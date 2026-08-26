@@ -9,10 +9,13 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { getReport2Config } from "@/data/report2-config";
+import LearnPill, { type LearnPillCopy } from "./LearnPill";
 import { getReportTheme } from "../reportTheme";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 
 interface Props {
+  /** Key Concepts block for this chapter; null when the layer has none. */
+  learn?: LearnPillCopy | null;
   archetype: string;
   importanceValue: number | null;
 }
@@ -99,7 +102,7 @@ function hexToRgbTriplet(hex: string): string {
   return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`;
 }
 
-const ImportanceOfSexualitySection: FC<Props> = ({ archetype, importanceValue }) => {
+const ImportanceOfSexualitySection: FC<Props> = ({ archetype, importanceValue, learn }) => {
   const band: Band =
     getReport2Config(archetype)?.importance_strip?.band ?? bandFromValue(importanceValue);
   const description = BAND_DESCRIPTION[band];
@@ -181,6 +184,9 @@ const ImportanceOfSexualitySection: FC<Props> = ({ archetype, importanceValue })
 
   return (
     <div className="report-flow report-flow--gap-xl">
+      {/* Key Concepts, added 2026-08-26 — above the card, as in every other chapter. */}
+      {learn ? <LearnPill prefix="importance" copy={learn} /> : null}
+
       <article className="report-importance">
         <div className="report-importance__highlight" aria-hidden="true" />
 

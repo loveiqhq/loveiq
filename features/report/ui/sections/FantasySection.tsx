@@ -9,6 +9,7 @@ import type { FantasyMapDot } from "@features/report/server/fantasyMap";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import LearnPill from "./LearnPill";
 import FantasyLearnings from "./FantasyLearnings";
+import { chapterHeading } from "./chapterHeading";
 
 /**
  * Server-resolved fantasy copy (`getReport2Section(name, "fantasy")`), threaded
@@ -40,9 +41,13 @@ export interface FantasyCopy {
   chartnote1?: string | null;
   chartnote2?: string | null;
   "learn.eyebrow"?: string | null;
+  /** Chapter-opening definition, rendered in front of `learn.body`. */
+  "learn.lead"?: string | null;
   "learn.body"?: string | null;
   /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
   "learn.body.p2"?: string | null;
+  /** What a `learn.lead` ending in a colon introduces. */
+  "learn.questions"?: string[] | null;
   /** True when the section isn't unlocked (blurs the map behind the overlay). */
   locked: boolean;
 }
@@ -397,7 +402,9 @@ const FantasySection: FC<Props> = ({
 
   return (
     <div className="report-fantasy">
-      <h3 className="report-fantasy__heading">Fantasy vs. Reality</h3>
+      <h3 className="report-fantasy__heading">
+        {chapterHeading("Fantasy vs. Reality", archetype)}
+      </h3>
 
       <LearnPill prefix="fantasy" copy={copy} />
 

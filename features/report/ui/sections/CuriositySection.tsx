@@ -9,6 +9,7 @@ import { renderEduPara } from "./eduPara";
 import { copyParagraphs } from "./copyParagraphs";
 import LearnPill from "./LearnPill";
 import DocStyleBlock from "./DocStyleBlock";
+import { chapterHeading } from "./chapterHeading";
 import {
   CURIOSITY_STYLES_OUTRO,
   type Report2DocStyle,
@@ -41,9 +42,13 @@ export interface CuriosityCopy {
   "edu.body.p1"?: string | null;
   "edu.body.p2"?: string | null;
   "learn.eyebrow"?: string | null;
+  /** Chapter-opening definition, rendered in front of `learn.body`. */
+  "learn.lead"?: string | null;
   "learn.body"?: string | null;
   /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
   "learn.body.p2"?: string | null;
+  /** What a `learn.lead` ending in a colon introduces. */
+  "learn.questions"?: string[] | null;
   /** Universal list of relationship structures (`edu.struct.1` … `edu.struct.14`). */
   [struct: `edu.struct.${number}`]: string | null | undefined;
   /** True when the per-archetype takeaway/body + fit map were withheld (unpaid). */
@@ -206,7 +211,9 @@ const CuriositySection: FC<Props> = ({
 
   return (
     <div className="report-curiosity">
-      <h3 className="report-curiosity__heading">Curiosity &amp; Relationship Form</h3>
+      <h3 className="report-curiosity__heading">
+        {chapterHeading("Curiosity & Relationship Form", archetype)}
+      </h3>
 
       <LearnPill prefix="curiosity" copy={copy} />
 

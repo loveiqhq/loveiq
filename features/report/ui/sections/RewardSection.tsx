@@ -8,6 +8,7 @@ import { useRevealOnView } from "../hooks/useRevealOnView";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
 import LearnPill from "./LearnPill";
+import { chapterHeading } from "./chapterHeading";
 
 /**
  * Server-resolved reward copy (`getReport2Section(name, "reward")`), threaded as
@@ -38,9 +39,13 @@ export interface RewardCopy {
   stat1?: string | null;
   "stat1.caption"?: string | null;
   "learn.eyebrow"?: string | null;
+  /** Chapter-opening definition, rendered in front of `learn.body`. */
+  "learn.lead"?: string | null;
   "learn.body"?: string | null;
   /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
   "learn.body.p2"?: string | null;
+  /** What a `learn.lead` ending in a colon introduces. */
+  "learn.questions"?: string[] | null;
   /** True when the per-archetype takeaway + reward config were withheld (unpaid). */
   locked: boolean;
 }
@@ -345,7 +350,7 @@ const RewardSection: FC<Props> = ({
 
   return (
     <div className="report-reward">
-      <h3 className="report-reward__heading">Reward System</h3>
+      <h3 className="report-reward__heading">{chapterHeading("Reward System", archetype)}</h3>
 
       <LearnPill prefix="reward" copy={copy} />
 

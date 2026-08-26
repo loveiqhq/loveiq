@@ -46,9 +46,13 @@ export interface AttachmentCopy {
   "edu.body.p7"?: string | null;
   "body.p1"?: string | null;
   "learn.eyebrow"?: string | null;
+  /** Chapter-opening definition, rendered in front of `learn.body`. */
+  "learn.lead"?: string | null;
   "learn.body"?: string | null;
   /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
   "learn.body.p2"?: string | null;
+  /** What a `learn.lead` ending in a colon introduces. */
+  "learn.questions"?: string[] | null;
   /** True when the per-archetype result/rows/insight/body/plane were withheld. */
   locked: boolean;
 }

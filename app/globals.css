@@ -15270,6 +15270,48 @@ input.autofill-dark:-internal-autofill-previewed {
   padding-top: 8px;
 }
 
+/* ── Key Concepts: the chapter-opening definition, and the Power questions ─────
+   Added 2026-08-26. Five chapters open with a one-sentence definition of the
+   dimension ("Energy level describes the baseline intensity, pace, and activation
+   a person brings into sexuality"). It sits as the FIRST SENTENCE of the same
+   paragraph as the green passage, which is what "add it as the first sentence"
+   asked for, so it needs weight rather than a block of its own. Ink, not the
+   body grey, at the same size — the same relationship `report-curiosity__lead-strong`
+   has to its own paragraph. */
+.report-learn-lead {
+  color: #161021;
+  font-weight: 600;
+}
+
+/* The Power chapter's definition ends "It answers questions like:", so its four
+   questions come with it. Serif italic, because they are addressed to the reader,
+   and the same left rule the document-style blocks use so the two read as one
+   family. */
+.report-learn-questions {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 10px 0 0;
+  padding: 0;
+}
+
+.report-learn-question {
+  padding-left: 14px;
+  border-left: 2.26px solid rgba(157, 138, 215, 0.35);
+  color: #161021;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: var(--report-teaser-size);
+  line-height: var(--report-teaser-lh);
+}
+
+/* Second Key Concepts paragraph. Only the gap; everything else is the section's
+   own `__learn-body` rule, so the two paragraphs match. */
+.report-learn-body-p2 {
+  margin-top: 10px;
+}
+
 /* Figma sets the leading label of a "Label: explanation" paragraph in Manrope Bold
    #161021 against the body's Regular #3f3a4d (verified node 8880:423). */
 .report-learn-para-label {

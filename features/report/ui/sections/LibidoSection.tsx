@@ -6,6 +6,7 @@ import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import LearnPill from "./LearnPill";
+import { chapterHeading } from "./chapterHeading";
 
 /**
  * Server-resolved libido copy (`getReport2Section(name, "libido")`), threaded as
@@ -33,9 +34,13 @@ export interface LibidoCopy {
   "row4.label"?: string | null;
   "practical.label"?: string | null;
   "learn.eyebrow"?: string | null;
+  /** Chapter-opening definition, rendered in front of `learn.body`. */
+  "learn.lead"?: string | null;
   "learn.body"?: string | null;
   /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
   "learn.body.p2"?: string | null;
+  /** What a `learn.lead` ending in a colon introduces. */
+  "learn.questions"?: string[] | null;
   // Per-archetype — withheld (null) from locked clients.
   result?: string | null;
   "row1.value"?: string | null;
@@ -285,7 +290,7 @@ const LibidoSection: FC<Props> = ({
 
   return (
     <div className="report-libido">
-      <h3 className="report-libido__heading">Libido Challenges</h3>
+      <h3 className="report-libido__heading">{chapterHeading("Libido Challenges", archetype)}</h3>
 
       <LearnPill prefix="libido" copy={copy} />
 

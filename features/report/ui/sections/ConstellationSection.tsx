@@ -3,6 +3,7 @@
 import { type CSSProperties, type FC } from "react";
 import { getReportTheme } from "../reportTheme";
 import { useRevealOnView } from "../hooks/useRevealOnView";
+import LearnPill, { type LearnPillCopy } from "./LearnPill";
 
 /**
  * Report 2.0 "Other Archetypes" / Constellation section — the LAST free Part I
@@ -21,6 +22,8 @@ import { useRevealOnView } from "../hooks/useRevealOnView";
  * `ranking` order handed down.
  */
 interface Props {
+  /** Key Concepts block for this chapter; null when the layer has none. */
+  learn?: LearnPillCopy | null;
   /** Archetype names, already sorted by match % descending (all 14). */
   ranking: string[];
   /** Match percentage per archetype name (0-100). */
@@ -69,6 +72,7 @@ const ConstellationSection: FC<Props> = ({
   ranking,
   percentages,
   mottos,
+  learn,
   viewArchetype,
   onViewArchetype,
 }) => {
@@ -92,6 +96,10 @@ const ConstellationSection: FC<Props> = ({
         <br />
         not a type
       </h3>
+
+      {/* Key Concepts, added 2026-08-26. Sits under the headline and above the
+          card, the same place it sits in every other chapter. */}
+      {learn ? <LearnPill prefix="constellation" copy={learn} /> : null}
 
       <section className="report-constellation" aria-label="Other archetypes">
         <p className="report-constellation__subline">

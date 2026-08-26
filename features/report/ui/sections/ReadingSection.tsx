@@ -6,6 +6,7 @@ import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import { getReadingSource, readingHref } from "@/data/report2-reading-links";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import LearnPill from "./LearnPill";
+import { chapterHeading } from "./chapterHeading";
 
 /**
  * Server-resolved reading copy (`getReport2Section(name, "reading")`), threaded
@@ -38,9 +39,13 @@ export interface ReadingCopy {
   "book4.tag"?: string | null;
   "closing.lead"?: string | null;
   "learn.eyebrow"?: string | null;
+  /** Chapter-opening definition, rendered in front of `learn.body`. */
+  "learn.lead"?: string | null;
   "learn.body"?: string | null;
   /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
   "learn.body.p2"?: string | null;
+  /** What a `learn.lead` ending in a colon introduces. */
+  "learn.questions"?: string[] | null;
   // Per-archetype — withheld (null) from locked clients.
   "book1.title"?: string | null;
   "book1.author"?: string | null;
@@ -173,7 +178,9 @@ const ReadingSection: FC<Props> = ({
 
   return (
     <div className="report-reading">
-      <h3 className="report-reading__heading">Reading Recommendations</h3>
+      <h3 className="report-reading__heading">
+        {chapterHeading("Reading Recommendations", archetype)}
+      </h3>
 
       <LearnPill prefix="reading" copy={copy} />
 

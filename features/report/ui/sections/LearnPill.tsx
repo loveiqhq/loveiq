@@ -22,9 +22,15 @@ import BookIcon from "./BookIcon";
  * `app/api/report/route.ts` now fills from `KEY_CONCEPTS_EYEBROW`.
  */
 
-/** The three slots this block reads, present on every section's copy interface. */
+/** The slots this block reads, present on every section's copy interface. */
 export interface LearnPillCopy {
   "learn.eyebrow"?: string | null;
+  /**
+   * The chapter's own one-sentence definition of the dimension, where the source
+   * document opens with one. Renders as the first sentence of the same paragraph
+   * as `learn.body`, which is what "add it as the first sentence" asked for.
+   */
+  "learn.lead"?: string | null;
   "learn.body"?: string | null;
   /**
    * Second intro paragraph. Added by the document pass; absent for every
@@ -32,6 +38,12 @@ export interface LearnPillCopy {
    * renders exactly as it did before.
    */
   "learn.body.p2"?: string | null;
+  /**
+   * What a `learn.lead` ending in a colon introduces — the Power chapter's four
+   * questions. A list, because four questions run together in a paragraph read
+   * as one long sentence.
+   */
+  "learn.questions"?: string[] | null;
 }
 
 interface Props {
@@ -41,9 +53,12 @@ interface Props {
 }
 
 const LearnPill: FC<Props> = ({ prefix, copy }) => {
+  const lead = copy["learn.lead"];
   const p1 = copy["learn.body"];
   const p2 = copy["learn.body.p2"];
-  if (!p1) return null;
+  const questions = copy["learn.questions"];
+  const hasQuestions = !!lead && !!questions && questions.length > 0;
+  if (!p1 && !lead) return null;
 
   return (
     <div className={`report-${prefix}__learn-pill-wrap`}>
@@ -53,7 +68,32 @@ const LearnPill: FC<Props> = ({ prefix, copy }) => {
         </span>
         {copy["learn.eyebrow"] ?? "What you will learn"}
       </span>
-      <p className={`report-${prefix}__learn-body`}>{p1}</p>
+      {/* The lead is the chapter's own definition and normally opens the same
+          paragraph as the green passage. The exception is a lead that ends on a
+          colon (Power): what the colon introduces has to come next, so the lead
+          takes its own paragraph, the questions follow, and the green passage
+          comes after them. Otherwise the colon would introduce the wrong text. */}
+      {hasQuestions ? (
+        <>
+          <p className={`report-${prefix}__learn-body`}>
+            <span className="report-learn-lead">{lead}</span>
+          </p>
+          <ul className="report-learn-questions">
+            {questions!.map((q, i) => (
+              <li key={i} className="report-learn-question">
+                {q}
+              </li>
+            ))}
+          </ul>
+          {p1 ? <p className={`report-${prefix}__learn-body report-learn-body-p2`}>{p1}</p> : null}
+        </>
+      ) : (
+        <p className={`report-${prefix}__learn-body`}>
+          {lead ? <span className="report-learn-lead">{lead}</span> : null}
+          {lead && p1 ? " " : null}
+          {p1}
+        </p>
+      )}
       {p2 ? <p className={`report-${prefix}__learn-body report-learn-body-p2`}>{p2}</p> : null}
     </div>
   );

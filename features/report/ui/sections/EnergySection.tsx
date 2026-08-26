@@ -10,6 +10,7 @@ import { getReportTheme } from "../reportTheme";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import { curveEndPoint } from "../curveEnd";
 import LearnPill from "./LearnPill";
+import { chapterHeading } from "./chapterHeading";
 import {
   ENERGY_THIRD_READING,
   getEnergyFamilyProfile,
@@ -42,9 +43,13 @@ export interface EnergyCopy {
   // Universal chart caption under the wave graph.
   chartnote1?: string | null;
   "learn.eyebrow"?: string | null;
+  /** Chapter-opening definition, rendered in front of `learn.body`. */
+  "learn.lead"?: string | null;
   "learn.body"?: string | null;
   /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
   "learn.body.p2"?: string | null;
+  /** What a `learn.lead` ending in a colon introduces. */
+  "learn.questions"?: string[] | null;
   /** True when the per-archetype hook/takeaway + energy config were withheld. */
   locked: boolean;
 }
@@ -433,7 +438,7 @@ const EnergySection: FC<Props> = ({
 
   return (
     <div className="report-energy">
-      <h3 className="report-energy__heading">Energy &amp; Risk</h3>
+      <h3 className="report-energy__heading">{chapterHeading("Energy & Risk", archetype)}</h3>
 
       <LearnPill prefix="energy" copy={copy} />
 

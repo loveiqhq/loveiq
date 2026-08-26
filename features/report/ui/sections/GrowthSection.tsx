@@ -14,6 +14,7 @@ import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import LearnPill from "./LearnPill";
+import { chapterHeading } from "./chapterHeading";
 
 /**
  * Server-resolved growth copy (`getReport2Section(name, "growth")`), threaded as
@@ -34,9 +35,13 @@ import LearnPill from "./LearnPill";
 export interface GrowthCopy {
   // Universal (always shipped) — these frame the section for locked clients too.
   "learn.eyebrow"?: string | null;
+  /** Chapter-opening definition, rendered in front of `learn.body`. */
+  "learn.lead"?: string | null;
   "learn.body"?: string | null;
   /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
   "learn.body.p2"?: string | null;
+  /** What a `learn.lead` ending in a colon introduces. */
+  "learn.questions"?: string[] | null;
   // Per-archetype — withheld (null) from locked clients.
   takeaway?: string | null;
   "ladder.headline"?: string | null;
@@ -359,7 +364,7 @@ const GrowthSection: FC<Props> = ({
 
   return (
     <div className={`report-growth${isAnimated ? " is-animated" : ""}`}>
-      <h3 className="report-growth__heading">Growth Potentials</h3>
+      <h3 className="report-growth__heading">{chapterHeading("Growth Potentials", archetype)}</h3>
 
       <LearnPill prefix="growth" copy={copy} />
 

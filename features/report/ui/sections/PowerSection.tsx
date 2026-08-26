@@ -12,6 +12,7 @@ import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPri
 import { renderEduPara } from "./eduPara";
 import { copyParagraphs } from "./copyParagraphs";
 import LearnPill from "./LearnPill";
+import { chapterHeading } from "./chapterHeading";
 
 /**
  * Server-resolved power copy (`getReport2Section(name, "power")`), threaded as a
@@ -41,9 +42,13 @@ export interface PowerCopy {
   "edu.body.p3"?: string | null;
   "edu.body.p4"?: string | null;
   "learn.eyebrow"?: string | null;
+  /** Chapter-opening definition, rendered in front of `learn.body`. */
+  "learn.lead"?: string | null;
   "learn.body"?: string | null;
   /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
   "learn.body.p2"?: string | null;
+  /** What a `learn.lead` ending in a colon introduces. */
+  "learn.questions"?: string[] | null;
   /**
    * The reader's power-zone region label (from config `families.power_zone`),
    * e.g. "Switch zone". Drives the top card label + the highlighted zone label
@@ -340,7 +345,7 @@ const PowerSection: FC<Props> = ({
 
   return (
     <div className="report-power">
-      <h3 className="report-power__heading">Power Orientation</h3>
+      <h3 className="report-power__heading">{chapterHeading("Power Orientation", archetype)}</h3>
 
       <LearnPill prefix="power" copy={copy} />
 

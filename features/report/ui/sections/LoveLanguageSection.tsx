@@ -8,6 +8,7 @@ import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPri
 import { renderEduPara } from "./eduPara";
 import { copyParagraphs } from "./copyParagraphs";
 import LearnPill from "./LearnPill";
+import { chapterHeading } from "./chapterHeading";
 
 /**
  * Server-resolved love-language copy (`getReport2Section(name, "lovelang")`),
@@ -32,9 +33,13 @@ export interface LoveLanguageCopy {
   "edu.body.p2"?: string | null;
   "edu.body.p3"?: string | null;
   "learn.eyebrow"?: string | null;
+  /** Chapter-opening definition, rendered in front of `learn.body`. */
+  "learn.lead"?: string | null;
   "learn.body"?: string | null;
   /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
   "learn.body.p2"?: string | null;
+  /** What a `learn.lead` ending in a colon introduces. */
+  "learn.questions"?: string[] | null;
   /** True when the per-archetype `body.p1` + `love_language_order` were withheld (unpaid). */
   locked: boolean;
 }
@@ -208,7 +213,7 @@ const LoveLanguageSection: FC<Props> = ({
 
   return (
     <div className="report-lovelang">
-      <h3 className="report-lovelang__heading">Love Language</h3>
+      <h3 className="report-lovelang__heading">{chapterHeading("Love Language", archetype)}</h3>
 
       <LearnPill prefix="lovelang" copy={copy} />
 

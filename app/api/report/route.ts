@@ -276,16 +276,20 @@ function withKeyConcepts<T extends Record<string, unknown>>(
   sectionId: string
 ): T & {
   "learn.eyebrow": string;
+  "learn.lead": string | null;
   "learn.body": string | null;
   "learn.body.p2": string | null;
+  "learn.questions": string[] | null;
 } {
   const block = getKeyConcepts(slug, sectionId);
   const existing = copy["learn.body"];
   return {
     ...copy,
     "learn.eyebrow": KEY_CONCEPTS_EYEBROW,
+    "learn.lead": block?.lead ?? null,
     "learn.body": block?.p1 ?? (typeof existing === "string" ? existing : null),
     "learn.body.p2": block?.p2 ?? null,
+    "learn.questions": block?.questions ?? null,
   };
 }
 
@@ -1691,6 +1695,14 @@ export async function GET(request: Request) {
      * `docSlug` is the report2 slug the layers are keyed by.
      */
     const docSlug = report2ArchetypeSlug(primaryArchetype);
+    /*
+     * Key Concepts for the three chapters that never carried the pill —
+     * Importance of Sexuality, Sexual Stage and the constellation block. They have
+     * no per-archetype prose of their own to gate, so these objects hold nothing
+     * but the universal `learn.*` slots and are always shipped.
+     */
+    const importanceLearn = withKeyConcepts({}, docSlug, "importance");
+    const constellationLearn = withKeyConcepts({}, docSlug, "constellation");
     const curiosityStyles = resolveDocStyles(
       CURIOSITY_STYLES,
       CURIOSITY_STYLE_BY_ARCHETYPE,
@@ -1782,7 +1794,9 @@ export async function GET(request: Request) {
         confidenceCopy: withKeyConcepts(confidenceCopy, docSlug, "confidence"),
         confidenceStrip,
         mapCopy,
-        stageCopy,
+        stageCopy: withKeyConcepts(stageCopy, docSlug, "stage"),
+        importanceLearn,
+        constellationLearn,
         constellationMottos,
         archetypeSummary,
       })

@@ -12,6 +12,7 @@ import { rewardStatDots } from "./RewardSection";
 import { curveEndPoint } from "../curveEnd";
 import LearnPill from "./LearnPill";
 import DocStyleBlock from "./DocStyleBlock";
+import { chapterHeading } from "./chapterHeading";
 import {
   AROUSAL_STYLES_OUTRO,
   type Report2DocStyle,
@@ -46,9 +47,13 @@ export interface ArousalCopy {
   "edu.body.p3"?: string | null;
   "edu.body.p4"?: string | null;
   "learn.eyebrow"?: string | null;
+  /** Chapter-opening definition, rendered in front of `learn.body`. */
+  "learn.lead"?: string | null;
   "learn.body"?: string | null;
   /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
   "learn.body.p2"?: string | null;
+  /** What a `learn.lead` ending in a colon introduces. */
+  "learn.questions"?: string[] | null;
   // Per-archetype — withheld (null) from locked clients.
   result?: string | null;
   "insight.value"?: string | null;
@@ -580,7 +585,7 @@ const ArousalSection: FC<Props> = ({
 
   return (
     <div className="report-arousal">
-      <h3 className="report-arousal__heading">Arousal Style</h3>
+      <h3 className="report-arousal__heading">{chapterHeading("Arousal Style", archetype)}</h3>
 
       <LearnPill prefix="arousal" copy={copy} />
 

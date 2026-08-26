@@ -10,6 +10,7 @@ import { useRevealOnView } from "../hooks/useRevealOnView";
 import { curveEndPoint } from "../curveEnd";
 import { copyParagraphs } from "./copyParagraphs";
 import LearnPill from "./LearnPill";
+import { chapterHeading } from "./chapterHeading";
 import {
   INSECURITY_THEMES,
   INSECURITY_THEMES_EYEBROW,
@@ -35,9 +36,13 @@ import {
 export interface InsecuritiesCopy {
   "practical.label"?: string | null;
   "learn.eyebrow"?: string | null;
+  /** Chapter-opening definition, rendered in front of `learn.body`. */
+  "learn.lead"?: string | null;
   "learn.body"?: string | null;
   /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
   "learn.body.p2"?: string | null;
+  /** What a `learn.lead` ending in a colon introduces. */
+  "learn.questions"?: string[] | null;
   // Per-archetype — withheld (null) from locked clients.
   takeaway?: string | null;
   "practical.teaser"?: string | null;
@@ -395,7 +400,9 @@ const InsecuritiesSection: FC<Props> = ({
 
   return (
     <div className="report-insecurities">
-      <h3 className="report-insecurities__heading">Core Insecurities</h3>
+      <h3 className="report-insecurities__heading">
+        {chapterHeading("Core Insecurities", archetype)}
+      </h3>
 
       <LearnPill prefix="insecurities" copy={copy} />
 

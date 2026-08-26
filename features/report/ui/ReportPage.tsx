@@ -133,6 +133,7 @@ import {
 } from "@shared/experiments/forcedPaywall";
 import { shouldAutoOpenOfferModal } from "../logic/paywallModal";
 import { useReportEngagementTimers } from "./hooks/useReportEngagementTimers";
+import type { LearnPillCopy } from "./sections/LearnPill";
 
 interface SnapshotContent {
   importanceLabel: string;
@@ -510,6 +511,9 @@ interface ReportExperienceProps {
   confidenceStrip: ConfidenceStrip | null;
   mapCopy: MapCopy | null;
   stageCopy: StageCopy | null;
+  /** Key Concepts for the three chapters that carry no other copy of their own. */
+  importanceLearn: LearnPillCopy | null;
+  constellationLearn: LearnPillCopy | null;
   constellationMottos: Record<string, string | null>;
   submitFeedback: (sectionId: string, payload: FeedbackPayload) => void;
   submitted: Record<string, boolean>;
@@ -602,6 +606,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   confidenceStrip,
   mapCopy,
   stageCopy,
+  importanceLearn,
+  constellationLearn,
   constellationMottos,
   submitFeedback,
   submitted,
@@ -1178,6 +1184,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                             ranking={ranking}
                             percentages={percentages}
                             mottos={constellationMottos}
+                            learn={constellationLearn}
                             viewArchetype={viewArchetype}
                             onViewArchetype={onUnlockArchetype}
                           />
@@ -1198,6 +1205,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                         <ImportanceOfSexualitySection
                           archetype={viewArchetype}
                           importanceValue={snapshot.importanceValue}
+                          learn={importanceLearn}
                         />
                       </ReportSection>
                     );
@@ -2932,6 +2940,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         confidenceStrip={data.confidenceStrip ?? null}
         mapCopy={data.mapCopy ?? null}
         stageCopy={data.stageCopy ?? null}
+        importanceLearn={data.importanceLearn ?? null}
+        constellationLearn={data.constellationLearn ?? null}
         constellationMottos={data.constellationMottos ?? {}}
         submitFeedback={submitFeedback}
         submitted={submitted}

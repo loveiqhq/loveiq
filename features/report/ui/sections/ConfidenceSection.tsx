@@ -10,6 +10,7 @@ import { archetypeSlug } from "@/data/report2-config";
 import { getConfidenceProfile } from "@/data/report2-confidence";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import LearnPill from "./LearnPill";
+import { chapterHeading } from "./chapterHeading";
 
 /**
  * Server-resolved Confidence Level copy (`getReport2Section(name, "confidence")`),
@@ -31,9 +32,13 @@ export interface ConfidenceCopy {
   "edu.body.p2"?: string | null;
   chartnote1?: string | null;
   "learn.eyebrow"?: string | null;
+  /** Chapter-opening definition, rendered in front of `learn.body`. */
+  "learn.lead"?: string | null;
   "learn.body"?: string | null;
   /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
   "learn.body.p2"?: string | null;
+  /** What a `learn.lead` ending in a colon introduces. */
+  "learn.questions"?: string[] | null;
   /** True when the report is not unlocked at the essentials tier. */
   locked: boolean;
 }
@@ -253,7 +258,9 @@ const ConfidenceSection: FC<Props> = ({
 
   return (
     <div className="report-confidence">
-      <h3 className="report-confidence__heading">Confidence Level</h3>
+      <h3 className="report-confidence__heading">
+        {chapterHeading("Confidence Level", archetype)}
+      </h3>
 
       <LearnPill prefix="confidence" copy={copy} />
 

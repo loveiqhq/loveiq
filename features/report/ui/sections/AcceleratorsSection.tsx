@@ -10,6 +10,7 @@ import { archetypeSlug } from "@/data/report2-config";
 import { getAccelRows, type AccelRow, type AccelVerdict } from "@/data/report2-accel-rows";
 import { renderEduPara } from "./eduPara";
 import LearnPill from "./LearnPill";
+import { chapterHeading } from "./chapterHeading";
 
 /**
  * Server-resolved accelerators copy (`getReport2Section(name, "accel")`),
@@ -42,9 +43,13 @@ export interface AccelCopy {
   /** Per-archetype verdict sentence — withheld (null) from locked clients. */
   takeaway?: string | null;
   "learn.eyebrow"?: string | null;
+  /** Chapter-opening definition, rendered in front of `learn.body`. */
+  "learn.lead"?: string | null;
   "learn.body"?: string | null;
   /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
   "learn.body.p2"?: string | null;
+  /** What a `learn.lead` ending in a colon introduces. */
+  "learn.questions"?: string[] | null;
   /** True when the per-archetype `takeaway` was withheld (unpaid). */
   locked: boolean;
 }
@@ -152,7 +157,9 @@ const AcceleratorsSection: FC<Props> = ({
 
   return (
     <div className="report-accel">
-      <h3 className="report-accel__heading">Accelerators &amp; Brakes</h3>
+      <h3 className="report-accel__heading">
+        {chapterHeading("Accelerators & Brakes", archetype)}
+      </h3>
 
       <LearnPill prefix="accel" copy={copy} />
 

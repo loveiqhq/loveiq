@@ -3,6 +3,7 @@
 import { type FC } from "react";
 import SexualStageExplorer from "./SexualStageExplorer";
 import { resolveStageId, STAGES } from "@/data/report2-stages";
+import LearnPill, { type LearnPillCopy } from "./LearnPill";
 
 /**
  * Server-resolved Stage copy slots (`getReport2Section(name, "stage")`). The
@@ -11,7 +12,7 @@ import { resolveStageId, STAGES } from "@/data/report2-stages";
  * the row/practical values are per-archetype. Every field is optional so an
  * archetype with a stub still renders.
  */
-export interface StageCopy {
+export interface StageCopy extends LearnPillCopy {
   eyebrow?: string;
   result?: string;
   "row1.label"?: string;
@@ -104,6 +105,11 @@ const SexualStageSection: FC<Props> = ({ userStageLabel, copy }) => {
 
   return (
     <div className="report-flow report-flow--gap-xl">
+      {/* Key Concepts, added 2026-08-26. The 2026-08-25 comment on this chapter said
+          it "jumps straight into the Stages without explaining what they are", which
+          is what this block now does before the card. */}
+      {copy ? <LearnPill prefix="stage" copy={copy} /> : null}
+
       {result ? (
         <article className="report-stage2-card">
           <span className="report-stage2-card__glow" aria-hidden="true" />

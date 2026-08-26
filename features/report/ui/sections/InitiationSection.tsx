@@ -11,6 +11,7 @@ import { rewardStatDots } from "./RewardSection";
 import { copyParagraphs } from "./copyParagraphs";
 import LearnPill from "./LearnPill";
 import DocStyleBlock from "./DocStyleBlock";
+import { chapterHeading } from "./chapterHeading";
 import {
   INITIATION_STYLES_OUTRO,
   type Report2DocStyle,
@@ -41,9 +42,13 @@ export interface InitiationCopy {
   "row1.label"?: string | null;
   "practical.label"?: string | null;
   "learn.eyebrow"?: string | null;
+  /** Chapter-opening definition, rendered in front of `learn.body`. */
+  "learn.lead"?: string | null;
   "learn.body"?: string | null;
   /** Second Key Concepts paragraph — see data/report2-key-concepts.ts. */
   "learn.body.p2"?: string | null;
+  /** What a `learn.lead` ending in a colon introduces. */
+  "learn.questions"?: string[] | null;
   // Per-archetype — withheld (null) from locked clients.
   result?: string | null;
   "row1.value"?: string | null;
@@ -292,7 +297,9 @@ const InitiationSection: FC<Props> = ({
 
   return (
     <div className="report-initiation" style={accentVars}>
-      <h3 className="report-initiation__heading">Initiation Style</h3>
+      <h3 className="report-initiation__heading">
+        {chapterHeading("Initiation Style", archetype)}
+      </h3>
 
       <LearnPill prefix="initiation" copy={copy} />
 
