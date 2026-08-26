@@ -8,6 +8,7 @@ import { renderEduPara } from "./eduPara";
 import { copyParagraphs } from "./copyParagraphs";
 import LearnPill from "./LearnPill";
 import { chapterHeading } from "./chapterHeading";
+import type { Report2DocInserts } from "@/data/report2-doc-inserts";
 
 /**
  * Server-resolved beliefs copy (`getReport2Section(name, "beliefs")`), threaded
@@ -22,6 +23,8 @@ import { chapterHeading } from "./chapterHeading";
  * which it received. Slot counts vary per archetype; render only what exists.
  */
 export interface BeliefsCopy {
+  /** Document passages placed in this chapter; null when locked or absent. */
+  inserts?: Report2DocInserts["beliefs"] | null;
   "edu.eyebrow"?: string | null;
   "edu.teaser"?: string | null;
   "edu.body.p1"?: string | null;

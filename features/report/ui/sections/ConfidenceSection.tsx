@@ -11,6 +11,7 @@ import { getConfidenceProfile } from "@/data/report2-confidence";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import LearnPill from "./LearnPill";
 import { chapterHeading } from "./chapterHeading";
+import type { Report2DocInserts } from "@/data/report2-doc-inserts";
 
 /**
  * Server-resolved Confidence Level copy (`getReport2Section(name, "confidence")`),
@@ -26,6 +27,8 @@ import { chapterHeading } from "./chapterHeading";
  * server-side) and the client renders a blurred stand-in + PremiumOverlay.
  */
 export interface ConfidenceCopy {
+  /** Document passages placed in this chapter; null when locked or absent. */
+  inserts?: Report2DocInserts["confidence"] | null;
   "edu.eyebrow"?: string | null;
   "edu.teaser"?: string | null;
   "edu.body.p1"?: string | null;

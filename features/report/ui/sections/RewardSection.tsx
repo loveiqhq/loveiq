@@ -9,6 +9,7 @@ import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPri
 import { renderEduPara } from "./eduPara";
 import LearnPill from "./LearnPill";
 import { chapterHeading } from "./chapterHeading";
+import type { Report2DocInserts } from "@/data/report2-doc-inserts";
 
 /**
  * Server-resolved reward copy (`getReport2Section(name, "reward")`), threaded as
@@ -30,6 +31,8 @@ import { chapterHeading } from "./chapterHeading";
  * rule they render only when present; absent ⇒ the stat block is omitted.
  */
 export interface RewardCopy {
+  /** Document passages placed in this chapter; null when locked or absent. */
+  inserts?: Report2DocInserts["reward"] | null;
   takeaway?: string | null;
   "edu.eyebrow"?: string | null;
   "edu.teaser"?: string | null;

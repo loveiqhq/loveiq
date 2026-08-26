@@ -247,9 +247,8 @@ describe("report layout standards", () => {
       ["BeliefsSection.tsx", 'copyParagraphs(copy["body.p1"])'],
       ["InitiationSection.tsx", 'copyParagraphs(copy["body.p1"])'],
       ["PowerSection.tsx", 'copyParagraphs(copy["body.p1"])'],
-      // Curiosity's lead goes through it inside `renderCuriosityLead`, which is where
-      // its bold opening phrase is applied.
-      ["CuriositySection.tsx", "const text = copyParagraphs(raw)"],
+      // Curiosity is NOT in this list any more: it no longer renders `body.p1` at all
+      // (2026-08-26), so it has no body block for a typed break to survive into.
     ] as const) {
       const src = readFileSync(join(process.cwd(), "features/report/ui/sections", file), "utf8");
       expect(src, file).toContain(slot);
@@ -276,11 +275,19 @@ describe("report layout standards", () => {
     // ...but not rendered
     expect(src).not.toMatch(/copy\["body\.p2"\]\s*\?/);
     expect(src).not.toMatch(/copy\["body\.p3"\]\s*\?/);
-    // and the lead sits ABOVE the fit table, the order in the Figma frame
-    const lead = src.indexOf('renderCuriosityLead(copy["body.p1"])');
+    // `body.p1` joined them on 2026-08-26. It was the "Novelty-first curiosity sets
+    // the terms…" lead, which restated the archetype's curiosity type immediately
+    // above the new scale that names that type and describes it in the document's
+    // words. Same treatment as p2/p3: still gated and sent, still declared, not drawn.
+    expect(route).toContain('"body.p1": curiosityUnlocked');
+    expect(src).toContain('"body.p1"?: string | null;');
+    expect(src).not.toMatch(/copy\["body\.p1"\]\s*\?/);
+
+    // The scale sits ABOVE the fit table, which is where the list it replaced sat.
+    const scale = src.indexOf("<CuriosityScale");
     const table = src.indexOf("<FitTable fit={relationshipFit} />");
-    expect(lead).toBeGreaterThan(-1);
-    expect(table).toBeGreaterThan(lead);
+    expect(scale).toBeGreaterThan(-1);
+    expect(table).toBeGreaterThan(scale);
   });
 
   it("draws the Energy & Risk callout as the standard purple block", () => {

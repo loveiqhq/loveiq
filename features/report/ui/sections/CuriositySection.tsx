@@ -6,10 +6,11 @@ import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
-import { copyParagraphs } from "./copyParagraphs";
 import LearnPill from "./LearnPill";
 import DocStyleBlock from "./DocStyleBlock";
+import CuriosityScale from "./CuriosityScale";
 import { chapterHeading } from "./chapterHeading";
+import type { Report2DocInserts } from "@/data/report2-doc-inserts";
 import {
   CURIOSITY_STYLES_OUTRO,
   type Report2DocStyle,
@@ -33,6 +34,8 @@ import {
  * locked per-archetype content to an unpaid client.
  */
 export interface CuriosityCopy {
+  /** Document passages placed in this chapter; null when locked or absent. */
+  inserts?: Report2DocInserts["curiosity"] | null;
   takeaway?: string | null;
   "body.p1"?: string | null;
   "body.p2"?: string | null;
@@ -151,28 +154,6 @@ const FitRow: FC<{ label: string; score: number | null }> = ({ label, score }) =
   </li>
 );
 
-/**
- * Figma 8427:2010 sets the lead paragraph's opening phrase in Manrope Bold
- * `#161021` and the rest in regular `#3f3a4d` — the phrase naming the reader's
- * curiosity type ("Depth-first curiosity", "Care-first curiosity", …). Two
- * archetypes phrase it as a condition instead ("Your curiosity has one
- * condition:"), so the early-colon form is bolded too. Anything else is left
- * plain rather than guessing where the emphasis ends.
- */
-function renderCuriosityLead(raw: string) {
-  const text = copyParagraphs(raw);
-  const typed = /^[A-Z][\w-]*-first curiosity/.exec(text);
-  const colon = typed ? null : /^[^.!?]{0,44}?:/.exec(text);
-  const lead = typed?.[0] ?? colon?.[0];
-  if (!lead) return text;
-  return (
-    <>
-      <strong className="report-curiosity__lead-strong">{lead}</strong>
-      {text.slice(lead.length)}
-    </>
-  );
-}
-
 /** The compact fit table — the nine forms with the reader's dots. */
 const FitTable: FC<{ fit: Record<string, number> | null }> = ({ fit }) => (
   <>
@@ -253,21 +234,39 @@ const CuriositySection: FC<Props> = ({
                 look like it had "moved up" over the illustration. Left in the payload
                 rather than deleted: it is real copy with no place in this layout, so it
                 is the designer's call where it goes. */}
-            {copy["body.p1"] ? (
-              <p className="report-curiosity__lead">{renderCuriosityLead(copy["body.p1"])}</p>
-            ) : null}
+            {/* `body.p1` — the "Novelty-first curiosity sets the terms…" lead — was
+                removed on 2026-08-26 at Mark's request. It restated the archetype's
+                curiosity type immediately above a block that now names that type and
+                describes it in the document's own words, so the two read as the same
+                sentence twice. The slot is still shipped by the route and still in the
+                matrix; only this render is gone, which is the same treatment `body.p2`
+                and `body.p3` already have in this section. */}
 
-            {/* Chapter 16's own "Common Curiosity Level Styles Across Archetypes",
-                restored 2026-08-26 — the reader's entry, above the fit table as
-                requested. */}
-            <DocStyleBlock
+            {/* Chapter 16's own "Common Curiosity Level Styles Across Archetypes".
+                Restored as a list on 2026-08-26 and redesigned the same day into the
+                scale the Importance of Sexuality and Confidence Level chapters use,
+                with all fourteen archetypes plotted. Above the fit table, as asked. */}
+            <CuriosityScale
+              archetype={archetype}
               eyebrow="Common Curiosity Level Styles Across Archetypes"
-              styles={curiosityStyles ?? []}
-              modifier="curiosity"
               outro={CURIOSITY_STYLES_OUTRO}
             />
 
+            {/* The reader's own style, named and described in the document's words,
+                under the scale that places it. */}
+            <DocStyleBlock
+              eyebrow="Your curiosity style"
+              styles={curiosityStyles ?? []}
+              modifier="curiosity"
+            />
+
             <FitTable fit={relationshipFit} />
+
+            {/* Document insert, 2026-08-26: "Add under the table of scores in the
+                Curiosity & Relationship Form section". */}
+            {copy.inserts?.underFit ? (
+              <p className="report-curiosity__insert">{copy.inserts.underFit}</p>
+            ) : null}
 
             {copy.takeaway ? (
               <div className="report-curiosity__verdict report-verdict">

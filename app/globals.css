@@ -23859,6 +23859,192 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 /* ── Fit-by-relationship-form table ────────────────────────────────────────── */
+/* ── Curiosity scale: all fourteen archetypes on one axis ──────────────────────
+   Added 2026-08-26. Built to sit beside the Importance of Sexuality strip rather
+   than to be a new kind of chart, so the metrics come from that chapter: the same
+   eyebrow treatment, dots at the archetype accent, only the reader's dot named.
+   Its four bands are the source document's own level names, which is what keeps
+   this the same block it replaced. */
+.report-curiosity-scale {
+  width: 100%;
+  margin: 14px 0 18px;
+}
+
+.report-curiosity-scale__eyebrow {
+  margin: 0 0 14px;
+  color: #6b5b95;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 0.705rem;
+  letter-spacing: 1.47px;
+  text-transform: uppercase;
+  line-height: 1.65;
+}
+
+/* Room above for the "You" label and below for the band labels. */
+.report-curiosity-scale__plot {
+  position: relative;
+  height: 78px;
+  margin: 0 10px;
+}
+
+.report-curiosity-scale__axis {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 34px;
+  height: 2.26px;
+  border-radius: 2px;
+  background: rgba(22, 16, 33, 0.09);
+}
+
+.report-curiosity-scale__bands {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 34px;
+  height: 44px;
+}
+
+.report-curiosity-scale__band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid rgba(22, 16, 33, 0.07);
+}
+
+.report-curiosity-scale__band:first-child {
+  border-left: none;
+}
+
+/* The reader's own band, tinted the way the power plane tints the reader's zone. */
+.report-curiosity-scale__band.is-yours {
+  background: linear-gradient(180deg, rgba(157, 138, 215, 0.12) 0%, rgba(157, 138, 215, 0) 100%);
+}
+
+.report-curiosity-scale__band-label {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  color: #a09aac;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.63rem;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.report-curiosity-scale__band.is-yours .report-curiosity-scale__band-label {
+  color: #6b5b95;
+}
+
+/* Dots land one after another as the strip comes into view, left to right, the
+   same staggered reveal the importance strip uses. */
+.report-curiosity-scale__dot {
+  position: absolute;
+  top: 35px;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  border-radius: 9999px;
+  background: var(--dot-accent, #c4bed0);
+  opacity: 0;
+  transform: translateY(-50%) scale(0.4);
+}
+
+.report-curiosity-scale__plot.is-revealed .report-curiosity-scale__dot {
+  opacity: 0.55;
+  transform: translateY(-50%) scale(1);
+  transition:
+    opacity 0.32s ease,
+    transform 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.3);
+  transition-delay: calc(var(--row) * 45ms);
+}
+
+.report-curiosity-scale__dot.is-you {
+  width: 15px;
+  height: 15px;
+  margin-left: -7.5px;
+  z-index: 1;
+  box-shadow: 0 0 0 5px rgb(255 255 255 / 0.9);
+}
+
+.report-curiosity-scale__plot.is-revealed .report-curiosity-scale__dot.is-you {
+  opacity: 1;
+}
+
+.report-curiosity-scale__you {
+  position: absolute;
+  top: 4px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  color: #161021;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 0.78rem;
+  opacity: 0;
+}
+
+.report-curiosity-scale__plot.is-revealed .report-curiosity-scale__you {
+  opacity: 1;
+  transition: opacity 0.3s ease 0.66s;
+}
+
+.report-curiosity-scale__ends {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  color: #a09aac;
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
+}
+
+.report-curiosity-scale__outro {
+  margin: 12px 0 0;
+  color: #6b6678;
+  font-family: var(--font-sans);
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
+}
+
+/* A document passage placed inside a chapter by one of its comments. */
+.report-curiosity__insert,
+.report-insecurities__above-graph {
+  margin: 14px 0 0;
+  color: #3f3a4d;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
+}
+
+.report-insecurities__above-graph {
+  margin: 0 0 14px;
+}
+
+/* The educational expander spans the card, like every other chapter's does. The
+   card sets its own horizontal padding, so the block is pulled back out to the
+   card edge rather than given a negative width. */
+.report-insecurities__edu {
+  margin-left: calc(-1 * clamp(22px, 2.4vw, 30.5px));
+  margin-right: calc(-1 * clamp(22px, 2.4vw, 30.5px));
+  width: auto;
+}
+
+@media (max-width: 768px) {
+  .report-curiosity-scale__plot {
+    height: 84px;
+    margin: 0 6px;
+  }
+
+  .report-curiosity-scale__band-label {
+    font-size: 0.56rem;
+  }
+}
+
 /* ── The document's "across the archetypes" style block ────────────────────────
    One component in three chapters: Curiosity Level (16), Arousal Style (21) and
    Initiation Style (22). Added 2026-08-26, when the source document's own

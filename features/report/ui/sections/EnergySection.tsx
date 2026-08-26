@@ -11,6 +11,7 @@ import { useRevealOnView } from "../hooks/useRevealOnView";
 import { curveEndPoint } from "../curveEnd";
 import LearnPill from "./LearnPill";
 import { chapterHeading } from "./chapterHeading";
+import type { Report2DocInserts } from "@/data/report2-doc-inserts";
 import {
   ENERGY_THIRD_READING,
   getEnergyFamilyProfile,
@@ -34,6 +35,8 @@ import {
  * client.
  */
 export interface EnergyCopy {
+  /** Document passages placed in this chapter; null when locked or absent. */
+  inserts?: Report2DocInserts["energy"] | null;
   takeaway?: string | null;
   "edu.eyebrow"?: string | null;
   "edu.teaser"?: string | null;

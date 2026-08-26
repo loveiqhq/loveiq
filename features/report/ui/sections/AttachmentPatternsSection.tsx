@@ -8,6 +8,7 @@ import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPri
 import { renderEduPara } from "./eduPara";
 import { copyParagraphs } from "./copyParagraphs";
 import LearnPill from "./LearnPill";
+import type { Report2DocInserts } from "@/data/report2-doc-inserts";
 
 /**
  * Server-resolved attachment copy (`getReport2Section(name, "attachment")`),
@@ -27,6 +28,8 @@ import LearnPill from "./LearnPill";
  * disconnection" / "After rupture"). Figma 8427:1447 is the source of truth.
  */
 export interface AttachmentCopy {
+  /** Document passages placed in this chapter; null when locked or absent. */
+  inserts?: Report2DocInserts["attachment"] | null;
   eyebrow?: string | null;
   result?: string | null;
   "row1.label"?: string | null;

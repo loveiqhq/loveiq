@@ -11,6 +11,7 @@ import { curveEndPoint } from "../curveEnd";
 import { copyParagraphs } from "./copyParagraphs";
 import LearnPill from "./LearnPill";
 import { chapterHeading } from "./chapterHeading";
+import type { Report2DocInserts } from "@/data/report2-doc-inserts";
 import {
   INSECURITY_THEMES,
   INSECURITY_THEMES_EYEBROW,
@@ -34,6 +35,8 @@ import {
  * client.
  */
 export interface InsecuritiesCopy {
+  /** Document passages placed in this chapter; null when locked or absent. */
+  inserts?: Report2DocInserts["insecurities"] | null;
   "practical.label"?: string | null;
   "learn.eyebrow"?: string | null;
   /** Chapter-opening definition, rendered in front of `learn.body`. */
@@ -413,6 +416,12 @@ const InsecuritiesSection: FC<Props> = ({
             family is withheld server-side) directly above the blurred real one. */}
         {locked ? null : (
           <>
+            {/* Document insert, 2026-08-26: "add it on top of the graph, just over
+                the 'Where your Sensitivity sits'". */}
+            {copy.inserts?.aboveGraph ? (
+              <p className="report-insecurities__above-graph">{copy.inserts.aboveGraph}</p>
+            ) : null}
+
             <p className="report-insecurities__eyebrow">Where your sensitivity sits</p>
 
             <div className="report-insecurities__graph-wrap">

@@ -24,6 +24,7 @@ import { getAttachmentPlaneForFamily } from "@/data/report2-attachment-planes";
 import { getRewardProfile } from "@/data/report2-reward";
 import { archetypeSlug as report2ArchetypeSlug, type Report2CopySlug } from "@/data/report2-config";
 import { getKeyConcepts, KEY_CONCEPTS_EYEBROW } from "@/data/report2-key-concepts";
+import { getDocInserts } from "@/data/report2-doc-inserts";
 import { getArchetypeSummary } from "@/data/report2-archetype-summary";
 import {
   AROUSAL_STYLES,
@@ -273,8 +274,10 @@ function normalizeInitiationConfig(cfg: Record<string, unknown> | null | undefin
 function withKeyConcepts<T extends Record<string, unknown>>(
   copy: T,
   slug: string,
-  sectionId: string
+  sectionId: string,
+  unlocked = true
 ): T & {
+  inserts: unknown;
   "learn.eyebrow": string;
   "learn.lead": string | null;
   "learn.body": string | null;
@@ -283,8 +286,17 @@ function withKeyConcepts<T extends Record<string, unknown>>(
 } {
   const block = getKeyConcepts(slug, sectionId);
   const existing = copy["learn.body"];
+  /*
+   * The document's comment-anchored passages for this chapter. Unlike `learn.*`
+   * these are per-archetype prose, so they are withheld from a locked client the
+   * same way the chapter's own `body.p1` is.
+   */
+  const inserts = unlocked
+    ? ((getDocInserts(slug) as Record<string, unknown> | null)?.[sectionId] ?? null)
+    : null;
   return {
     ...copy,
+    inserts,
     "learn.eyebrow": KEY_CONCEPTS_EYEBROW,
     "learn.lead": block?.lead ?? null,
     "learn.body": block?.p1 ?? (typeof existing === "string" ? existing : null),
@@ -1757,17 +1769,22 @@ export async function GET(request: Request) {
         practiceTendencies: filteredPracticeTendencies,
         snapshotCopy,
         findingsCopy,
-        beliefsCopy: withKeyConcepts(beliefsCopy, docSlug, "beliefs"),
-        attachmentCopy: withKeyConcepts(attachmentCopy, docSlug, "attachment"),
+        beliefsCopy: withKeyConcepts(beliefsCopy, docSlug, "beliefs", beliefsUnlocked),
+        attachmentCopy: withKeyConcepts(attachmentCopy, docSlug, "attachment", attachmentUnlocked),
         attachmentFamily,
         attachmentPlane,
         accelCopy: withKeyConcepts(accelCopy, docSlug, "accel"),
-        insecuritiesCopy: withKeyConcepts(insecuritiesCopy, docSlug, "insecurities"),
+        insecuritiesCopy: withKeyConcepts(
+          insecuritiesCopy,
+          docSlug,
+          "insecurities",
+          insecuritiesUnlocked
+        ),
         insecurityCueFamily,
         insecurityGraph,
-        rewardCopy: withKeyConcepts(rewardCopy, docSlug, "reward"),
+        rewardCopy: withKeyConcepts(rewardCopy, docSlug, "reward", rewardUnlocked),
         rewardConfig,
-        energyCopy: withKeyConcepts(energyCopy, docSlug, "energy"),
+        energyCopy: withKeyConcepts(energyCopy, docSlug, "energy", energyUnlocked),
         energyConfig,
         arousalCopy: withKeyConcepts(arousalCopy, docSlug, "arousal"),
         arousalConfig,
@@ -1786,12 +1803,12 @@ export async function GET(request: Request) {
         powerCopy: withKeyConcepts(powerCopy, docSlug, "power"),
         fantasyCopy: withKeyConcepts(fantasyCopy, docSlug, "fantasy"),
         fantasyDots,
-        curiosityCopy: withKeyConcepts(curiosityCopy, docSlug, "curiosity"),
+        curiosityCopy: withKeyConcepts(curiosityCopy, docSlug, "curiosity", curiosityUnlocked),
         curiosityStyles,
         relationshipFit,
         lovelangCopy: withKeyConcepts(lovelangCopy, docSlug, "lovelang"),
         loveLanguageOrder,
-        confidenceCopy: withKeyConcepts(confidenceCopy, docSlug, "confidence"),
+        confidenceCopy: withKeyConcepts(confidenceCopy, docSlug, "confidence", confidenceUnlocked),
         confidenceStrip,
         mapCopy,
         stageCopy: withKeyConcepts(stageCopy, docSlug, "stage"),
