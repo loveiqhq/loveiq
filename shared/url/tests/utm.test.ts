@@ -175,4 +175,45 @@ describe("lib/utm", () => {
       expect(getStoredUtm()).toBeNull();
     });
   });
+
+  describe("captureUtmFromUrl — Google Ads ValueTrack detail", () => {
+    it("captures matchtype and network, which are not utm_-prefixed", () => {
+      // Regression: the allowlist held only utm_* keys plus the click ids, so these
+      // two were dropped on capture even though `classifyTraffic` reads them and
+      // `trafficLine` renders them into the Slack survey ping. Measured live: ads
+      // arrived with utm_campaign and utm_term set and these two null.
+      setUrl(
+        "?utm_source=google&utm_medium=cpc&utm_campaign=price_time_test" +
+          "&utm_term=sexual%20archetype&matchtype=e&network=g&gclid=abc123"
+      );
+      const json = captureUtmFromUrl();
+      expect(json).not.toBeNull();
+      const parsed = JSON.parse(json!) as Record<string, string>;
+      expect(parsed.matchtype).toBe("e");
+      expect(parsed.network).toBe("g");
+      // and it must not have disturbed what already worked
+      expect(parsed.utm_campaign).toBe("price_time_test");
+      expect(parsed.utm_term).toBe("sexual archetype");
+      expect(parsed.gclid).toBe("abc123");
+    });
+
+    it("omits them entirely when Google does not send them", () => {
+      setUrl("?gclid=abc123");
+      const parsed = JSON.parse(captureUtmFromUrl()!) as Record<string, string>;
+      expect("matchtype" in parsed).toBe(false);
+      expect("network" in parsed).toBe(false);
+      // the auto-tagging fallback still applies
+      expect(parsed.utm_source).toBe("google");
+      expect(parsed.utm_medium).toBe("cpc");
+    });
+
+    it("does not treat ValueTrack detail alone as a reason to store anything", () => {
+      // matchtype/network with no campaign and no click id is not an attribution
+      // signal; storing it would overwrite a real earlier first-touch value.
+      setUrl("?matchtype=e&network=g");
+      const json = captureUtmFromUrl();
+      const parsed = json ? (JSON.parse(json) as Record<string, string>) : {};
+      expect(parsed.utm_source).toBeUndefined();
+    });
+  });
 });
