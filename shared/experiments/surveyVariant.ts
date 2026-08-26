@@ -30,6 +30,8 @@
  * The 453/411 split is therefore final and permanently reproducible.
  */
 
+import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
+
 const isProduction = process.env.NODE_ENV === "production";
 
 export type SurveyVariant = "white" | "dark";
@@ -41,26 +43,13 @@ export function isSurveyVariant(value: string | null | undefined): value is Surv
 }
 
 /**
- * Is this build allowed to honour the `?survey=` preview override? True in dev,
- * and on recognizably non-production deploys (staging / vercel previews, keyed
- * off the build-time `NEXT_PUBLIC_SITE_URL`). Safe-by-default: an unknown/empty
- * site URL is treated as production (override OFF), so the live apex/www can
- * never let a real user self-select an arm and bias the experiment.
- */
-function isPreviewableDeploy(): boolean {
-  if (process.env.NODE_ENV !== "production") return true;
-  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "").toLowerCase();
-  return siteUrl.includes("staging.") || siteUrl.includes(".vercel.app");
-}
-
-/**
  * Preview override. Reads a `survey` query value (`white` | `dark`) so either arm
  * can be previewed deterministically — append `?survey=white` to `/survey`.
  * Active in dev and on staging/preview deploys; returns null on production so it
  * can never affect a real user's bucketing.
  */
 export function resolveSurveyDevOverride(param: string | null | undefined): SurveyVariant | null {
-  if (!isPreviewableDeploy()) return null;
+  if (!isNonProdDeploy()) return null;
   return isSurveyVariant(param) ? param : null;
 }
 

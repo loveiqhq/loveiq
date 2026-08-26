@@ -13,6 +13,7 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { reportSections } from "@/data/report-general";
 import { escapeHtml } from "@shared/format/html-escape";
+import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
 import { cacheReportCheckoutQuote } from "@features/checkout/server/reportCheckoutQuoteCache";
 import {
   buildReportCheckoutHref,
@@ -827,16 +828,37 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     return access;
   }, [resolvedSections, accessPlan, viewArchetypeTier]);
 
+  /**
+   * Build-time, deliberately not a runtime flag or a query parameter. A reader on
+   * the live site must not be able to turn this off, and there must be no env var
+   * on the production project that could be set by mistake.
+   */
+  const copyable = isNonProdDeploy();
+
   return (
     <main
       id="main-content"
       ref={mainContentRef}
       tabIndex={-1}
-      className={`report-page${accessPlan === "full_report" || accessPlan === "all_reports" ? "" : " report-experience--sticky-pad"}`}
+      className={`report-page${accessPlan === "full_report" || accessPlan === "all_reports" ? "" : " report-experience--sticky-pad"}${copyable ? " report-page--copyable" : ""}`}
       style={getReportThemeStyle(theme)}
-      onCopy={(e) => e.preventDefault()}
-      onContextMenu={(e) => e.preventDefault()}
-      onDragStart={(e) => e.preventDefault()}
+      /**
+       * Copy, right-click and drag are blocked on the LIVE site only. The report
+       * is the paid product, so lifting its text is the thing this prevents.
+       *
+       * Off the live site — staging, Vercel previews, local dev — they are
+       * allowed, because the team reviews and quotes report copy and could not
+       * get the text out. All four guards have to move together: the CSS
+       * `user-select: none` below stops a selection ever being made, so leaving
+       * it on would make an unblocked `onCopy` useless.
+       */
+      {...(copyable
+        ? {}
+        : {
+            onCopy: (e: React.ClipboardEvent) => e.preventDefault(),
+            onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+            onDragStart: (e: React.DragEvent) => e.preventDefault(),
+          })}
     >
       {devParam && (
         <div

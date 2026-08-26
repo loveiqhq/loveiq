@@ -1281,6 +1281,19 @@ input.autofill-dark:-internal-autofill-previewed {
     linear-gradient(180deg, #ffffff 0%, #ffffff 100%);
 }
 
+/* Selectable off the live site only — staging, previews and local dev — so the
+   team can quote report copy. The React handlers in ReportPage.tsx gate on the
+   same build-time check; both halves are needed, because a selection that cannot
+   be made cannot be copied either. `-webkit-touch-callout` restores the iOS
+   long-press menu, which is how you copy on a phone. */
+.report-page--copyable {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
 .report-page::before {
   content: "";
   position: absolute;
