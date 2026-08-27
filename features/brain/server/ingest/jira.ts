@@ -74,6 +74,15 @@ function named(value: unknown): string | null {
   return null;
 }
 
+/** Matches upsert.ts MAX_BODY_CHARS; the notice must fit INSIDE the ceiling. */
+const JIRA_BODY_LIMIT = 2400;
+
+function truncationNotice(body: string): string {
+  if (body.length <= JIRA_BODY_LIMIT) return body;
+  const notice = "\n\n[…description truncated — open the ticket for the rest]";
+  return body.slice(0, JIRA_BODY_LIMIT - notice.length) + notice;
+}
+
 export function toRow(issue: JiraIssue, baseUrl: string, stampedAt: string): BrainRow | null {
   const key = issue.key;
   const f = issue.fields ?? {};
@@ -102,7 +111,13 @@ export function toRow(issue: JiraIssue, baseUrl: string, stampedAt: string): Bra
     source_id: key,
     title: `${key}: ${summary}`,
     url: `${baseUrl}/browse/${key}`,
-    body: [summary, header, description].filter(Boolean).join("\n\n"),
+    // `clean()` hard-truncates at 2400 chars. Docs and commits are SPLIT into
+    // several chunks instead, so nothing is lost; one row per issue means a long
+    // description loses its tail — often exactly the acceptance criteria or the
+    // final decision that answers "what did we decide on X". Splitting Jira
+    // properly belongs with enabling Jira; until then the cut is at least
+    // announced, and the ticket URL is right there in the citation.
+    body: truncationNotice([summary, header, description].filter(Boolean).join("\n\n")),
     meta: {
       key,
       status,
@@ -116,6 +131,9 @@ export function toRow(issue: JiraIssue, baseUrl: string, stampedAt: string): Bra
       resolution: named(f.resolution),
     },
     updated_at: stampedAt,
+    // The issue's own last-updated date, so a recently-touched ticket outranks a
+    // stale one on a tie rather than being ordered arbitrarily.
+    period_end: typeof f.updated === "string" ? f.updated.slice(0, 10) : null,
   };
 }
 
@@ -132,7 +150,14 @@ export async function ingestJira(
   }
 
   const auth = Buffer.from(`${email}:${token}`).toString("base64");
-  const jql = `project in (${PROJECTS.join(", ")}) ORDER BY updated DESC`;
+  // ORDER BY key, NOT `updated DESC`. With a recency sort, an issue on a
+  // not-yet-fetched page that someone edits mid-walk jumps to page 1 — already
+  // consumed — so it is never re-emitted, keeps the PREVIOUS run's `updated_at`,
+  // and `sweepStale` deletes it. The most actively worked ticket was the one most
+  // likely to silently vanish from the corpus. `key` is immutable, so pagination
+  // over it is stable. (Losing the recency ordering costs nothing: a run cut short
+  // by the time budget does not sweep at all.)
+  const jql = `project in (${PROJECTS.join(", ")}) ORDER BY key ASC`;
 
   let nextPageToken: string | null = null;
   let pages = 0;
@@ -184,7 +209,7 @@ export async function ingestJira(
 
   // Only sweep after walking the whole result set. Sweeping a run cut short by
   // the time budget would delete every issue the run never reached.
-  const swept = completed ? await sweepStale(SOURCE, stampedAt) : 0;
+  const swept = completed ? await sweepStale(SOURCE, stampedAt, written) : 0;
 
   return { source: SOURCE, rows: written, swept };
 }

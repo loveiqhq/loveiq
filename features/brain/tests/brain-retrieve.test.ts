@@ -10,7 +10,7 @@ vi.mock("@features/admin/server/supabase", () => ({
   supabaseFetch: (...args: unknown[]) => mockSupabaseFetch(...args),
 }));
 
-import { retrieve } from "@features/brain/server/retrieve";
+import { CorpusUnavailableError, retrieve } from "@features/brain/server/retrieve";
 import { toSlackMrkdwn } from "@features/brain/server/answer";
 
 interface RowInput {
@@ -195,13 +195,21 @@ describe("retrieve — failure and edge handling", () => {
     expect(body.query_text).toBe("a real question");
   });
 
-  it("returns an empty list, not a throw, when the RPC errors", async () => {
+  // These two used to assert `[]`, which is what made the brain answer "I
+  // couldn't find anything about that" while the database was unreachable. An
+  // empty list must mean "asked, found nothing" and nothing else.
+  it("throws CorpusUnavailableError — does NOT return [] — when the RPC errors", async () => {
     mockSupabaseFetch.mockResolvedValue({ ok: false, status: 500, json: async () => ({}) });
-    await expect(retrieve("anything", 8)).resolves.toEqual([]);
+    await expect(retrieve("anything", 8)).rejects.toBeInstanceOf(CorpusUnavailableError);
   });
 
-  it("returns an empty list, not a throw, when supabase is unreachable", async () => {
+  it("throws CorpusUnavailableError when supabase is unreachable", async () => {
     mockSupabaseFetch.mockRejectedValue(new Error("network down"));
+    await expect(retrieve("anything", 8)).rejects.toBeInstanceOf(CorpusUnavailableError);
+  });
+
+  it("still returns [] for a genuine miss, so the two stay distinguishable", async () => {
+    mockSupabaseFetch.mockResolvedValue({ ok: true, status: 200, json: async () => [] });
     await expect(retrieve("anything", 8)).resolves.toEqual([]);
   });
 

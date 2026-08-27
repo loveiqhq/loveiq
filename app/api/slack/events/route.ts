@@ -13,6 +13,7 @@ import {
   verifySlackSignature,
 } from "@features/brain/server/slack";
 import { scheduleAfterResponse } from "@shared/http/after-response";
+import { checkRateLimit } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 
 export const runtime = "nodejs";
@@ -59,6 +60,7 @@ interface SlackEnvelope {
   type?: string;
   challenge?: string;
   event_id?: string;
+  team_id?: string;
   event?: SlackEvent;
 }
 
@@ -117,34 +119,81 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  // Reply in-thread: under the mention in a channel, and under the message in a
-  // DM, so a busy channel does not fill with loose answers.
-  const threadTs = event.thread_ts ?? event.ts ?? null;
-
-  // The claim IS the dedupe: `slack_event_id` is UNIQUE, so a retried delivery
-  // loses the insert and stops here rather than spending a second model request.
-  const claim = await claimQuestion({
-    question,
-    slackEventId: payload.event_id ?? null,
-    slackUserId: event.user ?? null,
-    slackChannelId: channel,
-  });
-  if (claim.duplicate) {
-    logger.info({ eventId: payload.event_id }, "brain: duplicate Slack delivery ignored");
+  // A signed request proves it came from Slack, not that it came from OUR Slack.
+  // The corpus is deliberately undifferentiated -- revenue, ad spend, cost per
+  // customer, every internal doc -- so there is no per-source restriction to fall
+  // back on if the app is ever installed somewhere else. Env-gated so an unset
+  // value cannot lock the team out of its own bot.
+  const expectedTeam = process.env.SLACK_BRAIN_TEAM_ID;
+  if (expectedTeam && payload.team_id && payload.team_id !== expectedTeam) {
+    logger.warn({ teamId: payload.team_id }, "brain: event from an unexpected Slack workspace");
     return NextResponse.json({ ok: true });
   }
 
+  // Dedupe is the ONLY thing standing between a Slack retry storm and answering
+  // the same question three times, and it keys on `event_id`. Without one we
+  // cannot tell a retry from a new question, so we decline rather than risk
+  // uncapped duplicate answers. Slack sends it on every `event_callback`.
+  const eventId = payload.event_id;
+  if (!eventId) {
+    logger.warn("brain: event_callback with no event_id — cannot dedupe, declining");
+    return NextResponse.json({ ok: true });
+  }
+
+  // Reply in-thread: under the mention in a channel, and under the message in a
+  // DM, so a busy channel does not fill with loose answers.
+  const threadTs = event.thread_ts ?? event.ts ?? null;
+  const userId = event.user;
+
+  // NOTHING SLOW BEFORE THE ACK. The claim used to sit here, an awaited Supabase
+  // round trip with an 8s ceiling inside a 3s budget -- and it fails open, so
+  // when Supabase was slow the ack missed 3s, Slack retried, and every retry
+  // also failed the claim open and answered. Three duplicate answers, three
+  // model requests, none of them counted. Moved into the deferred block: both
+  // deliveries now ack instantly and race on the UNIQUE constraint, where
+  // exactly one wins.
   scheduleAfterResponse("brain-answer", async () => {
+    const claim = await claimQuestion({
+      question,
+      slackEventId: eventId,
+      slackUserId: userId ?? null,
+      slackChannelId: channel,
+    });
+    if (claim.duplicate) {
+      logger.info({ eventId }, "brain: duplicate Slack delivery ignored");
+      return;
+    }
+
     if (!isBrainSlackConfigured()) {
       logger.warn("SLACK_BRAIN_BOT_TOKEN not set — cannot reply");
       await finishQuestion(claim.id, { error: "slack bot token missing" });
       return;
     }
 
+    // Per-asker limit. The daily quota alone is a SHARED pool, so one person (or
+    // one runaway integration) could burn the whole team's day in a few minutes,
+    // and every question costs a corpus search plus a model call.
+    if (userId) {
+      const perUser = await checkRateLimit(userId, {
+        bucket: "brain-question",
+        limit: 10,
+        windowMs: 5 * 60_000,
+      });
+      if (!perUser.allowed) {
+        await postBrainReply({
+          channel,
+          threadTs,
+          text: "That's a lot of questions at once — give me a few minutes to catch up, then ask again.",
+        });
+        await finishQuestion(claim.id, { error: "per-user rate limited" });
+        return;
+      }
+    }
+
     // Fails OPEN when the count cannot be read: refusing to answer because a
     // bookkeeping query failed is worse than briefly overrunning the quota.
     const asked = await questionsToday();
-    if (asked !== null && asked > DAILY_QUESTION_LIMIT) {
+    if (asked !== null && asked >= DAILY_QUESTION_LIMIT) {
       await postBrainReply({
         channel,
         threadTs,
@@ -155,12 +204,21 @@ export async function POST(request: Request) {
     }
 
     const answer = await answerQuestion({ question });
-    const posted = await postBrainReply({
+    let posted = await postBrainReply({
       channel,
       threadTs,
       text: answer.text,
       blocks: answer.blocks,
     });
+
+    // The answer is already paid for with a scarce model request, and the most
+    // likely reason Slack refused it is `invalid_blocks` -- the block payload is
+    // built from model markdown by a regex transform. Retrying as plain text
+    // delivers a slightly uglier answer instead of silence.
+    if (!posted) {
+      logger.warn({ eventId }, "brain: block post failed, retrying as plain text");
+      posted = await postBrainReply({ channel, threadTs, text: answer.text });
+    }
 
     await finishQuestion(claim.id, {
       sourceCount: answer.sources.length,

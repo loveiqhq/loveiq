@@ -71,27 +71,60 @@ interface Ga4Row {
   metricValues?: Array<{ value?: string }>;
 }
 
+/** Page ceiling, so a bad request cannot walk forever. 20 x 5,000 = 100,000 rows. */
+const MAX_PAGES = 20;
+
+/**
+ * One GA4 report, PAGED TO COMPLETION.
+ *
+ * A single request silently returns at most `limit` rows and nothing in the
+ * response body looks like an error. The ad-cost report asks for
+ * (date x sessionCampaignName) over 90 days, which is 90 x however many campaigns
+ * ran — past the limit, Google just stops, so `Google Ads spend` was understated
+ * with no warning, and that figure feeds `Net` and `Cost per paying customer`.
+ * `rowCount` is the true total, so it is the loop's terminating condition.
+ */
 async function runGa4Report(
   token: string,
   propertyId: string,
   body: Record<string, unknown>
 ): Promise<Ga4Row[]> {
-  const res = await fetchWithTimeout(
-    `https://analyticsdata.googleapis.com/v1beta/properties/${encodeURIComponent(propertyId)}:runReport`,
-    {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      timeoutMs: TIMEOUT_MS,
+  const pageSize = typeof body.limit === "number" ? body.limit : 10_000;
+  const all: Ga4Row[] = [];
+  let offset = 0;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const res = await fetchWithTimeout(
+      `https://analyticsdata.googleapis.com/v1beta/properties/${encodeURIComponent(propertyId)}:runReport`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ ...body, limit: pageSize, offset }),
+        timeoutMs: TIMEOUT_MS,
+      }
+    );
+    if (!res.ok) {
+      const detail = (await res.text().catch(() => "")).slice(0, 400);
+      const hint = googleScopeHint(res.status, detail, GA4_SCOPE);
+      throw new Error(hint ?? `GA4 runReport failed (${res.status}): ${detail}`);
     }
-  );
-  if (!res.ok) {
-    const detail = (await res.text().catch(() => "")).slice(0, 400);
-    const hint = googleScopeHint(res.status, detail, GA4_SCOPE);
-    throw new Error(hint ?? `GA4 runReport failed (${res.status}): ${detail}`);
+    const json = (await res.json()) as { rows?: Ga4Row[]; rowCount?: number };
+    const rows = json.rows ?? [];
+    all.push(...rows);
+
+    const total = typeof json.rowCount === "number" ? json.rowCount : all.length;
+    if (rows.length === 0 || all.length >= total) return all;
+    offset += rows.length;
+
+    if (page === MAX_PAGES - 1) {
+      // Never truncate silently: say what was dropped.
+      logger.warn(
+        { got: all.length, total, dimensions: body.dimensions },
+        "GA4 report hit the page ceiling — figures derived from it are incomplete"
+      );
+    }
   }
-  const json = (await res.json()) as { rows?: Ga4Row[] };
-  return json.rows ?? [];
+  return all;
 }
 
 /** `YYYYMMDD` (GA4's `date` dimension) to `YYYY-MM-DD`. */
@@ -307,6 +340,7 @@ export async function ingestGa4(stampedAt: string): Promise<IngestResult> {
         ...(ad ? { ad_cost: ad.cost, ad_clicks: ad.clicks, ad_impressions: ad.impressions } : {}),
       },
       updated_at: stampedAt,
+      period_end: day,
     });
   }
 
@@ -320,6 +354,7 @@ export async function ingestGa4(stampedAt: string): Promise<IngestResult> {
       body: renderGa4(`${label} (${week})`, t),
       meta: { grain: "week", week, sessions: t.sessions, ad_cost: t.adCost },
       updated_at: stampedAt,
+      period_end: t.lastDay,
     });
   }
 
@@ -333,11 +368,12 @@ export async function ingestGa4(stampedAt: string): Promise<IngestResult> {
       body: renderGa4(`${label} — whole month (${month})`, t),
       meta: { grain: "month", month, sessions: t.sessions, ad_cost: t.adCost },
       updated_at: stampedAt,
+      period_end: t.lastDay,
     });
   }
 
   const written = await upsertChunks(chunks);
-  const swept = await sweepStale(GA4_SOURCE, stampedAt);
+  const swept = await sweepStale(GA4_SOURCE, stampedAt, written);
   return { source: GA4_SOURCE, rows: written, swept };
 }
 
@@ -349,27 +385,56 @@ interface GscRow {
   position?: number;
 }
 
+/**
+ * One Search Console query, PAGED TO COMPLETION via `startRow`.
+ *
+ * Worse than GA4's truncation in kind: the (date, query) report is ordered by
+ * clicks, so cutting it off drops whole quiet days' query rows. The per-query
+ * totals in `Top search queries` then became partial sums presented as period
+ * totals, while the headline clicks/impressions (from the date-only report) stayed
+ * correct — so the two numbers disagreed inside a single chunk.
+ *
+ * There is no `rowCount` here, so a short page is the terminating signal.
+ */
 async function queryGsc(
   token: string,
   site: string,
   body: Record<string, unknown>
 ): Promise<GscRow[]> {
-  const res = await fetchWithTimeout(
-    `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(site)}/searchAnalytics/query`,
-    {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      timeoutMs: TIMEOUT_MS,
+  const pageSize = typeof body.rowLimit === "number" ? body.rowLimit : 5000;
+  const all: GscRow[] = [];
+  let startRow = 0;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const res = await fetchWithTimeout(
+      `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(site)}/searchAnalytics/query`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ ...body, rowLimit: pageSize, startRow }),
+        timeoutMs: TIMEOUT_MS,
+      }
+    );
+    if (!res.ok) {
+      const detail = (await res.text().catch(() => "")).slice(0, 400);
+      const hint = googleScopeHint(res.status, detail, SEARCH_CONSOLE_SCOPE);
+      throw new Error(hint ?? `Search Console query failed (${res.status}): ${detail}`);
     }
-  );
-  if (!res.ok) {
-    const detail = (await res.text().catch(() => "")).slice(0, 400);
-    const hint = googleScopeHint(res.status, detail, SEARCH_CONSOLE_SCOPE);
-    throw new Error(hint ?? `Search Console query failed (${res.status}): ${detail}`);
+    const json = (await res.json()) as { rows?: GscRow[] };
+    const rows = json.rows ?? [];
+    all.push(...rows);
+
+    if (rows.length < pageSize) return all;
+    startRow += rows.length;
+
+    if (page === MAX_PAGES - 1) {
+      logger.warn(
+        { got: all.length, dimensions: body.dimensions },
+        "Search Console query hit the page ceiling — query totals are incomplete"
+      );
+    }
   }
-  const json = (await res.json()) as { rows?: GscRow[] };
-  return json.rows ?? [];
+  return all;
 }
 
 export async function ingestSearchConsole(stampedAt: string): Promise<IngestResult> {
@@ -496,6 +561,7 @@ export async function ingestSearchConsole(stampedAt: string): Promise<IngestResu
       body: renderGsc(`${longDate(day)} (${day})`, addGsc(emptyGsc(day), day, r)),
       meta: { grain: "day", day, clicks, impressions, position: r.position ?? 0 },
       updated_at: stampedAt,
+      period_end: day,
     });
   }
 
@@ -509,6 +575,7 @@ export async function ingestSearchConsole(stampedAt: string): Promise<IngestResu
       body: renderGsc(`${label} (${week})`, t),
       meta: { grain: "week", week, clicks: t.clicks, impressions: t.impressions },
       updated_at: stampedAt,
+      period_end: t.lastDay,
     });
   }
 
@@ -522,11 +589,12 @@ export async function ingestSearchConsole(stampedAt: string): Promise<IngestResu
       body: renderGsc(`${label} — whole month (${month})`, t),
       meta: { grain: "month", month, clicks: t.clicks, impressions: t.impressions },
       updated_at: stampedAt,
+      period_end: t.lastDay,
     });
   }
 
   const written = await upsertChunks(chunks);
-  const swept = await sweepStale(GSC_SOURCE, stampedAt);
+  const swept = await sweepStale(GSC_SOURCE, stampedAt, written);
   return { source: GSC_SOURCE, rows: written, swept };
 }
 

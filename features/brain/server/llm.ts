@@ -56,7 +56,7 @@ export interface LlmMessage {
 }
 
 export type LlmResult =
-  | { ok: true; text: string }
+  | { ok: true; text: string; truncated: boolean }
   | { ok: false; reason: "unconfigured" | "rate_limited" | "error"; detail?: string };
 
 export function isLlmConfigured(): boolean {
@@ -131,25 +131,33 @@ export async function complete(messages: LlmMessage[]): Promise<LlmResult> {
   } | null;
 
   const content = json?.choices?.[0]?.message?.content;
+  const finishReason = json?.choices?.[0]?.finish_reason;
   if (typeof content !== "string" || !content.trim()) {
     // A thinking model that spends its whole budget reasoning answers 200 with an
     // EMPTY message and finish_reason "length" — not an error status. Naming that
     // separately matters because the fix is a bigger `max_tokens` or a lower
     // reasoning effort, not a retry.
-    const finish = json?.choices?.[0]?.finish_reason;
     logger.error(
-      { hasChoices: Boolean(json?.choices?.length), finish },
+      { hasChoices: Boolean(json?.choices?.length), finish: finishReason },
       "brain llm returned no content"
     );
     return {
       ok: false,
       reason: "error",
       detail:
-        finish === "length"
+        finishReason === "length"
           ? "the model used its whole token budget on reasoning — raise BRAIN_LLM_REASONING_EFFORT or max_tokens"
           : "empty completion",
     };
   }
 
-  return { ok: true, text: content.trim() };
+  // The empty case above is the RARE one. The common shape is a non-empty answer
+  // that got cut off mid-sentence because reasoning ate the budget — and until
+  // now that fell straight through to `ok: true` and was posted with citations
+  // and no indication it was incomplete. On a tool people quote into decisions,
+  // a silently half-finished answer about revenue is worse than an error.
+  if (finishReason === "length") {
+    logger.warn({ chars: content.length }, "brain llm answer was truncated by the token budget");
+  }
+  return { ok: true, text: content.trim(), truncated: finishReason === "length" };
 }

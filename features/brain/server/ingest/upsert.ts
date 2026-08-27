@@ -19,6 +19,16 @@ export interface BrainRow {
   body: string;
   meta: Record<string, unknown>;
   updated_at: string;
+  /**
+   * The period this chunk DESCRIBES — not when it was ingested.
+   *
+   * `updated_at` cannot order by recency: it is stamped once per run, so
+   * `count(distinct updated_at)` was 1 across all 171 analytics chunks and the
+   * `ORDER BY score DESC, updated_at DESC` tie-break was a no-op. With scores
+   * tying 0.002 apart that made "the most recent month" effectively random —
+   * "revenue?" answered with May. Null where a period is meaningless (docs).
+   */
+  period_end?: string | null;
 }
 
 const BATCH = 200;
@@ -35,6 +45,12 @@ function clean(row: BrainRow): BrainRow {
     ...row,
     title: row.title.split(NUL_BYTE).join(""),
     body: row.body.split(NUL_BYTE).join("").slice(0, MAX_BODY_CHARS),
+    // PostgREST rejects a bulk insert whose objects do not all carry the SAME
+    // keys — "All object keys must match" (PGRST102), and it fails the whole
+    // batch, not the offending row. `period_end` is optional, and JSON.stringify
+    // drops `undefined`, so one row without it breaks every other row in the
+    // batch. Normalising to an explicit null here means no caller has to know.
+    period_end: row.period_end ?? null,
   };
 }
 
@@ -71,8 +87,27 @@ export async function upsertChunks(rows: BrainRow[]): Promise<number> {
  *
  * ONLY CALL THIS AFTER A COMPLETE RUN. Sweeping after a partial run deletes
  * everything the run never reached, which silently empties the corpus.
+ *
+ * `wroteRows` is required rather than advisory, because "the upstream answered"
+ * is not the same as "the run was complete". GA4 omits `rows` entirely for an
+ * empty result set and returns 200, so an accessible-but-empty property yielded
+ * zero chunks, zero writes, and then a sweep that deleted every ga4 row — and
+ * the cron reported `{ok: true}`, so nothing alerted. Refusing to sweep on a
+ * zero-write run makes that unreachable for every caller instead of asking four
+ * of them to remember.
  */
-export async function sweepStale(source: string, stampedAt: string): Promise<number> {
+export async function sweepStale(
+  source: string,
+  stampedAt: string,
+  wroteRows: number
+): Promise<number> {
+  if (wroteRows <= 0) {
+    logger.warn(
+      { source },
+      "brain sweep skipped: run wrote no rows, refusing to delete the source"
+    );
+    return 0;
+  }
   try {
     const res = await supabaseFetch(
       `/rest/v1/brain_chunk?source=eq.${encodeURIComponent(source)}&updated_at=lt.${encodeURIComponent(stampedAt)}`,

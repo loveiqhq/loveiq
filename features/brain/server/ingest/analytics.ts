@@ -121,35 +121,77 @@ function isEmpty(t: Totals): boolean {
   return t.visitors === 0 && t.submissions === 0 && t.reports === 0 && t.paid === 0;
 }
 
+export interface AdCost {
+  byDay: Map<string, number>;
+  /**
+   * Earliest day GA4 data exists for, or null when there is none.
+   *
+   * This is REQUIRED, not decoration. GA4 is ingested over 90 days
+   * (`google.ts` DAYS) while this rollup covers 400, so a month that straddles
+   * the GA4 floor pairs a FULL month of revenue with a PARTIAL month of ad
+   * spend. Measured: May 2026 had 4 of 31 days of spend (GA4 data starts
+   * 2026-05-28) and the chunk published "Net: EUR 291.68" when the real figure
+   * is a loss of several hundred. An exec comparing that to June's real
+   * EUR -1,178 concludes the business collapsed in June. It did not.
+   */
+  from: string | null;
+}
+
 /** Spend per day, read back from the `ga4` chunks written earlier in this run. */
-async function adCostByDay(): Promise<Map<string, number>> {
+async function adCostByDay(): Promise<AdCost> {
   const out = new Map<string, number>();
+  let from: string | null = null;
   try {
     const res = await supabaseFetch(
       // eslint-disable-next-line no-secrets/no-secrets -- a PostgREST query path, not a secret
       "/rest/v1/brain_chunk?source=eq.ga4&select=meta&meta->>grain=eq.day",
       { headers: { Range: "0-999" } }
     );
-    if (!res.ok) return out;
+    if (!res.ok) return { byDay: out, from };
     const rows = (await res.json()) as Array<{ meta?: Record<string, unknown> }>;
     for (const r of rows) {
       const day = typeof r.meta?.day === "string" ? r.meta.day : null;
+      if (!day) continue;
+      // The floor tracks every day GA4 COVERS, including zero-spend days — a day
+      // with no spend is still a day we know about, and treating it as uncovered
+      // would suppress the spend lines for a period that is genuinely complete.
+      if (from === null || day < from) from = day;
       const cost = Number(r.meta?.ad_cost ?? 0);
-      if (day && Number.isFinite(cost) && cost > 0) out.set(day, cost);
+      if (Number.isFinite(cost) && cost > 0) out.set(day, cost);
     }
   } catch {
     // Optional enrichment: without GA4 the rollup simply omits the spend lines.
   }
-  return out;
+  return { byDay: out, from };
+}
+
+/** Last calendar day of a `YYYY-MM`, so "whole month" can be checked not assumed. */
+function monthEnd(month: string): string {
+  const y = Number(month.slice(0, 4));
+  const m = Number(month.slice(5, 7));
+  // Day 0 of the NEXT month is the last day of this one, and it handles February.
+  return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
 }
 
 function money(n: number): string {
   return `EUR ${n.toFixed(2)}`;
 }
 
-function pct(part: number, whole: number): string {
-  if (!whole) return "n/a";
+function pct(part: number, whole: number): string | null {
+  if (!whole) return null;
+  // A funnel step cannot exceed the step above it. When it does, the two metrics
+  // have different tracking start dates — `funnel_event.unique_visitor` only
+  // begins 2026-05-23 while `survey_submission` goes back much further — and May
+  // 2026 published "Signups: 453 (115.9% of starts)" as if it were a conversion
+  // rate. Returning null drops the ratio and keeps the two honest counts.
+  if (part > whole) return null;
   return `${((part / whole) * 100).toFixed(1)}%`;
+}
+
+/** `123 (45.6% of x)`, or just `123` when the ratio would be misleading. */
+function withPct(count: number, part: number, whole: number, ofWhat: string): string {
+  const p = pct(part, whole);
+  return p ? `${count} (${p} of ${ofWhat})` : `${count}`;
 }
 
 const MONTHS = [
@@ -218,28 +260,59 @@ function renderSources(sources: Record<string, number>): string | null {
 }
 
 /** The shared body all three grains use, so a reader sees one consistent shape. */
-function renderBody(period: string, t: Totals): string {
+function renderBody(period: string, t: Totals, adFrom: string | null): string {
   const sources = renderSources(t.sources);
+
+  // Is the ad spend for this period complete, or does the period start before
+  // GA4 has any data? A partial figure is fine to state as long as it is not
+  // then divided into a cost-per-customer or subtracted into a Net.
+  const adPartial = t.adSpend > 0 && (adFrom === null || t.firstDay < adFrom);
+
   return [
     `Period: ${period}`,
-    `Website visitors: ${t.visitors}`,
-    `Survey starts: ${t.starts} (${pct(t.starts, t.visitors)} of visitors)`,
-    `Signups (completed surveys): ${t.submissions} (${pct(t.submissions, t.starts)} of starts)`,
-    `Reports created: ${t.reports} · Reports opened: ${t.opens}`,
-    `Paid customers: ${t.paid} (${pct(t.paid, t.reports)} of reports) · Revenue: EUR ${t.revenue.toFixed(2)}`,
+    // Never state 0. `unique_visitor` tracking only starts 2026-05-23, so a zero
+    // here means NOT MEASURED, and "how many visitors did we have in April?" was
+    // answered "0" as though it were a fact.
+    t.visitors > 0
+      ? `Website visits: ${t.visitors} (a returning person counts once per day)`
+      : null,
+    // Same rule one step down the funnel: a zero with a NON-ZERO step below it is
+    // impossible as a fact, so it is a tracking gap. March 2026 stated
+    // "Survey starts: 0" next to "Signups: 4" — you cannot complete a survey you
+    // never started.
+    t.starts === 0 && t.submissions > 0
+      ? null
+      : t.visitors > 0
+        ? `Survey starts: ${withPct(t.starts, t.starts, t.visitors, "visits")}`
+        : `Survey starts: ${t.starts}`,
+    `Signups (completed surveys): ${withPct(t.submissions, t.submissions, t.starts, "starts")}`,
+    `Reports created: ${t.reports} · Reports first opened: ${t.opens}`,
+    `Paid customers: ${withPct(t.paid, t.paid, t.reports, "reports")} · Revenue: EUR ${t.revenue.toFixed(2)}`,
     t.invites ? `Invites sent: ${t.invites}` : null,
     sources ? `Traffic sources: ${sources}` : null,
     // The two numbers everyone actually wants, next to each other and already
     // divided — a model asked to compute these from two separate chunks gets
     // them wrong or declines.
-    t.adSpend > 0 ? `Google Ads spend: ${money(t.adSpend)}` : null,
-    t.adSpend > 0 && t.submissions > 0
+    t.adSpend > 0
+      ? `Google Ads spend: ${money(t.adSpend)}${
+          adPartial
+            ? ` — INCOMPLETE: ad data only exists from ${adFrom ?? "an unknown date"}, and this period starts ${t.firstDay}. Do not treat this as the period's total spend.`
+            : ""
+        }`
+      : null,
+    // Deliberately suppressed when spend is partial: dividing full-period
+    // customers by part-period spend, or subtracting it from full revenue, turns
+    // a known gap into a confident wrong number.
+    !adPartial && t.adSpend > 0 && t.submissions > 0
       ? `Cost per signup: ${money(t.adSpend / t.submissions)} · Cost per paying customer: ${
           t.paid > 0 ? money(t.adSpend / t.paid) : "no paying customers"
         }`
       : null,
-    t.adSpend > 0
+    !adPartial && t.adSpend > 0
       ? `Net: ${money(t.revenue - t.adSpend)} (revenue ${money(t.revenue)} minus ad spend ${money(t.adSpend)})`
+      : null,
+    adPartial
+      ? `Cost per customer and net profit are omitted for this period on purpose, because the ad spend above covers only part of it.`
       : null,
   ]
     .filter((line) => line !== null)
@@ -249,7 +322,7 @@ function renderBody(period: string, t: Totals): string {
 export function buildAnalyticsRows(
   rows: RollupRow[],
   stampedAt: string,
-  adCost: Map<string, number> = new Map()
+  adCost: AdCost = { byDay: new Map(), from: null }
 ): BrainRow[] {
   const out: BrainRow[] = [];
   const byWeek = new Map<string, Totals>();
@@ -258,11 +331,11 @@ export function buildAnalyticsRows(
   for (const r of rows) {
     const day = String(r.day).slice(0, 10);
     const week = isoWeek(day);
-    byWeek.set(week, merge(byWeek.get(week), r, day, adCost));
+    byWeek.set(week, merge(byWeek.get(week), r, day, adCost.byDay));
     const month = day.slice(0, 7);
-    byMonth.set(month, merge(byMonth.get(month), r, day, adCost));
+    byMonth.set(month, merge(byMonth.get(month), r, day, adCost.byDay));
 
-    const totals = seed(r, day, adCost);
+    const totals = seed(r, day, adCost.byDay);
     if (isEmpty(totals)) continue;
     const label = longDate(day);
     out.push({
@@ -270,7 +343,7 @@ export function buildAnalyticsRows(
       source_id: `daily:${day}`,
       title: `LoveIQ numbers — ${label}`,
       url: null,
-      body: renderBody(`${label} (${day})`, totals),
+      body: renderBody(`${label} (${day})`, totals, adCost.from),
       meta: {
         grain: "day",
         day,
@@ -279,6 +352,7 @@ export function buildAnalyticsRows(
         ad_spend: totals.adSpend,
       },
       updated_at: stampedAt,
+      period_end: day,
     });
   }
 
@@ -291,9 +365,11 @@ export function buildAnalyticsRows(
       source_id: `weekly:${week}`,
       title: `LoveIQ numbers — ${label}`,
       url: null,
-      body: renderBody(`${label} (${week})`, t),
+      body: renderBody(`${label} (${week})`, t, adCost.from),
       meta: { grain: "week", week, visitors: t.visitors, revenue: t.revenue, ad_spend: t.adSpend },
       updated_at: stampedAt,
+      // The LAST day covered, so a part-week sorts by how recent it actually is.
+      period_end: t.lastDay,
     });
   }
 
@@ -305,7 +381,21 @@ export function buildAnalyticsRows(
       source_id: `monthly:${month}`,
       title: `LoveIQ numbers — ${label} (monthly total)`,
       url: null,
-      body: renderBody(`${label} — whole month (${month})`, t),
+      // Three sources each labelled a DIFFERENT partial range "whole month" —
+      // analytics ran to today, GA4 to yesterday, GSC to two days ago — so the
+      // same month carried three different "whole month" totals and nothing in
+      // the text said which days were actually covered.
+      body: renderBody(
+        `${label} — ${
+          t.lastDay >= monthEnd(month)
+            ? "whole month"
+            : `month so far, ${longDate(t.firstDay)} to ${longDate(t.lastDay)}`
+        } (${month})`,
+        t,
+        adCost.from
+      ),
+      // The LAST day covered, so the current part-month sorts as the most recent.
+      period_end: t.lastDay,
       meta: {
         grain: "month",
         month,
@@ -337,7 +427,7 @@ export async function ingestAnalytics(stampedAt: string): Promise<IngestResult> 
   const written = await upsertChunks(chunks);
   // Safe to sweep: this ingester always rewrites the whole window in one call,
   // so anything older is a day that aged out or a grain that emptied.
-  const swept = await sweepStale(SOURCE, stampedAt);
+  const swept = await sweepStale(SOURCE, stampedAt, written);
 
   return { source: SOURCE, rows: written, swept };
 }

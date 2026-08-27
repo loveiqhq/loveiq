@@ -6,7 +6,7 @@ import logger from "@shared/observability/logger";
  * corpus chunks most likely to contain the answer.
  *
  * Ranking itself lives in the `brain_search` RPC (full-text + trigram, see
- * 20260826090000_brain_chunk.sql). What lives HERE is the shaping that SQL is a
+ * 20260825215317_brain_chunk.sql). What lives HERE is the shaping that SQL is a
  * clumsy place for, and that measurably changes answer quality:
  *
  *   1. DEDUPE BY PARENT. Long docs and long commit messages are stored as several
@@ -105,6 +105,23 @@ function parentKey(row: BrainChunk): string {
   return `${row.source}:${row.sourceId}`;
 }
 
+/**
+ * Thrown when the corpus could not be QUERIED — HTTP 5xx, timeout, an open
+ * circuit breaker, Supabase not configured.
+ *
+ * This exists because returning `[]` for both "asked, found nothing" and "could
+ * not ask" made the brain reply "I couldn't find anything about that" while the
+ * database was down. For a tool whose only product is trustworthiness, asserting
+ * that evidence does not exist when the evidence store is unreachable is the one
+ * failure that destroys it. Callers must tell the two apart.
+ */
+export class CorpusUnavailableError extends Error {
+  constructor(detail: string) {
+    super(`brain corpus unavailable: ${detail}`);
+    this.name = "CorpusUnavailableError";
+  }
+}
+
 export async function retrieve(question: string, limit = 12): Promise<BrainChunk[]> {
   const trimmed = question.trim();
   if (trimmed.length < 2) return [];
@@ -128,12 +145,15 @@ export async function retrieve(question: string, limit = 12): Promise<BrainChunk
     });
     if (!res.ok) {
       logger.error({ status: res.status }, "brain_search RPC failed");
-      return [];
+      throw new CorpusUnavailableError(`rpc ${res.status}`);
     }
     rows = (await res.json()) as Array<Record<string, unknown>>;
   } catch (err) {
+    if (err instanceof CorpusUnavailableError) throw err;
+    // CircuitOpenError lands here too, which is exactly right: an open breaker
+    // means we did not ask, so we cannot claim there is nothing to find.
     logger.error({ err }, "brain retrieval failed");
-    return [];
+    throw new CorpusUnavailableError(err instanceof Error ? err.message : "unknown");
   }
   if (!Array.isArray(rows)) return [];
 
@@ -197,6 +217,12 @@ export async function retrieve(question: string, limit = 12): Promise<BrainChunk
     if (picked.length >= limit) break;
     picked.push(row);
   }
+
+  // The backfill appends AFTER every capped pick, so a deferred row scoring 1.02
+  // could sit at slot 12 while slot 3 scored 0.99. Citations are rendered [1]…[n]
+  // in this order, and a reader reasonably assumes [1] is the most relevant.
+  // Sorting at the end costs nothing and cannot change WHICH rows were chosen.
+  picked.sort((a, b) => b.score - a.score);
 
   return picked;
 }

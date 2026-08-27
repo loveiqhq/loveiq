@@ -74,7 +74,7 @@ describe("buildAnalyticsRows", () => {
     const weekly = rows.find((r) => r.source_id === "weekly:2026-W34");
     expect(weekly?.meta.visitors).toBe(200);
     expect(weekly?.meta.revenue).toBe(98);
-    expect(weekly?.body).toContain("Website visitors: 200");
+    expect(weekly?.body).toContain("Website visits: 200");
   });
 
   it("skips days with no activity so zero rows cannot crowd retrieval", () => {
@@ -101,7 +101,7 @@ describe("buildAnalyticsRows", () => {
   it("renders percentages a reader can act on", () => {
     const rows = buildAnalyticsRows([day("2026-08-19")], STAMP);
     const daily = rows.find((r) => r.source_id === "daily:2026-08-19");
-    expect(daily?.body).toContain("Survey starts: 10 (10.0% of visitors)");
+    expect(daily?.body).toContain("Survey starts: 10 (10.0% of visits)");
     expect(daily?.body).toContain("Signups (completed surveys): 5 (50.0% of starts)");
     expect(daily?.body).toContain("Revenue: EUR 49.00");
   });
@@ -133,15 +133,83 @@ describe("buildAnalyticsRows", () => {
     expect(weekly?.title).toContain("Wednesday 19 August 2026");
   });
 
-  it("says n/a rather than dividing by zero", () => {
+  it("never states a zero visit count as a fact, and never divides by zero", () => {
+    // `funnel_event.unique_visitor` only starts 2026-05-23, so zero means NOT
+    // MEASURED. "How many visitors did we have in April?" was answered "0".
     const rows = buildAnalyticsRows(
       [day("2026-08-19", { unique_visitors: 0, survey_starts: 0 })],
       STAMP
     );
     const daily = rows.find((r) => r.source_id === "daily:2026-08-19");
-    expect(daily?.body).toContain("n/a");
+    expect(daily?.body).not.toContain("Website visits: 0");
+    expect(daily?.body).not.toContain("Website visits");
     expect(daily?.body).not.toContain("NaN");
     expect(daily?.body).not.toContain("Infinity");
+    expect(daily?.body).not.toContain("n/a");
+  });
+
+  it("drops a funnel percentage that exceeds 100%, keeping both counts", () => {
+    // More signups than starts is impossible as a rate — it means the two
+    // metrics started tracking on different dates. May 2026 published
+    // "Signups: 453 (115.9% of starts)" as if it were a conversion rate.
+    const rows = buildAnalyticsRows(
+      [day("2026-08-19", { survey_starts: 4, submissions: 9 })],
+      STAMP
+    );
+    const daily = rows.find((r) => r.source_id === "daily:2026-08-19");
+    expect(daily?.body).toContain("Signups (completed surveys): 9");
+    expect(daily?.body).not.toMatch(/Signups[^\n]*% of starts/);
+  });
+
+  it("reports first-opens, not a per-day distinct count that cannot be summed", () => {
+    const rows = buildAnalyticsRows([day("2026-08-17"), day("2026-08-18")], STAMP);
+    const weekly = rows.find((r) => r.source_id === "weekly:2026-W34");
+    expect(weekly?.body).toContain("Reports first opened: 14");
+  });
+
+  it("suppresses net and cost-per-customer when ad spend covers only part of the period", () => {
+    // GA4 is ingested over 90 days, this rollup over 400. May 2026 paired 4 days
+    // of spend with 31 days of revenue and published "Net: EUR 291.68" when the
+    // truth was a loss of several hundred.
+    const rows = buildAnalyticsRows([day("2026-08-01"), day("2026-08-19")], STAMP, {
+      byDay: new Map([["2026-08-19", 500]]),
+      from: "2026-08-10", // ad data starts AFTER the period does
+    });
+    const monthly = rows.find((r) => r.source_id === "monthly:2026-08");
+    expect(monthly?.body).toContain("INCOMPLETE");
+    expect(monthly?.body).not.toContain("Net:");
+    expect(monthly?.body).not.toContain("Cost per paying customer");
+  });
+
+  it("still gives net and cost-per-customer when ad spend covers the whole period", () => {
+    const rows = buildAnalyticsRows([day("2026-08-18"), day("2026-08-19")], STAMP, {
+      byDay: new Map([["2026-08-19", 50]]),
+      from: "2026-08-01", // ad data starts BEFORE the period
+    });
+    const weekly = rows.find((r) => r.source_id === "weekly:2026-W34");
+    expect(weekly?.body).toContain("Net:");
+    expect(weekly?.body).toContain("Cost per paying customer");
+    expect(weekly?.body).not.toContain("INCOMPLETE");
+  });
+
+  it("omits a zero funnel step that has a non-zero step below it", () => {
+    // You cannot complete a survey you never started — March 2026 published
+    // "Survey starts: 0" alongside "Signups: 4".
+    const rows = buildAnalyticsRows(
+      [day("2026-08-19", { unique_visitors: 0, survey_starts: 0, submissions: 4 })],
+      STAMP
+    );
+    const daily = rows.find((r) => r.source_id === "daily:2026-08-19");
+    expect(daily?.body).not.toContain("Survey starts");
+    expect(daily?.body).toContain("Signups (completed surveys): 4");
+  });
+
+  it("does not call a part-month a whole month", () => {
+    const rows = buildAnalyticsRows([day("2026-08-01"), day("2026-08-19")], STAMP);
+    const monthly = rows.find((r) => r.source_id === "monthly:2026-08");
+    expect(monthly?.body).not.toContain("whole month");
+    expect(monthly?.body).toContain("month so far");
+    expect(monthly?.body).toContain("Wednesday 19 August 2026");
   });
 
   it("names the weekday, because people ask about weekends", () => {

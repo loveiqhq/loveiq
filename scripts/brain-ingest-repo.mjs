@@ -199,6 +199,8 @@ function chunkMarkdown(path, text) {
         title: buildTitle(c.crumb),
         url: `https://github.com/${REPO}/blob/main/${path}${c.anchorId ? `#${c.anchorId}` : ""}`,
         body: c.body,
+        // A doc describes no period; null sorts last on the recency tie-break.
+        period_end: null,
         meta: { path, heading: c.heading, part: n, covers: c.covered.slice(0, 12) },
       };
     });
@@ -258,6 +260,16 @@ function collectCommits() {
         title: subject,
         url: `https://github.com/${REPO}/commit/${sha}`,
         body: part,
+        // The commit's own date, so recency ties break on when the work happened
+        // rather than on when we last ingested — `updated_at` is stamped once per
+        // run and cannot order anything.
+        // UTC, not the author's local date. `%aI` carries an offset, so slicing
+        // the first 10 characters gave the committer's local day — 162 of 1510
+        // commits landed one day later than their UTC instant, and since
+        // brain_search tie-breaks on period_end, a late-night European commit
+        // outranked chunks genuinely dated the same real day. Every other source
+        // uses UTC dates.
+        period_end: typeof date === "string" ? new Date(date).toISOString().slice(0, 10) : null,
         meta: {
           sha: sha.slice(0, 8),
           author,

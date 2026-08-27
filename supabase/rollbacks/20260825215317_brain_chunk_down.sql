@@ -14,7 +14,11 @@
 
 BEGIN;
 
-DROP FUNCTION IF EXISTS public.brain_search(TEXT, INT);
+-- Signature must be exact. `(TEXT, INT)` matched nothing -- the function is
+-- `(TEXT, INT, INT)` -- and IF EXISTS swallowed the miss, so this rollback
+-- reported success while leaving brain_search behind, pointing at a dropped
+-- table.
+DROP FUNCTION IF EXISTS public.brain_search(TEXT, INT, INT);
 DROP TABLE IF EXISTS public.brain_query;
 DROP TABLE IF EXISTS public.brain_chunk;
 
