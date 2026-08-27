@@ -47,18 +47,15 @@ export const POWER_ZONES: Record<string, PowerZone> = {
  */
 export const POWER_ZONE_OVERRIDES: Record<string, PowerZone> = {
   /*
-   * "Playful switch - freedom-guided" was two pieces of jargon in five words:
-   * "switch" is a term from kink vocabulary and "freedom-guided" explains nothing on
-   * its own. The chapter does define leading and yielding, but in an expander, and
-   * this is the card's first line. It now says what it means (2026-08-27).
-   *
-   * The plane's region label stays short, because it sits inside a chart where the
-   * axes already read "yielding" and "leading".
+   * REVERTED 2026-08-27. This briefly read "You lead and yield by turns, and it
+   * stays play", on the grounds that "switch" is kink vocabulary and
+   * "freedom-guided" explains nothing on its own. Mark: "Dont take out the switch
+   * wording, as these are pre-defined labels." They are a fixed vocabulary shared
+   * with the other thirteen archetypes, so they are not the place to solve the
+   * jargon question - if the labels need explaining, that belongs in the chapter,
+   * not in a relabelling of one archetype.
    */
-  "spark-seeker": {
-    label: "Playful switch",
-    result: "You lead and yield by turns, and it stays play",
-  },
+  "spark-seeker": { label: "Playful switch", result: "Playful switch — freedom-guided" },
 };
 
 /**
