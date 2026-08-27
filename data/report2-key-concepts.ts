@@ -75,10 +75,8 @@ export const report2KeyConcepts: Record<string, Record<string, Report2KeyConcept
     },
     accel: {
       // Chapter 23 (accelerators) + chapter 24 (brakes) — one section.
-      // document paragraph 243
-      p1: "For the Spark Seeker, arousal grows when there’s playful tension and something to chase. What turns them on are moments that feel alive, flirt-forward, and a little unpredictable.",
-      // document paragraph 265
-      p2: "Desire doesn’t disappear because attraction is gone. It disappears because novelty, tension, and play were removed. Remove these negative triggers, and arousal often returns naturally, without effort, persuasion, or technique.",
+      // document paragraph 255
+      p1: "For the Spark Seeker, desire doesn’t disappear randomly. It collapses when sex feels predictable, overly serious, or like a scheduled responsibility. These triggers don’t just reduce arousal, they often create boredom, irritation, or emotional distancing.",
     },
     attachment: {
       // document paragraph 268
@@ -87,10 +85,9 @@ export const report2KeyConcepts: Record<string, Record<string, Report2KeyConcept
       p2: "Across archetypes, attachment style strongly shapes how desire emerges, how conflict affects libido, and how sex functions as reassurance, bonding, escape, or regulation.",
     },
     insecurities: {
+      // Chapter 9. Second paragraph removed 2026-08-27 ("Key Concepts are too long").
       // document paragraph 310
       p1: "Core insecurities are the deep, often pre-verbal fears that organize how a person protects themselves in intimacy. They are not surface-level worries or conscious beliefs, but felt vulnerabilities shaped by early attachment experiences, nervous-system learning, and repeated relational patterns. In sexuality, these insecurities quietly determine when desire opens, when it collapses, and what kinds of erotic strategies emerge to manage emotional risk.",
-      // document paragraph 312
-      p2: "Sexual behavior is frequently a regulation strategy. People do not only seek pleasure; they also seek safety, reassurance, validation, control, or distance, often without knowing it. Core insecurities sit underneath these strategies, guiding arousal, fantasy, boundaries, and relational choices.",
     },
     confidence: {
       // lead: document paragraph 347, first sentence
@@ -118,17 +115,10 @@ export const report2KeyConcepts: Record<string, Record<string, Report2KeyConcept
     power: {
       // Chapter 15. The lead ends on a colon, so the questions it introduces come with
       // it (POWER_QUESTIONS in report2-doc-inserts.ts).
-      // lead: document paragraph 454
-      lead: "Power orientation describes how a person relates to agency, control, surrender, and influence in sexual and intimate contexts. It answers questions like:",
+      // lead: document paragraph 454, first sentence
+      lead: "Power orientation describes how a person relates to agency, control, surrender, and influence in sexual and intimate contexts.",
       // document paragraph 459
       p1: "Power orientation is not dominance skill, not confidence, and not kink preference. Many people have strong erotic lives but struggle when power dynamics don’t align with their nervous system or attachment needs.",
-      // document paragraphs 455-458 — what the lead's colon introduces
-      questions: [
-        "Do I feel most alive when leading or when yielding?",
-        "Does desire grow through control, through surrender, or through mutual flow?",
-        "Do I seek structure, responsiveness, safety, intensity, or exchange?",
-        "Does power feel erotic, calming, threatening, or irrelevant?",
-      ],
     },
     curiosity: {
       // Chapter 16 (curiosity) + chapter 17 (relationship form) — one section.
@@ -140,20 +130,24 @@ export const report2KeyConcepts: Record<string, Record<string, Report2KeyConcept
       p2: "Sexual desire is deeply sensitive to relational structure. Structure determines how much background uncertainty the nervous system must manage, and therefore how much capacity remains for pleasure, curiosity, and intimacy.",
     },
     lovelang: {
-      // document paragraph 611
-      p1: "The concept of love language describes the ways people most naturally give, perceive, and register love, care, and erotic affirmation. While popularized by Gary Chapman’s The Five Love Languages, contemporary psychology and sexuality research have refined the idea beyond surface-level behaviors. At its core, love language is not about preference alone, but about how the nervous system recognizes safety, bonding, and erotic permission.",
+      // Chapter 19.
+      // document paragraph 611, with the Gary Chapman sentence removed
+      p1: "The concept of love language describes the ways people most naturally give, perceive, and register love, care, and erotic affirmation. At its core, love language is not about preference alone, but about how the nervous system recognizes safety, bonding, and erotic permission.",
     },
     arousal: {
       // document paragraph 719
       p1: "Desire does not switch on through emotional depth, slow reassurance, or routine alone. It builds through anticipation, play, and a sense of fresh possibility. Feeling intrigued, free, and energetically engaged is the gateway to physical arousal.",
     },
     initiation: {
+      // Chapter 22.
+      // lead: document paragraph 726, first sentence
+      lead: "Initiation style describes how a person tends to start sexual contact, or signal readiness for it.",
       // document paragraph 727
       p1: "Initiation style is not libido and not confidence. Many people desire sex deeply but struggle to initiate in ways that feel safe or authentic to them.",
     },
     fantasy: {
-      // document paragraph 752
-      p1: "Sexual fantasies do not exist in a vacuum. They are shaped by context: who we are with, how known we feel, what is at stake emotionally, what phase of life we are in, and how much of ourselves feels safe to express. The same fantasy can feel alive, distant, forbidden, comforting, or completely uninteresting depending on where it is imagined and with whom.",
+      // document paragraph 752, with the "same fantasy can feel alive" sentence removed
+      p1: "Sexual fantasies do not exist in a vacuum. They are shaped by context: who we are with, how known we feel, what is at stake emotionally, what phase of life we are in, and how much of ourselves feels safe to express.",
       // document paragraph 753
       p2: "One of the most confusing experiences for many people is realizing that certain fantasies feel compelling in imagination, yet feel wrong, risky, or unappealing when considered within their primary relationship, while simultaneously feeling imaginable with a stranger or in a purely internal space. This does not indicate disloyalty, deception, or a lack of love. It reveals something fundamental about what fantasies actually do.",
     },

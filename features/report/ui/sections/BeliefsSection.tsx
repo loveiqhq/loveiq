@@ -7,8 +7,9 @@ import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPri
 import { renderEduPara } from "./eduPara";
 import { copyParagraphs } from "./copyParagraphs";
 import LearnPill from "./LearnPill";
-import { chapterHeading } from "./chapterHeading";
+import ChapterHeading from "./ChapterHeading";
 import type { Report2DocInserts } from "@/data/report2-doc-inserts";
+import ProseGroup from "./ProseGroup";
 
 /**
  * Server-resolved beliefs copy (`getReport2Section(name, "beliefs")`), threaded
@@ -134,7 +135,11 @@ const BeliefsSection: FC<Props> = ({
 
   return (
     <div className="report-beliefs">
-      <h3 className="report-beliefs__heading">{chapterHeading("Typical Beliefs", archetype)}</h3>
+      <ChapterHeading
+        base="Typical Beliefs"
+        archetype={archetype}
+        className="report-beliefs__heading"
+      />
 
       <LearnPill prefix="beliefs" copy={copy} />
 
@@ -211,7 +216,7 @@ const BeliefsSection: FC<Props> = ({
             {/* Document insert, 2026-08-26: "add on top of / before 'Serve You -
                 Keep'". */}
             {copy.inserts?.intro ? (
-              <p className="report-beliefs__insert">{copy.inserts.intro}</p>
+              <p className="report-card-intro report-beliefs__insert">{copy.inserts.intro}</p>
             ) : null}
 
             <div className="report-beliefs__cols">
@@ -256,11 +261,15 @@ const BeliefsSection: FC<Props> = ({
                 so the inserts take its place and it stays the fallback for the
                 archetypes the document does not cover. */}
             {copy.inserts?.afterList?.length ? (
-              copy.inserts.afterList.map((para, i) => (
-                <p key={i} className="report-beliefs__note">
-                  {para}
-                </p>
-              ))
+              /* First two as one block joined by a line break, then "Growth for the
+                 Spark Seeker…" after a full gap (Mark, 2026-08-27). */
+              <ProseGroup
+                className="report-beliefs__note"
+                items={copy.inserts.afterList.map((text, i) => ({
+                  text,
+                  follows: i === 1 ? ("break" as const) : ("para" as const),
+                }))}
+              />
             ) : copy["body.p1"] ? (
               <p className="report-beliefs__note">{copyParagraphs(copy["body.p1"])}</p>
             ) : null}

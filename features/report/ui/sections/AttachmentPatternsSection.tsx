@@ -9,6 +9,7 @@ import { renderEduPara } from "./eduPara";
 import { copyParagraphs } from "./copyParagraphs";
 import LearnPill from "./LearnPill";
 import type { Report2DocInserts } from "@/data/report2-doc-inserts";
+import ProseGroup, { firstThenTight } from "./ProseGroup";
 
 /**
  * Server-resolved attachment copy (`getReport2Section(name, "attachment")`),
@@ -503,11 +504,12 @@ const AttachmentPatternsSection: FC<Props> = ({
 
               {/* Document insert, 2026-08-26: "just under the rectangle that reads
                   'The Key'". */}
-              {copy.inserts?.underKey?.map((para, i) => (
-                <p key={i} className="report-attachment__insert">
-                  {para}
-                </p>
-              ))}
+              {copy.inserts?.underKey?.length ? (
+                <ProseGroup
+                  className="report-attachment__insert"
+                  items={firstThenTight(copy.inserts.underKey)}
+                />
+              ) : null}
             </article>
           )}
         </div>

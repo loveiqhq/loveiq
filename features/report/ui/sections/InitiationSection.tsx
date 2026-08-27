@@ -11,7 +11,7 @@ import { rewardStatDots } from "./RewardSection";
 import { copyParagraphs } from "./copyParagraphs";
 import LearnPill from "./LearnPill";
 import DocStyleBlock from "./DocStyleBlock";
-import { chapterHeading } from "./chapterHeading";
+import ChapterHeading from "./ChapterHeading";
 import {
   INITIATION_STYLES_OUTRO,
   type Report2DocStyle,
@@ -297,9 +297,11 @@ const InitiationSection: FC<Props> = ({
 
   return (
     <div className="report-initiation" style={accentVars}>
-      <h3 className="report-initiation__heading">
-        {chapterHeading("Initiation Style", archetype)}
-      </h3>
+      <ChapterHeading
+        base="Initiation Style"
+        archetype={archetype}
+        className="report-initiation__heading"
+      />
 
       <LearnPill prefix="initiation" copy={copy} />
 

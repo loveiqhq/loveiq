@@ -6,7 +6,7 @@ import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import LearnPill from "./LearnPill";
-import { chapterHeading } from "./chapterHeading";
+import ChapterHeading from "./ChapterHeading";
 
 /**
  * Server-resolved libido copy (`getReport2Section(name, "libido")`), threaded as
@@ -290,7 +290,11 @@ const LibidoSection: FC<Props> = ({
 
   return (
     <div className="report-libido">
-      <h3 className="report-libido__heading">{chapterHeading("Libido Challenges", archetype)}</h3>
+      <ChapterHeading
+        base="Libido Challenges"
+        archetype={archetype}
+        className="report-libido__heading"
+      />
 
       <LearnPill prefix="libido" copy={copy} />
 

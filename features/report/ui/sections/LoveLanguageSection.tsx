@@ -8,7 +8,7 @@ import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPri
 import { renderEduPara } from "./eduPara";
 import { copyParagraphs } from "./copyParagraphs";
 import LearnPill from "./LearnPill";
-import { chapterHeading } from "./chapterHeading";
+import ChapterHeading from "./ChapterHeading";
 
 /**
  * Server-resolved love-language copy (`getReport2Section(name, "lovelang")`),
@@ -213,7 +213,11 @@ const LoveLanguageSection: FC<Props> = ({
 
   return (
     <div className="report-lovelang">
-      <h3 className="report-lovelang__heading">{chapterHeading("Love Language", archetype)}</h3>
+      <ChapterHeading
+        base="Love Language"
+        archetype={archetype}
+        className="report-lovelang__heading"
+      />
 
       <LearnPill prefix="lovelang" copy={copy} />
 

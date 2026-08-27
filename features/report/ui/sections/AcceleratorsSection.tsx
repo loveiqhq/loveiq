@@ -10,7 +10,8 @@ import { archetypeSlug } from "@/data/report2-config";
 import { getAccelRows, type AccelRow, type AccelVerdict } from "@/data/report2-accel-rows";
 import { renderEduPara } from "./eduPara";
 import LearnPill from "./LearnPill";
-import { chapterHeading } from "./chapterHeading";
+import ChapterHeading from "./ChapterHeading";
+import type { Report2DocInserts } from "@/data/report2-doc-inserts";
 
 /**
  * Server-resolved accelerators copy (`getReport2Section(name, "accel")`),
@@ -35,6 +36,8 @@ import { chapterHeading } from "./chapterHeading";
  * stand-in. The card, learn pill and verdict line follow the Figma spec.
  */
 export interface AccelCopy {
+  /** Document passages placed in this chapter; null when locked or absent. */
+  inserts?: Report2DocInserts["accel"] | null;
   "edu.eyebrow"?: string | null;
   "edu.teaser"?: string | null;
   "edu.body.p1"?: string | null;
@@ -157,23 +160,19 @@ const AcceleratorsSection: FC<Props> = ({
 
   return (
     <div className="report-accel">
-      <h3 className="report-accel__heading">
-        {chapterHeading("Accelerators & Brakes", archetype)}
-      </h3>
+      <ChapterHeading
+        base="Accelerators & Brakes"
+        archetype={archetype}
+        className="report-accel__heading"
+      />
 
-      {/* Mark asked on 2026-08-26 for this chapter's Key Concepts text to move INTO
-          the card: `learn.body` above "What opens you", and `learn.body.p2` (the
-          "Desire doesn't disappear because attraction is gone…" passage) under the
-          verdict meter. Both paragraphs are rendered below, in those two places.
-          Nothing is dropped.
-
-          This call therefore renders NOTHING today — LearnPill returns null without a
-          body, which is the wanted outcome, since a labelled pill with no text under
-          it would read as a broken block. It stays because the pill is where any
-          FUTURE Key Concepts text for this chapter belongs, and deleting the call
-          would hide that from the next reader. If the design settles on no pill here
-          at all, delete this line and the two renders keep working. */}
-      <LearnPill prefix="accel" copy={{ ...copy, "learn.body": null, "learn.body.p2": null }} />
+      {/* Two different blocks, from two rounds of feedback.
+          2026-08-26: the accelerator and brake passages move INTO the card, above
+          "What opens you" and under the verdict meter. They render there, below.
+          2026-08-27: "Where did the Key Concept go? This should have it." So the pill
+          is back, with the chapter's own educational opening from the document
+          (`learn.concept`) rather than the two passages that moved. */}
+      <LearnPill prefix="accel" copy={copy} />
 
       <article className="report-accel__card">
         {/* Unlocked: the ten ranked rows + verdict meter from Figma 8946:4286.
@@ -181,8 +180,8 @@ const AcceleratorsSection: FC<Props> = ({
             the blurred stand-in show, exactly as before. */}
         {!locked ? (
           <>
-            {copy["learn.body"] ? (
-              <p className="report-accel__intro">{copy["learn.body"]}</p>
+            {copy.inserts?.aboveColumns ? (
+              <p className="report-card-intro report-accel__intro">{copy.inserts.aboveColumns}</p>
             ) : null}
 
             <div
@@ -238,8 +237,8 @@ const AcceleratorsSection: FC<Props> = ({
               </p>
             </div>
 
-            {copy["learn.body.p2"] ? (
-              <p className="report-accel__under-meter">{copy["learn.body.p2"]}</p>
+            {copy.inserts?.underMeter ? (
+              <p className="report-accel__under-meter">{copy.inserts.underMeter}</p>
             ) : null}
           </>
         ) : (

@@ -6,7 +6,7 @@ import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import { getReadingSource, readingHref } from "@/data/report2-reading-links";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import LearnPill from "./LearnPill";
-import { chapterHeading } from "./chapterHeading";
+import ChapterHeading from "./ChapterHeading";
 
 /**
  * Server-resolved reading copy (`getReport2Section(name, "reading")`), threaded
@@ -178,9 +178,11 @@ const ReadingSection: FC<Props> = ({
 
   return (
     <div className="report-reading">
-      <h3 className="report-reading__heading">
-        {chapterHeading("Reading Recommendations", archetype)}
-      </h3>
+      <ChapterHeading
+        base="Reading Recommendations"
+        archetype={archetype}
+        className="report-reading__heading"
+      />
 
       <LearnPill prefix="reading" copy={copy} />
 

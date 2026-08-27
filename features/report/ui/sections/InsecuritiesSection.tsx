@@ -10,7 +10,7 @@ import { useRevealOnView } from "../hooks/useRevealOnView";
 import { curveEndPoint } from "../curveEnd";
 import { copyParagraphs } from "./copyParagraphs";
 import LearnPill from "./LearnPill";
-import { chapterHeading } from "./chapterHeading";
+import ChapterHeading from "./ChapterHeading";
 import type { Report2DocInserts } from "@/data/report2-doc-inserts";
 import {
   INSECURITY_THEMES,
@@ -403,9 +403,11 @@ const InsecuritiesSection: FC<Props> = ({
 
   return (
     <div className="report-insecurities">
-      <h3 className="report-insecurities__heading">
-        {chapterHeading("Core Insecurities", archetype)}
-      </h3>
+      <ChapterHeading
+        base="Core Insecurities"
+        archetype={archetype}
+        className="report-insecurities__heading"
+      />
 
       <LearnPill prefix="insecurities" copy={copy} />
 
@@ -419,7 +421,9 @@ const InsecuritiesSection: FC<Props> = ({
             {/* Document insert, 2026-08-26: "add it on top of the graph, just over
                 the 'Where your Sensitivity sits'". */}
             {copy.inserts?.aboveGraph ? (
-              <p className="report-insecurities__above-graph">{copy.inserts.aboveGraph}</p>
+              <p className="report-card-intro report-insecurities__above-graph">
+                {copy.inserts.aboveGraph}
+              </p>
             ) : null}
 
             <p className="report-insecurities__eyebrow">Where your sensitivity sits</p>

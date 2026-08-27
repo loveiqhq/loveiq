@@ -8,8 +8,9 @@ import { useRevealOnView } from "../hooks/useRevealOnView";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
 import LearnPill from "./LearnPill";
-import { chapterHeading } from "./chapterHeading";
+import ChapterHeading from "./ChapterHeading";
 import type { Report2DocInserts } from "@/data/report2-doc-inserts";
+import ProseGroup, { firstThenTight } from "./ProseGroup";
 
 /**
  * Server-resolved reward copy (`getReport2Section(name, "reward")`), threaded as
@@ -353,7 +354,11 @@ const RewardSection: FC<Props> = ({
 
   return (
     <div className="report-reward">
-      <h3 className="report-reward__heading">{chapterHeading("Reward System", archetype)}</h3>
+      <ChapterHeading
+        base="Reward System"
+        archetype={archetype}
+        className="report-reward__heading"
+      />
 
       <LearnPill prefix="reward" copy={copy} />
 
@@ -405,11 +410,14 @@ const RewardSection: FC<Props> = ({
 
             {/* Document inserts, 2026-08-26: "to Add under the statistical element
                 under Reward System", parts 1 and 2. */}
-            {copy.inserts?.underStats?.map((para, i) => (
-              <p key={i} className="report-reward__insert">
-                {para}
-              </p>
-            ))}
+            {/* "Have the second and third paragraph follow each other with a line
+                break, not an empty line" (Mark, 2026-08-27). */}
+            {copy.inserts?.underStats?.length ? (
+              <ProseGroup
+                className="report-reward__insert"
+                items={firstThenTight(copy.inserts.underStats)}
+              />
+            ) : null}
 
             {copy.takeaway ? (
               <div className="report-reward__verdict report-verdict">

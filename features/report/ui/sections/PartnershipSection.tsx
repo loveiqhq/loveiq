@@ -8,7 +8,7 @@ import { partnershipCentreMessage } from "@/data/report2-partnership-loops";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import { renderEduPara } from "./eduPara";
 import LearnPill from "./LearnPill";
-import { chapterHeading } from "./chapterHeading";
+import ChapterHeading from "./ChapterHeading";
 
 /**
  * Server-resolved partnership copy (`getReport2Section(name, "partnership")`),
@@ -258,9 +258,11 @@ const PartnershipSection: FC<Props> = ({
 
   return (
     <div className="report-partnership">
-      <h3 className="report-partnership__heading">
-        {chapterHeading("Challenges in Partnership", archetype)}
-      </h3>
+      <ChapterHeading
+        base="Challenges in Partnership"
+        archetype={archetype}
+        className="report-partnership__heading"
+      />
 
       <LearnPill prefix="partnership" copy={copy} />
 

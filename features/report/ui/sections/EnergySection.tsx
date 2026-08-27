@@ -10,13 +10,14 @@ import { getReportTheme } from "../reportTheme";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import { curveEndPoint } from "../curveEnd";
 import LearnPill from "./LearnPill";
-import { chapterHeading } from "./chapterHeading";
+import ChapterHeading from "./ChapterHeading";
 import type { Report2DocInserts } from "@/data/report2-doc-inserts";
 import { getEnergyThirdReading } from "@/data/report2-energy";
 import DocStyleBlock from "./DocStyleBlock";
 import { getEnergyLevel } from "@/data/report2-energy-levels";
 import { archetypeSlug } from "@/data/report2-config";
 import { getEnergyFamilyProfile, type EnergyReading } from "@/data/report2-energy";
+import ProseGroup, { firstThenTight } from "./ProseGroup";
 
 /**
  * Server-resolved energy copy (`getReport2Section(name, "energy")`), threaded as
@@ -449,7 +450,11 @@ const EnergySection: FC<Props> = ({
 
   return (
     <div className="report-energy">
-      <h3 className="report-energy__heading">{chapterHeading("Energy & Risk", archetype)}</h3>
+      <ChapterHeading
+        base="Energy & Risk"
+        archetype={archetype}
+        className="report-energy__heading"
+      />
 
       <LearnPill prefix="energy" copy={copy} />
 
@@ -510,12 +515,6 @@ const EnergySection: FC<Props> = ({
                 Replaces Speed'". */}
             {/* The document's own energy level for this archetype. Above the curve,
                 because it is the classification the curve then illustrates. */}
-            <DocStyleBlock
-              eyebrow="Core Energy Level Varieties Across Archetypes"
-              styles={docLevel ? [{ ...docLevel, role: "primary" as const }] : []}
-              modifier="energy"
-            />
-
             {copy.inserts?.afterDepth ? (
               <p className="report-energy__insert">{copy.inserts.afterDepth}</p>
             ) : null}
@@ -536,11 +535,14 @@ const EnergySection: FC<Props> = ({
             {/* Document insert, 2026-08-26: "Add just after the graph in the Energy &
                 Risk section". The anchored passage is the risk-orientation opening,
                 which is why it lands here rather than beside the energy readings. */}
-            {copy.inserts?.afterGraph?.map((para, i) => (
-              <p key={i} className="report-energy__insert">
-                {para}
-              </p>
-            ))}
+            {/* Left aligned, not centred (Mark, 2026-08-27) — the section's insert
+                class owns that; the group owns the rhythm between the two. */}
+            {copy.inserts?.afterGraph?.length ? (
+              <ProseGroup
+                className="report-energy__insert report-energy__insert--left"
+                items={firstThenTight(copy.inserts.afterGraph)}
+              />
+            ) : null}
 
             {copy.takeaway ? (
               <div className="report-energy__verdict report-verdict">

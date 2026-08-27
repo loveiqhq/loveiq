@@ -9,7 +9,7 @@ import type { FantasyMapDot } from "@features/report/server/fantasyMap";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import LearnPill from "./LearnPill";
 import FantasyLearnings from "./FantasyLearnings";
-import { chapterHeading } from "./chapterHeading";
+import ChapterHeading from "./ChapterHeading";
 
 /**
  * Server-resolved fantasy copy (`getReport2Section(name, "fantasy")`), threaded
@@ -402,9 +402,11 @@ const FantasySection: FC<Props> = ({
 
   return (
     <div className="report-fantasy">
-      <h3 className="report-fantasy__heading">
-        {chapterHeading("Fantasy vs. Reality", archetype)}
-      </h3>
+      <ChapterHeading
+        base="Fantasy vs. Reality"
+        archetype={archetype}
+        className="report-fantasy__heading"
+      />
 
       <LearnPill prefix="fantasy" copy={copy} />
 

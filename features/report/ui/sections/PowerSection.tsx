@@ -12,7 +12,7 @@ import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPri
 import { renderEduPara } from "./eduPara";
 import { copyParagraphs } from "./copyParagraphs";
 import LearnPill from "./LearnPill";
-import { chapterHeading } from "./chapterHeading";
+import ChapterHeading from "./ChapterHeading";
 
 /**
  * Server-resolved power copy (`getReport2Section(name, "power")`), threaded as a
@@ -345,9 +345,16 @@ const PowerSection: FC<Props> = ({
 
   return (
     <div className="report-power">
-      <h3 className="report-power__heading">{chapterHeading("Power Orientation", archetype)}</h3>
+      <ChapterHeading
+        base="Power Orientation"
+        archetype={archetype}
+        className="report-power__heading"
+      />
 
-      <LearnPill prefix="power" copy={copy} />
+      {/* "Take out the 'It answers questions like:' and the following questions"
+          (Mark, 2026-08-27). The lead is trimmed to its first sentence at the data
+          layer; the questions are dropped here so nothing downstream renders them. */}
+      <LearnPill prefix="power" copy={{ ...copy, "learn.questions": null }} />
 
       <article className="report-power__card">
         {locked ? (

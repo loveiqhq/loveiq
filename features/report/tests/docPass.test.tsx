@@ -179,18 +179,19 @@ describe("Key Concepts copy layer", () => {
     // `lead`, so it renders as the first sentence of the same paragraph and the
     // green passage it precedes survives.
     const blocks = report2KeyConcepts["spark-seeker"] ?? {};
-    for (const id of ["confidence", "reward", "energy", "power", "curiosity"]) {
+    for (const id of ["confidence", "reward", "energy", "power", "curiosity", "initiation"]) {
       expect(blocks[id]?.lead, `${id} has no lead`).toBeTruthy();
       expect(blocks[id]?.p1, `${id} lost its green paragraph`).toBeTruthy();
     }
-    // Power's definition ends on a colon, so what it introduces travels with it.
-    expect(blocks.power?.lead?.trim().endsWith(":")).toBe(true);
-    expect(blocks.power?.questions).toHaveLength(4);
-    // No other lead may end on a colon without its questions.
+    // Initiation joined them on 2026-08-27.
+    expect(blocks.initiation?.lead).toBeTruthy();
+
+    // NO lead may end on a colon. Power's used to, carrying the four questions it
+    // introduced; Mark asked for both the colon and the questions to go on
+    // 2026-08-27, so the rule is now simply that a lead is a whole sentence.
     for (const [id, block] of Object.entries(blocks)) {
-      if (block.lead?.trim().endsWith(":")) {
-        expect(block.questions?.length, `${id} lead dangles on a colon`).toBeGreaterThan(0);
-      }
+      expect(block.lead?.trim().endsWith(":") ?? false, `${id} lead ends on a colon`).toBe(false);
+      expect(block.questions, `${id} still carries questions`).toBeUndefined();
     }
   });
 

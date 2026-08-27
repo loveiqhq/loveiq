@@ -12,7 +12,7 @@ import { rewardStatDots } from "./RewardSection";
 import { curveEndPoint } from "../curveEnd";
 import LearnPill from "./LearnPill";
 import DocStyleBlock from "./DocStyleBlock";
-import { chapterHeading } from "./chapterHeading";
+import ChapterHeading from "./ChapterHeading";
 import {
   AROUSAL_STYLES_OUTRO,
   type Report2DocStyle,
@@ -585,7 +585,11 @@ const ArousalSection: FC<Props> = ({
 
   return (
     <div className="report-arousal">
-      <h3 className="report-arousal__heading">{chapterHeading("Arousal Style", archetype)}</h3>
+      <ChapterHeading
+        base="Arousal Style"
+        archetype={archetype}
+        className="report-arousal__heading"
+      />
 
       <LearnPill prefix="arousal" copy={copy} />
 

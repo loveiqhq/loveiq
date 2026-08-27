@@ -22,6 +22,17 @@
  */
 
 export interface Report2DocInserts {
+  accel: {
+    /**
+     * The accelerator opening, above the "What opens you" / "What shuts you down"
+     * columns, and the brakes conclusion, under the accelerator-led/brake-led
+     * meter. Both were this chapter's Key Concepts until 2026-08-26, when Mark
+     * asked for them to move into the card; they live here rather than in the
+     * Key Concepts layer because that is what they now are — placed passages.
+     */
+    aboveColumns: string;
+    underMeter: string;
+  };
   beliefs: {
     /** Above the "Serve you / Box you in" columns. */
     intro: string;
@@ -62,6 +73,14 @@ export interface Report2DocInserts {
 
 export const report2DocInserts: Record<string, Report2DocInserts> = {
   "spark-seeker": {
+    accel: {
+      // document paragraph 243
+      aboveColumns:
+        "For the Spark Seeker, arousal grows when there’s playful tension and something to chase. What turns them on are moments that feel alive, flirt-forward, and a little unpredictable.",
+      // document paragraph 265
+      underMeter:
+        "Desire doesn’t disappear because attraction is gone. It disappears because novelty, tension, and play were removed. Remove these negative triggers, and arousal often returns naturally, without effort, persuasion, or technique.",
+    },
     beliefs: {
       // document paragraph 216
       intro:

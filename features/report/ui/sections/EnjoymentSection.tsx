@@ -5,7 +5,7 @@ import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
 import LearnPill from "./LearnPill";
-import { chapterHeading } from "./chapterHeading";
+import ChapterHeading from "./ChapterHeading";
 
 /**
  * Server-resolved enjoyment copy (`getReport2Section(name, "enjoy")`), threaded
@@ -129,9 +129,11 @@ const EnjoymentSection: FC<Props> = ({
 
   return (
     <div className="report-enjoy">
-      <h3 className="report-enjoy__heading">
-        {chapterHeading("Challenges to Enjoy Sex", archetype)}
-      </h3>
+      <ChapterHeading
+        base="Challenges to Enjoy Sex"
+        archetype={archetype}
+        className="report-enjoy__heading"
+      />
 
       <LearnPill prefix="enjoy" copy={copy} />
 

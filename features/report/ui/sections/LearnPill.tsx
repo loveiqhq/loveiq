@@ -61,9 +61,18 @@ const LearnPill: FC<Props> = ({ prefix, copy }) => {
   if (!p1 && !lead) return null;
 
   return (
-    <div className={`report-${prefix}__learn-pill-wrap`}>
-      <span className={`report-${prefix}__learn-pill`}>
-        <span className={`report-${prefix}__learn-pill-icon`} aria-hidden="true">
+    /* Every element carries a SHARED class as well as its per-section one. The
+       per-section classes are still what the eighteen existing rule sets target, so
+       nothing about their look changes; the shared classes exist so a prefix with no
+       rules of its own is styled rather than unstyled. Three new pills (importance,
+       stage, constellation) shipped with no CSS at all on 2026-08-26 and rendered the
+       raw SVG at its natural size, several hundred pixels tall. This is the fix. */
+    <div className={`report-learn-pill-wrap report-${prefix}__learn-pill-wrap`}>
+      <span className={`report-learn-pill report-${prefix}__learn-pill`}>
+        <span
+          className={`report-learn-pill-icon report-${prefix}__learn-pill-icon`}
+          aria-hidden="true"
+        >
           <BookIcon />
         </span>
         {copy["learn.eyebrow"] ?? "What you will learn"}
@@ -75,7 +84,7 @@ const LearnPill: FC<Props> = ({ prefix, copy }) => {
           comes after them. Otherwise the colon would introduce the wrong text. */}
       {hasQuestions ? (
         <>
-          <p className={`report-${prefix}__learn-body`}>
+          <p className={`report-learn-body report-${prefix}__learn-body`}>
             <span className="report-learn-lead">{lead}</span>
           </p>
           <ul className="report-learn-questions">
@@ -85,16 +94,24 @@ const LearnPill: FC<Props> = ({ prefix, copy }) => {
               </li>
             ))}
           </ul>
-          {p1 ? <p className={`report-${prefix}__learn-body report-learn-body-p2`}>{p1}</p> : null}
+          {p1 ? (
+            <p className={`report-learn-body report-${prefix}__learn-body report-learn-body-p2`}>
+              {p1}
+            </p>
+          ) : null}
         </>
       ) : (
-        <p className={`report-${prefix}__learn-body`}>
+        <p className={`report-learn-body report-${prefix}__learn-body`}>
           {lead ? <span className="report-learn-lead">{lead}</span> : null}
           {lead && p1 ? " " : null}
           {p1}
         </p>
       )}
-      {p2 ? <p className={`report-${prefix}__learn-body report-learn-body-p2`}>{p2}</p> : null}
+      {p2 ? (
+        <p className={`report-learn-body report-${prefix}__learn-body report-learn-body-p2`}>
+          {p2}
+        </p>
+      ) : null}
     </div>
   );
 };

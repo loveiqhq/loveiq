@@ -10,8 +10,9 @@ import { archetypeSlug } from "@/data/report2-config";
 import { getConfidenceProfile } from "@/data/report2-confidence";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import LearnPill from "./LearnPill";
-import { chapterHeading } from "./chapterHeading";
+import ChapterHeading from "./ChapterHeading";
 import type { Report2DocInserts } from "@/data/report2-doc-inserts";
+import ProseGroup, { joinFirstTwo } from "./ProseGroup";
 
 /**
  * Server-resolved Confidence Level copy (`getReport2Section(name, "confidence")`),
@@ -261,9 +262,11 @@ const ConfidenceSection: FC<Props> = ({
 
   return (
     <div className="report-confidence">
-      <h3 className="report-confidence__heading">
-        {chapterHeading("Confidence Level", archetype)}
-      </h3>
+      <ChapterHeading
+        base="Confidence Level"
+        archetype={archetype}
+        className="report-confidence__heading"
+      />
 
       <LearnPill prefix="confidence" copy={copy} />
 
@@ -321,11 +324,13 @@ const ConfidenceSection: FC<Props> = ({
                 one of the 14 archetypes…' text." The matrix note stays the fallback
                 for the archetypes the document does not cover. */}
             {copy.inserts?.replaceStripNote?.length ? (
-              copy.inserts.replaceStripNote.map((para, i) => (
-                <p key={i} className="report-confidence__chartnote">
-                  {para}
-                </p>
-              ))
+              /* "Combine the two first sentences so they follow each other without a
+                 line break, then have the third follow after a line break" (Mark,
+                 2026-08-27). */
+              <ProseGroup
+                className="report-confidence__chartnote"
+                items={joinFirstTwo(copy.inserts.replaceStripNote)}
+              />
             ) : copy.chartnote1 ? (
               <p className="report-confidence__chartnote">{copy.chartnote1}</p>
             ) : null}

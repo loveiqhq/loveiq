@@ -14,7 +14,7 @@ import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import LearnPill from "./LearnPill";
-import { chapterHeading } from "./chapterHeading";
+import ChapterHeading from "./ChapterHeading";
 
 /**
  * Server-resolved growth copy (`getReport2Section(name, "growth")`), threaded as
@@ -364,7 +364,11 @@ const GrowthSection: FC<Props> = ({
 
   return (
     <div className={`report-growth${isAnimated ? " is-animated" : ""}`}>
-      <h3 className="report-growth__heading">{chapterHeading("Growth Potentials", archetype)}</h3>
+      <ChapterHeading
+        base="Growth Potentials"
+        archetype={archetype}
+        className="report-growth__heading"
+      />
 
       <LearnPill prefix="growth" copy={copy} />
 

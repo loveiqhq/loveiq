@@ -1773,7 +1773,7 @@ export async function GET(request: Request) {
         attachmentCopy: withKeyConcepts(attachmentCopy, docSlug, "attachment", attachmentUnlocked),
         attachmentFamily,
         attachmentPlane,
-        accelCopy: withKeyConcepts(accelCopy, docSlug, "accel"),
+        accelCopy: withKeyConcepts(accelCopy, docSlug, "accel", accelUnlocked),
         insecuritiesCopy: withKeyConcepts(
           insecuritiesCopy,
           docSlug,

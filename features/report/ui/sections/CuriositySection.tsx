@@ -9,7 +9,7 @@ import { renderEduPara } from "./eduPara";
 import LearnPill from "./LearnPill";
 import DocStyleBlock from "./DocStyleBlock";
 import CuriosityScale from "./CuriosityScale";
-import { chapterHeading } from "./chapterHeading";
+import ChapterHeading from "./ChapterHeading";
 import type { Report2DocInserts } from "@/data/report2-doc-inserts";
 import {
   CURIOSITY_STYLES_OUTRO,
@@ -192,9 +192,11 @@ const CuriositySection: FC<Props> = ({
 
   return (
     <div className="report-curiosity">
-      <h3 className="report-curiosity__heading">
-        {chapterHeading("Curiosity & Relationship Form", archetype)}
-      </h3>
+      <ChapterHeading
+        base="Curiosity & Relationship Form"
+        archetype={archetype}
+        className="report-curiosity__heading"
+      />
 
       <LearnPill prefix="curiosity" copy={copy} />
 

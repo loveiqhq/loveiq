@@ -15270,6 +15270,103 @@ input.autofill-dark:-internal-autofill-previewed {
   padding-top: 8px;
 }
 
+/* Energy's after-graph insert is left aligned. The section centres its captions,
+   and the risk-orientation passage inherited that and read as a pull-quote
+   (Mark, 2026-08-27). */
+.report-energy__insert--left {
+  text-align: left;
+}
+
+/* The archetype's name inside a chapter headline, in the archetype's own accent.
+   The colour is inline (it comes from `getReportTheme`); this only stops the span
+   inheriting anything else from the heading. */
+.report-chapter-heading__archetype {
+  color: inherit;
+}
+
+/* A paragraph that follows the one above it as a LINE BREAK rather than a new
+   paragraph. See `ProseGroup` for why this exists: passages that belong together
+   were reading as separate notes because every paragraph took the same generous
+   gap (2026-08-27). Doubled class so it beats the per-section paragraph rules
+   whatever their source order. */
+.report-prose--tight.report-prose--tight {
+  margin-top: 0.35em;
+}
+
+/* The paragraph a card opens with, before its first visual. Several chapters open
+   this way (Beliefs, Accelerators, the document inserts above a graph) and each
+   had its own spacing, so the text sat almost against the card edge in some and
+   floated in others. One rule, so they all breathe the same (2026-08-27). */
+.report-card-intro {
+  margin: 0 0 clamp(22px, 2.4vw, 32px);
+  padding-top: clamp(4px, 0.8vw, 10px);
+  color: #161021;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: var(--report-body-size);
+  line-height: var(--report-body-lh);
+}
+
+/* ── Key Concepts pill: the shared base ───────────────────────────────────────
+   Eighteen sections each declare their own `report-<x>__learn-*` rules, all of
+   them the same values. Those stay — they are what the per-section overrides and
+   the media queries target. This is the BASE underneath them, so a pill whose
+   prefix has no rules of its own is still styled instead of rendering an
+   unconstrained SVG (which is exactly what the importance, stage and
+   constellation pills did when they shipped without CSS on 2026-08-26).
+
+   Values transcribed from `.report-lovelang__learn-*`, which is representative of
+   all eighteen. */
+.report-learn-pill-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  /* The gap to whatever follows the block. Was set per section and drifted, so
+     several chapters had the pill almost touching their card (2026-08-27). One
+     value here, and it is the only place to change it. */
+  margin-bottom: clamp(20px, 2.2vw, 30px);
+}
+
+.report-learn-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
+  border-radius: 9px;
+  background: rgba(157, 138, 215, 0.16);
+  color: #6b5b95;
+  font-family: var(--font-sans);
+  font-weight: 800;
+  font-size: 0.635rem;
+  letter-spacing: 1.42px;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+/* The size constraint the broken pills were missing. */
+.report-learn-pill-icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  color: #6b5b95;
+}
+
+.report-learn-pill-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.report-learn-body {
+  margin: 0;
+  max-width: 46rem;
+  color: #161021;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: clamp(1rem, 1.4vw, 1.128rem);
+  line-height: 1.65;
+}
+
 /* ── Key Concepts: the chapter-opening definition, and the Power questions ─────
    Added 2026-08-26. Five chapters open with a one-sentence definition of the
    dimension ("Energy level describes the baseline intensity, pace, and activation
@@ -15278,9 +15375,12 @@ input.autofill-dark:-internal-autofill-previewed {
    asked for, so it needs weight rather than a block of its own. Ink, not the
    body grey, at the same size — the same relationship `report-curiosity__lead-strong`
    has to its own paragraph. */
+/* NOT bold. Mark, 2026-08-27: "no bold. Never in Key concepts." The definition is
+   still the first thing read because it is the first sentence; it does not need
+   weight to earn that, and weight inside a serif reading paragraph reads as
+   emphasis the sentence is not making. */
 .report-learn-lead {
   color: #161021;
-  font-weight: 600;
 }
 
 /* The Power chapter's definition ends "It answers questions like:", so its four
