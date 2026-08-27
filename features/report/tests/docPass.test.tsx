@@ -168,8 +168,9 @@ describe("Key Concepts copy layer", () => {
     // chapters that never carried the pill at all (Importance of Sexuality, Sexual
     // Stage, and the constellation block), added 2026-08-26.
     const blocks = report2KeyConcepts["spark-seeker"] ?? {};
-    expect(Object.keys(blocks)).toHaveLength(19);
-    for (const id of ["importance", "stage", "constellation"]) {
+    // 19 after 2026-08-26, plus Arousal, Desire & Pleasure on 2026-08-27.
+    expect(Object.keys(blocks)).toHaveLength(20);
+    for (const id of ["importance", "stage", "constellation", "knowhow"]) {
       expect(blocks[id]?.p1, `${id} has no Key Concepts`).toBeTruthy();
     }
   });

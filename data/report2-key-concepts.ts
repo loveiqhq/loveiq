@@ -44,6 +44,15 @@ export interface Report2KeyConcepts {
 /** slug → report2 section id → the block. */
 export const report2KeyConcepts: Record<string, Record<string, Report2KeyConcepts>> = {
   "spark-seeker": {
+    knowhow: {
+      // Chapter 20. Moved out of the open section into the pill on 2026-08-27
+      // ("Move the 'One of the most common,...' until 'disturbing sexual reactions'
+      // into a Key concept section that you need to build for this section").
+      // document paragraph 643
+      p1: "One of the most common, and most damaging, misunderstandings about sexuality is the belief that arousal, desire, and pleasure are the same thing. They are not. Modern sexuality science shows clearly that these are three distinct systems, each governed by different mechanisms in the brain and body. They often interact, but they do not reliably align. Learning to distinguish them is one of the most important steps toward self-understanding, sexual confidence, and healing.",
+      // document paragraph 644
+      p2: "This distinction matters not only for better sex, but for dissolving shame, understanding fantasies, navigating mismatched desire in relationships, and making sense of confusing or even disturbing sexual reactions.",
+    },
     constellation: {
       // Chapter "4 Probability of Other Archetypes" — the constellation block.
       // document paragraph 137

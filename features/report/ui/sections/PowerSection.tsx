@@ -13,6 +13,7 @@ import { renderEduPara } from "./eduPara";
 import { copyParagraphs } from "./copyParagraphs";
 import LearnPill from "./LearnPill";
 import ChapterHeading from "./ChapterHeading";
+import type { Report2DocInserts } from "@/data/report2-doc-inserts";
 
 /**
  * Server-resolved power copy (`getReport2Section(name, "power")`), threaded as a
@@ -33,6 +34,8 @@ import ChapterHeading from "./ChapterHeading";
  * client.
  */
 export interface PowerCopy {
+  /** Document passages placed in this chapter; null when locked or absent. */
+  inserts?: Report2DocInserts["power"] | null;
   takeaway?: string | null;
   "body.p1"?: string | null;
   "edu.eyebrow"?: string | null;
@@ -386,6 +389,12 @@ const PowerSection: FC<Props> = ({
             ) : null}
 
             <PowerPlane archetype={archetype} youZoneLabel={zoneLabel} />
+
+            {/* Document insert: the archetype's own power opener, before the body
+                paragraph (Mark, 2026-08-27). */}
+            {copy.inserts?.opener ? (
+              <p className="report-card-intro report-power__insert">{copy.inserts.opener}</p>
+            ) : null}
 
             {copy["body.p1"] ? (
               <p className="report-power__body">{copyParagraphs(copy["body.p1"])}</p>

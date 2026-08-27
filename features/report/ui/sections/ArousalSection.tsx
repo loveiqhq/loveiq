@@ -11,8 +11,9 @@ import { useRevealOnView } from "../hooks/useRevealOnView";
 import { rewardStatDots } from "./RewardSection";
 import { curveEndPoint } from "../curveEnd";
 import LearnPill from "./LearnPill";
-import DocStyleBlock from "./DocStyleBlock";
+import StyleVerdict from "./StyleVerdict";
 import ChapterHeading from "./ChapterHeading";
+import type { Report2DocInserts } from "@/data/report2-doc-inserts";
 import {
   AROUSAL_STYLES_OUTRO,
   type Report2DocStyle,
@@ -37,6 +38,8 @@ import {
  * per-archetype content to an unpaid client.
  */
 export interface ArousalCopy {
+  /** Document passages placed in this chapter; null when locked or absent. */
+  inserts?: Report2DocInserts["arousal"] | null;
   // Universal (always shipped) — these frame the section for locked clients too.
   eyebrow?: string | null;
   "insight.label"?: string | null;
@@ -638,11 +641,16 @@ const ArousalSection: FC<Props> = ({
             {/* Chapter 21's own eight arousal styles, restored 2026-08-26 — the
                 reader's own entry with the document's description, above the arc
                 so the named style frames the graph rather than trailing it. */}
-            <DocStyleBlock
+            {/* "Most people carry more than one arousal style..." moves ABOVE the
+                styles it qualifies (Mark, 2026-08-27). */}
+            <p className="report-card-intro report-arousal__insert">{AROUSAL_STYLES_OUTRO}</p>
+
+            {/* The reader's styles as verdicts, primary first, in the Confidence
+                chapter's shape. Replaces the bulleted list (Mark, 2026-08-27). */}
+            <StyleVerdict
               eyebrow="Arousal styles across the archetypes"
               styles={arousalStyles ?? []}
               modifier="arousal"
-              outro={AROUSAL_STYLES_OUTRO}
             />
 
             {/* One piece of state links the arc to the columns under it: pointing at
@@ -664,6 +672,11 @@ const ArousalSection: FC<Props> = ({
                 {hasStat1 ? <MiniStat value={stat1!} caption={stat1Cap!} viz="dots" /> : null}
                 {hasStat2 ? <MiniStat value={stat2!} caption={stat2Cap!} viz="bar" /> : null}
               </div>
+            ) : null}
+
+            {/* Document insert: before "The Reframe" (Mark, 2026-08-27). */}
+            {copy.inserts?.beforeReframe ? (
+              <p className="report-arousal__insert">{copy.inserts.beforeReframe}</p>
             ) : null}
 
             {copy["insight.value"] ? (

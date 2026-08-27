@@ -96,3 +96,30 @@ export const KNOWHOW_FINAL = [
   "This is not dysfunction.",
   "This is being human.",
 ];
+
+/**
+ * The educational expander for this chapter, added 2026-08-27.
+ *
+ * Mark: "Lets add an educational piece to this section. What parts of the Google
+ * Doc around Arousal, Desire and Pleasure could we copy paste into it? Build it
+ * with your best choice."
+ *
+ * The choice is arousal non-concordance, from the paragraphs of chapter 20 the
+ * open section does not use: the laboratory findings, the line that names what
+ * they show, and the evolutionary reason. It is the chapter's hardest idea and the
+ * one a reader is most likely to need explained, which is what an expander is for.
+ *
+ * DELIBERATELY NOT INCLUDED: the sexual-violence passage (chapter 20's "When the
+ * Systems Do Not Align"). It is the most important writing in the chapter and it
+ * belongs in the open section, not folded behind a "read the full explanation" —
+ * a reader who needs it should not have to click. `KNOWHOW_VERDICT`, the line it
+ * builds to, already renders there.
+ */
+export const KNOWHOW_EDU_EYEBROW = "Learn: arousal non-concordance";
+
+export const KNOWHOW_EDU: string[] = [
+  "This is why arousal can occur in situations that feel confusing, unwanted, or even disturbing. In laboratory studies, researchers have repeatedly shown that people can exhibit clear physiological arousal to stimuli they do not desire, do not enjoy, and would never choose in real life. Participants have shown genital arousal to non-preferred genders, non-human sexual imagery (such as animals), or abstract sexual cues that carried no personal meaning whatsoever.",
+  "In these cases, the body reacts while the mind does not want, and the experience is not pleasurable.",
+  "Sexuality science refers to this mismatch as arousal non-concordance, the lack of alignment between physiological arousal and subjective experience. This phenomenon is not a flaw or pathology. It is a predictable consequence of how the nervous system is designed to operate.",
+  "From an evolutionary perspective, arousal systems are intentionally broad, fast, and imprecise. They evolved to reduce missed reproductive opportunities, not to reflect modern identity, consent, morality, or emotional truth. Meaning is added later, if at all.",
+];

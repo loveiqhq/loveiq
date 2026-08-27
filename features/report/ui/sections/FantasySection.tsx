@@ -10,6 +10,8 @@ import { useRevealOnView } from "../hooks/useRevealOnView";
 import LearnPill from "./LearnPill";
 import FantasyLearnings from "./FantasyLearnings";
 import ChapterHeading from "./ChapterHeading";
+import type { Report2DocInserts } from "@/data/report2-doc-inserts";
+import ProseGroup, { firstThenTight } from "./ProseGroup";
 
 /**
  * Server-resolved fantasy copy (`getReport2Section(name, "fantasy")`), threaded
@@ -32,6 +34,8 @@ import ChapterHeading from "./ChapterHeading";
  * renders live. No per-user fantasy scores are ever fabricated.
  */
 export interface FantasyCopy {
+  /** Document passages placed in this chapter; null when locked or absent. */
+  inserts?: Report2DocInserts["fantasy"] | null;
   "edu.eyebrow"?: string | null;
   "edu.teaser"?: string | null;
   "edu.body.p1"?: string | null;
@@ -447,6 +451,21 @@ const FantasySection: FC<Props> = ({
                 chapter; it says nothing about this particular reader, which the
                 map below it does. */}
             <FantasyLearnings />
+
+            {/* Document inserts, 2026-08-27: what the scores are, and the two metrics,
+                before the practice-tendency groups. */}
+            {copy.inserts?.beforeTendencies?.length ? (
+              <ProseGroup
+                className="report-fantasy__insert"
+                items={firstThenTight(copy.inserts.beforeTendencies)}
+              />
+            ) : null}
+            {copy.inserts?.metrics?.length ? (
+              <ProseGroup
+                className="report-fantasy__insert"
+                items={firstThenTight(copy.inserts.metrics)}
+              />
+            ) : null}
 
             {/* Quadrant filter tabs (Figma 8427:2467) — the first element of the
                 unlocked card, above the map. The hook eyebrow that used to sit

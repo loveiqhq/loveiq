@@ -10,8 +10,10 @@ import { useRevealOnView } from "../hooks/useRevealOnView";
 import { rewardStatDots } from "./RewardSection";
 import { copyParagraphs } from "./copyParagraphs";
 import LearnPill from "./LearnPill";
-import DocStyleBlock from "./DocStyleBlock";
+import StyleVerdict from "./StyleVerdict";
+import ProseGroup, { firstThenTight } from "./ProseGroup";
 import ChapterHeading from "./ChapterHeading";
+import type { Report2DocInserts } from "@/data/report2-doc-inserts";
 import {
   INITIATION_STYLES_OUTRO,
   type Report2DocStyle,
@@ -37,6 +39,8 @@ import {
  * client.
  */
 export interface InitiationCopy {
+  /** Document passages placed in this chapter; null when locked or absent. */
+  inserts?: Report2DocInserts["initiation"] | null;
   // Universal (always shipped) — these frame the section for locked clients too.
   eyebrow?: string | null;
   "row1.label"?: string | null;
@@ -337,17 +341,54 @@ const InitiationSection: FC<Props> = ({
               {copy.result ? <p className="report-initiation__result">{copy.result}</p> : null}
             </div>
 
-            {/* Chapter 22's own "Core Initiation Style Varieties Across
-                Archetypes", restored 2026-08-26 — the reader's entry, above the
-                timeline. */}
-            <DocStyleBlock
+            {/* "Many people shift between styles..." moves ABOVE the styles it
+                qualifies (Mark, 2026-08-27). */}
+            <p className="report-card-intro report-initiation__insert">{INITIATION_STYLES_OUTRO}</p>
+
+            {/* The reader's style as a verdict, in the Confidence chapter's shape,
+                with the document's "(e.g. ...)" archetype list dropped
+                (Mark, 2026-08-27). */}
+            <StyleVerdict
               eyebrow="Core Initiation Style Varieties Across Archetypes"
               styles={initiationStyles ?? []}
               modifier="initiation"
-              outro={INITIATION_STYLES_OUTRO}
             />
 
-            <TimelineChart fam={fam} />
+            {/* Document insert: the archetype's own initiation description, after
+                the varieties. The third paragraph follows on a line break. */}
+            {copy.inserts?.afterVarieties?.length ? (
+              <ProseGroup
+                className="report-initiation__insert"
+                items={copy.inserts.afterVarieties.map((text, i) => ({
+                  text,
+                  follows: i === 1 ? ("break" as const) : ("para" as const),
+                }))}
+              />
+            ) : null}
+
+            {/* Mark, 2026-08-27: "I am a bit confused/irritated by the whole 'What
+                you send' / 'what arrived'. This doesn't really match what is in the
+                Google Doc for the Spark Seeker."
+
+                He is right, and `TimelineChart` IS that block — the two-column
+                sent/arrived table, despite its name. The document does not describe a
+                signal being misread. It describes a STANDOFF: "The Spark Seeker waits
+                to feel freedom and spark. The partner waits for emotional seriousness
+                and reassurance. Desire exists on both sides, but no one moves."
+
+                So where the document has that passage, it replaces the table. The
+                table stays as the fallback for the thirteen archetypes the document
+                does not cover, rather than deleting a block they still render. If the
+                standoff framing is right for all fourteen, this branch is where that
+                decision lands. */}
+            {copy.inserts?.standoff?.length ? (
+              <ProseGroup
+                className="report-initiation__insert"
+                items={firstThenTight(copy.inserts.standoff)}
+              />
+            ) : (
+              <TimelineChart fam={fam} />
+            )}
 
             {copy["body.p1"] ? (
               <p className="report-initiation__body">{copyParagraphs(copy["body.p1"])}</p>

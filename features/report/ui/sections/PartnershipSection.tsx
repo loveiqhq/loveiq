@@ -9,6 +9,7 @@ import { useRevealOnView } from "../hooks/useRevealOnView";
 import { renderEduPara } from "./eduPara";
 import LearnPill from "./LearnPill";
 import ChapterHeading from "./ChapterHeading";
+import type { Report2DocInserts } from "@/data/report2-doc-inserts";
 
 /**
  * Server-resolved partnership copy (`getReport2Section(name, "partnership")`),
@@ -28,6 +29,8 @@ import ChapterHeading from "./ChapterHeading";
  * to an unpaid client.
  */
 export interface PartnershipCopy {
+  /** Document passages placed in this chapter; null when locked or absent. */
+  inserts?: Report2DocInserts["partnership"] | null;
   // Universal (always shipped) — these frame the section for locked clients too.
   eyebrow?: string | null;
   "row1.label"?: string | null;
@@ -308,6 +311,12 @@ const PartnershipSection: FC<Props> = ({
             ) : null}
 
             {loop ? <PartnershipOrbit steps={loop.steps} exitQuote={loop.exitQuote} /> : null}
+
+            {/* Document insert, 2026-08-27: under the loop visual, before the
+                educational block. */}
+            {copy.inserts?.underFlywheel ? (
+              <p className="report-partnership__insert">{copy.inserts.underFlywheel}</p>
+            ) : null}
           </>
         )}
 

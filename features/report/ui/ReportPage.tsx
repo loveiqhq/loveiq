@@ -514,6 +514,7 @@ interface ReportExperienceProps {
   /** Key Concepts for the three chapters that carry no other copy of their own. */
   importanceLearn: LearnPillCopy | null;
   constellationLearn: LearnPillCopy | null;
+  knowhowLearn: LearnPillCopy | null;
   constellationMottos: Record<string, string | null>;
   submitFeedback: (sectionId: string, payload: FeedbackPayload) => void;
   submitted: Record<string, boolean>;
@@ -608,6 +609,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   stageCopy,
   importanceLearn,
   constellationLearn,
+  knowhowLearn,
   constellationMottos,
   submitFeedback,
   submitted,
@@ -1506,7 +1508,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                         sectionId={section.id}
                         title=""
                       >
-                        <KnowHowSection />
+                        <KnowHowSection learn={knowhowLearn} />
                       </ReportSection>
                     );
                   }
@@ -2942,6 +2944,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         stageCopy={data.stageCopy ?? null}
         importanceLearn={data.importanceLearn ?? null}
         constellationLearn={data.constellationLearn ?? null}
+        knowhowLearn={data.knowhowLearn ?? null}
         constellationMottos={data.constellationMottos ?? {}}
         submitFeedback={submitFeedback}
         submitted={submitted}

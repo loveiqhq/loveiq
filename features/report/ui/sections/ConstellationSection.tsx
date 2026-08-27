@@ -91,10 +91,14 @@ const ConstellationSection: FC<Props> = ({
           spacing and upright roman all match "The Importance of Sexuality" per the
           2026-08-21 feedback, and the gradient on `constellation,` is back per Eman —
           the italic is not, that belonged to the type that was being matched away. */}
+      {/* Renamed 2026-08-27. "You're a constellation, not a type" made its claim
+          twice and appeared twice in the report; Mark chose "Your other archetypes,
+          ranked", which says what the block is. The gradient stays on the word that
+          carries it. */}
       <h3 className="report-constellation__heading">
-        You&apos;re a <span className="report-constellation__heading-accent">constellation,</span>
+        Your other <span className="report-constellation__heading-accent">archetypes,</span>
         <br />
-        not a type
+        ranked
       </h3>
 
       {/* Key Concepts, added 2026-08-26. Sits under the headline and above the

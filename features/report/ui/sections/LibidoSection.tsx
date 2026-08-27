@@ -7,6 +7,8 @@ import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPri
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import LearnPill from "./LearnPill";
 import ChapterHeading from "./ChapterHeading";
+import type { Report2DocInserts } from "@/data/report2-doc-inserts";
+import ProseGroup, { firstThenTight } from "./ProseGroup";
 
 /**
  * Server-resolved libido copy (`getReport2Section(name, "libido")`), threaded as
@@ -26,6 +28,8 @@ import ChapterHeading from "./ChapterHeading";
  * send locked per-archetype content to an unpaid client.
  */
 export interface LibidoCopy {
+  /** Document passages placed in this chapter; null when locked or absent. */
+  inserts?: Report2DocInserts["libido"] | null;
   // Universal (always shipped) — these frame the section for locked clients too.
   eyebrow?: string | null;
   "row1.label"?: string | null;
@@ -339,6 +343,15 @@ const LibidoSection: FC<Props> = ({
                   </div>
                 ))}
               </div>
+            ) : null}
+
+            {/* Document insert, 2026-08-27: under the "Its close cousin" block, which
+                is the last of these four rows. */}
+            {copy.inserts?.underCousin?.length ? (
+              <ProseGroup
+                className="report-libido__insert"
+                items={firstThenTight(copy.inserts.underCousin)}
+              />
             ) : null}
           </>
         )}

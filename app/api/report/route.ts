@@ -1715,6 +1715,7 @@ export async function GET(request: Request) {
      */
     const importanceLearn = withKeyConcepts({}, docSlug, "importance");
     const constellationLearn = withKeyConcepts({}, docSlug, "constellation");
+    const knowhowLearn = withKeyConcepts({}, docSlug, "knowhow");
     const curiosityStyles = resolveDocStyles(
       CURIOSITY_STYLES,
       CURIOSITY_STYLE_BY_ARCHETYPE,
@@ -1786,22 +1787,22 @@ export async function GET(request: Request) {
         rewardConfig,
         energyCopy: withKeyConcepts(energyCopy, docSlug, "energy", energyUnlocked),
         energyConfig,
-        arousalCopy: withKeyConcepts(arousalCopy, docSlug, "arousal"),
+        arousalCopy: withKeyConcepts(arousalCopy, docSlug, "arousal", arousalUnlocked),
         arousalConfig,
         arousalStyles,
-        initiationCopy: withKeyConcepts(initiationCopy, docSlug, "initiation"),
+        initiationCopy: withKeyConcepts(initiationCopy, docSlug, "initiation", initiationUnlocked),
         initiationConfig,
         initiationStyles,
-        libidoCopy: withKeyConcepts(libidoCopy, docSlug, "libido"),
+        libidoCopy: withKeyConcepts(libidoCopy, docSlug, "libido", libidoUnlocked),
         libidoConfig,
-        partnershipCopy: withKeyConcepts(partnershipCopy, docSlug, "partnership"),
+        partnershipCopy: withKeyConcepts(partnershipCopy, docSlug, "partnership", libidoUnlocked),
         partnershipLoop,
         enjoyCopy: withKeyConcepts(enjoyCopy, docSlug, "enjoy"),
-        growthCopy: withKeyConcepts(growthCopy, docSlug, "growth"),
+        growthCopy: withKeyConcepts(growthCopy, docSlug, "growth", growthUnlocked),
         growthRungs,
         readingCopy: withKeyConcepts(readingCopy, docSlug, "reading"),
-        powerCopy: withKeyConcepts(powerCopy, docSlug, "power"),
-        fantasyCopy: withKeyConcepts(fantasyCopy, docSlug, "fantasy"),
+        powerCopy: withKeyConcepts(powerCopy, docSlug, "power", powerUnlocked),
+        fantasyCopy: withKeyConcepts(fantasyCopy, docSlug, "fantasy", fantasyUnlocked),
         fantasyDots,
         curiosityCopy: withKeyConcepts(curiosityCopy, docSlug, "curiosity", curiosityUnlocked),
         curiosityStyles,
@@ -1814,6 +1815,7 @@ export async function GET(request: Request) {
         stageCopy: withKeyConcepts(stageCopy, docSlug, "stage"),
         importanceLearn,
         constellationLearn,
+        knowhowLearn,
         constellationMottos,
         archetypeSummary,
       })

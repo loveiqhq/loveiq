@@ -7,10 +7,11 @@ import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
 import LearnPill from "./LearnPill";
-import DocStyleBlock from "./DocStyleBlock";
 import CuriosityScale from "./CuriosityScale";
+import StyleVerdict from "./StyleVerdict";
 import ChapterHeading from "./ChapterHeading";
 import type { Report2DocInserts } from "@/data/report2-doc-inserts";
+import ProseGroup, { firstThenTight } from "./ProseGroup";
 import {
   CURIOSITY_STYLES_OUTRO,
   type Report2DocStyle,
@@ -248,26 +249,41 @@ const CuriositySection: FC<Props> = ({
                 Restored as a list on 2026-08-26 and redesigned the same day into the
                 scale the Importance of Sexuality and Confidence Level chapters use,
                 with all fourteen archetypes plotted. Above the fit table, as asked. */}
+            {/* "Across life stages, partners and sexual phases..." moves ABOVE the
+                scale (Mark, 2026-08-27) - it frames the scale rather than qualifying
+                it afterwards. */}
+            <p className="report-card-intro report-curiosity__insert">{CURIOSITY_STYLES_OUTRO}</p>
+
             <CuriosityScale
               archetype={archetype}
               eyebrow="Common Curiosity Level Styles Across Archetypes"
-              outro={CURIOSITY_STYLES_OUTRO}
             />
 
-            {/* The reader's own style, named and described in the document's words,
-                under the scale that places it. */}
-            <DocStyleBlock
+            {/* The reader's own style as a verdict, in the shape the Confidence
+                chapter uses (Mark, 2026-08-27), with the document's "(e.g. ...)"
+                archetype list dropped. */}
+            <StyleVerdict
               eyebrow="Your curiosity style"
               styles={curiosityStyles ?? []}
               modifier="curiosity"
             />
 
+            {/* Document insert: under the curiosity visualisation. */}
+            {copy.inserts?.underScale ? (
+              <p className="report-curiosity__insert">{copy.inserts.underScale}</p>
+            ) : null}
+
             <FitTable fit={relationshipFit} />
 
             {/* Document insert, 2026-08-26: "Add under the table of scores in the
                 Curiosity & Relationship Form section". */}
-            {copy.inserts?.underFit ? (
-              <p className="report-curiosity__insert">{copy.inserts.underFit}</p>
+            {/* Under the table of scores. The relationship-form paragraph leads in,
+                then "When they feel free..." on a line break (Mark, 2026-08-27). */}
+            {copy.inserts?.underFit?.length ? (
+              <ProseGroup
+                className="report-curiosity__insert"
+                items={firstThenTight(copy.inserts.underFit)}
+              />
             ) : null}
 
             {copy.takeaway ? (

@@ -1,48 +1,44 @@
 /**
  * Text the source document's comments ask for, placed where the comments say.
  *
- * Thirteen comments were added to "Copy of [OLD] Spark Seeker Report Template"
- * on 2026-08-26 between 19:20 and 20:29, each anchored on the passage it wants
- * moved and each naming its destination in the report ("Add this to the
- * Attachment Style section just under the rectangle that reads 'The Key'").
- * This module is those passages, verbatim, keyed by where they go.
+ * Two rounds of Mark's feedback live here. The 2026-08-26 comments each anchored
+ * on a passage and named its destination ("Add this to the Attachment Style
+ * section just under the rectangle that reads 'The Key'"). The 2026-08-27 round
+ * named more destinations in prose. Both are the same thing: document passages,
+ * verbatim, keyed by where they go.
  *
- * HOW THE MAPPING WAS ESTABLISHED, since it is not machine-readable. The Drive
- * API returns comment threads newest-first and their anchors in document order,
- * with no shared id. Twelve of the thirteen anchors were matched to a paragraph
- * range by their own text; the thirteenth (the risk-orientation one) spans a
- * paragraph break and was found by hand. The chronological order of the
- * comments then matched the document order of the anchors exactly, and every
- * one landed in the section its own comment names — thirteen for thirteen, with
- * section agreement on all of them. That agreement is the check.
+ * HOW THE 2026-08-26 MAPPING WAS ESTABLISHED, since it is not machine-readable.
+ * The Drive API returns comment threads newest-first and their anchors in document
+ * order, with no shared id. Twelve of thirteen anchors were matched to a paragraph
+ * range by their own text; the thirteenth spans a paragraph break and was found by
+ * hand. The chronological order of the comments then matched the document order of
+ * the anchors exactly, and every one landed in the section its own comment names.
+ * That agreement is the check.
  *
- * Universal vs per-archetype: every string here is Spark Seeker copy, so it is
- * keyed under that slug. Other archetypes get nothing and their sections render
- * as they do today.
+ * Every string is verbatim. Where a field holds several, they are in document
+ * order and the component decides the spacing between them (see `ProseGroup`).
+ *
+ * Per-archetype, so gated: `withKeyConcepts` in app/api/report/route.ts passes
+ * each section's unlock flag and a locked reader receives null.
  */
 
 export interface Report2DocInserts {
   accel: {
-    /**
-     * The accelerator opening, above the "What opens you" / "What shuts you down"
-     * columns, and the brakes conclusion, under the accelerator-led/brake-led
-     * meter. Both were this chapter's Key Concepts until 2026-08-26, when Mark
-     * asked for them to move into the card; they live here rather than in the
-     * Key Concepts layer because that is what they now are — placed passages.
-     */
+    /** Above the "What opens you" / "What shuts you down" columns. */
     aboveColumns: string;
+    /** Under the accelerator-led / brake-led meter. */
     underMeter: string;
   };
   beliefs: {
-    /** Above the "Serve you / Box you in" columns. */
+    /** Above the two belief columns. */
     intro: string;
-    /** After the list, replacing "Most of these formed where attention arrived…". */
+    /** After the list, replacing "Most of these formed where attention arrived...". */
     afterList: string[];
   };
   attachment: {
     /** Under the "The Key" panel. */
     underKey: string[];
-    /** Under "The Map", replacing "one dot shows your baseline…". */
+    /** Under "The Map", replacing "one dot shows your baseline...". */
     underMap: string[];
   };
   insecurities: {
@@ -50,24 +46,58 @@ export interface Report2DocInserts {
     aboveGraph: string;
   };
   confidence: {
-    /** Replaces the "Each dot is one of the 14 archetypes…" strip note. */
+    /** Replaces the "Each dot is one of the 14 archetypes..." note. */
     replaceStripNote: string[];
   };
   reward: {
-    /** Above the ranked "01 Dopamine · the lead" list. */
+    /** Above the ranked "01 Dopamine - the lead" list. */
     aboveChemicals: string;
     /** Under the statistical element (comment parts 1 and 2). */
     underStats: string[];
   };
   energy: {
-    /** Just after the "Depth replaces speed" panel. */
-    afterDepth: string;
-    /** Just after the energy curve. */
+    /** After the "Depth replaces speed" panel. p426 leads it in (2026-08-27). */
+    afterDepth: string[];
+    /** After the energy curve. Left aligned. */
     afterGraph: string[];
   };
+  power: {
+    /** Opens the card, before "Leading happens when momentum grabs you". */
+    opener: string;
+  };
   curiosity: {
-    /** Under the "Fit by relationship form" table of scores. */
-    underFit: string;
+    /** Under the curiosity scale. */
+    underScale: string;
+    /** Under the "Fit by relationship form" table. p568 leads it in. */
+    underFit: string[];
+  };
+  arousal: {
+    /** Before "The Reframe" block. */
+    beforeReframe: string;
+  };
+  initiation: {
+    /** After the initiation-style block. p745 follows on a line break. */
+    afterVarieties: string[];
+    /** Replaces the "what you sent / what arrived" pair. */
+    standoff: string[];
+  };
+  fantasy: {
+    /** Before the practice-tendency groups: what the scores are. */
+    beforeTendencies: string[];
+    /** The two metrics, as a labelled pair. */
+    metrics: string[];
+  };
+  libido: {
+    /** Under the "Its close cousin" block. */
+    underCousin: string[];
+  };
+  partnership: {
+    /** Under the loop visual, before the educational block. */
+    underFlywheel: string;
+  };
+  growth: {
+    /** Replaces the "Spark Seekers get called shallow..." opener. */
+    replaceOpener: string;
   };
 }
 
@@ -121,7 +151,7 @@ export const report2DocInserts: Record<string, Report2DocInserts> = {
       // document paragraph 397
       aboveChemicals:
         "The Spark Seeker is primarily dopamine-oriented, with adrenaline and novelty-sensitive arousal playing strong supporting roles, while oxytocin tends to be secondary rather than leading.",
-      // document paragraphs 399, 400, 401 (comment parts 1 and 2)
+      // document paragraphs 399, 400, 401
       underStats: [
         "Their system is optimized for activation. Dopamine rises through pursuit, flirtation, uncertainty, and newness, creating a “charge” that pulls desire forward. Adrenaline can amplify arousal by adding edge, speed, and intensity. Oxytocin may follow, but usually after the spark has already ignited.",
         "Unlike oxytocin-driven archetypes, the Spark Seeker is not primarily motivated by bonding as the starting point. Too much emphasis on emotional heaviness, slow pacing, or relational processing can actually disrupt their reward loop by reducing stimulation.",
@@ -129,19 +159,79 @@ export const report2DocInserts: Record<string, Report2DocInserts> = {
       ],
     },
     energy: {
-      // document paragraph 427
-      afterDepth:
+      // document paragraphs 426, 427
+      afterDepth: [
+        "The Spark Seeker has a high, fast-activating energy level.",
         "Their sexuality is often explosive and quickly charged. Energy builds through novelty, flirtation, and anticipation, and they can arrive already “sparked”, especially when there is chemistry, play, and something new in the air. When conditions are right, their desire spikes quickly, feels bright and exciting, and thrives on momentum.",
+      ],
       // document paragraphs 446, 447
       afterGraph: [
         "The Spark Seeker has a high risk orientation.",
         "Their desire thrives in novelty, uncertainty, and energetic stimulation, not in predictability, routine, or overly controlled intimacy. Sexual risk, whether emotional (spontaneity, uncertainty, “will they want me?” tension) or sexual (trying something new, playful boldness, pushing variety), tends to activate arousal rather than shut it down.",
       ],
     },
+    power: {
+      // document paragraph 478
+      opener:
+        "The Spark Seeker has a primarily freedom guided, playful switch orientation. They do not seek power for control or security. They seek stimulation and aliveness, and power grows out of play.",
+    },
     curiosity: {
-      // document paragraph 511
-      underFit:
+      // document paragraph 509
+      underScale:
+        "For the Spark Seeker, curiosity tends to turn outward rather than inward. They are interested in discovering new experiences, new dynamics, new settings, new “what ifs”: how novelty changes arousal, how surprise ignites desire, and how play keeps attraction awake.",
+      // document paragraphs 568, 511
+      underFit: [
+        "The Spark Seeker is most naturally drawn to flexible, freedom preserving, and stimulation rich relationship forms, often monogamy with spaciousness, open leaning agreements, or relationships that prioritize novelty, autonomy, and play.",
         "When they feel free, desired, and unconfined, Spark Seekers can become surprisingly committed explorers. They may engage with fantasy, role play, new environments, or new sexual scripts, but typically in ways that preserve autonomy rather than deepen sameness. Rather than repeating one practice for years, they tend to rotate through experiences, finding depth through variety.",
+      ],
+    },
+    arousal: {
+      // document paragraph 719
+      beforeReframe:
+        "Desire does not switch on through emotional depth, slow reassurance, or routine alone. It builds through anticipation, play, and a sense of fresh possibility. Feeling intrigued, free, and energetically engaged is the gateway to physical arousal.",
+    },
+    initiation: {
+      // document paragraphs 742, 743, 745
+      afterVarieties: [
+        "The Spark Seeker has a primarily active and playful initiation style.",
+        "They rarely initiate through slow emotional build-up or careful relational checking first. Instead, they begin intimacy by creating charge through teasing, flirtation, novelty, and a sense of spontaneous invitation. Initiation often looks like play rather than seriousness.",
+        "Because they associate sex with aliveness and freedom, they often initiate when they feel energized, curious, or turned on by possibility. If things feel routine, heavy, or emotionally demanding, initiation may stop entirely, not because desire is gone, but because the environment feels constricting.",
+      ],
+      // document paragraphs 747, 748
+      standoff: [
+        "The Spark Seeker waits to feel freedom and spark. The partner waits for emotional seriousness and reassurance. Desire exists on both sides, but no one moves.",
+        "When the Spark Seeker feels spacious and desired, they can initiate more consistently, but still in a light, playful way, not a heavy or obligation-based one. Their growth lies in learning to stay present through quieter intimacy and to name needs for novelty without disappearing.",
+      ],
+    },
+    fantasy: {
+      // document paragraphs 838, 840
+      beforeTendencies: [
+        "These scores do not define you as an individual. They are probability-based estimates derived from aggregated research and observed patterns across archetypes.",
+        "They reflect what is statistically more common, not what is fixed or deterministic for you individually. Every person is unique, and real-world preferences are shaped by personal experience, context, development, and the combination of multiple archetypes within you.",
+      ],
+      // document paragraphs 844, 845, 846
+      metrics: [
+        "We present two separate metrics on a 10-point scale:",
+        "Fantasy Pull: how strongly a theme tends to appear in imagination, curiosity, or arousal",
+        "Lived Pleasure:  how likely the same theme is to feel grounding, pleasurable, and genuinely good when experienced in real life",
+      ],
+    },
+    libido: {
+      // document paragraphs 1237, 1238
+      underCousin: [
+        "For the Spark Seeker, libido challenges are rarely about sex itself. They are about the level of spark, freedom, and aliveness in the relational atmosphere.",
+        "Their desire is highly momentum-based. When the connection feels playful and charged, libido can be bright, fast, and persistent. When things feel routine or heavy, desire often drops suddenly, long before they can explain why.",
+      ],
+    },
+    partnership: {
+      // document paragraph 1278
+      underFlywheel:
+        "Can be perceived as restless, easily bored, or “always needing more” (especially when novelty and flirt energy drop) The Spark Seeker’s primary “fuel” is tension and aliveness: feeling wanted in a way that has play, chase, and surprise. When they don’t receive that consistently, they often don’t simply become mildly under-stimulated, they become disengaged. They may bring up the same theme repeatedly (“It feels so routine,” “I miss the spark,” “We never flirt anymore”), not to criticize, but because the issue doesn’t resolve internally until the relationship feels alive again. To a partner, especially someone more security-driven, routine-oriented, or emotionally serious, this can look like an impossible standard: “No matter what I do, it’s not enough.” The tragedy is that the Spark Seeker usually isn’t asking for more and more; they’re asking for the right kind (play, pursuit, novelty, freedom). When they don’t know how to translate that into clear, doable requests, it can come out as chronic dissatisfaction, creating partner insecurity and defensiveness over time.",
+    },
+    growth: {
+      // document paragraph 1288
+      replaceOpener:
+        "For the Spark Seeker, growth is rarely about becoming “more serious” or “more settled.” It’s about expanding range: staying true to the core erotic signature (spark, tension, play, novelty, freedom) while becoming less dependent on constant stimulation to access desire, speak needs, and stay connected when things feel ordinary.",
     },
   },
 };
@@ -152,24 +242,10 @@ export function getDocInserts(slug: string): Report2DocInserts | null {
 }
 
 /**
- * The four questions chapter 15 puts under "It answers questions like:".
- *
- * Carried because Mark asked for that sentence to open the Power chapter's Key
- * Concepts, and it ends on a colon. Without what the colon introduces it reads
- * as a broken sentence, so the document's own questions come with it.
- */
-export const POWER_QUESTIONS: string[] = [
-  "Do I feel most alive when leading or when yielding?",
-  "Does desire grow through control, through surrender, or through mutual flow?",
-  "Do I seek structure, responsiveness, safety, intensity, or exchange?",
-  "Does power feel erotic, calming, threatening, or irrelevant?",
-];
-
-/**
  * The trimmed opening of the Reward chapter.
  *
  * The document's paragraph runs on into the full list of five neurochemicals,
- * which the section then renders again as its ranked "01 Dopamine · the lead"
+ * which the section then renders again as its ranked "01 Dopamine - the lead"
  * list. Mark asked to keep the sentence only as far as "neurochemical systems",
  * so the prose introduces the list instead of duplicating it.
  */

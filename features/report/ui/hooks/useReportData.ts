@@ -252,6 +252,7 @@ export interface ReportData {
   /** Key Concepts for the three chapters that carry no other copy of their own. */
   importanceLearn: import("../sections/LearnPill").LearnPillCopy | null;
   constellationLearn: import("../sections/LearnPill").LearnPillCopy | null;
+  knowhowLearn: import("../sections/LearnPill").LearnPillCopy | null;
   /** Config `relationship_fit` (structure → 0..3 fit score); null when locked or when the archetype has no fit map (only Spiritual Lover today). */
   relationshipFit: Record<string, number> | null;
   /** Report 2.0 Love Language copy for the primary archetype, resolved server-side; `locked` mirrors the full_report gate. */

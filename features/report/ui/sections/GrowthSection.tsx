@@ -15,6 +15,7 @@ import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import LearnPill from "./LearnPill";
 import ChapterHeading from "./ChapterHeading";
+import type { Report2DocInserts } from "@/data/report2-doc-inserts";
 
 /**
  * Server-resolved growth copy (`getReport2Section(name, "growth")`), threaded as
@@ -33,6 +34,8 @@ import ChapterHeading from "./ChapterHeading";
  * per-archetype content to an unpaid client.
  */
 export interface GrowthCopy {
+  /** Document passages placed in this chapter; null when locked or absent. */
+  inserts?: Report2DocInserts["growth"] | null;
   // Universal (always shipped) — these frame the section for locked clients too.
   "learn.eyebrow"?: string | null;
   /** Chapter-opening definition, rendered in front of `learn.body`. */
@@ -415,7 +418,14 @@ const GrowthSection: FC<Props> = ({
                 defended rather than diagnosed. Moved BELOW the graph on
                 2026-08-26: the headline and the climb are what the chapter opens
                 on, and a paragraph in front of them delayed both. */}
-            {copy.opener ? <p className="report-growth__opener">{copy.opener}</p> : null}
+            {/* Document insert, 2026-08-27: replaces the "Spark Seekers get called
+                shallow…" opener. `copy.opener` stays the fallback for the thirteen
+                archetypes the document does not cover. */}
+            {copy.inserts?.replaceOpener ? (
+              <p className="report-growth__opener">{copy.inserts.replaceOpener}</p>
+            ) : copy.opener ? (
+              <p className="report-growth__opener">{copy.opener}</p>
+            ) : null}
 
             {hasLadder ? (
               <ol className={`report-growth__ladder${cue === null ? "" : " is-cued"}`}>

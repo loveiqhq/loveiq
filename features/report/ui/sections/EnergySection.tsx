@@ -515,8 +515,14 @@ const EnergySection: FC<Props> = ({
                 Replaces Speed'". */}
             {/* The document's own energy level for this archetype. Above the curve,
                 because it is the classification the curve then illustrates. */}
-            {copy.inserts?.afterDepth ? (
-              <p className="report-energy__insert">{copy.inserts.afterDepth}</p>
+            {/* "The Spark Seeker has a high, fast-activating energy level." leads in,
+                then "Their sexuality is often explosive..." on a line break
+                (Mark, 2026-08-27). */}
+            {copy.inserts?.afterDepth?.length ? (
+              <ProseGroup
+                className="report-energy__insert report-energy__insert--left"
+                items={firstThenTight(copy.inserts.afterDepth)}
+              />
             ) : null}
 
             <div className="report-energy__graph-wrap">

@@ -10319,6 +10319,7 @@ input.autofill-dark:-internal-autofill-previewed {
    and the CTA's placement are NOT restated: they come from the shared
    `.report-learn-peek` / `.report-learn-cta` classes, which is the whole reason
    the markup carries them. */
+.report-knowhow__edu,
 .report-insecurities__edu {
   position: relative;
   width: 100%;
@@ -10328,6 +10329,7 @@ input.autofill-dark:-internal-autofill-previewed {
   background: linear-gradient(180deg, rgba(157, 138, 215, 0.1) 0%, rgba(157, 138, 215, 0.02) 100%);
 }
 
+.report-knowhow__edu::before,
 .report-insecurities__edu::before {
   content: "";
   position: absolute;
@@ -10339,6 +10341,7 @@ input.autofill-dark:-internal-autofill-previewed {
   background: linear-gradient(90deg, #9d8ad7 0%, #c36ddf 100%);
 }
 
+.report-knowhow__edu-summary,
 .report-insecurities__edu-summary {
   display: flex;
   align-items: center;
@@ -10351,6 +10354,7 @@ input.autofill-dark:-internal-autofill-previewed {
   text-align: left;
 }
 
+.report-knowhow__edu-icon,
 .report-insecurities__edu-icon {
   display: inline-flex;
   align-items: center;
@@ -10363,11 +10367,13 @@ input.autofill-dark:-internal-autofill-previewed {
   color: #6b5b95;
 }
 
+.report-knowhow__edu-icon svg,
 .report-insecurities__edu-icon svg {
   width: 17px;
   height: 17px;
 }
 
+.report-knowhow__edu-eyebrow,
 .report-insecurities__edu-eyebrow {
   flex: 1 1 auto;
   color: #6b5b95;
@@ -10379,6 +10385,7 @@ input.autofill-dark:-internal-autofill-previewed {
   line-height: 1.44;
 }
 
+.report-knowhow__edu-chevron,
 .report-insecurities__edu-chevron {
   flex: 0 0 auto;
   color: #795fc8;
@@ -10389,15 +10396,18 @@ input.autofill-dark:-internal-autofill-previewed {
   transition: transform 0.2s ease;
 }
 
+.report-knowhow__edu-chevron.is-open,
 .report-insecurities__edu-chevron.is-open {
   transform: rotate(180deg);
 }
 
+.report-knowhow__edu-peek,
 .report-insecurities__edu-peek {
   position: relative;
   padding: 8px 20px 16px 69px;
 }
 
+.report-knowhow__edu-teaser,
 .report-insecurities__edu-teaser {
   margin: 0;
   color: #161021;
@@ -10407,6 +10417,7 @@ input.autofill-dark:-internal-autofill-previewed {
   line-height: var(--report-teaser-lh);
 }
 
+.report-knowhow__edu-cta,
 .report-insecurities__edu-cta {
   margin-top: 12px;
   padding: 7px 16px;
@@ -10421,6 +10432,7 @@ input.autofill-dark:-internal-autofill-previewed {
   cursor: pointer;
 }
 
+.report-knowhow__edu-body,
 .report-insecurities__edu-body {
   display: flex;
   flex-direction: column;
@@ -10428,6 +10440,7 @@ input.autofill-dark:-internal-autofill-previewed {
   padding: 12px 48px 12px 69px;
 }
 
+.report-knowhow__edu-para,
 .report-insecurities__edu-para {
   margin: 0;
   color: #3f3a4d;
@@ -10466,12 +10479,14 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 @media (max-width: 768px) {
+  .report-knowhow__edu-summary,
   .report-insecurities__edu-summary {
     padding-left: 16px;
     padding-right: 20px;
   }
 
   .report-insecurities__edu-peek,
+  .report-knowhow__edu-body,
   .report-insecurities__edu-body {
     padding-left: 20px;
     padding-right: 12px;
@@ -23959,6 +23974,101 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 /* ── Fit-by-relationship-form table ────────────────────────────────────────── */
+/* ── The reader's own style, as a verdict ──────────────────────────────────────
+   Used by the curiosity, arousal and initiation chapters (2026-08-27). Every value
+   is transcribed from `.report-confidence__result*`, which is the block Mark asked
+   these to look like — same grid, same serif at the same clamp, same hairline,
+   same collapse under 768px. Nothing new is invented here. */
+.report-style-verdict {
+  width: 100%;
+  margin: 14px 0 18px;
+}
+
+.report-style-verdict__eyebrow {
+  margin: 0 0 14px;
+  color: #6b5b95;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 0.705rem;
+  letter-spacing: 1.47px;
+  text-transform: uppercase;
+  line-height: 1.65;
+}
+
+.report-style-verdict__row {
+  display: grid;
+  grid-template-columns: minmax(0, 203px) 1px minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(16px, 2.4vw, 24px);
+}
+
+.report-style-verdict__row + .report-style-verdict__row {
+  margin-top: clamp(14px, 1.6vw, 20px);
+  padding-top: clamp(14px, 1.6vw, 20px);
+  border-top: 1px solid rgba(22, 16, 33, 0.07);
+}
+
+.report-style-verdict__name {
+  margin: 0;
+  color: #6b6678;
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: clamp(1.6rem, 2.6vw, 2.12rem);
+  line-height: 1.05;
+  letter-spacing: -0.4px;
+}
+
+/* A secondary style is real but not the verdict, so its name steps down rather
+   than competing with the primary above it. */
+.report-style-verdict__row--secondary .report-style-verdict__name {
+  font-size: clamp(1.15rem, 1.7vw, 1.4rem);
+}
+
+.report-style-verdict__divider {
+  align-self: stretch;
+  width: 1px;
+  background: rgba(22, 16, 33, 0.1);
+}
+
+.report-style-verdict__role {
+  display: block;
+  margin-bottom: 3px;
+  color: #a09aac;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.63rem;
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+}
+
+.report-style-verdict__desc {
+  margin: 0;
+  color: #3f3a4d;
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-size: clamp(0.95rem, 1.35vw, 0.987rem);
+  line-height: 1.6;
+}
+
+.report-style-verdict__outro {
+  margin: 16px 0 0;
+  color: #6b6678;
+  font-family: var(--font-sans);
+  font-size: var(--report-prose-size);
+  line-height: var(--report-prose-lh);
+}
+
+@media (max-width: 768px) {
+  .report-style-verdict__row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .report-style-verdict__divider {
+    display: none;
+  }
+}
+
 /* ── Curiosity scale: all fourteen archetypes on one axis ──────────────────────
    Added 2026-08-26. Built to sit beside the Importance of Sexuality strip rather
    than to be a new kind of chart, so the metrics come from that chapter: the same
@@ -24111,6 +24221,12 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 /* A document passage placed inside a chapter by one of its comments. */
+.report-power__insert,
+.report-arousal__insert,
+.report-initiation__insert,
+.report-fantasy__insert,
+.report-libido__insert,
+.report-partnership__insert,
 .report-attachment__insert,
 .report-energy__insert,
 .report-reward__insert,
@@ -24175,6 +24291,11 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 /* Consecutive inserts read as one passage, not as separate notes. */
+.report-power__insert + .report-power__insert,
+.report-arousal__insert + .report-arousal__insert,
+.report-initiation__insert + .report-initiation__insert,
+.report-fantasy__insert + .report-fantasy__insert,
+.report-libido__insert + .report-libido__insert,
 .report-attachment__insert + .report-attachment__insert,
 .report-energy__insert + .report-energy__insert,
 .report-reward__insert + .report-reward__insert {
@@ -24184,6 +24305,7 @@ input.autofill-dark:-internal-autofill-previewed {
 /* The educational expander spans the card, like every other chapter's does. The
    card sets its own horizontal padding, so the block is pulled back out to the
    card edge rather than given a negative width. */
+.report-knowhow__edu,
 .report-insecurities__edu {
   margin-left: calc(-1 * clamp(22px, 2.4vw, 30.5px));
   margin-right: calc(-1 * clamp(22px, 2.4vw, 30.5px));
