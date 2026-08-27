@@ -137,6 +137,33 @@ describe("production analytics gate", () => {
     expect(tag).not.toContain("data-cookieyes");
   });
 
+  it("does not ship PostHog bundles for products this project does not use", () => {
+    // 26 KiB of surveys.js was downloading on every page load while
+    // `surveys_opt_in` and `survey_config` were both null on the project — pure dead
+    // weight, and one line to stop. Asserted so it cannot silently come back.
+    const client = readFileSync(join(process.cwd(), "instrumentation-client.ts"), "utf8");
+    expect(client).toMatch(/disable_surveys:\s*true/);
+  });
+
+  it("preconnects to PostHog on EVERY environment, and stays within four hints", () => {
+    /**
+     * PostHog runs everywhere, so its preconnect must sit OUTSIDE the
+     * production-only block — inside it, the 300 ms LCP saving PageSpeed measured
+     * would apply only on production, which is the one place it was already fine.
+     *
+     * The count matters too: preconnect hints past about four cost more in
+     * contention than they save, so this fails loudly if a fifth is added rather
+     * than letting them accumulate.
+     */
+    const hints = layout.match(/<link rel="preconnect"/g) ?? [];
+    expect(hints.length).toBeLessThanOrEqual(4);
+
+    const at = layout.indexOf('href="https://eu-assets.i.posthog.com"');
+    expect(at, "PostHog preconnect missing").toBeGreaterThan(-1);
+    const inside = GATED_RANGES.some(([open, close]) => at > open && at < close);
+    expect(inside, "PostHog preconnect must not be production-gated").toBe(false);
+  });
+
   it("refuses the server-side GA4 purchase send off production", () => {
     // The one send that survives the client gate: it runs in the Stripe webhook,
     // and staging shares the production database, so a sandbox test purchase would
