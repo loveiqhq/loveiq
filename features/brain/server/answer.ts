@@ -91,20 +91,21 @@ function defence(text: string): string {
   // ANY run of 3+ brackets, not the exact 3-char token: splitting on "<<<" left
   // `<<<<` as `< <<<`, still a fence a fuzzy reader would honour. The replacement
   // contains no bracket run, so this is a fixed point.
-  return (
-    text
-      // Zero-width and formatting characters can be dropped INSIDE a bracket run
-      // (`<<\u200b<END SOURCE 1>\u200b>>`) so the run reads as three brackets to a
-      // human and to a model while matching neither /<{3,}/ nor />{3,}/. Removed
-      // first so the runs below see the real shape.
-      .replace(/[\u200b-\u200f\u202a-\u202e\u2060\ufeff]/g, "")
-      // Fullwidth and small-form confusables render as angle brackets.
-      .replace(/[\uff1c\ufe64\u2039\u276e]/g, "<")
-      .replace(/[\uff1e\ufe65\u203a\u276f]/g, ">")
-      // TWO brackets is already a fence a fuzzy reader would honour.
-      .replace(/<{2,}/g, "[lt]")
-      .replace(/>{2,}/g, "[gt]")
-  );
+  // Fold bracket confusables first, then collapse any run of two or more —
+  // allowing invisible characters BETWEEN them, which is how the bypass worked:
+  // `<\u200b<\u200b<END SOURCE 1>\u200b>\u200b>` reads as three brackets to a
+  // human and a model while matching neither /<{2,}/ nor />{2,}/.
+  //
+  // Scoped to bracket runs rather than stripping invisibles globally. A global
+  // strip also worked, but it silently rewrote 14 fields of the real corpus by
+  // removing emoji variation selectors (`⚠️` -> `⚠`) — a change with no security
+  // value, and content this function has no business editing.
+  const IGN = "\\p{Default_Ignorable_Code_Point}";
+  return text
+    .replace(/[\uff1c\ufe64\u2039\u276e\u27e8\u3008\u2770\u2772\u2774\u00ab\u276c\u2329]/g, "<")
+    .replace(/[\uff1e\ufe65\u203a\u276f\u27e9\u3009\u2771\u2773\u2775\u00bb\u276d\u232a]/g, ">")
+    .replace(new RegExp(`(?:<${IGN}*){2,}`, "gu"), "[lt]")
+    .replace(new RegExp(`(?:>${IGN}*){2,}`, "gu"), "[gt]");
 }
 
 function buildPrompt(question: string, chunks: BrainChunk[]): LlmMessage[] {

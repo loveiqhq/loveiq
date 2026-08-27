@@ -153,6 +153,8 @@ async function adCostByDay(): Promise<AdCost> {
   const out = new Map<string, number>();
   let from: string | null = null;
   let to: string | null = null;
+  // Set when any GA4 chunk reports its ad report as untrustworthy.
+  let sawUntrustedAdWindow = false;
   try {
     const res = await supabaseFetch(
       // eslint-disable-next-line no-secrets/no-secrets -- a PostgREST query path, not a secret
@@ -172,9 +174,22 @@ async function adCostByDay(): Promise<AdCost> {
       // min/max understates coverage and produced a spurious INCOMPLETE (and, on
       // a 7-day week, a spurious suppression) for a genuinely covered period.
       const wf = typeof r.meta?.window_from === "string" ? r.meta.window_from : null;
-      const wt = typeof r.meta?.window_to === "string" ? r.meta.window_to : null;
+      // The AD window, deliberately — `window_to` describes the traffic report,
+      // and using it to caveat ad spend published `Net: EUR 519.00` where the
+      // truth was -1581. Absent (an older chunk) falls back to the traffic
+      // window; explicitly null means the ad report was truncated or failed, and
+      // `to` then stays null so coverage reads as zero and figures are withheld.
+      const wt =
+        "ad_window_to" in (r.meta ?? {})
+          ? typeof r.meta?.ad_window_to === "string"
+            ? r.meta.ad_window_to
+            : null
+          : typeof r.meta?.window_to === "string"
+            ? r.meta.window_to
+            : null;
       if (wf && (from === null || wf < from)) from = wf;
       if (wt && (to === null || wt > to)) to = wt;
+      if (!wt && "ad_window_to" in (r.meta ?? {})) sawUntrustedAdWindow = true;
       if (!wf && (from === null || day < from)) from = day;
       if (!wt && (to === null || day > to)) to = day;
       const cost = Number(r.meta?.ad_cost ?? 0);
@@ -183,7 +198,9 @@ async function adCostByDay(): Promise<AdCost> {
   } catch {
     // Optional enrichment: without GA4 the rollup simply omits the spend lines.
   }
-  return { byDay: out, from, to };
+  // One truncated ad report poisons the whole window: we cannot say which days
+  // are missing, so we say we do not know.
+  return { byDay: out, from, to: sawUntrustedAdWindow ? null : to };
 }
 
 /** Inclusive day count between two `YYYY-MM-DD`s. */
@@ -356,17 +373,29 @@ function renderBody(period: string, t: Totals, ad: AdCost): string {
   const cov = coverage(t.firstDay, t.lastDay, ad.from, ad.to);
   const adGap = t.adSpend > 0 && cov.uncoveredDays > 0;
 
-  // WITHHOLD ON A MATERIAL GAP, MEASURED IN DAYS — not as a percentage of the
-  // period. A 90% rule is silently month-calibrated: 30 of 31 days is 97%, but
-  // 6 of 7 days is 86%, so it withheld net profit for the ENTIRE weekly grain in
-  // the current period, every week, forever. It also printed the same rounded
-  // "90%" for opposite behaviours (26/29 withheld, 27/30 kept).
+  // WHEN IS A GAP BIG ENOUGH TO WITHHOLD THE DERIVED FIGURES?
   //
-  // The real question is whether the missing spend could move the number, and
-  // that is a quantity of days, not a ratio: a one- or two-day trailing lag is
-  // immaterial at any grain, and a three-week hole is material at any grain.
+  // Two calibrations have already been wrong here. A 90%-of-period rule was
+  // month-shaped: 30 of 31 days is 97% but 6 of 7 is 86%, so it withheld net
+  // profit for the entire weekly grain, every week. Replacing it with a day COUNT
+  // (`uncoveredDays > 3`) broke the other way — 1 of 2 days covered is only one
+  // day missing, so a two-day period published a Net with half its spend unknown,
+  // and that fires every Tuesday and every 2nd of the month.
+  //
+  // 80% of the period is the line that satisfies both: 6/7 (86%) and 29/31 (94%)
+  // publish; 1/2 (50%), 3/6 (50%) and 4/7 (57%) do not.
+  //
+  // Plus a sign test, because a share of DAYS is only a proxy for a share of
+  // SPEND. Projecting the known daily rate across the missing days and checking
+  // whether that flips Net from profit to loss catches the case the day ratio
+  // cannot see — a small gap that happens to contain a large spend.
+  const projectedMissing =
+    cov.coveredDays > 0 ? (t.adSpend / cov.coveredDays) * cov.uncoveredDays : 0;
+  const netWouldFlipSign =
+    t.revenue - t.adSpend > 0 && t.revenue - t.adSpend - projectedMissing <= 0;
+
   const adUnusable =
-    t.adSpend > 0 && (cov.coveredDays === 0 || cov.uncoveredDays > 3 || cov.fraction < 0.5);
+    t.adSpend > 0 && (cov.coveredDays === 0 || cov.fraction < 0.8 || netWouldFlipSign);
 
   return [
     `Period: ${period}`,

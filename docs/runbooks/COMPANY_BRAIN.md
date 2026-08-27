@@ -58,11 +58,22 @@ Strongly recommended: `BRAIN_LLM_REASONING_EFFORT=low` (measured 13.7s → 1.7s)
 and `SLACK_BRAIN_TEAM_ID` (without it, any workspace that installs the app can
 read revenue, ad spend and every internal doc).
 
-Per-source, and each one silently freezes that source when unset — which is why
-a skipped source now raises a Slack ops alert once a day: `JIRA_BASE_URL`,
+Per-source, each one freezing that source when unset: `JIRA_BASE_URL`,
 `JIRA_EMAIL`, `JIRA_API_TOKEN`, `GOOGLE_OAUTH_CLIENT_ID`,
 `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REFRESH_TOKEN`, `GA4_PROPERTY_ID`,
 `SEARCH_CONSOLE_SITE`.
+
+**Leaving one unset does NOT alert, and that is deliberate.** Jira is knowingly
+unconfigured; a daily "SKIPPED jira" would train everyone to ignore the ops
+channel and take the real alerts down with it. What DOES alert, once per source
+per day, is a source that is configured and still produced nothing — a revoked or
+expired Google credential (`google-token-unavailable`), a run that exhausted its
+time budget, or a run that wrote zero rows. New failure kinds alert by default;
+only the four "we chose not to configure this" cases are silent.
+
+The practical consequence: after the first nightly run, check
+`select source, count(*) from brain_chunk group by source` yourself. A source you
+believe you configured but that is missing there will not page you.
 
 See the environment-variable table in `CLAUDE.md` for what each one does and what
 happens when it is missing.

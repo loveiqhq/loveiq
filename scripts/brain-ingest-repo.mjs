@@ -231,16 +231,28 @@ function collectDocs() {
     .filter((f) => !EXCLUDED_PREFIXES.some((p) => f.startsWith(p)));
 
   const rows = [];
+  let readCount = 0;
+  let skipped = 0;
   for (const f of files) {
     let text;
     try {
       text = fs.readFileSync(f, "utf8");
     } catch {
-      continue; // listed in the index but absent from the worktree
+      // Listed in the index but absent from the worktree: a sparse checkout, or a
+      // partial clone. Counted separately BECAUSE the log line is the only
+      // diagnostic an operator sees, and printing `files.length` there reported
+      // the full index count while a partial collection was under way — hiding
+      // the very condition that trips the sweep guard.
+      skipped += 1;
+      continue;
     }
+    readCount += 1;
     rows.push(...chunkMarkdown(f, text));
   }
-  return { rows, fileCount: files.length };
+  if (skipped > 0) {
+    console.warn(`${skipped} markdown file(s) are in the git index but missing from the worktree`);
+  }
+  return { rows, fileCount: readCount, listedCount: files.length };
 }
 
 /**
@@ -414,7 +426,7 @@ if (!onMain && !process.argv.includes("--dump-json") && !process.argv.includes("
   process.exit(1);
 }
 
-const { rows: docRows, fileCount } = collectDocs();
+const { rows: docRows, fileCount, listedCount } = collectDocs();
 const commitRows = collectCommits();
 const withMarcus = commitRows.filter((r) => r.meta.for_marcus).length;
 
@@ -425,7 +437,12 @@ if (process.argv.includes("--dump-json")) {
   process.exit(0);
 }
 
-console.log(`docs:    ${fileCount} files -> ${docRows.length} chunks`);
+console.log(
+  `docs:    ${fileCount} files -> ${docRows.length} chunks` +
+    (fileCount === listedCount
+      ? ""
+      : ` (${listedCount - fileCount} of ${listedCount} listed files unreadable)`)
+);
 console.log(`commits: ${commitRows.length} (${withMarcus} with a "For Marcus:" summary)`);
 
 if (DRY_RUN) {
@@ -462,7 +479,7 @@ await upsert([...docRows, ...commitRows], stampedAt);
 // satisfy a `> 0` guard — and the sweep would then delete the other ~1,448,
 // 99.8% of the largest source, and exit 0. The CI workflow sets `fetch-depth: 0`,
 // but nothing stopped a manual run.
-const isShallow = git(["rev-parse", "--is-shallow-repository"]).trim() === "true";
+const shallowAnswer = git(["rev-parse", "--is-shallow-repository"]).trim();
 
 /**
  * Refuse to sweep when this run wrote far less than the source already holds.
@@ -477,30 +494,80 @@ async function safeToSweep(source, wroteRows) {
     console.warn(`no ${source} chunks collected — refusing to sweep ${source}`);
     return false;
   }
-  if (isShallow) {
-    console.warn(`shallow clone — refusing to sweep ${source} (history is incomplete)`);
-    return false;
-  }
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const res = await fetch(
-    `${url}/rest/v1/brain_chunk?select=id&source=eq.${encodeURIComponent(source)}`,
-    {
-      headers: { apikey: key, Authorization: `Bearer ${key}`, Prefer: "count=exact", Range: "0-0" },
-    }
-  );
-  const existing = Number(res.headers.get("content-range")?.split("/")[1] ?? 0);
-  // First ever run for this source: nothing to protect.
-  if (!Number.isFinite(existing) || existing === 0) return true;
-  const ratio = wroteRows / existing;
-  if (ratio < 0.5) {
+  // `=== "false"` IS THE ONLY PERMISSIVE ANSWER. `git rev-parse` echoes an
+  // unrecognised flag and exits 0 (verified: `--is-not-a-real-flag` prints itself,
+  // rc 0), so on git < 2.15 the old `=== "true"` test read as "not shallow" and
+  // the guard failed open on exactly the machines least likely to have new git.
+  if (shallowAnswer !== "false") {
     console.warn(
-      `refusing to sweep ${source}: this run wrote ${wroteRows} but ${existing} exist ` +
-        `(${Math.round(ratio * 100)}%). That looks like a partial collection, not a deletion.`
+      `cannot confirm a full clone (git said ${JSON.stringify(shallowAnswer)}) — refusing to sweep ${source}`
     );
     return false;
   }
+
+  // HOW MANY ROWS WOULD THIS SWEEP ACTUALLY DELETE? Asked with the same predicate
+  // as the DELETE, so after the upsert it counts precisely the orphans.
+  const wouldDelete = await countChunks(source, stampedAt);
+  const total = await countChunks(source, null);
+
+  // FAIL CLOSED. The previous version read the count without checking `res.ok`,
+  // so a 503, a missing Content-Range, or PostgREST answering `0-0/*` all became
+  // `existing = 0`, which the code then read as "first ever run, nothing to
+  // protect" and swept everything. Measured: 1,448 rows deleted, exit 0, not one
+  // warning — output indistinguishable from a healthy run. A failed DELETE here
+  // is fatal; a failed SAFETY CHECK was "proceed". That asymmetry was the bug.
+  if (wouldDelete === null || total === null) {
+    console.warn(`could not count existing ${source} chunks — refusing to sweep ${source}`);
+    return false;
+  }
+  if (wouldDelete === 0) return true;
+
+  const keeps = total - wouldDelete;
+  if (wouldDelete > keeps) {
+    // Counts alone cannot tell a legitimate mass rename (every `source_id` is
+    // `path#slug`, so a docs reorganisation genuinely changes most ids) from a
+    // broken collection. Both look like "most rows are now orphans". So this
+    // refuses and says so loudly rather than guessing: stale rows are recoverable,
+    // deleted ones are not. `--allow-large-sweep` is the deliberate override.
+    if (!process.argv.includes("--allow-large-sweep")) {
+      console.warn(
+        `refusing to sweep ${source}: it would delete ${wouldDelete} rows and keep only ${keeps}. ` +
+          `That is either a mass id change or a broken collection, and counts cannot tell them apart. ` +
+          `Re-run with --allow-large-sweep if the deletion is intended.`
+      );
+      return false;
+    }
+    console.warn(`--allow-large-sweep: proceeding to delete ${wouldDelete} ${source} rows`);
+  }
   return true;
+}
+
+/** Rows for a source, optionally only those older than `before`. Null on any
+ *  failure, so the caller can refuse rather than assume zero. */
+async function countChunks(source, before) {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const filter = before ? `&updated_at=lt.${encodeURIComponent(before)}` : "";
+  try {
+    const res = await fetch(
+      `${url}/rest/v1/brain_chunk?select=id&source=eq.${encodeURIComponent(source)}${filter}`,
+      {
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+          Prefer: "count=exact",
+          Range: "0-0",
+        },
+      }
+    );
+    if (!res.ok) return null;
+    const raw = res.headers.get("content-range")?.split("/")[1];
+    if (!raw || raw === "*") return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
 }
 
 const sweptDocs = (await safeToSweep("doc", docRows.length))

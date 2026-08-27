@@ -129,7 +129,7 @@ async function runGa4Report(
     // one: 3 GA4 reports plus 2 GSC queries at 15s each is an 85s floor against a
     // 60s function limit, so without this a slow Google kills the function and
     // `recordCronRun` never writes at all.
-    if (page > 0 && (isOutOfTime() || Date.now() - startedAt > PAGING_BUDGET_MS)) {
+    if (isOutOfTime() || (page > 0 && Date.now() - startedAt > PAGING_BUDGET_MS)) {
       logger.warn(
         { got: all.length, dimensions: body.dimensions },
         "GA4 report stopped early on the time budget — figures derived from it are incomplete"
@@ -206,8 +206,29 @@ export async function ingestGa4(
   const propertyId = process.env.GA4_PROPERTY_ID;
   if (!propertyId) return { source: GA4_SOURCE, rows: 0, swept: 0, skipped: "ga4-no-property-id" };
 
+  // TWO DIFFERENT THINGS, AND ONLY ONE IS WORTH WAKING SOMEONE FOR.
+  // `getGoogleAccessToken()` returns null both when the env vars are unset (a
+  // deliberate state) and when the token exchange FAILS — a revoked refresh
+  // token, a changed password, a network error. Collapsing them into one
+  // `google-not-configured` meant the cron stayed silent for the fault case, so
+  // GA4 and Search Console could freeze indefinitely while the brain kept
+  // answering from stale ad spend and nobody was told. `isGoogleConfigured()`
+  // already existed as exactly this discriminator and was called from nowhere.
+  // ALREADY OUT OF TIME BEFORE THE FIRST REQUEST. The clock check inside the
+  // paging loop skipped page 0, so every report still fired one request no matter
+  // what — five reports at a 15s timeout is a 75s floor against a 60s function
+  // limit, and being killed there means `recordCronRun` never writes at all.
+  // Reported as a skip so the cron alerts instead of recording a silent success.
+  if (isOutOfTime()) {
+    return { source: GA4_SOURCE, rows: 0, swept: 0, skipped: "ga4-time-budget" };
+  }
+  if (!isGoogleConfigured()) {
+    return { source: GA4_SOURCE, rows: 0, swept: 0, skipped: "google-not-configured" };
+  }
   const token = await getGoogleAccessToken();
-  if (!token) return { source: GA4_SOURCE, rows: 0, swept: 0, skipped: "google-not-configured" };
+  if (!token) {
+    return { source: GA4_SOURCE, rows: 0, swept: 0, skipped: "google-token-unavailable" };
+  }
 
   const dateRanges = [{ startDate: `${DAYS}daysAgo`, endDate: "yesterday" }];
   const windowFrom = isoDaysAgo(DAYS);
@@ -293,6 +314,22 @@ export async function ingestGa4(
   // Still best-effort: a property with no linked Google Ads account returns
   // nothing, and that must not cost us the core numbers above.
   const ads = new Map<string, AdDay>();
+  /**
+   * The last day the AD report itself covers — not the traffic report's.
+   *
+   * These are two separate requests with separate limits, separate paging and
+   * their own try/catch, and the recorded window was taken from the CORE report
+   * while being spent on caveating the AD figures. With the ad report truncated
+   * to 10 of 31 days, the chunk published `Net: EUR 519.00` against a true
+   * -1581, with no INCOMPLETE line at all — the May-2026 defect through a
+   * different door. `orderBys` makes it sharper, not safer: date-ascending means
+   * truncation deterministically drops the most RECENT days.
+   *
+   * Null means "do not trust this at all", which the rollup reads as zero
+   * coverage and withholds every derived figure.
+   */
+  let adWindowTo: string | null = null;
+  let adReportComplete = true;
   try {
     const rows = await runGa4Report(
       token,
@@ -325,11 +362,21 @@ export async function ingestGa4(
         entry.campaigns.set(campaign, (entry.campaigns.get(campaign) ?? 0) + cost);
       }
       ads.set(day, entry);
+      if (adWindowTo === null || day > adWindowTo) adWindowTo = day;
+    }
+
+    // A report that came back exactly full was probably cut off. Treating it as
+    // complete is the failure this whole block exists to prevent.
+    if (rows.length >= 5000) {
+      adReportComplete = false;
+      logger.warn({ rows: rows.length }, "brain-ingest ga4: ad report looks truncated");
     }
   } catch (err) {
     // Expected and harmless when Google Ads is not linked to this property.
+    adReportComplete = false;
     logger.info({ err }, "brain-ingest ga4: no linked Google Ads data");
   }
+  if (!adReportComplete) adWindowTo = null;
 
   interface Ga4Totals {
     sessions: number;
@@ -447,6 +494,10 @@ export async function ingestGa4(
         // period's net profit is safe to publish.
         window_from: windowFrom,
         window_to: windowTo,
+        // The AD report's own reach. `window_to` above describes the TRAFFIC
+        // report; spending it on ad-spend caveats published a profit where the
+        // truth was a loss.
+        ad_window_to: adWindowTo,
       },
       updated_at: stampedAt,
       period_end: day,
@@ -524,7 +575,7 @@ async function queryGsc(
   const startedAt = Date.now();
 
   for (let page = 0; page < MAX_PAGES; page++) {
-    if (page > 0 && (isOutOfTime() || Date.now() - startedAt > PAGING_BUDGET_MS)) {
+    if (isOutOfTime() || (page > 0 && Date.now() - startedAt > PAGING_BUDGET_MS)) {
       logger.warn(
         { got: all.length, dimensions: body.dimensions },
         "Search Console query stopped early on the time budget — query totals are incomplete"
@@ -578,8 +629,29 @@ export async function ingestSearchConsole(
   const site = process.env.SEARCH_CONSOLE_SITE;
   if (!site) return { source: GSC_SOURCE, rows: 0, swept: 0, skipped: "gsc-no-site" };
 
+  // TWO DIFFERENT THINGS, AND ONLY ONE IS WORTH WAKING SOMEONE FOR.
+  // `getGoogleAccessToken()` returns null both when the env vars are unset (a
+  // deliberate state) and when the token exchange FAILS — a revoked refresh
+  // token, a changed password, a network error. Collapsing them into one
+  // `google-not-configured` meant the cron stayed silent for the fault case, so
+  // GA4 and Search Console could freeze indefinitely while the brain kept
+  // answering from stale ad spend and nobody was told. `isGoogleConfigured()`
+  // already existed as exactly this discriminator and was called from nowhere.
+  // ALREADY OUT OF TIME BEFORE THE FIRST REQUEST. The clock check inside the
+  // paging loop skipped page 0, so every report still fired one request no matter
+  // what — five reports at a 15s timeout is a 75s floor against a 60s function
+  // limit, and being killed there means `recordCronRun` never writes at all.
+  // Reported as a skip so the cron alerts instead of recording a silent success.
+  if (isOutOfTime()) {
+    return { source: GSC_SOURCE, rows: 0, swept: 0, skipped: "gsc-time-budget" };
+  }
+  if (!isGoogleConfigured()) {
+    return { source: GSC_SOURCE, rows: 0, swept: 0, skipped: "google-not-configured" };
+  }
   const token = await getGoogleAccessToken();
-  if (!token) return { source: GSC_SOURCE, rows: 0, swept: 0, skipped: "google-not-configured" };
+  if (!token) {
+    return { source: GSC_SOURCE, rows: 0, swept: 0, skipped: "google-token-unavailable" };
+  }
 
   // Search Console data lags ~2 days; asking for today returns empty rows.
   const startDate = isoDaysAgo(DAYS);

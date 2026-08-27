@@ -19,6 +19,21 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
+ * Skips that mean "we chose not to configure this", which must never alert — the
+ * team knows, and a daily reminder trains everyone to ignore the channel.
+ *
+ * Everything NOT in here alerts, including `google-token-unavailable` (a revoked
+ * credential) and `jira-time-budget` (a run that ran out of clock). New skip
+ * strings therefore alert by default, which is the safe direction.
+ */
+const DELIBERATE_SKIPS = new Set([
+  "jira-not-configured",
+  "google-not-configured",
+  "ga4-no-property-id",
+  "gsc-no-site",
+]);
+
+/**
  * GET /api/cron/brain-ingest
  *
  * Nightly ingest of the parts of the company-brain corpus that do NOT live in
@@ -87,13 +102,13 @@ export async function GET(request: Request) {
       // returns null), and a run that wrote zero rows. All three returned
       // `status: "success"` and `{ok: true}`, which is how Jira sat at zero
       // chunks indefinitely while the brain told askers "nothing in Jira".
-      // "NOT CONFIGURED" IS A DELIBERATE STATE, NOT A FAILURE. Jira is knowingly
-      // unconfigured, so alerting on it would have posted `SKIPPED jira` to ops
-      // every single day forever — and a channel that cries wolf daily gets muted,
-      // taking the real alerts with it. A source that IS configured and still did
-      // nothing (a revoked token, an exhausted time budget, zero rows) is the case
-      // worth waking someone for.
-      if (result.skipped && !result.skipped.endsWith("not-configured")) {
+      // AN EXPLICIT LIST, NOT A SUFFIX TEST. `endsWith("not-configured")` was
+      // wrong in BOTH directions: it alerted every day for `ga4-no-property-id`
+      // and `gsc-no-site`, which are deliberately unset, and it stayed SILENT for
+      // `google-not-configured`, which at the time also covered a revoked refresh
+      // token — the one case the comment below says is worth waking someone for.
+      // A channel that cries wolf daily gets muted, taking the real alerts with it.
+      if (result.skipped && !DELIBERATE_SKIPS.has(result.skipped)) {
         logger.warn({ ingester: name, skipped: result.skipped }, "brain-ingest: source skipped");
         await alertOnce(
           name,

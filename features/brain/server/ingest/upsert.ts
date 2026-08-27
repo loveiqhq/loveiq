@@ -109,16 +109,30 @@ export async function sweepStale(
     return 0;
   }
 
-  // `> 0` closes only the EMPTY case, and the partial case is both more likely and
-  // nearly as damaging: a GA4 report truncated to 5 of 90 days writes 5 chunks,
-  // clears the zero check, and the sweep then deletes the other 85. Comparing
-  // against what is already stored turns "did we write anything" into "did we
-  // write plausibly all of it".
-  const existing = await countExisting(source);
-  if (existing > 0 && wroteRows / existing < 0.5) {
+  // HOW MANY ROWS WOULD THIS DELETE, asked with the DELETE's own predicate.
+  //
+  // A `wroteRows > 0` check closes only the empty case, and the partial case is
+  // both likelier and nearly as damaging: a GA4 report truncated to 5 of 90 days
+  // writes 5 chunks, clears the zero check, and the sweep removes the other 85.
+  const wouldDelete = await countChunks(source, stampedAt);
+  const total = await countChunks(source, null);
+  if (wouldDelete === null || total === null) {
     logger.warn(
-      { source, wroteRows, existing },
-      "brain sweep skipped: this run wrote far less than the source holds, which looks like a partial collection"
+      { source },
+      "brain sweep skipped: could not count existing rows, refusing to delete"
+    );
+    return 0;
+  }
+  if (wouldDelete === 0) return 0;
+
+  // Counts cannot distinguish a legitimate mass id change (a shorter `DAYS`
+  // window, a re-chunking) from a broken collection — both leave most rows
+  // orphaned. Refuse and say so: stale rows are recoverable, deleted rows are
+  // not. The cron surfaces this as a zero-row/skip alert.
+  if (wouldDelete > total - wouldDelete) {
+    logger.warn(
+      { source, wouldDelete, keeps: total - wouldDelete, wroteRows },
+      "brain sweep skipped: it would delete the majority of this source, which is either a mass id change or a broken collection"
     );
     return 0;
   }
@@ -141,21 +155,30 @@ export async function sweepStale(
 }
 
 /**
- * Rows currently stored for a source, or 0 when the count cannot be read — in
- * which case the caller proceeds, because a bookkeeping failure must not block a
- * sweep that is otherwise sound.
+ * Rows for a source, optionally only those older than `before` — the same
+ * predicate the DELETE uses, so after an upsert it counts precisely the orphans.
+ *
+ * Returns NULL on any failure, never 0. The previous version returned 0, and the
+ * caller read 0 as "nothing stored, nothing to protect" and swept. A 503, a
+ * missing `Content-Range`, or PostgREST answering `0-0/*` therefore turned the
+ * safety check into a no-op — measured on the repo ingester, 1,448 rows deleted
+ * with no warning and a healthy-looking exit 0. A failed DELETE is fatal here; a
+ * failed safety check must not be "proceed".
  */
-async function countExisting(source: string): Promise<number> {
+async function countChunks(source: string, before: string | null): Promise<number | null> {
+  const filter = before ? `&updated_at=lt.${encodeURIComponent(before)}` : "";
   try {
     const res = await supabaseFetch(
-      `/rest/v1/brain_chunk?select=id&source=eq.${encodeURIComponent(source)}`,
+      `/rest/v1/brain_chunk?select=id&source=eq.${encodeURIComponent(source)}${filter}`,
       { headers: { Prefer: "count=exact", Range: "0-0" } }
     );
-    if (!res.ok) return 0;
-    const total = Number(res.headers.get("content-range")?.split("/")[1]);
-    return Number.isFinite(total) ? total : 0;
+    if (!res.ok) return null;
+    const raw = res.headers.get("content-range")?.split("/")[1];
+    if (!raw || raw === "*") return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
   } catch {
-    return 0;
+    return null;
   }
 }
 
