@@ -36,6 +36,17 @@ if (!projectToken || !host) {
     capture_exceptions: true,
     debug: process.env.NODE_ENV === "development",
     /**
+     * Do not ship the surveys bundle. PostHog loads `surveys.js` (26 KiB, measured in
+     * a PageSpeed run on 2026-08-28 as part of 560 KiB of unused JavaScript on the
+     * landing page) whether or not the product is in use — and it is not:
+     * `surveys_opt_in` and `survey_config` are both null on project 244778, and the
+     * only survey this company runs is its own, at /survey. Nothing to render, so
+     * nothing to download.
+     *
+     * Safe to flip back by deleting this line if PostHog Surveys is ever adopted.
+     */
+    disable_surveys: true,
+    /**
      * `deploy_env` as a super property, so it rides on every subsequent event.
      *
      * PostHog stays switched ON off production — unlike GA4 / Google Ads / Clarity,

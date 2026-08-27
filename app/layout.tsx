@@ -198,6 +198,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en" className={`${manrope.variable} ${lora.variable}`}>
       <head>
         <link rel="preconnect" href="https://cdn-cookieyes.com" />
+        {/* PostHog loads on every environment, so this preconnect is NOT gated with
+            the production-only ones below. PageSpeed named it as the single best
+            remaining preconnect candidate on 2026-08-28 — est. 300 ms off LCP —
+            because posthog-js fetches its remote config, recorder and autocapture
+            bundles from this origin on first paint. Four preconnects is the
+            recommended ceiling and this is the fourth. */}
+        <link rel="preconnect" href="https://eu-assets.i.posthog.com" />
         {productionAnalyticsEnabled && (
           <>
             <link rel="preconnect" href="https://www.clarity.ms" />
