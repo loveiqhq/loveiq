@@ -213,7 +213,7 @@ describe("POST /api/survey notifications", () => {
     expect(flat).toContain("`a***@example.com`");
     expect(flat).not.toContain("ada@example.com");
     // the LIVE arms, in plain English — never the raw codes
-    expect(flat).toContain("Landing page B (previous design)");
+    expect(flat).toContain("Landing Page V1 (First Design)");
     expect(flat).toContain("Pricing B");
     // Concluded experiments are not listed as ones they were in — the paywall,
     // and since 2026-08-25 the survey theme. The fixture still carries a dark

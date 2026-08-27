@@ -1021,7 +1021,7 @@ describe("checkout fulfillment", () => {
       // and still shown in /admin's concluded section.
       expect(all).not.toContain("Forced paywall");
       expect(all).not.toContain("Paywall style");
-      expect(all).toContain("Landing page A (current design)");
+      expect(all).toContain("Landing Page V2 (Survey in Hero)");
       // utm_content (base64 referrer email) must never reach Slack — in the
       // fallback text OR in any block.
       expect(all).not.toContain("cmVmZXJyZXJAZXhhbXBsZS5jb20=");
@@ -1065,10 +1065,10 @@ describe("checkout fulfillment", () => {
       expect(all).toContain("Organic");
       expect(all).not.toContain("Dismissible paywall");
       // landingVariant "control" is the RETIRED round-1 dark arm and must be
-      // labelled as itself — not conflated with the round-2 "previous design".
-      expect(all).toContain("Original dark landing page");
+      // labelled as itself — not conflated with round-2 V1.
+      expect(all).toContain("Dark landing page (before V1)");
       expect(all).toContain("retired arm");
-      expect(all).not.toContain("Landing page B (previous design)");
+      expect(all).not.toContain("Landing Page V1 (First Design)");
 
       delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
     });

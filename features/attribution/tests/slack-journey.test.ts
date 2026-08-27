@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { buildJourneyMessage, formatDuration } from "@features/attribution/server/slack-journey";
 import type { SubmissionJourney } from "@features/attribution/server/journey";
@@ -43,6 +43,7 @@ function journey(overrides: Partial<SubmissionJourney> = {}): SubmissionJourney 
     },
     money: null,
     quoteCount: 0,
+    recordingSessionId: null,
     ...overrides,
   };
 }
@@ -412,5 +413,110 @@ describe("formatDuration", () => {
     expect(formatDuration(null)).toBeNull();
     expect(formatDuration(-1)).toBeNull();
     expect(formatDuration(Number.NaN)).toBeNull();
+  });
+});
+
+/**
+ * Session-replay deep link (2026-08-27). Asserts the rendered URL, not the shape:
+ * the failure that matters is a button that looks fine and opens the wrong page —
+ * PostHog's recordings-list form with the id as a query parameter lands on a
+ * filtered LIST rather than the recording, and reads as "the link is broken".
+ */
+describe("session-recording link", () => {
+  // Without this adminLink() returns null anyway, so the "no admin button" tests
+  // below would pass whether or not the code removed it. Stubbing a real site URL
+  // is what makes them mean something.
+  beforeEach(() => vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org"));
+  afterEach(() => vi.unstubAllEnvs());
+
+  const urls = (blocks: SlackBlock[]): string[] =>
+    (JSON.parse(JSON.stringify(blocks)) as SlackBlock[])
+      .flatMap((b) => (Array.isArray(b.elements) ? (b.elements as Array<{ url?: string }>) : []))
+      .map((e) => e.url)
+      .filter((u): u is string => typeof u === "string");
+
+  const buttons = (blocks: SlackBlock[]) =>
+    (JSON.parse(JSON.stringify(blocks)) as SlackBlock[]).filter((b) => b.type === "actions");
+
+  it("links straight to the recording when a session id was captured", () => {
+    const message = buildJourneyMessage(
+      journey({ recordingSessionId: "01a04480-c0ad-7496-9e5a-7cf22106b1a9" }),
+      { kind: "survey_completed", questionCount: 59 }
+    );
+
+    expect(urls(message.blocks)).toContain(
+      "https://eu.posthog.com/project/244778/replay/01a04480-c0ad-7496-9e5a-7cf22106b1a9"
+    );
+    // The list-with-a-filter form, which does NOT open the recording.
+    expect(JSON.stringify(message.blocks)).not.toContain("sessionRecordingId=");
+  });
+
+  it("is the ONLY button on a survey message — no admin link", () => {
+    // Removed on request. At survey-completion time the "full journey" that button
+    // promised does not exist yet: report-open, paywall, checkout and payment have
+    // no rows, which is why the progress rail shows one green dot and four red. The
+    // facts that DO exist are already in the message, so it was a click to a
+    // restatement.
+    const message = buildJourneyMessage(journey({ recordingSessionId: "sess_abc" }), {
+      kind: "survey_completed",
+      questionCount: 59,
+    });
+
+    const actionBlocks = buttons(message.blocks);
+    expect(actionBlocks).toHaveLength(1);
+    expect((actionBlocks[0]!.elements as unknown[]).length).toBe(1);
+    expect(JSON.stringify(message.blocks)).not.toContain("/admin/");
+    expect(JSON.stringify(message.blocks)).not.toContain("Open full journey");
+  });
+
+  it("carries no buttons at all on a survey message with no recording", () => {
+    // Both buttons can legitimately be absent now, so the block must not be pushed
+    // empty — an actions block with zero elements is rejected by Slack.
+    const message = buildJourneyMessage(journey({ recordingSessionId: null }), {
+      kind: "survey_completed",
+      questionCount: 59,
+    });
+
+    expect(JSON.stringify(message.blocks)).not.toContain("posthog.com");
+    expect(JSON.stringify(message.blocks)).not.toContain("session recording");
+    expect(JSON.stringify(message.blocks)).not.toContain("/admin/");
+    expect(buttons(message.blocks)).toHaveLength(0);
+    // The message itself still stands on its own — the removal took a button, not
+    // the content.
+    expect(message.blocks.length).toBeGreaterThan(3);
+  });
+
+  /**
+   * The PURCHASE message lost the admin link too. Asserted separately from the
+   * survey case rather than folded into it: these are two different branches of
+   * `buildJourneyMessage`, and the admin link lived outside the branch, so a partial
+   * removal that left it on one message would otherwise pass.
+   */
+  it("is also the only button on a PURCHASE message", () => {
+    const message = buildJourneyMessage(journey({ recordingSessionId: "sess_abc" }), {
+      kind: "purchase",
+      planLabel: "Full report",
+      archetype: "Spiritual Lover",
+      amountText: "EUR 39.99",
+    });
+
+    const actionBlocks = buttons(message.blocks);
+    expect(actionBlocks).toHaveLength(1);
+    expect((actionBlocks[0]!.elements as unknown[]).length).toBe(1);
+    expect(urls(message.blocks)).toEqual(["https://eu.posthog.com/project/244778/replay/sess_abc"]);
+    expect(JSON.stringify(message.blocks)).not.toContain("/admin/");
+    expect(JSON.stringify(message.blocks)).not.toContain("Open full journey");
+  });
+
+  it("leaves a purchase message with no recording carrying no buttons either", () => {
+    const message = buildJourneyMessage(journey({ recordingSessionId: null }), {
+      kind: "purchase",
+      planLabel: "Full report",
+      archetype: "Spiritual Lover",
+      amountText: "EUR 39.99",
+    });
+    expect(buttons(message.blocks)).toHaveLength(0);
+    // The amount and plan are in the header, so the message still stands alone.
+    expect(JSON.stringify(message.blocks)).toContain("EUR 39.99");
   });
 });

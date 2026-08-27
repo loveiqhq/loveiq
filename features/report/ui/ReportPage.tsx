@@ -13,6 +13,7 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { reportSections } from "@/data/report-general";
 import { escapeHtml } from "@shared/format/html-escape";
+import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
 import { cacheReportCheckoutQuote } from "@features/checkout/server/reportCheckoutQuoteCache";
 import {
   buildReportCheckoutHref,
@@ -115,6 +116,7 @@ import {
   setReportSubmissionContext,
   trackExperimentExposure,
   trackLockedCardPriceShown,
+  trackBeginCheckout,
   trackLockIconClicked,
   trackPaywallCountdownExpired,
   trackPaywallInitiated,
@@ -827,16 +829,37 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     return access;
   }, [resolvedSections, accessPlan, viewArchetypeTier]);
 
+  /**
+   * Build-time, deliberately not a runtime flag or a query parameter. A reader on
+   * the live site must not be able to turn this off, and there must be no env var
+   * on the production project that could be set by mistake.
+   */
+  const copyable = isNonProdDeploy();
+
   return (
     <main
       id="main-content"
       ref={mainContentRef}
       tabIndex={-1}
-      className={`report-page${accessPlan === "full_report" || accessPlan === "all_reports" ? "" : " report-experience--sticky-pad"}`}
+      className={`report-page${accessPlan === "full_report" || accessPlan === "all_reports" ? "" : " report-experience--sticky-pad"}${copyable ? " report-page--copyable" : ""}`}
       style={getReportThemeStyle(theme)}
-      onCopy={(e) => e.preventDefault()}
-      onContextMenu={(e) => e.preventDefault()}
-      onDragStart={(e) => e.preventDefault()}
+      /**
+       * Copy, right-click and drag are blocked on the LIVE site only. The report
+       * is the paid product, so lifting its text is the thing this prevents.
+       *
+       * Off the live site — staging, Vercel previews, local dev — they are
+       * allowed, because the team reviews and quotes report copy and could not
+       * get the text out. All four guards have to move together: the CSS
+       * `user-select: none` below stops a selection ever being made, so leaving
+       * it on would make an unblocked `onCopy` useless.
+       */
+      {...(copyable
+        ? {}
+        : {
+            onCopy: (e: React.ClipboardEvent) => e.preventDefault(),
+            onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+            onDragStart: (e: React.DragEvent) => e.preventDefault(),
+          })}
     >
       {devParam && (
         <div
@@ -2586,8 +2609,23 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     ]
   );
 
+  /**
+   * The single door to Stripe. Every checkout surface — the pricing modal, the scroll
+   * teaser, the sticky unlock bar — ends here, and this is the only thing that pushes
+   * to /checkout, so it is the only honest place to count a checkout start.
+   *
+   * `begin_checkout` used to be fired by each of those three components instead, each
+   * guarded on `if (quote)` while the navigation ran unconditionally. So a click on a
+   * plan whose quote was missing from the client-side map went to Stripe silently.
+   * That is what collapsed the metric when pricing 2.0 split one plan into three on
+   * 2026-08-03: GA4 137 -> 22 and analytics_event ~78 -> 10 in a week where
+   * price_shown DOUBLED and payments held steady. Counted here, no surface can
+   * forget it and no missing quote can suppress it — the price is looked up, and its
+   * absence costs the value, not the event.
+   */
   const beginCheckout = (plan: ReportPurchasePlanId, archetype?: string | null) => {
     const quote = effectiveQuotes?.[plan];
+    trackBeginCheckout(plan, quote ? quote.chargedPriceCents / 100 : null, quote?.currency ?? null);
     if (quote) {
       cacheReportCheckoutQuote({
         plan,

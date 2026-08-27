@@ -41,6 +41,12 @@ export interface SurveySubmissionPayload {
   utmTracker?: string | null;
   sessionId?: string | null;
   /**
+   * PostHog `$session_id` for the session that submitted, so a reader can open the
+   * session replay. Stored on `survey_submission.posthog_session_id`. Absent
+   * whenever replay did not run (no project token, ad blocker, sampled out).
+   */
+  posthogSessionId?: string | null;
+  /**
    * Marketing-opt-in answer (Q16015). `true` = user picked "Yes", `false` =
    * "No", `null` (or absent) = unknown / question not answered. Stored on
    * `survey_submission.marketing_opt_in`; when true, the row also gets a
@@ -190,6 +196,15 @@ export async function submitSurveyOnce(
     };
     if (payload.marketingOptIn === true) {
       consentPatch.marketing_opt_in_terms_version = MARKETING_OPT_IN_TERMS_VERSION;
+    }
+    // Session-replay id rides along on the PATCH that already exists rather than in
+    // the submit_survey RPC: the RPC's signature would have to change (and with it
+    // every caller and the migration that defines it) to carry one nullable string
+    // that nothing else in the fan-out needs. Same best-effort contract as the
+    // consent fields — if this PATCH fails the submission still stands, and the
+    // only loss is a link in a Slack message.
+    if (payload.posthogSessionId) {
+      consentPatch.posthog_session_id = payload.posthogSessionId;
     }
     await supabaseServiceFetch(`/rest/v1/survey_submission?id=eq.${submissionId}`, {
       method: "PATCH",

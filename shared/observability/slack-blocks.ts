@@ -78,7 +78,7 @@ export function fields(pairs: Array<{ label: string; value: string }>): SlackBlo
   };
 }
 
-/** A link button, for "open this person in admin". */
+/** A link button — today, "watch this person's session recording". */
 export function linkButton(text: string, url: string): SlackBlock {
   return {
     type: "actions",

@@ -25,7 +25,6 @@ import {
   getReportPurchaseStrikePrice,
 } from "@features/checkout/server/reportPurchase";
 import {
-  trackBeginCheckout,
   trackPriceShown,
   trackScrollPaywallDismissed,
   trackScrollPaywallShown,
@@ -436,9 +435,9 @@ const ScrollPricingModal: FC<Props> = ({
 
   const handleCtaClick = () => {
     checkoutInitiatedRef.current = true;
-    if (quote) {
-      trackBeginCheckout("full_report", quote.chargedPriceCents / 100, quote.currency);
-    }
+    // begin_checkout is counted by ReportPage.beginCheckout, which onCheckout
+    // calls. It used to fire here behind `if (quote)` while the navigation ran
+    // regardless, so an unpriced click reached Stripe untracked.
     onCheckout();
   };
 

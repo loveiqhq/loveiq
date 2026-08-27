@@ -1,5 +1,6 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
+import { isProductionSite } from "@shared/env/is-non-prod-deploy";
 
 /**
  * Server-side PostHog purchase tracking via the capture API.
@@ -93,6 +94,10 @@ export async function sendPosthogPurchaseEvent(input: PosthogPurchaseInput): Pro
       // browser event when debugging a count mismatch.
       $lib: "loveiq-server",
       source: "stripe_webhook",
+      // Mirrors the browser super property registered in instrumentation-client.ts,
+      // so a staging test purchase is filterable out of PostHog revenue instead of
+      // silently inflating it. PostHog is labelled rather than gated — see that file.
+      deploy_env: resolveServerDeployEnv(),
       // Enrich the person record rather than only the event.
       $set: { email: distinctId, last_plan_purchased: input.plan },
     },
@@ -120,4 +125,17 @@ export async function sendPosthogPurchaseEvent(input: PosthogPurchaseInput): Pro
       "PostHog server-side purchase send error"
     );
   }
+}
+
+/**
+ * Same three values as the browser's `deploy_env`, resolved server-side. Production
+ * is delegated to `isProductionSite()` so the definition cannot drift from the gate
+ * that decides whether GA4 / Ads / Clarity load at all.
+ */
+function resolveServerDeployEnv(): "production" | "staging" | "development" {
+  if (isProductionSite()) return "production";
+  if (process.env.NODE_ENV !== "production") return "development";
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "").toLowerCase();
+  if (siteUrl.includes("staging.") || siteUrl.includes(".vercel.app")) return "staging";
+  return "development";
 }

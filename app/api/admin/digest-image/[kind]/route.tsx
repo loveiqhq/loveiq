@@ -63,11 +63,10 @@ const COLORS = {
   good: "#4ade80",
 };
 
-// The 7 line/curve kinds share `LongitudinalPayload`; `reactivation-email`
+// The 6 line/curve kinds share `LongitudinalPayload`; `reactivation-email`
 // uses `StageConversionPayload`. Order here documents the digest layout.
 const VALID_KINDS = new Set([
   "cvr-visitor-start",
-  "cvr-visitor-start-dark",
   "cvr-start-completion",
   "cvr-completion-engagement",
   "cvr-completion-paygate",
@@ -89,7 +88,6 @@ const VALID_KINDS = new Set([
 interface LongitudinalPayload {
   kind:
     | "cvr-visitor-start"
-    | "cvr-visitor-start-dark"
     | "cvr-start-completion"
     | "cvr-completion-engagement"
     | "cvr-completion-paygate"
@@ -183,7 +181,6 @@ type AnyPayload =
 
 const LONG_TITLES: Record<LongitudinalPayload["kind"], string> = {
   "cvr-visitor-start": "Visitor → Survey-start CVR",
-  "cvr-visitor-start-dark": "Dark journey — Visitor → Survey-start CVR",
   "cvr-start-completion": "Survey-start → Completion CVR",
   "cvr-completion-engagement": "Completion → Report-view CVR (1m / 5m / 10m)",
   "cvr-completion-paygate": "Completion → Paygate CVR",
@@ -1132,7 +1129,6 @@ function renderForKind(
 ): { element: React.ReactElement; height: number } {
   switch (kind) {
     case "cvr-visitor-start":
-    case "cvr-visitor-start-dark":
     case "cvr-start-completion":
     case "cvr-completion-engagement":
     case "cvr-completion-paygate":

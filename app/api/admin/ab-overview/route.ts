@@ -316,7 +316,7 @@ function buildReadout(
       /*
        * The combined-sample check inside twoProportionSignal is satisfied by a big
        * arm alone: 828 vs 9 clears n>=50 and comes back "inconclusive", so without
-       * this branch the page would read "Landing page A is ahead (2.1% vs 0.0%)"
+       * this branch the page would read "Landing Page V2 is ahead (2.1% vs 0.0%)"
        * and never mention that the comparison rests on nine people. That is exactly
        * the wrong impression to leave with a non-technical reader.
        */

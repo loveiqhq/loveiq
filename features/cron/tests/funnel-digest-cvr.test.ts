@@ -169,7 +169,6 @@ describe("buildFunnelDigestBlocks", () => {
     const kinds = imageKinds(blocks as Array<{ type: string; image_url?: string }>);
     expect(kinds).toEqual([
       "cvr-visitor-start",
-      "cvr-visitor-start-dark",
       "cvr-start-completion",
       "cvr-completion-engagement",
       "cvr-completion-paygate",

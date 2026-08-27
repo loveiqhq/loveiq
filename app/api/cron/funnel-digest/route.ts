@@ -60,7 +60,6 @@ const BUCKET_TOP_N = 5;
 
 type DigestImageKind =
   | "cvr-visitor-start"
-  | "cvr-visitor-start-dark"
   | "cvr-start-completion"
   | "cvr-completion-engagement"
   | "cvr-completion-paygate"
@@ -233,17 +232,25 @@ async function buildCvrChartBlocks(
     "visitors"
   );
 
-  // Visitor → survey-start conversion for the control (dark) landing arm. Both
-  // arms now take the same free survey (the white arm's old pay-first funnel was
-  // removed), so there is no separate white pay-funnel chart.
-  await single(
-    "cvr-visitor-start-dark",
-    "Dark journey: visitor to survey-start conversion over time",
-    "Visitor → Start (dark)",
-    "starts",
-    "visitors_control"
-  );
-
+  /**
+   * There was a "Dark journey: visitor to survey-start" chart here. DELETED
+   * 2026-08-27 rather than fixed.
+   *
+   * It drew `visitors_control` from `get_funnel_cvr_sparklines`, a CTE defined as
+   * `COALESCE(landing_variant, 'control') <> 'white'` — "everything that is not
+   * white", not "the dark arm". Those were the same thing when it was written and
+   * stopped being so on 2026-08-21 when round 2 introduced `white_prev`; they were
+   * never the same for arm-less traffic. Measured the day it was removed the bucket
+   * held 805 arm-less submissions and 34 Landing Page V1 ones against 53 genuinely
+   * dark, so the title was ~94% wrong.
+   *
+   * Deleted rather than repaired because the SCHEDULED conversion-digest already
+   * plots the landing axis per real arm through `armLabel`, so a per-arm version of
+   * this would only duplicate it. `visitors_control` itself is left in the RPC and
+   * in DigestDay — the field is still read by nothing else, and dropping a column
+   * from a SECURITY DEFINER function is a migration for no gain; its docstring in
+   * digest-metrics.ts records what it actually means.
+   */
   await single(
     "cvr-start-completion",
     "Survey-start to completion conversion rate over time",

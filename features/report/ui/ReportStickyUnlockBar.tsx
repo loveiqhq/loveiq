@@ -2,7 +2,7 @@
 
 import type { FC } from "react";
 
-import { trackBeginCheckout, trackStickyUnlockClicked } from "@features/analytics/client";
+import { trackStickyUnlockClicked } from "@features/analytics/client";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 
 interface Props {
@@ -30,9 +30,9 @@ const ArrowRight: FC = () => (
 const ReportStickyUnlockBar: FC<Props> = ({ quote, onCheckout, hidden = false, archetype }) => {
   const handleClick = (variant: "mobile" | "desktop") => () => {
     trackStickyUnlockClicked({ variant, archetype });
-    if (quote) {
-      trackBeginCheckout("full_report", quote.chargedPriceCents / 100, quote.currency);
-    }
+    // begin_checkout is counted by ReportPage.beginCheckout, which onCheckout calls.
+    // It used to fire here behind `if (quote)` while onCheckout ran regardless, so an
+    // unpriced click reached Stripe untracked — see that function for the numbers.
     onCheckout();
   };
 

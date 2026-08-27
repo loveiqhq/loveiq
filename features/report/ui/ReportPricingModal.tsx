@@ -25,7 +25,6 @@ import { REPORT_PAYWALL_COUNTDOWN_MS } from "@features/survey/ui/hooks/surveySes
 import { isTrustpilotEnabled } from "@shared/ui/trustpilot/config";
 import { isPlanOwnedForArchetype, type ReportAccessPlan } from "@features/report/server/access";
 import {
-  trackBeginCheckout,
   trackPaywallDismissed,
   trackPriceShown,
   type PaywallDismissSource,
@@ -653,14 +652,13 @@ const ReportPricingModal: FC<Props> = ({
                                 // effect doesn't double-count this as a
                                 // dismissal.
                                 checkoutInitiatedRef.current = true;
-                                const quote = quotes?.[card.plan];
-                                if (quote) {
-                                  trackBeginCheckout(
-                                    card.plan,
-                                    quote.chargedPriceCents / 100,
-                                    quote.currency
-                                  );
-                                }
+                                // begin_checkout is counted by
+                                // ReportPage.beginCheckout, which onUnlock reaches.
+                                // It used to fire here behind `if (quote)` while
+                                // onUnlock ran regardless, so a click on a plan
+                                // missing from this map went to Stripe untracked —
+                                // which is what collapsed the metric when pricing 2.0
+                                // turned one plan into three.
                                 onUnlock(
                                   card.plan,
                                   // Essentials + Full Report are per-archetype; if the modal

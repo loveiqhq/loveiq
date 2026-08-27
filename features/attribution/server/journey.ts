@@ -77,6 +77,13 @@ export interface SubmissionJourney {
   } | null;
   /** How many plan quotes exist — a rough proxy for paywall exposure. */
   quoteCount: number;
+  /**
+   * PostHog `$session_id` captured at submit, or null. Null is the ordinary case for
+   * anything submitted before 2026-08-27, and for a visitor whose replay never ran
+   * (no project token, ad blocker, sampled out) — so a reader must treat "no link"
+   * as "no recording", not as an error.
+   */
+  recordingSessionId: string | null;
 }
 
 interface SubmissionRow {
@@ -87,6 +94,7 @@ interface SubmissionRow {
   status: string | null;
   duration_ms: number | null;
   utm_tracker: string | null;
+  posthog_session_id: string | null;
   app_user: {
     email: string | null;
     first_name: string | null;
@@ -165,6 +173,7 @@ export async function buildSubmissionJourney(
     fetchJson<SubmissionRow>(
       `/rest/v1/survey_submission?id=eq.${submissionId}` +
         `&select=id,session_id,start_date_time,created_date_time,status,duration_ms,utm_tracker,` +
+        `posthog_session_id,` +
         `app_user!fk_survey_submission_user(email,first_name,user_profile(location_primary))`,
       "survey_submission"
     ),
@@ -237,6 +246,7 @@ export async function buildSubmissionJourney(
         }
       : null,
     quoteCount: quotes.length,
+    recordingSessionId: sub.posthog_session_id?.trim() || null,
   };
 }
 
@@ -305,5 +315,10 @@ export function journeyFromPurchase(input: {
       currency: (input.currency ?? "EUR").toUpperCase(),
     },
     quoteCount: 0,
+    // This builder deliberately does not touch the database (it exists so the
+    // purchase ping cannot be delayed by a read), so there is no session id to
+    // offer. The purchase message therefore carries no replay link; the survey
+    // message for the same person does.
+    recordingSessionId: null,
   };
 }

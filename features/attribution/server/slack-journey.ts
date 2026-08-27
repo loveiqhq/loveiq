@@ -218,10 +218,32 @@ function armFields(journey: SubmissionJourney): SlackBlock {
   );
 }
 
-function adminLink(submissionId: number): string | null {
-  const base = process.env.NEXT_PUBLIC_SITE_URL;
-  if (!base) return null;
-  return `${base.replace(/\/$/, "")}/admin/submissions/${submissionId}`;
+/**
+ * PostHog session-replay deep link.
+ *
+ * Region and project id are hardcoded, matching how every other vendor identifier
+ * in this repo is handled (the GA4 measurement id in app/layout.tsx, the Clarity
+ * project id in public/clarity-init.js, the Google Ads tag id): all of them are
+ * public, non-secret identifiers that only change if the account moves.
+ *
+ * NOT derived from `NEXT_PUBLIC_POSTHOG_HOST`. That variable holds the INGESTION
+ * host (`eu.i.posthog.com`), which is a different hostname from the app the replay
+ * is viewed in (`eu.posthog.com`), and it carries no project id at all — so
+ * deriving it would mean a string transform that produces a plausible-looking URL
+ * leading nowhere.
+ *
+ * The id goes in the PATH — `/replay/<id>`. PostHog also accepts it as a query
+ * parameter on `/replay/home`, but that form lands on the recordings LIST with a
+ * filter applied rather than opening the recording, which reads to whoever clicked
+ * it as a broken link.
+ */
+const POSTHOG_REPLAY_BASE = "https://eu.posthog.com/project/244778/replay";
+
+function recordingLink(sessionId: string | null): string | null {
+  if (!sessionId) return null;
+  // The id is already constrained to [A-Za-z0-9_-] by the /api/survey schema that
+  // accepted it; re-encode anyway so this function is safe on its own terms.
+  return `${POSTHOG_REPLAY_BASE}/${encodeURIComponent(sessionId)}`;
 }
 
 export interface JourneyMessage {
@@ -326,8 +348,27 @@ export function buildJourneyMessage(
   blocks.push(section("*Experiments they were in*"));
   blocks.push(armFields(journey));
 
-  const link = adminLink(journey.submissionId);
-  if (link) blocks.push(linkButton("Open full journey in admin", link));
+  /**
+   * The session recording, and nothing else.
+   *
+   * NO ADMIN LINK ON EITHER MESSAGE (removed 2026-08-27, on request). On the survey
+   * message it promised a "full journey" that does not exist yet — report-open,
+   * paywall, checkout and payment all read from rows written later, which is why the
+   * progress rail above shows one green dot and four red — and everything that IS
+   * known by then is already in the message, so it was a click to a restatement. On
+   * the purchase message the timeline is real, but the same judgement was applied:
+   * whoever wants /admin can search a submission id, and a button nobody presses is
+   * a button that makes the two that matter harder to find.
+   *
+   * The recording button is absent rather than disabled when there is no session id,
+   * which is the honest rendering: no id means no recording exists to open. That is
+   * the normal state for every submission before 2026-08-27 and for anyone whose
+   * replay was blocked or sampled out — so a message legitimately carries no buttons
+   * at all, and the block is only pushed when there is something to put in it.
+   * Slack rejects an actions block with zero elements.
+   */
+  const replay = recordingLink(journey.recordingSessionId);
+  if (replay) blocks.push(linkButton("▶ Watch session recording", replay));
 
   const fitted = fitBlocks(blocks, text);
   return { text, blocks: fitted.blocks, trimmed: fitted.trimmed, size: fitted.size };

@@ -10,13 +10,16 @@ import {
 
 describe("arm labels", () => {
   it("names every arm we actively assign, in plain English", () => {
-    // The A/B letter is part of the name so "variant A" in a meeting and
-    // "Landing page A" in Slack are unambiguously the same arm, and the
+    // Marketing's own convention (2026-08-27), so "V2" in a meeting and
+    // "Landing Page V2" in Slack are unambiguously the same arm, and the
     // parenthetical says which is which without the reader knowing dates.
-    expect(armLabel("landing", "white").long).toBe("Landing page A: the current design");
-    expect(armLabel("landing", "white_prev").long).toBe("Landing page B: the design it replaced");
-    expect(armLabel("landing", "white").short).toContain("A");
-    expect(armLabel("landing", "white_prev").short).toContain("B");
+    expect(armLabel("landing", "white").long).toBe("Landing Page V2: survey in the hero");
+    expect(armLabel("landing", "white_prev").long).toBe("Landing Page V1: the first design");
+    expect(armLabel("landing", "white").short).toBe("Landing Page V2 (Survey in Hero)");
+    expect(armLabel("landing", "white_prev").short).toBe("Landing Page V1 (First Design)");
+    // The retired dark arm must not compete for "the first one" — see labels.ts.
+    expect(armLabel("landing", "control").short).not.toMatch(/\bV1\b(?! *\))/);
+    expect(armLabel("landing", "control").short.toLowerCase()).not.toContain("first");
     // "homepage" is not the term the team uses; every landing label says so.
     for (const arm of ["white", "white_prev", "control"]) {
       expect(armLabel("landing", arm).short.toLowerCase()).not.toContain("homepage");
@@ -51,10 +54,10 @@ describe("arm labels", () => {
 
   it("keeps the retired landing arm truthfully labelled rather than hidden", () => {
     // ~5% of stored submissions still carry it, so it needs its own honest name —
-    // and it must NOT be conflated with the round-2 previous-design arm.
+    // and it must NOT be conflated with V1, the round-2 arm it predates.
     const retired = armLabel("landing", "control");
     expect(retired.retired).toBe(true);
-    expect(retired.long).toBe("Landing page: the original dark design");
+    expect(retired.long).toBe("Landing page: the original dark design, before V1");
     expect(retired.long).not.toBe(armLabel("landing", "white_prev").long);
   });
 

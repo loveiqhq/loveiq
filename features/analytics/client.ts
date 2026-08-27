@@ -440,6 +440,45 @@ export interface PaywallInitiatedParams {
 }
 
 /**
+ * `unlock_click` — the one canonical "they tried to unlock" event.
+ *
+ * Marketing asked for `unlock_click` + `begin_checkout` so the drop-off between
+ * reading the report and paying is visible, and so both can be fed to Google Ads as
+ * secondary signals. `begin_checkout` already existed; this did not — the intent
+ * moment was split across three differently-named events (`paywall_initiated`,
+ * `lock_icon_clicked`, `sticky_unlock_clicked`), which is exactly the shape you
+ * cannot build a single Google Ads conversion action from.
+ *
+ * Not a replacement: the three granular events keep firing and keep their durable
+ * rows, because the admin funnel and the digest's leak scoring already read them.
+ * This is one extra GA4/PostHog event carrying `surface`, so the same click is one
+ * countable step for Ads and still fully attributable internally.
+ *
+ * Deliberately NOT persisted to `analytics_event`. Every path that fires it already
+ * writes a durable row under its granular name, so persisting would duplicate rows
+ * and double-count the step in the internal funnel.
+ *
+ * Fired from inside `trackPaywallInitiated` and `trackStickyUnlockClicked` rather
+ * than at the call sites: those two functions are the funnels every unlock CTA
+ * already routes through (all three ReportPage lock paths call the first, the sticky
+ * bar calls the second), so a new CTA added later cannot forget it. They never
+ * co-occur on one click, so nothing double-fires.
+ *
+ * One inherited caveat, worth knowing before this is used as an Ads conversion:
+ * `source: "offer_link"` is not a click on this page at all — it is a click made in
+ * a nurture email, reported by a mount effect when the reader lands on
+ * `?offer=1`. Because it is a mount effect, RELOADING that URL fires it again. That
+ * is pre-existing `paywall_initiated` behaviour, unchanged here; `unlock_click`
+ * simply inherits it, so a small over-count on that one surface is expected. The
+ * `surface` param is what lets it be excluded if that matters.
+ */
+export type UnlockClickSurface = PaywallInitiatedSource | "sticky_bar";
+
+const trackUnlockClick = (surface: UnlockClickSurface, extra?: Record<string, unknown>): void => {
+  track("unlock_click", { surface, ...extra });
+};
+
+/**
  * Fires when a user takes a deliberate action that surfaces the paywall:
  * clicking a locked section, clicking the unlock CTA in PremiumOverlay, or
  * opening the report via an `?offer=1` email link. Replaces `paywall_view`
@@ -460,6 +499,12 @@ export const trackPaywallInitiated = (params: PaywallInitiatedParams) => {
   const payload: Record<string, unknown> = { ...params };
   track("paywall_initiated", payload);
   persistAnalyticsEvent("paywall_initiated", payload);
+  // Canonical cross-surface unlock signal — see trackUnlockClick.
+  trackUnlockClick(params.source, {
+    ...(params.section_id ? { section_id: params.section_id } : {}),
+    ...(params.archetype ? { archetype: params.archetype } : {}),
+    ...(params.plan_needed ? { plan_needed: params.plan_needed } : {}),
+  });
 };
 
 export interface PriceShownParams {
@@ -509,13 +554,43 @@ export const trackPriceShown = (params: PriceShownParams) => {
   persistAnalyticsEvent("price_shown", payload);
 };
 
+/**
+ * GA4's recommended ecommerce `begin_checkout`.
+ *
+ * `value` and `items[]` are not decoration: GA4 reads the amount from `value`, and
+ * this event sent only `price`. So every begin_checkout arrived in GA4 — and from
+ * there in Google Ads, where marketing wants it as a secondary conversion signal —
+ * counted but worth nothing, and GA4's ecommerce reports stayed empty for the step
+ * just before purchase. `price` is kept alongside it because the admin submission
+ * timeline renders `metadata.price`, and the durable row deliberately keeps its
+ * original three keys: `items[]` in Postgres would be duplicated bloat, so the
+ * ecommerce shape goes to GA4/PostHog only.
+ */
 export const trackBeginCheckout = (
   plan: "essentials" | "full_report" | "core" | "all_reports",
-  price: number,
-  currency: string
+  price: number | null,
+  currency: string | null
 ) => {
-  const params = { plan, price, currency };
-  track("begin_checkout", params);
+  // `price` is nullable, and that is the point. Every call site used to read
+  //     const quote = quotes?.[plan];
+  //     if (quote) trackBeginCheckout(...)
+  //     onUnlock(plan)            // ← ran regardless
+  // so a click whose plan was missing from the client-side quote map sent the buyer
+  // to Stripe and recorded nothing. Measured: GA4 begin_checkout fell 137 (Jul) to
+  // 22 (Aug) and our own analytics_event fell ~78 to 10, in the same week pricing 2.0
+  // split one plan into three — while price_shown DOUBLED and payments held steady.
+  // Both pipelines agreeing ruled out a persistence bug; the guard was the cause.
+  // An unpriced checkout start is still a checkout start, so the event always fires
+  // and only the monetary fields drop out.
+  const priced = typeof price === "number" && Number.isFinite(price);
+  const cur = currency ?? "EUR";
+  const params = priced ? { plan, price, currency: cur } : { plan, currency: cur };
+  track("begin_checkout", {
+    ...params,
+    ...(priced
+      ? { value: price, items: [{ item_id: plan, item_name: plan, price, quantity: 1 }] }
+      : {}),
+  });
   persistAnalyticsEvent("begin_checkout", params);
 };
 
@@ -801,6 +876,10 @@ export const trackStickyUnlockClicked = (params: {
   };
   track("sticky_unlock_clicked", payload);
   persistAnalyticsEvent("sticky_unlock_clicked", payload);
+  // The sticky bar goes straight to checkout without opening the paywall, so it is
+  // the one unlock CTA that never reaches trackPaywallInitiated — hence its own
+  // call. See trackUnlockClick for why these are the only two places.
+  trackUnlockClick("sticky_bar", payload);
 };
 
 export const trackReportShareOpened = (params: { source: "sidebar" | "drawer" | "modal" }) => {

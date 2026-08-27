@@ -625,11 +625,11 @@ export function buildAlerts(input: {
     alerts.push({
       // Standing caveat, same reasoning as above: true every day the test runs.
       severity: "info",
-      // Three sentences cut to one. The fact that changes a decision is that the
-      // current design's number is flattered; the mechanism behind it does not
-      // need re-explaining every morning.
+      // Three sentences cut to one. The fact that changes a decision is that V2's
+      // number is flattered; the mechanism behind it does not need re-explaining
+      // every morning.
       message:
-        "Landing arms are not a fair split — returning visitors keep the design they first saw, so the current design's number is flattered.",
+        "Landing arms are not a fair split — returning visitors keep the design they first saw, so V2's number is flattered.",
     });
   }
 

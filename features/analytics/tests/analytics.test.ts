@@ -480,7 +480,7 @@ describe("analytics", () => {
   });
 
   describe("trackBeginCheckout", () => {
-    it("emits begin_checkout with plan, price, currency", () => {
+    it("emits begin_checkout with plan, price, currency, and GA4's value + items", () => {
       const mockGtag = vi.fn();
       setConsentCookie({ analytics: true });
       globalThis.window = {
@@ -491,10 +491,16 @@ describe("analytics", () => {
 
       trackBeginCheckout("full_report", 29.99, "EUR");
 
+      // `value` and `items[]` are GA4's recommended ecommerce shape. Without
+      // `value` the event reaches GA4 — and Google Ads, which marketing wants to
+      // bid on it — counted but worth nothing. `price` stays because the admin
+      // submission timeline renders metadata.price.
       expect(mockGtag).toHaveBeenCalledWith("event", "begin_checkout", {
         plan: "full_report",
         price: 29.99,
         currency: "EUR",
+        value: 29.99,
+        items: [{ item_id: "full_report", item_name: "full_report", price: 29.99, quantity: 1 }],
       });
     });
   });
