@@ -700,7 +700,7 @@ describe("conversion-digest verdicts", () => {
     expect(verdict.sentence).toContain("genuinely ahead");
     expect(verdict.sentence).toContain("95% CI");
     // Plain-English arm names only — never a raw stored value.
-    expect(verdict.sentence).toContain("Landing page A (current design)");
+    expect(verdict.sentence).toContain("Landing Page V2 (Survey in Hero)");
     expect(verdict.sentence).not.toContain("white_prev");
   });
 
@@ -768,7 +768,7 @@ describe("conversion-digest verdicts", () => {
       // `control` is the retired dark landing — nobody has been served it for months.
       { arm: "control", n: 800, conversions: 40 },
     ]);
-    expect(verdict.arms.map((a) => a.label)).toEqual(["Landing page A (current design)"]);
+    expect(verdict.arms.map((a) => a.label)).toEqual(["Landing Page V2 (Survey in Hero)"]);
     expect(verdict.state).toBe("single-arm");
     expect(verdict.sentence).toContain("nothing to compare");
   });

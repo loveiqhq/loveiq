@@ -233,9 +233,29 @@ async function buildCvrChartBlocks(
     "visitors"
   );
 
-  // Visitor → survey-start conversion for the control (dark) landing arm. Both
-  // arms now take the same free survey (the white arm's old pay-first funnel was
-  // removed), so there is no separate white pay-funnel chart.
+  /**
+   * ⚠️ THIS CHART IS MISLABELLED. Do not schedule this digest without fixing it.
+   *
+   * `visitors_control` comes from a CTE in `get_funnel_cvr_sparklines` defined as
+   * `COALESCE(landing_variant, 'control') <> 'white'` — i.e. "everything that is not
+   * white", not "the dark arm". When it was written those were the same thing. They
+   * stopped being the same on 2026-08-21, when round 2 introduced `white_prev`
+   * (Landing Page V1), and they were never the same for arm-less traffic. Measured
+   * on 2026-08-27 the bucket held 805 arm-less submissions and 34 V1 ones against 53
+   * genuinely dark, so a line titled "Dark journey" is ~94% not dark.
+   *
+   * It is harmless TODAY only because this route is not in `vercel.json` crons, so
+   * nobody receives it. That is also exactly why it is a trap: whoever schedules
+   * this digest gets a confidently-titled wrong chart, the same failure the admin
+   * "Landing A/B" tab and the Explorer both had until 2026-08-27.
+   *
+   * Two ways out, both a deliberate decision rather than a quick edit:
+   *   (a) delete this chart — the scheduled `conversion-digest` already plots the
+   *       landing axis per real arm through `armLabel`, so this adds nothing; or
+   *   (b) split the CTE into per-arm series (`white`, `white_prev`, `control`,
+   *       `unknown`) the way `get_landing_variant_funnel` now does, and title each
+   *       line from `armLabel`.
+   */
   await single(
     "cvr-visitor-start-dark",
     "Dark journey: visitor to survey-start conversion over time",

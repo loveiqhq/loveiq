@@ -14,6 +14,7 @@ import WebVitals from "@shared/ui/WebVitals";
 import { after } from "next/server";
 import { recordUniqueVisit } from "@shared/observability/recordVisit";
 import { jsonLdString } from "@shared/seo/json-ld";
+import { isProductionSite } from "@shared/env/is-non-prod-deploy";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
@@ -152,6 +153,27 @@ export const viewport: Viewport = {
 // only after the visitor grants the CookieYes `functional` category (it sets
 // Trustpilot's third-party cookies). Gated off by default until we have enough
 // reviews, so the script never loads while the on-site widgets are hidden.
+/**
+ * Whether the third-party production analytics tags may load at all.
+ *
+ * GA4, Google Ads and Clarity are hardcoded IDs (there is no per-environment
+ * property), so before this gate every `npm run dev` page view and every visit to
+ * staging.loveiq.org landed in the same GA4 property, the same Ads account and the
+ * same Clarity project as real customers. Marketing asked for that separation, and
+ * on Google Ads it is worse than noise: a developer clicking through checkout on a
+ * laptop was feeding the conversion signal the bidding algorithm optimises on.
+ *
+ * Build-time, so the tags are not even emitted off production — nothing to block,
+ * nothing to strip, no runtime flag that can be flipped by mistake.
+ *
+ * CookieYes deliberately stays on every environment: the consent cookie it sets is
+ * what gates first-party durable analytics (`persistAnalyticsEvent`), so removing
+ * it off production would silently stop the funnel tables that staging QA checks.
+ * PostHog also stays on — it is the tool used to debug staging, and it tags its own
+ * events with `deploy_env` instead (see instrumentation-client.ts).
+ */
+const productionAnalyticsEnabled = isProductionSite();
+
 const trustpilotBusinessUnitId =
   isTrustpilotEnabled() && (process.env.NEXT_PUBLIC_TRUSTPILOT_BUSINESS_UNIT_ID || "").trim()
     ? (process.env.NEXT_PUBLIC_TRUSTPILOT_BUSINESS_UNIT_ID || "").trim()
@@ -176,8 +198,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en" className={`${manrope.variable} ${lora.variable}`}>
       <head>
         <link rel="preconnect" href="https://cdn-cookieyes.com" />
-        <link rel="preconnect" href="https://www.clarity.ms" />
-        <link rel="preconnect" href="https://www.googletagmanager.com" />
+        {productionAnalyticsEnabled && (
+          <>
+            <link rel="preconnect" href="https://www.clarity.ms" />
+            <link rel="preconnect" href="https://www.googletagmanager.com" />
+          </>
+        )}
         <link rel="dns-prefetch" href="https://www.google.com" />
         <link rel="dns-prefetch" href="https://www.gstatic.com" />
         <link rel="dns-prefetch" href="https://images.unsplash.com" />
@@ -187,21 +213,30 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           strategy="lazyOnload"
           nonce={nonce}
         />
-        <GtmScript nonce={nonce} />
-        <Script
-          id="ga-loader"
-          src="https://www.googletagmanager.com/gtag/js?id=G-QTYY69L46N"
-          strategy="lazyOnload"
-          nonce={nonce}
-          data-cookieyes="cookieyes-analytics"
-        />
-        <Script
-          id="ga-init"
-          strategy="lazyOnload"
-          nonce={nonce}
-          data-cookieyes="cookieyes-analytics"
-        >
-          {`
+        {productionAnalyticsEnabled && <GtmScript nonce={nonce} />}
+        {/* GA4 + Google Ads. Production only — see productionAnalyticsEnabled above.
+            `window.__loveiqAnalyticsEnabled` / `__loveiqGoogleAdsEnabled` are set by
+            the init scripts, so gating the tags here is also what makes every
+            `track()` call skip gtag off production: the flags simply stay undefined
+            and `features/analytics/client.ts` already checks them. PostHog and the
+            durable `analytics_event` writes are unaffected, so staging QA can still
+            verify that an event fired. */}
+        {productionAnalyticsEnabled && (
+          <>
+            <Script
+              id="ga-loader"
+              src="https://www.googletagmanager.com/gtag/js?id=G-QTYY69L46N"
+              strategy="lazyOnload"
+              nonce={nonce}
+              data-cookieyes="cookieyes-analytics"
+            />
+            <Script
+              id="ga-init"
+              strategy="lazyOnload"
+              nonce={nonce}
+              data-cookieyes="cookieyes-analytics"
+            >
+              {`
             window.dataLayer = window.dataLayer || [];
             window.gtag = window.gtag || function(){window.dataLayer.push(arguments);}
             if (!window.__loveiqGtagBootstrapped) {
@@ -213,21 +248,21 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               page_path: window.location.pathname,
             });
           `}
-        </Script>
-        <Script
-          id="google-ads-loader"
-          src="https://www.googletagmanager.com/gtag/js?id=AW-18068690553"
-          strategy="lazyOnload"
-          nonce={nonce}
-          data-cookieyes="cookieyes-advertisement"
-        />
-        <Script
-          id="google-ads-init"
-          strategy="lazyOnload"
-          nonce={nonce}
-          data-cookieyes="cookieyes-advertisement"
-        >
-          {`
+            </Script>
+            <Script
+              id="google-ads-loader"
+              src="https://www.googletagmanager.com/gtag/js?id=AW-18068690553"
+              strategy="lazyOnload"
+              nonce={nonce}
+              data-cookieyes="cookieyes-advertisement"
+            />
+            <Script
+              id="google-ads-init"
+              strategy="lazyOnload"
+              nonce={nonce}
+              data-cookieyes="cookieyes-advertisement"
+            >
+              {`
             window.dataLayer = window.dataLayer || [];
             window.gtag = window.gtag || function(){window.dataLayer.push(arguments);}
             if (!window.__loveiqGtagBootstrapped) {
@@ -237,7 +272,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             window.__loveiqGoogleAdsEnabled = true;
             window.gtag('config', 'AW-18068690553');
           `}
-        </Script>
+            </Script>
+          </>
+        )}
         {trustpilotBusinessUnitId && (
           <Script
             id="trustpilot-bootstrap"
@@ -274,11 +311,19 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             one-line change — restore type="text/plain" + data-cookieyes, which
             is the only mechanism measured to actually withhold a tag here.
             Bootstrap lives in public/clarity-init.js — see that file for why it
-            is not inline. */}
-        <script src="/clarity-init.js" defer />
+            is not inline.
+
+            PRODUCTION ONLY since 2026-08-27. The consent decision above is
+            untouched — on production this still runs for every visitor regardless
+            of the banner. What changed is the ENVIRONMENT: the Clarity project id is
+            hardcoded, so localhost and staging.loveiq.org were recording into the
+            same project as customers, and dev-build React/HMR errors were landing in
+            its JavaScript-errors list as if they were production faults. That is the
+            noise marketing asked to separate out. */}
+        {productionAnalyticsEnabled && <script src="/clarity-init.js" defer />}
       </head>
       <body className="bg-white dark:bg-[#050208]">
-        <GtmNoScript />
+        {productionAnalyticsEnabled && <GtmNoScript />}
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-black focus:shadow-lg"

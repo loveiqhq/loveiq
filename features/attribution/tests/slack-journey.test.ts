@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { buildJourneyMessage, formatDuration } from "@features/attribution/server/slack-journey";
 import type { SubmissionJourney } from "@features/attribution/server/journey";
@@ -43,6 +43,7 @@ function journey(overrides: Partial<SubmissionJourney> = {}): SubmissionJourney 
     },
     money: null,
     quoteCount: 0,
+    recordingSessionId: null,
     ...overrides,
   };
 }
@@ -412,5 +413,67 @@ describe("formatDuration", () => {
     expect(formatDuration(null)).toBeNull();
     expect(formatDuration(-1)).toBeNull();
     expect(formatDuration(Number.NaN)).toBeNull();
+  });
+});
+
+/**
+ * Session-replay deep link (2026-08-27). Asserts the rendered URL, not the shape:
+ * the failure that matters is a button that looks fine and opens the wrong page —
+ * PostHog's `/replay/home?sessionRecordingId=<id>` form lands on the filtered
+ * recordings LIST rather than the recording, and reads as "the link is broken".
+ */
+describe("session-recording link", () => {
+  // adminLink() returns null without this, so the pairing assertions below would
+  // silently compare one button against one button.
+  beforeEach(() => vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org"));
+  afterEach(() => vi.unstubAllEnvs());
+
+  const urls = (blocks: SlackBlock[]): string[] =>
+    (JSON.parse(JSON.stringify(blocks)) as SlackBlock[])
+      .flatMap((b) => (Array.isArray(b.elements) ? (b.elements as Array<{ url?: string }>) : []))
+      .map((e) => e.url)
+      .filter((u): u is string => typeof u === "string");
+
+  const buttons = (blocks: SlackBlock[]) =>
+    (JSON.parse(JSON.stringify(blocks)) as SlackBlock[]).filter((b) => b.type === "actions");
+
+  it("links straight to the recording when a session id was captured", () => {
+    const message = buildJourneyMessage(
+      journey({ recordingSessionId: "01a04480-c0ad-7496-9e5a-7cf22106b1a9" }),
+      { kind: "survey_completed", questionCount: 59 }
+    );
+
+    expect(urls(message.blocks)).toContain(
+      "https://eu.posthog.com/project/244778/replay/01a04480-c0ad-7496-9e5a-7cf22106b1a9"
+    );
+    // The list-with-a-filter form, which does NOT open the recording.
+    expect(JSON.stringify(message.blocks)).not.toContain("sessionRecordingId=");
+  });
+
+  it("puts it beside the admin link in ONE actions block, not stacked below", () => {
+    const message = buildJourneyMessage(journey({ recordingSessionId: "sess_abc" }), {
+      kind: "survey_completed",
+      questionCount: 59,
+    });
+
+    const actionBlocks = buttons(message.blocks);
+    expect(actionBlocks).toHaveLength(1);
+    expect((actionBlocks[0]!.elements as unknown[]).length).toBe(2);
+  });
+
+  it("omits the button entirely when there is no recording", () => {
+    // The honest rendering: no session id means no recording exists to open. Normal
+    // for every submission before 2026-08-27 and for a blocked or sampled-out
+    // visitor — so it must not render a dead button.
+    const message = buildJourneyMessage(journey({ recordingSessionId: null }), {
+      kind: "survey_completed",
+      questionCount: 59,
+    });
+
+    expect(JSON.stringify(message.blocks)).not.toContain("posthog.com");
+    expect(JSON.stringify(message.blocks)).not.toContain("session recording");
+    // ...and the admin button is still there, in its own single actions block.
+    expect(buttons(message.blocks)).toHaveLength(1);
+    expect(urls(message.blocks).some((u) => u.includes("/admin/submissions/1756"))).toBe(true);
   });
 });

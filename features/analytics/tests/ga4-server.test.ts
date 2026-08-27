@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -26,7 +26,41 @@ describe("sendGa4PurchaseEvent", () => {
     vi.resetAllMocks();
     process.env.GA4_API_SECRET = "test-secret";
     delete process.env.GA4_MEASUREMENT_ID;
+    // Every test below asserts behaviour of the LIVE site, so it has to look like
+    // the live site: the send now refuses to run anywhere else. Without these two
+    // the three "skips when X" tests would pass for the wrong reason — the
+    // environment guard would short-circuit before their condition was ever read.
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org");
     mockFetchWithTimeout.mockResolvedValue({ ok: true, status: 204 });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  /**
+   * The one analytics send that is not gated by app/layout.tsx, because it runs in
+   * the Stripe webhook rather than in a browser. Staging shares the production
+   * Supabase database and can receive Stripe test-mode webhooks, so without this a
+   * sandbox test purchase would arrive in the real GA4 property as revenue — and
+   * GA4 purchases feed Google Ads, so it would arrive as a conversion the bidding
+   * algorithm optimises on.
+   */
+  it.each([
+    ["staging", "https://staging.loveiq.org"],
+    ["a Vercel preview", "https://loveiq-abc123-loveiq.vercel.app"],
+    ["a local production build", "http://localhost:3000"],
+  ])("refuses to send from %s, even with the secret and consent present", async (_name, url) => {
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", url);
+    await sendGa4PurchaseEvent(baseInput);
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+  });
+
+  it("refuses to send from local dev", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    await sendGa4PurchaseEvent(baseInput);
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
   });
 
   it("skips (no send) when GA4_API_SECRET is unset", async () => {

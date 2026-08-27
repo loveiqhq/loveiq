@@ -26,7 +26,7 @@ import {
   fields,
   fitBlocks,
   header,
-  linkButton,
+  linkButtons,
   section,
 } from "@shared/observability/slack-blocks";
 
@@ -224,6 +224,34 @@ function adminLink(submissionId: number): string | null {
   return `${base.replace(/\/$/, "")}/admin/submissions/${submissionId}`;
 }
 
+/**
+ * PostHog session-replay deep link.
+ *
+ * Region and project id are hardcoded, matching how every other vendor identifier
+ * in this repo is handled (the GA4 measurement id in app/layout.tsx, the Clarity
+ * project id in public/clarity-init.js, the Google Ads tag id): all of them are
+ * public, non-secret identifiers that only change if the account moves.
+ *
+ * NOT derived from `NEXT_PUBLIC_POSTHOG_HOST`. That variable holds the INGESTION
+ * host (`eu.i.posthog.com`), which is a different hostname from the app the replay
+ * is viewed in (`eu.posthog.com`), and it carries no project id at all — so
+ * deriving it would mean a string transform that produces a plausible-looking URL
+ * leading nowhere.
+ *
+ * The id goes in the PATH — `/replay/<id>`. PostHog also accepts it as a query
+ * parameter on `/replay/home`, but that form lands on the recordings LIST with a
+ * filter applied rather than opening the recording, which reads to whoever clicked
+ * it as a broken link.
+ */
+const POSTHOG_REPLAY_BASE = "https://eu.posthog.com/project/244778/replay";
+
+function recordingLink(sessionId: string | null): string | null {
+  if (!sessionId) return null;
+  // The id is already constrained to [A-Za-z0-9_-] by the /api/survey schema that
+  // accepted it; re-encode anyway so this function is safe on its own terms.
+  return `${POSTHOG_REPLAY_BASE}/${encodeURIComponent(sessionId)}`;
+}
+
 export interface JourneyMessage {
   text: string;
   blocks: SlackBlock[];
@@ -326,8 +354,22 @@ export function buildJourneyMessage(
   blocks.push(section("*Experiments they were in*"));
   blocks.push(armFields(journey));
 
+  /**
+   * Admin and replay side by side in ONE actions block. Two separate blocks would
+   * stack them vertically and eat two of Slack's 50 blocks; `linkButtons` takes the
+   * pair and drops whichever is missing.
+   *
+   * The replay button is absent rather than disabled when there is no session id,
+   * which is the honest rendering: no id means no recording exists to open. That is
+   * the normal state for every submission before 2026-08-27 and for anyone whose
+   * replay was blocked or sampled out.
+   */
+  const actions: Array<{ text: string; url: string }> = [];
   const link = adminLink(journey.submissionId);
-  if (link) blocks.push(linkButton("Open full journey in admin", link));
+  if (link) actions.push({ text: "Open full journey in admin", url: link });
+  const replay = recordingLink(journey.recordingSessionId);
+  if (replay) actions.push({ text: "▶ Watch session recording", url: replay });
+  if (actions.length > 0) blocks.push(linkButtons(actions));
 
   const fitted = fitBlocks(blocks, text);
   return { text, blocks: fitted.blocks, trimmed: fitted.trimmed, size: fitted.size };

@@ -72,6 +72,22 @@ const surveySchema = z.object({
   // submission. Column is `text`, so the cap is only an anti-abuse bound.
   utmTracker: z.string().max(1000).optional().nullable(),
   sessionId: z.string().regex(UUID_RE).optional().nullable(),
+  /**
+   * PostHog `$session_id` for the browsing session that finished the survey, used
+   * to deep-link the Slack notification to the session replay.
+   *
+   * Validated as an opaque id, not a UUID: PostHog's format is its own business and
+   * has changed before, so the guard is "short, and safe to paste into a URL path"
+   * rather than a shape that would silently start rejecting every id after a
+   * posthog-js upgrade. It is interpolated into a Slack link, so the character class
+   * is what stops it carrying anything else in there.
+   */
+  posthogSessionId: z
+    .string()
+    .max(100)
+    .regex(/^[A-Za-z0-9_-]+$/)
+    .optional()
+    .nullable(),
   website: z.string().max(0).optional().nullable(),
 });
 
@@ -204,8 +220,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
 
-  const { email, firstName, answers, startedAt, durationMs, utmTracker, sessionId, website } =
-    parsed.data;
+  const {
+    email,
+    firstName,
+    answers,
+    startedAt,
+    durationMs,
+    utmTracker,
+    sessionId,
+    posthogSessionId,
+    website,
+  } = parsed.data;
   const normalizedEmail = email.trim().toLowerCase();
   const normalizedFirstName = firstName.trim();
 
@@ -298,6 +323,7 @@ export async function POST(request: Request) {
       durationMs,
       utmTracker: mergedUtmTracker,
       sessionId,
+      posthogSessionId,
       marketingOptIn,
     });
     const tSubmit = performance.now();

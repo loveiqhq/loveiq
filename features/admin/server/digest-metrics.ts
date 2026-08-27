@@ -1085,6 +1085,12 @@ export interface FunnelCvrDay {
   day: string;
   visitors: number;
   /** unique_visitor tagged control (or legacy/untagged → control). */
+  /**
+   * NOT "the dark arm" — the RPC defines it as `landing_variant <> 'white'`, so it
+   * also holds Landing Page V1 (`white_prev`, live since 2026-08-21) and all
+   * arm-less traffic. Only consumer is the UNSCHEDULED funnel-digest, where the
+   * mislabelling and both ways out are documented in full.
+   */
   visitors_control: number;
   starts: number;
   completions: number;

@@ -135,7 +135,7 @@ loveiq-web/
 
 1. **Page Load:** SSR → Client hydration → Smooth scroll init → Analytics pageview
 2. **Contact Form:** Form → reCAPTCHA → CSRF check → Rate limit → Zod validation → Resend email → Slack notification
-3. **Survey Submission:** Form → CSRF check → Rate limit → Zod validation → Honeypot check → Email cooldown → Supabase RPC → Slack notification
+3. **Survey Submission:** Form → CSRF check → Rate limit → Zod validation → Honeypot check → Email cooldown → Supabase RPC → consent PATCH (also stores `posthog_session_id`, the PostHog `$session_id` captured at submit) → Slack notification with a "▶ Watch session recording" button beside the admin link
 4. **Pre-Report Wizard:** Survey submit → ProcessingSequence (white; 5 animated steps around a progress ring, ~11s, waits for the POST) → fade to PreReportWizard (5 slides, dark) → `/report/<token>`. SurveyConfirmation is the error path only.
 5. **Survey Tracking:** Question transition → Buffer events → Flush batch → CSRF check → Rate limit → Zod validation → Supabase insert
 6. **Admin Panel:** `/admin/*` → Supabase Auth middleware gate (magic link session) → API routes with session + CSRF + rate limit → Supabase queries
@@ -145,6 +145,48 @@ loveiq-web/
 10. **Nurture Email Sequence:** `/api/cron/nurture-sequence` (hourly) reads `personal_report.created_date_time`, fans out to 5 stages (`6h_no_view`, `6h_no_unlock`, `30h_no_unlock`, `54h_no_unlock`, `78h_no_unlock`). At 30h/54h, mints a per-user Stripe Promotion Code (24h expiry, customer-restricted) → Resend send → idempotency write to `report_price_quote.metadata.nurtureEmailsSent[]` + `nurturePromoCodes[stage]`. Email CTA links carry `?promo=<code>&offer=1&pricingSessionId=…&utm_campaign=<stage>`. The `/report/[token]` page stashes `?promo=` in sessionStorage; checkout-session POST forwards it, server validates ownership via `resolveNurturePromo()`, pre-applies as `discounts:[]` on the Stripe session, and stamps `metadata.promoCode`/`metadata.promoStage` for attribution.
 11. **78h Call Invite + Calendly Capture:** The final nurture stage (`78h_no_unlock`) sends NO discount — it invites a 20-minute call (CTA → Calendly, UTM + name/email prefill) and writes a `call_invite_sent` row to `booking_event`. Calendly `invitee.created` / `invitee.canceled` hit `/api/calendly/webhook` (signature-verified, idempotent via `calendly_webhook_event`) → `call_booked` / `call_canceled` rows in `booking_event`, correlated by `utm_content` (submission id) → email fallback. All booking events surface in the admin submission timeline.
 12. **Post-call 100% coupon (manual grant):** After the call, an admin clicks "Grant 100% coupon" on the submission detail → `/api/admin/submissions/[id]/grant-call-coupon` mints a one-time 100%-off code (`STRIPE_COUPON_100`, 14-day expiry), stores it under `report_price_quote.metadata.nurturePromoCodes.post_call`, emails the user a one-tap unlock link, and writes a `call_coupon_sent` `booking_event`. Redeemed via the normal `?promo=` checkout → $0 session → existing fulfillment unlocks `full_report`.
+
+### Analytics environments
+
+**GA4, Google Ads, GTM and Microsoft Clarity load on production only.** Their IDs are
+hardcoded (there is no per-environment property), so before 2026-08-27 every
+`npm run dev` page view and every visit to `staging.loveiq.org` recorded into the
+same GA4 property, Ads account and Clarity project as real customers — and on Google
+Ads that meant a developer clicking through checkout fed the conversion signal the
+bidding algorithm optimises on.
+
+The gate is `isProductionSite()` in `shared/env/is-non-prod-deploy.ts`, evaluated at
+build time in `app/layout.tsx`, so the tags are not emitted at all off production.
+It is a positive **allowlist** of production hosts and is deliberately **not** the
+inverse of `isNonProdDeploy()` in the same file — the two gates guard opposite risks
+and so must fail in opposite directions. See the doc comments there; the difference
+is what closes `npm run build && npm start` on a laptop, which has
+`NODE_ENV=production` and a localhost site URL.
+
+Consequences to expect:
+
+- `window.gtag` is undefined off production, so every `track()` call skips GA4. This
+  needs no per-call handling — `features/analytics/client.ts` already gates on
+  `window.__loveiqAnalyticsEnabled`, which the (now absent) init script sets.
+- **PostHog and CookieYes still run everywhere.** PostHog is the only replay and
+  error trail staging and local dev have, so it is labelled rather than excluded: it
+  registers `deploy_env` (`production` | `staging` | `development`) as a super
+  property, so filtering is one click. CookieYes must stay because its consent cookie
+  is what gates the first-party durable writes in `persistAnalyticsEvent` — dropping
+  it would silently stop the funnel tables staging QA reads, not just quieten a third
+  party.
+- `sendGa4PurchaseEvent` refuses to send off production too. It runs in the Stripe
+  webhook rather than a browser, and staging shares the production database, so a
+  sandbox test purchase would otherwise arrive in real GA4 as revenue.
+
+To verify a change here, build twice and diff the served HTML — that is how the gate
+was confirmed:
+
+```bash
+npm run build && npx next start -p 3111                       # localhost URL: 0 trackers
+NEXT_PUBLIC_SITE_URL=https://www.loveiq.org npm run build \
+  && NEXT_PUBLIC_SITE_URL=https://www.loveiq.org npx next start -p 3112   # all 5 present
+```
 
 ### Key Boundaries
 

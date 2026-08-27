@@ -557,14 +557,18 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       return `• *${label}* — ${row.visits} visit-days → ${row.starts} started the survey`;
     };
     /**
-     * Both directions, in one line. The step mismatch flatters the current design;
-     * the all-page denominator penalises whichever arm sold reports, since a buyer
-     * re-reading theirs adds visit-days and can never add a start. Naming only the
-     * first — as a shorter version of this did — leaves the reader with a caveat
-     * that points one way when the real answer is that the direction is unknown.
+     * Both directions, in one line. The step mismatch flatters V2; the all-page
+     * denominator penalises whichever arm sold reports, since a buyer re-reading
+     * theirs adds visit-days and can never add a start. Naming only the first — as a
+     * shorter version of this did — leaves the reader with a caveat that points one
+     * way when the real answer is that the direction is unknown.
+     *
+     * Names the arm rather than "the current design": that phrase was a second name
+     * for V2 in a message whose other lines already call it V2, and it is the phrase
+     * marketing's naming convention exists to retire.
      */
     const caveat =
-      "Not a like-for-like comparison: the current design's inline question puts its visitors straight into the survey, and the denominator counts every page rather than landing views — the two pull opposite ways, so treat the gap as unknown.";
+      "Not a like-for-like comparison: V2's inline question puts its visitors straight into the survey, and the denominator counts every page rather than landing views — the two pull opposite ways, so treat the gap as unknown.";
     const hasAny = series.first.some((v) => v != null) || series.last.some((v) => v != null);
 
     if (hasAny && series.labels.length > 1) {
@@ -674,10 +678,10 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   // gone, and the per-axis section below is the only place landing is charted.
   //
   // Three of that chart's own rules said not to draw it. Its purple line ran from
-  // 26 Jul under the legend "Landing page A (current design)", but the current
-  // design only exists since the 10 Aug rebuild and the round-2 comparison since
-  // 21 Aug (AXIS_VALID_FROM.landing) — so most of that line was the PREVIOUS
-  // design wearing the current one's label, next to a 4-day stub of the other arm
+  // 26 Jul under the legend for the current arm, but V2 only exists since the
+  // 10 Aug rebuild and the round-2 comparison since 21 Aug
+  // (AXIS_VALID_FROM.landing) — so most of that line was V1 traffic wearing V2's
+  // label, next to a 4-day stub of the other arm
   // flat on zero. It also drew purchases, which the section below refuses to draw
   // below MIN_PAID_TO_DRAW, from the same 10 the captions call too few. A message
   // cannot both show a landing chart and say landing has no chart yet.

@@ -78,11 +78,26 @@ export function fields(pairs: Array<{ label: string; value: string }>): SlackBlo
   };
 }
 
-/** A link button, for "open this person in admin". */
-export function linkButton(text: string, url: string): SlackBlock {
+/**
+ * One actions block holding one or more link buttons, e.g. "open this person in
+ * admin" beside "watch their session recording".
+ *
+ * Takes the whole set rather than one button because Slack lays out the elements of
+ * a SINGLE actions block side by side: pushing two separate blocks stacks them
+ * vertically and spends two of the message's 50 blocks on what fits in one. Callers
+ * therefore filter the list down to the buttons they actually have and pass it once.
+ *
+ * Slack caps an actions block at 25 elements; sliced rather than rejected, matching
+ * how `fields` handles its own cap above.
+ */
+export function linkButtons(buttons: Array<{ text: string; url: string }>): SlackBlock {
   return {
     type: "actions",
-    elements: [{ type: "button", text: { type: "plain_text", text, emoji: true }, url }],
+    elements: buttons.slice(0, 25).map(({ text, url }) => ({
+      type: "button",
+      text: { type: "plain_text", text, emoji: true },
+      url,
+    })),
   };
 }
 

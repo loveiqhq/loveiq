@@ -18,9 +18,9 @@
 export type ExperimentAxis = "landing" | "survey" | "pricing" | "paywall";
 
 export interface ArmLabel {
-  /** Short name for a chart axis or a table cell, e.g. "Landing page A (current design)". */
+  /** Short name for a chart axis or a table cell, e.g. "Landing Page V2 (Survey in Hero)". */
   short: string;
-  /** Sentence for Slack, e.g. "Landing page A: the current design". */
+  /** Sentence for Slack, e.g. "Landing Page V2: survey in the hero". */
   long: string;
   /** Set when the arm is no longer being assigned to new visitors. */
   retired?: boolean;
@@ -39,24 +39,37 @@ const UNKNOWN: ArmLabel = {
  */
 const LABELS: Record<ExperimentAxis, Record<string, ArmLabel>> = {
   landing: {
-    // The A/B letter carries the identity and the parenthetical says which is
-    // which, so "variant A" in a meeting and "Landing page A" in Slack are
-    // unambiguously the same thing. Parentheses rather than a dash because these
-    // strings are interpolated into whole sentences in the digest, where a second
-    // dash reads as a break in the sentence.
+    // Marketing's naming convention (2026-08-27), adopted verbatim so the words in
+    // Slack, in /admin and in a meeting are the same words. It replaced "Landing
+    // page A / B (current / previous design)", which had two problems: the A/B
+    // letters carried no hint of WHICH came first, and "current design" is a name
+    // that goes stale the next time the page is rebuilt — the same failure already
+    // documented on the pricing arms below.
+    //
+    // V2 is the version with question 1 in the hero, hence "Survey in Hero"; V1 is
+    // the white landing that preceded that rebuild. The version numbers are the
+    // identity and the parenthetical says which is which. Parentheses rather than a
+    // dash because these strings are interpolated into whole sentences in the
+    // digest, where a second dash reads as a break in the sentence.
     white: {
-      short: "Landing page A (current design)",
-      long: "Landing page A: the current design",
+      short: "Landing Page V2 (Survey in Hero)",
+      long: "Landing Page V2: survey in the hero",
     },
     white_prev: {
-      short: "Landing page B (previous design)",
-      long: "Landing page B: the design it replaced",
+      short: "Landing Page V1 (First Design)",
+      long: "Landing Page V1: the first design",
     },
     // Round-1 dark landing page. Never assigned since 2026-08-21, but ~5% of stored
     // submissions still carry it, so it needs a truthful label of its own.
+    //
+    // Deliberately NOT called V0 or "first". It predates the V1/V2 numbering, which
+    // covers the two white designs only, and "Original dark landing page" beside
+    // "Landing Page V1 (First Design)" would put two arms on screen both claiming to
+    // be the first one. "before V1" is the one phrase that orders it without
+    // competing for the name.
     control: {
-      short: "Original dark landing page",
-      long: "Landing page: the original dark design",
+      short: "Dark landing page (before V1)",
+      long: "Landing page: the original dark design, before V1",
       retired: true,
     },
   },

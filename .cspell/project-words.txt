@@ -14,6 +14,7 @@ apiserver
 archetype
 archetypes
 aspf
+autocapture
 backout
 behaviours
 blindspot
@@ -52,6 +53,7 @@ Lora
 loveiq
 Manrope
 Marcus
+minimisation
 multimethod
 navigations
 organisational

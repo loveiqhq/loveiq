@@ -17,6 +17,29 @@ import {
 
 type SubmitStatus = "idle" | "submitting" | "success" | "error";
 
+/**
+ * PostHog's `$session_id` for the session that just filled in the survey, so the
+ * Slack notification can link straight to the replay of it.
+ *
+ * Read here rather than server-side because it exists only in the browser, and at
+ * submit time rather than on mount because the session id can roll over (PostHog
+ * starts a new session after 30 minutes idle) and the id that matters is the one
+ * covering the moment they finished.
+ *
+ * Wrapped: `get_session_id()` throws if PostHog never initialised — which is the
+ * normal case when the project token is unset, and also what an ad blocker leaves
+ * behind. A missing recording link is a missing row in a Slack message, so it must
+ * never be able to fail a submission.
+ */
+function posthogSessionId(): string | null {
+  try {
+    const id = posthog.get_session_id();
+    return typeof id === "string" && id.length > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 export function useSubmitSurvey() {
   const [status, setStatus] = useState<SubmitStatus>("idle");
   const [reportToken, setReportTokenState] = useState<string | null>(null);
@@ -64,6 +87,9 @@ export function useSubmitSurvey() {
 
       setStatus("submitting");
 
+      // Read once: two calls could straddle a PostHog session rollover.
+      const replaySessionId = posthogSessionId();
+
       try {
         const res = await fetch("/api/survey", {
           method: "POST",
@@ -79,6 +105,7 @@ export function useSubmitSurvey() {
             durationMs: payload.durationMs,
             ...(payload.utmTracker ? { utmTracker: payload.utmTracker } : {}),
             ...(payload.sessionId ? { sessionId: payload.sessionId } : {}),
+            ...(replaySessionId ? { posthogSessionId: replaySessionId } : {}),
           }),
         });
 

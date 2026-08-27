@@ -178,7 +178,7 @@ describe("GET /api/admin/ab-overview", () => {
   it("labels every arm in plain English and never leaks a raw code", async () => {
     routeData([submission(1, "white_prev", "dark")], [quote(1, "B", false)]);
     const text = JSON.stringify(await (await GET(req())).json());
-    expect(text).toContain("Landing page B (previous design)");
+    expect(text).toContain("Landing Page V1 (First Design)");
     // No "Dark survey" — the survey theme axis concluded 2026-08-25 and left the
     // live experiments list, so no arm of it is presented for analysis here.
     expect(text).not.toContain("Dark survey");

@@ -1,5 +1,6 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
+import { isProductionSite } from "@shared/env/is-non-prod-deploy";
 
 /**
  * Server-side GA4 purchase tracking via the Measurement Protocol.
@@ -49,6 +50,23 @@ export interface Ga4PurchaseInput {
  * Fulfillment must never fail because analytics did.
  */
 export async function sendGa4PurchaseEvent(input: Ga4PurchaseInput): Promise<void> {
+  /**
+   * Production only. This is the one analytics send that survives the client-side
+   * gate in app/layout.tsx, because it runs in the Stripe webhook rather than in a
+   * browser: staging shares the production Supabase database and can take Stripe
+   * test-mode webhooks, so a sandbox test purchase would otherwise arrive in the
+   * real GA4 property as revenue — and GA4 purchases feed Google Ads, so it would
+   * arrive as a conversion the bidding algorithm optimises on. `GA4_API_SECRET`
+   * being unset on staging today is a configuration accident, not a guard.
+   */
+  if (!isProductionSite()) {
+    logger.info(
+      { transactionId: input.transactionId },
+      "Non-production deploy — skipping server-side GA4 purchase event"
+    );
+    return;
+  }
+
   const apiSecret = process.env.GA4_API_SECRET;
   if (!apiSecret) {
     logger.info(
