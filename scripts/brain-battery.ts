@@ -164,16 +164,28 @@ function buildProbes(f: LiveFigures): Probe[] {
   ];
 }
 
+/** Strip thousands separators so `1,110.85` matches an expected `1110.85`. The
+ *  model formats money for humans; the corpus stores it raw. */
+function normalise(text: string): string {
+  return text.toLowerCase().replace(/(\d),(?=\d{3}\b)/g, "$1");
+}
+
 function flag(p: Probe, text: string, status: string, ms: number, sources: number): string[] {
-  const t = text.toLowerCase();
+  const t = normalise(text);
   const issues: string[] = [];
 
   for (const want of p.expect ?? []) {
-    if (!t.includes(want.toLowerCase())) issues.push(`missing "${want}"`);
+    if (!t.includes(normalise(want))) issues.push(`missing "${want}"`);
   }
   for (const bad of p.forbid ?? []) {
     if (t.includes(bad.toLowerCase())) issues.push(`LEAKED "${bad}"`);
   }
+
+  // A probe the model never answered tells you nothing about answer quality. It
+  // used to be counted as a content failure — and worse, a `shouldDecline` probe
+  // that came back rate-limited was reported as FABRICATED, which is the exact
+  // opposite of what happened.
+  if (status === "rate_limited") return ["__untested__"];
 
   const declined =
     /do not contain|don'?t have|not available|no data|could not find|couldn'?t find|not include|no information/i.test(
@@ -215,24 +227,45 @@ async function main(): Promise<void> {
   const probes = only ? all.filter((p) => p.kind.includes(only) || p.q.includes(only)) : all;
 
   let failures = 0;
-  for (const p of probes) {
-    const started = Date.now();
-    const a = await answerQuestion({ question: p.q });
+  let untested = 0;
+  // The free tier is per-MINUTE limited. Firing 25 probes back to back rate-limited
+  // 14 of them, which then read as quality failures. Pacing costs wall-clock and
+  // buys a run whose results mean something.
+  const GAP_MS = Number(process.env.BRAIN_BATTERY_GAP_MS ?? 12_000);
+  for (const [i, p] of probes.entries()) {
+    if (i > 0) await new Promise((r) => setTimeout(r, GAP_MS));
+    let started = Date.now();
+    let a = await answerQuestion({ question: p.q });
+    if (a.status === "rate_limited") {
+      // One retry after a longer pause. The free tier's window is per-minute, so
+      // a single probe landing on the boundary should not cost a whole result.
+      await new Promise((r) => setTimeout(r, 30_000));
+      started = Date.now();
+      a = await answerQuestion({ question: p.q });
+    }
     const ms = Date.now() - started;
     const issues = flag(p, a.text, a.status, ms, a.sources.length);
-    if (issues.length) failures++;
+    const skipped = issues[0] === "__untested__";
+    if (skipped) untested++;
+    else if (issues.length) failures++;
 
     console.log(
-      `\n${issues.length ? "FAIL" : "ok  "} [${p.kind}] ${JSON.stringify(p.q.slice(0, 70))}`
+      `\n${skipped ? "skip" : issues.length ? "FAIL" : "ok  "} [${p.kind}] ${JSON.stringify(p.q.slice(0, 70))}`
     );
     console.log(
       `      status=${a.status} ${ms}ms sources=${a.sources.length} blocks=${a.blocks.length}`
     );
-    if (issues.length) console.log(`      ISSUES: ${issues.join(" | ")}`);
+    if (skipped) console.log("      UNTESTED: rate limited by the model provider");
+    else if (issues.length) console.log(`      ISSUES: ${issues.join(" | ")}`);
     console.log("      " + a.text.replace(/\n+/g, " ").slice(0, 260).trim());
   }
 
-  console.log(`\n=== ${probes.length - failures}/${probes.length} clean, ${failures} flagged ===`);
+  const tested = probes.length - untested;
+  console.log(
+    `\n=== ${tested - failures}/${tested} clean, ${failures} flagged` +
+      (untested ? `, ${untested} untested (rate limited)` : "") +
+      " ==="
+  );
   process.exit(failures ? 1 : 0);
 }
 

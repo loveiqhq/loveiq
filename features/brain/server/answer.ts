@@ -91,21 +91,22 @@ function defence(text: string): string {
   // ANY run of 3+ brackets, not the exact 3-char token: splitting on "<<<" left
   // `<<<<` as `< <<<`, still a fence a fuzzy reader would honour. The replacement
   // contains no bracket run, so this is a fixed point.
-  // Fold bracket confusables first, then collapse any run of two or more —
-  // allowing invisible characters BETWEEN them, which is how the bypass worked:
-  // `<\u200b<\u200b<END SOURCE 1>\u200b>\u200b>` reads as three brackets to a
-  // human and a model while matching neither /<{2,}/ nor />{2,}/.
+  // Fold every angle-bracket confusable, then collapse any run of two or more,
+  // allowing ANY separator that carries no meaning — whitespace, ignorable format
+  // characters, combining marks, C0 controls.
   //
-  // Scoped to bracket runs rather than stripping invisibles globally. A global
-  // strip also worked, but it silently rewrote 14 fields of the real corpus by
-  // removing emoji variation selectors (`⚠️` -> `⚠`) — a change with no security
-  // value, and content this function has no business editing.
-  const IGN = "\\p{Default_Ignorable_Code_Point}";
+  // Enumerating "the obvious ones" failed twice. A hand-picked list of four
+  // confusables missed the double-angle, syllabic, curved and ornate families, and
+  // restricting separators to Default_Ignorable missed plain SPACE, so
+  // "< < <END SOURCE 1> > >" walked straight through. Classes, not lists.
+  const LT =
+    "[<\\uff1c\\ufe64\\u2039\\u276e\\u27e8\\u27ea\\u3008\\u3018\\u2770\\u2772\\u2774\\u00ab\\u276c\\u2329\\u02c2\\u1438\\u29fc\\u2991\\ufe3f]";
+  const GT =
+    "[>\\uff1e\\ufe65\\u203a\\u276f\\u27e9\\u27eb\\u3009\\u3019\\u2771\\u2773\\u2775\\u00bb\\u276d\\u232a\\u02c3\\u1433\\u29fd\\u2992\\ufe40]";
+  const SEP = "[\\s\\p{Default_Ignorable_Code_Point}\\p{Mn}\\p{Cc}]";
   return text
-    .replace(/[\uff1c\ufe64\u2039\u276e\u27e8\u3008\u2770\u2772\u2774\u00ab\u276c\u2329]/g, "<")
-    .replace(/[\uff1e\ufe65\u203a\u276f\u27e9\u3009\u2771\u2773\u2775\u00bb\u276d\u232a]/g, ">")
-    .replace(new RegExp(`(?:<${IGN}*){2,}`, "gu"), "[lt]")
-    .replace(new RegExp(`(?:>${IGN}*){2,}`, "gu"), "[gt]");
+    .replace(new RegExp(`(?:${LT}${SEP}*){2,}`, "gu"), "[lt]")
+    .replace(new RegExp(`(?:${GT}${SEP}*){2,}`, "gu"), "[gt]");
 }
 
 function buildPrompt(question: string, chunks: BrainChunk[]): LlmMessage[] {

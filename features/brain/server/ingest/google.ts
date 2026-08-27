@@ -129,7 +129,14 @@ async function runGa4Report(
     // one: 3 GA4 reports plus 2 GSC queries at 15s each is an 85s floor against a
     // 60s function limit, so without this a slow Google kills the function and
     // `recordCronRun` never writes at all.
-    if (isOutOfTime() || (page > 0 && Date.now() - startedAt > PAGING_BUDGET_MS)) {
+    // PAGE 0 ALWAYS FIRES. Applying the clock here returned an EMPTY report
+    // instead of one full page of real data — and because the core report had
+    // already produced rows, the ingester reported `rows > 0` with no `skipped`
+    // and no throw: no alert, `status: "success"`, `{ok: true}`. The chunks were
+    // then rewritten WITHOUT `ad_cost`, the sweep persisted them, and every
+    // money line in the corpus disappeared for every period. The run-level
+    // refusal now happens once, up front, where it can be reported as a skip.
+    if (page > 0 && (isOutOfTime() || Date.now() - startedAt > PAGING_BUDGET_MS)) {
       logger.warn(
         { got: all.length, dimensions: body.dimensions },
         "GA4 report stopped early on the time budget — figures derived from it are incomplete"
@@ -328,7 +335,6 @@ export async function ingestGa4(
    * Null means "do not trust this at all", which the rollup reads as zero
    * coverage and withholds every derived figure.
    */
-  let adWindowTo: string | null = null;
   let adReportComplete = true;
   try {
     const rows = await runGa4Report(
@@ -362,7 +368,6 @@ export async function ingestGa4(
         entry.campaigns.set(campaign, (entry.campaigns.get(campaign) ?? 0) + cost);
       }
       ads.set(day, entry);
-      if (adWindowTo === null || day > adWindowTo) adWindowTo = day;
     }
 
     // A report that came back exactly full was probably cut off. Treating it as
@@ -376,7 +381,18 @@ export async function ingestGa4(
     adReportComplete = false;
     logger.info({ err }, "brain-ingest ga4: no linked Google Ads data");
   }
-  if (!adReportComplete) adWindowTo = null;
+  // TIED TO THE TRAFFIC WINDOW, NOT TO THE LAST DAY WITH AD ACTIVITY.
+  //
+  // Deriving it from ad rows meant that PAUSING ADS shrank the window — GA4 omits
+  // all-zero rows, so four quiet days read as four days of unknown spend, and the
+  // chunk printed "there is no net figure for the WHOLE period" about days whose
+  // spend we knew perfectly well was zero. Measured: a true net of +3730 was
+  // published as "-270 over 3 days".
+  //
+  // The ad report asks for the same date range as the traffic report, so when it
+  // completes its coverage IS the traffic window. Null only when it did not
+  // complete, which is the one case the figures cannot be trusted.
+  const adWindowTo = adReportComplete ? windowTo : null;
 
   interface Ga4Totals {
     sessions: number;
@@ -575,7 +591,14 @@ async function queryGsc(
   const startedAt = Date.now();
 
   for (let page = 0; page < MAX_PAGES; page++) {
-    if (isOutOfTime() || (page > 0 && Date.now() - startedAt > PAGING_BUDGET_MS)) {
+    // PAGE 0 ALWAYS FIRES. Applying the clock here returned an EMPTY report
+    // instead of one full page of real data — and because the core report had
+    // already produced rows, the ingester reported `rows > 0` with no `skipped`
+    // and no throw: no alert, `status: "success"`, `{ok: true}`. The chunks were
+    // then rewritten WITHOUT `ad_cost`, the sweep persisted them, and every
+    // money line in the corpus disappeared for every period. The run-level
+    // refusal now happens once, up front, where it can be reported as a skip.
+    if (page > 0 && (isOutOfTime() || Date.now() - startedAt > PAGING_BUDGET_MS)) {
       logger.warn(
         { got: all.length, dimensions: body.dimensions },
         "Search Console query stopped early on the time budget — query totals are incomplete"

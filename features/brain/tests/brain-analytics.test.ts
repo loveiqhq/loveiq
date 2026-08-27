@@ -218,6 +218,43 @@ describe("buildAnalyticsRows", () => {
     expect(body).not.toContain("covers only");
   });
 
+  it("makes the daily and monthly grains agree about the same covered days", () => {
+    // Restricting REVENUE to the covered days while leaving SPEND as the whole
+    // period's total just mirrored the original defect: a day of spend outside the
+    // window put EUR 900 into a "net over the 2 days ad data covers", and the two
+    // grains then disagreed by that amount about the very same two named days.
+    const days = ["2026-06-01", "2026-06-02", "2026-06-03"];
+    const rows = buildAnalyticsRows(
+      days.map((d) => day(d, { revenue: "10", reports_paid: 1, submissions: 5 })),
+      STAMP,
+      {
+        byDay: new Map([
+          ["2026-06-01", 900],
+          ["2026-06-02", 50],
+          ["2026-06-03", 50],
+        ]),
+        from: "2026-06-02",
+        to: "2026-06-03",
+      }
+    );
+    const net = (id: string) =>
+      /Net[^:]*: EUR (-?[\d.]+)/.exec(
+        String(rows.find((r) => r.source_id === id)?.body ?? "")
+      )?.[1];
+
+    expect(net("daily:2026-06-02")).toBe("-40.00");
+    expect(net("daily:2026-06-03")).toBe("-40.00");
+    // The month must equal the sum of its covered days, not carry Jun 1's spend.
+    expect(net("monthly:2026-06")).toBe("-80.00");
+
+    // Every derived ratio divides covered spend by covered denominators.
+    const monthly = String(rows.find((r) => r.source_id === "monthly:2026-06")?.body ?? "");
+    expect(monthly).toContain("Cost per signup, over the 2 day(s) ad data covers: EUR 10.00");
+    expect(monthly).toContain(
+      "Cost per paying customer, over the 2 day(s) ad data covers: EUR 50.00"
+    );
+  });
+
   it("never prints an inverted date range when the ranges do not overlap", () => {
     // Clamping the two ends independently produced "covers only 2026-08-27 to
     // 2026-08-26".

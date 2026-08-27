@@ -81,6 +81,19 @@ interface Totals {
    */
   revenueCovered: number;
   paidCovered: number;
+  /**
+   * Ad spend on the covered days only.
+   *
+   * Restricting REVENUE to the covered days while leaving `adSpend` as the whole
+   * period's total just mirrored the original defect: measured, a day of spend
+   * outside the window put EUR 900 of it into a "net over the 2 days ad data
+   * covers", and the daily and monthly grains then disagreed about the very same
+   * two named days. Both sides of the subtraction must span the same days or the
+   * subtraction means nothing.
+   */
+  adSpendCovered: number;
+  /** Signups on the covered days, so cost-per-signup divides matching spans. */
+  submissionsCovered: number;
   firstDay: string;
   lastDay: string;
 }
@@ -106,6 +119,8 @@ function seed(r: RollupRow, day: string, ad: AdCost): Totals {
     adSpend: ad.byDay.get(day) ?? 0,
     revenueCovered: covered ? revenue : 0,
     paidCovered: covered ? r.reports_paid : 0,
+    adSpendCovered: covered ? (ad.byDay.get(day) ?? 0) : 0,
+    submissionsCovered: covered ? r.submissions : 0,
     firstDay: day,
     lastDay: day,
   };
@@ -132,6 +147,8 @@ function merge(a: Totals | undefined, r: RollupRow, day: string, ad: AdCost): To
     adSpend: a.adSpend + (ad.byDay.get(day) ?? 0),
     revenueCovered: a.revenueCovered + (covered ? revenue : 0),
     paidCovered: a.paidCovered + (covered ? r.reports_paid : 0),
+    adSpendCovered: a.adSpendCovered + (covered ? (ad.byDay.get(day) ?? 0) : 0),
+    submissionsCovered: a.submissionsCovered + (covered ? r.submissions : 0),
     firstDay: day < a.firstDay ? day : a.firstDay,
     lastDay: day > a.lastDay ? day : a.lastDay,
   };
@@ -173,8 +190,6 @@ async function adCostByDay(): Promise<AdCost> {
   const out = new Map<string, number>();
   let from: string | null = null;
   let to: string | null = null;
-  // Set when any GA4 chunk reports its ad report as untrustworthy.
-  let sawUntrustedAdWindow = false;
   try {
     const res = await supabaseFetch(
       // eslint-disable-next-line no-secrets/no-secrets -- a PostgREST query path, not a secret
@@ -209,7 +224,7 @@ async function adCostByDay(): Promise<AdCost> {
             : null;
       if (wf && (from === null || wf < from)) from = wf;
       if (wt && (to === null || wt > to)) to = wt;
-      if (!wt && "ad_window_to" in (r.meta ?? {})) sawUntrustedAdWindow = true;
+
       if (!wf && (from === null || day < from)) from = day;
       if (!wt && (to === null || day > to)) to = day;
       const cost = Number(r.meta?.ad_cost ?? 0);
@@ -218,9 +233,11 @@ async function adCostByDay(): Promise<AdCost> {
   } catch {
     // Optional enrichment: without GA4 the rollup simply omits the spend lines.
   }
-  // One truncated ad report poisons the whole window: we cannot say which days
-  // are missing, so we say we do not know.
-  return { byDay: out, from, to: sawUntrustedAdWindow ? null : to };
+  // A chunk whose ad report was untrustworthy contributes NOTHING to the window
+  // rather than nulling it. A single global "untrusted" flag meant one bad August
+  // chunk withdrew the net figure for June, whose own chunks were fine — a
+  // corpus-wide off-switch tripped by one bad night.
+  return { byDay: out, from, to };
 }
 
 /** Inclusive day count between two `YYYY-MM-DD`s. */
@@ -393,7 +410,7 @@ function renderBody(period: string, t: Totals, ad: AdCost): string {
   // simply a smaller true statement instead of a bigger false one, and there is no
   // constant left to miscalibrate — which is what went wrong three times running.
   const adGap = t.adSpend > 0 && cov.uncoveredDays > 0;
-  const netOverCovered = t.revenueCovered - t.adSpend;
+  const netOverCovered = t.revenueCovered - t.adSpendCovered;
 
   return [
     `Period: ${period}`,
@@ -433,13 +450,18 @@ function renderBody(period: string, t: Totals, ad: AdCost): string {
       : null,
     // Both computed over the SAME days as the spend above, so they are true
     // statements about a shorter period rather than false ones about this period.
-    t.adSpend > 0 && cov.coveredDays > 0
+    t.adSpendCovered > 0 && t.submissionsCovered > 0 && cov.coveredDays > 0
+      ? `Cost per signup${adGap ? `, over the ${cov.coveredDays} day(s) ad data covers` : ""}: ${money(t.adSpendCovered / t.submissionsCovered)}`
+      : null,
+    t.adSpendCovered > 0 && cov.coveredDays > 0
       ? `Cost per paying customer${adGap ? `, over the ${cov.coveredDays} day(s) ad data covers` : ""}: ${
-          t.paidCovered > 0 ? money(t.adSpend / t.paidCovered) : "no paying customers in those days"
+          t.paidCovered > 0
+            ? money(t.adSpendCovered / t.paidCovered)
+            : "no paying customers in those days"
         }`
       : null,
-    t.adSpend > 0 && cov.coveredDays > 0
-      ? `Net${adGap ? ` over the ${cov.coveredDays} day(s) ad data covers (${cov.from} to ${cov.to})` : ""}: ${money(netOverCovered)} (revenue ${money(t.revenueCovered)} minus ad spend ${money(t.adSpend)})`
+    t.adSpendCovered > 0 && cov.coveredDays > 0
+      ? `Net${adGap ? ` over the ${cov.coveredDays} day(s) ad data covers (${cov.from} to ${cov.to})` : ""}: ${money(netOverCovered)} (revenue ${money(t.revenueCovered)} minus ad spend ${money(t.adSpendCovered)})`
       : null,
     adGap && cov.coveredDays > 0
       ? `There is no net figure for the WHOLE period on purpose: ${cov.uncoveredDays} of its ${cov.periodDays} days have no ad-spend data, and pairing all of the revenue with part of the spend is how a loss gets published as a profit.`
