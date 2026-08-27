@@ -46,7 +46,19 @@ export const POWER_ZONES: Record<string, PowerZone> = {
  * same pass; this map is where their labels go when someone does it.
  */
 export const POWER_ZONE_OVERRIDES: Record<string, PowerZone> = {
-  "spark-seeker": { label: "Playful switch", result: "Playful switch — freedom-guided" },
+  /*
+   * "Playful switch - freedom-guided" was two pieces of jargon in five words:
+   * "switch" is a term from kink vocabulary and "freedom-guided" explains nothing on
+   * its own. The chapter does define leading and yielding, but in an expander, and
+   * this is the card's first line. It now says what it means (2026-08-27).
+   *
+   * The plane's region label stays short, because it sits inside a chart where the
+   * axes already read "yielding" and "leading".
+   */
+  "spark-seeker": {
+    label: "Playful switch",
+    result: "You lead and yield by turns, and it stays play",
+  },
 };
 
 /**

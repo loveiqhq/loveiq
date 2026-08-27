@@ -249,7 +249,12 @@ describe("GET /api/report", () => {
     expect(submissionLookupUrl).toContain("app_user!fk_survey_submission_user(first_name,email)");
     expect(submissionLookupUrl).not.toContain("select=id,first_name,created_at");
     expect(snapshotAnswerLookupUrl).toContain("survey_question!inner(frontend_qid)");
-    expect(snapshotAnswerLookupUrl).toContain("survey_question.frontend_qid=in.(01002,16013)");
+    // The two snapshot items, then the 21 dimension items the endpoint stat counts
+    // (2026-08-27). Asserted as "starts with the two, includes a dimension" rather
+    // than as the whole list, so adding a dimension does not break this test.
+    expect(snapshotAnswerLookupUrl).toContain("survey_question.frontend_qid=in.(01002,16013,");
+    expect(snapshotAnswerLookupUrl).toContain("01005");
+    expect(snapshotAnswerLookupUrl).toContain("11004");
     expect(recordReportSessionView).toHaveBeenCalledWith(
       expect.objectContaining({
         ipAddress: "1.2.3.4",

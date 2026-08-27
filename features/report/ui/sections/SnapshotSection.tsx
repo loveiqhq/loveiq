@@ -189,13 +189,24 @@ function dotsFromStat(stat: string | undefined): { filled: number; total: number
   const raw = stat?.trim() ?? "";
   // "N in M" — the general form. Only "1 in N" parsed before, so any other
   // ratio silently fell back to a 7-dot row.
-  const ratio = raw.match(/\b(\d+)\s+in\s+(\d+)/i);
+  // "N in M" or "N of M" — the general form. "of" was added on 2026-08-27 for the
+  // endpoint stat ("8 of 20"); without it that stat drew the 1-of-7 fallback, a
+  // graphic claiming ~14% under a label saying 40%.
+  const ratio = raw.match(/\b(\d+)\s+(?:in|of)\s+(\d+)/i);
   if (ratio) {
     const filled = Number(ratio[1]);
     const total = Number(ratio[2]);
     if (total >= 2 && total <= 12 && filled >= 1 && filled <= total) return { filled, total };
     // Rows longer than the strip can show stay readable as one-in-many.
     if (total > 12 && filled === 1) return { filled: 1, total: 12 };
+    /*
+     * A wide ratio (the endpoint stat is out of 20) scales to a ten-dot row at the
+     * SAME proportion, so the graphic still says what the label says. Rounded, and
+     * clamped to at least one filled dot so a real count never draws as zero.
+     */
+    if (total > 12 && filled > 1 && filled <= total) {
+      return { filled: Math.max(1, Math.round((filled / total) * 10)), total: 10 };
+    }
   }
   if (/nearly all/i.test(raw)) return { filled: 7, total: 8 };
   return { filled: 1, total: 7 };
@@ -362,7 +373,14 @@ export const SnapshotCompare: FC<{
    * short a column.
    */
   barrierTags?: readonly string[] | null;
-}> = ({ copy, barrierTags }) => {
+  /**
+   * The endpoint stat, resolved server-side (`data/report2-endpoint-stat.ts`).
+   * Takes the third column when present — it is about the reader, where the
+   * matrix's `compare3` was about a different archetype. Falls through to the
+   * barrier stat and then to the matrix, so the row is never short a column.
+   */
+  endpointStat?: { stat: string; caption: string } | null;
+}> = ({ copy, barrierTags, endpointStat = null }) => {
   // Its own reveal root, like the three mini-stat boxes. This box rides
   // `.report-section.is-visible` as a fallback, and that fires when the SECTION's
   // top crosses the fold — which for a box further down the section means the dots
@@ -389,20 +407,27 @@ export const SnapshotCompare: FC<{
       viz: "dots" as const,
       ...dotsFromStat(copy?.["compare2.stat"]),
     },
-    barrier
+    endpointStat
       ? {
-          stat: barrier.stat,
-          caption: barrier.caption,
+          stat: endpointStat.stat,
+          caption: endpointStat.caption,
           viz: "dots" as const,
-          ...dotsFromStat(barrier.stat),
+          ...dotsFromStat(endpointStat.stat),
         }
-      : {
-          stat: copy?.["compare3.stat"],
-          caption: copy?.["compare3.caption"],
-          viz: "bar" as const,
-          filled: 0,
-          total: 0,
-        },
+      : barrier
+        ? {
+            stat: barrier.stat,
+            caption: barrier.caption,
+            viz: "dots" as const,
+            ...dotsFromStat(barrier.stat),
+          }
+        : {
+            stat: copy?.["compare3.stat"],
+            caption: copy?.["compare3.caption"],
+            viz: "bar" as const,
+            filled: 0,
+            total: 0,
+          },
   ].filter((c) => c.stat || c.caption);
 
   if (compares.length === 0) return null;

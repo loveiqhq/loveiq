@@ -2,7 +2,12 @@
 
 import type { CSSProperties, FC } from "react";
 
-import { CURIOSITY_AXIS, CURIOSITY_BANDS, CURIOSITY_SCALE } from "@/data/report2-curiosity-scale";
+import {
+  CURIOSITY_AXIS,
+  CURIOSITY_BANDS,
+  CURIOSITY_SCALE,
+  CURIOSITY_SCALE_NOTE,
+} from "@/data/report2-curiosity-scale";
 import { getReportTheme } from "../reportTheme";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 
@@ -99,6 +104,10 @@ const CuriosityScale: FC<Props> = ({ archetype, eyebrow, outro }) => {
         <span>&larr; {CURIOSITY_AXIS.left}</span>
         <span>{CURIOSITY_AXIS.right} &rarr;</span>
       </div>
+
+      {/* What the dots are. Without this a reader skimming the strip sees fourteen
+          unexplained dots; the Importance strip has always carried the equivalent. */}
+      <p className="report-curiosity-scale__note">{CURIOSITY_SCALE_NOTE}</p>
 
       {outro ? <p className="report-curiosity-scale__outro">{outro}</p> : null}
     </div>

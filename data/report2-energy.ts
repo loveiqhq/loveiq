@@ -157,27 +157,33 @@ export const ENERGY_FAMILY_PROFILES: Record<string, EnergyFamilyProfile> = {
  * fast-activating and directly above a curve labelled "fast up, fast gone". The
  * callout argued against the reader on the same screen (found 2026-08-26).
  *
- * Now keyed by family. Wave keeps the original words exactly. The other three say
- * the same KIND of thing — "the third reading is the one partners underestimate"
- * — about their own third reading, in the register their own profile already
- * uses above. `emphasis` renders inline at the end of `body` in serif italic.
+ * Now keyed by family, and REWRITTEN on 2026-08-27: "The rectangle should never say
+ * things like 'The third reading is...', scratch that and lead with what follows
+ * from it." Every body now opens on the consequence rather than on a pointer to a
+ * row above it, which a reader skimming the card cannot resolve anyway. Every
+ * `emphasis` is a short plain sentence for the same reason — the earlier
+ * "Recurrence replaces endurance" style read as a slogan a skimmer has to decode.
+ *
+ * These four are AUTHORED, not document text. The wave one no longer matches the
+ * Figma frame's wording either, because the frame's wording was the thing being
+ * fixed. `emphasis` renders inline at the end of `body` in serif italic.
  */
 export const ENERGY_THIRD_READINGS: Record<string, { body: string; emphasis: string }> = {
   wave: {
-    body: "The third reading is the one partners underestimate: what takes longer to start also lasts far longer, and often feels more nourishing than fast, high-spike patterns.",
-    emphasis: "Depth replaces speed.",
+    body: "What takes longer to start also lasts far longer, and often feels more nourishing than a fast, high-spike pattern. It is the reading partners most often miss.",
+    emphasis: "Slow to start is not low.",
   },
   spike: {
-    body: "The third reading is the one partners underestimate: energy that returns again and again through variety is not energy running out, and a fade is not a verdict on the relationship.",
-    emphasis: "Recurrence replaces endurance.",
+    body: "Energy that returns again and again through variety is not energy running out. A fade is the pattern doing what it does, not a verdict on the relationship.",
+    emphasis: "A fade is not a failure.",
   },
   steady: {
-    body: "The third reading is the one partners underestimate: energy you can reach on most days without a run-up asks for no occasion, and needs no build to be real.",
-    emphasis: "Availability replaces intensity.",
+    body: "Energy you can reach on most days, without a run-up, asks for no occasion and needs no build to be real. It is easy to mistake for indifference.",
+    emphasis: "Even is not flat.",
   },
   conditional: {
-    body: "The third reading is the one partners underestimate: once the conditions are met you hold far longer than spike patterns, so what looks like reluctance is a threshold, not a limit.",
-    emphasis: "Threshold replaces reluctance.",
+    body: "Once the conditions are met you hold far longer than a spike pattern does. What looks like reluctance before that is a threshold, not a limit.",
+    emphasis: "A threshold is not a no.",
   },
 };
 

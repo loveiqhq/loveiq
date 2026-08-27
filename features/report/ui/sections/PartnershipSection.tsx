@@ -315,7 +315,16 @@ const PartnershipSection: FC<Props> = ({
             {/* Document insert, 2026-08-27: under the loop visual, before the
                 educational block. */}
             {copy.inserts?.underFlywheel ? (
-              <p className="report-partnership__insert">{copy.inserts.underFlywheel}</p>
+              <div className="report-partnership__insert-block">
+                <p className="report-partnership__insert-label">
+                  {copy.inserts.underFlywheel.label}
+                </p>
+                {copy.inserts.underFlywheel.paras.map((para, i) => (
+                  <p key={i} className="report-partnership__insert">
+                    {para}
+                  </p>
+                ))}
+              </div>
             ) : null}
           </>
         )}

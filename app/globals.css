@@ -11461,9 +11461,15 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 /* Centred line under the heading (Figma 8427:2203). */
+/* `pre-line`, so the typed break before the final short beat ("In three acts.")
+   lands as a line rather than being collapsed into the sentence before it
+   (Mark, 2026-08-27: "the work is keeping it lit. (LINE BREAK) In three acts").
+   The em dashes in these three lines went at the same time — the report's own style
+   rules ban them in prose. */
 .report-arousal__intro {
   margin: 10px auto 0;
   max-width: 46ch;
+  white-space: pre-line;
   color: #6b6678;
   font-family: var(--font-sans);
   font-weight: 400;
@@ -23995,11 +24001,18 @@ input.autofill-dark:-internal-autofill-previewed {
   line-height: 1.65;
 }
 
+/* Mark, 2026-08-27: the names need "way more horizontal space". The Confidence
+   block this was transcribed from carries one short word ("Activation-Contingent");
+   these carry "Very high / exploration-driven curiosity" and "Intensity-threshold
+   arousal", which wrapped to four lines in a 203px column. The column is now a
+   fraction rather than a fixed width, so the name gets roughly a third of the row
+   and grows with it, and `align-items` moves to the top so a two-line name and a
+   three-line description start on the same line. */
 .report-style-verdict__row {
   display: grid;
-  grid-template-columns: minmax(0, 203px) 1px minmax(0, 1fr);
-  align-items: center;
-  gap: clamp(16px, 2.4vw, 24px);
+  grid-template-columns: minmax(0, 0.9fr) 1px minmax(0, 1.6fr);
+  align-items: start;
+  gap: clamp(18px, 2.6vw, 28px);
 }
 
 .report-style-verdict__row + .report-style-verdict__row {
@@ -24008,20 +24021,20 @@ input.autofill-dark:-internal-autofill-previewed {
   border-top: 1px solid rgba(22, 16, 33, 0.07);
 }
 
+/* ONE size for every name, primary and secondary alike (Mark, 2026-08-27: "they
+   should have all the same font sizes. Use the smaller version"). Two sizes made
+   the three arousal styles read as a heading with footnotes rather than as three
+   entries in one list. Primary is still distinguished, by the absence of the
+   "also present" label rather than by size. */
 .report-style-verdict__name {
   margin: 0;
+  padding-top: 2px;
   color: #6b6678;
   font-family: var(--font-serif);
   font-weight: 500;
-  font-size: clamp(1.6rem, 2.6vw, 2.12rem);
-  line-height: 1.05;
-  letter-spacing: -0.4px;
-}
-
-/* A secondary style is real but not the verdict, so its name steps down rather
-   than competing with the primary above it. */
-.report-style-verdict__row--secondary .report-style-verdict__name {
   font-size: clamp(1.15rem, 1.7vw, 1.4rem);
+  line-height: 1.2;
+  letter-spacing: -0.2px;
 }
 
 .report-style-verdict__divider {
@@ -24056,6 +24069,16 @@ input.autofill-dark:-internal-autofill-previewed {
   font-family: var(--font-sans);
   font-size: var(--report-prose-size);
   line-height: var(--report-prose-lh);
+}
+
+/* A rule under the whole block, so the styles are visibly finished before the
+   graph starts (Mark, 2026-08-27: "Have a horizontal divider line behind them and
+   before the graph"). */
+.report-style-verdict--arousal,
+.report-style-verdict--initiation {
+  padding-bottom: clamp(20px, 2.4vw, 28px);
+  border-bottom: 1.128px solid rgba(22, 16, 33, 0.09);
+  margin-bottom: clamp(22px, 2.6vw, 32px);
 }
 
 @media (max-width: 768px) {
@@ -24212,6 +24235,16 @@ input.autofill-dark:-internal-autofill-previewed {
   font-size: 0.68rem;
 }
 
+/* Same job as the Importance strip's chartnote: says what the dots are. */
+.report-curiosity-scale__note {
+  margin: 14px 0 0;
+  color: #a09aac;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  text-align: left;
+}
+
 .report-curiosity-scale__outro {
   margin: 12px 0 0;
   color: #6b6678;
@@ -24288,6 +24321,26 @@ input.autofill-dark:-internal-autofill-previewed {
   font-size: 0.86em;
   letter-spacing: 0;
   text-transform: none;
+}
+
+/* Partnership's restructured block: a bold label, then its prose in paragraphs.
+   The label is the document's own bold run; the paragraph breaks are new and the
+   words are not (2026-08-27). */
+.report-partnership__insert-block {
+  margin-top: clamp(20px, 2.4vw, 28px);
+}
+
+.report-partnership__insert-label {
+  margin: 0 0 10px;
+  color: #161021;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: var(--report-body-size);
+  line-height: 1.45;
+}
+
+.report-partnership__insert-block .report-partnership__insert + .report-partnership__insert {
+  margin-top: 12px;
 }
 
 /* Consecutive inserts read as one passage, not as separate notes. */
@@ -28818,4 +28871,73 @@ input.autofill-dark:-internal-autofill-previewed {
   .report-beliefs__preview--locked > .report-premium-overlay {
     min-height: 1860px;
   }
+}
+
+/* ══ Report rhythm: one set of rules, appended last on purpose ════════════════
+   Everything here exists because the same decision had been made separately in
+   sixteen places and had drifted. It sits at the END of the file so source order
+   settles it against the per-section rules, and every selector is doubled so
+   specificity does too.
+
+   Reported 2026-08-27: "please double check all padding with the headlines, key
+   concepts and the sections themselves, I can see some are not matching" and
+   "build more padding into inner elements of sections to give them more space".
+
+   1. CARD RHYTHM. The row gap inside a chapter card ran from 12px (Curiosity,
+      Love Language, Know-How) to 32px (Arousal, Insecurities) — measured across
+      sixteen cards. One value now, at the roomy end of that range and slightly
+      past it, so text / visual / second visual / text / quote all breathe.
+   2. LEFT ALIGNMENT. Several chapters centre their result word, eyebrow, stat and
+      verdict, which is intended. Prose must never inherit that, and some of it
+      did. Every prose class this pass introduced is pinned left rather than left
+      to inherit. */
+.report-accel__card.report-accel__card,
+.report-arousal__card.report-arousal__card,
+.report-attachment__article.report-attachment__article,
+.report-beliefs__card.report-beliefs__card,
+.report-confidence__card.report-confidence__card,
+.report-curiosity__card.report-curiosity__card,
+.report-energy__card.report-energy__card,
+.report-fantasy__card.report-fantasy__card,
+.report-growth__card.report-growth__card,
+.report-initiation__card.report-initiation__card,
+.report-insecurities__card.report-insecurities__card,
+.report-knowhow__card.report-knowhow__card,
+.report-libido__card.report-libido__card,
+.report-lovelang__card.report-lovelang__card,
+.report-partnership__card.report-partnership__card,
+.report-power__card.report-power__card,
+.report-reward__card.report-reward__card {
+  row-gap: clamp(20px, 2.5vw, 36px);
+}
+
+/* Prose is left aligned, always. */
+.report-card-intro.report-card-intro,
+.report-learn-body.report-learn-body,
+.report-prose--tight.report-prose--tight,
+.report-power__insert.report-power__insert,
+.report-arousal__insert.report-arousal__insert,
+.report-initiation__insert.report-initiation__insert,
+.report-fantasy__insert.report-fantasy__insert,
+.report-libido__insert.report-libido__insert,
+.report-partnership__insert.report-partnership__insert,
+.report-partnership__insert-label.report-partnership__insert-label,
+.report-attachment__insert.report-attachment__insert,
+.report-energy__insert.report-energy__insert,
+.report-reward__insert.report-reward__insert,
+.report-curiosity__insert.report-curiosity__insert,
+.report-insecurities__above-graph.report-insecurities__above-graph,
+.report-beliefs__insert.report-beliefs__insert,
+.report-beliefs__note.report-beliefs__note,
+.report-confidence__chartnote.report-confidence__chartnote,
+.report-fantasy__learning-para.report-fantasy__learning-para,
+.report-fantasy__learning-eyebrow.report-fantasy__learning-eyebrow,
+.report-style-verdict__name.report-style-verdict__name,
+.report-style-verdict__desc.report-style-verdict__desc,
+.report-style-verdict__outro.report-style-verdict__outro,
+.report-style-verdict__eyebrow.report-style-verdict__eyebrow,
+.report-knowhow__body.report-knowhow__body,
+.report-knowhow__lead.report-knowhow__lead,
+.report-map-row__learn-text.report-map-row__learn-text {
+  text-align: left;
 }

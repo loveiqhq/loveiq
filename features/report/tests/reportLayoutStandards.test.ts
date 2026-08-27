@@ -245,7 +245,9 @@ describe("report layout standards", () => {
       ["AttachmentPatternsSection.tsx", 'copyParagraphs(copy["body.p1"])'],
       ["LoveLanguageSection.tsx", 'copyParagraphs(copy["body.p1"])'],
       ["BeliefsSection.tsx", 'copyParagraphs(copy["body.p1"])'],
-      ["InitiationSection.tsx", 'copyParagraphs(copy["body.p1"])'],
+      // Initiation is NOT in this list any more: it stopped rendering `body.p1` on
+      // 2026-08-27 ("Take out the paragraph 'A hallway grab…'"), so it has no body
+      // block for a typed break to survive into. Same treatment as Curiosity.
       ["PowerSection.tsx", 'copyParagraphs(copy["body.p1"])'],
       // Curiosity is NOT in this list any more: it no longer renders `body.p1` at all
       // (2026-08-26), so it has no body block for a typed break to survive into.

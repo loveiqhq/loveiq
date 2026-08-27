@@ -515,6 +515,7 @@ interface ReportExperienceProps {
   importanceLearn: LearnPillCopy | null;
   constellationLearn: LearnPillCopy | null;
   knowhowLearn: LearnPillCopy | null;
+  endpointStat: { stat: string; caption: string } | null;
   constellationMottos: Record<string, string | null>;
   submitFeedback: (sectionId: string, payload: FeedbackPayload) => void;
   submitted: Record<string, boolean>;
@@ -610,6 +611,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   importanceLearn,
   constellationLearn,
   knowhowLearn,
+  endpointStat,
   constellationMottos,
   submitFeedback,
   submitted,
@@ -1128,7 +1130,11 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                               so it renders here rather than in SnapshotSection.
                               Same section wrapper, so it keeps the shared
                               `.report-section.is-visible` reveal. */}
-                          <SnapshotCompare copy={snapshotCopy} barrierTags={snapshot.barrierTags} />
+                          <SnapshotCompare
+                            copy={snapshotCopy}
+                            barrierTags={snapshot.barrierTags}
+                            endpointStat={endpointStat}
+                          />
                         </ReportSection>
                         {/* Insight Map renders directly after Findings with the
                           same reveal treatment (Figma 8762:15822). Fully visible
@@ -2945,6 +2951,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         importanceLearn={data.importanceLearn ?? null}
         constellationLearn={data.constellationLearn ?? null}
         knowhowLearn={data.knowhowLearn ?? null}
+        endpointStat={data.endpointStat ?? null}
         constellationMottos={data.constellationMottos ?? {}}
         submitFeedback={submitFeedback}
         submitted={submitted}

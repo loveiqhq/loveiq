@@ -10,7 +10,6 @@ import { useRevealOnView } from "../hooks/useRevealOnView";
 import { rewardStatDots } from "./RewardSection";
 import { copyParagraphs } from "./copyParagraphs";
 import LearnPill from "./LearnPill";
-import StyleVerdict from "./StyleVerdict";
 import ProseGroup, { firstThenTight } from "./ProseGroup";
 import ChapterHeading from "./ChapterHeading";
 import type { Report2DocInserts } from "@/data/report2-doc-inserts";
@@ -90,6 +89,13 @@ interface Props {
    * chapter. Read off the document's own "(e.g. …)" list — Spark Seeker is named
    * under "Active / Direct initiation" — so unlike the arousal list this one is
    * sourced, not inferred. `null` when locked or unmapped.
+   */
+  /**
+   * The reader's initiation style from chapter 22's varieties. NOT RENDERED since
+   * 2026-08-27, when Mark asked for the varieties block to come out of this
+   * chapter. Still resolved and still sent — the mapping is real and sourced from
+   * the document, and the arousal and curiosity chapters still show theirs — so the
+   * prop stays declared rather than quietly disappearing from the payload.
    */
   initiationStyles: (Report2DocStyle & Report2StyleMatch)[] | null;
   archetype: string;
@@ -240,7 +246,6 @@ const InitiationSection: FC<Props> = ({
   archetype,
   copy,
   config,
-  initiationStyles,
   offerDeadline,
   onUnlock,
   quote = null,
@@ -307,7 +312,10 @@ const InitiationSection: FC<Props> = ({
         className="report-initiation__heading"
       />
 
-      <LearnPill prefix="initiation" copy={copy} />
+      {/* Mark, 2026-08-27: "Move the first sentence into the Key Concept 'Many people
+          shift...'". It qualified a varieties block that is now gone, so it belongs
+          with the chapter's definition rather than floating above the card. */}
+      <LearnPill prefix="initiation" copy={{ ...copy, "learn.body.p2": INITIATION_STYLES_OUTRO }} />
 
       <article className="report-initiation__card">
         {locked ? (
@@ -341,19 +349,6 @@ const InitiationSection: FC<Props> = ({
               {copy.result ? <p className="report-initiation__result">{copy.result}</p> : null}
             </div>
 
-            {/* "Many people shift between styles..." moves ABOVE the styles it
-                qualifies (Mark, 2026-08-27). */}
-            <p className="report-card-intro report-initiation__insert">{INITIATION_STYLES_OUTRO}</p>
-
-            {/* The reader's style as a verdict, in the Confidence chapter's shape,
-                with the document's "(e.g. ...)" archetype list dropped
-                (Mark, 2026-08-27). */}
-            <StyleVerdict
-              eyebrow="Core Initiation Style Varieties Across Archetypes"
-              styles={initiationStyles ?? []}
-              modifier="initiation"
-            />
-
             {/* Document insert: the archetype's own initiation description, after
                 the varieties. The third paragraph follows on a line break. */}
             {copy.inserts?.afterVarieties?.length ? (
@@ -364,6 +359,32 @@ const InitiationSection: FC<Props> = ({
                   follows: i === 1 ? ("break" as const) : ("para" as const),
                 }))}
               />
+            ) : null}
+
+            {/* Mark, 2026-08-27: "Move the rectangle with 'How you start' and the
+                statistical block in between the text after the paragraph of 'Because
+                they associate…'". So they sit here, between the archetype's own
+                description above and the standoff below, rather than after both. */}
+            {hasRow1 ? (
+              <div className="report-initiation__row">
+                <p className="report-initiation__row-term">
+                  {copy["row1.label"] ?? "How you start"}
+                </p>
+                <p className="report-initiation__row-detail">{copy["row1.value"]}</p>
+              </div>
+            ) : null}
+
+            {hasStat ? (
+              <div
+                ref={statRef}
+                className={`report-initiation__stat report-chart-reveal${
+                  statRevealed ? " is-revealed" : ""
+                }`}
+              >
+                <StatDots stat={stat} />
+                <span className="report-initiation__stat-value">{stat}</span>
+                <span className="report-initiation__stat-caption">{statCaption}</span>
+              </div>
             ) : null}
 
             {/* Mark, 2026-08-27: "I am a bit confused/irritated by the whole 'What
@@ -390,31 +411,10 @@ const InitiationSection: FC<Props> = ({
               <TimelineChart fam={fam} />
             )}
 
-            {copy["body.p1"] ? (
-              <p className="report-initiation__body">{copyParagraphs(copy["body.p1"])}</p>
-            ) : null}
-
-            {hasRow1 ? (
-              <div className="report-initiation__row">
-                <p className="report-initiation__row-term">
-                  {copy["row1.label"] ?? "How you start"}
-                </p>
-                <p className="report-initiation__row-detail">{copy["row1.value"]}</p>
-              </div>
-            ) : null}
-
-            {hasStat ? (
-              <div
-                ref={statRef}
-                className={`report-initiation__stat report-chart-reveal${
-                  statRevealed ? " is-revealed" : ""
-                }`}
-              >
-                <StatDots stat={stat} />
-                <span className="report-initiation__stat-value">{stat}</span>
-                <span className="report-initiation__stat-caption">{statCaption}</span>
-              </div>
-            ) : null}
+            {/* `body.p1` — "A hallway grab and a grin…" — is no longer rendered
+                (Mark, 2026-08-27). It restated the sent/arrived reading that came out
+                of this chapter the same day, so it argued for a frame the chapter no
+                longer makes. Still gated and still sent, like Curiosity's `body.p1`. */}
 
             {copy.takeaway ? (
               <div className="report-initiation__verdict report-verdict">

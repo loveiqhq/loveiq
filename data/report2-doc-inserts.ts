@@ -91,13 +91,17 @@ export interface Report2DocInserts {
     /** Under the "Its close cousin" block. */
     underCousin: string[];
   };
-  partnership: {
-    /** Under the loop visual, before the educational block. */
-    underFlywheel: string;
-  };
   growth: {
     /** Replaces the "Spark Seekers get called shallow..." opener. */
     replaceOpener: string;
+  };
+  partnership: {
+    /**
+     * Under the loop visual, before the educational block. A label plus its prose,
+     * re-broken into paragraphs — the document has all of it as one 1,082-character
+     * block, which is what the 2026-08-27 feedback asked to fix.
+     */
+    underFlywheel: { label: string; paras: string[] };
   };
 }
 
@@ -223,15 +227,23 @@ export const report2DocInserts: Record<string, Report2DocInserts> = {
         "Their desire is highly momentum-based. When the connection feels playful and charged, libido can be bright, fast, and persistent. When things feel routine or heavy, desire often drops suddenly, long before they can explain why.",
       ],
     },
-    partnership: {
-      // document paragraph 1278
-      underFlywheel:
-        "Can be perceived as restless, easily bored, or “always needing more” (especially when novelty and flirt energy drop) The Spark Seeker’s primary “fuel” is tension and aliveness: feeling wanted in a way that has play, chase, and surprise. When they don’t receive that consistently, they often don’t simply become mildly under-stimulated, they become disengaged. They may bring up the same theme repeatedly (“It feels so routine,” “I miss the spark,” “We never flirt anymore”), not to criticize, but because the issue doesn’t resolve internally until the relationship feels alive again. To a partner, especially someone more security-driven, routine-oriented, or emotionally serious, this can look like an impossible standard: “No matter what I do, it’s not enough.” The tragedy is that the Spark Seeker usually isn’t asking for more and more; they’re asking for the right kind (play, pursuit, novelty, freedom). When they don’t know how to translate that into clear, doable requests, it can come out as chronic dissatisfaction, creating partner insecurity and defensiveness over time.",
-    },
     growth: {
       // document paragraph 1288
       replaceOpener:
         "For the Spark Seeker, growth is rarely about becoming “more serious” or “more settled.” It’s about expanding range: staying true to the core erotic signature (spark, tension, play, novelty, freedom) while becoming less dependent on constant stimulation to access desire, speak needs, and stay connected when things feel ordinary.",
+    },
+    partnership: {
+      // document paragraph 1278, bold label split off and prose re-broken
+      underFlywheel: {
+        label:
+          "Can be perceived as restless, easily bored, or “always needing more” (especially when novelty and flirt energy drop)",
+        paras: [
+          "The Spark Seeker’s primary “fuel” is tension and aliveness: feeling wanted in a way that has play, chase, and surprise. When they don’t receive that consistently, they often don’t simply become mildly under-stimulated, they become disengaged.",
+          "They may bring up the same theme repeatedly (“It feels so routine,” “I miss the spark,” “We never flirt anymore”), not to criticize, but because the issue doesn’t resolve internally until the relationship feels alive again.",
+          "To a partner, especially someone more security-driven, routine-oriented, or emotionally serious, this can look like an impossible standard: “No matter what I do, it’s not enough.”",
+          "The tragedy is that the Spark Seeker usually isn’t asking for more and more; they’re asking for the right kind (play, pursuit, novelty, freedom). When they don’t know how to translate that into clear, doable requests, it can come out as chronic dissatisfaction, creating partner insecurity and defensiveness over time.",
+        ],
+      },
     },
   },
 };

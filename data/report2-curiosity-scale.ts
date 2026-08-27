@@ -64,6 +64,16 @@ export const CURIOSITY_BANDS: {
   { band: "very-high", label: "Very high", from: 0.78, to: 1 },
 ];
 
+/**
+ * What the dots are.
+ *
+ * The Importance of Sexuality strip carries a line explaining that each dot is one
+ * of the fourteen archetypes; this scale shipped without one on 2026-08-26 and a
+ * reader skimming it saw fourteen unexplained dots. Same job, same voice.
+ */
+export const CURIOSITY_SCALE_NOTE =
+  "Each dot is one of the 14 archetypes, placed by how far its members tend to take exploration. Yours is named.";
+
 /** Axis end labels. */
 export const CURIOSITY_AXIS = {
   left: "deepens what's familiar",

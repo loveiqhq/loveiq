@@ -57,7 +57,7 @@ export const AROUSAL_FAMILIES: Record<string, ArousalFamily> = {
   // Card 8427:2196 — the version already built into the report.
   responsive: {
     name: "Responsive",
-    intro: "Your desire doesn't switch on — it builds like a wave, in three acts.",
+    intro: "Your desire doesn't switch on. It builds like a wave.\nIn three acts.",
     acts: ["The build", "The dip", "The return"],
     notes: [
       "three conditions met, one by one",
@@ -79,7 +79,7 @@ export const AROUSAL_FAMILIES: Record<string, ArousalFamily> = {
   // Card 9107:1133.
   spontaneous: {
     name: "Spontaneous",
-    intro: "Your desire switches on fast — the work is keeping it lit. In three acts.",
+    intro: "Your desire switches on fast. The work is keeping it lit.\nIn three acts.",
     acts: ["The ignition", "The fade", "The rekindle"],
     notes: [
       "a spark catches — no ramp needed",
@@ -102,7 +102,7 @@ export const AROUSAL_FAMILIES: Record<string, ArousalFamily> = {
   // Card 9107:1220.
   contextual: {
     name: "Contextual",
-    intro: "Your desire opens when the setting is right — context is the switch. In three acts.",
+    intro: "Your desire opens when the setting is right. Context is the switch.\nIn three acts.",
     acts: ["The setting", "The disruption", "The re-entry"],
     notes: [
       "the right context assembles",

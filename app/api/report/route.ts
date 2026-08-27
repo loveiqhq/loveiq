@@ -25,6 +25,7 @@ import { getRewardProfile } from "@/data/report2-reward";
 import { archetypeSlug as report2ArchetypeSlug, type Report2CopySlug } from "@/data/report2-config";
 import { getKeyConcepts, KEY_CONCEPTS_EYEBROW } from "@/data/report2-key-concepts";
 import { getDocInserts } from "@/data/report2-doc-inserts";
+import { DIMENSION_QIDS, endpointStatFor } from "@/data/report2-endpoint-stat";
 import { getArchetypeSummary } from "@/data/report2-archetype-summary";
 import {
   AROUSAL_STYLES,
@@ -76,7 +77,12 @@ const RATE_LIMIT_CONFIG = {
 };
 
 const SUPABASE_TIMEOUT_MS = 5_000;
-const SNAPSHOT_QUESTION_QIDS = ["01002", "16013"] as const;
+/*
+ * The two snapshot items, PLUS the 21 dimension items the endpoint stat counts.
+ * One query either way — the select just names more qids. See
+ * `data/report2-endpoint-stat.ts` for what the dimension answers are used for.
+ */
+const SNAPSHOT_QUESTION_QIDS = ["01002", "16013", ...DIMENSION_QIDS] as const;
 
 type SnapshotQuestionQid = (typeof SNAPSHOT_QUESTION_QIDS)[number];
 
@@ -541,12 +547,22 @@ export async function GET(request: Request) {
       currentSexualSatisfaction: null,
       importanceOfSex: null,
     };
+    const dimensionAnswers: Record<string, number> = {};
 
     if (snapshotAnswersRes?.ok) {
       const snapshotAnswerRows = (await snapshotAnswersRes.json()) as Array<{
         normalized_value: number | null;
         survey_question: { frontend_qid: string } | null;
       }>;
+      // The dimension answers, keyed by qid, for the endpoint stat. Kept separate
+      // from `snapshotAnswers` because they are not shown to the reader as answers —
+      // only the count derived from them is.
+      for (const row of snapshotAnswerRows) {
+        const qid = row.survey_question?.frontend_qid;
+        const normalized = normalizeScaleAnswer(row.normalized_value);
+        if (qid && normalized !== null) dimensionAnswers[qid] = normalized;
+      }
+
       snapshotAnswers = snapshotAnswerRows.reduce<SnapshotAnswers>(
         (acc, row) => {
           const normalized = normalizeScaleAnswer(row.normalized_value);
@@ -1769,6 +1785,15 @@ export async function GET(request: Request) {
         archetypeContent: filteredArchetypeContent,
         practiceTendencies: filteredPracticeTendencies,
         snapshotCopy,
+        /*
+         * The third "How you compare" column. Computed here rather than in the
+         * client because it needs the reader's raw dimension answers, which are
+         * intimate and stay server-side — only the derived count crosses the wire.
+         * Null for a shared viewer, exactly like `snapshotAnswers`, and null when
+         * too few dimensions are on file (see `endpointStatFor`), in which case the
+         * column falls back to the matrix copy.
+         */
+        endpointStat: isShareAccess ? null : endpointStatFor(dimensionAnswers),
         findingsCopy,
         beliefsCopy: withKeyConcepts(beliefsCopy, docSlug, "beliefs", beliefsUnlocked),
         attachmentCopy: withKeyConcepts(attachmentCopy, docSlug, "attachment", attachmentUnlocked),
