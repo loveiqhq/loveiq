@@ -167,76 +167,55 @@ describe("buildAnalyticsRows", () => {
     expect(weekly?.body).toContain("Reports first opened: 14");
   });
 
-  it("suppresses net and cost-per-customer when ad spend covers only part of the period", () => {
-    // GA4 is ingested over 90 days, this rollup over 400. May 2026 paired 4 days
-    // of spend with 31 days of revenue and published "Net: EUR 291.68" when the
-    // truth was a loss of several hundred.
-    const rows = buildAnalyticsRows([day("2026-08-01"), day("2026-08-19")], STAMP, {
-      byDay: new Map([["2026-08-19", 500]]),
-      from: "2026-08-10", // ad data starts AFTER the period does
-      to: "2026-08-19",
-    });
-    const monthly = rows.find((r) => r.source_id === "monthly:2026-08");
-    expect(monthly?.body).toContain("INCOMPLETE");
-    expect(monthly?.body).not.toContain("Net:");
-    expect(monthly?.body).not.toContain("Cost per paying customer");
+  /**
+   * THE INVARIANT THAT REPLACED THREE THRESHOLDS.
+   *
+   * Net over a partial period is computed from the revenue of the SAME days the
+   * ad spend covers, so it is a true statement about a shorter span rather than a
+   * false one about this span. Three different thresholds (90% of the period, a
+   * day count, 80% plus a sign test) were each wrong in a different direction
+   * because they all tried to decide when subtracting mismatched spans was
+   * "close enough". It never is.
+   */
+  it.each([
+    [2, 1],
+    [6, 3],
+    [7, 4],
+    [7, 6],
+    [28, 26],
+  ])("nets exactly over the covered days: %i-day period, %i covered", (len, cov) => {
+    const days = Array.from({ length: len }, (_, i) =>
+      new Date(Date.parse("2026-06-01T00:00:00Z") + i * 864e5).toISOString().slice(0, 10)
+    );
+    const rows = buildAnalyticsRows(
+      days.map((d) => day(d, { revenue: "10", reports_paid: 1 })),
+      STAMP,
+      {
+        byDay: new Map(days.slice(0, cov).map((d) => [d, 100])),
+        from: days[0],
+        to: days[cov - 1],
+      }
+    );
+    const body = String(rows.find((r) => r.source_id === "monthly:2026-06")?.body ?? "");
+
+    // revenue 10/day and spend 100/day over `cov` days.
+    expect(body).toContain(`Net over the ${cov} day(s) ad data covers`);
+    expect(body).toContain(`EUR ${(cov * 10 - cov * 100).toFixed(2)}`);
+    // and it says why there is no whole-period figure
+    expect(body).toContain("no net figure for the WHOLE period on purpose");
   });
 
-  it("still gives net and cost-per-customer when ad spend covers the whole period", () => {
-    const rows = buildAnalyticsRows([day("2026-08-18"), day("2026-08-19")], STAMP, {
-      byDay: new Map([["2026-08-19", 50]]),
-      from: "2026-08-01", // ad data starts BEFORE the period
-      to: "2026-08-19",
-    });
-    const weekly = rows.find((r) => r.source_id === "weekly:2026-W34");
-    expect(weekly?.body).toContain("Net:");
-    expect(weekly?.body).toContain("Cost per paying customer");
-    expect(weekly?.body).not.toContain("INCOMPLETE");
-  });
-
-  it("flags the TRAILING spend gap too, not just the leading one", () => {
-    // GA4 stops at "yesterday" while brain_daily_rollup runs to today, so the
-    // current period is always short by a day or two. August 2026 published
-    // "Net: EUR -918.43" with no caveat while GA4 ended two days earlier.
-    const rows = buildAnalyticsRows([day("2026-08-01"), day("2026-08-27")], STAMP, {
-      byDay: new Map([["2026-08-01", 500]]),
-      from: "2026-08-01",
-      to: "2026-08-25", // two days behind the period's end
-    });
-    const monthly = rows.find((r) => r.source_id === "monthly:2026-08");
-    expect(monthly?.body).toContain("INCOMPLETE");
-    expect(monthly?.body).toContain("2026-08-25");
-    // A small trailing lag is still worth a number, but it must be labelled.
-    expect(monthly?.body).toContain("Net:");
-    expect(monthly?.body).toContain("approximate");
-  });
-
-  it("withholds derived figures entirely once coverage drops below 90%", () => {
-    const rows = buildAnalyticsRows([day("2026-08-01"), day("2026-08-27")], STAMP, {
-      byDay: new Map([["2026-08-27", 500]]), // must be a day that IS in the input
-      from: "2026-08-25", // only the last 3 of 27 days
-      to: "2026-08-27",
-    });
-    const monthly = rows.find((r) => r.source_id === "monthly:2026-08");
-    expect(monthly?.body).toContain("INCOMPLETE");
-    expect(monthly?.body).not.toContain("Net:");
-    expect(monthly?.body).not.toContain("Cost per paying customer");
-  });
-
-  it("still publishes net for the WEEKLY grain with a one-day trailing lag", () => {
-    // A 90%-of-period rule was silently month-calibrated: 30 of 31 days is 97%,
-    // but 6 of 7 days is 86%, so it withheld net profit for the entire weekly
-    // grain in the current period, every week. The rule is days missing, not a
-    // ratio.
-    const rows = buildAnalyticsRows([day("2026-08-24"), day("2026-08-30")], STAMP, {
-      byDay: new Map([["2026-08-24", 100]]),
-      from: "2026-08-01",
-      to: "2026-08-29", // one day short of the week
-    });
-    const weekly = rows.find((r) => r.source_id === "weekly:2026-W35");
-    expect(weekly?.body).toContain("INCOMPLETE");
-    expect(weekly?.body).toContain("Net:");
-    expect(weekly?.body).toContain("6 of the period's 7 days");
+  it("gives a plain, unscoped net when ad spend covers the whole period", () => {
+    const days = ["2026-06-01", "2026-06-02"];
+    const rows = buildAnalyticsRows(
+      days.map((d) => day(d, { revenue: "10", reports_paid: 1 })),
+      STAMP,
+      { byDay: new Map(days.map((d) => [d, 100])), from: "2026-05-01", to: "2026-07-01" }
+    );
+    const body = String(rows.find((r) => r.source_id === "monthly:2026-06")?.body ?? "");
+    expect(body).toContain("Net: EUR -180.00");
+    expect(body).not.toContain("day(s) ad data covers");
+    expect(body).not.toContain("covers only");
   });
 
   it("never prints an inverted date range when the ranges do not overlap", () => {

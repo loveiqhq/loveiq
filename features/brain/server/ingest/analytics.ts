@@ -69,11 +69,30 @@ interface Totals {
   invites: number;
   sources: Record<string, number>;
   adSpend: number;
+  /**
+   * Revenue and paid customers RESTRICTED to the days ad spend is known for.
+   *
+   * This is what makes a net figure honest on a partial period: comparing all of
+   * a month's revenue against part of its spend is the defect that has now been
+   * fixed three times with three different thresholds (90% of the period, then a
+   * day count, then 80% plus a sign test) and been wrong three times. The bug was
+   * never the constant — it was subtracting two numbers that describe different
+   * spans. Summed over the same days as `adSpend`, no threshold is needed at all.
+   */
+  revenueCovered: number;
+  paidCovered: number;
   firstDay: string;
   lastDay: string;
 }
 
-function seed(r: RollupRow, day: string, adCost: Map<string, number>): Totals {
+/** Is this day inside the window ad data actually covers? */
+function adCovers(ad: AdCost, day: string): boolean {
+  return ad.from !== null && ad.to !== null && day >= ad.from && day <= ad.to;
+}
+
+function seed(r: RollupRow, day: string, ad: AdCost): Totals {
+  const covered = adCovers(ad, day);
+  const revenue = Number(r.revenue ?? 0);
   return {
     visitors: r.unique_visitors,
     starts: r.survey_starts,
@@ -84,19 +103,18 @@ function seed(r: RollupRow, day: string, adCost: Map<string, number>): Totals {
     opens: r.report_opens,
     invites: r.invites_sent,
     sources: { ...(r.top_sources ?? {}) },
-    adSpend: adCost.get(day) ?? 0,
+    adSpend: ad.byDay.get(day) ?? 0,
+    revenueCovered: covered ? revenue : 0,
+    paidCovered: covered ? r.reports_paid : 0,
     firstDay: day,
     lastDay: day,
   };
 }
 
-function merge(
-  a: Totals | undefined,
-  r: RollupRow,
-  day: string,
-  adCost: Map<string, number>
-): Totals {
-  if (!a) return seed(r, day, adCost);
+function merge(a: Totals | undefined, r: RollupRow, day: string, ad: AdCost): Totals {
+  if (!a) return seed(r, day, ad);
+  const covered = adCovers(ad, day);
+  const revenue = Number(r.revenue ?? 0);
   const sources = { ...a.sources };
   for (const [k, v] of Object.entries(r.top_sources ?? {})) {
     sources[k] = (sources[k] ?? 0) + Number(v ?? 0);
@@ -111,7 +129,9 @@ function merge(
     opens: a.opens + r.report_opens,
     invites: a.invites + r.invites_sent,
     sources,
-    adSpend: a.adSpend + (adCost.get(day) ?? 0),
+    adSpend: a.adSpend + (ad.byDay.get(day) ?? 0),
+    revenueCovered: a.revenueCovered + (covered ? revenue : 0),
+    paidCovered: a.paidCovered + (covered ? r.reports_paid : 0),
     firstDay: day < a.firstDay ? day : a.firstDay,
     lastDay: day > a.lastDay ? day : a.lastDay,
   };
@@ -366,36 +386,14 @@ function renderBody(period: string, t: Totals, ad: AdCost): string {
   //   * trailing — GA4 stops at "yesterday" while the rollup runs to today, so
   //                the CURRENT period is always short by a day or two.
   //
-  // A single coverage ratio handles both, and the 90% threshold is the whole
-  // judgement: below it the gap can move the number enough to mislead, so the
-  // derived figures are withheld; above it (the normal one-day trailing lag) they
-  // are worth having as long as the shortfall is stated rather than hidden.
   const cov = coverage(t.firstDay, t.lastDay, ad.from, ad.to);
+
+  // NO THRESHOLD. Net and cost-per-customer are computed over the days ad spend
+  // is actually known for, and labelled with those days. A partial period is then
+  // simply a smaller true statement instead of a bigger false one, and there is no
+  // constant left to miscalibrate — which is what went wrong three times running.
   const adGap = t.adSpend > 0 && cov.uncoveredDays > 0;
-
-  // WHEN IS A GAP BIG ENOUGH TO WITHHOLD THE DERIVED FIGURES?
-  //
-  // Two calibrations have already been wrong here. A 90%-of-period rule was
-  // month-shaped: 30 of 31 days is 97% but 6 of 7 is 86%, so it withheld net
-  // profit for the entire weekly grain, every week. Replacing it with a day COUNT
-  // (`uncoveredDays > 3`) broke the other way — 1 of 2 days covered is only one
-  // day missing, so a two-day period published a Net with half its spend unknown,
-  // and that fires every Tuesday and every 2nd of the month.
-  //
-  // 80% of the period is the line that satisfies both: 6/7 (86%) and 29/31 (94%)
-  // publish; 1/2 (50%), 3/6 (50%) and 4/7 (57%) do not.
-  //
-  // Plus a sign test, because a share of DAYS is only a proxy for a share of
-  // SPEND. Projecting the known daily rate across the missing days and checking
-  // whether that flips Net from profit to loss catches the case the day ratio
-  // cannot see — a small gap that happens to contain a large spend.
-  const projectedMissing =
-    cov.coveredDays > 0 ? (t.adSpend / cov.coveredDays) * cov.uncoveredDays : 0;
-  const netWouldFlipSign =
-    t.revenue - t.adSpend > 0 && t.revenue - t.adSpend - projectedMissing <= 0;
-
-  const adUnusable =
-    t.adSpend > 0 && (cov.coveredDays === 0 || cov.fraction < 0.8 || netWouldFlipSign);
+  const netOverCovered = t.revenueCovered - t.adSpend;
 
   return [
     `Period: ${period}`,
@@ -425,29 +423,29 @@ function renderBody(period: string, t: Totals, ad: AdCost): string {
     t.adSpend > 0
       ? `Google Ads spend: ${money(t.adSpend)}${
           adGap
-            ? ` — INCOMPLETE: it covers ${
+            ? ` — covers ${
                 cov.coveredDays === 0
                   ? "NONE of this period"
-                  : `${cov.coveredDays} of the period's ${cov.periodDays} days (${cov.from} to ${cov.to})`
+                  : `only ${cov.coveredDays} of the period's ${cov.periodDays} days (${cov.from} to ${cov.to})`
               }, while the revenue above covers all ${cov.periodDays} (${t.firstDay} to ${t.lastDay}). Do not treat it as the period's total spend.`
             : ""
         }`
       : null,
-    // Deliberately suppressed when spend is partial: dividing full-period
-    // customers by part-period spend, or subtracting it from full revenue, turns
-    // a known gap into a confident wrong number.
-    !adUnusable && t.adSpend > 0 && t.submissions > 0
-      ? `Cost per signup: ${money(t.adSpend / t.submissions)} · Cost per paying customer: ${
-          t.paid > 0 ? money(t.adSpend / t.paid) : "no paying customers"
+    // Both computed over the SAME days as the spend above, so they are true
+    // statements about a shorter period rather than false ones about this period.
+    t.adSpend > 0 && cov.coveredDays > 0
+      ? `Cost per paying customer${adGap ? `, over the ${cov.coveredDays} day(s) ad data covers` : ""}: ${
+          t.paidCovered > 0 ? money(t.adSpend / t.paidCovered) : "no paying customers in those days"
         }`
       : null,
-    !adUnusable && t.adSpend > 0
-      ? `Net: ${money(t.revenue - t.adSpend)}${
-          adGap ? " (approximate — see the spend caveat above)" : ""
-        } (revenue ${money(t.revenue)} minus ad spend ${money(t.adSpend)})`
+    t.adSpend > 0 && cov.coveredDays > 0
+      ? `Net${adGap ? ` over the ${cov.coveredDays} day(s) ad data covers (${cov.from} to ${cov.to})` : ""}: ${money(netOverCovered)} (revenue ${money(t.revenueCovered)} minus ad spend ${money(t.adSpend)})`
       : null,
-    adUnusable
-      ? `Cost per customer and net profit are omitted for this period on purpose: the ad spend above covers ${cov.coveredDays} of ${cov.periodDays} days, so dividing or subtracting it would turn a known gap into a confident wrong number.`
+    adGap && cov.coveredDays > 0
+      ? `There is no net figure for the WHOLE period on purpose: ${cov.uncoveredDays} of its ${cov.periodDays} days have no ad-spend data, and pairing all of the revenue with part of the spend is how a loss gets published as a profit.`
+      : null,
+    t.adSpend > 0 && cov.coveredDays === 0
+      ? `No net or cost-per-customer figure: the ad spend above covers none of this period.`
       : null,
   ]
     .filter((line) => line !== null)
@@ -466,11 +464,11 @@ export function buildAnalyticsRows(
   for (const r of rows) {
     const day = String(r.day).slice(0, 10);
     const week = isoWeek(day);
-    byWeek.set(week, merge(byWeek.get(week), r, day, adCost.byDay));
+    byWeek.set(week, merge(byWeek.get(week), r, day, adCost));
     const month = day.slice(0, 7);
-    byMonth.set(month, merge(byMonth.get(month), r, day, adCost.byDay));
+    byMonth.set(month, merge(byMonth.get(month), r, day, adCost));
 
-    const totals = seed(r, day, adCost.byDay);
+    const totals = seed(r, day, adCost);
     if (isEmpty(totals)) continue;
     const label = longDate(day);
     out.push({
