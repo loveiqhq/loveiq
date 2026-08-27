@@ -230,6 +230,10 @@ export async function proxy(request: NextRequest) {
       // this the staging deployment answers Slack with a redirect to /login and
       // the brain silently never replies.
       path === "/api/slack/events" ||
+      // The MCP endpoint authenticates with a bearer token and is called by
+      // Claude, not a browser, so it has no staging session cookie and never
+      // could. Same reason as the webhooks above.
+      path === "/api/mcp" ||
       path.startsWith("/api/cron/") ||
       path.startsWith("/api/staging-") ||
       path.startsWith("/admin") ||

@@ -565,10 +565,17 @@ export function buildAnalyticsRows(
   return out;
 }
 
-export async function ingestAnalytics(stampedAt: string): Promise<IngestResult> {
+/**
+ * One row per day of the funnel, straight from the database.
+ *
+ * Exported because the MCP server hands these to a model to compute with, where
+ * the rendered chunks are prose meant to be read. Same source of truth, two
+ * shapes — and only one place that knows how to call the RPC.
+ */
+export async function brainDailyRollup(days: number = DAYS): Promise<RollupRow[]> {
   const res = await supabaseFetch("/rest/v1/rpc/brain_daily_rollup", {
     method: "POST",
-    body: JSON.stringify({ days: DAYS }),
+    body: JSON.stringify({ days }),
   });
   if (!res.ok) {
     throw new Error(`brain_daily_rollup failed: ${res.status}`);
@@ -577,6 +584,11 @@ export async function ingestAnalytics(stampedAt: string): Promise<IngestResult> 
   if (!Array.isArray(rows)) {
     throw new Error("brain_daily_rollup returned a non-array");
   }
+  return rows;
+}
+
+export async function ingestAnalytics(stampedAt: string): Promise<IngestResult> {
+  const rows = await brainDailyRollup();
 
   const chunks = buildAnalyticsRows(rows, stampedAt, await adCostByDay());
   const written = await upsertChunks(chunks);
