@@ -26,7 +26,7 @@ import {
   fields,
   fitBlocks,
   header,
-  linkButtons,
+  linkButton,
   section,
 } from "@shared/observability/slack-blocks";
 
@@ -218,12 +218,6 @@ function armFields(journey: SubmissionJourney): SlackBlock {
   );
 }
 
-function adminLink(submissionId: number): string | null {
-  const base = process.env.NEXT_PUBLIC_SITE_URL;
-  if (!base) return null;
-  return `${base.replace(/\/$/, "")}/admin/submissions/${submissionId}`;
-}
-
 /**
  * PostHog session-replay deep link.
  *
@@ -355,34 +349,26 @@ export function buildJourneyMessage(
   blocks.push(armFields(journey));
 
   /**
-   * Buttons, side by side in ONE actions block — Slack lays out the elements of a
-   * single block horizontally, so two separate blocks would stack them vertically
-   * and spend two of the message's 50 blocks on what fits in one.
+   * The session recording, and nothing else.
    *
-   * NO ADMIN LINK ON THE SURVEY MESSAGE (removed 2026-08-27, on request). There is
-   * nothing there to open yet: the "full journey" it promised is the report-open,
-   * paywall, checkout and payment timeline, and at survey-completion time none of
-   * those rows exist — the progress rail two blocks above is showing exactly one
-   * green dot and four red ones, which is the whole journey there is. The facts that
-   * DO exist by then (traffic, device, country, both arms, question count, duration)
-   * are already in the message, so the button was a click that led to a restatement.
-   * The purchase message keeps it, because by then the timeline is real.
+   * NO ADMIN LINK ON EITHER MESSAGE (removed 2026-08-27, on request). On the survey
+   * message it promised a "full journey" that does not exist yet — report-open,
+   * paywall, checkout and payment all read from rows written later, which is why the
+   * progress rail above shows one green dot and four red — and everything that IS
+   * known by then is already in the message, so it was a click to a restatement. On
+   * the purchase message the timeline is real, but the same judgement was applied:
+   * whoever wants /admin can search a submission id, and a button nobody presses is
+   * a button that makes the two that matter harder to find.
    *
-   * The replay button is absent rather than disabled when there is no session id,
+   * The recording button is absent rather than disabled when there is no session id,
    * which is the honest rendering: no id means no recording exists to open. That is
    * the normal state for every submission before 2026-08-27 and for anyone whose
-   * replay was blocked or sampled out. Together with the line above, a survey
-   * message can legitimately carry no buttons at all — `linkButtons` is only called
-   * when there is something to put in it.
+   * replay was blocked or sampled out — so a message legitimately carries no buttons
+   * at all, and the block is only pushed when there is something to put in it.
+   * Slack rejects an actions block with zero elements.
    */
-  const actions: Array<{ text: string; url: string }> = [];
-  if (options.kind === "purchase") {
-    const link = adminLink(journey.submissionId);
-    if (link) actions.push({ text: "Open full journey in admin", url: link });
-  }
   const replay = recordingLink(journey.recordingSessionId);
-  if (replay) actions.push({ text: "▶ Watch session recording", url: replay });
-  if (actions.length > 0) blocks.push(linkButtons(actions));
+  if (replay) blocks.push(linkButton("▶ Watch session recording", replay));
 
   const fitted = fitBlocks(blocks, text);
   return { text, blocks: fitted.blocks, trimmed: fitted.trimmed, size: fitted.size };

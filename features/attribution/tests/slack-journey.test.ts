@@ -487,13 +487,12 @@ describe("session-recording link", () => {
   });
 
   /**
-   * The purchase message KEEPS the admin link, and this is the line that says so on
-   * purpose. By then the timeline is real — report views, paywall, checkout, payment
-   * — so "open the full journey" leads somewhere. It is also the only remaining
-   * place two buttons share one actions block, which is what proves the horizontal
-   * layout still works.
+   * The PURCHASE message lost the admin link too. Asserted separately from the
+   * survey case rather than folded into it: these are two different branches of
+   * `buildJourneyMessage`, and the admin link lived outside the branch, so a partial
+   * removal that left it on one message would otherwise pass.
    */
-  it("sits beside the admin link on a PURCHASE message, in one actions block", () => {
+  it("is also the only button on a PURCHASE message", () => {
     const message = buildJourneyMessage(journey({ recordingSessionId: "sess_abc" }), {
       kind: "purchase",
       planLabel: "Full report",
@@ -503,8 +502,21 @@ describe("session-recording link", () => {
 
     const actionBlocks = buttons(message.blocks);
     expect(actionBlocks).toHaveLength(1);
-    expect((actionBlocks[0]!.elements as unknown[]).length).toBe(2);
-    expect(urls(message.blocks).some((u) => u.includes("/admin/submissions/1756"))).toBe(true);
-    expect(urls(message.blocks).some((u) => u.includes("eu.posthog.com"))).toBe(true);
+    expect((actionBlocks[0]!.elements as unknown[]).length).toBe(1);
+    expect(urls(message.blocks)).toEqual(["https://eu.posthog.com/project/244778/replay/sess_abc"]);
+    expect(JSON.stringify(message.blocks)).not.toContain("/admin/");
+    expect(JSON.stringify(message.blocks)).not.toContain("Open full journey");
+  });
+
+  it("leaves a purchase message with no recording carrying no buttons either", () => {
+    const message = buildJourneyMessage(journey({ recordingSessionId: null }), {
+      kind: "purchase",
+      planLabel: "Full report",
+      archetype: "Spiritual Lover",
+      amountText: "EUR 39.99",
+    });
+    expect(buttons(message.blocks)).toHaveLength(0);
+    // The amount and plan are in the header, so the message still stands alone.
+    expect(JSON.stringify(message.blocks)).toContain("EUR 39.99");
   });
 });

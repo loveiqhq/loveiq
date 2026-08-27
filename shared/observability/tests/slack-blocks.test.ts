@@ -6,7 +6,7 @@ import {
   fields,
   fitBlocks,
   header,
-  linkButtons,
+  linkButton,
   section,
 } from "@shared/observability/slack-blocks";
 
@@ -54,23 +54,8 @@ describe("block builders", () => {
   });
 
   it("builds a link button", () => {
-    const b = linkButtons([{ text: "Open", url: "https://example.test/x" }]);
+    const b = linkButton("Open", "https://example.test/x");
     expect((b.elements as Array<{ url: string }>)[0]!.url).toBe("https://example.test/x");
-  });
-
-  it("puts several buttons in ONE actions block so Slack lays them out side by side", () => {
-    const b = linkButtons([
-      { text: "Admin", url: "https://example.test/a" },
-      { text: "Recording", url: "https://example.test/b" },
-    ]);
-    expect((b.elements as unknown[]).length).toBe(2);
-  });
-
-  it("slices at Slack's 25-element cap", () => {
-    const b = linkButtons(
-      Array.from({ length: 30 }, (_, i) => ({ text: `B${i}`, url: `https://example.test/${i}` }))
-    );
-    expect((b.elements as unknown[]).length).toBe(25);
   });
 });
 
