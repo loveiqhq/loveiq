@@ -30,22 +30,6 @@ const FantasyLearnings: FC = () => (
             {para}
           </p>
         ))}
-        {/* Chapter 26 closes on four questions. A list, not four more paragraphs
-            — they are things to ask yourself, and they read as a wall otherwise. */}
-        {learning.questions ? (
-          <>
-            {learning.questionsLead ? (
-              <p className="report-fantasy__learning-para">{learning.questionsLead}</p>
-            ) : null}
-            <ul className="report-fantasy__learning-questions">
-              {learning.questions.map((q, j) => (
-                <li key={j} className="report-fantasy__learning-question">
-                  {q}
-                </li>
-              ))}
-            </ul>
-          </>
-        ) : null}
       </section>
     ))}
   </div>

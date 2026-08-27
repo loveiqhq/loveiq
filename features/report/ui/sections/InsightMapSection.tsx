@@ -58,6 +58,20 @@ interface Props {
 
 /** One "five more patterns" row: symbol + Lora title, "WHAT YOU'LL LEARN"
  *  label + subline, and the gradient pill CTA on the right. */
+/**
+ * Split a row description after its FIRST sentence.
+ *
+ * The lead sentence states the pattern; what follows explains how it behaves. One
+ * split, never more, so a row never fragments into four lines — and a description
+ * with no sentence break comes back as a single part unchanged.
+ */
+function splitLead(text: string | null | undefined): string[] {
+  if (!text) return [];
+  const at = text.indexOf(". ");
+  if (at < 0 || at > 120) return [text];
+  return [text.slice(0, at + 1), text.slice(at + 2)];
+}
+
 const PatternRow: FC<{
   symbol: ReactNode;
   symbolColor: string;

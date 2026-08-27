@@ -44,15 +44,6 @@ export interface Report2KeyConcepts {
 /** slug → report2 section id → the block. */
 export const report2KeyConcepts: Record<string, Record<string, Report2KeyConcepts>> = {
   "spark-seeker": {
-    knowhow: {
-      // Chapter 20. Moved out of the open section into the pill on 2026-08-27
-      // ("Move the 'One of the most common,...' until 'disturbing sexual reactions'
-      // into a Key concept section that you need to build for this section").
-      // document paragraph 643
-      p1: "One of the most common, and most damaging, misunderstandings about sexuality is the belief that arousal, desire, and pleasure are the same thing. They are not. Modern sexuality science shows clearly that these are three distinct systems, each governed by different mechanisms in the brain and body. They often interact, but they do not reliably align. Learning to distinguish them is one of the most important steps toward self-understanding, sexual confidence, and healing.",
-      // document paragraph 644
-      p2: "This distinction matters not only for better sex, but for dissolving shame, understanding fantasies, navigating mismatched desire in relationships, and making sense of confusing or even disturbing sexual reactions.",
-    },
     constellation: {
       // Chapter "4 Probability of Other Archetypes" — the constellation block.
       // document paragraph 137
@@ -77,6 +68,15 @@ export const report2KeyConcepts: Record<string, Record<string, Report2KeyConcept
       p1: "Sexuality unfolds in stages. These stages are not fixed identities or personality types. They are states. Dynamic patterns in how desire, intimacy, and sexual energy express themselves at a given moment in time.",
       // document paragraph 43
       p2: "Importantly, no sexual stage is better or worse than another. Each stage is adaptive. Each exists for a reason. Some protect us. Some invite exploration. Some deepen connection. Some open the door to meaning and transcendence. Difficulty usually arises not because someone is “in the wrong stage,” but because a stage is misunderstood, unsupported, or mismatched with a partner’s.",
+    },
+    knowhow: {
+      // Chapter 20. Moved out of the open section into the pill on 2026-08-27
+      // ("Move the 'One of the most common,...' until 'disturbing sexual reactions'
+      // into a Key concept section that you need to build for this section").
+      // document paragraph 643
+      p1: "One of the most common, and most damaging, misunderstandings about sexuality is the belief that arousal, desire, and pleasure are the same thing. They are not. Modern sexuality science shows clearly that these are three distinct systems, each governed by different mechanisms in the brain and body. They often interact, but they do not reliably align. Learning to distinguish them is one of the most important steps toward self-understanding, sexual confidence, and healing.",
+      // document paragraph 644
+      p2: "This distinction matters not only for better sex, but for dissolving shame, understanding fantasies, navigating mismatched desire in relationships, and making sense of confusing or even disturbing sexual reactions.",
     },
     beliefs: {
       // document paragraph 204
@@ -157,8 +157,8 @@ export const report2KeyConcepts: Record<string, Record<string, Report2KeyConcept
     fantasy: {
       // document paragraph 752, with the "same fantasy can feel alive" sentence removed
       p1: "Sexual fantasies do not exist in a vacuum. They are shaped by context: who we are with, how known we feel, what is at stake emotionally, what phase of life we are in, and how much of ourselves feels safe to express.",
-      // document paragraph 753
-      p2: "One of the most confusing experiences for many people is realizing that certain fantasies feel compelling in imagination, yet feel wrong, risky, or unappealing when considered within their primary relationship, while simultaneously feeling imaginable with a stranger or in a purely internal space. This does not indicate disloyalty, deception, or a lack of love. It reveals something fundamental about what fantasies actually do.",
+      // p2: p753 rewritten shorter at Mark's request - NOT verbatim
+      p2: "A fantasy can feel compelling in imagination and wrong inside your own relationship, yet imaginable with a stranger. That is not disloyalty or a lack of love. It reveals what fantasies actually do.",
     },
     libido: {
       // document paragraph 1223
