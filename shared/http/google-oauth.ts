@@ -11,17 +11,41 @@ import logger from "@shared/observability/logger";
  * is no project to create and no key file to store or rotate. Three plain env
  * vars are the whole configuration, and the exchange below is one POST.
  *
- * Getting the three values (run once, on a laptop, opens a browser):
+ * DO NOT USE GCLOUD'S SHARED CLIENT FOR THIS. `gcloud auth
+ * application-default login --scopes=...analytics.readonly` is REFUSED by
+ * Google — "This app tried to access sensitive info in your Google Account. To
+ * keep your account safe, Google blocked this access." `analytics.readonly` is a
+ * sensitive scope and gcloud's shared client id (764086051850-…) is not
+ * permitted to request it. Confirmed by hitting it on 2026-08-27; gcloud even
+ * says so before opening the browser ("you must provide your own client ID or
+ * use service account impersonation"). An earlier version of this comment
+ * recommended that command, which is why it is called out here.
  *
- *   gcloud auth application-default login --scopes=\
- *     openid,\
- *     https://www.googleapis.com/auth/userinfo.email,\
- *     https://www.googleapis.com/auth/cloud-platform,\
- *     https://www.googleapis.com/auth/analytics.readonly,\
- *     https://www.googleapis.com/auth/webmasters.readonly
+ * Getting the three values — use YOUR OWN OAuth client, which IS allowed the
+ * sensitive scope (run once, on a laptop, opens a browser):
  *
- * then read client_id / client_secret / refresh_token out of
- * ~/.config/gcloud/application_default_credentials.json.
+ *   1. Google Cloud console → project `loveiq-brain` → APIs & Services →
+ *      Credentials → Create credentials → OAuth client ID → Desktop app.
+ *      The consent screen must be **Internal** (Workspace-only): that removes
+ *      both the verification requirement and the 7-day refresh-token expiry.
+ *   2. Download its JSON, then:
+ *
+ *        gcloud auth application-default login \
+ *          --client-id-file=client_secret_…json \
+ *          --scopes=openid,\
+ *            https://www.googleapis.com/auth/userinfo.email,\
+ *            https://www.googleapis.com/auth/cloud-platform,\
+ *            https://www.googleapis.com/auth/analytics.readonly,\
+ *            https://www.googleapis.com/auth/webmasters.readonly
+ *
+ *   3. Read client_id / client_secret / refresh_token out of
+ *      ~/.config/gcloud/application_default_credentials.json.
+ *
+ * ANY PLAIN `gcloud auth application-default login` ON THE SAME MACHINE
+ * OVERWRITES THAT FILE and silently drops the two extra scopes, after which
+ * every Google call answers 403 ACCESS_TOKEN_SCOPE_INSUFFICIENT. Copy the three
+ * values into `.env.local` so the credential does not live only in a file any
+ * other terminal can clobber.
  *
  * SCOPES ARE FIXED AT LOGIN, NOT AT REQUEST TIME. This is the trap: asking for a
  * scope when exchanging the token does nothing — the grant already decided. A
@@ -45,6 +69,7 @@ export const SEARCH_CONSOLE_SCOPE = "https://www.googleapis.com/auth/webmasters.
 let cached: { token: string; expiresAtMs: number } | null = null;
 
 export function isGoogleConfigured(): boolean {
+  if (process.env.GOOGLE_OAUTH_ACCESS_TOKEN) return true;
   return Boolean(
     process.env.GOOGLE_OAUTH_CLIENT_ID &&
     process.env.GOOGLE_OAUTH_CLIENT_SECRET &&
@@ -58,6 +83,24 @@ export function isGoogleConfigured(): boolean {
  * fail a whole cron run.
  */
 export async function getGoogleAccessToken(nowMs: number = Date.now()): Promise<string | null> {
+  /**
+   * A ready-made access token, for LOCAL runs only.
+   *
+   * Service-account impersonation is the one route that needs no browser consent
+   * and no custom OAuth client:
+   *
+   *   gcloud auth print-access-token \
+   *     --impersonate-service-account=ga4-reader@loveiq-brain.iam.gserviceaccount.com \
+   *     --scopes=https://www.googleapis.com/auth/analytics.readonly
+   *
+   * It cannot be used in production — it needs the gcloud CLI, which a serverless
+   * function does not have — and the token lasts an hour, so it is a laptop
+   * convenience for re-ingesting, never a deployment credential. Checked first so
+   * it overrides a stale refresh token rather than fighting it.
+   */
+  const direct = process.env.GOOGLE_OAUTH_ACCESS_TOKEN;
+  if (direct) return direct;
+
   if (cached && cached.expiresAtMs > nowMs) return cached.token;
 
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
