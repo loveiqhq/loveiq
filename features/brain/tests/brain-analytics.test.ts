@@ -223,6 +223,48 @@ describe("buildAnalyticsRows", () => {
     expect(monthly?.body).not.toContain("Cost per paying customer");
   });
 
+  it("still publishes net for the WEEKLY grain with a one-day trailing lag", () => {
+    // A 90%-of-period rule was silently month-calibrated: 30 of 31 days is 97%,
+    // but 6 of 7 days is 86%, so it withheld net profit for the entire weekly
+    // grain in the current period, every week. The rule is days missing, not a
+    // ratio.
+    const rows = buildAnalyticsRows([day("2026-08-24"), day("2026-08-30")], STAMP, {
+      byDay: new Map([["2026-08-24", 100]]),
+      from: "2026-08-01",
+      to: "2026-08-29", // one day short of the week
+    });
+    const weekly = rows.find((r) => r.source_id === "weekly:2026-W35");
+    expect(weekly?.body).toContain("INCOMPLETE");
+    expect(weekly?.body).toContain("Net:");
+    expect(weekly?.body).toContain("6 of the period's 7 days");
+  });
+
+  it("never prints an inverted date range when the ranges do not overlap", () => {
+    // Clamping the two ends independently produced "covers only 2026-08-27 to
+    // 2026-08-26".
+    const rows = buildAnalyticsRows([day("2026-08-27")], STAMP, {
+      byDay: new Map([["2026-08-27", 50]]),
+      from: "2026-05-01",
+      to: "2026-08-26", // ends BEFORE the single-day period starts
+    });
+    const daily = rows.find((r) => r.source_id === "daily:2026-08-27");
+    expect(daily?.body).toContain("NONE of this period");
+    expect(daily?.body).not.toMatch(/covers .*2026-08-27 to 2026-08-26/);
+    expect(daily?.body).not.toContain("Net:");
+  });
+
+  it("states day counts, not a rounded percentage that can contradict itself", () => {
+    // 26/29 and 27/30 both rendered as "90%" while behaving oppositely.
+    const rows = buildAnalyticsRows([day("2026-08-01"), day("2026-08-27")], STAMP, {
+      byDay: new Map([["2026-08-01", 100]]),
+      from: "2026-08-01",
+      to: "2026-08-25",
+    });
+    const monthly = rows.find((r) => r.source_id === "monthly:2026-08");
+    expect(monthly?.body).toContain("25 of the period's 27 days");
+    expect(monthly?.body).not.toMatch(/\d+% of the period/);
+  });
+
   it("omits a zero funnel step that has a non-zero step below it", () => {
     // You cannot complete a survey you never started — March 2026 published
     // "Survey starts: 0" alongside "Signups: 4".

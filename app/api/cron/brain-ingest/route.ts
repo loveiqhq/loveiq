@@ -87,11 +87,23 @@ export async function GET(request: Request) {
       // returns null), and a run that wrote zero rows. All three returned
       // `status: "success"` and `{ok: true}`, which is how Jira sat at zero
       // chunks indefinitely while the brain told askers "nothing in Jira".
-      if (result.skipped) {
+      // "NOT CONFIGURED" IS A DELIBERATE STATE, NOT A FAILURE. Jira is knowingly
+      // unconfigured, so alerting on it would have posted `SKIPPED jira` to ops
+      // every single day forever — and a channel that cries wolf daily gets muted,
+      // taking the real alerts with it. A source that IS configured and still did
+      // nothing (a revoked token, an exhausted time budget, zero rows) is the case
+      // worth waking someone for.
+      if (result.skipped && !result.skipped.endsWith("not-configured")) {
         logger.warn({ ingester: name, skipped: result.skipped }, "brain-ingest: source skipped");
         await alertOnce(
           name,
           `:brain: Company-brain ingest SKIPPED *${escapeSlack(name)}* (${escapeSlack(result.skipped)}). Nothing failed, so this will not look broken — but that source is frozen and the brain will keep answering without it.`
+        );
+      } else if (result.skipped) {
+        // Logged, not alerted: visible in the response body and in `cron_run`.
+        logger.info(
+          { ingester: name, skipped: result.skipped },
+          "brain-ingest: source not configured, skipping"
         );
       } else if (result.rows === 0) {
         logger.warn({ ingester: name }, "brain-ingest: source wrote zero rows");
@@ -125,8 +137,8 @@ export async function GET(request: Request) {
   try {
     // GA4 first: `analytics` reads the ad spend back off the ga4 chunks to put
     // spend and revenue in one row, so it must run after them.
-    await run("ga4", () => ingestGa4(stampedAt));
-    await run("gsc", () => ingestSearchConsole(stampedAt));
+    await run("ga4", () => ingestGa4(stampedAt, isOutOfTime));
+    await run("gsc", () => ingestSearchConsole(stampedAt, isOutOfTime));
     await run("analytics", () => ingestAnalytics(stampedAt));
     await run("jira", () => ingestJira(stampedAt, isOutOfTime));
 

@@ -28,9 +28,11 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          # REQUIRED. The default shallow clone has one commit, which would
-          # ingest one commit and then sweep nothing -- silently reducing the
-          # corpus to the last push instead of the full history.
+          # REQUIRED. The default shallow clone sees ONE commit. The ingest
+          # script refuses to sweep from a shallow repository for exactly that
+          # reason -- one commit produces ~3 chunks, which would satisfy a
+          # naive write-count guard and delete the other ~1,448 -- so without
+          # this the commit half of the corpus simply never updates.
           fetch-depth: 0
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6

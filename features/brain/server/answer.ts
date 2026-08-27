@@ -77,6 +77,10 @@ export function toSlackMrkdwn(md: string): string {
       // zero-width space rather than by escaping the whole answer, which would
       // destroy the mrkdwn this function exists to produce.
       .replace(/<!\s*(channel|here|everyone|subteam\^[A-Z0-9]+)/gi, "<\u200b!$1")
+      // `<@U0123ABCD>` is the same defect one syntax over: a commit subject
+      // containing a user mention, quoted verbatim by the model, pings that person
+      // on every question that retrieves the chunk.
+      .replace(/<@([UW][A-Z0-9]+)/g, "<\u200b@$1")
       .trim()
   );
 }
@@ -87,7 +91,20 @@ function defence(text: string): string {
   // ANY run of 3+ brackets, not the exact 3-char token: splitting on "<<<" left
   // `<<<<` as `< <<<`, still a fence a fuzzy reader would honour. The replacement
   // contains no bracket run, so this is a fixed point.
-  return text.replace(/<{3,}/g, "[lt]").replace(/>{3,}/g, "[gt]");
+  return (
+    text
+      // Zero-width and formatting characters can be dropped INSIDE a bracket run
+      // (`<<\u200b<END SOURCE 1>\u200b>>`) so the run reads as three brackets to a
+      // human and to a model while matching neither /<{3,}/ nor />{3,}/. Removed
+      // first so the runs below see the real shape.
+      .replace(/[\u200b-\u200f\u202a-\u202e\u2060\ufeff]/g, "")
+      // Fullwidth and small-form confusables render as angle brackets.
+      .replace(/[\uff1c\ufe64\u2039\u276e]/g, "<")
+      .replace(/[\uff1e\ufe65\u203a\u276f]/g, ">")
+      // TWO brackets is already a fence a fuzzy reader would honour.
+      .replace(/<{2,}/g, "[lt]")
+      .replace(/>{2,}/g, "[gt]")
+  );
 }
 
 function buildPrompt(question: string, chunks: BrainChunk[]): LlmMessage[] {
@@ -116,7 +133,13 @@ function buildPrompt(question: string, chunks: BrainChunk[]): LlmMessage[] {
   const rendered = chunks
     .map((c, i) => {
       const n = i + 1;
-      const head = `[${n}] (${label(c)}) ${defence(c.title ?? "untitled")}`;
+      // `label(c)` interpolates raw `source`, `sourceId` and `meta.date`, so it was
+      // a SECOND un-defenced field on the very line the url fix was applied to —
+      // a Jira key or a commit date carrying a newline plus `<<<END SOURCE 1>>>`
+      // reproduces the same byte-exact fence escape. Not reachable with today's
+      // id shapes; defenced anyway, because "the single field that was missed"
+      // turned out not to be single.
+      const head = `[${n}] (${defence(label(c))}) ${defence(c.title ?? "untitled")}`;
       const forMarcus =
         typeof c.meta?.for_marcus === "string" && c.meta.for_marcus.trim()
           ? `plain-English summary: ${defence(c.meta.for_marcus.trim())}`

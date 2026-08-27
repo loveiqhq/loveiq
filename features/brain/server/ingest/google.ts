@@ -97,23 +97,46 @@ const PAGING_BUDGET_MS = 15_000;
 async function runGa4Report(
   token: string,
   propertyId: string,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
+  isOutOfTime: () => boolean = () => false
 ): Promise<Ga4Row[]> {
   const pageSize = typeof body.limit === "number" ? body.limit : 10_000;
   const all: Ga4Row[] = [];
   let offset = 0;
   const startedAt = Date.now();
 
-  // Stable order is REQUIRED for offset paging; without it Google may return a
-  // row twice across pages and ad spend would be double-counted. Every report
-  // here leads with `date`, so ordering on the first dimension is both stable and
-  // generic.
-  const firstDimension = Array.isArray(body.dimensions)
-    ? (body.dimensions[0] as { name?: string } | undefined)?.name
+  // Stable order is REQUIRED for offset paging; without it Google may return a row
+  // twice across pages and ad spend would be DOUBLE-COUNTED.
+  //
+  // Ordering on the leading dimension alone is not a total order: the two reports
+  // that can actually page are (date x sessionDefaultChannelGroup) and
+  // (date x sessionCampaignName), so rows within one date stayed unordered and a
+  // page boundary landing inside a date group could still repeat or skip a row.
+  // Ordering on every dimension makes it total.
+  const dimensionNames = Array.isArray(body.dimensions)
+    ? body.dimensions
+        .map((d) => (d as { name?: string } | undefined)?.name)
+        .filter((n): n is string => Boolean(n))
+    : [];
+  const orderBys = dimensionNames.length
+    ? dimensionNames.map((name) => ({ dimension: { dimensionName: name } }))
     : undefined;
-  const orderBys = firstDimension ? [{ dimension: { dimensionName: firstDimension } }] : undefined;
 
   for (let page = 0; page < MAX_PAGES; page++) {
+    // BEFORE, not after. Checking only after a page returned meant a report could
+    // overshoot its own budget by a full request timeout — measured, 29.8s inside
+    // a "15s" budget. And the run-level clock matters more than the per-report
+    // one: 3 GA4 reports plus 2 GSC queries at 15s each is an 85s floor against a
+    // 60s function limit, so without this a slow Google kills the function and
+    // `recordCronRun` never writes at all.
+    if (page > 0 && (isOutOfTime() || Date.now() - startedAt > PAGING_BUDGET_MS)) {
+      logger.warn(
+        { got: all.length, dimensions: body.dimensions },
+        "GA4 report stopped early on the time budget — figures derived from it are incomplete"
+      );
+      return all;
+    }
+
     const res = await fetchWithTimeout(
       `https://analyticsdata.googleapis.com/v1beta/properties/${encodeURIComponent(propertyId)}:runReport`,
       {
@@ -137,18 +160,16 @@ async function runGa4Report(
     const rows = json.rows ?? [];
     all.push(...rows);
 
-    // A SHORT PAGE is the terminator, not `all.length >= rowCount`. When
-    // `rowCount` is absent the fallback `total = all.length` made that comparison
-    // trivially true, so paging stopped after ONE page and silently dropped the
-    // remainder — exactly the bug this loop was added to fix.
-    if (rows.length < pageSize) return all;
+    // `rowCount` IS THE AUTHORITY WHEN PRESENT. It is documented as the total rows
+    // in the query result, independent of `limit` and `offset`. Checking the short
+    // page first was wrong in the other direction: a 1-row page against
+    // `rowCount: 900` stopped the loop and dropped 899 rows with no warning. The
+    // short page is only the fallback for when Google omits the count.
     const total = typeof json.rowCount === "number" ? json.rowCount : null;
-    if (total !== null && all.length >= total) return all;
+    if (rows.length === 0) return all;
+    if (total !== null ? all.length >= total : rows.length < pageSize) return all;
     offset += rows.length;
 
-    // Offset paging over an unordered result set can repeat or skip rows, and a
-    // repeated row would DOUBLE-COUNT ad spend. `orderBys` is added in the
-    // request below to make the order stable.
     if (Date.now() - startedAt > PAGING_BUDGET_MS) {
       logger.warn(
         { got: all.length, total, dimensions: body.dimensions },
@@ -178,7 +199,10 @@ function num(v: string | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-export async function ingestGa4(stampedAt: string): Promise<IngestResult> {
+export async function ingestGa4(
+  stampedAt: string,
+  isOutOfTime: () => boolean = () => false
+): Promise<IngestResult> {
   const propertyId = process.env.GA4_PROPERTY_ID;
   if (!propertyId) return { source: GA4_SOURCE, rows: 0, swept: 0, skipped: "ga4-no-property-id" };
 
@@ -186,22 +210,47 @@ export async function ingestGa4(stampedAt: string): Promise<IngestResult> {
   if (!token) return { source: GA4_SOURCE, rows: 0, swept: 0, skipped: "google-not-configured" };
 
   const dateRanges = [{ startDate: `${DAYS}daysAgo`, endDate: "yesterday" }];
-  // Same window, as explicit dates, so it can be recorded on each chunk.
   const windowFrom = isoDaysAgo(DAYS);
-  const windowTo = isoDaysAgo(1);
 
-  const core = await runGa4Report(token, propertyId, {
-    dateRanges,
-    dimensions: [{ name: "date" }],
-    metrics: [
-      { name: "sessions" },
-      { name: "totalUsers" },
-      { name: "newUsers" },
-      { name: "screenPageViews" },
-      { name: "engagedSessions" },
-    ],
-    limit: 400,
-  });
+  const core = await runGa4Report(
+    token,
+    propertyId,
+    {
+      dateRanges,
+      dimensions: [{ name: "date" }],
+      metrics: [
+        { name: "sessions" },
+        { name: "totalUsers" },
+        { name: "newUsers" },
+        { name: "screenPageViews" },
+        { name: "engagedSessions" },
+      ],
+      limit: 400,
+    },
+    isOutOfTime
+  );
+
+  /**
+   * The last day GA4 ACTUALLY RETURNED, not the last day we asked for.
+   *
+   * `isoDaysAgo(1)` was a UTC guess at what `endDate: "yesterday"` means, but GA4
+   * resolves "yesterday" in the PROPERTY's timezone. For a property west of UTC
+   * the guess is a day later than the data, so the recorded window over-claimed
+   * coverage, the funnel rollup then saw 100%, and a net profit was published with
+   * no caveat while a day of spend was missing — the exact defect the window was
+   * added to close. Taking the maximum date Google sent removes the timezone
+   * assumption entirely: it is ground truth about what exists.
+   *
+   * (An interior day with no traffic is spanned by [from, to] and so cannot
+   * shorten the window; only a trailing zero-traffic day could, which for a site
+   * running ~300 sessions a day does not happen.)
+   */
+  const windowTo =
+    core
+      .map((r) => ga4Date(r.dimensionValues?.[0]?.value ?? ""))
+      .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
+      .sort()
+      .pop() ?? null;
 
   // Channel mix and ad spend are enrichment: a failure here must not lose the
   // core numbers, and ad metrics 400 outright on a property with no linked Ads
@@ -210,12 +259,17 @@ export async function ingestGa4(stampedAt: string): Promise<IngestResult> {
   // sum these, and summing a map is correct where re-parsing prose is not.
   const channelCounts = new Map<string, Map<string, number>>();
   try {
-    const rows = await runGa4Report(token, propertyId, {
-      dateRanges,
-      dimensions: [{ name: "date" }, { name: "sessionDefaultChannelGroup" }],
-      metrics: [{ name: "sessions" }],
-      limit: 2000,
-    });
+    const rows = await runGa4Report(
+      token,
+      propertyId,
+      {
+        dateRanges,
+        dimensions: [{ name: "date" }, { name: "sessionDefaultChannelGroup" }],
+        metrics: [{ name: "sessions" }],
+        limit: 2000,
+      },
+      isOutOfTime
+    );
     for (const r of rows) {
       const day = ga4Date(r.dimensionValues?.[0]?.value ?? "");
       const channel = r.dimensionValues?.[1]?.value ?? "unknown";
@@ -240,16 +294,21 @@ export async function ingestGa4(stampedAt: string): Promise<IngestResult> {
   // nothing, and that must not cost us the core numbers above.
   const ads = new Map<string, AdDay>();
   try {
-    const rows = await runGa4Report(token, propertyId, {
-      dateRanges,
-      dimensions: [{ name: "date" }, { name: "sessionCampaignName" }],
-      metrics: [
-        { name: "advertiserAdCost" },
-        { name: "advertiserAdClicks" },
-        { name: "advertiserAdImpressions" },
-      ],
-      limit: 5000,
-    });
+    const rows = await runGa4Report(
+      token,
+      propertyId,
+      {
+        dateRanges,
+        dimensions: [{ name: "date" }, { name: "sessionCampaignName" }],
+        metrics: [
+          { name: "advertiserAdCost" },
+          { name: "advertiserAdClicks" },
+          { name: "advertiserAdImpressions" },
+        ],
+        limit: 5000,
+      },
+      isOutOfTime
+    );
     for (const r of rows) {
       const day = ga4Date(r.dimensionValues?.[0]?.value ?? "");
       const campaign = r.dimensionValues?.[1]?.value ?? "";
@@ -456,7 +515,8 @@ interface GscRow {
 async function queryGsc(
   token: string,
   site: string,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
+  isOutOfTime: () => boolean = () => false
 ): Promise<GscRow[]> {
   const pageSize = typeof body.rowLimit === "number" ? body.rowLimit : 5000;
   const all: GscRow[] = [];
@@ -464,6 +524,14 @@ async function queryGsc(
   const startedAt = Date.now();
 
   for (let page = 0; page < MAX_PAGES; page++) {
+    if (page > 0 && (isOutOfTime() || Date.now() - startedAt > PAGING_BUDGET_MS)) {
+      logger.warn(
+        { got: all.length, dimensions: body.dimensions },
+        "Search Console query stopped early on the time budget — query totals are incomplete"
+      );
+      return all;
+    }
+
     const res = await fetchWithTimeout(
       `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(site)}/searchAnalytics/query`,
       {
@@ -503,7 +571,10 @@ async function queryGsc(
   return all;
 }
 
-export async function ingestSearchConsole(stampedAt: string): Promise<IngestResult> {
+export async function ingestSearchConsole(
+  stampedAt: string,
+  isOutOfTime: () => boolean = () => false
+): Promise<IngestResult> {
   const site = process.env.SEARCH_CONSOLE_SITE;
   if (!site) return { source: GSC_SOURCE, rows: 0, swept: 0, skipped: "gsc-no-site" };
 
@@ -514,23 +585,33 @@ export async function ingestSearchConsole(stampedAt: string): Promise<IngestResu
   const startDate = isoDaysAgo(DAYS);
   const endDate = isoDaysAgo(2);
 
-  const daily = await queryGsc(token, site, {
-    startDate,
-    endDate,
-    dimensions: ["date"],
-    rowLimit: 500,
-  });
+  const daily = await queryGsc(
+    token,
+    site,
+    {
+      startDate,
+      endDate,
+      dimensions: ["date"],
+      rowLimit: 500,
+    },
+    isOutOfTime
+  );
 
   // The queries are the point: nothing else in our stack knows what people typed
   // into Google to find us.
   const queryStats = new Map<string, Map<string, { clicks: number; impressions: number }>>();
   try {
-    const rows = await queryGsc(token, site, {
-      startDate,
-      endDate,
-      dimensions: ["date", "query"],
-      rowLimit: 5000,
-    });
+    const rows = await queryGsc(
+      token,
+      site,
+      {
+        startDate,
+        endDate,
+        dimensions: ["date", "query"],
+        rowLimit: 5000,
+      },
+      isOutOfTime
+    );
     for (const r of rows) {
       const day = r.keys?.[0];
       const query = r.keys?.[1];

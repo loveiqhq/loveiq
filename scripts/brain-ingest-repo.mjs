@@ -391,6 +391,14 @@ async function sweepStaleSource(source, stampedAt) {
   return Array.isArray(deleted) ? deleted.length : 0;
 }
 
+// RUN FROM THE REPO ROOT, ALWAYS. `git ls-files "*.md"` is CWD-SCOPED and
+// `readFileSync` resolves cwd-relative, so invoking this from a subdirectory
+// collects a SUBSET of the docs — 39 files from `docs/` against 218 from the root —
+// which then satisfies the `docRows.length > 0` sweep guard and deletes every doc
+// chunk outside that subdirectory, CLAUDE.md and FILE_INDEX.md included. One line
+// removes the entire class rather than guarding against it.
+process.chdir(git(["rev-parse", "--show-toplevel"]).trim());
+
 // COMMITS ARE NEVER SWEPT (see the note at the top of this file), and every commit
 // chunk carries a `github.com/.../commit/<sha>` permalink. Ingesting from a
 // feature branch therefore injects PERMANENT rows whose links die the moment the
@@ -449,12 +457,56 @@ await upsert([...docRows, ...commitRows], stampedAt);
 // guard is always satisfied and proves nothing about docs. Run from a directory
 // where the glob finds no markdown (or after a bad `collectDocs`), this deleted
 // every doc chunk in the corpus — 471 rows, a quarter of it — and exited 0.
-const sweptDocs =
-  docRows.length > 0
-    ? await sweepStaleSource("doc", stampedAt)
-    : (console.warn("no doc chunks collected — refusing to sweep docs"), 0);
-const sweptCommits =
-  commitRows.length > 0
-    ? await sweepStaleSource("commit", stampedAt)
-    : (console.warn("no commit chunks collected — refusing to sweep commits"), 0);
+// A SHALLOW CLONE IS NOT A SMALLER HISTORY, IT IS A LIE ABOUT HISTORY.
+// `git clone --depth 1` yields ONE commit, which produces ~3 chunks — enough to
+// satisfy a `> 0` guard — and the sweep would then delete the other ~1,448,
+// 99.8% of the largest source, and exit 0. The CI workflow sets `fetch-depth: 0`,
+// but nothing stopped a manual run.
+const isShallow = git(["rev-parse", "--is-shallow-repository"]).trim() === "true";
+
+/**
+ * Refuse to sweep when this run wrote far less than the source already holds.
+ *
+ * `wroteRows > 0` closes only the empty case, and the PARTIAL case is both more
+ * likely and nearly as damaging: a truncated upstream, a sparse checkout, a failed
+ * glob. Comparing against what is already stored turns "did we write anything"
+ * into "did we write plausibly all of it".
+ */
+async function safeToSweep(source, wroteRows) {
+  if (wroteRows <= 0) {
+    console.warn(`no ${source} chunks collected — refusing to sweep ${source}`);
+    return false;
+  }
+  if (isShallow) {
+    console.warn(`shallow clone — refusing to sweep ${source} (history is incomplete)`);
+    return false;
+  }
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const res = await fetch(
+    `${url}/rest/v1/brain_chunk?select=id&source=eq.${encodeURIComponent(source)}`,
+    {
+      headers: { apikey: key, Authorization: `Bearer ${key}`, Prefer: "count=exact", Range: "0-0" },
+    }
+  );
+  const existing = Number(res.headers.get("content-range")?.split("/")[1] ?? 0);
+  // First ever run for this source: nothing to protect.
+  if (!Number.isFinite(existing) || existing === 0) return true;
+  const ratio = wroteRows / existing;
+  if (ratio < 0.5) {
+    console.warn(
+      `refusing to sweep ${source}: this run wrote ${wroteRows} but ${existing} exist ` +
+        `(${Math.round(ratio * 100)}%). That looks like a partial collection, not a deletion.`
+    );
+    return false;
+  }
+  return true;
+}
+
+const sweptDocs = (await safeToSweep("doc", docRows.length))
+  ? await sweepStaleSource("doc", stampedAt)
+  : 0;
+const sweptCommits = (await safeToSweep("commit", commitRows.length))
+  ? await sweepStaleSource("commit", stampedAt)
+  : 0;
 console.log(`swept ${sweptDocs} stale doc chunk(s), ${sweptCommits} stale commit chunk(s)`);

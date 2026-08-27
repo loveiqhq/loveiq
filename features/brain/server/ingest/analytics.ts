@@ -191,20 +191,55 @@ function daysBetween(a: string, b: string): number {
   return Math.floor((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000) + 1;
 }
 
-/** Share of [firstDay, lastDay] that [adFrom, adTo] covers, 0 when unknown. */
-function coverageFraction(
+interface Coverage {
+  periodDays: number;
+  coveredDays: number;
+  uncoveredDays: number;
+  fraction: number;
+  /** The covered range, or null when there is no overlap at all. */
+  from: string | null;
+  to: string | null;
+}
+
+/**
+ * How much of [firstDay, lastDay] the ad window [adFrom, adTo] covers.
+ *
+ * Returns DAY COUNTS, not just a ratio, because the caller states them in prose
+ * and a rounded percentage both contradicted itself at the threshold and hid the
+ * grain problem. `from`/`to` are null when the ranges do not overlap — clamping
+ * the two ends independently printed an inverted range ("covers only 2026-08-27
+ * to 2026-08-26").
+ */
+function coverage(
   firstDay: string,
   lastDay: string,
   adFrom: string | null,
   adTo: string | null
-): number {
-  if (!adFrom || !adTo) return 0;
+): Coverage {
+  const periodDays = Math.max(0, daysBetween(firstDay, lastDay));
+  const none: Coverage = {
+    periodDays,
+    coveredDays: 0,
+    uncoveredDays: periodDays,
+    fraction: 0,
+    from: null,
+    to: null,
+  };
+  if (!adFrom || !adTo || periodDays <= 0) return none;
+
   const from = adFrom > firstDay ? adFrom : firstDay;
   const to = adTo < lastDay ? adTo : lastDay;
-  const overlap = daysBetween(from, to);
-  const period = daysBetween(firstDay, lastDay);
-  if (period <= 0) return 0;
-  return Math.min(1, Math.max(0, overlap) / period);
+  if (from > to) return none;
+
+  const coveredDays = Math.min(periodDays, Math.max(0, daysBetween(from, to)));
+  return {
+    periodDays,
+    coveredDays,
+    uncoveredDays: periodDays - coveredDays,
+    fraction: coveredDays / periodDays,
+    from,
+    to,
+  };
 }
 
 /** Last calendar day of a `YYYY-MM`, so "whole month" can be checked not assumed. */
@@ -318,11 +353,20 @@ function renderBody(period: string, t: Totals, ad: AdCost): string {
   // judgement: below it the gap can move the number enough to mislead, so the
   // derived figures are withheld; above it (the normal one-day trailing lag) they
   // are worth having as long as the shortfall is stated rather than hidden.
-  const covered = coverageFraction(t.firstDay, t.lastDay, ad.from, ad.to);
-  const adGap = t.adSpend > 0 && covered < 1;
-  const adUnusable = t.adSpend > 0 && covered < 0.9;
-  const covFrom = ad.from && ad.from > t.firstDay ? ad.from : t.firstDay;
-  const covTo = ad.to && ad.to < t.lastDay ? ad.to : t.lastDay;
+  const cov = coverage(t.firstDay, t.lastDay, ad.from, ad.to);
+  const adGap = t.adSpend > 0 && cov.uncoveredDays > 0;
+
+  // WITHHOLD ON A MATERIAL GAP, MEASURED IN DAYS — not as a percentage of the
+  // period. A 90% rule is silently month-calibrated: 30 of 31 days is 97%, but
+  // 6 of 7 days is 86%, so it withheld net profit for the ENTIRE weekly grain in
+  // the current period, every week, forever. It also printed the same rounded
+  // "90%" for opposite behaviours (26/29 withheld, 27/30 kept).
+  //
+  // The real question is whether the missing spend could move the number, and
+  // that is a quantity of days, not a ratio: a one- or two-day trailing lag is
+  // immaterial at any grain, and a three-week hole is material at any grain.
+  const adUnusable =
+    t.adSpend > 0 && (cov.coveredDays === 0 || cov.uncoveredDays > 3 || cov.fraction < 0.5);
 
   return [
     `Period: ${period}`,
@@ -352,7 +396,11 @@ function renderBody(period: string, t: Totals, ad: AdCost): string {
     t.adSpend > 0
       ? `Google Ads spend: ${money(t.adSpend)}${
           adGap
-            ? ` — INCOMPLETE: this covers only ${covFrom} to ${covTo} (${Math.round(covered * 100)}% of the period), while the revenue above covers ${t.firstDay} to ${t.lastDay}. Do not treat it as the period's total spend.`
+            ? ` — INCOMPLETE: it covers ${
+                cov.coveredDays === 0
+                  ? "NONE of this period"
+                  : `${cov.coveredDays} of the period's ${cov.periodDays} days (${cov.from} to ${cov.to})`
+              }, while the revenue above covers all ${cov.periodDays} (${t.firstDay} to ${t.lastDay}). Do not treat it as the period's total spend.`
             : ""
         }`
       : null,
@@ -370,7 +418,7 @@ function renderBody(period: string, t: Totals, ad: AdCost): string {
         } (revenue ${money(t.revenue)} minus ad spend ${money(t.adSpend)})`
       : null,
     adUnusable
-      ? `Cost per customer and net profit are omitted for this period on purpose: the ad spend above covers only ${Math.round(covered * 100)}% of it, so dividing or subtracting it would turn a known gap into a confident wrong number.`
+      ? `Cost per customer and net profit are omitted for this period on purpose: the ad spend above covers ${cov.coveredDays} of ${cov.periodDays} days, so dividing or subtracting it would turn a known gap into a confident wrong number.`
       : null,
   ]
     .filter((line) => line !== null)

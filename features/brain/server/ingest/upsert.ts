@@ -108,6 +108,21 @@ export async function sweepStale(
     );
     return 0;
   }
+
+  // `> 0` closes only the EMPTY case, and the partial case is both more likely and
+  // nearly as damaging: a GA4 report truncated to 5 of 90 days writes 5 chunks,
+  // clears the zero check, and the sweep then deletes the other 85. Comparing
+  // against what is already stored turns "did we write anything" into "did we
+  // write plausibly all of it".
+  const existing = await countExisting(source);
+  if (existing > 0 && wroteRows / existing < 0.5) {
+    logger.warn(
+      { source, wroteRows, existing },
+      "brain sweep skipped: this run wrote far less than the source holds, which looks like a partial collection"
+    );
+    return 0;
+  }
+
   try {
     const res = await supabaseFetch(
       `/rest/v1/brain_chunk?source=eq.${encodeURIComponent(source)}&updated_at=lt.${encodeURIComponent(stampedAt)}`,
@@ -121,6 +136,25 @@ export async function sweepStale(
     return Array.isArray(deleted) ? deleted.length : 0;
   } catch (err) {
     logger.warn({ err, source }, "brain sweep threw");
+    return 0;
+  }
+}
+
+/**
+ * Rows currently stored for a source, or 0 when the count cannot be read — in
+ * which case the caller proceeds, because a bookkeeping failure must not block a
+ * sweep that is otherwise sound.
+ */
+async function countExisting(source: string): Promise<number> {
+  try {
+    const res = await supabaseFetch(
+      `/rest/v1/brain_chunk?select=id&source=eq.${encodeURIComponent(source)}`,
+      { headers: { Prefer: "count=exact", Range: "0-0" } }
+    );
+    if (!res.ok) return 0;
+    const total = Number(res.headers.get("content-range")?.split("/")[1]);
+    return Number.isFinite(total) ? total : 0;
+  } catch {
     return 0;
   }
 }
