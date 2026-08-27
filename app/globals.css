@@ -28941,3 +28941,20 @@ input.autofill-dark:-internal-autofill-previewed {
 .report-map-row__learn-text.report-map-row__learn-text {
   text-align: left;
 }
+
+/* Left-aligning the TEXT was not enough. These paragraphs sit in flex cards
+   whose `align-items: center` shrink-wraps a child that does not fill the row,
+   so a one-line paragraph kept reading as centred however its text-align was
+   set — measured on the live Spark Seeker report: "The Spark Seeker has a high
+   risk orientation." was a 320px box inset 237px into a 794px row.
+
+   Fixed by stretching the BOX rather than touching the parents' `align-items`,
+   which the cards still need for the charts and stat rows they centre. */
+.report-importance__desc,
+.report-confidence__result-def,
+.report-energy__insert,
+.report-initiation__insert,
+.report-fantasy__insert {
+  align-self: stretch;
+  width: 100%;
+}
