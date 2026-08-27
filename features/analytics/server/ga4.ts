@@ -13,9 +13,13 @@ import { isProductionSite } from "@shared/env/is-non-prod-deploy";
  * who paid and never came back.
  *
  * IT DOES NOT MAKE GA4 MATCH REALITY, and an earlier version of this comment
- * claimed it did. Measured 2026-08-27 over 12 months: 81 succeeded payments in the
- * database against 24 purchases in GA4 — 30%. The cause is the two gates below,
- * which this function INHERITS from the client rather than bypassing:
+ * claimed it did. Measured 2026-08-27 over 12 months: 24 purchases in GA4 against 51
+ * REAL sales in the database — under half. (The payment table holds 81 succeeded
+ * rows, but 30 of them are EUR 0 free unlocks — 22 in May alone — which contribute no
+ * revenue and mostly never pass through a browser purchase, so 81 is the wrong
+ * denominator. An earlier version of this comment used it and understated the ratio
+ * as 30%.) The cause is the two gates below, which this function INHERITS from the
+ * client rather than bypassing:
  *
  *   - `consentGranted` — of 68 paying submissions, only 35 ever wrote a single
  *     `analytics_event` row, and that table is itself consent-gated. So roughly
@@ -30,11 +34,13 @@ import { isProductionSite } from "@shared/env/is-non-prod-deploy";
  * one from here** — the `payment` table is. Anything that needs a real number (the
  * digest, /admin, a board slide) must read the database.
  *
- * The number that matters for advertising: GA4 sees ~30% of sales and ~24% of
- * revenue (EUR 269 of EUR 1,099). A consistent undercount still ranks campaigns
- * correctly, so conversion-based bidding is not broken, but any target-ROAS figure
- * fed from GA4 will be wrong by roughly 4x. Closing that properly means Google
- * Consent Mode v2 with modelling, not more server-side sends.
+ * The number that matters for advertising: GA4 sees roughly HALF of real sales by
+ * count and a QUARTER of revenue (EUR 269 of EUR 1,099.29). Revenue is the sounder of
+ * the two — it is unaffected by how free unlocks are counted, because they contribute
+ * nothing to either side. A consistent undercount still ranks campaigns correctly, so
+ * conversion-based bidding is not broken, but any target-ROAS figure fed from GA4 will
+ * be wrong by roughly 4x. Closing that properly means Google Consent Mode v2 with
+ * modelling, not more server-side sends.
  *
  * Dedup: we send the SAME `transaction_id` the client uses (the Stripe checkout
  * session id), so GA4 collapses the client + server events into one purchase.
