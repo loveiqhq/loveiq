@@ -22,6 +22,35 @@
  *   0 — all repo migrations match live DB
  *   1 — drift detected (caller is expected to investigate)
  *   2 — script error (bad config, can't reach DB)
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * THIS SCRIPT IS NOT IN CI, AND THAT COST SOMETHING. Audited 2026-08-27 and the
+ * repo had drifted nine ways since 26 July:
+ *
+ *   - 4 files whose version stamp disagreed with the ledger row for the same
+ *     migration. Cause is mechanical and will recur: applying SQL through the
+ *     Supabase MCP `apply_migration` stamps the version with the wall clock,
+ *     while the file gets written with a round timestamp. The file must be
+ *     RENAMED to the ledger's version afterwards. Fixed by renaming.
+ *   - 3 files with no ledger row at all — so `supabase db push` from this repo
+ *     would have re-run them. Two are DML re-syncs that rewrite every unpurchased
+ *     report_price_quote, and 20260727130000 re-syncs to the pricing 2.0 catalogue
+ *     where arm A was the LOW arm. Live quotes are on 2.1 (A 39.99 vs B 29 on
+ *     full_report, verified), so a push would have silently reverted the price
+ *     test to superseded numbers. Fixed by recording them as applied.
+ *   - 2 ledger rows with no file — `arm_cohorts_by_axis` and
+ *     `slack_journey_message_question_count`, applied straight to production and
+ *     never committed. This is the direction that breaks disaster recovery: prod
+ *     had them, any environment rebuilt from this repo would not. Fixed by
+ *     recovering both files from `pg_get_functiondef` / the live column set.
+ *
+ * None of that threw, no test failed, and nothing in `npm run check` looks at it —
+ * `check` is lint + test + docs + build, and this script is not in that chain
+ * because it needs a live connection. Wiring it into CI needs `SUPABASE_DB_URL`
+ * added as a GitHub secret, which is a human action; until then this only runs when
+ * someone remembers to. `scripts/check-migrations.ts` DOES run offline and catches
+ * duplicate versions and malformed filenames, but it cannot see the ledger.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import { readdirSync, readFileSync } from "node:fs";
