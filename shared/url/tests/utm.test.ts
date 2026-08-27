@@ -210,10 +210,19 @@ describe("lib/utm", () => {
     it("does not treat ValueTrack detail alone as a reason to store anything", () => {
       // matchtype/network with no campaign and no click id is not an attribution
       // signal; storing it would overwrite a real earlier first-touch value.
+      //
+      // Asserting on `json.utm_source` alone is NOT enough — that passes whether
+      // or not the bug exists, because the failure mode is storing
+      // {matchtype, network} with no utm_source at all. The two assertions that
+      // actually bite are: nothing returned, and the earlier value still there.
+      store[GLOBAL_UTM_KEY] = JSON.stringify({ utm_source: "newsletter", utm_medium: "email" });
       setUrl("?matchtype=e&network=g");
-      const json = captureUtmFromUrl();
-      const parsed = json ? (JSON.parse(json) as Record<string, string>) : {};
-      expect(parsed.utm_source).toBeUndefined();
+
+      expect(captureUtmFromUrl()).toBeNull();
+      expect(localStorage.setItem).not.toHaveBeenCalled();
+      expect(getStoredUtm()).toBe(
+        JSON.stringify({ utm_source: "newsletter", utm_medium: "email" })
+      );
     });
   });
 });

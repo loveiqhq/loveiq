@@ -81,13 +81,20 @@ export function captureUtmFromUrl(): string | null {
     if (!utm.has("utm_medium")) utm.set("utm_medium", "cpc");
   }
 
-  // ValueTrack detail rides alongside the utm_* params, not inside them.
+  // ValueTrack detail rides alongside the utm_* params, not inside them — it is
+  // DETAIL about an attribution signal, never a signal on its own. Collected
+  // separately and merged only once something real was found, because writing it
+  // into `utm` directly made `utm.size` non-zero for a URL carrying nothing but
+  // `?matchtype=e&network=g`, which then STORED and overwrote a genuine earlier
+  // first-touch value with two meaningless fields.
+  const valueTrack = new Map<string, string>();
   for (const key of VALUE_TRACK_KEYS) {
     const value = params.get(key);
-    if (value) utm.set(key, value);
+    if (value) valueTrack.set(key, value);
   }
 
   if (utm.size === 0) return null;
+  for (const [key, value] of valueTrack) utm.set(key, value);
 
   const json = JSON.stringify(Object.fromEntries(utm));
   try {
