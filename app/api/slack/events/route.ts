@@ -224,6 +224,7 @@ export async function POST(request: Request) {
       sourceCount: answer.sources.length,
       latencyMs: answer.latencyMs,
       error: posted ? (answer.status === "answered" ? null : answer.status) : "slack post failed",
+      answer: answer.text,
     });
   });
 

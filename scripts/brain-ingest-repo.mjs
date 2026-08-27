@@ -19,10 +19,16 @@
  * -- which is most of who this brain is for. Those lines are lifted into
  * `meta.for_marcus` so the answer layer can prefer them.
  *
- * IDEMPOTENT. Upserts on the natural key (source, source_id), then sweeps any
- * `doc` row it did not touch this run -- that is how a deleted file or a renamed
- * heading stops being retrievable. Commits are append-only, so they need no
- * sweep.
+ * IDEMPOTENT. Upserts on the natural key (source, source_id), then sweeps any row
+ * of that source it did not touch this run -- that is how a deleted file or a
+ * renamed heading stops being retrievable.
+ *
+ * COMMITS ARE SWEPT TOO, which they did not used to be. "Append-only" held only
+ * while chunking never changed: the moment a commit's body is re-chunked into
+ * fewer parts (stripping machine trailers did exactly that), the leftover
+ * `<sha>-2` rows become permanently unreachable orphans that can still be
+ * retrieved and cited. Both sweeps are guarded by the write count OF THEIR OWN
+ * SOURCE, never the total.
  *
  * Usage: SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/brain-ingest-repo.mjs [--dry-run]
  */
@@ -36,7 +42,19 @@ const DRY_RUN = process.argv.includes("--dry-run");
 // Vendored third-party agent skills (~700 KB of prose that is not LoveIQ
 // knowledge) and per-tool assistant config. Same exclusion list the docs-truth
 // checker uses, for the same reason.
-const EXCLUDED_PREFIXES = [".agents/", ".claude/", ".codeium/"];
+const EXCLUDED_PREFIXES = [
+  ".agents/",
+  ".claude/",
+  ".codeium/",
+  // CLAUDE.md's own Agent Operating Rule 11 says planning docs must be DELETED
+  // once the task is done, so indexing them means the brain cites, with the same
+  // weight as CLAUDE.md, exactly the files the project treats as disposable. A
+  // plan is a statement of intent on a date, not a fact — and measured,
+  // `docs/plans/2026-04-10-report-archetype-svg-design.md#scope` placed rank 3 on
+  // four unrelated questions.
+  "docs/plans/",
+  ".source-artifacts/",
+];
 
 // Chunk sizing. TARGET is what the packer aims for; HARD_MAX is the ceiling no
 // row may exceed. Both matter for different reasons:
@@ -225,6 +243,30 @@ function collectDocs() {
   return { rows, fileCount: files.length };
 }
 
+/**
+ * Drop machine trailers from a commit body before it is indexed.
+ *
+ * 532 of 1,516 commit chunks carried `Co-Authored-By:` lines, and one chunk's
+ * entire body was a single 68-character trailer — a zero-information row that can
+ * still be retrieved and rendered to the reader as a numbered source. Worse, this
+ * repo's commit convention forbids AI attribution precisely because the Slack
+ * commit channel must read as the team's own work, and the brain answers into
+ * Slack: without this it can quote those trailers straight back.
+ */
+function stripTrailers(body) {
+  return (body ?? "")
+    .split("\n")
+    .filter(
+      (line) =>
+        !/^\s*(co-authored-by|signed-off-by|generated[- ]with|reviewed-by|helped-by)\s*:/i.test(
+          line
+        )
+    )
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function collectCommits() {
   // Unit/record separators so a commit body containing newlines, pipes or tabs
   // cannot break the parse.
@@ -233,9 +275,21 @@ function collectCommits() {
   for (const rec of raw.split("\x1e")) {
     const t = rec.replace(/^\n/, "");
     if (!t.trim()) continue;
-    const [sha, author, date, subject, body = ""] = t.split("\x1f");
+    const [sha, author, date, subject, rawBody = ""] = t.split("\x1f");
     if (!sha || !subject) continue;
+    const body = stripTrailers(rawBody);
     const message = body.trim() ? `${subject}\n\n${body.trim()}` : subject;
+
+    // A commit whose entire message is one word — "fix", "update", "test" — cannot
+    // answer anything, but it CAN win a retrieval slot (`word_similarity` scores a
+    // 3-character body highly against a short query) and is then rendered to the
+    // reader as a numbered source.
+    //
+    // 8 is deliberately the low end. Measured on this history: <8 drops 71 commits
+    // and every one is a single word; <15 would drop 201, taking real messages
+    // like "fix lint" with it. The point is to remove chunks with no information,
+    // not to curate.
+    if (message.trim().length < 8) continue;
 
     // This repo's commit convention puts a plain-English summary for a
     // non-technical reader at the END of the message. Lifting it into meta means
@@ -315,11 +369,11 @@ async function upsert(rows, stampedAt) {
 }
 
 /** Remove `doc` rows this run did not touch: deleted files, renamed headings. */
-async function sweepStaleDocs(stampedAt) {
+async function sweepStaleSource(source, stampedAt) {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const res = await fetch(
-    `${url}/rest/v1/brain_chunk?source=eq.doc&updated_at=lt.${encodeURIComponent(stampedAt)}`,
+    `${url}/rest/v1/brain_chunk?source=eq.${encodeURIComponent(source)}&updated_at=lt.${encodeURIComponent(stampedAt)}`,
     {
       method: "DELETE",
       headers: {
@@ -335,6 +389,21 @@ async function sweepStaleDocs(stampedAt) {
   }
   const deleted = await res.json().catch(() => []);
   return Array.isArray(deleted) ? deleted.length : 0;
+}
+
+// COMMITS ARE NEVER SWEPT (see the note at the top of this file), and every commit
+// chunk carries a `github.com/.../commit/<sha>` permalink. Ingesting from a
+// feature branch therefore injects PERMANENT rows whose links die the moment the
+// branch is squash-merged or deleted. The GitHub Action only runs on `main`; this
+// guard is for a manual run, where the mistake is easy and irreversible.
+const branch = git(["rev-parse", "--abbrev-ref", "HEAD"]).trim();
+const onMain = branch === "main" || process.argv.includes("--allow-branch");
+if (!onMain && !process.argv.includes("--dump-json") && !process.argv.includes("--dry-run")) {
+  console.error(
+    `refusing to ingest commits from branch "${branch}": their permalinks would die on merge.\n` +
+      `Run from main, or pass --allow-branch if you accept that.`
+  );
+  process.exit(1);
 }
 
 const { rows: docRows, fileCount } = collectDocs();
@@ -380,8 +449,12 @@ await upsert([...docRows, ...commitRows], stampedAt);
 // guard is always satisfied and proves nothing about docs. Run from a directory
 // where the glob finds no markdown (or after a bad `collectDocs`), this deleted
 // every doc chunk in the corpus — 471 rows, a quarter of it — and exited 0.
-const swept =
+const sweptDocs =
   docRows.length > 0
-    ? await sweepStaleDocs(stampedAt)
+    ? await sweepStaleSource("doc", stampedAt)
     : (console.warn("no doc chunks collected — refusing to sweep docs"), 0);
-console.log(`swept ${swept} stale doc chunk(s)`);
+const sweptCommits =
+  commitRows.length > 0
+    ? await sweepStaleSource("commit", stampedAt)
+    : (console.warn("no commit chunks collected — refusing to sweep commits"), 0);
+console.log(`swept ${sweptDocs} stale doc chunk(s), ${sweptCommits} stale commit chunk(s)`);

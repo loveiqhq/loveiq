@@ -90,7 +90,17 @@ async function eventAlreadyClaimed(slackEventId?: string | null): Promise<boolea
 
 export async function finishQuestion(
   id: number | null,
-  outcome: { sourceCount?: number; latencyMs?: number; error?: string | null }
+  outcome: {
+    sourceCount?: number;
+    latencyMs?: number;
+    error?: string | null;
+    /**
+     * What the reader was actually told. Stored so a wrong answer can be found
+     * again — without it, "the brain gave August's question May's revenue" is
+     * unprovable after the fact and unfixable in aggregate.
+     */
+    answer?: string | null;
+  }
 ): Promise<void> {
   if (id == null) return;
   try {
@@ -102,6 +112,9 @@ export async function finishQuestion(
         source_count: outcome.sourceCount ?? null,
         latency_ms: outcome.latencyMs ?? null,
         error: outcome.error ? outcome.error.slice(0, 500) : null,
+        // Capped: the point is to be able to read back what was said, not to
+        // store a second copy of the corpus.
+        answer: outcome.answer ? outcome.answer.slice(0, 4000) : null,
       }),
     });
   } catch (err) {

@@ -1,5 +1,6 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
+import { expandRelativePeriods } from "@features/brain/server/periods";
 
 /**
  * Retrieval half of the company brain: turn a question into the handful of
@@ -138,7 +139,11 @@ export async function retrieve(question: string, limit = 12): Promise<BrainChunk
       // the question. Capping candidates PER SOURCE in SQL, before truncation,
       // is the only place that can be fixed.
       body: JSON.stringify({
-        query_text: trimmed,
+        // Relative time expressions are rewritten into the absolute period names
+        // the corpus uses. Without this, "how are we doing this month" returned
+        // May, June and July and omitted the current month entirely -- see
+        // `expandRelativePeriods` for the measured scores.
+        query_text: expandRelativePeriods(trimmed),
         k: CANDIDATE_CEILING,
         per_source: PER_BUCKET_CANDIDATES,
       }),

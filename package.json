@@ -28,6 +28,8 @@
     "survey:check-db-sync": "node scripts/check-survey-db-sync.js",
     "lint": "eslint .",
     "test": "vitest run",
+    "brain:ask": "tsx scripts/brain-ask.ts",
+    "brain:battery": "tsx scripts/brain-battery.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run --config vitest.integration.config.ts",
