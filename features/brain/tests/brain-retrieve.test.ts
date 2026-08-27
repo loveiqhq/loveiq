@@ -213,9 +213,12 @@ describe("retrieve — failure and edge handling", () => {
     await expect(retrieve("anything", 8)).resolves.toEqual([]);
   });
 
-  it("survives a non-array response body", async () => {
+  it("treats a non-array 200 body as unavailable, not as an empty corpus", async () => {
+    // A 200 whose body is an object is a proxy-wrapped error page or a scalar —
+    // the RPC did not answer. Resolving to [] here told the asker the corpus
+    // contains nothing about their question.
     mockSupabaseFetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({}) });
-    await expect(retrieve("anything", 8)).resolves.toEqual([]);
+    await expect(retrieve("anything", 8)).rejects.toBeInstanceOf(CorpusUnavailableError);
   });
 });
 

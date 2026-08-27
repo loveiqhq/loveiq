@@ -174,6 +174,7 @@ describe("buildAnalyticsRows", () => {
     const rows = buildAnalyticsRows([day("2026-08-01"), day("2026-08-19")], STAMP, {
       byDay: new Map([["2026-08-19", 500]]),
       from: "2026-08-10", // ad data starts AFTER the period does
+      to: "2026-08-19",
     });
     const monthly = rows.find((r) => r.source_id === "monthly:2026-08");
     expect(monthly?.body).toContain("INCOMPLETE");
@@ -185,11 +186,41 @@ describe("buildAnalyticsRows", () => {
     const rows = buildAnalyticsRows([day("2026-08-18"), day("2026-08-19")], STAMP, {
       byDay: new Map([["2026-08-19", 50]]),
       from: "2026-08-01", // ad data starts BEFORE the period
+      to: "2026-08-19",
     });
     const weekly = rows.find((r) => r.source_id === "weekly:2026-W34");
     expect(weekly?.body).toContain("Net:");
     expect(weekly?.body).toContain("Cost per paying customer");
     expect(weekly?.body).not.toContain("INCOMPLETE");
+  });
+
+  it("flags the TRAILING spend gap too, not just the leading one", () => {
+    // GA4 stops at "yesterday" while brain_daily_rollup runs to today, so the
+    // current period is always short by a day or two. August 2026 published
+    // "Net: EUR -918.43" with no caveat while GA4 ended two days earlier.
+    const rows = buildAnalyticsRows([day("2026-08-01"), day("2026-08-27")], STAMP, {
+      byDay: new Map([["2026-08-01", 500]]),
+      from: "2026-08-01",
+      to: "2026-08-25", // two days behind the period's end
+    });
+    const monthly = rows.find((r) => r.source_id === "monthly:2026-08");
+    expect(monthly?.body).toContain("INCOMPLETE");
+    expect(monthly?.body).toContain("2026-08-25");
+    // A small trailing lag is still worth a number, but it must be labelled.
+    expect(monthly?.body).toContain("Net:");
+    expect(monthly?.body).toContain("approximate");
+  });
+
+  it("withholds derived figures entirely once coverage drops below 90%", () => {
+    const rows = buildAnalyticsRows([day("2026-08-01"), day("2026-08-27")], STAMP, {
+      byDay: new Map([["2026-08-27", 500]]), // must be a day that IS in the input
+      from: "2026-08-25", // only the last 3 of 27 days
+      to: "2026-08-27",
+    });
+    const monthly = rows.find((r) => r.source_id === "monthly:2026-08");
+    expect(monthly?.body).toContain("INCOMPLETE");
+    expect(monthly?.body).not.toContain("Net:");
+    expect(monthly?.body).not.toContain("Cost per paying customer");
   });
 
   it("omits a zero funnel step that has a non-zero step below it", () => {

@@ -7,7 +7,7 @@ import {
   isGoogleConfigured,
 } from "@shared/http/google-oauth";
 import logger from "@shared/observability/logger";
-import { isoWeek, longDate, longMonth } from "./analytics";
+import { isoWeek, longDate, longMonth, monthEnd } from "./analytics";
 import { sweepStale, upsertChunks, type BrainRow, type IngestResult } from "./upsert";
 
 /**
@@ -75,6 +75,16 @@ interface Ga4Row {
 const MAX_PAGES = 20;
 
 /**
+ * Wall-clock ceiling per report.
+ *
+ * MAX_PAGES alone is not a time bound: 20 pages x a 15s per-request timeout is
+ * 300s, and the cron function's `maxDuration` is 60. Only the Jira ingester was
+ * given the run's time budget, so a slow GA4 report could burn the whole function
+ * and be killed before `recordCronRun` wrote anything at all.
+ */
+const PAGING_BUDGET_MS = 15_000;
+
+/**
  * One GA4 report, PAGED TO COMPLETION.
  *
  * A single request silently returns at most `limit` rows and nothing in the
@@ -92,6 +102,16 @@ async function runGa4Report(
   const pageSize = typeof body.limit === "number" ? body.limit : 10_000;
   const all: Ga4Row[] = [];
   let offset = 0;
+  const startedAt = Date.now();
+
+  // Stable order is REQUIRED for offset paging; without it Google may return a
+  // row twice across pages and ad spend would be double-counted. Every report
+  // here leads with `date`, so ordering on the first dimension is both stable and
+  // generic.
+  const firstDimension = Array.isArray(body.dimensions)
+    ? (body.dimensions[0] as { name?: string } | undefined)?.name
+    : undefined;
+  const orderBys = firstDimension ? [{ dimension: { dimensionName: firstDimension } }] : undefined;
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const res = await fetchWithTimeout(
@@ -99,7 +119,12 @@ async function runGa4Report(
       {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ ...body, limit: pageSize, offset }),
+        body: JSON.stringify({
+          ...body,
+          limit: pageSize,
+          offset,
+          ...(orderBys ? { orderBys } : {}),
+        }),
         timeoutMs: TIMEOUT_MS,
       }
     );
@@ -112,9 +137,25 @@ async function runGa4Report(
     const rows = json.rows ?? [];
     all.push(...rows);
 
-    const total = typeof json.rowCount === "number" ? json.rowCount : all.length;
-    if (rows.length === 0 || all.length >= total) return all;
+    // A SHORT PAGE is the terminator, not `all.length >= rowCount`. When
+    // `rowCount` is absent the fallback `total = all.length` made that comparison
+    // trivially true, so paging stopped after ONE page and silently dropped the
+    // remainder — exactly the bug this loop was added to fix.
+    if (rows.length < pageSize) return all;
+    const total = typeof json.rowCount === "number" ? json.rowCount : null;
+    if (total !== null && all.length >= total) return all;
     offset += rows.length;
+
+    // Offset paging over an unordered result set can repeat or skip rows, and a
+    // repeated row would DOUBLE-COUNT ad spend. `orderBys` is added in the
+    // request below to make the order stable.
+    if (Date.now() - startedAt > PAGING_BUDGET_MS) {
+      logger.warn(
+        { got: all.length, total, dimensions: body.dimensions },
+        "GA4 report hit the paging time budget — figures derived from it are incomplete"
+      );
+      return all;
+    }
 
     if (page === MAX_PAGES - 1) {
       // Never truncate silently: say what was dropped.
@@ -145,6 +186,9 @@ export async function ingestGa4(stampedAt: string): Promise<IngestResult> {
   if (!token) return { source: GA4_SOURCE, rows: 0, swept: 0, skipped: "google-not-configured" };
 
   const dateRanges = [{ startDate: `${DAYS}daysAgo`, endDate: "yesterday" }];
+  // Same window, as explicit dates, so it can be recorded on each chunk.
+  const windowFrom = isoDaysAgo(DAYS);
+  const windowTo = isoDaysAgo(1);
 
   const core = await runGa4Report(token, propertyId, {
     dateRanges,
@@ -338,6 +382,12 @@ export async function ingestGa4(stampedAt: string): Promise<IngestResult> {
         sessions,
         users,
         ...(ad ? { ad_cost: ad.cost, ad_clicks: ad.clicks, ad_impressions: ad.impressions } : {}),
+        // The window this run ASKED for, not the days that came back. GA4 omits
+        // zero-traffic days, so the analytics rollup cannot tell "no spend" from
+        // "no data" without this — and it needs to, because it decides whether a
+        // period's net profit is safe to publish.
+        window_from: windowFrom,
+        window_to: windowTo,
       },
       updated_at: stampedAt,
       period_end: day,
@@ -365,7 +415,14 @@ export async function ingestGa4(stampedAt: string): Promise<IngestResult> {
       source_id: `monthly:${month}`,
       title: `Google Analytics — ${label} (monthly total)`,
       url: null,
-      body: renderGa4(`${label} — whole month (${month})`, t),
+      body: renderGa4(
+        `${label} — ${
+          t.lastDay >= monthEnd(month)
+            ? "whole month"
+            : `month so far, ${longDate(t.firstDay)} to ${longDate(t.lastDay)}`
+        } (${month})`,
+        t
+      ),
       meta: { grain: "month", month, sessions: t.sessions, ad_cost: t.adCost },
       updated_at: stampedAt,
       period_end: t.lastDay,
@@ -404,6 +461,7 @@ async function queryGsc(
   const pageSize = typeof body.rowLimit === "number" ? body.rowLimit : 5000;
   const all: GscRow[] = [];
   let startRow = 0;
+  const startedAt = Date.now();
 
   for (let page = 0; page < MAX_PAGES; page++) {
     const res = await fetchWithTimeout(
@@ -426,6 +484,14 @@ async function queryGsc(
 
     if (rows.length < pageSize) return all;
     startRow += rows.length;
+
+    if (Date.now() - startedAt > PAGING_BUDGET_MS) {
+      logger.warn(
+        { got: all.length, dimensions: body.dimensions },
+        "Search Console query hit the paging time budget — query totals are incomplete"
+      );
+      return all;
+    }
 
     if (page === MAX_PAGES - 1) {
       logger.warn(
@@ -586,7 +652,14 @@ export async function ingestSearchConsole(stampedAt: string): Promise<IngestResu
       source_id: `monthly:${month}`,
       title: `Google Search Console — ${label} (monthly total)`,
       url: null,
-      body: renderGsc(`${label} — whole month (${month})`, t),
+      body: renderGsc(
+        `${label} — ${
+          t.lastDay >= monthEnd(month)
+            ? "whole month"
+            : `month so far, ${longDate(t.firstDay)} to ${longDate(t.lastDay)}`
+        } (${month})`,
+        t
+      ),
       meta: { grain: "month", month, clicks: t.clicks, impressions: t.impressions },
       updated_at: stampedAt,
       period_end: t.lastDay,

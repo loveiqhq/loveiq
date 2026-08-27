@@ -374,5 +374,14 @@ if (DRY_RUN) {
 // that predate this run -- never a row a later batch of this same run wrote.
 const stampedAt = new Date().toISOString();
 await upsert([...docRows, ...commitRows], stampedAt);
-const swept = await sweepStaleDocs(stampedAt);
+
+// GUARDED BY THE DOC COUNT, NOT THE TOTAL. This sweep deletes `source=eq.doc`,
+// but the write it follows is dominated by ~1500 commit rows — so a total-row
+// guard is always satisfied and proves nothing about docs. Run from a directory
+// where the glob finds no markdown (or after a bad `collectDocs`), this deleted
+// every doc chunk in the corpus — 471 rows, a quarter of it — and exited 0.
+const swept =
+  docRows.length > 0
+    ? await sweepStaleDocs(stampedAt)
+    : (console.warn("no doc chunks collected — refusing to sweep docs"), 0);
 console.log(`swept ${swept} stale doc chunk(s)`);

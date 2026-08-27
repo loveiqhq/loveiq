@@ -69,6 +69,14 @@ export function toSlackMrkdwn(md: string): string {
       .replace(/__([^_]+)__/g, "*$1*")
       // Slack renders "* " bullets as literal asterisks; "• " reads correctly.
       .replace(/^\s*[*-]\s+/gm, "• ")
+      // `<!channel>`, `<!here>`, `<!everyone>` and `<!subteam^X>` are Slack
+      // CONTROL sequences, not text. Source titles are escaped before rendering,
+      // but the MODEL's answer quotes corpus text verbatim — so a commit subject
+      // containing `<!channel>` came back out through the answer body and pinged
+      // the whole channel on every question that retrieved it. Defused with a
+      // zero-width space rather than by escaping the whole answer, which would
+      // destroy the mrkdwn this function exists to produce.
+      .replace(/<!\s*(channel|here|everyone|subteam\^[A-Z0-9]+)/gi, "<\u200b!$1")
       .trim()
   );
 }
@@ -76,7 +84,10 @@ export function toSlackMrkdwn(md: string): string {
 /** Remove the fence tokens from quoted corpus text so a chunk cannot close its
  *  own <<<SOURCE n>>> block and pose as the operator. */
 function defence(text: string): string {
-  return text.split("<<<").join("< <<").split(">>>").join("> >>");
+  // ANY run of 3+ brackets, not the exact 3-char token: splitting on "<<<" left
+  // `<<<<` as `< <<<`, still a fence a fuzzy reader would honour. The replacement
+  // contains no bracket run, so this is a fixed point.
+  return text.replace(/<{3,}/g, "[lt]").replace(/>{3,}/g, "[gt]");
 }
 
 function buildPrompt(question: string, chunks: BrainChunk[]): LlmMessage[] {
@@ -110,7 +121,13 @@ function buildPrompt(question: string, chunks: BrainChunk[]): LlmMessage[] {
         typeof c.meta?.for_marcus === "string" && c.meta.for_marcus.trim()
           ? `plain-English summary: ${defence(c.meta.for_marcus.trim())}`
           : null;
-      const inner = [head, c.url ? `url: ${c.url}` : null, forMarcus, "", defence(c.body)]
+      // `c.url` was the ONE field not run through defence(), which allowed a
+      // byte-exact fence escape: a url containing a newline plus
+      // `<<<END SOURCE 1>>>` closed its own block, and everything after it read
+      // as operator text. Scheme-checked too, the way the Slack renderer already
+      // does -- the asymmetry between the two was the tell.
+      const safeUrl = c.url && /^https?:\/\//i.test(c.url) ? defence(c.url) : null;
+      const inner = [head, safeUrl ? `url: ${safeUrl}` : null, forMarcus, "", defence(c.body)]
         .filter((line) => line !== null)
         .join("\n");
       return `<<<SOURCE ${n}>>>\n${inner}\n<<<END SOURCE ${n}>>>`;
@@ -249,11 +266,16 @@ async function answerInner(input: { question: string }, started: number): Promis
 
   // A cut-off answer must SAY it is cut off. It is posted with citations and an
   // authoritative tone, and people quote these numbers into decisions.
+  // PREPENDED, NOT APPENDED. A truncated answer is long by construction
+  // (max_tokens 2500), and BOTH delivery paths clip at 3000 characters --
+  // `fitBlocks`/`clampBlock` for the blocks and `text.slice(0, 3000)` in
+  // `postBrainReply` for the notification fallback. Appending put the warning
+  // exactly where it would be cut off, so the one case it exists for was the one
+  // case it never reached.
   const body =
-    toSlackMrkdwn(result.text) +
     (result.truncated
-      ? "\n\n_⚠️ This answer was cut short by the model's length limit — ask a narrower question for the full picture._"
-      : "");
+      ? "_⚠️ Cut short by the model's length limit — ask a narrower question for the full picture._\n\n"
+      : "") + toSlackMrkdwn(result.text);
   const blocks = [section(body), ...sourceBlocks(sources), context(`Asked the LoveIQ brain`)];
   const fitted = fitBlocks(blocks, body);
 

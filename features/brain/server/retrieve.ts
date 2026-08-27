@@ -155,7 +155,14 @@ export async function retrieve(question: string, limit = 12): Promise<BrainChunk
     logger.error({ err }, "brain retrieval failed");
     throw new CorpusUnavailableError(err instanceof Error ? err.message : "unknown");
   }
-  if (!Array.isArray(rows)) return [];
+  // A 200 whose body is not an array means the RPC did not answer — a
+  // proxy-wrapped error page, a scalar, null. That is "could not query", and
+  // returning [] here was a leftover of the behaviour this file now rejects:
+  // the asker was told the corpus contains nothing about their question.
+  if (!Array.isArray(rows)) {
+    logger.error({ got: typeof rows }, "brain_search returned a non-array body");
+    throw new CorpusUnavailableError("rpc returned a non-array body");
+  }
 
   const candidates: BrainChunk[] = rows.map((r) => ({
     source: String(r.source ?? ""),

@@ -211,5 +211,12 @@ export async function ingestJira(
   // the time budget would delete every issue the run never reached.
   const swept = completed ? await sweepStale(SOURCE, stampedAt, written) : 0;
 
+  // A run cut short by the time budget returned `{rows: 0, swept: 0}` with no
+  // `skipped` and no `error` — indistinguishable from a clean no-op, and Jira is
+  // the ONLY source given the budget, so it is the one that gets starved. Naming
+  // it means the cron's skip alert fires instead of reporting success.
+  if (!completed && written === 0) {
+    return { source: SOURCE, rows: 0, swept: 0, skipped: "jira-time-budget" };
+  }
   return { source: SOURCE, rows: written, swept };
 }

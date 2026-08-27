@@ -6,6 +6,7 @@ import type { IngestResult } from "@features/brain/server/ingest/upsert";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { escapeSlack, notifySlack } from "@shared/observability/slack";
 import {
+  markSlackAlertDelivered,
   recordCronRun,
   startCronTimer,
   tryClaimSlackAlert,
@@ -61,9 +62,44 @@ export async function GET(request: Request) {
 
   const dayKey = stampedAt.slice(0, 10);
 
+  /**
+   * Claim, notify, MARK. The mark was missing, so the claim row stayed
+   * `delivered = false` and the ">10 min stale reclaim" path matched on every
+   * later run — the "once per source per day" the comment promises was happening
+   * only by accident of the daily cadence, and broke the moment anyone pressed
+   * Run twice in the Vercel dashboard.
+   */
+  const alertOnce = async (name: string, text: string) => {
+    const key = `brain_ingest_failed:${name}`;
+    if (!(await tryClaimSlackAlert(key, "day", dayKey))) return;
+    await notifySlack({ channel: "ops", kind: "brain_ingest_failed", text });
+    await markSlackAlertDelivered(key, "day", dayKey);
+  };
+
   const run = async (name: string, fn: () => Promise<IngestResult>) => {
     try {
-      results.push(await fn());
+      const result = await fn();
+      results.push(result);
+
+      // A SOURCE THAT QUIETLY DOES NOTHING NEVER THREW, so it never alerted.
+      // Three separate paths land here: credentials unset (`skipped`), a revoked
+      // Google refresh token (also `skipped`, because getGoogleAccessToken just
+      // returns null), and a run that wrote zero rows. All three returned
+      // `status: "success"` and `{ok: true}`, which is how Jira sat at zero
+      // chunks indefinitely while the brain told askers "nothing in Jira".
+      if (result.skipped) {
+        logger.warn({ ingester: name, skipped: result.skipped }, "brain-ingest: source skipped");
+        await alertOnce(
+          name,
+          `:brain: Company-brain ingest SKIPPED *${escapeSlack(name)}* (${escapeSlack(result.skipped)}). Nothing failed, so this will not look broken — but that source is frozen and the brain will keep answering without it.`
+        );
+      } else if (result.rows === 0) {
+        logger.warn({ ingester: name }, "brain-ingest: source wrote zero rows");
+        await alertOnce(
+          name,
+          `:brain: Company-brain ingest wrote *0 rows* for *${escapeSlack(name)}*. The run succeeded, so nothing else will report this.`
+        );
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.error({ err, ingester: name }, "brain-ingest: source failed");
@@ -79,13 +115,10 @@ export async function GET(request: Request) {
       // The message deliberately carries the source error verbatim, because for
       // the Google ingesters that text IS the fix (the scope hint names the
       // exact command to re-run).
-      if (await tryClaimSlackAlert(`brain_ingest_failed:${name}`, "day", dayKey)) {
-        await notifySlack({
-          channel: "ops",
-          kind: "brain_ingest_failed",
-          text: `:brain: Company-brain ingest failed for *${escapeSlack(name)}*. The brain will keep answering from whatever it already has, so this will not look broken.\n> ${escapeSlack(message.slice(0, 500))}`,
-        });
-      }
+      await alertOnce(
+        name,
+        `:brain: Company-brain ingest failed for *${escapeSlack(name)}*. The brain will keep answering from whatever it already has, so this will not look broken.\n> ${escapeSlack(message.slice(0, 500))}`
+      );
     }
   };
 

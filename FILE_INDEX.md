@@ -142,6 +142,20 @@
 | Supabase admin server client | `features/admin/server/supabase-server.ts` |
 | Supabase admin REST helper   | `features/admin/server/supabase.ts`        |
 
+## Company Brain
+
+| Task                          | Files                                                                       |
+| ----------------------------- | --------------------------------------------------------------------------- |
+| Ask a question (answer core)  | `features/brain/server/answer.ts`                                           |
+| Change retrieval / ranking    | `features/brain/server/retrieve.ts`, `supabase/migrations/*brain_search*`   |
+| Swap the language model       | `features/brain/server/llm.ts` (`BRAIN_LLM_BASE_URL`, `BRAIN_LLM_MODEL`)    |
+| Slack front door              | `app/api/slack/events/route.ts`, `features/brain/server/slack.ts`           |
+| Nightly ingest (Jira/GA4/GSC) | `app/api/cron/brain-ingest/route.ts`, `features/brain/server/ingest/`       |
+| Docs + commits ingest         | `scripts/brain-ingest-repo.mjs`, `.github/workflows/brain-ingest.yml`       |
+| Business-number chunks        | `features/brain/server/ingest/analytics.ts`, `supabase/migrations/*rollup*` |
+| Ask from the CLI              | `scripts/brain-ask.ts`                                                      |
+| Adversarial question battery  | `scripts/brain-battery.ts`                                                  |
+
 ## Testing
 
 | Task             | Files                                                                 |

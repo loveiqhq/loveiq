@@ -69,7 +69,15 @@ rollup AS (
 UPDATE public.brain_chunk c SET period_end = rollup.last_day
   FROM rollup WHERE c.id = rollup.id AND c.period_end IS DISTINCT FROM rollup.last_day;
 
-CREATE OR REPLACE FUNCTION public.brain_search(query_text text, k integer DEFAULT 30, per_source integer DEFAULT 0)
+-- DROP FIRST. 20260825215317 created brain_search with 9 OUT columns; this adds
+-- `period_end` as a 10th, and Postgres refuses a return-type change through
+-- CREATE OR REPLACE ("cannot change return type of existing function", 42P13).
+-- Production never hit it because the rewrite was applied by hand before this
+-- file existed, but a replay from files -- a Supabase branch, SUPABASE_TEST_URL,
+-- or the disaster-recovery runbook -- would fail here.
+DROP FUNCTION IF EXISTS public.brain_search(text, integer, integer);
+
+CREATE FUNCTION public.brain_search(query_text text, k integer DEFAULT 30, per_source integer DEFAULT 0)
  RETURNS TABLE(id bigint, source text, source_id text, title text, url text, body text, meta jsonb, updated_at timestamp with time zone, period_end date, score real)
  LANGUAGE sql
  STABLE

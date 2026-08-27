@@ -51,13 +51,40 @@ export async function claimQuestion(input: {
 
     if (!res.ok) {
       logger.error({ status: res.status }, "brain query claim failed");
-      return { id: null, duplicate: false };
+      // Failing open here is what let TWO deliveries answer: A inserts fine, B's
+      // insert 500s or times out, B is told `duplicate: false` and spends a
+      // second model request. Only 409 was treated as a duplicate, so any other
+      // error looked like a fresh question. One extra read on the error path
+      // settles it — if the row exists, this delivery is a retry.
+      return { id: null, duplicate: await eventAlreadyClaimed(input.slackEventId) };
     }
     const rows = (await res.json().catch(() => [])) as Array<{ id?: number }>;
     return { id: rows?.[0]?.id ?? null, duplicate: false };
   } catch (err) {
     logger.error({ err }, "brain query claim threw");
-    return { id: null, duplicate: false };
+    return { id: null, duplicate: await eventAlreadyClaimed(input.slackEventId) };
+  }
+}
+
+/**
+ * Was this Slack event already recorded? Only consulted when the claim INSERT
+ * failed for a reason other than the unique violation, so the cost is paid on the
+ * error path alone.
+ *
+ * Fails open (returns false) on its own error: at that point the database is
+ * plainly unreachable, and answering twice is a smaller harm than answering never.
+ */
+async function eventAlreadyClaimed(slackEventId?: string | null): Promise<boolean> {
+  if (!slackEventId) return false;
+  try {
+    const res = await supabaseFetch(
+      `/rest/v1/brain_query?select=id&slack_event_id=eq.${encodeURIComponent(slackEventId)}&limit=1`
+    );
+    if (!res.ok) return false;
+    const rows = (await res.json().catch(() => [])) as unknown[];
+    return Array.isArray(rows) && rows.length > 0;
+  } catch {
+    return false;
   }
 }
 

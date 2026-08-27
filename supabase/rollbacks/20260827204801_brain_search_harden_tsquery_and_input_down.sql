@@ -10,7 +10,11 @@
 -- and an unbounded question length reaching word_similarity. Roll back only to
 -- unblock, and roll forward promptly.
 
-CREATE OR REPLACE FUNCTION public.brain_search(query_text TEXT, k INT DEFAULT 30, per_source INT DEFAULT 0)
+-- Mirror of the forward migration: dropping the 10-column form is required
+-- before recreating the 9-column one.
+DROP FUNCTION IF EXISTS public.brain_search(text, integer, integer);
+
+CREATE FUNCTION public.brain_search(query_text TEXT, k INT DEFAULT 30, per_source INT DEFAULT 0)
 RETURNS TABLE (
   id BIGINT, source TEXT, source_id TEXT, title TEXT, url TEXT, body TEXT,
   meta JSONB, updated_at TIMESTAMPTZ, score REAL
