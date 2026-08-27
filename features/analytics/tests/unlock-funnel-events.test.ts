@@ -55,6 +55,92 @@ describe("begin_checkout carries a monetary value", () => {
     ]);
   });
 
+  it("still fires when the price is unknown — the value drops, the event does not", () => {
+    /**
+     * The regression this pins, measured 2026-08-27.
+     *
+     * Every checkout surface used to read
+     *     const quote = quotes?.[plan];
+     *     if (quote) trackBeginCheckout(...)
+     *     onUnlock(plan)          // ← ran regardless
+     * so a click on a plan missing from the client-side quote map sent the buyer to
+     * Stripe and recorded nothing at all. When pricing 2.0 split one plan into three
+     * on 3 Aug, GA4 begin_checkout fell 137 -> 22 and our analytics_event fell ~78 ->
+     * 10 in the same week that price_shown DOUBLED and payments held steady. Two
+     * independent pipelines agreeing is what ruled out a persistence bug.
+     *
+     * An unpriced checkout start is still a checkout start. Counting it is the whole
+     * point of the event; the money is secondary.
+     */
+    client.trackBeginCheckout("all_reports", null, null);
+
+    const [[, params]] = captured("begin_checkout") as Array<[string, Record<string, unknown>]>;
+    expect(params.plan).toBe("all_reports");
+    // No invented money: absent rather than 0, which would understate revenue.
+    expect(params).not.toHaveProperty("value");
+    expect(params).not.toHaveProperty("price");
+    expect(params).not.toHaveProperty("items");
+    expect(params.currency).toBe("EUR");
+  });
+
+  /**
+   * Source-level, following the pattern in ReportPage.paywallTrigger.test.ts and for
+   * the same reason: the pricing modal is always mounted and only styled open, which
+   * jsdom cannot distinguish. The behaviour is covered in a real browser by
+   * `npm run qa:report`.
+   *
+   * These are deliberately sharp rather than "does the call exist". Mutation testing
+   * killed the first version: re-adding `if (quote)` in front of the call — the exact
+   * bug that collapsed the metric on 3 Aug — left it passing.
+   */
+  it("counts begin_checkout UNCONDITIONALLY at the only door to Stripe", () => {
+    const { readFileSync } = require("node:fs") as typeof import("node:fs");
+    const { join } = require("node:path") as typeof import("node:path");
+    const src = readFileSync(join(process.cwd(), "features/report/ui/ReportPage.tsx"), "utf8");
+
+    // Isolate the beginCheckout function body by brace matching.
+    const at = src.indexOf("const beginCheckout = (plan: ReportPurchasePlanId");
+    expect(at, "ReportPage.beginCheckout not found").toBeGreaterThan(-1);
+    let depth = 0;
+    let i = src.indexOf("{", at);
+    const bodyStart = i;
+    for (; i < src.length; i++) {
+      if (src[i] === "{") depth++;
+      else if (src[i] === "}" && --depth === 0) break;
+    }
+    const body = src.slice(bodyStart, i);
+
+    const callAt = body.indexOf("trackBeginCheckout(");
+    expect(callAt, "beginCheckout must count the event").toBeGreaterThan(-1);
+
+    // THE assertion. Nothing conditional may precede it: an unpriced or
+    // unrecognised plan still reached Stripe, so it must still be counted.
+    const firstBranch = body.search(/\bif\s*\(/);
+    if (firstBranch !== -1) {
+      expect(
+        callAt,
+        "trackBeginCheckout must not sit behind a condition — that is the 3 Aug regression"
+      ).toBeLessThan(firstBranch);
+    }
+
+    // And it must pass a null-tolerant price rather than reading through the quote.
+    const call = body.slice(callAt, body.indexOf(";", callAt));
+    expect(call).toContain("null");
+
+    // The three surfaces must NOT count it themselves — per-surface counting is what
+    // let it be forgotten when pricing 2.0 split one plan into three.
+    for (const f of [
+      "features/report/ui/ReportPricingModal.tsx",
+      "features/report/ui/ScrollPricingModal.tsx",
+      "features/report/ui/ReportStickyUnlockBar.tsx",
+    ]) {
+      expect(
+        readFileSync(join(process.cwd(), f), "utf8"),
+        `${f} must not fire begin_checkout itself`
+      ).not.toContain("trackBeginCheckout(");
+    }
+  });
+
   it("reaches gtag with the value, not just the dataLayer", () => {
     client.trackBeginCheckout("essentials", 19, "EUR");
     expect(window.gtag).toHaveBeenCalledWith(

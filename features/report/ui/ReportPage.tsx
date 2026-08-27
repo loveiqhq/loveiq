@@ -116,6 +116,7 @@ import {
   setReportSubmissionContext,
   trackExperimentExposure,
   trackLockedCardPriceShown,
+  trackBeginCheckout,
   trackLockIconClicked,
   trackPaywallCountdownExpired,
   trackPaywallInitiated,
@@ -2608,8 +2609,23 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     ]
   );
 
+  /**
+   * The single door to Stripe. Every checkout surface — the pricing modal, the scroll
+   * teaser, the sticky unlock bar — ends here, and this is the only thing that pushes
+   * to /checkout, so it is the only honest place to count a checkout start.
+   *
+   * `begin_checkout` used to be fired by each of those three components instead, each
+   * guarded on `if (quote)` while the navigation ran unconditionally. So a click on a
+   * plan whose quote was missing from the client-side map went to Stripe silently.
+   * That is what collapsed the metric when pricing 2.0 split one plan into three on
+   * 2026-08-03: GA4 137 -> 22 and analytics_event ~78 -> 10 in a week where
+   * price_shown DOUBLED and payments held steady. Counted here, no surface can
+   * forget it and no missing quote can suppress it — the price is looked up, and its
+   * absence costs the value, not the event.
+   */
   const beginCheckout = (plan: ReportPurchasePlanId, archetype?: string | null) => {
     const quote = effectiveQuotes?.[plan];
+    trackBeginCheckout(plan, quote ? quote.chargedPriceCents / 100 : null, quote?.currency ?? null);
     if (quote) {
       cacheReportCheckoutQuote({
         plan,

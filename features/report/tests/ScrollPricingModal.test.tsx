@@ -98,11 +98,23 @@ describe("ScrollPricingModal — pricing view", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("checks out from the pricing view, firing begin_checkout", () => {
+  it("checks out from the pricing view, and does NOT count begin_checkout itself", () => {
     const { onCheckout } = renderModal({ quote: discountQuote });
     fireEvent.click(screen.getByRole("button", { name: /continue to payment/i }));
     expect(onCheckout).toHaveBeenCalledTimes(1);
-    expect(trackBeginCheckout).toHaveBeenCalledTimes(1);
+
+    /**
+     * begin_checkout moved to ReportPage.beginCheckout — the single door to Stripe,
+     * which onCheckout reaches — on 2026-08-27.
+     *
+     * It used to fire HERE, behind `if (quote)`, while onCheckout ran regardless. So
+     * a click whose plan was missing from the client-side quote map went to Stripe
+     * and recorded nothing. When pricing 2.0 split one plan into three on 3 Aug, GA4
+     * begin_checkout fell 137 -> 22 and our analytics_event fell ~78 -> 10 in the same
+     * week price_shown DOUBLED and payments held steady. This assertion is inverted
+     * on purpose: counting it per-surface is what let it be forgotten.
+     */
+    expect(trackBeginCheckout).not.toHaveBeenCalled();
   });
 
   it("still reaches checkout when not dismissible (forced arm)", () => {

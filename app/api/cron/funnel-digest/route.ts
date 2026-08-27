@@ -60,7 +60,6 @@ const BUCKET_TOP_N = 5;
 
 type DigestImageKind =
   | "cvr-visitor-start"
-  | "cvr-visitor-start-dark"
   | "cvr-start-completion"
   | "cvr-completion-engagement"
   | "cvr-completion-paygate"
@@ -234,36 +233,24 @@ async function buildCvrChartBlocks(
   );
 
   /**
-   * ⚠️ THIS CHART IS MISLABELLED. Do not schedule this digest without fixing it.
+   * There was a "Dark journey: visitor to survey-start" chart here. DELETED
+   * 2026-08-27 rather than fixed.
    *
-   * `visitors_control` comes from a CTE in `get_funnel_cvr_sparklines` defined as
-   * `COALESCE(landing_variant, 'control') <> 'white'` — i.e. "everything that is not
-   * white", not "the dark arm". When it was written those were the same thing. They
-   * stopped being the same on 2026-08-21, when round 2 introduced `white_prev`
-   * (Landing Page V1), and they were never the same for arm-less traffic. Measured
-   * on 2026-08-27 the bucket held 805 arm-less submissions and 34 V1 ones against 53
-   * genuinely dark, so a line titled "Dark journey" is ~94% not dark.
+   * It drew `visitors_control` from `get_funnel_cvr_sparklines`, a CTE defined as
+   * `COALESCE(landing_variant, 'control') <> 'white'` — "everything that is not
+   * white", not "the dark arm". Those were the same thing when it was written and
+   * stopped being so on 2026-08-21 when round 2 introduced `white_prev`; they were
+   * never the same for arm-less traffic. Measured the day it was removed the bucket
+   * held 805 arm-less submissions and 34 Landing Page V1 ones against 53 genuinely
+   * dark, so the title was ~94% wrong.
    *
-   * It is harmless TODAY only because this route is not in `vercel.json` crons, so
-   * nobody receives it. That is also exactly why it is a trap: whoever schedules
-   * this digest gets a confidently-titled wrong chart, the same failure the admin
-   * "Landing A/B" tab and the Explorer both had until 2026-08-27.
-   *
-   * Two ways out, both a deliberate decision rather than a quick edit:
-   *   (a) delete this chart — the scheduled `conversion-digest` already plots the
-   *       landing axis per real arm through `armLabel`, so this adds nothing; or
-   *   (b) split the CTE into per-arm series (`white`, `white_prev`, `control`,
-   *       `unknown`) the way `get_landing_variant_funnel` now does, and title each
-   *       line from `armLabel`.
+   * Deleted rather than repaired because the SCHEDULED conversion-digest already
+   * plots the landing axis per real arm through `armLabel`, so a per-arm version of
+   * this would only duplicate it. `visitors_control` itself is left in the RPC and
+   * in DigestDay — the field is still read by nothing else, and dropping a column
+   * from a SECURITY DEFINER function is a migration for no gain; its docstring in
+   * digest-metrics.ts records what it actually means.
    */
-  await single(
-    "cvr-visitor-start-dark",
-    "Dark journey: visitor to survey-start conversion over time",
-    "Visitor → Start (dark)",
-    "starts",
-    "visitors_control"
-  );
-
   await single(
     "cvr-start-completion",
     "Survey-start to completion conversion rate over time",

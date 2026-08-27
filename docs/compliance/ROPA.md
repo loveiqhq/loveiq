@@ -37,21 +37,21 @@ GDPR Art. 30 requires the controller to maintain a written record of processing 
 
 ## 3. Processors / sub-processors
 
-| Vendor                 | Role                                 | Data shared                                                                                                                                                                                                                                                                                                                | Location            | DPA on file?                           |
-| ---------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- | -------------------------------------- |
-| **Supabase**           | Database, auth                       | All personal data (encrypted at rest)                                                                                                                                                                                                                                                                                      | EU region           | ✅ standard Supabase DPA (out-of-repo) |
-| **Vercel**             | Hosting + edge runtime               | Request logs (IP, UA, URL)                                                                                                                                                                                                                                                                                                 | Global edge         | ✅ Vercel DPA                          |
-| **Stripe**             | Payment processing                   | Payment data per activity #7                                                                                                                                                                                                                                                                                               | US (with EU SCCs)   | ✅ Stripe DPA                          |
-| **Resend**             | Email delivery                       | Recipient email, first_name, content                                                                                                                                                                                                                                                                                       | US (with EU SCCs)   | ✅ Resend DPA                          |
-| **Upstash**            | KV (rate-limit, engagement counters) | IP-derived keys, ephemeral                                                                                                                                                                                                                                                                                                 | Configured region   | ✅ Upstash DPA                         |
-| **Google Analytics 4** | Web analytics                        | Consent-gated identifiers                                                                                                                                                                                                                                                                                                  | US                  | ✅ Google DPA via Workspace            |
-| **Microsoft Clarity**  | Session replay + heatmaps            | NOT consent-gated (see note)                                                                                                                                                                                                                                                                                               | EU + US             | ⚠️ NOT a processor — see note below    |
-| **PostHog**            | Product analytics + session replay   | Custom event stream, autocapture, session replay (30d retention), distinct_id = lowercased email once a survey is submitted                                                                                                                                                                                                | EU (eu.posthog.com) | ❓ NOT VERIFIED — see note below       |
-| **CookieYes**          | Consent management                   | Cookie consent state                                                                                                                                                                                                                                                                                                       | EU                  | ✅ CookieYes DPA                       |
-| **Facebook (Meta)**    | Ad pixel                             | Consent-gated cross-site id                                                                                                                                                                                                                                                                                                | US                  | ✅ Meta Business DPA                   |
-| **TikTok Ads**         | Ad pixel                             | Consent-gated cross-site id                                                                                                                                                                                                                                                                                                | US/Singapore        | ✅ TikTok DPA                          |
-| **Google Ads**         | Ad pixel                             | Consent-gated cross-site id                                                                                                                                                                                                                                                                                                | US                  | ✅ Google Ads DPA                      |
-| **Slack**              | Ops alerting + funnel notifications  | Masked email, action, kind, acquisition channel (UTM source/medium/campaign), device type, self-reported country tier, A/B arm, journey timings, purchase amount. **No survey answers, no scoring/archetype output beyond the archetype name already shown on a purchase, never a raw email address, never `utm_content`** | US                  | ✅ Slack DPA                           |
+| Vendor                 | Role                                               | Data shared                                                                                                                                                                                                                                                                                                                | Location                 | DPA on file?                                |
+| ---------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ------------------------------------------- |
+| **Supabase**           | Database, auth                                     | All personal data (encrypted at rest)                                                                                                                                                                                                                                                                                      | EU region                | ✅ standard Supabase DPA (out-of-repo)      |
+| **Vercel**             | Hosting + edge runtime                             | Request logs (IP, UA, URL)                                                                                                                                                                                                                                                                                                 | Global edge              | ✅ Vercel DPA                               |
+| **Stripe**             | Payment processing                                 | Payment data per activity #7                                                                                                                                                                                                                                                                                               | US (with EU SCCs)        | ✅ Stripe DPA                               |
+| **Resend**             | Email delivery                                     | Recipient email, first_name, content                                                                                                                                                                                                                                                                                       | US (with EU SCCs)        | ✅ Resend DPA                               |
+| **Upstash**            | KV (rate-limit, engagement counters)               | IP-derived keys, ephemeral                                                                                                                                                                                                                                                                                                 | Configured region        | ✅ Upstash DPA                              |
+| **Google Analytics 4** | Web analytics                                      | Consent-gated identifiers                                                                                                                                                                                                                                                                                                  | US                       | ✅ Google DPA via Workspace                 |
+| **Microsoft Clarity**  | Session replay + heatmaps                          | NOT consent-gated (see note)                                                                                                                                                                                                                                                                                               | EU + US                  | ⚠️ NOT a processor — see note below         |
+| **PostHog**            | Product analytics + session replay — **processor** | Custom event stream, autocapture, session replay (30d retention), distinct_id = lowercased email once a survey is submitted                                                                                                                                                                                                | EU — Cloud EU, Frankfurt | ⚠️ available, NOT executed — see note below |
+| **CookieYes**          | Consent management                                 | Cookie consent state                                                                                                                                                                                                                                                                                                       | EU                       | ✅ CookieYes DPA                            |
+| **Facebook (Meta)**    | Ad pixel — **NOT LIVE, planned**                   | No data shared yet: no pixel exists in the codebase (verified 2026-08-27)                                                                                                                                                                                                                                                  | US                       | ✅ Meta Business DPA                        |
+| **TikTok Ads**         | Ad pixel — **NOT LIVE, planned**                   | No data shared yet: no pixel exists in the codebase (verified 2026-08-27)                                                                                                                                                                                                                                                  | US/Singapore             | ✅ TikTok DPA                               |
+| **Google Ads**         | Ad pixel                                           | Consent-gated cross-site id                                                                                                                                                                                                                                                                                                | US                       | ✅ Google Ads DPA                           |
+| **Slack**              | Ops alerting + funnel notifications                | Masked email, action, kind, acquisition channel (UTM source/medium/campaign), device type, self-reported country tier, A/B arm, journey timings, purchase amount. **No survey answers, no scoring/archetype output beyond the archetype name already shown on a purchase, never a raw email address, never `utm_content`** | US                       | ✅ Slack DPA                                |
 
 DPAs are stored outside this repository (in the company's contract management). Refresh annually; verify whenever a vendor SOC/ISO certification renews.
 
@@ -61,43 +61,73 @@ Activities involving US-based processors (Stripe, Resend, Facebook, TikTok, Goog
 
 ### PostHog was missing from this record entirely (found 2026-08-27)
 
-PostHog has been running in production since before this file was last reviewed —
-35,671 events over the 30 days to 2026-08-27, with **session replay enabled** and a
-30-day recording retention — and it had no row in either table above. It is now
-listed, but three things about it are **unresolved and need a human decision**:
+PostHog has run in production since its organization was created on **2026-08-09**
+(org `loveiq`, one member, one project `244778`) with **session replay enabled** and a
+30-day recording retention — 35,671 events in the 30 days to 2026-08-27 — and it had
+no row in either table above. It is now listed, and its status was researched rather
+than assumed:
 
-1. **No DPA has been verified.** The row is marked `❓ NOT VERIFIED` rather than
-   guessed. PostHog publishes a DPA and is EU-hosted here (`eu.posthog.com`), which
-   is a better starting position than Clarity's, but nobody has confirmed one is on
-   file for this account. Until someone does, treat the entry as incomplete.
-2. **It is not consent-gated**, the same deliberate choice as Microsoft Clarity
-   (see the note below, and `features/analytics/client.ts`, which captures to
-   PostHog _before_ the two GA4 consent checks precisely so declining analytics does
-   not silently empty the funnel). Everything the Clarity note says about recording
-   EU visitors without consent, and about Article-9 answers being captured in survey
-   replays, applies to PostHog too.
-3. **`posthog.identify()` sets `distinct_id` to the lowercased email** on survey
-   submit (`features/survey/ui/hooks/useSubmitSurvey.ts`), so PostHog holds a direct
-   identifier, not a pseudonymous one. Unlike Clarity, PostHog _does_ support
-   per-person deletion, so a DSAR erasure is at least technically possible here —
-   but no runbook step currently does it.
+**Settled.**
+
+1. **PostHog is a PROCESSOR, not an independent controller.** Its own DPA names the
+   customer as Controller and "PostHog, Inc." as Processor, obliged to process only on
+   the controller's documented instructions. This is a materially better position than
+   Microsoft Clarity below, which is an independent controller with no DPA available
+   at all — so the Clarity note's hardest consequences do NOT carry over wholesale.
+2. **Data stays in the EU.** The project is on PostHog Cloud EU (`eu.posthog.com`,
+   Frankfurt), which is what PostHog itself recommends for GDPR. Contrast GA4 and
+   Clarity, both US.
+3. **Per-person deletion is possible.** PostHog supports right-to-be-forgotten
+   deletion for an individual, which Clarity does not — so a DSAR erasure is
+   technically achievable here. No runbook step performs it yet; that is a gap in our
+   process, not in the vendor.
+
+**One action outstanding, and it needs a human.**
+
+- **The DPA exists but has to be executed.** PostHog does not incorporate it by
+  reference into its standard terms: it must be generated and countersigned per
+  organization at `app.posthog.com/legal`, and PostHog states the published text "is
+  not binding on its own — only the one you generate and countersign through the app
+  counts." Nothing in the API exposes whether one has been signed, so this could not
+  be verified programmatically. **Assume it has NOT been executed until someone
+  confirms otherwise, and execute it.** Two minutes, and it is the difference between
+  a documented processor relationship and an undocumented one.
+
+**Also true, and a deliberate choice rather than an oversight.**
+
+- **PostHog is not consent-gated**, the same owner decision as Microsoft Clarity.
+  `features/analytics/client.ts` captures to PostHog _before_ the two GA4 consent
+  checks, specifically so that declining analytics does not silently empty the custom
+  event funnel. Everything the Clarity note says about recording EU visitors without
+  consent, and about Article-9 answers appearing in survey replays, applies here too.
+- **`posthog.identify()` sets `distinct_id` to the lowercased email** on survey submit
+  (`features/survey/ui/hooks/useSubmitSurvey.ts`), so PostHog holds a direct
+  identifier rather than a pseudonymous one.
 
 **What changed on 2026-08-27**, and what it does and does not fix:
 
 - `survey_submission.posthog_session_id` now stores the PostHog `$session_id` of the
-  session that submitted, so the Slack notification can deep-link to that replay.
-  This creates no new category of data in PostHog — the recording already existed;
-  it stores a pointer to it in our own database, which is why activity #2 above now
-  lists the column. It also means a DSAR erasure of a submission removes our link to
-  the recording but not the recording itself (30-day expiry aside).
+  session that submitted, so the Slack notification can deep-link to that replay. This
+  creates no new category of data in PostHog — the recording already existed; it
+  stores a pointer to it in our own database, which is why activity #2 above now lists
+  the column. A DSAR erasure of a submission therefore removes our link to the
+  recording but not the recording itself (30-day expiry aside).
 - GA4, Google Ads, GTM and Clarity are no longer loaded outside production. Before
   this, staging and every developer's localhost recorded into the same GA4 property,
   Ads account and Clarity project as customers — verified by curl:
   staging.loveiq.org served `G-QTYY69L46N`, `AW-18068690553` and `/clarity-init.js`
-  identically to the live site. That is a data-minimisation improvement (fewer
-  people's sessions sent to US controllers) and is recorded as such in activity #9.
-  PostHog deliberately still runs everywhere and tags its events `deploy_env`
-  instead, because it is the only replay/error trail staging and dev have.
+  identically to the live site, and GA4 measurement afterwards put **16% of the
+  property's sessions and 17% of its "users" on developer machines**, still running at
+  426 sessions in August. That is a data-minimisation improvement — materially fewer
+  people's sessions sent to US controllers — and is recorded as such in activity #9.
+  PostHog deliberately still runs everywhere and tags its events `deploy_env` instead,
+  because it is the only replay/error trail staging and dev have.
+- The Facebook and TikTok rows are corrected to **NOT LIVE**. Both were recorded as
+  active data sharing; no pixel for either exists anywhere in the codebase (verified
+  2026-08-27). They are planned, so the rows are kept and marked rather than deleted —
+  a processing record must not claim transfers to two US/Singapore recipients that
+  are not happening. Google Ads stays live: its conversion tag is real
+  (`trackGoogleAdsPurchaseConversion`, gated on the advertisement consent category).
 
 ### Microsoft Clarity is an independent controller, not a processor
 

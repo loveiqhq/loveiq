@@ -568,14 +568,28 @@ export const trackPriceShown = (params: PriceShownParams) => {
  */
 export const trackBeginCheckout = (
   plan: "essentials" | "full_report" | "core" | "all_reports",
-  price: number,
-  currency: string
+  price: number | null,
+  currency: string | null
 ) => {
-  const params = { plan, price, currency };
+  // `price` is nullable, and that is the point. Every call site used to read
+  //     const quote = quotes?.[plan];
+  //     if (quote) trackBeginCheckout(...)
+  //     onUnlock(plan)            // ← ran regardless
+  // so a click whose plan was missing from the client-side quote map sent the buyer
+  // to Stripe and recorded nothing. Measured: GA4 begin_checkout fell 137 (Jul) to
+  // 22 (Aug) and our own analytics_event fell ~78 to 10, in the same week pricing 2.0
+  // split one plan into three — while price_shown DOUBLED and payments held steady.
+  // Both pipelines agreeing ruled out a persistence bug; the guard was the cause.
+  // An unpriced checkout start is still a checkout start, so the event always fires
+  // and only the monetary fields drop out.
+  const priced = typeof price === "number" && Number.isFinite(price);
+  const cur = currency ?? "EUR";
+  const params = priced ? { plan, price, currency: cur } : { plan, currency: cur };
   track("begin_checkout", {
     ...params,
-    value: price,
-    items: [{ item_id: plan, item_name: plan, price, quantity: 1 }],
+    ...(priced
+      ? { value: price, items: [{ item_id: plan, item_name: plan, price, quantity: 1 }] }
+      : {}),
   });
   persistAnalyticsEvent("begin_checkout", params);
 };

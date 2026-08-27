@@ -9,8 +9,32 @@ import { isProductionSite } from "@shared/env/is-non-prod-deploy";
  * GTM → GA4) only fires for the consented subset of buyers who actually land back
  * on /checkout/return with a "paid & complete" status — it's lost to ad blockers,
  * closed tabs, and async payments. The Stripe webhook, by contrast, fulfills 100%
- * of payments server-side. Sending the purchase from there makes GA4's purchase
- * count match reality.
+ * of payments server-side, so sending the purchase from there recovers the buyers
+ * who paid and never came back.
+ *
+ * IT DOES NOT MAKE GA4 MATCH REALITY, and an earlier version of this comment
+ * claimed it did. Measured 2026-08-27 over 12 months: 81 succeeded payments in the
+ * database against 24 purchases in GA4 — 30%. The cause is the two gates below,
+ * which this function INHERITS from the client rather than bypassing:
+ *
+ *   - `consentGranted` — of 68 paying submissions, only 35 ever wrote a single
+ *     `analytics_event` row, and that table is itself consent-gated. So roughly
+ *     half of all buyers decline analytics, and for them there is nothing to send.
+ *   - `clientId` — it comes from the buyer's `_ga` cookie. A buyer who declined
+ *     analytics has no `_ga` cookie, so even if consent were ignored there would be
+ *     no id to attribute the purchase to.
+ *
+ * Both gates are correct: sending a declined visitor's purchase to Google is
+ * exactly what the CookieYes gate exists to prevent. The consequence is simply that
+ * **GA4 is not a source of revenue truth for this product and cannot be made into
+ * one from here** — the `payment` table is. Anything that needs a real number (the
+ * digest, /admin, a board slide) must read the database.
+ *
+ * The number that matters for advertising: GA4 sees ~30% of sales and ~24% of
+ * revenue (EUR 269 of EUR 1,099). A consistent undercount still ranks campaigns
+ * correctly, so conversion-based bidding is not broken, but any target-ROAS figure
+ * fed from GA4 will be wrong by roughly 4x. Closing that properly means Google
+ * Consent Mode v2 with modelling, not more server-side sends.
  *
  * Dedup: we send the SAME `transaction_id` the client uses (the Stripe checkout
  * session id), so GA4 collapses the client + server events into one purchase.
