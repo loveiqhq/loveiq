@@ -419,12 +419,13 @@ describe("formatDuration", () => {
 /**
  * Session-replay deep link (2026-08-27). Asserts the rendered URL, not the shape:
  * the failure that matters is a button that looks fine and opens the wrong page —
- * PostHog's `/replay/home?sessionRecordingId=<id>` form lands on the filtered
- * recordings LIST rather than the recording, and reads as "the link is broken".
+ * PostHog's recordings-list form with the id as a query parameter lands on a
+ * filtered LIST rather than the recording, and reads as "the link is broken".
  */
 describe("session-recording link", () => {
-  // adminLink() returns null without this, so the pairing assertions below would
-  // silently compare one button against one button.
+  // Without this adminLink() returns null anyway, so the "no admin button" tests
+  // below would pass whether or not the code removed it. Stubbing a real site URL
+  // is what makes them mean something.
   beforeEach(() => vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org"));
   afterEach(() => vi.unstubAllEnvs());
 
@@ -450,7 +451,12 @@ describe("session-recording link", () => {
     expect(JSON.stringify(message.blocks)).not.toContain("sessionRecordingId=");
   });
 
-  it("puts it beside the admin link in ONE actions block, not stacked below", () => {
+  it("is the ONLY button on a survey message — no admin link", () => {
+    // Removed on request. At survey-completion time the "full journey" that button
+    // promised does not exist yet: report-open, paywall, checkout and payment have
+    // no rows, which is why the progress rail shows one green dot and four red. The
+    // facts that DO exist are already in the message, so it was a click to a
+    // restatement.
     const message = buildJourneyMessage(journey({ recordingSessionId: "sess_abc" }), {
       kind: "survey_completed",
       questionCount: 59,
@@ -458,13 +464,14 @@ describe("session-recording link", () => {
 
     const actionBlocks = buttons(message.blocks);
     expect(actionBlocks).toHaveLength(1);
-    expect((actionBlocks[0]!.elements as unknown[]).length).toBe(2);
+    expect((actionBlocks[0]!.elements as unknown[]).length).toBe(1);
+    expect(JSON.stringify(message.blocks)).not.toContain("/admin/");
+    expect(JSON.stringify(message.blocks)).not.toContain("Open full journey");
   });
 
-  it("omits the button entirely when there is no recording", () => {
-    // The honest rendering: no session id means no recording exists to open. Normal
-    // for every submission before 2026-08-27 and for a blocked or sampled-out
-    // visitor — so it must not render a dead button.
+  it("carries no buttons at all on a survey message with no recording", () => {
+    // Both buttons can legitimately be absent now, so the block must not be pushed
+    // empty — an actions block with zero elements is rejected by Slack.
     const message = buildJourneyMessage(journey({ recordingSessionId: null }), {
       kind: "survey_completed",
       questionCount: 59,
@@ -472,8 +479,32 @@ describe("session-recording link", () => {
 
     expect(JSON.stringify(message.blocks)).not.toContain("posthog.com");
     expect(JSON.stringify(message.blocks)).not.toContain("session recording");
-    // ...and the admin button is still there, in its own single actions block.
-    expect(buttons(message.blocks)).toHaveLength(1);
+    expect(JSON.stringify(message.blocks)).not.toContain("/admin/");
+    expect(buttons(message.blocks)).toHaveLength(0);
+    // The message itself still stands on its own — the removal took a button, not
+    // the content.
+    expect(message.blocks.length).toBeGreaterThan(3);
+  });
+
+  /**
+   * The purchase message KEEPS the admin link, and this is the line that says so on
+   * purpose. By then the timeline is real — report views, paywall, checkout, payment
+   * — so "open the full journey" leads somewhere. It is also the only remaining
+   * place two buttons share one actions block, which is what proves the horizontal
+   * layout still works.
+   */
+  it("sits beside the admin link on a PURCHASE message, in one actions block", () => {
+    const message = buildJourneyMessage(journey({ recordingSessionId: "sess_abc" }), {
+      kind: "purchase",
+      planLabel: "Full report",
+      archetype: "Spiritual Lover",
+      amountText: "EUR 39.99",
+    });
+
+    const actionBlocks = buttons(message.blocks);
+    expect(actionBlocks).toHaveLength(1);
+    expect((actionBlocks[0]!.elements as unknown[]).length).toBe(2);
     expect(urls(message.blocks).some((u) => u.includes("/admin/submissions/1756"))).toBe(true);
+    expect(urls(message.blocks).some((u) => u.includes("eu.posthog.com"))).toBe(true);
   });
 });

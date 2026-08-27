@@ -355,18 +355,31 @@ export function buildJourneyMessage(
   blocks.push(armFields(journey));
 
   /**
-   * Admin and replay side by side in ONE actions block. Two separate blocks would
-   * stack them vertically and eat two of Slack's 50 blocks; `linkButtons` takes the
-   * pair and drops whichever is missing.
+   * Buttons, side by side in ONE actions block — Slack lays out the elements of a
+   * single block horizontally, so two separate blocks would stack them vertically
+   * and spend two of the message's 50 blocks on what fits in one.
+   *
+   * NO ADMIN LINK ON THE SURVEY MESSAGE (removed 2026-08-27, on request). There is
+   * nothing there to open yet: the "full journey" it promised is the report-open,
+   * paywall, checkout and payment timeline, and at survey-completion time none of
+   * those rows exist — the progress rail two blocks above is showing exactly one
+   * green dot and four red ones, which is the whole journey there is. The facts that
+   * DO exist by then (traffic, device, country, both arms, question count, duration)
+   * are already in the message, so the button was a click that led to a restatement.
+   * The purchase message keeps it, because by then the timeline is real.
    *
    * The replay button is absent rather than disabled when there is no session id,
    * which is the honest rendering: no id means no recording exists to open. That is
    * the normal state for every submission before 2026-08-27 and for anyone whose
-   * replay was blocked or sampled out.
+   * replay was blocked or sampled out. Together with the line above, a survey
+   * message can legitimately carry no buttons at all — `linkButtons` is only called
+   * when there is something to put in it.
    */
   const actions: Array<{ text: string; url: string }> = [];
-  const link = adminLink(journey.submissionId);
-  if (link) actions.push({ text: "Open full journey in admin", url: link });
+  if (options.kind === "purchase") {
+    const link = adminLink(journey.submissionId);
+    if (link) actions.push({ text: "Open full journey in admin", url: link });
+  }
   const replay = recordingLink(journey.recordingSessionId);
   if (replay) actions.push({ text: "▶ Watch session recording", url: replay });
   if (actions.length > 0) blocks.push(linkButtons(actions));
