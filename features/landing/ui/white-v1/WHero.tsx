@@ -28,14 +28,14 @@ const WHero: FC = () => {
 
           {/* Left: copy */}
           <div className="relative z-10 order-1 flex w-full max-w-[40rem] flex-col gap-6 xl:order-none xl:max-w-[25rem]">
-            <div className="animate-on-scroll flex items-center gap-2.5">
+            <div className="animate-on-load flex items-center gap-2.5">
               <span className="animate-pulse-glow h-[7px] w-[7px] shrink-0 rounded-full bg-accent-orange" />
               <span className="text-[11px] font-bold uppercase tracking-wide text-[#6b6678]">
                 Science-backed methodology
               </span>
             </div>
 
-            <h1 className="animate-on-scroll stagger-1 font-serif text-[clamp(2.75rem,8vw,3.75rem)] font-semibold leading-[1.05] text-[#161021]">
+            <h1 className="animate-on-load stagger-1 font-serif text-[clamp(2.75rem,8vw,3.75rem)] font-semibold leading-[1.05] text-[#161021]">
               Determine{" "}
               <span className="whitespace-nowrap">
                 Your{" "}
@@ -48,7 +48,7 @@ const WHero: FC = () => {
               </span>
             </h1>
 
-            <p className="animate-on-scroll stagger-2 max-w-[34rem] text-[15px] leading-7 text-[#6b7280]">
+            <p className="animate-on-load stagger-2 max-w-[34rem] text-[15px] leading-7 text-[#6b7280]">
               Grounded in state-of-the-art science &amp; research.{" "}
               <strong className="font-extrabold text-black">In just 15 minutes</strong>,{" "}
               <strong className="font-extrabold text-black">
@@ -58,7 +58,7 @@ const WHero: FC = () => {
               improve intimacy.
             </p>
 
-            <div className="animate-on-scroll stagger-3">
+            <div className="animate-on-load stagger-3">
               <Link
                 href="/survey"
                 aria-label="Start test now - hero"
@@ -82,7 +82,7 @@ const WHero: FC = () => {
               </Link>
             </div>
 
-            <p className="animate-on-scroll stagger-4 text-sm text-black">
+            <p className="animate-on-load stagger-4 text-sm text-black">
               <span className="font-light">Your </span>
               <strong className="font-extrabold">privacy &amp; anonymity</strong>
               <span className="font-light"> come first. Learn more in our </span>
@@ -96,7 +96,7 @@ const WHero: FC = () => {
           </div>
 
           {/* Right: stat block */}
-          <dl className="animate-on-scroll stagger-2 relative z-10 order-3 flex w-full max-w-[40rem] flex-col xl:order-none xl:max-w-[19rem]">
+          <dl className="animate-on-load stagger-2 relative z-10 order-3 flex w-full max-w-[40rem] flex-col xl:order-none xl:max-w-[19rem]">
             {stats.map((stat) => (
               <div
                 key={stat.label}

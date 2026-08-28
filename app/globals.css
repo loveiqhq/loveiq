@@ -339,6 +339,79 @@ input.autofill-dark:-internal-autofill-previewed {
 }
 
 /* Aura-like in-view reveal */
+/*
+ * Above-the-fold reveal. Same motion as `.animate-on-scroll` below — same easing,
+ * duration and stagger — but driven by CSS from first paint instead of by JavaScript
+ * on intersection.
+ *
+ * Why it exists: `.animate-on-scroll` starts at `opacity: 0` and only becomes visible
+ * when ScrollAnimator's IntersectionObserver adds `.animate`. For content already in
+ * the viewport that is the wrong mechanism — there is nothing to scroll into. Measured
+ * on both landing arms at Lighthouse mobile settings (412px, 4x CPU, 1.6 Mbps/150 ms),
+ * the hero sub-paragraph went INVISIBLE at 1.26 s when this stylesheet applied and the
+ * fade did not begin until 3.73 s — JS bundle, then hydration, then the observer. It
+ * was fully readable at 4.3 s. Driven by CSS it is visible the moment the stylesheet
+ * lands and settles at 2.13 s, and it needs no JavaScript at all.
+ *
+ * `from` is `opacity: 0.25`, NOT 0, and that is load-bearing rather than taste. Chrome
+ * excludes an element whose computed opacity is exactly 0 from Largest Contentful Paint
+ * altogether, so a hero that fades from 0 is invisible to the metric until the fade is
+ * under way. On this page the largest element by far is that sub-paragraph (~39,000 px²
+ * against 1,805 px² for the small span that used to win by default), so fading it from 0
+ * moved measured LCP the WRONG way — 1,416 ms to 2,040 ms on the V2 arm — even though
+ * the content appeared two seconds sooner. From a visible floor: 1,412 ms on V2 and
+ * 1,460 ms on V1, down from 5,208 ms, and the number now describes the real headline
+ * copy instead of a scrap of chrome. Do not "tidy" this to 0.
+ *
+ * Note the hero H1 is itself a poor LCP candidate on this page: its gradient words use
+ * `bg-clip-text text-transparent`, and transparent text is ignored too.
+ *
+ * The animation is NOT removed and nothing renders differently once settled — this is
+ * the same fade-up, started earlier and beginning from 25% instead of 0%. Use it for
+ * anything in the initial viewport; `.animate-on-scroll` remains correct below.
+ */
+.animate-on-load {
+  animation: w-reveal-up 0.85s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+/* `.stagger-*` sets transition-delay, which a CSS animation ignores — so the same
+   offsets are restated as animation-delay. Kept identical to the values below so the
+   hero's rhythm is unchanged. */
+.animate-on-load.stagger-1 {
+  animation-delay: 100ms;
+}
+.animate-on-load.stagger-2 {
+  animation-delay: 200ms;
+}
+.animate-on-load.stagger-3 {
+  animation-delay: 300ms;
+}
+.animate-on-load.stagger-4 {
+  animation-delay: 400ms;
+}
+.animate-on-load.stagger-5 {
+  animation-delay: 500ms;
+}
+@keyframes w-reveal-up {
+  from {
+    /* Not 0 — opacity:0 is excluded from LCP. See the note on .animate-on-load. */
+    opacity: 0.25;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* No motion, and critically no opacity ramp either: a reduced-motion visitor should
+     get the hero at once rather than a slow fade with the movement stripped out. */
+  .animate-on-load {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .animate-on-scroll {
   opacity: 0;
   transform: translateY(24px);
