@@ -298,6 +298,40 @@ partial grant is self-diagnosing rather than silent.
 Private channels additionally need `groups:read` + `groups:history`; decide that
 separately, since it widens what one shared token can reach.
 
+### Notion: after changing the chunk shape, rebuild
+
+The nightly ingest is incremental — it skips any page whose `last_edited_time` AND
+`BUILDER_VERSION` both match what is indexed. That is what keeps 1,000+ pages
+inside a 45-second cron: a page's content costs ~1.9s, because Notion paginates
+nested block children and rate-limits to roughly 3 requests a second, so one run
+buys about 24 pages.
+
+The consequence: **bumping `BUILDER_VERSION` marks every page stale at once**, and
+the nightly job alone would need ~45 nights to work through them. Nothing is lost
+while it converges — every page is either rewritten or confirmed, so the sweep
+stays safe and un-rebuilt rows keep their older content — but the new shape does
+not arrive until it finishes.
+
+So whenever you change how a Notion row is built — the title format, which
+properties go in the body, what lands in meta — bump `BUILDER_VERSION`, deploy,
+then run:
+
+```bash
+npm run brain:rebuild-notion
+BUDGET_MS=120000 npm run brain:rebuild-notion   # shorter passes
+```
+
+Measured on the real workspace: 1,062 pages converge in 4 passes. Safe to
+interrupt and safe to re-run — an interrupted pass leaves every page either
+rewritten or confirmed, and on a finished corpus it detects convergence in one
+pass and exits.
+
+**Why the version stamp exists at all.** Without it, a change to row construction
+is invisible to the incremental check: the pages did not change, so they are
+touched forever and the old shape survives. That is not hypothetical — one version
+shipped with every database title reading "Untitled database", and another cut 67
+long pages off at 2,400 characters. Neither would ever have self-corrected.
+
 ### GA4 and Search Console: depth vs freshness
 
 The nightly job reads only the **last 10 days** of GA4 and Search Console and

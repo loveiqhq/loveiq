@@ -56,7 +56,7 @@ const MAX_CONTENT_PAGES = 300;
  * A version stamped in meta makes a mismatch count as "changed", so shipping a
  * builder change is enough to re-write the corpus over the following nights.
  */
-const BUILDER_VERSION = 5;
+export const BUILDER_VERSION = 5;
 
 interface RichText {
   plain_text?: string;

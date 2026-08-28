@@ -56,7 +56,8 @@
     "setup": "npm install && node -e \"const fs=require('fs');if(!fs.existsSync('.env.local')){fs.copyFileSync('.env.example','.env.local');console.log('.env.local created from .env.example')}else{console.log('.env.local already exists')}\"",
     "update:product-kpis": "node scripts/update-product-kpis.js",
     "prepare": "husky",
-    "brain:backfill-google": "tsx scripts/brain-backfill-google.ts"
+    "brain:backfill-google": "tsx scripts/brain-backfill-google.ts",
+    "brain:rebuild-notion": "tsx scripts/brain-rebuild-notion.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
