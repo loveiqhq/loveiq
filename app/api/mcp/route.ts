@@ -725,7 +725,7 @@ async function callTool(name: string, args: Record<string, unknown>) {
     // but missing from this list is named explicitly rather than silently
     // dropped. Add a source here when you add an ingester; if you forget, the
     // probe says so instead of the tool lying.
-    const SOURCES = ["doc", "commit", "analytics", "ga4", "gsc", "jira", "notion"];
+    const SOURCES = ["doc", "commit", "analytics", "ga4", "gsc", "jira", "notion", "drive"];
 
     const describe = async (source: string): Promise<string> => {
       const base = `/rest/v1/brain_chunk?source=eq.${encodeURIComponent(source)}`;

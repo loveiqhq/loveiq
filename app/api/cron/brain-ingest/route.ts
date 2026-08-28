@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ingestAnalytics } from "@features/brain/server/ingest/analytics";
+import { ingestDrive } from "@features/brain/server/ingest/drive";
 import { ingestGa4, ingestSearchConsole } from "@features/brain/server/ingest/google";
 import { ingestJira } from "@features/brain/server/ingest/jira";
 import { ingestNotion } from "@features/brain/server/ingest/notion";

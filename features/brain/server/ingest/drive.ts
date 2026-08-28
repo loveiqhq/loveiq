@@ -1,0 +1,254 @@
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { getGoogleAccessToken, isGoogleConfigured } from "@shared/http/google-oauth";
+import logger from "@shared/observability/logger";
+import { supabaseFetch } from "@features/admin/server/supabase";
+import { splitBody } from "./notion";
+import { sweepStale, touchChunks, upsertChunks, type BrainRow, type IngestResult } from "./upsert";
+
+/**
+ * Google Drive documents — in practice the Gemini notes written after each call.
+ *
+ * WHY DRIVE AND NOT GMAIL. The notes arrive as an email, but that email is only a
+ * notification: the note itself is a Google Doc, which exports to clean text.
+ * Parsing the mail body would mean guessing at HTML that Google can change at any
+ * time, for a worse result.
+ *
+ * SCOPE IS CONTROLLED BY SHARING, NOT BY CONFIGURATION. This indexes every Google
+ * Doc the service account can see, and it can see nothing by default — a folder
+ * has to be shared with
+ * `ga4-reader@loveiq-brain.iam.gserviceaccount.com` as Viewer. That is
+ * deliberately the same shape as the Notion integration: the boundary is what
+ * somebody chose to share, which is visible and revocable in Drive itself, rather
+ * than an env var nobody remembers setting. It also means this file needs no
+ * allow-list and cannot silently widen.
+ *
+ * The credential is the same one GA4 and Search Console use. A service account can
+ * only reach USER-owned Drive files through sharing or domain-wide delegation, and
+ * sharing is the smaller of the two.
+ */
+
+const SOURCE = "drive";
+const API = "https://www.googleapis.com/drive/v3";
+const TIMEOUT_MS = 20_000;
+const PAGE_SIZE = 100;
+const MAX_PAGES = 20;
+
+/** Bump when the row SHAPE changes; a mismatch counts as stale. See notion.ts. */
+export const DRIVE_BUILDER_VERSION = 1;
+
+/** Only native Google Docs export to text. A PDF or image would need OCR. */
+const DOC_MIME = "application/vnd.google-apps.document";
+
+interface DriveFile {
+  id?: string;
+  name?: string;
+  mimeType?: string;
+  modifiedTime?: string;
+  createdTime?: string;
+  webViewLink?: string;
+  owners?: Array<{ emailAddress?: string }>;
+}
+
+async function driveGet(token: string, path: string): Promise<Response> {
+  return fetchWithTimeout(`${API}${path}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+    timeoutMs: TIMEOUT_MS,
+  });
+}
+
+/** Every Google Doc the service account can see. */
+async function listDocs(
+  token: string,
+  isOutOfTime: () => boolean
+): Promise<{ items: DriveFile[]; complete: boolean }> {
+  const out: DriveFile[] = [];
+  let complete = true;
+  let pageToken: string | undefined;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    if (isOutOfTime()) {
+      complete = false;
+      break;
+    }
+    const q = encodeURIComponent(`mimeType='${DOC_MIME}' and trashed=false`);
+    const fields = encodeURIComponent(
+      "nextPageToken,files(id,name,mimeType,modifiedTime,createdTime,webViewLink,owners(emailAddress))"
+    );
+    const res = await driveGet(
+      token,
+      `/files?q=${q}&fields=${fields}&pageSize=${PAGE_SIZE}` +
+        `&includeItemsFromAllDrives=true&supportsAllDrives=true` +
+        (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "")
+    );
+    if (!res.ok) {
+      const detail = (await res.text().catch(() => "")).slice(0, 300);
+      logger.warn({ status: res.status, detail }, "brain-ingest drive: list failed");
+      return { items: out, complete: false };
+    }
+    const json = (await res.json().catch(() => null)) as
+      | { files?: DriveFile[]; nextPageToken?: string }
+      | null;
+    for (const f of json?.files ?? []) if (f.id) out.push(f);
+    pageToken = json?.nextPageToken;
+    if (!pageToken) break;
+    if (page === MAX_PAGES - 1) complete = false;
+  }
+  return { items: out, complete };
+}
+
+/** A Google Doc as plain text. */
+async function docText(token: string, fileId: string): Promise<string> {
+  const res = await driveGet(token, `/files/${fileId}/export?mimeType=text%2Fplain`);
+  if (!res.ok) throw new Error(`export ${res.status}`);
+  // Docs export with a BOM and CRLFs; both would show up inside chunk bodies.
+  return (await res.text()).replace(/^﻿/, "").replace(/\r\n/g, "\n").trim();
+}
+
+export function docToRows(file: DriveFile, text: string, stampedAt: string): BrainRow[] {
+  const name = (file.name ?? "").trim();
+  if (!file.id || !name) return [];
+  const edited = file.modifiedTime ?? file.createdTime ?? null;
+  const owner = file.owners?.[0]?.emailAddress ?? null;
+
+  const base: BrainRow = {
+    source: SOURCE,
+    source_id: `doc:${file.id}`,
+    title: `Drive: ${name}`,
+    url: file.webViewLink ?? null,
+    body: [name, text].filter(Boolean).join("\n\n"),
+    meta: {
+      kind: "drive-doc",
+      v: DRIVE_BUILDER_VERSION,
+      owner,
+      created: file.createdTime ?? null,
+      edited,
+    },
+    updated_at: stampedAt,
+    // The date the document last changed, so a note from today outranks one from
+    // March on a scoring tie.
+    period_end: typeof edited === "string" ? edited.slice(0, 10) : null,
+  };
+
+  // Split rather than let the write path slice the tail off — a call note is
+  // routinely longer than the 2,400-character ceiling.
+  const parts = splitBody(base.body);
+  return parts.map((body, i) =>
+    i === 0
+      ? { ...base, body }
+      : {
+          ...base,
+          source_id: `${base.source_id}#${i + 1}`,
+          title: `${base.title} (part ${i + 1} of ${parts.length})`,
+          body,
+          meta: { ...base.meta, part: i + 1, parts: parts.length },
+        }
+  );
+}
+
+/** source_id → what is already indexed, for the incremental skip. */
+async function knownDriveEdits(): Promise<Map<string, { edited: string; v: number }>> {
+  const out = new Map<string, { edited: string; v: number }>();
+  for (let offset = 0; offset < 50_000; offset += 1000) {
+    const res = await supabaseFetch(
+      `/rest/v1/brain_chunk?select=source_id,meta&source=eq.${SOURCE}&order=source_id.asc&limit=1000&offset=${offset}`
+    );
+    if (!res.ok) {
+      logger.warn({ status: res.status }, "brain-ingest drive: could not read existing chunks");
+      return new Map();
+    }
+    const batch = (await res.json().catch(() => [])) as Array<{
+      source_id?: string;
+      meta?: { edited?: unknown; v?: unknown } | null;
+    }>;
+    for (const row of batch) {
+      const edited = row.meta?.edited;
+      const v = typeof row.meta?.v === "number" ? row.meta.v : 0;
+      if (row.source_id && typeof edited === "string") out.set(row.source_id, { edited, v });
+    }
+    if (batch.length < 1000) break;
+  }
+  return out;
+}
+
+function partIdsOf(known: Map<string, unknown>, baseId: string): string[] {
+  const prefix = `${baseId}#`;
+  return [...known.keys()].filter((id) => id.startsWith(prefix));
+}
+
+export async function ingestDrive(
+  stampedAt: string,
+  isOutOfTime: () => boolean = () => false
+): Promise<IngestResult> {
+  if (!isGoogleConfigured()) {
+    return { source: SOURCE, rows: 0, swept: 0, skipped: "google-not-configured" };
+  }
+  const token = await getGoogleAccessToken();
+  if (!token) {
+    return { source: SOURCE, rows: 0, swept: 0, skipped: "google-token-unavailable" };
+  }
+  if (isOutOfTime()) return { source: SOURCE, rows: 0, swept: 0, skipped: "drive-time-budget" };
+
+  const known = await knownDriveEdits();
+  const listed = await listDocs(token, isOutOfTime);
+
+  // NOTHING SHARED IS NOT AN ERROR, and must not look like one. The service
+  // account sees only what somebody shared with it, so an empty list on a fresh
+  // setup is the expected state — reported as skipped so the ops alert does not
+  // fire every night for a source nobody has enabled yet.
+  if (listed.items.length === 0) {
+    return {
+      source: SOURCE,
+      rows: 0,
+      swept: 0,
+      skipped: listed.complete ? "drive-nothing-shared" : "drive-list-failed",
+    };
+  }
+
+  const rows: BrainRow[] = [];
+  const touch: string[] = [];
+  const toFetch: DriveFile[] = [];
+  let complete = listed.complete;
+
+  for (const file of listed.items) {
+    const sourceId = `doc:${file.id}`;
+    const edited = file.modifiedTime ?? file.createdTime ?? null;
+    const seen = known.get(sourceId);
+    if (edited && seen && seen.edited === edited && seen.v === DRIVE_BUILDER_VERSION) {
+      touch.push(sourceId, ...partIdsOf(known, sourceId));
+    } else {
+      toFetch.push(file);
+    }
+  }
+
+  for (const file of toFetch) {
+    if (isOutOfTime()) {
+      complete = false;
+      break;
+    }
+    try {
+      rows.push(...docToRows(file, await docText(token, file.id as string), stampedAt));
+    } catch (err) {
+      // One unreadable document must not cost the rest of the run.
+      logger.warn({ err, file: file.id }, "brain-ingest drive: export failed");
+      complete = false;
+    }
+  }
+
+  const written = await upsertChunks(rows);
+  const writtenIds = new Set(rows.map((r) => r.source_id));
+  const deferred = toFetch
+    .flatMap((f) => [`doc:${f.id}`, ...partIdsOf(known, `doc:${f.id}`)])
+    .filter((id) => !writtenIds.has(id));
+  const touched = await touchChunks(SOURCE, [...touch, ...deferred], stampedAt);
+
+  // Only sweep when the LISTING was complete. A partial list makes existing
+  // documents look deleted; a partial FETCH does not, because everything is
+  // either rewritten or confirmed above.
+  const swept = listed.complete ? await sweepStale(SOURCE, stampedAt, written + touched) : 0;
+
+  logger.info(
+    { docs: listed.items.length, written, touched, deferred: deferred.length, complete },
+    "brain-ingest drive"
+  );
+  return { source: SOURCE, rows: written + touched, swept };
+}

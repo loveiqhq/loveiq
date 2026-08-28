@@ -338,6 +338,35 @@ sweep — but they stop advancing. Fixing it means either re-running the browser
 flow for the `brain-cli` client to mint a fresh refresh token, or an org-policy
 exception so a downloadable service-account key can be created.
 
+### Gemini call notes, via Drive
+
+The notes Gemini writes after each call arrive as an email, but that email is only a
+notification — the note itself is a Google Doc, and a Doc exports to clean text.
+Parsing the mail body would mean guessing at HTML Google can change at will, for a
+worse result. So the ingester reads Drive.
+
+**Scope is controlled by SHARING, not by configuration.** It indexes every Google
+Doc the service account can see, and it can see nothing by default. To switch it on,
+share the folder those notes land in with
+
+```text
+ga4-reader@loveiq-brain.iam.gserviceaccount.com
+```
+
+as **Viewer**. That is deliberately the same shape as the Notion integration: the
+boundary is what somebody chose to share, visible and revocable in Drive itself,
+rather than an env var nobody remembers setting. Nothing else is needed — the Drive
+API is already enabled on `loveiq-brain`, and the credential is the one GA4 and
+Search Console use.
+
+Until something is shared the source reports `drive-nothing-shared` and is skipped,
+so the ops alert does not fire nightly for a source nobody has enabled. A FAILED
+listing reports `drive-list-failed` instead — the two are deliberately different,
+because "nobody shared anything" and "Drive refused us" need different responses.
+
+Only native Google Docs are indexed. A PDF or a scan would need OCR, and silently
+indexing an empty body would be worse than skipping it.
+
 ### Notion: after changing the chunk shape, rebuild
 
 The nightly ingest is incremental — it skips any page whose `last_edited_time` AND
