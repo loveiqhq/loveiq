@@ -73,9 +73,13 @@ jobs:
           fi
         env:
           PLAYWRIGHT_BASE_URL: ${{ env.TARGET_URL }}
-          # Staging is password-gated. The config mints the `staging_session` cookie
-          # from this, so a remote run reaches the real pages instead of /login.
-          STAGING_PASSWORD: ${{ secrets.STAGING_PASSWORD }}
+          # Only for a REMOTE target. proxy.ts turns the gate on from this variable
+          # alone, so passing it unconditionally gated the server this job builds
+          # locally — and the first regenerated set came back as 7 screenshots of
+          # /login, then, once the cookie fixed that, as pages with broken images.
+          # A locally built server has nothing to gate; keep the secret for the
+          # remote path, where the config mints the `staging_session` cookie.
+          STAGING_PASSWORD: ${{ inputs.target_url != '' && secrets.STAGING_PASSWORD || '' }}
           UPDATE_BASELINES: ${{ inputs.update_baselines }}
 
       - name: Upload regenerated baselines
