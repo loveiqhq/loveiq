@@ -55,7 +55,14 @@ jobs:
         # artifact, and commit it.
         run: |
           if [ "$UPDATE_BASELINES" = "true" ]; then
-            npx playwright test visual-regression --project="Desktop Chrome" --update-snapshots
+            # `=all`, not the bare flag. Bare `--update-snapshots` means "changed": it
+            # only rewrites a baseline whose comparison FAILED, so any baseline still
+            # passing within maxDiffPixelRatio survives even though it was captured
+            # under different conditions. After reduced-motion emulation was added on
+            # 2026-08-28, the white landing baseline passed at 0.4% and was kept, which
+            # left a permanent fixed 0.4% offset eating 40% of its 1% budget. `=all`
+            # matches what this input claims to do — regenerate, not compare.
+            npx playwright test visual-regression --project="Desktop Chrome" --update-snapshots=all
           else
             npx playwright test visual-regression --project="Desktop Chrome"
           fi
