@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { readAppCss } from "@shared/testing/read-app-css";
 
-const globalsCss = readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
+const globalsCss = readAppCss();
 
 describe("report inline heading typography", () => {
   it("sets the shared desktop archetype inline heading size to 32px", () => {

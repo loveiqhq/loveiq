@@ -1,9 +1,17 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { readAppCss } from "@shared/testing/read-app-css";
 
-const globalsCss = readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8");
+const globalsCss = readAppCss();
 
+/**
+ * These read the app's CSS through `readAppCss()`, which concatenates globals.css and
+ * features/report/ui/report.css. Reading globals.css directly — as this file used to —
+ * broke 44 assertions the moment the report rules moved out of it on 2026-08-28, and
+ * every one of those failures was a wrong PATH rather than a wrong style. If the CSS is
+ * ever split again, add the new file to that helper and these keep working.
+ */
 describe("report theme css contract", () => {
   it("themes the core archetype card border with the active archetype accent", () => {
     expect(globalsCss).toMatch(

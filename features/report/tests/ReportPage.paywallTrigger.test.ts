@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { readAppCss } from "@shared/testing/read-app-css";
 
 /**
  * When the plans pop-up appears, and how gently.
@@ -18,7 +19,7 @@ import { describe, expect, it } from "vitest";
  * opens on arrival, at both viewports.
  */
 const SOURCE = readFileSync(join(process.cwd(), "features/report/ui/ReportPage.tsx"), "utf8");
-const CSS = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+const CSS = readAppCss();
 
 describe("plans pop-up trigger", () => {
   it("observes the chapter after the two teased ones, not any scroll", () => {

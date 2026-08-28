@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { readAppCss } from "@shared/testing/read-app-css";
 
 /**
  * On a locked report every chapter's "Learn:" expander sits behind the blur, CTA
@@ -11,7 +12,7 @@ import { describe, expect, it } from "vitest";
  * no CSS. A real browser check lives in the scratch audit that produced this rule:
  * all twelve locked expanders read `blur(4px)`, all fifteen unlocked read none.
  */
-const CSS = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+const CSS = readAppCss();
 
 const LOCKED_RULE_START = ".report-section:has(.report-premium-overlay) .report-accel__details";
 

@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { readAppCss } from "@shared/testing/read-app-css";
 
 /**
  * Every locked premium section shows a pre-blurred render of its REAL chapter
@@ -71,7 +72,7 @@ describe("locked preview images", () => {
     //
     // Both children now share ONE grid cell, so the box is as tall as the taller of
     // the two: no crop, and no min-height to keep in step with the card.
-    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+    const css = readAppCss();
     const at = css.indexOf("THE WHOLE CHAPTER SHOWS, NOT THE TOP OF IT");
     expect(at, "the shared grid rule is gone").toBeGreaterThan(-1);
     const block = css.slice(at, at + 9000);
@@ -112,7 +113,7 @@ describe("locked preview images", () => {
     // region's centre, the drift growing with the chapter's length. The card and the
     // raster share one grid cell, so `align-self` is the whole fix — and the cell is
     // the raster whenever the raster is the taller of the two.
-    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+    const css = readAppCss();
     const at = css.indexOf("THE WHOLE CHAPTER SHOWS, NOT THE TOP OF IT");
     const block = css.slice(at, at + 9000);
     expect(block).toContain("align-self: center");
@@ -288,7 +289,7 @@ describe("locked preview images", () => {
     const gen = readFileSync(join(process.cwd(), "scripts/generate-locked-previews.mjs"), "utf8");
     expect(gen).toContain("clearBackdrop: true");
     expect(gen).toContain("quality: clearBackdrop ? 98 : 88");
-    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+    const css = readAppCss();
     const at = css.indexOf(
       ".report-learn-peek > .report-locked-preview .report-locked-preview__img"
     );
@@ -308,7 +309,7 @@ describe("locked preview images", () => {
     const ins = readFileSync(join(SECTIONS_DIR, "InsecuritiesSection.tsx"), "utf8");
     expect(ins).not.toContain("report-insecurities__graph-wrap--locked");
     // And the dead CSS went with them.
-    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+    const css = readAppCss();
     expect(css).not.toContain("tables--locked");
     expect(css).not.toContain("graph-wrap--locked");
   });

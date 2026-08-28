@@ -132,6 +132,7 @@ import {
 } from "@shared/experiments/forcedPaywall";
 import { shouldAutoOpenOfferModal } from "../logic/paywallModal";
 import { useReportEngagementTimers } from "./hooks/useReportEngagementTimers";
+import "./report.css";
 
 interface SnapshotContent {
   importanceLabel: string;
