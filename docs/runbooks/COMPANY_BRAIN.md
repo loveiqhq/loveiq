@@ -121,8 +121,27 @@ not go stale, and it refuses to run without `BRAIN_LLM_KEY` rather than reportin
 25 misleading failures. It is deliberately **not** part of `npm run check`: it
 makes real model and database calls.
 
-**The free tier's DAILY request cap is the binding constraint, and it is easy to
-hit.** Measured 2026-08-28: a handful of ad-hoc questions plus roughly two and a
+**MEASURED 2026-08-28: the free tier is not viable for a team tool.** A full
+25-question run, paced 16s apart, degraded monotonically as it went:
+
+| Probe position | Latency            |
+| -------------- | ------------------ |
+| first five     | 3.5 – 4.1 s        |
+| middle         | 7 – 11 s           |
+| later          | 23 – 38 s          |
+| last three     | 45 s, then timeout |
+
+Thirteen answers were correct. Of the eight flagged, **seven were latency or
+timeout, and none was a content problem** — the answers themselves were right,
+including the honest declines ("The provided sources do not contain information
+about Ferhad's pay"). The 3.5s figure is what this system actually costs when the
+provider is not throttling; the 45s figure is the provider, not the code.
+
+So the decision to take before telling the team it is theirs is a commercial one:
+**a paid tier, or accept that the fifth person to ask a question today waits 40
+seconds.** Nothing in the code will fix that.
+
+**The DAILY request cap is a separate limit and also easy to hit.** Measured 2026-08-28: a handful of ad-hoc questions plus roughly two and a
 half battery runs exhausted it, after which every request — including a two-character
 one — returns `429 You exceeded your current quota`. Two consequences:
 

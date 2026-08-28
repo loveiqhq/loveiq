@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ingestAnalytics } from "@features/brain/server/ingest/analytics";
 import { ingestGa4, ingestSearchConsole } from "@features/brain/server/ingest/google";
 import { ingestJira } from "@features/brain/server/ingest/jira";
+import { ingestNotion } from "@features/brain/server/ingest/notion";
 import type { IngestResult } from "@features/brain/server/ingest/upsert";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { escapeSlack, notifySlack } from "@shared/observability/slack";
@@ -31,6 +32,7 @@ const DELIBERATE_SKIPS = new Set([
   "google-not-configured",
   "ga4-no-property-id",
   "gsc-no-site",
+  "notion-not-configured",
 ]);
 
 /**
@@ -156,6 +158,10 @@ export async function GET(request: Request) {
     await run("gsc", () => ingestSearchConsole(stampedAt, isOutOfTime));
     await run("analytics", () => ingestAnalytics(stampedAt));
     await run("jira", () => ingestJira(stampedAt, isOutOfTime));
+    // Notion last, and given the run's clock: it is the only source whose cost
+    // scales with page COUNT rather than row count (one request per page for
+    // block content), so it is the one most likely to need cutting short.
+    await run("notion", () => ingestNotion(stampedAt, isOutOfTime));
 
     logger.info({ results }, "brain-ingest: done");
     // 200 even when a source failed: the run itself completed and Vercel must not

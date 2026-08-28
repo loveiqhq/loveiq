@@ -185,7 +185,14 @@ function flag(p: Probe, text: string, status: string, ms: number, sources: numbe
   // used to be counted as a content failure — and worse, a `shouldDecline` probe
   // that came back rate-limited was reported as FABRICATED, which is the exact
   // opposite of what happened.
-  if (status === "rate_limited") return ["__untested__"];
+  if (status === "rate_limited" || status === "unavailable") return ["__untested__"];
+
+  // An ERRORED probe was not tested either, and mislabelling it is worse than
+  // saying nothing: a `shouldDecline` probe that errored got reported as
+  // "FABRICATED — should have declined", because a provider error message
+  // naturally contains none of the decline phrases. Measured on 2026-08-28, that
+  // turned the free tier throttling into a fake content failure.
+  if (status === "error") return [`__untested__ provider error after ${Math.round(ms / 1000)}s`];
 
   const declined =
     /do not contain|don'?t have|not available|no data|could not find|couldn'?t find|not include|no information/i.test(
@@ -245,7 +252,7 @@ async function main(): Promise<void> {
     }
     const ms = Date.now() - started;
     const issues = flag(p, a.text, a.status, ms, a.sources.length);
-    const skipped = issues[0] === "__untested__";
+    const skipped = String(issues[0] ?? "").startsWith("__untested__");
     if (skipped) untested++;
     else if (issues.length) failures++;
 
@@ -255,7 +262,10 @@ async function main(): Promise<void> {
     console.log(
       `      status=${a.status} ${ms}ms sources=${a.sources.length} blocks=${a.blocks.length}`
     );
-    if (skipped) console.log("      UNTESTED: rate limited by the model provider");
+    if (skipped)
+      console.log(
+        `      UNTESTED: ${String(issues[0]).replace("__untested__", "").trim() || "rate limited by the model provider"}`
+      );
     else if (issues.length) console.log(`      ISSUES: ${issues.join(" | ")}`);
     console.log("      " + a.text.replace(/\n+/g, " ").slice(0, 260).trim());
   }
