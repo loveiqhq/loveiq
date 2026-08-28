@@ -18,10 +18,13 @@ import { sweepStale, upsertChunks, type BrainRow, type IngestResult } from "./up
  * must belong to the LoveIQ workspace, and `NOTION_TEAMSPACE_ID` narrows it
  * further to one teamspace.
  *
- * A CAVEAT THAT HAS NO CODE FIX. Notion enforces per-page permissions; the brain
- * does not. A page only some people can open in Notion becomes readable by anyone
- * who can ask the brain. That is a decision about what to share, not a bug to
- * fix, so `NOTION_EXCLUDE_TITLES` exists to keep named pages out.
+ * A CAVEAT WITH NO CODE FIX, AND A SETTLED ANSWER. Notion enforces per-page
+ * permissions; the brain does not, so a page only some people can open in Notion
+ * becomes readable by anyone who can ask the brain — and this workspace holds
+ * "Performance management", onboarding pages and job posts naming real people.
+ * Raised 2026-08-28; the answer was to index everything, as company-wide policy.
+ * See "Who can see what" in CLAUDE.md. `NOTION_EXCLUDE_TITLES` therefore ships
+ * empty and exists only if that policy changes.
  */
 
 const SOURCE = "notion";
@@ -287,12 +290,31 @@ export function pageToRow(page: NotionPage, text: string, stampedAt: string): Br
   };
 }
 
+/**
+ * Titles always kept out, regardless of policy, because their whole content is a
+ * secret rather than a document.
+ *
+ * `upsert.ts` refuses any chunk matching a known credential PREFIX, which covers
+ * most cases automatically. It cannot catch a page whose entire body is one bare
+ * opaque string — indistinguishable from a hash or an id by shape alone — which is
+ * exactly what "Github token:" in this workspace contains (verified 2026-08-28:
+ * one block, one 30+ character string, nothing else).
+ *
+ * This is not an exception to the open-access policy. That policy is about people
+ * reading information; a key pasted into every LLM prompt that retrieves it is a
+ * different thing.
+ */
+const ALWAYS_EXCLUDED = ["github token"];
+
 /** Titles the team has chosen to keep out, lowercased, from NOTION_EXCLUDE_TITLES. */
 function excludedTitles(): string[] {
-  return (process.env.NOTION_EXCLUDE_TITLES ?? "")
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
+  return [
+    ...ALWAYS_EXCLUDED,
+    ...(process.env.NOTION_EXCLUDE_TITLES ?? "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
+  ];
 }
 
 export function isExcluded(title: string, excluded: string[]): boolean {

@@ -270,7 +270,7 @@ Copy `.env.example` to `.env.local` and fill values:
 | `NOTION_TOKEN`                             | For brain    | Notion internal-integration secret (`ntn_…`) for the nightly ingest. **Replaces Jira** — decision 2026-08-28, the team runs its board in Notion. Must belong to the **LoveIQ** workspace: the account first connected to Claude here was an `@aqvc.com` one whose teamspaces were AQVC Labs, Navigate Ventures and Asset Management, i.e. another company's material with no LoveIQ content. An integration sees nothing until pages are shared with it in Notion (page → ⋯ → Connections), and that sharing is the real access boundary. Unset ⇒ the source is skipped silently, by design.                                                                                                                                                            |
 | `NOTION_BOARD_DATABASE_ID`                 | No           | The `👷🏻‍♂️ Board` database id, from its URL. This is the Jira-equivalent half — 171 tasks with Status / Priority / Impact / assignee / due / completed as of 2026-08-28. Unset ⇒ pages are indexed but the board is not.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `NOTION_TEAMSPACE_ID`                      | No           | Advisory, logged only. Notion's search API has no teamspace filter, so scope is decided by which pages the integration was shared with.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `NOTION_EXCLUDE_TITLES`                    | No           | Comma-separated, case-insensitive substrings of Notion page titles to keep OUT of the corpus. **Notion enforces per-page permissions and the brain does not**, so a page only some people can open in Notion becomes readable by anyone who can ask the brain. Consider HR, performance and onboarding pages.                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `NOTION_EXCLUDE_TITLES`                    | No           | Comma-separated, case-insensitive substrings of Notion page titles to keep OUT of the corpus. **Ships empty, and that is the decision — see "Who can see what" below.** The mechanism exists only if the open-access policy ever changes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `JIRA_BASE_URL`                            | For brain    | Jira Cloud site for the nightly ingest, e.g. `https://loveiq.atlassian.net`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `JIRA_EMAIL`                               | For brain    | Atlassian account email, paired with `JIRA_API_TOKEN` for Basic auth against the Jira REST API.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `JIRA_API_TOKEN`                           | For brain    | Atlassian API token ([create one](https://id.atlassian.com/manage-profile/security/api-tokens)). When this, `JIRA_EMAIL` or `JIRA_BASE_URL` is unset, `/api/cron/brain-ingest` still returns `200 {ok:true}` with `results[].skipped = "jira-not-configured"` for that source — the run itself succeeds. Since 2026-08-27 a skipped or zero-row source also raises an ops Slack alert once a day, because otherwise a source that quietly stops is invisible.                                                                                                                                                                                                                                                                                           |
@@ -638,6 +638,43 @@ For Marcus: Fixed the LoveIQ logo and photos not showing up in our emails. They 
 The Slack commit channel posts the full message, so Marcus automatically gets a plain-English summary at the end of every commit.
 
 ---
+
+## Who can see what (company brain)
+
+**Everything indexed is readable by everyone.** The brain has no per-user or
+per-role filtering, by decision — 2026-08-28, restated as company-wide policy:
+LoveIQ runs an open culture where everyone can see everything.
+
+This matters because some sources DO enforce their own permissions and the brain
+does not inherit them:
+
+- **Notion** has per-page permissions. A page restricted to a few people in Notion
+  becomes readable by anyone who can ask the brain. The workspace holds
+  "Performance management", onboarding pages and job posts naming real people.
+  Indexed anyway, deliberately.
+- **The repo is public**, so docs and commits were already world-readable.
+- **Business numbers** — revenue, ad spend, cost per customer — are in the corpus
+  and therefore answerable by anyone in the Slack workspace and by anyone whose
+  Claude reaches the MCP endpoint.
+
+Two consequences worth keeping in view rather than rediscovering:
+
+1. `SLACK_BRAIN_TEAM_ID` is the only thing stopping another Slack workspace's
+   install from reading all of it, and `LOVEIQ_MCP_TOKEN` is one shared token, so
+   a leak of either is a leak of the whole corpus.
+2. **Credentials are not documents.** `upsertChunks` refuses any chunk containing
+   a recognisable secret — GitHub, Notion, Google, Slack, Stripe, AWS, JWTs,
+   private keys — and logs the title so it can be rotated. Indexing a key is not
+   the same as sharing a page: it copies the secret into a searchable table, into
+   every LLM prompt that retrieves it, and into a free-tier provider that may
+   train on those prompts. One page in Notion ("Github token:") holds nothing but
+   a bare opaque string that no safe pattern can distinguish from a hash, so it is
+   excluded by title in `notion.ts` and **that token should be rotated**.
+3. **Customer data is the line that does NOT move.** `brain_chunk` must never
+   index user-level rows — survey answers, individual reports, email addresses.
+   Open access among the team is a choice; making customers' private results
+   searchable is not the same choice, and the ROPA entry for the language-model
+   vendor depends on it staying true.
 
 ## Postponed / TODO (deliberately deferred work)
 

@@ -40,6 +40,43 @@ const NUL_BYTE = String.fromCharCode(0);
  *  to a comparable size and no single row can dominate a prompt. */
 const MAX_BODY_CHARS = 2400;
 
+/**
+ * Credential shapes that must never enter the corpus.
+ *
+ * Indexing a secret is not the same as sharing a document. `brain_chunk` is
+ * searchable by everyone, its contents are pasted into every LLM prompt that
+ * retrieves them, and the free-tier model provider may train on those prompts —
+ * so one indexed key becomes several copies in places it can never be recalled
+ * from. LoveIQ's open-access policy is about people reading information; it is
+ * not a decision to publish credentials.
+ *
+ * Deliberately PREFIXED patterns only. A generic "long opaque string" rule would
+ * silently drop legitimate chunks — git SHAs, base64, ids — and a guard that eats
+ * real content is worse than no guard.
+ */
+const CREDENTIAL_PATTERNS: Array<[string, RegExp]> = [
+  ["github", /gh[pousr]_[A-Za-z0-9]{16,}/],
+  ["github-fine-grained", /github_pat_[A-Za-z0-9_]{20,}/],
+  ["notion", /\b(?:ntn_|secret_)[A-Za-z0-9]{24,}/],
+  ["google-api-key", /AIza[A-Za-z0-9_-]{30,}/],
+  ["google-oauth-secret", /GOCSPX-[A-Za-z0-9_-]{20,}/],
+  ["slack", /xox[baprse]-[A-Za-z0-9-]{16,}/],
+  ["stripe", /\b[sr]k_(?:live|test)_[A-Za-z0-9]{20,}/],
+  ["stripe-webhook", /whsec_[A-Za-z0-9]{24,}/],
+  ["openai-anthropic", /\bsk-(?:ant-)?[A-Za-z0-9_-]{24,}/],
+  ["jwt", /\beyJ[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\./],
+  ["private-key", /-----BEGIN (?:RSA |EC |OPENSSH |PGP )?PRIVATE KEY/],
+  ["aws", /\bAKIA[0-9A-Z]{16}\b/],
+];
+
+/** The credential kind found in this text, or null. */
+export function credentialKind(text: string): string | null {
+  for (const [kind, pattern] of CREDENTIAL_PATTERNS) {
+    if (pattern.test(text)) return kind;
+  }
+  return null;
+}
+
 function clean(row: BrainRow): BrainRow {
   return {
     ...row,
@@ -61,7 +98,20 @@ export async function upsertChunks(rows: BrainRow[]): Promise<number> {
   // command cannot affect row a second time" and fails the whole request, so
   // de-duplicate here rather than trusting every caller to.
   const byKey = new Map<string, BrainRow>();
-  for (const row of rows) byKey.set(`${row.source} ${row.source_id}`, clean(row));
+  for (const row of rows) {
+    // Refused at the shared write path, so every source is covered and no
+    // ingester has to remember. Logged with the title and never the value, so
+    // someone can go and rotate it.
+    const kind = credentialKind(`${row.title}\n${row.body}`);
+    if (kind) {
+      logger.warn(
+        { source: row.source, sourceId: row.source_id, kind, url: row.url },
+        "brain: refusing to index a chunk containing a credential — rotate it and remove it from the source"
+      );
+      continue;
+    }
+    byKey.set(`${row.source} ${row.source_id}`, clean(row));
+  }
   const unique = [...byKey.values()];
 
   let written = 0;
