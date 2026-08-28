@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import AcceleratorsSection, {
   type AccelCopy,
 } from "@features/report/ui/sections/AcceleratorsSection";
+import { readAppCss } from "@shared/testing/read-app-css";
 
 /**
  * What a locked Accelerators & Brakes chapter shows.
@@ -115,7 +116,7 @@ describe("AcceleratorsSection — locked tease", () => {
 
     // Row three blurs in live text so the ramp starts before the image, and the
     // image is graded rather than flat — same as beliefs.
-    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+    const css = readAppCss();
     const bodyAt = (selector: string) => {
       const at = css.indexOf(selector);
       expect(at, `missing rule: ${selector}`).toBeGreaterThan(-1);

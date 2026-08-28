@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import BeliefsSection, { type BeliefsCopy } from "@features/report/ui/sections/BeliefsSection";
+import { readAppCss } from "@shared/testing/read-app-css";
 
 /**
  * The locked state has been through six shapes, and this is the one that holds:
@@ -150,7 +151,7 @@ describe("BeliefsSection — how much the server ships", () => {
     expect(gen).toContain('row.style.borderLeftColor = ""');
 
     // And a second graded pass across the left edge, where those rules sit.
-    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+    const css = readAppCss();
     const at = css.indexOf(".report-beliefs__preview-fade--tease .report-locked-preview::before");
     expect(at, "the left-edge softening pass is missing").toBeGreaterThan(-1);
     const body = css.slice(at, css.indexOf("}", at));
@@ -178,7 +179,7 @@ describe("BeliefsSection — how much the server ships", () => {
     // down the image instead of sitting flat, which is what read as "too strong in
     // the middle". Addressed from the END of the list, not by index: the two columns
     // ship different row counts (five keeps, three loosens).
-    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+    const css = readAppCss();
     const bodyAt = (selector: string) => {
       const at = css.indexOf(selector);
       expect(at, `missing rule: ${selector}`).toBeGreaterThan(-1);
@@ -203,7 +204,7 @@ describe("BeliefsSection — how much the server ships", () => {
     // different heights; the counts fix most of it and subgrid closes the rest by
     // sharing three tracks — label, rows, raster — between the columns. Desktop only:
     // below 769px the columns stack, where there is no line to match.
-    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+    const css = readAppCss();
     const at = css.indexOf(".report-beliefs__preview-fade--tease .report-beliefs__cols");
     expect(at, "the shared-track rule is gone").toBeGreaterThan(-1);
     const block = css.slice(at, css.indexOf("\n}", css.indexOf(".report-beliefs__col {", at)));
@@ -230,7 +231,7 @@ describe("BeliefsSection — how much the server ships", () => {
     expect(gen).toContain('sib.style.visibility = "hidden"');
     expect(gen).toContain("window.__previewHidden");
 
-    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+    const css = readAppCss();
     const bodyAt = (selector: string) => {
       const at = css.indexOf(selector);
       expect(at, `missing rule: ${selector}`).toBeGreaterThan(-1);
@@ -316,7 +317,7 @@ describe("BeliefsSection — how much the server ships", () => {
     // Centred, the card's top edge sat at 32px — above the live rows — so the reader
     // could see there was text and not finish it: measured, it covered 202px of
     // readable rows at 1440, 168 at 1100, 223 at 900.
-    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+    const css = readAppCss();
     const OVERLAY = ".report-beliefs__preview--locked > .report-premium-overlay";
     const rules = [
       ...css.matchAll(
@@ -348,7 +349,7 @@ describe("BeliefsSection — how much the server ships", () => {
     // The rasters arrive blurred and quarter-scaled; a filter on top would make this
     // chapter visibly softer than every other locked surface. And nothing fades to
     // white: the lists cancel the shared lock mask outright.
-    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+    const css = readAppCss();
     const bodyAt = (selector: string) => {
       const at = css.indexOf(selector);
       expect(at, `missing rule: ${selector}`).toBeGreaterThan(-1);

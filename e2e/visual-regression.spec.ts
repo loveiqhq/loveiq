@@ -46,6 +46,7 @@ async function disableAnimations(page: import("@playwright/test").Page) {
         scroll-behavior: auto !important;
       }
       .animate-on-scroll,
+      .animate-on-load,
       .reveal-on-scroll {
         opacity: 1 !important;
         transform: none !important;

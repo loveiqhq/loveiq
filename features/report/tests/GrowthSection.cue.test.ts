@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { readAppCss } from "@shared/testing/read-app-css";
 
 /**
  * Growth Potentials: the graph and the ladder answer each other.
@@ -15,7 +16,7 @@ import { describe, expect, it } from "vitest";
  * directions), tapping a dot on an iPhone sets it and tapping the empty chart clears
  * it, and focusing a row from the keyboard lights its dot.
  */
-const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+const css = readAppCss();
 const src = readFileSync(
   join(process.cwd(), "features/report/ui/sections/GrowthSection.tsx"),
   "utf8"

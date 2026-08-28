@@ -90,6 +90,34 @@ describe("landing A/B — the two arms", () => {
     expect(previous).toContain('<LandingPageTracker variant="white_prev" />');
   });
 
+  it("themes the archetype cards light on BOTH arms", () => {
+    /**
+     * `ArchetypeCard` defaults to `variant="dark"` — it was written for the retired
+     * dark landing, whose S06 carousel is now dead code. Both live landings are
+     * white, so every call site on them has to opt in explicitly, and forgetting to
+     * is silent: no error, no failing render, just black cards on a white page.
+     * That is exactly what shipped on the previous arm in 6f231825 and was only
+     * noticed on 2026-08-28.
+     *
+     * Asserted per arm rather than by diffing the two files, because the arms are
+     * deliberately different designs — the card THEME is not one of the differences
+     * under test.
+     */
+    for (const arm of [
+      "features/landing/ui/white/WArchetypeCards.tsx",
+      "features/landing/ui/white-v1/WArchetypeCards.tsx",
+    ]) {
+      const src = readFileSync(join(process.cwd(), arm), "utf8");
+      const calls = src.match(/<ArchetypeCard[^>]*\/>/g) ?? [];
+      expect(calls.length, `${arm} renders no ArchetypeCard`).toBeGreaterThan(0);
+      for (const call of calls) {
+        expect(call, `${arm}: light landing must pass variant="white"`).toContain(
+          'variant="white"'
+        );
+      }
+    }
+  });
+
   it("keeps the previous arm's own hero, carousel, FAQ and CTA pinned", () => {
     const previous = readFileSync(
       join(process.cwd(), "features/landing/ui/white-v1/LandingPageWhiteV1.tsx"),
