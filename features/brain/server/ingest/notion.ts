@@ -404,27 +404,41 @@ export async function ingestNotion(
   // The env var is gone rather than fixed: a config value that silently decides
   // which 15% of the workspace is visible is the wrong shape. If a database is
   // shared with the integration, it is in.
-  const databases = await allDatabases(token, isOutOfTime);
+  const dbResult = await allDatabases(token, isOutOfTime);
+  const databases = dbResult.items;
+  let crawlTruncated = !dbResult.complete;
   const candidates: Array<{ raw: NotionPage; dbTitle: string | null }> = [];
 
   for (const [dbId, dbTitle] of databases) {
     if (isOutOfTime()) {
-      complete = false;
+      crawlTruncated = true;
       break;
     }
-    for (const raw of await databaseRows(token, dbId, isOutOfTime)) {
-      candidates.push({ raw, dbTitle });
-    }
+    const rowResult = await databaseRows(token, dbId, isOutOfTime);
+    if (!rowResult.complete) crawlTruncated = true;
+    for (const raw of rowResult.items) candidates.push({ raw, dbTitle });
   }
 
   // ---- standalone pages (not rows of any database) --------------------------
-  for (const raw of await standalonePages(token, isOutOfTime)) {
-    candidates.push({ raw, dbTitle: null });
-  }
+  const pageResult = await standalonePages(token, isOutOfTime);
+  if (!pageResult.complete) crawlTruncated = true;
+  for (const raw of pageResult.items) candidates.push({ raw, dbTitle: null });
 
-  // ---- build, fetching content only for what changed -----------------------
+  // ---- classify first, then do the cheap work before the expensive work ----
+  //
+  // MEASURED: a page's content costs ~1.9s (block children are paginated and
+  // nested, and Notion rate-limits to ~3 req/s), so 45 seconds buys about 24
+  // pages. A run that simply walked the list in order spent its whole budget on
+  // the first 30 pages, touched NOTHING, and therefore could not sweep — and
+  // after a BUILDER_VERSION bump, when every page needs rebuilding, convergence
+  // would have taken ~36 nights with no sweep in between.
+  //
+  // So: touch everything that does not need re-reading, then spend what is left
+  // of the clock on the pages that do, and touch whatever the clock did not
+  // reach. Every page ends up either rewritten or confirmed, which is what lets
+  // the sweep run safely on every run instead of only on a complete one.
+  const toFetch: Array<{ raw: NotionPage; dbTitle: string | null; sourceId: string }> = [];
   const touch: string[] = [];
-  let fetched = 0;
 
   for (const { raw, dbTitle } of candidates) {
     const title = titleOf(raw).trim();
@@ -434,54 +448,83 @@ export async function ingestNotion(
 
     const sourceId = `${dbTitle ? "task" : "page"}:${raw.id}`;
     const edited = raw.last_edited_time ?? raw.created_time ?? null;
-
-    // Unchanged since the last run: keep it alive without re-downloading it.
-    // Compared on the FULL timestamp, not the date, so a page edited twice in
-    // one day is still re-read the second time.
     const seen = known.get(sourceId);
+
+    // Unchanged AND built by the current version: keep it alive for the cost of
+    // one PATCH per 100 rows. Compared on the FULL timestamp, not the date, so a
+    // page edited twice in one day is still re-read the second time.
     if (edited && seen && seen.edited === edited && seen.v === BUILDER_VERSION) {
       touch.push(sourceId);
-      continue;
+    } else {
+      toFetch.push({ raw, dbTitle, sourceId });
     }
+  }
 
+  // ---- fetch what the clock allows -----------------------------------------
+  //
+  // ponytail: the crawl above costs ~20s of the run because it queries all 35
+  // databases every night to learn which pages exist. A cheaper design is
+  // available and deliberately not taken yet: `/search` sorted by
+  // last_edited_time descending, paginated only until it passes the oldest edit
+  // already indexed, gives the CHANGED set in 2-3 requests, and everything else
+  // can be confirmed from `known` without being crawled at all. It is not free —
+  // a page deleted in Notion would then never be noticed, so the full crawl has
+  // to stay as the backfill path. Worth doing if the nightly run starts running
+  // out of budget before it fetches anything.
+  let fetched = 0;
+  for (const item of toFetch) {
     if (isOutOfTime() || fetched >= MAX_CONTENT_PAGES) {
-      // Deliberately not an error. The sweep is skipped for an incomplete run,
-      // and the next run picks up where this one stopped because everything
-      // already written is now "unchanged" and costs a touch instead of a fetch.
+      // Not an error, and not a loss: the rest are CONFIRMED below rather than
+      // abandoned, so they keep their existing (older) content until a later run
+      // reaches them. Stale content beats deleted content.
       complete = false;
       break;
     }
 
     let text = "";
     try {
-      text = await pageText(token, raw.id);
+      text = await pageText(token, item.raw.id as string);
     } catch (err) {
-      logger.warn({ err, page: raw.id }, "brain-ingest notion: page content unreadable");
+      logger.warn({ err, page: item.raw.id }, "brain-ingest notion: page content unreadable");
       complete = false;
     }
     fetched += 1;
 
-    const row = dbTitle
-      ? taskToRow(raw, stampedAt, dbTitle, text)
-      : pageToRow(raw, text, stampedAt);
+    const row = item.dbTitle
+      ? taskToRow(item.raw, stampedAt, item.dbTitle, text)
+      : pageToRow(item.raw, text, stampedAt);
     if (row) rows.push(row);
   }
 
+  // Anything the clock did not reach is confirmed, not abandoned.
   const written = await upsertChunks(rows);
-  const touched = await touchChunks(SOURCE, touch, stampedAt);
+  const writtenIds = new Set(rows.map((r) => r.source_id));
+  const deferred = toFetch.map((i) => i.sourceId).filter((id) => !writtenIds.has(id));
+  const touched = await touchChunks(SOURCE, [...touch, ...deferred], stampedAt);
 
-  // Only sweep a run that walked everything. A partial run would delete every
-  // row it never reached — and `sweepStale` additionally refuses when this run
-  // accounted for far less than the source already holds. `written + touched`
-  // because a touched row is just as much "still here" as a rewritten one.
-  const swept = complete ? await sweepStale(SOURCE, stampedAt, written + touched) : 0;
+  // The sweep is safe whenever every page was either rewritten or confirmed —
+  // which is now true even for a run cut short, so stale rows are never deleted
+  // just because the clock ran out. It still refuses if the crawl itself was
+  // incomplete, because then pages may be missing from `candidates` entirely.
+  const crawlComplete = databases.size > 0 && !crawlTruncated;
+  const swept = crawlComplete ? await sweepStale(SOURCE, stampedAt, written + touched) : 0;
 
   logger.info(
-    { databases: databases.size, candidates: candidates.length, written, touched, fetched, complete },
+    {
+      databases: databases.size,
+      candidates: candidates.length,
+      toFetch: toFetch.length,
+      written,
+      touched,
+      fetched,
+      deferred: deferred.length,
+      crawlComplete,
+      complete,
+    },
     "brain-ingest notion"
   );
 
-  if (!complete && written === 0 && touched === 0) {
+  if (written === 0 && touched === 0) {
     return { source: SOURCE, rows: 0, swept: 0, skipped: "notion-time-budget" };
   }
   return { source: SOURCE, rows: written + touched, swept };
@@ -491,11 +534,15 @@ export async function ingestNotion(
 async function allDatabases(
   token: string,
   isOutOfTime: () => boolean
-): Promise<Map<string, string>> {
+): Promise<{ items: Map<string, string>; complete: boolean }> {
   const out = new Map<string, string>();
+  let complete = true;
   let cursor: string | undefined;
   for (let page = 0; page < MAX_PAGES; page++) {
-    if (isOutOfTime()) break;
+    if (isOutOfTime()) {
+      complete = false;
+      break;
+    }
     const json = await notionPost(token, "/search", {
       filter: { property: "object", value: "database" },
       page_size: PAGE_SIZE,
@@ -513,8 +560,9 @@ async function allDatabases(
     }
     cursor = json.has_more ? (json.next_cursor as string) : undefined;
     if (!cursor) break;
+    if (page === MAX_PAGES - 1) complete = false;
   }
-  return out;
+  return { items: out, complete };
 }
 
 /** Every live row of one database. */
@@ -522,11 +570,15 @@ async function databaseRows(
   token: string,
   dbId: string,
   isOutOfTime: () => boolean
-): Promise<NotionPage[]> {
+): Promise<{ items: NotionPage[]; complete: boolean }> {
   const out: NotionPage[] = [];
+  let complete = true;
   let cursor: string | undefined;
   for (let page = 0; page < MAX_PAGES; page++) {
-    if (isOutOfTime()) break;
+    if (isOutOfTime()) {
+      complete = false;
+      break;
+    }
     let json;
     try {
       json = await notionPost(token, `/databases/${dbId}/query`, {
@@ -534,9 +586,11 @@ async function databaseRows(
         ...(cursor ? { start_cursor: cursor } : {}),
       });
     } catch (err) {
-      // One database the integration cannot query must not lose the other 34.
+      // One database the integration cannot query must not lose the other 34 —
+      // but it DOES mean the crawl is incomplete, so the sweep must not run: its
+      // rows would look absent and be deleted.
       logger.warn({ err, dbId }, "brain-ingest notion: database unreadable");
-      return out;
+      return { items: out, complete: false };
     }
     for (const raw of (json.results as NotionPage[]) ?? []) {
       if (raw.archived || raw.in_trash) continue;
@@ -544,8 +598,9 @@ async function databaseRows(
     }
     cursor = json.has_more ? (json.next_cursor as string) : undefined;
     if (!cursor) break;
+    if (page === MAX_PAGES - 1) complete = false;
   }
-  return out;
+  return { items: out, complete };
 }
 
 /** Pages that are not rows of a database. Rows are covered by databaseRows(),
@@ -553,11 +608,15 @@ async function databaseRows(
 async function standalonePages(
   token: string,
   isOutOfTime: () => boolean
-): Promise<NotionPage[]> {
+): Promise<{ items: NotionPage[]; complete: boolean }> {
   const out: NotionPage[] = [];
+  let complete = true;
   let cursor: string | undefined;
   for (let page = 0; page < MAX_PAGES; page++) {
-    if (isOutOfTime()) break;
+    if (isOutOfTime()) {
+      complete = false;
+      break;
+    }
     const json = await notionPost(token, "/search", {
       filter: { property: "object", value: "page" },
       sort: { direction: "descending", timestamp: "last_edited_time" },
@@ -571,8 +630,9 @@ async function standalonePages(
     }
     cursor = json.has_more ? (json.next_cursor as string) : undefined;
     if (!cursor) break;
+    if (page === MAX_PAGES - 1) complete = false;
   }
-  return out;
+  return { items: out, complete };
 }
 
 /**

@@ -228,3 +228,70 @@ describe("incremental: unchanged pages are touched, not re-downloaded", () => {
     expect(res.rows).toBe(3);
   });
 });
+
+describe("a run cut short must confirm what it could not refresh", () => {
+  beforeEach(() => {
+    dbCalls.length = 0;
+    notionCalls.length = 0;
+    existingChunks = [];
+    process.env.NOTION_TOKEN = "ntn_test";
+  });
+
+  /** Out of time only AFTER the first page-content fetch, so the crawl completes
+   *  and the fetch loop is the thing that gets cut short. */
+  const outOfTimeAfterFirstFetch = () =>
+    notionCalls.filter((u) => u.includes("/blocks/")).length >= 1;
+
+  /** Every source_id named in a PATCH, decoded out of the in.() list. */
+  function touchedIds(): string[] {
+    return dbCalls
+      .filter((c) => c.method === "PATCH")
+      .flatMap((c) => (decodeURIComponent(c.path).match(/"([^"]+)"/g) ?? []).map((q) => q.slice(1, -1)));
+  }
+
+  it("touches the pages the clock did not reach, instead of abandoning them", async () => {
+    // MEASURED: a page's content costs ~1.9s, so 45s buys ~24 pages. A run that
+    // walked the list in order spent its whole budget on the first 30 and touched
+    // NOTHING, so it could not sweep — and after a BUILDER_VERSION bump, when
+    // every page needs rebuilding, that meant ~36 nights with no sweep at all.
+    await ingestNotion(STAMP, outOfTimeAfterFirstFetch);
+
+    const fetched = notionCalls.filter((u) => u.includes("/blocks/")).length;
+    expect(fetched).toBe(1);
+    // Three candidates, one fetched, so the other two must be CONFIRMED.
+    expect(touchedIds().length).toBe(2);
+  });
+
+  it("sweeps anyway, because every page is either rewritten or confirmed", async () => {
+    // Refusing to sweep on a cut-short run would let pages deleted in Notion
+    // linger in the corpus indefinitely.
+    await ingestNotion(STAMP, outOfTimeAfterFirstFetch);
+    const sweepProbe = dbCalls.filter(
+      (c) => c.method === "GET" && c.path.includes("updated_at=lt.")
+    );
+    expect(sweepProbe.length).toBeGreaterThan(0);
+  });
+
+  it("does NOT sweep when a database could not be queried", async () => {
+    // Then its rows are missing from the candidate list entirely, and a sweep
+    // would read that absence as deletion.
+    const realFetch = vi.mocked(
+      (await import("@shared/http/fetch-with-timeout")).fetchWithTimeout
+    );
+    const original = realFetch.getMockImplementation()!;
+    realFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (String(url).includes("/databases/db-lit/query")) {
+        return new Response("boom", { status: 500 }) as never;
+      }
+      return original(url, init) as never;
+    });
+
+    await ingestNotion(STAMP, () => false);
+
+    const sweepProbe = dbCalls.filter(
+      (c) => c.method === "GET" && c.path.includes("updated_at=lt.")
+    );
+    expect(sweepProbe.length).toBe(0);
+    realFetch.mockImplementation(original);
+  });
+});

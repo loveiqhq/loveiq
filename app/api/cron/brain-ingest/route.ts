@@ -56,7 +56,20 @@ const DELIBERATE_SKIPS = new Set([
  */
 
 /** Leaves ~15s of the 60s budget for the response and the cron bookkeeping. */
-const TIME_BUDGET_MS = 45_000;
+/**
+ * When to STOP STARTING new work, not when the run ends.
+ *
+ * Every ingester has a tail that runs after this expires and cannot be
+ * interrupted: it must finish writing the rows it already fetched, confirm the
+ * ones it did not, and sweep. Measured for Notion at 1,062 chunks that tail is
+ * ~6s (11 touch batches plus the upsert and the sweep), and it grows with the
+ * corpus, so the gap to `maxDuration` is the margin that keeps a run from being
+ * killed mid-write.
+ *
+ * 38s against a 60s ceiling leaves ~22s. Raise `maxDuration` here AND in
+ * `vercel.json` before raising this.
+ */
+const TIME_BUDGET_MS = 38_000;
 
 export async function GET(request: Request) {
   if (!verifyCronAuth(request)) {
