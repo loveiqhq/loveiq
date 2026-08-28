@@ -698,4 +698,22 @@ describe("descriptions must not assert configuration state", () => {
       expect(text).toMatch(/not a missing data source/);
     });
   });
+
+  describe("list_sources reports Google's credential state", () => {
+    it("says which Google routes are available, with flags and never values", async () => {
+      // A production cron reported google-token-unavailable while logging nothing.
+      // Reporting the shape here is the only way to compare a REQUEST context
+      // against a CRON one — if the two differ, that difference is the answer.
+      wireCorpusForSources();
+      process.env.VERCEL_OIDC_TOKEN = "a.secret.jwt";
+      process.env.GOOGLE_WORKLOAD_IDENTITY_AUDIENCE = "//iam.example/aud";
+      const text = await sourcesText();
+      expect(text).toMatch(/google credentials visible here:/);
+      expect(text).toMatch(/oidc=1/);
+      expect(text).not.toContain("a.secret.jwt");
+      expect(text).not.toContain("iam.example");
+      delete process.env.VERCEL_OIDC_TOKEN;
+      delete process.env.GOOGLE_WORKLOAD_IDENTITY_AUDIENCE;
+    });
+  });
 });

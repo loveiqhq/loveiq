@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { googleCredentialShape } from "@shared/http/google-oauth";
 import { brainDailyRollup } from "@features/brain/server/ingest/analytics";
 import { CorpusUnavailableError, retrieve } from "@features/brain/server/retrieve";
 import { supabaseFetch } from "@features/admin/server/supabase";
@@ -779,6 +780,12 @@ async function callTool(name: string, args: Record<string, unknown>) {
       return `${name}: NOT REACHABLE — ${svc.envKeys.join(" or ")} is unset on this deployment`;
     });
 
+    // Google's credential state belongs in a tool whose job is reporting what can
+    // and cannot be reached. It is also the only way to compare a REQUEST context
+    // against a CRON one: a production cron reported google-token-unavailable while
+    // logging nothing, and if the two contexts differ, that is the answer.
+    const google = `google credentials visible here: ${googleCredentialShape()}`;
+
     return textResult(
       `INDEXED HISTORY (searchable with search_company_context)\n${lines.join("\n")}\n\n` +
         `A source showing NEVER INGESTED has no data at all — its silence is not evidence ` +
@@ -788,7 +795,12 @@ async function callTool(name: string, args: Record<string, unknown>) {
         `time with full history — use list_product_tables and query_product_data.\n` +
         `Outside services, via query_external_service:\n${live.map((l) => `  ${l}`).join("\n")}\n\n` +
         `A service marked NOT REACHABLE is missing a credential, which is NOT the same as ` +
-        `having no data. Say so rather than answering as though the data does not exist.`
+        `having no data. Say so rather than answering as though the data does not exist.\n\n` +
+        `${google}\n` +
+        `(oidc = Vercel's per-deployment identity token, wif = the workload-identity ` +
+        `audience, imp = the service account to impersonate, refresh = a full OAuth ` +
+        `refresh triple. Flags only — never values. GA4, Search Console and Drive need ` +
+        `at least one usable route among these.)`
     );
   }
 
