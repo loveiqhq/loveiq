@@ -276,13 +276,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           `}
             </Script>
             <Script
-              id="google-ads-loader"
-              src="https://www.googletagmanager.com/gtag/js?id=AW-18068690553"
-              strategy="lazyOnload"
-              nonce={nonce}
-              data-cookieyes="cookieyes-advertisement"
-            />
-            <Script
               id="google-ads-init"
               strategy="lazyOnload"
               nonce={nonce}
@@ -296,6 +289,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               window.__loveiqGtagBootstrapped = true;
             }
             window.gtag('config', 'AW-18068690553');
+            /* No second gtag/js loader for AW-. gtag.js is ONE library serving every
+               destination, so loading it twice fetched ~151 KiB of identical code;
+               Google's own snippet loads it once and calls config() per ID.
+               Verified 2026-08-28 that the duplicate was NOT caused by GTM: after GA4
+               was removed from that container entirely, both loads still appeared. */
           `}
             </Script>
           </>
