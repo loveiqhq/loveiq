@@ -298,6 +298,46 @@ partial grant is self-diagnosing rather than silent.
 Private channels additionally need `groups:read` + `groups:history`; decide that
 separately, since it widens what one shared token can reach.
 
+### Backfilling Google without a working refresh token
+
+The `GOOGLE_OAUTH_*` refresh token dies periodically to a Workspace reauth policy
+(`invalid_grant / invalid_rapt`) and a fresh `gcloud auth login` does NOT revive it —
+it is a separate credential from gcloud's own. Two other routes exist, and only one
+of them currently works:
+
+- **A service-account key is blocked by org policy** —
+  `constraints/iam.disableServiceAccountKeyCreation` on `loveiq-brain`. The two keys
+  `ga4-reader` already has are `SYSTEM_MANAGED` and cannot be downloaded. Lifting
+  that policy is an org-admin decision.
+- **Impersonation works**, needs no key, and is how a local backfill gets done:
+
+```bash
+export GOOGLE_OAUTH_ACCESS_TOKEN=$(gcloud auth print-access-token \
+  --impersonate-service-account=ga4-reader@loveiq-brain.iam.gserviceaccount.com \
+  --scopes=https://www.googleapis.com/auth/analytics.readonly,https://www.googleapis.com/auth/webmasters.readonly \
+  2>/dev/null)
+npm run brain:backfill-google
+```
+
+**Three traps in that one command.** `--scopes` is REQUIRED — without it the token
+carries only `cloud-platform` and both APIs answer "Request had insufficient
+authentication scopes". Both scopes must be passed together, comma-separated; a
+token with one reaches only its own API. And gcloud prints
+"`--scopes` flag may not work as expected and will be ignored for account type
+impersonated_account" — that warning is **misleading**, the flag does take effect,
+and the warnings go to stdout, so `2>/dev/null` alone is not enough if you are
+capturing output (use `| tr -d '[:space:]'` and check the token starts `ya29.`).
+
+`getGoogleAccessToken()` checks `GOOGLE_OAUTH_ACCESS_TOKEN` first precisely so this
+works, and it is a laptop convenience only — a serverless function has no gcloud.
+
+**The nightly refresh still needs a real credential.** Until one exists, GA4 and
+Search Console keep the history that was backfilled — a run with no usable token
+returns `skipped: google-token-unavailable`, writes nothing, and therefore does not
+sweep — but they stop advancing. Fixing it means either re-running the browser OAuth
+flow for the `brain-cli` client to mint a fresh refresh token, or an org-policy
+exception so a downloadable service-account key can be created.
+
 ### Notion: after changing the chunk shape, rebuild
 
 The nightly ingest is incremental — it skips any page whose `last_edited_time` AND

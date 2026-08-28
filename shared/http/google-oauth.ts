@@ -92,7 +92,17 @@ export async function getGoogleAccessToken(nowMs: number = Date.now()): Promise<
    *
    *   gcloud auth print-access-token \
    *     --impersonate-service-account=ga4-reader@loveiq-brain.iam.gserviceaccount.com \
-   *     --scopes=https://www.googleapis.com/auth/analytics.readonly
+   *     --scopes=https://www.googleapis.com/auth/analytics.readonly,https://www.googleapis.com/auth/webmasters.readonly
+   *
+   * BOTH scopes, comma-separated: a token minted with one reaches only its own
+   * API, and with none it carries `cloud-platform` alone and both answer "Request
+   * had insufficient authentication scopes". gcloud warns that `--scopes` "will be
+   * ignored for account type impersonated_account" — that is wrong, the flag does
+   * take effect, and its warnings go to STDOUT so they corrupt a captured token.
+   *
+   * A downloadable service-account key is NOT an option here:
+   * `constraints/iam.disableServiceAccountKeyCreation` is set on the project, and
+   * the keys `ga4-reader` holds are SYSTEM_MANAGED.
    *
    * It cannot be used in production — it needs the gcloud CLI, which a serverless
    * function does not have — and the token lasts an hour, so it is a laptop
@@ -127,7 +137,9 @@ export async function getGoogleAccessToken(nowMs: number = Date.now()): Promise<
   if (saKey) {
     const token = await serviceAccountToken(saKey, nowMs);
     if (token) return token;
-    logger.warn("google oauth: service-account key present but unusable, falling back to refresh token");
+    logger.warn(
+      "google oauth: service-account key present but unusable, falling back to refresh token"
+    );
   }
 
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
@@ -218,8 +230,7 @@ async function serviceAccountToken(rawKey: string, nowMs: number): Promise<strin
     iat,
     exp: iat + 3600,
   };
-  const b64 = (o: unknown) =>
-    Buffer.from(JSON.stringify(o)).toString("base64url");
+  const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
   const signingInput = `${b64({ alg: "RS256", typ: "JWT" })}.${b64(claims)}`;
 
   let assertion: string;
@@ -249,9 +260,10 @@ async function serviceAccountToken(rawKey: string, nowMs: number): Promise<strin
     logger.error({ status: res.status, detail }, "google oauth: service-account exchange rejected");
     return null;
   }
-  const json = (await res.json().catch(() => null)) as
-    | { access_token?: string; expires_in?: number }
-    | null;
+  const json = (await res.json().catch(() => null)) as {
+    access_token?: string;
+    expires_in?: number;
+  } | null;
   if (!json?.access_token) {
     logger.error("google oauth: service-account exchange returned no access_token");
     return null;
