@@ -106,6 +106,21 @@ not go stale, and it refuses to run without `BRAIN_LLM_KEY` rather than reportin
 25 misleading failures. It is deliberately **not** part of `npm run check`: it
 makes real model and database calls.
 
+**The free tier's DAILY request cap is the binding constraint, and it is easy to
+hit.** Measured 2026-08-28: a handful of ad-hoc questions plus roughly two and a
+half battery runs exhausted it, after which every request — including a two-character
+one — returns `429 You exceeded your current quota`. Two consequences:
+
+- Run the battery **once** and let it finish. Two concurrent runs rate-limit each
+  other into uselessness; one earlier run produced three lines of output before
+  giving up. `BRAIN_BATTERY_GAP_MS` paces it (default 12s); the run takes ~6
+  minutes.
+- `DAILY_QUESTION_LIMIT` in `features/brain/server/log.ts` is 220, chosen against
+  an assumed 250/day. That assumption is **unverified** — the real ceiling has not
+  been measured, and if it is lower the guard never fires and people just see
+  "something went wrong" instead of an honest "out of questions for today".
+  Measure it before telling the team the tool is theirs, or move to a paid tier.
+
 ### Checking it is still alive
 
 ```sql
