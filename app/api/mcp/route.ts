@@ -204,7 +204,6 @@ const TOOLS = [
             "slack",
             "github",
             "vercel",
-            "calendly",
             "figma",
             "trustpilot",
             "clarity",
@@ -332,15 +331,6 @@ export const EXTERNAL_SERVICES: Record<
       "endpoints need a teamId and projectId — get them from /v2/teams and /v9/projects rather " +
       "than hardcoding, and note the two projects are the production site and staging.",
   },
-  calendly: {
-    base: "https://api.calendly.com",
-    envKeys: ["CALENDLY_API_TOKEN"],
-    auth: { kind: "bearer" },
-    note:
-      "Scheduled events, invitees and event types. Bookings we already receive by webhook are " +
-      "stored in booking_event and calendly_webhook_event, so prefer query_product_data for " +
-      "anything historical — this is for detail we never stored.",
-  },
   figma: {
     base: "https://api.figma.com/v1",
     envKeys: ["FIGMA_TOKEN", "FIGMA_ACCESS_TOKEN"],
@@ -363,12 +353,16 @@ export const EXTERNAL_SERVICES: Record<
     envKeys: ["CLARITY_API_TOKEN"],
     auth: { kind: "bearer" },
     note:
-      "Microsoft Clarity: session-recording and heatmap metrics — dead clicks, rage clicks, " +
-      "excessive scrolling, JavaScript errors, and traffic broken down by browser, device, " +
-      "country and referrer. Live on the production site via public/clarity-init.js, and the " +
-      "only tool we run that reports user FRUSTRATION rather than volume, which is exactly " +
-      "what the funnel numbers cannot tell you. Its export API covers the last 1-3 days only, " +
-      "so treat it as a current-state signal, not history.",
+      "Microsoft Clarity, live on every page via public/clarity-init.js. The only tool we run " +
+      "that measures user FRUSTRATION rather than volume: dead clicks, rage clicks, quick " +
+      "backs, excessive scrolling and JavaScript errors — exactly what the funnel numbers " +
+      "cannot explain. " +
+      "There is ONE endpoint: '/project-live-insights'. Required param numOfDays, which " +
+      "accepts only 1, 2 or 3 — the API has no longer history, so this is a current-state " +
+      "signal and an empty result for last month is the API's limit, not an absence of " +
+      "sessions. Optional dimension1/dimension2/dimension3, each one of: Browser, Device, " +
+      "Country, OS, Source, Medium, Campaign, URL. Example: " +
+      "{numOfDays: 3, dimension1: 'Device'}.",
   },
   posthog: {
     base: "https://eu.posthog.com/api",

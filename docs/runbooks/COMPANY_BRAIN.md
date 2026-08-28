@@ -148,11 +148,11 @@ Six tools, in two halves.
 
 **Live state — read at ask time, full history, no lag:**
 
-| Tool                     | For                                                                                                                                                                                                                                                                     |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `list_product_tables`    | Every table, view and analysis function in our database, with its columns                                                                                                                                                                                               |
-| `query_product_data`     | Read any of them: payments, refunds, Resend delivery, Calendly bookings, submissions, answers, reports, shares, invites, waitlist, marketing spend, admin tables. Prefer an `rpc/get_*` function when one fits — they encode the business logic already                 |
-| `query_external_service` | Read-only GET against nine outside services — Stripe, Resend, Slack, GitHub, PostHog, Vercel, Calendly, Figma, Trustpilot — for what they know and we do not store: dispute detail, payout timing, a Slack thread, an open pull request, a runtime error, a design file |
+| Tool                     | For                                                                                                                                                                                                                                                                    |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_product_tables`    | Every table, view and analysis function in our database, with its columns                                                                                                                                                                                              |
+| `query_product_data`     | Read any of them: payments, refunds, Resend delivery, Calendly bookings, submissions, answers, reports, shares, invites, waitlist, marketing spend, admin tables. Prefer an `rpc/get_*` function when one fits — they encode the business logic already                |
+| `query_external_service` | Read-only GET against nine outside services — Stripe, Resend, Slack, GitHub, PostHog, Vercel, Figma, Trustpilot, Clarity — for what they know and we do not store: dispute detail, payout timing, a Slack thread, an open pull request, a runtime error, a design file |
 
 **Read-only by construction, not by validation.** A table read is a GET, a
 function call is a POST to `/rpc`, and PostgREST needs PATCH/PUT/DELETE to write.
@@ -258,8 +258,7 @@ time, so it cannot drift.
 Reachable with credentials that already exist for other reasons: Stripe, Resend,
 PostHog, Slack (subject to scopes, below). GitHub needs no credential at all
 because the repository is public. Registered and waiting on one env var each:
-`VERCEL_TOKEN`, `CALENDLY_API_TOKEN`, `FIGMA_TOKEN`, `TRUSTPILOT_API_KEY`,
-`CLARITY_API_TOKEN` — Trustpilot takes its key as a query parameter rather than a
+`VERCEL_TOKEN`, `FIGMA_TOKEN`, `TRUSTPILOT_API_KEY`, `CLARITY_API_TOKEN` — Trustpilot takes its key as a query parameter rather than a
 header, and Figma uses its own header, which is why the gateway supports four auth
 shapes.
 
