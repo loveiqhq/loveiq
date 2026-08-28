@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { brainDailyRollup } from "@features/brain/server/ingest/analytics";
 import { CorpusUnavailableError, retrieve } from "@features/brain/server/retrieve";
@@ -182,7 +183,16 @@ async function callTool(name: string, args: Record<string, unknown>) {
     // ingested". A discovered list cannot show the second case at all: an absent
     // source would simply not appear, which is the exact inference the tool exists
     // to prevent.
-    const SOURCES = ["doc", "commit", "analytics", "ga4", "gsc", "jira"];
+    //
+    // But a fixed list only covers ONE direction, and the other direction bit us:
+    // Notion was ingested (233 chunks, answering searches) while this list still
+    // said doc/commit/analytics/ga4/gsc/jira, so the tool reported a corpus that
+    // did not include the company board — a confident, wrong answer to "what do
+    // you have access to". Hence the probe below: anything present in the table
+    // but missing from this list is named explicitly rather than silently
+    // dropped. Add a source here when you add an ingester; if you forget, the
+    // probe says so instead of the tool lying.
+    const SOURCES = ["doc", "commit", "analytics", "ga4", "gsc", "jira", "notion"];
 
     const describe = async (source: string): Promise<string> => {
       const base = `/rest/v1/brain_chunk?source=eq.${encodeURIComponent(source)}`;
@@ -207,6 +217,25 @@ async function callTool(name: string, args: Record<string, unknown>) {
     };
 
     const lines = await Promise.all(SOURCES.map(describe));
+
+    // Name anything in the table that SOURCES forgot. Postgres aggregates are
+    // disabled on this instance (PGRST123), so this is a plain `not.in` scan
+    // rather than a DISTINCT; unlisted sources are a bug, so the row count is
+    // tiny in practice and the limit only bounds the pathological case.
+    const unlisted = await supabaseFetch(
+      `/rest/v1/brain_chunk?select=source&source=not.in.(${SOURCES.join(",")})&limit=200`
+    );
+    if (unlisted.ok) {
+      const rows = (await unlisted.json().catch(() => [])) as Array<{ source?: string }>;
+      const names = [...new Set(rows.map((r) => r.source).filter(Boolean))].sort();
+      if (names.length > 0) {
+        lines.push(
+          `${names.join(", ")}: present in the corpus but MISSING from this tool's source list — ` +
+            `the counts above are incomplete, and this is a bug worth reporting.`
+        );
+      }
+    }
+
     return textResult(
       `${lines.join("\n")}\n\nA source showing NEVER INGESTED has no data at all — its silence is ` +
         `not evidence that the thing does not exist. A source whose newest period is old has ` +
@@ -226,8 +255,14 @@ export async function POST(request: Request) {
 
   const auth = request.headers.get("authorization") ?? "";
   const presented = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  // Length check first: timingSafeEqual throws on a length mismatch.
-  if (presented.length !== expected.length || presented !== expected) {
+  // The comment here used to claim timingSafeEqual while the code did a plain
+  // `!==`, which short-circuits on the first differing byte and so leaks the
+  // shared token's prefix to anyone who can time responses. Now it does what it
+  // says. The length check stays FIRST because timingSafeEqual throws outright on
+  // unequal buffer lengths — and length is not a secret worth protecting here.
+  const a = Buffer.from(presented);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 

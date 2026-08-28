@@ -10,7 +10,10 @@ vi.mock("@features/brain/server/retrieve", async (importOriginal) => ({
   retrieve: (...a: unknown[]) => mockRetrieve(...a),
 }));
 
-vi.mock("@features/admin/server/supabase", () => ({ supabaseFetch: vi.fn() }));
+const mockSupabaseFetch = vi.fn();
+vi.mock("@features/admin/server/supabase", () => ({
+  supabaseFetch: (...a: unknown[]) => mockSupabaseFetch(...(a as [])),
+}));
 vi.mock("@features/brain/server/ingest/analytics", () => ({ brainDailyRollup: vi.fn() }));
 
 const mockRateLimit = vi.fn(async () => ({ allowed: true }));
@@ -162,6 +165,71 @@ describe("/api/mcp", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.result.isError).toBe(true);
+    });
+  });
+
+  describe("list_sources", () => {
+    /**
+     * Drive supabaseFetch by URL shape: the per-source count/newest reads, the
+     * per-source updated_at read, and the `not.in` completeness probe.
+     */
+    function wireCorpus(present: Record<string, number>, unlisted: string[] = []) {
+      mockSupabaseFetch.mockImplementation(async (path: string) => {
+        if (path.includes("source=not.in.")) {
+          return {
+            ok: true,
+            headers: new Headers(),
+            json: async () => unlisted.map((s) => ({ source: s })),
+          };
+        }
+        const m = /source=eq\.([a-z0-9_]+)/.exec(path);
+        const source = m?.[1] ?? "";
+        const n = present[source] ?? 0;
+        if (path.includes("select=updated_at")) {
+          return { ok: true, headers: new Headers(), json: async () => [{ updated_at: "2026-08-28T00:00:00Z" }] };
+        }
+        return {
+          ok: true,
+          headers: new Headers({ "content-range": `0-0/${n}` }),
+          json: async () => (n > 0 ? [{ period_end: "2026-08-28" }] : []),
+        };
+      });
+    }
+
+    async function text() {
+      const res = await POST(
+        rpc({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "list_sources", arguments: {} } })
+      );
+      const body = await res.json();
+      return body.result.content[0].text as string;
+    }
+
+    it("reports notion, which the fixed source list originally omitted", async () => {
+      // The regression: notion had 233 chunks and answered searches, while this
+      // tool listed only doc/commit/analytics/ga4/gsc/jira — so it described a
+      // corpus without the company board. Fails on the pre-fix SOURCES array.
+      wireCorpus({ doc: 418, commit: 1448, analytics: 174, ga4: 108, gsc: 107, notion: 233 });
+      expect(await text()).toContain("notion: 233 chunks");
+    });
+
+    it("still distinguishes a never-ingested source from a stale one", async () => {
+      // The reason the list is fixed at all — a discovered list cannot say this.
+      wireCorpus({ doc: 418, commit: 1448, analytics: 174, ga4: 108, gsc: 107, notion: 233 });
+      expect(await text()).toContain("jira: 0 chunks — NEVER INGESTED");
+    });
+
+    it("names a source that is in the corpus but missing from the list", async () => {
+      // The other direction, which is what actually broke. Without the probe the
+      // tool silently under-reports and reads as if the corpus were complete.
+      wireCorpus({ doc: 1, notion: 1 }, ["transcript", "slack_history"]);
+      const t = await text();
+      expect(t).toContain("slack_history, transcript");
+      expect(t).toMatch(/MISSING from this tool's source list/);
+    });
+
+    it("says nothing extra when every source is accounted for", async () => {
+      wireCorpus({ doc: 1, notion: 1 }, []);
+      expect(await text()).not.toMatch(/MISSING from this tool's source list/);
     });
   });
 });
