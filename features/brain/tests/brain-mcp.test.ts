@@ -208,7 +208,11 @@ describe("/api/mcp", () => {
         const source = m?.[1] ?? "";
         const n = present[source] ?? 0;
         if (path.includes("select=updated_at")) {
-          return { ok: true, headers: new Headers(), json: async () => [{ updated_at: "2026-08-28T00:00:00Z" }] };
+          return {
+            ok: true,
+            headers: new Headers(),
+            json: async () => [{ updated_at: "2026-08-28T00:00:00Z" }],
+          };
         }
         return {
           ok: true,
@@ -220,7 +224,12 @@ describe("/api/mcp", () => {
 
     async function text() {
       const res = await POST(
-        rpc({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "list_sources", arguments: {} } })
+        rpc({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "list_sources", arguments: {} },
+        })
       );
       const body = await res.json();
       return body.result.content[0].text as string;
@@ -284,24 +293,31 @@ describe("/api/mcp", () => {
     };
 
     function wire(rows: unknown, opts: { ok?: boolean; total?: number; status?: number } = {}) {
-      mockSupabaseFetch.mockImplementation(async (path: string, init?: { headers?: Record<string, string> }) => {
-        if (init?.headers?.Accept === "application/openapi+json") {
-          return { ok: true, headers: new Headers(), json: async () => OPENAPI };
+      mockSupabaseFetch.mockImplementation(
+        async (path: string, init?: { headers?: Record<string, string> }) => {
+          if (init?.headers?.Accept === "application/openapi+json") {
+            return { ok: true, headers: new Headers(), json: async () => OPENAPI };
+          }
+          const total = opts.total ?? (Array.isArray(rows) ? rows.length : 0);
+          return {
+            ok: opts.ok ?? true,
+            status: opts.status ?? 200,
+            headers: new Headers({ "content-range": `0-0/${total}` }),
+            json: async () => rows,
+            text: async () => JSON.stringify(rows),
+          };
         }
-        const total = opts.total ?? (Array.isArray(rows) ? rows.length : 0);
-        return {
-          ok: opts.ok ?? true,
-          status: opts.status ?? 200,
-          headers: new Headers({ "content-range": `0-0/${total}` }),
-          json: async () => rows,
-          text: async () => JSON.stringify(rows),
-        };
-      });
+      );
     }
 
     async function call(args: Record<string, unknown>, tool = "query_product_data") {
       const res = await POST(
-        rpc({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: tool, arguments: args } })
+        rpc({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: tool, arguments: args },
+        })
       );
       const body = await res.json();
       return body.result as { content: Array<{ text: string }>; isError?: boolean };
@@ -445,7 +461,9 @@ describe("/api/mcp", () => {
 
     it("pins the host, so the path cannot redirect the request elsewhere", async () => {
       await call({ service: "stripe", path: "/charges" });
-      expect(String(mockFetch.mock.calls[0][0])).toMatch(/^https:\/\/api\.stripe\.com\/v1\/charges/);
+      expect(String(mockFetch.mock.calls[0][0])).toMatch(
+        /^https:\/\/api\.stripe\.com\/v1\/charges/
+      );
     });
 
     it("rejects a path that tries to escape the API namespace", async () => {
@@ -471,13 +489,36 @@ describe("/api/mcp", () => {
     it("distinguishes 'not configured' from 'no data', which is the whole point", async () => {
       const r = await call({ service: "posthog", path: "/projects" });
       expect(r.isError).toBe(true);
-      expect(r.content[0].text).toMatch(/POSTHOG_API_KEY is unset/);
+      expect(r.content[0].text).toMatch(/POSTHOG_API_KEY unset/);
       expect(r.content[0].text).toMatch(/do not conclude the data does not exist/);
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
+    it("prefers the brain's own Slack token over the one driving journey messages", async () => {
+      // Adding read scopes to SLACK_BOT_TOKEN would force a reinstall of the app
+      // that posts live journey messages; CLAUDE.md says do not risk it.
+      process.env.SLACK_BRAIN_BOT_TOKEN = "xoxb-brain";
+      process.env.SLACK_BOT_TOKEN = "xoxb-main";
+      await call({ service: "slack", path: "/conversations.list" });
+      expect(
+        (mockFetch.mock.calls[0][1] as { headers: Record<string, string> }).headers.Authorization
+      ).toBe("Bearer xoxb-brain");
+
+      mockFetch.mockClear();
+      delete process.env.SLACK_BRAIN_BOT_TOKEN;
+      await call({ service: "slack", path: "/conversations.list" });
+      expect(
+        (mockFetch.mock.calls[0][1] as { headers: Record<string, string> }).headers.Authorization
+      ).toBe("Bearer xoxb-main");
+      delete process.env.SLACK_BOT_TOKEN;
+    });
+
     it("flattens nested params into bracket syntax, which Stripe and PostHog both need", async () => {
-      await call({ service: "stripe", path: "/charges", params: { limit: 3, created: { gte: 1756000000 } } });
+      await call({
+        service: "stripe",
+        path: "/charges",
+        params: { limit: 3, created: { gte: 1756000000 } },
+      });
       const url = String(mockFetch.mock.calls[0][0]);
       expect(url).toContain("limit=3");
       expect(url).toContain("created%5Bgte%5D=1756000000");
@@ -487,17 +528,25 @@ describe("/api/mcp", () => {
       delete process.env.GITHUB_TOKEN;
       const r = await call({ service: "github", path: "/repos/loveiqhq/loveiq/issues" });
       expect(r.isError).toBeFalsy();
-      expect((mockFetch.mock.calls[0][1] as { headers: Record<string, string> }).headers.Authorization).toBeUndefined();
+      expect(
+        (mockFetch.mock.calls[0][1] as { headers: Record<string, string> }).headers.Authorization
+      ).toBeUndefined();
 
       mockFetch.mockClear();
       process.env.GITHUB_TOKEN = "ghp_x";
       await call({ service: "github", path: "/repos/loveiqhq/loveiq/issues" });
-      expect((mockFetch.mock.calls[0][1] as { headers: Record<string, string> }).headers.Authorization).toBe("token ghp_x");
+      expect(
+        (mockFetch.mock.calls[0][1] as { headers: Record<string, string> }).headers.Authorization
+      ).toBe("token ghp_x");
       delete process.env.GITHUB_TOKEN;
     });
 
     it("reports an upstream error instead of an empty result", async () => {
-      mockFetch.mockResolvedValue({ ok: false, status: 402, text: async () => '{"error":"card_declined"}' });
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 402,
+        text: async () => '{"error":"card_declined"}',
+      });
       const r = await call({ service: "stripe", path: "/charges" });
       expect(r.isError).toBe(true);
       expect(r.content[0].text).toMatch(/stripe returned 402/);

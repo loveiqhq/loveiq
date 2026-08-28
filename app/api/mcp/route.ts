@@ -150,8 +150,7 @@ const TOOLS = [
       properties: {
         table: {
           type: "string",
-          description:
-            "Table, view, or 'rpc/<function>' from list_product_tables.",
+          description: "Table, view, or 'rpc/<function>' from list_product_tables.",
         },
         select: {
           type: "string",
@@ -168,7 +167,8 @@ const TOOLS = [
         },
         order: {
           type: "string",
-          description: "e.g. 'created_date_time.desc'. Strongly recommended \u2014 without it the order is arbitrary.",
+          description:
+            "e.g. 'created_date_time.desc'. Strongly recommended \u2014 without it the order is arbitrary.",
         },
         limit: { type: "number", description: "Rows to return. Default 100, maximum 1000." },
         offset: { type: "number", description: "Rows to skip, for paging past the cap." },
@@ -226,7 +226,6 @@ const TOOLS = [
   },
 ];
 
-
 /**
  * Table → column names, straight from PostgREST's OpenAPI document.
  *
@@ -258,7 +257,9 @@ const EXTERNAL_SERVICES: Record<
   string,
   {
     base: string;
-    envKey: string | null;
+    /** Tried in order; the first one set wins. Lets a service prefer a
+     *  read-scoped token and fall back to a broader one. */
+    envKeys: string[];
     auth: "bearer" | "token" | "query";
     /** true when the API is readable WITHOUT the credential and the token only
      *  raises a rate limit. The repository is public, so GitHub is the case. */
@@ -268,32 +269,36 @@ const EXTERNAL_SERVICES: Record<
 > = {
   stripe: {
     base: "https://api.stripe.com/v1",
-    envKey: "STRIPE_SECRET_KEY",
+    envKeys: ["STRIPE_SECRET_KEY"],
     auth: "bearer",
     note: "Charges, disputes, refunds, payouts, balance, customers, invoices, promotion codes. Use for what Stripe knows and our database does not — dispute detail, payout timing, coupon redemption counts.",
   },
   resend: {
     base: "https://api.resend.com",
-    envKey: "RESEND_API_KEY",
+    envKeys: ["RESEND_API_KEY"],
     auth: "bearer",
     note: "Domains and their DNS/verification state, audiences and contacts, and a single email by id. Per-message delivery events are already in resend_webhook_event, so prefer query_product_data for bounce and open rates.",
   },
   slack: {
     base: "https://slack.com/api",
-    envKey: "SLACK_BOT_TOKEN",
+    // The BRAIN bot first, deliberately. Adding read scopes to SLACK_BOT_TOKEN
+    // would force a reinstall of the app that drives the live journey messages,
+    // and CLAUDE.md is explicit that this is not worth the risk. The brain app
+    // exists precisely to hold read scopes.
+    envKeys: ["SLACK_BRAIN_BOT_TOKEN", "SLACK_BOT_TOKEN"],
     auth: "bearer",
     note: "conversations.list, conversations.history, conversations.replies, users.list. Reads only channels the bot is in, and only with the scopes it holds — a missing scope returns ok:false with missing_scope rather than an error.",
   },
   github: {
     base: "https://api.github.com",
-    envKey: "GITHUB_TOKEN",
+    envKeys: ["GITHUB_TOKEN"],
     auth: "token",
     optional: true,
     note: "Issues, pull requests, reviews, releases and workflow runs for loveiqhq/loveiq. The repository is public, so this works with no credential; a token only raises the rate limit.",
   },
   posthog: {
     base: "https://eu.posthog.com/api",
-    envKey: "POSTHOG_API_KEY",
+    envKeys: ["POSTHOG_API_KEY"],
     auth: "bearer",
     note: "Product analytics, feature flags, session recordings, insights. Needs a PostHog Personal API Key, which is not configured yet.",
   },
@@ -340,17 +345,20 @@ async function productSchema(): Promise<Map<string, string[]> | null> {
   for (const [path, def] of Object.entries(spec.paths ?? {})) {
     const key = path.replace(/^\//, "");
     if (!key.startsWith("rpc/") || out.has(key)) continue;
-    const body = (def as {
-      post?: {
-        parameters?: Array<{
-          in?: string;
-          schema?: { properties?: Record<string, { format?: string }>; required?: string[] };
-        }>;
-      };
-    }).post?.parameters?.find((param) => param.in === "body")?.schema;
+    const body = (
+      def as {
+        post?: {
+          parameters?: Array<{
+            in?: string;
+            schema?: { properties?: Record<string, { format?: string }>; required?: string[] };
+          }>;
+        };
+      }
+    ).post?.parameters?.find((param) => param.in === "body")?.schema;
     const required = new Set(body?.required ?? []);
     const args = Object.entries(body?.properties ?? {}).map(
-      ([argName, argDef]) => `${argName}${required.has(argName) ? "!" : ""}: ${argDef.format ?? "?"}`
+      ([argName, argDef]) =>
+        `${argName}${required.has(argName) ? "!" : ""}: ${argDef.format ?? "?"}`
     );
     out.set(key, args.length > 0 ? args : ["(no arguments)"]);
   }
@@ -468,9 +476,7 @@ async function callTool(name: string, args: Record<string, unknown>) {
       init = {
         method: "POST",
         headers: { Prefer: "count=exact" },
-        body: JSON.stringify(
-          args.params && typeof args.params === "object" ? args.params : {}
-        ),
+        body: JSON.stringify(args.params && typeof args.params === "object" ? args.params : {}),
       };
     } else {
       const parts = [
@@ -526,10 +532,10 @@ async function callTool(name: string, args: Record<string, unknown>) {
       );
     }
 
-    const token = svc.envKey ? process.env[svc.envKey] : null;
-    if (svc.envKey && !token && !svc.optional) {
+    const token = svc.envKeys.map((k) => process.env[k]).find(Boolean) ?? null;
+    if (svc.envKeys.length > 0 && !token && !svc.optional) {
       return textResult(
-        `${key} is not configured on this deployment (${svc.envKey} is unset), so I cannot ` +
+        `${key} is not configured on this deployment (${svc.envKeys.join(" / ")} unset), so I cannot ` +
           `read it. This is a missing credential, not an empty result — do not conclude the ` +
           `data does not exist.`,
         true
@@ -578,7 +584,10 @@ async function callTool(name: string, args: Record<string, unknown>) {
       });
     } catch (err) {
       logger.warn({ err, service: key }, "mcp: external service unreachable");
-      return textResult(`${key} did not respond in time. This is an outage, not an empty result.`, true);
+      return textResult(
+        `${key} did not respond in time. This is an outage, not an empty result.`,
+        true
+      );
     }
 
     const text = (await res.text().catch(() => "")).slice(0, MAX_RESULT_CHARS - 500);

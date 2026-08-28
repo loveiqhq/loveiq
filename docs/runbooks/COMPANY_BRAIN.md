@@ -239,6 +239,30 @@ one — returns `429 You exceeded your current quota`. Two consequences:
   "something went wrong" instead of an honest "out of questions for today".
   Measure it before telling the team the tool is theirs, or move to a paid tier.
 
+### Slack history needs two scopes on the brain app
+
+`query_external_service` with `service: "slack"` works, but currently answers
+`missing_scope`: the tokens hold only `chat:write` (the main bot) and
+`app_mentions:read, im:*` (the brain bot). Neither can list channels or read
+history.
+
+Reads use `SLACK_BRAIN_BOT_TOKEN` first and fall back to `SLACK_BOT_TOKEN`,
+deliberately: adding read scopes to the main bot would force a reinstall of the app
+that posts the live journey messages, which `CLAUDE.md` says not to risk.
+
+To enable it, add to the **LoveIQ Brain** app (api.slack.com/apps → OAuth &
+Permissions → Bot Token Scopes) and reinstall:
+
+- `channels:read` — list public channels
+- `channels:history` — read messages in public channels the bot is in
+
+Then `/invite @LoveIQ Brain` in each channel it should be able to read. Slack
+returns `ok:false` with `missing_scope` naming exactly what is needed, so a
+partial grant is self-diagnosing rather than silent.
+
+Private channels additionally need `groups:read` + `groups:history`; decide that
+separately, since it widens what one shared token can reach.
+
 ### GA4 and Search Console: depth vs freshness
 
 The nightly job reads only the **last 10 days** of GA4 and Search Console and
