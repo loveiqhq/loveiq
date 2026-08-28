@@ -65,6 +65,10 @@ const EXPIRY_SKEW_MS = 60_000;
 
 export const GA4_SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
 export const SEARCH_CONSOLE_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
+export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
+
+/** Scopes an impersonated service-account token is minted with. All read-only. */
+const IMPERSONATION_SCOPES = [GA4_SCOPE, SEARCH_CONSOLE_SCOPE, DRIVE_SCOPE];
 
 let cached: { token: string; expiresAtMs: number } | null = null;
 
@@ -179,6 +183,15 @@ export async function getGoogleAccessToken(nowMs: number = Date.now()): Promise<
       return null;
     }
 
+    // IMPERSONATE, IF ASKED TO. See the comment on impersonate() for why this
+    // exists: it lets the stored refresh token carry only `cloud-platform`, a
+    // NON-SENSITIVE scope, instead of the analytics scopes Google refuses to some
+    // clients and that a Workspace reauth policy keeps invalidating.
+    const impersonateAs = process.env.GOOGLE_IMPERSONATE_SERVICE_ACCOUNT?.trim();
+    if (impersonateAs) {
+      return impersonate(impersonateAs, json.access_token, nowMs);
+    }
+
     cached = {
       token: json.access_token,
       expiresAtMs: nowMs + Math.max((json.expires_in ?? 3600) * 1000 - EXPIRY_SKEW_MS, 0),
@@ -273,6 +286,88 @@ async function serviceAccountToken(rawKey: string, nowMs: number): Promise<strin
     expiresAtMs: nowMs + Math.max(0, (json.expires_in ?? 3600) * 1000 - EXPIRY_SKEW_MS),
   };
   return json.access_token;
+}
+
+/**
+ * Swap a `cloud-platform` token for a SERVICE-ACCOUNT token with the read scopes.
+ *
+ * WHY THIS IS THE DURABLE ANSWER. Three other routes were tried and each is closed:
+ *
+ *  - The refresh token minted WITH the analytics scopes dies to a Workspace reauth
+ *    policy (`invalid_grant / invalid_rapt`) every few weeks, and a fresh
+ *    `gcloud auth login` does not revive it — it is a separate credential.
+ *  - A downloadable service-account key is refused outright by
+ *    `constraints/iam.disableServiceAccountKeyCreation` on the project; the keys
+ *    `ga4-reader` holds are SYSTEM_MANAGED and cannot be exported.
+ *  - `gcloud auth print-access-token --impersonate-service-account` works, but
+ *    needs the gcloud CLI, which a serverless function does not have.
+ *
+ * This is that last route done over plain HTTP, so it runs anywhere. The stored
+ * refresh token then needs only `cloud-platform` — a non-sensitive scope, which is
+ * both easier to obtain and the one that survived when the sensitive ones did not —
+ * and the service account supplies the actual read access it already holds (GA4
+ * Viewer, Search Console Full, plus whatever Drive folders are shared with it).
+ *
+ * Requires the source identity to hold `roles/iam.serviceAccountTokenCreator` on
+ * the target account. Verified end to end on 2026-08-28: the minted token read GA4
+ * back to 2025-12-30 and Search Console back to 2026-01-01.
+ */
+async function impersonate(
+  serviceAccount: string,
+  sourceToken: string,
+  nowMs: number
+): Promise<string | null> {
+  const url =
+    `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/` +
+    `${encodeURIComponent(serviceAccount)}:generateAccessToken`;
+
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${sourceToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ scope: IMPERSONATION_SCOPES, lifetime: "3600s" }),
+      timeoutMs: TIMEOUT_MS,
+    });
+  } catch (err) {
+    logger.error({ err, serviceAccount }, "google oauth: impersonation request failed");
+    return null;
+  }
+
+  if (!res.ok) {
+    const detail = (await res.text().catch(() => "")).slice(0, 300);
+    // 403 here almost always means the missing role rather than a bad token, and
+    // saying so turns a dead end into a one-line fix.
+    const hint =
+      res.status === 403
+        ? " — the caller likely lacks roles/iam.serviceAccountTokenCreator on this account"
+        : "";
+    logger.error(
+      { status: res.status, detail, serviceAccount },
+      `google oauth: impersonation refused${hint}`
+    );
+    return null;
+  }
+
+  const json = (await res.json().catch(() => null)) as {
+    accessToken?: string;
+    expireTime?: string;
+  } | null;
+  if (!json?.accessToken) {
+    logger.error("google oauth: impersonation returned no accessToken");
+    return null;
+  }
+
+  // Google returns an absolute expiry here, not a lifetime.
+  const expiresAtMs = json.expireTime ? Date.parse(json.expireTime) : nowMs + 3_600_000;
+  cached = {
+    token: json.accessToken,
+    expiresAtMs: (Number.isFinite(expiresAtMs) ? expiresAtMs : nowMs + 3_600_000) - EXPIRY_SKEW_MS,
+  };
+  return cached.token;
 }
 
 export function googleScopeHint(status: number, body: string, scope: string): string | null {
