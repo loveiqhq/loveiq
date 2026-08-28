@@ -229,22 +229,45 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             dropped, dataLayer push included. PostHog and the durable
             `analytics_event` writes are unaffected, so staging QA can still verify
             that an event fired. */}
-        {/* The gtag/dataLayer SHIM, split out of ga-init and hoisted to
-            afterInteractive. Three lines, no network.
+        {/* The gtag BOOTSTRAP — shim, `js`, and the GA4 `config` — at
+            afterInteractive. No network: these are dataLayer pushes.
 
-            ga-init below stays lazyOnload — the 185 KiB library has no business
-            blocking first paint — but its shim used to be trapped in there with it,
-            so `window.gtag` did not exist until window load and every event fired
-            from a mount effect went nowhere. Google's own snippet defines the shim
-            first for exactly this reason: it makes gtag a dataLayer pusher, so calls
-            made before the library arrives queue in order and are drained when it
-            does. Measured before this: price_shown wrote 1,172 rows to our database
-            and reached GA4 four times. */}
+            The library itself (ga-loader) stays lazyOnload; 185 KiB has no business
+            blocking first paint. What must NOT stay there is the bootstrap. Two
+            rounds of this bug:
+
+            1. The shim was trapped inside the lazyOnload script, so `window.gtag`
+               did not exist until window load and every event from a mount effect
+               went nowhere. Hoisting the shim (2026-08-28) fixed interaction events:
+               price_shown went from 0 GA4 events in 9 days to arriving the same day.
+            2. It did not fix MOUNT events, because `config` was still lazyOnload.
+               gtag.js drains the queue in order and an event that precedes `config`
+               for its measurement id has no configured destination, so it is
+               discarded. Captured on production the same day, consented reload:
+               landing_page_view sat at dataLayer index 1 and config at index 13.
+               GA4 had 97 sessions landing on `/` that day and 0 landing_page_view.
+
+            So config is hoisted too. Google's own snippet does exactly this — shim,
+            js, config inline; library async — and the ordering is the whole point.
+
+            The GA4 config is deliberately NOT behind `data-cookieyes` even though
+            ga-init was: a config command transmits nothing on its own, and the
+            LIBRARY remains analytics-gated, so no data leaves the browser without
+            consent. `track()` also checks consent before it pushes. The Ads config
+            keeps its own advertisement gate below, because that one must not ride in
+            on analytics consent. */}
         {productionAnalyticsEnabled && (
           <Script id="gtag-shim" strategy="afterInteractive" nonce={nonce}>
             {`
             window.dataLayer = window.dataLayer || [];
             window.gtag = window.gtag || function(){window.dataLayer.push(arguments);}
+            if (!window.__loveiqGtagBootstrapped) {
+              window.gtag('js', new Date());
+              window.__loveiqGtagBootstrapped = true;
+            }
+            window.gtag('config', 'G-QTYY69L46N', {
+              page_path: window.location.pathname,
+            });
           `}
           </Script>
         )}
@@ -257,24 +280,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               nonce={nonce}
               data-cookieyes="cookieyes-analytics"
             />
-            <Script
-              id="ga-init"
-              strategy="lazyOnload"
-              nonce={nonce}
-              data-cookieyes="cookieyes-analytics"
-            >
-              {`
-            window.dataLayer = window.dataLayer || [];
-            window.gtag = window.gtag || function(){window.dataLayer.push(arguments);}
-            if (!window.__loveiqGtagBootstrapped) {
-              window.gtag('js', new Date());
-              window.__loveiqGtagBootstrapped = true;
-            }
-            window.gtag('config', 'G-QTYY69L46N', {
-              page_path: window.location.pathname,
-            });
-          `}
-            </Script>
             <Script
               id="google-ads-init"
               strategy="lazyOnload"

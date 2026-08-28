@@ -195,6 +195,48 @@ describe("production analytics gate", () => {
     expect(client).toContain("if (!isProductionSite()) return;");
   });
 
+  it("runs gtag config BEFORE the library, or queued mount events are discarded", () => {
+    /**
+     * Round two of the same bug, found on production 2026-08-28. Hoisting the shim
+     * made `gtag` exist early, which rescued interaction events — but `config` was
+     * still lazyOnload, and gtag.js drains the dataLayer in order: an event that
+     * precedes `config` for its measurement id has no configured destination and is
+     * thrown away. Captured on a consented reload of www.loveiq.org:
+     * landing_page_view sat at dataLayer index 1, config at index 13. GA4 recorded
+     * 97 sessions landing on `/` that day and 0 landing_page_view.
+     *
+     * So the assertion is positional: the GA4 config must live in the early
+     * afterInteractive bootstrap, ahead of the lazyOnload library.
+     */
+    const shim = layout.indexOf('id="gtag-shim"');
+    const config = layout.indexOf("window.gtag('config', 'G-QTYY69L46N'");
+    const loader = layout.indexOf("gtag/js?id=G-QTYY69L46N");
+    expect(shim, "gtag-shim not found").toBeGreaterThan(-1);
+    expect(config, "GA4 config not found").toBeGreaterThan(-1);
+    expect(loader, "GA4 loader not found").toBeGreaterThan(-1);
+
+    // config sits after the shim opens and before the library is requested...
+    expect(config).toBeGreaterThan(shim);
+    expect(config, "GA4 config must precede the lazyOnload library").toBeLessThan(loader);
+
+    // ...and inside the afterInteractive script, not a lazyOnload one. Walk from the
+    // shim to config and assert no `strategy="lazyOnload"` opens in between, which is
+    // what would happen if config were moved back into its own late <Script>.
+    const between = layout.slice(shim, config);
+    expect(between, "GA4 config drifted into a lazyOnload script").not.toContain(
+      'strategy="lazyOnload"'
+    );
+
+    // Exactly one GA4 config: two would double every page_view.
+    const configs = layout.match(/window\.gtag\('config', 'G-QTYY69L46N'/g) ?? [];
+    expect(configs).toHaveLength(1);
+
+    // The Ads config must NOT be hoisted with it — it carries its own advertisement
+    // consent gate and must not ride in on analytics consent.
+    const adsConfig = layout.indexOf("window.gtag('config', 'AW-18068690553')");
+    expect(adsConfig).toBeGreaterThan(loader);
+  });
+
   it("loads gtag.js exactly once, not once per destination", () => {
     // It used to load twice — G-QTYY69L46N and AW-18068690553 each had their own
     // loader — for ~151 KiB of byte-identical library. Worth pinning: adding a third
