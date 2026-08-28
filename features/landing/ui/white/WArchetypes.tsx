@@ -282,7 +282,7 @@ const WArchetypes: FC = () => {
                   key={row.name}
                   className="grid grid-cols-[28px_minmax(0,1fr)] items-center gap-4 border-b border-black/[0.05] py-4 sm:grid-cols-[28px_minmax(0,1fr)_minmax(180px,300px)_auto]"
                 >
-                  <span className="font-serif text-2xl text-[#c5c8cc]">
+                  <span className="font-serif text-2xl text-[#8e9093]">
                     {String(i + 1).padStart(2, "0")}
                   </span>
                   <div className="flex items-center gap-3">

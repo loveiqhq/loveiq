@@ -22,6 +22,8 @@ module.exports = {
         },
         accent: {
           orange: "var(--accent-orange)",
+          // Text-only; see the note on --accent-orange-ink in globals.css.
+          "orange-ink": "var(--accent-orange-ink)",
           purple: "var(--accent-purple)",
         },
       },

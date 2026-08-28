@@ -59,7 +59,7 @@ const WTrustRow: FC = () => (
             {it.icon}
           </svg>
           <h3 className="font-serif text-[18px] font-bold text-[#161021]">{it.title}</h3>
-          <p className="text-[14px] leading-relaxed text-[#6b7280]">{it.body}</p>
+          <p className="text-[14px] leading-relaxed text-[#69707d]">{it.body}</p>
         </div>
       ))}
     </div>
