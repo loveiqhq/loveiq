@@ -35,11 +35,25 @@ import { sweepStale, upsertChunks, type BrainRow, type IngestResult } from "./up
  *
  * This is why `ingestAnalytics` runs AFTER `ingestGa4` in the cron.
  *
- * EMPTY DAYS ARE NOT INDEXED. Four hundred rows of zeroes would match loosely on
+ * EMPTY DAYS ARE NOT INDEXED. Thousands of rows of zeroes would match loosely on
  * every date-shaped question and crowd out the days that actually say something.
  */
 
-const DAYS = 400;
+/**
+ * ALL HISTORY, not a window.
+ *
+ * Was 400, matching a clamp inside `brain_daily_rollup` that turned out to be
+ * wrong twice: it silently returned 400 rows to a caller asking for more, and it
+ * capped this corpus so the oldest month would start being trimmed once the
+ * company passed 400 days old — a truncation nobody would have noticed.
+ *
+ * Costs nothing to widen. It is ONE rpc call with a `days` argument, empty days
+ * are not indexed (see below), and every table CTE inside the function is
+ * filtered by `day >= from_day`, so a wider window scans the same rows when no
+ * older rows exist. Measured after raising the clamp: 400 days 0.9ms, 4000 days
+ * 2.6ms. LoveIQ's data starts 2026-03-24.
+ */
+const DAYS = 4000;
 const SOURCE = "analytics";
 
 interface RollupRow {
@@ -164,7 +178,7 @@ export interface AdCost {
    * Earliest day GA4 data exists for, or null when there is none.
    *
    * This is REQUIRED, not decoration. GA4 is ingested over 90 days
-   * (`google.ts` DAYS) while this rollup covers 400, so a month that straddles
+   * (`google.ts` DAYS) while this rollup covers all history, so a month that straddles
    * the GA4 floor pairs a FULL month of revenue with a PARTIAL month of ad
    * spend. Measured: May 2026 had 4 of 31 days of spend (GA4 data starts
    * 2026-05-28) and the chunk published "Net: EUR 291.68" when the real figure

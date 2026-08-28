@@ -108,7 +108,10 @@ const TOOLS = [
       properties: {
         days: {
           type: "number",
-          description: "How many days back, from today. Default 30, maximum 120.",
+          description:
+            "How many days back, from today. Default 30. There is no practical ceiling — " +
+            "ask for the whole history if you want it, and the answer says so if the range " +
+            "had to be reduced.",
         },
       },
     },
@@ -460,10 +463,25 @@ async function callTool(name: string, args: Record<string, unknown>) {
   }
 
   if (name === "get_business_numbers") {
-    const days = Math.min(120, Math.max(1, Number(args.days) || 30));
-    const rows = await brainDailyRollup(days);
-    if (rows.length === 0) return textResult("No rows for that window.");
-    return textResult(JSON.stringify(rows, null, 2));
+    // No 120-day ceiling. The old one silently returned 120 days to a caller who
+    // asked for a year, which reads as "that is all there is". The database
+    // function clamps at 4000 days as a DoS guard; if a request is reduced, say so.
+    const asked = Math.max(1, Number(args.days) || 30);
+    const rows = await brainDailyRollup(asked);
+    if (rows.length === 0) {
+      return textResult(
+        "No rows for that window. Note this counts only days with activity — an empty " +
+          "result means no recorded activity in that range, not a missing data source."
+      );
+    }
+    const covered = rows.length;
+    const head =
+      covered < asked
+        ? `Asked for ${asked} days; ${covered} returned, which is every day the database ` +
+          `holds in that range. Not a truncation — there is no data before the earliest ` +
+          `day below.\n\n`
+        : "";
+    return textResult(head + JSON.stringify(rows, null, 2));
   }
 
   if (name === "list_product_tables") {

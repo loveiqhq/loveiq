@@ -14,7 +14,10 @@ const mockSupabaseFetch = vi.fn();
 vi.mock("@features/admin/server/supabase", () => ({
   supabaseFetch: (...a: unknown[]) => mockSupabaseFetch(...(a as [])),
 }));
-vi.mock("@features/brain/server/ingest/analytics", () => ({ brainDailyRollup: vi.fn() }));
+const mockRollup = vi.fn();
+vi.mock("@features/brain/server/ingest/analytics", () => ({
+  brainDailyRollup: (...a: unknown[]) => mockRollup(...(a as [never])),
+}));
 
 const mockRateLimit = vi.fn(async () => ({ allowed: true }));
 const mockFetch = vi.fn();
@@ -649,4 +652,50 @@ describe("descriptions must not assert configuration state", () => {
     );
     return String((await res.json()).result.content[0].text);
   }
+
+  describe("get_business_numbers must not truncate silently", () => {
+    it("passes the full requested range through, with no 120-day ceiling", async () => {
+      // The old code did Math.min(120, ...), so a caller asking for a year got 120
+      // days and no indication — which reads as "that is all the history there is".
+      mockRollup.mockResolvedValue([{ day: "2026-08-28" }]);
+      await POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "get_business_numbers", arguments: { days: 1200 } },
+        })
+      );
+      expect(mockRollup).toHaveBeenLastCalledWith(1200);
+    });
+
+    it("says when fewer days came back than were asked for", async () => {
+      mockRollup.mockResolvedValue([{ day: "2026-08-28" }, { day: "2026-08-27" }]);
+      const res = await POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "get_business_numbers", arguments: { days: 400 } },
+        })
+      );
+      const text = (await res.json()).result.content[0].text as string;
+      expect(text).toMatch(/Asked for 400 days; 2 returned/);
+      expect(text).toMatch(/Not a truncation/);
+    });
+
+    it("explains an empty result rather than implying a missing source", async () => {
+      mockRollup.mockResolvedValue([]);
+      const res = await POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "get_business_numbers", arguments: { days: 5 } },
+        })
+      );
+      const text = (await res.json()).result.content[0].text as string;
+      expect(text).toMatch(/not a missing data source/);
+    });
+  });
 });
