@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       target_url:
-        description: "Target URL (defaults to staging)"
+        description: "Deployed URL to screenshot (leave EMPTY to build and test locally, which is what the baselines were captured from)"
         required: false
-        default: "https://staging.loveiq.org"
+        default: ""
       update_baselines:
         description: "Regenerate the golden images instead of comparing them, then upload them as an artifact to commit"
         required: false
@@ -31,7 +31,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      TARGET_URL: ${{ inputs.target_url || 'https://staging.loveiq.org' }}
+      # Empty means "build locally", which is the default and what the committed
+      # baselines were captured from. This input used to default to staging and was
+      # silently ignored, because playwright.config.ts hardcoded localhost; now that
+      # the config honours PLAYWRIGHT_BASE_URL, defaulting it to a deployed URL would
+      # change what every scheduled run measures — and staging content can lag main.
+      TARGET_URL: ${{ inputs.target_url }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -68,6 +73,9 @@ jobs:
           fi
         env:
           PLAYWRIGHT_BASE_URL: ${{ env.TARGET_URL }}
+          # Staging is password-gated. The config mints the `staging_session` cookie
+          # from this, so a remote run reaches the real pages instead of /login.
+          STAGING_PASSWORD: ${{ secrets.STAGING_PASSWORD }}
           UPDATE_BASELINES: ${{ inputs.update_baselines }}
 
       - name: Upload regenerated baselines
