@@ -28958,3 +28958,60 @@ input.autofill-dark:-internal-autofill-previewed {
   align-self: stretch;
   width: 100%;
 }
+
+/* ══ Universal chapter rhythm ═════════════════════════════════════════════════
+   One spacing standard for the top of every chapter:
+
+       chapter headline  →  KEY CONCEPTS pill   14px
+       KEY CONCEPTS pill →  its copy            14px
+       Key Concepts block → the chapter's card  44px
+
+   WHY IT DRIFTED. Each chapter's flow container carried its own `row-gap`, and
+   the Key Concepts block inherits it. Measured across all 21 chapters that have
+   a Key Concepts block (2026-08-28, 1440px):
+
+       .report-flow        56px  → Importance and Sexual Stage sat at 86px
+       .report-attachment  27px  → Attachment sat at 57px
+       .report-beliefs     13.5px and the same in 16 others → 43/44px
+       .report-section__body  block, no gap → Constellation sat at 30px
+
+   and the headline gap was 14px in 17 chapters, 22px in Constellation, and 36px
+   in the three whose headline renders in `.report-section__header` instead of
+   the flow. Four chapters were the outliers; the other 17 already agreed.
+
+   `:has()` picks out whichever element is the chapter's flow container without
+   enumerating twenty class names. `.report-flow` and `.report-attachment` are
+   also named explicitly so the two worst offenders are still corrected in a
+   browser without `:has()` support. */
+.report-section :has(> .report-learn-pill-wrap),
+.report-flow,
+.report-attachment {
+  row-gap: 14px;
+}
+
+/* Importance, Sexual Stage and Attachment render their headline in the section
+   header, above the flow, so their gap comes from this margin rather than the
+   row-gap. Was 36px. */
+.report-section__header {
+  margin-bottom: 14px;
+}
+
+/* Constellation's flow is block, so row-gap does nothing there: it needs both
+   gaps set directly. Was 22px above and 30px below. */
+.report-constellation__heading {
+  margin-bottom: 14px;
+}
+.report-section__body > .report-learn-pill-wrap {
+  margin-bottom: 44px;
+}
+
+/* Tightening those two row-gaps also tightened the gaps between the big blocks
+   further down those chapters, which were relying on the larger value. Put that
+   separation back explicitly, so the only thing this block changes is the
+   Key Concepts rhythm. */
+.report-flow > .stage-explorer {
+  margin-top: 42px;
+}
+.report-attachment > .report-attachment__article {
+  margin-top: 13px;
+}
