@@ -601,4 +601,52 @@ describe("descriptions must not assert configuration state", () => {
     );
   });
 });
+
+  describe("list_sources reports what it CANNOT see", () => {
+    it("names an unreachable service and its missing env key, computed at request time", async () => {
+      // "No credential" and "no data" are indistinguishable to a model unless the
+      // tool says which. Computed from process.env, never from prose, so it
+      // cannot drift the way four descriptions already did.
+      wireCorpusForSources();
+      delete process.env.TRUSTPILOT_API_KEY;
+      process.env.STRIPE_SECRET_KEY = "sk_test_x";
+      const text = await sourcesText();
+      expect(text).toMatch(/trustpilot: NOT REACHABLE — TRUSTPILOT_API_KEY is unset/);
+      expect(text).toMatch(/stripe: reachable/);
+      expect(text).toMatch(/NOT the same as having no data/);
+    });
+
+    it("flips to reachable the moment the key exists, with no code change", async () => {
+      wireCorpusForSources();
+      process.env.TRUSTPILOT_API_KEY = "tp_x";
+      expect(await sourcesText()).toMatch(/trustpilot: reachable/);
+      delete process.env.TRUSTPILOT_API_KEY;
+    });
+
+    it("says GitHub is reachable without a credential", async () => {
+      wireCorpusForSources();
+      delete process.env.GITHUB_TOKEN;
+      expect(await sourcesText()).toMatch(/github: reachable without a credential/);
+    });
+  });
+
+  function wireCorpusForSources() {
+    mockSupabaseFetch.mockImplementation(async (path: string) => {
+      if (path.includes("source=not.in.")) {
+        return { ok: true, headers: new Headers(), json: async () => [] };
+      }
+      return {
+        ok: true,
+        headers: new Headers({ "content-range": "0-0/1" }),
+        json: async () => [{ period_end: "2026-08-28", updated_at: "2026-08-28T00:00:00Z" }],
+      };
+    });
+  }
+
+  async function sourcesText(): Promise<string> {
+    const res = await POST(
+      rpc({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "list_sources", arguments: {} } })
+    );
+    return String((await res.json()).result.content[0].text);
+  }
 });

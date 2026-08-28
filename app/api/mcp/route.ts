@@ -195,7 +195,7 @@ const TOOLS = [
       properties: {
         service: {
           type: "string",
-          enum: ["stripe", "resend", "slack", "github", "posthog"],
+          enum: ["stripe", "resend", "slack", "github", "vercel", "calendly", "figma", "trustpilot", "posthog"],
           description: "Which service to read.",
         },
         path: {
@@ -219,9 +219,11 @@ const TOOLS = [
   {
     name: "list_sources",
     description:
-      "What the corpus currently holds and how fresh each source is. Use this first when " +
-      "an answer looks stale or missing — a source frozen at an old date means its " +
-      "ingest has stopped, and its absence is not evidence that the thing does not exist.",
+      "Everything this server can and cannot see: how many chunks each indexed source holds " +
+      "and how fresh it is, plus which outside services are reachable right now and which are " +
+      "missing a credential. Use it first whenever an answer looks stale, missing, or when you " +
+      "are about to tell someone LoveIQ has no record of something — the difference between " +
+      "'no data' and 'no credential' is here.",
     inputSchema: { type: "object", properties: {} },
   },
 ];
@@ -260,7 +262,17 @@ export const EXTERNAL_SERVICES: Record<
     /** Tried in order; the first one set wins. Lets a service prefer a
      *  read-scoped token and fall back to a broader one. */
     envKeys: string[];
-    auth: "bearer" | "token" | "query";
+    /**
+     * A discriminated union rather than a bare string, because the previous
+     * version declared a "query" kind and never implemented it — a service added
+     * with it would have sent NO credential and failed with a confusing 401. The
+     * exhaustive switch below now makes that a compile error instead.
+     */
+    auth:
+      | { kind: "bearer" }
+      | { kind: "token" }
+      | { kind: "header"; name: string }
+      | { kind: "query"; param: string };
     /** true when the API is readable WITHOUT the credential and the token only
      *  raises a rate limit. The repository is public, so GitHub is the case. */
     optional?: boolean;
@@ -270,13 +282,13 @@ export const EXTERNAL_SERVICES: Record<
   stripe: {
     base: "https://api.stripe.com/v1",
     envKeys: ["STRIPE_SECRET_KEY"],
-    auth: "bearer",
+    auth: { kind: "bearer" },
     note: "Charges, disputes, refunds, payouts, balance, customers, invoices, promotion codes. Use for what Stripe knows and our database does not — dispute detail, payout timing, coupon redemption counts.",
   },
   resend: {
     base: "https://api.resend.com",
     envKeys: ["RESEND_API_KEY"],
-    auth: "bearer",
+    auth: { kind: "bearer" },
     note: "Domains and their DNS/verification state, audiences and contacts, and a single email by id. Per-message delivery events are already in resend_webhook_event, so prefer query_product_data for bounce and open rates.",
   },
   slack: {
@@ -286,20 +298,56 @@ export const EXTERNAL_SERVICES: Record<
     // and CLAUDE.md is explicit that this is not worth the risk. The brain app
     // exists precisely to hold read scopes.
     envKeys: ["SLACK_BRAIN_BOT_TOKEN", "SLACK_BOT_TOKEN"],
-    auth: "bearer",
+    auth: { kind: "bearer" },
     note: "conversations.list, conversations.history, conversations.replies, users.list. Reads only channels the bot is in, and only with the scopes it holds — a missing scope returns ok:false with missing_scope rather than an error.",
   },
   github: {
     base: "https://api.github.com",
     envKeys: ["GITHUB_TOKEN"],
-    auth: "token",
+    auth: { kind: "token" },
     optional: true,
     note: "Issues, pull requests, reviews, releases and workflow runs for loveiqhq/loveiq. The repository is public, so this works with no credential; a token only raises the rate limit.",
+  },
+  vercel: {
+    base: "https://api.vercel.com",
+    envKeys: ["VERCEL_TOKEN"],
+    auth: { kind: "bearer" },
+    note:
+      "Deployments, build logs, runtime errors and logs, domains, project config. Answers " +
+      "'is the site healthy', 'what shipped and when', 'what is erroring in production'. Most " +
+      "endpoints need a teamId and projectId — get them from /v2/teams and /v9/projects rather " +
+      "than hardcoding, and note the two projects are the production site and staging.",
+  },
+  calendly: {
+    base: "https://api.calendly.com",
+    envKeys: ["CALENDLY_API_TOKEN"],
+    auth: { kind: "bearer" },
+    note:
+      "Scheduled events, invitees and event types. Bookings we already receive by webhook are " +
+      "stored in booking_event and calendly_webhook_event, so prefer query_product_data for " +
+      "anything historical — this is for detail we never stored.",
+  },
+  figma: {
+    base: "https://api.figma.com/v1",
+    envKeys: ["FIGMA_TOKEN", "FIGMA_ACCESS_TOKEN"],
+    auth: { kind: "header", name: "X-Figma-Token" },
+    note:
+      "Files, nodes, comments and component metadata for the design system. Figma uses its own " +
+      "header rather than a bearer token.",
+  },
+  trustpilot: {
+    base: "https://api.trustpilot.com/v1",
+    envKeys: ["TRUSTPILOT_API_KEY"],
+    auth: { kind: "query", param: "apikey" },
+    note:
+      "Business-unit profile and customer reviews. Trustpilot takes its key as a query " +
+      "parameter, not a header. The on-site review widget is a separate, deliberately disabled " +
+      "feature — see the Trustpilot note in CLAUDE.md.",
   },
   posthog: {
     base: "https://eu.posthog.com/api",
     envKeys: ["POSTHOG_API_KEY"],
-    auth: "bearer",
+    auth: { kind: "bearer" },
     note:
       "Product analytics, feature flags, session recordings, saved insights, and the query " +
       "endpoint. Our project is 244778 on the EU host — the same key is rejected by the US " +
@@ -574,7 +622,23 @@ async function callTool(name: string, args: Record<string, unknown>) {
 
     const headers: Record<string, string> = { Accept: "application/json" };
     if (token) {
-      headers.Authorization = svc.auth === "token" ? `token ${token}` : `Bearer ${token}`;
+      switch (svc.auth.kind) {
+        case "bearer":
+          headers.Authorization = `Bearer ${token}`;
+          break;
+        case "token":
+          headers.Authorization = `token ${token}`;
+          break;
+        case "header":
+          headers[svc.auth.name] = token;
+          break;
+        case "query":
+          // The credential travels in the URL for this one. Acceptable because it
+          // is server-to-server over TLS and the URL is never logged or returned
+          // to the caller — but it is why a header is the default.
+          url.searchParams.set(svc.auth.param, token);
+          break;
+      }
     }
     if (key === "github") headers["X-GitHub-Api-Version"] = "2022-11-28";
 
@@ -667,10 +731,26 @@ async function callTool(name: string, args: Record<string, unknown>) {
       }
     }
 
+    // The live half, computed from process.env at request time. Deliberately not
+    // written into any prose: whether a credential exists is a moving fact, and
+    // copying it into a description is how the same bug shipped four times.
+    const live = Object.entries(EXTERNAL_SERVICES).map(([name, svc]) => {
+      const has = svc.envKeys.some((k) => process.env[k]);
+      if (has) return `${name}: reachable`;
+      if (svc.optional) return `${name}: reachable without a credential`;
+      return `${name}: NOT REACHABLE — ${svc.envKeys.join(" or ")} is unset on this deployment`;
+    });
+
     return textResult(
-      `${lines.join("\n")}\n\nA source showing NEVER INGESTED has no data at all — its silence is ` +
-        `not evidence that the thing does not exist. A source whose newest period is old has ` +
-        `stopped updating.`
+      `INDEXED HISTORY (searchable with search_company_context)\n${lines.join("\n")}\n\n` +
+        `A source showing NEVER INGESTED has no data at all — its silence is not evidence ` +
+        `that the thing does not exist. A source whose newest period is old has stopped ` +
+        `updating.\n\n` +
+        `LIVE STATE\nOur own database: every table, view and analysis function, read at ask ` +
+        `time with full history — use list_product_tables and query_product_data.\n` +
+        `Outside services, via query_external_service:\n${live.map((l) => `  ${l}`).join("\n")}\n\n` +
+        `A service marked NOT REACHABLE is missing a credential, which is NOT the same as ` +
+        `having no data. Say so rather than answering as though the data does not exist.`
     );
   }
 
