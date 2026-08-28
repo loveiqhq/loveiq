@@ -40,14 +40,14 @@ const WHero: FC = () => {
         <div className="grid items-center gap-10 py-12 lg:grid-cols-[minmax(0,1fr)_471px] lg:gap-14 lg:pb-[82px] lg:pt-[70px]">
           {/* Left: copy */}
           <div className="flex max-w-[38rem] flex-col">
-            <div className="animate-on-scroll flex items-center gap-2.5">
+            <div className="animate-on-load flex items-center gap-2.5">
               <span className="animate-pulse-glow h-[7px] w-[7px] shrink-0 rounded-full bg-accent-orange" />
               <span className="text-[11px] font-bold uppercase tracking-[0.88px] text-[#5f6675]">
                 Anonymous · ~9 minutes · No account
               </span>
             </div>
 
-            <h1 className="animate-on-scroll stagger-1 mt-3.5 font-serif text-[clamp(2.6rem,8.5vw,3.67rem)] font-semibold leading-[1.12] tracking-[-0.01em] text-[#161021]">
+            <h1 className="animate-on-load stagger-1 mt-3.5 font-serif text-[clamp(2.6rem,8.5vw,3.67rem)] font-semibold leading-[1.12] tracking-[-0.01em] text-[#161021]">
               Determine
               <br />
               <span className="whitespace-nowrap">
@@ -62,7 +62,7 @@ const WHero: FC = () => {
               </span>
             </h1>
 
-            <p className="animate-on-scroll stagger-2 mt-5 max-w-[470px] text-[16px] font-medium leading-[28px] text-[#5f6675]">
+            <p className="animate-on-load stagger-2 mt-5 max-w-[470px] text-[16px] font-medium leading-[28px] text-[#5f6675]">
               Grounded in state-of-the-art science &amp; research.
               <br />
               <strong className="font-extrabold text-black">In just 9 minutes</strong>, decode your
@@ -70,7 +70,7 @@ const WHero: FC = () => {
               intimacy.
             </p>
 
-            <div className="animate-on-scroll stagger-3 mt-5">
+            <div className="animate-on-load stagger-3 mt-5">
               <Link
                 href="/survey"
                 aria-label="Start my free test - hero"
@@ -92,7 +92,7 @@ const WHero: FC = () => {
             </div>
 
             {/* Social proof */}
-            <div className="animate-on-scroll stagger-4 mt-5 flex items-center gap-3">
+            <div className="animate-on-load stagger-4 mt-5 flex items-center gap-3">
               <div className="flex items-center">
                 {RATING_AVATARS.map((src, i) => (
                   <div
@@ -118,7 +118,7 @@ const WHero: FC = () => {
               </div>
             </div>
 
-            <div className="animate-on-scroll stagger-4 mt-3 flex items-center gap-2">
+            <div className="animate-on-load stagger-4 mt-3 flex items-center gap-2">
               {/* Live-ish indicator: a static dot under the halo, so it still
                   reads as a dot when animation is off. */}
               <span className="relative flex h-[7px] w-[7px] shrink-0">
@@ -134,7 +134,7 @@ const WHero: FC = () => {
               </p>
             </div>
 
-            <p className="animate-on-scroll stagger-5 mt-[18px] text-[16px] leading-[28px] text-black">
+            <p className="animate-on-load stagger-5 mt-[18px] text-[16px] leading-[28px] text-black">
               <span className="font-light">Your </span>
               <strong className="font-extrabold">privacy &amp; anonymity</strong>
               <span className="font-light"> come first. Learn more in our </span>
@@ -151,7 +151,7 @@ const WHero: FC = () => {
           </div>
 
           {/* Right: live question 1 */}
-          <div className="animate-on-scroll stagger-2 w-full lg:justify-self-end">
+          <div className="animate-on-load stagger-2 w-full lg:justify-self-end">
             <WQuestionCard size="hero" location="hero" />
           </div>
         </div>

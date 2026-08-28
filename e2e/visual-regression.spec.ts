@@ -46,6 +46,7 @@ async function disableAnimations(page: import("@playwright/test").Page) {
         scroll-behavior: auto !important;
       }
       .animate-on-scroll,
+      .animate-on-load,
       .reveal-on-scroll {
         opacity: 1 !important;
         transform: none !important;
@@ -106,7 +107,22 @@ async function waitForVisualReady(page: import("@playwright/test").Page) {
 }
 
 test.describe("Visual Regression", () => {
-  test.use({ viewport: { width: 1280, height: 720 } });
+  /**
+   * `reducedMotion: "reduce"` is what makes these screenshots deterministic, and it is
+   * load-bearing rather than a nicety.
+   *
+   * `disableAnimations` below zeroes CSS animation and transition durations, but two
+   * things on the landing page animate from JavaScript and ignore it entirely: the hero
+   * constellation cycles which label it shows on a timer, and the archetype carousel
+   * auto-scrolls, settling at a different offset every run. Measured on 2026-08-28 by
+   * capturing the same build three times: 0.37-0.48% of pixels differed run to run
+   * (58,000-75,000 px) with nothing changed at all. Under reduced motion the same
+   * comparison is 0.0000% — zero pixels, three for three — because both components
+   * already honour the media query (`WHeroConstellation` tracks a `reduced` state,
+   * `WArchetypeCards` uses `motion-reduce:`). Using the app's own static path beats
+   * masking the regions, which would have taken them out of regression cover.
+   */
+  test.use({ viewport: { width: 1280, height: 720 }, contextOptions: { reducedMotion: "reduce" } });
   test.beforeEach(({}, testInfo) => {
     test.skip(
       testInfo.project.name !== "Desktop Chrome",
@@ -138,7 +154,11 @@ test.describe("Visual Regression", () => {
       await page.waitForLoadState("networkidle");
       await expect(page).toHaveScreenshot(arm.snapshot, {
         fullPage: true,
-        maxDiffPixelRatio: 0.03,
+        // 0.01, matching every other page here. It sat at 0.03 — three times the rest
+        // of this file — to absorb the JS-driven noise the reduced-motion setting above
+        // now removes. At 0.03 a whole section of a 12,000px page could change and
+        // still pass, so leaving it loose would waste the determinism.
+        maxDiffPixelRatio: 0.01,
         timeout: 30000,
       });
     });
@@ -201,7 +221,8 @@ test.describe("Visual Regression", () => {
 });
 
 test.describe("Component Visual Regression", () => {
-  test.use({ viewport: { width: 412, height: 915 } }); // Mobile viewport
+  // Mobile viewport. Reduced motion for the same reason as above.
+  test.use({ viewport: { width: 412, height: 915 }, contextOptions: { reducedMotion: "reduce" } });
   test.beforeEach(({}, testInfo) => {
     test.skip(
       testInfo.project.name !== "Mobile Chrome",

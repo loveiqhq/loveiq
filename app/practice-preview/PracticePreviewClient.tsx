@@ -6,6 +6,7 @@
 
 import dynamic from "next/dynamic";
 import type { ReportPracticeTendencyContentForUser } from "@features/report/ui/hooks/useReportData";
+import "@features/report/ui/report.css";
 
 const PracticeTendenciesSection = dynamic(
   () => import("@features/report/ui/sections/PracticeTendenciesSection"),

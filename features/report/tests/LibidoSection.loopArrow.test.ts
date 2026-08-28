@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { readAppCss } from "@shared/testing/read-app-css";
 
 /**
  * The Over-Giving Loop's back-arrow — Figma's dashed curve, with the dashes moving.
@@ -21,7 +22,7 @@ import { describe, expect, it } from "vitest";
  * (cross-correlating two frames 280ms apart put frame B 4 device-px higher), and the
  * curve spanning the stack at 320-1440px while staying clear of the chips.
  */
-const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+const css = readAppCss();
 const src = readFileSync(
   join(process.cwd(), "features/report/ui/sections/LibidoSection.tsx"),
   "utf8"

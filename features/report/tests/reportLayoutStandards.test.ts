@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { readAppCss } from "@shared/testing/read-app-css";
 
 /**
  * Cross-chapter layout standards for the PAID report.
@@ -14,7 +15,7 @@ import { describe, expect, it } from "vitest";
  * cannot see spacing at all, and the numbers here were verified in a real browser at
  * 320-1600px when they were set.
  */
-const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+const css = readAppCss();
 const ruleBody = (selector: string) => {
   const at = css.indexOf(selector + " {");
   expect(at, `missing rule: ${selector}`).toBeGreaterThan(-1);
@@ -29,7 +30,7 @@ describe("report layout standards", () => {
     // (MO, 2026-08-21). The parent card's row-gap lands on both sides of the block and
     // differs per chapter, so each chapter declares it and the shared rule subtracts
     // it — otherwise "standard padding" still renders eight different gaps.
-    const css = readFileSync(join(process.cwd(), "app/globals.css"), "utf8");
+    const css = readAppCss();
     const shared = css.slice(css.indexOf(".report-verdict {"));
     const body = shared.slice(0, shared.indexOf("}"));
     expect(body).toContain("gap: clamp(13px, 1.5vw, 16px)");
