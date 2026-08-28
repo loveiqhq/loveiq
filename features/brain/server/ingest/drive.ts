@@ -1,5 +1,9 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
-import { getGoogleAccessToken, isGoogleConfigured } from "@shared/http/google-oauth";
+import {
+  getGoogleAccessToken,
+  googleCredentialShape,
+  isGoogleConfigured,
+} from "@shared/http/google-oauth";
 import logger from "@shared/observability/logger";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { splitBody } from "./notion";
@@ -285,7 +289,7 @@ export async function ingestDrive(
   }
   const token = await getGoogleAccessToken();
   if (!token) {
-    return { source: SOURCE, rows: 0, swept: 0, skipped: "google-token-unavailable" };
+    return { source: SOURCE, rows: 0, swept: 0, skipped: `google-token-unavailable(${googleCredentialShape()})` };
   }
   if (isOutOfTime()) return { source: SOURCE, rows: 0, swept: 0, skipped: "drive-time-budget" };
 

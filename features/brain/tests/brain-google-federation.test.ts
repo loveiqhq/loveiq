@@ -137,3 +137,36 @@ describe("keyless Google auth via Vercel OIDC federation", () => {
     expect(calls.length).toBe(first);
   });
 });
+
+describe("googleCredentialShape", () => {
+  it("reports which sources are present, and never a value", async () => {
+    // This exists because a production run reported google-token-unavailable and
+    // logged NOTHING — the function has silent-null paths and Vercel's log query
+    // kept timing out. The flags travel in cron_run.error_message instead, which
+    // can always be read back from the database.
+    const { googleCredentialShape } = await import("@shared/http/google-oauth");
+    process.env.VERCEL_OIDC_TOKEN = "a.secret.jwt";
+    process.env.GOOGLE_WORKLOAD_IDENTITY_AUDIENCE = "//iam.example/aud";
+    delete process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+    delete process.env.GOOGLE_OAUTH_REFRESH_TOKEN;
+
+    const shape = googleCredentialShape();
+    expect(shape).toContain("oidc=1");
+    expect(shape).toContain("wif=1");
+    expect(shape).toContain("sakey=0");
+    expect(shape).toContain("refresh=0");
+    // no values, ever
+    expect(shape).not.toContain("secret");
+    expect(shape).not.toContain("iam.example");
+  });
+
+  it("needs ALL THREE refresh parts before reporting refresh=1", async () => {
+    const { googleCredentialShape } = await import("@shared/http/google-oauth");
+    process.env.GOOGLE_OAUTH_CLIENT_ID = "cid";
+    process.env.GOOGLE_OAUTH_CLIENT_SECRET = "csec";
+    delete process.env.GOOGLE_OAUTH_REFRESH_TOKEN;
+    expect(googleCredentialShape()).toContain("refresh=0");
+    process.env.GOOGLE_OAUTH_REFRESH_TOKEN = "rt";
+    expect(googleCredentialShape()).toContain("refresh=1");
+  });
+});

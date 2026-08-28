@@ -3,6 +3,7 @@ import {
   GA4_SCOPE,
   SEARCH_CONSOLE_SCOPE,
   getGoogleAccessToken,
+  googleCredentialShape,
   googleScopeHint,
   isGoogleConfigured,
 } from "@shared/http/google-oauth";
@@ -262,7 +263,7 @@ export async function ingestGa4(
   }
   const token = await getGoogleAccessToken();
   if (!token) {
-    return { source: GA4_SOURCE, rows: 0, swept: 0, skipped: "google-token-unavailable" };
+    return { source: GA4_SOURCE, rows: 0, swept: 0, skipped: `google-token-unavailable(${googleCredentialShape()})` };
   }
 
   const dateRanges = [{ startDate: `${windowDays}daysAgo`, endDate: "yesterday" }];
@@ -710,7 +711,7 @@ export async function ingestSearchConsole(
   }
   const token = await getGoogleAccessToken();
   if (!token) {
-    return { source: GSC_SOURCE, rows: 0, swept: 0, skipped: "google-token-unavailable" };
+    return { source: GSC_SOURCE, rows: 0, swept: 0, skipped: `google-token-unavailable(${googleCredentialShape()})` };
   }
 
   // Search Console data lags ~2 days; asking for today returns empty rows.

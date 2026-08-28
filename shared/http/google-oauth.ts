@@ -458,6 +458,36 @@ async function federate(oidcToken: string, audience: string): Promise<string | n
   return json.access_token;
 }
 
+
+/**
+ * WHICH credential sources are present, as a short flag string — never a value.
+ *
+ * Added because a production run reported `google-token-unavailable` and logged
+ * NOTHING: `getGoogleAccessToken()` has silent-null paths (a missing refresh
+ * triple, or federation skipped because `VERCEL_OIDC_TOKEN` is absent), and Vercel's
+ * log query kept timing out. `cron_run.error_message` is a channel that can always
+ * be read back from the database, so the diagnosis travels there instead.
+ *
+ * Booleans only. Whether a credential EXISTS is not a secret; its value is.
+ */
+export function googleCredentialShape(): string {
+  const flags = [
+    `oidc=${process.env.VERCEL_OIDC_TOKEN ? 1 : 0}`,
+    `wif=${process.env.GOOGLE_WORKLOAD_IDENTITY_AUDIENCE ? 1 : 0}`,
+    `imp=${process.env.GOOGLE_IMPERSONATE_SERVICE_ACCOUNT ? 1 : 0}`,
+    `sakey=${process.env.GOOGLE_SERVICE_ACCOUNT_KEY ? 1 : 0}`,
+    `direct=${process.env.GOOGLE_OAUTH_ACCESS_TOKEN ? 1 : 0}`,
+    `refresh=${
+      process.env.GOOGLE_OAUTH_CLIENT_ID &&
+      process.env.GOOGLE_OAUTH_CLIENT_SECRET &&
+      process.env.GOOGLE_OAUTH_REFRESH_TOKEN
+        ? 1
+        : 0
+    }`,
+  ];
+  return flags.join(",");
+}
+
 export function googleScopeHint(status: number, body: string, scope: string): string | null {
   if (status !== 403 || !/ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficient/i.test(body)) return null;
   return `The Google credential is missing the ${scope} scope. Re-run "gcloud auth application-default login --scopes=...,${scope}" and update GOOGLE_OAUTH_REFRESH_TOKEN.`;
