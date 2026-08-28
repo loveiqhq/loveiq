@@ -330,6 +330,18 @@ Two env vars on production only — `GOOGLE_WORKLOAD_IDENTITY_AUDIENCE` and
 `GOOGLE_IMPERSONATE_SERVICE_ACCOUNT`. Neither is a secret: one is a resource path,
 one an email.
 
+**Proved with a real token, not just unit tests.** `vercel env pull
+--environment=development` yields a genuine Vercel OIDC token, and its claims match
+the provider exactly (`iss https://oidc.vercel.com/loveiq`, `aud
+https://vercel.com/loveiq`, `sub owner:loveiq:project:loveiq-web:environment:development`).
+Presented to the production provider it is REFUSED with `unauthorized_client` —
+which alone is ambiguous, since a wrong audience gives the same error. So a
+temporary second provider with the environment condition relaxed was created, the
+same token federated successfully through it, and the provider was deleted. That
+discriminates: the issuer, the audience and the exchange are all correct, and the
+production provider refuses a development deployment specifically because of its
+environment condition. Use that technique rather than relaxing the real provider.
+
 **Diagnosing it.** A 400 from STS means configuration, not a bad token — a
 mismatched audience, an `aud` claim the provider does not allow, or a subject the
 attribute condition rejects; the log names all three. A 403 from
