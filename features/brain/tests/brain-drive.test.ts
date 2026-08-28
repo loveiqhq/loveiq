@@ -71,6 +71,20 @@ const FILE = {
 };
 
 describe("docToRows", () => {
+  it("titles a Gemini note as MEETING NOTES, because the title feeds the search index", () => {
+    // "Drive: LoveIQ Sync - … - Notes by Gemini" contains no word anyone would use
+    // to ask for it, and the title is half of what brain_search matches on.
+    const [row] = docToRows(FILE, "x", STAMP);
+    expect(row.title.startsWith("Meeting notes:")).toBe(true);
+    expect((row.meta as { kind: string }).kind).toBe("meeting-notes");
+  });
+
+  it("leaves an ordinary Drive document with the neutral prefix", () => {
+    const [row] = docToRows({ ...FILE, name: "Q3 budget" }, "x", STAMP);
+    expect(row.title).toBe("Drive: Q3 budget");
+    expect((row.meta as { kind: string }).kind).toBe("drive-doc");
+  });
+
   it("keeps the document title and its text, and links back to Drive", () => {
     const [row] = docToRows(FILE, "We agreed to ship the paywall.", STAMP);
     expect(row.source).toBe("drive");

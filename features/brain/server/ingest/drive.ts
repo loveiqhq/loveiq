@@ -34,7 +34,7 @@ const PAGE_SIZE = 100;
 const MAX_PAGES = 20;
 
 /** Bump when the row SHAPE changes; a mismatch counts as stale. See notion.ts. */
-export const DRIVE_BUILDER_VERSION = 1;
+export const DRIVE_BUILDER_VERSION = 2;
 
 /** Only native Google Docs export to text. A PDF or image would need OCR. */
 const DOC_MIME = "application/vnd.google-apps.document";
@@ -110,14 +110,30 @@ export function docToRows(file: DriveFile, text: string, stampedAt: string): Bra
   const edited = file.modifiedTime ?? file.createdTime ?? null;
   const owner = file.owners?.[0]?.emailAddress ?? null;
 
+  /**
+   * TITLE THE MEETING NOTES AS MEETING NOTES.
+   *
+   * The title feeds the trigram index — it is half of what `brain_search` matches
+   * on — and "Drive: LoveIQ Sync - 2026/08/28 08:59 CEST - Notes by Gemini"
+   * contains no word anyone would use to ask for it. Measured before this change:
+   * "action items from our recent meetings" ranked a dependency-bump commit above
+   * the actual meeting notes, and the notes only appeared at all because retrieval
+   * reserves slots per source.
+   *
+   * Gemini names every note "… - Notes by Gemini", so that is the detector. Other
+   * Drive documents keep the neutral prefix rather than being mislabelled.
+   */
+  const isMeetingNote = /notes by gemini/i.test(name);
+  const title = isMeetingNote ? `Meeting notes: ${name}` : `Drive: ${name}`;
+
   const base: BrainRow = {
     source: SOURCE,
     source_id: `doc:${file.id}`,
-    title: `Drive: ${name}`,
+    title,
     url: file.webViewLink ?? null,
     body: [name, text].filter(Boolean).join("\n\n"),
     meta: {
-      kind: "drive-doc",
+      kind: isMeetingNote ? "meeting-notes" : "drive-doc",
       v: DRIVE_BUILDER_VERSION,
       owner,
       created: file.createdTime ?? null,

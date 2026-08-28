@@ -397,6 +397,13 @@ notification — the note itself is a Google Doc, and a Doc exports to clean tex
 Parsing the mail body would mean guessing at HTML Google can change at will, for a
 worse result. So the ingester reads Drive.
 
+**Live since 2026-08-28:** the folder is shared and 23 notes (105 chunks) are
+indexed, back to 7 August. A dedicated cron re-checks every 15 minutes
+(`/api/cron/brain-drive`, at 7/22/37/52 past), so a note written after a call is
+searchable within minutes rather than the next morning. The nightly `brain-ingest`
+also ingests Drive — deliberate redundancy, so a failure of the fast job degrades to
+daily rather than to nothing.
+
 **Scope is controlled by SHARING, not by configuration.** It indexes every Google
 Doc the service account can see, and it can see nothing by default. To switch it on,
 share the folder those notes land in with
@@ -415,6 +422,20 @@ Until something is shared the source reports `drive-nothing-shared` and is skipp
 so the ops alert does not fire nightly for a source nobody has enabled. A FAILED
 listing reports `drive-list-failed` instead — the two are deliberately different,
 because "nobody shared anything" and "Drive refused us" need different responses.
+
+**Why a separate 15-minute cron rather than running `brain-ingest` more often.**
+That job crawls all 35 Notion databases and both Google properties and costs ~30s a
+run; at 15-minute intervals it would burn an hour of compute a day re-reading things
+that change daily at most, and hit Notion's rate limit for nothing. Drive is the
+opposite shape — ONE list call, and content is fetched only for documents whose
+`modifiedTime` moved, so a run with nothing new is a single HTTP request.
+
+Gemini notes are titled `Meeting notes: …` rather than `Drive: …`, because the
+title feeds the trigram index and is half of what `brain_search` matches on.
+Measured before that change: "action items from our recent meetings" ranked a
+dependency-bump commit above the actual notes, and they appeared at all only because
+retrieval reserves slots per source. After it, "what was decided in the meeting
+about mobile" returns notes at ranks 1 and 2.
 
 Only native Google Docs are indexed. A PDF or a scan would need OCR, and silently
 indexing an empty body would be worse than skipping it.
