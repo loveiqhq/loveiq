@@ -63,6 +63,21 @@ Per-source, each one freezing that source when unset: `JIRA_BASE_URL`,
 `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REFRESH_TOKEN`, `GA4_PROPERTY_ID`,
 `SEARCH_CONSOLE_SITE`.
 
+**Both Google credentials are now in place** (2026-08-28). Two things were needed
+and neither is obvious:
+
+- Search Console is a **separate grant** from GA4. The `ga4-reader` service
+  account was a Viewer on the GA4 property but not a user on
+  `sc-domain:loveiq.org`, so it read analytics and 403'd search. Added as a Full
+  user; Search Console went from frozen at 23 August to current.
+- The refresh token must come from the project's **own** Desktop OAuth client
+  (`brain-cli`, `824530086559-lchl…`), never from `gcloud auth
+application-default login`. Google refuses gcloud's shared client the sensitive
+  `analytics.readonly` scope outright — "This app tried to access sensitive
+  info… Google blocked this access". Google also no longer lets you download an
+  existing client's secret, so restoring this means adding a second secret to the
+  same client rather than recreating it.
+
 **Leaving one unset does NOT alert, and that is deliberate.** Jira is knowingly
 unconfigured; a daily "SKIPPED jira" would train everyone to ignore the ops
 channel and take the real alerts down with it. What DOES alert, once per source
