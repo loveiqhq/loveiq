@@ -258,9 +258,17 @@ time, so it cannot drift.
 Reachable with credentials that already exist for other reasons: Stripe, Resend,
 PostHog, Slack (subject to scopes, below). GitHub needs no credential at all
 because the repository is public. Registered and waiting on one env var each:
-`VERCEL_TOKEN`, `CALENDLY_API_TOKEN`, `FIGMA_TOKEN`, `TRUSTPILOT_API_KEY` — the
-last takes its key as a query parameter rather than a header, which is why the
-gateway supports four auth shapes.
+`VERCEL_TOKEN`, `CALENDLY_API_TOKEN`, `FIGMA_TOKEN`, `TRUSTPILOT_API_KEY`,
+`CLARITY_API_TOKEN` — Trustpilot takes its key as a query parameter rather than a
+header, and Figma uses its own header, which is why the gateway supports four auth
+shapes.
+
+**How this list was arrived at:** every external hostname the application talks to
+was enumerated from the source and checked against coverage, rather than recalled.
+That sweep is what found Microsoft Clarity — live on the site via
+`public/clarity-init.js` and completely invisible to the brain — and confirmed
+Google Ads needs no separate integration, because GA4 exposes `advertiserAdCost`
+once the accounts are linked. Re-run that sweep when a new dependency is added.
 
 **The distinction that matters:** an unreachable service is a MISSING CREDENTIAL,
 not an absence of data. Both the tool and `list_sources` say so explicitly, because

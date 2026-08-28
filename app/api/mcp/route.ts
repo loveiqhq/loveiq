@@ -198,7 +198,18 @@ const TOOLS = [
       properties: {
         service: {
           type: "string",
-          enum: ["stripe", "resend", "slack", "github", "vercel", "calendly", "figma", "trustpilot", "posthog"],
+          enum: [
+            "stripe",
+            "resend",
+            "slack",
+            "github",
+            "vercel",
+            "calendly",
+            "figma",
+            "trustpilot",
+            "clarity",
+            "posthog",
+          ],
           description: "Which service to read.",
         },
         path: {
@@ -346,6 +357,18 @@ export const EXTERNAL_SERVICES: Record<
       "Business-unit profile and customer reviews. Trustpilot takes its key as a query " +
       "parameter, not a header. The on-site review widget is a separate, deliberately disabled " +
       "feature — see the Trustpilot note in CLAUDE.md.",
+  },
+  clarity: {
+    base: "https://www.clarity.ms/export-data/api/v1",
+    envKeys: ["CLARITY_API_TOKEN"],
+    auth: { kind: "bearer" },
+    note:
+      "Microsoft Clarity: session-recording and heatmap metrics — dead clicks, rage clicks, " +
+      "excessive scrolling, JavaScript errors, and traffic broken down by browser, device, " +
+      "country and referrer. Live on the production site via public/clarity-init.js, and the " +
+      "only tool we run that reports user FRUSTRATION rather than volume, which is exactly " +
+      "what the funnel numbers cannot tell you. Its export API covers the last 1-3 days only, " +
+      "so treat it as a current-state signal, not history.",
   },
   posthog: {
     base: "https://eu.posthog.com/api",
