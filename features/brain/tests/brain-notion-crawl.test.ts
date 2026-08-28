@@ -295,3 +295,94 @@ describe("a run cut short must confirm what it could not refresh", () => {
     realFetch.mockImplementation(original);
   });
 });
+
+describe("long pages are split, not truncated", () => {
+  it("keeps the tail of a page longer than the write-path ceiling", async () => {
+    // The write path slices a body at 2,400 chars silently. 60 of 1,062 Notion
+    // chunks arrived at exactly 2,400 with their tails gone and nothing recording
+    // it. Every other source chunks before it gets there.
+    const { splitBody } = await import("@features/brain/server/ingest/notion");
+    const long = Array.from({ length: 12 }, (_, i) => `Paragraph ${i} ` + "x".repeat(400)).join("\n\n");
+    const parts = splitBody(long);
+    expect(parts.length).toBeGreaterThan(1);
+    for (const p of parts) expect(p.length).toBeLessThanOrEqual(2400);
+    // Nothing lost: the last paragraph must survive somewhere.
+    expect(parts.join(" ")).toContain("Paragraph 11");
+  });
+
+  it("does not split a page that fits", async () => {
+    const { splitBody } = await import("@features/brain/server/ingest/notion");
+    expect(splitBody("short enough")).toEqual(["short enough"]);
+  });
+
+  it("splits a wide table with no paragraph or line break inside the limit", async () => {
+    // The hard-cut branch. Without it the loop cannot make progress and hangs.
+    const { splitBody } = await import("@features/brain/server/ingest/notion");
+    const parts = splitBody("|" + "a".repeat(9000) + "|");
+    expect(parts.length).toBeGreaterThan(3);
+    for (const p of parts) expect(p.length).toBeLessThanOrEqual(2400);
+  });
+
+  it("gives part 1 the base id so existing rows update rather than orphan", async () => {
+    dbCalls.length = 0;
+    existingChunks = [];
+    process.env.NOTION_TOKEN = "ntn_test";
+    await ingestNotion(STAMP, () => false);
+    const ids = dbCalls
+      .filter((c) => c.method === "POST" && c.path.includes("on_conflict"))
+      .flatMap((c) => (JSON.parse(c.body) as Array<{ source_id: string }>).map((r) => r.source_id));
+    // Fixtures are short, so no parts — but the base ids must be unsuffixed.
+    expect(ids.some((id) => id.includes("#"))).toBe(false);
+    expect(ids).toContain("task:row-lit-1");
+  });
+});
+
+describe("continuation parts must be confirmed, or the sweep eats them", () => {
+  beforeEach(() => {
+    dbCalls.length = 0;
+    notionCalls.length = 0;
+    process.env.NOTION_TOKEN = "ntn_test";
+  });
+
+  /** Every source_id named in a PATCH. */
+  function patched(): string[] {
+    return dbCalls
+      .filter((c) => c.method === "PATCH")
+      .flatMap((c) => (decodeURIComponent(c.path).match(/"([^"]+)"/g) ?? []).map((q) => q.slice(1, -1)));
+  }
+
+  it("touches #2 and #3 alongside the base when the page is unchanged", async () => {
+    // A long page becomes task:x, task:x#2, task:x#3. They share the page's edit
+    // state, so if the base is unchanged they are too — but they have their own
+    // ids, and touching only the base leaves the sweep to delete the tail of every
+    // long page on the first run after a backfill.
+    const V = (taskToRow(ROW_LIT, STAMP, "Literature", "")!.meta as { v: number }).v;
+    existingChunks = [
+      { source_id: "task:row-lit-1", meta: { edited: "2026-08-20T09:00:00.000Z", v: V } },
+      { source_id: "task:row-lit-1#2", meta: { edited: "2026-08-20T09:00:00.000Z", v: V } },
+      { source_id: "task:row-lit-1#3", meta: { edited: "2026-08-20T09:00:00.000Z", v: V } },
+    ];
+    await ingestNotion(STAMP, () => false);
+    const ids = patched();
+    expect(ids).toContain("task:row-lit-1");
+    expect(ids).toContain("task:row-lit-1#2");
+    expect(ids).toContain("task:row-lit-1#3");
+  });
+
+  it("confirms parts of a page the clock did not reach", async () => {
+    // Same requirement on the deferred path: a page waiting to be rebuilt keeps
+    // its existing parts until it is reached.
+    const V = (taskToRow(ROW_LIT, STAMP, "Literature", "")!.meta as { v: number }).v;
+    existingChunks = [
+      // stale version, so it lands in toFetch, not touch
+      { source_id: "task:row-lit-1", meta: { edited: "2026-08-20T09:00:00.000Z", v: V - 1 } },
+      { source_id: "task:row-lit-1#2", meta: { edited: "2026-08-20T09:00:00.000Z", v: V - 1 } },
+    ];
+    // Out of time once the CRAWL is done — not immediately, or the crawl itself is
+    // cut short and there are no candidates to defer.
+    const crawlDone = () =>
+      notionCalls.filter((u) => u.includes("/search") || u.includes("/query")).length >= 4;
+    await ingestNotion(STAMP, crawlDone);
+    expect(patched()).toContain("task:row-lit-1#2");
+  });
+});

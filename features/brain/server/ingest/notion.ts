@@ -56,7 +56,7 @@ const MAX_CONTENT_PAGES = 300;
  * A version stamped in meta makes a mismatch count as "changed", so shipping a
  * builder change is enough to re-write the corpus over the following nights.
  */
-const BUILDER_VERSION = 4;
+const BUILDER_VERSION = 5;
 
 interface RichText {
   plain_text?: string;
@@ -454,7 +454,10 @@ export async function ingestNotion(
     // one PATCH per 100 rows. Compared on the FULL timestamp, not the date, so a
     // page edited twice in one day is still re-read the second time.
     if (edited && seen && seen.edited === edited && seen.v === BUILDER_VERSION) {
-      touch.push(sourceId);
+      // Also confirm any continuation parts. They share the page's edit state, so
+      // if the base is unchanged they are too — but they have their own ids, and
+      // touching only the base would leave the sweep to delete every "part 2".
+      touch.push(sourceId, ...partIdsOf(known, sourceId));
     } else {
       toFetch.push({ raw, dbTitle, sourceId });
     }
@@ -493,13 +496,32 @@ export async function ingestNotion(
     const row = item.dbTitle
       ? taskToRow(item.raw, stampedAt, item.dbTitle, text)
       : pageToRow(item.raw, text, stampedAt);
-    if (row) rows.push(row);
+    if (!row) continue;
+
+    // Split rather than let the write path slice the tail off. Part 1 keeps the
+    // base source_id so existing rows update in place instead of orphaning.
+    const parts = splitBody(row.body);
+    parts.forEach((body, i) => {
+      rows.push(
+        i === 0
+          ? { ...row, body }
+          : {
+              ...row,
+              source_id: `${row.source_id}#${i + 1}`,
+              title: `${row.title} (part ${i + 1} of ${parts.length})`,
+              body,
+              meta: { ...row.meta, part: i + 1, parts: parts.length },
+            }
+      );
+    });
   }
 
   // Anything the clock did not reach is confirmed, not abandoned.
   const written = await upsertChunks(rows);
   const writtenIds = new Set(rows.map((r) => r.source_id));
-  const deferred = toFetch.map((i) => i.sourceId).filter((id) => !writtenIds.has(id));
+  const deferred = toFetch
+    .flatMap((i) => [i.sourceId, ...partIdsOf(known, i.sourceId)])
+    .filter((id) => !writtenIds.has(id));
   const touched = await touchChunks(SOURCE, [...touch, ...deferred], stampedAt);
 
   // The sweep is safe whenever every page was either rewritten or confirmed —
@@ -528,6 +550,46 @@ export async function ingestNotion(
     return { source: SOURCE, rows: 0, swept: 0, skipped: "notion-time-budget" };
   }
   return { source: SOURCE, rows: written + touched, swept };
+}
+
+
+/**
+ * The shared write path caps a body at 2,400 characters and slices the excess
+ * away silently. Every other source chunks BEFORE it gets there — the repo
+ * ingester splits markdown at heading and paragraph boundaries, so its longest
+ * chunk lands at 2,392 — but Notion pages went in whole, and 60 of 1,062 arrived
+ * at exactly 2,400 with their tails gone and nothing recording the loss.
+ *
+ * So split here instead, preferring a paragraph break, then a line break, then a
+ * hard cut — the hard cut being the case that fires on a wide table where neither
+ * break exists inside the limit. Same shape as `hardSplit` in
+ * scripts/brain-ingest-repo.mjs.
+ *
+ * The ceiling itself stays: it is there so no single row can dominate a prompt.
+ * The bug was losing content to it, not having it.
+ */
+const BODY_LIMIT = 2400;
+const MIN_SPLIT = 600;
+
+/** Continuation ids already indexed for a page, e.g. `page:abc#2`, `#3`. */
+function partIdsOf(known: Map<string, { edited: string; v: number }>, baseId: string): string[] {
+  const prefix = `${baseId}#`;
+  return [...known.keys()].filter((id) => id.startsWith(prefix));
+}
+
+export function splitBody(text: string): string[] {
+  const out: string[] = [];
+  let rest = text;
+  while (rest.length > BODY_LIMIT) {
+    const window = rest.slice(0, BODY_LIMIT);
+    let cut = window.lastIndexOf("\n\n");
+    if (cut < MIN_SPLIT) cut = window.lastIndexOf("\n");
+    if (cut < MIN_SPLIT) cut = BODY_LIMIT;
+    out.push(rest.slice(0, cut).trim());
+    rest = rest.slice(cut).trim();
+  }
+  if (rest) out.push(rest);
+  return out.filter(Boolean);
 }
 
 /** Every database shared with the integration, id → title. */
