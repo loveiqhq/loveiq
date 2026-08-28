@@ -37,6 +37,13 @@
   --color-text-secondary: #e2dafb;
   --color-text-muted: #c3bbd8;
   --accent-orange: #f26d4f;
+  /* Text-only variant of the accent. #f26d4f is 2.97:1 on white — it fails WCAG AA
+     (4.5:1) for text, which Lighthouse flagged on the Trust Center link and the
+     hello@loveiq.org link. This darker tone is the same hue at 5.22:1, and it also
+     clears the #f5f6f8 / #f5f4f8 section backgrounds. Use it ONLY for text; fills,
+     borders and buttons keep --accent-orange, exactly as the archetype cards already
+     do ("the accent stays as fills only — using it for TEXT would fail contrast"). */
+  --accent-orange-ink: #b04f38;
   --accent-purple: #9c7dff;
   --shadow-card: 0 22px 100px rgba(0, 0, 0, 0.55);
   --shadow-soft: 0 16px 60px rgba(0, 0, 0, 0.45);
@@ -4283,4 +4290,18 @@ input.autofill-dark:-internal-autofill-previewed {
    ========================================================================== */
 [class*="__details-body"] {
   padding-bottom: clamp(30px, 3.2vw, 46px);
+}
+
+/* CookieYes consent banner — contrast fix.
+   Their Accept All / Reject All buttons ship white text on #1578F7, which is 4.15:1
+   and fails WCAG AA for normal text (4.5:1). Lighthouse flagged both on 2026-08-28.
+   The colour is set as an INLINE style on the button, so `!important` is the only way
+   to reach it from a stylesheet; only the blue changes, 5% darker at the same hue, to
+   4.53:1. Nothing about their layout or behaviour is touched.
+   The tidier place is CookieYes' own dashboard (Banner > Buttons), which would let
+   this rule go — until then it lives here so the fix is in version control. */
+.cky-btn-accept,
+.cky-btn-reject {
+  background-color: #1472eb !important;
+  border-color: #1472eb !important;
 }

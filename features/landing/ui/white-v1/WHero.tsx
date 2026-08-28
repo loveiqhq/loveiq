@@ -48,7 +48,7 @@ const WHero: FC = () => {
               </span>
             </h1>
 
-            <p className="animate-on-load stagger-2 max-w-[34rem] text-[15px] leading-7 text-[#6b7280]">
+            <p className="animate-on-load stagger-2 max-w-[34rem] text-[15px] leading-7 text-[#69707d]">
               Grounded in state-of-the-art science &amp; research.{" "}
               <strong className="font-extrabold text-black">In just 15 minutes</strong>,{" "}
               <strong className="font-extrabold text-black">
@@ -88,7 +88,7 @@ const WHero: FC = () => {
               <span className="font-light"> come first. Learn more in our </span>
               <Link
                 href="/trust-zone"
-                className="focus-visible-ring font-bold text-accent-orange hover:underline"
+                className="focus-visible-ring font-bold text-accent-orange-ink hover:underline"
               >
                 › Trust Center
               </Link>

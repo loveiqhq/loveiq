@@ -50,10 +50,17 @@ const startingCookies = [
   /**
    * Past the staging gate. proxy.ts compares `staging_session` against the hex
    * SHA-256 of STAGING_PASSWORD, so the cookie can be minted directly — no login
-   * round-trip. Without it a remote run against staging redirects to /login and
-   * every screenshot is of the login page.
+   * round-trip. Without it, every screenshot is of the login page.
+   *
+   * Keyed on the PASSWORD being set, NOT on the target being remote. The gate is
+   * proxy.ts reading `process.env.STAGING_PASSWORD`, so a LOCALLY built server with
+   * that variable present is gated too. This was originally `!isLocalTarget &&`,
+   * which broke the moment the visual-regression workflow started passing the
+   * secret: CI built locally, the gate switched on, no cookie was carried, and all
+   * seven regenerated baselines came back 1280x720 — the login page, not the pages
+   * under test.
    */
-  ...(!isLocalTarget && stagingPassword
+  ...(stagingPassword
     ? [
         {
           name: "staging_session",
@@ -62,7 +69,8 @@ const startingCookies = [
           path: "/",
           expires: -1,
           httpOnly: true,
-          secure: true,
+          // http on localhost drops a Secure cookie, so this must follow the target.
+          secure: !isLocalTarget,
           sameSite: "Strict" as const,
         },
       ]

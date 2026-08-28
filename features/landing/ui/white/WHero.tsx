@@ -108,7 +108,7 @@ const WHero: FC = () => {
                 ))}
               </div>
               <div className="flex flex-col gap-0.5 text-[13px]">
-                <span aria-hidden className="tracking-[1px] text-accent-orange">
+                <span aria-hidden className="tracking-[1px] text-accent-orange-ink">
                   ★★★★★
                 </span>
                 <p className="font-semibold text-[#5f6675]">
