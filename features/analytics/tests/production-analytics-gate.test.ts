@@ -24,7 +24,11 @@ const layout = readFileSync(join(process.cwd(), "app/layout.tsx"), "utf8");
 const GATED_TRACKERS = [
   ["GA4 loader", "gtag/js?id=G-QTYY69L46N"],
   ["GA4 config", "window.gtag('config', 'G-QTYY69L46N'"],
-  ["Google Ads loader", "gtag/js?id=AW-18068690553"],
+  // No "Google Ads loader" entry: there is only ONE gtag/js load now. gtag.js is a
+  // single library serving every destination, so loading it per-ID fetched ~151 KiB
+  // of identical code. Google's own snippet loads it once and calls config() per ID,
+  // which is what the next line guards — that config is now the only thing wiring
+  // Ads up, so it is the fingerprint that matters.
   ["Google Ads config", "window.gtag('config', 'AW-18068690553')"],
   // `src="..."` and not the bare filename: the JSX comment above the tag also says
   // "public/clarity-init.js", and matching prose would fail the enclosure check on a
@@ -162,6 +166,44 @@ describe("production analytics gate", () => {
     expect(at, "PostHog preconnect missing").toBeGreaterThan(-1);
     const inside = GATED_RANGES.some(([open, close]) => at > open && at < close);
     expect(inside, "PostHog preconnect must not be production-gated").toBe(false);
+  });
+
+  it("defines the gtag shim EARLY, so events fired on mount are not lost", () => {
+    /**
+     * The whole 2026-08-28 fix in one assertion. `ga-init` is deliberately
+     * lazyOnload — the 185 KiB library must not block first paint — but the three-line
+     * gtag/dataLayer shim has to exist before that, or `gtag()` is undefined for every
+     * event fired from a mount effect and the call is lost rather than queued.
+     * Measured before the split: price_shown wrote 1,172 rows to our database and
+     * reached GA4 four times.
+     */
+    const shim = layout.indexOf('id="gtag-shim"');
+    expect(shim, "gtag shim not found").toBeGreaterThan(-1);
+
+    // It must NOT be lazyOnload — that is the bug it exists to fix.
+    const shimBlock = layout.slice(shim, shim + 200);
+    expect(shimBlock).toContain('strategy="afterInteractive"');
+    expect(shimBlock).not.toContain("lazyOnload");
+
+    // ...and it must come before the heavy loader it queues for.
+    expect(shim).toBeLessThan(layout.indexOf("gtag/js?id=G-QTYY69L46N"));
+
+    // The racy window flags must not come back as gates in the client.
+    const client = readFileSync(join(process.cwd(), "features/analytics/client.ts"), "utf8");
+    expect(client).not.toContain("window.__loveiqAnalyticsEnabled");
+    expect(client).not.toContain("window.__loveiqGoogleAdsEnabled");
+    expect(client).toContain("if (!isProductionSite()) return;");
+  });
+
+  it("loads gtag.js exactly once, not once per destination", () => {
+    // It used to load twice — G-QTYY69L46N and AW-18068690553 each had their own
+    // loader — for ~151 KiB of byte-identical library. Worth pinning: adding a third
+    // destination later makes "one loader per ID" look like the obvious pattern.
+    const loaders = layout.match(/gtag\/js\?id=/g) ?? [];
+    expect(loaders).toHaveLength(1);
+    // ...and both destinations must still be configured off that single load.
+    expect(layout).toContain("window.gtag('config', 'G-QTYY69L46N'");
+    expect(layout).toContain("window.gtag('config', 'AW-18068690553')");
   });
 
   it("refuses the server-side GA4 purchase send off production", () => {

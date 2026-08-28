@@ -222,12 +222,32 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         />
         {productionAnalyticsEnabled && <GtmScript nonce={nonce} />}
         {/* GA4 + Google Ads. Production only — see productionAnalyticsEnabled above.
-            `window.__loveiqAnalyticsEnabled` / `__loveiqGoogleAdsEnabled` are set by
-            the init scripts, so gating the tags here is also what makes every
-            `track()` call skip gtag off production: the flags simply stay undefined
-            and `features/analytics/client.ts` already checks them. PostHog and the
-            durable `analytics_event` writes are unaffected, so staging QA can still
-            verify that an event fired. */}
+            `features/analytics/client.ts` gates on the same build-time
+            `isProductionSite()` rather than on a window flag these scripts set. It
+            used to read `window.__loveiqAnalyticsEnabled`, which lazyOnload does not
+            define until window load — so every event fired from a mount effect was
+            dropped, dataLayer push included. PostHog and the durable
+            `analytics_event` writes are unaffected, so staging QA can still verify
+            that an event fired. */}
+        {/* The gtag/dataLayer SHIM, split out of ga-init and hoisted to
+            afterInteractive. Three lines, no network.
+
+            ga-init below stays lazyOnload — the 185 KiB library has no business
+            blocking first paint — but its shim used to be trapped in there with it,
+            so `window.gtag` did not exist until window load and every event fired
+            from a mount effect went nowhere. Google's own snippet defines the shim
+            first for exactly this reason: it makes gtag a dataLayer pusher, so calls
+            made before the library arrives queue in order and are drained when it
+            does. Measured before this: price_shown wrote 1,172 rows to our database
+            and reached GA4 four times. */}
+        {productionAnalyticsEnabled && (
+          <Script id="gtag-shim" strategy="afterInteractive" nonce={nonce}>
+            {`
+            window.dataLayer = window.dataLayer || [];
+            window.gtag = window.gtag || function(){window.dataLayer.push(arguments);}
+          `}
+          </Script>
+        )}
         {productionAnalyticsEnabled && (
           <>
             <Script
@@ -250,19 +270,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               window.gtag('js', new Date());
               window.__loveiqGtagBootstrapped = true;
             }
-            window.__loveiqAnalyticsEnabled = true;
             window.gtag('config', 'G-QTYY69L46N', {
               page_path: window.location.pathname,
             });
           `}
             </Script>
-            <Script
-              id="google-ads-loader"
-              src="https://www.googletagmanager.com/gtag/js?id=AW-18068690553"
-              strategy="lazyOnload"
-              nonce={nonce}
-              data-cookieyes="cookieyes-advertisement"
-            />
             <Script
               id="google-ads-init"
               strategy="lazyOnload"
@@ -276,8 +288,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               window.gtag('js', new Date());
               window.__loveiqGtagBootstrapped = true;
             }
-            window.__loveiqGoogleAdsEnabled = true;
             window.gtag('config', 'AW-18068690553');
+            /* No second gtag/js loader for AW-. gtag.js is ONE library serving every
+               destination, so loading it twice fetched ~151 KiB of identical code;
+               Google's own snippet loads it once and calls config() per ID.
+               Verified 2026-08-28 that the duplicate was NOT caused by GTM: after GA4
+               was removed from that container entirely, both loads still appeared. */
           `}
             </Script>
           </>
