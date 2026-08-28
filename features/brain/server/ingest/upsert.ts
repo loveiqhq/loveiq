@@ -67,6 +67,13 @@ const CREDENTIAL_PATTERNS: Array<[string, RegExp]> = [
   ["jwt", /\beyJ[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\./],
   ["private-key", /-----BEGIN (?:RSA |EC |OPENSSH |PGP )?PRIVATE KEY/],
   ["aws", /\bAKIA[0-9A-Z]{16}\b/],
+  // PostHog: phx_ is a Personal API Key (read/write on the account), phs_ a
+  // session key. phc_ is the PUBLIC project token that ships in client-side
+  // JavaScript, so it is deliberately NOT here — refusing it would drop real
+  // documentation about our own analytics setup for no security gain.
+  ["posthog", /\bph[xs]_[A-Za-z0-9]{32,}/],
+  ["resend", /\bre_[A-Za-z0-9]{24,}/],
+  ["calendly", /\beyJraWQ/], // Calendly PATs are JWTs; caught above too, kept for the label
 ];
 
 /** The credential kind found in this text, or null. */
