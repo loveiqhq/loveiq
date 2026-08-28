@@ -74,10 +74,18 @@ and while it is dead GA4 and Search Console simply stop advancing, with an ops
 alert but no data loss. A service account has no user session and never re-authenticates.
 
 The external gateway reads credentials that already exist for other reasons:
-`STRIPE_SECRET_KEY`, `RESEND_API_KEY`, `SLACK_BOT_TOKEN`. Two are optional —
-`GITHUB_TOKEN` only raises a rate limit (the repository is public, so GitHub reads
-work without it), and `POSTHOG_API_KEY` is not set at all, so PostHog queries
-answer "not configured" until someone adds a Personal API Key.
+`STRIPE_SECRET_KEY`, `RESEND_API_KEY`, `POSTHOG_API_KEY`, and `SLACK_BRAIN_BOT_TOKEN`
+(falling back to `SLACK_BOT_TOKEN`). `GITHUB_TOKEN` is optional — the repository is
+public, so GitHub reads work without it and a token only raises the rate limit.
+
+Verified live against production on 2026-08-28: Stripe returns the balance,
+charges and disputes; Resend returns the verified `loveiq.org` domain; GitHub
+returns the repo and open pull requests; PostHog returns project 244778 with its
+insights. Only Slack answers `missing_scope` — see below.
+
+PostHog is on the **EU** host. The same key is rejected by the US host with
+`authentication_failed`, which says nothing about the region, so it is an easy
+hour to lose.
 
 `LOVEIQ_MCP_TOKEN` gates the MCP endpoint rather than a source: unset means
 `/api/mcp` returns 503 and no Claude can connect, which is why it is safe to

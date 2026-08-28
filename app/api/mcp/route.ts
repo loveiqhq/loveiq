@@ -253,7 +253,7 @@ const TOOLS = [
  *
  * `envKey: null` means the API needs no credential (the repo is public).
  */
-const EXTERNAL_SERVICES: Record<
+export const EXTERNAL_SERVICES: Record<
   string,
   {
     base: string;
@@ -300,7 +300,10 @@ const EXTERNAL_SERVICES: Record<
     base: "https://eu.posthog.com/api",
     envKeys: ["POSTHOG_API_KEY"],
     auth: "bearer",
-    note: "Product analytics, feature flags, session recordings, insights. Needs a PostHog Personal API Key, which is not configured yet.",
+    note:
+      "Product analytics, feature flags, session recordings, saved insights, and the query " +
+      "endpoint. Our project is 244778 on the EU host — the same key is rejected by the US " +
+      "host, and the error says authentication_failed rather than anything about the region.",
   },
 };
 

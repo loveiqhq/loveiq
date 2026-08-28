@@ -559,4 +559,46 @@ describe("/api/mcp", () => {
       expect(r.content[0].text).toMatch(/outage, not an empty result/);
     });
   });
+
+describe("descriptions must not assert configuration state", () => {
+  /**
+   * This bug has now shipped four times: a tool description advertised Jira
+   * (0 chunks) while omitting Notion (1,062), the `initialize` instructions did
+   * the same, `list_sources` left Notion out of its source list, and the PostHog
+   * registry note said "not configured yet" for a day after it was configured.
+   *
+   * The pattern is always the same — a fact that lives in the environment gets
+   * copied into prose and then drifts. Whether a service is configured is
+   * answered at runtime by looking at `process.env`, and the tool already returns
+   * a precise message when a key is missing. So a note that also claims it is a
+   * duplicate of a moving fact, and this test refuses one.
+   */
+  it("no service note claims a credential is missing", async () => {
+    const { EXTERNAL_SERVICES } = await import("@/app/api/mcp/route");
+    const forbidden = /not configured|not set|unconfigured|no credential yet|coming soon/i;
+    for (const [name, svc] of Object.entries(EXTERNAL_SERVICES)) {
+      expect(svc.note, `${name} note asserts configuration state`).not.toMatch(forbidden);
+    }
+  });
+
+  it("every service names at least one env key or is explicitly optional", async () => {
+    const { EXTERNAL_SERVICES } = await import("@/app/api/mcp/route");
+    for (const [name, svc] of Object.entries(EXTERNAL_SERVICES)) {
+      expect(svc.envKeys.length > 0 || svc.optional === true, `${name}`).toBe(true);
+    }
+  });
+
+  it("the enum the model sees matches the registry exactly", async () => {
+    // A service in the registry but missing from the enum is unreachable; one in
+    // the enum but not the registry is an error the model cannot avoid.
+    const { EXTERNAL_SERVICES } = await import("@/app/api/mcp/route");
+    const body = await (await POST(rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }))).json();
+    const tool = body.result.tools.find(
+      (t: { name: string }) => t.name === "query_external_service"
+    );
+    expect([...tool.inputSchema.properties.service.enum].sort()).toEqual(
+      Object.keys(EXTERNAL_SERVICES).sort()
+    );
+  });
+});
 });
