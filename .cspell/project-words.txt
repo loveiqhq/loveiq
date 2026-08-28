@@ -10,6 +10,7 @@
 # Security / compliance / infra acronyms + terms
 # These are legitimate words (not typos). Add new terms as needed.
 adkim
+analyticsdata
 apiserver
 aqvc
 archetype
@@ -46,6 +47,7 @@ Hotjar
 hotspot
 hotspots
 HSTS
+iamcredentials
 IBAN
 Idxy
 JSYR
@@ -73,6 +75,7 @@ recognisable
 Resend
 ROPA
 SBOM
+searchconsole
 Semgrep
 semgrepignore
 signups
