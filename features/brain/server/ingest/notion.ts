@@ -56,7 +56,7 @@ const MAX_CONTENT_PAGES = 300;
  * A version stamped in meta makes a mismatch count as "changed", so shipping a
  * builder change is enough to re-write the corpus over the following nights.
  */
-const BUILDER_VERSION = 3;
+const BUILDER_VERSION = 4;
 
 interface RichText {
   plain_text?: string;
@@ -284,7 +284,11 @@ export function taskToRow(
       const value = propertyToText(prop).trim();
       // Skip the title property: it is already the chunk title.
       const isTitle = (prop as { type?: string } | null)?.type === "title";
-      return !value || isTitle ? null : `${name}: ${value}`;
+      // Notion allows a property with a BLANK name, which rendered as ": 38" in
+      // the Research Papers rows — a value with nothing saying what it measures
+      // is worse than no value, because a model will read it as meaningful.
+      if (!value || isTitle || !name.trim()) return null;
+      return `${name.trim()}: ${value}`;
     })
     .filter(Boolean)
     .join(" · ");

@@ -141,6 +141,20 @@ describe("ingestNotion crawls every database", () => {
     expect(lit?.body).toContain("page body text");
   });
 
+  it("drops a property whose NAME is blank, which Notion allows", async () => {
+    // Rendered as ": 38" in the real Research Papers rows. A number with nothing
+    // saying what it measures reads as meaningful to a model, so it is worse
+    // than omitting it.
+    const row = taskToRow(
+      { ...ROW_LIT, properties: { ...ROW_LIT.properties, "  ": { type: "number", number: 38 } } },
+      STAMP,
+      "Literature",
+      ""
+    );
+    expect(row?.body).not.toContain(": 38");
+    expect(row?.body).toContain("Year: 1969");
+  });
+
   it("names the database in the title, so a citation says where it came from", async () => {
     await ingestNotion(STAMP);
     expect(written().find((r) => r.source_id === "task:row-lit-1")?.title).toBe(

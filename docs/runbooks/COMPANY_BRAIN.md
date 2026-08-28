@@ -67,6 +67,18 @@ Per-source, each one freezing that source when unset: `NOTION_TOKEN`,
 `GOOGLE_OAUTH_REFRESH_TOKEN`, `GA4_PROPERTY_ID`, `SEARCH_CONSOLE_SITE`. The
 `JIRA_*` trio still exists in code and is deliberately left unset.
 
+`GOOGLE_SERVICE_ACCOUNT_KEY` is preferred over the `GOOGLE_OAUTH_*` trio and
+should replace it. A Workspace reauth policy invalidates a user refresh token
+every few weeks — it failed on 2026-08-28 with `invalid_grant / invalid_rapt` —
+and while it is dead GA4 and Search Console simply stop advancing, with an ops
+alert but no data loss. A service account has no user session and never re-authenticates.
+
+The external gateway reads credentials that already exist for other reasons:
+`STRIPE_SECRET_KEY`, `RESEND_API_KEY`, `SLACK_BOT_TOKEN`. Two are optional —
+`GITHUB_TOKEN` only raises a rate limit (the repository is public, so GitHub reads
+work without it), and `POSTHOG_API_KEY` is not set at all, so PostHog queries
+answer "not configured" until someone adds a Personal API Key.
+
 `LOVEIQ_MCP_TOKEN` gates the MCP endpoint rather than a source: unset means
 `/api/mcp` returns 503 and no Claude can connect, which is why it is safe to
 deploy before the token exists.
@@ -116,13 +128,37 @@ Add it as a custom connector with:
 drops the `Authorization` header, so the apex presents as a confusing 401 with a
 token that is perfectly valid.
 
-Three tools, deliberately few:
+Six tools, in two halves.
 
-| Tool                     | For                                                                                              |
-| ------------------------ | ------------------------------------------------------------------------------------------------ |
-| `search_company_context` | Anything written down or historical — a decision, a commit, a board task, a past month's numbers |
-| `get_business_numbers`   | Exact daily funnel/revenue/ad-spend rows to compute with                                         |
-| `list_sources`           | What the corpus holds and how fresh each source is — call this first when an answer looks stale  |
+**History — the indexed corpus:**
+
+| Tool                     | For                                                                                                 |
+| ------------------------ | --------------------------------------------------------------------------------------------------- |
+| `search_company_context` | Anything written down — a decision, a commit, a Notion page or database row, a past month's numbers |
+| `get_business_numbers`   | Exact daily funnel/revenue/ad-spend rows to compute with                                            |
+| `list_sources`           | What the corpus holds and how fresh each source is — call this first when an answer looks stale     |
+
+**Live state — read at ask time, full history, no lag:**
+
+| Tool                     | For                                                                                                                                                                                                                                                     |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_product_tables`    | Every table, view and analysis function in our database, with its columns                                                                                                                                                                               |
+| `query_product_data`     | Read any of them: payments, refunds, Resend delivery, Calendly bookings, submissions, answers, reports, shares, invites, waitlist, marketing spend, admin tables. Prefer an `rpc/get_*` function when one fits — they encode the business logic already |
+| `query_external_service` | Read-only GET against Stripe, Resend, Slack, GitHub and PostHog, for what those services know and we do not store — dispute detail, payout timing, a Slack thread, an open pull request                                                                 |
+
+**Read-only by construction, not by validation.** A table read is a GET, a
+function call is a POST to `/rpc`, and PostgREST needs PATCH/PUT/DELETE to write.
+The external gateway is GET-only against a fixed host registry — a tool taking an
+arbitrary URL would be an SSRF hole, since the deployment can reach the Supabase
+service-role endpoint and cloud metadata addresses. Table names must match an
+anchored identifier pattern and exist in the live schema. Every one of these is
+mutation-tested: removing any single guard fails a specific test.
+
+**Two things the tools say out loud.** A capped result reports how many rows MATCH,
+not just how many came back — a truncated answer that does not admit it reads as
+the whole picture. And an unconfigured service answers "this credential is unset,
+do not conclude the data does not exist" rather than returning an empty list,
+because a model cannot tell those apart.
 
 **One shared token for the whole team, so it is the whole corpus.** There is no
 per-person scoping, by policy: revenue, ad spend and every internal document sit

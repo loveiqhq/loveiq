@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { brainDailyRollup } from "@features/brain/server/ingest/analytics";
 import { CorpusUnavailableError, retrieve } from "@features/brain/server/retrieve";
 import { supabaseFetch } from "@features/admin/server/supabase";
@@ -179,6 +180,42 @@ const TOOLS = [
     },
   },
   {
+    name: "query_external_service",
+    description:
+      "Read any GET endpoint of the outside services LoveIQ runs on: Stripe (charges, " +
+      "disputes, refunds, payouts, balance, customers), Resend (domains, audiences), Slack " +
+      "(channel list and message history), GitHub (issues, pull requests, releases, CI " +
+      "runs), PostHog (product analytics, when configured). Read-only, and the API keys " +
+      "stay on the server. Use this for what those services know that our own database " +
+      "does not — dispute detail, a Slack discussion, an open pull request. For payments " +
+      "and email events we already store, query_product_data is faster and has full history.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        service: {
+          type: "string",
+          enum: ["stripe", "resend", "slack", "github", "posthog"],
+          description: "Which service to read.",
+        },
+        path: {
+          type: "string",
+          description:
+            "Path within that service's API, e.g. '/charges' or '/disputes' for stripe, " +
+            "'/domains' for resend, '/conversations.list' for slack, " +
+            "'/repos/loveiqhq/loveiq/issues' for github.",
+        },
+        params: {
+          type: "object",
+          description:
+            "Query-string parameters, e.g. {limit: 10, created: {gte: 1756000000}} for " +
+            "stripe, {channel: 'C123', limit: 50} for slack. Nested objects are flattened " +
+            "into Stripe's bracket syntax.",
+        },
+      },
+      required: ["service", "path"],
+    },
+  },
+  {
     name: "list_sources",
     description:
       "What the corpus currently holds and how fresh each source is. Use this first when " +
@@ -197,6 +234,70 @@ const TOOLS = [
  * information_schema (needs a function we would have to add). Cached per lambda
  * instance: the schema changes on deploy, and a deploy replaces the instance.
  */
+
+/**
+ * READ-ONLY GATEWAY TO THE OUTSIDE SERVICES LOVEIQ USES.
+ *
+ * One tool with a fixed registry rather than a tool per service, because the
+ * shape is identical every time — a base URL, a bearer token that must never
+ * leave the server, and GET. Adding a service is one entry; the safety
+ * properties are proven once.
+ *
+ * WHY A REGISTRY AND NOT A URL PARAMETER. A tool taking an arbitrary URL is an
+ * SSRF hole: the caller could point it at the Supabase service-role endpoint, at
+ * a cloud metadata address, or at anything on the deployment's network. Here the
+ * host is never caller-controlled — only the path within a known API.
+ *
+ * GET ONLY, enforced here rather than trusted from the caller. These keys can
+ * refund charges and send mail; the tool exists to read.
+ *
+ * `envKey: null` means the API needs no credential (the repo is public).
+ */
+const EXTERNAL_SERVICES: Record<
+  string,
+  {
+    base: string;
+    envKey: string | null;
+    auth: "bearer" | "token" | "query";
+    /** true when the API is readable WITHOUT the credential and the token only
+     *  raises a rate limit. The repository is public, so GitHub is the case. */
+    optional?: boolean;
+    note: string;
+  }
+> = {
+  stripe: {
+    base: "https://api.stripe.com/v1",
+    envKey: "STRIPE_SECRET_KEY",
+    auth: "bearer",
+    note: "Charges, disputes, refunds, payouts, balance, customers, invoices, promotion codes. Use for what Stripe knows and our database does not — dispute detail, payout timing, coupon redemption counts.",
+  },
+  resend: {
+    base: "https://api.resend.com",
+    envKey: "RESEND_API_KEY",
+    auth: "bearer",
+    note: "Domains and their DNS/verification state, audiences and contacts, and a single email by id. Per-message delivery events are already in resend_webhook_event, so prefer query_product_data for bounce and open rates.",
+  },
+  slack: {
+    base: "https://slack.com/api",
+    envKey: "SLACK_BOT_TOKEN",
+    auth: "bearer",
+    note: "conversations.list, conversations.history, conversations.replies, users.list. Reads only channels the bot is in, and only with the scopes it holds — a missing scope returns ok:false with missing_scope rather than an error.",
+  },
+  github: {
+    base: "https://api.github.com",
+    envKey: "GITHUB_TOKEN",
+    auth: "token",
+    optional: true,
+    note: "Issues, pull requests, reviews, releases and workflow runs for loveiqhq/loveiq. The repository is public, so this works with no credential; a token only raises the rate limit.",
+  },
+  posthog: {
+    base: "https://eu.posthog.com/api",
+    envKey: "POSTHOG_API_KEY",
+    auth: "bearer",
+    note: "Product analytics, feature flags, session recordings, insights. Needs a PostHog Personal API Key, which is not configured yet.",
+  },
+};
+
 let schemaCache: Map<string, string[]> | null = null;
 
 async function productSchema(): Promise<Map<string, string[]> | null> {
@@ -373,6 +474,78 @@ async function callTool(name: string, args: Record<string, unknown>) {
         ? `${rows.length} rows shown, ${total} match. Raise limit or page with offset.\n\n`
         : `${rows.length} rows.\n\n`;
     return textResult(head + JSON.stringify(rows, null, 2));
+  }
+
+  if (name === "query_external_service") {
+    const key = typeof args.service === "string" ? args.service.toLowerCase().trim() : "";
+    const svc = EXTERNAL_SERVICES[key];
+    if (!svc) {
+      return textResult(
+        `Unknown service. Available: ${Object.keys(EXTERNAL_SERVICES).join(", ")}.`,
+        true
+      );
+    }
+
+    const token = svc.envKey ? process.env[svc.envKey] : null;
+    if (svc.envKey && !token && !svc.optional) {
+      return textResult(
+        `${key} is not configured on this deployment (${svc.envKey} is unset), so I cannot ` +
+          `read it. This is a missing credential, not an empty result — do not conclude the ` +
+          `data does not exist.`,
+        true
+      );
+    }
+
+    let path = typeof args.path === "string" ? args.path.trim() : "";
+    if (!path.startsWith("/")) path = `/${path}`;
+    // The host is fixed by the registry; these checks stop the PATH from
+    // escaping it. `//` would be read as protocol-relative, `..` walks up out of
+    // the API's namespace, and `@` can smuggle a different host into a URL.
+    if (path.startsWith("//") || path.includes("..") || path.includes("@") || /\s/.test(path)) {
+      return textResult("path must be a simple path inside that service's API.", true);
+    }
+
+    const url = new URL(svc.base + path);
+    // Stripe and PostHog both use bracket syntax for nested filters, so flatten
+    // one level rather than making the caller build the strings.
+    for (const [k, v] of Object.entries(
+      (args.params && typeof args.params === "object" ? args.params : {}) as Record<string, unknown>
+    )) {
+      if (v === null || v === undefined) continue;
+      if (typeof v === "object" && !Array.isArray(v)) {
+        for (const [k2, v2] of Object.entries(v as Record<string, unknown>)) {
+          if (v2 !== null && v2 !== undefined) url.searchParams.set(`${k}[${k2}]`, String(v2));
+        }
+      } else if (Array.isArray(v)) {
+        for (const item of v) url.searchParams.append(`${k}[]`, String(item));
+      } else {
+        url.searchParams.set(k, String(v));
+      }
+    }
+
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (token) {
+      headers.Authorization = svc.auth === "token" ? `token ${token}` : `Bearer ${token}`;
+    }
+    if (key === "github") headers["X-GitHub-Api-Version"] = "2022-11-28";
+
+    let res: Response;
+    try {
+      res = await fetchWithTimeout(url.toString(), {
+        method: "GET",
+        headers,
+        timeoutMs: 20_000,
+      });
+    } catch (err) {
+      logger.warn({ err, service: key }, "mcp: external service unreachable");
+      return textResult(`${key} did not respond in time. This is an outage, not an empty result.`, true);
+    }
+
+    const text = (await res.text().catch(() => "")).slice(0, MAX_RESULT_CHARS - 500);
+    if (!res.ok) {
+      return textResult(`${key} returned ${res.status}:\n${text}`, true);
+    }
+    return textResult(text || "(empty response)");
   }
 
   if (name === "list_sources") {

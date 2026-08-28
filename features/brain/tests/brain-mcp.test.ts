@@ -17,6 +17,11 @@ vi.mock("@features/admin/server/supabase", () => ({
 vi.mock("@features/brain/server/ingest/analytics", () => ({ brainDailyRollup: vi.fn() }));
 
 const mockRateLimit = vi.fn(async () => ({ allowed: true }));
+const mockFetch = vi.fn();
+vi.mock("@shared/http/fetch-with-timeout", () => ({
+  fetchWithTimeout: (...a: unknown[]) => mockFetch(...(a as [])),
+}));
+
 vi.mock("@shared/http/ratelimit", () => ({
   checkRateLimit: (...a: unknown[]) => mockRateLimit(...(a as [])),
   getClientIp: () => "1.2.3.4",
@@ -77,7 +82,7 @@ describe("/api/mcp", () => {
       expect(body.result.serverInfo.name).toBe("loveiq-brain");
     });
 
-    it("lists exactly the five tools, each with a schema", async () => {
+    it("lists exactly the six tools, each with a schema", async () => {
       // Asserted exactly, not with toContain: a tool that disappears from the list
       // is unreachable to every connected Claude, and nothing else would notice.
       const body = await (await POST(rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }))).json();
@@ -86,6 +91,7 @@ describe("/api/mcp", () => {
         "get_business_numbers",
         "list_product_tables",
         "query_product_data",
+        "query_external_service",
         "list_sources",
       ]);
       for (const t of body.result.tools) expect(t.inputSchema.type).toBe("object");
@@ -375,6 +381,106 @@ describe("/api/mcp", () => {
       wire([]);
       const r = await call({ match: "rpc" }, "list_product_tables");
       expect(r.content[0].text).toContain("rpc/get_conversion_funnel");
+    });
+  });
+
+  describe("query_external_service — read-only gateway", () => {
+    async function call(args: Record<string, unknown>) {
+      const res = await POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "query_external_service", arguments: args },
+        })
+      );
+      return (await res.json()).result as { content: Array<{ text: string }>; isError?: boolean };
+    }
+
+    beforeEach(() => {
+      mockFetch.mockReset();
+      mockFetch.mockResolvedValue({ ok: true, status: 200, text: async () => '{"data":[]}' });
+      process.env.STRIPE_SECRET_KEY = "sk_test_secret_value";
+      process.env.RESEND_API_KEY = "re_secret_value";
+      delete process.env.POSTHOG_API_KEY;
+    });
+
+    it("only ever issues GET — these keys can refund charges and send mail", async () => {
+      // The caller must not be able to pick the method, so this also passes a
+      // method it should ignore.
+      await call({ service: "stripe", path: "/charges", method: "DELETE" });
+      await call({ service: "resend", path: "/domains" });
+      expect(mockFetch.mock.calls.length).toBe(2);
+      for (const [, init] of mockFetch.mock.calls) {
+        expect((init as { method?: string }).method).toBe("GET");
+      }
+    });
+
+    it("pins the host, so the path cannot redirect the request elsewhere", async () => {
+      await call({ service: "stripe", path: "/charges" });
+      expect(String(mockFetch.mock.calls[0][0])).toMatch(/^https:\/\/api\.stripe\.com\/v1\/charges/);
+    });
+
+    it("rejects a path that tries to escape the API namespace", async () => {
+      for (const path of ["//evil.example.com/x", "/../../admin", "/x@evil.example.com", "/a b"]) {
+        const r = await call({ service: "stripe", path });
+        expect(r.isError, path).toBe(true);
+        expect(r.content[0].text).toMatch(/simple path/);
+      }
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("rejects an unknown service rather than guessing a base URL", async () => {
+      const r = await call({ service: "mystery", path: "/x" });
+      expect(r.isError).toBe(true);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("never returns the API key to the caller", async () => {
+      const r = await call({ service: "stripe", path: "/charges" });
+      expect(JSON.stringify(r)).not.toContain("sk_test_secret_value");
+    });
+
+    it("distinguishes 'not configured' from 'no data', which is the whole point", async () => {
+      const r = await call({ service: "posthog", path: "/projects" });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toMatch(/POSTHOG_API_KEY is unset/);
+      expect(r.content[0].text).toMatch(/do not conclude the data does not exist/);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("flattens nested params into bracket syntax, which Stripe and PostHog both need", async () => {
+      await call({ service: "stripe", path: "/charges", params: { limit: 3, created: { gte: 1756000000 } } });
+      const url = String(mockFetch.mock.calls[0][0]);
+      expect(url).toContain("limit=3");
+      expect(url).toContain("created%5Bgte%5D=1756000000");
+    });
+
+    it("uses GitHub's token scheme, not Bearer, and works with no credential", async () => {
+      delete process.env.GITHUB_TOKEN;
+      const r = await call({ service: "github", path: "/repos/loveiqhq/loveiq/issues" });
+      expect(r.isError).toBeFalsy();
+      expect((mockFetch.mock.calls[0][1] as { headers: Record<string, string> }).headers.Authorization).toBeUndefined();
+
+      mockFetch.mockClear();
+      process.env.GITHUB_TOKEN = "ghp_x";
+      await call({ service: "github", path: "/repos/loveiqhq/loveiq/issues" });
+      expect((mockFetch.mock.calls[0][1] as { headers: Record<string, string> }).headers.Authorization).toBe("token ghp_x");
+      delete process.env.GITHUB_TOKEN;
+    });
+
+    it("reports an upstream error instead of an empty result", async () => {
+      mockFetch.mockResolvedValue({ ok: false, status: 402, text: async () => '{"error":"card_declined"}' });
+      const r = await call({ service: "stripe", path: "/charges" });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toMatch(/stripe returned 402/);
+    });
+
+    it("reports a timeout as an outage, not as absence", async () => {
+      mockFetch.mockRejectedValue(new Error("timeout"));
+      const r = await call({ service: "stripe", path: "/charges" });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toMatch(/outage, not an empty result/);
     });
   });
 });
