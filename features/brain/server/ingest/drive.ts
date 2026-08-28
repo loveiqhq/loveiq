@@ -292,7 +292,7 @@ export async function ingestDrive(
   }
   const token = await getGoogleAccessToken(Date.now(), oidcToken);
   if (!token) {
-    return { source: SOURCE, rows: 0, swept: 0, skipped: `google-token-unavailable(${googleCredentialShape()})` };
+    return { source: SOURCE, rows: 0, swept: 0, skipped: `google-token-unavailable(${googleCredentialShape(oidcToken)})` };
   }
   if (isOutOfTime()) return { source: SOURCE, rows: 0, swept: 0, skipped: "drive-time-budget" };
 

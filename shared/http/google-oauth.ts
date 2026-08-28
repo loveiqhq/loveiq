@@ -503,9 +503,12 @@ export function readVercelOidcToken(request: Request): string | null {
   return request.headers.get(VERCEL_OIDC_HEADER) ?? process.env.VERCEL_OIDC_TOKEN ?? null;
 }
 
-export function googleCredentialShape(): string {
+export function googleCredentialShape(oidcToken?: string | null): string {
   const flags = [
-    `oidc=${process.env.VERCEL_OIDC_TOKEN ? 1 : 0}`,
+    // The RESOLVED token, not the env var. Reporting the env var was itself
+    // misleading: it is only populated in local dev, so this would have kept
+    // saying oidc=0 in production even after the header fix worked.
+    `oidc=${(oidcToken ?? process.env.VERCEL_OIDC_TOKEN) ? 1 : 0}`,
     `wif=${process.env.GOOGLE_WORKLOAD_IDENTITY_AUDIENCE ? 1 : 0}`,
     `imp=${process.env.GOOGLE_IMPERSONATE_SERVICE_ACCOUNT ? 1 : 0}`,
     `sakey=${process.env.GOOGLE_SERVICE_ACCOUNT_KEY ? 1 : 0}`,

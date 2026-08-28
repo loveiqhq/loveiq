@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
-import { googleCredentialShape } from "@shared/http/google-oauth";
+import { googleCredentialShape, readVercelOidcToken } from "@shared/http/google-oauth";
 import { brainDailyRollup } from "@features/brain/server/ingest/analytics";
 import { CorpusUnavailableError, retrieve } from "@features/brain/server/retrieve";
 import { supabaseFetch } from "@features/admin/server/supabase";
@@ -441,7 +441,13 @@ async function productSchema(): Promise<Map<string, string[]> | null> {
   return out;
 }
 
-async function callTool(name: string, args: Record<string, unknown>) {
+async function callTool(
+  name: string,
+  args: Record<string, unknown>,
+  /** Vercel's per-request identity token, so the credential report tells the truth
+   *  about what a REQUEST can see rather than about the (local-dev-only) env var. */
+  oidcForReport: string | null = null
+) {
   if (name === "search_company_context") {
     const query = typeof args.query === "string" ? args.query : "";
     if (query.trim().length < 2) {
@@ -784,7 +790,7 @@ async function callTool(name: string, args: Record<string, unknown>) {
     // and cannot be reached. It is also the only way to compare a REQUEST context
     // against a CRON one: a production cron reported google-token-unavailable while
     // logging nothing, and if the two contexts differ, that is the answer.
-    const google = `google credentials visible here: ${googleCredentialShape()}`;
+    const google = `google credentials visible here: ${googleCredentialShape(oidcForReport)}`;
 
     return textResult(
       `INDEXED HISTORY (searchable with search_company_context)\n${lines.join("\n")}\n\n` +
@@ -880,7 +886,7 @@ export async function POST(request: Request) {
     const name = typeof params.name === "string" ? params.name : "";
     const args = (params.arguments ?? {}) as Record<string, unknown>;
     try {
-      return result(id, await callTool(name, args));
+      return result(id, await callTool(name, args, readVercelOidcToken(request)));
     } catch (err) {
       logger.error({ err, tool: name }, "MCP tool call failed");
       // Returned as a tool RESULT, not a protocol error: the model can then say

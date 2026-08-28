@@ -265,7 +265,7 @@ export async function ingestGa4(
   }
   const token = await getGoogleAccessToken(Date.now(), oidcToken);
   if (!token) {
-    return { source: GA4_SOURCE, rows: 0, swept: 0, skipped: `google-token-unavailable(${googleCredentialShape()})` };
+    return { source: GA4_SOURCE, rows: 0, swept: 0, skipped: `google-token-unavailable(${googleCredentialShape(oidcToken)})` };
   }
 
   const dateRanges = [{ startDate: `${windowDays}daysAgo`, endDate: "yesterday" }];
@@ -715,7 +715,7 @@ export async function ingestSearchConsole(
   }
   const token = await getGoogleAccessToken(Date.now(), oidcToken);
   if (!token) {
-    return { source: GSC_SOURCE, rows: 0, swept: 0, skipped: `google-token-unavailable(${googleCredentialShape()})` };
+    return { source: GSC_SOURCE, rows: 0, swept: 0, skipped: `google-token-unavailable(${googleCredentialShape(oidcToken)})` };
   }
 
   // Search Console data lags ~2 days; asking for today returns empty rows.

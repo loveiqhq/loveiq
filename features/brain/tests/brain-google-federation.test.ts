@@ -139,6 +139,17 @@ describe("keyless Google auth via Vercel OIDC federation", () => {
 });
 
 describe("googleCredentialShape", () => {
+  it("reports the RESOLVED token, not the env var — the env var lies in production", async () => {
+    // The first version of this read process.env.VERCEL_OIDC_TOKEN, which is only
+    // populated in local dev. It would therefore have kept reporting oidc=0 in
+    // production even after the header fix worked — a diagnostic that lies is worse
+    // than no diagnostic.
+    const { googleCredentialShape } = await import("@shared/http/google-oauth");
+    delete process.env.VERCEL_OIDC_TOKEN;
+    expect(googleCredentialShape(null)).toContain("oidc=0");
+    expect(googleCredentialShape("token.from.header")).toContain("oidc=1");
+  });
+
   it("reports which sources are present, and never a value", async () => {
     // This exists because a production run reported google-token-unavailable and
     // logged NOTHING — the function has silent-null paths and Vercel's log query

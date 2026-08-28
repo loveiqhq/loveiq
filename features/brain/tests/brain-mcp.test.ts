@@ -646,9 +646,18 @@ describe("descriptions must not assert configuration state", () => {
     });
   }
 
-  async function sourcesText(): Promise<string> {
+  async function sourcesText(extraHeaders: Record<string, string> = {}): Promise<string> {
+    const body = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "list_sources", arguments: {} } };
     const res = await POST(
-      rpc({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "list_sources", arguments: {} } })
+      new Request("https://www.loveiq.org/api/mcp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${TOKEN}`,
+          ...extraHeaders,
+        },
+        body: JSON.stringify(body),
+      })
     );
     return String((await res.json()).result.content[0].text);
   }
@@ -705,9 +714,10 @@ describe("descriptions must not assert configuration state", () => {
       // Reporting the shape here is the only way to compare a REQUEST context
       // against a CRON one — if the two differ, that difference is the answer.
       wireCorpusForSources();
-      process.env.VERCEL_OIDC_TOKEN = "a.secret.jwt";
+      // Supplied as the request HEADER, which is how Vercel actually delivers it.
+      delete process.env.VERCEL_OIDC_TOKEN;
       process.env.GOOGLE_WORKLOAD_IDENTITY_AUDIENCE = "//iam.example/aud";
-      const text = await sourcesText();
+      const text = await sourcesText({ "x-vercel-oidc-token": "a.secret.jwt" });
       expect(text).toMatch(/google credentials visible here:/);
       expect(text).toMatch(/oidc=1/);
       expect(text).not.toContain("a.secret.jwt");
