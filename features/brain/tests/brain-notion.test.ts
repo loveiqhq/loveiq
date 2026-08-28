@@ -168,3 +168,16 @@ describe("isExcluded", () => {
     expect(isExcluded("anything at all", [])).toBe(false);
   });
 });
+
+describe("citation label", () => {
+  /**
+   * A board task and a written page are different kinds of evidence — one carries
+   * a status and an owner, the other does not — and the label is what a reader
+   * sees next to the answer. "notion" for both flattens that distinction.
+   */
+  it("distinguishes a board task from a page", async () => {
+    const { labelForTest } = await import("@features/brain/server/answer");
+    expect(labelForTest({ source: "notion", sourceId: "task:abc", meta: {} })).toBe("notion board");
+    expect(labelForTest({ source: "notion", sourceId: "page:abc", meta: {} })).toBe("notion page");
+  });
+});

@@ -72,8 +72,10 @@ const TOOLS = [
     name: "search_company_context",
     description:
       "Search LoveIQ's own written record: repository documentation, every git commit " +
-      "(including the plain-English 'For Marcus:' summaries), Jira issues, and dated " +
-      "business numbers (funnel, revenue, ad spend, GA4, Search Console). Use this for " +
+      "(including the plain-English 'For Marcus:' summaries), the Notion workspace — both " +
+      "the team board with each task's status, priority and assignee, and the written " +
+      "pages — and dated business numbers (funnel, revenue, ad spend, GA4, Search " +
+      "Console). Use this for " +
       "anything historical or written down — why a decision was made, when something " +
       "changed, what a past month's numbers were. It cannot see live state; use the " +
       "Supabase, Stripe, PostHog or Vercel tools for that.",
@@ -293,7 +295,8 @@ export async function POST(request: Request) {
       capabilities: { tools: {} },
       serverInfo: { name: "loveiq-brain", version: "1.0.0" },
       instructions:
-        "LoveIQ's own written record: documentation, git history, Jira and dated business " +
+        "LoveIQ's own written record: documentation, git history, the Notion board and " +
+        "pages, and dated business " +
         "numbers. Prefer this for anything historical or already decided. It holds history, " +
         "not live state — for current values use the Supabase, Stripe, PostHog or Vercel tools.",
     });

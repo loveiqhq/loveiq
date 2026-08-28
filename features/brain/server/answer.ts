@@ -46,10 +46,20 @@ export interface BrainAnswer {
   latencyMs: number;
 }
 
+/** Exported for tests only — the citation label is user-visible text. */
+export const labelForTest = (c: Pick<BrainChunk, "source" | "sourceId" | "meta">) =>
+  label(c as BrainChunk);
+
 function label(chunk: BrainChunk): string {
   const date = typeof chunk.meta?.date === "string" ? chunk.meta.date.slice(0, 10) : null;
   if (chunk.source === "commit") return date ? `commit ${date}` : "commit";
   if (chunk.source === "jira") return `jira ${chunk.sourceId}`;
+  // Notion ids are prefixed `task:` / `page:` by the ingester, and the difference
+  // matters to a reader: a board task carries a status and an owner, a page does
+  // not. "notion" alone would flatten the two in the citation Marcus reads.
+  if (chunk.source === "notion") {
+    return chunk.sourceId.startsWith("task:") ? "notion board" : "notion page";
+  }
   return chunk.source;
 }
 

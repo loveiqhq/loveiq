@@ -102,7 +102,8 @@ function parentKey(row: BrainChunk): string {
     return `doc:${path ?? row.sourceId.split("#")[0]}`;
   }
 
-  // analytics / ga4 / gsc / jira: the id is already the natural key.
+  // analytics / ga4 / gsc / jira / notion: the id is already the natural key
+  // (notion ids are prefixed task:/page:, so a task and a page never collide).
   return `${row.source}:${row.sourceId}`;
 }
 
