@@ -87,7 +87,13 @@ export function isGoogleConfigured(): boolean {
  * expires. Returns null on any failure so a caller can skip its work rather than
  * fail a whole cron run.
  */
-export async function getGoogleAccessToken(nowMs: number = Date.now()): Promise<string | null> {
+export async function getGoogleAccessToken(
+  nowMs: number = Date.now(),
+  /** Vercel's per-request identity token, from `readVercelOidcToken(request)`.
+   *  Passed explicitly rather than held in module state: it is per-invocation, and
+   *  a serverless instance is reused across invocations. */
+  oidcToken?: string | null
+): Promise<string | null> {
   /**
    * A ready-made access token, for LOCAL runs only.
    *
@@ -137,10 +143,10 @@ export async function getGoogleAccessToken(nowMs: number = Date.now()): Promise<
    * Tried FIRST, before the refresh token, because on production it should always
    * win; locally `VERCEL_OIDC_TOKEN` is absent and the rest of the chain applies.
    */
-  const oidcToken = process.env.VERCEL_OIDC_TOKEN;
+  const oidc = oidcToken ?? process.env.VERCEL_OIDC_TOKEN;
   const wifAudience = process.env.GOOGLE_WORKLOAD_IDENTITY_AUDIENCE;
-  if (oidcToken && wifAudience) {
-    const federated = await federate(oidcToken, wifAudience);
+  if (oidc && wifAudience) {
+    const federated = await federate(oidc, wifAudience);
     if (federated) {
       const impersonateAs = process.env.GOOGLE_IMPERSONATE_SERVICE_ACCOUNT?.trim();
       // Federation alone yields an identity with no API access of its own; the
@@ -470,6 +476,33 @@ async function federate(oidcToken: string, audience: string): Promise<string | n
  *
  * Booleans only. Whether a credential EXISTS is not a secret; its value is.
  */
+
+/**
+ * Vercel's per-invocation identity token, read from the REQUEST rather than the
+ * environment.
+ *
+ * This is the whole reason keyless auth was silently failing in production. I
+ * assumed `VERCEL_OIDC_TOKEN` was an ordinary environment variable, and the
+ * diagnostic proved otherwise: `oidc=0` in BOTH a cron and a request context, on a
+ * deployment that definitely had the federation config. Reading Vercel's own
+ * `@vercel/oidc` source settles it —
+ *
+ *   getContext().headers?.["x-vercel-oidc-token"] ?? process.env.VERCEL_OIDC_TOKEN
+ *
+ * — so the token arrives as a request HEADER and the env var is only a local-dev
+ * fallback, which is exactly why `vercel env pull` produced one and production did
+ * not.
+ *
+ * Read directly rather than adding `@vercel/functions`: the whole mechanism is one
+ * header lookup, and the house rule is to hand-roll instead of taking a dependency
+ * for a couple of calls. The header name comes from Vercel's source, not a guess.
+ */
+export const VERCEL_OIDC_HEADER = "x-vercel-oidc-token";
+
+export function readVercelOidcToken(request: Request): string | null {
+  return request.headers.get(VERCEL_OIDC_HEADER) ?? process.env.VERCEL_OIDC_TOKEN ?? null;
+}
+
 export function googleCredentialShape(): string {
   const flags = [
     `oidc=${process.env.VERCEL_OIDC_TOKEN ? 1 : 0}`,

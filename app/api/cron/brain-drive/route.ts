@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ingestDrive } from "@features/brain/server/ingest/drive";
+import { readVercelOidcToken } from "@shared/http/google-oauth";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { escapeSlack, notifySlack } from "@shared/observability/slack";
 import {
@@ -82,7 +83,14 @@ export async function GET(request: Request) {
   let result;
 
   try {
-    result = await ingestDrive(new Date().toISOString(), isOutOfTime);
+    // The identity token is a REQUEST header, so it has to be read here and
+    // handed down — it is not in the environment. Getting this wrong is what made
+    // the keyless path fail silently in production.
+    result = await ingestDrive(
+      new Date().toISOString(),
+      isOutOfTime,
+      readVercelOidcToken(request)
+    );
     logger.info({ result }, "brain-drive: done");
 
     if (result.skipped && !DELIBERATE_SKIPS.has(result.skipped)) {

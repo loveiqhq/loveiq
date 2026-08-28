@@ -5,6 +5,7 @@ import { ingestGa4, ingestSearchConsole } from "@features/brain/server/ingest/go
 import { ingestJira } from "@features/brain/server/ingest/jira";
 import { ingestNotion } from "@features/brain/server/ingest/notion";
 import type { IngestResult } from "@features/brain/server/ingest/upsert";
+import { readVercelOidcToken } from "@shared/http/google-oauth";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { escapeSlack, notifySlack } from "@shared/observability/slack";
 import {
@@ -168,13 +169,21 @@ export async function GET(request: Request) {
   try {
     // GA4 first: `analytics` reads the ad spend back off the ga4 chunks to put
     // spend and revenue in one row, so it must run after them.
-    await run("ga4", () => ingestGa4(stampedAt, isOutOfTime));
-    await run("gsc", () => ingestSearchConsole(stampedAt, isOutOfTime));
+    // The identity token is a request HEADER, not an environment variable, so it
+    // must be read here and passed down. Reading it from process.env is exactly
+    // what made the keyless path fail silently in production.
+    const oidcToken = readVercelOidcToken(request);
+    await run("ga4", () => ingestGa4(stampedAt, isOutOfTime, undefined, oidcToken));
+    await run("gsc", () => ingestSearchConsole(stampedAt, isOutOfTime, undefined, oidcToken));
     await run("analytics", () => ingestAnalytics(stampedAt));
     await run("jira", () => ingestJira(stampedAt, isOutOfTime));
     // Notion last, and given the run's clock: it is the only source whose cost
     // scales with page COUNT rather than row count (one request per page for
     // block content), so it is the one most likely to need cutting short.
+    // Drive nightly as well as every 15 minutes. Deliberate redundancy: if the
+    // fast job is disabled or failing, the corpus degrades to daily rather than
+    // stopping. Cheap when nothing changed — one list call.
+    await run("drive", () => ingestDrive(stampedAt, isOutOfTime, oidcToken));
     await run("notion", () => ingestNotion(stampedAt, isOutOfTime));
 
     logger.info({ results }, "brain-ingest: done");

@@ -237,7 +237,9 @@ function num(v: string | undefined): number {
 export async function ingestGa4(
   stampedAt: string,
   isOutOfTime: () => boolean = () => false,
-  windowDays: number = DAYS
+  windowDays: number = DAYS,
+  /** Vercel's per-request identity token; see readVercelOidcToken(). */
+  oidcToken?: string | null
 ): Promise<IngestResult> {
   const propertyId = process.env.GA4_PROPERTY_ID;
   if (!propertyId) return { source: GA4_SOURCE, rows: 0, swept: 0, skipped: "ga4-no-property-id" };
@@ -261,7 +263,7 @@ export async function ingestGa4(
   if (!isGoogleConfigured()) {
     return { source: GA4_SOURCE, rows: 0, swept: 0, skipped: "google-not-configured" };
   }
-  const token = await getGoogleAccessToken();
+  const token = await getGoogleAccessToken(Date.now(), oidcToken);
   if (!token) {
     return { source: GA4_SOURCE, rows: 0, swept: 0, skipped: `google-token-unavailable(${googleCredentialShape()})` };
   }
@@ -685,7 +687,9 @@ async function queryGsc(
 export async function ingestSearchConsole(
   stampedAt: string,
   isOutOfTime: () => boolean = () => false,
-  windowDays: number = DAYS
+  windowDays: number = DAYS,
+  /** Vercel's per-request identity token; see readVercelOidcToken(). */
+  oidcToken?: string | null
 ): Promise<IngestResult> {
   const site = process.env.SEARCH_CONSOLE_SITE;
   if (!site) return { source: GSC_SOURCE, rows: 0, swept: 0, skipped: "gsc-no-site" };
@@ -709,7 +713,7 @@ export async function ingestSearchConsole(
   if (!isGoogleConfigured()) {
     return { source: GSC_SOURCE, rows: 0, swept: 0, skipped: "google-not-configured" };
   }
-  const token = await getGoogleAccessToken();
+  const token = await getGoogleAccessToken(Date.now(), oidcToken);
   if (!token) {
     return { source: GSC_SOURCE, rows: 0, swept: 0, skipped: `google-token-unavailable(${googleCredentialShape()})` };
   }

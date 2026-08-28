@@ -282,12 +282,15 @@ function partIdsOf(known: Map<string, unknown>, baseId: string): string[] {
 
 export async function ingestDrive(
   stampedAt: string,
-  isOutOfTime: () => boolean = () => false
+  isOutOfTime: () => boolean = () => false,
+  /** Vercel's per-request identity token; see readVercelOidcToken(). Without it
+   *  the keyless path cannot run, because the token is a request HEADER. */
+  oidcToken?: string | null
 ): Promise<IngestResult> {
   if (!isGoogleConfigured()) {
     return { source: SOURCE, rows: 0, swept: 0, skipped: "google-not-configured" };
   }
-  const token = await getGoogleAccessToken();
+  const token = await getGoogleAccessToken(Date.now(), oidcToken);
   if (!token) {
     return { source: SOURCE, rows: 0, swept: 0, skipped: `google-token-unavailable(${googleCredentialShape()})` };
   }
