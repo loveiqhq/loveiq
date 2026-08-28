@@ -41,14 +41,18 @@ it — there is no automatic feedback signal.
 
 ### What feeds it
 
-| Source                                                      | Where from                                                             | When                    |
-| ----------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------- |
-| Repo docs + git commits                                     | `.github/workflows/brain-ingest.yml` → `scripts/brain-ingest-repo.mjs` | on every push to `main` |
-| Funnel numbers, GA4, Search Console, Notion (board + pages) | `/api/cron/brain-ingest`                                               | daily, 04:47 UTC        |
+| Source                                                                           | Where from                                                             | When                    |
+| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------- |
+| Repo docs + git commits                                                          | `.github/workflows/brain-ingest.yml` → `scripts/brain-ingest-repo.mjs` | on every push to `main` |
+| Funnel numbers, GA4, Search Console, Notion (board + pages), Slack conversations | `/api/cron/brain-ingest`                                               | daily, 04:47 UTC        |
 
-Jira is wired but has never been ingested and is not expected to be — Notion
-replaced it on 2026-08-28. `list_sources` reports it as `NEVER INGESTED`, which is
-the correct state, not a fault.
+Jira is **not** a source. Notion is the system of record for the team's work
+(decision 2026-08-28), so `ingestJira` is no longer called by the cron and `jira`
+has been removed from the `list_sources` list. The ingester file and its tests are
+kept — the 1,037 issues in `loveiq.atlassian.net` are real and actively updated, so
+re-enabling it later means wiring the call back and setting `JIRA_*`, not rewriting
+it. Do not add `jira` back to the source list before chunks exist: naming a source
+with zero rows tells the model to search something that cannot answer.
 
 Both are idempotent and both sweep rows they did not rewrite, guarded by the
 write count **of their own source** so an empty run can never wipe a source.
@@ -65,7 +69,8 @@ read revenue, ad spend and every internal doc).
 Per-source, each one freezing that source when unset: `NOTION_TOKEN`,
 `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`,
 `GOOGLE_OAUTH_REFRESH_TOKEN`, `GA4_PROPERTY_ID`, `SEARCH_CONSOLE_SITE`. The
-`JIRA_*` trio still exists in code and is deliberately left unset.
+`JIRA_*` trio still exists in code and is deliberately left unset. Slack reads use
+`SLACK_BRAIN_BOT_TOKEN`.
 
 `GOOGLE_SERVICE_ACCOUNT_KEY` is preferred over the `GOOGLE_OAUTH_*` trio and
 should replace it. A Workspace reauth policy invalidates a user refresh token
@@ -81,7 +86,7 @@ public, so GitHub reads work without it and a token only raises the rate limit.
 Verified live against production on 2026-08-28: Stripe returns the balance,
 charges and disputes; Resend returns the verified `loveiq.org` domain; GitHub
 returns the repo and open pull requests; PostHog returns project 244778 with its
-insights. Only Slack answers `missing_scope` — see below.
+insights. Slack lists channels and reads history — see below.
 
 PostHog is on the **EU** host. The same key is rejected by the US host with
 `authentication_failed`, which says nothing about the region, so it is an easy
@@ -106,9 +111,9 @@ application-default login`. Google refuses gcloud's shared client the sensitive
   existing client's secret, so restoring this means adding a second secret to the
   same client rather than recreating it.
 
-**Leaving one unset does NOT alert, and that is deliberate.** Jira is knowingly
-unconfigured; a daily "SKIPPED jira" would train everyone to ignore the ops
-channel and take the real alerts down with it. What DOES alert, once per source
+**Leaving one unset does NOT alert, and that is deliberate.** A daily "SKIPPED"
+line for a source nobody intends to configure would train everyone to ignore the
+ops channel and take the real alerts down with it. What DOES alert, once per source
 per day, is a source that is configured and still produced nothing — a revoked or
 expired Google credential (`google-token-unavailable`), a run that exhausted its
 time budget, or a run that wrote zero rows. New failure kinds alert by default;
@@ -274,26 +279,48 @@ not an absence of data. Both the tool and `list_sources` say so explicitly, beca
 a model cannot otherwise tell them apart and will answer "we have no record of
 that" when the truth is "nobody gave me a key".
 
-### Slack history needs two scopes on the brain app
+### Slack conversations — indexed, and readable live
 
-`query_external_service` with `service: "slack"` works, but currently answers
-`missing_scope`: the tokens hold only `chat:write` (the main bot) and
-`app_mentions:read, im:*` (the brain bot). Neither can list channels or read
-history.
+Enabled 2026-08-28. The **LoveIQ Brain** app holds
+`app_mentions:read, chat:write, im:write, im:history, im:read, channels:history,
+channels:read, channels:join, users:read` and is a member of all 9 public channels.
 
 Reads use `SLACK_BRAIN_BOT_TOKEN` first and fall back to `SLACK_BOT_TOKEN`,
 deliberately: adding read scopes to the main bot would force a reinstall of the app
 that posts the live journey messages, which `CLAUDE.md` says not to risk.
 
-To enable it, add to the **LoveIQ Brain** app (api.slack.com/apps → OAuth &
-Permissions → Bot Token Scopes) and reinstall:
+Two things this buys, and they are different:
 
-- `channels:read` — list public channels
-- `channels:history` — read messages in public channels the bot is in
+- **Live** — `query_external_service` with `service: "slack"` calls any read method
+  (`conversations.list`, `conversations.history`, `users.list`).
+- **Indexed** — `ingestSlack` writes one chunk **per channel per day**, so
+  `search_company_context` finds the exchange, not an isolated line. 519 chunks
+  cover 2025-10-29 → present.
 
-Then `/invite @LoveIQ Brain` in each channel it should be able to read. Slack
-returns `ok:false` with `missing_scope` naming exactly what is needed, so a
-partial grant is self-diagnosing rather than silent.
+Three design choices worth knowing before changing it:
+
+1. **Bot messages are excluded**, which is what makes joining _every_ public channel
+   safe. `#commits-prod-staging` and `#prod-alerts` are almost entirely machine
+   output and the commits are already indexed from git. Filtering on **authorship**
+   rather than a channel allow-list means a human comment in an alerts channel is
+   still kept and a new bot channel needs no configuration. Join/leave messages
+   carry a real `user`, so they are filtered by `subtype` separately.
+2. **A day is one chunk.** A single Slack message is usually meaningless alone
+   ("yeah agreed"); the unit that answers a question is the exchange around it.
+   `period_end` is the day, so recency ranking works.
+3. **Thread replies are fetched separately** — they do not appear in
+   `conversations.history`, and a thread is usually where the actual argument
+   happens. `conversations.replies` is Tier 3 (~50/min) and the first live run
+   tripped it a dozen times, so the ingester honours `Retry-After` and records
+   `meta.threadsComplete: false` on any day whose replies it could not fetch. That
+   flag is load-bearing: a past day is otherwise skipped forever once indexed, so
+   without it one 429 would silently truncate a chunk permanently. Bumping
+   `SLACK_BUILDER_VERSION` is how you force every day to be rebuilt.
+
+`users:read` is what turns an opaque `<@U…>` id into `Marcus Börner`, in the author
+position **and** inside message text — a message about someone is only findable by
+their name if the name is in the indexed text. Without the scope it degrades to raw
+ids rather than failing.
 
 Private channels additionally need `groups:read` + `groups:history`; decide that
 separately, since it widens what one shared token can reach.
@@ -535,8 +562,8 @@ skipped or zero-row ingest raises a Slack ops alert once per source per day —
 but a source that was **never configured** looks identical to one that broke, so
 read the counts yourself after the first nightly run rather than trusting silence.
 
-Expect six sources with rows — `doc`, `commit`, `analytics`, `ga4`, `gsc`,
-`notion` — and `jira` at zero, which is correct. Easier than SQL: call
+Expect eight sources with rows — `doc`, `commit`, `analytics`, `ga4`, `gsc`,
+`notion`, `drive`, `slack`. Easier than SQL: call
 `list_sources` through the MCP endpoint, which prints the same thing per source
 and additionally names any source present in the table that the tool does not
 know about.

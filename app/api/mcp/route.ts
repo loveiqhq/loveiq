@@ -69,6 +69,24 @@ function textResult(text: string, isError = false) {
   };
 }
 
+/** Exported only so the "no indexed source is invisible" test reads the SAME
+ * array the route uses — a copy in the test would drift with the bug. */
+export const SOURCES_FOR_TEST = [
+  "doc",
+  "commit",
+  "analytics",
+  "ga4",
+  "gsc",
+  "notion",
+  "drive",
+  "slack",
+];
+// `jira` is deliberately absent. The 1,037 issues in loveiq.atlassian.net are real
+// and actively updated, but `JIRA_API_TOKEN` has never been set, so the corpus holds
+// 0 Jira chunks. Listing it anyway told the model to search a source that cannot
+// answer — the same "prose asserts a fact that lives in the environment" bug the
+// tests below guard. Add it back in the commit that proves chunks exist.
+
 const TOOLS = [
   {
     name: "search_company_context",
@@ -76,7 +94,8 @@ const TOOLS = [
       "Search LoveIQ's own written record: repository documentation, every git commit " +
       "(including the plain-English 'For Marcus:' summaries), the Notion workspace — both " +
       "the team board with each task's status, priority and assignee, and the written " +
-      "pages — and dated business numbers (funnel, revenue, ad spend, GA4, Search " +
+      "pages — the team's Slack conversations, and the notes from every recorded call, " +
+      "plus dated business numbers (funnel, revenue, ad spend, GA4, Search " +
       "Console). Use this for " +
       "anything historical or written down — why a decision was made, when something " +
       "changed, what a past month's numbers were. It cannot see live state; use the " +
@@ -732,7 +751,7 @@ async function callTool(
     // but missing from this list is named explicitly rather than silently
     // dropped. Add a source here when you add an ingester; if you forget, the
     // probe says so instead of the tool lying.
-    const SOURCES = ["doc", "commit", "analytics", "ga4", "gsc", "jira", "notion", "drive"];
+    const SOURCES = SOURCES_FOR_TEST;
 
     const describe = async (source: string): Promise<string> => {
       const base = `/rest/v1/brain_chunk?source=eq.${encodeURIComponent(source)}`;
@@ -863,7 +882,8 @@ export async function POST(request: Request) {
         "Everything LoveIQ knows about itself, in two halves.\n\n" +
         "HISTORY, indexed and searchable: documentation, every git commit including the " +
         "plain-English 'For Marcus:' summaries, the whole Notion workspace (every database " +
-        "and page, not just the task board), and dated business numbers. Use " +
+        "and page, not just the task board), the team's Slack conversations day by day, the " +
+        "notes from every recorded call, and dated business numbers. Use " +
         "search_company_context, and list_sources when you need to know how fresh a source " +
         "is.\n\n" +
         "LIVE STATE, queried straight from the production database with full history and no " +

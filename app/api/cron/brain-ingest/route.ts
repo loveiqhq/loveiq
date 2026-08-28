@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { ingestAnalytics } from "@features/brain/server/ingest/analytics";
 import { ingestDrive } from "@features/brain/server/ingest/drive";
 import { ingestGa4, ingestSearchConsole } from "@features/brain/server/ingest/google";
-import { ingestJira } from "@features/brain/server/ingest/jira";
 import { ingestNotion } from "@features/brain/server/ingest/notion";
+import { ingestSlack } from "@features/brain/server/ingest/slack";
 import type { IngestResult } from "@features/brain/server/ingest/upsert";
 import { readVercelOidcToken } from "@shared/http/google-oauth";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -26,11 +26,10 @@ export const maxDuration = 60;
  * team knows, and a daily reminder trains everyone to ignore the channel.
  *
  * Everything NOT in here alerts, including `google-token-unavailable` (a revoked
- * credential) and `jira-time-budget` (a run that ran out of clock). New skip
+ * credential) and `notion-time-budget` (a run that ran out of clock). New skip
  * strings therefore alert by default, which is the safe direction.
  */
 const DELIBERATE_SKIPS = new Set([
-  "jira-not-configured",
   "google-not-configured",
   "ga4-no-property-id",
   "gsc-no-site",
@@ -41,18 +40,19 @@ const DELIBERATE_SKIPS = new Set([
  * GET /api/cron/brain-ingest
  *
  * Nightly ingest of the parts of the company-brain corpus that do NOT live in
- * git: the funnel numbers, and Jira. The other half — 107 markdown docs and 1,476
+ * git: the funnel numbers, Notion, Slack and the call notes. The other half — the
+ * markdown docs and the
  * commit messages — is ingested by `.github/workflows/brain-ingest.yml` on push,
  * because only inside an Action are the files and the history actually on disk.
  *
  * EACH SOURCE FAILS ALONE. They are run in sequence but caught individually, so a
- * Jira outage or a rotated token still leaves the analytics rollup refreshed. A
+ * Notion outage or a rotated token still leaves the analytics rollup refreshed. A
  * single try/catch around both would have made every ingester only as reliable as
  * the least reliable one.
  *
  * ORDER IS DELIBERATE. GA4 goes first because `analytics` reads its ad-spend
  * numbers back out of the chunks it wrote, so that one row can answer "what did
- * we spend and what did we earn". Jira goes last because it is a paginated walk
+ * we spend and what did we earn". Notion goes last because it is a paginated walk
  * of a third-party API and the only one that can run out of time — anything
  * after it would be starved on a slow night.
  */
@@ -117,8 +117,8 @@ export async function GET(request: Request) {
       // Three separate paths land here: credentials unset (`skipped`), a revoked
       // Google refresh token (also `skipped`, because getGoogleAccessToken just
       // returns null), and a run that wrote zero rows. All three returned
-      // `status: "success"` and `{ok: true}`, which is how Jira sat at zero
-      // chunks indefinitely while the brain told askers "nothing in Jira".
+      // `status: "success"` and `{ok: true}`, which is how a source can sit at zero
+      // chunks indefinitely while the brain tells askers there is nothing there.
       // AN EXPLICIT LIST, NOT A SUFFIX TEST. `endsWith("not-configured")` was
       // wrong in BOTH directions: it alerted every day for `ga4-no-property-id`
       // and `gsc-no-site`, which are deliberately unset, and it stayed SILENT for
@@ -176,7 +176,6 @@ export async function GET(request: Request) {
     await run("ga4", () => ingestGa4(stampedAt, isOutOfTime, undefined, oidcToken));
     await run("gsc", () => ingestSearchConsole(stampedAt, isOutOfTime, undefined, oidcToken));
     await run("analytics", () => ingestAnalytics(stampedAt));
-    await run("jira", () => ingestJira(stampedAt, isOutOfTime));
     // Notion last, and given the run's clock: it is the only source whose cost
     // scales with page COUNT rather than row count (one request per page for
     // block content), so it is the one most likely to need cutting short.
@@ -184,6 +183,10 @@ export async function GET(request: Request) {
     // fast job is disabled or failing, the corpus degrades to daily rather than
     // stopping. Cheap when nothing changed — one list call.
     await run("drive", () => ingestDrive(stampedAt, isOutOfTime, oidcToken));
+    // Slack before Notion: it is bounded by CHANNEL count (9) rather than page
+    // count, so it finishes predictably, and it is the only source carrying the
+    // reasoning behind decisions the repo only shows the result of.
+    await run("slack", () => ingestSlack(stampedAt, isOutOfTime));
     await run("notion", () => ingestNotion(stampedAt, isOutOfTime));
 
     logger.info({ results }, "brain-ingest: done");

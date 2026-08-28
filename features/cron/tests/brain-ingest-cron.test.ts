@@ -26,7 +26,7 @@ vi.mock("@features/brain/server/ingest/google", () => ({
   ingestGa4: mk("ga4"),
   ingestSearchConsole: mk("gsc"),
 }));
-vi.mock("@features/brain/server/ingest/jira", () => ({ ingestJira: mk("jira") }));
+vi.mock("@features/brain/server/ingest/slack", () => ({ ingestSlack: mk("slack") }));
 vi.mock("@features/brain/server/ingest/notion", () => ({ ingestNotion: mk("notion") }));
 
 vi.mock("@shared/http/is-prod-cron-host", () => ({ isProdCronHost: () => true }));
@@ -62,7 +62,7 @@ describe("/api/cron/brain-ingest wiring", () => {
     // something that was not happening.
     await GET(req());
     expect(calls.map((c) => c.name).sort()).toEqual(
-      ["analytics", "drive", "ga4", "gsc", "jira", "notion"].sort()
+      ["analytics", "drive", "ga4", "gsc", "notion", "slack"].sort()
     );
   });
 
@@ -90,7 +90,7 @@ describe("/api/cron/brain-ingest wiring", () => {
 
   it("does not pass the token to sources that do not use Google", async () => {
     await GET(req({ [VERCEL_OIDC_HEADER]: OIDC }));
-    for (const name of ["analytics", "notion", "jira"]) {
+    for (const name of ["analytics", "notion", "slack"]) {
       const call = calls.find((c) => c.name === name)!;
       expect(call.args, name).not.toContain(OIDC);
     }

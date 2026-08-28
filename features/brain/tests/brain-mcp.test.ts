@@ -249,7 +249,7 @@ describe("/api/mcp", () => {
     it("still distinguishes a never-ingested source from a stale one", async () => {
       // The reason the list is fixed at all — a discovered list cannot say this.
       wireCorpus({ doc: 418, commit: 1448, analytics: 174, ga4: 108, gsc: 107, notion: 233 });
-      expect(await text()).toContain("jira: 0 chunks — NEVER INGESTED");
+      expect(await text()).toContain("slack: 0 chunks — NEVER INGESTED");
     });
 
     it("names a source that is in the corpus but missing from the list", async () => {
@@ -562,6 +562,50 @@ describe("/api/mcp", () => {
       expect(r.content[0].text).toMatch(/outage, not an empty result/);
     });
   });
+
+describe("no indexed source may be invisible to the model", () => {
+  /**
+   * The fifth guard on the same recurring bug. Four times a source has been
+   * ingested and then left out of the prose the model reads, which makes it
+   * unfindable: the model does not know to search for something it was never
+   * told exists. `list_sources` naming it is not enough — the model reads the
+   * tool description first and decides from that whether the corpus is worth
+   * asking. So every source the ingesters can write must be named somewhere the
+   * model actually sees.
+   */
+  it("every source in SOURCES is named in the search description or the instructions", async () => {
+    const mod = await import("@/app/api/mcp/route");
+    const list = await (
+      await POST(rpc({ jsonrpc: "2.0", id: 1, method: "tools/list" }))
+    ).json();
+    const init = await (
+      await POST(rpc({ jsonrpc: "2.0", id: 2, method: "initialize" }))
+    ).json();
+    const prose = (
+      JSON.stringify(list.result.tools) + (init.result.instructions ?? "")
+    ).toLowerCase();
+
+    // The human-readable word for each source id, since the prose names things the
+    // way a person would ("call notes", not "drive").
+    const WORD: Record<string, string> = {
+      doc: "documentation",
+      commit: "commit",
+      analytics: "business numbers",
+      ga4: "ga4",
+      gsc: "search console",
+      jira: "jira",
+      notion: "notion",
+      drive: "call",
+      slack: "slack",
+    };
+    const sources = (mod as { SOURCES_FOR_TEST?: string[] }).SOURCES_FOR_TEST ?? [];
+    expect(sources.length).toBeGreaterThan(0);
+    for (const src of sources) {
+      const word = WORD[src] ?? src;
+      expect(prose, `source "${src}" is indexed but never named to the model`).toContain(word);
+    }
+  });
+});
 
 describe("descriptions must not assert configuration state", () => {
   /**
