@@ -131,6 +131,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         dataLayer: [],
       } as typeof globalThis.window;
 
@@ -150,6 +151,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         dataLayer: [],
       } as typeof globalThis.window;
 
@@ -165,6 +167,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
@@ -179,6 +182,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
@@ -193,6 +197,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
@@ -207,6 +212,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
@@ -225,6 +231,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
       delete globalThis.window.dataLayer;
@@ -243,6 +250,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
@@ -260,6 +268,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
@@ -279,6 +288,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
@@ -296,6 +306,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
@@ -314,6 +325,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
@@ -334,6 +346,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
@@ -352,6 +365,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
@@ -372,6 +386,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
@@ -389,6 +404,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
@@ -407,6 +423,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
@@ -432,6 +449,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
@@ -448,6 +466,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
@@ -472,6 +491,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
@@ -490,6 +510,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
@@ -506,6 +527,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
@@ -542,6 +564,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
@@ -572,6 +595,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
@@ -591,6 +615,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqAnalyticsEnabled: true,
       } as typeof globalThis.window;
 
@@ -741,7 +766,11 @@ describe("analytics", () => {
 
       const mockGtag = vi.fn();
       setConsentCookie({ advertisement: true });
-      globalThis.window = { ...globalThis.window, gtag: mockGtag } as typeof globalThis.window;
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
+      } as typeof globalThis.window;
 
       mod.trackGoogleAdsPurchaseConversion(purchaseParams);
 
@@ -754,6 +783,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqGoogleAdsEnabled: true,
       } as typeof globalThis.window;
 
@@ -768,6 +798,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         __loveiqGoogleAdsEnabled: true,
       } as typeof globalThis.window;
 
@@ -788,6 +819,7 @@ describe("analytics", () => {
       globalThis.window = {
         ...globalThis.window,
         gtag: mockGtag,
+        google_tag_manager: { "G-QTYY69L46N": {} },
         dataLayer,
         __loveiqAnalyticsEnabled: true,
         __loveiqGoogleAdsEnabled: true,

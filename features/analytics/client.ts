@@ -29,6 +29,8 @@ declare global {
   interface Window {
     gtag?: GTag;
     dataLayer?: Array<Record<string, unknown>>;
+    /** Set by gtag.js per destination once it has initialised. */
+    google_tag_manager?: Record<string, unknown>;
     __loveiqGtagBootstrapped?: boolean;
     __loveiqReportSubmissionId?: number | null;
     /** Coupled forced-paywall A/B arm for the current report/wizard session. */
@@ -111,7 +113,7 @@ export const setForcedPaywallArm = (arm: "treatment" | "control" | null) => {
   // GA4 reports, register a custom dimension "forced_paywall_arm" (user-scoped)
   // in GA4 Admin → Custom definitions (one-time config, not code).
   if (arm && isProductionSite() && hasCookieYesConsent("analytics")) {
-    window.gtag?.("set", "user_properties", { forced_paywall_arm: arm });
+    gtagSend("set", "user_properties", { forced_paywall_arm: arm });
   }
 };
 
@@ -126,7 +128,7 @@ export const setSurveyVariant = (variant: "white" | "dark" | null) => {
   window.__loveiqSurveyVariant = variant;
   if (variant) posthog.register({ survey_variant: variant });
   if (variant && isProductionSite() && hasCookieYesConsent("analytics")) {
-    window.gtag?.("set", "user_properties", { survey_variant: variant });
+    gtagSend("set", "user_properties", { survey_variant: variant });
   }
 };
 
@@ -216,6 +218,107 @@ const getCookieValue = (name: string) => {
   return decodeURIComponent(cookie.slice(cookie.indexOf("=") + 1));
 };
 
+/**
+ * Every gtag call goes through here, held back until gtag.js is actually running.
+ *
+ * `window.gtag` stays a dataLayer pusher for the whole life of the page — that is
+ * the designed snippet, and gtag.js drains the queue rather than replacing the
+ * function. The theory is therefore that an early call is merely delivered late.
+ * Measured on production 2026-08-28, that is NOT what happens: an event pushed
+ * during hydration never reaches GA4 at all, while the identical call once gtag.js
+ * has loaded sends immediately. `landing_page_view` and `experiment_exposure` fire
+ * from the landing page's mount effect and had therefore never once been recorded —
+ * 0 in GA4 every day for nine days, against ~100 sessions landing on `/` a day.
+ *
+ * Hoisting `gtag('config', …)` out of lazyOnload (same day) was a real fix and a
+ * prerequisite — before it, config landed at dataLayer index 13, behind the events —
+ * but it only narrowed the loss to a race, and the race is still lost: post-deploy
+ * hours show web_vitals arriving and landing_page_view still at 0.
+ *
+ * So: buffer, then replay once `google_tag_manager["G-QTYY69L46N"]` exists, the
+ * marker gtag.js sets per destination when it initialises. Order is preserved —
+ * a `set user_properties` replayed after its event would not decorate it.
+ */
+/**
+ * The two call shapes `GTag` accepts, as a tuple union.
+ *
+ * NOT `Parameters<GTag>` — on an overloaded type that resolves to the LAST overload
+ * only, so it typechecked `set` and rejected every `event` call.
+ */
+type GtagCall =
+  | ["event", string, Record<string, unknown>?]
+  | ["set", "user_properties", Record<string, unknown>];
+
+/** Applies a queued tuple to gtag. The cast is needed because TypeScript cannot
+ *  resolve an overload from a spread of a union tuple; the runtime shim takes
+ *  anything, and `GtagCall` is what constrains the call sites. */
+const applyGtag = (call: GtagCall) => {
+  (window.gtag as unknown as ((...a: unknown[]) => void) | undefined)?.(...call);
+};
+
+/** Pending calls, or `null` once drained — after which calls go straight through. */
+let gtagQueue: GtagCall[] | null = [];
+let flushTimer: ReturnType<typeof setInterval> | null = null;
+let flushAttempts = 0;
+
+/** ~10s of retries. If gtag.js never arrives (ad blocker, blocked by consent, the
+ *  script 404s) the queue is dropped rather than grown forever. */
+const FLUSH_INTERVAL_MS = 250;
+const FLUSH_MAX_ATTEMPTS = 40;
+const QUEUE_LIMIT = 50;
+
+const gtagIsLive = () =>
+  typeof window !== "undefined" && !!window.google_tag_manager?.[GA4_MEASUREMENT_ID];
+
+const stopFlushing = () => {
+  if (flushTimer !== null) {
+    clearInterval(flushTimer);
+    flushTimer = null;
+  }
+};
+
+/** Drains the queue if gtag.js is live. Returns true once it has drained. */
+const flushGtagQueue = (): boolean => {
+  if (gtagQueue === null) return true;
+  if (!gtagIsLive()) return false;
+
+  const pending = gtagQueue;
+  // Cleared BEFORE replaying: gtag is synchronous, so a re-entrant call must go
+  // direct rather than land back in a queue that is mid-drain.
+  gtagQueue = null;
+  stopFlushing();
+  for (const call of pending) applyGtag(call);
+  return true;
+};
+
+const scheduleFlush = () => {
+  if (flushTimer !== null || gtagQueue === null) return;
+  flushAttempts = 0;
+  flushTimer = setInterval(() => {
+    flushAttempts += 1;
+    if (flushGtagQueue()) return;
+    if (flushAttempts >= FLUSH_MAX_ATTEMPTS) {
+      gtagQueue = [];
+      stopFlushing();
+    }
+  }, FLUSH_INTERVAL_MS);
+};
+
+/**
+ * Call gtag, or queue it until gtag.js is live. Use this rather than
+ * `gtagSend(...)` anywhere in this file: a direct call during hydration is
+ * silently dropped.
+ */
+const gtagSend = (...args: GtagCall) => {
+  if (typeof window === "undefined") return;
+  if (gtagQueue === null) {
+    applyGtag(args);
+    return;
+  }
+  if (gtagQueue.length < QUEUE_LIMIT) gtagQueue.push(args);
+  if (!flushGtagQueue()) scheduleFlush();
+};
+
 export const hasCookieYesConsent = (category: ConsentCategory) => {
   const consentValue = getCookieValue(COOKIEYES_CONSENT_COOKIE);
   if (!consentValue) return false;
@@ -283,7 +386,7 @@ export const setLandingVariant = (variant: LandingVariant | null) => {
   if (typeof window === "undefined") return;
   if (variant) posthog.register({ landing_variant: variant });
   if (variant && isProductionSite() && hasCookieYesConsent("analytics")) {
-    window.gtag?.("set", "user_properties", { landing_variant: variant });
+    gtagSend("set", "user_properties", { landing_variant: variant });
   }
 };
 
@@ -333,7 +436,7 @@ export const track = (name: string, params?: Record<string, unknown>) => {
   // `gtag` a dataLayer pusher from `afterInteractive`, and dataLayer is an ordinary
   // array that GTM and gtag.js each drain on load. Queueing is the designed
   // behaviour — dropping was not.
-  window.gtag?.("event", name, params);
+  gtagSend("event", name, params);
   window.dataLayer = window.dataLayer || [];
   window.dataLayer.push({ event: name, ...params });
 };
@@ -787,7 +890,7 @@ export const trackGoogleAdsPurchaseConversion = (params: ReportPurchaseParams) =
   if (!isProductionSite()) return;
   if (!hasCookieYesConsent("advertisement")) return;
 
-  window.gtag?.("event", "conversion", {
+  gtagSend("event", "conversion", {
     send_to: GOOGLE_ADS_PURCHASE_SEND_TO,
     value: typeof params.value === "number" ? params.value : 1.0,
     currency: params.currency || "MXN",
