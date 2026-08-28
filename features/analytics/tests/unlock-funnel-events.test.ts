@@ -28,6 +28,9 @@ beforeEach(async () => {
   document.cookie = "cookieyes-consent=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
   client = await import("@features/analytics/client");
   window.gtag = vi.fn() as unknown as typeof window.gtag;
+  // client.ts holds gtag calls until gtag.js has initialised; this is the marker
+  // it sets, and these assertions describe a page where it has loaded.
+  window.google_tag_manager = { "G-QTYY69L46N": {} };
   window.dataLayer = [];
   grantAnalyticsConsent();
   // No submission context: keeps durable persistence out of these assertions, which
