@@ -298,6 +298,46 @@ partial grant is self-diagnosing rather than silent.
 Private channels additionally need `groups:read` + `groups:history`; decide that
 separately, since it widens what one shared token can reach.
 
+### Google auth on production is keyless
+
+Production stores no Google credential at all. Vercel signs an OIDC token for every
+deployment into `VERCEL_OIDC_TOKEN`; Google trades that for a token of its own
+through a Workload Identity Pool, and that token impersonates `ga4-reader`, which is
+what actually holds GA4 Viewer, Search Console Full and any shared Drive folders.
+
+**Why it is built this way.** Every credential-holding alternative is broken or
+blocked: a refresh token carrying the sensitive analytics scopes dies to a Workspace
+reauth policy every few weeks, a downloadable service-account key is refused by
+`constraints/iam.disableServiceAccountKeyCreation`, and gcloud impersonation needs a
+CLI that serverless does not have. There is nothing here to rotate, leak, or
+re-consent, which is the only arrangement that can actually stay in sync.
+
+What exists, all on project `loveiq-brain`:
+
+| Piece               | Value                                                                       |
+| ------------------- | --------------------------------------------------------------------------- |
+| Pool                | `vercel` (global)                                                           |
+| Provider            | `vercel-oidc`, issuer `https://oidc.vercel.com/loveiq`                      |
+| Allowed audience    | `https://vercel.com/loveiq`                                                 |
+| Attribute condition | subject must start `owner:loveiq:project:loveiq-web:environment:production` |
+| Binding             | `ga4-reader` grants `roles/iam.workloadIdentityUser` to that one subject    |
+
+The condition is the security boundary: a PREVIEW deployment, a different project or
+another team gets a token STS will refuse, so this cannot be borrowed by anything
+else in the account.
+
+Two env vars on production only — `GOOGLE_WORKLOAD_IDENTITY_AUDIENCE` and
+`GOOGLE_IMPERSONATE_SERVICE_ACCOUNT`. Neither is a secret: one is a resource path,
+one an email.
+
+**Diagnosing it.** A 400 from STS means configuration, not a bad token — a
+mismatched audience, an `aud` claim the provider does not allow, or a subject the
+attribute condition rejects; the log names all three. A 403 from
+`generateAccessToken` almost always means the missing
+`roles/iam.serviceAccountTokenCreator` or `workloadIdentityUser` binding. If
+federation fails the code falls back to the refresh token and still impersonates, so
+a stale pool config degrades to the previous path rather than to no access.
+
 ### Backfilling Google without a working refresh token
 
 The `GOOGLE_OAUTH_*` refresh token dies periodically to a Workspace reauth policy

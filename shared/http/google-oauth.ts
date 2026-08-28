@@ -119,6 +119,40 @@ export async function getGoogleAccessToken(nowMs: number = Date.now()): Promise<
   if (cached && cached.expiresAtMs > nowMs) return cached.token;
 
   /**
+   * KEYLESS, AND THEREFORE THE ONLY OPTION THAT CANNOT EXPIRE.
+   *
+   * Vercel signs an OIDC token for every deployment and puts it in
+   * `VERCEL_OIDC_TOKEN`. Google will trade that for its own token through a
+   * Workload Identity Pool, and the pool is restricted to exactly one subject —
+   * `owner:loveiq:project:loveiq-web:environment:production` — so a preview
+   * deployment, another project, or another team cannot use it.
+   *
+   * This exists because every credential-holding alternative has already broken or
+   * is blocked: a refresh token carrying the sensitive analytics scopes dies to a
+   * Workspace reauth policy every few weeks, a downloadable service-account key is
+   * refused by `constraints/iam.disableServiceAccountKeyCreation`, and gcloud
+   * impersonation needs a CLI that serverless does not have. There is nothing here
+   * to rotate, leak, or re-consent.
+   *
+   * Tried FIRST, before the refresh token, because on production it should always
+   * win; locally `VERCEL_OIDC_TOKEN` is absent and the rest of the chain applies.
+   */
+  const oidcToken = process.env.VERCEL_OIDC_TOKEN;
+  const wifAudience = process.env.GOOGLE_WORKLOAD_IDENTITY_AUDIENCE;
+  if (oidcToken && wifAudience) {
+    const federated = await federate(oidcToken, wifAudience);
+    if (federated) {
+      const impersonateAs = process.env.GOOGLE_IMPERSONATE_SERVICE_ACCOUNT?.trim();
+      // Federation alone yields an identity with no API access of its own; the
+      // service account is what actually holds GA4 Viewer and Search Console.
+      if (impersonateAs) return impersonate(impersonateAs, federated, nowMs);
+      logger.warn(
+        "google oauth: federated successfully but GOOGLE_IMPERSONATE_SERVICE_ACCOUNT is unset, so there is no read access to use"
+      );
+    }
+  }
+
+  /**
    * A SERVICE-ACCOUNT KEY, PREFERRED WHEN PRESENT.
    *
    * Added 2026-08-28 after the user refresh token died with
@@ -368,6 +402,60 @@ async function impersonate(
     expiresAtMs: (Number.isFinite(expiresAtMs) ? expiresAtMs : nowMs + 3_600_000) - EXPIRY_SKEW_MS,
   };
   return cached.token;
+}
+
+/**
+ * Exchange a third-party OIDC token for a Google access token via STS.
+ *
+ * The audience is the full provider resource path
+ * (`//iam.googleapis.com/projects/<num>/locations/global/workloadIdentityPools/<pool>/providers/<provider>`)
+ * and lives in an env var rather than in code: it embeds a project number and a
+ * pool name, which are deployment facts, and the repo's own no-secrets lint rule
+ * objects to high-entropy identifiers in source anyway.
+ *
+ * Only `cloud-platform` is requested. The federated identity is a stepping stone —
+ * it holds no API access itself, and the service account it then impersonates is
+ * what carries the actual read permissions.
+ */
+async function federate(oidcToken: string, audience: string): Promise<string | null> {
+  let res: Response;
+  try {
+    res = await fetchWithTimeout("https://sts.googleapis.com/v1/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        audience,
+        grantType: "urn:ietf:params:oauth:grant-type:token-exchange",
+        requestedTokenType: "urn:ietf:params:oauth:token-type:access_token",
+        scope: "https://www.googleapis.com/auth/cloud-platform",
+        subjectTokenType: "urn:ietf:params:oauth:token-type:jwt",
+        subjectToken: oidcToken,
+      }),
+      timeoutMs: TIMEOUT_MS,
+    });
+  } catch (err) {
+    logger.error({ err }, "google oauth: STS token exchange failed");
+    return null;
+  }
+
+  if (!res.ok) {
+    const detail = (await res.text().catch(() => "")).slice(0, 300);
+    // The common causes are all configuration, and naming them turns a 400 into a
+    // one-line fix: a mismatched audience, an attribute condition the deployment's
+    // subject does not satisfy, or an `aud` claim the provider does not allow.
+    logger.error(
+      { status: res.status, detail },
+      "google oauth: STS refused the Vercel OIDC token — check the audience, the provider's allowed audiences, and the attribute condition against this deployment's subject"
+    );
+    return null;
+  }
+
+  const json = (await res.json().catch(() => null)) as { access_token?: string } | null;
+  if (!json?.access_token) {
+    logger.error("google oauth: STS returned no access_token");
+    return null;
+  }
+  return json.access_token;
 }
 
 export function googleScopeHint(status: number, body: string, scope: string): string | null {
