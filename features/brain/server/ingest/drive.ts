@@ -39,6 +39,15 @@ export const DRIVE_BUILDER_VERSION = 2;
 /** Only native Google Docs export to text. A PDF or image would need OCR. */
 const DOC_MIME = "application/vnd.google-apps.document";
 
+/**
+ * Google Meet does not always put the note IN the meeting folder — for meetings
+ * organised by someone else it drops a SHORTCUT pointing at a document in their
+ * Drive. Measured in the LoveIQ `Google Meet` folder: one series holds 23 real
+ * documents, and three others hold nothing but shortcuts, one of which points at a
+ * video. So a query for documents alone finds 23 of 24 available notes.
+ */
+const SHORTCUT_MIME = "application/vnd.google-apps.shortcut";
+
 interface DriveFile {
   id?: string;
   name?: string;
@@ -47,6 +56,7 @@ interface DriveFile {
   createdTime?: string;
   webViewLink?: string;
   owners?: Array<{ emailAddress?: string }>;
+  shortcutDetails?: { targetId?: string; targetMimeType?: string };
 }
 
 async function driveGet(token: string, path: string): Promise<Response> {
@@ -70,9 +80,13 @@ async function listDocs(
       complete = false;
       break;
     }
-    const q = encodeURIComponent(`mimeType='${DOC_MIME}' and trashed=false`);
+    // Shortcuts come back in the same query so a second pass is not needed.
+    const q = encodeURIComponent(
+      `(mimeType='${DOC_MIME}' or mimeType='${SHORTCUT_MIME}') and trashed=false`
+    );
     const fields = encodeURIComponent(
-      "nextPageToken,files(id,name,mimeType,modifiedTime,createdTime,webViewLink,owners(emailAddress))"
+      "nextPageToken,files(id,name,mimeType,modifiedTime,createdTime,webViewLink," +
+        "owners(emailAddress),shortcutDetails(targetId,targetMimeType))"
     );
     const res = await driveGet(
       token,
@@ -94,6 +108,77 @@ async function listDocs(
     if (page === MAX_PAGES - 1) complete = false;
   }
   return { items: out, complete };
+}
+
+
+/**
+ * Turn the raw listing into the documents we can actually read.
+ *
+ * A shortcut is a pointer, not a file: its own `modifiedTime` tracks the pointer,
+ * so the TARGET's metadata has to be fetched or the incremental check would never
+ * notice the note being edited. One extra request per shortcut, and shortcuts are
+ * a handful.
+ *
+ * An unreadable target is NOT an error. Google Meet creates a shortcut whenever
+ * the meeting was organised by somebody else, and the note then lives in THEIR
+ * Drive — so "we cannot read it" is the normal state until that person shares
+ * their own folder. It is counted and logged rather than warned about, because it
+ * is information for a human, not a fault to page anyone over.
+ *
+ * Video targets are skipped outright: a recording is not text and there is no OCR
+ * or transcription step here, so indexing an empty body would be worse than
+ * skipping it.
+ */
+async function resolveShortcuts(
+  token: string,
+  listed: DriveFile[]
+): Promise<{ docs: DriveFile[]; unreachable: number; skippedNonDoc: number }> {
+  const docs: DriveFile[] = [];
+  const seen = new Set<string>();
+  let unreachable = 0;
+  let skippedNonDoc = 0;
+
+  for (const f of listed) {
+    if (f.mimeType === DOC_MIME && f.id) {
+      if (seen.has(f.id)) continue;
+      seen.add(f.id);
+      docs.push(f);
+    }
+  }
+
+  for (const f of listed) {
+    if (f.mimeType !== SHORTCUT_MIME) continue;
+    const targetId = f.shortcutDetails?.targetId;
+    if (!targetId) continue;
+    if (f.shortcutDetails?.targetMimeType !== DOC_MIME) {
+      skippedNonDoc += 1;
+      continue;
+    }
+    // A target can also be directly visible; do not index it twice.
+    if (seen.has(targetId)) continue;
+
+    const res = await driveGet(
+      token,
+      `/files/${encodeURIComponent(targetId)}` +
+        `?fields=id,name,mimeType,modifiedTime,createdTime,webViewLink,owners(emailAddress)` +
+        `&supportsAllDrives=true`
+    );
+    if (!res.ok) {
+      unreachable += 1;
+      continue;
+    }
+    const target = (await res.json().catch(() => null)) as DriveFile | null;
+    if (!target?.id) {
+      unreachable += 1;
+      continue;
+    }
+    seen.add(target.id);
+    // Keep the SHORTCUT's name: it is the one that carries the meeting title in
+    // the folder the team actually looks at.
+    docs.push({ ...target, name: target.name || f.name });
+  }
+
+  return { docs, unreachable, skippedNonDoc };
 }
 
 /** A Google Doc as plain text. */
@@ -205,7 +290,18 @@ export async function ingestDrive(
   if (isOutOfTime()) return { source: SOURCE, rows: 0, swept: 0, skipped: "drive-time-budget" };
 
   const known = await knownDriveEdits();
-  const listed = await listDocs(token, isOutOfTime);
+  const raw = await listDocs(token, isOutOfTime);
+  const resolved = await resolveShortcuts(token, raw.items);
+  const listed = { items: resolved.docs, complete: raw.complete };
+
+  if (resolved.unreachable > 0 || resolved.skippedNonDoc > 0) {
+    // Information, not a fault: a shortcut we cannot follow means the note lives
+    // in someone else's Drive and they have not shared their folder.
+    logger.info(
+      { unreachable: resolved.unreachable, nonDocTargets: resolved.skippedNonDoc },
+      "brain-ingest drive: some shortcut targets are not readable (their owner has not shared) or are not documents"
+    );
+  }
 
   // NOTHING SHARED IS NOT AN ERROR, and must not look like one. The service
   // account sees only what somebody shared with it, so an empty list on a fresh
@@ -263,7 +359,14 @@ export async function ingestDrive(
   const swept = listed.complete ? await sweepStale(SOURCE, stampedAt, written + touched) : 0;
 
   logger.info(
-    { docs: listed.items.length, written, touched, deferred: deferred.length, complete },
+    {
+      docs: listed.items.length,
+      shortcutsUnreachable: resolved.unreachable,
+      written,
+      touched,
+      deferred: deferred.length,
+      complete,
+    },
     "brain-ingest drive"
   );
   return { source: SOURCE, rows: written + touched, swept };

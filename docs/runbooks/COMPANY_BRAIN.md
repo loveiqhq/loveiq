@@ -437,6 +437,27 @@ dependency-bump commit above the actual notes, and they appeared at all only bec
 retrieval reserves slots per source. After it, "what was decided in the meeting
 about mobile" returns notes at ranks 1 and 2.
 
+**Google Meet uses SHORTCUTS for meetings you did not organise.** In the LoveIQ
+`Google Meet` folder, one series holds 23 real documents and three others hold
+nothing but shortcuts — one of which points at a video. A query for documents alone
+therefore finds 23 of 24 available notes, so the ingester follows shortcuts: it
+fetches the TARGET's metadata (the shortcut's own `modifiedTime` tracks the pointer,
+not the note, so using it would mean an edited note never looks changed), skips
+non-document targets, and skips targets it cannot read.
+
+An unreadable target is NORMAL, not a fault: the note lives in the organiser's own
+Drive and they have not shared their folder. The run logs `shortcutsUnreachable` so
+the gap is visible without paging anyone. As of 2026-08-28 that count is 2 — the
+Kick Off Call and the Eman/Mark attribution call — and closing it means each
+organiser sharing their own `My Drive > Google Meet` folder with the service
+account, exactly as above.
+
+Share the PARENT `Google Meet` folder rather than an individual meeting folder:
+Drive access is inherited, so one share covers every existing series and every
+future one Gemini creates. The listing query is global (`mimeType='document' or
+shortcut`, no parent filter), so no code change is needed when a new meeting folder
+appears.
+
 Only native Google Docs are indexed. A PDF or a scan would need OCR, and silently
 indexing an empty body would be worse than skipping it.
 

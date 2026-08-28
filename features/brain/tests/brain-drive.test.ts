@@ -33,6 +33,7 @@ vi.mock("@features/admin/server/supabase", () => ({
 let files: unknown[] = [];
 let exportBody = "Summary\n\nWe agreed to ship the paywall.";
 let listOk = true;
+let targets: Record<string, unknown> = {};
 let alwaysMorePages = false;
 const httpCalls: string[] = [];
 vi.mock("@shared/http/fetch-with-timeout", () => ({
@@ -52,6 +53,14 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
     }
     if (url.includes("/export?")) {
       return { ok: true, status: 200, text: async () => "﻿" + exportBody.replace(/\n/g, "\r\n") };
+    }
+    // single-file metadata GET, which is how a shortcut's TARGET is resolved
+    const meta = /\/files\/([^?]+)\?fields=id,name/.exec(url);
+    if (meta) {
+      const target = targets[decodeURIComponent(meta[1])];
+      return target
+        ? { ok: true, status: 200, json: async () => target, text: async () => "" }
+        : { ok: false, status: 404, text: async () => '{"error":"File not found"}' };
     }
     return { ok: true, status: 200, json: async () => ({}), text: async () => "" };
   }),
@@ -123,6 +132,7 @@ describe("ingestDrive", () => {
     files = [FILE];
     listOk = true;
     alwaysMorePages = false;
+    targets = {};
   });
 
   it("strips the BOM and CRLFs that Google's text export adds", async () => {
@@ -208,5 +218,115 @@ describe("ingestDrive", () => {
     const list = httpCalls.find((u) => u.includes("/files?q="))!;
     expect(decodeURIComponent(list)).toContain("mimeType='application/vnd.google-apps.document'");
     expect(decodeURIComponent(list)).toContain("trashed=false");
+  });
+});
+
+describe("Google Meet shortcuts", () => {
+  const SHORTCUT = {
+    id: "sc1",
+    name: "60 min with Mark - 2026/08/22 - Notes by Gemini",
+    mimeType: "application/vnd.google-apps.shortcut",
+    modifiedTime: "2026-08-22T11:00:00.000Z",
+    shortcutDetails: {
+      targetId: "tgt1",
+      targetMimeType: "application/vnd.google-apps.document",
+    },
+  };
+  const VIDEO_SHORTCUT = {
+    id: "sc2",
+    name: "60 min with Mark - recording",
+    mimeType: "application/vnd.google-apps.shortcut",
+    shortcutDetails: { targetId: "vid1", targetMimeType: "video/mp4" },
+  };
+
+  beforeEach(() => {
+    dbCalls.length = 0;
+    httpCalls.length = 0;
+    existing = [];
+    listOk = true;
+    alwaysMorePages = false;
+    targets = {};
+    process.env.NOTION_TOKEN = "ntn_test";
+  });
+
+  function written() {
+    return dbCalls
+      .filter((c) => c.method !== "GET" && c.path.includes("on_conflict"))
+      .flatMap((c) => JSON.parse(c.body) as Array<{ source_id: string; title: string }>);
+  }
+
+  it("follows a shortcut to a readable document, which a Docs-only query misses", async () => {
+    // Meet drops a SHORTCUT when the meeting was organised by someone else. In the
+    // real folder, three of four meeting series held only shortcuts — so querying
+    // for documents alone found 23 of 24 available notes.
+    files = [SHORTCUT];
+    targets = {
+      tgt1: {
+        id: "tgt1",
+        name: "60 min with Mark - 2026/08/22 - Notes by Gemini",
+        mimeType: "application/vnd.google-apps.document",
+        modifiedTime: "2026-08-22T11:05:00.000Z",
+        webViewLink: "https://docs.google.com/document/d/tgt1/edit",
+      },
+    };
+    await ingestDrive(STAMP);
+    const rows = written();
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows[0].source_id).toBe("doc:tgt1");
+    expect(rows[0].title.startsWith("Meeting notes:")).toBe(true);
+  });
+
+  it("dates the chunk from the TARGET, not the pointer", async () => {
+    // A shortcut's own modifiedTime tracks the pointer, so using it would mean an
+    // edited note never looks changed.
+    files = [SHORTCUT];
+    targets = {
+      tgt1: {
+        id: "tgt1",
+        name: "note",
+        mimeType: "application/vnd.google-apps.document",
+        modifiedTime: "2026-08-24T09:00:00.000Z",
+      },
+    };
+    await ingestDrive(STAMP);
+    const rows = dbCalls
+      .filter((c) => c.method !== "GET" && c.path.includes("on_conflict"))
+      .flatMap((c) => JSON.parse(c.body) as Array<{ period_end: string }>);
+    expect(rows[0].period_end).toBe("2026-08-24");
+  });
+
+  it("treats an unreadable target as normal, not as a failure", async () => {
+    // The note lives in the organiser's Drive and they have not shared it. That is
+    // the expected state, so the run must still succeed and must not sweep-delete
+    // anything.
+    files = [SHORTCUT];
+    targets = {}; // 404
+    const res = await ingestDrive(STAMP);
+    expect(res.skipped).toBe("drive-nothing-shared");
+    expect(written()).toHaveLength(0);
+  });
+
+  it("skips a shortcut pointing at a video without trying to export it", async () => {
+    files = [VIDEO_SHORTCUT];
+    await ingestDrive(STAMP);
+    expect(httpCalls.filter((u) => u.includes("/export?"))).toHaveLength(0);
+    expect(httpCalls.filter((u) => u.includes("/files/vid1"))).toHaveLength(0);
+  });
+
+  it("does not re-fetch a target that is already visible directly", async () => {
+    // NOT about duplicate rows: `upsertChunks` dedupes by (source, source_id), so a
+    // duplicate would be collapsed at the write path and the row count proves
+    // nothing — an earlier version of this test passed with the guard deleted for
+    // exactly that reason. What the guard actually saves is a pointless HTTP
+    // request per shortcut whose target we already have.
+    files = [
+      FILE,
+      { ...SHORTCUT, shortcutDetails: { targetId: FILE.id, targetMimeType: "application/vnd.google-apps.document" } },
+    ];
+    targets = { [FILE.id]: { ...FILE } };
+    await ingestDrive(STAMP);
+    expect(httpCalls.filter((u) => u.includes(`/files/${FILE.id}?fields=id,name`))).toHaveLength(0);
+    // and it is still indexed exactly once
+    expect(written().filter((r) => r.source_id === `doc:${FILE.id}`)).toHaveLength(1);
   });
 });
