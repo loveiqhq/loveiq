@@ -41,10 +41,14 @@ it — there is no automatic feedback signal.
 
 ### What feeds it
 
-| Source                                    | Where from                                                             | When                    |
-| ----------------------------------------- | ---------------------------------------------------------------------- | ----------------------- |
-| Repo docs + git commits                   | `.github/workflows/brain-ingest.yml` → `scripts/brain-ingest-repo.mjs` | on every push to `main` |
-| Funnel numbers, GA4, Search Console, Jira | `/api/cron/brain-ingest`                                               | daily, 04:47 UTC        |
+| Source                                                      | Where from                                                             | When                    |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------- |
+| Repo docs + git commits                                     | `.github/workflows/brain-ingest.yml` → `scripts/brain-ingest-repo.mjs` | on every push to `main` |
+| Funnel numbers, GA4, Search Console, Notion (board + pages) | `/api/cron/brain-ingest`                                               | daily, 04:47 UTC        |
+
+Jira is wired but has never been ingested and is not expected to be — Notion
+replaced it on 2026-08-28. `list_sources` reports it as `NEVER INGESTED`, which is
+the correct state, not a fault.
 
 Both are idempotent and both sweep rows they did not rewrite, guarded by the
 write count **of their own source** so an empty run can never wipe a source.
@@ -58,10 +62,14 @@ Strongly recommended: `BRAIN_LLM_REASONING_EFFORT=low` (measured 13.7s → 1.7s)
 and `SLACK_BRAIN_TEAM_ID` (without it, any workspace that installs the app can
 read revenue, ad spend and every internal doc).
 
-Per-source, each one freezing that source when unset: `JIRA_BASE_URL`,
-`JIRA_EMAIL`, `JIRA_API_TOKEN`, `GOOGLE_OAUTH_CLIENT_ID`,
-`GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REFRESH_TOKEN`, `GA4_PROPERTY_ID`,
-`SEARCH_CONSOLE_SITE`.
+Per-source, each one freezing that source when unset: `NOTION_TOKEN`,
+`GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`,
+`GOOGLE_OAUTH_REFRESH_TOKEN`, `GA4_PROPERTY_ID`, `SEARCH_CONSOLE_SITE`. The
+`JIRA_*` trio still exists in code and is deliberately left unset.
+
+`LOVEIQ_MCP_TOKEN` gates the MCP endpoint rather than a source: unset means
+`/api/mcp` returns 503 and no Claude can connect, which is why it is safe to
+deploy before the token exists.
 
 **Both Google credentials are now in place** (2026-08-28). Two things were needed
 and neither is obvious:
@@ -92,6 +100,46 @@ believe you configured but that is missing there will not page you.
 
 See the environment-variable table in `CLAUDE.md` for what each one does and what
 happens when it is missing.
+
+### Connecting Claude to it (the MCP endpoint)
+
+This is the primary way to use the brain. `/api/mcp` exposes the corpus as an MCP
+server, so Claude — the claude.ai app, Claude Desktop, or Claude Code — can search
+it as a tool and reason across it alongside the live connectors it already has.
+
+Add it as a custom connector with:
+
+- **URL** `https://www.loveiq.org/api/mcp`
+- **Authorization** `Bearer <LOVEIQ_MCP_TOKEN>`
+
+**Use `www`, not the apex.** `loveiq.org` 308-redirects to `www`, and a redirect
+drops the `Authorization` header, so the apex presents as a confusing 401 with a
+token that is perfectly valid.
+
+Three tools, deliberately few:
+
+| Tool                     | For                                                                                              |
+| ------------------------ | ------------------------------------------------------------------------------------------------ |
+| `search_company_context` | Anything written down or historical — a decision, a commit, a board task, a past month's numbers |
+| `get_business_numbers`   | Exact daily funnel/revenue/ad-spend rows to compute with                                         |
+| `list_sources`           | What the corpus holds and how fresh each source is — call this first when an answer looks stale  |
+
+**One shared token for the whole team, so it is the whole corpus.** There is no
+per-person scoping, by policy: revenue, ad spend and every internal document sit
+behind this one string. Requests are rate-limited to 120/minute per IP to bound how
+fast a leaked token could drain it. Rotate by changing the value in both Vercel
+projects — no code change, and the next deployment picks it up.
+
+**Unset token means 503, not open.** Verified against a live deployment:
+`{"error":"Not configured."}` with no token configured, `401` for a missing, wrong
+or off-by-one-character bearer, `200` only for an exact match (constant-time
+compared).
+
+**The nightly refresh only runs on production.** `isProdCronHost()` checks
+`NEXT_PUBLIC_SITE_URL` against `https://(www.)?loveiq.org`, so a staging or preview
+deployment serves the MCP endpoint happily but never re-ingests — the corpus there
+is frozen at whatever production last wrote. Reading a stale corpus from staging is
+fine; concluding a source has died from it is not.
 
 ### Slack app setup, in two phases
 
@@ -165,7 +213,13 @@ select count(*), max(created_at) from brain_query;
 If a source's `max(period_end)` is stale, that source has stopped. A failed,
 skipped or zero-row ingest raises a Slack ops alert once per source per day —
 but a source that was **never configured** looks identical to one that broke, so
-check `jira` is non-zero after the first nightly run.
+read the counts yourself after the first nightly run rather than trusting silence.
+
+Expect six sources with rows — `doc`, `commit`, `analytics`, `ga4`, `gsc`,
+`notion` — and `jira` at zero, which is correct. Easier than SQL: call
+`list_sources` through the MCP endpoint, which prints the same thing per source
+and additionally names any source present in the table that the tool does not
+know about.
 
 ### Known limitations, deliberately accepted
 

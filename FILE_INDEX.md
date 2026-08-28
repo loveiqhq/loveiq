@@ -144,17 +144,21 @@
 
 ## Company Brain
 
-| Task                          | Files                                                                       |
-| ----------------------------- | --------------------------------------------------------------------------- |
-| Ask a question (answer core)  | `features/brain/server/answer.ts`                                           |
-| Change retrieval / ranking    | `features/brain/server/retrieve.ts`, `supabase/migrations/*brain_search*`   |
-| Swap the language model       | `features/brain/server/llm.ts` (`BRAIN_LLM_BASE_URL`, `BRAIN_LLM_MODEL`)    |
-| Slack front door              | `app/api/slack/events/route.ts`, `features/brain/server/slack.ts`           |
-| Nightly ingest (Jira/GA4/GSC) | `app/api/cron/brain-ingest/route.ts`, `features/brain/server/ingest/`       |
-| Docs + commits ingest         | `scripts/brain-ingest-repo.mjs`, `.github/workflows/brain-ingest.yml`       |
-| Business-number chunks        | `features/brain/server/ingest/analytics.ts`, `supabase/migrations/*rollup*` |
-| Ask from the CLI              | `scripts/brain-ask.ts`                                                      |
-| Adversarial question battery  | `scripts/brain-battery.ts`                                                  |
+| Task                            | Files                                                                       |
+| ------------------------------- | --------------------------------------------------------------------------- |
+| Ask a question (answer core)    | `features/brain/server/answer.ts`                                           |
+| Change retrieval / ranking      | `features/brain/server/retrieve.ts`, `supabase/migrations/*brain_search*`   |
+| Swap the language model         | `features/brain/server/llm.ts` (`BRAIN_LLM_BASE_URL`, `BRAIN_LLM_MODEL`)    |
+| Slack front door                | `app/api/slack/events/route.ts`, `features/brain/server/slack.ts`           |
+| Nightly ingest (Notion/GA4/GSC) | `app/api/cron/brain-ingest/route.ts`, `features/brain/server/ingest/`       |
+| Connect Claude (MCP server)     | `app/api/mcp/route.ts` (`LOVEIQ_MCP_TOKEN`)                                 |
+| Notion board + pages ingest     | `features/brain/server/ingest/notion.ts` (`NOTION_TOKEN`)                   |
+| Refuse to index a credential    | `features/brain/server/ingest/upsert.ts` (`credentialKind`)                 |
+| Operator runbook                | `docs/runbooks/COMPANY_BRAIN.md`                                            |
+| Docs + commits ingest           | `scripts/brain-ingest-repo.mjs`, `.github/workflows/brain-ingest.yml`       |
+| Business-number chunks          | `features/brain/server/ingest/analytics.ts`, `supabase/migrations/*rollup*` |
+| Ask from the CLI                | `scripts/brain-ask.ts`                                                      |
+| Adversarial question battery    | `scripts/brain-battery.ts`                                                  |
 
 ## Testing
 
