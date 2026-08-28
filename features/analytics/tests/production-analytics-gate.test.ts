@@ -164,6 +164,33 @@ describe("production analytics gate", () => {
     expect(inside, "PostHog preconnect must not be production-gated").toBe(false);
   });
 
+  it("defines the gtag shim EARLY, so events fired on mount are not lost", () => {
+    /**
+     * The whole 2026-08-28 fix in one assertion. `ga-init` is deliberately
+     * lazyOnload — the 185 KiB library must not block first paint — but the three-line
+     * gtag/dataLayer shim has to exist before that, or `gtag()` is undefined for every
+     * event fired from a mount effect and the call is lost rather than queued.
+     * Measured before the split: price_shown wrote 1,172 rows to our database and
+     * reached GA4 four times.
+     */
+    const shim = layout.indexOf('id="gtag-shim"');
+    expect(shim, "gtag shim not found").toBeGreaterThan(-1);
+
+    // It must NOT be lazyOnload — that is the bug it exists to fix.
+    const shimBlock = layout.slice(shim, shim + 200);
+    expect(shimBlock).toContain('strategy="afterInteractive"');
+    expect(shimBlock).not.toContain("lazyOnload");
+
+    // ...and it must come before the heavy loader it queues for.
+    expect(shim).toBeLessThan(layout.indexOf("gtag/js?id=G-QTYY69L46N"));
+
+    // The racy window flags must not come back as gates in the client.
+    const client = readFileSync(join(process.cwd(), "features/analytics/client.ts"), "utf8");
+    expect(client).not.toContain("window.__loveiqAnalyticsEnabled");
+    expect(client).not.toContain("window.__loveiqGoogleAdsEnabled");
+    expect(client).toContain("if (!isProductionSite()) return;");
+  });
+
   it("refuses the server-side GA4 purchase send off production", () => {
     // The one send that survives the client gate: it runs in the Stripe webhook,
     // and staging shares the production database, so a sandbox test purchase would

@@ -43,6 +43,16 @@ describe("analytics", () => {
 
   beforeEach(async () => {
     clearConsentCookie();
+    /**
+     * These tests assert what the LIVE SITE sends, so the environment has to look
+     * like the live site. `track()` gates on `isProductionSite()` — a build-time
+     * check — since the old `window.__loveiqAnalyticsEnabled` flag turned out to be
+     * a race: it is set by a `lazyOnload` script, so every event fired from a mount
+     * effect was silently dropped. Without these stubs every assertion below would
+     * pass vacuously on an early return.
+     */
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org");
     // Dynamically import to reset module state
     vi.resetModules();
     const mod = await import("@features/analytics/client");
@@ -63,6 +73,7 @@ describe("analytics", () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     clearConsentCookie();
     // Restore window
     if (originalWindow === undefined) {
@@ -93,14 +104,59 @@ describe("analytics", () => {
       expect(() => track("test_event")).not.toThrow();
     });
 
-    it("does nothing when analytics is not enabled", () => {
-      const mockGtag = vi.fn();
-      setConsentCookie({ analytics: true });
-      globalThis.window = { ...globalThis.window, gtag: mockGtag } as typeof globalThis.window;
+    /**
+     * Replaces "does nothing when analytics is not enabled", which asserted on the
+     * `window.__loveiqAnalyticsEnabled` flag. That flag was removed on 2026-08-28: it
+     * is set by a `lazyOnload` script, so it was still undefined when most events fire
+     * from a mount effect, and `track()` silently dropped them — including the
+     * dataLayer push, which would have queued perfectly well. price_shown wrote 1,172
+     * rows to our database and reached GA4 four times.
+     *
+     * The guarantee it was really protecting — do not send from anywhere that is not
+     * the live site — is now a BUILD-TIME check, so it holds without a race. These
+     * assert that guarantee at each of the three environments that are not production.
+     */
+    it.each([
+      ["staging", "production", "https://staging.loveiq.org"],
+      ["a Vercel preview", "production", "https://loveiq-abc123-loveiq.vercel.app"],
+      ["local dev", "development", "https://www.loveiq.org"],
+    ])("sends nothing from %s, even with full consent", async (_label, nodeEnv, siteUrl) => {
+      vi.stubEnv("NODE_ENV", nodeEnv);
+      vi.stubEnv("NEXT_PUBLIC_SITE_URL", siteUrl);
+      vi.resetModules();
+      const mod = await import("@features/analytics/client");
 
-      track("test_event");
+      const mockGtag = vi.fn();
+      setConsentCookie({ analytics: true, advertisement: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        dataLayer: [],
+      } as typeof globalThis.window;
+
+      mod.track("test_event");
 
       expect(mockGtag).not.toHaveBeenCalled();
+      // The dataLayer must stay clean too — pushing there is what reaches GTM, so
+      // leaving it open would send from staging by a different door.
+      expect(globalThis.window.dataLayer).toHaveLength(0);
+    });
+
+    it("sends on production without waiting for any load-order flag", () => {
+      // The regression this pins: `track()` must not depend on a window global set by
+      // a lazyOnload script. No `__loveiqAnalyticsEnabled` is set anywhere here.
+      const mockGtag = vi.fn();
+      setConsentCookie({ analytics: true });
+      globalThis.window = {
+        ...globalThis.window,
+        gtag: mockGtag,
+        dataLayer: [],
+      } as typeof globalThis.window;
+
+      track("test_event", { a: 1 });
+
+      expect(mockGtag).toHaveBeenCalledWith("event", "test_event", { a: 1 });
+      expect(globalThis.window.dataLayer).toEqual([{ event: "test_event", a: 1 }]);
     });
 
     it("does nothing when analytics consent is not granted", () => {
@@ -667,12 +723,27 @@ describe("analytics", () => {
       expect(() => trackGoogleAdsPurchaseConversion(purchaseParams)).not.toThrow();
     });
 
-    it("does nothing when Google Ads is not enabled", () => {
+    it.each([
+      ["staging", "production", "https://staging.loveiq.org"],
+      ["local dev", "development", "https://www.loveiq.org"],
+    ])("sends no Ads conversion from %s", async (_label, nodeEnv, siteUrl) => {
+      /**
+       * Was "does nothing when Google Ads is not enabled", which read
+       * `window.__loveiqGoogleAdsEnabled`. That flag is set by a lazyOnload script,
+       * the same race that was dropping GA4 events, so it is gone. The guarantee —
+       * never report a conversion from anywhere but the live site — now comes from
+       * the build-time check and holds regardless of load order.
+       */
+      vi.stubEnv("NODE_ENV", nodeEnv);
+      vi.stubEnv("NEXT_PUBLIC_SITE_URL", siteUrl);
+      vi.resetModules();
+      const mod = await import("@features/analytics/client");
+
       const mockGtag = vi.fn();
       setConsentCookie({ advertisement: true });
       globalThis.window = { ...globalThis.window, gtag: mockGtag } as typeof globalThis.window;
 
-      trackGoogleAdsPurchaseConversion(purchaseParams);
+      mod.trackGoogleAdsPurchaseConversion(purchaseParams);
 
       expect(mockGtag).not.toHaveBeenCalled();
     });

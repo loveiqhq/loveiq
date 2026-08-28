@@ -1,5 +1,6 @@
 import posthog from "posthog-js";
 import { getCsrfToken } from "@shared/http/csrf-client";
+import { isProductionSite } from "@shared/env/is-non-prod-deploy";
 import {
   LANDING_VARIANT_COOKIE,
   isLandingVariant,
@@ -28,8 +29,6 @@ declare global {
   interface Window {
     gtag?: GTag;
     dataLayer?: Array<Record<string, unknown>>;
-    __loveiqAnalyticsEnabled?: boolean;
-    __loveiqGoogleAdsEnabled?: boolean;
     __loveiqGtagBootstrapped?: boolean;
     __loveiqReportSubmissionId?: number | null;
     /** Coupled forced-paywall A/B arm for the current report/wizard session. */
@@ -111,7 +110,7 @@ export const setForcedPaywallArm = (arm: "treatment" | "control" | null) => {
   // per-event wiring. Consent-gated like all GA4 traffic. NOTE: to surface in
   // GA4 reports, register a custom dimension "forced_paywall_arm" (user-scoped)
   // in GA4 Admin → Custom definitions (one-time config, not code).
-  if (arm && window.__loveiqAnalyticsEnabled && hasCookieYesConsent("analytics")) {
+  if (arm && isProductionSite() && hasCookieYesConsent("analytics")) {
     window.gtag?.("set", "user_properties", { forced_paywall_arm: arm });
   }
 };
@@ -126,7 +125,7 @@ export const setSurveyVariant = (variant: "white" | "dark" | null) => {
   if (typeof window === "undefined") return;
   window.__loveiqSurveyVariant = variant;
   if (variant) posthog.register({ survey_variant: variant });
-  if (variant && window.__loveiqAnalyticsEnabled && hasCookieYesConsent("analytics")) {
+  if (variant && isProductionSite() && hasCookieYesConsent("analytics")) {
     window.gtag?.("set", "user_properties", { survey_variant: variant });
   }
 };
@@ -283,7 +282,7 @@ const getLandingVariant = (): LandingVariant | null => {
 export const setLandingVariant = (variant: LandingVariant | null) => {
   if (typeof window === "undefined") return;
   if (variant) posthog.register({ landing_variant: variant });
-  if (variant && window.__loveiqAnalyticsEnabled && hasCookieYesConsent("analytics")) {
+  if (variant && isProductionSite() && hasCookieYesConsent("analytics")) {
     window.gtag?.("set", "user_properties", { landing_variant: variant });
   }
 };
@@ -298,10 +297,43 @@ export const track = (name: string, params?: Record<string, unknown>) => {
   // recording them. Placed here rather than at the ~33 call sites so a new
   // trackX() helper is mirrored automatically and can never be forgotten.
   posthog.capture(name, params);
-  if (!window.__loveiqAnalyticsEnabled) return;
+
+  /**
+   * Production gate is BUILD-TIME, not the `__loveiqAnalyticsEnabled` window flag
+   * this used to read. That flag is set by the `ga-init` script in app/layout.tsx,
+   * which runs `strategy="lazyOnload"` — i.e. at window load — while most of these
+   * events fire from a mount effect long before it. So the guard silently threw the
+   * event away, and it threw away the dataLayer push with it, which is the one path
+   * that queues perfectly well before the tag loads.
+   *
+   * Measured on production 2026-08-28, GA4 against our own analytics_event table over
+   * the same window. Events that fire EARLY barely arrived; events that fire after a
+   * click or a timer arrived fully:
+   *
+   *     price_shown            1,172 rows -> 4 in GA4
+   *     scroll_paywall_shown     512      -> 4
+   *     experiment_exposure    1,337      -> 94
+   *     wizard_slide_advanced  2,474      -> 65
+   *     ---
+   *     report_viewed            880      -> 1,230
+   *     begin_checkout           107      -> 159
+   *     report_engagement_1min   302      -> 430
+   *
+   * Confirmed in a real browser rather than inferred: on a fully consented landing
+   * page load, `window.dataLayer` held nine entries and not one of them was ours.
+   * `landing_page_view` never fired at all.
+   *
+   * `isProductionSite()` is inlined at build time, so it carries no race. Consent
+   * still gates everything below it.
+   */
+  if (!isProductionSite()) return;
   if (!hasCookieYesConsent("analytics")) return;
+
+  // Both of these are safe before gtag.js has loaded: the shim in layout.tsx makes
+  // `gtag` a dataLayer pusher from `afterInteractive`, and dataLayer is an ordinary
+  // array that GTM and gtag.js each drain on load. Queueing is the designed
+  // behaviour — dropping was not.
   window.gtag?.("event", name, params);
-  // Also push to dataLayer for GTM consumption
   window.dataLayer = window.dataLayer || [];
   window.dataLayer.push({ event: name, ...params });
 };
@@ -719,7 +751,7 @@ export interface ReportPurchaseParams {
 
 export const trackReportPurchase = (params: ReportPurchaseParams) => {
   if (typeof window === "undefined") return;
-  if (!window.__loveiqAnalyticsEnabled) return;
+  if (!isProductionSite()) return;
   if (!hasCookieYesConsent("analytics")) return;
 
   window.dataLayer = window.dataLayer || [];
@@ -752,7 +784,7 @@ export const trackReportPurchase = (params: ReportPurchaseParams) => {
 
 export const trackGoogleAdsPurchaseConversion = (params: ReportPurchaseParams) => {
   if (typeof window === "undefined") return;
-  if (!window.__loveiqGoogleAdsEnabled) return;
+  if (!isProductionSite()) return;
   if (!hasCookieYesConsent("advertisement")) return;
 
   window.gtag?.("event", "conversion", {

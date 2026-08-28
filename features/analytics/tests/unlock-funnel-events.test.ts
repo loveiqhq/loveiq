@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Hoisted so the vi.mock factory below closes over the same spies.
 const ph = vi.hoisted(() => ({
@@ -20,17 +20,22 @@ let client: Client;
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  // track() gates on isProductionSite() — build-time, replacing the lazyOnload-race
+  // window flag. Without these the assertions below would pass on an early return.
+  vi.stubEnv("NODE_ENV", "production");
+  vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org");
   vi.resetModules();
   document.cookie = "cookieyes-consent=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
   client = await import("@features/analytics/client");
   window.gtag = vi.fn() as unknown as typeof window.gtag;
   window.dataLayer = [];
-  window.__loveiqAnalyticsEnabled = true;
   grantAnalyticsConsent();
   // No submission context: keeps durable persistence out of these assertions, which
   // are about what reaches GA4 / PostHog.
   client.setReportSubmissionContext(null);
 });
+
+afterEach(() => vi.unstubAllEnvs());
 
 const captured = (name: string) => ph.capture.mock.calls.filter(([n]) => n === name);
 
