@@ -86,6 +86,44 @@ function isoDaysAgo(n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * Expand a fetch window backwards so it starts on the first day of the ISO week
+ * AND the calendar month its raw start falls in.
+ *
+ * Weekly and monthly chunks are TOTALLED FROM THE FETCHED ROWS. A window that
+ * begins mid-period therefore produces an aggregate covering only that slice, and
+ * then overwrites the complete one an earlier backfill wrote. Measured against
+ * production on 2026-08-28: the August monthly chunk held 23 clicks / 330
+ * impressions from an 18–26 August slice, while August's own daily chunks summed
+ * to 70 / 1,271 — a 67% understatement on exactly the number someone asks the
+ * brain for, with `meta.month` still claiming "August".
+ *
+ * Widening costs at most ~30 extra days per run. It also fixes the harder case:
+ * on the 1st–9th the 10-day window straddles a month boundary and rewrites the
+ * PREVIOUS, already-complete month from a handful of days.
+ */
+export function windowCoveringWholePeriods(windowDays: number, today: Date = new Date()): number {
+  const start = new Date(today);
+  start.setUTCDate(start.getUTCDate() - windowDays);
+
+  const monthStart = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1);
+
+  // ISO weeks start Monday; getUTCDay() is Sunday-based, so rotate it.
+  const weekStart = new Date(start);
+  weekStart.setUTCDate(weekStart.getUTCDate() - ((weekStart.getUTCDay() + 6) % 7));
+
+  const earliest = Math.min(monthStart, weekStart.getTime());
+
+  // Diff whole UTC DAYS, not instants. `today` carries a time-of-day (the cron
+  // fires at 04:47), so a raw millisecond difference rounds up and lands the
+  // window one day BEFORE the 1st — which would rebuild the previous, complete
+  // month from that single trailing day and recreate this very bug one month
+  // back, every night.
+  const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  const days = Math.round((todayUtc - earliest) / 86_400_000);
+  return Math.max(windowDays, days);
+}
+
 interface AdDay {
   cost: number;
   clicks: number;
@@ -268,8 +306,10 @@ export async function ingestGa4(
     return { source: GA4_SOURCE, rows: 0, swept: 0, skipped: `google-token-unavailable(${googleCredentialShape(oidcToken)})` };
   }
 
-  const dateRanges = [{ startDate: `${windowDays}daysAgo`, endDate: "yesterday" }];
-  const windowFrom = isoDaysAgo(windowDays);
+  // Widened so every weekly/monthly total this run writes covers a WHOLE period.
+  const fetchDays = windowCoveringWholePeriods(windowDays);
+  const dateRanges = [{ startDate: `${fetchDays}daysAgo`, endDate: "yesterday" }];
+  const windowFrom = isoDaysAgo(fetchDays);
 
   const core = await runGa4Report(
     token,
@@ -719,7 +759,7 @@ export async function ingestSearchConsole(
   }
 
   // Search Console data lags ~2 days; asking for today returns empty rows.
-  const startDate = isoDaysAgo(windowDays);
+  const startDate = isoDaysAgo(windowCoveringWholePeriods(windowDays));
   const endDate = isoDaysAgo(2);
 
   const daily = await queryGsc(

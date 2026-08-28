@@ -135,11 +135,25 @@ describe("the nightly window must not delete the history", () => {
     const { fetchWithTimeout } = await import("@shared/http/fetch-with-timeout");
     await ingestGa4(STAMP);
     const nightly = vi.mocked(fetchWithTimeout).mock.calls.map(([, init]) => String((init as { body?: string })?.body ?? ""));
-    expect(nightly.some((b) => b.includes("10daysAgo"))).toBe(true);
+    // The window is deliberately WIDER than DAYS: it is expanded back to the first
+    // day of the ISO week and month it touches, because weekly/monthly chunks are
+    // totalled from the fetched rows and a mid-period start produced a mid-period
+    // "month". Measured in production 2026-08-28: August read 23 clicks against a
+    // true 70. So assert the floor and the period boundary, not an exact number.
+    const nightlyDays = nightly
+      .flatMap((b) => [...b.matchAll(/(\d+)daysAgo/g)].map((m) => Number(m[1])))
+      .filter((n) => Number.isFinite(n));
+    expect(nightlyDays.length).toBeGreaterThan(0);
+    expect(Math.max(...nightlyDays)).toBeGreaterThanOrEqual(10);
+    // …and never so wide that the nightly run turns into a backfill.
+    expect(Math.max(...nightlyDays)).toBeLessThan(10 + 32);
 
     vi.mocked(fetchWithTimeout).mockClear();
     await ingestGa4(STAMP, () => false, 480);
     const back = vi.mocked(fetchWithTimeout).mock.calls.map(([, init]) => String((init as { body?: string })?.body ?? ""));
-    expect(back.some((b) => b.includes("480daysAgo"))).toBe(true);
+    const backDays = back
+      .flatMap((b) => [...b.matchAll(/(\d+)daysAgo/g)].map((m) => Number(m[1])))
+      .filter((n) => Number.isFinite(n));
+    expect(Math.max(...backDays)).toBeGreaterThanOrEqual(480);
   });
 });

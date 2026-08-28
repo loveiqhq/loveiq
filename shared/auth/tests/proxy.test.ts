@@ -81,6 +81,7 @@ vi.mock("@shared/auth/supabase-middleware", () => ({
 
 import { proxy, shouldCountVisit } from "@/proxy";
 import logger from "@shared/observability/logger";
+import { reportingDay } from "@shared/time/reporting-day";
 
 function makeNextRequest(
   url = "http://localhost:3000/",
@@ -736,7 +737,11 @@ describe("proxy — consent-independent daily unique-visit count", () => {
   });
 
   it("does NOT flag/set when liq_dv already equals today (deduped)", async () => {
-    const today = new Date().toISOString().slice(0, 10);
+    // MUST be the Europe/Berlin reporting day, not UTC. proxy.ts dedupes against
+    // `reportingDay()` so the cookie matches the funnel_event row; a UTC date here
+    // agrees for 22 hours and disagrees during the offset window, so this test
+    // failed only between 00:00 and 02:00 Berlin — a nightly CI flake.
+    const today = reportingDay();
     await proxy(makeVisitRequest({ dest: "document", liqDv: today }));
     expect(mockNextOpts.value?.request?.headers?.get("x-liq-new-visit")).toBeFalsy();
     expect(mockCookiesSet.mock.calls.find((c) => c[0] === "liq_dv")).toBeUndefined();

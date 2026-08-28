@@ -771,3 +771,65 @@ describe("descriptions must not assert configuration state", () => {
     });
   });
 });
+
+describe("an oversized result must announce that it was cut", () => {
+  /**
+   * `textResult` used a bare `slice(0, MAX_RESULT_CHARS)`, so any result over the
+   * ceiling ended mid-sentence with nothing to distinguish it from a complete
+   * answer. It was not theoretical: `query_product_data` on
+   * `survey_submission_answer` (104,355 rows) came back at exactly 40,000
+   * characters. The same shape of bug cost 60 Notion pages their tails and lost
+   * Slack threads to a rate limit while the run reported success — silent loss
+   * that reads as complete data is the one failure the brain must never have.
+   */
+  it("appends a truncation notice, and stays within the ceiling", async () => {
+    const { capWithNotice } = await import("@/app/api/mcp/route");
+    const out = capWithNotice("x".repeat(80_000));
+    expect(out).toMatch(/TRUNCATED/);
+    expect(out).toMatch(/page with offset/);
+    // The notice must fit INSIDE the cap, not push the payload past it.
+    expect(out.length).toBeLessThanOrEqual(40_000);
+  });
+
+  it("leaves a result that fits completely untouched", async () => {
+    const { capWithNotice } = await import("@/app/api/mcp/route");
+    expect(capWithNotice("short answer")).toBe("short answer");
+    // Exactly at the boundary is not truncated, so the notice cannot appear on a
+    // complete result and teach the model to distrust good data.
+    expect(capWithNotice("y".repeat(40_000))).not.toMatch(/TRUNCATED/);
+  });
+
+  it("does not tell a caller at the row cap to raise the limit, which does nothing", async () => {
+    // query_product_data clamps to 1000. Advising "raise limit" sends the model to
+    // retry at 5000, get the same 1000 rows back, and conclude it has everything.
+    const src = await import("node:fs").then((fs) =>
+      fs.readFileSync("app/api/mcp/route.ts", "utf8")
+    );
+    const advice = src.slice(src.indexOf("rows shown"), src.indexOf("rows shown") + 400);
+    expect(advice).toMatch(/per-call maximum/);
+    expect(advice).toMatch(/limit >= MAX_PRODUCT_ROWS/);
+  });
+});
+
+describe("query_external_service must not bypass the truncation notice", () => {
+  /**
+   * The first version of `capWithNotice` could not fire on this path at all: the
+   * external-service branch pre-sliced to `MAX_RESULT_CHARS - 500`, putting every
+   * response under the ceiling the notice checks. So oversized Vercel and GitHub
+   * responses came back cut mid-JSON, with isError=false and nothing said — the
+   * exact failure the notice was added to end, surviving inside the fix for it.
+   */
+  it("does not slice the body before textResult sees it", async () => {
+    const src = await import("node:fs").then((fs) =>
+      fs.readFileSync("app/api/mcp/route.ts", "utf8")
+    );
+    // Narrow on purpose: slicing an ERROR EXCERPT to a few hundred chars is fine
+    // and is done elsewhere. What must never recur is a slice measured against the
+    // ceiling itself, because that is what silently disarms the notice.
+    expect(src).not.toMatch(/\.slice\(0,\s*MAX_RESULT_CHARS\s*-\s*\d/);
+    expect(src).toMatch(/const text = await res\.text\(\)\.catch/);
+    // capWithNotice is the ONLY place allowed to cut at the ceiling.
+    const atCeiling = [...src.matchAll(/\.slice\(0,\s*MAX_RESULT_CHARS/g)];
+    expect(atCeiling.length).toBe(1);
+  });
+});

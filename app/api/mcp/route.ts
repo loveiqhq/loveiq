@@ -45,6 +45,11 @@ const PROTOCOL_VERSION = "2025-06-18";
  *  12 of them plus framing is roughly 8k tokens. */
 const MAX_RESULT_CHARS = 40_000;
 
+/** Hard per-call row ceiling for `query_product_data`. Advising a caller to
+ *  "raise the limit" past this is advice that silently does nothing, so the
+ *  message has to know the number. */
+const MAX_PRODUCT_ROWS = 1000;
+
 interface JsonRpcRequest {
   jsonrpc?: string;
   id?: string | number | null;
@@ -64,9 +69,33 @@ function rpcError(id: JsonRpcRequest["id"], code: number, message: string) {
  *  as a result rather than a transport error it cannot reason about. */
 function textResult(text: string, isError = false) {
   return {
-    content: [{ type: "text", text: text.slice(0, MAX_RESULT_CHARS) }],
+    content: [{ type: "text", text: capWithNotice(text) }],
     isError,
   };
+}
+
+/**
+ * Cap a result, and SAY SO when it was cut.
+ *
+ * A bare `slice()` here silently dropped the tail of every oversized result: the
+ * caller saw a response that simply stopped, with no way to tell a complete answer
+ * from a truncated one. `query_product_data` on `survey_submission_answer` returned
+ * exactly 40,000 characters, so this was firing on ordinary queries, not in theory.
+ *
+ * Same failure as the 2,400-char Notion truncation that cost 60 pages their tails
+ * and the rate-limited Slack threads that vanished while the run reported success:
+ * data loss that looks exactly like complete data. The notice is what makes it
+ * loud, and it must fit INSIDE the ceiling rather than pushing past it — the
+ * pattern `features/brain/server/ingest/jira.ts` already uses.
+ */
+export function capWithNotice(text: string): string {
+  if (text.length <= MAX_RESULT_CHARS) return text;
+  const notice =
+    "\n\n[TRUNCATED: this result hit the gateway's " +
+    `${MAX_RESULT_CHARS}-character ceiling and the rest was NOT returned. ` +
+    "Do not treat this as the complete answer — narrow the query, select fewer " +
+    "columns, or page with offset.]";
+  return text.slice(0, MAX_RESULT_CHARS - notice.length) + notice;
 }
 
 /** Exported only so the "no indexed source is invisible" test reads the SAME
@@ -577,7 +606,7 @@ async function callTool(
       );
     }
 
-    const limit = Math.min(1000, Math.max(1, Number(args.limit) || 100));
+    const limit = Math.min(MAX_PRODUCT_ROWS, Math.max(1, Number(args.limit) || 100));
     const offset = Math.max(0, Number(args.offset) || 0);
     const isRpc = table.startsWith("rpc/");
 
@@ -632,7 +661,11 @@ async function callTool(
     const total = res.headers.get("content-range")?.split("/")[1] ?? null;
     const head =
       total && Number(total) > offset + rows.length
-        ? `${rows.length} rows shown, ${total} match. Raise limit or page with offset.\n\n`
+        ? `${rows.length} rows shown, ${total} match. ${
+            limit >= MAX_PRODUCT_ROWS
+              ? `${MAX_PRODUCT_ROWS} is the per-call maximum, so page with offset to see the rest.`
+              : "Raise limit or page with offset."
+          }\n\n`
         : `${rows.length} rows.\n\n`;
     return textResult(head + JSON.stringify(rows, null, 2));
   }
@@ -721,7 +754,12 @@ async function callTool(
       );
     }
 
-    const text = (await res.text().catch(() => "")).slice(0, MAX_RESULT_CHARS - 500);
+    // NOT pre-sliced. Cutting to `MAX_RESULT_CHARS - 500` here put the string
+    // under the ceiling, so `capWithNotice` could never fire and every oversized
+    // external response was returned silently truncated, mid-JSON, with
+    // isError=false. Hand the full body to textResult and let the one capping
+    // path decide — a second, quieter truncation is how the first one hid.
+    const text = await res.text().catch(() => "");
     if (!res.ok) {
       return textResult(`${key} returned ${res.status}:\n${text}`, true);
     }
