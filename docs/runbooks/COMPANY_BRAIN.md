@@ -239,6 +239,34 @@ one — returns `429 You exceeded your current quota`. Two consequences:
   "something went wrong" instead of an honest "out of questions for today".
   Measure it before telling the team the tool is theirs, or move to a paid tier.
 
+### GA4 and Search Console: depth vs freshness
+
+The nightly job reads only the **last 10 days** of GA4 and Search Console and
+confirms everything older with a touch. It is not a 10-day corpus — depth comes
+from a one-off backfill and then persists, because each night's touch tells the
+sweep the older chunks are still current.
+
+```bash
+npm run brain:backfill-google          # 480 days, Search Console's API limit
+npm run brain:backfill-google -- 200   # shallower
+```
+
+**Why not simply widen the nightly window.** The Search Console `date x query`
+report is one row per query per day; over 16 months that is tens of thousands of
+rows against a 15-second paging budget, and a truncated report is not an error —
+so a wide nightly window would quietly lose the query breakdown for arbitrary
+days. 10 days is chosen because GA4 finalises in ~48h and Search Console lags ~2
+days and can still revise: anything inside that window may change and must be
+re-read.
+
+Run the backfill again whenever the chunk shape changes, or after an outage longer
+than the window.
+
+**The guard that matters here:** if the run cannot list what already exists, it
+touches nothing and reports only what it wrote. `sweepStale` then sees a small run
+against a large source and refuses a majority deletion, so the history survives a
+bad read rather than being deleted by it. Mutation-tested four ways.
+
 ### Checking it is still alive
 
 ```sql

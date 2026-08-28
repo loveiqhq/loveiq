@@ -261,7 +261,26 @@ describe("/api/mcp", () => {
         payment: { properties: { id: {}, amount: {}, created_date_time: {} } },
         resend_webhook_event: { properties: { id: {}, type: {}, received_at: {} } },
       },
-      paths: { "/rpc/get_conversion_funnel": {}, "/payment": {} },
+      paths: {
+        "/payment": {},
+        "/rpc/get_conversion_funnel": {
+          post: {
+            parameters: [
+              {
+                in: "body",
+                schema: {
+                  properties: {
+                    since_ts: { format: "timestamp with time zone" },
+                    utm_filter: { format: "text" },
+                  },
+                  required: ["since_ts"],
+                },
+              },
+            ],
+          },
+        },
+        "/rpc/show_limit": { post: { parameters: [{ in: "body", schema: {} }] } },
+      },
     };
 
     function wire(rows: unknown, opts: { ok?: boolean; total?: number; status?: number } = {}) {
@@ -377,10 +396,18 @@ describe("/api/mcp", () => {
       expect(narrowed.content[0].text).not.toContain("payment(");
     });
 
-    it("includes rpc functions, which have no column list", async () => {
+    it("shows each function's ARGUMENTS, or all 63 of them are unusable", async () => {
+      // Listing them as "(function)" meant a caller could not know that
+      // get_conversion_funnel needs since_ts, so the call failed with PGRST202
+      // and the analysis functions that encode our business logic went unused.
       wire([]);
       const r = await call({ match: "rpc" }, "list_product_tables");
-      expect(r.content[0].text).toContain("rpc/get_conversion_funnel");
+      const text = r.content[0].text;
+      expect(text).toContain("rpc/get_conversion_funnel");
+      expect(text).toContain("since_ts!");
+      expect(text).toContain("utm_filter");
+      expect(text).not.toContain("utm_filter!");
+      expect(text).toContain("rpc/show_limit((no arguments))");
     });
   });
 

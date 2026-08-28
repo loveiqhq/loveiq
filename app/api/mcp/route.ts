@@ -116,10 +116,11 @@ const TOOLS = [
   {
     name: "list_product_tables",
     description:
-      "Every table and view in LoveIQ's own database, with its columns, plus the named " +
-      "analysis functions. Call this before query_product_data so you filter on columns " +
-      "that exist. This is LIVE state — payments, emails sent, bookings, survey " +
-      "submissions, reports, funnel events — not the indexed corpus.",
+      "Every table and view in LoveIQ's own database with its columns, plus all 63 analysis " +
+      "functions with their argument names and types — a trailing '!' marks an argument that " +
+      "is required. Call this before query_product_data so you filter on columns that exist " +
+      "and pass the arguments a function needs. This is LIVE state — payments, emails sent, " +
+      "bookings, survey submissions, reports, funnel events — not the indexed corpus.",
     inputSchema: {
       type: "object",
       properties: {
@@ -302,9 +303,22 @@ let schemaCache: Map<string, string[]> | null = null;
 
 async function productSchema(): Promise<Map<string, string[]> | null> {
   if (schemaCache) return schemaCache;
-  const res = await supabaseFetch("/rest/v1/", {
-    headers: { Accept: "application/openapi+json" },
-  });
+
+  // Never throw: every caller treats null as "could not check", and a schema
+  // read that fails must degrade the tool rather than fail the whole call. This
+  // exact request timed out in production on first use — 8s default against a
+  // 490 KB document PostgREST regenerates per request — and the thrown error
+  // surfaced to the user as an opaque "That lookup failed".
+  let res: Awaited<ReturnType<typeof supabaseFetch>>;
+  try {
+    res = await supabaseFetch("/rest/v1/", {
+      headers: { Accept: "application/openapi+json" },
+      timeoutMs: 30_000,
+    });
+  } catch (err) {
+    logger.warn({ err }, "mcp: could not read the database schema");
+    return null;
+  }
   if (!res.ok) return null;
   const spec = (await res.json().catch(() => null)) as {
     definitions?: Record<string, { properties?: Record<string, unknown> }>;
@@ -316,10 +330,29 @@ async function productSchema(): Promise<Map<string, string[]> | null> {
   for (const [name, def] of Object.entries(spec.definitions ?? {})) {
     out.set(name, Object.keys(def.properties ?? {}));
   }
-  // Functions have no definition entry; they appear only as /rpc/<name> paths.
-  for (const path of Object.keys(spec.paths ?? {})) {
+
+  // Functions have no `definitions` entry; they appear only as /rpc/<name> paths,
+  // with their arguments in the POST body schema. Listing them as "(function)"
+  // made all 63 unusable — `rpc/get_conversion_funnel` needs `since_ts` and a
+  // caller has no way to discover that, so the call fails with PGRST202 and the
+  // analysis functions that encode our business logic go unused. A trailing `!`
+  // marks a required argument.
+  for (const [path, def] of Object.entries(spec.paths ?? {})) {
     const key = path.replace(/^\//, "");
-    if (key.startsWith("rpc/") && !out.has(key)) out.set(key, ["(function)"]);
+    if (!key.startsWith("rpc/") || out.has(key)) continue;
+    const body = (def as {
+      post?: {
+        parameters?: Array<{
+          in?: string;
+          schema?: { properties?: Record<string, { format?: string }>; required?: string[] };
+        }>;
+      };
+    }).post?.parameters?.find((param) => param.in === "body")?.schema;
+    const required = new Set(body?.required ?? []);
+    const args = Object.entries(body?.properties ?? {}).map(
+      ([argName, argDef]) => `${argName}${required.has(argName) ? "!" : ""}: ${argDef.format ?? "?"}`
+    );
+    out.set(key, args.length > 0 ? args : ["(no arguments)"]);
   }
   schemaCache = out;
   return out;
@@ -376,7 +409,14 @@ async function callTool(name: string, args: Record<string, unknown>) {
 
   if (name === "list_product_tables") {
     const spec = await productSchema();
-    if (!spec) return textResult("Could not read the database schema right now.", true);
+    if (!spec) {
+      return textResult(
+        "Could not read the database schema just now, so I cannot list the tables. This is a " +
+          "transient failure, not an empty database — retry, or call query_product_data " +
+          "directly if you already know the table name.",
+        true
+      );
+    }
     const match = typeof args.match === "string" ? args.match.toLowerCase().trim() : "";
     const lines = [...spec.entries()]
       .filter(([table]) => !match || table.toLowerCase().includes(match))

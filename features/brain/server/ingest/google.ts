@@ -8,7 +8,8 @@ import {
 } from "@shared/http/google-oauth";
 import logger from "@shared/observability/logger";
 import { isoWeek, longDate, longMonth, monthEnd } from "./analytics";
-import { sweepStale, upsertChunks, type BrainRow, type IngestResult } from "./upsert";
+import { supabaseFetch } from "@features/admin/server/supabase";
+import { sweepStale, touchChunks, upsertChunks, type BrainRow, type IngestResult } from "./upsert";
 
 /**
  * GA4 and Search Console, as dated daily facts.
@@ -47,7 +48,33 @@ import { sweepStale, upsertChunks, type BrainRow, type IngestResult } from "./up
  * single quiet day with one lucky impression drag the month around.
  */
 
-const DAYS = 90;
+/**
+ * THE NIGHTLY WINDOW, not the corpus depth.
+ *
+ * This used to be the whole story at 90 days, which meant GA4 and Search Console
+ * held exactly 90 days and silently dropped the 91st — the corpus started
+ * 2026-05-30 while our own funnel data goes back to 2026-03-24.
+ *
+ * Simply widening it does not work. The Search Console `date x query` report is
+ * one row per query per day; over 16 months that is tens of thousands of rows
+ * against a 15-second paging budget, and a truncated report is not an error, so
+ * it would quietly lose the query breakdown for arbitrary days.
+ *
+ * So depth and freshness are separated, the same way the Notion ingester does it:
+ * fetch only the recent days each night, and `touchChunks` everything older so
+ * the sweep keeps it. Depth comes from one explicit backfill (`backfillDays`),
+ * and persists because touching confirms it.
+ *
+ * 10 days, because GA4 finalises in ~48h and Search Console lags ~2 days and can
+ * still revise: anything inside that window may change and must be re-read.
+ */
+const DAYS = 10;
+
+/**
+ * How far back a BACKFILL reaches. 16 months is Search Console's hard API limit;
+ * GA4 is bounded by its own retention setting and simply returns fewer days.
+ */
+export const BACKFILL_DAYS = 480;
 const GA4_SOURCE = "ga4";
 const GSC_SOURCE = "gsc";
 const TIMEOUT_MS = 15_000;
@@ -208,7 +235,8 @@ function num(v: string | undefined): number {
 
 export async function ingestGa4(
   stampedAt: string,
-  isOutOfTime: () => boolean = () => false
+  isOutOfTime: () => boolean = () => false,
+  windowDays: number = DAYS
 ): Promise<IngestResult> {
   const propertyId = process.env.GA4_PROPERTY_ID;
   if (!propertyId) return { source: GA4_SOURCE, rows: 0, swept: 0, skipped: "ga4-no-property-id" };
@@ -237,8 +265,8 @@ export async function ingestGa4(
     return { source: GA4_SOURCE, rows: 0, swept: 0, skipped: "google-token-unavailable" };
   }
 
-  const dateRanges = [{ startDate: `${DAYS}daysAgo`, endDate: "yesterday" }];
-  const windowFrom = isoDaysAgo(DAYS);
+  const dateRanges = [{ startDate: `${windowDays}daysAgo`, endDate: "yesterday" }];
+  const windowFrom = isoDaysAgo(windowDays);
 
   const core = await runGa4Report(
     token,
@@ -556,8 +584,16 @@ export async function ingestGa4(
   }
 
   const written = await upsertChunks(chunks);
-  const swept = await sweepStale(GA4_SOURCE, stampedAt, written);
-  return { source: GA4_SOURCE, rows: written, swept };
+  // Everything this run did not rewrite is older than the window and still true.
+  // Without touching it, the sweep would delete the entire history every night
+  // and the corpus would be permanently 10 days deep.
+  const touched = await touchOlderChunks(
+    GA4_SOURCE,
+    chunks.map((c) => c.source_id),
+    stampedAt
+  );
+  const swept = await sweepStale(GA4_SOURCE, stampedAt, written + touched);
+  return { source: GA4_SOURCE, rows: written + touched, swept };
 }
 
 interface GscRow {
@@ -647,7 +683,8 @@ async function queryGsc(
 
 export async function ingestSearchConsole(
   stampedAt: string,
-  isOutOfTime: () => boolean = () => false
+  isOutOfTime: () => boolean = () => false,
+  windowDays: number = DAYS
 ): Promise<IngestResult> {
   const site = process.env.SEARCH_CONSOLE_SITE;
   if (!site) return { source: GSC_SOURCE, rows: 0, swept: 0, skipped: "gsc-no-site" };
@@ -677,7 +714,7 @@ export async function ingestSearchConsole(
   }
 
   // Search Console data lags ~2 days; asking for today returns empty rows.
-  const startDate = isoDaysAgo(DAYS);
+  const startDate = isoDaysAgo(windowDays);
   const endDate = isoDaysAgo(2);
 
   const daily = await queryGsc(
@@ -843,8 +880,62 @@ export async function ingestSearchConsole(
   }
 
   const written = await upsertChunks(chunks);
-  const swept = await sweepStale(GSC_SOURCE, stampedAt, written);
-  return { source: GSC_SOURCE, rows: written, swept };
+  // Everything this run did not rewrite is older than the window and still true.
+  // Without touching it, the sweep would delete the entire history every night
+  // and the corpus would be permanently 10 days deep.
+  const touched = await touchOlderChunks(
+    GSC_SOURCE,
+    chunks.map((c) => c.source_id),
+    stampedAt
+  );
+  const swept = await sweepStale(GSC_SOURCE, stampedAt, written + touched);
+  return { source: GSC_SOURCE, rows: written + touched, swept };
+}
+
+
+/**
+ * Confirm every chunk of a source that this run did NOT rewrite.
+ *
+ * The nightly window is 10 days, but the corpus is 16 months deep. The sweep
+ * deletes anything whose `updated_at` predates the run, so without this the
+ * history would be deleted every night and the corpus would sit permanently at
+ * 10 days — the exact failure the window split exists to avoid.
+ *
+ * Reads existing ids in pages of 1,000: PostgREST caps a response at 1,000 rows,
+ * and a 16-month corpus is ~570 rows per source now but will pass that cap as
+ * history accumulates, at which point an unpaginated read would silently stop
+ * confirming the oldest chunks and the sweep would eat them.
+ */
+async function touchOlderChunks(
+  source: string,
+  writtenIds: string[],
+  stampedAt: string
+): Promise<number> {
+  const written = new Set(writtenIds);
+  const stale: string[] = [];
+
+  for (let offset = 0; offset < 100_000; offset += 1000) {
+    const res = await supabaseFetch(
+      `/rest/v1/brain_chunk?select=source_id&source=eq.${encodeURIComponent(source)}&order=source_id.asc&limit=1000&offset=${offset}`
+    );
+    if (!res.ok) {
+      // Fail CLOSED: returning 0 here makes the sweep see a small run against a
+      // large source, and `sweepStale` refuses a majority deletion — so the
+      // history survives a bad read rather than being deleted by it.
+      logger.warn(
+        { source, status: res.status },
+        "brain-ingest: could not list existing chunks to confirm; skipping the touch"
+      );
+      return 0;
+    }
+    const batch = (await res.json().catch(() => [])) as Array<{ source_id?: string }>;
+    for (const row of batch) {
+      if (row.source_id && !written.has(row.source_id)) stale.push(row.source_id);
+    }
+    if (batch.length < 1000) break;
+  }
+
+  return touchChunks(source, stale, stampedAt);
 }
 
 export function googleIngestersConfigured(): boolean {
