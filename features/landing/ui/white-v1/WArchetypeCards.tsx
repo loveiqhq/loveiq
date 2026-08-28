@@ -238,7 +238,7 @@ const WArchetypeCards: FC = () => {
               className="mr-4 shrink-0 sm:mr-8 lg:mr-6"
               aria-hidden={i >= COUNT || undefined}
             >
-              <ArchetypeCard archetype={a} />
+              <ArchetypeCard archetype={a} variant="white" />
             </div>
           ))}
         </div>
