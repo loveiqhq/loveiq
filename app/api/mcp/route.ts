@@ -326,10 +326,13 @@ export const EXTERNAL_SERVICES: Record<
     envKeys: ["VERCEL_TOKEN"],
     auth: { kind: "bearer" },
     note:
-      "Deployments, build logs, runtime errors and logs, domains, project config. Answers " +
-      "'is the site healthy', 'what shipped and when', 'what is erroring in production'. Most " +
-      "endpoints need a teamId and projectId — get them from /v2/teams and /v9/projects rather " +
-      "than hardcoding, and note the two projects are the production site and staging.",
+      "Deployments, build logs, runtime errors and runtime logs, domains and project " +
+      "config. Answers 'is the site healthy', 'what shipped and when', 'what is erroring in " +
+      "production'. Most endpoints need a teamId and projectId — read them from /v9/projects " +
+      "rather than hardcoding. " +
+      "The token is PROJECT-SCOPED to the production project: staging deployment reads " +
+      "return 403, and /v2/user and /v2/teams are refused, which is correct and not a fault. " +
+      "It can list environment-variable NAMES but not their values.",
   },
   figma: {
     base: "https://api.figma.com/v1",

@@ -53,6 +53,9 @@ describe("credentialKind catches real secrets", () => {
     ["posthog personal", fake("phx_", 40)],
     ["posthog session", fake("phs_", 40)],
     ["resend", fake("re_", 28)],
+    ["vercel project token", fake("vcp_", 40)],
+    ["vercel team token", fake("vct_", 40)],
+    ["figma personal token", fake("figd_", 36)],
   ])("refuses a chunk containing a %s", (_label, secret) => {
     expect(credentialKind(`Some notes about setup.\n\n${secret}\n\nMore notes.`)).not.toBeNull();
   });
@@ -72,6 +75,12 @@ describe("credentialKind leaves real content alone", () => {
     ["env var names", "Set STRIPE_SECRET_KEY and RESEND_API_KEY in Vercel."],
     ["a long slug", "features/brain/server/ingest/upsert.ts handles this at the write path"],
     ["a phone number", "Call the office on +49 30 123456789 if it breaks."],
+    // Must not be mistaken for a Vercel token: project and deployment IDs are
+    // pasted into docs and Slack constantly, and eating them would silently drop
+    // real deployment notes.
+    ["a Vercel project id", "Deployed to prj_DzpCLnVP476gli8BwxFoikxBk0vp last night."],
+    ["a Vercel deployment id", "See dpl_BDXqmphyxCiBm6togjKuxvJ61KTF for the build log."],
+    ["a Vercel team id", "Team is team_n4LtofwIARvH2BTgKXmwGSmV."],
     ["an ordinary sentence", "We charge 39.99 for the full report and 19.99 for essentials."],
   ])("allows %s", (_label, text) => {
     expect(credentialKind(text)).toBeNull();

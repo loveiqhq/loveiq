@@ -74,6 +74,12 @@ const CREDENTIAL_PATTERNS: Array<[string, RegExp]> = [
   ["posthog", /\bph[xs]_[A-Za-z0-9]{32,}/],
   ["resend", /\bre_[A-Za-z0-9]{24,}/],
   ["calendly", /\beyJraWQ/], // Calendly PATs are JWTs; caught above too, kept for the label
+  // Vercel: vcp_ is a PROJECT-scoped access token, vct_/vca_ the team and user
+  // variants. Any of them can deploy or read project config, so none belongs in
+  // a searchable table.
+  ["vercel", /\bvc[pta]_[A-Za-z0-9]{24,}/],
+  // Figma personal access token.
+  ["figma", /\bfigd_[A-Za-z0-9_-]{24,}/],
 ];
 
 /** The credential kind found in this text, or null. */
