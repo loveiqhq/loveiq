@@ -1,6 +1,7 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { isLandingVariant } from "@shared/experiments/landingVariant";
 import { sanitizeUtmSource } from "@shared/url/utm";
+import { reportingDay } from "@shared/time/reporting-day";
 import logger from "@shared/observability/logger";
 
 /**
@@ -40,7 +41,7 @@ export async function recordUniqueVisit(variant: string, utmSource?: string): Pr
       },
       body: JSON.stringify({
         visitor_id: crypto.randomUUID(),
-        day: new Date().toISOString().slice(0, 10),
+        day: reportingDay(),
         event_type: "unique_visitor",
         // Landing A/B arm, stored RAW so the arms stay distinguishable (see proxy.ts).
         //

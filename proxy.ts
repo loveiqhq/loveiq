@@ -9,6 +9,7 @@ import {
   type LandingVariant,
 } from "@shared/experiments/landingVariant";
 import { sanitizeUtmSource } from "@shared/url/utm";
+import { reportingDay } from "@shared/time/reporting-day";
 
 // Google Ads remarketing/audience pixels (`/ads/ga-audiences` and
 // `/pagead/1p-user-list/<id>`) are requested from the visitor's LOCAL Google
@@ -123,9 +124,11 @@ function resolveLandingVariant(request: NextRequest): LandingVariant {
 }
 
 // Daily dedup flag for the consent-independent unique-visit count (the
-// Visitor→Survey-start CVR denominator). Holds only a UTC date — no identifier,
-// no cross-day linkage — so it is a strictly-functional, aggregate-analytics
-// cookie, set regardless of analytics consent.
+// Visitor→Survey-start CVR denominator). Holds only a date — no identifier, no
+// cross-day linkage — so it is a strictly-functional, aggregate-analytics cookie,
+// set regardless of analytics consent. The date is the Europe/Berlin reporting day
+// (see shared/time/reporting-day.ts), NOT UTC, and must stay the same clock as the
+// funnel_event row or every visitor in the offset window counts twice a day.
 const VISIT_DAY_COOKIE = "liq_dv";
 
 /**
@@ -388,7 +391,7 @@ export async function proxy(request: NextRequest) {
   // funnel_event row gets a throwaway random id, so there is no profiling. The
   // row itself is written by the root layout via after() when this header is
   // present (keeps the DB write in Node app code, not the edge middleware).
-  const visitDay = new Date().toISOString().slice(0, 10);
+  const visitDay = reportingDay();
   const isNewDailyVisit =
     shouldCountVisit(request) && request.cookies.get(VISIT_DAY_COOKIE)?.value !== visitDay;
   if (isNewDailyVisit) {
