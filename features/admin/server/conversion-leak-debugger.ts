@@ -558,7 +558,7 @@ export async function buildConversionLeakDebuggerSnapshot(
         : fetchBatches<PaymentRow>(
             reportIds,
             (batch) =>
-              `/rest/v1/payment?select=personal_report_id,status&personal_report_id=in.(${batch.join(",")})`
+              `/rest/v1/payment?is_test=is.false&select=personal_report_id,status&personal_report_id=in.(${batch.join(",")})`
           ),
     ]);
 

@@ -97,7 +97,7 @@ async function fetchSettledRevenue(
   try {
     const rows = await fetchAllPages<{ amount: number | string | null; currency: string | null }>(
       (offset, pageSize) =>
-        `/rest/v1/payment?created_date_time=gte.${sinceIso}&status=eq.succeeded` +
+        `/rest/v1/payment?is_test=is.false&created_date_time=gte.${sinceIso}&status=eq.succeeded` +
         `&select=amount,currency&order=id.asc&offset=${offset}&limit=${pageSize}`,
       "payment"
     );
