@@ -113,6 +113,72 @@ const TOOLS = [
     },
   },
   {
+    name: "list_product_tables",
+    description:
+      "Every table and view in LoveIQ's own database, with its columns, plus the named " +
+      "analysis functions. Call this before query_product_data so you filter on columns " +
+      "that exist. This is LIVE state — payments, emails sent, bookings, survey " +
+      "submissions, reports, funnel events — not the indexed corpus.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        match: {
+          type: "string",
+          description:
+            "Optional substring to narrow the list, e.g. 'payment', 'email', 'booking'. " +
+            "Omit to see everything.",
+        },
+      },
+    },
+  },
+  {
+    name: "query_product_data",
+    description:
+      "Read any table, view or analysis function in LoveIQ's database, live and with full " +
+      "history. This is how you answer questions the indexed corpus cannot: Resend " +
+      "deliverability (resend_webhook_event, email_suppression), Stripe payments and " +
+      "refunds (payment, payment_item, payment_webhook_event), Calendly bookings " +
+      "(booking_event), survey submissions and answers, reports, shares, invites, the " +
+      "waitlist, marketing spend, and the admin tables. Read-only by construction. " +
+      "Prefer an rpc/get_* function when one matches the question \u2014 they encode the " +
+      "business logic already. Use search_company_context instead for anything written " +
+      "down or historical narrative.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        table: {
+          type: "string",
+          description:
+            "Table, view, or 'rpc/<function>' from list_product_tables.",
+        },
+        select: {
+          type: "string",
+          description:
+            "PostgREST select list, e.g. 'id,created_date_time,amount'. Default '*'. " +
+            "Naming columns rather than '*' keeps large tables inside the result cap.",
+        },
+        filters: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "PostgREST filters, one per entry, e.g. 'created_date_time=gte.2026-08-01', " +
+            "'status=eq.paid', 'email=like.*@loveiq.org'.",
+        },
+        order: {
+          type: "string",
+          description: "e.g. 'created_date_time.desc'. Strongly recommended \u2014 without it the order is arbitrary.",
+        },
+        limit: { type: "number", description: "Rows to return. Default 100, maximum 1000." },
+        offset: { type: "number", description: "Rows to skip, for paging past the cap." },
+        params: {
+          type: "object",
+          description: "Arguments for an rpc/ function, as an object.",
+        },
+      },
+      required: ["table"],
+    },
+  },
+  {
     name: "list_sources",
     description:
       "What the corpus currently holds and how fresh each source is. Use this first when " +
@@ -121,6 +187,42 @@ const TOOLS = [
     inputSchema: { type: "object", properties: {} },
   },
 ];
+
+
+/**
+ * Table → column names, straight from PostgREST's OpenAPI document.
+ *
+ * One request describes all 146 tables, views and functions, which beats both
+ * hardcoding a list (it goes stale the moment a migration lands) and querying
+ * information_schema (needs a function we would have to add). Cached per lambda
+ * instance: the schema changes on deploy, and a deploy replaces the instance.
+ */
+let schemaCache: Map<string, string[]> | null = null;
+
+async function productSchema(): Promise<Map<string, string[]> | null> {
+  if (schemaCache) return schemaCache;
+  const res = await supabaseFetch("/rest/v1/", {
+    headers: { Accept: "application/openapi+json" },
+  });
+  if (!res.ok) return null;
+  const spec = (await res.json().catch(() => null)) as {
+    definitions?: Record<string, { properties?: Record<string, unknown> }>;
+    paths?: Record<string, unknown>;
+  } | null;
+  if (!spec) return null;
+
+  const out = new Map<string, string[]>();
+  for (const [name, def] of Object.entries(spec.definitions ?? {})) {
+    out.set(name, Object.keys(def.properties ?? {}));
+  }
+  // Functions have no definition entry; they appear only as /rpc/<name> paths.
+  for (const path of Object.keys(spec.paths ?? {})) {
+    const key = path.replace(/^\//, "");
+    if (key.startsWith("rpc/") && !out.has(key)) out.set(key, ["(function)"]);
+  }
+  schemaCache = out;
+  return out;
+}
 
 async function callTool(name: string, args: Record<string, unknown>) {
   if (name === "search_company_context") {
@@ -169,6 +271,108 @@ async function callTool(name: string, args: Record<string, unknown>) {
     const rows = await brainDailyRollup(days);
     if (rows.length === 0) return textResult("No rows for that window.");
     return textResult(JSON.stringify(rows, null, 2));
+  }
+
+  if (name === "list_product_tables") {
+    const spec = await productSchema();
+    if (!spec) return textResult("Could not read the database schema right now.", true);
+    const match = typeof args.match === "string" ? args.match.toLowerCase().trim() : "";
+    const lines = [...spec.entries()]
+      .filter(([table]) => !match || table.toLowerCase().includes(match))
+      .map(([table, cols]) => `${table}(${cols.join(", ")})`);
+    if (lines.length === 0) {
+      return textResult(
+        `No table matches "${match}". Call list_product_tables with no argument to see all ${spec.size}.`
+      );
+    }
+    return textResult(
+      `${lines.length} of ${spec.size} tables/views/functions:\n\n${lines.join("\n")}`
+    );
+  }
+
+  if (name === "query_product_data") {
+    const table = typeof args.table === "string" ? args.table.trim() : "";
+    // Anchored allow-pattern rather than an escape: a table name is an
+    // identifier, so anything outside this alphabet is a mistake or an attack,
+    // and there is no legitimate value to preserve by sanitising it.
+    if (!/^(rpc\/)?[a-zA-Z_][a-zA-Z0-9_]*$/.test(table)) {
+      return textResult(
+        "table must be a plain identifier, optionally prefixed 'rpc/'. Call list_product_tables.",
+        true
+      );
+    }
+
+    const spec = await productSchema();
+    if (spec && !spec.has(table)) {
+      const near = [...spec.keys()]
+        .filter((t) => t.includes(table.replace("rpc/", "").slice(0, 6)))
+        .slice(0, 8);
+      return textResult(
+        `No such table "${table}".` + (near.length ? ` Did you mean: ${near.join(", ")}?` : ""),
+        true
+      );
+    }
+
+    const limit = Math.min(1000, Math.max(1, Number(args.limit) || 100));
+    const offset = Math.max(0, Number(args.offset) || 0);
+    const isRpc = table.startsWith("rpc/");
+
+    // GET for tables, POST for functions. Neither can mutate: PostgREST needs
+    // PATCH/PUT/DELETE to write, and an rpc/ POST reaches only the VOLATILE
+    // functions the anon/service role is granted — all the get_* ones are reads.
+    let path: string;
+    let init: { method?: string; body?: string; headers?: Record<string, string> };
+    if (isRpc) {
+      path = `/rest/v1/${table}`;
+      init = {
+        method: "POST",
+        headers: { Prefer: "count=exact" },
+        body: JSON.stringify(
+          args.params && typeof args.params === "object" ? args.params : {}
+        ),
+      };
+    } else {
+      const parts = [
+        `select=${encodeURIComponent(typeof args.select === "string" && args.select.trim() ? args.select.trim() : "*")}`,
+        `limit=${limit}`,
+        `offset=${offset}`,
+      ];
+      if (typeof args.order === "string" && args.order.trim()) {
+        parts.push(`order=${encodeURIComponent(args.order.trim())}`);
+      }
+      for (const f of Array.isArray(args.filters) ? args.filters : []) {
+        if (typeof f !== "string" || !f.includes("=")) continue;
+        const eq = f.indexOf("=");
+        const col = f.slice(0, eq).trim();
+        const value = f.slice(eq + 1);
+        if (!col) continue;
+        parts.push(`${encodeURIComponent(col)}=${encodeURIComponent(value)}`);
+      }
+      path = `/rest/v1/${table}?${parts.join("&")}`;
+      init = { headers: { Prefer: "count=exact" } };
+    }
+
+    const res = await supabaseFetch(path, init);
+    if (!res.ok) {
+      const detail = (await res.text().catch(() => "")).slice(0, 400);
+      return textResult(`Query failed (${res.status}): ${detail}`, true);
+    }
+    const rows = (await res.json().catch(() => null)) as unknown;
+    if (!Array.isArray(rows)) {
+      return textResult(
+        `That returned a single value rather than rows: ${JSON.stringify(rows).slice(0, 2000)}`
+      );
+    }
+
+    // The total, so a truncated answer is never mistaken for the whole picture —
+    // the same silent-cap bug that made list_sources report 307 commits instead
+    // of 1,448.
+    const total = res.headers.get("content-range")?.split("/")[1] ?? null;
+    const head =
+      total && Number(total) > offset + rows.length
+        ? `${rows.length} rows shown, ${total} match. Raise limit or page with offset.\n\n`
+        : `${rows.length} rows.\n\n`;
+    return textResult(head + JSON.stringify(rows, null, 2));
   }
 
   if (name === "list_sources") {
@@ -295,10 +499,22 @@ export async function POST(request: Request) {
       capabilities: { tools: {} },
       serverInfo: { name: "loveiq-brain", version: "1.0.0" },
       instructions:
-        "LoveIQ's own written record: documentation, git history, the Notion board and " +
-        "pages, and dated business " +
-        "numbers. Prefer this for anything historical or already decided. It holds history, " +
-        "not live state — for current values use the Supabase, Stripe, PostHog or Vercel tools.",
+        "Everything LoveIQ knows about itself, in two halves.\n\n" +
+        "HISTORY, indexed and searchable: documentation, every git commit including the " +
+        "plain-English 'For Marcus:' summaries, the whole Notion workspace (every database " +
+        "and page, not just the task board), and dated business numbers. Use " +
+        "search_company_context, and list_sources when you need to know how fresh a source " +
+        "is.\n\n" +
+        "LIVE STATE, queried straight from the production database with full history and no " +
+        "lag: payments and refunds, Resend email delivery and bounces, Calendly bookings, " +
+        "survey submissions and answers, reports, shares, invites, the waitlist, marketing " +
+        "spend, and the admin tables. Use list_product_tables then query_product_data, and " +
+        "prefer an rpc/get_* analysis function when one fits — those encode the business " +
+        "logic already.\n\n" +
+        "Which half to reach for: history for why something was decided or what a past " +
+        "period looked like; live for what is true right now. Never infer a current number " +
+        "from an indexed chunk when query_product_data can read it directly, and never " +
+        "conclude something does not exist from an empty search — check list_sources first.",
     });
   }
 

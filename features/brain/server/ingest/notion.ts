@@ -1,6 +1,7 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
-import { sweepStale, upsertChunks, type BrainRow, type IngestResult } from "./upsert";
+import { supabaseFetch } from "@features/admin/server/supabase";
+import { sweepStale, touchChunks, upsertChunks, type BrainRow, type IngestResult } from "./upsert";
 
 /**
  * Notion into the company-brain corpus: the task board, and the written pages.
@@ -39,6 +40,23 @@ const MAX_PAGES = 25;
 
 /** Blocks are fetched per page, so this bounds the request count, not the rows. */
 const MAX_CONTENT_PAGES = 300;
+
+/**
+ * BUMP THIS whenever the SHAPE of a row changes — title format, which properties
+ * go in the body, what lands in meta.
+ *
+ * Incremental ingest skips any page whose `last_edited_time` matches what is
+ * already indexed, which is what keeps 1,000+ pages inside a 45-second cron. The
+ * consequence is that a code change to row CONSTRUCTION is invisible to it: the
+ * pages did not change, so they are touched and never rebuilt, and the old shape
+ * survives forever. That is not hypothetical — v2 shipped with every database
+ * title reading "Untitled database" (a database's name is a top-level `title`,
+ * not a property) and those rows would never have self-corrected.
+ *
+ * A version stamped in meta makes a mismatch count as "changed", so shipping a
+ * builder change is enough to re-write the corpus over the following nights.
+ */
+const BUILDER_VERSION = 3;
 
 interface RichText {
   plain_text?: string;
@@ -221,7 +239,12 @@ async function pageText(token: string, pageId: string): Promise<string> {
  * still open about pricing" is answerable from text retrieval without a
  * structured query — the same reason the Jira ingester did it that way.
  */
-export function taskToRow(page: NotionPage, stampedAt: string): BrainRow | null {
+export function taskToRow(
+  page: NotionPage,
+  stampedAt: string,
+  dbTitle?: string,
+  text?: string
+): BrainRow | null {
   const title = titleOf(page).trim();
   if (!page.id || !title) return null;
 
@@ -248,14 +271,36 @@ export function taskToRow(page: NotionPage, stampedAt: string): BrainRow | null 
 
   const edited = page.last_edited_time ?? page.created_time ?? null;
 
+  // Every property, not just the six the board happens to use. A row in
+  // "Literature" or "Competitor Tracker" carries its meaning in fields this
+  // function had never heard of, and dropping them left 859 rows worth of
+  // company knowledge as bare titles.
+  const named = new Set([
+    "Status", "Priority", "Impact", "Assign", "Assignee", "Due Date", "Date Completed",
+  ]);
+  const extras = Object.entries(props)
+    .filter(([name]) => !named.has(name))
+    .map(([name, prop]) => {
+      const value = propertyToText(prop).trim();
+      // Skip the title property: it is already the chunk title.
+      const isTitle = (prop as { type?: string } | null)?.type === "title";
+      return !value || isTitle ? null : `${name}: ${value}`;
+    })
+    .filter(Boolean)
+    .join(" · ");
+
+  const label = dbTitle?.trim() || "Board";
+
   return {
     source: SOURCE,
     source_id: `task:${page.id}`,
-    title: `Board task: ${title}`,
+    title: `${label}: ${title}`,
     url: page.url ?? null,
-    body: [title, header].filter(Boolean).join("\n\n"),
+    body: [title, header, extras, text?.trim() || null].filter(Boolean).join("\n\n"),
     meta: {
       kind: "task",
+      v: BUILDER_VERSION,
+      database: label,
       status: status || null,
       priority: priority || null,
       impact: impact || null,
@@ -284,7 +329,7 @@ export function pageToRow(page: NotionPage, text: string, stampedAt: string): Br
     title: `Notion: ${title}`,
     url: page.url ?? null,
     body: [title, text].filter(Boolean).join("\n\n"),
-    meta: { kind: "page", created: page.created_time ?? null, edited },
+    meta: { kind: "page", v: BUILDER_VERSION, created: page.created_time ?? null, edited },
     updated_at: stampedAt,
     period_end: typeof edited === "string" ? edited.slice(0, 10) : null,
   };
@@ -334,53 +379,181 @@ export async function ingestNotion(
   if (!token) return { source: SOURCE, rows: 0, swept: 0, skipped: "notion-not-configured" };
   if (isOutOfTime()) return { source: SOURCE, rows: 0, swept: 0, skipped: "notion-time-budget" };
 
-  const boardId = process.env.NOTION_BOARD_DATABASE_ID;
   const excluded = excludedTitles();
-
   const rows: BrainRow[] = [];
   let complete = true;
 
-  // ---- the task board ----------------------------------------------------
-  if (boardId) {
-    let cursor: string | undefined;
-    for (let page = 0; page < MAX_PAGES; page++) {
-      if (isOutOfTime()) {
-        complete = false;
-        break;
-      }
-      const json = await notionPost(token, `/databases/${boardId}/query`, {
-        page_size: PAGE_SIZE,
-        ...(cursor ? { start_cursor: cursor } : {}),
-      });
-      for (const raw of (json.results as NotionPage[]) ?? []) {
-        if (raw.archived || raw.in_trash) continue;
-        const row = taskToRow(raw, stampedAt);
-        if (row && !isExcluded(row.title, excluded)) rows.push(row);
-      }
-      cursor = json.has_more ? (json.next_cursor as string) : undefined;
-      if (!cursor) break;
-      if (page === MAX_PAGES - 1) {
-        complete = false;
-        logger.warn({ got: rows.length }, "brain-ingest notion: board hit the page ceiling");
-      }
-    }
-  } else {
-    logger.info("brain-ingest notion: NOTION_BOARD_DATABASE_ID unset, skipping the board");
-  }
+  // ---- what exists, so unchanged pages need no content fetch ---------------
+  const known = await knownNotionEdits();
 
-  // ---- written pages -----------------------------------------------------
+  // ---- every database, not one ---------------------------------------------
   //
-  // `/search` returns pages the integration has been shared with, newest edit
-  // first. Rows that belong to the board are skipped here: they are already
-  // covered above with their status and priority, and re-indexing them as bare
-  // pages would put the same task in the corpus twice under two ids.
-  const seenPages: NotionPage[] = [];
-  let cursor: string | undefined;
-  for (let page = 0; page < MAX_PAGES; page++) {
+  // This used to read a single database named by NOTION_BOARD_DATABASE_ID and
+  // index everything else as a bare page — except the page loop skips anything
+  // whose parent is a database, so rows of every OTHER database fell through
+  // both loops and were never indexed at all. Measured 2026-08-28: 1,027 of the
+  // 1,093 reachable pages are database rows across 35 databases, and 168 were
+  // indexed. Literature (80), Research Papers (41+34), Competitor Tracker (28),
+  // the article release plans and Beta Testers were entirely absent — and there
+  // are TWO databases both called "Board", so even the board was half covered.
+  //
+  // The env var is gone rather than fixed: a config value that silently decides
+  // which 15% of the workspace is visible is the wrong shape. If a database is
+  // shared with the integration, it is in.
+  const databases = await allDatabases(token, isOutOfTime);
+  const candidates: Array<{ raw: NotionPage; dbTitle: string | null }> = [];
+
+  for (const [dbId, dbTitle] of databases) {
     if (isOutOfTime()) {
       complete = false;
       break;
     }
+    for (const raw of await databaseRows(token, dbId, isOutOfTime)) {
+      candidates.push({ raw, dbTitle });
+    }
+  }
+
+  // ---- standalone pages (not rows of any database) --------------------------
+  for (const raw of await standalonePages(token, isOutOfTime)) {
+    candidates.push({ raw, dbTitle: null });
+  }
+
+  // ---- build, fetching content only for what changed -----------------------
+  const touch: string[] = [];
+  let fetched = 0;
+
+  for (const { raw, dbTitle } of candidates) {
+    const title = titleOf(raw).trim();
+    if (!raw.id || !title) continue;
+    const scopedTitle = dbTitle ? `${dbTitle}: ${title}` : `Notion: ${title}`;
+    if (isExcluded(scopedTitle, excluded)) continue;
+
+    const sourceId = `${dbTitle ? "task" : "page"}:${raw.id}`;
+    const edited = raw.last_edited_time ?? raw.created_time ?? null;
+
+    // Unchanged since the last run: keep it alive without re-downloading it.
+    // Compared on the FULL timestamp, not the date, so a page edited twice in
+    // one day is still re-read the second time.
+    const seen = known.get(sourceId);
+    if (edited && seen && seen.edited === edited && seen.v === BUILDER_VERSION) {
+      touch.push(sourceId);
+      continue;
+    }
+
+    if (isOutOfTime() || fetched >= MAX_CONTENT_PAGES) {
+      // Deliberately not an error. The sweep is skipped for an incomplete run,
+      // and the next run picks up where this one stopped because everything
+      // already written is now "unchanged" and costs a touch instead of a fetch.
+      complete = false;
+      break;
+    }
+
+    let text = "";
+    try {
+      text = await pageText(token, raw.id);
+    } catch (err) {
+      logger.warn({ err, page: raw.id }, "brain-ingest notion: page content unreadable");
+      complete = false;
+    }
+    fetched += 1;
+
+    const row = dbTitle
+      ? taskToRow(raw, stampedAt, dbTitle, text)
+      : pageToRow(raw, text, stampedAt);
+    if (row) rows.push(row);
+  }
+
+  const written = await upsertChunks(rows);
+  const touched = await touchChunks(SOURCE, touch, stampedAt);
+
+  // Only sweep a run that walked everything. A partial run would delete every
+  // row it never reached — and `sweepStale` additionally refuses when this run
+  // accounted for far less than the source already holds. `written + touched`
+  // because a touched row is just as much "still here" as a rewritten one.
+  const swept = complete ? await sweepStale(SOURCE, stampedAt, written + touched) : 0;
+
+  logger.info(
+    { databases: databases.size, candidates: candidates.length, written, touched, fetched, complete },
+    "brain-ingest notion"
+  );
+
+  if (!complete && written === 0 && touched === 0) {
+    return { source: SOURCE, rows: 0, swept: 0, skipped: "notion-time-budget" };
+  }
+  return { source: SOURCE, rows: written + touched, swept };
+}
+
+/** Every database shared with the integration, id → title. */
+async function allDatabases(
+  token: string,
+  isOutOfTime: () => boolean
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  let cursor: string | undefined;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    if (isOutOfTime()) break;
+    const json = await notionPost(token, "/search", {
+      filter: { property: "object", value: "database" },
+      page_size: PAGE_SIZE,
+      ...(cursor ? { start_cursor: cursor } : {}),
+    });
+    for (const raw of (json.results as NotionPage[]) ?? []) {
+      if (raw.archived || raw.in_trash || !raw.id) continue;
+      // A DATABASE's name is a top-level `title` array; only a PAGE keeps its
+      // title inside `properties`. Running titleOf() here returned "" for every
+      // database, which titled all 1,027 rows "Untitled database: …".
+      const own = Array.isArray((raw as { title?: RichText[] }).title)
+        ? (raw as { title?: RichText[] }).title!.map((t) => t.plain_text ?? "").join("")
+        : "";
+      out.set(raw.id, own.trim() || titleOf(raw).trim() || "Untitled database");
+    }
+    cursor = json.has_more ? (json.next_cursor as string) : undefined;
+    if (!cursor) break;
+  }
+  return out;
+}
+
+/** Every live row of one database. */
+async function databaseRows(
+  token: string,
+  dbId: string,
+  isOutOfTime: () => boolean
+): Promise<NotionPage[]> {
+  const out: NotionPage[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    if (isOutOfTime()) break;
+    let json;
+    try {
+      json = await notionPost(token, `/databases/${dbId}/query`, {
+        page_size: PAGE_SIZE,
+        ...(cursor ? { start_cursor: cursor } : {}),
+      });
+    } catch (err) {
+      // One database the integration cannot query must not lose the other 34.
+      logger.warn({ err, dbId }, "brain-ingest notion: database unreadable");
+      return out;
+    }
+    for (const raw of (json.results as NotionPage[]) ?? []) {
+      if (raw.archived || raw.in_trash) continue;
+      out.push(raw);
+    }
+    cursor = json.has_more ? (json.next_cursor as string) : undefined;
+    if (!cursor) break;
+  }
+  return out;
+}
+
+/** Pages that are not rows of a database. Rows are covered by databaseRows(),
+ *  and indexing them here too would put the same page in twice under two ids. */
+async function standalonePages(
+  token: string,
+  isOutOfTime: () => boolean
+): Promise<NotionPage[]> {
+  const out: NotionPage[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    if (isOutOfTime()) break;
     const json = await notionPost(token, "/search", {
       filter: { property: "object", value: "page" },
       sort: { direction: "descending", timestamp: "last_edited_time" },
@@ -390,45 +563,47 @@ export async function ingestNotion(
     for (const raw of (json.results as NotionPage[]) ?? []) {
       if (raw.archived || raw.in_trash) continue;
       if (raw.parent?.type === "database_id") continue;
-      seenPages.push(raw);
+      out.push(raw);
     }
     cursor = json.has_more ? (json.next_cursor as string) : undefined;
     if (!cursor) break;
   }
+  return out;
+}
 
-  // Content is one request per page, so this is where the time actually goes.
-  let fetched = 0;
-  for (const raw of seenPages) {
-    if (fetched >= MAX_CONTENT_PAGES || isOutOfTime()) {
-      if (fetched < seenPages.length) complete = false;
-      break;
+/**
+ * source_id → the `last_edited_time` already indexed for it.
+ *
+ * Paginated explicitly: PostgREST caps a response at 1,000 rows by default, and
+ * this table now holds more Notion rows than that, so a single unpaginated read
+ * would silently report the oldest 1,000 as the whole corpus and re-download
+ * every page past the cap on every run.
+ */
+async function knownNotionEdits(): Promise<Map<string, { edited: string; v: number }>> {
+  const out = new Map<string, { edited: string; v: number }>();
+  for (let offset = 0; offset < 20_000; offset += 1000) {
+    const res = await supabaseFetch(
+      `/rest/v1/brain_chunk?select=source_id,meta&source=eq.${SOURCE}&order=source_id.asc&limit=1000&offset=${offset}`
+    );
+    if (!res.ok) {
+      logger.warn({ status: res.status }, "brain-ingest notion: could not read existing chunks — will refetch all content");
+      return new Map();
     }
-    const title = titleOf(raw).trim();
-    if (!title || isExcluded(`Notion: ${title}`, excluded)) continue;
-    let text = "";
-    try {
-      text = raw.id ? await pageText(token, raw.id) : "";
-    } catch (err) {
-      // A single unreadable page must not lose the rest of the run.
-      logger.warn({ err, page: raw.id }, "brain-ingest notion: page content unreadable");
-      complete = false;
+    const batch = (await res.json().catch(() => [])) as Array<{
+      source_id?: string;
+      meta?: { edited?: unknown; v?: unknown } | null;
+    }>;
+    for (const row of batch) {
+      const edited = row.meta?.edited;
+      // A row with no version predates the stamp, so it reads as v0 and gets
+      // rebuilt — which is the correct treatment for the rows already written
+      // with the wrong database title.
+      const v = typeof row.meta?.v === "number" ? row.meta.v : 0;
+      if (row.source_id && typeof edited === "string") out.set(row.source_id, { edited, v });
     }
-    fetched += 1;
-    const row = pageToRow(raw, text, stampedAt);
-    if (row) rows.push(row);
+    if (batch.length < 1000) break;
   }
-
-  const written = await upsertChunks(rows);
-
-  // Only sweep a run that walked everything. A partial run would delete every
-  // task and page it never reached — and `sweepStale` additionally refuses when
-  // this run wrote far less than the source already holds.
-  const swept = complete ? await sweepStale(SOURCE, stampedAt, written) : 0;
-
-  if (!complete && written === 0) {
-    return { source: SOURCE, rows: 0, swept: 0, skipped: "notion-time-budget" };
-  }
-  return { source: SOURCE, rows: written, swept };
+  return out;
 }
 
 /** Teamspace narrowing is advisory only — Notion's search API has no teamspace

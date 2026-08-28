@@ -70,6 +70,7 @@ let cached: { token: string; expiresAtMs: number } | null = null;
 
 export function isGoogleConfigured(): boolean {
   if (process.env.GOOGLE_OAUTH_ACCESS_TOKEN) return true;
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) return true;
   return Boolean(
     process.env.GOOGLE_OAUTH_CLIENT_ID &&
     process.env.GOOGLE_OAUTH_CLIENT_SECRET &&
@@ -102,6 +103,32 @@ export async function getGoogleAccessToken(nowMs: number = Date.now()): Promise<
   if (direct) return direct;
 
   if (cached && cached.expiresAtMs > nowMs) return cached.token;
+
+  /**
+   * A SERVICE-ACCOUNT KEY, PREFERRED WHEN PRESENT.
+   *
+   * Added 2026-08-28 after the user refresh token died with
+   * `invalid_grant / invalid_rapt` — a Google Workspace REAUTH policy, which
+   * periodically invalidates refresh tokens for sensitive scopes no matter how
+   * the token was minted. Re-consenting fixes it until the next expiry, so a
+   * user token cannot deliver "always in sync": every few weeks GA4 and Search
+   * Console would freeze and someone would have to click a browser prompt.
+   *
+   * A service account has no user session and therefore never reauths. The
+   * earlier objection to this route — "requires creating a project, enabling
+   * APIs and downloading a key" — no longer holds: project `loveiq-brain` and
+   * `ga4-reader` already exist, and that account already has GA4 Viewer plus
+   * Search Console Full access.
+   *
+   * The refresh-token path below is kept as a fallback so nothing breaks while
+   * the key is being put in place.
+   */
+  const saKey = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+  if (saKey) {
+    const token = await serviceAccountToken(saKey, nowMs);
+    if (token) return token;
+    logger.warn("google oauth: service-account key present but unusable, falling back to refresh token");
+  }
 
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
@@ -155,6 +182,87 @@ export async function getGoogleAccessToken(nowMs: number = Date.now()): Promise<
  * Turn Google's scope error into an instruction. Without this the failure reads
  * as a generic 403 and the fix (re-run the login WITH the scope) is invisible.
  */
+
+/**
+ * Sign a JWT with the service account's private key and swap it for an access
+ * token. Google calls this the "JWT bearer" flow; it needs no browser, no user
+ * and no consent screen, which is the whole point.
+ *
+ * Scopes are requested here rather than granted to the key, so the token is
+ * narrowed to exactly the two read-only APIs the ingesters use even though the
+ * account itself could be given more.
+ */
+async function serviceAccountToken(rawKey: string, nowMs: number): Promise<string | null> {
+  let key: { client_email?: string; private_key?: string };
+  try {
+    // Accept both the raw JSON and a base64 blob: Vercel's env UI mangles
+    // multi-line values, and a PEM is multi-line by definition.
+    const text = rawKey.trim().startsWith("{")
+      ? rawKey
+      : Buffer.from(rawKey, "base64").toString("utf8");
+    key = JSON.parse(text);
+  } catch {
+    logger.error("google oauth: GOOGLE_SERVICE_ACCOUNT_KEY is neither JSON nor base64 JSON");
+    return null;
+  }
+  if (!key.client_email || !key.private_key) {
+    logger.error("google oauth: service-account key missing client_email or private_key");
+    return null;
+  }
+
+  const iat = Math.floor(nowMs / 1000);
+  const claims = {
+    iss: key.client_email,
+    scope: `${GA4_SCOPE} ${SEARCH_CONSOLE_SCOPE}`,
+    aud: TOKEN_URL,
+    iat,
+    exp: iat + 3600,
+  };
+  const b64 = (o: unknown) =>
+    Buffer.from(JSON.stringify(o)).toString("base64url");
+  const signingInput = `${b64({ alg: "RS256", typ: "JWT" })}.${b64(claims)}`;
+
+  let assertion: string;
+  try {
+    const { createSign } = await import("node:crypto");
+    const signer = createSign("RSA-SHA256");
+    signer.update(signingInput);
+    // A key pasted through a shell or an env UI often arrives with literal \n.
+    assertion = `${signingInput}.${signer.sign(key.private_key.replace(/\\n/g, "\n"), "base64url")}`;
+  } catch (err) {
+    logger.error({ err }, "google oauth: could not sign the service-account assertion");
+    return null;
+  }
+
+  const res = await fetchWithTimeout(TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion,
+    }).toString(),
+    timeoutMs: TIMEOUT_MS,
+  });
+
+  if (!res.ok) {
+    const detail = (await res.text().catch(() => "")).slice(0, 300);
+    logger.error({ status: res.status, detail }, "google oauth: service-account exchange rejected");
+    return null;
+  }
+  const json = (await res.json().catch(() => null)) as
+    | { access_token?: string; expires_in?: number }
+    | null;
+  if (!json?.access_token) {
+    logger.error("google oauth: service-account exchange returned no access_token");
+    return null;
+  }
+  cached = {
+    token: json.access_token,
+    expiresAtMs: nowMs + Math.max(0, (json.expires_in ?? 3600) * 1000 - EXPIRY_SKEW_MS),
+  };
+  return json.access_token;
+}
+
 export function googleScopeHint(status: number, body: string, scope: string): string | null {
   if (status !== 403 || !/ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficient/i.test(body)) return null;
   return `The Google credential is missing the ${scope} scope. Re-run "gcloud auth application-default login --scopes=...,${scope}" and update GOOGLE_OAUTH_REFRESH_TOKEN.`;

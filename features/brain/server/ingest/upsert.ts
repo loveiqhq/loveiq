@@ -146,6 +146,61 @@ export async function upsertChunks(rows: BrainRow[]): Promise<number> {
  * zero-write run makes that unreachable for every caller instead of asking four
  * of them to remember.
  */
+/**
+ * Bump `updated_at` on rows this run deliberately did NOT rewrite.
+ *
+ * WHY THIS EXISTS. The sweep deletes any row of a source whose `updated_at` is
+ * older than the current run's stamp, which means "keep this row" and "re-fetch
+ * this row's content" are the same act — and for Notion that is 1,000+ HTTP
+ * requests a night to re-download pages nobody edited. Touching lets a run say
+ * "still there, unchanged" for the cost of one request per 100 rows, so a full
+ * corpus stays live inside a 45-second cron budget.
+ *
+ * Batched because the ids travel in the URL as `in.(…)`; 100 uuids is ~4 KB,
+ * comfortably inside any proxy's limit.
+ *
+ * Returns how many rows were confirmed, which the caller adds to its write count
+ * before sweeping — otherwise a run that touched 1,000 rows and rewrote 3 looks
+ * to `sweepStale` like a run that wrote almost nothing.
+ */
+export async function touchChunks(
+  source: string,
+  sourceIds: string[],
+  stampedAt: string
+): Promise<number> {
+  if (sourceIds.length === 0) return 0;
+
+  let touched = 0;
+  for (let i = 0; i < sourceIds.length; i += 100) {
+    const batch = sourceIds.slice(i, i + 100);
+    // PostgREST `in.()` needs each value quoted, or a comma or paren inside an
+    // id would split the list. Notion ids are uuids, but the ingester prefixes
+    // them (`task:`/`page:`) and a future source may not be so tidy.
+    const list = batch.map((id) => `"${id.replace(/"/g, '""')}"`).join(",");
+    const res = await supabaseFetch(
+      `/rest/v1/brain_chunk?source=eq.${encodeURIComponent(source)}&source_id=in.(${encodeURIComponent(list)})`,
+      {
+        method: "PATCH",
+        headers: { Prefer: "return=headers-only,count=exact" },
+        body: JSON.stringify({ updated_at: stampedAt }),
+      }
+    );
+    if (!res.ok) {
+      logger.warn(
+        { source, status: res.status, batch: batch.length },
+        "brain touch failed — those rows will look stale to the sweep"
+      );
+      continue;
+    }
+    // Trust the server's count, not the batch length: a row that no longer
+    // exists must not be counted as kept.
+    const range = res.headers.get("content-range");
+    const n = range ? Number(range.split("/")[1]) : NaN;
+    touched += Number.isFinite(n) ? n : batch.length;
+  }
+  return touched;
+}
+
 export async function sweepStale(
   source: string,
   stampedAt: string,

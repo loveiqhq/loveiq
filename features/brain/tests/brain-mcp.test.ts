@@ -77,14 +77,30 @@ describe("/api/mcp", () => {
       expect(body.result.serverInfo.name).toBe("loveiq-brain");
     });
 
-    it("lists exactly the three tools, each with a schema", async () => {
+    it("lists exactly the five tools, each with a schema", async () => {
+      // Asserted exactly, not with toContain: a tool that disappears from the list
+      // is unreachable to every connected Claude, and nothing else would notice.
       const body = await (await POST(rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }))).json();
       expect(body.result.tools.map((t: { name: string }) => t.name)).toEqual([
         "search_company_context",
         "get_business_numbers",
+        "list_product_tables",
+        "query_product_data",
         "list_sources",
       ]);
       for (const t of body.result.tools) expect(t.inputSchema.type).toBe("object");
+    });
+
+    it("tells the client about BOTH halves — indexed history and live state", async () => {
+      // The instructions are the server's only chance to say what it is. Twice
+      // today a description advertised a source that had 0 chunks while omitting
+      // one with hundreds, which makes the data effectively unreachable.
+      const body = await (await POST(rpc({ jsonrpc: "2.0", id: 9, method: "initialize" }))).json();
+      const text = String(body.result.instructions);
+      expect(text).toMatch(/Notion/);
+      expect(text).toMatch(/query_product_data/);
+      expect(text).toMatch(/live/i);
+      expect(text).not.toMatch(/Jira/);
     });
 
     it("returns 202 with no body for a notification, which expects no response", async () => {
@@ -230,6 +246,135 @@ describe("/api/mcp", () => {
     it("says nothing extra when every source is accounted for", async () => {
       wireCorpus({ doc: 1, notion: 1 }, []);
       expect(await text()).not.toMatch(/MISSING from this tool's source list/);
+    });
+  });
+
+  describe("query_product_data — live database access", () => {
+    const OPENAPI = {
+      definitions: {
+        payment: { properties: { id: {}, amount: {}, created_date_time: {} } },
+        resend_webhook_event: { properties: { id: {}, type: {}, received_at: {} } },
+      },
+      paths: { "/rpc/get_conversion_funnel": {}, "/payment": {} },
+    };
+
+    function wire(rows: unknown, opts: { ok?: boolean; total?: number; status?: number } = {}) {
+      mockSupabaseFetch.mockImplementation(async (path: string, init?: { headers?: Record<string, string> }) => {
+        if (init?.headers?.Accept === "application/openapi+json") {
+          return { ok: true, headers: new Headers(), json: async () => OPENAPI };
+        }
+        const total = opts.total ?? (Array.isArray(rows) ? rows.length : 0);
+        return {
+          ok: opts.ok ?? true,
+          status: opts.status ?? 200,
+          headers: new Headers({ "content-range": `0-0/${total}` }),
+          json: async () => rows,
+          text: async () => JSON.stringify(rows),
+        };
+      });
+    }
+
+    async function call(args: Record<string, unknown>, tool = "query_product_data") {
+      const res = await POST(
+        rpc({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: tool, arguments: args } })
+      );
+      const body = await res.json();
+      return body.result as { content: Array<{ text: string }>; isError?: boolean };
+    }
+
+    it("refuses a table name that is not a plain identifier", async () => {
+      wire([]);
+      for (const table of ["payment; drop table x", "pay ment", "../secrets", "payment)--"]) {
+        const r = await call({ table });
+        expect(r.isError, table).toBe(true);
+        expect(r.content[0].text).toMatch(/plain identifier/);
+      }
+    });
+
+    it("refuses a table that is not in the schema, and suggests near matches", async () => {
+      wire([]);
+      const r = await call({ table: "paymentz" });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toMatch(/No such table/);
+      expect(r.content[0].text).toMatch(/payment/);
+    });
+
+    it("never issues a write method", async () => {
+      // Read-only by CONSTRUCTION, not by validation: a table read is a GET and a
+      // function call is a POST to /rpc, and PostgREST needs PATCH/PUT/DELETE to
+      // mutate. This asserts the property directly so a future edit cannot quietly
+      // introduce one.
+      wire([{ id: 1 }]);
+      await call({ table: "payment" });
+      await call({ table: "rpc/get_conversion_funnel", params: { days: 7 } });
+      const methods = mockSupabaseFetch.mock.calls
+        .map(([, init]) => (init as { method?: string } | undefined)?.method ?? "GET")
+        .map((m) => m.toUpperCase());
+      expect(methods).not.toContain("PATCH");
+      expect(methods).not.toContain("PUT");
+      expect(methods).not.toContain("DELETE");
+      expect(new Set(methods)).toEqual(new Set(["GET", "POST"]));
+    });
+
+    it("says how many rows MATCH, not just how many it returned", async () => {
+      // The silent-truncation bug that made list_sources report 307 commits of
+      // 1,448: a capped result that does not admit it reads as the whole picture.
+      wire([{ id: 1 }, { id: 2 }], { total: 5000 });
+      const r = await call({ table: "payment", limit: 2 });
+      expect(r.content[0].text).toMatch(/2 rows shown, 5000 match/);
+      expect(r.content[0].text).toMatch(/offset/);
+    });
+
+    it("does not claim truncation when everything fits", async () => {
+      wire([{ id: 1 }, { id: 2 }], { total: 2 });
+      expect((await call({ table: "payment" })).content[0].text).toMatch(/^2 rows\./);
+    });
+
+    it("passes filters and order through as PostgREST params", async () => {
+      wire([]);
+      await call({
+        table: "payment",
+        select: "id,amount",
+        filters: ["created_date_time=gte.2026-08-01", "amount=gt.0"],
+        order: "created_date_time.desc",
+        limit: 10,
+      });
+      const path = String(mockSupabaseFetch.mock.calls.at(-1)?.[0]);
+      expect(path).toContain("select=id%2Camount");
+      expect(path).toContain("created_date_time=gte.2026-08-01");
+      expect(path).toContain("amount=gt.0");
+      expect(path).toContain("order=created_date_time.desc");
+      expect(path).toContain("limit=10");
+    });
+
+    it("caps limit at 1000 and floors it at 1", async () => {
+      wire([]);
+      await call({ table: "payment", limit: 99999 });
+      expect(String(mockSupabaseFetch.mock.calls.at(-1)?.[0])).toContain("limit=1000");
+      await call({ table: "payment", limit: -5 });
+      expect(String(mockSupabaseFetch.mock.calls.at(-1)?.[0])).toContain("limit=1");
+    });
+
+    it("surfaces a database error as a tool error rather than pretending there are no rows", async () => {
+      wire({ message: "column does not exist" }, { ok: false, status: 400 });
+      const r = await call({ table: "payment", filters: ["nope=eq.1"] });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toMatch(/Query failed \(400\)/);
+    });
+
+    it("lists tables with their columns, and narrows on match", async () => {
+      wire([]);
+      const all = await call({}, "list_product_tables");
+      expect(all.content[0].text).toContain("payment(id, amount, created_date_time)");
+      const narrowed = await call({ match: "resend" }, "list_product_tables");
+      expect(narrowed.content[0].text).toContain("resend_webhook_event");
+      expect(narrowed.content[0].text).not.toContain("payment(");
+    });
+
+    it("includes rpc functions, which have no column list", async () => {
+      wire([]);
+      const r = await call({ match: "rpc" }, "list_product_tables");
+      expect(r.content[0].text).toContain("rpc/get_conversion_funnel");
     });
   });
 });
