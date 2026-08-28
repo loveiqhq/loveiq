@@ -363,7 +363,7 @@ export async function buildForecastSnapshot(inputDays: number): Promise<Forecast
       { headers: { Range: "0-49999" } }
     ),
     supabaseFetch(
-      `/rest/v1/payment?select=id,amount,status,payment_date_time&payment_date_time=gte.${previousSince}&order=payment_date_time.asc`,
+      `/rest/v1/payment?is_test=is.false&select=id,amount,status,payment_date_time&payment_date_time=gte.${previousSince}&order=payment_date_time.asc`,
       { headers: { Range: "0-49999" } }
     ),
     supabaseFetch(

@@ -359,7 +359,7 @@ export async function GET(request: Request) {
     }> = [];
     try {
       const paymentRes = await supabaseFetch(
-        `/rest/v1/payment?select=id,user_id,personal_report_id,amount,payment_date_time,created_date_time&status=eq.succeeded&created_date_time=gte.${since}`,
+        `/rest/v1/payment?is_test=is.false&select=id,user_id,personal_report_id,amount,payment_date_time,created_date_time&status=eq.succeeded&created_date_time=gte.${since}`,
         { headers: { Range: "0-49999" } }
       );
       if (paymentRes.ok) {
@@ -674,7 +674,7 @@ export async function GET(request: Request) {
           { headers: { Prefer: "count=exact", Range: "0-0" } }
         ),
         supabaseFetch(
-          `/rest/v1/payment?select=id,amount&status=eq.succeeded&created_date_time=gte.${prevSince}&created_date_time=lt.${prevUntil}`,
+          `/rest/v1/payment?is_test=is.false&select=id,amount&status=eq.succeeded&created_date_time=gte.${prevSince}&created_date_time=lt.${prevUntil}`,
           { headers: { Range: "0-49999" } }
         ),
       ]);

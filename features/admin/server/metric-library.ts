@@ -222,9 +222,12 @@ async function fetchReportViewRate(): Promise<number | null> {
 }
 
 async function fetchRevenueTotal(): Promise<number | null> {
-  const res = await supabaseFetch("/rest/v1/payment?select=amount&status=eq.succeeded", {
-    headers: { Range: "0-49999" },
-  });
+  const res = await supabaseFetch(
+    "/rest/v1/payment?is_test=is.false&select=amount&status=eq.succeeded",
+    {
+      headers: { Range: "0-49999" },
+    }
+  );
   if (!res.ok) return null;
   const rows = (await res.json()) as Array<{ amount: number | null }>;
   return Math.round(rows.reduce((sum, row) => sum + Number(row.amount ?? 0), 0) * 100) / 100;

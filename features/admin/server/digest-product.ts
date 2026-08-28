@@ -365,7 +365,7 @@ export async function fetchOnboardingFunnel(
   // 'share'. If that signal isn't set, this collapses to 0 — better than a
   // fake number.
   const unlocksRes = await supabaseFetch(
-    `/rest/v1/payment?select=id&status=eq.succeeded&metadata->>via=eq.share&${dateRange("created_date_time", sinceIso, untilIso)}`,
+    `/rest/v1/payment?is_test=is.false&select=id&status=eq.succeeded&metadata->>via=eq.share&${dateRange("created_date_time", sinceIso, untilIso)}`,
     { method: "HEAD", headers: { Prefer: "count=exact" } }
   );
   const unlocksRange = unlocksRes.headers.get("content-range");

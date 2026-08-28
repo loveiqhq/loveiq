@@ -685,7 +685,7 @@ async function fetchDistinctReportViewers(sinceIso: string, untilIso: string): P
  */
 async function fetchRevenue(sinceIso: string, untilIso: string): Promise<RevenueBreakdown> {
   const res = await supabaseFetch(
-    `/rest/v1/payment?select=amount,currency,metadata&status=eq.succeeded&${dateRange("created_date_time", sinceIso, untilIso)}`,
+    `/rest/v1/payment?is_test=is.false&select=amount,currency,metadata&status=eq.succeeded&${dateRange("created_date_time", sinceIso, untilIso)}`,
     { headers: { Range: "0-999" } }
   );
   if (!res.ok)
@@ -732,7 +732,7 @@ async function fetchRefunds(
   untilIso: string
 ): Promise<{ count: number; amount: number }> {
   const res = await supabaseFetch(
-    `/rest/v1/payment?select=refund_amount&status=eq.refunded&${dateRange("refunded_at", sinceIso, untilIso)}`,
+    `/rest/v1/payment?is_test=is.false&select=refund_amount&status=eq.refunded&${dateRange("refunded_at", sinceIso, untilIso)}`,
     { headers: { Range: "0-999" } }
   );
   if (!res.ok) return { count: 0, amount: 0 };
@@ -752,7 +752,7 @@ async function fetchPaymentCountByStatus(
   untilIso: string
 ): Promise<number> {
   return fetchExactCount(
-    `/rest/v1/payment?select=id&status=eq.${status}&${dateRange("created_date_time", sinceIso, untilIso)}`
+    `/rest/v1/payment?is_test=is.false&select=id&status=eq.${status}&${dateRange("created_date_time", sinceIso, untilIso)}`
   );
 }
 
@@ -895,7 +895,7 @@ async function fetchMedianTimeToPurchaseHours(
   untilIso: string
 ): Promise<number | null> {
   const paymentsRes = await supabaseFetch(
-    `/rest/v1/payment?select=survey_submission_id,created_date_time&status=eq.succeeded&${dateRange("created_date_time", sinceIso, untilIso)}`,
+    `/rest/v1/payment?is_test=is.false&select=survey_submission_id,created_date_time&status=eq.succeeded&${dateRange("created_date_time", sinceIso, untilIso)}`,
     { headers: { Range: "0-999" } }
   );
   if (!paymentsRes.ok) return null;
@@ -1718,7 +1718,7 @@ export async function fetchFunnelStages(sinceIso: string, untilIso: string): Pro
       "survey_submission_id"
     ),
     supabaseFetch(
-      `/rest/v1/payment?select=user_id&status=eq.succeeded&${dateRange("created_date_time", sinceIso, untilIso)}`,
+      `/rest/v1/payment?is_test=is.false&select=user_id&status=eq.succeeded&${dateRange("created_date_time", sinceIso, untilIso)}`,
       { headers: { Range: "0-999" } }
     ),
   ]);

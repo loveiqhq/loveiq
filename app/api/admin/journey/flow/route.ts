@@ -181,7 +181,7 @@ export async function GET(request: Request) {
         range
       ),
       supabaseFetch(
-        `/rest/v1/payment?select=personal_report_id,status,amount&created_date_time=gte.${since}`,
+        `/rest/v1/payment?is_test=is.false&select=personal_report_id,status,amount&created_date_time=gte.${since}`,
         range
       ),
       supabaseFetch(

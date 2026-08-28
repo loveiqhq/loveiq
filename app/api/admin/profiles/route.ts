@@ -113,9 +113,12 @@ export async function GET(request: Request) {
           headers: { Range: "0-9999" },
         }
       ),
-      supabaseFetch(`/rest/v1/payment?select=personal_report_id,status,payment_date_time,amount`, {
-        headers: { Range: "0-9999" },
-      }),
+      supabaseFetch(
+        `/rest/v1/payment?is_test=is.false&select=personal_report_id,status,payment_date_time,amount`,
+        {
+          headers: { Range: "0-9999" },
+        }
+      ),
     ]);
 
     if (!profilesRes.ok || !usersRes.ok) {
