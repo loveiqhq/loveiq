@@ -593,6 +593,29 @@ Expect eight sources with rows — `doc`, `commit`, `analytics`, `ga4`, `gsc`,
 and additionally names any source present in the table that the tool does not
 know about.
 
+### Slack is PUSHED, not polled
+
+`message.channels` events hit `/api/slack/events`, which treats a human post in a
+public channel as new corpus rather than as a question for the bot. The corpus is
+therefore seconds behind the conversation instead of up to fifteen minutes.
+
+- **Debounced to one pass per minute.** A busy thread emits a burst of events, and
+  each would otherwise start a full incremental pass — the same work, concurrently,
+  racing on the same rows. The claim is atomic (a UNIQUE constraint), so exactly one
+  event per minute wins.
+- **Acked before the work.** Slack's deadline is 3s and a pass takes 4-12s, so the
+  ingest runs in `scheduleAfterResponse`. Doing it inline would time out, Slack
+  would retry, and the retries would multiply the work.
+- **The team check is repeated on this branch.** A signed request proves the sender
+  is Slack, not that it is OUR Slack, and unlike the Q&A path this branch WRITES.
+- **The 15-minute cron stays.** If the subscription is removed, the signing secret
+  rotates, or the route starts failing, the corpus degrades to quarter-hourly rather
+  than stopping — and `brain-fast` is the thing the cron watchdog can see.
+
+**To enable it:** api.slack.com/apps → the LoveIQ Brain app → Event Subscriptions →
+Subscribe to bot events → add `message.channels`, then reinstall. The scope it needs
+(`channels:history`) is already granted, so this adds no new permission.
+
 ### Three ingest jobs, at three speeds
 
 Each source is refreshed as fast as its upstream actually changes — which is not

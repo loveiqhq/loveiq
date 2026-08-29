@@ -13,6 +13,10 @@ import {
   verifySlackSignature,
 } from "@features/brain/server/slack";
 import { scheduleAfterResponse } from "@shared/http/after-response";
+import {
+  markSlackAlertDelivered,
+  tryClaimSlackAlert,
+} from "@shared/observability/slack-alert-dedup";
 import { checkRateLimit } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 
@@ -109,6 +113,60 @@ export async function POST(request: Request) {
 
   const isMention = event.type === "app_mention";
   const isDirectMessage = event.type === "message" && event.channel_type === "im";
+
+  /**
+   * PUSH-BASED SLACK INGEST.
+   *
+   * A message in a public channel is not a question for the bot — it is new
+   * corpus. Polling every 15 minutes made the brain up to 15 minutes behind the
+   * conversation; this makes it seconds behind, because Slack tells us the moment
+   * something is said. The 15-minute cron stays as the safety net: if this webhook
+   * is ever unsubscribed, misconfigured or failing, the corpus degrades to
+   * quarter-hourly rather than stopping.
+   *
+   * Requires the `message.channels` event subscription on the brain app. The
+   * `channels:history` scope it needs is already granted.
+   *
+   * The team check is repeated here rather than reused below, because a signed
+   * request only proves the sender is Slack — not that it is OUR Slack — and this
+   * branch WRITES to the corpus.
+   */
+  const isPublicChannelMessage = event.type === "message" && event.channel_type === "channel";
+  if (isPublicChannelMessage) {
+    const team = process.env.SLACK_BRAIN_TEAM_ID;
+    if (team && payload.team_id && payload.team_id !== team) {
+      logger.warn({ teamId: payload.team_id }, "brain: channel message from an unexpected workspace");
+      return NextResponse.json({ ok: true });
+    }
+    // Ack first, ingest after: Slack's deadline is 3s and the pass takes ~4-12s.
+    scheduleAfterResponse("brain-slack-push", async () => {
+      /**
+       * DEBOUNCE TO ONE PASS PER MINUTE. A busy thread produces a burst of events,
+       * and each one would otherwise start a full incremental pass — the same work,
+       * concurrently, racing on the same rows. The claim is atomic (a UNIQUE
+       * constraint), so exactly one event per minute wins and the rest return.
+       */
+      const minute = new Date().toISOString().slice(0, 16);
+      if (!(await tryClaimSlackAlert("brain_slack_push", "minute", minute))) return;
+      try {
+        const { ingestSlack } = await import("@features/brain/server/ingest/slack");
+        const startedAt = Date.now();
+        const result = await ingestSlack(
+          new Date().toISOString(),
+          () => Date.now() - startedAt > 25_000
+        );
+        logger.info({ result }, "brain: slack push ingest");
+      } catch (err) {
+        // Never throw out of the deferred block: the 15-minute cron is the net,
+        // and a failed push must not look like a failed Slack delivery.
+        logger.error({ err }, "brain: slack push ingest failed");
+      } finally {
+        await markSlackAlertDelivered("brain_slack_push", "minute", minute);
+      }
+    });
+    return NextResponse.json({ ok: true });
+  }
+
   if (!isMention && !isDirectMessage) {
     return NextResponse.json({ ok: true });
   }

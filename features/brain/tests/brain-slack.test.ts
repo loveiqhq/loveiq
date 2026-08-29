@@ -331,3 +331,79 @@ describe("POST /api/slack/events", () => {
     expect(mockClaimQuestion).not.toHaveBeenCalled();
   });
 });
+
+describe("push-based ingest: a public channel message is corpus, not a question", () => {
+  /**
+   * Polling every 15 minutes left the brain up to 15 minutes behind the
+   * conversation. Slack tells us the moment something is said, so this makes it
+   * seconds. The cron stays as the safety net: if this webhook is unsubscribed or
+   * failing, the corpus degrades to quarter-hourly rather than stopping.
+   */
+  const channelMessage = (over: Record<string, unknown> = {}) =>
+    JSON.stringify({
+      type: "event_callback",
+      event_id: `Ev${Math.random().toString(36).slice(2)}`,
+      team_id: "T09Q1FE9WFJ",
+      event: {
+        type: "message",
+        channel_type: "channel",
+        channel: "C0AN7REQFLG",
+        user: "U0BSZ4VRX26",
+        text: "we should raise the price",
+        ts: "1787941701.811139",
+        ...over,
+      },
+    });
+
+  beforeEach(() => {
+    process.env.SLACK_BRAIN_SIGNING_SECRET = SECRET;
+    process.env.SLACK_BRAIN_TEAM_ID = "T09Q1FE9WFJ";
+    // `deferred` is module-level and only cleared by flush(); a test that asserts
+    // NOTHING was scheduled would otherwise pass or fail on the previous test's
+    // leftovers rather than on its own behaviour.
+    deferred = null;
+  });
+
+  it("acks immediately and does the ingest AFTER responding", async () => {
+    // Slack's deadline is 3s; the pass takes 4-12s. Doing it inline would time out
+    // and Slack would retry, multiplying the work.
+    const body = channelMessage();
+    const res = await POST(makeRequest(body));
+    expect(res.status).toBe(200);
+    // The work must have been deferred, not awaited.
+    expect(deferred).not.toBeNull();
+  });
+
+  it("ignores a bot's own post, so the brain cannot feed itself", async () => {
+    const res = await POST(makeRequest(channelMessage({ bot_id: "B123", user: undefined })));
+    expect(res.status).toBe(200);
+    expect(deferred).toBeNull();
+  });
+
+  it("ignores joins and edits, which carry a subtype and are not conversation", async () => {
+    for (const subtype of ["channel_join", "message_changed", "message_deleted"]) {
+      deferred = null;
+      await POST(makeRequest(channelMessage({ subtype })));
+      expect(deferred, subtype).toBeNull();
+    }
+  });
+
+  it("refuses a message from a DIFFERENT Slack workspace", async () => {
+    // A signed request proves the sender is Slack, not that it is OUR Slack — and
+    // this branch WRITES to the corpus, so the team check is repeated for it.
+    const body = channelMessage();
+    const foreign = body.replace('"team_id":"T09Q1FE9WFJ"', '"team_id":"T_SOMEONE_ELSE"');
+    await POST(makeRequest(foreign));
+    expect(deferred).toBeNull();
+  });
+
+  it("still treats a DM as a question, not as corpus", async () => {
+    // The two paths must not collide: a DM is answered, a channel post is indexed.
+    await POST(
+      makeRequest(channelMessage({ channel_type: "im", text: "what did we decide on pricing" }))
+    );
+    expect(deferred).not.toBeNull();
+    await flush();
+    expect(mockAnswerQuestion).toHaveBeenCalled();
+  });
+});
