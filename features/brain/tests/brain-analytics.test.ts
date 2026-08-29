@@ -333,3 +333,32 @@ describe("googleScopeHint", () => {
     expect(googleScopeHint(403, '{"reason":"USER_PROJECT_DENIED"}', GA4_SCOPE)).toBeNull();
   });
 });
+
+describe("a day counts as empty only when NOTHING happened", () => {
+  /**
+   * `isEmpty` tested four of the eight metrics, so a day whose only activity was
+   * invites, survey starts, intro completions or report opens was written to no
+   * daily chunk AND no weekly chunk. Confirmed in production: 2026-03-21 had 13
+   * invite events and no chunk at all, and `weekly:2026-W12` was missing with it,
+   * which left `monthly:2026-03` disagreeing with the weeks inside it.
+   */
+  it("keeps a day whose only activity is invites", async () => {
+    const src = await import("node:fs").then((fs) =>
+      fs.readFileSync("features/brain/server/ingest/analytics.ts", "utf8")
+    );
+    for (const metric of ["starts", "revenue", "opens", "invites"]) {
+      expect(src).toMatch(new RegExp(`t\\.${metric} === 0`));
+    }
+  });
+
+  it("pages the rollup past PostgREST's 1,000-row ceiling", async () => {
+    // A single POST made DAYS=4000 mean 1,000 in practice, so the corpus would have
+    // silently stopped at ~2.7 years however far back the data went. `Range` does
+    // not lift the cap on an rpc call; `offset` does.
+    const src = await import("node:fs").then((fs) =>
+      fs.readFileSync("features/brain/server/ingest/analytics.ts", "utf8")
+    );
+    expect(src).toMatch(/rpc\/brain_daily_rollup\?limit=1000&offset=\$\{offset\}/);
+    expect(src).toMatch(/if \(rows\.length < 1000\) break;/);
+  });
+});

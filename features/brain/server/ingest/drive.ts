@@ -258,8 +258,16 @@ async function knownDriveEdits(): Promise<Map<string, { edited: string; v: numbe
       `/rest/v1/brain_chunk?select=source_id,meta&source=eq.${SOURCE}&order=source_id.asc&limit=1000&offset=${offset}`
     );
     if (!res.ok) {
-      logger.warn({ status: res.status }, "brain-ingest drive: could not read existing chunks");
-      return new Map();
+      /**
+       * FAIL CLOSED. An empty map reads as "nothing is indexed", so every existing
+       * row goes neither written nor confirmed and the sweep in this same run
+       * deletes it — silently, while reporting success. A stale row is repaired by
+       * the next run; a deleted one is gone.
+       */
+      throw new Error(
+        `brain-ingest drive: could not read the existing chunk list (status ${res.status}) — ` +
+          `aborting before the sweep rather than treating the corpus as empty`
+      );
     }
     const batch = (await res.json().catch(() => [])) as Array<{
       source_id?: string;

@@ -549,14 +549,31 @@ export async function ingestGa4(
   const ga4Weeks = new Map<string, Ga4Totals>();
   const ga4Months = new Map<string, Ga4Totals>();
 
+  /**
+   * Iterate the UNION of days that had traffic and days that had SPEND.
+   *
+   * This loop used to walk the traffic report alone and `continue` past any day
+   * with no sessions and no users. GA4 omits a row entirely for such days, so a day
+   * where money was spent but nobody arrived never reached `ads.get(day)` and its
+   * cost was fetched and then silently thrown away — EUR 125.24 across seven days
+   * (2026-04-25/26/27/29/30 and 2026-05-02/03, one of them EUR 90.03). Missing
+   * spend understates cost and therefore OVERSTATES net profit, which is the
+   * direction that actually misleads.
+   */
+  const trafficByDay = new Map<string, number[]>();
   for (const r of core) {
-    const day = ga4Date(r.dimensionValues?.[0]?.value ?? "");
-    if (!day) continue;
-    const metrics = (r.metricValues ?? []).map((m) => num(m.value));
-    const [sessions = 0, users = 0] = metrics;
-    if (!sessions && !users) continue;
+    const d = ga4Date(r.dimensionValues?.[0]?.value ?? "");
+    if (d) trafficByDay.set(d, (r.metricValues ?? []).map((m) => num(m.value)));
+  }
+  const allDays = [...new Set([...trafficByDay.keys(), ...ads.keys()])].sort();
 
+  for (const day of allDays) {
+    const metrics = trafficByDay.get(day) ?? [];
+    const [sessions = 0, users = 0] = metrics;
     const ad = ads.get(day);
+    // Skip only a day that is empty on BOTH counts — no traffic and no spend.
+    if (!sessions && !users && !ad) continue;
+
     const week = isoWeek(day);
     const month = day.slice(0, 7);
     ga4Weeks.set(week, addInto(ga4Weeks.get(week) ?? emptyTotals(day), day, metrics, ad));

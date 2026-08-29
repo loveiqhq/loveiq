@@ -168,8 +168,27 @@ function merge(a: Totals | undefined, r: RollupRow, day: string, ad: AdCost): To
   };
 }
 
+/**
+ * A day is empty only when NOTHING happened on it.
+ *
+ * This tested four of the eight metrics — visitors, submissions, reports, paid —
+ * so a day whose only activity was invites, survey starts, intro completions or
+ * report opens was written to no daily chunk and to no weekly chunk. Confirmed in
+ * production: of 146 days with a non-zero metric, only 145 day-chunks existed, and
+ * the missing one was 2026-03-21 with 13 invite events. `weekly:2026-W12` went with
+ * it, and `monthly:2026-03` then disagreed with the weeks it contains.
+ */
 function isEmpty(t: Totals): boolean {
-  return t.visitors === 0 && t.submissions === 0 && t.reports === 0 && t.paid === 0;
+  return (
+    t.visitors === 0 &&
+    t.starts === 0 &&
+    t.submissions === 0 &&
+    t.reports === 0 &&
+    t.paid === 0 &&
+    t.revenue === 0 &&
+    t.opens === 0 &&
+    t.invites === 0
+  );
 }
 
 export interface AdCost {
@@ -601,18 +620,31 @@ export function buildAnalyticsRows(
  * shapes — and only one place that knows how to call the RPC.
  */
 export async function brainDailyRollup(days: number = DAYS): Promise<RollupRow[]> {
-  const res = await supabaseFetch("/rest/v1/rpc/brain_daily_rollup", {
-    method: "POST",
-    body: JSON.stringify({ days }),
-  });
-  if (!res.ok) {
-    throw new Error(`brain_daily_rollup failed: ${res.status}`);
+  /**
+   * PAGE IT. PostgREST caps any response at 1,000 rows, including an rpc result,
+   * so a single POST made `DAYS = 4000` mean 1,000 in practice — the SQL clamp of
+   * `least(greatest(days,1),4000)` was unreachable, and the corpus would silently
+   * stop at ~2.7 years of history however far back the data went. `Range` does not
+   * lift it on an rpc call; `offset` does.
+   */
+  const out: RollupRow[] = [];
+  for (let offset = 0; offset < 20_000; offset += 1000) {
+    const res = await supabaseFetch(
+      // eslint-disable-next-line no-secrets/no-secrets -- a PostgREST query path, not a secret
+      `/rest/v1/rpc/brain_daily_rollup?limit=1000&offset=${offset}`,
+      { method: "POST", body: JSON.stringify({ days }) }
+    );
+    if (!res.ok) {
+      throw new Error(`brain_daily_rollup failed: ${res.status}`);
+    }
+    const rows = (await res.json()) as RollupRow[];
+    if (!Array.isArray(rows)) {
+      throw new Error("brain_daily_rollup returned a non-array");
+    }
+    out.push(...rows);
+    if (rows.length < 1000) break;
   }
-  const rows = (await res.json()) as RollupRow[];
-  if (!Array.isArray(rows)) {
-    throw new Error("brain_daily_rollup returned a non-array");
-  }
-  return rows;
+  return out;
 }
 
 export async function ingestAnalytics(stampedAt: string): Promise<IngestResult> {

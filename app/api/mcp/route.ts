@@ -516,7 +516,17 @@ async function productSchema(): Promise<Map<string, string[]> | null> {
     );
     out.set(key, args.length > 0 ? args : ["(no arguments)"]);
   }
-  schemaCache = out;
+  /**
+   * ONLY CACHE A USEFUL ANSWER.
+   *
+   * This cached unconditionally, so one PostgREST reply that parsed to an empty map
+   * — a 200 with an unexpected body, a schema still reloading — was pinned for the
+   * lambda's whole lifetime. `list_product_tables` then reported success with zero
+   * tables (isError false, "…see all 0"), and `query_product_data` rejected every
+   * real table with "No such table", which reads as *the data does not exist*
+   * rather than *I cannot see it*. Re-deriving on the next call costs one request.
+   */
+  if (out.size > 0) schemaCache = out;
   return out;
 }
 

@@ -895,3 +895,20 @@ describe("list results must be cut on a row boundary, and counted honestly", () 
     expect(compact.length).toBeLessThan(JSON.stringify(rows, null, 2).length);
   });
 });
+
+describe("an empty schema must never be cached", () => {
+  /**
+   * `productSchema()` cached whatever it parsed, so one 200 that yielded an empty
+   * map was pinned for the lambda's life: list_product_tables reported success with
+   * zero tables, and query_product_data answered "No such table" for every real
+   * one — blindness presented as absence, which is the failure mode that destroys
+   * trust in the whole tool.
+   */
+  it("only stores a non-empty result", async () => {
+    const src = await import("node:fs").then((fs) =>
+      fs.readFileSync("app/api/mcp/route.ts", "utf8")
+    );
+    expect(src).toMatch(/if \(out\.size > 0\) schemaCache = out;/);
+    expect(src).not.toMatch(/\n  schemaCache = out;/);
+  });
+});

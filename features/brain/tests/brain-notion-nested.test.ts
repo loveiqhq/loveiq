@@ -113,3 +113,21 @@ describe("incomplete-crawl signalling must distinguish truncated from deferred",
     expect(src).not.toMatch(/if \(!complete\) \{\s*return \{\s*source: SOURCE/);
   });
 });
+
+describe("a page past the block cap must say so", () => {
+  /**
+   * The cap was 5 pages of 100 blocks with no signal at all, so a longer page lost
+   * its tail silently — the same failure that already cost 60 Notion pages their
+   * endings once. No page is near the ceiling today (largest is 382 blocks), which
+   * is exactly why the silence mattered: nothing would have revealed it.
+   */
+  it("appends a visible notice rather than stopping quietly", async () => {
+    const src = await import("node:fs").then((fs) =>
+      fs.readFileSync("features/brain/server/ingest/notion.ts", "utf8")
+    );
+    expect(src).toMatch(/the rest was not indexed/);
+    expect(src).toMatch(/MAX_BLOCK_PAGES = 20/);
+    // the old silent 5-page loop must be gone
+    expect(src).not.toMatch(/for \(let i = 0; i < 5; i\+\+\)/);
+  });
+});

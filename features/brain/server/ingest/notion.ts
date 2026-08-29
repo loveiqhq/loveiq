@@ -246,6 +246,8 @@ async function notionGet(token: string, path: string): Promise<Record<string, un
  * their parent.
  */
 const NOT_DESCENDED = new Set(["child_page", "child_database"]);
+/** Top-level block pages fetched per Notion page, at 100 blocks each. */
+const MAX_BLOCK_PAGES = 20;
 const MAX_CHILD_DEPTH = 4;
 
 async function attachChildren(
@@ -278,7 +280,15 @@ export async function pageText(
 ): Promise<string> {
   const out: NotionBlock[] = [];
   let cursor: string | undefined;
-  for (let i = 0; i < 5; i++) {
+  let truncated = false;
+  /**
+   * 20 pages of 100 = 2,000 top-level blocks. It was 5 pages (500) with NO signal
+   * when the cap was hit, so a longer page would have lost its tail in silence —
+   * the same shape of bug that cost 60 pages their tails once already. The largest
+   * page in the workspace today is 382 blocks, so this is headroom, and the notice
+   * below is what makes the ceiling visible if it is ever reached.
+   */
+  for (let i = 0; i < MAX_BLOCK_PAGES; i++) {
     const qs = cursor
       ? `?start_cursor=${encodeURIComponent(cursor)}&page_size=100`
       : "?page_size=100";
@@ -286,9 +296,13 @@ export async function pageText(
     out.push(...((json.results as NotionBlock[]) ?? []));
     cursor = json.has_more ? (json.next_cursor as string) : undefined;
     if (!cursor) break;
+    if (i === MAX_BLOCK_PAGES - 1) truncated = true;
   }
   await attachChildren(token, out, 0, { left: 60 }, isOutOfTime);
-  return blocksToText(out);
+  const text = blocksToText(out);
+  if (!truncated) return text;
+  logger.warn({ pageId, blocks: out.length }, "brain-ingest notion: page exceeded the block cap");
+  return `${text}\n\n[This page is longer than ${MAX_BLOCK_PAGES * 100} blocks; the rest was not indexed.]`;
 }
 
 /**
@@ -796,8 +810,17 @@ async function knownNotionEdits(): Promise<Map<string, { edited: string; v: numb
       `/rest/v1/brain_chunk?select=source_id,meta&source=eq.${SOURCE}&order=source_id.asc&limit=1000&offset=${offset}`
     );
     if (!res.ok) {
-      logger.warn({ status: res.status }, "brain-ingest notion: could not read existing chunks — will refetch all content");
-      return new Map();
+      /**
+       * FAIL CLOSED. Returning an empty map here reads as "nothing is indexed", so
+       * the run treats every existing row as unknown: continuation parts are
+       * neither written nor confirmed, and the sweep at the end of the SAME run
+       * deletes them as orphans — silently, reporting success, and never rebuilding
+       * them. A stale row is repaired by the next run; a deleted one is gone.
+       */
+      throw new Error(
+        `brain-ingest notion: could not read the existing chunk list (status ${res.status}) — ` +
+          `aborting before the sweep rather than treating the corpus as empty`
+      );
     }
     const batch = (await res.json().catch(() => [])) as Array<{
       source_id?: string;

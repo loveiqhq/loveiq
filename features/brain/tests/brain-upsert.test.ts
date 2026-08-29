@@ -101,3 +101,23 @@ describe("a failed touch must never let the sweep run", () => {
     await expect(touchChunks("gsc", ["a", "b"], "2026-08-29T00:00:00Z")).resolves.toBe(2);
   });
 });
+
+describe("every known-chunk read must fail closed", () => {
+  /**
+   * All three ingesters answered an unreadable corpus list with an empty Map, which
+   * reads as "nothing is indexed": existing rows are then neither written nor
+   * confirmed, and the sweep in the SAME run deletes them. For notion that meant
+   * every continuation part (`#2`, `#3`, …) of every page it did not refetch,
+   * silently, with the run reporting success and never rebuilding them.
+   */
+  it.each(["notion", "drive", "slack"])(
+    "%s aborts instead of treating the corpus as empty",
+    async (src) => {
+      const fs = await import("node:fs");
+      const code = fs.readFileSync(`features/brain/server/ingest/${src}.ts`, "utf8");
+      expect(code).toMatch(/aborting before the sweep rather than treating the corpus as empty/);
+      // and the old fail-open must be gone
+      expect(code).not.toMatch(/if \(!res\.ok\) return new Map\(\);/);
+    }
+  );
+});

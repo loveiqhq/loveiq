@@ -28,15 +28,25 @@ const SOURCE = "slack";
 const API = "https://slack.com/api";
 const TIMEOUT_MS = 20_000;
 const PAGE = 200;
-const MAX_PAGES = 15;
+/**
+ * Per-channel history ceiling for a FULL walk: MAX_PAGES x PAGE messages. The
+ * nightly pass is bounded by `oldest` instead, so this only caps a first-time or
+ * rebuild walk. At 15 pages the ceiling was 3,000 and #all-loveiq already held
+ * 2,575 (86%) — anything past it would have been permanently unreachable, silently.
+ */
+const MAX_PAGES = 50;
+/** Replies are their own paginated list; 200 x 10 covers any realistic thread. */
+const MAX_REPLY_PAGES = 10;
 const MAX_RETRIES = 4;
 
 /** Bump when the row SHAPE changes; a mismatch counts as stale. See notion.ts. */
+// v5: v1-v4 never fetched replies under a bot parent, and truncated any thread
+// past 100 replies.
 // v4: v1-v3 stored Slack's HTML entities ("&amp;") rather than the typed text.
 // v3: v1-v2 stored every thread reply BEFORE its parent and in reverse order.
 // v2: v1 wrote days whose thread replies had been dropped by a 429 without
 // recording the gap, so every v1 row must be rebuilt rather than trusted.
-export const SLACK_BUILDER_VERSION = 4;
+export const SLACK_BUILDER_VERSION = 5;
 
 /**
  * Message subtypes that are membership bookkeeping, not conversation. Slack emits
@@ -246,9 +256,19 @@ async function knownSlackDays(): Promise<Map<string, boolean>> {
     const res = await supabaseFetch(
       `/rest/v1/brain_chunk?select=source_id,meta&source=eq.${SOURCE}&order=source_id.asc&limit=1000&offset=${offset}`
     );
-    // Fail closed: an unreadable list must not look like "nothing is indexed", which
-    // would re-fetch every channel and then sweep the real rows away.
-    if (!res.ok) return new Map();
+    if (!res.ok) {
+      /**
+       * FAIL CLOSED, and loudly. Returning an empty map reads as "nothing is
+       * indexed": every existing row is then neither written nor confirmed, and the
+       * sweep in this same run deletes it. Returning quietly was already safer than
+       * continuing, but it still let the run report success on a corpus it could
+       * not see.
+       */
+      throw new Error(
+        `brain-ingest slack: could not read the existing chunk list (status ${res.status}) — ` +
+          `aborting before the sweep rather than treating the corpus as empty`
+      );
+    }
     const batch = (await res.json().catch(() => [])) as Array<{
       source_id?: string;
       meta?: { threadsComplete?: boolean; v?: number };
@@ -320,7 +340,7 @@ export async function ingestSlack(
      * first, which is close to unreadable and actively misleading about who replied
      * to whom. Reversing entries and flattening afterwards keeps each thread intact.
      */
-    const byDay = new Map<string, Array<{ line: string; replies: string[] }>>();
+    const byDay = new Map<string, Array<{ line: string | null; replies: string[] }>>();
     const threadGaps = new Set<string>();
     let cursor = "";
 
@@ -384,37 +404,68 @@ export async function ingestSlack(
       }
       const messages = (json.messages as SlackMessage[]) ?? [];
       for (const m of messages) {
+        if (!m.ts) continue;
         const line = renderMessage(m, names);
-        if (!line || !m.ts) continue;
+        /**
+         * A THREAD UNDER A BOT PARENT IS STILL A HUMAN CONVERSATION.
+         *
+         * This used to `continue` whenever the parent did not render — a bot post, a
+         * tombstone, an empty message — which skipped the reply fetch entirely. In
+         * #incoming-surveys and #bugs-issues the team frequently replies in-thread
+         * to an automated post, and every one of those replies was invisible to the
+         * brain. The parent is dropped as noise; its replies are not.
+         */
+        if (!line && !(m.reply_count ?? 0)) continue;
         const day = tsDate(m.ts);
         const bucket = byDay.get(day) ?? [];
         const entry = { line, replies: [] as string[] };
-        bucket.push(entry);
 
         // Thread replies do NOT appear in channel history, and a thread is usually
         // where the actual argument happens — fetching only the parent would index
         // the question and drop the answer.
         if ((m.reply_count ?? 0) > 0) {
-          const replies = isOutOfTime()
-            ? null
-            : await slackGet(
-                token,
-                "conversations.replies",
-                { channel: ch.id as string, ts: m.ts, limit: 100 },
-                isOutOfTime
-              );
-          if (!replies) {
-            // Record the gap against the DAY, so this day is rebuilt next run rather
-            // than being cached as if the thread had no replies.
-            threadGaps.add(day);
-          }
-          for (const r of (replies?.messages as SlackMessage[]) ?? []) {
-            if (r.ts === m.ts) continue;
-            const rl = renderMessage(r, names, true);
-            if (rl) entry.replies.push(rl);
+          // PAGINATE. A single limit=100 call with no cursor silently truncated any
+          // thread past 100 replies AND still stamped the day threadsComplete, so it
+          // was cached as immutable with the tail missing.
+          let rCursor = "";
+          for (let rp = 0; rp < MAX_REPLY_PAGES; rp++) {
+            const replies: Record<string, unknown> | null = isOutOfTime()
+              ? null
+              : await slackGet(
+                  token,
+                  "conversations.replies",
+                  {
+                    channel: ch.id as string,
+                    ts: m.ts,
+                    limit: 200,
+                    ...(rCursor ? { cursor: rCursor } : {}),
+                  },
+                  isOutOfTime
+                );
+            if (!replies) {
+              // Record the gap against the DAY, so this day is rebuilt next run
+              // rather than being cached as if the thread had no replies.
+              threadGaps.add(day);
+              break;
+            }
+            for (const r of (replies.messages as SlackMessage[]) ?? []) {
+              if (r.ts === m.ts) continue;
+              const rl = renderMessage(r, names, true);
+              if (rl) entry.replies.push(rl);
+            }
+            rCursor =
+              ((replies.response_metadata as Record<string, string>) ?? {}).next_cursor ?? "";
+            if (!rCursor) break;
+            // Ran out of pages with more still to come: the day is not whole.
+            if (rp === MAX_REPLY_PAGES - 1) threadGaps.add(day);
           }
         }
-        byDay.set(day, bucket);
+        // Keep the entry only if something human survived: the parent, a reply, or
+        // both. A bot parent with no human replies contributes nothing.
+        if (entry.line || entry.replies.length > 0) {
+          bucket.push(entry);
+          byDay.set(day, bucket);
+        }
       }
       cursor = ((json.response_metadata as Record<string, string>) ?? {}).next_cursor ?? "";
       if (!cursor) break;
@@ -430,7 +481,9 @@ export async function ingestSlack(
       if (!whole) complete = false;
       // Reverse the top-level sequence only, then flatten each thread back in
       // order, so replies follow their parent and read oldest-first.
-      const lines = [...entries].reverse().flatMap((e) => [e.line, ...e.replies]);
+      const lines = [...entries]
+        .reverse()
+        .flatMap((e) => (e.line ? [e.line, ...e.replies] : e.replies));
       rows.push(...dayToRows(ch.name as string, day, lines, stampedAt, whole));
     }
   }
