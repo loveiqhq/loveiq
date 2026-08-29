@@ -692,7 +692,12 @@ async function callTool(
     const rows = (await res.json().catch(() => null)) as unknown;
     if (!Array.isArray(rows)) {
       return textResult(
-        `That returned a single value rather than rows: ${JSON.stringify(rows).slice(0, 2000)}`
+        // NOT a 2,000-char slice. Object-returning analysis functions land here —
+        // `rpc/get_funnel_sparklines_v3` is a 140,557-character payload, of which
+        // this returned 2,047 (1.4%), cut mid-key, with isError:false and nothing
+        // said. This is the rpc path the tool description tells the model to PREFER.
+        // capWithNotice cuts at the real ceiling and says that it did.
+        `That returned a single value rather than rows: ${JSON.stringify(rows)}`
       );
     }
 

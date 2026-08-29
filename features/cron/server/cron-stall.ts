@@ -32,7 +32,6 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   "payment-fulfillment-sweep": 2 * 3_600_000,
   "security-storm-detector": 3_600_000,
   "anomaly-watcher": 3 * 3_600_000,
-  "chapter-nudge": 26 * 3_600_000,
   "conversion-digest": 26 * 3_600_000,
   "brain-ingest": 26 * 3_600_000,
   "brain-drive": 45 * 60_000,
@@ -42,7 +41,15 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
  * Crons deliberately not watched. `journey-backfill` runs once a year
  * (`0 4 1 1 *`), so "stale" is its normal state for 364 days.
  */
-export const UNWATCHED_CRONS = new Set(["journey-backfill", "purge-old-data"]);
+export const UNWATCHED_CRONS = new Set([
+  "journey-backfill",
+  "purge-old-data",
+  // Retired 2026-08-29: the team stopped using chapter nudges. It is still listed
+  // in vercel.json and last ran 2026-07-25, so watching it would alert every day
+  // about something nobody intends to fix — which is how an ops channel gets
+  // ignored and takes the real alerts down with it.
+  "chapter-nudge",
+]);
 
 export interface StalledCron {
   cron: string;

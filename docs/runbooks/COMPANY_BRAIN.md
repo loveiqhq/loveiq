@@ -294,8 +294,31 @@ Two things this buys, and they are different:
 - **Live** — `query_external_service` with `service: "slack"` calls any read method
   (`conversations.list`, `conversations.history`, `users.list`).
 - **Indexed** — `ingestSlack` writes one chunk **per channel per day**, so
-  `search_company_context` finds the exchange, not an isolated line. 519 chunks
+  `search_company_context` finds the exchange, not an isolated line. ~517 chunks
   cover 2025-10-29 → present.
+
+The nightly pass is **incremental**: `conversations.history` is asked for `oldest`
+= the earliest day still needing work (today, which is still accruing, plus any day
+recorded incomplete). A full re-walk of all nine channels takes **266 seconds**
+against the cron's 38-second budget, so before this the nightly reached one channel
+of nine, wrote nothing, and still reported success. It now finishes in **~6s**.
+
+Three traps live here, all of which produced silence rather than errors:
+
+- `oldest` must be Slack's `seconds.microseconds` string. A bare integer is refused
+  with `invalid_ts_oldest` — for the WHOLE channel, logged only as a warning.
+- Day ids for a long day are `…:DAY#2`, `…:DAY#3`. Feeding that raw third segment
+  to `Date.parse` yields `NaN`, with the same silent effect.
+- A day rewritten shorter orphans its extra parts on an old builder version. Those
+  orphans used to be touched every run (so they never expired) AND counted as
+  "needs work" (so the fetch bound was dragged back months, the walk never
+  finished, and `complete: false` blocked the very sweep that would have removed
+  them). The ingester now recognises a stale part of a current day and lets the
+  sweep take it.
+
+`Retry-After` is honoured on a 429 but **never past the run's deadline** — one
+rate-limited thread could otherwise consume the whole budget. A deferred thread is
+recorded as a gap and repaired next run.
 
 Three design choices worth knowing before changing it:
 
@@ -567,6 +590,28 @@ Expect eight sources with rows — `doc`, `commit`, `analytics`, `ga4`, `gsc`,
 `list_sources` through the MCP endpoint, which prints the same thing per source
 and additionally names any source present in the table that the tool does not
 know about.
+
+### A cron that stops firing now alerts
+
+Every alert in the cron routes lives inside the route body, so the one failure
+nobody heard about was the route never being entered — a cron never invoked, 401ing,
+hitting the non-prod gate, or hard-killed at `maxDuration` writes no `cron_run` row
+and says nothing.
+
+`features/cron/server/cron-stall.ts` holds a max-age per cron and is called from
+`anomaly-watcher` (hourly, thousands of runs), so it watches from OUTSIDE the crons
+it checks. It is wrapped in its own try/catch: monitoring that can take down what it
+monitors is worse than none. A test keeps the watch list in step with `vercel.json`,
+because an unwatched cron looks exactly like a healthy one.
+
+It found `chapter-nudge` dead since 2026-07-25 on its first run. That cron is
+**retired** (decision 2026-08-29) and is listed in `UNWATCHED_CRONS`; its
+`vercel.json` entry and route still exist and can be removed when convenient.
+
+A source that has never run cannot be distinguished from one deployed minutes ago,
+so that case says so in the alert text rather than asserting a fault — `brain-ingest`
+showed zero runs for exactly that reason on 2026-08-28, and fired normally at
+04:47 the next morning.
 
 ### Known limitations, deliberately accepted
 

@@ -165,3 +165,85 @@ describe("a day with a dropped thread must be rebuilt, not cached", () => {
     expect(SLACK_BUILDER_VERSION).toBeGreaterThan(1);
   });
 });
+
+describe("slackTs — the format Slack actually accepts", () => {
+  /**
+   * A bare integer is rejected with `invalid_ts_oldest`, and the failure is quiet:
+   * `conversations.history` returns ok:false for the WHOLE channel, so the
+   * incremental fetch silently retrieves nothing. Only the completeness flag
+   * catches it, which is why that flag exists.
+   */
+  it("emits seconds.microseconds, not a bare integer", async () => {
+    const { slackTs } = await import("@features/brain/server/ingest/slack");
+    expect(slackTs("2026-08-29")).toMatch(/^\d+\.\d{6}$/);
+  });
+
+  it("is midnight UTC of the given day", async () => {
+    const { slackTs, tsDate } = await import("@features/brain/server/ingest/slack");
+    expect(tsDate(slackTs("2026-08-29"))).toBe("2026-08-29");
+  });
+});
+
+describe("slackTs must never emit NaN", () => {
+  it("returns empty for a malformed day rather than 'NaN.000000'", async () => {
+    // `ch:all-loveiq:2026-08-24#2` is a real source_id shape (a split day). Feeding
+    // its raw third segment to Date.parse yields NaN, and Slack answers
+    // `invalid_ts_oldest` for the entire channel.
+    const { slackTs } = await import("@features/brain/server/ingest/slack");
+    expect(slackTs("2026-08-24#2")).toBe("");
+    expect(slackTs("not-a-date")).toBe("");
+  });
+});
+
+describe("the nightly pass must be incremental, not a full re-walk", () => {
+  /**
+   * Measured before the fix: one full pass took 266 SECONDS against the cron's
+   * 38-second budget, because every channel's whole history was fetched and only
+   * discarded at write time. In production that meant the nightly reached one
+   * channel of nine, wrote nothing, and still reported success. After: 6.5s,
+   * complete.
+   *
+   * These assert the two rules that make it correct, on the real source, because
+   * the failure mode is silence rather than an error.
+   */
+  it("bounds the fetch by day, and ignores part-chunks when choosing that bound", async () => {
+    const src = await import("node:fs").then((fs) =>
+      fs.readFileSync("features/brain/server/ingest/slack.ts", "utf8")
+    );
+    // `oldest` must be sent, or the walk is unbounded.
+    expect(src).toMatch(/\.\.\.\(oldest \? \{ oldest \} : \{\}\)/);
+    // and the bound must be computed from BASE ids only.
+    expect(src).toMatch(/!id\.includes\("#"\) && !done/);
+  });
+
+  it("treats a stale part of a current day as an orphan, so the sweep takes it", async () => {
+    // A day rewritten shorter leaves `…#3`, `…#4` behind on an old builder version.
+    // Touching them kept them alive AND dragged the fetch bound back months, which
+    // blocked the very sweep that would have removed them — a loop that fed itself.
+    const src = await import("node:fs").then((fs) =>
+      fs.readFileSync("features/brain/server/ingest/slack.ts", "utf8")
+    );
+    expect(src).toMatch(/known\.get\(id\) === false && known\.get\(id\.slice\(0, hash\)\) === true/);
+    expect(src).toMatch(/!isOrphanPart\(id\)/);
+  });
+
+  it("refuses to start when the shared clock is already spent", async () => {
+    // Without this it made zero history calls, confirmed all existing rows, and
+    // returned rows>0 with no `skipped` — so the cron's zero-rows alert never fired.
+    process.env.SLACK_BRAIN_BOT_TOKEN = "xoxb-test";
+    const { ingestSlack } = await import("@features/brain/server/ingest/slack");
+    await expect(ingestSlack("2026-08-29T00:00:00Z", () => true)).resolves.toMatchObject({
+      rows: 0,
+      skipped: "slack-time-budget",
+    });
+  });
+
+  it("never sleeps past the deadline when Slack rate-limits it", async () => {
+    // Retry-After can be 30s. Honouring it blindly turned a 4s pass into 40s and
+    // blew the budget on a single thread.
+    const src = await import("node:fs").then((fs) =>
+      fs.readFileSync("features/brain/server/ingest/slack.ts", "utf8")
+    );
+    expect(src).toMatch(/rate limited with no clock left, deferring/);
+  });
+});

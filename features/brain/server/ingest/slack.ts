@@ -80,7 +80,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function slackGet(
   token: string,
   path: string,
-  params: Record<string, string | number>
+  params: Record<string, string | number>,
+  isOutOfTime: () => boolean = () => false
 ): Promise<Record<string, unknown> | null> {
   const qs = new URLSearchParams(
     Object.entries(params).map(([k, v]) => [k, String(v)])
@@ -102,6 +103,14 @@ async function slackGet(
       return null;
     }
     const wait = Math.min(Number(res.headers.get("retry-after") ?? "2") || 2, 30);
+    // NEVER SLEEP PAST THE DEADLINE. Slack's Retry-After can be 30s, and honouring
+    // it blindly turned a 4-second pass into 40 and blew the cron's budget — one
+    // rate-limited thread could eat the whole run. Giving up here is cheap: the
+    // caller records a thread gap and the next run repairs that day.
+    if (isOutOfTime()) {
+      logger.warn({ path }, "brain-ingest slack: rate limited with no clock left, deferring");
+      return null;
+    }
     await sleep(wait * 1000);
   }
   if (!res || !res.ok) {
@@ -164,6 +173,22 @@ export function renderMessage(
     .replace(/&amp;/g, "&");
   const who = names.get(m.user) ?? m.user;
   return `${indent ? "  ↳ " : ""}${who}: ${body}`;
+}
+
+/**
+ * Midnight UTC on `day`, in Slack's timestamp format.
+ *
+ * Slack rejects a bare integer with `invalid_ts_oldest` — it wants the seconds.
+ * microseconds form its own `ts` values use. Getting this wrong makes
+ * `conversations.history` fail for the whole channel, which is silent apart from
+ * the completeness flag.
+ */
+export function slackTs(day: string): string {
+  const ms = Date.parse(`${day}T00:00:00Z`);
+  // Never hand Slack a NaN: it answers `invalid_ts_oldest` and the caller loses the
+  // whole channel with nothing but a warn to show for it.
+  if (!Number.isFinite(ms)) return "";
+  return `${Math.floor(ms / 1000)}.000000`;
 }
 
 /** UTC date of a Slack timestamp ("1787941701.811139"). */
@@ -245,6 +270,15 @@ export async function ingestSlack(
   const token = process.env.SLACK_BRAIN_BOT_TOKEN ?? process.env.SLACK_BOT_TOKEN;
   if (!token) return { source: SOURCE, rows: 0, swept: 0, skipped: "slack-not-configured" };
 
+  // A run that starts with no clock left must SAY so. Without this it made zero
+  // history calls, wrote nothing, confirmed all 521 existing rows via touchChunks,
+  // and returned {rows: 521} with no `skipped` — so the cron's "wrote 0 rows" alert
+  // never fired and a frozen source looked perfectly healthy. Its two sibling
+  // ingesters already had this guard.
+  if (isOutOfTime()) {
+    return { source: SOURCE, rows: 0, swept: 0, skipped: "slack-time-budget" };
+  }
+
   const listed = await slackGet(token, "conversations.list", {
     types: "public_channel",
     limit: 200,
@@ -287,12 +321,53 @@ export async function ingestSlack(
     const threadGaps = new Set<string>();
     let cursor = "";
 
+    /**
+     * ONLY ASK FOR WHAT WE DO NOT ALREADY HOLD.
+     *
+     * This used to walk every channel's full history on every run — 15 pages of 200
+     * plus a `conversations.replies` call per thread — and then discard the days it
+     * already had at WRITE time. The fetching still happened, so a full pass took
+     * 266 seconds against a 38-second budget: in production the nightly reached one
+     * channel of nine, wrote nothing, and reported success.
+     *
+     * `oldest` is the start of the earliest day still needing work: today (always
+     * rewritten, since it is still accruing) or any earlier day recorded incomplete.
+     * A channel with nothing indexed yet is left unbounded for its first full walk.
+     */
+    /**
+     * BASE ids only. A day too long for one chunk is stored as `…:DAY`, `…:DAY#2`,
+     * `…:DAY#3`. When that day is later rewritten shorter it produces fewer parts,
+     * and the extras are orphaned on an old builder version.
+     *
+     * Counting those orphans as "needs work" created a loop that fed itself: the
+     * orphan dragged `oldest` back to February, so the channel walked its whole
+     * history, ran out of clock, reported `complete: false`, which blocked the very
+     * sweep that would have deleted the orphan. Every night, forever. The base
+     * chunk's version is the authoritative answer for whether a day needs refetching.
+     */
+    const needsWork = [...known.entries()]
+      .filter(([id, done]) => id.startsWith(`ch:${ch.name}:`) && !id.includes("#") && !done)
+      // A long day is split into `ch:name:DAY#2`, `#3`… so the part suffix has to
+      // come off — `Date.parse("2026-08-24#2T00:00:00Z")` is NaN, which Slack
+      // rejects as `invalid_ts_oldest` and which silently skips the whole channel.
+      .map(([id]) => (id.split(":")[2] ?? "").split("#")[0] ?? "")
+      .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
+    const haveAny = [...known.keys()].some((id) => id.startsWith(`ch:${ch.name}:`));
+    const from = [today, ...needsWork].sort()[0] ?? today;
+    const oldest = haveAny ? slackTs(from) : "";
+
     for (let page = 0; page < MAX_PAGES; page++) {
-      const json = await slackGet(token, "conversations.history", {
-        channel: ch.id as string,
-        limit: PAGE,
-        ...(cursor ? { cursor } : {}),
-      });
+      const json = await slackGet(
+        token,
+        "conversations.history",
+        {
+          channel: ch.id as string,
+          limit: PAGE,
+          ...(oldest ? { oldest } : {}),
+          ...(cursor ? { cursor } : {}),
+        },
+        isOutOfTime
+      );
       if (!json) {
         complete = false;
         break;
@@ -312,11 +387,12 @@ export async function ingestSlack(
         if ((m.reply_count ?? 0) > 0) {
           const replies = isOutOfTime()
             ? null
-            : await slackGet(token, "conversations.replies", {
-                channel: ch.id as string,
-                ts: m.ts,
-                limit: 100,
-              });
+            : await slackGet(
+                token,
+                "conversations.replies",
+                { channel: ch.id as string, ts: m.ts, limit: 100 },
+                isOutOfTime
+              );
           if (!replies) {
             // Record the gap against the DAY, so this day is rebuilt next run rather
             // than being cached as if the thread had no replies.
@@ -351,9 +427,34 @@ export async function ingestSlack(
 
   const written = await upsertChunks(rows);
   const writtenIds = new Set(rows.map((r) => r.source_id));
+  // Days rewritten this run, by their base id. Any OTHER stored part of such a day
+  // is an orphan from a longer previous version, and touching it would keep it
+  // alive — and searchable — forever. Leaving it untouched lets the sweep take it.
+  const rewrittenDays = new Set([...writtenIds].map((id) => id.split("#")[0]));
+
+  /**
+   * A stored part is an ORPHAN when its base day is on the current builder version
+   * but the part itself is not: the day was rewritten shorter and this part is a
+   * leftover of the longer version. Refusing to touch it lets the sweep remove it.
+   *
+   * Without this the orphans were immortal — they are never rewritten (their day is
+   * already current) and they were touched every run, so stale text with the old
+   * thread order and raw HTML entities stayed searchable indefinitely.
+   */
+  const isOrphanPart = (id: string): boolean => {
+    const hash = id.indexOf("#");
+    if (hash < 0) return false;
+    return known.get(id) === false && known.get(id.slice(0, hash)) === true;
+  };
+
   const touched = await touchChunks(
     SOURCE,
-    [...known.keys()].filter((id) => !writtenIds.has(id)),
+    [...known.keys()].filter(
+      (id) =>
+        !writtenIds.has(id) &&
+        !rewrittenDays.has(id.split("#")[0] ?? id) &&
+        !isOrphanPart(id)
+    ),
     stampedAt
   );
   // Only sweep a complete walk; a truncated one makes past days look deleted.
@@ -365,6 +466,15 @@ export async function ingestSlack(
   );
   if (written === 0 && touched === 0) {
     return { source: SOURCE, rows: 0, swept: 0, skipped: "slack-nothing-to-index" };
+  }
+  /**
+   * Say so when the walk did not finish, the way notion does. `rows` is
+   * `written + touched`, and touching means "this old row still exists" — so a run
+   * that fetched NOTHING still reports rows in the hundreds and reads as healthy.
+   * `slack-walk-incomplete` is not in the cron's DELIBERATE_SKIPS, so it alerts.
+   */
+  if (!complete) {
+    return { source: SOURCE, rows: written + touched, swept, skipped: "slack-walk-incomplete" };
   }
   return { source: SOURCE, rows: written + touched, swept };
 }
