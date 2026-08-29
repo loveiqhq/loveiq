@@ -38,10 +38,42 @@ const PAGE_SIZE = 100;
 const MAX_PAGES = 20;
 
 /** Bump when the row SHAPE changes; a mismatch counts as stale. See notion.ts. */
-export const DRIVE_BUILDER_VERSION = 2;
+// v3: v1-v2 indexed Google Docs only — 24 call notes out of ~494 readable files on
+// the company Drive. Sheets, markdown, CSV, JSON and Word documents were invisible.
+export const DRIVE_BUILDER_VERSION = 3;
 
-/** Only native Google Docs export to text. A PDF or image would need OCR. */
 const DOC_MIME = "application/vnd.google-apps.document";
+const SHEET_MIME = "application/vnd.google-apps.spreadsheet";
+const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+/**
+ * EVERY FILE ON THE COMPANY DRIVE WE CAN TURN INTO TEXT, not just meeting notes.
+ *
+ * This used to fetch Google Docs alone, which was 24 call notes. The Drive that
+ * ec@loveiq.org can see actually holds 980 items: 284 Docs, 213 PDFs, 141 folders,
+ * 98 markdown files, 43 Word documents, 39 Sheets and 20 CSVs. Everything except
+ * the meeting notes was invisible to the brain.
+ *
+ * Three ways to get text out, by type:
+ *  - Google Docs and Sheets EXPORT (Docs to text, Sheets to CSV).
+ *  - Plain-text formats DOWNLOAD as-is (`alt=media`).
+ *  - `.docx` downloads and goes through `mammoth`, which is already a dependency.
+ *
+ * PDFs are deliberately excluded: Drive refuses to export them ("Export only
+ * supports Docs Editors files", HTTP 403) and extracting their text needs a new
+ * dependency. 213 files is a real gap and it is recorded in the runbook rather
+ * than hidden.
+ */
+const PLAIN_MIMES = new Set([
+  "text/markdown",
+  "text/plain",
+  "text/csv",
+  "application/json",
+  "text/html",
+]);
+
+/** Everything the listing asks for, as a Drive `q` fragment. */
+const WANTED_MIMES = [DOC_MIME, SHEET_MIME, DOCX_MIME, ...PLAIN_MIMES];
 
 /**
  * Google Meet does not always put the note IN the meeting folder — for meetings
@@ -86,7 +118,8 @@ async function listDocs(
     }
     // Shortcuts come back in the same query so a second pass is not needed.
     const q = encodeURIComponent(
-      `(mimeType='${DOC_MIME}' or mimeType='${SHORTCUT_MIME}') and trashed=false`
+      `(${[...WANTED_MIMES, SHORTCUT_MIME].map((m) => `mimeType='${m}'`).join(" or ")}) ` +
+        `and trashed=false`
     );
     const fields = encodeURIComponent(
       "nextPageToken,files(id,name,mimeType,modifiedTime,createdTime,webViewLink," +
@@ -143,7 +176,7 @@ async function resolveShortcuts(
   let skippedNonDoc = 0;
 
   for (const f of listed) {
-    if (f.mimeType === DOC_MIME && f.id) {
+    if (f.mimeType && WANTED_MIMES.includes(f.mimeType) && f.id) {
       if (seen.has(f.id)) continue;
       seen.add(f.id);
       docs.push(f);
@@ -154,7 +187,7 @@ async function resolveShortcuts(
     if (f.mimeType !== SHORTCUT_MIME) continue;
     const targetId = f.shortcutDetails?.targetId;
     if (!targetId) continue;
-    if (f.shortcutDetails?.targetMimeType !== DOC_MIME) {
+    if (!WANTED_MIMES.includes(f.shortcutDetails?.targetMimeType ?? "")) {
       skippedNonDoc += 1;
       continue;
     }
@@ -186,11 +219,31 @@ async function resolveShortcuts(
 }
 
 /** A Google Doc as plain text. */
-async function docText(token: string, fileId: string): Promise<string> {
-  const res = await driveGet(token, `/files/${fileId}/export?mimeType=text%2Fplain`);
-  if (!res.ok) throw new Error(`export ${res.status}`);
-  // Docs export with a BOM and CRLFs; both would show up inside chunk bodies.
-  return (await res.text()).replace(/^﻿/, "").replace(/\r\n/g, "\n").trim();
+/** Strip the BOM and CRLFs Google exports carry; both show up inside chunk bodies. */
+const clean = (t: string): string => t.replace(/^\ufeff/, "").replace(/\r\n/g, "\n").trim();
+
+async function docText(token: string, fileId: string, mimeType?: string): Promise<string> {
+  // Google-native files must be EXPORTED; everything else downloads with alt=media.
+  // Asking for the wrong one is a 403 that reads like a permission problem.
+  if (mimeType === DOC_MIME || mimeType === SHEET_MIME) {
+    const as = mimeType === SHEET_MIME ? "text%2Fcsv" : "text%2Fplain";
+    const res = await driveGet(token, `/files/${fileId}/export?mimeType=${as}`);
+    if (!res.ok) throw new Error(`export ${res.status}`);
+    return clean(await res.text());
+  }
+
+  const res = await driveGet(token, `/files/${fileId}?alt=media`);
+  if (!res.ok) throw new Error(`download ${res.status}`);
+
+  if (mimeType === DOCX_MIME) {
+    // `mammoth` is already a dependency; it turns .docx into plain text without
+    // pulling in an office suite.
+    const mammoth = await import("mammoth");
+    const buf = Buffer.from(await res.arrayBuffer());
+    const out = await mammoth.extractRawText({ buffer: buf });
+    return clean(out.value);
+  }
+  return clean(await res.text());
 }
 
 export function docToRows(file: DriveFile, text: string, stampedAt: string): BrainRow[] {
@@ -353,7 +406,9 @@ export async function ingestDrive(
       break;
     }
     try {
-      rows.push(...docToRows(file, await docText(token, file.id as string), stampedAt));
+      rows.push(
+        ...docToRows(file, await docText(token, file.id as string, file.mimeType), stampedAt)
+      );
     } catch (err) {
       // One unreadable document must not cost the rest of the run.
       logger.warn({ err, file: file.id }, "brain-ingest drive: export failed");

@@ -593,6 +593,62 @@ Expect eight sources with rows — `doc`, `commit`, `analytics`, `ga4`, `gsc`,
 and additionally names any source present in the table that the tool does not
 know about.
 
+### Drive: the whole company Drive, not just the call notes
+
+Until 2026-08-29 this indexed Google Docs only, which was 24 meeting notes. What
+`ec@loveiq.org` can actually see is 980 items:
+
+| Type          | Count | Indexed |
+| ------------- | ----: | ------- |
+| Google Docs   |   284 | yes     |
+| PDF           |   213 | **no**  |
+| folders       |   141 | n/a     |
+| markdown      |    98 | yes     |
+| Word `.docx`  |    43 | yes     |
+| Google Sheets |    39 | yes     |
+| CSV           |    20 | yes     |
+
+Text comes out three ways, and asking the wrong one is a 403 that reads like a
+permission error: Google-native files must be **exported** (Docs to text, Sheets to
+CSV), plain-text formats **download** with `alt=media`, and `.docx` downloads then
+goes through `mammoth`, which was already a dependency.
+
+**PDFs are the known gap.** Drive refuses to export them — "Export only supports
+Docs Editors files", HTTP 403 — so 213 files need a PDF text extractor, which means
+a new dependency. Recorded here rather than left to be rediscovered.
+
+A local run with the user credential produced **512 documents / 11,185 chunks**,
+which took the corpus from 4,797 to 15,835 and the database from ~121 MB to 289 MB
+of the 500 MB free-tier ceiling. Retrieval stays balanced because the ranker
+reserves slots per source — spot-checked across five questions, Drive appears
+without displacing gsc, ga4, slack or notion.
+
+#### Production sees far less than this, and that is the open item
+
+The nightly and 15-minute jobs authenticate as
+`ga4-reader@loveiq-brain.iam.gserviceaccount.com`, which sees only what has been
+SHARED with it — in practice the `Google Meet` folder. The 11,185 chunks were
+written with `ec@loveiq.org`'s own credential from a laptop.
+
+That is safe but not self-maintaining: a production Drive run sees a fraction of the
+corpus, so its sweep would delete the rest — and does not, because `sweepStale`
+refuses any deletion that would remove the majority of a source. It logs
+`brain sweep skipped: it would delete the majority of this source` every run until
+access is fixed. The data is not at risk; the freshness is.
+
+**To fix it,** share these with the service account as Viewer (sharing is
+inherited, so the folders cover everything inside them):
+
+- the four top-level folders — `04_Software`, `Google Meet`, `Meet Recordings`, `pdf`
+- the 75 loose files sitting at the root of My Drive (select all, share once)
+
+A user refresh token would also work and is what the laptop uses, but it is the
+wrong answer for production: Workspace reauth policy kills refresh tokens carrying
+sensitive scopes every few weeks — it did exactly that on 2026-08-28 — so Drive
+would freeze periodically until somebody clicked a browser prompt. A service account
+has no user session and never reauths. The 144 items other people have shared into
+our Drive stay out of reach either way; they are owned elsewhere.
+
 ### Slack is PUSHED, not polled
 
 `message.channels` events hit `/api/slack/events`, which treats a human post in a
