@@ -299,6 +299,9 @@ export async function ingestSlack(
   const known = await knownSlackDays();
   const rows: BrainRow[] = [];
   const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.parse(`${today}T00:00:00Z`) - 86_400_000)
+    .toISOString()
+    .slice(0, 10);
   let complete = true;
 
   for (const ch of channels) {
@@ -353,7 +356,14 @@ export async function ingestSlack(
       .map(([id]) => (id.split(":")[2] ?? "").split("#")[0] ?? "")
       .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
     const haveAny = [...known.keys()].some((id) => id.startsWith(`ch:${ch.name}:`));
-    const from = [today, ...needsWork].sort()[0] ?? today;
+    /**
+     * YESTERDAY IS NOT FINAL. The cron runs at 04:47 UTC, so it writes "today" when
+     * the day is four hours old, and on the next run that day is past and is
+     * skipped — every message posted after 04:47 was therefore lost permanently.
+     * Re-reading the previous day as well costs one extra day of messages and
+     * closes the hole regardless of what hour the cron runs at.
+     */
+    const from = [yesterday, ...needsWork].sort()[0] ?? yesterday;
     const oldest = haveAny ? slackTs(from) : "";
 
     for (let page = 0; page < MAX_PAGES; page++) {
@@ -415,7 +425,7 @@ export async function ingestSlack(
       // Today's chunk is always rewritten because the day is still accruing. A past
       // day is immutable ONCE FULLY FETCHED, so skip it and save the write — but a
       // day recorded with a thread gap is rebuilt until it is whole.
-      if (day !== today && known.get(`ch:${ch.name}:${day}`) === true) continue;
+      if (day < yesterday && known.get(`ch:${ch.name}:${day}`) === true) continue;
       const whole = !threadGaps.has(day);
       if (!whole) complete = false;
       // Reverse the top-level sequence only, then flatten each thread back in

@@ -247,3 +247,21 @@ describe("the nightly pass must be incremental, not a full re-walk", () => {
     expect(src).toMatch(/rate limited with no clock left, deferring/);
   });
 });
+
+describe("a day is not final until it is over", () => {
+  /**
+   * The cron runs at 04:47 UTC, so it wrote "today" when the day was four hours
+   * old — and on the next run that day was past, already indexed, and skipped
+   * forever. Every Slack message posted after 04:47 was therefore never indexed.
+   * Re-reading yesterday as well costs one extra day of messages.
+   */
+  it("re-reads yesterday, not just today", async () => {
+    const src = await import("node:fs").then((fs) =>
+      fs.readFileSync("features/brain/server/ingest/slack.ts", "utf8")
+    );
+    expect(src).toMatch(/const from = \[yesterday, \.\.\.needsWork\]/);
+    // and the write-skip must agree, or the fetch would be wasted
+    expect(src).toMatch(/if \(day < yesterday && known\.get/);
+    expect(src).not.toMatch(/if \(day !== today && known\.get/);
+  });
+});
