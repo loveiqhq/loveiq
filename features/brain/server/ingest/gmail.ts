@@ -1,6 +1,11 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
-import { getGoogleAccessToken } from "@shared/http/google-oauth";
+import {
+  DIRECTORY_SCOPE,
+  getDelegatedToken,
+  getGoogleAccessToken,
+  GMAIL_SCOPE,
+} from "@shared/http/google-oauth";
 import logger from "@shared/observability/logger";
 import { splitBody } from "./notion";
 import { sweepStale, touchChunks, upsertChunks, type BrainRow, type IngestResult } from "./upsert";
@@ -66,6 +71,59 @@ export function mailboxes(): string[] {
     .split(",")
     .map((m) => m.trim())
     .filter(Boolean);
+}
+
+/**
+ * Every active person in the Workspace domain, asked of the directory itself.
+ *
+ * Preferred over a hand-maintained `GMAIL_MAILBOXES` list because that list goes
+ * stale the moment somebody joins or leaves — silently, since a missing mailbox
+ * looks exactly like a quiet one. Suspended and archived accounts are excluded by
+ * the query; a departed colleague's mail stays in the corpus as history but stops
+ * being re-read.
+ *
+ * Needs `admin.directory.user.readonly` on the SAME domain-wide delegation grant,
+ * and an admin `subject` to ask as — the directory refuses an ordinary user.
+ * Returns null when unavailable, which the caller reads as "fall back to the
+ * configured list" rather than "the company has no staff".
+ */
+export async function domainMailboxes(
+  oidcToken?: string | null
+): Promise<string[] | null> {
+  const admin = (process.env.GOOGLE_WORKSPACE_ADMIN ?? "").trim();
+  const domain = (process.env.GOOGLE_WORKSPACE_DOMAIN ?? "").trim();
+  if (!admin || !domain) return null;
+
+  const token = await getDelegatedToken(admin, DIRECTORY_SCOPE, Date.now(), oidcToken);
+  if (!token) return null;
+
+  const out: string[] = [];
+  let pageToken = "";
+  for (let page = 0; page < 10; page++) {
+    const res = await fetchWithTimeout(
+      "https://admin.googleapis.com/admin/directory/v1/users" +
+        `?domain=${encodeURIComponent(domain)}&maxResults=200&query=isSuspended=false` +
+        (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""),
+      { headers: { Authorization: `Bearer ${token}` }, timeoutMs: TIMEOUT_MS }
+    );
+    if (!res.ok) {
+      logger.warn(
+        { status: res.status, detail: (await res.text().catch(() => "")).slice(0, 200) },
+        "brain-ingest gmail: directory listing refused"
+      );
+      return out.length > 0 ? out : null;
+    }
+    const json = (await res.json().catch(() => ({}))) as {
+      users?: Array<{ primaryEmail?: string; archived?: boolean; suspended?: boolean }>;
+      nextPageToken?: string;
+    };
+    for (const u of json.users ?? []) {
+      if (u.primaryEmail && !u.archived && !u.suspended) out.push(u.primaryEmail);
+    }
+    pageToken = json.nextPageToken ?? "";
+    if (!pageToken) break;
+  }
+  return out;
 }
 
 /**
@@ -311,10 +369,30 @@ export async function ingestGmail(
   if (isOutOfTime()) {
     return { source: SOURCE, rows: 0, swept: 0, skipped: "gmail-time-budget" };
   }
-  const token = await getGoogleAccessToken(Date.now(), oidcToken);
-  if (!token) {
+  const own = await getGoogleAccessToken(Date.now(), oidcToken);
+  if (!own) {
     return { source: SOURCE, rows: 0, swept: 0, skipped: "google-token-unavailable" };
   }
+
+  /**
+   * A token PER MAILBOX. `me` uses the credential's own token; a named address
+   * needs a delegated one, because a user OAuth token reaches only its own mail
+   * whatever scope it carries.
+   *
+   * Minted once per mailbox rather than per request — each one costs a signJwt and
+   * a token exchange, and at ~2,400 threads that would otherwise be thousands of
+   * round trips.
+   */
+  const tokenFor = async (mailbox: string): Promise<string | null> =>
+    mailbox === "me" ? own : getDelegatedToken(mailbox, GMAIL_SCOPE, Date.now(), oidcToken);
+
+  /**
+   * Ask the directory who works here; fall back to the configured list. An empty
+   * or failed directory answer must NOT be read as "nobody works here" — that
+   * would list no mailboxes, write nothing, and let the sweep delete the corpus.
+   */
+  const discovered = await domainMailboxes(oidcToken);
+  const boxes = discovered && discovered.length > 0 ? discovered : mailboxes();
 
   const known = await knownThreads();
   const rows: BrainRow[] = [];
@@ -322,7 +400,18 @@ export async function ingestGmail(
   let complete = true;
   let fetched = 0;
 
-  for (const mailbox of mailboxes()) {
+  const failedMailboxes: string[] = [];
+
+  for (const mailbox of boxes) {
+    const token = await tokenFor(mailbox);
+    if (!token) {
+      // One unreachable mailbox must not fail the others, and must not let the
+      // sweep run as if that person's mail had been deleted.
+      logger.warn({ mailbox }, "brain-ingest gmail: no token for this mailbox, skipping it");
+      failedMailboxes.push(mailbox);
+      complete = false;
+      continue;
+    }
     let pageToken = "";
     for (let page = 0; page < MAX_PAGES; page++) {
       if (isOutOfTime()) {
@@ -393,7 +482,16 @@ export async function ingestGmail(
   const swept = complete ? await sweepStale(SOURCE, stampedAt, written + touched) : 0;
 
   logger.info(
-    { mailboxes: mailboxes().length, listed: seen.size, fetched, written, touched, complete },
+    {
+      mailboxes: boxes.length,
+      discovered: discovered?.length ?? null,
+      unreachable: failedMailboxes,
+      listed: seen.size,
+      fetched,
+      written,
+      touched,
+      complete,
+    },
     "brain-ingest gmail"
   );
 

@@ -67,9 +67,24 @@ export const GA4_SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
 export const SEARCH_CONSOLE_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
 export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
 export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+export const DIRECTORY_SCOPE =
+  "https://www.googleapis.com/auth/admin.directory.user.readonly";
 
 /** Scopes an impersonated service-account token is minted with. All read-only. */
-const IMPERSONATION_SCOPES = [GA4_SCOPE, SEARCH_CONSOLE_SCOPE, DRIVE_SCOPE, GMAIL_SCOPE];
+/**
+ * `cloud-platform` is here for one reason: `signJwt`, which domain-wide delegation
+ * needs to mint a token that acts as a colleague. The IAM Credentials API accepts
+ * no narrower scope, and a token without it answers
+ * ACCESS_TOKEN_SCOPE_INSUFFICIENT — which reads like a permissions problem and is
+ * actually a scope one.
+ */
+const IMPERSONATION_SCOPES = [
+  GA4_SCOPE,
+  SEARCH_CONSOLE_SCOPE,
+  DRIVE_SCOPE,
+  GMAIL_SCOPE,
+  "https://www.googleapis.com/auth/cloud-platform",
+];
 
 let cached: { token: string; expiresAtMs: number } | null = null;
 
@@ -533,4 +548,94 @@ export function googleScopeHint(status: number, body: string, scope: string): st
 /** Test seam: module-scope caching would otherwise leak between test cases. */
 export function clearGoogleTokenCache(): void {
   cached = null;
+}
+
+/**
+ * An access token that acts AS a given user, via Workspace domain-wide delegation.
+ *
+ * This is the only way to read a colleague's mailbox. A user OAuth token reaches
+ * its own mail and nothing else, whatever scope it carries — that is a property of
+ * the token, not a misconfiguration. Domain-wide delegation instead authorises the
+ * SERVICE ACCOUNT, in the Workspace Admin console, to impersonate users in the
+ * domain.
+ *
+ * The usual recipe signs the assertion with a downloaded service-account KEY, which
+ * is impossible here: `constraints/iam.disableServiceAccountKeyCreation` is set on
+ * the project and the keys `ga4-reader` holds are SYSTEM_MANAGED. `signJwt` is the
+ * way round it — the IAM Credentials API signs on the account's behalf, so there is
+ * no key to download, leak or rotate.
+ *
+ * Two steps, and both have to be exactly right:
+ *   1. ask IAM to sign a JWT whose `sub` is the mailbox we want to read
+ *   2. exchange that assertion at Google's token endpoint for an access token
+ *
+ * `aud` MUST be the token endpoint, not the API being called — a wrong audience
+ * fails at the exchange with `invalid_grant`, which reads like a permissions
+ * problem and is not.
+ */
+export async function getDelegatedToken(
+  subject: string,
+  scope: string,
+  nowMs: number = Date.now(),
+  oidcToken?: string | null
+): Promise<string | null> {
+  const sa = process.env.GOOGLE_IMPERSONATE_SERVICE_ACCOUNT?.trim();
+  if (!sa) {
+    logger.warn("google oauth: GOOGLE_IMPERSONATE_SERVICE_ACCOUNT unset, cannot delegate");
+    return null;
+  }
+  // The caller must already be able to act as the service account; that is the same
+  // permission the existing impersonation path uses.
+  const caller = await getGoogleAccessToken(nowMs, oidcToken);
+  if (!caller) return null;
+
+  const iat = Math.floor(nowMs / 1000);
+  const payload = JSON.stringify({
+    iss: sa,
+    sub: subject,
+    scope,
+    aud: "https://oauth2.googleapis.com/token",
+    iat,
+    exp: iat + 3600,
+  });
+
+  const signed = await fetchWithTimeout(
+    `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${encodeURIComponent(sa)}:signJwt`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${caller}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ payload }),
+      timeoutMs: 15_000,
+    }
+  );
+  if (!signed.ok) {
+    const detail = (await signed.text().catch(() => "")).slice(0, 300);
+    logger.error({ status: signed.status, subject, detail }, "google oauth: signJwt refused");
+    return null;
+  }
+  const { signedJwt } = (await signed.json()) as { signedJwt?: string };
+  if (!signedJwt) return null;
+
+  const exchanged = await fetchWithTimeout("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion: signedJwt,
+    }).toString(),
+    timeoutMs: 15_000,
+  });
+  if (!exchanged.ok) {
+    const detail = (await exchanged.text().catch(() => "")).slice(0, 300);
+    // `unauthorized_client` here means the Admin console step is missing or the
+    // scope list there does not include the one being asked for. It is a
+    // configuration answer, not a code one, so say which.
+    logger.error(
+      { status: exchanged.status, subject, scope, detail },
+      "google oauth: delegated token exchange refused — check domain-wide delegation in the Workspace Admin console"
+    );
+    return null;
+  }
+  const { access_token: token } = (await exchanged.json()) as { access_token?: string };
+  return token ?? null;
 }
