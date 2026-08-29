@@ -12,6 +12,9 @@ vi.mock("@features/brain/server/ingest/drive", () => ({
 let prodHost = true;
 // The other two sources in this lane. They are stubbed to a healthy no-op so each
 // test isolates the behaviour it names; a real call here would alert and mask it.
+vi.mock("@features/brain/server/ingest/google", () => ({
+  ingestGa4: vi.fn(async () => ({ source: "ga4", rows: 237, swept: 0 })),
+}));
 vi.mock("@features/brain/server/ingest/analytics", () => ({
   ingestAnalytics: vi.fn(async () => ({ source: "analytics", rows: 177, swept: 0 })),
 }));

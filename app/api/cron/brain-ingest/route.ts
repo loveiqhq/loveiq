@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ingestGa4, ingestSearchConsole } from "@features/brain/server/ingest/google";
+import { ingestSearchConsole } from "@features/brain/server/ingest/google";
 import type { IngestResult } from "@features/brain/server/ingest/upsert";
 import { readVercelOidcToken } from "@shared/http/google-oauth";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -169,7 +169,6 @@ export async function GET(request: Request) {
     // must be read here and passed down. Reading it from process.env is exactly
     // what made the keyless path fail silently in production.
     const oidcToken = readVercelOidcToken(request);
-    await run("ga4", () => ingestGa4(stampedAt, isOutOfTime, undefined, oidcToken));
     await run("gsc", () => ingestSearchConsole(stampedAt, isOutOfTime, undefined, oidcToken));
     // Notion last, and given the run's clock: it is the only source whose cost
     // scales with page COUNT rather than row count (one request per page for

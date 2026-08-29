@@ -41,12 +41,12 @@ it — there is no automatic feedback signal.
 
 ### What feeds it
 
-| Source                                          | Where from                                                             | When                    |
-| ----------------------------------------------- | ---------------------------------------------------------------------- | ----------------------- |
-| Repo docs + git commits                         | `.github/workflows/brain-ingest.yml` → `scripts/brain-ingest-repo.mjs` | on every push to `main` |
-| Call notes, funnel numbers, Slack conversations | `/api/cron/brain-fast`                                                 | every 15 min            |
-| Notion (board + pages)                          | `/api/cron/brain-notion`                                               | hourly, at :41          |
-| GA4, Search Console                             | `/api/cron/brain-ingest`                                               | daily, 04:47 UTC        |
+| Source                                 | Where from                                                             | When                    |
+| -------------------------------------- | ---------------------------------------------------------------------- | ----------------------- |
+| Repo docs + git commits                | `.github/workflows/brain-ingest.yml` → `scripts/brain-ingest-repo.mjs` | on every push to `main` |
+| GA4, call notes, funnel numbers, Slack | `/api/cron/brain-fast`                                                 | every 15 min            |
+| Notion (board + pages)                 | `/api/cron/brain-notion`                                               | hourly, at :41          |
+| Search Console                         | `/api/cron/brain-ingest`                                               | daily, 04:47 UTC        |
 
 Jira is **not** a source. Notion is the system of record for the team's work
 (decision 2026-08-28), so `ingestJira` is no longer called by the cron and `jira`
@@ -592,6 +592,40 @@ Expect eight sources with rows — `doc`, `commit`, `analytics`, `ga4`, `gsc`,
 `list_sources` through the MCP endpoint, which prints the same thing per source
 and additionally names any source present in the table that the tool does not
 know about.
+
+### Three ingest jobs, at three speeds
+
+Each source is refreshed as fast as its upstream actually changes — which is not
+the same as "as fast as possible".
+
+| Job            | Every   | Sources                      | Measured           |
+| -------------- | ------- | ---------------------------- | ------------------ |
+| `brain-fast`   | 15 min  | ga4, drive, analytics, slack | ~12s in production |
+| `brain-notion` | hourly  | notion                       | ~29s in production |
+| `brain-ingest` | nightly | gsc                          | seconds            |
+
+- **Slack, the funnel numbers and call notes change continuously** and are all
+  cheap. Slack only became cheap once its pass stopped re-walking all history
+  (266s to ~4s); before that the nightly reached one channel of nine, wrote
+  nothing, and reported success.
+- **GA4 is here because it serves INTRADAY data.** Probed live on 2026-08-29 it
+  returned 45 sessions for that same morning, so a nightly-only GA4 left "how many
+  visitors today" unanswerable until the next night. Its window now ends at `today`
+  rather than `yesterday`. Today's row is partial by nature and is labelled
+  `TODAY SO FAR, still accruing`, so a running total is never read as a closed day.
+- **Notion is hourly, not 15-minute, because it costs ~29s a run whether or not
+  anything changed** — it enumerates all 35 databases to find what moved. Every 15
+  minutes that is ~50 minutes of compute a day re-reading unchanged pages, against
+  Notion's rate limit, for nothing. Hourly is still 24x fresher than nightly. The
+  cheap alternative, a `/search`-by-last-edited crawl, can never notice a DELETED
+  page, and the sweep depends on knowing the full set.
+- **Search Console stays nightly because it genuinely lags.** Probed on 2026-08-29,
+  its newest available day was 2026-08-26 — three days back. Asking every 15 minutes
+  would refetch identical numbers 96 times a day. For GSC alone, nightly IS live.
+
+`brain-fast` replaced `brain-drive`, which ran call notes by themselves. Its
+15-minute slots (`7,22,37,52`) are unchanged, so the cadence is the one already
+proven in production.
 
 ### A cron that stops firing now alerts
 

@@ -308,7 +308,17 @@ export async function ingestGa4(
 
   // Widened so every weekly/monthly total this run writes covers a WHOLE period.
   const fetchDays = windowCoveringWholePeriods(windowDays);
-  const dateRanges = [{ startDate: `${fetchDays}daysAgo`, endDate: "yesterday" }];
+  /**
+   * ENDS AT TODAY, not yesterday. GA4 serves intraday data — probed live on
+   * 2026-08-29 it returned 45 sessions for that same morning — so stopping at
+   * yesterday meant "how many visitors today" was unanswerable from the corpus
+   * until the following night. Today's row is PARTIAL and is labelled as such
+   * below; it is rewritten on every run until the day closes.
+   *
+   * (Search Console is the opposite and genuinely lags: its newest available day
+   * on 2026-08-29 was 2026-08-26, so nothing there is gained by asking sooner.)
+   */
+  const dateRanges = [{ startDate: `${fetchDays}daysAgo`, endDate: "today" }];
   const windowFrom = isoDaysAgo(fetchDays);
 
   const core = await runGa4Report(
@@ -545,6 +555,7 @@ export async function ingestGa4(
       .filter((l) => l !== null)
       .join("\n");
 
+  const todayUtc = new Date().toISOString().slice(0, 10);
   const chunks: BrainRow[] = [];
   const ga4Weeks = new Map<string, Ga4Totals>();
   const ga4Months = new Map<string, Ga4Totals>();
@@ -585,7 +596,10 @@ export async function ingestGa4(
       source_id: `daily:${day}`,
       title: `Google Analytics — ${longDate(day)}`,
       url: null,
-      body: renderGa4(`${longDate(day)} (${day})`, daily),
+      body: renderGa4(
+        `${longDate(day)} (${day})${day === todayUtc ? " — TODAY SO FAR, still accruing" : ""}`,
+        daily
+      ),
       meta: {
         grain: "day",
         day,

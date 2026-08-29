@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ingestAnalytics } from "@features/brain/server/ingest/analytics";
 import { ingestDrive } from "@features/brain/server/ingest/drive";
+import { ingestGa4 } from "@features/brain/server/ingest/google";
 import { ingestSlack } from "@features/brain/server/ingest/slack";
 import type { IngestResult } from "@features/brain/server/ingest/upsert";
 import { readVercelOidcToken } from "@shared/http/google-oauth";
@@ -36,9 +37,14 @@ export const maxDuration = 60;
  * - `notion` costs ~32s because it enumerates all 35 databases whether or not
  *   anything changed. It has its own hourly job — still 24x fresher than nightly,
  *   without spending 50 minutes of compute a day re-reading unchanged pages.
- * - `ga4` and `gsc` stay NIGHTLY because Google's own data lags 1-3 days. Polling
- *   them every 15 minutes would re-fetch identical numbers 96 times a day. For
- *   those two, nightly IS live; anything faster is noise.
+ * - `gsc` stays NIGHTLY because Search Console genuinely lags: probed on
+ *   2026-08-29 its newest available day was 2026-08-26. Asking every 15 minutes
+ *   would re-fetch identical numbers 96 times a day. For GSC, nightly IS live.
+ *
+ * `ga4` IS here, and that was a correction: GA4 serves INTRADAY data (45 sessions
+ * for the same morning, probed live), so a nightly-only GA4 left "how many
+ * visitors today" unanswerable until the next night. Today's row is partial and is
+ * labelled "TODAY SO FAR" so a running total is never read as a closed day.
  *
  * EACH SOURCE FAILS ALONE. They run in sequence but are caught individually, so a
  * Slack outage still leaves the funnel numbers refreshed.
@@ -48,6 +54,8 @@ export const maxDuration = 60;
  *  so a new failure kind is noisy by default rather than silent. */
 const DELIBERATE_SKIPS = new Set([
   "google-not-configured",
+  "ga4-no-property-id",
+  "ga4-time-budget",
   "drive-nothing-shared",
   "drive-time-budget",
   "slack-not-configured",
@@ -119,6 +127,8 @@ export async function GET(request: Request) {
     // down — it is not in the environment. Getting this wrong is what made the
     // keyless Google path fail silently in production.
     const oidcToken = readVercelOidcToken(request);
+    // GA4 first: `analytics` reads its ad spend back out of the chunks it writes.
+    await run("ga4", () => ingestGa4(stampedAt, isOutOfTime, undefined, oidcToken));
     await run("drive", () => ingestDrive(stampedAt, isOutOfTime, oidcToken));
     await run("analytics", () => ingestAnalytics(stampedAt));
     await run("slack", () => ingestSlack(stampedAt, isOutOfTime));
