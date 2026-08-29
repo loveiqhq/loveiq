@@ -66,9 +66,10 @@ const EXPIRY_SKEW_MS = 60_000;
 export const GA4_SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
 export const SEARCH_CONSOLE_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
 export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
+export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 
 /** Scopes an impersonated service-account token is minted with. All read-only. */
-const IMPERSONATION_SCOPES = [GA4_SCOPE, SEARCH_CONSOLE_SCOPE, DRIVE_SCOPE];
+const IMPERSONATION_SCOPES = [GA4_SCOPE, SEARCH_CONSOLE_SCOPE, DRIVE_SCOPE, GMAIL_SCOPE];
 
 let cached: { token: string; expiresAtMs: number } | null = null;
 

@@ -618,6 +618,7 @@ describe("no indexed source may be invisible to the model", () => {
       jira: "jira",
       notion: "notion",
       drive: "call",
+      gmail: "email",
       slack: "slack",
     };
     const sources = (mod as { SOURCES_FOR_TEST?: string[] }).SOURCES_FOR_TEST ?? [];

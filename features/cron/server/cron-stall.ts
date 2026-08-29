@@ -38,6 +38,7 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   "brain-fast": 45 * 60_000,
   // Hourly.
   "brain-notion": 3 * 3_600_000,
+  "brain-gmail": 3 * 3_600_000,
 };
 
 /**

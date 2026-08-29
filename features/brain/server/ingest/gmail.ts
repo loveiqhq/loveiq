@@ -1,0 +1,407 @@
+import { supabaseFetch } from "@features/admin/server/supabase";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { getGoogleAccessToken } from "@shared/http/google-oauth";
+import logger from "@shared/observability/logger";
+import { splitBody } from "./notion";
+import { sweepStale, touchChunks, upsertChunks, type BrainRow, type IngestResult } from "./upsert";
+
+/**
+ * Company email.
+ *
+ * Where a startup's decisions and relationships actually live: investor threads,
+ * customer replies, the supplier who said yes, the thing agreed at 11pm that never
+ * reached Notion. The repo has the result, Slack has the argument, and email has
+ * everything said to the outside world.
+ *
+ * ONE CHUNK PER THREAD, not per message — the same reasoning as Slack days. A reply
+ * saying "yes, agreed, let's do the 39.99" is meaningless without the message above
+ * it, and a thread is the unit somebody actually asks about.
+ */
+
+const SOURCE = "gmail";
+const API = "https://gmail.googleapis.com/gmail/v1/users";
+const TIMEOUT_MS = 20_000;
+const PAGE_SIZE = 100;
+/**
+ * 40 x 100 = 4,000 threads per mailbox. At 20 the first real walk stopped at
+ * exactly 2,000 and reported `gmail-walk-incomplete`, which is honest but means
+ * the oldest mail is never reached. ec@loveiq.org holds 2,650 threads before
+ * filtering.
+ */
+const MAX_PAGES = 40;
+
+/**
+ * A SINGLE-message thread this short is a notification stub, not a conversation.
+ *
+ * Measured: the "Your secure link to Claude.ai is here" mails reduce to a body of
+ * "96" and whitespace — the link lives in HTML that the plain part does not carry,
+ * so nothing useful survives (and nothing sensitive is stored either: verified zero
+ * URLs in the indexed body). Dozens of those crowd the corpus while being unable to
+ * answer anything.
+ *
+ * The single-message condition is load-bearing. A first attempt tested the whole
+ * thread's length and threw away a genuine two-line exchange — "Should we go to
+ * 39.99?" / "Yes." — which is short, decisive, and exactly the kind of thing the
+ * brain exists to remember. A reply means a human engaged; length is only evidence
+ * when nobody did.
+ */
+const MIN_STUB_CHARS = 60;
+
+/** Bump when the row SHAPE changes; a mismatch counts as stale. See notion.ts. */
+// v2: v1 indexed notification stubs (bodies of "96" and whitespace) as threads.
+export const GMAIL_BUILDER_VERSION = 2;
+
+/**
+ * Mailboxes to read. `me` is whoever the credential belongs to.
+ *
+ * Reading a COLLEAGUE's mailbox needs Workspace domain-wide delegation — a user
+ * OAuth token only ever reaches its own mail, whatever scope it carries. Listing
+ * them here rather than hardcoding `me` means turning that on later is config, not
+ * a rewrite.
+ */
+export function mailboxes(): string[] {
+  const configured = (process.env.GMAIL_MAILBOXES ?? "").trim();
+  if (!configured) return ["me"];
+  return configured
+    .split(",")
+    .map((m) => m.trim())
+    .filter(Boolean);
+}
+
+/**
+ * What NOT to index, as a Gmail search query.
+ *
+ * Promotions, social and forums are Google's own noise buckets and are almost
+ * entirely newsletters and marketing. Spam and trash are self-explanatory. Chats is
+ * Google Chat history, which is not email.
+ *
+ * Deliberately NOT excluded: automated mail from Stripe, Vercel and the like. A
+ * payment receipt or a failed-deploy notice is real company history, and the team
+ * frequently replies to those threads — which is exactly the content that would be
+ * lost by filtering on sender.
+ */
+const EXCLUDE = "-in:spam -in:trash -in:chats -category:promotions -category:social -category:forums";
+
+interface GmailHeader {
+  name?: string;
+  value?: string;
+}
+interface GmailPart {
+  mimeType?: string;
+  filename?: string;
+  body?: { data?: string; size?: number };
+  parts?: GmailPart[];
+}
+interface GmailMessage {
+  id?: string;
+  internalDate?: string;
+  labelIds?: string[];
+  payload?: GmailPart & { headers?: GmailHeader[] };
+}
+interface GmailThread {
+  id?: string;
+  historyId?: string;
+  messages?: GmailMessage[];
+}
+
+async function gmailGet(
+  token: string,
+  mailbox: string,
+  path: string
+): Promise<Record<string, unknown> | null> {
+  const res = await fetchWithTimeout(`${API}/${encodeURIComponent(mailbox)}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    timeoutMs: TIMEOUT_MS,
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    // A missing scope is configuration, not an outage, and naming it turns a dead
+    // end into a one-line fix.
+    logger.warn(
+      { path, status: res.status, detail: body.slice(0, 200) },
+      "brain-ingest gmail: api refused"
+    );
+    return null;
+  }
+  return (await res.json().catch(() => null)) as Record<string, unknown> | null;
+}
+
+const header = (m: GmailMessage, name: string): string =>
+  (m.payload?.headers ?? []).find((h) => h.name?.toLowerCase() === name.toLowerCase())?.value ?? "";
+
+/** Gmail encodes bodies as base64url, and omits padding. */
+function decode(data: string): string {
+  const b64 = data.replace(/-/g, "+").replace(/_/g, "/");
+  return Buffer.from(b64, "base64").toString("utf8");
+}
+
+/**
+ * Plain text out of a MIME tree.
+ *
+ * Prefers `text/plain`; falls back to stripping tags from `text/html`, because a
+ * good share of real mail — anything sent from a phone or a marketing tool — has no
+ * plain part at all, and skipping those would silently lose whole conversations.
+ */
+export function messageText(part?: GmailPart): string {
+  if (!part) return "";
+  if (part.mimeType === "text/plain" && part.body?.data) return decode(part.body.data);
+
+  if (Array.isArray(part.parts)) {
+    for (const p of part.parts) {
+      const t = messageText(p);
+      if (t.trim()) return t;
+    }
+  }
+  if (part.mimeType === "text/html" && part.body?.data) {
+    return decode(part.body.data)
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"');
+  }
+  return "";
+}
+
+/**
+ * Strip the quoted copy of the previous message.
+ *
+ * Without this every reply carries the whole thread beneath it, so a ten-message
+ * thread is stored ten times over — the body limit then truncates the actual new
+ * text in favour of quoted history, and search matches the same sentence in ten
+ * chunks.
+ */
+export function stripQuoted(text: string): string {
+  const cut = text.search(
+    /\n\s*(On .{0,120}wrote:|-{2,} ?Original Message ?-{2,}|_{10,}|From: .{0,120}\n(Sent|To):)/
+  );
+  const body = cut > 0 ? text.slice(0, cut) : text;
+  return body
+    .split("\n")
+    .filter((l) => !/^\s*>/.test(l))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/** A person, without the angle-bracket noise: "Marcus <m@x.com>" -> "Marcus". */
+export function person(addr: string): string {
+  const named = /^\s*"?([^"<]+?)"?\s*</.exec(addr);
+  if (named?.[1]) return named[1].trim();
+  return addr.replace(/[<>]/g, "").trim();
+}
+
+export function threadToRows(
+  thread: GmailThread,
+  mailbox: string,
+  stampedAt: string
+): BrainRow[] {
+  const msgs = (thread.messages ?? []).filter((m) => m.payload);
+  if (!thread.id || msgs.length === 0) return [];
+
+  const first = msgs[0]!;
+  const subject = header(first, "Subject").trim() || "(no subject)";
+  const last = msgs[msgs.length - 1]!;
+  const when = Number(last.internalDate ?? first.internalDate ?? 0);
+  const day = when ? new Date(when).toISOString().slice(0, 10) : null;
+
+  const lines: string[] = [];
+  for (const m of msgs) {
+    const from = person(header(m, "From"));
+    const date = Number(m.internalDate ?? 0);
+    const stamp = date ? new Date(date).toISOString().slice(0, 10) : "";
+    const text = stripQuoted(messageText(m.payload));
+    if (!text) continue;
+    lines.push(`${from}${stamp ? ` (${stamp})` : ""}: ${text}`);
+  }
+  if (lines.length === 0) return [];
+  const joined = lines.join(" ").replace(/\s+/g, " ").trim();
+  if (lines.length === 1 && joined.length < MIN_STUB_CHARS) return [];
+
+  const participants = [
+    ...new Set(
+      msgs.flatMap((m) => [header(m, "From"), header(m, "To")].filter(Boolean).map(person))
+    ),
+  ].slice(0, 8);
+
+  const title = `Email: ${subject}`;
+  const base: BrainRow = {
+    source: SOURCE,
+    source_id: `thread:${thread.id}`,
+    title,
+    url: `https://mail.google.com/mail/u/0/#all/${thread.id}`,
+    body: [title, `Between: ${participants.join(", ")}`, "", ...lines].join("\n"),
+    meta: {
+      kind: "gmail-thread",
+      v: GMAIL_BUILDER_VERSION,
+      mailbox,
+      messages: msgs.length,
+      participants,
+      // Gmail's own change cursor: a thread whose historyId has not moved has not
+      // been replied to, so it never needs refetching.
+      historyId: thread.historyId ?? null,
+    },
+    updated_at: stampedAt,
+    period_end: day,
+  };
+
+  const parts = splitBody(base.body);
+  return parts.map((body, i) =>
+    i === 0
+      ? { ...base, body }
+      : {
+          ...base,
+          source_id: `${base.source_id}#${i + 1}`,
+          title: `${title} (part ${i + 1} of ${parts.length})`,
+          body,
+          meta: { ...base.meta, part: i + 1, parts: parts.length },
+        }
+  );
+}
+
+/**
+ * source_id -> what we already hold for it.
+ *
+ * `current` is false when the row was built by an older builder version. Such a row
+ * must never be TOUCHED: touching says "this is still correct", so a chunk that the
+ * current rules would no longer produce — a notification stub, under v2 — would be
+ * confirmed forever and never fall to the sweep. Measured: 30 stub threads survived
+ * the v2 rebuild exactly this way.
+ */
+async function knownThreads(): Promise<Map<string, { historyId: string | null; current: boolean }>> {
+  const out = new Map<string, { historyId: string | null; current: boolean }>();
+  for (let offset = 0; offset < 100_000; offset += 1000) {
+    const res = await supabaseFetch(
+      `/rest/v1/brain_chunk?select=source_id,meta&source=eq.${SOURCE}` +
+        `&order=source_id.asc&limit=1000&offset=${offset}`
+    );
+    if (!res.ok) {
+      /**
+       * FAIL CLOSED. An empty map reads as "nothing is indexed", so every existing
+       * row goes neither written nor confirmed and the sweep in this same run
+       * deletes it. A stale row is repaired next run; a deleted one is gone.
+       */
+      throw new Error(
+        `brain-ingest gmail: could not read the existing chunk list (status ${res.status}) — ` +
+          `aborting before the sweep rather than treating the corpus as empty`
+      );
+    }
+    const batch = (await res.json().catch(() => [])) as Array<{
+      source_id?: string;
+      meta?: { historyId?: string | null; v?: number } | null;
+    }>;
+    for (const r of batch) {
+      if (!r.source_id) continue;
+      const current = r.meta?.v === GMAIL_BUILDER_VERSION;
+      out.set(r.source_id, { historyId: current ? (r.meta?.historyId ?? null) : null, current });
+    }
+    if (batch.length < 1000) break;
+  }
+  return out;
+}
+
+export async function ingestGmail(
+  stampedAt: string,
+  isOutOfTime: () => boolean = () => false,
+  oidcToken?: string | null
+): Promise<IngestResult> {
+  if (isOutOfTime()) {
+    return { source: SOURCE, rows: 0, swept: 0, skipped: "gmail-time-budget" };
+  }
+  const token = await getGoogleAccessToken(Date.now(), oidcToken);
+  if (!token) {
+    return { source: SOURCE, rows: 0, swept: 0, skipped: "google-token-unavailable" };
+  }
+
+  const known = await knownThreads();
+  const rows: BrainRow[] = [];
+  const seen = new Set<string>();
+  let complete = true;
+  let fetched = 0;
+
+  for (const mailbox of mailboxes()) {
+    let pageToken = "";
+    for (let page = 0; page < MAX_PAGES; page++) {
+      if (isOutOfTime()) {
+        complete = false;
+        break;
+      }
+      const listed = await gmailGet(
+        token,
+        mailbox,
+        `/threads?maxResults=${PAGE_SIZE}&q=${encodeURIComponent(EXCLUDE)}` +
+          (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "")
+      );
+      if (!listed) {
+        complete = false;
+        break;
+      }
+      const threads = (listed.threads as GmailThread[]) ?? [];
+
+      for (const t of threads) {
+        if (!t.id) continue;
+        const id = `thread:${t.id}`;
+        seen.add(id);
+        // Gmail's historyId moves whenever a thread changes, so an unchanged
+        // thread costs one listing entry and no fetch at all.
+        const have = known.get(id);
+        if (have?.current && have.historyId && have.historyId === t.historyId) continue;
+        if (isOutOfTime()) {
+          complete = false;
+          break;
+        }
+        const full = (await gmailGet(
+          token,
+          mailbox,
+          `/threads/${encodeURIComponent(t.id)}?format=full`
+        )) as GmailThread | null;
+        if (!full) {
+          complete = false;
+          continue;
+        }
+        fetched += 1;
+        rows.push(...threadToRows(full, mailbox, stampedAt));
+      }
+
+      pageToken = (listed.nextPageToken as string) ?? "";
+      if (!pageToken) break;
+      if (page === MAX_PAGES - 1) complete = false;
+    }
+  }
+
+  const written = await upsertChunks(rows);
+  const writtenIds = new Set(rows.map((r) => r.source_id));
+  const rewritten = new Set([...writtenIds].map((id) => id.split("#")[0]));
+  const touched = await touchChunks(
+    SOURCE,
+    [...known.entries()]
+      .filter(([id, have]) => {
+        if (writtenIds.has(id)) return false;
+        if (rewritten.has(id.split("#")[0] ?? id)) return false;
+        // Never confirm a stale-version row. It was either dropped from the source
+        // or is no longer something we would index (a stub, under v2); either way
+        // it belongs to the sweep, not to the touch list.
+        return have.current;
+      })
+      .map(([id]) => id),
+    stampedAt
+  );
+  // Sweep only a complete walk; a truncated one makes real threads look deleted.
+  const swept = complete ? await sweepStale(SOURCE, stampedAt, written + touched) : 0;
+
+  logger.info(
+    { mailboxes: mailboxes().length, listed: seen.size, fetched, written, touched, complete },
+    "brain-ingest gmail"
+  );
+
+  if (written === 0 && touched === 0) {
+    return { source: SOURCE, rows: 0, swept: 0, skipped: "gmail-nothing-to-index" };
+  }
+  if (!complete) {
+    return { source: SOURCE, rows: written + touched, swept, skipped: "gmail-walk-incomplete" };
+  }
+  return { source: SOURCE, rows: written + touched, swept };
+}

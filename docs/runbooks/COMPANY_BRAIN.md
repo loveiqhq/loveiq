@@ -672,16 +672,79 @@ therefore seconds behind the conversation instead of up to fifteen minutes.
 Subscribe to bot events → add `message.channels`, then reinstall. The scope it needs
 (`channels:history`) is already granted, so this adds no new permission.
 
+### Gmail — company email
+
+Added 2026-08-29. Where a startup's decisions and relationships actually live:
+investor threads, customer replies, the supplier who said yes, the thing agreed at
+11pm that never reached Notion. The repo holds the result, Slack the argument, and
+email everything said to the outside world.
+
+**One chunk per THREAD**, not per message — the same reasoning as Slack days. A
+reply of "Yes, agreed" is meaningless without the message above it, and a thread is
+the unit somebody actually asks about.
+
+Four things that are easy to get wrong here, all measured against the real mailbox:
+
+- **Quoted text is stripped.** Without it a ten-message thread is stored ten times
+  over: every reply quotes everything above it, the 2,400-char body limit then
+  truncates the ACTUAL new text in favour of quoted history, and search matches the
+  same sentence in ten chunks.
+- **HTML is a fallback, not an afterthought.** A large share of real mail — anything
+  from a phone or a marketing tool — has no `text/plain` part at all. Skipping those
+  would silently lose whole conversations.
+- **Bodies are base64URL**, not plain base64: `-` and `_` for `+` and `/`, padding
+  stripped. Decoding it as ordinary base64 yields mojibake rather than an error, so
+  the failure is silent.
+- **Single-message threads under 60 characters are dropped as stubs.** Measured: the
+  "Your secure link to Claude.ai is here" mails reduce to a body of `96` and
+  whitespace. The single-message condition is load-bearing — a first attempt tested
+  the whole thread and threw away a genuine exchange ("Should we go to 39.99?" /
+  "Yes."), which is short, decisive, and exactly what the brain exists to remember.
+
+**Excluded:** spam, trash, chats, and Google's promotions/social/forums categories.
+Deliberately NOT excluded: automated mail from Stripe, Jira, Vercel and the like — a
+receipt or a failed-deploy notice is real history, and the team frequently replies
+in those threads, which is precisely the content a sender-based filter would lose.
+
+**Nothing sensitive is stored, and that was checked rather than assumed.** A scan of
+1,000 indexed chunks found zero login links, zero password-reset links and zero
+credential-shaped strings; the magic-link mails carry their link only in HTML that
+the plain part does not include, so the indexed body has no URLs at all.
+
+Incremental via Gmail's `historyId`: a thread whose id has not moved has not been
+replied to, so it costs one listing entry and no fetch. The first full walk of 2,000
+threads took 462s, which is why this has its own hourly job rather than sitting in
+the 15-minute lane where it could starve the cheap sources of their clock.
+
+#### Reading EVERYONE's mail needs domain-wide delegation
+
+Today this reads one mailbox: whoever the credential belongs to. A user OAuth token
+can only ever reach its own mail, whatever scope it carries — that is a property of
+the token, not a configuration mistake.
+
+The Workspace mechanism for reading colleagues' mail is **domain-wide delegation**:
+the service account is authorised, in the Admin console, to impersonate users in the
+domain. `GMAIL_MAILBOXES` already accepts a comma-separated list, so switching it on
+is configuration rather than a rewrite.
+
+It is worth deciding deliberately. The corpus is undifferentiated, so anything
+indexed from anyone's mailbox becomes answerable to anyone who can ask the brain.
+That follows the open-access decision already taken for Notion and Slack, but email
+is the first source whose sharing boundary was drawn by the SENDER rather than by
+LoveIQ — an outside party writing to one person did not consent to the whole company
+reading it.
+
 ### Three ingest jobs, at three speeds
 
 Each source is refreshed as fast as its upstream actually changes — which is not
 the same as "as fast as possible".
 
-| Job            | Every   | Sources                      | Measured           |
-| -------------- | ------- | ---------------------------- | ------------------ |
-| `brain-fast`   | 15 min  | ga4, drive, analytics, slack | ~12s in production |
-| `brain-notion` | hourly  | notion                       | ~29s in production |
-| `brain-ingest` | nightly | gsc                          | seconds            |
+| Job            | Every   | Sources                      | Measured                           |
+| -------------- | ------- | ---------------------------- | ---------------------------------- |
+| `brain-fast`   | 15 min  | ga4, drive, analytics, slack | ~12s in production                 |
+| `brain-notion` | hourly  | notion                       | ~29s in production                 |
+| `brain-gmail`  | hourly  | gmail                        | 621s first walk, incremental after |
+| `brain-ingest` | nightly | gsc                          | seconds                            |
 
 - **Slack, the funnel numbers and call notes change continuously** and are all
   cheap. Slack only became cheap once its pass stopped re-walking all history

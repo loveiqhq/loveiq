@@ -140,6 +140,7 @@ export const SOURCES_FOR_TEST = [
   "notion",
   "drive",
   "slack",
+  "gmail",
 ];
 // `jira` is deliberately absent. The 1,037 issues in loveiq.atlassian.net are real
 // and actively updated, but `JIRA_API_TOKEN` has never been set, so the corpus holds
@@ -154,7 +155,8 @@ const TOOLS = [
       "Search LoveIQ's own written record: repository documentation, every git commit " +
       "(including the plain-English 'For Marcus:' summaries), the Notion workspace — both " +
       "the team board with each task's status, priority and assignee, and the written " +
-      "pages — the team's Slack conversations, and the notes from every recorded call, " +
+      "pages — the team's Slack conversations, the company email, and the notes from " +
+      "every recorded call, " +
       "plus dated business numbers (funnel, revenue, ad spend, GA4, Search " +
       "Console). Use this for " +
       "anything historical or written down — why a decision was made, when something " +
@@ -987,6 +989,7 @@ export async function POST(request: Request) {
         "HISTORY, indexed and searchable: documentation, every git commit including the " +
         "plain-English 'For Marcus:' summaries, the whole Notion workspace (every database " +
         "and page, not just the task board), the team's Slack conversations day by day, the " +
+        "company email thread by thread, the " +
         "notes from every recorded call, and dated business numbers. Use " +
         "search_company_context, and list_sources when you need to know how fresh a source " +
         "is.\n\n" +

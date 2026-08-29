@@ -44,6 +44,10 @@
     {
       "path": "/api/cron/brain-notion",
       "schedule": "41 * * * *"
+    },
+    {
+      "path": "/api/cron/brain-gmail",
+      "schedule": "11 * * * *"
     }
   ],
   "functions": {
@@ -102,6 +106,9 @@
       "maxDuration": 60
     },
     "app/api/cron/brain-notion/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/cron/brain-gmail/route.ts": {
       "maxDuration": 60
     }
   }
