@@ -720,13 +720,37 @@ monitors is worse than none. A test keeps the watch list in step with `vercel.js
 because an unwatched cron looks exactly like a healthy one.
 
 It found `chapter-nudge` dead since 2026-07-25 on its first run. That cron is
-**retired** (decision 2026-08-29) and is listed in `UNWATCHED_CRONS`; its
-`vercel.json` entry and route still exist and can be removed when convenient.
+**retired** (decision 2026-08-29): its `vercel.json` schedule is gone, so it can no
+longer fire, and it stays in `UNWATCHED_CRONS` so that re-adding the schedule without
+deciding to bring the feature back does not start alerting.
+
+The route (`app/api/cron/chapter-nudge/`), its email template and its tests are
+deliberately LEFT IN PLACE. They are inert without a schedule, and deleting them
+would also mean deleting `UNSUBSCRIBE_CAMPAIGNS.chapterNudge` — which existing
+unsubscribe links are signed against, so removing it would break the opt-out of
+anyone who already used one. Deleting the feature is a separate, deliberate change.
 
 A source that has never run cannot be distinguished from one deployed minutes ago,
 so that case says so in the alert text rather than asserting a fault — `brain-ingest`
 showed zero runs for exactly that reason on 2026-08-28, and fired normally at
 04:47 the next morning.
+
+### Pending: private Slack channels and group DMs
+
+The brain bot holds `channels:*` only, so private channels and group DMs are
+invisible — and their existence cannot even be counted, so the size of the blind
+spot is unknown rather than small. Agreed on 2026-08-29 to do this "in a bit".
+
+Turning it on means adding `groups:read` + `groups:history` (and `mpim:read` +
+`mpim:history` for group DMs) to the brain app and reinstalling, then inviting the
+bot to each private channel — Slack enforces membership regardless of scope, so the
+scope alone reveals nothing.
+
+Worth deciding deliberately rather than by default: the corpus is undifferentiated,
+so anything indexed from a private channel becomes answerable to anyone who can ask
+the brain. That is consistent with the open-access decision already taken for
+Notion and the rest, but private channels are the first source where the sharing
+boundary was drawn by the people in them rather than by the company.
 
 ### Known limitations, deliberately accepted
 

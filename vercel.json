@@ -26,10 +26,6 @@
       "schedule": "38 * * * *"
     },
     {
-      "path": "/api/cron/chapter-nudge",
-      "schedule": "28 11 * * *"
-    },
-    {
       "path": "/api/cron/conversion-digest",
       "schedule": "0 9 * * *"
     },
@@ -95,9 +91,6 @@
     },
     "app/api/cron/table-size-digest/route.ts": {
       "maxDuration": 30
-    },
-    "app/api/cron/chapter-nudge/route.ts": {
-      "maxDuration": 60
     },
     "app/api/cron/conversion-digest/route.ts": {
       "maxDuration": 60

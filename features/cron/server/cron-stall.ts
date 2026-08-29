@@ -47,10 +47,10 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
 export const UNWATCHED_CRONS = new Set([
   "journey-backfill",
   "purge-old-data",
-  // Retired 2026-08-29: the team stopped using chapter nudges. It is still listed
-  // in vercel.json and last ran 2026-07-25, so watching it would alert every day
-  // about something nobody intends to fix — which is how an ops channel gets
-  // ignored and takes the real alerts down with it.
+  // Retired 2026-08-29: the team stopped using chapter nudges, and its schedule has
+  // been removed from vercel.json. Kept in this list so that if anyone re-adds the
+  // schedule without deciding to bring the feature back, it does not start alerting
+  // — and so the reason is written down rather than inferred from an absence.
   "chapter-nudge",
 ]);
 
