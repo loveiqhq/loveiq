@@ -59,3 +59,45 @@ describe("upsertChunks payload shape", () => {
     expect((JSON.parse(posted[0]) as Record<string, unknown>[])[0].period_end).toBe("2026-08-25");
   });
 });
+
+describe("a failed touch must never let the sweep run", () => {
+  /**
+   * The most dangerous line the audit found. `touchChunks` used to `continue` past
+   * a non-2xx PATCH, which left that batch's rows with a stale `updated_at` AND
+   * excluded them from `touched` — so `sweepStale`, later in the SAME run, deleted
+   * them as orphans. The majority guard only refuses losses above ~50%, so one
+   * transient PostgREST 5xx could silently delete up to half a source.
+   *
+   * The circuit breaker is no help: it counts THROWN errors, and `fetchWithTimeout`
+   * resolves normally with a 503 Response, so a run of 5xx looks like successes.
+   */
+  it("throws instead of silently leaving rows to be swept", async () => {
+    const { supabaseFetch } = await import("@features/admin/server/supabase");
+    vi.mocked(supabaseFetch).mockResolvedValue({
+      ok: false,
+      status: 503,
+      headers: new Headers(),
+      json: async () => ({}),
+      text: async () => "",
+    } as unknown as Response);
+
+    const { touchChunks } = await import("@features/brain/server/ingest/upsert");
+    await expect(touchChunks("gsc", ["a", "b"], "2026-08-29T00:00:00Z")).rejects.toThrow(
+      /aborting before the sweep/
+    );
+  });
+
+  it("still returns a count when every batch succeeds", async () => {
+    const { supabaseFetch } = await import("@features/admin/server/supabase");
+    vi.mocked(supabaseFetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-range": "*/2" }),
+      json: async () => [],
+      text: async () => "",
+    } as unknown as Response);
+
+    const { touchChunks } = await import("@features/brain/server/ingest/upsert");
+    await expect(touchChunks("gsc", ["a", "b"], "2026-08-29T00:00:00Z")).resolves.toBe(2);
+  });
+});

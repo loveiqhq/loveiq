@@ -56,7 +56,10 @@ const MAX_CONTENT_PAGES = 300;
  * A version stamped in meta makes a mismatch count as "changed", so shipping a
  * builder change is enough to re-write the corpus over the following nights.
  */
-export const BUILDER_VERSION = 5;
+// v6: v1-v5 indexed only TOP-LEVEL blocks — every toggle, column, callout body,
+// nested bullet and table row was dropped (~19% of the workspace text). Every
+// older row must be refetched, not trusted.
+export const BUILDER_VERSION = 6;
 
 interface RichText {
   plain_text?: string;
@@ -178,6 +181,18 @@ export function blocksToText(blocks: NotionBlock[], depth = 0): string {
         lines.push(prefix + text);
       }
     }
+    // A table_row carries `cells: RichText[][]`, not `rich_text`, so the generic
+    // path above finds nothing and every inline table came out empty.
+    if (b.type === "table_row") {
+      const cells = (b.table_row as { cells?: Array<Array<{ plain_text?: string }>> })?.cells;
+      if (Array.isArray(cells)) {
+        const row = cells
+          .map((cell) => cell.map((t) => t.plain_text ?? "").join("").trim())
+          .filter(Boolean)
+          .join(" | ");
+        if (row) lines.push(row);
+      }
+    }
     if (Array.isArray((b as { children?: NotionBlock[] }).children)) {
       const child = blocksToText((b as { children: NotionBlock[] }).children, depth + 1);
       if (child) lines.push(child);
@@ -217,7 +232,50 @@ async function notionGet(token: string, path: string): Promise<Record<string, un
 }
 
 /** Every block of one page, flattened. Children are followed one level. */
-async function pageText(token: string, pageId: string): Promise<string> {
+/**
+ * Blocks nested under other blocks are a SEPARATE request in the Notion API: a
+ * toggle, a column, a callout body, a nested bullet and every table row come back
+ * as `has_children: true` with no children attached.
+ *
+ * `blocksToText` has always recursed into a `.children` array, but nothing ever
+ * populated it, so all of that text was silently dropped — measured at 19.1% of the
+ * workspace. The docstring claiming "children are followed one level" was false.
+ *
+ * `child_page` and `child_database` are deliberately NOT followed: they are indexed
+ * as their own chunks, so descending into them would duplicate whole pages inside
+ * their parent.
+ */
+const NOT_DESCENDED = new Set(["child_page", "child_database"]);
+const MAX_CHILD_DEPTH = 4;
+
+async function attachChildren(
+  token: string,
+  blocks: NotionBlock[],
+  depth: number,
+  budget: { left: number },
+  isOutOfTime: () => boolean
+): Promise<void> {
+  if (depth >= MAX_CHILD_DEPTH) return;
+  for (const b of blocks) {
+    // The budget and the clock are both hard stops: a deeply nested page must not
+    // be able to spend the whole cron run by itself.
+    if (budget.left <= 0 || isOutOfTime()) return;
+    if (!b.has_children || !b.id || (b.type && NOT_DESCENDED.has(b.type))) continue;
+
+    budget.left -= 1;
+    const json = await notionGet(token, `/blocks/${b.id}/children?page_size=100`);
+    const kids = (json.results as NotionBlock[]) ?? [];
+    if (kids.length === 0) continue;
+    (b as { children?: NotionBlock[] }).children = kids;
+    await attachChildren(token, kids, depth + 1, budget, isOutOfTime);
+  }
+}
+
+export async function pageText(
+  token: string,
+  pageId: string,
+  isOutOfTime: () => boolean = () => false
+): Promise<string> {
   const out: NotionBlock[] = [];
   let cursor: string | undefined;
   for (let i = 0; i < 5; i++) {
@@ -229,6 +287,7 @@ async function pageText(token: string, pageId: string): Promise<string> {
     cursor = json.has_more ? (json.next_cursor as string) : undefined;
     if (!cursor) break;
   }
+  await attachChildren(token, out, 0, { left: 60 }, isOutOfTime);
   return blocksToText(out);
 }
 
@@ -486,7 +545,7 @@ export async function ingestNotion(
 
     let text = "";
     try {
-      text = await pageText(token, item.raw.id as string);
+      text = await pageText(token, item.raw.id as string, isOutOfTime);
     } catch (err) {
       logger.warn({ err, page: item.raw.id }, "brain-ingest notion: page content unreadable");
       complete = false;
@@ -548,6 +607,31 @@ export async function ingestNotion(
 
   if (written === 0 && touched === 0) {
     return { source: SOURCE, rows: 0, swept: 0, skipped: "notion-time-budget" };
+  }
+  /**
+   * A PARTIAL CRAWL MUST NOT LOOK HEALTHY. `complete` was computed and logged and
+   * then dropped from the result, while the cron alerts only on `skipped` or
+   * `rows === 0` — so a source that reached 10% of the workspace every night read
+   * as fine forever. `notion-crawl-incomplete` is deliberately NOT in the cron's
+   * DELIBERATE_SKIPS, so it alerts by default.
+   */
+  /**
+   * Alert only on a genuinely INCOMPLETE CRAWL, i.e. the walk of databases and
+   * pages was truncated so we do not even know what exists. That is the case the
+   * audit found reporting SUCCESS forever.
+   *
+   * `complete === false` is a different and benign thing: the run hit its time
+   * budget and deferred pages to the next pass. That is the designed behaviour of
+   * a paginated crawl on a clock, it self-heals, and treating it as a fault made
+   * the rebuild script stop after one pass with 1,004 pages still queued.
+   */
+  if (!crawlComplete) {
+    return {
+      source: SOURCE,
+      rows: written + touched,
+      swept,
+      skipped: "notion-crawl-incomplete",
+    };
   }
   return { source: SOURCE, rows: written + touched, swept };
 }

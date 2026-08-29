@@ -205,13 +205,27 @@ async function adCostByDay(): Promise<AdCost> {
   let from: string | null = null;
   let to: string | null = null;
   try {
-    const res = await supabaseFetch(
-      // eslint-disable-next-line no-secrets/no-secrets -- a PostgREST query path, not a secret
-      "/rest/v1/brain_chunk?source=eq.ga4&select=meta&meta->>grain=eq.day",
-      { headers: { Range: "0-999" } }
-    );
-    if (!res.ok) return { byDay: out, from, to };
-    const rows = (await res.json()) as Array<{ meta?: Record<string, unknown> }>;
+    /**
+     * PAGE, and ORDER. This was a single unpaginated `Range: "0-999"` with no
+     * `order`, eleven files from a comment warning about exactly that: past 1,000
+     * ga4 day-chunks PostgREST returns an arbitrary — not merely oldest — 1,000,
+     * so a silent subset of daily `ad_cost` would vanish from every Net and
+     * cost-per-customer figure. Understating spend OVERSTATES profit, which is the
+     * direction that matters. 186 day-chunks today, so it is headroom, not a bug
+     * yet — but an invisible one when it arrives.
+     */
+    const rows: Array<{ meta?: Record<string, unknown> }> = [];
+    for (let offset = 0; offset < 100_000; offset += 1000) {
+      const res = await supabaseFetch(
+        // eslint-disable-next-line no-secrets/no-secrets -- a PostgREST query path, not a secret
+        "/rest/v1/brain_chunk?source=eq.ga4&select=meta&meta->>grain=eq.day" +
+          `&order=period_end.asc&limit=1000&offset=${offset}`
+      );
+      if (!res.ok) return { byDay: out, from, to };
+      const batch = (await res.json()) as Array<{ meta?: Record<string, unknown> }>;
+      rows.push(...batch);
+      if (batch.length < 1000) break;
+    }
     for (const r of rows) {
       const day = typeof r.meta?.day === "string" ? r.meta.day : null;
       if (!day) continue;

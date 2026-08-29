@@ -67,6 +67,37 @@ function rpcError(id: JsonRpcRequest["id"], code: number, message: string) {
 
 /** MCP tool results are content blocks; `isError` lets the model see a failure
  *  as a result rather than a transport error it cannot reason about. */
+/**
+ * Serialise as many WHOLE rows as fit, and say how many that was.
+ *
+ * Both list-returning tools used to count the rows they FETCHED, render them, and
+ * let the ceiling cut the text — so the header announced "1000 rows shown" while
+ * the body carried 76 and the JSON ended mid-object. Worse, a caller following the
+ * header's own advice and paging with `offset=1000` skipped the 924 rows that were
+ * fetched and never delivered: 92% of a wide-table walk lost, silently.
+ *
+ * Rows are also emitted COMPACT. Pretty-printing is what made 131 days of business
+ * numbers cost 40,000 characters, putting the company's first month out of reach of
+ * a tool whose whole job is the full history.
+ */
+export function renderRowsForTest(
+  rows: unknown[],
+  budget: number
+): { text: string; shown: number } {
+  const parts: string[] = [];
+  let used = 2; // the enclosing brackets
+  let shown = 0;
+  for (const row of rows) {
+    const piece = JSON.stringify(row);
+    // +1 for the separating comma once there is something to separate from.
+    if (used + piece.length + (shown > 0 ? 1 : 0) > budget) break;
+    used += piece.length + (shown > 0 ? 1 : 0);
+    parts.push(piece);
+    shown += 1;
+  }
+  return { text: `[${parts.join(",")}]`, shown };
+}
+
 function textResult(text: string, isError = false) {
   return {
     content: [{ type: "text", text: capWithNotice(text) }],
@@ -550,13 +581,23 @@ async function callTool(
       );
     }
     const covered = rows.length;
+    /**
+     * Compact, and cut on a row boundary. Pretty-printing made 131 days cost the
+     * whole 40,000-character ceiling, so asking for the full history returned
+     * malformed JSON cut mid-object and the company's first month — 2026-03-24 to
+     * 2026-04-19 — was simply unreachable through the tool that exists to serve it.
+     */
+    const { text: bodyText, shown } = renderRowsForTest(rows, MAX_RESULT_CHARS - 600);
     const head =
-      covered < asked
-        ? `Asked for ${asked} days; ${covered} returned, which is every day the database ` +
-          `holds in that range. Not a truncation — there is no data before the earliest ` +
-          `day below.\n\n`
-        : "";
-    return textResult(head + JSON.stringify(rows, null, 2));
+      shown < covered
+        ? `${shown} of ${covered} days returned — the rest did not fit the character ` +
+          `ceiling. Ask for a narrower period to see them.\n\n`
+        : covered < asked
+          ? `Asked for ${asked} days; ${covered} returned, which is every day the database ` +
+            `holds in that range. Not a truncation — there is no data before the earliest ` +
+            `day below.\n\n`
+          : "";
+    return textResult(head + bodyText);
   }
 
   if (name === "list_product_tables") {
@@ -659,15 +700,25 @@ async function callTool(
     // the same silent-cap bug that made list_sources report 307 commits instead
     // of 1,448.
     const total = res.headers.get("content-range")?.split("/")[1] ?? null;
+    // Reserve room for the header itself so the notice never gets cut off.
+    const { text: bodyText, shown } = renderRowsForTest(rows, MAX_RESULT_CHARS - 600);
+    const dropped = rows.length - shown;
+    const more = total !== null && Number(total) > offset + shown;
     const head =
-      total && Number(total) > offset + rows.length
-        ? `${rows.length} rows shown, ${total} match. ${
-            limit >= MAX_PRODUCT_ROWS
-              ? `${MAX_PRODUCT_ROWS} is the per-call maximum, so page with offset to see the rest.`
-              : "Raise limit or page with offset."
-          }\n\n`
-        : `${rows.length} rows.\n\n`;
-    return textResult(head + JSON.stringify(rows, null, 2));
+      `${shown} rows returned` +
+      (total ? `, ${total} match` : "") +
+      (dropped > 0
+        ? `. ${dropped} more were fetched but did not fit the character ceiling, so ` +
+          `page with offset=${offset + shown} — offset=${offset + rows.length} would SKIP them.`
+        : more
+          ? `. ${
+              limit >= MAX_PRODUCT_ROWS
+                ? `${MAX_PRODUCT_ROWS} is the per-call maximum, so page with offset`
+                : "Raise limit or page with offset"
+            } to see the rest.`
+          : ".") +
+      "\n\n";
+    return textResult(head + bodyText);
   }
 
   if (name === "query_external_service") {

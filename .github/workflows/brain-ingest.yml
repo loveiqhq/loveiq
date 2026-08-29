@@ -48,9 +48,31 @@ jobs:
         run: |
           set -euo pipefail
 
+          # FAIL, do not skip. This branch used to `exit 0`, so a repo with a
+          # missing or rotated Supabase secret produced a green tick, zero writes
+          # and no alert — `doc` and `commit` would freeze indefinitely while CI
+          # looked perfectly healthy. These two sources have no other refresh path.
           if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
-            echo "Supabase secrets not set; skipping ingest."
-            exit 0
+            echo "::error::Supabase secrets are not set, so the docs and commits half of the company brain cannot be refreshed."
+            exit 1
           fi
 
+          # Cheap guard on the chunker itself before touching the corpus.
+          node scripts/brain-ingest-repo.mjs --self-check
+
           node scripts/brain-ingest-repo.mjs
+
+      # Without this the only signal is a red tick nobody is watching for.
+      - name: Tell ops the brain stopped refreshing
+        if: failure()
+        env:
+          SLACK_OPS_WEBHOOK_URL: ${{ secrets.SLACK_OPS_WEBHOOK_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SLACK_OPS_WEBHOOK_URL:-}" ]; then
+            echo "no ops webhook configured; skipping notification"
+            exit 0
+          fi
+          curl -sS -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\":brain: Company-brain repo ingest FAILED on ${GITHUB_SHA:0:7}. The docs and commit history in the brain are now frozen until this is fixed — it will keep answering from stale data without looking broken. ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" \
+            "$SLACK_OPS_WEBHOOK_URL"

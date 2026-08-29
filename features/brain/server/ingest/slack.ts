@@ -32,9 +32,11 @@ const MAX_PAGES = 15;
 const MAX_RETRIES = 4;
 
 /** Bump when the row SHAPE changes; a mismatch counts as stale. See notion.ts. */
+// v4: v1-v3 stored Slack's HTML entities ("&amp;") rather than the typed text.
+// v3: v1-v2 stored every thread reply BEFORE its parent and in reverse order.
 // v2: v1 wrote days whose thread replies had been dropped by a 429 without
 // recording the gap, so every v1 row must be rebuilt rather than trusted.
-export const SLACK_BUILDER_VERSION = 2;
+export const SLACK_BUILDER_VERSION = 4;
 
 /**
  * Message subtypes that are membership bookkeeping, not conversation. Slack emits
@@ -153,7 +155,13 @@ export function renderMessage(
 
   // Rewrite <@Uxxxx> mentions inline too — a message about a person is only
   // searchable by that person's name if the name is actually in the text.
-  const body = text.replace(/<@([A-Z0-9]+)>/g, (_, id: string) => `@${names.get(id) ?? id}`);
+  const body = text
+    .replace(/<@([A-Z0-9]+)>/g, (_, id: string) => `@${names.get(id) ?? id}`)
+    // Slack escapes exactly these three in message text, so storing the raw string
+    // put "&amp;" in the corpus where the author typed "&".
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
   const who = names.get(m.user) ?? m.user;
   return `${indent ? "  ↳ " : ""}${who}: ${body}`;
 }
@@ -264,7 +272,18 @@ export async function ingestSlack(
       complete = false;
       break;
     }
-    const byDay = new Map<string, string[]>();
+    /**
+     * Per day, a list of ENTRIES rather than a flat list of lines: each entry is a
+     * top-level message plus its thread replies.
+     *
+     * A flat list broke ordering. `conversations.history` returns newest-first, so
+     * the day is reversed at the end to read chronologically — but replies were
+     * appended directly behind their parent, so that same reverse put every reply
+     * BEFORE its parent and in backwards order. A thread read bottom-up, answer
+     * first, which is close to unreadable and actively misleading about who replied
+     * to whom. Reversing entries and flattening afterwards keeps each thread intact.
+     */
+    const byDay = new Map<string, Array<{ line: string; replies: string[] }>>();
     const threadGaps = new Set<string>();
     let cursor = "";
 
@@ -284,7 +303,8 @@ export async function ingestSlack(
         if (!line || !m.ts) continue;
         const day = tsDate(m.ts);
         const bucket = byDay.get(day) ?? [];
-        bucket.push(line);
+        const entry = { line, replies: [] as string[] };
+        bucket.push(entry);
 
         // Thread replies do NOT appear in channel history, and a thread is usually
         // where the actual argument happens — fetching only the parent would index
@@ -305,7 +325,7 @@ export async function ingestSlack(
           for (const r of (replies?.messages as SlackMessage[]) ?? []) {
             if (r.ts === m.ts) continue;
             const rl = renderMessage(r, names, true);
-            if (rl) bucket.push(rl);
+            if (rl) entry.replies.push(rl);
           }
         }
         byDay.set(day, bucket);
@@ -315,14 +335,17 @@ export async function ingestSlack(
       if (page === MAX_PAGES - 1) complete = false;
     }
 
-    for (const [day, lines] of byDay) {
+    for (const [day, entries] of byDay) {
       // Today's chunk is always rewritten because the day is still accruing. A past
       // day is immutable ONCE FULLY FETCHED, so skip it and save the write — but a
       // day recorded with a thread gap is rebuilt until it is whole.
       if (day !== today && known.get(`ch:${ch.name}:${day}`) === true) continue;
       const whole = !threadGaps.has(day);
       if (!whole) complete = false;
-      rows.push(...dayToRows(ch.name as string, day, lines.reverse(), stampedAt, whole));
+      // Reverse the top-level sequence only, then flatten each thread back in
+      // order, so replies follow their parent and read oldest-first.
+      const lines = [...entries].reverse().flatMap((e) => [e.line, ...e.replies]);
+      rows.push(...dayToRows(ch.name as string, day, lines, stampedAt, whole));
     }
   }
 

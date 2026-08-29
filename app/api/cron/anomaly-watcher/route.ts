@@ -14,6 +14,7 @@
 
 import { NextResponse } from "next/server";
 import logger from "@shared/observability/logger";
+import { describeStall, findStalledCrons } from "@features/cron/server/cron-stall";
 import { notifySlack, escapeSlack } from "@shared/observability/slack";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import {
@@ -79,6 +80,21 @@ export async function GET(request: Request) {
       fired += 1;
     }
 
+    /**
+     * Watch the OTHER crons from out here. A cron that is never invoked writes no
+     * `cron_run` row and alerts from inside its own route body, so it cannot
+     * report its own absence — only a job that is definitely running can.
+     */
+    let stalled = 0;
+    try {
+      stalled = await alertOnStalledCrons(dayKey);
+    } catch (err) {
+      // The watchdog is SECONDARY to this cron's real job. If it throws, the
+      // anomaly alerts must still go out — a monitoring add-on that can take down
+      // the thing it was bolted onto is worse than no monitoring.
+      logger.error({ err }, "anomaly-watcher: cron stall check failed");
+    }
+
     return NextResponse.json({
       ok: true,
       day: dayKey,
@@ -86,6 +102,7 @@ export async function GET(request: Request) {
       fired,
       suppressed,
       deferred,
+      stalled,
     });
   } catch (err) {
     logger.error({ err }, "anomaly-watcher cron failed");
@@ -95,4 +112,23 @@ export async function GET(request: Request) {
     await trackDuration();
     await recordCronRun("anomaly-watcher", startMs, cronError ? "error" : "success", cronError);
   }
+}
+
+/** Alerts once per cron per day for anything that has stopped firing. */
+async function alertOnStalledCrons(dayKey: string): Promise<number> {
+  let stalled = 0;
+  for (const s of await findStalledCrons()) {
+      const claimed = await tryClaimSlackAlert(`cron_stalled:${s.cron}`, "day", dayKey);
+      if (!claimed) continue;
+      await notifySlack({
+        channel: "ops",
+        kind: "cron_stalled",
+        username: "ops_alerts",
+        text: `:alarm_clock: *Cron not firing* — ${escapeSlack(describeStall(s))}`,
+        context: { cron: s.cron, lastRunAt: s.lastRunAt, ageMs: s.ageMs },
+      });
+      await markSlackAlertDelivered(`cron_stalled:${s.cron}`, "day", dayKey);
+    stalled += 1;
+  }
+  return stalled;
 }

@@ -199,11 +199,25 @@ export async function touchChunks(
       }
     );
     if (!res.ok) {
-      logger.warn(
-        { source, status: res.status, batch: batch.length },
-        "brain touch failed — those rows will look stale to the sweep"
+      /**
+       * FAIL CLOSED. This used to `continue`, which was the most dangerous line in
+       * the ingester: the batch's rows were left with a stale `updated_at` AND
+       * excluded from `touched`, so the sweep later in the same run deleted them as
+       * orphans. The majority guard only refuses losses above ~50%, so a single
+       * transient PostgREST 5xx could silently delete up to half a source.
+       *
+       * The circuit breaker cannot catch this either — it counts THROWN errors, and
+       * `fetchWithTimeout` resolves normally with a 503 Response, so a run of 5xx
+       * looks like a series of successes.
+       *
+       * Throwing aborts before the sweep and surfaces through the cron route's
+       * existing catch, which alerts. A stale row is repaired by the next run; a
+       * deleted one is gone.
+       */
+      throw new Error(
+        `brain touch failed for ${source} (status ${res.status}, ${batch.length} rows) — ` +
+          `aborting before the sweep so those rows are not deleted as orphans`
       );
-      continue;
     }
     // Trust the server's count, not the batch length: a row that no longer
     // exists must not be counted as kept.

@@ -360,18 +360,40 @@ describe("/api/mcp", () => {
       expect(new Set(methods)).toEqual(new Set(["GET", "POST"]));
     });
 
+    it("at the row cap, never advises raising the limit — that provably does nothing", async () => {
+      // query_product_data clamps to MAX_PRODUCT_ROWS. Telling a caller to raise the
+      // limit sends the model to retry at 5000, receive the identical 1000 rows, and
+      // conclude it has everything. Verified against production: limit=5000 returned
+      // exactly the same rows as limit=1000.
+      wire(
+        Array.from({ length: 1000 }, (_, i) => ({ id: i })),
+        { total: 104355 }
+      );
+      const r = await call({ table: "payment", limit: 5000 });
+      const text = r.content[0].text as string;
+      expect(text).not.toMatch(/Raise limit/);
+      expect(text).toMatch(/per-call maximum/);
+      expect(text).toMatch(/offset/);
+    });
+
+    it("below the cap, raising the limit IS the right advice and is still given", async () => {
+      wire([{ id: 1 }, { id: 2 }], { total: 5000 });
+      const r = await call({ table: "payment", limit: 2 });
+      expect(r.content[0].text).toMatch(/Raise limit/);
+    });
+
     it("says how many rows MATCH, not just how many it returned", async () => {
       // The silent-truncation bug that made list_sources report 307 commits of
       // 1,448: a capped result that does not admit it reads as the whole picture.
       wire([{ id: 1 }, { id: 2 }], { total: 5000 });
       const r = await call({ table: "payment", limit: 2 });
-      expect(r.content[0].text).toMatch(/2 rows shown, 5000 match/);
+      expect(r.content[0].text).toMatch(/2 rows returned, 5000 match/);
       expect(r.content[0].text).toMatch(/offset/);
     });
 
     it("does not claim truncation when everything fits", async () => {
       wire([{ id: 1 }, { id: 2 }], { total: 2 });
-      expect((await call({ table: "payment" })).content[0].text).toMatch(/^2 rows\./);
+      expect((await call({ table: "payment" })).content[0].text).toMatch(/^2 rows returned, 2 match\./);
     });
 
     it("passes filters and order through as PostgREST params", async () => {
@@ -805,9 +827,11 @@ describe("an oversized result must announce that it was cut", () => {
     const src = await import("node:fs").then((fs) =>
       fs.readFileSync("app/api/mcp/route.ts", "utf8")
     );
-    const advice = src.slice(src.indexOf("rows shown"), src.indexOf("rows shown") + 400);
-    expect(advice).toMatch(/per-call maximum/);
-    expect(advice).toMatch(/limit >= MAX_PRODUCT_ROWS/);
+    // Anchor on the CODE, not on prose: an earlier version of this test sliced from
+    // the first "rows shown" in the file and started matching a comment instead.
+    expect(src).toMatch(/limit >= MAX_PRODUCT_ROWS/);
+    expect(src).toMatch(/per-call maximum, so page with offset/);
+
   });
 });
 
@@ -831,5 +855,43 @@ describe("query_external_service must not bypass the truncation notice", () => {
     // capWithNotice is the ONLY place allowed to cut at the ceiling.
     const atCeiling = [...src.matchAll(/\.slice\(0,\s*MAX_RESULT_CHARS/g)];
     expect(atCeiling.length).toBe(1);
+  });
+});
+
+describe("list results must be cut on a row boundary, and counted honestly", () => {
+  /**
+   * Both list tools counted the rows they FETCHED, rendered them, and let the
+   * ceiling cut the text — so the header said "1000 rows shown" while the body
+   * carried 76 and the JSON ended mid-object. A caller following the header's own
+   * advice and paging with offset=1000 then SKIPPED the 924 rows that were fetched
+   * and never delivered: 92% of a wide-table walk lost, in silence.
+   */
+  it("returns only whole rows and reports how many it actually returned", async () => {
+    const { renderRowsForTest } = await import("@/app/api/mcp/route");
+    const rows = Array.from({ length: 500 }, (_, i) => ({ id: i, blob: "x".repeat(200) }));
+    const { text, shown } = renderRowsForTest(rows, 5_000);
+    expect(shown).toBeLessThan(rows.length);
+    expect(text.length).toBeLessThanOrEqual(5_000);
+    // The whole point: what comes back must PARSE. A mid-object cut does not.
+    const parsed = JSON.parse(text) as unknown[];
+    expect(parsed).toHaveLength(shown);
+  });
+
+  it("emits every row when they all fit", async () => {
+    const { renderRowsForTest } = await import("@/app/api/mcp/route");
+    const rows = [{ a: 1 }, { a: 2 }];
+    const { text, shown } = renderRowsForTest(rows, 5_000);
+    expect(shown).toBe(2);
+    expect(JSON.parse(text)).toEqual(rows);
+  });
+
+  it("is compact — pretty-printing is what put the first month out of reach", async () => {
+    const { renderRowsForTest } = await import("@/app/api/mcp/route");
+    const rows = Array.from({ length: 40 }, (_, i) => ({ day: `2026-04-${i}`, visits: i }));
+    const compact = renderRowsForTest(rows, 1_000_000).text;
+    // The invariant is "not pretty-printed", not a particular ratio — indentation is
+    // what multiplied the payload, and small objects do not hit a 2x saving.
+    expect(compact).not.toMatch(/\n\s\s/);
+    expect(compact.length).toBeLessThan(JSON.stringify(rows, null, 2).length);
   });
 });

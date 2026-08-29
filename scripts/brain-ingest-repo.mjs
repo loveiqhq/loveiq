@@ -120,7 +120,7 @@ function hardSplit(text) {
  * this repo's AGENT_README files yield dozens of 300-char fragments and the
  * chunk that ranks first rarely holds the whole answer.
  */
-function chunkMarkdown(path, text) {
+export function chunkMarkdown(path, text) {
   const lines = text.split(/\r?\n/);
   const segments = [];
   const stack = [];
@@ -184,6 +184,21 @@ function chunkMarkdown(path, text) {
       packed[i - 1].body += `\n\n${packed[i].body}`;
       packed.splice(i, 1);
     }
+  }
+
+  /**
+   * ...and a short FIRST chunk folds FORWARD, because the loop above stops before
+   * index 0 and the filter further down then deletes it outright.
+   *
+   * A doc opening with a one-line lede above a long first section therefore lost
+   * that line entirely — no warning, no `part` marker, exit 0. It is a very common
+   * markdown shape, and the opening sentence is usually the highest-value line in
+   * the file and exactly what a non-technical reader would search for. Reproduced
+   * end to end; it happens to fire on none of the docs indexed today.
+   */
+  if (packed.length > 1 && packed[0].body.length < MIN_CHARS) {
+    packed[1].body = `${packed[0].body}\n\n${packed[1].body}`;
+    packed.shift();
   }
 
   const docName = path.split("/").pop();
@@ -416,6 +431,36 @@ process.chdir(git(["rev-parse", "--show-toplevel"]).trim());
 // feature branch therefore injects PERMANENT rows whose links die the moment the
 // branch is squash-merged or deleted. The GitHub Action only runs on `main`; this
 // guard is for a manual run, where the mistake is easy and irreversible.
+/**
+ * `--self-check` exercises the chunker on the shape that used to lose text, and
+ * exits. It runs BEFORE any git or network work so it is safe from any branch.
+ *
+ * The bug: a doc opening with a short lede above a long first section had that
+ * lede DELETED — the backward fold loop stops before index 0, and the filter then
+ * dropped it. Silent, exit 0, no part marker.
+ */
+if (process.argv.includes("--self-check")) {
+  const lede = "LoveIQ pays Stripe 2.9% plus 30 cents per sale.";
+  const long = Array.from({ length: 45 }, () => "Filler about the checkout funnel.").join(" ");
+  const chunks = chunkMarkdown("docs/PROBE.md", `${lede}\n\n## Details\n\n${long}\n`);
+  const all = chunks.map((c) => c.body).join("\n");
+  if (!all.includes(lede)) {
+    console.error(`self-check FAILED: the opening line was dropped (${chunks.length} chunk(s))`);
+    process.exit(1);
+  }
+  // And a normal doc must still split rather than collapsing into one chunk.
+  const many = chunkMarkdown(
+    "docs/PROBE2.md",
+    ["# A", long, "## B", long, "## C", long].join("\n\n")
+  );
+  if (many.length < 2) {
+    console.error(`self-check FAILED: expected a multi-section doc to split, got ${many.length}`);
+    process.exit(1);
+  }
+  console.log(`self-check OK: opening line kept, multi-section doc split into ${many.length}`);
+  process.exit(0);
+}
+
 const branch = git(["rev-parse", "--abbrev-ref", "HEAD"]).trim();
 const onMain = branch === "main" || process.argv.includes("--allow-branch");
 if (!onMain && !process.argv.includes("--dump-json") && !process.argv.includes("--dry-run")) {

@@ -64,6 +64,14 @@ describe("renderMessage — what gets into the corpus", () => {
     expect(renderMessage({ user: "UNKNOWN1", text: "hi", ts: "1" }, new Map())).toBe("UNKNOWN1: hi");
   });
 
+  it("decodes the three entities Slack escapes, so the corpus holds what was typed", () => {
+    // Slack escapes &, < and > in message text. Storing the raw string put
+    // "Let discuss also have a couple of thoughts &amp; ideas" in the corpus.
+    expect(
+      renderMessage({ user: "U0BSZ4VRX26", text: "thoughts &amp; ideas &lt;3 &gt;", ts: "1" }, NAMES)
+    ).toBe("Eman: thoughts & ideas <3 >");
+  });
+
   it("drops an empty message and marks a thread reply", () => {
     expect(renderMessage({ user: "U0BSZ4VRX26", text: "   ", ts: "1" }, NAMES)).toBeNull();
     expect(renderMessage({ user: "U0BSZ4VRX26", text: "agreed", ts: "1" }, NAMES, true)).toBe(
