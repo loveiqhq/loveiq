@@ -62,37 +62,37 @@ describe("/api/cron/brain-ingest wiring", () => {
     // something that was not happening.
     await GET(req());
     expect(calls.map((c) => c.name).sort()).toEqual(
-      ["analytics", "drive", "ga4", "gsc", "notion", "slack"].sort()
+      ["ga4", "gsc"].sort()
     );
   });
 
-  it("keeps GA4 before analytics, which reads GA4's ad spend back out", async () => {
+  it("runs ONLY the sources whose upstream changes daily", async () => {
+    /**
+     * GA4 and Search Console lag 1-3 days at Google's end, so nightly IS live for
+     * them and polling faster just refetches identical numbers. Everything that
+     * changes continuously moved to `brain-fast` (15 min) and `brain-notion`
+     * (hourly). If a continuously-changing source reappears here, the corpus goes
+     * back to being up to 24 hours stale without anything looking broken.
+     */
     await GET(req());
-    const order = calls.map((c) => c.name);
-    expect(order.indexOf("ga4")).toBeLessThan(order.indexOf("analytics"));
-  });
-
-  it("keeps Notion last, since it is the source most likely to be cut short", async () => {
-    await GET(req());
-    const order = calls.map((c) => c.name);
-    expect(order[order.length - 1]).toBe("notion");
+    expect(calls.map((c) => c.name).sort()).toEqual(["ga4", "gsc"]);
   });
 
   it("passes the OIDC token from the REQUEST HEADER to every Google-dependent source", async () => {
     // The token is a header, not an env var. Reading it from process.env is what
     // made keyless auth fail silently in production with oidc=0.
     await GET(req({ [VERCEL_OIDC_HEADER]: OIDC }));
-    for (const name of ["ga4", "gsc", "drive"]) {
+    for (const name of ["ga4", "gsc"]) {
       const call = calls.find((c) => c.name === name)!;
       expect(call.args, name).toContain(OIDC);
     }
   });
 
-  it("does not pass the token to sources that do not use Google", async () => {
+  it("has no non-Google source left that could be handed the token by mistake", async () => {
+    // The original of this test asserted analytics/notion/slack were NOT given the
+    // OIDC token. Those three now live in brain-fast, so the meaningful assertion
+    // moved with them; here the point is that this lane is Google-only.
     await GET(req({ [VERCEL_OIDC_HEADER]: OIDC }));
-    for (const name of ["analytics", "notion", "slack"]) {
-      const call = calls.find((c) => c.name === name)!;
-      expect(call.args, name).not.toContain(OIDC);
-    }
+    expect(calls.every((c) => c.name === "ga4" || c.name === "gsc")).toBe(true);
   });
 });

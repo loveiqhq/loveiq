@@ -42,8 +42,12 @@
       "schedule": "47 4 * * *"
     },
     {
-      "path": "/api/cron/brain-drive",
+      "path": "/api/cron/brain-fast",
       "schedule": "7,22,37,52 * * * *"
+    },
+    {
+      "path": "/api/cron/brain-notion",
+      "schedule": "41 * * * *"
     }
   ],
   "functions": {
@@ -100,6 +104,12 @@
     },
     "app/api/cron/journey-backfill/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/cron/brain-fast/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/cron/brain-notion/route.ts": {
+      "maxDuration": 60
     }
   }
 }

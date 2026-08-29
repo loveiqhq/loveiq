@@ -1,9 +1,5 @@
 import { NextResponse } from "next/server";
-import { ingestAnalytics } from "@features/brain/server/ingest/analytics";
-import { ingestDrive } from "@features/brain/server/ingest/drive";
 import { ingestGa4, ingestSearchConsole } from "@features/brain/server/ingest/google";
-import { ingestNotion } from "@features/brain/server/ingest/notion";
-import { ingestSlack } from "@features/brain/server/ingest/slack";
 import type { IngestResult } from "@features/brain/server/ingest/upsert";
 import { readVercelOidcToken } from "@shared/http/google-oauth";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -175,19 +171,11 @@ export async function GET(request: Request) {
     const oidcToken = readVercelOidcToken(request);
     await run("ga4", () => ingestGa4(stampedAt, isOutOfTime, undefined, oidcToken));
     await run("gsc", () => ingestSearchConsole(stampedAt, isOutOfTime, undefined, oidcToken));
-    await run("analytics", () => ingestAnalytics(stampedAt));
     // Notion last, and given the run's clock: it is the only source whose cost
     // scales with page COUNT rather than row count (one request per page for
     // block content), so it is the one most likely to need cutting short.
-    // Drive nightly as well as every 15 minutes. Deliberate redundancy: if the
-    // fast job is disabled or failing, the corpus degrades to daily rather than
-    // stopping. Cheap when nothing changed — one list call.
-    await run("drive", () => ingestDrive(stampedAt, isOutOfTime, oidcToken));
-    // Slack before Notion: it is bounded by CHANNEL count (9) rather than page
     // count, so it finishes predictably, and it is the only source carrying the
     // reasoning behind decisions the repo only shows the result of.
-    await run("slack", () => ingestSlack(stampedAt, isOutOfTime));
-    await run("notion", () => ingestNotion(stampedAt, isOutOfTime));
 
     logger.info({ results }, "brain-ingest: done");
     // 200 even when a source failed: the run itself completed and Vercel must not

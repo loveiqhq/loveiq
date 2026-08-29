@@ -34,7 +34,10 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   "anomaly-watcher": 3 * 3_600_000,
   "conversion-digest": 26 * 3_600_000,
   "brain-ingest": 26 * 3_600_000,
-  "brain-drive": 45 * 60_000,
+  // Every 15 minutes, so 45m of silence is two missed ticks.
+  "brain-fast": 45 * 60_000,
+  // Hourly.
+  "brain-notion": 3 * 3_600_000,
 };
 
 /**

@@ -41,10 +41,12 @@ it — there is no automatic feedback signal.
 
 ### What feeds it
 
-| Source                                                                           | Where from                                                             | When                    |
-| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------- |
-| Repo docs + git commits                                                          | `.github/workflows/brain-ingest.yml` → `scripts/brain-ingest-repo.mjs` | on every push to `main` |
-| Funnel numbers, GA4, Search Console, Notion (board + pages), Slack conversations | `/api/cron/brain-ingest`                                               | daily, 04:47 UTC        |
+| Source                                          | Where from                                                             | When                    |
+| ----------------------------------------------- | ---------------------------------------------------------------------- | ----------------------- |
+| Repo docs + git commits                         | `.github/workflows/brain-ingest.yml` → `scripts/brain-ingest-repo.mjs` | on every push to `main` |
+| Call notes, funnel numbers, Slack conversations | `/api/cron/brain-fast`                                                 | every 15 min            |
+| Notion (board + pages)                          | `/api/cron/brain-notion`                                               | hourly, at :41          |
+| GA4, Search Console                             | `/api/cron/brain-ingest`                                               | daily, 04:47 UTC        |
 
 Jira is **not** a source. Notion is the system of record for the team's work
 (decision 2026-08-28), so `ingestJira` is no longer called by the cron and `jira`
@@ -449,7 +451,7 @@ worse result. So the ingester reads Drive.
 
 **Live since 2026-08-28:** the folder is shared and 23 notes (105 chunks) are
 indexed, back to 7 August. A dedicated cron re-checks every 15 minutes
-(`/api/cron/brain-drive`, at 7/22/37/52 past), so a note written after a call is
+(`/api/cron/brain-fast`, at 7/22/37/52 past), so a note written after a call is
 searchable within minutes rather than the next morning. The nightly `brain-ingest`
 also ingests Drive — deliberate redundancy, so a failure of the fast job degrades to
 daily rather than to nothing.
@@ -473,7 +475,7 @@ so the ops alert does not fire nightly for a source nobody has enabled. A FAILED
 listing reports `drive-list-failed` instead — the two are deliberately different,
 because "nobody shared anything" and "Drive refused us" need different responses.
 
-**Why a separate 15-minute cron rather than running `brain-ingest` more often.**
+**Why three jobs at three speeds rather than one.**
 That job crawls all 35 Notion databases and both Google properties and costs ~30s a
 run; at 15-minute intervals it would burn an hour of compute a day re-reading things
 that change daily at most, and hit Notion's rate limit for nothing. Drive is the

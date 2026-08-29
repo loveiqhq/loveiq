@@ -10,6 +10,15 @@ vi.mock("@features/brain/server/ingest/drive", () => ({
 }));
 
 let prodHost = true;
+// The other two sources in this lane. They are stubbed to a healthy no-op so each
+// test isolates the behaviour it names; a real call here would alert and mask it.
+vi.mock("@features/brain/server/ingest/analytics", () => ({
+  ingestAnalytics: vi.fn(async () => ({ source: "analytics", rows: 177, swept: 0 })),
+}));
+vi.mock("@features/brain/server/ingest/slack", () => ({
+  ingestSlack: vi.fn(async () => ({ source: "slack", rows: 526, swept: 0 })),
+}));
+
 vi.mock("@shared/http/is-prod-cron-host", () => ({ isProdCronHost: () => prodHost }));
 
 let authOk = true;
@@ -40,11 +49,11 @@ vi.mock("@shared/observability/slack", () => ({
   escapeSlack: (s: string) => s,
 }));
 
-import { GET } from "@/app/api/cron/brain-drive/route";
+import { GET } from "@/app/api/cron/brain-fast/route";
 
-const req = () => new Request("https://www.loveiq.org/api/cron/brain-drive");
+const req = () => new Request("https://www.loveiq.org/api/cron/brain-fast");
 
-describe("/api/cron/brain-drive", () => {
+describe("/api/cron/brain-fast", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     claims.length = 0;
@@ -120,6 +129,32 @@ describe("/api/cron/brain-drive", () => {
     mockIngest.mockRejectedValue(new Error("boom"));
     await GET(req());
     expect(recorded).toHaveLength(1);
-    expect(recorded[0].name).toBe("brain-drive");
+    expect(recorded[0].name).toBe("brain-fast");
+  });
+});
+
+describe("the OIDC token goes only where Google is actually called", () => {
+  /**
+   * The token is a REQUEST HEADER, not an env var — reading it from process.env is
+   * what made keyless auth fail silently in production with `oidc=0`. Drive needs
+   * it; analytics and slack must not be handed a Google credential they have no
+   * use for.
+   */
+  it("hands it to drive and to nothing else in this lane", async () => {
+    const { ingestAnalytics } = await import("@features/brain/server/ingest/analytics");
+    const { ingestSlack } = await import("@features/brain/server/ingest/slack");
+    mockIngest.mockResolvedValue({ source: "drive", rows: 1, swept: 0 });
+    await GET(
+      new Request("https://www.loveiq.org/api/cron/brain-fast", {
+        headers: { "x-vercel-oidc-token": "vercel.oidc.jwt" },
+      })
+    );
+    const driveCall = mockIngest.mock.calls.at(-1)!;
+    expect(driveCall).toContain("vercel.oidc.jwt");
+    for (const fn of [ingestAnalytics, ingestSlack]) {
+      for (const call of vi.mocked(fn).mock.calls) {
+        expect(call).not.toContain("vercel.oidc.jwt");
+      }
+    }
   });
 });

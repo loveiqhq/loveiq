@@ -26,14 +26,14 @@ const ok = (started_at: string | null) =>
 
 describe("findStalledCrons", () => {
   it("flags a cron whose newest run is older than its limit", async () => {
-    // brain-drive runs every 15 minutes; 4 hours of silence is a real stall.
+    // brain-fast runs every 15 minutes; 4 hours of silence is a real stall.
     mockFetch.mockImplementation((url: string) =>
       Promise.resolve(
-        ok(url.includes("brain-drive") ? "2026-08-29T08:00:00Z" : "2026-08-29T11:55:00Z")
+        ok(url.includes("brain-fast") ? "2026-08-29T08:00:00Z" : "2026-08-29T11:55:00Z")
       )
     );
     const stalled = await findStalledCrons(NOW);
-    expect(stalled.map((s) => s.cron)).toContain("brain-drive");
+    expect(stalled.map((s) => s.cron)).toContain("brain-fast");
   });
 
   it("does not flag a cron that ran within its limit", async () => {
