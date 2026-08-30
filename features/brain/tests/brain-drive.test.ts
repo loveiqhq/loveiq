@@ -4,8 +4,15 @@ vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
+let delegatedToken: string | null = "delegated-token";
+const delegatedFor: string[] = [];
 vi.mock("@shared/http/google-oauth", () => ({
+  DRIVE_SCOPE: "drive",
   getGoogleAccessToken: vi.fn(async () => "test-token"),
+  getDelegatedToken: vi.fn(async (subject: string) => {
+    delegatedFor.push(subject);
+    return delegatedToken;
+  }),
   isGoogleConfigured: () => true,
 }));
 
@@ -423,5 +430,48 @@ describe("PDFs — the 213 files that used to be invisible", () => {
       .map((c) => c.body)
       .join(" ");
     expect(written).toContain("[truncated: this pdf is longer than the brain indexes]");
+  });
+});
+
+describe("Drive reads as a PERSON, not as the service account", () => {
+  beforeEach(() => {
+    files = [FILE];
+    existing = [];
+    dbCalls.length = 0;
+    httpCalls.length = 0;
+    delegatedFor.length = 0;
+    delegatedToken = "delegated-token";
+    listOk = true;
+    alwaysMorePages = false;
+    targets = {};
+    exportBody = "Summary\n\nWe agreed to ship the paywall.";
+    delete process.env.GOOGLE_WORKSPACE_ADMIN;
+  });
+
+  /**
+   * The whole point. As its own identity the service account sees only what has been
+   * explicitly shared with it — measured in production on 2026-08-30, TWENTY-FOUR
+   * documents against 512 for a person. The other ~11,000 chunks came from a one-off
+   * local run and every production run since was saved from deleting them only by
+   * the sweep's majority guard.
+   */
+  it("impersonates the workspace admin when one is configured", async () => {
+    process.env.GOOGLE_WORKSPACE_ADMIN = "ec@loveiq.org";
+    await ingestDrive(STAMP, () => false, null);
+    expect(delegatedFor).toContain("ec@loveiq.org");
+  });
+
+  it("falls back to the service account when impersonation fails, so it is never WORSE", async () => {
+    process.env.GOOGLE_WORKSPACE_ADMIN = "ec@loveiq.org";
+    delegatedToken = null;
+    const result = await ingestDrive(STAMP, () => false, null);
+    // still ingested, using the old identity
+    expect(result.skipped).not.toBe("google-token-unavailable");
+    expect(httpCalls.some((u) => u.includes("/files?q="))).toBe(true);
+  });
+
+  it("does not attempt impersonation when no admin is configured", async () => {
+    await ingestDrive(STAMP, () => false, null);
+    expect(delegatedFor).toHaveLength(0);
   });
 });

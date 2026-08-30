@@ -1,5 +1,7 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import {
+  DRIVE_SCOPE,
+  getDelegatedToken,
   getGoogleAccessToken,
   googleCredentialShape,
   isGoogleConfigured,
@@ -376,6 +378,36 @@ function partIdsOf(known: Map<string, unknown>, baseId: string): string[] {
   return [...known.keys()].filter((id) => id.startsWith(prefix));
 }
 
+/**
+ * The Drive token, IMPERSONATING A PERSON where possible.
+ *
+ * This is the difference between seeing the company Drive and seeing a corner of
+ * it. As its own identity the service account can only read what has been
+ * explicitly shared with it -- measured on 2026-08-30: **24 documents**, against
+ * 512 for a person. The other ~11,000 chunks in the corpus came from a one-off
+ * local run under a human credential, and every production run since has been
+ * saved from deleting them only by the sweep's majority guard.
+ *
+ * Delegation fixes that without anyone sharing a single folder by hand: read as the
+ * workspace admin and Drive returns what THEY can see.
+ *
+ * Falls back to the service account's own token, so if delegation is unavailable
+ * this is exactly as capable as before and never worse.
+ */
+async function driveToken(oidcToken?: string | null): Promise<string | null> {
+  const admin = (process.env.GOOGLE_WORKSPACE_ADMIN ?? "").trim();
+  if (admin) {
+    const delegated = await getDelegatedToken(admin, DRIVE_SCOPE, Date.now(), oidcToken);
+    if (delegated) return delegated;
+    logger.warn(
+      { admin },
+      "brain-ingest drive: could not impersonate the workspace admin, falling back to the " +
+        "service account -- which sees only what has been shared with it"
+    );
+  }
+  return getGoogleAccessToken(Date.now(), oidcToken);
+}
+
 export async function ingestDrive(
   stampedAt: string,
   isOutOfTime: () => boolean = () => false,
@@ -386,7 +418,7 @@ export async function ingestDrive(
   if (!isGoogleConfigured()) {
     return { source: SOURCE, rows: 0, swept: 0, skipped: "google-not-configured" };
   }
-  const token = await getGoogleAccessToken(Date.now(), oidcToken);
+  const token = await driveToken(oidcToken);
   if (!token) {
     return {
       source: SOURCE,
