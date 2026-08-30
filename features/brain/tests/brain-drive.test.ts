@@ -62,8 +62,23 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
         ? { ok: true, status: 200, json: async () => target, text: async () => "" }
         : { ok: false, status: 404, text: async () => '{"error":"File not found"}' };
     }
-    return { ok: true, status: 200, json: async () => ({}), text: async () => "" };
+    // alt=media download: bytes for a pdf, text for everything else
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+      text: async () => "",
+      arrayBuffer: async () => new Uint8Array([37, 80, 68, 70]).buffer,
+    };
   }),
+}));
+
+// unpdf is stubbed rather than fed a real pdf: this test is about what the
+// ingester DOES with extracted text, not about whether pdfjs can parse.
+let pdfText = "";
+vi.mock("unpdf", () => ({
+  getDocumentProxy: vi.fn(async () => ({})),
+  extractText: vi.fn(async () => ({ totalPages: 1, text: pdfText })),
 }));
 
 import { docToRows, ingestDrive } from "@features/brain/server/ingest/drive";
@@ -328,5 +343,64 @@ describe("Google Meet shortcuts", () => {
     expect(httpCalls.filter((u) => u.includes(`/files/${FILE.id}?fields=id,name`))).toHaveLength(0);
     // and it is still indexed exactly once
     expect(written().filter((r) => r.source_id === `doc:${FILE.id}`)).toHaveLength(1);
+  });
+});
+
+describe("PDFs — the 213 files that used to be invisible", () => {
+  const PDF = {
+    id: "pdf1",
+    name: "Term Sheet 2026",
+    mimeType: "application/pdf",
+    modifiedTime: "2026-08-26T14:05:00.000Z",
+    createdTime: "2026-08-26T14:00:00.000Z",
+    webViewLink: "https://drive.google.com/file/d/pdf1/view",
+    owners: [{ emailAddress: "ec@loveiq.org" }],
+  };
+
+  beforeEach(() => {
+    files = [PDF];
+    existing = [];
+    dbCalls.length = 0;
+    httpCalls.length = 0;
+    listOk = true;
+    alwaysMorePages = false;
+    targets = {};
+  });
+
+  it("asks Drive for PDFs at all — they were absent from the listing query", async () => {
+    // Everything else is downstream of this: if the `q` does not name the mime
+    // type, no PDF is ever seen, and the ingester looks like it works.
+    pdfText = "some real text ".repeat(40);
+    await ingestDrive(STAMP, () => false, null);
+    const listing = httpCalls.find((u) => u.includes("/files?q="));
+    expect(decodeURIComponent(listing ?? "")).toContain("mimeType='application/pdf'");
+  });
+
+  it("indexes the text layer of a real pdf", async () => {
+    pdfText = "Investors agree to a EUR 2m SAFE at a 12m cap. ".repeat(10);
+    await ingestDrive(STAMP, () => false, null);
+    const written = dbCalls.filter((c) => c.method === "POST").map((c) => c.body).join(" ");
+    expect(written).toContain("SAFE at a 12m cap");
+    expect(written).toContain("Term Sheet 2026");
+  });
+
+  /**
+   * A scanned contract has no text layer. Extracting it yields a few stray
+   * characters, and indexing that produces a chunk whose only real content is its
+   * own title — which then matches questions it cannot answer. There is no OCR
+   * here, so the honest thing is to skip it.
+   */
+  it("skips a scan with no text layer rather than indexing an empty husk", async () => {
+    pdfText = "  \n page 1 \n ";
+    await ingestDrive(STAMP, () => false, null);
+    const written = dbCalls.filter((c) => c.method === "POST").map((c) => c.body).join(" ");
+    expect(written).not.toContain("Term Sheet 2026");
+  });
+
+  it("caps one pdf, and says so in the text rather than truncating silently", async () => {
+    pdfText = "word ".repeat(200_000); // ~1M chars, larger than the cap
+    await ingestDrive(STAMP, () => false, null);
+    const written = dbCalls.filter((c) => c.method === "POST").map((c) => c.body).join(" ");
+    expect(written).toContain("[truncated: this pdf is longer than the brain indexes]");
   });
 });

@@ -36,5 +36,5 @@
     "package-lock.json"
   ],
   "ignoreRegExpList": ["/`[^`]+`/", "/```[\\s\\S]*?```/", "HexValues", "Urls", "EmailAddresses"],
-  "words": ["halfvec", "IVFFlat", "pgvector"]
+  "words": ["halfvec", "IVFFlat", "pgvector", "unpdf"]
 }

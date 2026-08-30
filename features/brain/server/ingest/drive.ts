@@ -45,6 +45,25 @@ export const DRIVE_BUILDER_VERSION = 3;
 const DOC_MIME = "application/vnd.google-apps.document";
 const SHEET_MIME = "application/vnd.google-apps.spreadsheet";
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const PDF_MIME = "application/pdf";
+
+/**
+ * Cap on the text taken from ONE pdf, ~167 chunks at BODY_LIMIT.
+ *
+ * Not theoretical: a single Drive file ("Pitchbook Investors Data") is already
+ * 3,242 chunks -- 13% of the whole corpus, and 13% of the embedding budget, from
+ * one data export. Nothing stopped it, because no source caps a single document.
+ * A 300-page contract fits comfortably under this; a data dump does not.
+ *
+ * ponytail: caps the NEW source only. The existing oversized Drive documents are
+ * left alone deliberately -- shrinking them would delete indexed content nobody
+ * asked to lose, and that is a call for a person, not for this change.
+ */
+const PDF_TEXT_LIMIT = 400_000;
+
+/** Below this, a pdf is a scan with no text layer, and indexing it yields a
+ *  title-shaped chunk with no content. We have no OCR, so it is skipped. */
+const PDF_MIN_CHARS = 200;
 
 /**
  * EVERY FILE ON THE COMPANY DRIVE WE CAN TURN INTO TEXT, not just meeting notes.
@@ -59,10 +78,10 @@ const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingm
  *  - Plain-text formats DOWNLOAD as-is (`alt=media`).
  *  - `.docx` downloads and goes through `mammoth`, which is already a dependency.
  *
- * PDFs are deliberately excluded: Drive refuses to export them ("Export only
- * supports Docs Editors files", HTTP 403) and extracting their text needs a new
- * dependency. 213 files is a real gap and it is recorded in the runbook rather
- * than hidden.
+ *  - PDFs DOWNLOAD and go through `unpdf`. Drive refuses to export them ("Export
+ *    only supports Docs Editors files", HTTP 403), so the bytes are fetched and
+ *    the text layer read locally. A scan with no text layer is skipped rather
+ *    than indexed as an empty husk -- there is no OCR here.
  */
 const PLAIN_MIMES = new Set([
   "text/markdown",
@@ -73,7 +92,7 @@ const PLAIN_MIMES = new Set([
 ]);
 
 /** Everything the listing asks for, as a Drive `q` fragment. */
-const WANTED_MIMES = [DOC_MIME, SHEET_MIME, DOCX_MIME, ...PLAIN_MIMES];
+const WANTED_MIMES = [DOC_MIME, SHEET_MIME, DOCX_MIME, PDF_MIME, ...PLAIN_MIMES];
 
 /**
  * Google Meet does not always put the note IN the meeting folder — for meetings
@@ -234,6 +253,18 @@ async function docText(token: string, fileId: string, mimeType?: string): Promis
 
   const res = await driveGet(token, `/files/${fileId}?alt=media`);
   if (!res.ok) throw new Error(`download ${res.status}`);
+
+  if (mimeType === PDF_MIME) {
+    const buf = new Uint8Array(await res.arrayBuffer());
+    const { extractText, getDocumentProxy } = await import("unpdf");
+    const doc = await getDocumentProxy(buf);
+    const { text } = await extractText(doc, { mergePages: true });
+    const joined = clean(Array.isArray(text) ? text.join("\n") : text);
+    if (joined.length < PDF_MIN_CHARS) return "";
+    return joined.length > PDF_TEXT_LIMIT
+      ? `${joined.slice(0, PDF_TEXT_LIMIT)}\n\n[truncated: this pdf is longer than the brain indexes]`
+      : joined;
+  }
 
   if (mimeType === DOCX_MIME) {
     // `mammoth` is already a dependency; it turns .docx into plain text without
@@ -406,9 +437,13 @@ export async function ingestDrive(
       break;
     }
     try {
-      rows.push(
-        ...docToRows(file, await docText(token, file.id as string, file.mimeType), stampedAt)
-      );
+      const text = await docText(token, file.id as string, file.mimeType);
+      // A file that yields no text -- a scanned pdf with no text layer, an empty
+      // doc -- would otherwise be indexed as a chunk whose only content is its own
+      // title, which then matches questions it cannot answer. Skipping lets the
+      // sweep remove it if it was indexed before.
+      if (!text.trim()) continue;
+      rows.push(...docToRows(file, text, stampedAt));
     } catch (err) {
       // One unreadable document must not cost the rest of the run.
       logger.warn({ err, file: file.id }, "brain-ingest drive: export failed");

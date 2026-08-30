@@ -511,8 +511,8 @@ future one Gemini creates. The listing query is global (`mimeType='document' or
 shortcut`, no parent filter), so no code change is needed when a new meeting folder
 appears.
 
-Only native Google Docs are indexed. A PDF or a scan would need OCR, and silently
-indexing an empty body would be worse than skipping it.
+PDFs are indexed from their text layer. A SCAN still is not: it needs OCR, and
+silently indexing an empty body would be worse than skipping it.
 
 ### Notion: after changing the chunk shape, rebuild
 
@@ -602,7 +602,7 @@ Until 2026-08-29 this indexed Google Docs only, which was 24 meeting notes. What
 | Type          | Count | Indexed |
 | ------------- | ----: | ------- |
 | Google Docs   |   284 | yes     |
-| PDF           |   213 | **no**  |
+| PDF           |   213 | yes     |
 | folders       |   141 | n/a     |
 | markdown      |    98 | yes     |
 | Word `.docx`  |    43 | yes     |
@@ -614,9 +614,17 @@ permission error: Google-native files must be **exported** (Docs to text, Sheets
 CSV), plain-text formats **download** with `alt=media`, and `.docx` downloads then
 goes through `mammoth`, which was already a dependency.
 
-**PDFs are the known gap.** Drive refuses to export them — "Export only supports
-Docs Editors files", HTTP 403 — so 213 files need a PDF text extractor, which means
-a new dependency. Recorded here rather than left to be rediscovered.
+~~**PDFs are the known gap.**~~ Fixed 2026-08-30. Drive still refuses to export
+them ("Export only supports Docs Editors files", HTTP 403), so the bytes are
+downloaded with `alt=media` and the text layer is read by `unpdf` — chosen over
+`pdf-parse` because it has no native binaries and runs on the Node runtime
+unchanged.
+
+Two limits worth knowing. A **scan with no text layer is skipped**, not indexed:
+there is no OCR here, and a chunk whose only real content is its own title matches
+questions it cannot answer. And **one PDF is capped at 400,000 characters** (~167
+chunks) with the cut stated in the text, because nothing else in this pipeline caps
+a single document — see the note on `PDF_TEXT_LIMIT`.
 
 A local run with the user credential produced **512 documents / 11,185 chunks**,
 which took the corpus from 4,797 to 15,835 and the database from ~121 MB to 289 MB
@@ -874,6 +882,12 @@ boundary was drawn by the people in them rather than by the company.
 - **Revenue is attributed to report-creation date, not payment date**, and
   refunds are excluded rather than netted. Harmless while there are zero refunds;
   revisit at the first one.
+- **One Drive file is 13% of the corpus.** "Pitchbook Investors Data" is 3,242
+  chunks — a data export, not knowledge — because no source caps a single
+  document. New PDFs are capped at ~167 chunks, but the existing oversized Drive
+  files are deliberately left alone: shrinking them would delete indexed content
+  nobody asked to lose. Worth a decision when storage gets tight (321 MB of 500 MB
+  as of 2026-08-30).
 - **Bulk email outranks conversation on broad questions.** Gmail is the largest
   source, and a subscribed newsletter can still surface for a vague question. Near
   duplicates are handled (one row per document, and gmail collapses on subject
