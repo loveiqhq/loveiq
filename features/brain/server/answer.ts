@@ -119,7 +119,7 @@ function defence(text: string): string {
     .replace(new RegExp(`(?:${GT}${SEP}*){2,}`, "gu"), "[gt]");
 }
 
-function buildPrompt(question: string, chunks: BrainChunk[]): LlmMessage[] {
+export function buildPrompt(question: string, chunks: BrainChunk[]): LlmMessage[] {
   const today = new Date().toISOString().slice(0, 10);
 
   const system = [
@@ -176,7 +176,7 @@ function buildPrompt(question: string, chunks: BrainChunk[]): LlmMessage[] {
   ];
 }
 
-function sourceBlocks(sources: BrainSource[]): SlackBlock[] {
+export function sourceBlocks(sources: BrainSource[]): SlackBlock[] {
   if (sources.length === 0) return [];
   const lines = sources.map((s) => {
     // Titles come from commit subjects, doc headings and Jira summaries — corpus
