@@ -879,27 +879,38 @@ async function callTool(
       gsc: "brain-ingest",
     };
 
+    /**
+     * One query PER CRON, not one query over the newest N rows.
+     *
+     * The first version read the latest 200 `cron_run` rows and picked the newest
+     * per name, which is wrong for anything infrequent: `brain-fast` alone writes
+     * 96 rows a day, so the nightly `brain-ingest` fell outside the window and was
+     * reported as "never running" while it had run that morning. That is the same
+     * false-confidence bug this whole tool is meant to remove, pointed the other way.
+     */
     const lastRun = new Map<string, { status: string; error: string | null; at: string }>();
-    const runsRes = await supabaseFetch(
-      "/rest/v1/cron_run?select=cron_name,started_at,status,error_message" +
-        "&order=started_at.desc&limit=200"
-    );
-    if (runsRes.ok) {
-      const runs = (await runsRes.json().catch(() => [])) as Array<{
-        cron_name?: string;
-        started_at?: string;
-        status?: string;
-        error_message?: string | null;
-      }>;
-      for (const r of runs) {
-        if (!r.cron_name || lastRun.has(r.cron_name)) continue;
-        lastRun.set(r.cron_name, {
+    const crons = [...new Set(Object.values(CRON_FOR_SOURCE))];
+    await Promise.all(
+      crons.map(async (cron) => {
+        const res = await supabaseFetch(
+          `/rest/v1/cron_run?select=started_at,status,error_message` +
+            `&cron_name=eq.${encodeURIComponent(cron)}&order=started_at.desc&limit=1`
+        );
+        if (!res.ok) return;
+        const rows = (await res.json().catch(() => [])) as Array<{
+          started_at?: string;
+          status?: string;
+          error_message?: string | null;
+        }>;
+        const r = rows?.[0];
+        if (!r) return;
+        lastRun.set(cron, {
           status: r.status ?? "?",
           error: r.error_message ?? null,
           at: r.started_at ?? "",
         });
-      }
-    }
+      })
+    );
 
     const health = (source: string): string => {
       if (source === "doc" || source === "commit") return " · ingested on push to main";

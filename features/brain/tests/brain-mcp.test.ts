@@ -198,8 +198,17 @@ describe("/api/mcp", () => {
      * Drive supabaseFetch by URL shape: the per-source count/newest reads, the
      * per-source updated_at read, and the `not.in` completeness probe.
      */
+    /** Latest cron_run per job, keyed by cron name. Empty means "never ran". */
+    let cronRuns: Record<string, { started_at: string; status: string; error_message?: string }> =
+      {};
+
     function wireCorpus(present: Record<string, number>, unlisted: string[] = []) {
       mockSupabaseFetch.mockImplementation(async (path: string) => {
+        if (path.includes("/cron_run?")) {
+          const name = decodeURIComponent(/cron_name=eq\.([^&]+)/.exec(path)?.[1] ?? "");
+          const run = cronRuns[name];
+          return { ok: true, headers: new Headers(), json: async () => (run ? [run] : []) };
+        }
         if (path.includes("source=not.in.")) {
           return {
             ok: true,
@@ -237,6 +246,53 @@ describe("/api/mcp", () => {
       const body = await res.json();
       return body.result.content[0].text as string;
     }
+
+    it("says a source is FAILING when its job is failing, however recent the write looks", async () => {
+      /**
+       * The regression this exists for. `last ingested` came from the write
+       * timestamp, which moves whenever the ingester RUNS — including runs that
+       * fetched nothing. Gmail had been fetching zero threads for two days while
+       * this tool showed today's date, so anyone asking what the brain could see
+       * was told a dead source was healthy.
+       */
+      cronRuns = {
+        "brain-gmail": {
+          started_at: "2026-08-30T22:11:05Z",
+          status: "error",
+          error_message: "gmail skipped: gmail-walk-incomplete",
+        },
+      };
+      wireCorpus({ gmail: 9061 });
+      const out = await text();
+      expect(out).toContain("brain-gmail FAILING");
+      expect(out).toContain("gmail-walk-incomplete");
+    });
+
+    it("says a source is ok when its job succeeded", async () => {
+      cronRuns = { "brain-notion": { started_at: "2026-08-30T22:41:39Z", status: "success" } };
+      wireCorpus({ notion: 1404 });
+      expect(await text()).toContain("brain-notion ok at 2026-08-30 22:41");
+    });
+
+    /**
+     * My own first attempt read the newest 200 cron rows and picked the latest per
+     * name — but `brain-fast` alone writes 96 rows a day, so the NIGHTLY job fell
+     * outside the window and was reported "never running" hours after it ran. That
+     * is the same false confidence, pointed the other way.
+     */
+    it("does not call an infrequent nightly job 'never run' just because it is rare", async () => {
+      cronRuns = { "brain-ingest": { started_at: "2026-08-30T04:47:44Z", status: "success" } };
+      wireCorpus({ gsc: 276 });
+      const out = await text();
+      expect(out).not.toContain("no record of brain-ingest ever running");
+      expect(out).toContain("brain-ingest ok at 2026-08-30 04:47");
+    });
+
+    it("names a job that genuinely has no record, rather than implying health", async () => {
+      cronRuns = {};
+      wireCorpus({ gmail: 10 });
+      expect(await text()).toContain("no record of brain-gmail ever running");
+    });
 
     it("reports notion, which the fixed source list originally omitted", async () => {
       // The regression: notion had 233 chunks and answered searches, while this
