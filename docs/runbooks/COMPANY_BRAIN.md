@@ -46,6 +46,7 @@ it — there is no automatic feedback signal.
 | Repo docs + git commits                | `.github/workflows/brain-ingest.yml` → `scripts/brain-ingest-repo.mjs` | on every push to `main` |
 | GA4, call notes, funnel numbers, Slack | `/api/cron/brain-fast`                                                 | every 15 min            |
 | Notion (board + pages)                 | `/api/cron/brain-notion`                                               | hourly, at :41          |
+| Gmail (every mailbox on the domain)    | `/api/cron/brain-gmail`                                                | hourly, at :11          |
 | Search Console                         | `/api/cron/brain-ingest`                                               | daily, 04:47 UTC        |
 
 Jira is **not** a source. Notion is the system of record for the team's work
@@ -734,17 +735,60 @@ is the first source whose sharing boundary was drawn by the SENDER rather than b
 LoveIQ — an outside party writing to one person did not consent to the whole company
 reading it.
 
-### Three ingest jobs, at three speeds
+### Embeddings — semantic recall
+
+Every chunk carries a 384-dimension `gte-small` vector in `brain_chunk.embedding`
+(`halfvec`, so 2 bytes a dimension rather than 4), indexed with HNSW under
+`halfvec_cosine_ops`. HNSW rather than IVFFlat because IVFFlat needs a
+representative sample to build its lists and degrades as the corpus outgrows what
+it was trained on; HNSW has no training step, so it stays correct as sources are
+added.
+
+The vectors are computed by the `brain-embed` Supabase edge function. That is the
+whole reason this costs nothing and leaks nothing: the model runs inside our own
+Supabase project, so no chunk is ever sent to an embedding API and there is no
+per-token bill.
+
+**Postgres cannot run the model**, so `brain_search` does not embed anything. The
+CALLER embeds the question and passes the vector as the optional fourth argument.
+A null vector means lexical-only — which is what makes an embedding outage a loss
+of recall rather than a broken search.
+
+**Keeping up.** `embedMissing` runs at the end of `brain-fast`, every 15 minutes,
+after the ingesters. It is driven by `embedding IS NULL` rather than a timestamp,
+which makes it restartable and source-agnostic: chunks written by the hourly Notion
+and Gmail lanes, the nightly job, and the push-based Slack route are all picked up
+without any of those knowing embeddings exist. Measured growth is ~3 new chunks an
+hour against roughly 7 a run.
+
+**If the ops channel says chunks are waiting for embeddings**, the 15-minute lane
+has fallen behind — normally because a builder-version bump rewrote thousands of
+chunks at once, which drains at only ~670/day. Run the backfill directly:
+
+```bash
+npx tsx scripts/brain-embed-backfill.ts
+```
+
+Nothing is broken while that backlog exists. Those chunks are still found
+lexically; they just cannot be matched by meaning yet.
+
+**A note on the cost of getting the patience wrong.** `embedBatch` retries six
+times with escalating backoff for the backfill, where giving up means chunks stay
+unsearchable. `embedQuery` takes ONE attempt and four seconds, because it sits in
+front of a person waiting for an answer. Sharing the backfill's patience puts ~22
+seconds of backoff on every question whenever the edge worker is cold.
+
+### Four ingest jobs, at four speeds
 
 Each source is refreshed as fast as its upstream actually changes — which is not
 the same as "as fast as possible".
 
-| Job            | Every   | Sources                      | Measured                           |
-| -------------- | ------- | ---------------------------- | ---------------------------------- |
-| `brain-fast`   | 15 min  | ga4, drive, analytics, slack | ~12s in production                 |
-| `brain-notion` | hourly  | notion                       | ~29s in production                 |
-| `brain-gmail`  | hourly  | gmail                        | 621s first walk, incremental after |
-| `brain-ingest` | nightly | gsc                          | seconds                            |
+| Job            | Every   | Sources                                      | Measured                           |
+| -------------- | ------- | -------------------------------------------- | ---------------------------------- |
+| `brain-fast`   | 15 min  | ga4, drive, analytics, slack, **embeddings** | ~12s in production                 |
+| `brain-notion` | hourly  | notion                                       | ~29s in production                 |
+| `brain-gmail`  | hourly  | gmail                                        | 621s first walk, incremental after |
+| `brain-ingest` | nightly | gsc                                          | seconds                            |
 
 - **Slack, the funnel numbers and call notes change continuously** and are all
   cheap. Slack only became cheap once its pass stopped re-walking all history
@@ -817,15 +861,24 @@ boundary was drawn by the people in them rather than by the company.
 
 ### Known limitations, deliberately accepted
 
-- **No embeddings.** Retrieval is Postgres full-text plus trigram fuzzy matching.
-  Paraphrases that share no words with the corpus will not match. Adding
-  a pgvector embedding column is the upgrade path.
+- ~~**No embeddings.**~~ Fixed 2026-08-30. Every chunk carries a 384-dim
+  `gte-small` vector (`halfvec`, HNSW, cosine), computed by a Supabase edge
+  function so the corpus never leaves our own infrastructure and there is no
+  per-token bill. `brain_search` takes the query vector as an optional fourth
+  argument; a null vector degrades it to exactly the previous lexical behaviour,
+  so an embedding outage costs recall rather than search. New chunks are embedded
+  at the end of the 15-minute lane — see "Embeddings" below.
 - **No relevance floor.** Scores are not comparable between questions, so the
   pipeline cannot tell "we have this" from "we don't" — declining honestly is a
   property of the prompt, not something the search can enforce.
 - **Revenue is attributed to report-creation date, not payment date**, and
   refunds are excluded rather than netted. Harmless while there are zero refunds;
   revisit at the first one.
-- **`idx_brain_chunk_body_trgm`** is 7.6 MB and unused since the search rewrite.
-  Left in place because the database is at 146 MB of a 500 MB budget and
-  rebuilding the index takes seconds if fuzzy body matching is ever wanted.
+- **Bulk email outranks conversation on broad questions.** Gmail is the largest
+  source, and a subscribed newsletter can still surface for a vague question. Near
+  duplicates are handled (one row per document, and gmail collapses on subject
+  because one broadcast is indexed once per mailbox), but there is no bulk-vs-human
+  signal: the obvious one, "did anyone reply", was measured and REJECTED — JIRA
+  notification threads accumulate messages and it promoted ticket spam over the
+  real commits. Capturing `List-Unsubscribe` at ingest is the honest fix and needs
+  a Gmail builder-version bump.

@@ -35,5 +35,6 @@
     "sbom.json",
     "package-lock.json"
   ],
-  "ignoreRegExpList": ["/`[^`]+`/", "/```[\\s\\S]*?```/", "HexValues", "Urls", "EmailAddresses"]
+  "ignoreRegExpList": ["/`[^`]+`/", "/```[\\s\\S]*?```/", "HexValues", "Urls", "EmailAddresses"],
+  "words": ["halfvec", "IVFFlat", "pgvector"]
 }
