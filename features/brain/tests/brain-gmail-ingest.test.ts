@@ -22,6 +22,13 @@ vi.mock("@features/admin/server/supabase", () => ({
       return { ok: true, headers: new Headers(), json: async () => (off === 0 ? existing : []) };
     }
     if (method === "PATCH") {
+      touchedIds = [...String(init?.body ?? "").matchAll(/thread:[A-Za-z0-9_-]+/g)].map(
+        (m) => m[0]
+      );
+      const inUrl = [...path.matchAll(/thread%3A[A-Za-z0-9_-]+/g)].map((m) =>
+        decodeURIComponent(m[0])
+      );
+      if (inUrl.length) touchedIds = inUrl;
       touchedCount = existing.length;
       return {
         ok: true,
@@ -39,6 +46,12 @@ vi.mock("@features/admin/server/supabase", () => ({
 }));
 
 let listingOk = true;
+/** RAW gmail thread ids whose FETCH fails, while the listing still names them. */
+let failingThreadIds: string[] = [];
+/** Threads the listing returns. */
+let listedThreads: Array<{ id: string; historyId: string }> = [];
+/** source_id -> whether touchChunks was asked to confirm it. */
+let touchedIds: string[] = [];
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: vi.fn(async (url: string) => {
     // Directory API: pretend delegation cannot resolve the domain's mailboxes,
@@ -46,9 +59,49 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
     if (url.includes("admin/directory")) {
       return { ok: false, status: 403, text: async () => "not delegated" };
     }
+    // A single thread FETCH: /threads/<id>?format=full
+    const one = /\/threads\/([^?]+)\?format=full/.exec(url);
+    if (one) {
+      const id = decodeURIComponent(one[1]!);
+      if (failingThreadIds.includes(id)) {
+        return { ok: false, status: 404, text: async () => '{"error":{"code":404}}' };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id,
+          historyId: "9",
+          messages: [
+            {
+              id: `m-${id}`,
+              internalDate: "1787900000000",
+              payload: {
+                headers: [
+                  { name: "Subject", value: `Thread ${id}` },
+                  { name: "From", value: "Marcus <marcus@loveiq.org>" },
+                ],
+                mimeType: "text/plain",
+                body: {
+                  data: Buffer.from(
+                    "A real conversation with enough text to clear the stub filter. ".repeat(3)
+                  ).toString("base64"),
+                },
+              },
+            },
+          ],
+        }),
+        text: async () => "",
+      };
+    }
     if (url.includes("/threads")) {
       return listingOk
-        ? { ok: true, status: 200, json: async () => ({ threads: [] }), text: async () => "" }
+        ? {
+            ok: true,
+            status: 200,
+            json: async () => ({ threads: listedThreads }),
+            text: async () => "",
+          }
         : {
             ok: false,
             status: 400,
@@ -65,6 +118,9 @@ beforeEach(() => {
   existing = [];
   touchedCount = 0;
   listingOk = true;
+  failingThreadIds = [];
+  listedThreads = [];
+  touchedIds = [];
   process.env.GMAIL_MAILBOXES = "";
 });
 
@@ -99,5 +155,40 @@ describe("a broken Gmail walk must not report success", () => {
     listingOk = false;
     const result = await ingestGmail("2026-08-30T00:00:00.000Z", () => false, null);
     expect(result.swept).toBe(0);
+  });
+});
+
+describe("one flaky thread must not block the sweep for the other 3,900", () => {
+  const thread = (n: number) => ({ id: `t${n}`, historyId: "9" });
+
+  it("completes the walk when a single thread fetch 404s", async () => {
+    // A thread can be deleted between the listing and the fetch. Treating that as
+    // an incomplete walk is why brain-gmail had never once completed, and an
+    // incomplete walk blocks the sweep — so deleted threads lingered forever.
+    listedThreads = [thread(1), thread(2), thread(3)];
+    failingThreadIds = ["t2"];
+    const result = await ingestGmail("2026-08-31T00:00:00.000Z", () => false, null);
+    expect(result.skipped).toBeUndefined();
+  });
+
+  it("protects the failed thread's existing rows from that same sweep", async () => {
+    /**
+     * The reason this is safe. We could not read the thread, so we know nothing new
+     * about it — deleting a real conversation because one fetch returned 404 is far
+     * worse than carrying its chunk in an older shape for one more run.
+     */
+    listedThreads = [thread(1), thread(2)];
+    failingThreadIds = ["t2"];
+    existing = [{ source_id: "thread:t2", meta: { v: 1 } }]; // deliberately STALE version
+    await ingestGmail("2026-08-31T00:00:00.000Z", () => false, null);
+    expect(touchedIds).toContain("thread:t2");
+  });
+
+  it("still calls the walk incomplete when failures are systemic, not incidental", async () => {
+    // 26 failures is a different KIND of problem from one, and must not sweep.
+    listedThreads = Array.from({ length: 30 }, (_, i) => thread(i));
+    failingThreadIds = Array.from({ length: 26 }, (_, i) => `t${i}`);
+    const result = await ingestGmail("2026-08-31T00:00:00.000Z", () => false, null);
+    expect(result.skipped).toBe("gmail-walk-incomplete");
   });
 });

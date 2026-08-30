@@ -52,6 +52,17 @@ const MAX_PAGES = 40;
  * when nobody did.
  */
 const MIN_STUB_CHARS = 60;
+/**
+ * How many individual thread fetches may fail before the whole walk is called
+ * incomplete.
+ *
+ * One flaky thread out of ~3,900 used to mark the entire walk incomplete, which
+ * blocks the sweep — so `brain-gmail` had never once completed and deleted threads
+ * lingered forever. A 404 on a single thread is normal: it can be deleted between
+ * the listing and the fetch. A systemic failure is different in KIND, and shows up
+ * as many failures, not one.
+ */
+const MAX_TOLERATED_THREAD_FAILURES = 25;
 
 /** Bump when the row SHAPE changes; a mismatch counts as stale. See notion.ts. */
 // v2: v1 indexed notification stubs (bodies of "96" and whitespace) as threads.
@@ -88,9 +99,7 @@ export function mailboxes(): string[] {
  * Returns null when unavailable, which the caller reads as "fall back to the
  * configured list" rather than "the company has no staff".
  */
-export async function domainMailboxes(
-  oidcToken?: string | null
-): Promise<string[] | null> {
+export async function domainMailboxes(oidcToken?: string | null): Promise<string[] | null> {
   const admin = (process.env.GOOGLE_WORKSPACE_ADMIN ?? "").trim();
   const domain = (process.env.GOOGLE_WORKSPACE_DOMAIN ?? "").trim();
   /**
@@ -159,7 +168,8 @@ export async function domainMailboxes(
  * frequently replies to those threads — which is exactly the content that would be
  * lost by filtering on sender.
  */
-const EXCLUDE = "-in:spam -in:trash -in:chats -category:promotions -category:social -category:forums";
+const EXCLUDE =
+  "-in:spam -in:trash -in:chats -category:promotions -category:social -category:forums";
 
 interface GmailHeader {
   name?: string;
@@ -294,11 +304,7 @@ export function person(addr: string): string {
   return addr.replace(/[<>]/g, "").trim();
 }
 
-export function threadToRows(
-  thread: GmailThread,
-  mailbox: string,
-  stampedAt: string
-): BrainRow[] {
+export function threadToRows(thread: GmailThread, mailbox: string, stampedAt: string): BrainRow[] {
   const msgs = (thread.messages ?? []).filter((m) => m.payload);
   if (!thread.id || msgs.length === 0) return [];
 
@@ -374,7 +380,9 @@ export function threadToRows(
  * confirmed forever and never fall to the sweep. Measured: 30 stub threads survived
  * the v2 rebuild exactly this way.
  */
-async function knownThreads(): Promise<Map<string, { historyId: string | null; current: boolean }>> {
+async function knownThreads(): Promise<
+  Map<string, { historyId: string | null; current: boolean }>
+> {
   const out = new Map<string, { historyId: string | null; current: boolean }>();
   for (let offset = 0; offset < 100_000; offset += 1000) {
     const res = await supabaseFetch(
@@ -446,6 +454,8 @@ export async function ingestGmail(
   let fetched = 0;
 
   const failedMailboxes: string[] = [];
+  /** Threads we listed but could not re-read this run. Protected from the sweep. */
+  const failedThreads = new Set<string>();
 
   for (const mailbox of boxes) {
     const token = await tokenFor(mailbox);
@@ -493,7 +503,11 @@ export async function ingestGmail(
           `/threads/${encodeURIComponent(t.id)}?format=full`
         )) as GmailThread | null;
         if (!full) {
-          complete = false;
+          // NOT `complete = false`. A thread can be deleted between the listing and
+          // the fetch, and one such 404 must not block the sweep for the other
+          // 3,900. The id is remembered so its existing rows are protected below;
+          // a systemic failure trips the threshold instead.
+          failedThreads.add(id);
           continue;
         }
         fetched += 1;
@@ -506,6 +520,14 @@ export async function ingestGmail(
     }
   }
 
+  if (failedThreads.size > MAX_TOLERATED_THREAD_FAILURES) {
+    logger.warn(
+      { failed: failedThreads.size, limit: MAX_TOLERATED_THREAD_FAILURES },
+      "brain-ingest gmail: too many thread fetches failed, treating the walk as incomplete"
+    );
+    complete = false;
+  }
+
   const written = await upsertChunks(rows);
   const writtenIds = new Set(rows.map((r) => r.source_id));
   const rewritten = new Set([...writtenIds].map((id) => id.split("#")[0]));
@@ -514,7 +536,15 @@ export async function ingestGmail(
     [...known.entries()]
       .filter(([id, have]) => {
         if (writtenIds.has(id)) return false;
-        if (rewritten.has(id.split("#")[0] ?? id)) return false;
+        const base = id.split("#")[0] ?? id;
+        if (rewritten.has(base)) return false;
+        /**
+         * A thread we FAILED to re-read is confirmed regardless of builder version.
+         * We could not look at it, so we know nothing new about it — and deleting
+         * a real thread because one fetch returned 404 is far worse than carrying
+         * a chunk in an older shape until the next run rewrites it.
+         */
+        if (failedThreads.has(base)) return true;
         // Never confirm a stale-version row. It was either dropped from the source
         // or is no longer something we would index (a stub, under v2); either way
         // it belongs to the sweep, not to the touch list.
