@@ -11,6 +11,7 @@ import {
   person,
   stripQuoted,
   threadToRows,
+  isBulkMail,
 } from "@features/brain/server/ingest/gmail";
 
 const b64 = (s: string) =>
@@ -300,5 +301,66 @@ describe("a stale-version row must never be confirmed", () => {
       fs.readFileSync("features/brain/server/ingest/gmail.ts", "utf8")
     );
     expect(src).toMatch(/have\?\.current && have\.historyId && have\.historyId === t\.historyId/);
+  });
+});
+
+describe("isBulkMail — newsletters must not outrank colleagues", () => {
+  const msg = (from: string, extraHeaders: Array<{ name: string; value: string }> = []) => ({
+    id: `m${from}`,
+    internalDate: "1787900000000",
+    payload: {
+      headers: [
+        { name: "Subject", value: "Something" },
+        { name: "From", value: from },
+        ...extraHeaders,
+      ],
+      mimeType: "text/plain",
+      body: { data: b64("text") },
+    },
+  });
+  const UNSUB = [{ name: "List-Unsubscribe", value: "<https://x.test/u/1>" }];
+
+  it("flags a plain newsletter", () => {
+    expect(isBulkMail([msg("Substack <n@substack.test>", UNSUB)])).toBe(true);
+  });
+
+  it("does not flag a normal thread between people", () => {
+    expect(isBulkMail(thread.messages)).toBe(false);
+  });
+
+  /**
+   * The reason this is `every` and not `some`. A newsletter someone forwarded and
+   * the team then argued about IS a conversation, and the replies carry no
+   * List-Unsubscribe. Treating it as bulk would bury the discussion along with it.
+   */
+  it("does not flag a newsletter the team replied to", () => {
+    expect(
+      isBulkMail([msg("Substack <n@substack.test>", UNSUB), msg("Eman <ec@loveiq.org>")])
+    ).toBe(false);
+  });
+
+  it("is case-insensitive about the header name, as RFC 2369 senders are not consistent", () => {
+    expect(
+      isBulkMail([msg("N <n@x.test>", [{ name: "list-unsubscribe", value: "<mailto:u@x.test>" }])])
+    ).toBe(true);
+  });
+
+  it("treats an empty thread as not bulk rather than vacuously true", () => {
+    expect(isBulkMail([])).toBe(false);
+  });
+
+  it("records the flag on every part of a long thread, so a split newsletter is still bulk", () => {
+    // Long enough to clear MIN_STUB_CHARS: a single short message is discarded as
+    // a notification stub before it ever gets a bulk flag.
+    const long = {
+      ...msg("Substack <n@substack.test>", UNSUB),
+      payload: {
+        ...msg("Substack <n@substack.test>", UNSUB).payload,
+        body: { data: b64("Why hurt people hurt people. ".repeat(40)) },
+      },
+    };
+    const rows = threadToRows({ ...thread, messages: [long] }, "me", "stamp");
+    expect(rows.length).toBeGreaterThan(0);
+    for (const r of rows) expect((r.meta as { bulk: boolean }).bulk).toBe(true);
   });
 });

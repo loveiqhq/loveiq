@@ -54,7 +54,7 @@ const MIN_STUB_CHARS = 60;
 
 /** Bump when the row SHAPE changes; a mismatch counts as stale. See notion.ts. */
 // v2: v1 indexed notification stubs (bodies of "96" and whitespace) as threads.
-export const GMAIL_BUILDER_VERSION = 2;
+export const GMAIL_BUILDER_VERSION = 3;
 
 /**
  * Mailboxes to read. `me` is whoever the credential belongs to.
@@ -245,6 +245,27 @@ export function stripQuoted(text: string): string {
     .trim();
 }
 
+/**
+ * Is this thread BULK MAIL rather than a conversation?
+ *
+ * `List-Unsubscribe` is the honest signal: RFC 2369 requires it on mail sent to a
+ * list, and no human replying from a mail client emits it. Everything else we could
+ * reach for is a guess about wording or sender names.
+ *
+ * `every`, not `some`, and that is the whole subtlety: a newsletter that somebody
+ * FORWARDED and the team then argued about is a real conversation, and the replies
+ * carry no such header. Requiring it on every message lets those threads back out
+ * of the penalty box, while a plain untouched newsletter -- always a single message
+ * -- still matches.
+ *
+ * Rejected alternative, measured: "did anyone reply" (`messages > 1`). JIRA
+ * notification threads accumulate messages, so it promoted ticket spam above the
+ * actual commits.
+ */
+export function isBulkMail(msgs: GmailMessage[]): boolean {
+  return msgs.length > 0 && msgs.every((m) => header(m, "List-Unsubscribe") !== "");
+}
+
 /** A person, without the angle-bracket noise: "Marcus <m@x.com>" -> "Marcus". */
 export function person(addr: string): string {
   const named = /^\s*"?([^"<]+?)"?\s*</.exec(addr);
@@ -298,6 +319,9 @@ export function threadToRows(
       mailbox,
       messages: msgs.length,
       participants,
+      // Bulk mail is still INDEXED -- open culture, nothing excluded -- it just
+      // must not outrank a colleague's actual answer on a vague question.
+      bulk: isBulkMail(msgs),
       // Gmail's own change cursor: a thread whose historyId has not moved has not
       // been replied to, so it never needs refetching.
       historyId: thread.historyId ?? null,
