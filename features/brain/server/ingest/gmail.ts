@@ -4,6 +4,7 @@ import {
   DIRECTORY_SCOPE,
   getDelegatedToken,
   getGoogleAccessToken,
+  googleCredentialShape,
   GMAIL_SCOPE,
 } from "@shared/http/google-oauth";
 import logger from "@shared/observability/logger";
@@ -92,10 +93,30 @@ export async function domainMailboxes(
 ): Promise<string[] | null> {
   const admin = (process.env.GOOGLE_WORKSPACE_ADMIN ?? "").trim();
   const domain = (process.env.GOOGLE_WORKSPACE_DOMAIN ?? "").trim();
-  if (!admin || !domain) return null;
+  /**
+   * BOTH of these used to return null in silence, which is why a real outage was
+   * invisible: the caller falls back to a single mailbox, that mailbox belongs to
+   * a service account with no Gmail, and the API answers 400 "Precondition check
+   * failed" — three steps away from the actual cause. Only the directory LISTING
+   * refusal logged, and that is the one case that was not happening.
+   */
+  if (!admin || !domain) {
+    logger.warn(
+      { hasAdmin: Boolean(admin), hasDomain: Boolean(domain) },
+      "brain-ingest gmail: workspace admin/domain not configured, so only one mailbox is reachable"
+    );
+    return null;
+  }
 
   const token = await getDelegatedToken(admin, DIRECTORY_SCOPE, Date.now(), oidcToken);
-  if (!token) return null;
+  if (!token) {
+    logger.warn(
+      { admin, credential: googleCredentialShape(oidcToken) },
+      "brain-ingest gmail: could not mint a delegated token for the workspace admin — " +
+        "domain-wide delegation is not working, so no colleague's mail is reachable"
+    );
+    return null;
+  }
 
   const out: string[] = [];
   let pageToken = "";
@@ -519,11 +540,29 @@ export async function ingestGmail(
     "brain-ingest gmail"
   );
 
-  if (written === 0 && touched === 0) {
-    return { source: SOURCE, rows: 0, swept: 0, skipped: "gmail-nothing-to-index" };
-  }
+  /**
+   * ORDER MATTERS, and getting it wrong hid a total outage.
+   *
+   * `gmail-nothing-to-index` is a DELIBERATE skip: it reports success and never
+   * alerts, because "the mailbox is empty" is not a fault. But it was checked
+   * FIRST, so a run where the Gmail API refused every request — listing nothing,
+   * fetching nothing, writing nothing — also matched it and reported success.
+   *
+   * That is exactly what happened on 2026-08-30: delegation stopped resolving
+   * mailboxes, Gmail answered 400 "Precondition check failed" to every listing,
+   * and the only thing keeping the failure visible was that the run still TOUCHED
+   * 9,061 existing rows. The moment a builder bump stopped those touches — correct
+   * behaviour, since a stale-version row must not be confirmed — the same broken
+   * run started reporting success instead.
+   *
+   * An incomplete walk is never "nothing to index". Checking `complete` first is
+   * what keeps a silent outage loud.
+   */
   if (!complete) {
     return { source: SOURCE, rows: written + touched, swept, skipped: "gmail-walk-incomplete" };
+  }
+  if (written === 0 && touched === 0) {
+    return { source: SOURCE, rows: 0, swept: 0, skipped: "gmail-nothing-to-index" };
   }
   return { source: SOURCE, rows: written + touched, swept };
 }

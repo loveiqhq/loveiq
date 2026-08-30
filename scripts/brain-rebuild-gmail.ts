@@ -28,6 +28,19 @@ async function main(): Promise<void> {
         `${result.skipped ? `, skipped ${result.skipped}` : ""}` +
         ` (${Math.round((Date.now() - t0) / 1000)}s elapsed)`
     );
+    // Stop on a credential problem instead of spinning. The local refresh token
+    // needs interactive reauth periodically (Google returns `invalid_grant` /
+    // `invalid_rapt`), and without this the loop retries twenty times, does no
+    // work, and still exits 0 -- which reads like "nothing to do".
+    if (result.skipped === "google-token-unavailable" || result.skipped === "gmail-not-configured") {
+      console.log(
+        `stopping: ${result.skipped}. Production uses Workload Identity Federation and is ` +
+          `unaffected; this script needs local Google credentials. Re-run the OAuth flow, ` +
+          `or just let the hourly brain-gmail cron re-walk on its own.`
+      );
+      process.exitCode = 1;
+      return;
+    }
     if (await noneLeftOnOldShape()) {
       console.log("every mailbox is on the current shape");
       return;
