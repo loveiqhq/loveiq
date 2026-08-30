@@ -22,6 +22,23 @@ vi.mock("@features/brain/server/ingest/slack", () => ({
   ingestSlack: vi.fn(async () => ({ source: "slack", rows: 526, swept: 0 })),
 }));
 
+// Embedding runs at the end of this lane. Stubbed here so the tests above stay
+// about ingestion; the tests at the bottom of this file drive it directly.
+let embedResult: { embedded: number; remaining: number; complete: boolean } = {
+  embedded: 0,
+  remaining: 0,
+  complete: true,
+};
+let embedThrows = false;
+const embedCalls: Array<{ maxBatches: number | undefined }> = [];
+vi.mock("@features/brain/server/embed", () => ({
+  embedMissing: vi.fn(async (_isOutOfTime: unknown, maxBatches?: number) => {
+    embedCalls.push({ maxBatches });
+    if (embedThrows) throw new Error("edge worker refused");
+    return embedResult;
+  }),
+}));
+
 vi.mock("@shared/http/is-prod-cron-host", () => ({ isProdCronHost: () => prodHost }));
 
 let authOk = true;
@@ -159,5 +176,70 @@ describe("the OIDC token goes only where Google is actually called", () => {
         expect(call).not.toContain("vercel.oidc.jwt");
       }
     }
+  });
+});
+
+describe("brain-fast embeds the chunks it just ingested", () => {
+  beforeEach(() => {
+    authOk = true;
+    prodHost = true;
+    claimGranted = true;
+    embedThrows = false;
+    embedResult = { embedded: 4, remaining: 0, complete: true };
+    embedCalls.length = 0;
+    notified.length = 0;
+    recorded.length = 0;
+    mockIngest.mockResolvedValue({ source: "drive", rows: 11, swept: 0 });
+  });
+
+  /**
+   * The whole point of the 15-minute lane is that the brain is minutes behind
+   * reality. A chunk with no embedding is invisible to semantic search, so if
+   * nothing embeds on a schedule the corpus silently freezes at whenever the last
+   * manual backfill ran — while still answering, and still looking healthy.
+   */
+  it("embeds after ingesting, on every run", async () => {
+    const res = await GET(req());
+    expect(res.status).toBe(200);
+    expect(embedCalls).toHaveLength(1);
+  });
+
+  it("bounds the work so embedding cannot eat the run's time budget", async () => {
+    await GET(req());
+    expect(embedCalls[0]?.maxBatches).toBe(3);
+  });
+
+  it("still reports success when the embedder fails — lexical search is unaffected", async () => {
+    embedThrows = true;
+    const res = await GET(req());
+    expect(res.status).toBe(200);
+    expect(recorded.at(-1)?.status).toBe("success");
+  });
+
+  it("does not run before the ingesters, or it would embed nothing new", async () => {
+    const order: string[] = [];
+    mockIngest.mockImplementation(async () => {
+      order.push("ingest");
+      return { source: "drive", rows: 11, swept: 0 };
+    });
+    const { embedMissing } = await import("@features/brain/server/embed");
+    vi.mocked(embedMissing).mockImplementation(async () => {
+      order.push("embed");
+      return embedResult;
+    });
+    await GET(req());
+    expect(order.indexOf("ingest")).toBeLessThan(order.indexOf("embed"));
+  });
+
+  it("raises a backlog too big for this lane to drain, instead of falling behind quietly", async () => {
+    embedResult = { embedded: 24, remaining: 9_000, complete: false };
+    await GET(req());
+    expect(notified.map((n) => n.text).join(" ")).toMatch(/waiting for embeddings/);
+  });
+
+  it("stays quiet for a backlog it will clear on its own", async () => {
+    embedResult = { embedded: 24, remaining: 30, complete: false };
+    await GET(req());
+    expect(notified).toHaveLength(0);
   });
 });

@@ -3,6 +3,7 @@ import { ingestAnalytics } from "@features/brain/server/ingest/analytics";
 import { ingestDrive } from "@features/brain/server/ingest/drive";
 import { ingestGa4 } from "@features/brain/server/ingest/google";
 import { ingestSlack } from "@features/brain/server/ingest/slack";
+import { embedMissing } from "@features/brain/server/embed";
 import type { IngestResult } from "@features/brain/server/ingest/upsert";
 import { readVercelOidcToken } from "@shared/http/google-oauth";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -132,6 +133,41 @@ export async function GET(request: Request) {
     await run("drive", () => ingestDrive(stampedAt, isOutOfTime, oidcToken));
     await run("analytics", () => ingestAnalytics(stampedAt));
     await run("slack", () => ingestSlack(stampedAt, isOutOfTime));
+
+    /**
+     * EMBED WHAT WE JUST WROTE. A chunk with no embedding is invisible to the
+     * semantic arm of `brain_search` — findable only if the question happens to
+     * share its words.
+     *
+     * This is here because it was missing: `embedMissing` shipped reachable only
+     * from a one-off script, so every chunk written after the initial backfill
+     * would have stayed unembedded indefinitely. The failure is quiet in the worst
+     * way — search keeps working, keeps returning results, and simply stops being
+     * able to reason about anything recent. Exactly the "live, not a snapshot"
+     * property this whole job exists for.
+     *
+     * Sized against measured growth: ~3 new chunks an hour against roughly 7 this
+     * can embed per run (the edge worker manages ~13 a minute), 96 runs a day.
+     *
+     * ponytail: a builder-version bump that rewrites thousands of chunks drains at
+     * ~670/day, so a full re-index still wants `scripts/brain-embed-backfill.ts`.
+     */
+    try {
+      const embed = await embedMissing(isOutOfTime, 3);
+      logger.info({ embed }, "brain-fast: embedded new chunks");
+      if (embed.remaining > 2_000) {
+        await alertOnce(
+          "embed:backlog",
+          `:brain: ${embed.remaining} chunks are waiting for embeddings, which is more ` +
+            `than the 15-minute job drains. Search still answers, but it cannot match ` +
+            `those by meaning yet. Run \`npx tsx scripts/brain-embed-backfill.ts\` to catch up.`
+        );
+      }
+    } catch (err) {
+      // Never fails the run: unembedded chunks are still found lexically, so this
+      // costs recall on new material, not the brain.
+      logger.error({ err }, "brain-fast: embedding new chunks failed");
+    }
 
     logger.info({ results }, "brain-fast: done");
     // 200 even when a source failed: the run itself completed and Vercel must not
