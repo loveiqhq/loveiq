@@ -121,3 +121,19 @@ describe("every known-chunk read must fail closed", () => {
     }
   );
 });
+
+describe("a write must be given longer than a read", () => {
+  /**
+   * The multi-mailbox Gmail run fetched all ten mailboxes successfully and then
+   * threw the entire walk away on "Request timeout after 8000ms" at the upsert.
+   * A batch of email threads is ~2,400 characters per row plus a regenerated
+   * tsvector each; the shared 8s default is a READ timeout and does not fit.
+   */
+  it("gives the chunk upsert its own generous timeout", async () => {
+    const src = await import("node:fs").then((fs) =>
+      fs.readFileSync("features/brain/server/ingest/upsert.ts", "utf8")
+    );
+    const upsert = src.slice(src.indexOf("export async function upsertChunks"));
+    expect(upsert).toMatch(/timeoutMs: 45_000/);
+  });
+});

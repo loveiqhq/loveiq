@@ -134,6 +134,14 @@ export async function upsertChunks(rows: BrainRow[]): Promise<number> {
       method: "POST",
       headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
       body: JSON.stringify(batch),
+      /**
+       * The shared 8s default is a READ timeout and is far too short for this.
+       * A batch of email threads is ~2,400 characters per row plus a regenerated
+       * tsvector for each, and the multi-mailbox Gmail run died exactly here:
+       * "Request timeout after 8000ms" — after successfully fetching every
+       * mailbox, so the whole walk was thrown away at the last step.
+       */
+      timeoutMs: 45_000,
     });
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
