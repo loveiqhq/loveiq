@@ -93,7 +93,7 @@ describe("test payments are excluded from revenue", () => {
 
   it("ships the migration that defines and backfills the flag", () => {
     const sql = readFileSync(
-      join(REPO, "supabase/migrations/20260828173515_payment_is_test_flag.sql"),
+      join(REPO, "supabase/migrations/20260828173546_payment_is_test_flag.sql"),
       "utf8"
     );
     expect(sql).toContain("add column if not exists is_test");
