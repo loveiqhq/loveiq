@@ -32,7 +32,10 @@ async function main(): Promise<void> {
     // needs interactive reauth periodically (Google returns `invalid_grant` /
     // `invalid_rapt`), and without this the loop retries twenty times, does no
     // work, and still exits 0 -- which reads like "nothing to do".
-    if (result.skipped === "google-token-unavailable" || result.skipped === "gmail-not-configured") {
+    if (
+      result.skipped === "google-token-unavailable" ||
+      result.skipped === "gmail-not-configured"
+    ) {
       console.log(
         `stopping: ${result.skipped}. Production uses Workload Identity Federation and is ` +
           `unaffected; this script needs local Google credentials. Re-run the OAuth flow, ` +

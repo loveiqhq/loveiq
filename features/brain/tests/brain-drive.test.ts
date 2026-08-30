@@ -21,7 +21,11 @@ vi.mock("@features/admin/server/supabase", () => ({
     }
     if (method === "PATCH") {
       const n = (path.match(/%22/g)?.length ?? 0) / 2;
-      return { ok: true, headers: new Headers({ "content-range": `*/${n}` }), json: async () => [] };
+      return {
+        ok: true,
+        headers: new Headers({ "content-range": `*/${n}` }),
+        json: async () => [],
+      };
     }
     if (method === "GET") {
       return { ok: true, headers: new Headers({ "content-range": "0-0/0" }), json: async () => [] };
@@ -202,7 +206,9 @@ describe("ingestDrive", () => {
     await ingestDrive(STAMP);
     const ids = dbCalls
       .filter((c) => c.method === "PATCH")
-      .flatMap((c) => (decodeURIComponent(c.path).match(/"([^"]+)"/g) ?? []).map((q) => q.slice(1, -1)));
+      .flatMap((c) =>
+        (decodeURIComponent(c.path).match(/"([^"]+)"/g) ?? []).map((q) => q.slice(1, -1))
+      );
     expect(ids).toContain("doc:1AbCdEf#2");
   });
 
@@ -336,7 +342,13 @@ describe("Google Meet shortcuts", () => {
     // request per shortcut whose target we already have.
     files = [
       FILE,
-      { ...SHORTCUT, shortcutDetails: { targetId: FILE.id, targetMimeType: "application/vnd.google-apps.document" } },
+      {
+        ...SHORTCUT,
+        shortcutDetails: {
+          targetId: FILE.id,
+          targetMimeType: "application/vnd.google-apps.document",
+        },
+      },
     ];
     targets = { [FILE.id]: { ...FILE } };
     await ingestDrive(STAMP);
@@ -379,7 +391,10 @@ describe("PDFs — the 213 files that used to be invisible", () => {
   it("indexes the text layer of a real pdf", async () => {
     pdfText = "Investors agree to a EUR 2m SAFE at a 12m cap. ".repeat(10);
     await ingestDrive(STAMP, () => false, null);
-    const written = dbCalls.filter((c) => c.method === "POST").map((c) => c.body).join(" ");
+    const written = dbCalls
+      .filter((c) => c.method === "POST")
+      .map((c) => c.body)
+      .join(" ");
     expect(written).toContain("SAFE at a 12m cap");
     expect(written).toContain("Term Sheet 2026");
   });
@@ -393,14 +408,20 @@ describe("PDFs — the 213 files that used to be invisible", () => {
   it("skips a scan with no text layer rather than indexing an empty husk", async () => {
     pdfText = "  \n page 1 \n ";
     await ingestDrive(STAMP, () => false, null);
-    const written = dbCalls.filter((c) => c.method === "POST").map((c) => c.body).join(" ");
+    const written = dbCalls
+      .filter((c) => c.method === "POST")
+      .map((c) => c.body)
+      .join(" ");
     expect(written).not.toContain("Term Sheet 2026");
   });
 
   it("caps one pdf, and says so in the text rather than truncating silently", async () => {
     pdfText = "word ".repeat(200_000); // ~1M chars, larger than the cap
     await ingestDrive(STAMP, () => false, null);
-    const written = dbCalls.filter((c) => c.method === "POST").map((c) => c.body).join(" ");
+    const written = dbCalls
+      .filter((c) => c.method === "POST")
+      .map((c) => c.body)
+      .join(" ");
     expect(written).toContain("[truncated: this pdf is longer than the brain indexes]");
   });
 });

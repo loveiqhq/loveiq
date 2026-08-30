@@ -155,9 +155,10 @@ async function listDocs(
       logger.warn({ status: res.status, detail }, "brain-ingest drive: list failed");
       return { items: out, complete: false };
     }
-    const json = (await res.json().catch(() => null)) as
-      | { files?: DriveFile[]; nextPageToken?: string }
-      | null;
+    const json = (await res.json().catch(() => null)) as {
+      files?: DriveFile[];
+      nextPageToken?: string;
+    } | null;
     for (const f of json?.files ?? []) if (f.id) out.push(f);
     pageToken = json?.nextPageToken;
     if (!pageToken) break;
@@ -165,7 +166,6 @@ async function listDocs(
   }
   return { items: out, complete };
 }
-
 
 /**
  * Turn the raw listing into the documents we can actually read.
@@ -239,7 +239,11 @@ async function resolveShortcuts(
 
 /** A Google Doc as plain text. */
 /** Strip the BOM and CRLFs Google exports carry; both show up inside chunk bodies. */
-const clean = (t: string): string => t.replace(/^\ufeff/, "").replace(/\r\n/g, "\n").trim();
+const clean = (t: string): string =>
+  t
+    .replace(/^\ufeff/, "")
+    .replace(/\r\n/g, "\n")
+    .trim();
 
 async function docText(token: string, fileId: string, mimeType?: string): Promise<string> {
   // Google-native files must be EXPORTED; everything else downloads with alt=media.
@@ -384,7 +388,12 @@ export async function ingestDrive(
   }
   const token = await getGoogleAccessToken(Date.now(), oidcToken);
   if (!token) {
-    return { source: SOURCE, rows: 0, swept: 0, skipped: `google-token-unavailable(${googleCredentialShape(oidcToken)})` };
+    return {
+      source: SOURCE,
+      rows: 0,
+      swept: 0,
+      skipped: `google-token-unavailable(${googleCredentialShape(oidcToken)})`,
+    };
   }
   if (isOutOfTime()) return { source: SOURCE, rows: 0, swept: 0, skipped: "drive-time-budget" };
 

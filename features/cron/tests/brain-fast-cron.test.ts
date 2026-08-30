@@ -103,7 +103,12 @@ describe("/api/cron/brain-fast", () => {
   it("does NOT alert when nothing has been shared yet", async () => {
     // The expected state until somebody shares a folder. Alerting would page
     // 96 times a day for a source nobody has enabled.
-    mockIngest.mockResolvedValue({ source: "drive", rows: 0, swept: 0, skipped: "drive-nothing-shared" });
+    mockIngest.mockResolvedValue({
+      source: "drive",
+      rows: 0,
+      swept: 0,
+      skipped: "drive-nothing-shared",
+    });
     const body = await (await GET(req())).json();
     expect(body.ok).toBe(true);
     expect(notified).toHaveLength(0);
@@ -111,7 +116,12 @@ describe("/api/cron/brain-fast", () => {
   });
 
   it("does NOT alert when the credential is simply unconfigured", async () => {
-    mockIngest.mockResolvedValue({ source: "drive", rows: 0, swept: 0, skipped: "google-not-configured" });
+    mockIngest.mockResolvedValue({
+      source: "drive",
+      rows: 0,
+      swept: 0,
+      skipped: "google-not-configured",
+    });
     await GET(req());
     expect(notified).toHaveLength(0);
   });
@@ -119,7 +129,12 @@ describe("/api/cron/brain-fast", () => {
   it("DOES alert on an unexpected skip, and marks the claim delivered", async () => {
     // Unmarked claims were a real bug in the sibling cron: the row stayed
     // delivered=false and the stale-reclaim path re-fired on the next run.
-    mockIngest.mockResolvedValue({ source: "drive", rows: 0, swept: 0, skipped: "drive-list-failed" });
+    mockIngest.mockResolvedValue({
+      source: "drive",
+      rows: 0,
+      swept: 0,
+      skipped: "drive-list-failed",
+    });
     const body = await (await GET(req())).json();
     expect(body.ok).toBe(false);
     expect(notified).toHaveLength(1);
@@ -129,7 +144,12 @@ describe("/api/cron/brain-fast", () => {
   });
 
   it("alerts once per day, not once per run", async () => {
-    mockIngest.mockResolvedValue({ source: "drive", rows: 0, swept: 0, skipped: "drive-list-failed" });
+    mockIngest.mockResolvedValue({
+      source: "drive",
+      rows: 0,
+      swept: 0,
+      skipped: "drive-list-failed",
+    });
     claimGranted = false; // the day's claim is already taken
     await GET(req());
     expect(notified).toHaveLength(0);

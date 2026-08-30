@@ -135,7 +135,10 @@ export async function POST(request: Request) {
   if (isPublicChannelMessage) {
     const team = process.env.SLACK_BRAIN_TEAM_ID;
     if (team && payload.team_id && payload.team_id !== team) {
-      logger.warn({ teamId: payload.team_id }, "brain: channel message from an unexpected workspace");
+      logger.warn(
+        { teamId: payload.team_id },
+        "brain: channel message from an unexpected workspace"
+      );
       return NextResponse.json({ ok: true });
     }
     // Ack first, ingest after: Slack's deadline is 3s and the pass takes ~4-12s.

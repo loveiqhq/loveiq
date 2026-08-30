@@ -118,16 +118,16 @@ export async function GET(request: Request) {
 async function alertOnStalledCrons(dayKey: string): Promise<number> {
   let stalled = 0;
   for (const s of await findStalledCrons()) {
-      const claimed = await tryClaimSlackAlert(`cron_stalled:${s.cron}`, "day", dayKey);
-      if (!claimed) continue;
-      await notifySlack({
-        channel: "ops",
-        kind: "cron_stalled",
-        username: "ops_alerts",
-        text: `:alarm_clock: *Cron not firing* — ${escapeSlack(describeStall(s))}`,
-        context: { cron: s.cron, lastRunAt: s.lastRunAt, ageMs: s.ageMs },
-      });
-      await markSlackAlertDelivered(`cron_stalled:${s.cron}`, "day", dayKey);
+    const claimed = await tryClaimSlackAlert(`cron_stalled:${s.cron}`, "day", dayKey);
+    if (!claimed) continue;
+    await notifySlack({
+      channel: "ops",
+      kind: "cron_stalled",
+      username: "ops_alerts",
+      text: `:alarm_clock: *Cron not firing* — ${escapeSlack(describeStall(s))}`,
+      context: { cron: s.cron, lastRunAt: s.lastRunAt, ageMs: s.ageMs },
+    });
+    await markSlackAlertDelivered(`cron_stalled:${s.cron}`, "day", dayKey);
     stalled += 1;
   }
   return stalled;

@@ -7,19 +7,49 @@ vi.mock("@shared/observability/logger", () => ({
 /** Notion's real shape: children are a SEPARATE request, never inlined. */
 const CHILDREN: Record<string, unknown[]> = {
   page1: [
-    { id: "toggle1", type: "toggle", has_children: true, toggle: { rich_text: [{ plain_text: "Pricing decisions" }] } },
-    { id: "para1", type: "paragraph", has_children: false, paragraph: { rich_text: [{ plain_text: "top level" }] } },
+    {
+      id: "toggle1",
+      type: "toggle",
+      has_children: true,
+      toggle: { rich_text: [{ plain_text: "Pricing decisions" }] },
+    },
+    {
+      id: "para1",
+      type: "paragraph",
+      has_children: false,
+      paragraph: { rich_text: [{ plain_text: "top level" }] },
+    },
     { id: "sub1", type: "child_page", has_children: true, child_page: { title: "Sub page" } },
   ],
   toggle1: [
-    { id: "inner1", type: "paragraph", has_children: false, paragraph: { rich_text: [{ plain_text: "we charge 39.99" }] } },
-    { id: "nest1", type: "bulleted_list_item", has_children: true, bulleted_list_item: { rich_text: [{ plain_text: "arm A" }] } },
+    {
+      id: "inner1",
+      type: "paragraph",
+      has_children: false,
+      paragraph: { rich_text: [{ plain_text: "we charge 39.99" }] },
+    },
+    {
+      id: "nest1",
+      type: "bulleted_list_item",
+      has_children: true,
+      bulleted_list_item: { rich_text: [{ plain_text: "arm A" }] },
+    },
   ],
   nest1: [
-    { id: "deep1", type: "paragraph", has_children: false, paragraph: { rich_text: [{ plain_text: "deepest fact" }] } },
+    {
+      id: "deep1",
+      type: "paragraph",
+      has_children: false,
+      paragraph: { rich_text: [{ plain_text: "deepest fact" }] },
+    },
   ],
   sub1: [
-    { id: "never", type: "paragraph", has_children: false, paragraph: { rich_text: [{ plain_text: "SHOULD NOT APPEAR" }] } },
+    {
+      id: "never",
+      type: "paragraph",
+      has_children: false,
+      paragraph: { rich_text: [{ plain_text: "SHOULD NOT APPEAR" }] },
+    },
   ],
 };
 

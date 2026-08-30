@@ -31,7 +31,12 @@ vi.mock("@features/brain/server/llm", () => ({
   }),
 }));
 
-import { BRIEF_QUESTION, NOTHING, buildDailyBrief, chunksForDay } from "@features/brain/server/brief";
+import {
+  BRIEF_QUESTION,
+  NOTHING,
+  buildDailyBrief,
+  chunksForDay,
+} from "@features/brain/server/brief";
 
 const chunk = (source: string, i: number) => ({
   source,

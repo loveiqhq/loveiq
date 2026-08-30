@@ -61,14 +61,19 @@ describe("renderMessage — what gets into the corpus", () => {
   });
 
   it("falls back to the raw id when users:read is unavailable, rather than dropping the message", () => {
-    expect(renderMessage({ user: "UNKNOWN1", text: "hi", ts: "1" }, new Map())).toBe("UNKNOWN1: hi");
+    expect(renderMessage({ user: "UNKNOWN1", text: "hi", ts: "1" }, new Map())).toBe(
+      "UNKNOWN1: hi"
+    );
   });
 
   it("decodes the three entities Slack escapes, so the corpus holds what was typed", () => {
     // Slack escapes &, < and > in message text. Storing the raw string put
     // "Let discuss also have a couple of thoughts &amp; ideas" in the corpus.
     expect(
-      renderMessage({ user: "U0BSZ4VRX26", text: "thoughts &amp; ideas &lt;3 &gt;", ts: "1" }, NAMES)
+      renderMessage(
+        { user: "U0BSZ4VRX26", text: "thoughts &amp; ideas &lt;3 &gt;", ts: "1" },
+        NAMES
+      )
     ).toBe("Eman: thoughts & ideas <3 >");
   });
 
@@ -223,7 +228,9 @@ describe("the nightly pass must be incremental, not a full re-walk", () => {
     const src = await import("node:fs").then((fs) =>
       fs.readFileSync("features/brain/server/ingest/slack.ts", "utf8")
     );
-    expect(src).toMatch(/known\.get\(id\) === false && known\.get\(id\.slice\(0, hash\)\) === true/);
+    expect(src).toMatch(
+      /known\.get\(id\) === false && known\.get\(id\.slice\(0, hash\)\) === true/
+    );
     expect(src).toMatch(/!isOrphanPart\(id\)/);
   });
 

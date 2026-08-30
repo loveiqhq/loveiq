@@ -303,7 +303,12 @@ export async function ingestGa4(
   }
   const token = await getGoogleAccessToken(Date.now(), oidcToken);
   if (!token) {
-    return { source: GA4_SOURCE, rows: 0, swept: 0, skipped: `google-token-unavailable(${googleCredentialShape(oidcToken)})` };
+    return {
+      source: GA4_SOURCE,
+      rows: 0,
+      swept: 0,
+      skipped: `google-token-unavailable(${googleCredentialShape(oidcToken)})`,
+    };
   }
 
   // Widened so every weekly/monthly total this run writes covers a WHOLE period.
@@ -574,7 +579,11 @@ export async function ingestGa4(
   const trafficByDay = new Map<string, number[]>();
   for (const r of core) {
     const d = ga4Date(r.dimensionValues?.[0]?.value ?? "");
-    if (d) trafficByDay.set(d, (r.metricValues ?? []).map((m) => num(m.value)));
+    if (d)
+      trafficByDay.set(
+        d,
+        (r.metricValues ?? []).map((m) => num(m.value))
+      );
   }
   const allDays = [...new Set([...trafficByDay.keys(), ...ads.keys()])].sort();
 
@@ -786,7 +795,12 @@ export async function ingestSearchConsole(
   }
   const token = await getGoogleAccessToken(Date.now(), oidcToken);
   if (!token) {
-    return { source: GSC_SOURCE, rows: 0, swept: 0, skipped: `google-token-unavailable(${googleCredentialShape(oidcToken)})` };
+    return {
+      source: GSC_SOURCE,
+      rows: 0,
+      swept: 0,
+      skipped: `google-token-unavailable(${googleCredentialShape(oidcToken)})`,
+    };
   }
 
   // Search Console data lags ~2 days; asking for today returns empty rows.
@@ -967,7 +981,6 @@ export async function ingestSearchConsole(
   const swept = await sweepStale(GSC_SOURCE, stampedAt, written + touched);
   return { source: GSC_SOURCE, rows: written + touched, swept };
 }
-
 
 /**
  * Confirm every chunk of a source that this run did NOT rewrite.

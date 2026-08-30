@@ -187,7 +187,12 @@ export function blocksToText(blocks: NotionBlock[], depth = 0): string {
       const cells = (b.table_row as { cells?: Array<Array<{ plain_text?: string }>> })?.cells;
       if (Array.isArray(cells)) {
         const row = cells
-          .map((cell) => cell.map((t) => t.plain_text ?? "").join("").trim())
+          .map((cell) =>
+            cell
+              .map((t) => t.plain_text ?? "")
+              .join("")
+              .trim()
+          )
           .filter(Boolean)
           .join(" | ");
         if (row) lines.push(row);
@@ -349,7 +354,13 @@ export function taskToRow(
   // function had never heard of, and dropping them left 859 rows worth of
   // company knowledge as bare titles.
   const named = new Set([
-    "Status", "Priority", "Impact", "Assign", "Assignee", "Due Date", "Date Completed",
+    "Status",
+    "Priority",
+    "Impact",
+    "Assign",
+    "Assignee",
+    "Due Date",
+    "Date Completed",
   ]);
   const extras = Object.entries(props)
     .filter(([name]) => !named.has(name))
@@ -649,7 +660,6 @@ export async function ingestNotion(
   }
   return { source: SOURCE, rows: written + touched, swept };
 }
-
 
 /**
  * The shared write path caps a body at 2,400 characters and slices the excess

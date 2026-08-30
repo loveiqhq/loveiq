@@ -310,6 +310,8 @@ jobs:
           #  - calendly/webhook (verified via Calendly signature header instead of CSRF)
           #  - unsubscribe (RFC 8058 one-click; auth via HMAC-signed token in URL — email clients cannot send CSRF cookies)
           #  - csp-report (browsers POST CSP violation reports automatically with no token/cookie; rate-limited + body-bounded instead)
+          #  - slack/events (verified via the Slack v0 request signature; Slack is a server, so it has no CSRF cookie to send)
+          #  - mcp (machine-to-machine JSON-RPC; auth is a static bearer token, and claude.ai calls it cross-origin with no cookie at all)
           for file in $(find app/api -name 'route.ts' \
               -not -path "*/staging-*" \
               -not -path "*/stripe/webhook/*" \
@@ -317,6 +319,8 @@ jobs:
               -not -path "*/calendly/webhook/*" \
               -not -path "*/unsubscribe/*" \
               -not -path "*/csp-report/*" \
+              -not -path "*/slack/events/*" \
+              -not -path "*/mcp/*" \
               2>/dev/null); do
             if [ -f "$file" ] && grep -q "export.*POST\|export.*PUT\|export.*DELETE\|export.*PATCH" "$file"; then
               # Accept any CSRF verifier helper from shared/http/csrf.ts:
@@ -361,6 +365,8 @@ jobs:
           #  - admin/logout (no body to validate; just clears the auth session)
           #  - admin grant-call-coupon (no request body; acts on the validated [id] URL param)
           #  - csp-report (browser-sent CSP violation report JSON; parsed leniently across legacy + Reporting-API shapes, then bounded + logged — a strict schema would just drop valid reports)
+          #  - slack/events (body is HMAC-verified against the Slack signing secret BEFORE it is parsed, same basis as the webhooks above)
+          #  - mcp (JSON-RPC; every tool argument is explicitly type-checked and clamped by hand -- `typeof args.query === "string"`, `Math.min(30, Math.max(1, Number(args.limit) || 12))`, `encodeURIComponent` on anything reaching a URL -- which is stricter than a permissive schema, just not spelled with zod)
           for file in $(find app/api -name 'route.ts' \
               -not -path "*/staging-*" \
               -not -path "*/stripe/webhook/*" \
@@ -370,6 +376,8 @@ jobs:
               -not -path "*/admin/logout/*" \
               -not -path "*/grant-call-coupon/*" \
               -not -path "*/csp-report/*" \
+              -not -path "*/slack/events/*" \
+              -not -path "*/mcp/*" \
               2>/dev/null); do
             if [ -f "$file" ] && grep -q "export.*POST\|export.*PUT" "$file"; then
               if ! grep -q "z\.object\|zod" "$file"; then

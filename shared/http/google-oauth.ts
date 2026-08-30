@@ -67,8 +67,7 @@ export const GA4_SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
 export const SEARCH_CONSOLE_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
 export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
 export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
-export const DIRECTORY_SCOPE =
-  "https://www.googleapis.com/auth/admin.directory.user.readonly";
+export const DIRECTORY_SCOPE = "https://www.googleapis.com/auth/admin.directory.user.readonly";
 
 /** Scopes an impersonated service-account token is minted with. All read-only. */
 /**
@@ -479,7 +478,6 @@ async function federate(oidcToken: string, audience: string): Promise<string | n
   }
   return json.access_token;
 }
-
 
 /**
  * WHICH credential sources are present, as a short flag string — never a value.

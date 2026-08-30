@@ -449,7 +449,9 @@ describe("/api/mcp", () => {
 
     it("does not claim truncation when everything fits", async () => {
       wire([{ id: 1 }, { id: 2 }], { total: 2 });
-      expect((await call({ table: "payment" })).content[0].text).toMatch(/^2 rows returned, 2 match\./);
+      expect((await call({ table: "payment" })).content[0].text).toMatch(
+        /^2 rows returned, 2 match\./
+      );
     });
 
     it("passes filters and order through as PostgREST params", async () => {
@@ -641,92 +643,88 @@ describe("/api/mcp", () => {
     });
   });
 
-describe("no indexed source may be invisible to the model", () => {
-  /**
-   * The fifth guard on the same recurring bug. Four times a source has been
-   * ingested and then left out of the prose the model reads, which makes it
-   * unfindable: the model does not know to search for something it was never
-   * told exists. `list_sources` naming it is not enough — the model reads the
-   * tool description first and decides from that whether the corpus is worth
-   * asking. So every source the ingesters can write must be named somewhere the
-   * model actually sees.
-   */
-  it("every source in SOURCES is named in the search description or the instructions", async () => {
-    const mod = await import("@/app/api/mcp/route");
-    const list = await (
-      await POST(rpc({ jsonrpc: "2.0", id: 1, method: "tools/list" }))
-    ).json();
-    const init = await (
-      await POST(rpc({ jsonrpc: "2.0", id: 2, method: "initialize" }))
-    ).json();
-    const prose = (
-      JSON.stringify(list.result.tools) + (init.result.instructions ?? "")
-    ).toLowerCase();
+  describe("no indexed source may be invisible to the model", () => {
+    /**
+     * The fifth guard on the same recurring bug. Four times a source has been
+     * ingested and then left out of the prose the model reads, which makes it
+     * unfindable: the model does not know to search for something it was never
+     * told exists. `list_sources` naming it is not enough — the model reads the
+     * tool description first and decides from that whether the corpus is worth
+     * asking. So every source the ingesters can write must be named somewhere the
+     * model actually sees.
+     */
+    it("every source in SOURCES is named in the search description or the instructions", async () => {
+      const mod = await import("@/app/api/mcp/route");
+      const list = await (await POST(rpc({ jsonrpc: "2.0", id: 1, method: "tools/list" }))).json();
+      const init = await (await POST(rpc({ jsonrpc: "2.0", id: 2, method: "initialize" }))).json();
+      const prose = (
+        JSON.stringify(list.result.tools) + (init.result.instructions ?? "")
+      ).toLowerCase();
 
-    // The human-readable word for each source id, since the prose names things the
-    // way a person would ("call notes", not "drive").
-    const WORD: Record<string, string> = {
-      doc: "documentation",
-      commit: "commit",
-      analytics: "business numbers",
-      ga4: "ga4",
-      gsc: "search console",
-      jira: "jira",
-      notion: "notion",
-      drive: "call",
-      gmail: "email",
-      slack: "slack",
-    };
-    const sources = (mod as { SOURCES_FOR_TEST?: string[] }).SOURCES_FOR_TEST ?? [];
-    expect(sources.length).toBeGreaterThan(0);
-    for (const src of sources) {
-      const word = WORD[src] ?? src;
-      expect(prose, `source "${src}" is indexed but never named to the model`).toContain(word);
-    }
-  });
-});
-
-describe("descriptions must not assert configuration state", () => {
-  /**
-   * This bug has now shipped four times: a tool description advertised Jira
-   * (0 chunks) while omitting Notion (1,062), the `initialize` instructions did
-   * the same, `list_sources` left Notion out of its source list, and the PostHog
-   * registry note said "not configured yet" for a day after it was configured.
-   *
-   * The pattern is always the same — a fact that lives in the environment gets
-   * copied into prose and then drifts. Whether a service is configured is
-   * answered at runtime by looking at `process.env`, and the tool already returns
-   * a precise message when a key is missing. So a note that also claims it is a
-   * duplicate of a moving fact, and this test refuses one.
-   */
-  it("no service note claims a credential is missing", async () => {
-    const { EXTERNAL_SERVICES } = await import("@/app/api/mcp/route");
-    const forbidden = /not configured|not set|unconfigured|no credential yet|coming soon/i;
-    for (const [name, svc] of Object.entries(EXTERNAL_SERVICES)) {
-      expect(svc.note, `${name} note asserts configuration state`).not.toMatch(forbidden);
-    }
+      // The human-readable word for each source id, since the prose names things the
+      // way a person would ("call notes", not "drive").
+      const WORD: Record<string, string> = {
+        doc: "documentation",
+        commit: "commit",
+        analytics: "business numbers",
+        ga4: "ga4",
+        gsc: "search console",
+        jira: "jira",
+        notion: "notion",
+        drive: "call",
+        gmail: "email",
+        slack: "slack",
+      };
+      const sources = (mod as { SOURCES_FOR_TEST?: string[] }).SOURCES_FOR_TEST ?? [];
+      expect(sources.length).toBeGreaterThan(0);
+      for (const src of sources) {
+        const word = WORD[src] ?? src;
+        expect(prose, `source "${src}" is indexed but never named to the model`).toContain(word);
+      }
+    });
   });
 
-  it("every service names at least one env key or is explicitly optional", async () => {
-    const { EXTERNAL_SERVICES } = await import("@/app/api/mcp/route");
-    for (const [name, svc] of Object.entries(EXTERNAL_SERVICES)) {
-      expect(svc.envKeys.length > 0 || svc.optional === true, `${name}`).toBe(true);
-    }
-  });
+  describe("descriptions must not assert configuration state", () => {
+    /**
+     * This bug has now shipped four times: a tool description advertised Jira
+     * (0 chunks) while omitting Notion (1,062), the `initialize` instructions did
+     * the same, `list_sources` left Notion out of its source list, and the PostHog
+     * registry note said "not configured yet" for a day after it was configured.
+     *
+     * The pattern is always the same — a fact that lives in the environment gets
+     * copied into prose and then drifts. Whether a service is configured is
+     * answered at runtime by looking at `process.env`, and the tool already returns
+     * a precise message when a key is missing. So a note that also claims it is a
+     * duplicate of a moving fact, and this test refuses one.
+     */
+    it("no service note claims a credential is missing", async () => {
+      const { EXTERNAL_SERVICES } = await import("@/app/api/mcp/route");
+      const forbidden = /not configured|not set|unconfigured|no credential yet|coming soon/i;
+      for (const [name, svc] of Object.entries(EXTERNAL_SERVICES)) {
+        expect(svc.note, `${name} note asserts configuration state`).not.toMatch(forbidden);
+      }
+    });
 
-  it("the enum the model sees matches the registry exactly", async () => {
-    // A service in the registry but missing from the enum is unreachable; one in
-    // the enum but not the registry is an error the model cannot avoid.
-    const { EXTERNAL_SERVICES } = await import("@/app/api/mcp/route");
-    const body = await (await POST(rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }))).json();
-    const tool = body.result.tools.find(
-      (t: { name: string }) => t.name === "query_external_service"
-    );
-    expect([...tool.inputSchema.properties.service.enum].sort()).toEqual(
-      Object.keys(EXTERNAL_SERVICES).sort()
-    );
+    it("every service names at least one env key or is explicitly optional", async () => {
+      const { EXTERNAL_SERVICES } = await import("@/app/api/mcp/route");
+      for (const [name, svc] of Object.entries(EXTERNAL_SERVICES)) {
+        expect(svc.envKeys.length > 0 || svc.optional === true, `${name}`).toBe(true);
+      }
+    });
+
+    it("the enum the model sees matches the registry exactly", async () => {
+      // A service in the registry but missing from the enum is unreachable; one in
+      // the enum but not the registry is an error the model cannot avoid.
+      const { EXTERNAL_SERVICES } = await import("@/app/api/mcp/route");
+      const body = await (await POST(rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }))).json();
+      const tool = body.result.tools.find(
+        (t: { name: string }) => t.name === "query_external_service"
+      );
+      expect([...tool.inputSchema.properties.service.enum].sort()).toEqual(
+        Object.keys(EXTERNAL_SERVICES).sort()
+      );
+    });
   });
-});
 
   describe("list_sources reports what it CANNOT see", () => {
     it("names an unreachable service and its missing env key, computed at request time", async () => {
@@ -770,7 +768,12 @@ describe("descriptions must not assert configuration state", () => {
   }
 
   async function sourcesText(extraHeaders: Record<string, string> = {}): Promise<string> {
-    const body = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "list_sources", arguments: {} } };
+    const body = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name: "list_sources", arguments: {} },
+    };
     const res = await POST(
       new Request("https://www.loveiq.org/api/mcp", {
         method: "POST",
@@ -888,7 +891,6 @@ describe("an oversized result must announce that it was cut", () => {
     // the first "rows shown" in the file and started matching a comment instead.
     expect(src).toMatch(/limit >= MAX_PRODUCT_ROWS/);
     expect(src).toMatch(/per-call maximum, so page with offset/);
-
   });
 });
 

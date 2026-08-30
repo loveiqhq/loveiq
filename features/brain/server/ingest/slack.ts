@@ -93,9 +93,7 @@ async function slackGet(
   params: Record<string, string | number>,
   isOutOfTime: () => boolean = () => false
 ): Promise<Record<string, unknown> | null> {
-  const qs = new URLSearchParams(
-    Object.entries(params).map(([k, v]) => [k, String(v)])
-  ).toString();
+  const qs = new URLSearchParams(Object.entries(params).map(([k, v]) => [k, String(v)])).toString();
 
   let res: Response | null = null;
   // `conversations.replies` is Slack Tier 3 (~50/min) and a busy channel trips it
@@ -513,10 +511,7 @@ export async function ingestSlack(
   const touched = await touchChunks(
     SOURCE,
     [...known.keys()].filter(
-      (id) =>
-        !writtenIds.has(id) &&
-        !rewrittenDays.has(id.split("#")[0] ?? id) &&
-        !isOrphanPart(id)
+      (id) => !writtenIds.has(id) && !rewrittenDays.has(id.split("#")[0] ?? id) && !isOrphanPart(id)
     ),
     stampedAt
   );

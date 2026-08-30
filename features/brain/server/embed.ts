@@ -82,7 +82,8 @@ async function embedBatch(
       return json?.embeddings ?? null;
     }
     const detail = (await res.text().catch(() => "")).slice(0, 200);
-    const transient = res.status === 546 || /WORKER_RESOURCE_LIMIT|BOOT_ERROR|timed out/i.test(detail);
+    const transient =
+      res.status === 546 || /WORKER_RESOURCE_LIMIT|BOOT_ERROR|timed out/i.test(detail);
     if (!transient || attempt === attempts - 1) {
       logger.warn({ status: res.status, detail, attempt }, "brain-embed: edge function refused");
       return null;

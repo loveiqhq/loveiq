@@ -53,7 +53,9 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
     if (url.includes("/databases/db-lit/query")) return json({ results: [ROW_LIT] });
     if (url.includes("/blocks/")) {
       return json({
-        results: [{ type: "paragraph", paragraph: { rich_text: [{ plain_text: "page body text" }] } }],
+        results: [
+          { type: "paragraph", paragraph: { rich_text: [{ plain_text: "page body text" }] } },
+        ],
       });
     }
     return json({ results: [] });
@@ -109,7 +111,9 @@ const CURRENT_V = (taskToRow(ROW_LIT, STAMP, "Literature", "")!.meta as { v: num
 function written(): Array<{ source_id: string; title: string; body: string }> {
   return dbCalls
     .filter((c) => c.method === "POST" && c.path.includes("on_conflict"))
-    .flatMap((c) => JSON.parse(c.body) as Array<{ source_id: string; title: string; body: string }>);
+    .flatMap(
+      (c) => JSON.parse(c.body) as Array<{ source_id: string; title: string; body: string }>
+    );
 }
 
 describe("ingestNotion crawls every database", () => {
@@ -204,14 +208,18 @@ describe("incremental: unchanged pages are touched, not re-downloaded", () => {
     // Without this, any change to how a row is built never reaches rows already
     // in the corpus: the page did not change, so it is touched and the old shape
     // survives forever. v2 shipped every database title as "Untitled database".
-    existingChunks = [{ source_id: "task:row-lit-1", meta: { edited: "2026-08-20T09:00:00.000Z", v: 1 } as never }];
+    existingChunks = [
+      { source_id: "task:row-lit-1", meta: { edited: "2026-08-20T09:00:00.000Z", v: 1 } as never },
+    ];
     await ingestNotion(STAMP);
     expect(notionCalls.filter((u) => u.includes("/blocks/row-lit-1")).length).toBeGreaterThan(0);
     expect(written().map((r) => r.source_id)).toContain("task:row-lit-1");
   });
 
   it("treats a row with no version as stale, so pre-versioning rows self-correct", async () => {
-    existingChunks = [{ source_id: "task:row-lit-1", meta: { edited: "2026-08-20T09:00:00.000Z" } }];
+    existingChunks = [
+      { source_id: "task:row-lit-1", meta: { edited: "2026-08-20T09:00:00.000Z" } },
+    ];
     await ingestNotion(STAMP);
     expect(notionCalls.filter((u) => u.includes("/blocks/row-lit-1")).length).toBeGreaterThan(0);
   });
@@ -246,7 +254,9 @@ describe("a run cut short must confirm what it could not refresh", () => {
   function touchedIds(): string[] {
     return dbCalls
       .filter((c) => c.method === "PATCH")
-      .flatMap((c) => (decodeURIComponent(c.path).match(/"([^"]+)"/g) ?? []).map((q) => q.slice(1, -1)));
+      .flatMap((c) =>
+        (decodeURIComponent(c.path).match(/"([^"]+)"/g) ?? []).map((q) => q.slice(1, -1))
+      );
   }
 
   it("touches the pages the clock did not reach, instead of abandoning them", async () => {
@@ -275,9 +285,7 @@ describe("a run cut short must confirm what it could not refresh", () => {
   it("does NOT sweep when a database could not be queried", async () => {
     // Then its rows are missing from the candidate list entirely, and a sweep
     // would read that absence as deletion.
-    const realFetch = vi.mocked(
-      (await import("@shared/http/fetch-with-timeout")).fetchWithTimeout
-    );
+    const realFetch = vi.mocked((await import("@shared/http/fetch-with-timeout")).fetchWithTimeout);
     const original = realFetch.getMockImplementation()!;
     realFetch.mockImplementation(async (url: string, init?: RequestInit) => {
       if (String(url).includes("/databases/db-lit/query")) {
@@ -302,7 +310,9 @@ describe("long pages are split, not truncated", () => {
     // chunks arrived at exactly 2,400 with their tails gone and nothing recording
     // it. Every other source chunks before it gets there.
     const { splitBody } = await import("@features/brain/server/ingest/notion");
-    const long = Array.from({ length: 12 }, (_, i) => `Paragraph ${i} ` + "x".repeat(400)).join("\n\n");
+    const long = Array.from({ length: 12 }, (_, i) => `Paragraph ${i} ` + "x".repeat(400)).join(
+      "\n\n"
+    );
     const parts = splitBody(long);
     expect(parts.length).toBeGreaterThan(1);
     for (const p of parts) expect(p.length).toBeLessThanOrEqual(2400);
@@ -348,7 +358,9 @@ describe("continuation parts must be confirmed, or the sweep eats them", () => {
   function patched(): string[] {
     return dbCalls
       .filter((c) => c.method === "PATCH")
-      .flatMap((c) => (decodeURIComponent(c.path).match(/"([^"]+)"/g) ?? []).map((q) => q.slice(1, -1)));
+      .flatMap((c) =>
+        (decodeURIComponent(c.path).match(/"([^"]+)"/g) ?? []).map((q) => q.slice(1, -1))
+      );
   }
 
   it("touches #2 and #3 alongside the base when the page is unchanged", async () => {

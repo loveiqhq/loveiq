@@ -75,7 +75,9 @@ export async function GET(request: Request) {
     const blocks = [
       section(body),
       ...sourceBlocks(sources),
-      context("Nobody asked for this. The brain reads what the company wrote each day and speaks up when something looks worth knowing."),
+      context(
+        "Nobody asked for this. The brain reads what the company wrote each day and speaks up when something looks worth knowing."
+      ),
     ];
     const fitted = fitBlocks(blocks, body);
 

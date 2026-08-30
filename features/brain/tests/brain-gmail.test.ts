@@ -15,7 +15,11 @@ import {
 } from "@features/brain/server/ingest/gmail";
 
 const b64 = (s: string) =>
-  Buffer.from(s, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  Buffer.from(s, "utf8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 
 describe("messageText — getting text out of a MIME tree", () => {
   it("prefers text/plain", () => {
@@ -37,7 +41,9 @@ describe("messageText — getting text out of a MIME tree", () => {
       messageText({
         mimeType: "text/html",
         body: { data: b64("<div>we agreed on <b>39.99</b></div>") },
-      }).replace(/\s+/g, " ").trim()
+      })
+        .replace(/\s+/g, " ")
+        .trim()
     ).toBe("we agreed on 39.99");
   });
 
@@ -59,7 +65,9 @@ describe("messageText — getting text out of a MIME tree", () => {
   });
 
   it("returns empty for an attachment-only part rather than throwing", () => {
-    expect(messageText({ mimeType: "application/pdf", filename: "x.pdf", body: { size: 9 } })).toBe("");
+    expect(messageText({ mimeType: "application/pdf", filename: "x.pdf", body: { size: 9 } })).toBe(
+      ""
+    );
     expect(messageText(undefined)).toBe("");
   });
 });
@@ -72,12 +80,16 @@ describe("stripQuoted — the reply that carries the whole thread beneath it", (
    */
   it("cuts at the 'On ... wrote:' marker", () => {
     expect(
-      stripQuoted("Yes, agreed.\n\nOn Mon, 4 Aug 2026 at 11:02, Marcus <m@x.com> wrote:\n> the old text")
+      stripQuoted(
+        "Yes, agreed.\n\nOn Mon, 4 Aug 2026 at 11:02, Marcus <m@x.com> wrote:\n> the old text"
+      )
     ).toBe("Yes, agreed.");
   });
 
   it("cuts at an Outlook-style original-message divider", () => {
-    expect(stripQuoted("Sounds good.\n\n-----Original Message-----\nFrom: someone")).toBe("Sounds good.");
+    expect(stripQuoted("Sounds good.\n\n-----Original Message-----\nFrom: someone")).toBe(
+      "Sounds good."
+    );
   });
 
   it("drops leading '>' quote lines even without a marker", () => {
@@ -165,7 +177,10 @@ describe("threadToRows — one chunk per THREAD", () => {
   it("skips a thread whose every message is empty or attachment-only", () => {
     expect(
       threadToRows(
-        { id: "t9", messages: [{ id: "m", payload: { mimeType: "application/pdf", headers: [] } }] },
+        {
+          id: "t9",
+          messages: [{ id: "m", payload: { mimeType: "application/pdf", headers: [] } }],
+        },
         "me",
         "s"
       )
@@ -180,7 +195,10 @@ describe("threadToRows — one chunk per THREAD", () => {
         id: `m${i}`,
         internalDate: "1787900000000",
         payload: {
-          headers: [{ name: "Subject", value: "Long one" }, { name: "From", value: "A <a@x.com>" }],
+          headers: [
+            { name: "Subject", value: "Long one" },
+            { name: "From", value: "A <a@x.com>" },
+          ],
           mimeType: "text/plain",
           body: { data: b64(`message number ${i} discussing the checkout funnel at length`) },
         },
@@ -226,7 +244,10 @@ describe("notification stubs are not conversations", () => {
               id: "m",
               internalDate: "1787900000000",
               payload: {
-                headers: [{ name: "Subject", value: "Your secure link" }, { name: "From", value: "A <a@x>" }],
+                headers: [
+                  { name: "Subject", value: "Your secure link" },
+                  { name: "From", value: "A <a@x>" },
+                ],
                 mimeType: "text/plain",
                 body: { data: b("96") },
               },
@@ -252,7 +273,10 @@ describe("notification stubs are not conversations", () => {
             id: "m1",
             internalDate: "1787900000000",
             payload: {
-              headers: [{ name: "Subject", value: "Budget" }, { name: "From", value: "Marcus <m@x>" }],
+              headers: [
+                { name: "Subject", value: "Budget" },
+                { name: "From", value: "Marcus <m@x>" },
+              ],
               mimeType: "text/plain",
               body: { data: b("Can we sign off the extra ad budget for September, roughly 2k?") },
             },
@@ -261,7 +285,10 @@ describe("notification stubs are not conversations", () => {
             id: "m2",
             internalDate: "1787990000000",
             payload: {
-              headers: [{ name: "Subject", value: "Re: Budget" }, { name: "From", value: "Eman <e@x>" }],
+              headers: [
+                { name: "Subject", value: "Re: Budget" },
+                { name: "From", value: "Eman <e@x>" },
+              ],
               mimeType: "text/plain",
               body: { data: b("Yes, approved.") },
             },

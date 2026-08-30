@@ -70,7 +70,10 @@ describe("credentialKind leaves real content alone", () => {
     ["a git sha", "Fixed in a7f555ab9c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f, see the PR."],
     ["a uuid", "Submission 3cae0cbe-f1a3-380e-b483-d94fc5a2e2fb was refunded."],
     ["a Notion page id", "https://notion.so/2a3e0cbef1a3804e9e5fe5404fd4dbf9"],
-    ["base64 prose", "The payload was " + Buffer.from("hello world, this is fine").toString("base64")],
+    [
+      "base64 prose",
+      "The payload was " + Buffer.from("hello world, this is fine").toString("base64"),
+    ],
     ["the word resend", "The resend button on the confirmation screen is broken."],
     ["env var names", "Set STRIPE_SECRET_KEY and RESEND_API_KEY in Vercel."],
     ["a long slug", "features/brain/server/ingest/upsert.ts handles this at the write path"],

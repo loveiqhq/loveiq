@@ -61,9 +61,7 @@ describe("/api/cron/brain-ingest wiring", () => {
     // was ingested nightly as "deliberate redundancy" — documentation describing
     // something that was not happening.
     await GET(req());
-    expect(calls.map((c) => c.name).sort()).toEqual(
-      ["gsc"].sort()
-    );
+    expect(calls.map((c) => c.name).sort()).toEqual(["gsc"].sort());
   });
 
   it("runs ONLY the sources whose upstream changes daily", async () => {

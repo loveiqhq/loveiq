@@ -98,7 +98,11 @@ describe("the nightly window must not delete the history", () => {
   });
 
   it("counts touched rows toward the sweep, or the guard refuses a healthy run", async () => {
-    existingIds = Array.from({ length: 500 }, (_, i) => `daily:2025-${String((i % 12) + 1).padStart(2, "0")}-${String((i % 28) + 1).padStart(2, "0")}`);
+    existingIds = Array.from(
+      { length: 500 },
+      (_, i) =>
+        `daily:2025-${String((i % 12) + 1).padStart(2, "0")}-${String((i % 28) + 1).padStart(2, "0")}`
+    );
     await ingestGa4(STAMP);
     const [, , total] = sweepStale.mock.calls[0] as unknown as [string, string, number];
     const written = await upsertChunks.mock.results[0].value;
@@ -134,7 +138,9 @@ describe("the nightly window must not delete the history", () => {
     existingIds = [];
     const { fetchWithTimeout } = await import("@shared/http/fetch-with-timeout");
     await ingestGa4(STAMP);
-    const nightly = vi.mocked(fetchWithTimeout).mock.calls.map(([, init]) => String((init as { body?: string })?.body ?? ""));
+    const nightly = vi
+      .mocked(fetchWithTimeout)
+      .mock.calls.map(([, init]) => String((init as { body?: string })?.body ?? ""));
     // The window is deliberately WIDER than DAYS: it is expanded back to the first
     // day of the ISO week and month it touches, because weekly/monthly chunks are
     // totalled from the fetched rows and a mid-period start produced a mid-period
@@ -150,7 +156,9 @@ describe("the nightly window must not delete the history", () => {
 
     vi.mocked(fetchWithTimeout).mockClear();
     await ingestGa4(STAMP, () => false, 480);
-    const back = vi.mocked(fetchWithTimeout).mock.calls.map(([, init]) => String((init as { body?: string })?.body ?? ""));
+    const back = vi
+      .mocked(fetchWithTimeout)
+      .mock.calls.map(([, init]) => String((init as { body?: string })?.body ?? ""));
     const backDays = back
       .flatMap((b) => [...b.matchAll(/(\d+)daysAgo/g)].map((m) => Number(m[1])))
       .filter((n) => Number.isFinite(n));

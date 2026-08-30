@@ -66,9 +66,9 @@ describe("windowCoveringWholePeriods", () => {
   });
 
   it("never SHRINKS a window — a 480-day backfill stays at least 480", () => {
-    expect(windowCoveringWholePeriods(480, new Date("2026-08-28T04:47:00Z"))).toBeGreaterThanOrEqual(
-      480
-    );
+    expect(
+      windowCoveringWholePeriods(480, new Date("2026-08-28T04:47:00Z"))
+    ).toBeGreaterThanOrEqual(480);
   });
 
   it("costs at most about a month of extra days", () => {

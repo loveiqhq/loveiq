@@ -49,7 +49,7 @@
     "ci:local:quick": "QUICK=1 bash scripts/ci-local.sh",
     "ci:local:full": "FULL=1 bash scripts/ci-local.sh",
     "analyze": "ANALYZE=true npm run build",
-    "check": "npm run lint && npm test && npm run docs:check && npm run build",
+    "check": "npm run lint && npx prettier --check . && npm run check:migrations && npm test && npm run docs:check && npm run build",
     "generate:practice-tendencies": "node scripts/generate-practice-tendencies.js",
     "scoring:extract": "python scripts/extract-scoring-xlsm.py",
     "scoring:update": "python scripts/extract-scoring-xlsm.py && node scripts/update-scoring-config.js",

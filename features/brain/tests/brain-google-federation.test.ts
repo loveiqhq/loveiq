@@ -21,7 +21,12 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
 
     if (url.includes("sts.googleapis.com")) {
       return stsOk
-        ? { ok: true, status: 200, json: async () => ({ access_token: "federated-token" }), text: async () => "" }
+        ? {
+            ok: true,
+            status: 200,
+            json: async () => ({ access_token: "federated-token" }),
+            text: async () => "",
+          }
         : { ok: false, status: 400, text: async () => '{"error":"invalid_grant"}' };
     }
     if (url.includes("iamcredentials.googleapis.com")) {
@@ -35,7 +40,12 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
         : { ok: false, status: 403, text: async () => '{"error":"permission denied"}' };
     }
     // the refresh-token endpoint, which must NOT be reached when federation works
-    return { ok: true, status: 200, json: async () => ({ access_token: "refresh-token", expires_in: 3600 }), text: async () => "" };
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ access_token: "refresh-token", expires_in: 3600 }),
+      text: async () => "",
+    };
   }),
 }));
 
@@ -67,7 +77,9 @@ describe("keyless Google auth via Vercel OIDC federation", () => {
     // back to the refresh token the system would look healthy until that token
     // died again.
     expect(await getGoogleAccessToken()).toBe("sa-token");
-    expect(calls.map((c) => c.url).some((u) => u.includes("oauth2.googleapis.com/token"))).toBe(false);
+    expect(calls.map((c) => c.url).some((u) => u.includes("oauth2.googleapis.com/token"))).toBe(
+      false
+    );
     expect(calls[0].url).toContain("sts.googleapis.com");
     expect(calls[1].url).toContain("iamcredentials.googleapis.com");
   });
