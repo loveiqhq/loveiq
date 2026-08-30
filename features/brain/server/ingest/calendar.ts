@@ -236,8 +236,17 @@ export async function ingestCalendar(
     }
     const token = await getDelegatedToken(mailbox, CALENDAR_SCOPE, Date.now(), oidcToken);
     if (!token) {
-      // One unreachable calendar must not let the sweep run as if that person's
-      // meetings had been deleted.
+      /**
+       * THIS is what a missing calendar scope looks like, not `calendar-no-mailboxes`.
+       *
+       * Mailbox discovery uses the DIRECTORY scope, which already works — so the
+       * domain list comes back fine and then every per-calendar token is refused.
+       * If this fires for every mailbox, the delegation grant in the Google Admin
+       * console is missing `.../auth/calendar.readonly`.
+       *
+       * One unreachable calendar must also not let the sweep run as if that
+       * person's meetings had been deleted.
+       */
       failures.push(mailbox);
       complete = false;
       continue;
@@ -270,6 +279,13 @@ export async function ingestCalendar(
   }
 
   if (failures.length > MAX_TOLERATED_FAILURES) complete = false;
+  if (failures.length === boxes.length && boxes.length > 0) {
+    logger.warn(
+      { mailboxes: boxes.length, scope: CALENDAR_SCOPE },
+      "brain-ingest calendar: EVERY calendar refused a delegated token — the calendar scope is " +
+        "almost certainly missing from the domain-wide delegation grant in the Google Admin console"
+    );
+  }
 
   const written = await upsertChunks(rows);
   const writtenIds = new Set(rows.map((r) => r.source_id));

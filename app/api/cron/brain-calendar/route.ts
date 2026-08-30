@@ -82,8 +82,9 @@ export async function GET(request: Request) {
         `skip:${result.skipped}`,
         `:brain: brain-calendar skipped (${escapeSlack(result.skipped)}). Meetings are frozen ` +
           `but nothing else failed, so this will not look broken.\n` +
-          `> If this says \`calendar-no-mailboxes\`, the calendar scope is probably missing from ` +
-          `the domain-wide delegation grant in the Google Admin console.`
+          `> If this says \`calendar-walk-incomplete\` on the very first run, the delegation grant ` +
+          `in the Google Admin console is probably missing \`.../auth/calendar.readonly\` — mailbox ` +
+          `discovery uses a different scope, so the domain list works and every calendar is then refused.`
       );
     }
     return NextResponse.json({ ok: status === "success", result });
