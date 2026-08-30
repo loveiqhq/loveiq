@@ -475,3 +475,29 @@ describe("Drive reads as a PERSON, not as the service account", () => {
     expect(delegatedFor).toHaveLength(0);
   });
 });
+
+describe("a WhatsApp export in Drive is a conversation, not a document", () => {
+  const EXPORT = [
+    "[06/08/2026, 09:12:31] Marcus: Should the report be 39.99?",
+    "[06/08/2026, 09:13:02] Eman: I think so",
+    "[07/08/2026, 11:02:00] Eman: Shipped.",
+  ].join("\n");
+
+  it("routes it to the per-day parser instead of the generic document path", () => {
+    // Left to the normal path it becomes anonymous slices all stamped with the
+    // FILE's modified date, so "what did we decide in July" cannot work.
+    const rows = docToRows(
+      { ...FILE, name: "WhatsApp Chat with LoveIQ Team.txt", mimeType: "text/plain" },
+      EXPORT,
+      STAMP
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.period_end)).toEqual(["2026-08-06", "2026-08-07"]);
+    expect(rows[0]!.title).toContain("WhatsApp: LoveIQ Team");
+  });
+
+  it("leaves an ordinary text file on the normal path", () => {
+    const rows = docToRows({ ...FILE, name: "Q3 budget" }, "Some prose about the budget.", STAMP);
+    expect(rows[0]!.title).toBe("Drive: Q3 budget");
+  });
+});

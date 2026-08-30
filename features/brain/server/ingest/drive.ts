@@ -9,6 +9,7 @@ import {
 import logger from "@shared/observability/logger";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { splitBody } from "./notion";
+import { looksLikeWhatsAppExport, whatsappRows } from "./whatsapp";
 import { sweepStale, touchChunks, upsertChunks, type BrainRow, type IngestResult } from "./upsert";
 
 /**
@@ -288,6 +289,18 @@ export function docToRows(file: DriveFile, text: string, stampedAt: string): Bra
   if (!file.id || !name) return [];
   const edited = file.modifiedTime ?? file.createdTime ?? null;
   const owner = file.owners?.[0]?.emailAddress ?? null;
+
+  /**
+   * A WhatsApp export is a conversation, not a document.
+   *
+   * Left to the normal path it becomes anonymous 2,400-character slices, every one
+   * stamped with the FILE's modified date — so "what did we decide in July" cannot
+   * work, because no chunk knows which day it covers. Cut it per day instead, the
+   * same shape the Slack ingester produces.
+   */
+  if (looksLikeWhatsAppExport(text)) {
+    return whatsappRows(file.id, name, file.webViewLink ?? null, text, stampedAt);
+  }
 
   /**
    * TITLE THE MEETING NOTES AS MEETING NOTES.
