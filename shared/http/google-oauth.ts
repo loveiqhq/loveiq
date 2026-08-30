@@ -68,6 +68,7 @@ export const SEARCH_CONSOLE_SCOPE = "https://www.googleapis.com/auth/webmasters.
 export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
 export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 export const DIRECTORY_SCOPE = "https://www.googleapis.com/auth/admin.directory.user.readonly";
+export const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
 
 /** Scopes an impersonated service-account token is minted with. All read-only. */
 /**
@@ -82,6 +83,7 @@ const IMPERSONATION_SCOPES = [
   SEARCH_CONSOLE_SCOPE,
   DRIVE_SCOPE,
   GMAIL_SCOPE,
+  CALENDAR_SCOPE,
   "https://www.googleapis.com/auth/cloud-platform",
 ];
 
