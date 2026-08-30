@@ -259,3 +259,33 @@ describe("toSlackMrkdwn", () => {
     expect(toSlackMrkdwn("It is off [1] by decision [2].")).toBe("It is off [1] by decision [2].");
   });
 });
+
+describe("semantic recall must never break search", () => {
+  /**
+   * Embedding the question sits on the path of EVERY question the team asks. The
+   * edge function that computes it has already been seen to refuse under load
+   * (WORKER_RESOURCE_LIMIT), so a failure there must cost recall and nothing else.
+   * With a null vector the SQL takes exactly its previous lexical path.
+   */
+  it("embeds the question outside the retrieval try/catch, and swallows failures", async () => {
+    const src = await import("node:fs").then((fs) =>
+      fs.readFileSync("features/brain/server/retrieve.ts", "utf8")
+    );
+    expect(src).toMatch(/could not embed the question, falling back to lexical search/);
+    // the vector must be passed to the RPC, or the whole thing is decoration
+    expect(src).toMatch(/query_embedding: queryVector/);
+    // and it must be computed BEFORE the block that throws CorpusUnavailableError
+    expect(src.indexOf("queryVector = await embedQuery")).toBeLessThan(
+      src.indexOf("rpc/brain_search")
+    );
+  });
+
+  it("passes null rather than an empty string when embedding is unavailable", async () => {
+    const src = await import("node:fs").then((fs) =>
+      fs.readFileSync("features/brain/server/embed.ts", "utf8")
+    );
+    // An empty string would be cast by Postgres and raise, turning a soft
+    // degradation into a hard failure.
+    expect(src).toMatch(/return first \? toVectorLiteral\(first\) : null;/);
+  });
+});

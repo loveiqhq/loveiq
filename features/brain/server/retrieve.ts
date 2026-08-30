@@ -128,6 +128,18 @@ export async function retrieve(question: string, limit = 12): Promise<BrainChunk
   const trimmed = question.trim();
   if (trimmed.length < 2) return [];
 
+  /**
+   * Embedded BEFORE the try, and never allowed to throw: this sits on the path of
+   * every question, and a failure here must cost recall, not the whole answer.
+   */
+  let queryVector: string | null = null;
+  try {
+    const { embedQuery } = await import("./embed");
+    queryVector = await embedQuery(expandRelativePeriods(trimmed));
+  } catch (err) {
+    logger.warn({ err }, "brain: could not embed the question, falling back to lexical search");
+  }
+
   let rows: Array<Record<string, unknown>> = [];
   try {
     const res = await supabaseFetch("/rest/v1/rpc/brain_search", {
@@ -147,6 +159,11 @@ export async function retrieve(question: string, limit = 12): Promise<BrainChunk
         query_text: expandRelativePeriods(trimmed),
         k: CANDIDATE_CEILING,
         per_source: PER_BUCKET_CANDIDATES,
+        // SEMANTIC RECALL. Postgres cannot run the model, so the question is
+        // embedded here and the vector passed in. Null when embedding fails, which
+        // the SQL treats as "lexical only" — an embedding outage degrades the
+        // answers rather than breaking search.
+        query_embedding: queryVector,
       }),
     });
     if (!res.ok) {

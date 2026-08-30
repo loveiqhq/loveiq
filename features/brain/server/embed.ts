@@ -46,7 +46,16 @@ export function toVectorLiteral(v: number[]): string {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function embedBatch(texts: string[]): Promise<number[][] | null> {
+async function embedBatch(
+  texts: string[],
+  opts: { attempts?: number; timeoutMs?: number } = {}
+): Promise<number[][] | null> {
+  // The BACKFILL wants persistence -- losing a batch means those chunks stay
+  // unsearchable. A QUESTION wants to fail fast: it sits in front of a person
+  // waiting for an answer, and lexical search is a perfectly good fallback. Same
+  // call, different patience, so the caller sets it.
+  const attempts = Math.max(1, opts.attempts ?? 6);
+  const timeoutMs = opts.timeoutMs ?? 120_000;
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
@@ -61,12 +70,12 @@ async function embedBatch(texts: string[]): Promise<number[][] | null> {
    *
    * So: back off and retry rather than shrink. Giving up loses the batch entirely.
    */
-  for (let attempt = 0; attempt <= 5; attempt++) {
+  for (let attempt = 0; attempt < attempts; attempt++) {
     const res = await fetchWithTimeout(`${url}/functions/v1/brain-embed`, {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({ texts }),
-      timeoutMs: 120_000,
+      timeoutMs,
     });
     if (res.ok) {
       const json = (await res.json().catch(() => null)) as { embeddings?: number[][] } | null;
@@ -74,7 +83,7 @@ async function embedBatch(texts: string[]): Promise<number[][] | null> {
     }
     const detail = (await res.text().catch(() => "")).slice(0, 200);
     const transient = res.status === 546 || /WORKER_RESOURCE_LIMIT|BOOT_ERROR|timed out/i.test(detail);
-    if (!transient || attempt === 5) {
+    if (!transient || attempt === attempts - 1) {
       logger.warn({ status: res.status, detail, attempt }, "brain-embed: edge function refused");
       return null;
     }
@@ -166,4 +175,22 @@ async function countMissing(): Promise<number> {
   });
   if (!res.ok) return -1;
   return Number(res.headers.get("content-range")?.split("/")[1] ?? "-1");
+}
+
+/**
+ * Embed a QUESTION, for the semantic arm of `brain_search`.
+ *
+ * Returns null on any failure, and the caller passes that straight through: with a
+ * null vector the search degrades to exactly its previous lexical behaviour. An
+ * embedding outage therefore makes answers worse, never broken — which matters
+ * because this now sits on the path of every question the team asks.
+ */
+export async function embedQuery(question: string): Promise<string | null> {
+  const text = question.trim().slice(0, 1500);
+  if (text.length < 2) return null;
+  // One attempt, four seconds. Retrying here the way the backfill does would put
+  // 22s of backoff in front of a waiting person on a cold edge worker.
+  const vectors = await embedBatch([text], { attempts: 1, timeoutMs: 4_000 });
+  const first = vectors?.[0];
+  return first ? toVectorLiteral(first) : null;
 }
