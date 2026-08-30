@@ -743,6 +743,42 @@ is the first source whose sharing boundary was drawn by the SENDER rather than b
 LoveIQ — an outside party writing to one person did not consent to the whole company
 reading it.
 
+### Gmail: what production needs that a laptop does not
+
+Reaching colleagues' mail needs domain-wide delegation, and delegation needs TWO
+environment variables that are easy to have locally and forget in Vercel:
+
+```text
+GOOGLE_WORKSPACE_ADMIN=ec@loveiq.org
+GOOGLE_WORKSPACE_DOMAIN=loveiq.org
+```
+
+Without them `domainMailboxes()` returns null, the run falls back to a single
+mailbox, that mailbox belongs to a service account with no Gmail of its own, and
+Gmail answers `400 "Precondition check failed"` to every listing. The cause is three
+steps away from the symptom, which is why it went unnoticed from 29 to 30 August
+while the corpus sat frozen at 9,061 chunks.
+
+**This is exactly the shape to expect again.** The base Google credential — Vercel's
+OIDC token federated to the service account — is a DIFFERENT credential from the
+one a laptop uses, and it can reach less. Drive has the same split: run locally with
+a person's credential it sees 512 documents; run in production as the service
+account it sees 24, and only the mass-delete guard stops each run from sweeping the
+rest away.
+
+So: **a source verified locally is not a source verified in production.** Check the
+job, not the laptop:
+
+```sql
+select cron_name, started_at, status, error_message
+from cron_run where cron_name = 'brain-gmail'
+order by started_at desc limit 5;
+```
+
+`list_sources` now reports that job outcome next to each source, because its
+`last ingested` date is the write timestamp and moves on every run — including runs
+that fetched nothing at all.
+
 ### Embeddings — semantic recall
 
 Every chunk carries a 384-dimension `gte-small` vector in `brain_chunk.embedding`

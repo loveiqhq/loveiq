@@ -859,6 +859,59 @@ async function callTool(
     // probe says so instead of the tool lying.
     const SOURCES = SOURCES_FOR_TEST;
 
+    /**
+     * A source's `updated_at` moves whenever its ingester RUNS, even on a run that
+     * fetched nothing -- so `last ingested` reported today's date for Gmail while
+     * it had been fetching zero threads for two days. Anyone asking the brain what
+     * it had access to was told a dead source was healthy.
+     *
+     * The honest signal is the JOB's outcome, so it is read here and reported
+     * alongside. `doc` and `commit` are ingested by a GitHub Action on push and
+     * have no cron row, which is stated rather than left blank.
+     */
+    const CRON_FOR_SOURCE: Record<string, string> = {
+      ga4: "brain-fast",
+      drive: "brain-fast",
+      analytics: "brain-fast",
+      slack: "brain-fast",
+      notion: "brain-notion",
+      gmail: "brain-gmail",
+      gsc: "brain-ingest",
+    };
+
+    const lastRun = new Map<string, { status: string; error: string | null; at: string }>();
+    const runsRes = await supabaseFetch(
+      "/rest/v1/cron_run?select=cron_name,started_at,status,error_message" +
+        "&order=started_at.desc&limit=200"
+    );
+    if (runsRes.ok) {
+      const runs = (await runsRes.json().catch(() => [])) as Array<{
+        cron_name?: string;
+        started_at?: string;
+        status?: string;
+        error_message?: string | null;
+      }>;
+      for (const r of runs) {
+        if (!r.cron_name || lastRun.has(r.cron_name)) continue;
+        lastRun.set(r.cron_name, {
+          status: r.status ?? "?",
+          error: r.error_message ?? null,
+          at: r.started_at ?? "",
+        });
+      }
+    }
+
+    const health = (source: string): string => {
+      if (source === "doc" || source === "commit") return " · ingested on push to main";
+      const cron = CRON_FOR_SOURCE[source];
+      if (!cron) return "";
+      const run = lastRun.get(cron);
+      if (!run) return ` · no record of ${cron} ever running`;
+      const when = run.at.slice(0, 16).replace("T", " ");
+      if (run.status === "success") return ` · ${cron} ok at ${when}`;
+      return ` · ${cron} FAILING since at least ${when}${run.error ? ` (${run.error})` : ""}`;
+    };
+
     const describe = async (source: string): Promise<string> => {
       const base = `/rest/v1/brain_chunk?source=eq.${encodeURIComponent(source)}`;
       const newest = await supabaseFetch(
@@ -878,7 +931,10 @@ async function callTool(
         : [];
       const ingested = lastRows?.[0]?.updated_at?.slice(0, 10) ?? "?";
 
-      return `${source}: ${total} chunks · newest period ${period ?? "n/a (docs carry no period)"} · last ingested ${ingested}`;
+      return (
+        `${source}: ${total} chunks · newest period ${period ?? "n/a (docs carry no period)"}` +
+        ` · last wrote ${ingested}${health(source)}`
+      );
     };
 
     const lines = await Promise.all(SOURCES.map(describe));
@@ -919,7 +975,7 @@ async function callTool(
 
     return textResult(
       `INDEXED HISTORY (searchable with search_company_context)\n${lines.join("\n")}\n\n` +
-        `A source showing NEVER INGESTED has no data at all — its silence is not evidence ` +
+        `A source marked FAILING is not updating, however recent its last write looks: the write timestamp moves on every run, including runs that fetched nothing. Trust the job outcome over the date.\nA source showing NEVER INGESTED has no data at all — its silence is not evidence ` +
         `that the thing does not exist. A source whose newest period is old has stopped ` +
         `updating.\n\n` +
         `LIVE STATE\nOur own database: every table, view and analysis function, read at ask ` +
