@@ -299,7 +299,8 @@ export async function ingestCalendar(
         return current;
       })
       .map(([id]) => id),
-    stampedAt
+    stampedAt,
+    complete
   );
   const swept = complete ? await sweepStale(SOURCE, stampedAt, written + touched) : 0;
 

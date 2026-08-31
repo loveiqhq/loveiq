@@ -137,3 +137,60 @@ describe("a write must be given longer than a read", () => {
     expect(upsert).toMatch(/timeoutMs: 45_000/);
   });
 });
+
+describe("touching rows is only ever for the sweep, and it is not free", () => {
+  /**
+   * Supabase warned on 2026-08-31 that the project was exhausting its Disk IO
+   * budget. Cause: `brain_chunk` had 30,213 live rows and 991,115 updates, only
+   * 0.3% of them HOT. `updated_at` is an indexed column
+   * (`idx_brain_chunk_source` is `btree (source, updated_at DESC)`), so a touch
+   * can NEVER be HOT -- each one rewrites the row plus its entries in a 42 MB GIN
+   * full-text index, a 30 MB HNSW vector index and a 13 MB trigram index. 227 MB
+   * of indexes over a 51 MB heap, and every row rewritten ~33 times.
+   *
+   * Worse, Gmail and Drive were mid-re-walk, so their sweeps were gated off while
+   * the touch still ran: ~25,000 index-rewriting updates an hour with NO consumer.
+   *
+   * The database this hammers also serves the survey, reports and checkout.
+   *
+   * Earlier describes in this file replace the shared `supabaseFetch` mock and
+   * never restore it, so these assert on the mock's own calls.
+   */
+  let fetchMock: ReturnType<typeof vi.mocked<never>>;
+
+  beforeEach(async () => {
+    const { supabaseFetch } = await import("@features/admin/server/supabase");
+    fetchMock = vi.mocked(supabaseFetch) as never;
+    (fetchMock as unknown as { mockClear: () => void }).mockClear();
+    (fetchMock as unknown as { mockResolvedValue: (v: unknown) => void }).mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-range": "*/3" }),
+      json: async () => [],
+      text: async () => "",
+    });
+  });
+
+  it("writes nothing when the caller will not sweep this run", async () => {
+    const { touchChunks } = await import("@features/brain/server/ingest/upsert");
+    const n = await touchChunks("gmail", ["a", "b", "c"], "2026-08-31T00:00:00Z", false);
+    expect((fetchMock as unknown as { mock: { calls: unknown[] } }).mock.calls).toHaveLength(0);
+    expect(n).toBe(3); // still CONFIRMED present; only the write was skipped
+  });
+
+  it("still writes when the caller will sweep, because then the stamp is load-bearing", async () => {
+    const { touchChunks } = await import("@features/brain/server/ingest/upsert");
+    await touchChunks("gmail", ["a", "b"], "2026-08-31T00:00:00Z", true);
+    expect(
+      (fetchMock as unknown as { mock: { calls: unknown[] } }).mock.calls.length
+    ).toBeGreaterThan(0);
+  });
+
+  it("defaults to writing, so a caller that always sweeps needs no argument", async () => {
+    const { touchChunks } = await import("@features/brain/server/ingest/upsert");
+    await touchChunks("ga4", ["a"], "2026-08-31T00:00:00Z");
+    expect(
+      (fetchMock as unknown as { mock: { calls: unknown[] } }).mock.calls.length
+    ).toBeGreaterThan(0);
+  });
+});

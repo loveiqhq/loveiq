@@ -187,9 +187,34 @@ export async function upsertChunks(rows: BrainRow[]): Promise<number> {
 export async function touchChunks(
   source: string,
   sourceIds: string[],
-  stampedAt: string
+  stampedAt: string,
+  /**
+   * Whether the caller will actually sweep this run. Defaults true, so a caller
+   * that always sweeps needs no argument.
+   *
+   * TOUCHING IS ONLY EVER FOR THE SWEEP, and it is far from free. `updated_at` is
+   * an indexed column -- `idx_brain_chunk_source` is `btree (source, updated_at
+   * DESC)` -- so a touch can NEVER be a HOT update. Every one rewrites the row and
+   * its entries in a 42 MB GIN full-text index, a 30 MB HNSW vector index and a
+   * 13 MB trigram index: 227 MB of indexes over a 51 MB heap.
+   *
+   * Measured on 2026-08-31, after Supabase warned the project was exhausting its
+   * Disk IO budget: 30,213 live rows had absorbed 991,115 updates, 0.3% of them
+   * HOT -- every row rewritten ~33 times purely to say "still here".
+   *
+   * Gmail and Drive were mid-re-walk at the time, so `complete` was false and
+   * their sweeps never ran, while the touch still did: ~25,000 index-rewriting
+   * updates an hour with no consumer whatsoever. Skipping those costs nothing,
+   * because when a sweep does run the touch runs in the same pass and stamps
+   * everything it saw.
+   *
+   * The rows still count as CONFIRMED when the write is skipped -- the caller saw
+   * them in the walk; only the stamp, which nothing will read, is what we drop.
+   */
+  willSweep = true
 ): Promise<number> {
   if (sourceIds.length === 0) return 0;
+  if (!willSweep) return sourceIds.length;
 
   let touched = 0;
   for (let i = 0; i < sourceIds.length; i += 100) {

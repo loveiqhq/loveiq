@@ -563,7 +563,8 @@ export async function ingestGmail(
         return have.current;
       })
       .map(([id]) => id),
-    stampedAt
+    stampedAt,
+    complete
   );
   // Sweep only a complete walk; a truncated one makes real threads look deleted.
   const swept = complete ? await sweepStale(SOURCE, stampedAt, written + touched) : 0;

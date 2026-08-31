@@ -606,13 +606,13 @@ export async function ingestNotion(
   const deferred = toFetch
     .flatMap((i) => [i.sourceId, ...partIdsOf(known, i.sourceId)])
     .filter((id) => !writtenIds.has(id));
-  const touched = await touchChunks(SOURCE, [...touch, ...deferred], stampedAt);
+  const crawlComplete = databases.size > 0 && !crawlTruncated;
+  const touched = await touchChunks(SOURCE, [...touch, ...deferred], stampedAt, crawlComplete);
 
   // The sweep is safe whenever every page was either rewritten or confirmed —
   // which is now true even for a run cut short, so stale rows are never deleted
   // just because the clock ran out. It still refuses if the crawl itself was
   // incomplete, because then pages may be missing from `candidates` entirely.
-  const crawlComplete = databases.size > 0 && !crawlTruncated;
   const swept = crawlComplete ? await sweepStale(SOURCE, stampedAt, written + touched) : 0;
 
   logger.info(

@@ -510,7 +510,7 @@ export async function ingestDrive(
   const deferred = toFetch
     .flatMap((f) => [`doc:${f.id}`, ...partIdsOf(known, `doc:${f.id}`)])
     .filter((id) => !writtenIds.has(id));
-  const touched = await touchChunks(SOURCE, [...touch, ...deferred], stampedAt);
+  const touched = await touchChunks(SOURCE, [...touch, ...deferred], stampedAt, listed.complete);
 
   // Only sweep when the LISTING was complete. A partial list makes existing
   // documents look deleted; a partial FETCH does not, because everything is

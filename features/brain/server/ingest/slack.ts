@@ -513,7 +513,8 @@ export async function ingestSlack(
     [...known.keys()].filter(
       (id) => !writtenIds.has(id) && !rewrittenDays.has(id.split("#")[0] ?? id) && !isOrphanPart(id)
     ),
-    stampedAt
+    stampedAt,
+    complete
   );
   // Only sweep a complete walk; a truncated one makes past days look deleted.
   const swept = complete ? await sweepStale(SOURCE, stampedAt, written + touched) : 0;
