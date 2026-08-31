@@ -56,6 +56,10 @@
     {
       "path": "/api/cron/brain-calendar",
       "schedule": "26 * * * *"
+    },
+    {
+      "path": "/api/cron/brain-drive",
+      "schedule": "52 * * * *"
     }
   ],
   "functions": {

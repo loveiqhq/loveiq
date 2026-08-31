@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { ingestAnalytics } from "@features/brain/server/ingest/analytics";
-import { ingestDrive } from "@features/brain/server/ingest/drive";
 import { ingestGa4 } from "@features/brain/server/ingest/google";
 import { ingestSlack } from "@features/brain/server/ingest/slack";
 import { embedMissing } from "@features/brain/server/embed";
@@ -27,11 +26,12 @@ export const maxDuration = 60;
  * The sources that change CONTINUOUSLY, every 15 minutes, so the brain is minutes
  * behind reality rather than up to a day.
  *
- * Was `brain-drive`, which ran call notes alone. The other two earned their place
- * by getting cheap: an incremental Slack pass fell from 266s to ~4s once it stopped
- * re-walking all history every run, and the funnel rollup is ~2s. Measured
- * end-to-end: drive 0.6s + analytics 1.9s + slack 3.9s = 6.4s, against a 60s
- * ceiling.
+ * Drive LEFT this lane on 2026-08-31. It was cheap only while the service account
+ * could see the 24 files shared with it; once it started impersonating a person it
+ * walked the whole company Drive — 512 documents, PDFs downloaded and parsed — and
+ * took this job past its 60-second ceiling (504 at 01:37). It has its own hourly
+ * job now, for the same reason gmail and calendar do: a heavy per-person walk must
+ * not be able to starve the funnel numbers and Slack of their clock.
  *
  * WHAT IS DELIBERATELY NOT HERE, and why this is not just "run everything often":
  *
@@ -57,8 +57,6 @@ const DELIBERATE_SKIPS = new Set([
   "google-not-configured",
   "ga4-no-property-id",
   "ga4-time-budget",
-  "drive-nothing-shared",
-  "drive-time-budget",
   "slack-not-configured",
   "slack-nothing-to-index",
 ]);
@@ -130,7 +128,6 @@ export async function GET(request: Request) {
     const oidcToken = readVercelOidcToken(request);
     // GA4 first: `analytics` reads its ad spend back out of the chunks it writes.
     await run("ga4", () => ingestGa4(stampedAt, isOutOfTime, undefined, oidcToken));
-    await run("drive", () => ingestDrive(stampedAt, isOutOfTime, oidcToken));
     await run("analytics", () => ingestAnalytics(stampedAt));
     await run("slack", () => ingestSlack(stampedAt, isOutOfTime));
 

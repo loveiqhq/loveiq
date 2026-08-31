@@ -4,17 +4,19 @@ vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
+/**
+ * Points at GA4, not Drive. Drive left this lane on 2026-08-31 — once it started
+ * impersonating a person it walked the whole company Drive and took the job past
+ * its 60s ceiling — so a Drive mock here would simply never be called.
+ */
 const mockIngest = vi.fn();
-vi.mock("@features/brain/server/ingest/drive", () => ({
-  ingestDrive: (...a: unknown[]) => mockIngest(...(a as [])),
+vi.mock("@features/brain/server/ingest/google", () => ({
+  ingestGa4: (...a: unknown[]) => mockIngest(...(a as [])),
 }));
 
 let prodHost = true;
 // The other two sources in this lane. They are stubbed to a healthy no-op so each
 // test isolates the behaviour it names; a real call here would alert and mask it.
-vi.mock("@features/brain/server/ingest/google", () => ({
-  ingestGa4: vi.fn(async () => ({ source: "ga4", rows: 237, swept: 0 })),
-}));
 vi.mock("@features/brain/server/ingest/analytics", () => ({
   ingestAnalytics: vi.fn(async () => ({ source: "analytics", rows: 177, swept: 0 })),
 }));
@@ -83,7 +85,7 @@ describe("/api/cron/brain-fast", () => {
     authOk = true;
     prodHost = true;
     claimGranted = true;
-    mockIngest.mockResolvedValue({ source: "drive", rows: 3, swept: 0 });
+    mockIngest.mockResolvedValue({ source: "ga4", rows: 3, swept: 0 });
   });
 
   it("refuses an unauthenticated request", async () => {
@@ -100,14 +102,15 @@ describe("/api/cron/brain-fast", () => {
     expect(mockIngest).not.toHaveBeenCalled();
   });
 
-  it("does NOT alert when nothing has been shared yet", async () => {
-    // The expected state until somebody shares a folder. Alerting would page
-    // 96 times a day for a source nobody has enabled.
+  it("does NOT alert for a source that simply is not set up yet", async () => {
+    // The expected state until somebody adds the property id. Alerting would page
+    // 96 times a day for a source nobody has enabled. (`drive-nothing-shared` used
+    // to be the example here; Drive moved to its own hourly job on 2026-08-31.)
     mockIngest.mockResolvedValue({
-      source: "drive",
+      source: "ga4",
       rows: 0,
       swept: 0,
-      skipped: "drive-nothing-shared",
+      skipped: "ga4-no-property-id",
     });
     const body = await (await GET(req())).json();
     expect(body.ok).toBe(true);
@@ -157,12 +160,12 @@ describe("/api/cron/brain-fast", () => {
   });
 
   it("returns 200 on a thrown error so Vercel does not retry a job that will fail again", async () => {
-    mockIngest.mockRejectedValue(new Error("drive exploded"));
+    mockIngest.mockRejectedValue(new Error("ga4 exploded"));
     const res = await GET(req());
     expect(res.status).toBe(200);
     expect((await res.json()).ok).toBe(false);
     expect(recorded[0].status).toBe("error");
-    expect(notified[0].text).toContain("drive exploded");
+    expect(notified[0].text).toContain("ga4 exploded");
   });
 
   it("records the run even when it throws", async () => {
@@ -176,21 +179,21 @@ describe("/api/cron/brain-fast", () => {
 describe("the OIDC token goes only where Google is actually called", () => {
   /**
    * The token is a REQUEST HEADER, not an env var — reading it from process.env is
-   * what made keyless auth fail silently in production with `oidc=0`. Drive needs
+   * what made keyless auth fail silently in production with `oidc=0`. GA4 needs
    * it; analytics and slack must not be handed a Google credential they have no
    * use for.
    */
-  it("hands it to drive and to nothing else in this lane", async () => {
+  it("hands it to ga4 and to nothing else in this lane", async () => {
     const { ingestAnalytics } = await import("@features/brain/server/ingest/analytics");
     const { ingestSlack } = await import("@features/brain/server/ingest/slack");
-    mockIngest.mockResolvedValue({ source: "drive", rows: 1, swept: 0 });
+    mockIngest.mockResolvedValue({ source: "ga4", rows: 1, swept: 0 });
     await GET(
       new Request("https://www.loveiq.org/api/cron/brain-fast", {
         headers: { "x-vercel-oidc-token": "vercel.oidc.jwt" },
       })
     );
-    const driveCall = mockIngest.mock.calls.at(-1)!;
-    expect(driveCall).toContain("vercel.oidc.jwt");
+    const ga4Call = mockIngest.mock.calls.at(-1)!;
+    expect(ga4Call).toContain("vercel.oidc.jwt");
     for (const fn of [ingestAnalytics, ingestSlack]) {
       for (const call of vi.mocked(fn).mock.calls) {
         expect(call).not.toContain("vercel.oidc.jwt");
