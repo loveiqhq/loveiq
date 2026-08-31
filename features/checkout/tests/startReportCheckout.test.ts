@@ -99,11 +99,19 @@ describe("startReportCheckout", () => {
     expect(body.reportToken).toBeNull();
   });
 
+  // The two guards below assert their exact MESSAGE, not just `status: "error"`.
+  // Both sit inside the try/catch, so deleting either one still produces an
+  // "error" result — from the crash rather than the guard — and a status-only
+  // assertion passes on a mutant. The message is the only thing that separates
+  // "we refused" from "we blew up".
   it("refuses without a report context, and never calls Stripe", async () => {
     globalThis.fetch = vi.fn();
     const result = await startReportCheckout({ plan: "full_report", quote: QUOTE, token: null });
 
-    expect(result?.status).toBe("error");
+    expect(result).toEqual({
+      status: "error",
+      message: "This checkout is tied to a saved report. Open your report again and retry.",
+    });
     expect(globalThis.fetch).not.toHaveBeenCalled();
     expect(assign).not.toHaveBeenCalled();
   });
@@ -116,7 +124,10 @@ describe("startReportCheckout", () => {
       token: "rpt_ABCDEFGHIJKLMNOPQRST",
     });
 
-    expect(result?.status).toBe("error");
+    expect(result).toEqual({
+      status: "error",
+      message: "We're still preparing your price. Try again in a moment.",
+    });
     expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 

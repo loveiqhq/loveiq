@@ -19,11 +19,10 @@ vi.mock("next/navigation", () => ({
 const mockGetReportSessionId = vi.fn();
 vi.mock("@features/survey/ui/hooks/surveySession", () => ({
   getReportSessionId: () => mockGetReportSessionId(),
-  getReportPaywallDeadline: () => 1_700_000_000_000,
-  peekReportPaywallDeadline: () => null,
+  getReportNurturePromo: () => null,
+  getReportPricingSessionId: () => null,
   setReportNurturePromo: () => {},
   setReportPricingSessionId: () => {},
-  REPORT_PAYWALL_COUNTDOWN_MS: 180_000,
 }));
 
 const mockUseReportData = vi.fn();
@@ -62,7 +61,6 @@ vi.mock("@features/analytics/client", () => ({
   trackSectionNavigated: vi.fn(),
   trackChapterFeedbackSubmitted: vi.fn(),
   trackLockedCardPriceShown: vi.fn(),
-  trackPaywallCountdownExpired: vi.fn(),
   hasCookieYesConsent: () => true,
 }));
 

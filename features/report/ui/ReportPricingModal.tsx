@@ -59,7 +59,7 @@ const FOCUSABLE_SELECTOR =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 // Orange→purple gradient used for the italic emphasis in the "Why unlock
-// Reports?" cards (matches ScrollPricingModal + Figma 8442-16168).
+// Reports?" cards (Figma 8442-16168).
 const gradientTextStyle: CSSProperties = {
   background: "linear-gradient(90deg, #fe6839 0%, #a855f7 100%)",
   WebkitBackgroundClip: "text",

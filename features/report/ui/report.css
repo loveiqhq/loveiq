@@ -2503,10 +2503,12 @@
   outline: none;
 }
 
-/* Figma 7152:10160 — desktop-fixed typography for the scroll pricing modal.
- * Inline styles in ScrollPricingModal.tsx reference these vars via var(--rpm-*),
- * so we can scale every hero text point at one breakpoint without touching JSX. */
-/* Hover treatment for the 3 "Unlock full report" CTAs in ScrollPricingModal.
+/* Figma 7152:10160 — desktop-fixed typography for the paywall modal.
+ * DEAD as of 2026-08-31: these were read by inline styles in ScrollPricingModal
+ * (the forced wall), which is gone. Nothing reads any --rpm-* var now. Left in
+ * place because they were already unreferenced before that deletion, so they are
+ * not this change's to remove — but do not add to them. */
+/* Hover treatment for the "Unlock full report" CTAs in the pricing modal.
  * Mirrors the landing-page S01Hero "Start test now" reveal: a white fade
  * layer + a white/20 slide-up layer combine to reveal a white pill from
  * below on hover; label + arrow color transitions to black. */
@@ -2841,8 +2843,9 @@
   transform: rotateY(180deg);
   cursor: pointer;
 }
-/* (The flipped pricing face drops backdrop-filter via an inline style in
-   ScrollPricingModal — inline beats a class rule, so it can't live here.) */
+/* (The flipped pricing face dropped backdrop-filter via an inline style in the
+   deleted forced-paywall modal — inline beats a class rule, so it could not live
+   here.) */
 /* Front "tap to flip" hint — straddles the bottom edge, non-interactive so
    clicks fall through to the face and flip it. */
 .rpm-flip__hint {
@@ -3125,7 +3128,7 @@
 }
 
 /* ════════════════════════════════════════════════════════════════════════
-   WHITE THEME — report pre-payment paywall (ScrollPricingModal)
+   WHITE THEME — report pre-payment paywall
    Pixel-matched to Figma 7926:27390 (archetype view) + 7926:26743 (pricing).
    Scoped under `.report-pricing-modal--white` so the 3-tier ReportPricingModal
    (plain `.report-pricing-modal`) is untouched.
@@ -4423,7 +4426,7 @@
 /* ─────────────────────────────────────────────────────────────────────────
    3-tier ReportPricingModal — WHITE skin.
    Reuses the shared `.report-pricing-modal--white` shell (white dialog + light
-   backdrop / close / scrollbar — the exact rules ScrollPricingModal uses). The
+   backdrop / close / scrollbar). The
    3-tier CARDS were already light-designed (#f5f6f8 bg, #161021 ink), so on a
    white dialog their translucent highlight/essentials tints composite over
    WHITE instead of the old dark bg — which is what fixes the "invisible €9.99"
@@ -4431,7 +4434,7 @@
    remaining dark-theme text (header/copy/eyebrow/payments + the two too-light
    card titles), and (b) restore the 3-tier content geometry that the shell's
    rpm-tuned `padding:0` removed. Layout rules are scoped with `[data-variant]`
-   (only the 3-tier modal sets it) so ScrollPricingModal stays untouched. */
+   (only the 3-tier modal sets it). */
 
 /* (b) geometry — the shell zeroes __inner padding for the single-card rpm
    content; restore the 3-tier's own centered inner box + responsive padding. */
@@ -4447,8 +4450,8 @@
   }
 }
 
-/* (a) header text → dark ink on white; accent → the same brand gradient the
-   white ScrollPricingModal uses (orange → violet → blue). */
+/* (a) header text → dark ink on white; accent → the brand gradient
+   (orange → violet → blue). */
 .report-pricing-modal--white .report-pricing-modal__title,
 .report-pricing-modal--white .report-pricing-modal__title-tail {
   color: #161021;
@@ -17591,7 +17594,7 @@
   }
 }
 
-/* ── Decorative ambient orbs inside ScrollPricingModal (desktop only) ────── */
+/* ── Decorative ambient orbs (desktop only) ──────────────────────────────── */
 .rpm-orb {
   display: none;
   position: absolute;

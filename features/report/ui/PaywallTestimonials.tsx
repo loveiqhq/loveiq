@@ -15,8 +15,8 @@ import { trackTestimonialInteraction } from "@features/analytics/client";
 /**
  * "Real people. Real insights. Real results." testimonials carousel.
  *
- * Shared by BOTH report paywalls (the white ScrollPricingModal and the 3-tier
- * ReportPricingModal) so there's a single source of truth. Continuous leftward
+ * Rendered by ReportPricingModal. It was shared with a second paywall modal
+ * until that one (the forced wall) was removed on 2026-08-31. Continuous leftward
  * auto-scroll with a float-accumulator (see the auto-scroll effect — reading
  * back the integer-rounded scrollLeft each frame dropped the sub-pixel delta and
  * stuttered), grab-to-pan (mouse), click-to-pause, prev/next arrows, and a dots

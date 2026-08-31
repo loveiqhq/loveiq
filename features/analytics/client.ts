@@ -592,8 +592,8 @@ const trackUnlockClick = (surface: UnlockClickSurface, extra?: Record<string, un
  * as the digest's "did the user actually want the paywall?" signal.
  *
  * Why not just keep paywall_view: that event also fires on auto-mount paths
- * (ScrollPricingModal scroll-trigger, ReportPricingModal 24h+ ladder auto-open),
- * so the count conflates intent with passive exposure. Founder confirmed the
+ * (the chapter-reach scroll trigger, the 24h+ ladder auto-open), so the count
+ * conflates intent with passive exposure. Founder confirmed the
  * digest should track INITIATED intent only.
  *
  * No items[] payload here — we want a clean count of intent moments, not

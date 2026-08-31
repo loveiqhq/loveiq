@@ -632,10 +632,10 @@ The Slack commit channel posts the full message, so Marcus automatically gets a 
   "Field reports" section (`white/WTestimonials.tsx`, the former on-site
   testimonials, pixel-matched to Figma 7828:9430) instead of Trustpilot, and
   stays that way even after the flag flips — it's the A/B counterpart to the dark
-  arm. (3) the report **pricing modals** (`ScrollPricingModal`,
-  `ReportPricingModal`) currently render NO social-proof block when off — the old
-  `PricingTestimonialsCarousel` was deleted by the Trustpilot commit; restore it
-  there or accept the gap before merging staging→main. (4) the nurture **emails**
+  arm. (3) the report **pricing modal** (`ReportPricingModal`) renders no
+  Trustpilot block when off — it shows the curated `PaywallTestimonials` carousel
+  instead. (The second paywall modal this note used to name, `ScrollPricingModal`,
+  was the forced wall and was deleted on 2026-08-31.) (4) the nurture **emails**
   still reference Trustpilot copy; the flag does not touch emails (they're not
   "the website" and staging crons are short-circuited) — revisit separately.
 
