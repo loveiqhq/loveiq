@@ -4,8 +4,7 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 import {
   recordSweep,
   shouldSweep,
-  sweepStale,
-  touchChunks,
+  sweepMissing,
   upsertChunks,
   type BrainRow,
   type IngestResult,
@@ -618,21 +617,28 @@ export async function ingestNotion(
   // Sweeping about once a day instead of every run: the touch it needs rewrites
   // four indexes per row, and a deleted source document can wait a day to be
   // noticed. See shouldSweep.
+  /**
+   * NO TOUCH, same as drive and gmail. Notion is 1,405 rows -- 14 confirm requests --
+   * and brain-notion was already using 80% of its 60s budget (48.6s of 60s) while
+   * doing it. Drive and gmail failed on exactly this at 16 and 9 thousand rows; notion
+   * is the same shape, just not over the line yet.
+   *
+   * The list is unchanged: everything crawled and unchanged, plus everything the clock
+   * did not reach, which is confirmed rather than abandoned.
+   */
+  const confirmed = [...touch, ...deferred];
+  const touched = confirmed.length;
+
   const sweeping = crawlComplete && (await shouldSweep(SOURCE));
-  // BEFORE the touch, not after. The touch can throw (it fails closed so a failed
-  // confirm never lets the sweep delete those rows), and with the record after it,
-  // a throw meant the attempt was never written -- so brain-drive retried its
-  // 16,000-row touch EVERY HOUR, timing out at the same place and generating
-  // exactly the disk IO this change exists to remove. Recording the attempt first
-  // is what the comment on recordSweep already claimed the code did.
+  // Recorded BEFORE the sweep: a throw after the record defers 20 hours, a throw
+  // before it retried hourly forever.
   if (sweeping) await recordSweep(SOURCE);
-  const touched = await touchChunks(SOURCE, [...touch, ...deferred], stampedAt, sweeping);
 
   // The sweep is safe whenever every page was either rewritten or confirmed —
   // which is now true even for a run cut short, so stale rows are never deleted
   // just because the clock ran out. It still refuses if the crawl itself was
   // incomplete, because then pages may be missing from `candidates` entirely.
-  const swept = sweeping ? await sweepStale(SOURCE, stampedAt, written + touched) : 0;
+  const swept = sweeping ? await sweepMissing(SOURCE, new Set([...writtenIds, ...confirmed])) : 0;
 
   logger.info(
     {

@@ -4,7 +4,7 @@ vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-/** Every Supabase call the ingester makes, so a test can assert on the PATCHes. */
+/** Every Supabase call the ingester makes, so a test can assert on the writes. */
 const dbCalls: Array<{ path: string; method: string; body: string }> = [];
 let existingChunks: Array<{ source_id: string; meta: { edited: string; v?: number } }> = [];
 
@@ -15,6 +15,27 @@ vi.mock("@features/admin/server/supabase", () => ({
 
     // A source with no sweep-state row has never swept, so it is due. Answered
     // here rather than stubbing shouldSweep, to keep the real gate under test.
+    // sweepMissing's paged id listing. `select=source_id&` (with the ampersand)
+    // distinguishes it from knownNotionEdits' `select=source_id,meta`.
+    if (method === "GET" && /select=source_id&/.test(path)) {
+      const off = Number(/offset=(\d+)/.exec(path)?.[1] ?? 0);
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () =>
+          off === 0 ? existingChunks.map((e) => ({ source_id: e.source_id })) : [],
+      };
+    }
+    if (method === "DELETE") {
+      const n = (path.match(/%22/g)?.length ?? 0) / 2;
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => Array.from({ length: n }, () => ({})),
+      };
+    }
     if (path.includes("brain_sweep_state")) {
       return { ok: true, status: 200, headers: new Headers(), json: async () => [] };
     }
@@ -195,10 +216,14 @@ describe("incremental: unchanged pages are touched, not re-downloaded", () => {
     await ingestNotion(STAMP);
 
     expect(notionCalls.filter((u) => u.includes("/blocks/row-lit-1"))).toHaveLength(0);
-    const patched = dbCalls.filter((c) => c.method === "PATCH");
-    expect(patched).toHaveLength(1);
-    expect(patched[0].path).toContain("row-lit-1");
-    expect(JSON.parse(patched[0].body)).toEqual({ updated_at: STAMP });
+    // It used to assert the row was CONFIRMED by PATCHing `updated_at`. Notion sweeps
+    // by id set now, so assert the thing that mattered: the unchanged row survives.
+    const deleted = dbCalls
+      .filter((c) => c.method === "DELETE")
+      .flatMap((c) =>
+        (decodeURIComponent(c.path).match(/"([^"]+)"/g) ?? []).map((q) => q.slice(1, -1))
+      );
+    expect(deleted).not.toContain("task:row-lit-1");
   });
 
   it("re-downloads when the page was edited again, even on the same day", async () => {
@@ -257,10 +282,10 @@ describe("a run cut short must confirm what it could not refresh", () => {
   const outOfTimeAfterFirstFetch = () =>
     notionCalls.filter((u) => u.includes("/blocks/")).length >= 1;
 
-  /** Every source_id named in a PATCH, decoded out of the in.() list. */
-  function touchedIds(): string[] {
+  /** Every source_id this run DELETED, decoded out of the in.() list. */
+  function deletedIds(): string[] {
     return dbCalls
-      .filter((c) => c.method === "PATCH")
+      .filter((c) => c.method === "DELETE")
       .flatMap((c) =>
         (decodeURIComponent(c.path).match(/"([^"]+)"/g) ?? []).map((q) => q.slice(1, -1))
       );
@@ -275,16 +300,19 @@ describe("a run cut short must confirm what it could not refresh", () => {
 
     const fetched = notionCalls.filter((u) => u.includes("/blocks/")).length;
     expect(fetched).toBe(1);
-    // Three candidates, one fetched, so the other two must be CONFIRMED.
-    expect(touchedIds().length).toBe(2);
+    // Three candidates, one fetched, so the other two must be CONFIRMED -- which now
+    // means "kept out of the delete set" rather than "written to".
+    expect(deletedIds()).toEqual([]);
   });
 
   it("sweeps anyway, because every page is either rewritten or confirmed", async () => {
     // Refusing to sweep on a cut-short run would let pages deleted in Notion
     // linger in the corpus indefinitely.
     await ingestNotion(STAMP, outOfTimeAfterFirstFetch);
+    // `updated_at=lt.` was the timestamp sweep's probe and no longer exists. The
+    // bookkeeping write happens if and only if this run swept, so it is the marker.
     const sweepProbe = dbCalls.filter(
-      (c) => c.method === "GET" && c.path.includes("updated_at=lt.")
+      (c) => c.method === "POST" && c.path.includes("brain_sweep_state")
     );
     expect(sweepProbe.length).toBeGreaterThan(0);
   });
@@ -364,10 +392,10 @@ describe("continuation parts must be confirmed, or the sweep eats them", () => {
     process.env.NOTION_TOKEN = "ntn_test";
   });
 
-  /** Every source_id named in a PATCH. */
-  function patched(): string[] {
+  /** Every source_id this run DELETED. Survival is what these tests are about. */
+  function deleted(): string[] {
     return dbCalls
-      .filter((c) => c.method === "PATCH")
+      .filter((c) => c.method === "DELETE")
       .flatMap((c) =>
         (decodeURIComponent(c.path).match(/"([^"]+)"/g) ?? []).map((q) => q.slice(1, -1))
       );
@@ -383,12 +411,26 @@ describe("continuation parts must be confirmed, or the sweep eats them", () => {
       { source_id: "task:row-lit-1", meta: { edited: "2026-08-20T09:00:00.000Z", v: V } },
       { source_id: "task:row-lit-1#2", meta: { edited: "2026-08-20T09:00:00.000Z", v: V } },
       { source_id: "task:row-lit-1#3", meta: { edited: "2026-08-20T09:00:00.000Z", v: V } },
+      /**
+       * A PLANTED ORPHAN, and it is load-bearing. Without a row the sweep genuinely
+       * deletes, `deleted()` is empty and every `not.toContain` below passes because
+       * nothing was ever swept -- not because these rows were protected. It also has
+       * to be a MINORITY of the source or the majority guard refuses outright.
+       */
+      { source_id: "task:deleted-in-notion", meta: { edited: "2026-08-20T09:00:00.000Z", v: V } },
     ];
     await ingestNotion(STAMP, () => false);
-    const ids = patched();
-    expect(ids).toContain("task:row-lit-1");
-    expect(ids).toContain("task:row-lit-1#2");
-    expect(ids).toContain("task:row-lit-1#3");
+    /**
+     * These used to assert the three ids were PATCHed, i.e. confirmed by writing to
+     * them. Notion sweeps by id set now, so confirmation means being kept OUT of the
+     * delete set. A long page becomes task:x, task:x#2, task:x#3, and leaving the
+     * tail out of the keep set is what would delete it.
+     */
+    const ids = deleted();
+    expect(ids).not.toContain("task:row-lit-1");
+    expect(ids).not.toContain("task:row-lit-1#2");
+    expect(ids).not.toContain("task:row-lit-1#3");
+    expect(ids).toEqual(["task:deleted-in-notion"]); // the orphan, and only the orphan
   });
 
   it("confirms parts of a page the clock did not reach", async () => {
@@ -399,12 +441,20 @@ describe("continuation parts must be confirmed, or the sweep eats them", () => {
       // stale version, so it lands in toFetch, not touch
       { source_id: "task:row-lit-1", meta: { edited: "2026-08-20T09:00:00.000Z", v: V - 1 } },
       { source_id: "task:row-lit-1#2", meta: { edited: "2026-08-20T09:00:00.000Z", v: V - 1 } },
+      // Two planted orphans, so the one-real-row keep set is not a minority and the
+      // guard does not refuse. Same reason as above: without a real deletion the
+      // assertion below is vacuous.
+      { source_id: "task:deleted-a", meta: { edited: "2026-08-20T09:00:00.000Z", v: V } },
+      { source_id: "task:deleted-b", meta: { edited: "2026-08-20T09:00:00.000Z", v: V } },
     ];
     // Out of time once the CRAWL is done — not immediately, or the crawl itself is
     // cut short and there are no candidates to defer.
     const crawlDone = () =>
       notionCalls.filter((u) => u.includes("/search") || u.includes("/query")).length >= 4;
     await ingestNotion(STAMP, crawlDone);
-    expect(patched()).toContain("task:row-lit-1#2");
+    // Confirmed = not swept. A part the clock never reached must survive, while the
+    // planted orphans prove the sweep actually ran.
+    expect(deleted()).not.toContain("task:row-lit-1#2");
+    expect(deleted().length).toBeGreaterThan(0);
   });
 });

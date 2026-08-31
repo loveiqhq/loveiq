@@ -13,6 +13,32 @@ beforeAll(() => {
 afterEach(() => {
   server.resetHandlers();
 });
+
+// Settle any post-response work this test started before the next one begins.
+// `scheduleAfterResponse` runs DETACHED when there is no request context, so without
+// this a survey POST's Slack send lands part-way through a LATER test and inflates its
+// mock counts — the cause of five randomly-failing tests across survey-notifications,
+// funnel-digest-handler and anomaly-watcher. See shared/http/after-response.ts.
+afterEach(async () => {
+  /**
+   * Imported DEFENSIVELY. Five test files `vi.mock` this module to stub
+   * `scheduleAfterResponse` into a no-op, and their mocks have no
+   * `flushAfterResponse` — vitest then throws `No "flushAfterResponse" export is
+   * defined on the mock`, which failed 76 tests when this hook first landed.
+   *
+   * Requiring every mock to grow an export it does not need is the wrong fix: a file
+   * that stubs the scheduler has no detached work, so "no flush available" already
+   * means "nothing to drain". Any future mock is covered for free.
+   */
+  try {
+    const mod = await import("@shared/http/after-response");
+    if (typeof mod.flushAfterResponse === "function") {
+      await mod.flushAfterResponse();
+    }
+  } catch {
+    /* mocked without the export, or never loaded in this file */
+  }
+});
 afterAll(() => {
   server.close();
 });

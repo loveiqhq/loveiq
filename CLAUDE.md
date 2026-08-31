@@ -88,7 +88,7 @@ loveiq-web/
 │   ├── contact/tests/          # Contact form pipeline tests (route stays in app/api/contact/)
 │   ├── cron/tests/             # Scheduled job tests (routes stay in app/api/cron/)
 │   ├── analytics/              # client.ts (GA4 helpers) + tests/
-│   ├── brain/                  # server/ + tests/ — company brain: Slack Q&A over our docs, commits and Jira
+│   ├── brain/                  # server/ (ingest/ + search) + tests/ — company brain, reached by Claude over MCP (`/api/mcp`), not a chat product. 11 live sources: repo docs + commits, Gmail, Drive, Notion, Slack, Calendar, WhatsApp, GA4, Search Console, funnel rollups. Jira has an ingester but is NOT wired up (no credentials).
 │   └── admin/                  # ui/ (22 internal subdomains), server/, server/emails/, tests/ — 280+ files preserving internal structure
 ├── shared/                     # Cross-cutting infrastructure (renamed from lib/)
 │   ├── http/                   # csrf, csrf-client, ratelimit, fetch-with-timeout, circuit-breaker, after-response
