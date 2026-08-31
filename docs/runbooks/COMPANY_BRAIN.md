@@ -813,8 +813,43 @@ Three things the schema will not tell you:
   `ZGROUPMEMBER` to `ZWAPROFILEPUSHNAME` instead.
 - Dates are Core Data seconds from 2001-01-01; add 978307200 for a Unix timestamp.
 
-**It is not a cron**, and `list_sources` says so rather than showing an empty slot.
-It syncs when the Mac runs it. A linked desktop receives new messages live but pulls
+**It runs hourly on Eman's Mac**, not on Vercel — there is no server that can see a
+WhatsApp Desktop database. `list_sources` says so rather than showing an empty slot
+where a cron should be.
+
+```text
+~/Library/LaunchAgents/org.loveiq.whatsapp-sync.plist   launchd, StartInterval 3600
+~/.loveiq-brain/run-whatsapp-sync.sh                    the runner
+~/.loveiq-brain/whatsapp-sync.log                       what it did, per run
+```
+
+Three things that will bite whoever sets this up again:
+
+- **It runs from `~/.loveiq-brain`, a git worktree pinned to `origin/main`** — never
+  from `/Users/eman/loveiq`, which sits on somebody's working branch. A colleague's
+  half-finished commit must not be what ingests company chat.
+- **launchd gives a job almost no environment.** A bare `node` is
+  "No such file or directory", so the runner sets `PATH` explicitly.
+- **It calls `node` directly, not `node_modules/.bin/tsx`.** That is a symlink to a
+  `.mjs` whose executable bit an `--ignore-scripts` install drops, and launchd
+  reports it only as a bare exit 127.
+
+Check it with `launchctl list | grep loveiq` — the second column is the last exit
+status, and 0 is what you want.
+
+A linked desktop keeps back-filling history in the background, so the range grows on
+its own: 614 messages over 53 days when first linked, 1,952 over 306 days a few hours
+later. It syncs when the Mac is awake.
+
+**Bounded at 2026-05-01** (`WHATSAPP_SINCE`), by decision on 2026-08-31 — older chat
+is not worth the storage or the embedding cost. Note that moving that floor FORWARD
+will not clean up on its own: the sweep's majority guard refuses to delete more than
+half a source, correctly, because it cannot tell a deliberate cut-off from a broken
+collection. Trim by date instead, which is scoped to exactly what you meant:
+
+````sql
+delete from brain_chunk where source = 'whatsapp' and period_end < date '<floor>';
+``` A linked desktop receives new messages live but pulls
 only a limited back-catalogue, so the history before linking comes from a one-off
 `Export chat → Without media` dropped in Drive — the Drive ingester parses that into
 the same per-day shape.
@@ -851,7 +886,7 @@ chunks at once, which drains at only ~670/day. Run the backfill directly:
 
 ```bash
 npx tsx scripts/brain-embed-backfill.ts
-```
+````
 
 Nothing is broken while that backlog exists. Those chunks are still found
 lexically; they just cannot be matched by meaning yet.

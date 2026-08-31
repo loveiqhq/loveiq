@@ -33,6 +33,16 @@ import { join } from "node:path";
 const GROUP_JID = process.env.WHATSAPP_GROUP_JID ?? "120363422139124113@g.us";
 const CHAT_NAME = process.env.WHATSAPP_GROUP_NAME ?? "LoveIQ";
 
+/**
+ * Oldest day worth indexing.
+ *
+ * A linked desktop keeps back-filling in the background — 53 days of history when
+ * first linked, 306 a few hours later — and older chat is not worth the storage or
+ * the embedding cost. Anything before this is skipped, and the sweep removes it if
+ * an earlier run already indexed it.
+ */
+const SINCE_DAY = process.env.WHATSAPP_SINCE ?? "2026-05-01";
+
 const DB = join(
   homedir(),
   "Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite"
@@ -96,6 +106,10 @@ async function main(): Promise<void> {
    * but all 44 of those messages already carry the link in `ZTEXT`, so nothing is
    * lost by ignoring it.
    */
+  // Core Data counts from 2001, so the floor has to be converted before it can be
+  // compared against ZMESSAGEDATE.
+  const sinceCoreData = Math.floor(Date.parse(`${SINCE_DAY}T00:00:00Z`) / 1000) - CORE_DATA_EPOCH;
+
   const rows = query<{ ts: number; text: string | null; mine: number; jid: string | null }>(
     `select m.ZMESSAGEDATE as ts,
             coalesce(nullif(m.ZTEXT, ''), nullif(i.ZTITLE, '')) as text,
@@ -106,6 +120,7 @@ async function main(): Promise<void> {
        left join ZWAMEDIAITEM i on i.ZMESSAGE = m.Z_PK
       where m.ZCHATSESSION = ${session.pk}
         and coalesce(nullif(m.ZTEXT, ''), nullif(i.ZTITLE, '')) is not null
+        and m.ZMESSAGEDATE >= ${sinceCoreData}
       order by m.ZMESSAGEDATE asc;`
   );
 
@@ -146,7 +161,7 @@ async function main(): Promise<void> {
 
   const days = new Set(messages.map((m) => m.day));
   console.log(
-    `${CHAT_NAME}: ${messages.length} messages across ${days.size} days -> ` +
+    `${CHAT_NAME}: ${messages.length} messages since ${SINCE_DAY} across ${days.size} days -> ` +
       `${written} chunks written, ${swept} stale swept`
   );
   console.log(`speakers: ${[...new Set(messages.map((m) => m.sender))].join(", ")}`);
