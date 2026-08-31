@@ -122,6 +122,9 @@
     },
     "app/api/cron/brain-gmail/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/cron/brain-drive/route.ts": {
+      "maxDuration": 300
     }
   }
 }

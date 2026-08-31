@@ -40,6 +40,7 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   "brain-notion": 3 * 3_600_000,
   "brain-gmail": 3 * 3_600_000,
   "brain-calendar": 3 * 3_600_000,
+  // Hourly, but with a 300s ceiling — a full Drive walk is minutes, not seconds.
   "brain-drive": 3 * 3_600_000,
   // Daily, and the ONLY job here whose normal output is silence -- it posts
   // nothing on a routine day. That makes it the easiest one to be dead without

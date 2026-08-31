@@ -14,7 +14,18 @@ import logger from "@shared/observability/logger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+/**
+ * 300 seconds, not 60.
+ *
+ * A full company-Drive walk does not fit in a minute any more: 512 documents, PDFs
+ * downloaded and parsed, then a touch of 11,000+ existing rows in batches of 100.
+ * At 60s it was killed mid-run twice (504 at 01:37 inside brain-fast, and again at
+ * 01:52 on its own lane) — and a killed run is not a slow one, because the upsert
+ * happens after the walk, so everything fetched is thrown away.
+ *
+ * Hourly, so a five-minute ceiling is comfortably inside its own period.
+ */
+export const maxDuration = 300;
 
 /**
  * GET /api/cron/brain-drive
@@ -54,19 +65,19 @@ export async function GET(request: Request) {
   // Notion's tail (upsert of up to 1,400 rows, touch batches, sweep) runs after
   // this expires and cannot be interrupted, so leave it room.
   /**
-   * 30 seconds of FETCHING, not 40.
+   * 240 seconds of FETCHING, inside a 300-second ceiling.
    *
    * The budget only bounds the walk. Everything after it — the upsert, the touch
    * batches, the sweep — cannot be interrupted, and that tail grows with how much
    * the walk fetched. Measured on gmail mid-re-walk: 58.1s total against a 40s
-   * budget, so an 18s tail, against a 60s ceiling. Two seconds of margin is not
-   * margin.
+   * budget, so an 18s tail. With a 300s ceiling the walk gets 240s and the tail
+   * keeps a full minute, which is the ratio the smaller lanes run at.
    *
    * A killed run is not a slow run: `ingestGmail` upserts AFTER its loop, so a
    * timeout throws away everything that run fetched. Trading ~25% of the walk per
    * run for never losing a whole one is the right way round.
    */
-  const isOutOfTime = () => Date.now() - startedAtMs > 30_000;
+  const isOutOfTime = () => Date.now() - startedAtMs > 240_000;
 
   const dayKey = new Date().toISOString().slice(0, 10);
   const alertOnce = async (name: string, text: string) => {
