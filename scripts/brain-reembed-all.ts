@@ -20,6 +20,24 @@ import { EMBED_BATCH, embedText, toVectorLiteral } from "@features/brain/server/
 
 const READ = 100;
 
+/**
+ * PER-INVOCATION CAP, and the pause between pages.
+ *
+ * This loop used to run until it hit an error, which under launchd meant essentially
+ * continuously. `embedding` carries an HNSW index, so every re-embed rewrites an
+ * index entry -- among the most expensive writes Postgres makes -- and it was
+ * measured at ~180/min. That was a material share of the Disk IO exhaustion Supabase
+ * warned about on 2026-08-31, on the database that also serves the survey, the
+ * reports and checkout.
+ *
+ * A backfill that improves semantic recall on older chunks is worth doing, and worth
+ * doing slowly. The cursor is persisted per page, so stopping early is free.
+ */
+const MAX_PER_RUN = Number(process.env.REEMBED_MAX ?? 500);
+const PAGE_PAUSE_MS = Number(process.env.REEMBED_PAUSE_MS ?? 2_000);
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function main(): Promise<void> {
   const { supabaseFetch } = await import("@features/admin/server/supabase");
   let after = Number(process.argv[2] ?? 0);
@@ -82,6 +100,12 @@ async function main(): Promise<void> {
         /* progress reporting must never fail the work */
       }
     }
+    // Checked AFTER the cursor is persisted, so pausing never re-does a finished page.
+    if (done >= MAX_PER_RUN) {
+      console.log(`paused at the per-run cap (${done}), cursor ${after}`);
+      break;
+    }
+    if (PAGE_PAUSE_MS > 0) await sleep(PAGE_PAUSE_MS);
     const rate = done / Math.max(1, (Date.now() - startedAt) / 60_000);
     console.log(`  ${done} re-embedded (${Math.round(rate)}/min), cursor ${after}`);
   }
