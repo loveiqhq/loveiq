@@ -106,8 +106,16 @@ export async function buildDailyBrief(day: string): Promise<DailyBrief | null> {
   // — anyone who can write a commit message or send us an email can put text in it.
   const result = await complete(buildPrompt(BRIEF_QUESTION, chunks));
   if (!result.ok) {
-    logger.warn({ reason: result.reason, day }, "brain-brief: llm unavailable");
-    return null;
+    /**
+     * THROW, do not return null.
+     *
+     * Null means "a routine day, post nothing" and the caller marks the day
+     * DELIVERED on the strength of it. Returning null here made a broken language
+     * model indistinguishable from a quiet one: the brief would go silent, record
+     * the day as done, and never retry it. Silence is the design only when the
+     * model actually looked and found nothing worth saying.
+     */
+    throw new Error(`brain-brief: the language model is unavailable (${result.reason})`);
   }
 
   const text = result.text.trim();

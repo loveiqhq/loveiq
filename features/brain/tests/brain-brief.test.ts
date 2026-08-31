@@ -99,9 +99,12 @@ describe("buildDailyBrief — silence is the design", () => {
     expect(dbPaths).toHaveLength(0); // cheapest check first
   });
 
-  it("says nothing when the model is unavailable, rather than posting an error", async () => {
+  it("does NOT treat an unavailable model as a quiet day", async () => {
+    // This test previously asserted the opposite, and that assertion was the bug:
+    // returning null made the caller mark the day delivered, so a model outage
+    // went silent and never retried. See the block at the bottom of this file.
     llmReply = { ok: false, reason: "rate_limited" };
-    expect(await buildDailyBrief("2026-08-29")).toBeNull();
+    await expect(buildDailyBrief("2026-08-29")).rejects.toThrow();
   });
 
   it("returns the brief and the chunks behind it when the day was not routine", async () => {
@@ -126,5 +129,23 @@ describe("buildDailyBrief — silence is the design", () => {
   it("invites silence explicitly, or the model will find something every day", () => {
     expect(BRIEF_QUESTION).toContain(NOTHING);
     expect(BRIEF_QUESTION.toLowerCase()).toContain("not a failure");
+  });
+});
+
+describe("a broken model must not look like a quiet day", () => {
+  /**
+   * `null` means "routine day, post nothing", and the route marks the day DELIVERED
+   * on the strength of it. If a model outage also returned null, the brief would go
+   * silent, record the day as done, and never retry — a total failure wearing the
+   * costume of the feature working as designed.
+   */
+  it("throws when the model is unavailable, rather than returning silence", async () => {
+    llmReply = { ok: false, reason: "rate_limited" };
+    await expect(buildDailyBrief("2026-08-29")).rejects.toThrow(/unavailable/i);
+  });
+
+  it("still returns silence when the model looked and found nothing", async () => {
+    llmReply = { ok: true, text: NOTHING, truncated: false };
+    expect(await buildDailyBrief("2026-08-29")).toBeNull();
   });
 });
