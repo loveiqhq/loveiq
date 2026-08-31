@@ -451,6 +451,15 @@ export async function ingestGmail(
   const rows: BrainRow[] = [];
   const seen = new Set<string>();
   let complete = true;
+  /**
+   * WHY the walk is incomplete decides whether anyone should be woken up.
+   *
+   * Running out of page budget is expected and self-healing: the next run picks up
+   * where this one stopped. A mailbox we cannot get a token for, a listing Gmail
+   * refuses, or thread fetches failing en masse are faults that will not fix
+   * themselves. Both suppress the sweep; only the second kind should alert.
+   */
+  let degraded = false;
   let fetched = 0;
 
   const failedMailboxes: string[] = [];
@@ -465,6 +474,7 @@ export async function ingestGmail(
       logger.warn({ mailbox }, "brain-ingest gmail: no token for this mailbox, skipping it");
       failedMailboxes.push(mailbox);
       complete = false;
+      degraded = true; // a mailbox we cannot reach will not fix itself
       continue;
     }
     let pageToken = "";
@@ -481,6 +491,7 @@ export async function ingestGmail(
       );
       if (!listed) {
         complete = false;
+        degraded = true; // Gmail refused the listing -- the 2026-08-30 outage shape
         break;
       }
       const threads = (listed.threads as GmailThread[]) ?? [];
@@ -526,6 +537,7 @@ export async function ingestGmail(
       "brain-ingest gmail: too many thread fetches failed, treating the walk as incomplete"
     );
     complete = false;
+    degraded = true; // systemic, not the one-deleted-thread case handled above
   }
 
   const written = await upsertChunks(rows);
@@ -566,6 +578,7 @@ export async function ingestGmail(
       written,
       touched,
       complete,
+      degraded,
     },
     "brain-ingest gmail"
   );
@@ -588,8 +601,34 @@ export async function ingestGmail(
    * An incomplete walk is never "nothing to index". Checking `complete` first is
    * what keeps a silent outage loud.
    */
+  /**
+   * But "incomplete" alone is not "broken", and treating it as such created the
+   * MIRROR of the bug above.
+   *
+   * A builder bump re-walks ~9,000 threads, which does not fit in one 60s run. The
+   * walk advances a few hundred threads per hourly run and converges over ~18 hours
+   * — every one of those runs is incomplete, and every one was reporting `error`.
+   * An alert that is red for 18 predictable hours cannot show a real Gmail outage
+   * inside that window; the permanent red hides exactly what the loud skip existed
+   * to reveal.
+   *
+   * Progress is the signal that separates them. A run that WROTE rows reached Gmail
+   * and is converging. A run that wrote nothing AND could not finish is the outage
+   * shape from 2026-08-30 — nothing listed, nothing fetched, nothing written.
+   *
+   * Both still skip the sweep (above), so neither can delete live threads.
+   */
   if (!complete) {
-    return { source: SOURCE, rows: written + touched, swept, skipped: "gmail-walk-incomplete" };
+    // Quiet ONLY for a budget-truncated walk that actually advanced. A truncated
+    // walk that wrote nothing is a stall, not progress -- that is how a mis-set
+    // time budget would otherwise defer every run forever in silence.
+    const converging = !degraded && written + touched > 0;
+    return {
+      source: SOURCE,
+      rows: written + touched,
+      swept,
+      skipped: converging ? "gmail-walk-in-progress" : "gmail-walk-incomplete",
+    };
   }
   if (written === 0 && touched === 0) {
     return { source: SOURCE, rows: 0, swept: 0, skipped: "gmail-nothing-to-index" };

@@ -192,3 +192,63 @@ describe("one flaky thread must not block the sweep for the other 3,900", () => 
     expect(result.skipped).toBe("gmail-walk-incomplete");
   });
 });
+
+describe("a converging re-walk must not be as loud as an outage", () => {
+  const thread = (n: number) => ({ id: `t${n}`, historyId: "9" });
+
+  /**
+   * THE MIRROR OF THE BUG ABOVE, and it was live for hours.
+   *
+   * A builder bump re-walks ~9,000 threads, which does not fit in one 60s run. So
+   * every hourly run was incomplete, every run reported `error`, and `list_sources`
+   * said Gmail was FAILING for what would have been ~18 predictable hours. An alert
+   * that is permanently red cannot reveal a real outage inside that window — it
+   * defeats the very guard the tests above exist to protect.
+   *
+   * Budget truncation heals itself on the next run. A refused listing does not.
+   */
+  it("reports a budget-truncated walk that advanced as progress, not failure", async () => {
+    listedThreads = [thread(1), thread(2), thread(3)];
+    let calls = 0;
+    const result = await ingestGmail("2026-08-31T00:00:00.000Z", () => ++calls > 3, null);
+    expect(result.skipped).toBe("gmail-walk-in-progress");
+  });
+
+  it("keeps a truncated walk that advanced NOTHING loud, so a stalled budget cannot hide", async () => {
+    // If the budget were mis-set, every run would defer everything. Silence there
+    // would mean Gmail quietly stopped updating and nothing ever said so.
+    // The budget has to expire AFTER the entry guard -- exhausted on arrival is a
+    // different, already-loud skip (`gmail-time-budget`).
+    listedThreads = [thread(1), thread(2), thread(3)];
+    let calls = 0;
+    const result = await ingestGmail("2026-08-31T00:00:00.000Z", () => calls++ > 0, null);
+    expect(result.skipped).toBe("gmail-walk-incomplete");
+  });
+
+  it("is exhausted-on-arrival, not 'incomplete', when there was never any budget", async () => {
+    const result = await ingestGmail("2026-08-31T00:00:00.000Z", () => true, null);
+    expect(result.skipped).toBe("gmail-time-budget");
+  });
+
+  it("keeps a refused listing loud even though it is also 'incomplete'", async () => {
+    listingOk = false;
+    const result = await ingestGmail("2026-08-31T00:00:00.000Z", () => false, null);
+    expect(result.skipped).toBe("gmail-walk-incomplete");
+  });
+
+  it("still never sweeps while converging", async () => {
+    listedThreads = [thread(1), thread(2), thread(3)];
+    let calls = 0;
+    const result = await ingestGmail("2026-08-31T00:00:00.000Z", () => ++calls > 3, null);
+    expect(result.swept).toBe(0);
+  });
+
+  it("the cron treats only the progress skip as deliberate", async () => {
+    const src = await import("node:fs").then((fs) =>
+      fs.readFileSync("app/api/cron/brain-gmail/route.ts", "utf8")
+    );
+    const block = src.slice(src.indexOf("DELIBERATE_SKIPS"), src.indexOf("export async function"));
+    expect(block).toContain("gmail-walk-in-progress");
+    expect(block).not.toContain('"gmail-walk-incomplete"');
+  });
+});

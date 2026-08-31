@@ -35,7 +35,13 @@ export const maxDuration = 60;
  */
 
 /** Skips that mean "not set up yet", which must never alert. */
-const DELIBERATE_SKIPS = new Set(["google-token-unavailable", "gmail-nothing-to-index"]);
+// `gmail-walk-in-progress` is deliberate: a multi-run re-walk that is advancing.
+// `gmail-walk-incomplete` (no rows written) stays loud — that is the outage shape.
+const DELIBERATE_SKIPS = new Set([
+  "google-token-unavailable",
+  "gmail-nothing-to-index",
+  "gmail-walk-in-progress",
+]);
 
 export async function GET(request: Request) {
   if (!verifyCronAuth(request)) {
