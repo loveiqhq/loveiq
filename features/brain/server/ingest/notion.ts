@@ -619,6 +619,13 @@ export async function ingestNotion(
   // four indexes per row, and a deleted source document can wait a day to be
   // noticed. See shouldSweep.
   const sweeping = crawlComplete && (await shouldSweep(SOURCE));
+  // BEFORE the touch, not after. The touch can throw (it fails closed so a failed
+  // confirm never lets the sweep delete those rows), and with the record after it,
+  // a throw meant the attempt was never written -- so brain-drive retried its
+  // 16,000-row touch EVERY HOUR, timing out at the same place and generating
+  // exactly the disk IO this change exists to remove. Recording the attempt first
+  // is what the comment on recordSweep already claimed the code did.
+  if (sweeping) await recordSweep(SOURCE);
   const touched = await touchChunks(SOURCE, [...touch, ...deferred], stampedAt, sweeping);
 
   // The sweep is safe whenever every page was either rewritten or confirmed —
@@ -626,7 +633,6 @@ export async function ingestNotion(
   // just because the clock ran out. It still refuses if the crawl itself was
   // incomplete, because then pages may be missing from `candidates` entirely.
   const swept = sweeping ? await sweepStale(SOURCE, stampedAt, written + touched) : 0;
-  if (sweeping) await recordSweep(SOURCE);
 
   logger.info(
     {

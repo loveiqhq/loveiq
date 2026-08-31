@@ -515,3 +515,53 @@ describe("a WhatsApp export in Drive is a conversation, not a document", () => {
     expect(rows[0]!.title).toBe("Drive: Q3 budget");
   });
 });
+
+describe("a failed sweep must not retry every hour", () => {
+  /**
+   * THE LOOP THIS EXISTS FOR.
+   *
+   * `touchChunks` fails closed: a non-2xx confirm throws, so the sweep can never
+   * delete rows it could not confirm. Correct. But `recordSweep` ran AFTER the sweep,
+   * so a throw meant the attempt was never recorded — and brain-drive retried its
+   * 16,117-row touch EVERY HOUR, timing out at 8s in the same place each time
+   * (observed 14:52, 15:52 and 16:52 on 2026-08-31), generating precisely the disk IO
+   * the once-a-day sweep exists to remove.
+   *
+   * The bookkeeping write must land before the expensive work, which is what the
+   * comment on `recordSweep` already claimed. Only asserting the ORDER keeps the
+   * comment and the code honest.
+   */
+  beforeEach(() => {
+    // This describe sits outside the main one, so it does NOT inherit its beforeEach.
+    // Without this the run lists no files, never reaches the touch, and `dbCalls`
+    // still holds entries from earlier tests — which is exactly how two earlier
+    // versions of this test passed with the bug present and the mutation applied.
+    vi.clearAllMocks();
+    dbCalls.length = 0;
+    httpCalls.length = 0;
+    files = [FILE];
+    listOk = true;
+    alwaysMorePages = false;
+    targets = {};
+    existing = [];
+  });
+
+  it("records the attempt before touching, so a timeout defers instead of looping", async () => {
+    // An UNCHANGED existing row is what gets touched rather than rewritten, so this
+    // is what drives the run down the touch path at all.
+    const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    existing = [{ source_id: "doc:1AbCdEf", meta: { edited: FILE.modifiedTime, v } }];
+
+    await ingestDrive(STAMP);
+
+    const firstTouch = dbCalls.findIndex(
+      (c) => c.method === "PATCH" && c.path.includes("brain_chunk")
+    );
+    const record = dbCalls.findIndex(
+      (c) => c.path.includes("brain_sweep_state") && c.method === "POST"
+    );
+    expect(firstTouch).toBeGreaterThanOrEqual(0); // the setup must reach the touch
+    expect(record).toBeGreaterThanOrEqual(0); // the attempt must be recorded
+    expect(record).toBeLessThan(firstTouch); // and recorded FIRST
+  });
+});

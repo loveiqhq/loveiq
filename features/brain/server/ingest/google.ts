@@ -681,6 +681,7 @@ export async function ingestGa4(
   // Once a day, not every 15 minutes: the touch below rewrites four indexes per
   // row, and GA4/GSC rows going stale is not urgent. See shouldSweep.
   const sweeping = await shouldSweep(GA4_SOURCE);
+  if (sweeping) await recordSweep(GA4_SOURCE);
   const touched = await touchOlderChunks(
     GA4_SOURCE,
     chunks.map((c) => c.source_id),
@@ -688,7 +689,6 @@ export async function ingestGa4(
     sweeping
   );
   const swept = sweeping ? await sweepStale(GA4_SOURCE, stampedAt, written + touched) : 0;
-  if (sweeping) await recordSweep(GA4_SOURCE);
   return { source: GA4_SOURCE, rows: written + touched, swept };
 }
 
@@ -989,6 +989,7 @@ export async function ingestSearchConsole(
   // Once a day, not every 15 minutes: the touch below rewrites four indexes per
   // row, and GA4/GSC rows going stale is not urgent. See shouldSweep.
   const sweeping = await shouldSweep(GSC_SOURCE);
+  if (sweeping) await recordSweep(GSC_SOURCE);
   const touched = await touchOlderChunks(
     GSC_SOURCE,
     chunks.map((c) => c.source_id),
@@ -996,7 +997,6 @@ export async function ingestSearchConsole(
     sweeping
   );
   const swept = sweeping ? await sweepStale(GSC_SOURCE, stampedAt, written + touched) : 0;
-  if (sweeping) await recordSweep(GSC_SOURCE);
   return { source: GSC_SOURCE, rows: written + touched, swept };
 }
 
