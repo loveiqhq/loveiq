@@ -30,7 +30,6 @@ import {
   resolveSubmissionAccessContext,
   lookupReportTokenBySubmissionId,
 } from "@features/report/server/personalReport";
-import { getForcedPaywallCohort } from "@shared/experiments/forcedPaywall";
 
 function createJsonResponse(body: unknown, ok = true) {
   return {
@@ -505,15 +504,15 @@ describe("reportPricing", () => {
         base_price_bucket: quote.basePriceBucket,
         msrp: quote.msrpCents / 100,
         starting_price: quote.startingPriceCents / 100,
-        // No URL token + submission-token lookup mocked to null → control.
-        forced_paywall_arm: "control",
       })
     );
   });
 
-  it("stamps the forced-paywall arm from the report token on a fresh quote", async () => {
+  it("never stamps a forced-paywall arm on a fresh quote", async () => {
+    // The forced-paywall A/B was removed on 2026-08-31. A fresh quote must leave
+    // `forced_paywall_arm` unset entirely — writing "control" would look like a
+    // live arm to every downstream reader.
     const reportToken = "rpt_SkDN8YcTxXRivawCVtY6";
-    const expectedArm = getForcedPaywallCohort(reportToken);
     let createdPayload: Record<string, unknown> | null = null;
 
     mockFetchWithTimeout.mockImplementation(
@@ -571,9 +570,10 @@ describe("reportPricing", () => {
       reportToken,
     });
 
-    expect(expectedArm).toMatch(/^(treatment|control)$/);
-    expect(createdPayload).toEqual(expect.objectContaining({ forced_paywall_arm: expectedArm }));
-    // Token was present → never falls back to the submission-token lookup.
+    expect(createdPayload).not.toBeNull();
+    expect(Object.keys(createdPayload!)).not.toContain("forced_paywall_arm");
+    // Nothing needs the report token for bucketing any more, so the fallback
+    // submission-token lookup must not be reached either.
     expect(lookupReportTokenBySubmissionId).not.toHaveBeenCalled();
   });
 

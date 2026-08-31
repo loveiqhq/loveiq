@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 
 const mockRouterPush = vi.fn();
 const mockCacheReportCheckoutQuote = vi.fn();
@@ -40,19 +40,6 @@ vi.mock("@features/checkout/server/reportCheckoutQuoteCache", () => ({
   cacheReportCheckoutQuote: (...args: unknown[]) => mockCacheReportCheckoutQuote(...args),
 }));
 
-// Stub the scroll teaser so we can assert the cohort → `dismissible` wiring
-// without simulating the scroll/timer. The real component is exercised in
-// features/report/tests/ScrollPricingModal.test.tsx.
-vi.mock("@features/report/ui/ScrollPricingModal", () => ({
-  default: (props: { dismissible?: boolean; open?: boolean }) => (
-    <div
-      data-testid="scroll-teaser"
-      data-dismissible={String(props.dismissible)}
-      data-open={String(props.open)}
-    />
-  ),
-}));
-
 const mockTrackReportViewed = vi.fn();
 const mockTrackPaywallView = vi.fn();
 const mockTrackPaywallInitiated = vi.fn();
@@ -65,8 +52,6 @@ vi.mock("@features/analytics/client", () => ({
   trackBeginCheckout: (...args: unknown[]) => mockTrackBeginCheckout(...args),
   trackPriceShown: (...args: unknown[]) => mockTrackPriceShown(...args),
   setReportSubmissionContext: vi.fn(),
-  setForcedPaywallArm: vi.fn(),
-  trackExperimentExposure: vi.fn(),
   // New track functions exercised by ReportPage interactions.
   trackLockIconClicked: vi.fn(),
   trackReferFriendOpened: vi.fn(),
@@ -700,70 +685,34 @@ describe("ReportPage", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("gives a forced-arm visitor the soft control experience when arriving from an email link", () => {
-    mockUseReportData.mockReturnValue(buildSuccessResponse());
-    // Persistent (not Once): the cohort is recomputed from searchParams on every
-    // render, so the email signal must survive re-renders.
-    mockSearchParams.mockImplementation(() => new URLSearchParams("from=email"));
-    try {
-      render(<ReportPage token={TREATMENT_TOKEN} />);
-      const teaser = screen.getByTestId("scroll-teaser");
-      // Treatment-arm token, but an email return ⇒ soft control UX: dismissible
-      // and NOT force-opened on load.
-      expect(teaser).toHaveAttribute("data-dismissible", "true");
-      expect(teaser).toHaveAttribute("data-open", "false");
-    } finally {
-      mockSearchParams.mockImplementation(() => new URLSearchParams());
-    }
-  });
-
-  it("treats utm_source=email as an email return too (covers already-sent emails)", () => {
-    mockUseReportData.mockReturnValue(buildSuccessResponse());
-    mockSearchParams.mockImplementation(() => new URLSearchParams("utm_source=email"));
-    try {
-      render(<ReportPage token={TREATMENT_TOKEN} />);
-      const teaser = screen.getByTestId("scroll-teaser");
-      expect(teaser).toHaveAttribute("data-dismissible", "true");
-    } finally {
-      mockSearchParams.mockImplementation(() => new URLSearchParams());
-    }
-  });
-
-  it("makes the scroll teaser non-dismissible for the forced-paywall treatment cohort", () => {
+  it("shows no paywall on load — the forced hard wall is gone", () => {
+    /**
+     * A report token used to bucket the reader into the forced-paywall
+     * "treatment" arm: a non-dismissible modal opened on mount, before any
+     * scroll. That experiment was removed on 2026-08-31. An identifiable report
+     * now opens with nothing over it, and the reader reaches the plans pop-up by
+     * scrolling to Attachment Style or clicking an unlock CTA.
+     */
     mockUseReportData.mockReturnValue(buildSuccessResponse());
     render(<ReportPage token={TREATMENT_TOKEN} />);
-    const teaser = screen.getByTestId("scroll-teaser");
-    expect(teaser).toHaveAttribute("data-dismissible", "false");
+    // This fixture sits at discountStep 1, so the ordinary 24h-ladder modal does
+    // auto-open — the forced arm used to suppress it. What must NOT come back is
+    // the un-closable one: whatever opens is always closable.
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /close/i })).toBeInTheDocument();
   });
 
-  it("keeps the scroll teaser dismissible for an email-return (soft) visit", () => {
+  it("an email return is no longer a special case — same closable surface", () => {
+    // `from=email` existed to soften the forced wall for re-engagement links.
+    // With the wall gone there is nothing to soften, so an email return must
+    // look exactly like any other visit.
     mockUseReportData.mockReturnValue(buildSuccessResponse());
     mockSearchParams.mockImplementation(() => new URLSearchParams("from=email"));
     try {
       render(<ReportPage token={TREATMENT_TOKEN} />);
-      const teaser = screen.getByTestId("scroll-teaser");
-      expect(teaser).toHaveAttribute("data-dismissible", "true");
-    } finally {
-      mockSearchParams.mockImplementation(() => new URLSearchParams());
-    }
-  });
-
-  it("opens the forced paywall immediately on load for the treatment cohort", () => {
-    mockUseReportData.mockReturnValue(buildSuccessResponse());
-    render(<ReportPage token={TREATMENT_TOKEN} />);
-    // No scroll simulated — treatment must already be open on mount.
-    expect(screen.getByTestId("scroll-teaser")).toHaveAttribute("data-open", "true");
-    // …and the closable discount-offer modal must NOT preempt it, even though
-    // the fixture is at discountStep 1 (which would auto-open it for control).
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  });
-
-  it("does NOT open the teaser on load for an email-return (soft) visit (waits for scroll)", () => {
-    mockUseReportData.mockReturnValue(buildSuccessResponse());
-    mockSearchParams.mockImplementation(() => new URLSearchParams("from=email"));
-    try {
-      render(<ReportPage token={TREATMENT_TOKEN} />);
-      expect(screen.getByTestId("scroll-teaser")).toHaveAttribute("data-open", "false");
+      const dialog = screen.getByRole("dialog");
+      expect(within(dialog).getByRole("button", { name: /close/i })).toBeInTheDocument();
     } finally {
       mockSearchParams.mockImplementation(() => new URLSearchParams());
     }

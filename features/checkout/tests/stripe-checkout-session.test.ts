@@ -49,7 +49,6 @@ import {
   getReportPriceQuoteForContext,
   markReportPriceQuoteCheckoutStarted,
 } from "@features/pricing/logic/reportPricing";
-import { getForcedPaywallCohort } from "@shared/experiments/forcedPaywall";
 
 /** The quote the route resolves: full report, €27.49, urgency window still open. */
 const BASE_QUOTE = {
@@ -219,7 +218,10 @@ describe("POST /api/stripe/checkout-session", () => {
     expect(markReportPriceQuoteCheckoutStarted).toHaveBeenCalledWith({ quoteId: 22 });
   });
 
-  it("stamps the forced-paywall arm (recomputed server-side from the report token) into session metadata", async () => {
+  it("no longer stamps a forced-paywall arm into session metadata", async () => {
+    // The A/B was removed on 2026-08-31. The key must be absent, not "control":
+    // fulfillment copies session metadata onto the durable payment row, so a
+    // constant would read downstream as a live arm every buyer was in.
     const createSession = vi.fn().mockResolvedValue({
       id: "cs_test_arm_789",
       url: "https://checkout.stripe.com/c/pay/cs_test_arm_789",
@@ -231,55 +233,20 @@ describe("POST /api/stripe/checkout-session", () => {
       checkout: { sessions: { create: createSession } },
     } as never);
 
-    const reportToken = "rpt_SkDN8YcTxXRivawCVtY6";
-    const expectedArm = getForcedPaywallCohort(reportToken);
-
     const res = await POST(
       makeRequest({
         archetype: "Spark Seeker",
         plan: "full_report",
         reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
-        reportToken,
+        reportToken: "rpt_SkDN8YcTxXRivawCVtY6",
       })
     );
 
     expect(res.status).toBe(200);
-    expect(expectedArm).toMatch(/^(treatment|control)$/);
-    expect(createSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        metadata: expect.objectContaining({ forcedPaywallArm: expectedArm }),
-      }),
-      expect.anything()
-    );
-  });
-
-  it("defaults the forced-paywall arm to control when no report token is present", async () => {
-    const createSession = vi.fn().mockResolvedValue({
-      id: "cs_test_arm_none",
-      url: "https://checkout.stripe.com/c/pay/cs_test_arm_none",
-    });
-
-    vi.mocked(isStripeCheckoutEnabled).mockReturnValue(true);
-    vi.mocked(getStripeCheckoutCustomerEmail).mockResolvedValue("test@example.com");
-    vi.mocked(getStripeServerClient).mockReturnValue({
-      checkout: { sessions: { create: createSession } },
-    } as never);
-
-    const res = await POST(
-      makeRequest({
-        archetype: "Spark Seeker",
-        plan: "full_report",
-        reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
-      })
-    );
-
-    expect(res.status).toBe(200);
-    expect(createSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        metadata: expect.objectContaining({ forcedPaywallArm: "control" }),
-      }),
-      expect.anything()
-    );
+    const metadata = createSession.mock.calls[0]![0].metadata as Record<string, unknown>;
+    expect(Object.keys(metadata)).not.toContain("forcedPaywallArm");
+    // The consent flag rides in the same block and must survive the removal.
+    expect(metadata).toHaveProperty("gaAnalyticsConsent");
   });
 
   it("rejects archetype when plan is all_reports (global unlock has no archetype scope)", async () => {

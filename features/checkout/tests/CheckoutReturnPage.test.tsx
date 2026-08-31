@@ -13,7 +13,6 @@ vi.mock("next/navigation", () => ({
 vi.mock("@features/analytics/client", () => ({
   trackReportPurchase: (...args: unknown[]) => mockTrackReportPurchase(...args),
   setReportSubmissionContext: vi.fn(),
-  setForcedPaywallArm: vi.fn(),
   trackPaywallUnlocked: vi.fn(),
   trackCheckoutReturnViewed: vi.fn(),
   trackCheckoutRetryClicked: vi.fn(),
@@ -22,7 +21,7 @@ vi.mock("@features/analytics/client", () => ({
 }));
 
 import {
-  setForcedPaywallArm,
+  setReportSubmissionContext,
   trackCheckoutReturnViewed,
   trackPaywallUnlocked,
 } from "@features/analytics/client";
@@ -34,7 +33,7 @@ describe("CheckoutReturnPage", () => {
     originalFetch = globalThis.fetch;
     mockRouterReplace.mockReset();
     mockTrackReportPurchase.mockReset();
-    vi.mocked(setForcedPaywallArm).mockClear();
+    vi.mocked(setReportSubmissionContext).mockClear();
     vi.mocked(trackPaywallUnlocked).mockClear();
     vi.mocked(trackCheckoutReturnViewed).mockClear();
   });
@@ -245,7 +244,7 @@ describe("CheckoutReturnPage", () => {
     );
   }, 15000);
 
-  it("re-binds the server-echoed forced-paywall arm before the conversion events fire", async () => {
+  it("fires the conversion events on a paid return", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -259,7 +258,6 @@ describe("CheckoutReturnPage", () => {
         },
         sessionStatus: "complete",
         surveySubmissionId: 4242,
-        forcedPaywallArm: "treatment",
       }),
     } as Response);
 
@@ -271,11 +269,12 @@ describe("CheckoutReturnPage", () => {
       />
     );
 
-    // paywall_unlocked is the conversion event; it must carry the arm. The arm
-    // is bound from the server-echoed session value (== payment row), not the
-    // /report page (a different route), so the durable row self-tags the arm.
+    // paywall_unlocked is the conversion event. It used to be preceded by a
+    // forced-paywall arm re-bind; that experiment was removed on 2026-08-31, so
+    // the submission context is now the only thing that has to be re-bound here
+    // (/checkout/return is a different route from /report).
     await waitFor(() => expect(trackPaywallUnlocked).toHaveBeenCalled());
-    expect(setForcedPaywallArm).toHaveBeenCalledWith("treatment");
+    expect(setReportSubmissionContext).toHaveBeenCalledWith(4242);
     expect(trackCheckoutReturnViewed).toHaveBeenCalledWith({
       status: "success",
       plan: "full_report",

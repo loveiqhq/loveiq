@@ -135,11 +135,10 @@ describe("begin_checkout carries a monetary value", () => {
     const call = body.slice(callAt, body.indexOf(";", callAt));
     expect(call).toContain("null");
 
-    // The three surfaces must NOT count it themselves — per-surface counting is what
+    // The surfaces must NOT count it themselves — per-surface counting is what
     // let it be forgotten when pricing 2.0 split one plan into three.
     for (const f of [
       "features/report/ui/ReportPricingModal.tsx",
-      "features/report/ui/ScrollPricingModal.tsx",
       "features/report/ui/ReportStickyUnlockBar.tsx",
     ]) {
       expect(

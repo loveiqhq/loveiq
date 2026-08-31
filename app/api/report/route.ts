@@ -1587,13 +1587,6 @@ export async function GET(request: Request) {
       archetypeTiers
     );
 
-    // When forced_paywall_enabled is OFF the report is freely viewable and the
-    // pricing modal is opt-in only (no non-dismissible screen). Shared viewers
-    // never see the forced wall regardless.
-    const forcedPaywallEnabled = isShareAccess
-      ? false
-      : await isFeatureEnabled("forced_paywall_enabled", true);
-
     // Every section copy goes out through one gate: on a locked section the
     // "Learn:" body paragraphs come off the wire entirely, so the peek→expand
     // control has nothing to reveal to a reader who hasn't bought.
@@ -1601,7 +1594,6 @@ export async function GET(request: Request) {
       stripLockedEduBodyFromPayload({
         submissionId: submission.id,
         accessPlan,
-        forcedPaywallEnabled,
         userName: getSubmissionUserName(submission),
         userEmail: isShareAccess ? null : getSubmissionUserEmail(submission),
         ownerFirstName: isShareAccess ? getSubmissionUserName(submission) : null,

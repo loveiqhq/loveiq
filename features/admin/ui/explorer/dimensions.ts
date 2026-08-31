@@ -95,15 +95,7 @@ export const DIMENSION_GROUPS: Array<{ title: string; dims: DimensionKey[] }> = 
   { title: "Acquisition", dims: ["trafficSource", "utmMedium", "utmCampaign", "landingVariant"] },
   {
     title: "Pricing & experiment",
-    dims: [
-      "plan",
-      "device",
-      "paywallArm",
-      "experimentGroup",
-      "countryTier",
-      "priceBucket",
-      "behavioralBucket",
-    ],
+    dims: ["plan", "device", "experimentGroup", "countryTier", "priceBucket", "behavioralBucket"],
   },
   { title: "Engagement", dims: ["reportViewed", "sessionBucket"] },
 ];

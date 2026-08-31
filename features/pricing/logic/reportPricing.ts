@@ -8,13 +8,8 @@ import {
 import {
   resolveSubmissionAccessContext,
   ensurePersonalReportForSubmission,
-  lookupReportTokenBySubmissionId,
 } from "@features/report/server/personalReport";
 import { parseUtmSource } from "@features/survey/server/utils";
-import {
-  getForcedPaywallCohort,
-  type ForcedPaywallCohort,
-} from "@shared/experiments/forcedPaywall";
 import logger from "@shared/observability/logger";
 import { isFeatureEnabled } from "@shared/flags/system-flags";
 import { REPORT_PAYWALL_COUNTDOWN_MS } from "@features/survey/ui/hooks/surveySession";
@@ -319,10 +314,12 @@ interface ReportPriceQuoteRow {
   /**
    * Forced-paywall A/B arm for this report ("treatment" | "control"), stamped
    * once at first quote persist. Consent-independent denominator for the
-   * experiment (see get_forced_paywall_ab RPC). Nullable for rows written
+   * experiment, which was removed on 2026-08-31. READ-ONLY now: nothing writes
+   * this any more, and it survives so historical rows still report truthfully
+   * (see get_forced_paywall_ab RPC). Nullable for rows written
    * before the 2026-05 column migration.
    */
-  forced_paywall_arm?: ForcedPaywallCohort | null;
+  forced_paywall_arm?: "treatment" | "control" | null;
   base_price_bucket: string;
   base_price: number;
   /** MSRP anchor in EUR (numeric). Nullable for rows written before the 2026-04 pricing migration. */
@@ -1363,10 +1360,7 @@ async function persistQuote({
   plan: ReportPurchasePlanId;
   pricingSessionId?: string | null;
 }) {
-  const [upliftEnabled, forcedPaywallEnabled] = await Promise.all([
-    isFeatureEnabled("pricing_uplift_enabled", true),
-    isFeatureEnabled("forced_paywall_enabled", true),
-  ]);
+  const upliftEnabled = await isFeatureEnabled("pricing_uplift_enabled", true);
 
   const builtQuote = buildQuotePayload({
     context,
@@ -1378,23 +1372,15 @@ async function persistQuote({
     upliftEnabled,
   });
 
-  // Stamp the forced-paywall A/B arm ONCE (stable across re-quotes / per-plan
-  // rows, like experiment_group). Keyed on the SAME canonical report token the
-  // experience uses (token ?? data.ownerToken) so session-only users aren't
-  // mis-stamped as control. Consent-independent denominator for the experiment.
-  // When forced_paywall_enabled is OFF, NEW quotes stamp "control" (report is
-  // viewable; modal is opt-in) — existing stamps stay stable.
-  const forcedPaywallArm: ForcedPaywallCohort =
-    existingQuote?.forced_paywall_arm ??
-    (forcedPaywallEnabled
-      ? getForcedPaywallCohort(
-          context.reportToken ?? (await lookupReportTokenBySubmissionId(context.submissionId))
-        )
-      : "control");
-
+  // The forced-paywall A/B was removed on 2026-08-31, so nothing stamps
+  // `forced_paywall_arm` any more. An existing stamp is carried forward
+  // untouched rather than nulled, so a re-quote never erases the arm a
+  // historical reader actually experienced.
   const payload = {
     ...builtQuote.payload,
-    forced_paywall_arm: forcedPaywallArm,
+    ...(existingQuote?.forced_paywall_arm
+      ? { forced_paywall_arm: existingQuote.forced_paywall_arm }
+      : {}),
     created_date_time: existingQuote?.id ? undefined : now.toISOString(),
     personal_report_id: context.personalReportId,
     survey_submission_id: context.submissionId,

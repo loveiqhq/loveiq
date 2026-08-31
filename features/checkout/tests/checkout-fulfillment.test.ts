@@ -170,7 +170,6 @@ describe("checkout fulfillment", () => {
               pricingClusterId:
                 "A-full_report-full_low_2-tier_2-desktop-direct-consistent-engaged-d0",
               experimentGroup: "A",
-              forcedPaywallArm: "treatment",
               basePriceBucket: "full_low_2",
               discountStep: "0",
               currentPrice: "24.49",
@@ -234,9 +233,6 @@ describe("checkout fulfillment", () => {
         couponPercentOff: 100,
         discountAmount: 24.49,
         experimentGroup: "A",
-        // Forced-paywall arm carried from session metadata → durable payment row
-        // for consent-independent conversion/revenue-by-arm analysis.
-        forcedPaywallArm: "treatment",
         requestIp: "127.0.0.1",
         requestUserAgent: "Mozilla/5.0 (Vitest)",
         stripePaymentStatus: "no_payment_required",
@@ -885,7 +881,6 @@ describe("checkout fulfillment", () => {
       plan: "essentials" | "full_report" | "all_reports",
       archetype?: string,
       paymentIntent: string | null = "pi_test_slack_001",
-      forcedPaywallArm?: string,
       landingVariant?: string
     ) {
       return {
@@ -900,7 +895,6 @@ describe("checkout fulfillment", () => {
               metadata: {
                 plan,
                 ...(archetype ? { archetype } : {}),
-                ...(forcedPaywallArm ? { forcedPaywallArm } : {}),
                 ...(landingVariant ? { landingVariant } : {}),
                 reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
               },
@@ -974,7 +968,7 @@ describe("checkout fulfillment", () => {
       delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
     });
 
-    it("includes referral source + forced paywall arm in the Slack ping", async () => {
+    it("includes referral source, and never the removed paywall arm, in the Slack ping", async () => {
       process.env.SLACK_PAYMENTS_WEBHOOK_URL = SLACK_URL;
       const slackCalls = setupHappyPathMocks({
         utmTracker: JSON.stringify({
@@ -996,19 +990,12 @@ describe("checkout fulfillment", () => {
               metadata: {
                 plan: "full_report",
                 archetype: "Spark Seeker",
-                forcedPaywallArm: "treatment",
                 reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
               },
             },
           },
         } as never,
-        stripe: buildStripe(
-          "full_report",
-          "Spark Seeker",
-          "pi_test_slack_001",
-          "treatment",
-          "white"
-        ) as never,
+        stripe: buildStripe("full_report", "Spark Seeker", "pi_test_slack_001", "white") as never,
       });
 
       expect(slackCalls).toHaveLength(1);
@@ -1029,7 +1016,7 @@ describe("checkout fulfillment", () => {
       delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
     });
 
-    it("includes organic source + closeable paywall arm in the Slack ping", async () => {
+    it("includes organic source, and never the removed paywall arm, in the Slack ping", async () => {
       process.env.SLACK_PAYMENTS_WEBHOOK_URL = SLACK_URL;
       const slackCalls = setupHappyPathMocks({
         utmTracker: JSON.stringify({ utm_source: "google", utm_medium: "organic" }),
@@ -1045,19 +1032,12 @@ describe("checkout fulfillment", () => {
               metadata: {
                 plan: "full_report",
                 archetype: "Spark Seeker",
-                forcedPaywallArm: "control",
                 reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
               },
             },
           },
         } as never,
-        stripe: buildStripe(
-          "full_report",
-          "Spark Seeker",
-          "pi_test_slack_001",
-          "control",
-          "control"
-        ) as never,
+        stripe: buildStripe("full_report", "Spark Seeker", "pi_test_slack_001", "control") as never,
       });
 
       expect(slackCalls).toHaveLength(1);

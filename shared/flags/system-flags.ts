@@ -13,7 +13,6 @@
  *   report_paywall_enforced
  *   chapter_nudge
  *   pricing_uplift_enabled   — when OFF, all per-visitor price boosts are paused (base prices only)
- *   forced_paywall_enabled   — when OFF, the report is viewable and the pricing modal is opt-in only
  *
  * Add new flags by INSERT into system_flags + listing here so callers get
  * type-checked names.
@@ -29,7 +28,6 @@ export type SystemFlagKey =
   | "report_paywall_enforced"
   | "chapter_nudge"
   | "pricing_uplift_enabled"
-  | "forced_paywall_enabled"
   /**
    * The +2 EUR surcharge once a reader's paywall countdown has run out. Off by
    * default: with it off the report and the checkout charge exactly what they charged

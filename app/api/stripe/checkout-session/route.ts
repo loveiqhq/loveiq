@@ -26,11 +26,9 @@ import { scheduleAfterResponse } from "@shared/http/after-response";
 import { refreshJourneyMessage } from "@features/attribution/server/journey-message";
 import {
   getReportAccessPlanForSubmission,
-  resolveReportAccessToken,
   resolveSubmissionAccessContext,
 } from "@features/report/server/personalReport";
 import { isPlanOwnedForArchetype } from "@features/report/server/access";
-import { getForcedPaywallCohort } from "@shared/experiments/forcedPaywall";
 import {
   LANDING_VARIANT_COOKIE,
   normalizeLandingVariant,
@@ -242,18 +240,6 @@ export async function POST(request: Request) {
     const archetypeSlug = archetypeName ? toArchetypeSlug(archetypeName) : null;
     const planTitle = archetypeName ? `${archetypeName} report` : plan.title;
 
-    // Forced-paywall A/B arm, recomputed server-side from the canonical report
-    // token. Token checkouts carry it directly; session-only checkouts resolve
-    // it from the submission so the attribution arm matches the arm the user
-    // EXPERIENCED on the report (which keys on token ?? data.ownerToken). Never
-    // throws — a resolution miss defaults to control.
-    const forcedPaywallArm = getForcedPaywallCohort(
-      await resolveReportAccessToken({
-        reportSessionId: parsed.data.reportSessionId ?? null,
-        reportToken: parsed.data.reportToken ?? null,
-      })
-    );
-
     // White-landing A/B arm, read from the sticky cookie, so revenue is
     // attributable to the landing variant the buyer first saw. Defaults to
     // "control" when the cookie is absent (e.g. they never hit `/`) or when
@@ -364,11 +350,6 @@ export async function POST(request: Request) {
           gaClientId: toStripeMetadataValue(parsed.data.gaClientId ?? null),
           gaSessionId: toStripeMetadataValue(parsed.data.gaSessionId ?? null),
           gaAnalyticsConsent: parsed.data.gaConsent ? "1" : "0",
-          // Forced-paywall A/B arm (computed above from the canonical report
-          // token, consent-independent). Mirrors experimentGroup → flows
-          // webhook → fulfillment → payment.metadata for conversion attribution
-          // that survives analytics-consent declines.
-          forcedPaywallArm,
           landingVariant,
           initialPrice: String((quote.initialPriceCents / 100).toFixed(2)),
           msrp: String((quote.msrpCents / 100).toFixed(2)),

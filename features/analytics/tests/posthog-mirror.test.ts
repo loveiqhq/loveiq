@@ -64,13 +64,10 @@ describe("PostHog mirror of the GA4 event taxonomy", () => {
   it("registers experiment arms as PostHog super properties", () => {
     setSurveyVariant("white");
     expect(ph.register).toHaveBeenCalledWith({ survey_variant: "white" });
-    setForcedPaywallArm("treatment");
-    expect(ph.register).toHaveBeenCalledWith({ forced_paywall_arm: "treatment" });
   });
 
   it("does not register an arm when it is null", () => {
     setSurveyVariant(null);
-    setForcedPaywallArm(null);
     expect(ph.register).not.toHaveBeenCalled();
   });
 });

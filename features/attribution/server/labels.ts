@@ -95,9 +95,21 @@ const LABELS: Record<ExperimentAxis, Record<string, ArmLabel>> = {
     // Retired 2026-06 in the 3-bucket → 2-bucket cut. Legacy quotes still read back as C.
     C: { short: "Pricing C", long: "Pricing: group C", retired: true },
   },
+  // Whole axis concluded, and the forced wall itself was removed on 2026-08-31,
+  // so NEITHER arm is assigned any more — both carry `retired` for the same
+  // second-guard reason as the survey axis above. Stored rows still read back
+  // with a truthful label; `activeArms("paywall")` is correctly empty.
   paywall: {
-    treatment: { short: "Forced paywall", long: "Paywall: forced — had to pay to read on" },
-    control: { short: "Dismissible paywall", long: "Paywall: dismissible — could close it" },
+    treatment: {
+      short: "Forced paywall",
+      long: "Paywall: forced — had to pay to read on",
+      retired: true,
+    },
+    control: {
+      short: "Dismissible paywall",
+      long: "Paywall: dismissible — could close it",
+      retired: true,
+    },
   },
 };
 

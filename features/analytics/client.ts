@@ -33,8 +33,6 @@ declare global {
     google_tag_manager?: Record<string, unknown>;
     __loveiqGtagBootstrapped?: boolean;
     __loveiqReportSubmissionId?: number | null;
-    /** Coupled forced-paywall A/B arm for the current report/wizard session. */
-    __loveiqForcedPaywallArm?: "treatment" | "control" | null;
     /** Survey white A/B arm for the current survey session. */
     __loveiqSurveyVariant?: "white" | "dark" | null;
     /** Dev-only: tracks event_types we've already warned about for missing context. */
@@ -96,30 +94,8 @@ export const setReportSubmissionContext = (submissionId: number | null | undefin
 };
 
 /**
- * Set on the report + wizard once the forced-paywall arm is known. Every
- * persisted analytics event then auto-carries `forced_paywall_arm` in its
- * metadata, so the whole funnel is arm-attributable with a single GROUP BY
- * (no per-call wiring, nothing missed).
- */
-export const setForcedPaywallArm = (arm: "treatment" | "control" | null) => {
-  if (typeof window === "undefined") return;
-  window.__loveiqForcedPaywallArm = arm;
-  // Super property: attaches to every subsequent PostHog event, mirroring the
-  // GA4 user_properties call below (which is consent-gated; this is not).
-  if (arm) posthog.register({ forced_paywall_arm: arm });
-  // Mirror the arm into GA4 as a user-scoped property so EVERY GA4 event (not
-  // just experiment_exposure) is segmentable by arm in GA4 Explorations — no
-  // per-event wiring. Consent-gated like all GA4 traffic. NOTE: to surface in
-  // GA4 reports, register a custom dimension "forced_paywall_arm" (user-scoped)
-  // in GA4 Admin → Custom definitions (one-time config, not code).
-  if (arm && isProductionSite() && hasCookieYesConsent("analytics")) {
-    gtagSend("set", "user_properties", { forced_paywall_arm: arm });
-  }
-};
-
-/**
- * Set on the survey engine once the survey white-A/B arm is known. Like
- * `setForcedPaywallArm`, every persisted analytics event then auto-carries
+ * Set on the survey engine once the survey white-A/B arm is known. Every
+ * persisted analytics event then auto-carries
  * `survey_variant`, so survey completion-by-arm is a single GROUP BY. Register a
  * user-scoped GA4 custom dimension `survey_variant` to surface it in GA4 reports.
  */
@@ -165,15 +141,12 @@ const persistAnalyticsEvent = (
   if (!csrf) return;
 
   // Auto-stamp the experiment arms onto every persisted event so the whole
-  // funnel is attributable without per-call wiring. The forced-paywall arm
-  // comes from a window global (set on report/wizard once the token resolves);
-  // the white-landing variant is read straight from its cookie (source of
-  // truth, readable on every page). Caller keys win over both.
-  const arm = window.__loveiqForcedPaywallArm ?? null;
+  // funnel is attributable without per-call wiring. The survey arm comes from a
+  // window global; the white-landing variant is read straight from its cookie
+  // (source of truth, readable on every page). Caller keys win over both.
   const surveyVariant = window.__loveiqSurveyVariant ?? null;
   const landingVariant = getLandingVariant();
   const mergedMetadata = {
-    ...(arm ? { forced_paywall_arm: arm } : {}),
     ...(surveyVariant ? { survey_variant: surveyVariant } : {}),
     ...(landingVariant ? { landing_variant: landingVariant } : {}),
     ...metadata,
@@ -967,9 +940,7 @@ export const trackExperimentExposure = (params: {
 };
 
 /**
- * The scroll/forced pricing modal became visible. Captures modal impressions
- * per arm (treatment ≈ immediate; control = scroll-gated). `forced_paywall_arm`
- * is auto-stamped by persistAnalyticsEvent.
+ * The scroll pricing modal became visible. Captures modal impressions.
  */
 export const trackScrollPaywallShown = (params: { surface?: string } = {}) => {
   const payload = params.surface ? { surface: params.surface } : {};
@@ -978,8 +949,7 @@ export const trackScrollPaywallShown = (params: { surface?: string } = {}) => {
 };
 
 /**
- * The treatment flip card was flipped. `to` = which face is now showing.
- * Captures flip engagement; `forced_paywall_arm` is auto-stamped.
+ * The flip card was flipped. `to` = which face is now showing.
  */
 export const trackExperimentCardFlipped = (params: { to: "pricing" | "archetype" }) => {
   const payload = { to: params.to };

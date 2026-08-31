@@ -115,21 +115,29 @@ describe("plans pop-up trigger", () => {
   });
 
   it("also arms the countdown for every other route to the paywall", () => {
-    // Forced arm on load, ?offer=1 deep-link, 24h ladder auto-open, manual
-    // "Unlock" CTAs — one effect covers them all, so no open path can show a
-    // countdown that was never anchored.
+    // ?offer=1 deep-link, 24h ladder auto-open, manual "Unlock" CTAs — one
+    // effect covers them all, so no open path can show a countdown that was
+    // never anchored.
     expect(SOURCE).toMatch(
-      /if \(!isPricingModalOpen && !isScrollTeaserOpen\) return;[\s\S]{0,220}?armPaywallCountdown\(\)/
+      /if \(!isPricingModalOpen\) return;[\s\S]{0,220}?armPaywallCountdown\(\)/
     );
   });
 
-  it("keeps the forced-paywall arm opening immediately", () => {
-    // The A/B treatment arm deliberately shows the paywall on load; the snapshot
-    // trigger must not swallow that. `forcedPaywallCohort === "treatment"` is
-    // checked in two places, so match the branch that opens the teaser rather
-    // than slicing from the first occurrence.
-    expect(SOURCE).toMatch(
-      /forcedPaywallCohort === "treatment"\)\s*\{[\s\S]{0,300}?setIsScrollTeaserOpen\(true\)/
-    );
+  it("never opens the paywall on load — the forced wall is gone", () => {
+    /**
+     * The forced (non-dismissible, opens-on-mount) paywall was removed on
+     * 2026-08-31. The ONLY thing that may open the teaser is the scroll trigger
+     * plus the explicit CTAs, so no `setIsScrollTeaserOpen(true)` may survive
+     * outside the scroll handler. Asserted against the source because an
+     * on-mount reopen is invisible in a unit render that never scrolls.
+     */
+    expect(SOURCE).not.toContain("forcedPaywallCohort");
+    // The non-dismissible surface itself is gone, not merely unreachable.
+    expect(SOURCE).not.toContain("ScrollPricingModal");
+    expect(SOURCE).not.toContain("isScrollTeaserOpen");
+    // The chapter-reach trigger is the only thing that opens a paywall surface,
+    // and it opens the ordinary closable plans modal.
+    const openPlans = SOURCE.slice(SOURCE.indexOf("function openPlans()"));
+    expect(openPlans).toContain("setIsPricingModalOpen(true)");
   });
 });
