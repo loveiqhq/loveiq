@@ -15,7 +15,9 @@ import logger from "@shared/observability/logger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// 120s so a 100s model call fits with room for the corpus read. Daily job, one
+// invocation, so the extra ceiling costs nothing.
+export const maxDuration = 120;
 
 /**
  * GET /api/cron/brain-brief

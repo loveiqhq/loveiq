@@ -125,6 +125,12 @@
     },
     "app/api/cron/brain-drive/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/cron/brain-calendar/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/cron/brain-brief/route.ts": {
+      "maxDuration": 120
     }
   }
 }

@@ -81,7 +81,22 @@ function reasoningEffort(): string | null {
   return value ? value : null;
 }
 
-export async function complete(messages: LlmMessage[]): Promise<LlmResult> {
+export async function complete(
+  messages: LlmMessage[],
+  /**
+   * Per-call override. The default suits `answerQuestion`, which a person is waiting
+   * on, so it must give up quickly.
+   *
+   * The daily brief is not. On 2026-08-31 at 06:11 it died at 46,745 ms -- the 45s
+   * timeout plus overhead -- having never posted. The same call measured 6.5s from a
+   * laptop against the same corpus and produced a good brief, so the model and the
+   * key were fine; the call was simply slower than 45s from Vercel that morning.
+   * Killing a once-a-day job to save thirty seconds it has no need of is the wrong
+   * trade, and a failed day is never retried -- the route only ever asks for
+   * yesterday.
+   */
+  timeoutMs: number = TIMEOUT_MS
+): Promise<LlmResult> {
   const key = process.env.BRAIN_LLM_KEY;
   if (!key) return { ok: false, reason: "unconfigured" };
 
@@ -103,7 +118,7 @@ export async function complete(messages: LlmMessage[]): Promise<LlmResult> {
         stream: false,
         ...(reasoningEffort() ? { reasoning_effort: reasoningEffort() } : {}),
       }),
-      timeoutMs: TIMEOUT_MS,
+      timeoutMs,
     });
   } catch (err) {
     logger.error({ err }, "brain llm request failed");

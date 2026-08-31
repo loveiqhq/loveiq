@@ -104,7 +104,9 @@ export async function buildDailyBrief(day: string): Promise<DailyBrief | null> {
   // Reuses the Q&A prompt on purpose: it already fences every quoted field against
   // prompt injection, and this corpus is exactly as untrusted here as it is there
   // — anyone who can write a commit message or send us an email can put text in it.
-  const result = await complete(buildPrompt(BRIEF_QUESTION, chunks));
+  // 100s, not the shared 45s default: see `complete`. brain-brief's maxDuration is
+  // raised to match, so the route outlives the call it is waiting on.
+  const result = await complete(buildPrompt(BRIEF_QUESTION, chunks), 100_000);
   if (!result.ok) {
     /**
      * THROW, do not return null.
@@ -115,7 +117,15 @@ export async function buildDailyBrief(day: string): Promise<DailyBrief | null> {
      * the day as done, and never retry it. Silence is the design only when the
      * model actually looked and found nothing worth saying.
      */
-    throw new Error(`brain-brief: the language model is unavailable (${result.reason})`);
+    /**
+     * `detail` is the whole diagnosis and it used to be dropped. The 2026-08-31
+     * 06:11 failure logged only "(error)", which spans three very different causes:
+     * a timeout, an HTTP status, and the model spending its entire token budget on
+     * reasoning. Recovering which one meant matching the run's 46,745 ms against
+     * TIMEOUT_MS by hand.
+     */
+    const detail = result.detail ? `${result.reason}: ${result.detail}` : result.reason;
+    throw new Error(`brain-brief: the language model is unavailable (${detail})`);
   }
 
   const text = result.text.trim();
