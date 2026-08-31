@@ -51,7 +51,6 @@ interface Props {
    * entry. Null only when locked ⇒ the fit rows render without dots.
    */
   relationshipFit: Record<string, number> | null;
-  offerDeadline?: number;
   onUnlock: () => void;
   quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
@@ -167,7 +166,6 @@ const CuriositySection: FC<Props> = ({
   archetype,
   copy,
   relationshipFit,
-  offerDeadline,
   onUnlock,
   quote = null,
   sectionTitle,
@@ -220,7 +218,6 @@ const CuriositySection: FC<Props> = ({
                 sectionTitle={sectionTitle}
                 tier={tier}
                 quote={quote}
-                offerDeadline={offerDeadline}
                 onUnlock={onUnlock}
               />
             </div>

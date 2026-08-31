@@ -27,13 +27,7 @@ export type SystemFlagKey =
   | "nurture_sequence"
   | "report_paywall_enforced"
   | "chapter_nudge"
-  | "pricing_uplift_enabled"
-  /**
-   * The +2 EUR surcharge once a reader's paywall countdown has run out. Off by
-   * default: with it off the report and the checkout charge exactly what they charged
-   * before the surcharge existed, so it can be killed without a deploy.
-   */
-  | "report_urgency_surcharge_enabled";
+  | "pricing_uplift_enabled";
 
 const CACHE_TTL_MS = 30_000;
 const FAIL_OPEN_TTL_MS = 5_000;

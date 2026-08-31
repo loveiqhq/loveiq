@@ -70,7 +70,6 @@ interface Props {
   copy: InitiationCopy | null;
   /** Timeline-chart config (family + variant); null when locked or absent. */
   config: InitiationConfig | null;
-  offerDeadline?: number;
   onUnlock: () => void;
   quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
@@ -231,7 +230,6 @@ const InitiationSection: FC<Props> = ({
   archetype,
   copy,
   config,
-  offerDeadline,
   onUnlock,
   quote = null,
   sectionTitle,
@@ -323,7 +321,6 @@ const InitiationSection: FC<Props> = ({
                 sectionTitle={sectionTitle}
                 tier={tier}
                 quote={quote}
-                offerDeadline={offerDeadline}
                 onUnlock={onUnlock}
               />
             </div>

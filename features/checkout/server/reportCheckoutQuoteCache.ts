@@ -47,9 +47,8 @@ function isReportPriceQuoteSnapshot(
     snapshot.plan === plan &&
     snapshot.currency === "EUR" &&
     typeof snapshot.currentPriceCents === "number" &&
-    // Written before the urgency surcharge existed: such an entry has no charged price,
-    // so honouring it would show the old number while checkout charged the new one.
-    // Rejecting it just means one fetch from `/api/price`.
+    // An entry written before `chargedPriceCents` existed has no charged price at all,
+    // so it is rejected rather than guessed at. That costs one fetch from `/api/price`.
     typeof snapshot.chargedPriceCents === "number" &&
     typeof snapshot.initialPriceCents === "number" &&
     typeof snapshot.expiresAt === "string"
@@ -122,23 +121,6 @@ export function getCachedReportCheckoutQuote({
 
     const expiresAt = Date.parse(parsed.quote.expiresAt);
     if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
-      return null;
-    }
-
-    // The 21-day `expiresAt` above is the quote's own lifetime; the reader's THREE-MINUTE
-    // urgency window is a different clock, and crossing it changes the price. A quote
-    // cached while that window was open would show the old figure here while the
-    // checkout POST — which re-derives server-side — charged the surcharged one. That is
-    // the single mismatch this feature must never produce, so such an entry is stale.
-    const urgencyDeadline = parsed.quote.urgencyDeadlineAt
-      ? Date.parse(parsed.quote.urgencyDeadlineAt)
-      : null;
-    if (
-      parsed.quote.surchargeCents === 0 &&
-      urgencyDeadline != null &&
-      Number.isFinite(urgencyDeadline) &&
-      urgencyDeadline <= Date.now()
-    ) {
       return null;
     }
 

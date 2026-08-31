@@ -2,15 +2,6 @@ export const SURVEY_SESSION_KEY = "loveiq-survey-session";
 export const REPORT_SESSION_KEY = "loveiq-report-session";
 export const REPORT_PRICING_SESSION_PREFIX = "loveiq-report-pricing-session";
 export const REPORT_NURTURE_PROMO_PREFIX = "loveiq-report-nurture-promo";
-export const REPORT_PAYWALL_DEADLINE_PREFIX = "loveiq-report-paywall-deadline";
-
-/**
- * Urgency window for the report paywall countdown. Three minutes since
- * 2026-08-19 (was two): the clock now starts when the reader REACHES the first
- * paywalled chapter rather than on page load, so it has to survive reading that
- * chapter and the pop-up's own arrival before it runs out.
- */
-export const REPORT_PAYWALL_COUNTDOWN_MS = 3 * 60 * 1_000;
 
 function canUseStorage() {
   return typeof window !== "undefined";
@@ -202,89 +193,5 @@ export function getReportNurturePromo({
     return sessionStorage.getItem(storageKey);
   } catch {
     return null;
-  }
-}
-
-function getPaywallDeadlineStorageKey({
-  sessionId,
-  token,
-}: {
-  sessionId?: string | null;
-  token?: string | null;
-}): string | null {
-  if (token) return `${REPORT_PAYWALL_DEADLINE_PREFIX}:token:${token}`;
-  if (sessionId) return `${REPORT_PAYWALL_DEADLINE_PREFIX}:session:${sessionId}`;
-  return null;
-}
-
-/**
- * Read-or-create the report paywall countdown deadline (epoch ms) for this
- * report, persisted in sessionStorage so the urgency window survives view
- * switches, re-renders, and reopening the modal within the same tab — it does
- * NOT silently reset to a fresh 3:00 on every open. Once the deadline has
- * elapsed it is kept (the countdown shows 00:00), never regenerated.
- *
- * CREATING it starts the clock, so the caller decides when that happens — the
- * report arms it on reaching the first paywalled chapter (or on any earlier
- * paywall open), not on page load. Use {@link peekReportPaywallDeadline} to read
- * an already-running clock without starting one.
- *
- * Returns a fresh in-memory deadline when storage is unavailable (private mode)
- * or there's no token/session key, so the countdown still works — it just won't
- * persist across reopens in that edge case.
- */
-/**
- * Read the paywall deadline for this report WITHOUT starting one. Returns null
- * when the clock has not been armed yet (or storage is unavailable), which is how
- * the report tells "reader has already seen the paywall in this tab" from "clock
- * not started".
- */
-export function peekReportPaywallDeadline({
-  sessionId,
-  token,
-}: {
-  sessionId?: string | null;
-  token?: string | null;
-}): number | null {
-  if (!canUseStorage()) return null;
-
-  const storageKey = getPaywallDeadlineStorageKey({ sessionId, token });
-  if (!storageKey) return null;
-
-  try {
-    const stored = sessionStorage.getItem(storageKey);
-    if (!stored) return null;
-    const parsed = Number.parseInt(stored, 10);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-export function getReportPaywallDeadline({
-  sessionId,
-  token,
-}: {
-  sessionId?: string | null;
-  token?: string | null;
-}): number {
-  const fallback = Date.now() + REPORT_PAYWALL_COUNTDOWN_MS;
-  if (!canUseStorage()) return fallback;
-
-  const storageKey = getPaywallDeadlineStorageKey({ sessionId, token });
-  if (!storageKey) return fallback;
-
-  try {
-    const stored = sessionStorage.getItem(storageKey);
-    if (stored) {
-      const parsed = Number.parseInt(stored, 10);
-      if (Number.isFinite(parsed) && parsed > 0) {
-        return parsed;
-      }
-    }
-    sessionStorage.setItem(storageKey, String(fallback));
-    return fallback;
-  } catch {
-    return fallback;
   }
 }

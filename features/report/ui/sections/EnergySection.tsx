@@ -71,7 +71,6 @@ interface Props {
   copy: EnergyCopy | null;
   /** Energy config (curve family + readouts); null when locked or absent. */
   config: EnergyConfig | null;
-  offerDeadline?: number;
   onUnlock: () => void;
   quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
@@ -395,7 +394,6 @@ const EnergySection: FC<Props> = ({
   archetype,
   copy,
   config,
-  offerDeadline,
   onUnlock,
   quote = null,
   sectionTitle,
@@ -462,7 +460,6 @@ const EnergySection: FC<Props> = ({
                 sectionTitle={sectionTitle}
                 tier={tier}
                 quote={quote}
-                offerDeadline={offerDeadline}
                 onUnlock={onUnlock}
               />
             </div>

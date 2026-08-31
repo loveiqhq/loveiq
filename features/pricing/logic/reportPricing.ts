@@ -12,12 +12,6 @@ import {
 import { parseUtmSource } from "@features/survey/server/utils";
 import logger from "@shared/observability/logger";
 import { isFeatureEnabled } from "@shared/flags/system-flags";
-import { REPORT_PAYWALL_COUNTDOWN_MS } from "@features/survey/ui/hooks/surveySession";
-import {
-  mergeUrgencyDeadline,
-  readUrgencyDeadline,
-  urgencySurchargeCents,
-} from "@features/pricing/logic/urgencySurcharge";
 
 const SUPABASE_TIMEOUT_MS = 8_000;
 const QUOTE_VALIDITY_MS = 21 * 24 * 60 * 60 * 1_000;
@@ -210,21 +204,13 @@ export interface ReportPriceQuoteSnapshot {
   currentPriceCents: number;
   initialPriceCents: number;
   /**
-   * When the reader's three-minute urgency window closes. `null` until they reach the
-   * paywall. Stored on the quote row (not in the browser), so it survives a new
-   * browser, incognito and cleared storage.
-   */
-  urgencyDeadlineAt: string | null;
-  /**
-   * `0`, or `URGENCY_SURCHARGE_CENTS` once that window has closed. Added at the edges
-   * and never written into `current_price`, which is monotonically non-increasing by
-   * design — see `urgencySurcharge.ts`.
-   */
-  surchargeCents: number;
-  /**
-   * What the reader is shown and what Stripe charges: `currentPriceCents +
-   * surchargeCents`. Every price surface reads THIS, so the screen and the invoice
-   * cannot disagree.
+   * What the reader is shown and what Stripe charges. Every price surface and the
+   * Stripe line item read THIS, so the screen and the invoice cannot disagree.
+   *
+   * Equal to `currentPriceCents` since the +2 EUR urgency surcharge was removed on
+   * 2026-08-31. Kept as its own field because it is the one name for "the amount we
+   * charge", and collapsing it would edit every price surface on the money path for
+   * no change in behaviour.
    */
   chargedPriceCents: number;
   discountMultiplier: number;
@@ -895,13 +881,7 @@ function buildPricingClusterId({
 
 function toSnapshot(
   row: ReportPriceQuoteRow,
-  override?: SnapshotOverride | null,
-  /**
-   * Whether the urgency surcharge is live, and the clock to judge the deadline by.
-   * Omitted means "not enabled": a call site that forgets to pass it under-charges
-   * rather than over-charges, which is the safe way for money code to fail.
-   */
-  urgency?: { enabled: boolean; deadlineAt?: string | null; now?: number }
+  override?: SnapshotOverride | null
 ): ReportPriceQuoteSnapshot {
   // Backfill msrp + starting_price for legacy rows that predate the 2026-04
   // pricing migration. Fall back to the bucket catalogue if the row matches a
@@ -917,15 +897,6 @@ function toSnapshot(
       : (catalogueBucket?.startingCents ?? initialCents);
 
   const currentPriceCents = override?.currentPriceCents ?? fromEuroAmount(row.current_price);
-  // Report-wide when the caller resolved it (every real call does); the row's own
-  // metadata is the fallback so a direct snapshot still reads sensibly.
-  const urgencyDeadlineAt =
-    urgency?.deadlineAt !== undefined ? urgency.deadlineAt : readUrgencyDeadline(row.metadata);
-  const surchargeCents = urgencySurchargeCents({
-    deadlineAt: urgencyDeadlineAt,
-    enabled: urgency?.enabled === true,
-    now: urgency?.now,
-  });
 
   return {
     id: row.id,
@@ -938,9 +909,7 @@ function toSnapshot(
     startingPriceCents: startingCents,
     currentPriceCents,
     initialPriceCents: initialCents,
-    urgencyDeadlineAt,
-    surchargeCents,
-    chargedPriceCents: currentPriceCents + surchargeCents,
+    chargedPriceCents: currentPriceCents,
     discountMultiplier: override?.discountMultiplier ?? row.discount_multiplier,
     discountStep: override?.discountStep ?? row.discount_step,
     pricingClusterId: row.pricing_cluster_id,
@@ -1090,35 +1059,6 @@ async function fetchStoredQuote({
 
   const rows = (await response.json()) as ReportPriceQuoteRow[];
   return rows[0] ?? null;
-}
-
-/**
- * The reader's urgency deadline, read across ALL of the report's quote rows.
- *
- * There is one quote row per (report, plan), but the window belongs to the READER, not
- * to a plan: they reach the paywall once. Reading it per-row is how the first cut of
- * this went out with the surcharge on `full_report` alone while `core` and `all_reports`
- * stayed at their base price — the arming had only touched one row. Earliest wins, so a
- * later row cannot hand back a longer window.
- */
-async function fetchUrgencyDeadlineForReport(personalReportId: number): Promise<string | null> {
-  const response = await supabaseServiceFetch(
-    `/rest/v1/report_price_quote?personal_report_id=eq.${personalReportId}&select=metadata`
-  );
-
-  if (!response.ok) {
-    // Treated as "not armed": the reader keeps the base price rather than being charged
-    // more because of a failed read.
-    logger.warn({ personalReportId }, "urgency deadline lookup failed");
-    return null;
-  }
-
-  const rows = (await response.json()) as Array<{ metadata: unknown }>;
-  const deadlines = rows
-    .map((row) => readUrgencyDeadline(row.metadata))
-    .filter((value): value is string => Boolean(value))
-    .sort();
-  return deadlines[0] ?? null;
 }
 
 async function fetchStoredQuoteById(quoteId: number) {
@@ -1425,104 +1365,16 @@ async function persistQuote({
   };
 }
 
-/**
- * Is the urgency surcharge live? Read server-side only and never handed to the browser
- * as a flag: the client is given the finished `chargedPriceCents` instead, so a stale
- * flag cache in one place cannot make the page show one price and Stripe charge another.
- */
-async function isUrgencySurchargeEnabled(): Promise<boolean> {
-  return isFeatureEnabled("report_urgency_surcharge_enabled", false);
-}
-
-/**
- * Start the reader's urgency window, once.
- *
- * Called at the moment the visible countdown arms — reaching the first paywalled
- * chapter — so the server's clock and the reader's clock describe the same window. The
- * deadline lives on the quote row rather than in the browser, so it cannot be reset by
- * opening the report somewhere else, and it is never extended once set.
- */
-export async function armReportUrgencyWindow({
-  now = new Date(),
-  plan = DEFAULT_REPORT_PURCHASE_PLAN_ID,
-  pricingSessionId,
-  reportSessionId,
-  reportToken,
-  submissionId,
-  userAgent,
-}: {
-  now?: Date;
-  plan?: ReportPurchasePlanId;
-  pricingSessionId?: string | null;
-  reportSessionId?: string | null;
-  reportToken?: string | null;
-  submissionId?: number | null;
-  userAgent?: string | null;
-}): Promise<string | null> {
-  const context = await getPricingContext({
-    reportSessionId,
-    reportToken,
-    submissionId,
-    userAgent,
-  });
-
-  if (!context) {
-    return null;
-  }
-
-  const existingQuote = await fetchStoredQuote({
-    personalReportId: context.personalReportId,
-    plan,
-  });
-
-  // Nothing to arm against yet: the caller resolves a quote first (every paywall
-  // surface does), so this is only reachable for a report with no quote row at all.
-  if (!existingQuote) {
-    return null;
-  }
-
-  const alreadyArmed = readUrgencyDeadline(existingQuote.metadata);
-  if (alreadyArmed) {
-    return alreadyArmed;
-  }
-
-  const { metadata, deadlineAt } = mergeUrgencyDeadline(
-    existingQuote.metadata,
-    new Date(now.getTime() + REPORT_PAYWALL_COUNTDOWN_MS).toISOString()
-  );
-
-  const response = await supabaseServiceFetch(
-    `/rest/v1/report_price_quote?id=eq.${existingQuote.id}`,
-    {
-      body: JSON.stringify({ metadata, updated_date_time: now.toISOString() }),
-      headers: { Prefer: "return=minimal" },
-      method: "PATCH",
-    }
-  );
-
-  if (!response.ok) {
-    // Non-fatal: the reader keeps the base price rather than seeing an error. The next
-    // paywall surface tries again.
-    logger.warn({ quoteId: existingQuote.id }, "urgency window arm failed");
-    return null;
-  }
-
-  return deadlineAt;
-}
-
 async function resolveQuote({
   context,
   now,
   plan,
   pricingSessionId,
-  urgency,
 }: {
   context: PricingContext;
   now: Date;
   plan: ReportPurchasePlanId;
   pricingSessionId?: string | null;
-  /** Resolved once by the caller when several plans are priced in one request. */
-  urgency?: { enabled: boolean; deadlineAt: string | null };
 }) {
   const existingQuote = await fetchStoredQuote({
     personalReportId: context.personalReportId,
@@ -1546,18 +1398,7 @@ async function resolveQuote({
     throw new Error("pricing_quote_missing_after_persist");
   }
 
-  const resolvedUrgency =
-    urgency ??
-    (await (async () => ({
-      enabled: await isUrgencySurchargeEnabled(),
-      deadlineAt: await fetchUrgencyDeadlineForReport(context.personalReportId),
-    }))());
-
-  return toSnapshot(persisted.row, persisted.snapshotOverride, {
-    enabled: resolvedUrgency.enabled,
-    deadlineAt: resolvedUrgency.deadlineAt,
-    now: now.getTime(),
-  });
+  return toSnapshot(persisted.row, persisted.snapshotOverride);
 }
 
 async function getValidatedQuoteForContext({
@@ -1596,14 +1437,7 @@ async function getValidatedQuoteForContext({
           discountMultiplier: sessionLockedQuote.discountMultiplier,
           discountStep: sessionLockedQuote.discountStep,
         }
-      : null,
-    // The session lock protects the BASE price an email promised; the urgency window is
-    // judged separately, so a locked price still moves once the clock has run out.
-    {
-      enabled: await isUrgencySurchargeEnabled(),
-      deadlineAt: await fetchUrgencyDeadlineForReport(context.personalReportId),
-      now: now.getTime(),
-    }
+      : null
   );
 }
 
@@ -1685,13 +1519,6 @@ export async function getReportPriceQuotesForContext({
     return null;
   }
 
-  // One read of the reader's window for the whole request, shared by every plan — the
-  // window is theirs, not the plan's.
-  const [enabled, deadlineAt] = await Promise.all([
-    isUrgencySurchargeEnabled(),
-    fetchUrgencyDeadlineForReport(context.personalReportId),
-  ]);
-
   const results = await Promise.all(
     REPORT_PURCHASE_PLAN_IDS.map(async (plan) => {
       const quote = await resolveQuote({
@@ -1699,7 +1526,6 @@ export async function getReportPriceQuotesForContext({
         now,
         plan,
         pricingSessionId,
-        urgency: { enabled, deadlineAt },
       });
       return [plan, quote] as const;
     })

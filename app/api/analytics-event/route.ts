@@ -65,9 +65,8 @@ const ALLOWED_EVENTS = [
   "experiment_exposure",
   "scroll_paywall_shown",
   "experiment_card_flipped",
-  // Locked-chapter-card paywall surface (inline price + countdown)
+  // Locked-chapter-card paywall surface (inline price)
   "locked_card_price_shown",
-  "paywall_countdown_expired",
 ] as const;
 
 type AllowedEvent = (typeof ALLOWED_EVENTS)[number];
@@ -111,7 +110,6 @@ function entityTypeFor(event: AllowedEvent): string {
       return "ux";
     case "scroll_paywall_shown":
     case "locked_card_price_shown":
-    case "paywall_countdown_expired":
       return "paywall";
     case "experiment_exposure":
     case "experiment_card_flipped":

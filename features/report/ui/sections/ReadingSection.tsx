@@ -59,7 +59,6 @@ export interface ReadingCopy {
 interface Props {
   archetype: string;
   copy: ReadingCopy | null;
-  offerDeadline?: number;
   onUnlock: () => void;
   quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
@@ -160,7 +159,6 @@ const BookCard: FC<{ book: Book }> = ({ book }) => {
 const ReadingSection: FC<Props> = ({
   archetype,
   copy,
-  offerDeadline,
   onUnlock,
   quote = null,
   sectionTitle,
@@ -217,7 +215,6 @@ const ReadingSection: FC<Props> = ({
             sectionTitle={sectionTitle}
             tier={tier}
             quote={quote}
-            offerDeadline={offerDeadline}
             onUnlock={onUnlock}
           />
         </div>

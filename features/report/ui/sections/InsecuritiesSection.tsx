@@ -67,7 +67,6 @@ interface Props {
   cueFamily: string | null;
   /** Config `insecurity_graph` (highlighted_curve + axis label overrides). */
   graph: InsecurityGraph | null;
-  offerDeadline?: number;
   onUnlock: () => void;
   quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
@@ -317,7 +316,6 @@ const InsecuritiesSection: FC<Props> = ({
   copy,
   cueFamily,
   graph,
-  offerDeadline,
   onUnlock,
   quote = null,
   sectionTitle,
@@ -415,7 +413,6 @@ const InsecuritiesSection: FC<Props> = ({
                 sectionTitle={sectionTitle}
                 tier={tier}
                 quote={quote}
-                offerDeadline={offerDeadline}
                 onUnlock={onUnlock}
               />
             </div>

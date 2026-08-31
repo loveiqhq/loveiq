@@ -53,7 +53,6 @@ interface Props {
   copy: ConfidenceCopy | null;
   /** Per-archetype result; null when locked OR when config has no strip. */
   strip: ConfidenceStrip | null;
-  offerDeadline?: number;
   onUnlock: () => void;
   quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
@@ -220,7 +219,6 @@ const ConfidenceSection: FC<Props> = ({
   archetype,
   copy,
   strip,
-  offerDeadline,
   onUnlock,
   quote = null,
   sectionTitle,
@@ -278,7 +276,6 @@ const ConfidenceSection: FC<Props> = ({
                 sectionTitle={sectionTitle}
                 tier={tier}
                 quote={quote}
-                offerDeadline={offerDeadline}
                 onUnlock={onUnlock}
               />
             </div>

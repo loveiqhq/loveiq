@@ -61,7 +61,6 @@ interface Props {
   copy: LibidoCopy | null;
   /** Named-loop config (name + steps); null when locked or absent. */
   config: LibidoConfig | null;
-  offerDeadline?: number;
   onUnlock: () => void;
   quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
@@ -244,7 +243,6 @@ const LibidoSection: FC<Props> = ({
   archetype,
   copy,
   config,
-  offerDeadline,
   onUnlock,
   quote = null,
   sectionTitle,
@@ -331,7 +329,6 @@ const LibidoSection: FC<Props> = ({
                 sectionTitle={sectionTitle}
                 tier={tier}
                 quote={quote}
-                offerDeadline={offerDeadline}
                 onUnlock={onUnlock}
               />
             </div>

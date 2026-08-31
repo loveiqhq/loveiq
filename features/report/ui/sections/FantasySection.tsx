@@ -46,7 +46,6 @@ export interface FantasyCopy {
 interface Props {
   archetype: string;
   copy: FantasyCopy | null;
-  offerDeadline?: number;
   onUnlock: () => void;
   quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
@@ -364,7 +363,6 @@ const FantasyMap: FC<{ filter: MapFilter; dots?: FantasyMapDot[] | null }> = ({ 
 const FantasySection: FC<Props> = ({
   archetype,
   copy,
-  offerDeadline,
   onUnlock,
   quote = null,
   sectionTitle,
@@ -425,7 +423,6 @@ const FantasySection: FC<Props> = ({
                 sectionTitle={sectionTitle}
                 tier={tier}
                 quote={quote}
-                offerDeadline={offerDeadline}
                 onUnlock={onUnlock}
               />
             </div>

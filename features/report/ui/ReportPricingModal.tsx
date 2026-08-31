@@ -20,8 +20,6 @@ import {
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import TrustpilotReviews from "@shared/ui/trustpilot/TrustpilotReviews";
 import PaywallTestimonials from "./PaywallTestimonials";
-import { usePaywallCountdownValue, PaywallCountdownDigits } from "./PaywallCountdown";
-import { REPORT_PAYWALL_COUNTDOWN_MS } from "@features/survey/ui/hooks/surveySession";
 import { isTrustpilotEnabled } from "@shared/ui/trustpilot/config";
 import { isPlanOwnedForArchetype, type ReportAccessPlan } from "@features/report/server/access";
 import {
@@ -45,8 +43,6 @@ interface Props {
    */
   primaryArchetype?: string | null;
   quotes: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
-  /** Shared epoch-ms countdown deadline (resolved once per report session). */
-  offerDeadline?: number;
   returnFocusRef?: MutableRefObject<HTMLElement | null>;
   targetArchetype?: string | null;
   /**
@@ -163,7 +159,7 @@ function getCardPricing(
     };
   }
 
-  // The charged price, i.e. base + urgency surcharge once this reader's countdown has
+  // The charged price, which every surface and the Stripe line item read. A bucket
   // run out. `strikeEligible` and the badge below both compare against it, so a bucket
   // whose MSRP the surcharge overtakes simply loses its anchor instead of advertising a
   // cheaper past.
@@ -205,7 +201,6 @@ const ReportPricingModal: FC<Props> = ({
   onUnlock,
   primaryArchetype = null,
   quotes,
-  offerDeadline,
   returnFocusRef,
   targetArchetype = null,
   variant = "default",
@@ -235,15 +230,6 @@ const ReportPricingModal: FC<Props> = ({
         : `Unlock your complete ${archetype} report \u2014 attachment style, core insecurities, confidence, love language, arousal, desire drivers, fantasies, and more.`;
   const planCards = REPORT_PURCHASE_PLANS;
 
-  // Urgency countdown (Figma 8442-16168). Reads the SHARED provider value, like
-  // the locked-section cards and the sticky pill, rather than running a second
-  // interval of its own — two intervals drifted up to a second apart, so the
-  // modal's tiles and the card behind it could show 02:57 and 02:58. Falls back to
-  // a local ticker only when there is no provider (isolated unit tests).
-  const [fallbackDeadline] = useState(() =>
-    typeof window === "undefined" ? 0 : Date.now() + REPORT_PAYWALL_COUNTDOWN_MS
-  );
-  const { mm, ss } = usePaywallCountdownValue(offerDeadline ?? fallbackDeadline);
   // Cheapest live price — prefixes the "Lifetime value" why-card ("<price>, one
   // time…"). Read from the quote, never a literal, so it follows the catalogue.
   const cheapestPriceLabel = quotes?.full_report
@@ -321,7 +307,6 @@ const ReportPricingModal: FC<Props> = ({
       trackPriceShown({
         plan: card.plan,
         price: quote.chargedPriceCents / 100,
-        surcharge: quote.surchargeCents / 100,
         currency: quote.currency,
         bucket: quote.basePriceBucket,
         pricing_cluster_id: quote.pricingClusterId,
@@ -790,17 +775,6 @@ const ReportPricingModal: FC<Props> = ({
                 <PricingMethodMark logo="mastercard" label="Mastercard" />
                 <PricingMethodMark logo="visa" label="Visa" />
                 <PricingMethodMark logo="amex" label="American Express" />
-              </div>
-
-              <div
-                className="report-pricing-modal__countdown"
-                role="timer"
-                aria-label={`Offer expires in ${mm}:${ss}`}
-              >
-                <span className="report-pricing-modal__countdown-label">
-                  Time left to secure this offer
-                </span>
-                <PaywallCountdownDigits mm={mm} ss={ss} />
               </div>
 
               <PaywallTestimonials open={open} />

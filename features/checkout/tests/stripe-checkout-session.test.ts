@@ -59,8 +59,6 @@ const BASE_QUOTE = {
   basePriceBucket: "full_center",
   basePriceCents: 2999,
   currentPriceCents: 2749,
-  urgencyDeadlineAt: null,
-  surchargeCents: 0,
   chargedPriceCents: 2749,
   initialPriceCents: 2999,
   discountMultiplier: 1,
@@ -316,13 +314,14 @@ describe("POST /api/stripe/checkout-session", () => {
     );
   });
 
-  it("charges the surcharged price once the reader's urgency window has closed", async () => {
+  it("charges chargedPriceCents, never the base currentPriceCents", async () => {
     // The number Stripe receives has to be the one the report showed. `chargedPriceCents`
-    // is that number; `currentPriceCents` is the base it was built from and must never be
-    // the amount charged.
+    // is that number; `currentPriceCents` is the base it was built from. They are equal
+    // today — the +2 EUR urgency surcharge that separated them was removed on
+    // 2026-08-31 — so this pins WHICH FIELD is read, which is the part that can rot.
     const createSession = vi.fn().mockResolvedValue({
-      id: "cs_test_session_expired",
-      url: "https://checkout.stripe.com/c/pay/cs_test_session_expired",
+      id: "cs_test_session_charged",
+      url: "https://checkout.stripe.com/c/pay/cs_test_session_charged",
     });
     vi.mocked(isStripeCheckoutEnabled).mockReturnValue(true);
     vi.mocked(getStripeCheckoutCustomerEmail).mockResolvedValue("test@example.com");
@@ -330,14 +329,11 @@ describe("POST /api/stripe/checkout-session", () => {
       checkout: { sessions: { create: createSession } },
     } as never);
 
-    const closed = {
+    vi.mocked(getReportPriceQuoteForContext).mockResolvedValue({
       ...BASE_QUOTE,
       currentPriceCents: 2749,
-      surchargeCents: 200,
       chargedPriceCents: 2949,
-      urgencyDeadlineAt: "2026-08-23T12:00:00.000Z",
-    };
-    vi.mocked(getReportPriceQuoteForContext).mockResolvedValue(closed);
+    });
 
     const res = await POST(
       makeRequest({
@@ -348,23 +344,11 @@ describe("POST /api/stripe/checkout-session", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(createSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        line_items: [
-          expect.objectContaining({
-            price_data: expect.objectContaining({ unit_amount: 2949 }),
-          }),
-        ],
-        // The audit trail carries both halves, so a support question about a two-euro
-        // difference is answerable from the payment alone.
-        metadata: expect.objectContaining({
-          currentPrice: "29.49",
-          basePrice: "27.49",
-          urgencySurcharge: "2.00",
-          urgencyExpired: "1",
-        }),
-      }),
-      expect.anything()
-    );
+    const session = createSession.mock.calls[0]![0];
+    expect(session.line_items[0].price_data.unit_amount).toBe(2949);
+    // The urgency metadata went with the surcharge; nothing may reintroduce a
+    // second price into the audit trail.
+    expect(Object.keys(session.metadata)).not.toContain("urgencySurcharge");
+    expect(Object.keys(session.metadata)).not.toContain("urgencyDeadlineAt");
   });
 });

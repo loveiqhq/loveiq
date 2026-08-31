@@ -35,7 +35,6 @@ import {
   RETIRED_REPORT_SECTION_IDS,
 } from "./reportNav";
 import ReportMobileNav from "./ReportMobileNav";
-import { PaywallCountdownProvider } from "./PaywallCountdown";
 import ReportPricingModal from "./ReportPricingModal";
 import ReportStickyUnlockBar from "./ReportStickyUnlockBar";
 import ReportSection from "./ReportSection";
@@ -44,8 +43,6 @@ import ShareReportModal from "./ShareReportModal";
 import ShareVerifyGate from "./ShareVerifyGate";
 import SharedViewerBanner from "./SharedViewerBanner";
 import {
-  getReportPaywallDeadline,
-  peekReportPaywallDeadline,
   getReportPricingSessionId,
   getReportSessionId,
   setReportNurturePromo,
@@ -115,7 +112,6 @@ import {
   trackLockedCardPriceShown,
   trackBeginCheckout,
   trackLockIconClicked,
-  trackPaywallCountdownExpired,
   trackPaywallInitiated,
   trackReferFriendOpened,
   trackReportChapterMenuOpened,
@@ -388,7 +384,6 @@ interface ReportExperienceProps {
   isPricingModalOpen: boolean;
   isShareModalOpen: boolean;
   matchScore: number;
-  offerDeadline?: number;
   onBeginCheckout: (plan: ReportPurchasePlanId, archetype?: string | null) => void;
   onClosePricingModal: () => void;
   onCloseShareModal: () => void;
@@ -486,7 +481,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   isPricingModalOpen,
   isShareModalOpen,
   matchScore,
-  offerDeadline,
   onBeginCheckout,
   onClosePricingModal,
   onCloseShareModal,
@@ -596,7 +590,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     trackLockedCardPriceShown({
       plan: "full_report",
       price: fullReportQuote.chargedPriceCents / 100,
-      surcharge: fullReportQuote.surchargeCents / 100,
       currency: fullReportQuote.currency,
       bucket: fullReportQuote.basePriceBucket,
       pricing_cluster_id: fullReportQuote.pricingClusterId,
@@ -978,7 +971,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           generalHtml=""
                           isPremium={section.isPremium}
                           isUnlocked={isSummaryUnlocked}
-                          offerDeadline={offerDeadline}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionId={section.id}
@@ -1159,7 +1151,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           copy={isPrimaryView ? attachmentCopy : null}
                           plane={isPrimaryView ? attachmentPlane : null}
                           family={isPrimaryView ? attachmentFamily : null}
-                          offerDeadline={offerDeadline}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1199,7 +1190,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           copy={isPrimaryView ? insecuritiesCopy : null}
                           cueFamily={isPrimaryView ? insecurityCueFamily : null}
                           graph={isPrimaryView ? insecurityGraph : null}
-                          offerDeadline={offerDeadline}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1237,7 +1227,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           archetype={viewArchetype}
                           copy={isPrimaryView ? rewardCopy : null}
                           config={isPrimaryView ? rewardConfig : null}
-                          offerDeadline={offerDeadline}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1275,7 +1264,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           archetype={viewArchetype}
                           copy={isPrimaryView ? energyCopy : null}
                           config={isPrimaryView ? energyConfig : null}
-                          offerDeadline={offerDeadline}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1314,7 +1302,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                         <PowerSection
                           archetype={viewArchetype}
                           copy={isPrimaryView ? powerCopy : null}
-                          offerDeadline={offerDeadline}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1355,7 +1342,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           archetype={viewArchetype}
                           copy={isPrimaryView ? curiosityCopy : null}
                           relationshipFit={isPrimaryView ? relationshipFit : null}
-                          offerDeadline={offerDeadline}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1395,7 +1381,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           archetype={viewArchetype}
                           copy={isPrimaryView ? lovelangCopy : null}
                           order={isPrimaryView ? loveLanguageOrder : null}
-                          offerDeadline={offerDeadline}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1435,7 +1420,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           archetype={viewArchetype}
                           copy={isPrimaryView ? arousalCopy : null}
                           config={isPrimaryView ? arousalConfig : null}
-                          offerDeadline={offerDeadline}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1478,7 +1462,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           archetype={viewArchetype}
                           copy={isPrimaryView ? initiationCopy : null}
                           config={isPrimaryView ? initiationConfig : null}
-                          offerDeadline={offerDeadline}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1523,7 +1506,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                             archetype={viewArchetype}
                             copy={isPrimaryView ? libidoCopy : null}
                             config={isPrimaryView ? libidoConfig : null}
-                            offerDeadline={offerDeadline}
                             onUnlock={() => unlockSection(section)}
                             quote={fullReportQuote}
                             sectionTitle={title}
@@ -1549,7 +1531,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                             archetype={viewArchetype}
                             copy={isPrimaryView ? partnershipCopy : null}
                             loop={isPrimaryView ? partnershipLoop : null}
-                            offerDeadline={offerDeadline}
                             onUnlock={() => unlockSection(section)}
                             quote={fullReportQuote}
                             sectionTitle={title}
@@ -1595,7 +1576,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                         <EnjoymentSection
                           archetype={viewArchetype}
                           copy={isPrimaryView ? enjoyCopy : null}
-                          offerDeadline={offerDeadline}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1637,7 +1617,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           archetype={viewArchetype}
                           copy={isPrimaryView ? growthCopy : null}
                           rungCount={isPrimaryView ? growthRungs : null}
-                          offerDeadline={offerDeadline}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1674,7 +1653,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           archetype={viewArchetype}
                           copy={isPrimaryView ? confidenceCopy : null}
                           strip={isPrimaryView ? confidenceStrip : null}
-                          offerDeadline={offerDeadline}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1720,7 +1698,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           archetype={viewArchetype}
                           copy={isPrimaryView ? beliefsCopy : null}
                           isUnlocked={isBeliefsUnlocked}
-                          offerDeadline={offerDeadline}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1761,7 +1738,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                         <AcceleratorsSection
                           archetype={viewArchetype}
                           copy={accelCopyForView}
-                          offerDeadline={offerDeadline}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1814,7 +1790,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           archetype={viewArchetype}
                           copy={isPrimaryView ? fantasyCopy : null}
                           dots={isPrimaryView ? fantasyDots : null}
-                          offerDeadline={offerDeadline}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={practiceSectionTitle}
@@ -1828,7 +1803,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                               hideOverlay={isPrimaryView && fantasyCopy?.locked === true}
                               isPremium={section.isPremium}
                               isUnlocked={isBackendUnlocked}
-                              offerDeadline={offerDeadline}
                               onUnlock={() => unlockSection(section)}
                               quote={fullReportQuote}
                               sectionTitle={practiceSectionTitle}
@@ -1874,7 +1848,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                         <ReadingSection
                           archetype={viewArchetype}
                           copy={isPrimaryView ? readingCopy : null}
-                          offerDeadline={offerDeadline}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1909,7 +1882,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                         isPremium={section.isPremium}
                         isStageValueLocked={isStageValueLocked}
                         isUnlocked={isBackendUnlocked}
-                        offerDeadline={offerDeadline}
                         onUnlock={() => unlockSection(section)}
                         quote={fullReportQuote}
                         sectionId={section.id}
@@ -1950,7 +1922,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
         onClose={onClosePricingModal}
         onUnlock={onBeginCheckout}
         quotes={pricingQuotes}
-        offerDeadline={offerDeadline}
         returnFocusRef={mainContentRef}
         targetArchetype={pricingTargetArchetype}
         primaryArchetype={primaryArchetype}
@@ -2070,147 +2041,38 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   // dev_session) viewers still resolve to their own report.
   const resolvedReportToken = token ?? data?.ownerToken ?? null;
 
-  // The paywall countdown deadline (client-only; a sessionStorage entry keyed by
-  // token/session, kept out of the render path so it can't cause a hydration
-  // mismatch). The window survives view switches + reopening the modal within the
-  // tab.
-  //
-  // It is ARMED on reaching the first paywalled chapter — the same moment that
-  // arms the plans pop-up (Eman, 2026-08-19) — not on page load. Reading the
-  // report for ten minutes before getting there no longer burns the clock down to
-  // 00:00 before the offer has been made. On mount we only PEEK: an entry already
-  // in storage means this tab has seen the paywall, so that clock keeps running.
-  const [offerDeadline, setOfferDeadline] = useState<number | undefined>(undefined);
-  const offerDeadlineSetRef = useRef(false);
-  useEffect(() => {
-    // Lock in on the first stable storage key (token or session). Re-resolving
-    // when `ownerToken` arrives later for session-based access would key a
-    // different sessionStorage entry and make the visible timer jump.
-    if (offerDeadlineSetRef.current) return;
-    if (!resolvedReportToken && !sessionId) return;
-    const running = peekReportPaywallDeadline({ token: resolvedReportToken, sessionId });
-    if (running == null) return;
-    offerDeadlineSetRef.current = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- client-only sessionStorage read, fires once
-    setOfferDeadline(running);
-  }, [resolvedReportToken, sessionId]);
+  /**
+   * The prices the page loaded with. Nothing moves them mid-session any more: the
+   * +2 EUR urgency surcharge — the only thing that ever re-priced a live report —
+   * was removed on 2026-08-31 along with its countdown.
+   */
+  const pricingQuotes = data?.pricingQuotes ?? null;
 
   /**
-   * Prices re-read from the server after the urgency window closes.
+   * Tell the server the reader reached the paywall.
    *
-   * The report's quotes are fetched once, at load, which is BEFORE the countdown even
-   * arms. When the window closes the server's price goes up by the surcharge, so
-   * without this the page would keep showing the old number while checkout charged the
-   * new one — the one thing this feature must never do.
+   * This POST used to arm the urgency window as well. What is left is the reason it
+   * has to stay: it is the only SERVER-SIDE evidence that a reader got here, so the
+   * Slack journey message can fill its "Paywall hit" step. The `paywall_initiated`
+   * analytics event cannot do that job — it lives in the consent-gated table.
+   *
+   * Self-skipping after the first call, so reopening the pop-up is free.
    */
-  const [refreshedQuotes, setRefreshedQuotes] = useState<Record<
-    ReportPurchasePlanId,
-    ReportPriceQuoteSnapshot
-  > | null>(null);
-
-  /**
-   * The prices in force right now: the ones re-read after the urgency window closed if
-   * we have them, else the ones the page loaded with. Everything that displays or
-   * caches a price reads THIS, so no surface can be left showing the pre-surcharge
-   * figure.
-   */
-  const effectiveQuotes = refreshedQuotes ?? data?.pricingQuotes ?? null;
-
-  const refreshPricingQuotes = useCallback(async () => {
+  const paywallReachedRef = useRef(false);
+  const notifyPaywallReached = useCallback(() => {
+    if (paywallReachedRef.current) return;
     if (!resolvedReportToken && !sessionId) return;
-    const params = new URLSearchParams();
-    if (resolvedReportToken) params.set("token", resolvedReportToken);
-    else if (sessionId) params.set("reportSessionId", sessionId);
-    const storedPricingSessionId = getReportPricingSessionId({
-      sessionId,
-      token: resolvedReportToken,
+    paywallReachedRef.current = true;
+    void fetch("/api/price", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-csrf-token": getCsrfToken() ?? "" },
+      body: JSON.stringify(
+        resolvedReportToken ? { token: resolvedReportToken } : { reportSessionId: sessionId }
+      ),
+    }).catch(() => {
+      // Best-effort: a missed ping costs one funnel step, never the reader's session.
     });
-    if (storedPricingSessionId) params.set("pricingSessionId", storedPricingSessionId);
-    try {
-      const response = await fetch(`/api/price?${params.toString()}`, {
-        headers: { "x-csrf-token": getCsrfToken() ?? "" },
-      });
-      if (!response.ok) return;
-      const payload = (await response.json()) as {
-        quotes?: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
-      };
-      if (payload.quotes) setRefreshedQuotes(payload.quotes);
-    } catch {
-      // Leave the prices as they are. The checkout page re-reads them anyway, so the
-      // worst case is a stale figure on this page for one navigation — never a charge
-      // that disagrees with a page the reader actually paid from.
-    }
   }, [resolvedReportToken, sessionId]);
-
-  // Start the clock. Idempotent: the first caller creates the deadline, everyone
-  // after reads the same one, so the number in the pop-up, the sticky bar and every
-  // locked chapter card always agree.
-  //
-  // The deadline is ARMED ON THE SERVER too, on the quote row, because the price
-  // depends on it: a browser-only clock could be reset by opening the report in a new
-  // tab. The server's answer wins — including when it hands back a window that closed
-  // days ago, which is how "once expired, expired" survives a fresh browser.
-  const armPaywallCountdown = useCallback(() => {
-    if (offerDeadlineSetRef.current) return;
-    if (!resolvedReportToken && !sessionId) return;
-    offerDeadlineSetRef.current = true;
-    setOfferDeadline(getReportPaywallDeadline({ token: resolvedReportToken, sessionId }));
-
-    void (async () => {
-      try {
-        const response = await fetch("/api/price", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-csrf-token": getCsrfToken() ?? "" },
-          body: JSON.stringify({
-            ...(resolvedReportToken
-              ? { token: resolvedReportToken }
-              : { reportSessionId: sessionId }),
-            ...(() => {
-              const pricingSessionId = getReportPricingSessionId({
-                sessionId,
-                token: resolvedReportToken,
-              });
-              return pricingSessionId ? { pricingSessionId } : {};
-            })(),
-          }),
-        });
-        if (!response.ok) return;
-        const payload = (await response.json()) as { urgencyDeadlineAt?: string | null };
-        if (!payload.urgencyDeadlineAt) return;
-        const serverDeadline = Date.parse(payload.urgencyDeadlineAt);
-        if (Number.isNaN(serverDeadline)) return;
-        setOfferDeadline(serverDeadline);
-        // An already-closed window means this reader's price is the higher one, and the
-        // page is holding the pre-surcharge figures it loaded with.
-        if (serverDeadline <= Date.now()) void refreshPricingQuotes();
-      } catch {
-        // The visible timer still runs off the local deadline; the price simply stays
-        // at the base until a surface re-reads it.
-      }
-    })();
-  }, [refreshPricingQuotes, resolvedReportToken, sessionId]);
-
-  // Fire one "countdown expired" event when the shared urgency timer
-  // elapses DURING this session — only if time actually remained when it was
-  // armed and the report is still locked. Returning visitors who land after it already
-  // expired never schedule it; a purchase mid-session cancels it (dep re-run).
-  const countdownExpiredFiredRef = useRef(false);
-  useEffect(() => {
-    if (countdownExpiredFiredRef.current) return;
-    if (offerDeadline == null) return;
-    const plan = data?.accessPlan;
-    if (plan === "full_report" || plan === "all_reports") return;
-    const msLeft = offerDeadline - Date.now();
-    if (msLeft <= 0) return;
-    const id = window.setTimeout(() => {
-      countdownExpiredFiredRef.current = true;
-      trackPaywallCountdownExpired(data?.primaryArchetype ?? null);
-      // The window just closed: re-read the prices so every surface shows the surcharge
-      // the checkout is about to apply.
-      void refreshPricingQuotes();
-    }, msLeft);
-    return () => window.clearTimeout(id);
-  }, [offerDeadline, data?.accessPlan, data?.primaryArchetype, refreshPricingQuotes]);
 
   const reportViewedFiredRef = useRef(false);
   useEffect(() => {
@@ -2292,11 +2154,9 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       if (scrollTeaserFiredRef.current || plansOfferedRef.current) return;
       scrollTeaserFiredRef.current = true;
       plansOfferedRef.current = true;
-      // Start the countdown NOW, on arrival — not after the 1.6s settle beat and
-      // not when the modal mounts. The locked chapter's own card shows the same
-      // countdown, and the reader sees that card as they arrive, so arming here is
-      // what keeps the two numbers identical.
-      armPaywallCountdown();
+      // Report the paywall on ARRIVAL, not after the 1.6s settle beat — the reader
+      // has reached it whether or not they wait for the pop-up to fade in.
+      notifyPaywallReached();
       scrollTeaserTimerRef.current = setTimeout(() => {
         if (!isPricingModalOpenRef.current) {
           // Pricing 2.0: the scroll pop-up shows the NEW 3-tier plans modal
@@ -2319,15 +2179,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       document.getElementById("typical_beliefs") ??
       document.getElementById("snapshot");
 
-    // ARM THE CLOCK ON THE FIRST OFFER THE READER ACTUALLY SEES.
+    // COUNT THE PAYWALL FROM THE FIRST OFFER THE READER ACTUALLY SEES.
     //
-    // Every locked chapter's card prints "Time left to secure this price" over this
-    // same countdown, and with no deadline the digits render 00:00 — a dead offer.
-    // While the pop-up sat on the first paywalled chapter that could not happen: no
-    // card was ever on screen before it fired. Now that it waits for Attachment, the
-    // two half-shown chapters come first, so the clock is armed by whichever paywall
-    // card arrives first instead. `armPaywallCountdown` is idempotent, so the pop-up
-    // arming it again later is a no-op and every number still agrees.
+    // The pop-up waits for Attachment Style, but two half-shown locked chapters come
+    // before it, so a reader meets the paywall earlier than the pop-up fires. Whichever
+    // arrives first reports it; `notifyPaywallReached` is idempotent, so the pop-up
+    // reporting it again later is a no-op.
     const firstOfferCard = document.querySelector(".report-premium-overlay");
     let cardObserver: IntersectionObserver | null = null;
     if (firstOfferCard) {
@@ -2336,7 +2193,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           if (!entries.some((entry) => entry.isIntersecting)) return;
           cardObserver?.disconnect();
           cardObserver = null;
-          armPaywallCountdown();
+          notifyPaywallReached();
         },
         { threshold: 0, rootMargin: "0px 0px -25% 0px" }
       );
@@ -2388,10 +2245,9 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
 
     // Landing BELOW the chapter — a deep link, or the browser restoring a scroll
     // position on reload — means it was passed before any of this existed. Checked
-    // once here so such a reader gets an anchored countdown rather than the
-    // provider's unanchored fallback ticking in every locked chapter card until
-    // their first scroll. It cannot misfire at the top of the report: everything
-    // above this chapter is far taller than three quarters of a viewport.
+    // once here so such a reader still gets the offer. It cannot misfire at the top
+    // of the report: everything above this chapter is far taller than three quarters
+    // of a viewport.
     if (hasReachedTrigger()) {
       openPlans();
     }
@@ -2411,7 +2267,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
 
     function stop() {
       observer.disconnect();
-      // The card observer arms the countdown and is independent of the pop-up, but it
+      // The card observer reports the paywall independently of the pop-up, but it
       // must not outlive the effect either.
       cardObserver?.disconnect();
       cardObserver = null;
@@ -2430,18 +2286,15 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       }
       scrollTeaserFiredRef.current = false;
     };
-  }, [accessPlan, armPaywallCountdown, data, viewMode, shouldShowOfferVariant]);
+  }, [accessPlan, notifyPaywallReached, data, viewMode, shouldShowOfferVariant]);
 
-  // Any other route to the paywall also starts the clock: an ?offer=1 email
-  // deep-link, the 24h ladder auto-open, and every
-  // manual "Unlock" CTA. Whichever comes first arms it; the rest read the same
-  // deadline. Without this a reader who clicked a locked chapter before reaching
-  // Typical Beliefs would see a countdown that was never anchored.
+  // Every other route to the paywall reports it too: an ?offer=1 email deep-link,
+  // the 24h ladder auto-open, and every manual "Unlock" CTA. Whichever comes first
+  // sends the ping; the rest are no-ops.
   useEffect(() => {
     if (!isPricingModalOpen) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot, guarded by offerDeadlineSetRef: arms on the first paywall open and never again
-    armPaywallCountdown();
-  }, [isPricingModalOpen, armPaywallCountdown]);
+    notifyPaywallReached();
+  }, [isPricingModalOpen, notifyPaywallReached]);
 
   const apiUnlocked = data?.unlockedArchetypes;
   const primaryArchetypeFromData = data?.primaryArchetype;
@@ -2523,7 +2376,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
    * absence costs the value, not the event.
    */
   const beginCheckout = (plan: ReportPurchasePlanId, archetype?: string | null) => {
-    const quote = effectiveQuotes?.[plan];
+    const quote = pricingQuotes?.[plan];
     trackBeginCheckout(plan, quote ? quote.chargedPriceCents / 100 : null, quote?.currency ?? null);
     if (quote) {
       cacheReportCheckoutQuote({
@@ -2668,20 +2521,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       return ia - ib;
     });
 
-  // One shared countdown ticker for the whole locked report — drives the locked
-  // chapter cards AND the pricing modal (it reads the value through the portal
-  // via React context) from a single interval, so every timer shows the exact
-  // same MM:SS.
-  const reportLocked = data.accessPlan !== "full_report" && data.accessPlan !== "all_reports";
-  // Active while the report isn't fully unlocked, and additionally whenever a
-  // pricing surface is open. A `full_report` customer upgrading to `all_reports`
-  // (locked archetype tile -> pricing modal) is NOT "locked", so keying purely on
-  // that would leave the modal's own tiles frozen now that it reads this shared
-  // value instead of running a second interval.
-  const countdownActive = reportLocked || isPricingModalOpen;
-
   return (
-    <PaywallCountdownProvider deadline={offerDeadline ?? null} active={countdownActive}>
+    <>
       <ReportExperience
         key={`${token ?? "browser"}:${sessionId ?? "anon"}`}
         devParam={devParam}
@@ -2691,7 +2532,6 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         isPricingModalOpen={isPricingModalOpen}
         isShareModalOpen={isShareModalOpen}
         matchScore={matchScore}
-        offerDeadline={offerDeadline}
         onBeginCheckout={beginCheckout}
         onClosePricingModal={closePricingModal}
         onCloseShareModal={closeShareModal}
@@ -2703,7 +2543,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         percentages={percentages}
         placeholderValues={placeholderValues}
         primaryArchetype={primaryArchetype}
-        pricingQuotes={effectiveQuotes}
+        pricingQuotes={pricingQuotes}
         archetypeContent={data.archetypeContent ?? {}}
         practiceTendencies={data.practiceTendencies ?? {}}
         pricingTargetArchetype={pricingTargetArchetype}
@@ -2760,13 +2600,13 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       />
       {data.accessPlan !== "full_report" && data.accessPlan !== "all_reports" && (
         <ReportStickyUnlockBar
-          quote={effectiveQuotes?.full_report ?? null}
+          quote={pricingQuotes?.full_report ?? null}
           onCheckout={() => beginCheckout("full_report", effectiveViewArchetype)}
           hidden={isPricingModalOpen || isShareModalOpen}
           archetype={effectiveViewArchetype}
         />
       )}
-    </PaywallCountdownProvider>
+    </>
   );
 };
 

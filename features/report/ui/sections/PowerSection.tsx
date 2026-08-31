@@ -61,7 +61,6 @@ export interface PowerCopy {
 interface Props {
   archetype: string;
   copy: PowerCopy | null;
-  offerDeadline?: number;
   onUnlock: () => void;
   quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
@@ -285,7 +284,6 @@ const PowerPlane: FC<{ archetype: string; youZoneLabel: string | null }> = ({
 const PowerSection: FC<Props> = ({
   archetype,
   copy,
-  offerDeadline,
   onUnlock,
   quote = null,
   sectionTitle,
@@ -343,7 +341,6 @@ const PowerSection: FC<Props> = ({
                 sectionTitle={sectionTitle}
                 tier={tier}
                 quote={quote}
-                offerDeadline={offerDeadline}
                 onUnlock={onUnlock}
               />
             </div>

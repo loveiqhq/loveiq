@@ -79,9 +79,8 @@ const PERSISTED_EVENTS = new Set([
   "experiment_exposure",
   "scroll_paywall_shown",
   "experiment_card_flipped",
-  // Locked-chapter-card paywall surface (price + countdown shown inline)
+  // Locked-chapter-card paywall surface (inline price)
   "locked_card_price_shown",
-  "paywall_countdown_expired",
 ]);
 
 /**
@@ -619,8 +618,8 @@ export interface PriceShownParams {
   plan: "essentials" | "full_report" | "core" | "all_reports";
   /**
    * Final EUR amount the user sees — post-multipliers, post-ladder, normalized, and
-   * INCLUDING the urgency surcharge when it applies, because this is meant to be what
-   * was on screen. See `surcharge` for how much of it that was.
+   * What was actually on screen — the charged price, the same number the Stripe
+   * line item uses.
    */
   price: number;
   /** ISO currency code, e.g. "EUR". */
@@ -641,12 +640,6 @@ export interface PriceShownParams {
   msrp?: number;
   /** Initial price before ladder discount. */
   initial_price?: number;
-  /**
-   * The urgency surcharge included in `price` (EUR, 0 when the reader's countdown was
-   * still running). Sent so the two cohorts can be separated without having to infer
-   * them from the amount.
-   */
-  surcharge?: number;
 }
 
 /**
@@ -704,7 +697,7 @@ export const trackBeginCheckout = (
 
 /**
  * Fires once per report the first time a LOCKED CHAPTER CARD renders a live
- * price + urgency countdown (the `PremiumOverlay` surface — distinct from the
+ * price (the `PremiumOverlay` surface — distinct from the
  * pricing modal's `price_shown`). Lets the funnel measure the inline card as
  * its own price-exposure surface, tagged `surface: "locked_chapter_card"`.
  * Caller dedupes to one fire per report load.
@@ -716,19 +709,6 @@ export const trackLockedCardPriceShown = (params: PriceShownParams) => {
   } as unknown as Record<string, unknown>;
   track("locked_card_price_shown", payload);
   persistAnalyticsEvent("locked_card_price_shown", payload);
-};
-
-/**
- * Fires once per report when the shared urgency countdown reaches
- * 0:00 *during the session* (the same deadline drives the modal + every locked
- * card). Powers "did the timer expire before they bought?" urgency analysis.
- * Not fired for returning visitors who land after the deadline already passed.
- * Caller dedupes + only schedules when time remains.
- */
-export const trackPaywallCountdownExpired = (archetype?: string | null) => {
-  const params = { ...(archetype ? { archetype } : {}) };
-  track("paywall_countdown_expired", params);
-  persistAnalyticsEvent("paywall_countdown_expired", params);
 };
 
 /**

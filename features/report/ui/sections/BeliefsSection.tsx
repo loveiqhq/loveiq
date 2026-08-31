@@ -38,7 +38,6 @@ interface Props {
   archetype: string;
   copy: BeliefsCopy | null;
   isUnlocked: boolean;
-  offerDeadline?: number;
   onUnlock: () => void;
   quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
@@ -97,7 +96,6 @@ const BeliefsSection: FC<Props> = ({
   archetype,
   copy,
   isUnlocked,
-  offerDeadline,
   onUnlock,
   quote = null,
   sectionTitle,
@@ -200,7 +198,6 @@ const BeliefsSection: FC<Props> = ({
                 sectionTitle={sectionTitle}
                 tier={tier}
                 quote={quote}
-                offerDeadline={offerDeadline}
                 onUnlock={onUnlock}
               />
             </div>

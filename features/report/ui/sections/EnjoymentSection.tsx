@@ -56,7 +56,6 @@ export interface EnjoyCopy {
 interface Props {
   archetype: string;
   copy: EnjoyCopy | null;
-  offerDeadline?: number;
   onUnlock: () => void;
   quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
@@ -93,7 +92,6 @@ const ResultRow: FC<{ row: Row }> = ({ row }) => (
 const EnjoymentSection: FC<Props> = ({
   archetype,
   copy,
-  offerDeadline,
   onUnlock,
   quote = null,
   sectionTitle,
@@ -160,7 +158,6 @@ const EnjoymentSection: FC<Props> = ({
                 sectionTitle={sectionTitle}
                 tier={tier}
                 quote={quote}
-                offerDeadline={offerDeadline}
                 onUnlock={onUnlock}
               />
             </div>

@@ -72,7 +72,6 @@ interface Props {
    * row2/row3 labels. `null` falls back to universal copy labels.
    */
   family: string | null;
-  offerDeadline?: number;
   onUnlock: () => void;
   quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
@@ -362,7 +361,6 @@ const AttachmentPatternsSection: FC<Props> = ({
   copy,
   plane,
   family,
-  offerDeadline,
   onUnlock,
   quote = null,
   sectionTitle,
@@ -650,7 +648,6 @@ const AttachmentPatternsSection: FC<Props> = ({
           sectionTitle={sectionTitle}
           tier={tier}
           quote={quote}
-          offerDeadline={offerDeadline}
           onUnlock={onUnlock}
         />
       ) : null}

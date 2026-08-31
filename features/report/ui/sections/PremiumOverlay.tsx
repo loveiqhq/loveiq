@@ -1,11 +1,6 @@
 "use client";
 
-import { useState, type FC } from "react";
-import {
-  PaywallCountdownDigits,
-  usePaywallCountdownValue,
-} from "@features/report/ui/PaywallCountdown";
-import { REPORT_PAYWALL_COUNTDOWN_MS } from "@features/survey/ui/hooks/surveySession";
+import { type FC } from "react";
 import {
   formatReportPurchasePrice,
   getReportPurchaseBadgeFromPrice,
@@ -31,16 +26,9 @@ interface Props {
    * Live full-report price quote. When present the card renders the real
    * price / strike / "you save" / discount badge (never Figma placeholders),
    * matching the paywall modal exactly. Null while pricing is unavailable —
-   * the card then hides the price block but still shows the countdown + CTA.
+   * the card then hides the price block but still shows the CTA.
    */
   quote?: ReportPriceQuoteSnapshot | null;
-  /**
-   * Shared epoch-ms deadline for the urgency countdown (resolved once per
-   * report session by ReportPage, persisted in sessionStorage). Passing the
-   * same value to the modal and every card keeps all timers in lock-step.
-   * Falls back to a fresh 3-minute window when omitted.
-   */
-  offerDeadline?: number;
 }
 
 const LockIcon: FC = () => (
@@ -109,13 +97,13 @@ const FlaskIcon: FC = () => (
 // `tier` stays on Props — all sixteen call sites pass it and it still describes
 // which plan opens the section — but nothing renders it now that the badge is gone,
 // so it is deliberately not destructured.
-const PremiumOverlay: FC<Props> = ({ onUnlock, quote = null, offerDeadline }) => {
+const PremiumOverlay: FC<Props> = ({ onUnlock, quote = null }) => {
   // ── Live pricing — identical computation to the paywall modal so the card
   //    and modal always agree. ────────────────────────────────────────────────
-  // `chargedPriceCents` — the base price PLUS the urgency surcharge once this reader's
-  // countdown has run out. Every price surface and the Stripe line item read the same
-  // field, so what the card promises is what the invoice says. `strikeEligible` below
-  // then hides the anchor automatically for buckets whose MSRP the surcharge overtakes.
+  // Every price surface and the Stripe line item read `chargedPriceCents`, so what
+  // the card promises is what the invoice says. `strikeEligible` hides the anchor
+  // for any bucket priced at or above its own MSRP rather than advertising a
+  // strike-through that is not a saving.
   const currentCents = quote?.chargedPriceCents ?? 0;
   const msrpCents = quote?.msrpCents ?? null;
   const strikeEligible = typeof msrpCents === "number" && msrpCents > currentCents;
@@ -128,16 +116,6 @@ const PremiumOverlay: FC<Props> = ({ onUnlock, quote = null, offerDeadline }) =>
   const badge = quote
     ? getReportPurchaseBadgeFromPrice({ strikeCents: msrpCents, currentCents })
     : null;
-
-  // ── Countdown — same drift-free hook + shared deadline as the modal. ────────
-  const [fallbackDeadline] = useState(() =>
-    typeof window === "undefined" ? 0 : Date.now() + REPORT_PAYWALL_COUNTDOWN_MS
-  );
-  const deadline = offerDeadline ?? fallbackDeadline;
-  // Reads the shared report-level countdown (one interval for all cards) when
-  // rendered under a PaywallCountdownProvider; falls back to a local ticker with
-  // `deadline` when standalone (e.g. unit tests).
-  const { mm, ss } = usePaywallCountdownValue(deadline);
 
   // Green offer pill (Figma 8005:744): "⚡ {badge} OFF · SAVE €{save}". The badge
   // already reads "85% OFF"; append the merged "· SAVE €X" when we know the save.
@@ -163,19 +141,9 @@ const PremiumOverlay: FC<Props> = ({ onUnlock, quote = null, offerDeadline }) =>
             </span>
           ) : null}
 
-          <span className="report-premium-overlay__timer-label">
-            Time left to secure this price
-          </span>
-
           <div className="report-premium-overlay__price-line">
-            <PaywallCountdownDigits mm={mm} ss={ss} />
             {priceLabel ? (
-              <>
-                <span className="report-premium-overlay__arrow" aria-hidden="true">
-                  <ArrowIcon />
-                </span>
-                <span className="report-premium-overlay__price">{priceLabel}</span>
-              </>
+              <span className="report-premium-overlay__price">{priceLabel}</span>
             ) : null}
           </div>
 

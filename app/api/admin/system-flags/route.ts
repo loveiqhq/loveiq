@@ -30,16 +30,11 @@ const patchSchema = z.object({
 });
 
 // Toggleable from the admin panel. GET lists every row in the table, so a flag
-// missing from this set shows up in the UI and then refuses to move — which is
-// how `report_urgency_surcharge_enabled` shipped: it went live on 2026-08-23 with
-// no way to turn it off short of a hand-written database write. A live pricing
-// switch needs a kill switch someone can actually reach.
-const ALLOWED_KEYS = new Set([
-  "survey_submissions",
-  "nurture_sequence",
-  "report_paywall_enforced",
-  "report_urgency_surcharge_enabled",
-]);
+// missing from this set shows up in the UI and then refuses to move. That is how
+// the +2 EUR urgency surcharge shipped in August 2026: live pricing with no kill
+// switch anyone could reach short of a hand-written database write. Any flag with
+// a money consequence belongs in this set on the day it ships.
+const ALLOWED_KEYS = new Set(["survey_submissions", "nurture_sequence", "report_paywall_enforced"]);
 
 export async function GET() {
   const admin = await verifyAdminSession();
