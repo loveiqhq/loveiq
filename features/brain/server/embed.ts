@@ -82,7 +82,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function embedBatch(
   texts: string[],
-  opts: { attempts?: number; timeoutMs?: number } = {}
+  opts: { attempts?: number; timeoutMs?: number; isOutOfTime?: () => boolean } = {}
 ): Promise<number[][] | null> {
   // The BACKFILL wants persistence -- losing a batch means those chunks stay
   // unsearchable. A QUESTION wants to fail fast: it sits in front of a person
@@ -120,6 +120,20 @@ async function embedBatch(
       res.status === 546 || /WORKER_RESOURCE_LIMIT|BOOT_ERROR|timed out/i.test(detail);
     if (!transient || attempt === attempts - 1) {
       logger.warn({ status: res.status, detail, attempt }, "brain-embed: edge function refused");
+      return null;
+    }
+    /**
+     * STOP RETRYING WHEN THE CALLER IS OUT OF TIME.
+     *
+     * The backoff totals 22.5s across six attempts, and `embedMissing` only checked
+     * its budget BETWEEN batches — so one bad batch late in a run pushed the cron
+     * from its 40s budget past the 60s ceiling and Vercel killed it mid-flight
+     * (observed: brain-fast, 504 at 00:37). Giving up here costs nothing: the chunk
+     * stays NULL and the next run collects it, which is what the whole
+     * `embedding IS NULL` design is for.
+     */
+    if (opts.isOutOfTime?.()) {
+      logger.warn({ attempt }, "brain-embed: out of time, leaving the rest for the next run");
       return null;
     }
     await sleep(1500 * (attempt + 1));
@@ -170,7 +184,10 @@ export async function embedMissing(
     for (let i = 0; i < rows.length; i += EMBED_BATCH) {
       if (isOutOfTime()) break;
       const slice = rows.slice(i, i + EMBED_BATCH);
-      const vectors = await embedBatch(slice.map((r) => embedText(r.title, r.body)));
+      const vectors = await embedBatch(
+        slice.map((r) => embedText(r.title, r.body)),
+        { isOutOfTime }
+      );
       if (!vectors || vectors.length !== slice.length) {
         logger.warn(
           { asked: slice.length, got: vectors?.length ?? 0 },

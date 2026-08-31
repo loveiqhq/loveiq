@@ -14,6 +14,20 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
   }),
 }));
 
+let chunkRows: Array<{ id: number; title: string; body: string }> = [];
+vi.mock("@features/admin/server/supabase", () => ({
+  supabaseFetch: vi.fn(async (path: string) => {
+    if (path.includes("select=id,title,body")) {
+      return { ok: true, headers: new Headers(), json: async () => chunkRows };
+    }
+    return {
+      ok: true,
+      headers: new Headers({ "content-range": "*/0" }),
+      json: async () => [],
+    };
+  }),
+}));
+
 import { embedQuery } from "@features/brain/server/embed";
 
 beforeEach(() => {
@@ -56,5 +70,45 @@ describe("embedQuery is on the path of every question", () => {
   it("does not call the edge function for a question too short to mean anything", async () => {
     expect(await embedQuery(" a ")).toBeNull();
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe("embedding must never outlive the cron that called it", () => {
+  /**
+   * THE 504 THIS PREVENTS. The backoff totals 22.5 seconds across six attempts, and
+   * `embedMissing` only checked its budget BETWEEN batches — so one bad batch late
+   * in a run pushed brain-fast from its 40s budget past the 60s ceiling and Vercel
+   * killed it mid-flight (observed 2026-08-31 00:37). Smaller batches made it
+   * likelier by creating more chances to hit a bad one.
+   */
+  it("abandons its retries once the caller runs out of time mid-batch", async () => {
+    respond = () => new Response("WORKER_RESOURCE_LIMIT", { status: 546 });
+    const { embedMissing } = await import("@features/brain/server/embed");
+
+    /**
+     * The budget must be spendable, not spent. `embedMissing` checks it BEFORE the
+     * first batch, so a clock that is already out of time returns immediately and
+     * never reaches the retry loop — a test written that way passes whether or not
+     * the guard exists, which is exactly how this nearly shipped untested.
+     */
+    chunkRows = Array.from({ length: 5 }, (_, i) => ({
+      id: i + 1,
+      title: `chunk ${i}`,
+      body: "some text long enough to be worth embedding",
+    }));
+
+    let calls = 0;
+    const isOutOfTime = () => {
+      calls += 1;
+      return calls > 2; // in budget for the first checks, out of it inside the retries
+    };
+
+    const t0 = Date.now();
+    const result = await embedMissing(isOutOfTime, 5);
+    const elapsed = Date.now() - t0;
+
+    expect(result.complete).toBe(false);
+    // The full backoff is 22.5s. Anything near that means the retries kept going.
+    expect(elapsed).toBeLessThan(6000);
   });
 });
