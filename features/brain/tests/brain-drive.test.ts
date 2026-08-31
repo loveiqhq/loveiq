@@ -279,9 +279,23 @@ describe("ingestDrive", () => {
     alwaysMorePages = true;
     files = [FILE];
     await ingestDrive(STAMP);
+    /**
+     * ASSERT ON A MARKER THIS CODE ACTUALLY EMITS.
+     *
+     * This used to filter for `updated_at=lt.`, which only `sweepStale`/`countChunks`
+     * in upsert.ts ever produce. drive imports `sweepMissing` alone and deletes by
+     * `source_id=in.(...)`, so the filtered array was ALWAYS empty and the assertion
+     * could never fail. Deleting `listed.complete &&` from the sweep gate left all 484
+     * tests passing — verified by mutation — while the real effect is deleting rows a
+     * truncated listing never saw.
+     *
+     * `brain_sweep_state` is written if and only if this run swept, so it is the
+     * unambiguous marker. The DELETE check is the belt to that braces.
+     */
     expect(
-      dbCalls.filter((c) => c.method === "GET" && c.path.includes("updated_at=lt."))
+      dbCalls.filter((c) => c.method === "POST" && c.path.includes("brain_sweep_state"))
     ).toHaveLength(0);
+    expect(dbCalls.filter((c) => c.method === "DELETE")).toHaveLength(0);
   });
 
   it("asks Drive only for native Google Docs, which are the only exportable kind", async () => {

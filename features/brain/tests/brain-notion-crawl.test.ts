@@ -331,10 +331,18 @@ describe("a run cut short must confirm what it could not refresh", () => {
 
     await ingestNotion(STAMP, () => false);
 
+    /**
+     * Same vacuous-probe bug as drive had: `updated_at=lt.` is emitted only by
+     * `sweepStale`/`countChunks`, and notion imports `sweepMissing` alone — so this
+     * filter was always empty and could never fail. Deleting `crawlComplete &&` from
+     * the sweep gate left all 484 tests green, verified by mutation, while the real
+     * effect is deleting a database's rows because ONE query 500'd.
+     */
     const sweepProbe = dbCalls.filter(
-      (c) => c.method === "GET" && c.path.includes("updated_at=lt.")
+      (c) => c.method === "POST" && c.path.includes("brain_sweep_state")
     );
     expect(sweepProbe.length).toBe(0);
+    expect(dbCalls.filter((c) => c.method === "DELETE")).toHaveLength(0);
     realFetch.mockImplementation(original);
   });
 });
