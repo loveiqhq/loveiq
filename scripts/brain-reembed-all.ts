@@ -53,12 +53,47 @@ async function main(): Promise<void> {
       process.exitCode = 1;
       return;
     }
-    const rows = (await res.json().catch(() => [])) as Array<{
+    /**
+     * AN UNREADABLE PAGE IS NOT AN EMPTY ONE, and conflating them stopped this
+     * backfill dead while reporting success.
+     *
+     * This used to be `.catch(() => [])`. An empty array means "reached the end", so
+     * the loop broke, the script printed `done:`, and the runner wrote DONE into the
+     * cursor file -- after which every future invocation exited immediately. Observed
+     * 2026-08-31: it declared itself finished at cursor 139,767 with 13,529 chunks
+     * above it still untouched, out of a max id of 287,665.
+     *
+     * Null is now distinguishable from empty, and only a genuinely empty page ends
+     * the walk.
+     */
+    const parsed = (await res.json().catch(() => null)) as Array<{
       id: number;
       title: string | null;
       body: string;
-    }>;
-    if (rows.length === 0) break;
+    }> | null;
+    if (!Array.isArray(parsed)) {
+      console.error(`unreadable page at cursor ${after} — re-run with cursor ${after}`);
+      process.exitCode = 1;
+      return;
+    }
+    const rows = parsed;
+    if (rows.length === 0) {
+      /**
+       * VERIFY THE END before claiming it. An empty page is the only thing standing
+       * between "finished" and a permanent DONE, so ask the database directly rather
+       * than trusting one response.
+       */
+      const check = await supabaseFetch(`/rest/v1/brain_chunk?select=id&id=gt.${after}&limit=1`);
+      const left = check.ok ? ((await check.json().catch(() => null)) as unknown[] | null) : null;
+      if (left === null || left.length > 0) {
+        console.error(
+          `refusing to report done: the corpus still has rows above ${after} — re-run with cursor ${after}`
+        );
+        process.exitCode = 1;
+        return;
+      }
+      break;
+    }
 
     for (let i = 0; i < rows.length; i += EMBED_BATCH) {
       const slice = rows.slice(i, i + EMBED_BATCH);
