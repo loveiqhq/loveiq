@@ -141,6 +141,8 @@ export const SOURCES_FOR_TEST = [
   "drive",
   "slack",
   "gmail",
+  "calendar",
+  "whatsapp",
 ];
 // `jira` is deliberately absent. The 1,037 issues in loveiq.atlassian.net are real
 // and actively updated, but `JIRA_API_TOKEN` has never been set, so the corpus holds
@@ -155,7 +157,8 @@ const TOOLS = [
       "Search LoveIQ's own written record: repository documentation, every git commit " +
       "(including the plain-English 'For Marcus:' summaries), the Notion workspace — both " +
       "the team board with each task's status, priority and assignee, and the written " +
-      "pages — the team's Slack conversations, the company email, and the notes from " +
+      "pages — the team's Slack conversations, the company email, the WhatsApp team group " +
+      "day by day, the calendar of who met whom, and the notes from " +
       "every recorded call, " +
       "plus dated business numbers (funnel, revenue, ad spend, GA4, Search " +
       "Console). Use this for " +
@@ -876,6 +879,7 @@ async function callTool(
       slack: "brain-fast",
       notion: "brain-notion",
       gmail: "brain-gmail",
+      calendar: "brain-calendar",
       gsc: "brain-ingest",
     };
 
@@ -914,6 +918,13 @@ async function callTool(
 
     const health = (source: string): string => {
       if (source === "doc" || source === "commit") return " · ingested on push to main";
+      /**
+       * WhatsApp has no cron ON PURPOSE. There is no API that can read an existing
+       * group, so it is pushed from a Mac running WhatsApp Desktop — see
+       * `scripts/whatsapp-sync.ts`. Saying so beats an empty slot that reads like a
+       * job nobody wired up.
+       */
+      if (source === "whatsapp") return " · pushed from WhatsApp Desktop, not a scheduled job";
       const cron = CRON_FOR_SOURCE[source];
       if (!cron) return "";
       const run = lastRun.get(cron);
@@ -1056,7 +1067,8 @@ export async function POST(request: Request) {
         "HISTORY, indexed and searchable: documentation, every git commit including the " +
         "plain-English 'For Marcus:' summaries, the whole Notion workspace (every database " +
         "and page, not just the task board), the team's Slack conversations day by day, the " +
-        "company email thread by thread, the " +
+        "company email thread by thread, the WhatsApp team group day by day, the calendar " +
+        "of meetings and who attended them, the " +
         "notes from every recorded call, and dated business numbers. Use " +
         "search_company_context, and list_sources when you need to know how fresh a source " +
         "is.\n\n" +

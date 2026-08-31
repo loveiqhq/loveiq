@@ -779,6 +779,46 @@ order by started_at desc limit 5;
 `last ingested` date is the write timestamp and moves on every run — including runs
 that fetched nothing at all.
 
+### WhatsApp — read from this Mac, not from an API
+
+There is **no way to read an existing WhatsApp group programmatically.** Meta's 2026
+Groups API covers only groups the business itself created, capped at 8 members. The
+unofficial libraries that can read a real group (Baileys, whatsapp-web.js, WAHA)
+work by impersonating a linked device over WhatsApp's protocol — that is the Terms
+of Service clause that gets numbers permanently banned, typically within 2-8 weeks,
+detected automatically.
+
+So the group is read where it already sits: **WhatsApp Desktop keeps every message
+in a plain SQLite file on the Mac**, and WhatsApp Desktop is a first-party linked
+device you use normally.
+
+```bash
+npx tsx scripts/whatsapp-sync.ts
+```
+
+That opens `~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite`
+READ-ONLY. It never speaks to WhatsApp's servers, so the automation clause does not
+apply — it is your own messages, at rest, on your own machine. Needs Full Disk Access
+for whatever runs it, because macOS protects the app container.
+
+**The safeguard.** That database holds every chat on the account, including private
+ones. The script is scoped to a single group JID and refuses to run without one — an
+allowlist, not a filter. No query in it can reach another conversation.
+
+Three things the schema will not tell you:
+
+- Group members are `@lid` identifiers now, not phone numbers, and `ZCONTACTNAME` is
+  empty. Readable names live only in `ZWAPROFILEPUSHNAME`.
+- `ZPUSHNAME` on the message row is an encoded blob, not a name. Join through
+  `ZGROUPMEMBER` to `ZWAPROFILEPUSHNAME` instead.
+- Dates are Core Data seconds from 2001-01-01; add 978307200 for a Unix timestamp.
+
+**It is not a cron**, and `list_sources` says so rather than showing an empty slot.
+It syncs when the Mac runs it. A linked desktop receives new messages live but pulls
+only a limited back-catalogue, so the history before linking comes from a one-off
+`Export chat → Without media` dropped in Drive — the Drive ingester parses that into
+the same per-day shape.
+
 ### Embeddings — semantic recall
 
 Every chunk carries a 384-dimension `gte-small` vector in `brain_chunk.embedding`

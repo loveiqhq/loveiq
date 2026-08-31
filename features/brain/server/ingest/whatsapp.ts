@@ -119,17 +119,32 @@ export function chatName(fileName: string): string {
  * is its own conversation and has to stay separately findable. The `#` in the id is
  * still what lets the Drive sweep track these alongside the file they came from.
  */
-export function whatsappRows(
-  fileId: string,
-  fileName: string,
-  webViewLink: string | null,
-  text: string,
-  stampedAt: string
-): BrainRow[] {
-  const messages = parseWhatsApp(text);
+export interface DayRowInput {
+  /** `drive` for an exported .txt sitting in Drive, `whatsapp` for the live desktop read. */
+  source: string;
+  /** Id prefix the day is appended to, e.g. `doc:<fileId>` or `wa:<groupJid>`. */
+  idBase: string;
+  chat: string;
+  url: string | null;
+  messages: WaMessage[];
+  stampedAt: string;
+}
+
+/**
+ * One chunk per DAY, like Slack.
+ *
+ * `meta.part` is deliberately NOT set. The ranker collapses a document to a single
+ * row when `part` is present, which is right for a long PDF and wrong here: each day
+ * is its own conversation and has to stay separately findable. The `#` in the id is
+ * still what lets a sweep track these alongside whatever they came from.
+ *
+ * Shared by both readers so an exported file and the live desktop read produce the
+ * same shape — otherwise the same conversation would look like two different sources.
+ */
+export function dayRows(input: DayRowInput): BrainRow[] {
+  const { source, idBase, chat, url, messages, stampedAt } = input;
   if (messages.length === 0) return [];
 
-  const name = chatName(fileName);
   const byDay = new Map<string, WaMessage[]>();
   for (const m of messages) {
     const list = byDay.get(m.day);
@@ -141,12 +156,12 @@ export function whatsappRows(
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([day, msgs]) => {
       const speakers = [...new Set(msgs.map((m) => m.sender).filter(Boolean))];
-      const title = `WhatsApp: ${name} — ${day}`;
+      const title = `WhatsApp: ${chat} — ${day}`;
       return {
-        source: "drive",
-        source_id: `doc:${fileId}#wa-${day}`,
+        source,
+        source_id: `${idBase}#wa-${day}`,
         title,
-        url: webViewLink,
+        url,
         body: [
           title,
           `Between: ${speakers.join(", ")}`,
@@ -155,7 +170,7 @@ export function whatsappRows(
         ].join("\n"),
         meta: {
           kind: "whatsapp-day",
-          chat: name,
+          chat,
           day,
           speakers: speakers.slice(0, 12),
           messages: msgs.length,
@@ -164,4 +179,22 @@ export function whatsappRows(
         period_end: day,
       } satisfies BrainRow;
     });
+}
+
+/** The Drive path: an exported .txt, parsed then chunked by day. */
+export function whatsappRows(
+  fileId: string,
+  fileName: string,
+  webViewLink: string | null,
+  text: string,
+  stampedAt: string
+): BrainRow[] {
+  return dayRows({
+    source: "drive",
+    idBase: `doc:${fileId}`,
+    chat: chatName(fileName),
+    url: webViewLink,
+    messages: parseWhatsApp(text),
+    stampedAt,
+  });
 }

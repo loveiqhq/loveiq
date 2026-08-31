@@ -36,5 +36,18 @@
     "package-lock.json"
   ],
   "ignoreRegExpList": ["/`[^`]+`/", "/```[\\s\\S]*?```/", "HexValues", "Urls", "EmailAddresses"],
-  "words": ["halfvec", "IVFFlat", "pgvector", "unpdf"]
+  "words": [
+    "Baileys",
+    "ChatStorage",
+    "halfvec",
+    "iCalUID",
+    "IVFFlat",
+    "pgvector",
+    "unpdf",
+    "WAHA",
+    "ZCONTACTNAME",
+    "ZGROUPMEMBER",
+    "ZPUSHNAME",
+    "ZWAPROFILEPUSHNAME"
+  ]
 }
