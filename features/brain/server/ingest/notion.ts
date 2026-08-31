@@ -676,7 +676,9 @@ export async function ingestNotion(
  * The ceiling itself stays: it is there so no single row can dominate a prompt.
  * The bug was losing content to it, not having it.
  */
-const BODY_LIMIT = 2400;
+/** The most text one chunk may hold. Must stay >= the embedding window, or the tail
+ *  of every long chunk becomes invisible to semantic search — see EMBED_CHARS. */
+export const BODY_LIMIT = 2400;
 const MIN_SPLIT = 600;
 
 /** Continuation ids already indexed for a page, e.g. `page:abc#2`, `#3`. */

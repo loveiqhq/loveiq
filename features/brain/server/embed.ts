@@ -26,7 +26,41 @@ import logger from "@shared/observability/logger";
  * earlier measurement using short synthetic sentences suggested 10 was safe and was
  * misleading — the limit is total text volume, not item count.
  */
-export const EMBED_BATCH = 8;
+/**
+ * Three, not eight — because the TEXT per item got longer (see `embedText`).
+ *
+ * MEASURED, and it disproved the obvious guess. The intuition was that the edge
+ * worker cares about bytes per REQUEST, so 5 x 2400 (12,031 B) should behave like
+ * 8 x 1500 (12,043 B). It does not: at the same payload size, 8 x 1500 succeeded 2/3
+ * while 5 x 2400 succeeded 0/3. The cost is per-TEXT length, not total bytes —
+ * transformer attention is quadratic in sequence length, so one long text costs far
+ * more than two short ones of the same total size.
+ *
+ * Sweeping at full 2,400-char length: 4 -> 3/4, 3 -> 3/4, 2 -> 4/4. Three is the
+ * balance; `embedBatch` already retries six times with backoff on 546, which covers
+ * the rest.
+ */
+export const EMBED_BATCH = 3;
+
+/**
+ * Embed the WHOLE chunk, not the first 1,500 characters of it.
+ *
+ * Chunks are built up to BODY_LIMIT (2,400), but this sliced at 1,500 — so the tail
+ * of every long chunk was invisible to semantic search. Measured on the live corpus:
+ * **17,859 of 25,015 chunks (71%) were longer than the window, and 12.1 million
+ * characters — roughly a third of everything the brain holds — could not be matched
+ * by meaning at all.**
+ *
+ * 1,500 looks like a guess at the model's token limit. It is not one: embedding the
+ * same text truncated at 1000/1500/1800/2000/2400 characters produces vectors that
+ * keep MOVING all the way out (cosine against the 1000-char version: 0.9891, 0.9894,
+ * 0.9862, 0.9577), so `gte-small` is demonstrably reading past 1,500 and the slice
+ * was simply throwing that text away.
+ *
+ * Matched to BODY_LIMIT so the unit of chunking and the unit of embedding are the
+ * same thing — which is the property that stops this drifting apart again.
+ */
+export const EMBED_CHARS = 2400;
 
 /** Rows fetched per pass. Larger than EMBED_BATCH so one database read feeds
  *  several embedding calls and one write puts them all back. */
@@ -36,7 +70,7 @@ const READ_BATCH = 100;
  *  sending more costs time and changes nothing. The title leads because it carries
  *  the most distinguishing words. */
 export function embedText(title: string | null, body: string): string {
-  return `${title ?? ""}\n${body}`.slice(0, 1500);
+  return `${title ?? ""}\n${body}`.slice(0, EMBED_CHARS);
 }
 
 /** Postgres reads a vector literal as `[0.1,0.2,…]`. */

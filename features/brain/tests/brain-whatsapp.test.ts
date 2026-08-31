@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   chatName,
+  dayRows,
   detectDayFirst,
   looksLikeWhatsAppExport,
   parseWhatsApp,
@@ -85,11 +86,67 @@ describe("parseWhatsApp", () => {
 });
 
 describe("whatsappRows — one chunk per DAY", () => {
-  it("splits the export by day and dates each chunk with that day", () => {
+  it("splits by conversation and dates each chunk with the day it happened", () => {
     const rows = whatsappRows("f1", "WhatsApp Chat with LoveIQ Team.txt", null, IOS_EXPORT, STAMP);
     expect(rows).toHaveLength(2);
     expect(rows.map((r) => r.period_end)).toEqual(["2026-08-06", "2026-08-07"]);
-    expect(rows[0]!.title).toBe("WhatsApp: LoveIQ Team — 2026-08-06");
+    // The time is in the title because one group covers every topic: a whole day
+    // in one chunk blurs the embedding and gives the title no topical word to match.
+    expect(rows[0]!.title).toBe("WhatsApp: LoveIQ Team — 2026-08-06 09:12");
+  });
+
+  it("starts a new chunk after a long silence, not only at midnight", () => {
+    /**
+     * A day of one group chat is not one subject. Measured on the real group:
+     * chunking per day put pricing, a bug report and a lunch plan in one body, and
+     * of three questions whose answers were demonstrably in the chat only one
+     * retrieved it. A 45-minute gap ends a conversation.
+     */
+    const morning = 1_754_460_000_000; // fixed epoch ms, no clock dependency
+    const msg = (at: number, text: string) => ({
+      day: "2026-08-06",
+      time: new Date(at).toISOString().slice(11, 16),
+      sender: "Marcus",
+      text,
+      at,
+    });
+    const rows = dayRows({
+      source: "whatsapp",
+      idBase: "wa:test",
+      chat: "LoveIQ",
+      url: null,
+      stampedAt: STAMP,
+      messages: [
+        msg(morning, "morning topic about pricing"),
+        msg(morning + 60_000, "still the same conversation"),
+        msg(morning + 3 * 3_600_000, "hours later, a totally different subject"),
+      ],
+    });
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.body).toContain("pricing");
+    expect(rows[1]!.body).toContain("different subject");
+  });
+
+  it("splits a very long conversation, because the writer clamps bodies at 2400", () => {
+    // Found in production: upsertChunks truncates silently, so an unsplit busy day
+    // simply lost its later messages with no error and no log.
+    const at = 1_754_460_000_000;
+    const rows = dayRows({
+      source: "whatsapp",
+      idBase: "wa:test",
+      chat: "LoveIQ",
+      url: null,
+      stampedAt: STAMP,
+      messages: Array.from({ length: 60 }, (_, i) => ({
+        day: "2026-08-06",
+        time: "09:12",
+        sender: "Marcus",
+        text: `a reasonably long sentence about the report and the paywall number ${i}`,
+        at: at + i * 1000,
+      })),
+    });
+    expect(rows.length).toBeGreaterThan(1);
+    for (const r of rows) expect(r.body.length).toBeLessThanOrEqual(2400);
   });
 
   /**

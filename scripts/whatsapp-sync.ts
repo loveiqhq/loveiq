@@ -81,11 +81,31 @@ async function main(): Promise<void> {
     if (r.jid && r.name) names.set(r.jid, r.name);
   }
 
+  /**
+   * TAKE THE CAPTION TOO, NOT JUST `ZTEXT`.
+   *
+   * A first pass read `ZTEXT` alone and silently dropped 111 of 614 messages — 18%
+   * of the group. They are not empty: a photo or voice note posted with a caption
+   * stores that caption on the MEDIA row as `ZTITLE`, and those captions are real
+   * sentences ("Traffic has been stable over the last 4 weeks…", "I am capturing all
+   * insights and what I think we should do…"). Losing them loses arguments.
+   *
+   * Checked the other way round too: every column in both tables was enumerated for
+   * this chat. `ZVCARDSTRING` is a MIME type, `ZVCARDNAME` a hash, `ZMEDIAURL` an
+   * expiring CDN link — none are content. External links do appear in `ZMETADATA`,
+   * but all 44 of those messages already carry the link in `ZTEXT`, so nothing is
+   * lost by ignoring it.
+   */
   const rows = query<{ ts: number; text: string | null; mine: number; jid: string | null }>(
-    `select m.ZMESSAGEDATE as ts, m.ZTEXT as text, m.ZISFROMME as mine, g.ZMEMBERJID as jid
+    `select m.ZMESSAGEDATE as ts,
+            coalesce(nullif(m.ZTEXT, ''), nullif(i.ZTITLE, '')) as text,
+            m.ZISFROMME as mine,
+            g.ZMEMBERJID as jid
        from ZWAMESSAGE m
        left join ZWAGROUPMEMBER g on g.Z_PK = m.ZGROUPMEMBER
-      where m.ZCHATSESSION = ${session.pk} and m.ZTEXT is not null and m.ZTEXT <> ''
+       left join ZWAMEDIAITEM i on i.ZMESSAGE = m.Z_PK
+      where m.ZCHATSESSION = ${session.pk}
+        and coalesce(nullif(m.ZTEXT, ''), nullif(i.ZTITLE, '')) is not null
       order by m.ZMESSAGEDATE asc;`
   );
 
@@ -97,24 +117,37 @@ async function main(): Promise<void> {
       time: at.toISOString().slice(11, 16),
       sender: r.mine ? "Eman" : (r.jid && names.get(r.jid)) || "someone",
       text: r.text ?? "",
+      at: at.getTime(),
     };
   });
 
+  const stampedAt = new Date().toISOString();
   const chunks = dayRows({
     source: "whatsapp",
     idBase: `wa:${GROUP_JID}`,
     chat: CHAT_NAME,
     url: null,
     messages,
-    stampedAt: new Date().toISOString(),
+    stampedAt,
   });
 
-  const { upsertChunks } = await import("@features/brain/server/ingest/upsert");
+  const { upsertChunks, sweepStale } = await import("@features/brain/server/ingest/upsert");
   const written = await upsertChunks(chunks);
+
+  /**
+   * Remove chunks this run did not write.
+   *
+   * Without it, changing how the chat is cut leaves the previous shape behind as
+   * orphans — the day-chunks this replaced would have sat there forever answering
+   * questions with stale, truncated copies of the same conversation. `sweepStale`
+   * has the majority guard, so a bad run cannot wipe the source.
+   */
+  const swept = await sweepStale("whatsapp", stampedAt, written);
 
   const days = new Set(messages.map((m) => m.day));
   console.log(
-    `${CHAT_NAME}: ${messages.length} messages across ${days.size} days -> ${written} chunks written`
+    `${CHAT_NAME}: ${messages.length} messages across ${days.size} days -> ` +
+      `${written} chunks written, ${swept} stale swept`
   );
   console.log(`speakers: ${[...new Set(messages.map((m) => m.sender))].join(", ")}`);
 }

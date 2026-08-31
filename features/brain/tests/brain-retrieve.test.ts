@@ -289,3 +289,28 @@ describe("semantic recall must never break search", () => {
     expect(src).toMatch(/return first \? toVectorLiteral\(first\) : null;/);
   });
 });
+
+describe("the embedding window must cover the whole chunk", () => {
+  /**
+   * THE BUG THIS PREVENTS. Chunks are built up to BODY_LIMIT (2,400 characters) but
+   * `embedText` sliced at 1,500 — so the tail of every long chunk was invisible to
+   * semantic search. Measured on the live corpus before the fix: 17,859 of 25,015
+   * chunks (71%) were longer than the window, and 12.1 million characters — roughly
+   * a third of everything the brain holds — could not be matched by meaning at all.
+   *
+   * The two constants live in different files and drifted silently. This ties them
+   * together so the next person who changes one is told about the other.
+   */
+  it("embeds at least as many characters as a chunk can contain", async () => {
+    const { EMBED_CHARS } = await import("@features/brain/server/embed");
+    const { BODY_LIMIT } = await import("@features/brain/server/ingest/notion");
+    expect(EMBED_CHARS).toBeGreaterThanOrEqual(BODY_LIMIT);
+  });
+
+  it("keeps the batch small enough for the longer texts", async () => {
+    // Measured: at 2,400 chars, 5-per-batch failed 0/3 and 3-per-batch passed 3/4.
+    // Cost is per-TEXT length, not payload bytes — attention is quadratic.
+    const { EMBED_BATCH } = await import("@features/brain/server/embed");
+    expect(EMBED_BATCH).toBeLessThanOrEqual(4);
+  });
+});

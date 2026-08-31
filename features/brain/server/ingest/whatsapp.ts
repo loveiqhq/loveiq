@@ -19,6 +19,7 @@
  * ingester produces.
  */
 
+import { splitBody } from "./notion";
 import type { BrainRow } from "./upsert";
 
 /** iOS: `[06/08/2026, 14:23:11] Marcus: text` — the leading mark is WhatsApp's own. */
@@ -35,6 +36,8 @@ export interface WaMessage {
   time: string;
   sender: string;
   text: string;
+  /** Epoch ms. Used to split a chat into conversations; optional for the export path. */
+  at?: number;
 }
 
 /**
@@ -145,40 +148,62 @@ export function dayRows(input: DayRowInput): BrainRow[] {
   const { source, idBase, chat, url, messages, stampedAt } = input;
   if (messages.length === 0) return [];
 
-  const byDay = new Map<string, WaMessage[]>();
+  /**
+   * GROUP BY CONVERSATION, NOT BY CALENDAR DAY.
+   *
+   * A day of one group chat is not one subject. Chunking per day produced a body
+   * covering pricing, a bug report and a lunch plan at once — which blurs the
+   * embedding until it is close to nothing in particular, and leaves a title
+   * ("WhatsApp: LoveIQ — 2026-08-30") carrying no topical word for the lexical arm
+   * to match either. Measured: of three questions whose answers were demonstrably
+   * in the chat, only one retrieved it.
+   *
+   * Slack gets away with a day-chunk because a channel is already topic-scoped. One
+   * WhatsApp group is every topic the company has, so the split has to come from the
+   * conversation itself: a gap of `GAP_MINUTES` ends one and starts the next.
+   */
+  const GAP_MINUTES = 45;
+  const bursts: WaMessage[][] = [];
   for (const m of messages) {
-    const list = byDay.get(m.day);
-    if (list) list.push(m);
-    else byDay.set(m.day, [m]);
+    const last = bursts[bursts.length - 1];
+    const prev = last?.[last.length - 1];
+    const newDay = !prev || prev.day !== m.day;
+    const gap = prev?.at != null && m.at != null ? m.at - prev.at > GAP_MINUTES * 60_000 : false;
+    if (!last || newDay || gap) bursts.push([m]);
+    else last.push(m);
   }
 
-  return [...byDay.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([day, msgs]) => {
-      const speakers = [...new Set(msgs.map((m) => m.sender).filter(Boolean))];
-      const title = `WhatsApp: ${chat} — ${day}`;
-      return {
-        source,
-        source_id: `${idBase}#wa-${day}`,
-        title,
-        url,
-        body: [
-          title,
-          `Between: ${speakers.join(", ")}`,
-          "",
-          ...msgs.map((m) => `${m.sender} (${m.time}): ${m.text}`),
-        ].join("\n"),
-        meta: {
-          kind: "whatsapp-day",
-          chat,
-          day,
-          speakers: speakers.slice(0, 12),
-          messages: msgs.length,
-        },
-        updated_at: stampedAt,
-        period_end: day,
-      } satisfies BrainRow;
-    });
+  return bursts.flatMap((msgs) => {
+    const day = msgs[0]!.day;
+    const from = msgs[0]!.time;
+    const speakers = [...new Set(msgs.map((m) => m.sender).filter(Boolean))];
+    const title = `WhatsApp: ${chat} — ${day} ${from}`;
+    const head = [title, `Between: ${speakers.join(", ")}`, ""];
+    const full = [...head, ...msgs.map((m) => `${m.sender} (${m.time}): ${m.text}`)].join("\n");
+
+    /**
+     * Still split on length as well: `upsertChunks` clamps every body to 2,400
+     * characters, and a long unbroken conversation was being truncated on write
+     * with no error and no log — the messages simply vanished.
+     */
+    const parts = splitBody(full);
+    return parts.map((body, i) => ({
+      source,
+      source_id: `${idBase}#wa-${day}-${from.replace(":", "")}${i === 0 ? "" : `-${i + 1}`}`,
+      title: parts.length > 1 ? `${title} (${i + 1}/${parts.length})` : title,
+      url,
+      body: i === 0 ? body : [...head, body].join("\n"),
+      meta: {
+        kind: "whatsapp-chat",
+        chat,
+        day,
+        speakers: speakers.slice(0, 12),
+        messages: msgs.length,
+      },
+      updated_at: stampedAt,
+      period_end: day,
+    })) satisfies BrainRow[];
+  });
 }
 
 /** The Drive path: an exported .txt, parsed then chunked by day. */
