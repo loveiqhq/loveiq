@@ -53,7 +53,20 @@ export async function GET(request: Request) {
   const checkSlow = startCronTimer("brain-calendar", maxDuration);
   // The tail — upsert, touch batches, sweep — runs after this expires and cannot be
   // interrupted, so leave it room.
-  const isOutOfTime = () => Date.now() - startedAtMs > 40_000;
+  /**
+   * 30 seconds of FETCHING, not 40.
+   *
+   * The budget only bounds the walk. Everything after it — the upsert, the touch
+   * batches, the sweep — cannot be interrupted, and that tail grows with how much
+   * the walk fetched. Measured on gmail mid-re-walk: 58.1s total against a 40s
+   * budget, so an 18s tail, against a 60s ceiling. Two seconds of margin is not
+   * margin.
+   *
+   * A killed run is not a slow run: `ingestGmail` upserts AFTER its loop, so a
+   * timeout throws away everything that run fetched. Trading ~25% of the walk per
+   * run for never losing a whole one is the right way round.
+   */
+  const isOutOfTime = () => Date.now() - startedAtMs > 30_000;
 
   const dayKey = new Date().toISOString().slice(0, 10);
   const alertOnce = async (name: string, text: string) => {
