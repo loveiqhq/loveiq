@@ -116,3 +116,51 @@ describe("/api/cron/brain-brief", () => {
     expect(recorded.at(-1)).toMatchObject({ name: "brain-brief", status: "success" });
   });
 });
+
+describe("a day this job failed must be recoverable", () => {
+  /**
+   * The schedule only ever asks for YESTERDAY, so a day the job fails is lost forever.
+   * That happened on the very first run: 2026-08-31 06:11 died on a 45s model timeout
+   * and 2026-08-30's brief was never posted, with nothing able to retry it.
+   *
+   * `?day=` closes that, guarded: same cron bearer as everything else, and no future
+   * dates. The per-day claim still applies, so a replay cannot double-post.
+   */
+  const dayReq = (d: string) => new Request(`https://www.loveiq.org/api/cron/brain-brief?day=${d}`);
+
+  it("builds the brief for an explicitly requested past day", async () => {
+    const res = await dayReq("2026-08-30");
+    const out = await GET(res);
+    expect(out.status).toBe(200);
+    expect(await out.json()).toMatchObject({ day: "2026-08-30", sent: true });
+  });
+
+  it("ignores a future day and falls back to yesterday", async () => {
+    // A future day has no sources in yet, so honouring it would post an empty brief
+    // and burn the claim for a day that has not happened.
+    const out = await GET(dayReq("2099-01-01"));
+    const body = (await out.json()) as { day: string };
+    expect(body.day).not.toBe("2099-01-01");
+    expect(body.day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("ignores a malformed day rather than passing it to the query", async () => {
+    /**
+     * "1" and "1999-13-45" sort BEFORE today, so the not-in-the-future check lets them
+     * through and only the format check stops them. "not-a-date" does not test this at
+     * all — it sorts after "2026-…" and the ordering guard rejects it, which is how the
+     * first version of this test passed with the format guard deleted.
+     */
+    for (const bad of ["1", "1999-13-45", "2026-8-3", ""]) {
+      const body = (await (await GET(dayReq(bad))).json()) as { day: string };
+      expect(body.day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(body.day).not.toBe(bad);
+    }
+  });
+
+  it("still requires the cron bearer, so the override is not a public replay", async () => {
+    authOk = false;
+    const out = await GET(dayReq("2026-08-30"));
+    expect(out.status).toBe(401);
+  });
+});

@@ -50,9 +50,31 @@ export async function GET(request: Request) {
   let status: "success" | "error" = "success";
   let errorMessage: string | undefined;
 
-  // Yesterday in UTC: the last day whose sources are all in, and the same day
-  // boundary every ingester stamps `period_end` with.
-  const day = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  /**
+   * Yesterday in UTC by default: the last day whose sources are all in, and the same
+   * day boundary every ingester stamps `period_end` with.
+   *
+   * `?day=YYYY-MM-DD` overrides it, because a day this job FAILS is otherwise lost
+   * forever -- the schedule only ever asks for yesterday, so nothing retries it. That
+   * happened on the very first run: 2026-08-31 06:11 died on a 45s model timeout and
+   * 2026-08-30's brief was simply never posted.
+   *
+   * Requires the same cron bearer as everything else here, and refuses future dates.
+   * The per-day claim below still applies, so a replay cannot double-post.
+   */
+  const requested = new URL(request.url).searchParams.get("day");
+  const today = new Date().toISOString().slice(0, 10);
+  /**
+   * Round-tripped through Date, not just shape-matched. `1999-13-45` satisfies
+   * /^\d{4}-\d{2}-\d{2}$/ and sorts before today, so a regex plus an ordering check
+   * accepted a month 13 and a day 45 -- caught by widening this route's own test.
+   */
+  const isRealDate = (d: string) => {
+    const parsed = new Date(`${d}T00:00:00.000Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === d;
+  };
+  const validDay = Boolean(requested) && isRealDate(requested!) && requested! < today;
+  const day = validDay ? requested! : new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
 
   try {
     // One brief per day even if the cron is retried or fires twice.
