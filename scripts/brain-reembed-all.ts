@@ -14,6 +14,8 @@
  *   npx tsx scripts/brain-reembed-all.ts [afterId]
  */
 
+import { writeFileSync } from "node:fs";
+
 import { EMBED_BATCH, embedText, toVectorLiteral } from "@features/brain/server/embed";
 
 const READ = 100;
@@ -65,6 +67,21 @@ async function main(): Promise<void> {
     }
 
     after = rows[rows.length - 1]!.id;
+    /**
+     * Persist the cursor after every batch, not just at the end.
+     *
+     * stdout is block-buffered when this is run by launchd, so the log stays empty
+     * for as long as the process lives — which makes a job that IS working look
+     * identical to one that is stuck. The cursor file is the progress signal, and
+     * it is also what makes a killed run resume instead of restarting.
+     */
+    if (process.env.REEMBED_CURSOR_FILE) {
+      try {
+        writeFileSync(process.env.REEMBED_CURSOR_FILE, String(after));
+      } catch {
+        /* progress reporting must never fail the work */
+      }
+    }
     const rate = done / Math.max(1, (Date.now() - startedAt) / 60_000);
     console.log(`  ${done} re-embedded (${Math.round(rate)}/min), cursor ${after}`);
   }
