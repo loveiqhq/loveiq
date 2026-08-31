@@ -874,7 +874,12 @@ async function callTool(
      */
     const CRON_FOR_SOURCE: Record<string, string> = {
       ga4: "brain-fast",
-      drive: "brain-fast",
+      // Drive left the 15-minute lane on 2026-08-31 for its own hourly job. This
+      // map is the ONLY thing tying a source to the job that feeds it, so a stale
+      // entry reports the wrong job's health — which is the precise failure this
+      // line exists to prevent. It said "brain-fast ok" while brain-drive was
+      // timing out.
+      drive: "brain-drive",
       analytics: "brain-fast",
       slack: "brain-fast",
       notion: "brain-notion",

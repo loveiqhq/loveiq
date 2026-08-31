@@ -971,3 +971,19 @@ describe("an empty schema must never be cached", () => {
     expect(src).not.toMatch(/\n  schemaCache = out;/);
   });
 });
+
+describe("a source must report the health of the job that actually feeds it", () => {
+  /**
+   * Drive moved from `brain-fast` to its own hourly job, and this map was not
+   * updated with it — so `list_sources` said "brain-fast ok" while `brain-drive`
+   * was being killed at its timeout. Reporting the wrong job's health is worse than
+   * reporting none, because it reads as a clean bill of health.
+   */
+  it("maps drive to brain-drive, not to the lane it used to live in", async () => {
+    const src = await import("node:fs").then((fs) =>
+      fs.readFileSync("app/api/mcp/route.ts", "utf8")
+    );
+    expect(src).toMatch(/drive:\s*"brain-drive"/);
+    expect(src).not.toMatch(/drive:\s*"brain-fast"/);
+  });
+});
