@@ -65,19 +65,26 @@ export async function GET(request: Request) {
   // Notion's tail (upsert of up to 1,400 rows, touch batches, sweep) runs after
   // this expires and cannot be interrupted, so leave it room.
   /**
-   * 240 seconds of FETCHING, inside a 300-second ceiling.
+   * 120 seconds of FETCHING, inside a 300-second ceiling.
    *
    * The budget only bounds the walk. Everything after it — the upsert, the touch
    * batches, the sweep — cannot be interrupted, and that tail grows with how much
    * the walk fetched. Measured on gmail mid-re-walk: 58.1s total against a 40s
-   * budget, so an 18s tail. With a 300s ceiling the walk gets 240s and the tail
-   * keeps a full minute, which is the ratio the smaller lanes run at.
+   * budget, so an 18s tail. Drive's tail is far bigger: 240s of walking produced
+   * 4,128 new chunks to upsert plus a touch of 15,000 existing rows, and the run
+   * was killed at 300s partway through the touch (observed 02:52 on 2026-08-31).
+   *
+   * The chunks it had already written SURVIVED — the upsert completes before the
+   * touch — so the timeouts were productive but the run never finished, which
+   * means the sweep never ran either. Halving the walk leaves well over two
+   * minutes for the tail. The ingester defers what it did not reach, so the first
+   * full walk simply converges over a few hourly runs instead of one long one.
    *
    * A killed run is not a slow run: `ingestGmail` upserts AFTER its loop, so a
    * timeout throws away everything that run fetched. Trading ~25% of the walk per
    * run for never losing a whole one is the right way round.
    */
-  const isOutOfTime = () => Date.now() - startedAtMs > 240_000;
+  const isOutOfTime = () => Date.now() - startedAtMs > 120_000;
 
   const dayKey = new Date().toISOString().slice(0, 10);
   const alertOnce = async (name: string, text: string) => {
