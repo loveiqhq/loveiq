@@ -229,3 +229,6 @@ export async function embedQuery(question: string): Promise<string | null> {
   const first = vectors?.[0];
   return first ? toVectorLiteral(first) : null;
 }
+
+/** Exposed for the one-off re-embed script; see scripts/brain-reembed-all.ts. */
+export const embedBatchForTest = embedBatch;
