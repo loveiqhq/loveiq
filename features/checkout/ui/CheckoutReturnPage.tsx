@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type FC } from "react";
 import { useRouter } from "next/navigation";
 import {
-  buildReportCheckoutHref,
   getReportPurchasePlan,
   getReportReturnHref,
   type ReportPurchasePlanId,
@@ -318,7 +317,9 @@ const CheckoutReturnPage: FC<Props> = ({
             </Link>
             {!isPaidAndComplete ? (
               <Link
-                href={buildReportCheckoutHref({ archetype: archetypeSlug, plan: planId, token })}
+                // Back to the report, where every unlock CTA now goes straight to
+                // Stripe. There is no /checkout page to send them to any more.
+                href={reportHrefWithArchetype}
                 className="checkout-return__link"
                 onClick={() =>
                   trackCheckoutRetryClicked({

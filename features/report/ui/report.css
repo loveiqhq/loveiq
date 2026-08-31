@@ -320,6 +320,33 @@
   text-align: center;
 }
 
+/* The hand-off to Stripe, shown over the report while the session is created.
+   Replaces the /checkout page that used to occupy this second: same card, no
+   navigation. Reuses .report-status-card wholesale — only the positioning is
+   new. */
+.report-checkout-handoff {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.report-status-card__action {
+  margin-top: 1rem;
+  border: 1px solid rgba(22, 16, 33, 0.16);
+  border-radius: 9999px;
+  padding: 0.6rem 1.4rem;
+  background: #ffffff;
+  color: var(--report-ink, #161021);
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .report-status-card__spinner {
   width: 2.5rem;
   height: 2.5rem;

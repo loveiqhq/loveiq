@@ -4,7 +4,10 @@ import userEvent from "@testing-library/user-event";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 
 const mockRouterPush = vi.fn();
-const mockCacheReportCheckoutQuote = vi.fn();
+const mockStartReportCheckout = vi.fn().mockResolvedValue(null);
+vi.mock("@features/checkout/ui/startReportCheckout", () => ({
+  startReportCheckout: (...args: unknown[]) => mockStartReportCheckout(...args),
+}));
 
 const mockSearchParams = vi.fn(() => new URLSearchParams());
 vi.mock("next/navigation", () => ({
@@ -34,10 +37,6 @@ vi.mock("@features/report/ui/hooks/useSectionFeedback", () => ({
     submitted: {},
     submitFeedback: vi.fn(),
   }),
-}));
-
-vi.mock("@features/checkout/server/reportCheckoutQuoteCache", () => ({
-  cacheReportCheckoutQuote: (...args: unknown[]) => mockCacheReportCheckoutQuote(...args),
 }));
 
 const mockTrackReportViewed = vi.fn();
@@ -324,7 +323,8 @@ describe("ReportPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRouterPush.mockReset();
-    mockCacheReportCheckoutQuote.mockReset();
+    mockStartReportCheckout.mockReset();
+    mockStartReportCheckout.mockResolvedValue(null);
     mockGetReportSessionId.mockReturnValue("02d88f31-eceb-4402-940d-c8cd98d01848");
   });
 
@@ -532,7 +532,7 @@ describe("ReportPage", () => {
   );
 
   it(
-    "routes to checkout when a pricing modal CTA is clicked",
+    "goes straight to Stripe when a pricing modal CTA is clicked",
     async () => {
       const user = userEvent.setup();
       mockUseReportData.mockReturnValue(buildSuccessResponse());
@@ -549,17 +549,17 @@ describe("ReportPage", () => {
       expect(typeof price).toBe("number");
       expect(Number.isFinite(price)).toBe(true);
       expect(price).toBeGreaterThan(0);
-      expect(mockCacheReportCheckoutQuote).toHaveBeenCalledWith({
+      // Straight to Stripe: no /checkout navigation in between, and the quote the
+      // reader was shown is handed over rather than re-fetched on another page.
+      expect(mockRouterPush).not.toHaveBeenCalled();
+      await waitFor(() => expect(mockStartReportCheckout).toHaveBeenCalledTimes(1));
+      expect(mockStartReportCheckout).toHaveBeenCalledWith({
+        archetype: "Emotional Voyeur",
         plan: "full_report",
         quote: buildSuccessResponse().data.pricingQuotes.full_report,
-        sessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+        reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
         token: undefined,
       });
-      await waitFor(() =>
-        expect(mockRouterPush).toHaveBeenCalledWith(
-          "/checkout?plan=full_report&archetype=emotional-voyeur"
-        )
-      );
       expect(container.querySelector(".report-premium-overlay__cta")).toBeInTheDocument();
     },
     REPORT_MODAL_TEST_TIMEOUT_MS

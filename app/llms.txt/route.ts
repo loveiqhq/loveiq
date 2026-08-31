@@ -55,7 +55,7 @@ These paths hold no public content and are disallowed in
 
 - \`/report\` — individual paid reports, reachable only with a per-person signed token.
 - \`/survey\` — an interactive flow; its rendered HTML is not meaningful as a document.
-- \`/checkout\` — payment flow.
+- \`/checkout\` — legacy payment redirect.
 - \`/admin\`, \`/api/\`, \`/login\` — internal, authenticated, or non-content endpoints.
 
 ## Notes for agents

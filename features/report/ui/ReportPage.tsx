@@ -14,11 +14,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { reportSections } from "@/data/report-general";
 import { escapeHtml } from "@shared/format/html-escape";
 import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
-import { cacheReportCheckoutQuote } from "@features/checkout/server/reportCheckoutQuoteCache";
-import {
-  buildReportCheckoutHref,
-  type ReportPurchasePlanId,
-} from "@features/checkout/server/reportPurchase";
+import { startReportCheckout } from "@features/checkout/ui/startReportCheckout";
+import { type ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { canSharePlan } from "@features/report/server/planAccess";
 import InviteModal from "@features/invite/ui/InviteModal";
@@ -2004,6 +2001,16 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const { feedbacks, submitted, submitFeedback } = useSectionFeedback(sessionId, token);
   const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  /**
+   * The hand-off to Stripe. `null` while nothing is in flight; `redirecting`
+   * while the session is being created; `disabled`/`error` if it could not be.
+   * This is the only state the deleted /checkout page is missed for — a click
+   * that goes nowhere for a second reads as broken.
+   */
+  const [checkoutHandoff, setCheckoutHandoff] = useState<{
+    status: "redirecting" | "disabled" | "error";
+    message: string | null;
+  } | null>(null);
   const [pricingTargetArchetype, setPricingTargetArchetype] = useState<string | null>(null);
   const [pricingVariant, setPricingVariant] = useState<"default" | "offer" | "share">("default");
   const autoOpenedPricingRef = useRef(false);
@@ -2378,18 +2385,23 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const beginCheckout = (plan: ReportPurchasePlanId, archetype?: string | null) => {
     const quote = pricingQuotes?.[plan];
     trackBeginCheckout(plan, quote ? quote.chargedPriceCents / 100 : null, quote?.currency ?? null);
-    if (quote) {
-      cacheReportCheckoutQuote({
-        plan,
-        quote,
-        sessionId: token ? null : sessionId,
-        token,
-      });
-    }
     // Essentials + Full Report are per-archetype; All Reports is a global
     // unlock so it stays archetype-less.
     const archetypeForCheckout = plan === "all_reports" ? null : (archetype ?? null);
-    router.push(buildReportCheckoutHref({ archetype: archetypeForCheckout, plan, token }));
+    // Straight to Stripe. There used to be a /checkout page in between that
+    // repeated this price and then auto-forwarded anyway; it is gone, so the
+    // pending state it used to show has to live here instead.
+    setCheckoutHandoff({ status: "redirecting", message: null });
+    void startReportCheckout({
+      archetype: archetypeForCheckout,
+      plan,
+      quote: quote ?? null,
+      reportSessionId: token ? null : sessionId,
+      token,
+    }).then((failure) => {
+      // Resolves ONLY on failure — on success the browser is already leaving.
+      if (failure) setCheckoutHandoff(failure);
+    });
   };
 
   const closePricingModal = useCallback(() => {
@@ -2598,6 +2610,29 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         viewArchetype={effectiveViewArchetype}
         viewMode={viewMode}
       />
+      {checkoutHandoff && (
+        <div className="report-checkout-handoff" role="status" aria-live="polite">
+          <div className="report-status-card report-card">
+            {checkoutHandoff.status === "redirecting" ? (
+              <>
+                <div className="report-status-card__spinner" />
+                <p className="report-status-card__label">Taking you to secure checkout...</p>
+              </>
+            ) : (
+              <>
+                <p className="report-status-card__label">{checkoutHandoff.message}</p>
+                <button
+                  type="button"
+                  className="report-status-card__action"
+                  onClick={() => setCheckoutHandoff(null)}
+                >
+                  Back to your report
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
       {data.accessPlan !== "full_report" && data.accessPlan !== "all_reports" && (
         <ReportStickyUnlockBar
           quote={pricingQuotes?.full_report ?? null}

@@ -188,7 +188,9 @@ describe("POST /api/stripe/checkout-session", () => {
         // hand-redeem test codes. Owned codes still auto-apply via discounts[]
         // (?promo= link); the two params are mutually exclusive.
         allow_promotion_codes: true,
-        cancel_url: "http://localhost/checkout?plan=full_report&archetype=spark-seeker",
+        // Backing out on Stripe returns to the REPORT. The /checkout review page
+        // that used to catch a cancellation was removed on 2026-08-31.
+        cancel_url: "http://localhost/report?archetype=spark-seeker",
         customer_email: "test@example.com",
         line_items: [
           expect.objectContaining({
@@ -306,7 +308,7 @@ describe("POST /api/stripe/checkout-session", () => {
         }),
         success_url:
           "http://localhost/checkout/return?plan=full_report&session_id={CHECKOUT_SESSION_ID}&archetype=spark-seeker",
-        cancel_url: "http://localhost/checkout?plan=full_report&archetype=spark-seeker",
+        cancel_url: "http://localhost/report?archetype=spark-seeker",
       }),
       expect.objectContaining({
         idempotencyKey: expect.stringMatching(/^[0-9a-f]{64}$/),

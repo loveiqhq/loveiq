@@ -116,28 +116,26 @@ function buildSuccessUrl({
   return `${origin}/checkout/return?${params.join("&")}`;
 }
 
+/**
+ * Where Stripe sends a buyer who backs out.
+ *
+ * Straight back to the report they came from, since the `/checkout` review page
+ * they used to land on was removed on 2026-08-31. An archetype-scoped purchase
+ * returns to that archetype's view so the reader is where they left off.
+ */
 function buildCancelUrl({
   archetypeSlug,
   origin,
-  plan,
   reportToken,
 }: {
   archetypeSlug?: string | null;
   origin: string;
-  plan: ReportPurchasePlanId;
   reportToken?: string | null;
 }) {
-  const params = [`plan=${encodeURIComponent(plan)}`];
-
-  if (reportToken) {
-    params.push(`token=${encodeURIComponent(reportToken)}`);
-  }
-
-  if (archetypeSlug) {
-    params.push(`archetype=${encodeURIComponent(archetypeSlug)}`);
-  }
-
-  return `${origin}/checkout?${params.join("&")}`;
+  const path = reportToken ? `/report/${encodeURIComponent(reportToken)}` : "/report";
+  return archetypeSlug
+    ? `${origin}${path}?archetype=${encodeURIComponent(archetypeSlug)}`
+    : `${origin}${path}`;
 }
 
 export async function POST(request: Request) {
@@ -377,7 +375,6 @@ export async function POST(request: Request) {
         cancel_url: buildCancelUrl({
           archetypeSlug,
           origin: siteUrl,
-          plan: parsed.data.plan,
           reportToken: parsed.data.reportToken ?? null,
         }),
       },
