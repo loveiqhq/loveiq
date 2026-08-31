@@ -87,6 +87,10 @@ interface SlackMessage {
 }
 
 interface SlackChannel {
+  /** Set on private channels. Slack only returns ones the bot was invited to. */
+  is_private?: boolean;
+  /** Set on group DMs (multi-person IMs). Named `mpdm-a--b--c-1` by Slack. */
+  is_mpim?: boolean;
   id?: string;
   name?: string;
   is_member?: boolean;
@@ -305,11 +309,40 @@ export async function ingestSlack(
     return { source: SOURCE, rows: 0, swept: 0, skipped: "slack-time-budget" };
   }
 
-  const listed = await slackGet(token, "conversations.list", {
-    types: "public_channel",
+  /**
+   * PRIVATE CHANNELS AND GROUP DMs, WITH A FALLBACK THAT MATTERS.
+   *
+   * `conversations.list` fails ENTIRELY when the app lacks a scope for any requested
+   * type -- it answers `missing_scope` rather than returning what it can. So asking
+   * for private channels without `groups:read`, or group DMs without `mpim:read`,
+   * would have taken PUBLIC channel ingestion down with it. Widening the request
+   * without this fallback turns "we also read private channels" into "we read no
+   * Slack at all", which is the worse failure by far.
+   *
+   * Membership is still the real boundary: Slack only ever returns conversations the
+   * bot has been added to, whatever the scopes say. Adding scopes grants nothing on
+   * its own -- somebody has to invite the bot.
+   */
+  let listed = await slackGet(token, "conversations.list", {
+    types: "public_channel,private_channel,mpim",
     limit: 200,
     exclude_archived: "true",
   });
+  let privateScopesMissing = false;
+  if (!listed) {
+    listed = await slackGet(token, "conversations.list", {
+      types: "public_channel",
+      limit: 200,
+      exclude_archived: "true",
+    });
+    privateScopesMissing = Boolean(listed);
+    if (privateScopesMissing) {
+      logger.warn(
+        { needed: "groups:read + groups:history, mpim:read + mpim:history" },
+        "brain-ingest slack: private channels and group DMs are unreadable, continuing with public channels only"
+      );
+    }
+  }
   if (!listed) return { source: SOURCE, rows: 0, swept: 0, skipped: "slack-list-failed" };
 
   const channels = ((listed.channels as SlackChannel[]) ?? []).filter(
@@ -320,6 +353,16 @@ export async function ingestSlack(
   if (channels.length === 0) {
     return { source: SOURCE, rows: 0, swept: 0, skipped: "slack-no-channels-joined" };
   }
+
+  logger.info(
+    {
+      conversations: channels.length,
+      private: channels.filter((c) => c.is_private).length,
+      groupDms: channels.filter((c) => c.is_mpim).length,
+      privateScopesMissing,
+    },
+    "brain-ingest slack: conversations discovered"
+  );
 
   const names = await userNames(token);
   const known = await knownSlackDays();
