@@ -321,6 +321,80 @@ export async function recordSweep(source: string, at = new Date().toISOString())
   }
 }
 
+/**
+ * Delete rows of `source` whose id this run did not see. The touchless sweep.
+ *
+ * WHY THIS EXISTS ALONGSIDE `sweepStale`. The timestamp sweep needs every surviving
+ * row stamped first, and that stamp is the most expensive write in the brain (see
+ * `touchChunks`). For the large sources it does not even fit in one invocation:
+ * drive is 16,117 rows in 161 batches and gmail 9,074, and both hit the 8s
+ * per-request timeout on 2026-08-31 -- gmail at 11:11, drive at 14:52, 15:52 and
+ * 16:52. No amount of scheduling fixes a job that cannot finish.
+ *
+ * The set of ids the run saw is what the sweep always actually meant, and every
+ * ingester already holds it in memory. So: zero writes, one paged read, and a DELETE
+ * that normally matches nothing.
+ *
+ * Same two guards as the timestamp version. FAIL CLOSED on any unreadable page,
+ * because a short read makes live rows look like orphans; and refuse a majority
+ * deletion, because a mass id change (a re-chunking, a shorter window) and a broken
+ * collection are indistinguishable from here. Stale rows are recoverable; deleted
+ * ones are not.
+ */
+export async function sweepMissing(source: string, seenIds: Set<string>): Promise<number> {
+  const stored: string[] = [];
+  for (let offset = 0; offset < 200_000; offset += 1000) {
+    const res = await supabaseFetch(
+      `/rest/v1/brain_chunk?select=source_id&source=eq.${encodeURIComponent(source)}` +
+        `&order=source_id.asc&limit=1000&offset=${offset}`
+    );
+    if (!res.ok) {
+      logger.warn({ source, status: res.status }, "brain sweep skipped: could not list stored ids");
+      return 0;
+    }
+    const batch = (await res.json().catch(() => null)) as Array<{ source_id?: string }> | null;
+    if (!Array.isArray(batch)) {
+      logger.warn({ source }, "brain sweep skipped: unreadable stored-id page");
+      return 0;
+    }
+    for (const r of batch) if (r?.source_id) stored.push(r.source_id);
+    if (batch.length < 1000) break;
+  }
+  if (stored.length === 0) return 0;
+
+  const orphans = stored.filter((id) => !seenIds.has(id));
+  if (orphans.length === 0) return 0;
+  if (orphans.length > stored.length - orphans.length) {
+    logger.warn(
+      { source, orphans: orphans.length, stored: stored.length },
+      "brain sweep skipped: it would delete the majority of this source, which is either a mass id change or a broken collection"
+    );
+    return 0;
+  }
+
+  let deleted = 0;
+  for (let i = 0; i < orphans.length; i += 100) {
+    const list = orphans
+      .slice(i, i + 100)
+      .map((id) => `"${id.replace(/"/g, '""')}"`)
+      .join(",");
+    const res = await supabaseFetch(
+      `/rest/v1/brain_chunk?source=eq.${encodeURIComponent(source)}` +
+        `&source_id=in.(${encodeURIComponent(list)})`,
+      { method: "DELETE", headers: { Prefer: "return=representation" } }
+    );
+    if (!res.ok) {
+      // Stop rather than continue: a partial failure mid-sweep is not a reason to
+      // keep deleting, and whatever is left is swept on the next attempt.
+      logger.warn({ source, status: res.status }, "brain sweep failed partway");
+      return deleted;
+    }
+    const gone = (await res.json().catch(() => [])) as unknown[];
+    deleted += Array.isArray(gone) ? gone.length : 0;
+  }
+  return deleted;
+}
+
 export async function sweepStale(
   source: string,
   stampedAt: string,

@@ -12,8 +12,7 @@ import { splitBody } from "./notion";
 import {
   recordSweep,
   shouldSweep,
-  sweepStale,
-  touchChunks,
+  sweepMissing,
   upsertChunks,
   type BrainRow,
   type IngestResult,
@@ -551,19 +550,17 @@ export async function ingestGmail(
   const written = await upsertChunks(rows);
   const writtenIds = new Set(rows.map((r) => r.source_id));
   const rewritten = new Set([...writtenIds].map((id) => id.split("#")[0]));
-  // Sweeping about once a day instead of every run: the touch it needs rewrites
-  // four indexes per row, and a deleted source document can wait a day to be
-  // noticed. See shouldSweep.
-  const sweeping = complete && (await shouldSweep(SOURCE));
-  // BEFORE the touch, not after. The touch can throw (it fails closed so a failed
-  // confirm never lets the sweep delete those rows), and with the record after it,
-  // a throw meant the attempt was never written -- so brain-drive retried its
-  // 16,000-row touch EVERY HOUR, timing out at the same place and generating
-  // exactly the disk IO this change exists to remove. Recording the attempt first
-  // is what the comment on recordSweep already claimed the code did.
-  if (sweeping) await recordSweep(SOURCE);
-  const touched = await touchChunks(
-    SOURCE,
+  /**
+   * NO TOUCH. Gmail is 9,074 rows, which is 91 confirm requests against a 60s
+   * ceiling, and it hit the 8s per-request timeout at 11:11 on 2026-08-31. Drive,
+   * larger, failed the same way three hours running. A confirm pass that cannot
+   * finish inside one invocation cannot be scheduled into working.
+   *
+   * The list below is unchanged -- it is precisely "ids that legitimately exist and
+   * must not be swept". It used to be written to; now it is simply handed to
+   * `sweepMissing` as the set to keep. Same decisions, no writes.
+   */
+  const confirmed = ((): string[] =>
     [...known.entries()]
       .filter(([id, have]) => {
         if (writtenIds.has(id)) return false;
@@ -581,12 +578,16 @@ export async function ingestGmail(
         // it belongs to the sweep, not to the touch list.
         return have.current;
       })
-      .map(([id]) => id),
-    stampedAt,
-    sweeping
-  );
+      .map(([id]) => id))();
+  const touched = confirmed.length;
+
   // Sweep only a complete walk; a truncated one makes real threads look deleted.
-  const swept = sweeping ? await sweepStale(SOURCE, stampedAt, written + touched) : 0;
+  // Once a day, not every run -- see shouldSweep.
+  const sweeping = complete && (await shouldSweep(SOURCE));
+  // Recorded BEFORE the sweep: a throw after the record defers 20 hours, a throw
+  // before it retried hourly forever.
+  if (sweeping) await recordSweep(SOURCE);
+  const swept = sweeping ? await sweepMissing(SOURCE, new Set([...writtenIds, ...confirmed])) : 0;
 
   logger.info(
     {

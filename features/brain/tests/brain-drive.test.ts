@@ -17,6 +17,19 @@ vi.mock("@shared/http/google-oauth", () => ({
 }));
 
 const dbCalls: Array<{ path: string; method: string; body: string }> = [];
+
+/**
+ * The ids this run actually DELETED. Drive now sweeps by id set rather than by
+ * timestamp, so "did this row survive" is read off the DELETE calls, not off whether
+ * a confirming PATCH was issued.
+ */
+function deletedIds(): string[] {
+  return dbCalls
+    .filter((c) => c.method === "DELETE" && c.path.includes("brain_chunk"))
+    .flatMap((c) =>
+      (decodeURIComponent(c.path).match(/"([^"]+)"/g) ?? []).map((q) => q.slice(1, -1))
+    );
+}
 let existing: Array<{ source_id: string; meta: { edited: string; v?: number } }> = [];
 vi.mock("@features/admin/server/supabase", () => ({
   supabaseFetch: vi.fn(async (path: string, init?: RequestInit) => {
@@ -26,6 +39,25 @@ vi.mock("@features/admin/server/supabase", () => ({
     // here rather than stubbing shouldSweep, to keep the real gate under test.
     if (path.includes("brain_sweep_state")) {
       return { ok: true, status: 200, headers: new Headers(), json: async () => [] };
+    }
+    // sweepMissing's paged id listing. `select=source_id&` -- note the ampersand --
+    // is what distinguishes it from knownDocs' `select=source_id,meta`.
+    if (method === "GET" && /select=source_id&/.test(path)) {
+      const off = Number(/offset=(\d+)/.exec(path)?.[1] ?? 0);
+      return {
+        ok: true,
+        headers: new Headers(),
+        json: async () => (off === 0 ? existing.map((e) => ({ source_id: e.source_id })) : []),
+      };
+    }
+    if (method === "DELETE") {
+      // Prefer: return=representation, so the caller counts what it deleted.
+      const n = (path.match(/%22/g)?.length ?? 0) / 2;
+      return {
+        ok: true,
+        headers: new Headers(),
+        json: async () => Array.from({ length: n }, () => ({})),
+      };
     }
     if (method === "GET" && path.includes("select=source_id,meta")) {
       const off = Number(/offset=(\d+)/.exec(path)?.[1] ?? 0);
@@ -202,7 +234,10 @@ describe("ingestDrive", () => {
     existing = [{ source_id: "doc:1AbCdEf", meta: { edited: FILE.modifiedTime, v } }];
     await ingestDrive(STAMP);
     expect(httpCalls.filter((u) => u.includes("/export?"))).toHaveLength(0);
-    expect(dbCalls.filter((c) => c.method === "PATCH").length).toBeGreaterThan(0);
+    // It used to assert a PATCH happened, i.e. that the row was CONFIRMED by writing
+    // to it. There is no confirm write any more, so assert the thing that actually
+    // mattered: an unchanged document is not deleted.
+    expect(deletedIds()).not.toContain("doc:1AbCdEf");
   });
 
   it("re-exports when the document changed", async () => {
@@ -219,12 +254,9 @@ describe("ingestDrive", () => {
       { source_id: "doc:1AbCdEf#2", meta: { edited: FILE.modifiedTime, v } },
     ];
     await ingestDrive(STAMP);
-    const ids = dbCalls
-      .filter((c) => c.method === "PATCH")
-      .flatMap((c) =>
-        (decodeURIComponent(c.path).match(/"([^"]+)"/g) ?? []).map((q) => q.slice(1, -1))
-      );
-    expect(ids).toContain("doc:1AbCdEf#2");
+    // Directly: the part is not deleted. Stronger than the old assertion that it was
+    // PATCHed, which only proved the mechanism ran, not that the row survived.
+    expect(deletedIds()).not.toContain("doc:1AbCdEf#2");
   });
 
   it("DOES sweep when the listing was complete", async () => {
@@ -233,8 +265,11 @@ describe("ingestDrive", () => {
     // returns zero items and exits before the sweep is ever reached.
     files = [FILE];
     await ingestDrive(STAMP);
+    // The bookkeeping write happens if and only if this run swept, so it is the
+    // unambiguous marker. `updated_at=lt.` no longer appears -- that was the
+    // timestamp sweep, which drive no longer uses.
     expect(
-      dbCalls.filter((c) => c.method === "GET" && c.path.includes("updated_at=lt.")).length
+      dbCalls.filter((c) => c.method === "POST" && c.path.includes("brain_sweep_state")).length
     ).toBeGreaterThan(0);
   });
 
@@ -546,22 +581,68 @@ describe("a failed sweep must not retry every hour", () => {
     existing = [];
   });
 
-  it("records the attempt before touching, so a timeout defers instead of looping", async () => {
-    // An UNCHANGED existing row is what gets touched rather than rewritten, so this
-    // is what drives the run down the touch path at all.
+  it("refuses to delete the majority of a source, because that is indistinguishable from a broken walk", async () => {
+    /**
+     * The guard that stands between a bad walk and the corpus. Removing it entirely
+     * left all 475 tests green, which is why this test exists.
+     *
+     * Five rows stored, one produced by the walk: four orphans against one keeper.
+     * A genuine mass id change (a re-chunking, a shorter window) looks exactly like a
+     * collection that half-failed, and counts cannot tell them apart -- so it refuses
+     * and says so. Stale rows are recoverable; deleted ones are not.
+     */
     const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
-    existing = [{ source_id: "doc:1AbCdEf", meta: { edited: FILE.modifiedTime, v } }];
+    existing = [
+      { source_id: "doc:1AbCdEf", meta: { edited: FILE.modifiedTime, v } },
+      { source_id: "doc:gone-1", meta: { edited: FILE.modifiedTime, v } },
+      { source_id: "doc:gone-2", meta: { edited: FILE.modifiedTime, v } },
+      { source_id: "doc:gone-3", meta: { edited: FILE.modifiedTime, v } },
+      { source_id: "doc:gone-4", meta: { edited: FILE.modifiedTime, v } },
+    ];
+
+    const res = await ingestDrive(STAMP);
+
+    expect(deletedIds()).toEqual([]); // nothing deleted at all
+    expect(res.swept).toBe(0);
+  });
+
+  it("deletes a minority of orphans, so the guard is a majority rule and not a veto", async () => {
+    // The control for the test above: one orphan against four keepers must go, or
+    // "refuses" above would pass simply because the sweep never deletes anything.
+    const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    existing = [
+      { source_id: "doc:1AbCdEf", meta: { edited: FILE.modifiedTime, v } },
+      { source_id: "doc:1AbCdEf#2", meta: { edited: FILE.modifiedTime, v } },
+      { source_id: "doc:1AbCdEf#3", meta: { edited: FILE.modifiedTime, v } },
+      { source_id: "doc:gone-1", meta: { edited: FILE.modifiedTime, v } },
+    ];
 
     await ingestDrive(STAMP);
 
-    const firstTouch = dbCalls.findIndex(
-      (c) => c.method === "PATCH" && c.path.includes("brain_chunk")
+    expect(deletedIds()).toEqual(["doc:gone-1"]);
+  });
+
+  it("records the attempt before the delete, so a failure defers instead of looping", async () => {
+    // A stored row the walk cannot produce, so the sweep genuinely deletes something
+    // and there is a real DELETE to order the bookkeeping against.
+    const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    existing = [
+      { source_id: "doc:1AbCdEf", meta: { edited: FILE.modifiedTime, v } },
+      { source_id: "doc:ZZZ_deleted_from_drive", meta: { edited: FILE.modifiedTime, v } },
+    ];
+
+    await ingestDrive(STAMP);
+
+    const firstDelete = dbCalls.findIndex(
+      (c) => c.method === "DELETE" && c.path.includes("brain_chunk")
     );
     const record = dbCalls.findIndex(
       (c) => c.path.includes("brain_sweep_state") && c.method === "POST"
     );
-    expect(firstTouch).toBeGreaterThanOrEqual(0); // the setup must reach the touch
+    expect(firstDelete).toBeGreaterThanOrEqual(0); // the setup must reach a real sweep
     expect(record).toBeGreaterThanOrEqual(0); // the attempt must be recorded
-    expect(record).toBeLessThan(firstTouch); // and recorded FIRST
+    expect(record).toBeLessThan(firstDelete); // and recorded FIRST
+    // And it deleted the orphan ONLY.
+    expect(deletedIds()).toEqual(["doc:ZZZ_deleted_from_drive"]);
   });
 });

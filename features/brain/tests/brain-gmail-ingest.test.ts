@@ -17,6 +17,26 @@ let touchedCount = 0;
 vi.mock("@features/admin/server/supabase", () => ({
   supabaseFetch: vi.fn(async (path: string, init?: RequestInit) => {
     const method = (init?.method ?? "GET").toUpperCase();
+    // sweepMissing's paged id listing -- `select=source_id&` (with the ampersand)
+    // distinguishes it from knownThreads' `select=source_id,meta`.
+    if (method === "GET" && /select=source_id&/.test(path)) {
+      const off = Number(/offset=(\d+)/.exec(path)?.[1] ?? 0);
+      return {
+        ok: true,
+        headers: new Headers(),
+        json: async () => (off === 0 ? existing.map((e) => ({ source_id: e.source_id })) : []),
+      };
+    }
+    if (method === "DELETE") {
+      deletedIds.push(
+        ...(decodeURIComponent(path).match(/"([^"]+)"/g) ?? []).map((q) => q.slice(1, -1))
+      );
+      return {
+        ok: true,
+        headers: new Headers(),
+        json: async () => deletedIds.map(() => ({})),
+      };
+    }
     if (method === "GET" && path.includes("select=source_id,meta")) {
       const off = Number(/offset=(\d+)/.exec(path)?.[1] ?? 0);
       return { ok: true, headers: new Headers(), json: async () => (off === 0 ? existing : []) };
@@ -52,6 +72,8 @@ let failingThreadIds: string[] = [];
 let listedThreads: Array<{ id: string; historyId: string }> = [];
 /** source_id -> whether touchChunks was asked to confirm it. */
 let touchedIds: string[] = [];
+/** Ids this run actually DELETED. Gmail sweeps by id set now, not by timestamp. */
+const deletedIds: string[] = [];
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: vi.fn(async (url: string) => {
     // Directory API: pretend delegation cannot resolve the domain's mailboxes,
@@ -112,7 +134,7 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
   }),
 }));
 
-import { ingestGmail } from "@features/brain/server/ingest/gmail";
+import { GMAIL_BUILDER_VERSION, ingestGmail } from "@features/brain/server/ingest/gmail";
 
 beforeEach(() => {
   existing = [];
@@ -121,6 +143,7 @@ beforeEach(() => {
   failingThreadIds = [];
   listedThreads = [];
   touchedIds = [];
+  deletedIds.length = 0;
   process.env.GMAIL_MAILBOXES = "";
 });
 
@@ -179,9 +202,23 @@ describe("one flaky thread must not block the sweep for the other 3,900", () => 
      */
     listedThreads = [thread(1), thread(2)];
     failingThreadIds = ["t2"];
-    existing = [{ source_id: "thread:t2", meta: { v: 1 } }]; // deliberately STALE version
+    /**
+     * The three current rows are not decoration. Deleting t2 has to be a MINORITY of
+     * this source or `sweepMissing` refuses on its majority guard, and the assertion
+     * below would pass because nothing was ever deleted rather than because t2 was
+     * protected. Verified by mutation: dropping the failed-thread branch in the
+     * ingester deletes t2 and fails this test.
+     */
+    existing = [
+      { source_id: "thread:t2", meta: { v: 1 } }, // deliberately STALE version
+      { source_id: "thread:keep1", meta: { v: GMAIL_BUILDER_VERSION } },
+      { source_id: "thread:keep2", meta: { v: GMAIL_BUILDER_VERSION } },
+      { source_id: "thread:keep3", meta: { v: GMAIL_BUILDER_VERSION } },
+    ];
     await ingestGmail("2026-08-31T00:00:00.000Z", () => false, null);
-    expect(touchedIds).toContain("thread:t2");
+    // Used to assert the row was CONFIRMED by writing to it. There is no confirm
+    // write any more, so assert what actually mattered: it is not deleted.
+    expect(deletedIds).not.toContain("thread:t2");
   });
 
   it("still calls the walk incomplete when failures are systemic, not incidental", async () => {

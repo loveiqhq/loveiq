@@ -13,8 +13,7 @@ import { looksLikeWhatsAppExport, whatsappRows } from "./whatsapp";
 import {
   recordSweep,
   shouldSweep,
-  sweepStale,
-  touchChunks,
+  sweepMissing,
   upsertChunks,
   type BrainRow,
   type IngestResult,
@@ -518,23 +517,27 @@ export async function ingestDrive(
   const deferred = toFetch
     .flatMap((f) => [`doc:${f.id}`, ...partIdsOf(known, `doc:${f.id}`)])
     .filter((id) => !writtenIds.has(id));
-  // Sweeping about once a day instead of every run: the touch it needs rewrites
-  // four indexes per row, and a deleted source document can wait a day to be
-  // noticed. See shouldSweep.
-  const sweeping = listed.complete && (await shouldSweep(SOURCE));
-  // BEFORE the touch, not after. The touch can throw (it fails closed so a failed
-  // confirm never lets the sweep delete those rows), and with the record after it,
-  // a throw meant the attempt was never written -- so brain-drive retried its
-  // 16,000-row touch EVERY HOUR, timing out at the same place and generating
-  // exactly the disk IO this change exists to remove. Recording the attempt first
-  // is what the comment on recordSweep already claimed the code did.
-  if (sweeping) await recordSweep(SOURCE);
-  const touched = await touchChunks(SOURCE, [...touch, ...deferred], stampedAt, sweeping);
+  /**
+   * NO TOUCH AT ALL. Drive is 16,117 rows, which is 161 confirm requests, and one of
+   * them reliably exceeded the 8s timeout -- brain-drive failed at 14:52, 15:52 and
+   * 16:52 on 2026-08-31 doing exactly this. A confirm pass that cannot finish inside
+   * one invocation cannot be scheduled into working.
+   *
+   * `sweepMissing` deletes by the id set the walk collected, which is what the sweep
+   * always meant. Every id here is one we know exists: rewritten, unchanged, or
+   * deferred because the clock ran out.
+   */
+  const confirmed = [...touch, ...deferred];
+  const touched = confirmed.length;
 
   // Only sweep when the LISTING was complete. A partial list makes existing
-  // documents look deleted; a partial FETCH does not, because everything is
-  // either rewritten or confirmed above.
-  const swept = sweeping ? await sweepStale(SOURCE, stampedAt, written + touched) : 0;
+  // documents look deleted; a partial FETCH does not, because everything is either
+  // rewritten or confirmed above. Once a day, not every run -- see shouldSweep.
+  const sweeping = listed.complete && (await shouldSweep(SOURCE));
+  // Recorded BEFORE the sweep: a throw after the record defers 20 hours, a throw
+  // before it retried hourly forever.
+  if (sweeping) await recordSweep(SOURCE);
+  const swept = sweeping ? await sweepMissing(SOURCE, new Set([...writtenIds, ...confirmed])) : 0;
 
   logger.info(
     {
