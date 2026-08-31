@@ -167,12 +167,22 @@ describe("GET /api/admin/ab-overview", () => {
     routeData(subs, quotes);
 
     const body = await (await GET(req())).json();
-    const pricing = body.experiments.find((e: { axis: string }) => e.axis === "pricing");
-    const a = pricing.arms.find((x: { arm: string }) => x.arm === "A");
-    const b = pricing.arms.find((x: { arm: string }) => x.arm === "B");
-    expect(a).toMatchObject({ n: 100, purchases: 5, rate: 5 });
-    expect(b).toMatchObject({ n: 100, purchases: 10, rate: 10 });
-    expect(pricing.unattributed).toBe(0);
+    // The pricing axis was CONCLUDED on 2026-08-31 by retiring the higher-priced
+    // arm, so it must not appear as a live experiment however many quotes carry
+    // an arm — the stored arms are historical, and comparing them now compares
+    // two time periods rather than two randomly-assigned groups.
+    expect(body.experiments.map((e: { axis: string }) => e.axis)).not.toContain("pricing");
+    expect(
+      body.concluded.map((c: { title: string }) => c.title),
+      "a finished price test must still be listed, or it silently vanishes"
+    ).toContain("Report pricing (A vs B)");
+    // The one live axis is still attributed and rated from the same fixture.
+    const landing = body.experiments.find((e: { axis: string }) => e.axis === "landing");
+    expect(landing.arms.find((x: { arm: string }) => x.arm === "white")).toMatchObject({ n: 100 });
+    expect(landing.arms.find((x: { arm: string }) => x.arm === "white_prev")).toMatchObject({
+      n: 100,
+    });
+    expect(landing.unattributed).toBe(0);
   });
 
   it("labels every arm in plain English and never leaks a raw code", async () => {
@@ -311,19 +321,22 @@ describe("GET /api/admin/ab-overview", () => {
   });
 
   it("does not present a concluded experiment as a live A/B test", async () => {
-    // The paywall concluded in favour of forced, and with the forced screen
-    // switched off its two arms are two different time periods, not a randomised
-    // split. The survey theme concluded 2026-08-25 in favour of white. Both are
-    // listed under `concluded`, which carries prose and no rates.
+    // Three axes have finished. The paywall concluded in favour of forced and was
+    // then removed from the product entirely. The survey theme concluded
+    // 2026-08-25 in favour of white. The price test was settled on 2026-08-31 by
+    // retiring the higher-priced arm, so its two arms are two time periods rather
+    // than a randomised split. All three are listed under `concluded`, which
+    // carries prose and no rates.
     //
-    // The fixture deliberately supplies a dark survey arm: this asserts the axis
-    // list is what removes it, not an absent value.
+    // The fixture deliberately supplies a dark survey arm and an arm-A quote:
+    // this asserts the axis list is what removes them, not absent values.
     routeData([submission(1, "white", "dark")], [quote(1, "A", false)]);
     const body = await (await GET(req(36))).json();
-    expect(body.experiments.map((e: { axis: string }) => e.axis)).toEqual(["landing", "pricing"]);
+    expect(body.experiments.map((e: { axis: string }) => e.axis)).toEqual(["landing"]);
     const titles = body.concluded.map((c: { title: string }) => c.title);
     expect(titles).toContain("Paywall style");
     expect(titles.join(" ")).toContain("Survey design");
+    expect(titles.join(" ")).toContain("Report pricing");
     // and neither may carry a rate anyone could read a winner into
     expect(JSON.stringify(body.concluded)).not.toMatch(/\d+(\.\d+)?%/);
   });

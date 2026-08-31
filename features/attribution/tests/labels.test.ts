@@ -74,7 +74,11 @@ describe("arm labels", () => {
 
   it("excludes retired arms from the active set used for charts", () => {
     expect(activeArms("landing")).toEqual(["white", "white_prev"]);
-    expect(activeArms("pricing")).toEqual(["A", "B"]);
+    // Arm A retired 2026-08-31 when the higher-priced arm was dropped, so B is
+    // the only group still stamped on a new quote.
+    expect(activeArms("pricing")).toEqual(["B"]);
+    expect(armLabel("pricing", "A").retired).toBe(true);
+    expect(isKnownArm("pricing", "A")).toBe(true);
     // Dark is retired (the theme test concluded 2026-08-25 in favour of white), so
     // it must not read as an arm we still assign.
     expect(activeArms("survey")).toEqual(["white"]);

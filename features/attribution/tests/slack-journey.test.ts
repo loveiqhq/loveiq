@@ -200,17 +200,17 @@ describe("the two numbers the team scans for", () => {
   });
 });
 
-describe("pricing arm — which side of the test, in words and numbers", () => {
-  function pricingRow(blocks: SlackBlock[]): string {
-    const text = JSON.stringify(blocks);
-    const m = /Report pricing[^"]*/.exec(text);
-    return m ? m[0] : "";
-  }
-
-  it("names the dearer side for arm A, which is dearer since pricing 2.1", () => {
-    // Derived from PLAN_BUCKETS, not from a label: arm A is 39.99 on the entry
-    // tier against arm B's 29.00. The old labels said "Pricing A (lower)" and
-    // kept saying it after 2.1 inverted the test.
+describe("pricing arm — no longer shown", () => {
+  /**
+   * This block used to assert the pricing row spelled out which SIDE of the price
+   * test a buyer was on ("dearer, base EUR 39.99 vs EUR 29.00"), derived from
+   * PLAN_BUCKETS so a repricing could not make the label lie. The A/B price test
+   * was concluded on 2026-08-31 by retiring the higher-priced arm, so there is no
+   * side to be on: every reader sees one list. The row goes for the same reason
+   * the paywall and survey-theme rows went — a permanent constant on every
+   * message is noise, and presenting it as an experiment is worse than noise.
+   */
+  it("shows no pricing row, even for a purchase that carries an arm", () => {
     const message = buildJourneyMessage(
       journey({
         arms: { landing: "white", survey: "white", pricing: "A", paywall: null },
@@ -219,111 +219,16 @@ describe("pricing arm — which side of the test, in words and numbers", () => {
       }),
       { kind: "purchase", planLabel: "Just a snapshot", archetype: null, amountText: "EUR 39.99" }
     );
-    const row = pricingRow(message.blocks);
-    expect(row).toContain("dearer");
-    expect(row).not.toContain("cheaper");
-    expect(row).toContain("EUR 39.99");
-    expect(row).toContain("EUR 29.00");
-  });
-
-  it("names the cheaper side for arm B", () => {
-    const message = buildJourneyMessage(
-      journey({
-        arms: { landing: "white", survey: "white", pricing: "B", paywall: null },
-        money: { plan: "full_report", amount: 29, currency: "EUR" },
-        milestones: { ...journey().milestones, purchasedAt: "2026-08-24T19:10:00.000Z" },
-      }),
-      { kind: "purchase", planLabel: "Just a snapshot", archetype: null, amountText: "EUR 29.00" }
-    );
-    const row = pricingRow(message.blocks);
-    expect(row).toContain("cheaper");
-    expect(row).not.toContain("dearer");
-  });
-
-  it("compares on the plan actually bought, not always the entry tier", () => {
-    // all_reports: A 59.00 vs B 49.00 — different numbers from the entry tier, so
-    // a hardcoded reference plan would print the wrong pair here.
-    const message = buildJourneyMessage(
-      journey({
-        arms: { landing: "white", survey: "white", pricing: "A", paywall: null },
-        money: { plan: "all_reports", amount: 59, currency: "EUR" },
-        milestones: { ...journey().milestones, purchasedAt: "2026-08-24T19:10:00.000Z" },
-      }),
-      {
-        kind: "purchase",
-        planLabel: "For you & your partner",
-        archetype: null,
-        amountText: "EUR 59.00",
-      }
-    );
-    const row = pricingRow(message.blocks);
-    expect(row).toContain("EUR 59.00");
-    expect(row).toContain("EUR 49.00");
-  });
-
-  it("says so when both sides cost the same rather than inventing a direction", () => {
-    // essentials is grandfathered at one price for both arms.
-    const message = buildJourneyMessage(
-      journey({
-        arms: { landing: "white", survey: "white", pricing: "A", paywall: null },
-        money: { plan: "essentials", amount: 9.99, currency: "EUR" },
-        milestones: { ...journey().milestones, purchasedAt: "2026-08-24T19:10:00.000Z" },
-      }),
-      { kind: "purchase", planLabel: "Essentials", archetype: null, amountText: "EUR 9.99" }
-    );
-    const row = pricingRow(message.blocks);
-    expect(row).toContain("same base price both sides");
-    expect(row).not.toContain("dearer");
-    expect(row).not.toContain("cheaper");
-  });
-
-  it("explains the blank row instead of reading like a failure", () => {
-    // At survey-completion time no quote exists, so there genuinely is no arm.
-    // "Not recorded" made that look like lost data; it is simply not assigned yet.
-    const message = buildJourneyMessage(journey(), {
-      kind: "survey_completed",
-      questionCount: 59,
-    });
-    const row = pricingRow(message.blocks);
-    expect(row).toContain("Not priced yet");
-    expect(row).not.toContain("Not recorded");
-    expect(row).not.toContain("dearer");
-    expect(row).not.toContain("cheaper");
-  });
-
-  it("never shows a concluded experiment's row — paywall or survey theme", () => {
-    // It used to appear whenever the arm happened to have a value, which
-    // purchases do (they carry it in the Stripe metadata). But nothing
-    // randomises the paywall any more, so listing it under "experiments they
-    // were in" told the reader they were in a test that is not running. The arm
-    // is still stored and still shown in /admin's CONCLUDED section, which is
-    // where a finished experiment belongs.
-    const survey = buildJourneyMessage(journey(), {
-      kind: "survey_completed",
-      questionCount: 59,
-    });
-    expect(JSON.stringify(survey.blocks)).not.toContain("Paywall style");
-
-    const purchase = buildJourneyMessage(
-      journey({
-        arms: { landing: "white", survey: "white", pricing: "A", paywall: "treatment" },
-        money: { plan: "full_report", amount: 39.99, currency: "EUR" },
-        milestones: { ...journey().milestones, purchasedAt: "2026-08-24T19:10:00.000Z" },
-      }),
-      { kind: "purchase", planLabel: "Just a snapshot", archetype: null, amountText: "EUR 39.99" }
-    );
-    const text = JSON.stringify(purchase.blocks);
-    expect(text).not.toContain("Paywall style");
-    expect(text).not.toContain("Forced paywall");
-    // The survey theme test concluded 2026-08-25. Everyone gets white, so the
-    // row would be a permanent constant on every message — the same reason the
-    // paywall row went. Note the fixture DOES carry a survey arm, so this asserts
-    // the axis list is what excludes it, not an absent value.
-    expect(text).not.toContain("Survey design");
-    expect(text).not.toContain("White survey");
-    // The LIVE experiments are still there.
-    expect(text).toContain("Landing page design");
-    expect(text).toContain("Report pricing");
+    const text = JSON.stringify(message.blocks);
+    // The fixture DOES carry a pricing arm, so this asserts the axis list is what
+    // excludes it, not an absent value.
+    expect(text).not.toContain("Report pricing");
+    expect(text).not.toContain("Pricing A");
+    expect(text).not.toContain("dearer");
+    expect(text).not.toContain("cheaper");
+    // The amount paid is still there — that is the number the row existed to
+    // contextualise, and it never came from the arm.
+    expect(text).toContain("EUR 39.99");
   });
 });
 

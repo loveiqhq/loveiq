@@ -90,7 +90,10 @@ const LABELS: Record<ExperimentAxis, Record<string, ArmLabel>> = {
     // buyer was shown. A direction baked into a name goes stale silently every
     // time the test flips, so the name identifies the arm and the surrounding
     // numbers (the amount paid, the digest's rates) carry the direction.
-    A: { short: "Pricing A", long: "Pricing: group A" },
+    // Retired 2026-08-31: the higher-priced arm was dropped and the axis concluded.
+    // A was the CHEAPER arm until the 2.1 flip on 2026-08-24 and the dearer one after
+    // it, which is why the label says neither.
+    A: { short: "Pricing A", long: "Pricing: group A", retired: true },
     B: { short: "Pricing B", long: "Pricing: group B" },
     // Retired 2026-06 in the 3-bucket → 2-bucket cut. Legacy quotes still read back as C.
     C: { short: "Pricing C", long: "Pricing: group C", retired: true },

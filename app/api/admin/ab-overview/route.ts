@@ -492,13 +492,16 @@ export async function GET(request: Request) {
     /*
      * Only genuinely randomised, currently-running splits belong here.
      *
-     * The paywall axis is gone: the forced wall was REMOVED from the product on
-     * 2026-08-31, so nothing stamps an arm and no reader is bucketed. It stays in
-     * `concluded` below so a finished test cannot be mistaken for a live one.
+     * Two axes left on 2026-08-31 and both are in `concluded` below rather than
+     * here, so a finished test cannot be mistaken for a live one. The forced
+     * paywall was REMOVED from the product, so nothing stamps an arm at all. The
+     * price test was settled by dropping the higher-priced arm, so every new quote
+     * is stamped with the surviving group — which is not the same thing as a
+     * randomised arm, and comparing it against the retired one would be comparing
+     * two time periods.
      */
     const experiments: ExperimentReadout[] = [
       tally("landing", (_id, tracker) => readStampedArms(tracker).landing),
-      tally("pricing", (id) => bySubmission.get(id)?.pricing ?? null),
     ];
 
     /*
@@ -617,6 +620,11 @@ export async function GET(request: Request) {
       funnelCaveats,
       experiments,
       concluded: [
+        {
+          title: "Report pricing (A vs B)",
+          outcome:
+            "Finished on 31 August 2026. We dropped the more expensive of the two price lists, so everyone now sees the same prices. The cheaper list had taken more money over the test as a whole, but the two prices were swapped over on 24 August, which means the before and after are not really one comparison — with 1 sale against 2 since the swap there was nothing to call it on. It was a decision to simplify, not a verdict.",
+        },
         {
           title: "Paywall style",
           outcome:

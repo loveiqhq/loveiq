@@ -82,20 +82,24 @@ export const maxDuration = 60;
 const WINDOW_DAYS = 30;
 
 /**
- * The axes worth a verdict. `paywall` and `survey` are deliberately absent —
- * both experiments are concluded (the paywall in favour of the forced wall, the
- * survey theme in favour of white on 2026-08-25) and nothing randomises either
- * any more, so presenting one as a live test is exactly the mistake the /admin
- * dashboard made before it was corrected.
+ * The axes worth a verdict. `paywall`, `survey` and `pricing` are deliberately
+ * absent — all three experiments are concluded (the paywall in favour of the
+ * forced wall and then removed entirely, the survey theme in favour of white on
+ * 2026-08-25, the price test in favour of the lower arm on 2026-08-31) and
+ * nothing randomises any of them any more, so presenting one as a live test is
+ * exactly the mistake the /admin dashboard made before it was corrected.
  */
-const VERDICT_AXES: ExperimentAxis[] = ["landing", "pricing"];
+const VERDICT_AXES: ExperimentAxis[] = ["landing"];
 
 /**
- * When report prices last changed. Pre- and post-change arm A are different
- * products, so the digest says the pricing comparison restarts rather than
- * pooling two prices into one rate. Update this on the next price change.
+ * When report prices last changed. `buildAlerts` uses it to suppress the
+ * "conversion dropped" alert around a repricing, where a rate change is expected
+ * rather than a regression. Update this on the next price change.
+ *
+ * 2026-08-31: the higher-priced arm was retired, so every reader moved to the
+ * lower price list. That is a repricing for most visitors, hence the new date.
  */
-const PRICING_CUTOVER_ISO = "2026-08-24T02:46:49Z";
+const PRICING_CUTOVER_ISO = "2026-08-31T00:00:00Z";
 
 /**
  * Makes each preview's Slack `kind` distinct so notifySlack's 60-second dedup

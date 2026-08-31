@@ -45,13 +45,23 @@ const PRICING_SIGNAL_SELECT = [
 ].join(",");
 
 /**
- * Pricing buckets. Each A/B bucket carries its OWN base price per plan and all
- * per-visitor boosts are paused, so the charged price is simply the bucket's
- * `startingCents` and the 14-day time-decay ladder is off. `msrpCents` is the
- * struck-out anchor shown in the modal/email. Since Pricing 2.1 (2026-08) Group
- * A is the HIGH arm and Group B the low one — the reverse of 2.0, so do not
- * assume a direction here; read PLAN_BUCKETS below, which is the single source
- * of truth (see its per-tier comments).
+ * The price list. One bucket per plan since the A/B price test was CONCLUDED on
+ * 2026-08-31 in favour of B; `startingCents` is what the reader is charged and
+ * `msrpCents` is the struck-out anchor shown in the modal and the emails.
+ *
+ * Why B, and what the data actually said. Group A was the dearer arm from the
+ * 2.1 flip on 2026-08-24 (39.99/49.99/59 against B's 29/39/49); before that, in
+ * 2.0, A was the cheaper one. Measured over the whole life of the test:
+ *
+ *   before the flip   A 2,525 quotes / 21 paid / EUR 482.29
+ *                     B 2,376 quotes / 23 paid / EUR 684.81
+ *   since the flip    A   195 quotes /  1 paid / EUR  39.99
+ *                     B   191 quotes /  2 paid / EUR  68.00
+ *
+ * B earned more in both eras, but the flip means the two eras are not one test,
+ * and 1-vs-2 purchases since the flip settles nothing on its own. This was called
+ * on the stakeholder's instruction to drop the higher-priced arm, which the
+ * numbers do not contradict — not on a result the sample could support.
  *
  * Existing quotes are frozen on create, so a change here reprices ONLY new
  * quotes: the stored msrp/starting_price, initial_price and current_price each
@@ -60,9 +70,10 @@ const PRICING_SIGNAL_SELECT = [
  * nothing for everyone who already has a quote (see
  * supabase/migrations/*_resync_quotes.sql).
  */
-// "C" retired 2026-06 (3-bucket → 2-bucket). Kept in the union so legacy quotes
-// stamped base_price_bucket="C" still rehydrate — they read msrp/starting off the
-// stored row, and bucketFromCode("C") → null is handled gracefully downstream.
+// "C" retired 2026-06 (3-bucket → 2-bucket); "A" retired 2026-08-31. Both stay in
+// the union so legacy quotes stamped with them still rehydrate — they read
+// msrp/starting off the stored row, and bucketFromCode → null is handled
+// gracefully downstream.
 export type PricingBucketCode = "A" | "B" | "C";
 interface PricingBucket {
   code: PricingBucketCode;
@@ -70,33 +81,15 @@ interface PricingBucket {
   msrpCents: number;
   startingCents: number;
 }
-// Pricing 2.1 (2026-08, from Tracking & Pricing - pricing_2.0.csv, the "higher
-// validity test (23.08.2026)" block). Each bucket carries its OWN base, and note
-// that 2.1 FLIPPED the direction: arm A is now the HIGH arm on every tier and
-// arm B the low one — the opposite of 2.0. Boosts stay paused (no per-visitor
-// multipliers applied), so the charged price is just `startingCents`;
-// `msrpCents` is the strike-through anchor. Arm B is unchanged from 2.0, and
-// `essentials` (retired/grandfathered) is untouched.
 const PLAN_BUCKETS: Record<ReportPurchasePlanId, readonly PricingBucket[]> = {
-  essentials: [
-    { code: "A", weight: 50, msrpCents: 2999, startingCents: 999 },
-    { code: "B", weight: 50, msrpCents: 2999, startingCents: 999 },
-  ],
-  // Tier 1 "Just a snapshot": A €39.99 (strike €45.99), B €29 (no strike)
-  full_report: [
-    { code: "A", weight: 50, msrpCents: 4599, startingCents: 3999 },
-    { code: "B", weight: 50, msrpCents: 2900, startingCents: 2900 },
-  ],
-  // Tier 2 "All your core archetypes": A €49.99 (strike €54.99), B €39 (strike €87)
-  core: [
-    { code: "A", weight: 50, msrpCents: 5499, startingCents: 4999 },
-    { code: "B", weight: 50, msrpCents: 8700, startingCents: 3900 },
-  ],
-  // Tier 3 "For you & your partner": A €59 (strike €64.99), B €49 (strike €58)
-  all_reports: [
-    { code: "A", weight: 50, msrpCents: 6499, startingCents: 5900 },
-    { code: "B", weight: 50, msrpCents: 5800, startingCents: 4900 },
-  ],
+  // Retired/grandfathered tier, untouched by the 2.1 flip and by this cut.
+  essentials: [{ code: "B", weight: 100, msrpCents: 2999, startingCents: 999 }],
+  // Tier 1 "Just a snapshot": €29 (priced at its own anchor, so no strike)
+  full_report: [{ code: "B", weight: 100, msrpCents: 2900, startingCents: 2900 }],
+  // Tier 2 "All your core archetypes": €39 (strike €87)
+  core: [{ code: "B", weight: 100, msrpCents: 8700, startingCents: 3900 }],
+  // Tier 3 "For you & your partner": €49 (strike €58)
+  all_reports: [{ code: "B", weight: 100, msrpCents: 5800, startingCents: 4900 }],
 };
 
 const COUNTRY_CODE_TO_TIER: Record<
@@ -596,31 +589,12 @@ export function normalizePriceEnding(rawCents: number) {
   return candidates.find((candidate) => candidate >= rounded) ?? rounded;
 }
 
-export function getPricingExperimentGroup(personalReportId: number): PricingExperimentGroup {
-  return hashString(`experiment:${personalReportId}`) % 2 === 0 ? "A" : "B";
-}
-
 /**
- * Deterministic bucket selection using the hash-of-personalReportId seeded
- * against the weighted distribution (A=50%, B=50%). One bucket per
- * user — the same code (A/B) is applied across all three plans so the
- * tier ladder stays monotonic (Full Report ≥ Essentials, All ≥ Full).
+ * The surviving pricing group. Nothing is randomised any more — the A/B price test
+ * concluded on 2026-08-31 — but `report_price_quote.experiment_group` is NOT NULL,
+ * so new rows carry the group that won rather than an arm nobody was assigned to.
  */
-function pickBucket(plan: ReportPurchasePlanId, personalReportId: number): PricingBucket {
-  // eslint-disable-next-line security/detect-object-injection -- plan is a closed union of internal purchase-plan ids.
-  const buckets = PLAN_BUCKETS[plan];
-  const draw = hashString(`bucket:${personalReportId}`) % 100;
-  let running = 0;
-  for (const bucket of buckets) {
-    running += bucket.weight;
-    if (draw < running) {
-      return bucket;
-    }
-  }
-  // Weights sum to 100; the loop always returns, but fall through defensively.
-  // Callers only pass non-empty `buckets`, so the final index is defined.
-  return buckets[buckets.length - 1]!;
-}
+const SURVIVING_PRICING_GROUP: PricingExperimentGroup = "B";
 
 function bucketFromCode(
   plan: ReportPurchasePlanId,
@@ -630,6 +604,17 @@ function bucketFromCode(
   // eslint-disable-next-line security/detect-object-injection -- plan is a closed union.
   const buckets = PLAN_BUCKETS[plan];
   return buckets.find((bucket) => bucket.code === code) ?? null;
+}
+
+/**
+ * The same lookup for the FRESH-quote path, where a miss is a bug rather than a
+ * legacy row: throwing means a mis-stamped group fails the quote instead of
+ * silently charging whatever bucket happened to be first in the list.
+ */
+function mustGetBucket(plan: ReportPurchasePlanId, code: string): PricingBucket {
+  const bucket = bucketFromCode(plan, code);
+  if (!bucket) throw new Error(`pricing_bucket_missing:${plan}:${code}`);
+  return bucket;
 }
 
 function normalizeCountryCode(value: string | null | undefined) {
@@ -1094,8 +1079,7 @@ function buildQuotePayload({
   // base prices still differ (bucket.startingCents), but no dynamic uplift.
   upliftEnabled: boolean;
 }): BuiltQuotePayload {
-  const experimentGroup =
-    existingQuote?.experiment_group ?? getPricingExperimentGroup(context.personalReportId);
+  const experimentGroup = existingQuote?.experiment_group ?? SURVIVING_PRICING_GROUP;
 
   // Resolve the bucket — either read the stored code (with MSRP/starting
   // sourced from the row when present) or pick fresh for a brand-new quote.
@@ -1119,14 +1103,10 @@ function buildQuotePayload({
             ? fromEuroAmount(existingQuote.starting_price)
             : (existingBucketFromCode?.startingCents ?? fromEuroAmount(existingQuote.base_price)),
       }
-    : // Pricing 2.0: a fresh quote's price bucket follows the experiment arm
-      // (Group A → A bucket, Group B → B bucket) so "Group A/B" means ONE
-      // coherent thing across price, uplift gate, and analytics. Previously the
-      // bucket was an independent weighted draw (pickBucket) — harmless while
-      // A and B were the same price, incoherent now that they differ. Falls
-      // back to pickBucket only if the arm has no matching bucket code (never
-      // for the A/B catalogue, but keeps legacy "C" ids safe).
-      (bucketFromCode(plan, experimentGroup) ?? pickBucket(plan, context.personalReportId));
+    : // One price list, so a fresh quote takes the only bucket there is. The
+      // lookup is by code rather than `[0]` so a stray group value can never
+      // silently price someone off the wrong row — it throws instead.
+      mustGetBucket(plan, experimentGroup);
 
   const countryPricing = getCountryPricing(context.countryCode);
   const deviceType = existingQuote?.device_type ?? getDeviceTypeFromUserAgent(context.userAgent);
@@ -1157,26 +1137,26 @@ function buildQuotePayload({
       ? existingQuote.initial_price_timestamp
       : now.toISOString();
 
-  // Per-user pricing (pricing 2.0): each arm is charged its OWN bucket's flat
-  // `starting` price — since Pricing 2.1 Group A is the HIGH arm, B the low. While
+  // The charged price is the bucket's flat `starting` price. While
   // `pricing_uplift_enabled` is OFF (current default) NO per-visitor uplift is
-  // applied to either arm. If uplift is ever re-enabled, Group B additionally
-  // gets the contextual multiplier (country × device × traffic × behavioral ×
-  // engagement) on its base, charm-rounded to a .49/.99 ending and clamped to MSRP.
-  const groupBInitialRaw =
+  // applied. If uplift is ever re-enabled, the contextual multiplier (country ×
+  // device × traffic × behavioral × engagement) is applied to that base,
+  // charm-rounded to a .49/.99 ending and clamped to MSRP. Note this used to apply
+  // to Group B only; with one group it applies to everyone, which is what the flag
+  // has always described.
+  const upliftedInitialRaw =
     bucket.startingCents *
     countryPricing.multiplier *
     deviceMultiplier *
     trafficMultiplier *
     behavioralPricing.multiplier *
     engagementMultiplier;
-  const computedInitialCents =
-    experimentGroup === "A" || !upliftEnabled
-      ? Math.min(bucket.msrpCents, bucket.startingCents)
-      : Math.min(
-          bucket.msrpCents,
-          normalizePriceEnding(Math.min(bucket.msrpCents, groupBInitialRaw))
-        );
+  const computedInitialCents = upliftEnabled
+    ? Math.min(
+        bucket.msrpCents,
+        normalizePriceEnding(Math.min(bucket.msrpCents, upliftedInitialRaw))
+      )
+    : Math.min(bucket.msrpCents, bucket.startingCents);
   const initialPriceCents =
     !regenerateInitialPrice && existingQuote?.initial_price != null
       ? fromEuroAmount(existingQuote.initial_price)
@@ -1300,7 +1280,17 @@ async function persistQuote({
   plan: ReportPurchasePlanId;
   pricingSessionId?: string | null;
 }) {
-  const upliftEnabled = await isFeatureEnabled("pricing_uplift_enabled", true);
+  /**
+   * Fails CLOSED, unlike most flags here. `isFeatureEnabled` returns this default
+   * when the row is missing OR Supabase is unreachable, and the row has been
+   * `false` in production since 2026-08-03 — so defaulting to `true` meant a
+   * Supabase blip switched per-visitor price boosts ON for everyone and charged
+   * more than the page showed. It was survivable only because Group A
+   * short-circuited the uplift branch, covering half of readers; retiring arm A
+   * on 2026-08-31 removed that accident. A pricing flag must fail towards
+   * charging LESS, the same rule the urgency surcharge followed.
+   */
+  const upliftEnabled = await isFeatureEnabled("pricing_uplift_enabled", false);
 
   const builtQuote = buildQuotePayload({
     context,
@@ -1590,11 +1580,3 @@ export function getPricingBucketsForPlan(plan: ReportPurchasePlanId) {
   // eslint-disable-next-line security/detect-object-injection -- plan is a closed union.
   return PLAN_BUCKETS[plan];
 }
-
-/**
- * Test-only surface — production code should call `getReportPriceQuoteForContext`
- * which internally invokes `pickBucket`. Exposed here so the bucket-coherence
- * invariant ("same user lands the same A/B/C across all 3 plans") can be
- * asserted directly without mocking the full Supabase fetch chain.
- */
-export const __testing__ = { pickBucket };
