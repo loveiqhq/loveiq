@@ -1,7 +1,15 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import { sweepStale, touchChunks, upsertChunks, type BrainRow, type IngestResult } from "./upsert";
+import {
+  recordSweep,
+  shouldSweep,
+  sweepStale,
+  touchChunks,
+  upsertChunks,
+  type BrainRow,
+  type IngestResult,
+} from "./upsert";
 
 /**
  * Notion into the company-brain corpus: the task board, and the written pages.
@@ -607,13 +615,18 @@ export async function ingestNotion(
     .flatMap((i) => [i.sourceId, ...partIdsOf(known, i.sourceId)])
     .filter((id) => !writtenIds.has(id));
   const crawlComplete = databases.size > 0 && !crawlTruncated;
-  const touched = await touchChunks(SOURCE, [...touch, ...deferred], stampedAt, crawlComplete);
+  // Sweeping about once a day instead of every run: the touch it needs rewrites
+  // four indexes per row, and a deleted source document can wait a day to be
+  // noticed. See shouldSweep.
+  const sweeping = crawlComplete && (await shouldSweep(SOURCE));
+  const touched = await touchChunks(SOURCE, [...touch, ...deferred], stampedAt, sweeping);
 
   // The sweep is safe whenever every page was either rewritten or confirmed —
   // which is now true even for a run cut short, so stale rows are never deleted
   // just because the clock ran out. It still refuses if the crawl itself was
   // incomplete, because then pages may be missing from `candidates` entirely.
-  const swept = crawlComplete ? await sweepStale(SOURCE, stampedAt, written + touched) : 0;
+  const swept = sweeping ? await sweepStale(SOURCE, stampedAt, written + touched) : 0;
+  if (sweeping) await recordSweep(SOURCE);
 
   logger.info(
     {

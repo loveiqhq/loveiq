@@ -13,6 +13,11 @@ vi.mock("@features/admin/server/supabase", () => ({
     const method = (init?.method ?? "GET").toUpperCase();
     dbCalls.push({ path, method, body: String(init?.body ?? "") });
 
+    // A source with no sweep-state row has never swept, so it is due. Answered
+    // here rather than stubbing shouldSweep, to keep the real gate under test.
+    if (path.includes("brain_sweep_state")) {
+      return { ok: true, status: 200, headers: new Headers(), json: async () => [] };
+    }
     // knownNotionEdits()
     if (method === "GET" && path.includes("select=source_id,meta")) {
       const offset = Number(/offset=(\d+)/.exec(path)?.[1] ?? 0);
@@ -110,7 +115,9 @@ const CURRENT_V = (taskToRow(ROW_LIT, STAMP, "Literature", "")!.meta as { v: num
 
 function written(): Array<{ source_id: string; title: string; body: string }> {
   return dbCalls
-    .filter((c) => c.method === "POST" && c.path.includes("on_conflict"))
+    .filter(
+      (c) => c.method === "POST" && c.path.includes("brain_chunk") && c.path.includes("on_conflict")
+    )
     .flatMap(
       (c) => JSON.parse(c.body) as Array<{ source_id: string; title: string; body: string }>
     );
@@ -339,7 +346,10 @@ describe("long pages are split, not truncated", () => {
     process.env.NOTION_TOKEN = "ntn_test";
     await ingestNotion(STAMP, () => false);
     const ids = dbCalls
-      .filter((c) => c.method === "POST" && c.path.includes("on_conflict"))
+      .filter(
+        (c) =>
+          c.method === "POST" && c.path.includes("brain_chunk") && c.path.includes("on_conflict")
+      )
       .flatMap((c) => (JSON.parse(c.body) as Array<{ source_id: string }>).map((r) => r.source_id));
     // Fixtures are short, so no parts — but the base ids must be unsuffixed.
     expect(ids.some((id) => id.includes("#"))).toBe(false);

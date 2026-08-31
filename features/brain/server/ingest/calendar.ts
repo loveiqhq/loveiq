@@ -19,7 +19,15 @@ import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
 import { domainMailboxes } from "./gmail";
 import { splitBody } from "./notion";
-import { sweepStale, touchChunks, upsertChunks, type BrainRow, type IngestResult } from "./upsert";
+import {
+  recordSweep,
+  shouldSweep,
+  sweepStale,
+  touchChunks,
+  upsertChunks,
+  type BrainRow,
+  type IngestResult,
+} from "./upsert";
 
 const SOURCE = "calendar";
 const API = "https://www.googleapis.com/calendar/v3/calendars";
@@ -290,6 +298,10 @@ export async function ingestCalendar(
   const written = await upsertChunks(rows);
   const writtenIds = new Set(rows.map((r) => r.source_id));
   const rewritten = new Set([...writtenIds].map((id) => id.split("#")[0]));
+  // Sweeping about once a day instead of every run: the touch it needs rewrites
+  // four indexes per row, and a deleted source document can wait a day to be
+  // noticed. See shouldSweep.
+  const sweeping = complete && (await shouldSweep(SOURCE));
   const touched = await touchChunks(
     SOURCE,
     [...known.entries()]
@@ -300,9 +312,10 @@ export async function ingestCalendar(
       })
       .map(([id]) => id),
     stampedAt,
-    complete
+    sweeping
   );
-  const swept = complete ? await sweepStale(SOURCE, stampedAt, written + touched) : 0;
+  const swept = sweeping ? await sweepStale(SOURCE, stampedAt, written + touched) : 0;
+  if (sweeping) await recordSweep(SOURCE);
 
   logger.info(
     {

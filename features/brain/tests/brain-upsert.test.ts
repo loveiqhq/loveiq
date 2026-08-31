@@ -194,3 +194,80 @@ describe("touching rows is only ever for the sweep, and it is not free", () => {
     ).toBeGreaterThan(0);
   });
 });
+
+describe("the sweep runs about once a day, and fails closed", () => {
+  /**
+   * Every ingester used to touch its whole source on EVERY run so the sweep could
+   * tell an old-but-true row from a deleted one -- up to 96 times a day for the
+   * brain-fast sources. Since no touch can be HOT (see `touchChunks`), that was the
+   * write amplification that exhausted the project's Disk IO budget.
+   *
+   * A source document being deleted is rare and not urgent. Once a day is enough.
+   */
+  let calls: string[];
+
+  beforeEach(async () => {
+    calls = [];
+    const { supabaseFetch } = await import("@features/admin/server/supabase");
+    (vi.mocked(supabaseFetch) as never as { mockReset: () => void }).mockReset();
+  });
+
+  async function withState(body: unknown, ok = true) {
+    const { supabaseFetch } = await import("@features/admin/server/supabase");
+    (
+      vi.mocked(supabaseFetch) as never as {
+        mockImplementation: (f: (p: string, i?: RequestInit) => unknown) => void;
+      }
+    ).mockImplementation((p: string, i?: RequestInit) => {
+      calls.push(`${(i?.method ?? "GET").toUpperCase()} ${p}`);
+      return Promise.resolve({
+        ok,
+        status: ok ? 200 : 503,
+        headers: new Headers(),
+        json: async () => body,
+        text: async () => "",
+      });
+    });
+    return await import("@features/brain/server/ingest/upsert");
+  }
+
+  it("sweeps a source that has never swept", async () => {
+    const { shouldSweep } = await withState([]);
+    await expect(shouldSweep("gmail")).resolves.toBe(true);
+  });
+
+  it("does not sweep again an hour later", async () => {
+    const hourAgo = new Date(Date.parse("2026-08-31T12:00:00Z") - 3_600_000).toISOString();
+    const { shouldSweep } = await withState([{ swept_at: hourAgo }]);
+    await expect(shouldSweep("gmail", Date.parse("2026-08-31T12:00:00Z"))).resolves.toBe(false);
+  });
+
+  it("sweeps again after twenty hours", async () => {
+    const old = new Date(Date.parse("2026-08-31T12:00:00Z") - 21 * 3_600_000).toISOString();
+    const { shouldSweep } = await withState([{ swept_at: old }]);
+    await expect(shouldSweep("gmail", Date.parse("2026-08-31T12:00:00Z"))).resolves.toBe(true);
+  });
+
+  it("refuses to sweep when the state is unreadable, because deletion is irreversible", async () => {
+    const { shouldSweep } = await withState([], false);
+    await expect(shouldSweep("gmail")).resolves.toBe(false);
+  });
+
+  it("refuses to sweep on an unparseable timestamp rather than guessing", async () => {
+    const { shouldSweep } = await withState([{ swept_at: "not a date" }]);
+    await expect(shouldSweep("gmail")).resolves.toBe(false);
+  });
+
+  it("records the sweep against its own table, not the corpus", async () => {
+    const { recordSweep } = await withState([]);
+    await recordSweep("gmail", "2026-08-31T12:00:00Z");
+    expect(calls.join()).toContain("brain_sweep_state");
+    expect(calls.join()).not.toContain("brain_chunk");
+  });
+
+  it("never fails the run when the bookkeeping write fails", async () => {
+    // One lost write means one extra sweep tomorrow. It must not abort ingestion.
+    const { recordSweep } = await withState([], false);
+    await expect(recordSweep("gmail")).resolves.toBeUndefined();
+  });
+});

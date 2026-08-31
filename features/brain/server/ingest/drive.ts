@@ -10,7 +10,15 @@ import logger from "@shared/observability/logger";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { splitBody } from "./notion";
 import { looksLikeWhatsAppExport, whatsappRows } from "./whatsapp";
-import { sweepStale, touchChunks, upsertChunks, type BrainRow, type IngestResult } from "./upsert";
+import {
+  recordSweep,
+  shouldSweep,
+  sweepStale,
+  touchChunks,
+  upsertChunks,
+  type BrainRow,
+  type IngestResult,
+} from "./upsert";
 
 /**
  * Google Drive documents — in practice the Gemini notes written after each call.
@@ -510,12 +518,17 @@ export async function ingestDrive(
   const deferred = toFetch
     .flatMap((f) => [`doc:${f.id}`, ...partIdsOf(known, `doc:${f.id}`)])
     .filter((id) => !writtenIds.has(id));
-  const touched = await touchChunks(SOURCE, [...touch, ...deferred], stampedAt, listed.complete);
+  // Sweeping about once a day instead of every run: the touch it needs rewrites
+  // four indexes per row, and a deleted source document can wait a day to be
+  // noticed. See shouldSweep.
+  const sweeping = listed.complete && (await shouldSweep(SOURCE));
+  const touched = await touchChunks(SOURCE, [...touch, ...deferred], stampedAt, sweeping);
 
   // Only sweep when the LISTING was complete. A partial list makes existing
   // documents look deleted; a partial FETCH does not, because everything is
   // either rewritten or confirmed above.
-  const swept = listed.complete ? await sweepStale(SOURCE, stampedAt, written + touched) : 0;
+  const swept = sweeping ? await sweepStale(SOURCE, stampedAt, written + touched) : 0;
+  if (sweeping) await recordSweep(SOURCE);
 
   logger.info(
     {

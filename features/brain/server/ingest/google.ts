@@ -10,7 +10,15 @@ import {
 import logger from "@shared/observability/logger";
 import { isoWeek, longDate, longMonth, monthEnd } from "./analytics";
 import { supabaseFetch } from "@features/admin/server/supabase";
-import { sweepStale, touchChunks, upsertChunks, type BrainRow, type IngestResult } from "./upsert";
+import {
+  recordSweep,
+  shouldSweep,
+  sweepStale,
+  touchChunks,
+  upsertChunks,
+  type BrainRow,
+  type IngestResult,
+} from "./upsert";
 
 /**
  * GA4 and Search Console, as dated daily facts.
@@ -670,12 +678,17 @@ export async function ingestGa4(
   // Everything this run did not rewrite is older than the window and still true.
   // Without touching it, the sweep would delete the entire history every night
   // and the corpus would be permanently 10 days deep.
+  // Once a day, not every 15 minutes: the touch below rewrites four indexes per
+  // row, and GA4/GSC rows going stale is not urgent. See shouldSweep.
+  const sweeping = await shouldSweep(GA4_SOURCE);
   const touched = await touchOlderChunks(
     GA4_SOURCE,
     chunks.map((c) => c.source_id),
-    stampedAt
+    stampedAt,
+    sweeping
   );
-  const swept = await sweepStale(GA4_SOURCE, stampedAt, written + touched);
+  const swept = sweeping ? await sweepStale(GA4_SOURCE, stampedAt, written + touched) : 0;
+  if (sweeping) await recordSweep(GA4_SOURCE);
   return { source: GA4_SOURCE, rows: written + touched, swept };
 }
 
@@ -973,12 +986,17 @@ export async function ingestSearchConsole(
   // Everything this run did not rewrite is older than the window and still true.
   // Without touching it, the sweep would delete the entire history every night
   // and the corpus would be permanently 10 days deep.
+  // Once a day, not every 15 minutes: the touch below rewrites four indexes per
+  // row, and GA4/GSC rows going stale is not urgent. See shouldSweep.
+  const sweeping = await shouldSweep(GSC_SOURCE);
   const touched = await touchOlderChunks(
     GSC_SOURCE,
     chunks.map((c) => c.source_id),
-    stampedAt
+    stampedAt,
+    sweeping
   );
-  const swept = await sweepStale(GSC_SOURCE, stampedAt, written + touched);
+  const swept = sweeping ? await sweepStale(GSC_SOURCE, stampedAt, written + touched) : 0;
+  if (sweeping) await recordSweep(GSC_SOURCE);
   return { source: GSC_SOURCE, rows: written + touched, swept };
 }
 
@@ -998,8 +1016,12 @@ export async function ingestSearchConsole(
 async function touchOlderChunks(
   source: string,
   writtenIds: string[],
-  stampedAt: string
+  stampedAt: string,
+  // Skipping this skips the full id listing as well as the writes -- both exist
+  // only to let the sweep tell an old-but-true row from a deleted one.
+  willSweep = true
 ): Promise<number> {
+  if (!willSweep) return 0;
   const written = new Set(writtenIds);
   const stale: string[] = [];
 

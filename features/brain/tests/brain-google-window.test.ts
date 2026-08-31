@@ -21,6 +21,10 @@ vi.mock("@features/admin/server/supabase", () => ({
   supabaseFetch: vi.fn(async (path: string) => {
     listCalls.push(path);
     if (!listOk) return { ok: false, status: 500, json: async () => ({}) };
+    // Never-swept => due. Keeps the real shouldSweep in the path under test.
+    if (path.includes("brain_sweep_state")) {
+      return { ok: true, status: 200, json: async () => [] };
+    }
     const offset = Number(/offset=(\d+)/.exec(path)?.[1] ?? 0);
     const page = existingIds.slice(offset, offset + 1000).map((id) => ({ source_id: id }));
     return { ok: true, status: 200, json: async () => page };
@@ -129,9 +133,14 @@ describe("the nightly window must not delete the history", () => {
     listOk = false;
     await ingestGa4(STAMP);
     expect(touchChunks).not.toHaveBeenCalled();
-    const [, , total] = sweepStale.mock.calls[0] as unknown as [string, string, number];
-    const written = await upsertChunks.mock.results[0].value;
-    expect(total).toBe(written);
+    /**
+     * STRONGER than it used to be. Previously the sweep still ran, and safety rested
+     * on `sweepStale` refusing a majority deletion once the touch count came back 0.
+     * Now an unreadable database also makes `shouldSweep` fail closed, so the sweep
+     * never starts. Both keep the history; not deleting at all is the better of the
+     * two, and it no longer depends on the majority guard being the last line.
+     */
+    expect(sweepStale).not.toHaveBeenCalled();
   });
 
   it("asks GA4 for the nightly window by default and the backfill window on request", async () => {

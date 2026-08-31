@@ -22,6 +22,11 @@ vi.mock("@features/admin/server/supabase", () => ({
   supabaseFetch: vi.fn(async (path: string, init?: RequestInit) => {
     const method = (init?.method ?? "GET").toUpperCase();
     dbCalls.push({ path, method, body: String(init?.body ?? "") });
+    // A source with no sweep-state row has never swept, so it is due. Answered
+    // here rather than stubbing shouldSweep, to keep the real gate under test.
+    if (path.includes("brain_sweep_state")) {
+      return { ok: true, status: 200, headers: new Headers(), json: async () => [] };
+    }
     if (method === "GET" && path.includes("select=source_id,meta")) {
       const off = Number(/offset=(\d+)/.exec(path)?.[1] ?? 0);
       return { ok: true, headers: new Headers(), json: async () => (off === 0 ? existing : []) };
@@ -164,7 +169,10 @@ describe("ingestDrive", () => {
   it("strips the BOM and CRLFs that Google's text export adds", async () => {
     await ingestDrive(STAMP);
     const written = dbCalls
-      .filter((c) => c.method !== "GET" && c.path.includes("on_conflict"))
+      .filter(
+        (c) =>
+          c.method !== "GET" && c.path.includes("brain_chunk") && c.path.includes("on_conflict")
+      )
       .flatMap((c) => JSON.parse(c.body) as Array<{ body: string }>);
     expect(written.length).toBe(1);
     expect(written[0].body).not.toContain("﻿");
@@ -279,7 +287,10 @@ describe("Google Meet shortcuts", () => {
 
   function written() {
     return dbCalls
-      .filter((c) => c.method !== "GET" && c.path.includes("on_conflict"))
+      .filter(
+        (c) =>
+          c.method !== "GET" && c.path.includes("brain_chunk") && c.path.includes("on_conflict")
+      )
       .flatMap((c) => JSON.parse(c.body) as Array<{ source_id: string; title: string }>);
   }
 
@@ -318,7 +329,10 @@ describe("Google Meet shortcuts", () => {
     };
     await ingestDrive(STAMP);
     const rows = dbCalls
-      .filter((c) => c.method !== "GET" && c.path.includes("on_conflict"))
+      .filter(
+        (c) =>
+          c.method !== "GET" && c.path.includes("brain_chunk") && c.path.includes("on_conflict")
+      )
       .flatMap((c) => JSON.parse(c.body) as Array<{ period_end: string }>);
     expect(rows[0].period_end).toBe("2026-08-24");
   });

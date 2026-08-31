@@ -261,6 +261,66 @@ export async function touchChunks(
   return touched;
 }
 
+/**
+ * Roughly once a day, not every run.
+ *
+ * The sweep deletes rows whose source document is gone. That is rare, and the touch
+ * it depends on is the brain's most expensive write (see `touchChunks`). Paying a
+ * full-corpus rewrite up to 96 times a day to notice a rare deletion is what
+ * exhausted the project's Disk IO budget on 2026-08-31.
+ *
+ * Twenty hours rather than twenty-four so a source does not drift a slot later each
+ * day and skip one entirely.
+ */
+const SWEEP_INTERVAL_MS = 20 * 60 * 60 * 1000;
+
+/**
+ * FAILS CLOSED. Any unreadable state answers "do not sweep", because the cost of
+ * skipping a sweep is that a deleted document lingers one more day, while the cost
+ * of sweeping on bad information is deleted corpus.
+ *
+ * A source with no row has never swept, so it sweeps on its next complete walk.
+ */
+export async function shouldSweep(source: string, nowMs = Date.now()): Promise<boolean> {
+  try {
+    const res = await supabaseFetch(
+      `/rest/v1/brain_sweep_state?source=eq.${encodeURIComponent(source)}&select=swept_at`
+    );
+    if (!res.ok) {
+      logger.warn({ source, status: res.status }, "brain sweep state unreadable, not sweeping");
+      return false;
+    }
+    const rows = (await res.json().catch(() => null)) as Array<{ swept_at?: string }> | null;
+    if (!Array.isArray(rows)) return false;
+    if (rows.length === 0) return true;
+    const last = Date.parse(rows[0]?.swept_at ?? "");
+    if (!Number.isFinite(last)) return false;
+    return nowMs - last >= SWEEP_INTERVAL_MS;
+  } catch (err) {
+    logger.warn({ err, source }, "brain sweep state threw, not sweeping");
+    return false;
+  }
+}
+
+/**
+ * Recorded on ATTEMPT, not on success. The expensive part -- the touch -- has already
+ * happened by the time the sweep runs, so retrying in an hour would repeat the whole
+ * cost to reach the same refusal. A sweep the majority guard declined is a signal to
+ * look, not a reason to hammer the disk.
+ */
+export async function recordSweep(source: string, at = new Date().toISOString()): Promise<void> {
+  try {
+    await supabaseFetch("/rest/v1/brain_sweep_state?on_conflict=source", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify({ source, swept_at: at }),
+    });
+  } catch (err) {
+    // A lost write means one extra sweep tomorrow. Never worth failing the run.
+    logger.warn({ err, source }, "brain sweep state not recorded");
+  }
+}
+
 export async function sweepStale(
   source: string,
   stampedAt: string,
