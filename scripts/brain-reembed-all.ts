@@ -137,13 +137,25 @@ async function main(): Promise<void> {
     }
     // Checked AFTER the cursor is persisted, so pausing never re-does a finished page.
     if (done >= MAX_PER_RUN) {
+      /**
+       * RETURN, not break. The message after the loop begins with `done:`, and the
+       * launchd runner treats `^done:` as "the walk finished" and writes DONE into the
+       * cursor file -- after which every future invocation exits immediately.
+       *
+       * So pausing at the cap fell through to declaring completion. Observed
+       * 2026-08-31: the agent paused at its first 500-chunk cap and the corpus was
+       * marked finished with ~13,000 chunks untouched. My own pacing change introduced
+       * this, and the manual test runs missed it because the harness killed them at
+       * 120s, before they ever reached the cap.
+       */
       console.log(`paused at the per-run cap (${done}), cursor ${after}`);
-      break;
+      return;
     }
     if (PAGE_PAUSE_MS > 0) await sleep(PAGE_PAUSE_MS);
     const rate = done / Math.max(1, (Date.now() - startedAt) / 60_000);
     console.log(`  ${done} re-embedded (${Math.round(rate)}/min), cursor ${after}`);
   }
+  // Only reachable now via the verified-empty page above, i.e. a genuine end of walk.
   console.log(`done: ${done} chunks re-embedded with the full ${2400}-character window`);
 }
 
