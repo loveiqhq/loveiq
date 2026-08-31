@@ -102,7 +102,6 @@ async function notifySlackPurchase({
   email,
   experimentGroup,
   firstName,
-  forcedPaywallArm,
   landingVariant,
   paymentId,
   plan,
@@ -118,7 +117,6 @@ async function notifySlackPurchase({
   email: string | null;
   experimentGroup: string | null;
   firstName: string | null;
-  forcedPaywallArm: string | null;
   landingVariant: string | null;
   paymentId: number;
   plan: ReportPurchasePlanId;
@@ -142,7 +140,6 @@ async function notifySlackPurchase({
     utmTracker,
     experimentGroup,
     basePriceBucket,
-    forcedPaywallArm,
     landingVariant,
     deviceType,
     countryTier,
@@ -1190,10 +1187,6 @@ async function syncCheckoutSessionPayment({
     pricingQuoteId,
     pricingClusterId: settledSession.metadata?.pricingClusterId ?? null,
     experimentGroup: settledSession.metadata?.experimentGroup ?? null,
-    // Forced-paywall A/B arm ("treatment" | "control"), stamped server-side at
-    // checkout-session creation. Query via payment.metadata->>'forcedPaywallArm'
-    // for consent-independent conversion + revenue by arm.
-    forcedPaywallArm: settledSession.metadata?.forcedPaywallArm ?? null,
     // Landing A/B arm ("white" | "control") the buyer first saw, stamped on the
     // Stripe session at checkout-session creation. Persisted here so paid rows are
     // self-describing for CSV/exports; the admin funnel groups via the submission's
@@ -1383,7 +1376,6 @@ async function syncCheckoutSessionPayment({
         experimentGroup: metadata.experimentGroup,
         email: recipient.email,
         firstName: recipient.firstName,
-        forcedPaywallArm: settledSession.metadata?.forcedPaywallArm ?? null,
         landingVariant: settledSession.metadata?.landingVariant ?? null,
         paymentId,
         plan,
@@ -1425,7 +1417,6 @@ async function syncCheckoutSessionPayment({
           country_tier: metadata.countryTier ?? undefined,
           device_type: metadata.deviceType ?? undefined,
           traffic_source: metadata.trafficSource ?? undefined,
-          forced_paywall_arm: metadata.forcedPaywallArm ?? undefined,
           landing_variant: metadata.landingVariant ?? undefined,
         },
       });
@@ -1451,7 +1442,6 @@ async function syncCheckoutSessionPayment({
           country_tier: metadata.countryTier ?? undefined,
           device_type: metadata.deviceType ?? undefined,
           traffic_source: metadata.trafficSource ?? undefined,
-          forced_paywall_arm: metadata.forcedPaywallArm ?? undefined,
           landing_variant: metadata.landingVariant ?? undefined,
           submission_id: context.submissionId ?? undefined,
         },

@@ -33,8 +33,6 @@ declare global {
     google_tag_manager?: Record<string, unknown>;
     __loveiqGtagBootstrapped?: boolean;
     __loveiqReportSubmissionId?: number | null;
-    /** Coupled forced-paywall A/B arm for the current report/wizard session. */
-    __loveiqForcedPaywallArm?: "treatment" | "control" | null;
     /** Survey white A/B arm for the current survey session. */
     __loveiqSurveyVariant?: "white" | "dark" | null;
     /** Dev-only: tracks event_types we've already warned about for missing context. */
@@ -81,9 +79,8 @@ const PERSISTED_EVENTS = new Set([
   "experiment_exposure",
   "scroll_paywall_shown",
   "experiment_card_flipped",
-  // Locked-chapter-card paywall surface (price + countdown shown inline)
+  // Locked-chapter-card paywall surface (inline price)
   "locked_card_price_shown",
-  "paywall_countdown_expired",
 ]);
 
 /**
@@ -96,30 +93,8 @@ export const setReportSubmissionContext = (submissionId: number | null | undefin
 };
 
 /**
- * Set on the report + wizard once the forced-paywall arm is known. Every
- * persisted analytics event then auto-carries `forced_paywall_arm` in its
- * metadata, so the whole funnel is arm-attributable with a single GROUP BY
- * (no per-call wiring, nothing missed).
- */
-export const setForcedPaywallArm = (arm: "treatment" | "control" | null) => {
-  if (typeof window === "undefined") return;
-  window.__loveiqForcedPaywallArm = arm;
-  // Super property: attaches to every subsequent PostHog event, mirroring the
-  // GA4 user_properties call below (which is consent-gated; this is not).
-  if (arm) posthog.register({ forced_paywall_arm: arm });
-  // Mirror the arm into GA4 as a user-scoped property so EVERY GA4 event (not
-  // just experiment_exposure) is segmentable by arm in GA4 Explorations — no
-  // per-event wiring. Consent-gated like all GA4 traffic. NOTE: to surface in
-  // GA4 reports, register a custom dimension "forced_paywall_arm" (user-scoped)
-  // in GA4 Admin → Custom definitions (one-time config, not code).
-  if (arm && isProductionSite() && hasCookieYesConsent("analytics")) {
-    gtagSend("set", "user_properties", { forced_paywall_arm: arm });
-  }
-};
-
-/**
- * Set on the survey engine once the survey white-A/B arm is known. Like
- * `setForcedPaywallArm`, every persisted analytics event then auto-carries
+ * Set on the survey engine once the survey white-A/B arm is known. Every
+ * persisted analytics event then auto-carries
  * `survey_variant`, so survey completion-by-arm is a single GROUP BY. Register a
  * user-scoped GA4 custom dimension `survey_variant` to surface it in GA4 reports.
  */
@@ -165,15 +140,12 @@ const persistAnalyticsEvent = (
   if (!csrf) return;
 
   // Auto-stamp the experiment arms onto every persisted event so the whole
-  // funnel is attributable without per-call wiring. The forced-paywall arm
-  // comes from a window global (set on report/wizard once the token resolves);
-  // the white-landing variant is read straight from its cookie (source of
-  // truth, readable on every page). Caller keys win over both.
-  const arm = window.__loveiqForcedPaywallArm ?? null;
+  // funnel is attributable without per-call wiring. The survey arm comes from a
+  // window global; the white-landing variant is read straight from its cookie
+  // (source of truth, readable on every page). Caller keys win over both.
   const surveyVariant = window.__loveiqSurveyVariant ?? null;
   const landingVariant = getLandingVariant();
   const mergedMetadata = {
-    ...(arm ? { forced_paywall_arm: arm } : {}),
     ...(surveyVariant ? { survey_variant: surveyVariant } : {}),
     ...(landingVariant ? { landing_variant: landingVariant } : {}),
     ...metadata,
@@ -620,8 +592,8 @@ const trackUnlockClick = (surface: UnlockClickSurface, extra?: Record<string, un
  * as the digest's "did the user actually want the paywall?" signal.
  *
  * Why not just keep paywall_view: that event also fires on auto-mount paths
- * (ScrollPricingModal scroll-trigger, ReportPricingModal 24h+ ladder auto-open),
- * so the count conflates intent with passive exposure. Founder confirmed the
+ * (the chapter-reach scroll trigger, the 24h+ ladder auto-open), so the count
+ * conflates intent with passive exposure. Founder confirmed the
  * digest should track INITIATED intent only.
  *
  * No items[] payload here — we want a clean count of intent moments, not
@@ -646,8 +618,8 @@ export interface PriceShownParams {
   plan: "essentials" | "full_report" | "core" | "all_reports";
   /**
    * Final EUR amount the user sees — post-multipliers, post-ladder, normalized, and
-   * INCLUDING the urgency surcharge when it applies, because this is meant to be what
-   * was on screen. See `surcharge` for how much of it that was.
+   * What was actually on screen — the charged price, the same number the Stripe
+   * line item uses.
    */
   price: number;
   /** ISO currency code, e.g. "EUR". */
@@ -668,12 +640,6 @@ export interface PriceShownParams {
   msrp?: number;
   /** Initial price before ladder discount. */
   initial_price?: number;
-  /**
-   * The urgency surcharge included in `price` (EUR, 0 when the reader's countdown was
-   * still running). Sent so the two cohorts can be separated without having to infer
-   * them from the amount.
-   */
-  surcharge?: number;
 }
 
 /**
@@ -731,7 +697,7 @@ export const trackBeginCheckout = (
 
 /**
  * Fires once per report the first time a LOCKED CHAPTER CARD renders a live
- * price + urgency countdown (the `PremiumOverlay` surface — distinct from the
+ * price (the `PremiumOverlay` surface — distinct from the
  * pricing modal's `price_shown`). Lets the funnel measure the inline card as
  * its own price-exposure surface, tagged `surface: "locked_chapter_card"`.
  * Caller dedupes to one fire per report load.
@@ -743,19 +709,6 @@ export const trackLockedCardPriceShown = (params: PriceShownParams) => {
   } as unknown as Record<string, unknown>;
   track("locked_card_price_shown", payload);
   persistAnalyticsEvent("locked_card_price_shown", payload);
-};
-
-/**
- * Fires once per report when the shared urgency countdown reaches
- * 0:00 *during the session* (the same deadline drives the modal + every locked
- * card). Powers "did the timer expire before they bought?" urgency analysis.
- * Not fired for returning visitors who land after the deadline already passed.
- * Caller dedupes + only schedules when time remains.
- */
-export const trackPaywallCountdownExpired = (archetype?: string | null) => {
-  const params = { ...(archetype ? { archetype } : {}) };
-  track("paywall_countdown_expired", params);
-  persistAnalyticsEvent("paywall_countdown_expired", params);
 };
 
 /**
@@ -967,9 +920,7 @@ export const trackExperimentExposure = (params: {
 };
 
 /**
- * The scroll/forced pricing modal became visible. Captures modal impressions
- * per arm (treatment ≈ immediate; control = scroll-gated). `forced_paywall_arm`
- * is auto-stamped by persistAnalyticsEvent.
+ * The scroll pricing modal became visible. Captures modal impressions.
  */
 export const trackScrollPaywallShown = (params: { surface?: string } = {}) => {
   const payload = params.surface ? { surface: params.surface } : {};
@@ -978,8 +929,7 @@ export const trackScrollPaywallShown = (params: { surface?: string } = {}) => {
 };
 
 /**
- * The treatment flip card was flipped. `to` = which face is now showing.
- * Captures flip engagement; `forced_paywall_arm` is auto-stamped.
+ * The flip card was flipped. `to` = which face is now showing.
  */
 export const trackExperimentCardFlipped = (params: { to: "pricing" | "archetype" }) => {
   const payload = { to: params.to };

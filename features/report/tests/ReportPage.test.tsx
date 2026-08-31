@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 
 const mockRouterPush = vi.fn();
-const mockCacheReportCheckoutQuote = vi.fn();
+const mockStartReportCheckout = vi.fn().mockResolvedValue(null);
+vi.mock("@features/checkout/ui/startReportCheckout", () => ({
+  startReportCheckout: (...args: unknown[]) => mockStartReportCheckout(...args),
+}));
 
 const mockSearchParams = vi.fn(() => new URLSearchParams());
 vi.mock("next/navigation", () => ({
@@ -16,11 +19,10 @@ vi.mock("next/navigation", () => ({
 const mockGetReportSessionId = vi.fn();
 vi.mock("@features/survey/ui/hooks/surveySession", () => ({
   getReportSessionId: () => mockGetReportSessionId(),
-  getReportPaywallDeadline: () => 1_700_000_000_000,
-  peekReportPaywallDeadline: () => null,
+  getReportNurturePromo: () => null,
+  getReportPricingSessionId: () => null,
   setReportNurturePromo: () => {},
   setReportPricingSessionId: () => {},
-  REPORT_PAYWALL_COUNTDOWN_MS: 180_000,
 }));
 
 const mockUseReportData = vi.fn();
@@ -36,23 +38,6 @@ vi.mock("@features/report/ui/hooks/useSectionFeedback", () => ({
   }),
 }));
 
-vi.mock("@features/checkout/server/reportCheckoutQuoteCache", () => ({
-  cacheReportCheckoutQuote: (...args: unknown[]) => mockCacheReportCheckoutQuote(...args),
-}));
-
-// Stub the scroll teaser so we can assert the cohort → `dismissible` wiring
-// without simulating the scroll/timer. The real component is exercised in
-// features/report/tests/ScrollPricingModal.test.tsx.
-vi.mock("@features/report/ui/ScrollPricingModal", () => ({
-  default: (props: { dismissible?: boolean; open?: boolean }) => (
-    <div
-      data-testid="scroll-teaser"
-      data-dismissible={String(props.dismissible)}
-      data-open={String(props.open)}
-    />
-  ),
-}));
-
 const mockTrackReportViewed = vi.fn();
 const mockTrackPaywallView = vi.fn();
 const mockTrackPaywallInitiated = vi.fn();
@@ -65,8 +50,6 @@ vi.mock("@features/analytics/client", () => ({
   trackBeginCheckout: (...args: unknown[]) => mockTrackBeginCheckout(...args),
   trackPriceShown: (...args: unknown[]) => mockTrackPriceShown(...args),
   setReportSubmissionContext: vi.fn(),
-  setForcedPaywallArm: vi.fn(),
-  trackExperimentExposure: vi.fn(),
   // New track functions exercised by ReportPage interactions.
   trackLockIconClicked: vi.fn(),
   trackReferFriendOpened: vi.fn(),
@@ -78,7 +61,6 @@ vi.mock("@features/analytics/client", () => ({
   trackSectionNavigated: vi.fn(),
   trackChapterFeedbackSubmitted: vi.fn(),
   trackLockedCardPriceShown: vi.fn(),
-  trackPaywallCountdownExpired: vi.fn(),
   hasCookieYesConsent: () => true,
 }));
 
@@ -146,8 +128,6 @@ describe("ReportPage", () => {
             basePriceBucket: "essentials_center",
             basePriceCents: 1499,
             currentPriceCents: 1499,
-            urgencyDeadlineAt: null,
-            surchargeCents: 0,
             chargedPriceCents: 1499,
             initialPriceCents: 1499,
             discountMultiplier: 1,
@@ -181,8 +161,6 @@ describe("ReportPage", () => {
             basePriceBucket: "full_center",
             basePriceCents: 2999,
             currentPriceCents: 2749,
-            urgencyDeadlineAt: null,
-            surchargeCents: 0,
             chargedPriceCents: 2749,
             initialPriceCents: 2999,
             discountMultiplier: 1,
@@ -215,8 +193,6 @@ describe("ReportPage", () => {
             basePriceBucket: "all_center",
             basePriceCents: 12999,
             currentPriceCents: 11499,
-            urgencyDeadlineAt: null,
-            surchargeCents: 0,
             chargedPriceCents: 11499,
             initialPriceCents: 12999,
             discountMultiplier: 1,
@@ -345,7 +321,8 @@ describe("ReportPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRouterPush.mockReset();
-    mockCacheReportCheckoutQuote.mockReset();
+    mockStartReportCheckout.mockReset();
+    mockStartReportCheckout.mockResolvedValue(null);
     mockGetReportSessionId.mockReturnValue("02d88f31-eceb-4402-940d-c8cd98d01848");
   });
 
@@ -553,7 +530,7 @@ describe("ReportPage", () => {
   );
 
   it(
-    "routes to checkout when a pricing modal CTA is clicked",
+    "goes straight to Stripe when a pricing modal CTA is clicked",
     async () => {
       const user = userEvent.setup();
       mockUseReportData.mockReturnValue(buildSuccessResponse());
@@ -570,17 +547,17 @@ describe("ReportPage", () => {
       expect(typeof price).toBe("number");
       expect(Number.isFinite(price)).toBe(true);
       expect(price).toBeGreaterThan(0);
-      expect(mockCacheReportCheckoutQuote).toHaveBeenCalledWith({
+      // Straight to Stripe: no /checkout navigation in between, and the quote the
+      // reader was shown is handed over rather than re-fetched on another page.
+      expect(mockRouterPush).not.toHaveBeenCalled();
+      await waitFor(() => expect(mockStartReportCheckout).toHaveBeenCalledTimes(1));
+      expect(mockStartReportCheckout).toHaveBeenCalledWith({
+        archetype: "Emotional Voyeur",
         plan: "full_report",
         quote: buildSuccessResponse().data.pricingQuotes.full_report,
-        sessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+        reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
         token: undefined,
       });
-      await waitFor(() =>
-        expect(mockRouterPush).toHaveBeenCalledWith(
-          "/checkout?plan=full_report&archetype=emotional-voyeur"
-        )
-      );
       expect(container.querySelector(".report-premium-overlay__cta")).toBeInTheDocument();
     },
     REPORT_MODAL_TEST_TIMEOUT_MS
@@ -700,70 +677,34 @@ describe("ReportPage", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("gives a forced-arm visitor the soft control experience when arriving from an email link", () => {
-    mockUseReportData.mockReturnValue(buildSuccessResponse());
-    // Persistent (not Once): the cohort is recomputed from searchParams on every
-    // render, so the email signal must survive re-renders.
-    mockSearchParams.mockImplementation(() => new URLSearchParams("from=email"));
-    try {
-      render(<ReportPage token={TREATMENT_TOKEN} />);
-      const teaser = screen.getByTestId("scroll-teaser");
-      // Treatment-arm token, but an email return ⇒ soft control UX: dismissible
-      // and NOT force-opened on load.
-      expect(teaser).toHaveAttribute("data-dismissible", "true");
-      expect(teaser).toHaveAttribute("data-open", "false");
-    } finally {
-      mockSearchParams.mockImplementation(() => new URLSearchParams());
-    }
-  });
-
-  it("treats utm_source=email as an email return too (covers already-sent emails)", () => {
-    mockUseReportData.mockReturnValue(buildSuccessResponse());
-    mockSearchParams.mockImplementation(() => new URLSearchParams("utm_source=email"));
-    try {
-      render(<ReportPage token={TREATMENT_TOKEN} />);
-      const teaser = screen.getByTestId("scroll-teaser");
-      expect(teaser).toHaveAttribute("data-dismissible", "true");
-    } finally {
-      mockSearchParams.mockImplementation(() => new URLSearchParams());
-    }
-  });
-
-  it("makes the scroll teaser non-dismissible for the forced-paywall treatment cohort", () => {
+  it("shows no paywall on load — the forced hard wall is gone", () => {
+    /**
+     * A report token used to bucket the reader into the forced-paywall
+     * "treatment" arm: a non-dismissible modal opened on mount, before any
+     * scroll. That experiment was removed on 2026-08-31. An identifiable report
+     * now opens with nothing over it, and the reader reaches the plans pop-up by
+     * scrolling to Attachment Style or clicking an unlock CTA.
+     */
     mockUseReportData.mockReturnValue(buildSuccessResponse());
     render(<ReportPage token={TREATMENT_TOKEN} />);
-    const teaser = screen.getByTestId("scroll-teaser");
-    expect(teaser).toHaveAttribute("data-dismissible", "false");
+    // This fixture sits at discountStep 1, so the ordinary 24h-ladder modal does
+    // auto-open — the forced arm used to suppress it. What must NOT come back is
+    // the un-closable one: whatever opens is always closable.
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /close/i })).toBeInTheDocument();
   });
 
-  it("keeps the scroll teaser dismissible for an email-return (soft) visit", () => {
+  it("an email return is no longer a special case — same closable surface", () => {
+    // `from=email` existed to soften the forced wall for re-engagement links.
+    // With the wall gone there is nothing to soften, so an email return must
+    // look exactly like any other visit.
     mockUseReportData.mockReturnValue(buildSuccessResponse());
     mockSearchParams.mockImplementation(() => new URLSearchParams("from=email"));
     try {
       render(<ReportPage token={TREATMENT_TOKEN} />);
-      const teaser = screen.getByTestId("scroll-teaser");
-      expect(teaser).toHaveAttribute("data-dismissible", "true");
-    } finally {
-      mockSearchParams.mockImplementation(() => new URLSearchParams());
-    }
-  });
-
-  it("opens the forced paywall immediately on load for the treatment cohort", () => {
-    mockUseReportData.mockReturnValue(buildSuccessResponse());
-    render(<ReportPage token={TREATMENT_TOKEN} />);
-    // No scroll simulated — treatment must already be open on mount.
-    expect(screen.getByTestId("scroll-teaser")).toHaveAttribute("data-open", "true");
-    // …and the closable discount-offer modal must NOT preempt it, even though
-    // the fixture is at discountStep 1 (which would auto-open it for control).
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  });
-
-  it("does NOT open the teaser on load for an email-return (soft) visit (waits for scroll)", () => {
-    mockUseReportData.mockReturnValue(buildSuccessResponse());
-    mockSearchParams.mockImplementation(() => new URLSearchParams("from=email"));
-    try {
-      render(<ReportPage token={TREATMENT_TOKEN} />);
-      expect(screen.getByTestId("scroll-teaser")).toHaveAttribute("data-open", "false");
+      const dialog = screen.getByRole("dialog");
+      expect(within(dialog).getByRole("button", { name: /close/i })).toBeInTheDocument();
     } finally {
       mockSearchParams.mockImplementation(() => new URLSearchParams());
     }

@@ -30,7 +30,6 @@ export type DimensionKey =
   | "utmCampaign"
   | "landingVariant"
   | "device"
-  | "paywallArm"
   | "experimentGroup"
   | "countryTier"
   | "priceBucket"
@@ -52,7 +51,6 @@ export const DIMENSION_LABELS: Record<DimensionKey, string> = {
   utmCampaign: "UTM campaign",
   landingVariant: "Landing page",
   device: "Device",
-  paywallArm: "Paywall arm (A/B)",
   experimentGroup: "Experiment group",
   countryTier: "Country tier",
   priceBucket: "Price bucket",
@@ -154,7 +152,6 @@ export interface EnrichedRow {
   landingVariant: string;
   // Pricing / experiment / device — from the submission's canonical quote.
   device: string | null;
-  paywallArm: string | null;
   experimentGroup: string | null;
   countryTier: string | null;
   priceBucket: string | null;
@@ -279,8 +276,6 @@ export function dimensionValue(row: EnrichedRow, dim: DimensionKey, opts: Access
       return row.landingVariant || "control";
     case "device":
       return row.device ?? UNKNOWN_LABEL;
-    case "paywallArm":
-      return row.paywallArm ?? UNKNOWN_LABEL;
     case "experimentGroup":
       return row.experimentGroup ?? UNKNOWN_LABEL;
     case "countryTier":

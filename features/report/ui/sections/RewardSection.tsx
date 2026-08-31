@@ -64,7 +64,6 @@ interface Props {
   copy: RewardCopy | null;
   /** Reward config (order/roles/meters); null when locked or absent for the archetype. */
   config: RewardConfig | null;
-  offerDeadline?: number;
   onUnlock: () => void;
   quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
@@ -301,7 +300,6 @@ const RewardSection: FC<Props> = ({
   archetype,
   copy,
   config,
-  offerDeadline,
   onUnlock,
   quote = null,
   sectionTitle,
@@ -374,7 +372,6 @@ const RewardSection: FC<Props> = ({
                 sectionTitle={sectionTitle}
                 tier={tier}
                 quote={quote}
-                offerDeadline={offerDeadline}
                 onUnlock={onUnlock}
               />
             </div>

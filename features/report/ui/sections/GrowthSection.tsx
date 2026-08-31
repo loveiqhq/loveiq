@@ -62,7 +62,6 @@ interface Props {
   copy: GrowthCopy | null;
   /** `getReport2Config(name).growth_rungs` — how many rungs to expect; may be null. */
   rungCount?: number | null;
-  offerDeadline?: number;
   onUnlock: () => void;
   quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
@@ -283,7 +282,6 @@ const GrowthSection: FC<Props> = ({
   archetype,
   copy,
   rungCount = null,
-  offerDeadline,
   onUnlock,
   quote = null,
   sectionTitle,
@@ -380,7 +378,6 @@ const GrowthSection: FC<Props> = ({
                 sectionTitle={sectionTitle}
                 tier={tier}
                 quote={quote}
-                offerDeadline={offerDeadline}
                 onUnlock={onUnlock}
               />
             </div>

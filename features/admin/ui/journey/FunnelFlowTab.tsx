@@ -91,7 +91,6 @@ interface FlowData {
 interface Segment {
   source: string;
   landingVariant: string;
-  paywallArm: string;
 }
 
 const money = (n: number) =>
@@ -155,16 +154,6 @@ const SegmentFilters: FC<{ value: Segment; onChange: (s: Segment) => void }> = (
         { value: "white", label: armLabel("landing", "white").short },
         { value: "white_prev", label: armLabel("landing", "white_prev").short },
         { value: "control", label: armLabel("landing", "control").short },
-      ]}
-    />
-    <Select
-      label="Paywall arm"
-      value={value.paywallArm}
-      onChange={(v) => onChange({ ...value, paywallArm: v })}
-      options={[
-        { value: "all", label: "All" },
-        { value: "control", label: "Control" },
-        { value: "treatment", label: "Treatment" },
       ]}
     />
   </>
@@ -532,16 +521,8 @@ const SegmentColumn: FC<{ label: string; params: Record<string, string>; enabled
 const FunnelFlowTab: FC = () => {
   const [days, setDays] = useState(30);
   const [compare, setCompare] = useState(false);
-  const [segA, setSegA] = useState<Segment>({
-    source: "all",
-    landingVariant: "all",
-    paywallArm: "all",
-  });
-  const [segB, setSegB] = useState<Segment>({
-    source: "Google Ads",
-    landingVariant: "all",
-    paywallArm: "all",
-  });
+  const [segA, setSegA] = useState<Segment>({ source: "all", landingVariant: "all" });
+  const [segB, setSegB] = useState<Segment>({ source: "Google Ads", landingVariant: "all" });
 
   const paramsA = useMemo(() => ({ days: String(days), ...segA }), [days, segA]);
   const paramsB = useMemo(() => ({ days: String(days), ...segB }), [days, segB]);
@@ -550,7 +531,6 @@ const FunnelFlowTab: FC = () => {
     [
       s.source === "all" ? "All sources" : s.source,
       s.landingVariant !== "all" ? s.landingVariant : null,
-      s.paywallArm !== "all" ? s.paywallArm : null,
     ]
       .filter(Boolean)
       .join(" · ");

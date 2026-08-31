@@ -730,14 +730,17 @@ describe("conversion-digest verdicts", () => {
   });
 
   it("blames the conversion count, not the survey count, when purchases are the blocker", () => {
-    // The real pricing split, 30 days to 2026-08-25. 328 finished surveys is
-    // plenty; TEN purchases between them is not. This used to say "no clear
-    // winner", which claims we measured the two arms and found them equal — but
-    // the z-test's normal approximation is not even valid at 3 successes, so
-    // nothing was measured. It must say which number is missing.
-    const verdict = buildArmVerdict("pricing", [
-      { arm: "A", n: 165, conversions: 3 },
-      { arm: "B", n: 163, conversions: 7 },
+    // The shape of a real 30-day split: 328 finished surveys is plenty; TEN
+    // purchases between them is not. This used to say "no clear winner", which
+    // claims we measured the two arms and found them equal — but the z-test's
+    // normal approximation is not even valid at 3 successes, so nothing was
+    // measured. It must say which number is missing. (Originally written against
+    // the pricing axis, moved to landing when the price test was concluded on
+    // 2026-08-31 — `buildArmVerdict` drops retired arms, so a retired axis can no
+    // longer exercise the two-arm branches.)
+    const verdict = buildArmVerdict("landing", [
+      { arm: "white", n: 165, conversions: 3 },
+      { arm: "white_prev", n: 163, conversions: 7 },
     ]);
     expect(verdict.state).toBe("insufficient-data");
     expect(verdict.sentence).toContain("not enough purchases");
@@ -754,9 +757,9 @@ describe("conversion-digest verdicts", () => {
     // Same shape, but with conversions above the validity floor on both sides —
     // so the comparison genuinely runs and genuinely finds no winner. Keeps the
     // no-winner branch covered now that thin data no longer reaches it.
-    const verdict = buildArmVerdict("pricing", [
-      { arm: "A", n: 165, conversions: 20 },
-      { arm: "B", n: 163, conversions: 24 },
+    const verdict = buildArmVerdict("landing", [
+      { arm: "white", n: 165, conversions: 20 },
+      { arm: "white_prev", n: 163, conversions: 24 },
     ]);
     expect(verdict.state).toBe("no-winner");
     expect(verdict.sentence).toContain("no clear winner");

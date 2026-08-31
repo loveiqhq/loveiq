@@ -36,7 +36,6 @@ interface Props {
    * the table renders `--` with or without a cover.
    */
   hideOverlay?: boolean;
-  offerDeadline?: number;
   onUnlock?: () => void;
   quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
@@ -236,22 +235,12 @@ const PracticeRow: FC<{
 const PracticeGroupLocked: FC<{
   archetype: string;
   group: ReportPracticeTendencyGroup;
-  offerDeadline?: number;
   onUnlock: () => void;
   quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
   tier: PremiumOverlayTier;
   hideOverlay?: boolean;
-}> = ({
-  archetype,
-  group,
-  hideOverlay = false,
-  offerDeadline,
-  onUnlock,
-  quote = null,
-  sectionTitle,
-  tier,
-}) => {
+}> = ({ archetype, group, hideOverlay = false, onUnlock, quote = null, sectionTitle, tier }) => {
   const freeRow = group.rows[0] ?? null;
   // Row 0 ships with real metric values (free preview). Rows 1+ ship with
   // their practice names but `fantasyPull` / `actualPleasure` nulled out by
@@ -345,7 +334,6 @@ const PracticeGroupLocked: FC<{
                         sectionTitle={sectionTitle}
                         tier={tier}
                         quote={quote}
-                        offerDeadline={offerDeadline}
                         onUnlock={onUnlock}
                       />
                     </div>
@@ -686,7 +674,6 @@ const PracticeTendenciesSection: FC<Props> = ({
   hideOverlay = false,
   isPremium,
   isUnlocked = false,
-  offerDeadline,
   onUnlock,
   quote = null,
   sectionTitle,
@@ -727,7 +714,6 @@ const PracticeTendenciesSection: FC<Props> = ({
               sectionTitle={sectionTitle}
               tier={tier}
               quote={quote}
-              offerDeadline={offerDeadline}
               onUnlock={handleUnlock}
             />
           ))}

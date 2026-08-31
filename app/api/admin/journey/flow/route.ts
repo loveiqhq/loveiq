@@ -26,13 +26,13 @@ import logger from "@shared/observability/logger";
  * GET /api/admin/journey/flow — the funnel "journey atlas".
  *
  * Returns FOUR conserved Sankey bands for one segment (selected by `days`,
- * `source`, `landingVariant`, `paywallArm`) plus an engagement-depth panel:
+ * `source`, `landingVariant`) plus an engagement-depth panel:
  *
  *   A `acquisition`  — visitor-keyed: sources → visitors → opened survey →
  *                      intro slides 1-4 → started answering. Counts are
  *                      distinct visitors/sessions (aggregate band, monotone-
  *                      clamped); only the `source` filter applies — visitors
- *                      are anonymous, so landing/arm can't slice this band.
+ *                      are anonymous, so landing can't slice this band.
  *   B `survey`       — session-keyed: started → chapter checkpoints (from
  *                      survey_partial_save.current_index vs each chapter's
  *                      first question index, survey order) → submitted.
@@ -85,7 +85,6 @@ type SubmissionRecord = {
   sessionId: string | null;
   source: ChannelBucket;
   landingVariant: string | null;
-  arm: string | null;
   scored: boolean;
   hasReport: boolean;
   viewed: boolean;
@@ -129,8 +128,7 @@ export async function GET(request: Request) {
       ? (sourceParam as ChannelBucket)
       : "all";
     const landingFilter = url.searchParams.get("landingVariant") || "all"; // all|control|white
-    const armFilter = url.searchParams.get("paywallArm") || "all"; // all|control|treatment
-    const submissionFiltersActive = landingFilter !== "all" || armFilter !== "all";
+    const submissionFiltersActive = landingFilter !== "all";
 
     const range = { headers: { Range: "0-49999" } };
     const [
@@ -173,7 +171,6 @@ export async function GET(request: Request) {
       supabaseFetch(
         `/rest/v1/report_price_quote?select=${[
           "survey_submission_id",
-          "forced_paywall_arm",
           "checkout_started_at",
           "purchased_at",
           "metadata",
@@ -259,7 +256,6 @@ export async function GET(request: Request) {
     }>;
     const quotes = (await quotesRes.json()) as Array<{
       survey_submission_id: number | null;
-      forced_paywall_arm: string | null;
       checkout_started_at: string | null;
       purchased_at: string | null;
       metadata: { nurtureEmailsSent?: unknown } | null;
@@ -339,13 +335,18 @@ export async function GET(request: Request) {
         .filter((id): id is number => id != null)
     );
 
-    const armBySubmission = new Map<number, string>();
+    // "Has a price quote at all". Was `armBySubmission` (the forced-paywall arm,
+    // stamped on every quote row) until that experiment was removed on
+    // 2026-08-31. It was never really an arm signal — every quote got a stamp —
+    // so this preserves the exact same "reached the paywall" population without
+    // depending on a column nothing writes any more.
+    const quotedSubmissionIds = new Set<number>();
     const quoteCheckoutIds = new Set<number>();
     const quotePurchasedIds = new Set<number>();
     const nurtureStagesBySubmission = new Map<number, Set<string>>();
     for (const q of quotes) {
       if (q.survey_submission_id == null) continue;
-      if (q.forced_paywall_arm) armBySubmission.set(q.survey_submission_id, q.forced_paywall_arm);
+      quotedSubmissionIds.add(q.survey_submission_id);
       if (q.checkout_started_at) quoteCheckoutIds.add(q.survey_submission_id);
       if (q.purchased_at) quotePurchasedIds.add(q.survey_submission_id);
       const sent = q.metadata?.nurtureEmailsSent;
@@ -398,11 +399,12 @@ export async function GET(request: Request) {
         reportId != null && (paidReportIds.has(reportId) || refundedReportIds.has(reportId));
       const rawPurchased = everPaid || quotePurchasedIds.has(s.id);
       const rawCheckout = quoteCheckoutIds.has(s.id) || beginCheckoutIds.has(s.id) || rawPurchased;
-      const rawPaywall = paywallSubmissionIds.has(s.id) || rawCheckout || armBySubmission.has(s.id);
+      const rawPaywall =
+        paywallSubmissionIds.has(s.id) || rawCheckout || quotedSubmissionIds.has(s.id);
       const hasReport = reportId != null;
       // Each stage strictly implies the previous → conserved Sankey. "viewed" is
       // an actual report_session, a paywall PAGE event, or a purchase — NOT a
-      // bare quote/arm row (server-written without a page view).
+      // bare quote row (server-written without a page view).
       const viewed =
         hasReport &&
         (viewedReportIds.has(reportId) || paywallSubmissionIds.has(s.id) || rawPurchased);
@@ -415,7 +417,6 @@ export async function GET(request: Request) {
         sessionId: s.session_id,
         source: classifyChannel(s.utm_tracker),
         landingVariant: utm.landing_variant ?? null,
-        arm: armBySubmission.get(s.id) ?? null,
         scored: scoredSet.has(s.id),
         hasReport,
         viewed,
@@ -434,7 +435,6 @@ export async function GET(request: Request) {
     const filtered = records.filter((r) => {
       if (sourceFilter !== "all" && r.source !== sourceFilter) return false;
       if (landingFilter !== "all" && r.landingVariant !== landingFilter) return false;
-      if (armFilter !== "all" && r.arm !== armFilter) return false;
       return true;
     });
     const filteredIds = new Set(filtered.map((r) => r.id));
@@ -772,7 +772,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       days,
-      filters: { source: sourceFilter, landingVariant: landingFilter, paywallArm: armFilter },
+      filters: { source: sourceFilter, landingVariant: landingFilter },
       bands: {
         acquisition: { nodes: acquisition.nodes, links: acquisition.links },
         survey: { nodes: surveyBuilt.nodes, links: surveyBuilt.links },
@@ -828,7 +828,7 @@ export async function GET(request: Request) {
         wizardConsent:
           "Wizard + engagement events require analytics consent, so those bands cover the consenting subset of submissions.",
         armScope:
-          "The paywall-arm filter only covers journeys that reached the report stage; the landing-variant filter needs the white-landing A/B live in production.",
+          "The landing-variant filter needs the white-landing A/B live in production. The paywall-arm filter is gone: the forced paywall was removed on 31 August 2026, so there are no arms left to compare.",
         recovery:
           "Recovery ladder = nurture emails actually sent. They're normally sequential (each step a subset of the prior); if an earlier send was skipped a step is clamped to keep flows conserved" +
           (recoveryBuilt.wasClamped ? " (clamping applied here)" : "") +

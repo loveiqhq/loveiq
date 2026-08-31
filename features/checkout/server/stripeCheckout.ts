@@ -64,10 +64,6 @@ export type StripeCheckoutSessionStatusResponse =
       purchaseAnalytics: StripeCheckoutPurchaseAnalytics | null;
       sessionStatus: string | null;
       surveySubmissionId: number | null;
-      // Forced-paywall A/B arm stamped on the Stripe session at creation. Echoed
-      // back so /checkout/return can tag its conversion events (paywall_unlocked,
-      // checkout_return_viewed) with the SAME arm as the payment row.
-      forcedPaywallArm: "treatment" | "control" | null;
     };
 
 let stripeClient: Stripe | null = null;

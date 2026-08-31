@@ -28,7 +28,7 @@ describe("plans pop-up trigger", () => {
     expect(SOURCE).toMatch(/observer\.observe\(trigger\)/);
   });
 
-  it("arms the countdown on the first offer card, not only on the pop-up", () => {
+  it("reports the paywall from the first offer card, not only from the pop-up", () => {
     // Every locked chapter's card prints "Time left to secure this price" over this
     // countdown, and with no deadline those digits render 00:00 — a dead offer. While
     // the pop-up sat on the FIRST paywalled chapter that could not happen: no card was
@@ -36,7 +36,7 @@ describe("plans pop-up trigger", () => {
     // half-shown chapters come first, so the first card arms the clock instead.
     expect(SOURCE).toContain('document.querySelector(".report-premium-overlay")');
     const block = SOURCE.slice(SOURCE.indexOf("const firstOfferCard"));
-    expect(block.slice(0, 900)).toMatch(/armPaywallCountdown\(\)/);
+    expect(block.slice(0, 900)).toMatch(/notifyPaywallReached\(\)/);
     // ...and it is torn down with the rest of the effect.
     expect(SOURCE).toMatch(/cardObserver\?\.disconnect\(\)/);
   });
@@ -100,36 +100,41 @@ describe("plans pop-up trigger", () => {
     expect(cleanup).not.toMatch(/plansOfferedRef\.current = false/);
   });
 
-  it("starts the urgency countdown on arrival, not on page load", () => {
-    // Reading the free chapters for ten minutes used to burn the clock to 00:00
-    // before the offer had been made: the deadline was created in a mount effect.
-    // Mount now only PEEKS (an entry already in storage = this tab has seen the
-    // paywall); `openPlans` arms it, before the settle beat so the chapter's own
-    // locked card and the pop-up show the same number.
-    expect(SOURCE).toMatch(/const running = peekReportPaywallDeadline\(/);
+  it("reports the paywall on arrival, not after the settle beat", () => {
+    // `/api/price` POST is the only server-side, consent-independent evidence that a
+    // reader reached the paywall — it fills the Slack journey's "Paywall hit" step.
+    // It has to fire when they ARRIVE, not 1.6s later when the pop-up finishes fading
+    // in, or a reader who leaves in between is counted as never having seen it.
     const openPlans = SOURCE.slice(SOURCE.indexOf("function openPlans()"));
-    const armIdx = openPlans.indexOf("armPaywallCountdown()");
+    const notifyIdx = openPlans.indexOf("notifyPaywallReached()");
     const timerIdx = openPlans.indexOf("scrollTeaserTimerRef.current = setTimeout");
-    expect(armIdx, "openPlans no longer arms the countdown").toBeGreaterThan(-1);
-    expect(armIdx).toBeLessThan(timerIdx);
+    expect(notifyIdx, "openPlans no longer reports the paywall").toBeGreaterThan(-1);
+    expect(notifyIdx).toBeLessThan(timerIdx);
   });
 
-  it("also arms the countdown for every other route to the paywall", () => {
-    // Forced arm on load, ?offer=1 deep-link, 24h ladder auto-open, manual
-    // "Unlock" CTAs — one effect covers them all, so no open path can show a
-    // countdown that was never anchored.
+  it("also reports it for every other route to the paywall", () => {
+    // ?offer=1 deep-link, 24h ladder auto-open, manual "Unlock" CTAs — one effect
+    // covers them all, so no open path goes uncounted.
     expect(SOURCE).toMatch(
-      /if \(!isPricingModalOpen && !isScrollTeaserOpen\) return;[\s\S]{0,220}?armPaywallCountdown\(\)/
+      /if \(!isPricingModalOpen\) return;[\s\S]{0,220}?notifyPaywallReached\(\)/
     );
   });
 
-  it("keeps the forced-paywall arm opening immediately", () => {
-    // The A/B treatment arm deliberately shows the paywall on load; the snapshot
-    // trigger must not swallow that. `forcedPaywallCohort === "treatment"` is
-    // checked in two places, so match the branch that opens the teaser rather
-    // than slicing from the first occurrence.
-    expect(SOURCE).toMatch(
-      /forcedPaywallCohort === "treatment"\)\s*\{[\s\S]{0,300}?setIsScrollTeaserOpen\(true\)/
-    );
+  it("never opens the paywall on load — the forced wall is gone", () => {
+    /**
+     * The forced (non-dismissible, opens-on-mount) paywall was removed on
+     * 2026-08-31. The ONLY thing that may open the teaser is the scroll trigger
+     * plus the explicit CTAs, so no `setIsScrollTeaserOpen(true)` may survive
+     * outside the scroll handler. Asserted against the source because an
+     * on-mount reopen is invisible in a unit render that never scrolls.
+     */
+    expect(SOURCE).not.toContain("forcedPaywallCohort");
+    // The non-dismissible surface itself is gone, not merely unreachable.
+    expect(SOURCE).not.toContain("ScrollPricingModal");
+    expect(SOURCE).not.toContain("isScrollTeaserOpen");
+    // The chapter-reach trigger is the only thing that opens a paywall surface,
+    // and it opens the ordinary closable plans modal.
+    const openPlans = SOURCE.slice(SOURCE.indexOf("function openPlans()"));
+    expect(openPlans).toContain("setIsPricingModalOpen(true)");
   });
 });

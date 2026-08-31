@@ -49,7 +49,6 @@ export interface AccelCopy {
 interface Props {
   archetype: string;
   copy: AccelCopy | null;
-  offerDeadline?: number;
   onUnlock: () => void;
   quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
@@ -123,7 +122,6 @@ function verdictCaptionParts(v: AccelVerdict): [string, string, string] {
 const AcceleratorsSection: FC<Props> = ({
   archetype,
   copy,
-  offerDeadline,
   onUnlock,
   quote = null,
   sectionTitle,
@@ -288,7 +286,6 @@ const AcceleratorsSection: FC<Props> = ({
                   sectionTitle={sectionTitle}
                   tier={tier}
                   quote={quote}
-                  offerDeadline={offerDeadline}
                   onUnlock={onUnlock}
                 />
               </div>

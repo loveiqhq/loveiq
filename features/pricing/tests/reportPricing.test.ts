@@ -18,10 +18,8 @@ vi.mock("@features/report/server/personalReport", () => ({
 }));
 
 import {
-  __testing__,
   getDiscountAdjustment,
   getPricingBucketsForPlan,
-  getPricingExperimentGroup,
   getReportPriceQuoteForContext,
   normalizePriceEnding,
 } from "@features/pricing/logic/reportPricing";
@@ -30,7 +28,6 @@ import {
   resolveSubmissionAccessContext,
   lookupReportTokenBySubmissionId,
 } from "@features/report/server/personalReport";
-import { getForcedPaywallCohort } from "@shared/experiments/forcedPaywall";
 
 function createJsonResponse(body: unknown, ok = true) {
   return {
@@ -80,90 +77,58 @@ describe("reportPricing", () => {
     });
   });
 
-  describe("bucket catalogue (pricing 2.1)", () => {
-    // Per-visitor boosts are paused, so A/B are just two flat base arms from the
-    // CSV. Since Pricing 2.1 (2026-08) A is the HIGH arm and B the low one — the
-    // reverse of 2.0 — so these assert the numbers, not a direction. Each arm is
-    // charged its own bucket base verbatim.
-    it("essentials buckets are flat €9.99 (grandfathered, A == B)", () => {
+  describe("price list (arm A retired 2026-08-31)", () => {
+    // One bucket per plan: the A/B price test was concluded by dropping the
+    // higher-priced arm, so the surviving B list IS the price list. These assert
+    // the exact numbers because they are what the reader is charged; the
+    // companion resync migration (20260831120000) carries the same four rows and
+    // the two must not drift.
+    it("essentials is flat €9.99 (retired/grandfathered)", () => {
       expect(getPricingBucketsForPlan("essentials")).toEqual([
-        { code: "A", weight: 50, msrpCents: 2999, startingCents: 999 },
-        { code: "B", weight: 50, msrpCents: 2999, startingCents: 999 },
+        { code: "B", weight: 100, msrpCents: 2999, startingCents: 999 },
       ]);
     });
 
-    it("full_report buckets: A €39.99 (strike €45.99), B flat €29", () => {
+    it("full_report is €29, priced at its own anchor so no strike", () => {
       expect(getPricingBucketsForPlan("full_report")).toEqual([
-        { code: "A", weight: 50, msrpCents: 4599, startingCents: 3999 },
-        { code: "B", weight: 50, msrpCents: 2900, startingCents: 2900 },
+        { code: "B", weight: 100, msrpCents: 2900, startingCents: 2900 },
       ]);
     });
 
-    it("core buckets: A €49.99 (strike €54.99), B €39 (strike €87)", () => {
+    it("core is €39 (strike €87)", () => {
       expect(getPricingBucketsForPlan("core")).toEqual([
-        { code: "A", weight: 50, msrpCents: 5499, startingCents: 4999 },
-        { code: "B", weight: 50, msrpCents: 8700, startingCents: 3900 },
+        { code: "B", weight: 100, msrpCents: 8700, startingCents: 3900 },
       ]);
     });
 
-    it("all_reports buckets: A €59 (strike €64.99), B €49 (strike €58)", () => {
+    it("all_reports is €49 (strike €58)", () => {
       expect(getPricingBucketsForPlan("all_reports")).toEqual([
-        { code: "A", weight: 50, msrpCents: 6499, startingCents: 5900 },
-        { code: "B", weight: 50, msrpCents: 5800, startingCents: 4900 },
+        { code: "B", weight: 100, msrpCents: 5800, startingCents: 4900 },
       ]);
     });
 
-    // €59.00 is the only charged price in the catalogue without a .49/.99
-    // ending, so it is the one value where normalizePriceEnding disagrees with
-    // the catalogue: it snaps 5900 UP to 5949. That only stays invisible because
-    // current_price is Math.min(previous, discounted, initial) and initial is
-    // 5900. Guard it, so a future refactor that drops the min surfaces here
-    // rather than as a 49-cent overcharge in production.
-    it("normalizePriceEnding snaps €59.00 up, so the min against initial is what holds the price", () => {
+    it("no plan offers a second bucket to be assigned to", () => {
+      // The guard against half-retiring the arm: a stray A row in the catalogue
+      // would silently start pricing people again, because the fresh-quote path
+      // looks a bucket up by code.
+      for (const plan of ["essentials", "full_report", "core", "all_reports"] as const) {
+        const buckets = getPricingBucketsForPlan(plan);
+        expect(buckets, plan).toHaveLength(1);
+        expect(buckets[0]!.code, plan).toBe("B");
+        expect(buckets[0]!.weight, plan).toBe(100);
+      }
+    });
+
+    // Kept from the arm-A era because the rule it guards is not about arm A.
+    // normalizePriceEnding snaps a round euro amount UP to a .49/.99 ending, and
+    // that only stays invisible because current_price is
+    // Math.min(previous, discounted, initial). A future refactor that drops the
+    // min should surface here rather than as a 49-cent overcharge in production.
+    it("normalizePriceEnding snaps a round €59.00 up, so the min against initial is what holds the price", () => {
       expect(normalizePriceEnding(5900)).toBe(5949);
       expect(Math.min(5900, normalizePriceEnding(5900), 5900)).toBe(5900);
-      // The other two new arm-A prices are already on a .99 ending.
       expect(normalizePriceEnding(3999)).toBe(3999);
       expect(normalizePriceEnding(4999)).toBe(4999);
-    });
-
-    it("weights sum to 100 per plan", () => {
-      for (const plan of ["essentials", "full_report", "core", "all_reports"] as const) {
-        const total = getPricingBucketsForPlan(plan).reduce((s, b) => s + b.weight, 0);
-        expect(total).toBe(100);
-      }
-    });
-  });
-
-  describe("pickBucket invariant — one bucket per user", () => {
-    // Locks the post-fix invariant: a single personalReportId hashes to the
-    // same bucket code (A/B) across all three plans, so the tier ladder
-    // stays monotonic (Full Report ≥ Essentials, All ≥ Full).
-    it("returns the same bucket code across all three plans for any personalReportId", () => {
-      const plans = ["essentials", "full_report", "all_reports"] as const;
-      // Sample a wide range of ids to cover hashString collisions and edge cases.
-      const ids = [1, 2, 3, 7, 11, 42, 99, 100, 121, 122, 123, 500, 9_999, 1_234_567];
-
-      for (const id of ids) {
-        const codes = plans.map((plan) => __testing__.pickBucket(plan, id).code);
-        expect(new Set(codes).size).toBe(1);
-      }
-    });
-
-    it("distributes buckets across the even A=50% / B=50% spread (no retired C)", () => {
-      const counts: Record<"A" | "B" | "C", number> = { A: 0, B: 0, C: 0 };
-      const sample = 10_000;
-      for (let id = 1; id <= sample; id++) {
-        const code = __testing__.pickBucket("essentials", id).code;
-        counts[code] += 1;
-      }
-      // Allow ±3% tolerance for hash skew on a 10k sample.
-      expect(counts.A / sample).toBeGreaterThan(0.47);
-      expect(counts.A / sample).toBeLessThan(0.53);
-      expect(counts.B / sample).toBeGreaterThan(0.47);
-      expect(counts.B / sample).toBeLessThan(0.53);
-      // C retired — no user should ever be assigned the removed bucket.
-      expect(counts.C).toBe(0);
     });
   });
 
@@ -505,15 +470,15 @@ describe("reportPricing", () => {
         base_price_bucket: quote.basePriceBucket,
         msrp: quote.msrpCents / 100,
         starting_price: quote.startingPriceCents / 100,
-        // No URL token + submission-token lookup mocked to null → control.
-        forced_paywall_arm: "control",
       })
     );
   });
 
-  it("stamps the forced-paywall arm from the report token on a fresh quote", async () => {
+  it("never stamps a forced-paywall arm on a fresh quote", async () => {
+    // The forced-paywall A/B was removed on 2026-08-31. A fresh quote must leave
+    // `forced_paywall_arm` unset entirely — writing "control" would look like a
+    // live arm to every downstream reader.
     const reportToken = "rpt_SkDN8YcTxXRivawCVtY6";
-    const expectedArm = getForcedPaywallCohort(reportToken);
     let createdPayload: Record<string, unknown> | null = null;
 
     mockFetchWithTimeout.mockImplementation(
@@ -571,27 +536,21 @@ describe("reportPricing", () => {
       reportToken,
     });
 
-    expect(expectedArm).toMatch(/^(treatment|control)$/);
-    expect(createdPayload).toEqual(expect.objectContaining({ forced_paywall_arm: expectedArm }));
-    // Token was present → never falls back to the submission-token lookup.
+    expect(createdPayload).not.toBeNull();
+    expect(Object.keys(createdPayload!)).not.toContain("forced_paywall_arm");
+    // Nothing needs the report token for bucketing any more, so the fallback
+    // submission-token lookup must not be reached either.
     expect(lookupReportTokenBySubmissionId).not.toHaveBeenCalled();
   });
 
-  it("group A all_reports fresh quote is the €59 base starting verbatim (step 0)", async () => {
-    // Group A is charged the flat base `starting` verbatim (no per-user uplift,
-    // no charm-snap). Pricing 2.1 base for all_reports is €59.00. A fresh quote
-    // at step 0 → initial == current == the catalogue starting (5900). This is
-    // also the only end-to-end guard that €59.00 survives normalizePriceEnding
-    // snapping it to 5949.
-    let groupAId = 0;
-    for (let id = 1; id <= 5_000; id++) {
-      if (getPricingExperimentGroup(id) === "A") {
-        groupAId = id;
-        break;
-      }
-    }
-    expect(groupAId).toBeGreaterThan(0);
-    vi.mocked(ensurePersonalReportForSubmission).mockResolvedValue({ id: groupAId });
+  it("an all_reports fresh quote is the €49 base starting verbatim (step 0)", async () => {
+    // The reader is charged the flat base `starting` verbatim: no per-user uplift,
+    // no decay, no charm-snap. A fresh quote at step 0 → initial == current ==
+    // the catalogue starting. End-to-end, so it also proves the retired arm A
+    // cannot be reached: any id would previously have had a 50% chance of being
+    // priced at €59.
+    const reportId = 4242;
+    vi.mocked(ensurePersonalReportForSubmission).mockResolvedValue({ id: reportId });
 
     mockFetchWithTimeout.mockImplementation(
       async (url: string, options?: { body?: string; method?: string }) => {
@@ -629,7 +588,7 @@ describe("reportPricing", () => {
           return createJsonResponse([
             {
               id: 92,
-              personal_report_id: groupAId,
+              personal_report_id: reportId,
               survey_submission_id: 42,
               user_id: 7,
               ...createdPayload,
@@ -647,11 +606,18 @@ describe("reportPricing", () => {
       reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
     });
 
-    // Group A: €59.00 base verbatim — no uplift, no decay, no charm-snap.
-    // Pricing 2.1 all_reports Group A: starting €59.00, strike (msrp) €64.99.
-    expect(quote.initialPriceCents).toBe(5900);
-    expect(quote.currentPriceCents).toBe(5900);
-    expect(quote.msrpCents).toBe(6499);
+    // This fixture does NOT stub the system_flags fetch, so `pricing_uplift_enabled`
+    // resolves to its default — which is the point. That default is `false`, so a
+    // Supabase outage leaves the flat base price rather than switching per-visitor
+    // boosts on and charging more than the page showed. Flip the default in
+    // reportPricing.ts and this assertion fails with an uplifted amount.
+    //
+    // all_reports: starting €49.00, strike (msrp) €58.00 — the surviving list.
+    expect(quote.initialPriceCents).toBe(4900);
+    expect(quote.currentPriceCents).toBe(4900);
+    expect(quote.msrpCents).toBe(5800);
+    expect(quote.chargedPriceCents).toBe(4900);
+    expect(quote.basePriceBucket).toBe("B");
   });
 
   // Pricing 2.1 RAISED arm A, and a raise is the one direction the engine

@@ -25,7 +25,7 @@ const CONCURRENT_CLIENT =
 const subscribeNoop = () => () => {};
 
 const WHero: FC = () => {
-  // Same pattern as CheckoutPage: the server renders a fixed number (so
+  // Same pattern the deleted /checkout page used: the server renders a fixed number (so
   // hydration matches) and the client swaps in the randomised one — without a
   // setState-in-effect and its extra render.
   const concurrent = useSyncExternalStore(

@@ -49,7 +49,6 @@ describe("restoreScroll", () => {
     const { join } = await import("node:path");
     for (const f of [
       "features/report/ui/ReportPricingModal.tsx",
-      "features/report/ui/ScrollPricingModal.tsx",
       "features/report/ui/ShareReportModal.tsx",
       "features/landing/ui/NavSection.tsx",
       "features/landing/ui/white/WNavSection.tsx",

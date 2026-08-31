@@ -267,7 +267,6 @@ export function journeyFromPurchase(input: {
   utmTracker: string | null;
   experimentGroup: string | null;
   basePriceBucket: string | null;
-  forcedPaywallArm: string | null;
   landingVariant: string | null;
   deviceType: string | null;
   countryTier: string | null;
@@ -288,7 +287,10 @@ export function journeyFromPurchase(input: {
       landing: stamped.landing ?? input.landingVariant,
       survey: stamped.survey,
       pricing: input.experimentGroup ?? input.basePriceBucket,
-      paywall: input.forcedPaywallArm,
+      // The forced-paywall axis was removed on 2026-08-31 and nothing stamps it
+      // any more. Historical purchases keep their arm on report_price_quote; the
+      // Slack message never rendered this axis (see armFields).
+      paywall: null,
     },
     traffic: classifyTraffic(input.utmTracker),
     device: input.deviceType,

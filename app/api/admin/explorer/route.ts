@@ -52,7 +52,6 @@ const QUOTE_SELECT = [
   "personal_report_id",
   "plan",
   "purchased_at",
-  "forced_paywall_arm",
   "experiment_group",
   "device_type",
   "country_tier",
@@ -175,7 +174,6 @@ interface QuoteRow {
   personal_report_id: number | null;
   plan: string | null;
   purchased_at: string | null;
-  forced_paywall_arm: string | null;
   experiment_group: string | null;
   device_type: string | null;
   country_tier: string | null;
@@ -528,7 +526,6 @@ export async function GET(request: Request) {
         utmCampaign: parseUtmField(s.utm_tracker, "utm_campaign"),
         landingVariant: parseLandingVariant(s.utm_tracker),
         device: normalizeLabel(attrs?.device_type),
-        paywallArm: normalizeLabel(attrs?.forced_paywall_arm),
         experimentGroup: normalizeLabel(attrs?.experiment_group),
         countryTier: normalizeLabel(attrs?.country_tier),
         priceBucket: normalizeLabel(attrs?.base_price_bucket),
@@ -608,7 +605,6 @@ export async function GET(request: Request) {
         "relationship",
         "plan",
         "device",
-        "paywall_arm",
         "experiment_group",
         "country_tier",
         "price_bucket",
@@ -636,7 +632,6 @@ export async function GET(request: Request) {
             r.relationship,
             r.plan,
             r.device,
-            r.paywallArm,
             r.experimentGroup,
             r.countryTier,
             r.priceBucket,

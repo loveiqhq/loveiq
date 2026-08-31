@@ -71,7 +71,6 @@ interface Props {
   copy: ArousalCopy | null;
   /** Arc config (family + act labels); null when locked or absent. */
   config: ArousalConfig | null;
-  offerDeadline?: number;
   onUnlock: () => void;
   quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
@@ -513,7 +512,6 @@ const ArousalSection: FC<Props> = ({
   archetype,
   copy,
   config,
-  offerDeadline,
   onUnlock,
   quote = null,
   sectionTitle,
@@ -591,7 +589,6 @@ const ArousalSection: FC<Props> = ({
                 sectionTitle={sectionTitle}
                 tier={tier}
                 quote={quote}
-                offerDeadline={offerDeadline}
                 onUnlock={onUnlock}
               />
             </div>

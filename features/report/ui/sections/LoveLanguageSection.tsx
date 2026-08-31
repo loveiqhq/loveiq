@@ -46,7 +46,6 @@ interface Props {
    * render WITHOUT the ranked list rather than fabricating an order.
    */
   order: string[] | null;
-  offerDeadline?: number;
   onUnlock: () => void;
   quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
@@ -183,7 +182,6 @@ const LoveLanguageSection: FC<Props> = ({
   archetype,
   copy,
   order,
-  offerDeadline,
   onUnlock,
   quote = null,
   sectionTitle,
@@ -237,7 +235,6 @@ const LoveLanguageSection: FC<Props> = ({
                 sectionTitle={sectionTitle}
                 tier={tier}
                 quote={quote}
-                offerDeadline={offerDeadline}
                 onUnlock={onUnlock}
               />
             </div>

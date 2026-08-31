@@ -14,16 +14,31 @@ vi.mock("@shared/observability/logger", () => ({
 }));
 
 vi.mock("@features/pricing/logic/reportPricing", () => ({
-  armReportUrgencyWindow: vi.fn(),
   getReportPriceQuoteForContext: vi.fn(),
   getReportPriceQuotesForContext: vi.fn(),
+}));
+
+// Run the deferred work inline so the journey ping is observable in the test.
+// Swallows like the real helper, which logs rather than rejecting.
+vi.mock("@shared/http/after-response", () => ({
+  scheduleAfterResponse: vi.fn((_key: string, fn: () => Promise<void>) => {
+    void fn().catch(() => {});
+  }),
+}));
+
+vi.mock("@features/report/server/personalReport", () => ({
+  resolveSubmissionAccessContext: vi.fn().mockResolvedValue({ submissionId: 4242 }),
+}));
+
+vi.mock("@features/attribution/server/journey-message", () => ({
+  refreshJourneyMessage: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { GET, POST } from "@/app/api/price/route";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit } from "@shared/http/ratelimit";
+import { refreshJourneyMessage } from "@features/attribution/server/journey-message";
 import {
-  armReportUrgencyWindow,
   getReportPriceQuoteForContext,
   getReportPriceQuotesForContext,
 } from "@features/pricing/logic/reportPricing";
@@ -48,8 +63,6 @@ describe("GET /api/price", () => {
       basePriceBucket: "full_center",
       basePriceCents: 2999,
       currentPriceCents: 2749,
-      urgencyDeadlineAt: null,
-      surchargeCents: 0,
       chargedPriceCents: 2749,
       initialPriceCents: 2999,
       discountMultiplier: 1,
@@ -91,8 +104,6 @@ describe("GET /api/price", () => {
     await expect(res.json()).resolves.toEqual({
       quote: expect.objectContaining({
         currentPriceCents: 2749,
-        urgencyDeadlineAt: null,
-        surchargeCents: 0,
         chargedPriceCents: 2749,
         plan: "full_report",
       }),
@@ -109,8 +120,6 @@ describe("GET /api/price", () => {
         basePriceBucket: "essentials_center",
         basePriceCents: 1499,
         currentPriceCents: 1499,
-        urgencyDeadlineAt: null,
-        surchargeCents: 0,
         chargedPriceCents: 1499,
         initialPriceCents: 1499,
         discountMultiplier: 1,
@@ -143,8 +152,6 @@ describe("GET /api/price", () => {
         basePriceBucket: "full_center",
         basePriceCents: 2999,
         currentPriceCents: 2999,
-        urgencyDeadlineAt: null,
-        surchargeCents: 0,
         chargedPriceCents: 2999,
         initialPriceCents: 2999,
         discountMultiplier: 1,
@@ -177,8 +184,6 @@ describe("GET /api/price", () => {
         basePriceBucket: "all_center",
         basePriceCents: 12999,
         currentPriceCents: 12999,
-        urgencyDeadlineAt: null,
-        surchargeCents: 0,
         chargedPriceCents: 12999,
         initialPriceCents: 12999,
         discountMultiplier: 1,
@@ -228,9 +233,13 @@ describe("GET /api/price", () => {
  * readers (a shared report link unfurling in Slack), and arming has a price
  * consequence, so it must only be reachable from our own page.
  */
+/**
+ * The POST used to arm a three-minute urgency window that added 2 EUR to every plan.
+ * That surcharge and its countdown were removed on 2026-08-31; the endpoint survives
+ * for the one thing only it can do — tell the server, consent-independently, that a
+ * reader reached the paywall, so the Slack journey message can fill "Paywall hit".
+ */
 describe("POST /api/price", () => {
-  const armed = "2026-08-23T12:03:00.000Z";
-
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(verifyCsrfToken).mockResolvedValue(true);
@@ -249,24 +258,19 @@ describe("POST /api/price", () => {
     });
   }
 
-  it("arms the window and returns the deadline", async () => {
-    vi.mocked(armReportUrgencyWindow).mockResolvedValue(armed);
-
+  it("advances the journey message to Paywall hit", async () => {
     const res = await POST(armRequest({ token: "rpt_ABCDEFGHIJKLMNOPQRST" }));
 
     expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toEqual({ urgencyDeadlineAt: armed });
+    await expect(res.json()).resolves.toEqual({ success: true });
+    expect(refreshJourneyMessage).toHaveBeenCalledWith(4242, "paywall");
   });
 
-  it("returns the same deadline when called again — it is never re-armed or extended", async () => {
-    // Re-arming would hand a reader the lower price back by reopening the report.
-    vi.mocked(armReportUrgencyWindow).mockResolvedValue(armed);
+  it("returns no price or deadline — this endpoint no longer moves money", async () => {
+    const res = await POST(armRequest({ token: "rpt_ABCDEFGHIJKLMNOPQRST" }));
+    const body = (await res.json()) as Record<string, unknown>;
 
-    const first = await POST(armRequest({ token: "rpt_ABCDEFGHIJKLMNOPQRST" }));
-    const second = await POST(armRequest({ token: "rpt_ABCDEFGHIJKLMNOPQRST" }));
-
-    await expect(first.json()).resolves.toEqual({ urgencyDeadlineAt: armed });
-    await expect(second.json()).resolves.toEqual({ urgencyDeadlineAt: armed });
+    expect(Object.keys(body)).toEqual(["success"]);
   });
 
   it("refuses a request without a CSRF token", async () => {
@@ -275,23 +279,21 @@ describe("POST /api/price", () => {
     const res = await POST(armRequest({ token: "rpt_ABCDEFGHIJKLMNOPQRST" }));
 
     expect(res.status).toBe(403);
-    expect(armReportUrgencyWindow).not.toHaveBeenCalled();
+    expect(refreshJourneyMessage).not.toHaveBeenCalled();
   });
 
   it("refuses a request with no report context", async () => {
     const res = await POST(armRequest({}));
 
     expect(res.status).toBe(400);
-    expect(armReportUrgencyWindow).not.toHaveBeenCalled();
+    expect(refreshJourneyMessage).not.toHaveBeenCalled();
   });
 
-  it("reports no deadline rather than failing when arming throws", async () => {
-    // The reader keeps the base price; they never see an error for this.
-    vi.mocked(armReportUrgencyWindow).mockRejectedValue(new Error("supabase down"));
+  it("never fails the reader when the journey write throws", async () => {
+    vi.mocked(refreshJourneyMessage).mockRejectedValueOnce(new Error("supabase down"));
 
     const res = await POST(armRequest({ token: "rpt_ABCDEFGHIJKLMNOPQRST" }));
 
     expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toEqual({ urgencyDeadlineAt: null });
   });
 });

@@ -269,7 +269,6 @@ describe("new dimensions", () => {
   it("exposes pricing/experiment/device/acquisition/engagement via the accessor", () => {
     const r = row({
       device: "mobile",
-      paywallArm: "armB",
       experimentGroup: "variant",
       countryTier: "tier2",
       priceBucket: "high",
@@ -280,7 +279,6 @@ describe("new dimensions", () => {
       sessionCount: 2,
     });
     expect(dimensionValue(r, "device", opts)).toBe("mobile");
-    expect(dimensionValue(r, "paywallArm", opts)).toBe("armB");
     expect(dimensionValue(r, "experimentGroup", opts)).toBe("variant");
     expect(dimensionValue(r, "utmMedium", opts)).toBe("cpc");
     expect(dimensionValue(r, "utmCampaign", opts)).toBe("spring");
@@ -289,8 +287,7 @@ describe("new dimensions", () => {
   });
 
   it("missing pricing/engagement reads as Unknown / Not viewed / 0", () => {
-    const r = row({ paywallArm: null, reportViewed: false, sessionCount: 0 });
-    expect(dimensionValue(r, "paywallArm", opts)).toBe("Unknown");
+    const r = row({ reportViewed: false, sessionCount: 0 });
     expect(dimensionValue(r, "reportViewed", opts)).toBe("Not viewed");
     expect(dimensionValue(r, "sessionBucket", opts)).toBe("0");
   });

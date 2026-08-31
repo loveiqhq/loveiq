@@ -149,7 +149,6 @@ const QUOTE_COLUMNS = [
   "survey_submission_id",
   "experiment_group",
   "base_price_bucket",
-  "forced_paywall_arm",
   "current_price",
   "purchased_at",
   "checkout_started_at",
@@ -237,7 +236,6 @@ interface QuoteRow {
   survey_submission_id: number;
   experiment_group: string | null;
   base_price_bucket: string | null;
-  forced_paywall_arm: string | null;
   current_price: number | string | null;
   purchased_at: string | null;
   checkout_started_at: string | null;
@@ -421,7 +419,6 @@ export async function GET(request: Request) {
       number,
       {
         pricing: string | null;
-        paywall: string | null;
         purchased: boolean;
         startedCheckout: boolean;
         revenue: number;
@@ -431,14 +428,12 @@ export async function GET(request: Request) {
       const key = q.survey_submission_id;
       const existing = bySubmission.get(key) ?? {
         pricing: null,
-        paywall: null,
         purchased: false,
         startedCheckout: false,
         revenue: 0,
       };
       if (q.checkout_started_at) existing.startedCheckout = true;
       existing.pricing ??= q.experiment_group ?? q.base_price_bucket ?? null;
-      existing.paywall ??= q.forced_paywall_arm ?? null;
       if (q.purchased_at) {
         existing.purchased = true;
         existing.revenue += num(q.current_price);
@@ -497,18 +492,16 @@ export async function GET(request: Request) {
     /*
      * Only genuinely randomised, currently-running splits belong here.
      *
-     * The paywall arm is deliberately EXCLUDED. That experiment concluded in
-     * favour of the forced wall: getForcedPaywallCohort is now deterministic
-     * (`token ? "treatment" : "control"`), and with the forced_paywall_enabled
-     * flag off, new quotes stamp "control" outright. The surviving "treatment"
-     * rows are historical, so comparing the two arms compares two time periods,
-     * not two randomly-assigned groups. Presenting that with a winner would
-     * invite a decision the data cannot support, so it is reported as concluded
-     * with no rates attached.
+     * Two axes left on 2026-08-31 and both are in `concluded` below rather than
+     * here, so a finished test cannot be mistaken for a live one. The forced
+     * paywall was REMOVED from the product, so nothing stamps an arm at all. The
+     * price test was settled by dropping the higher-priced arm, so every new quote
+     * is stamped with the surviving group — which is not the same thing as a
+     * randomised arm, and comparing it against the retired one would be comparing
+     * two time periods.
      */
     const experiments: ExperimentReadout[] = [
       tally("landing", (_id, tracker) => readStampedArms(tracker).landing),
-      tally("pricing", (id) => bySubmission.get(id)?.pricing ?? null),
     ];
 
     /*
@@ -628,9 +621,14 @@ export async function GET(request: Request) {
       experiments,
       concluded: [
         {
+          title: "Report pricing (A vs B)",
+          outcome:
+            "Finished on 31 August 2026. We dropped the more expensive of the two price lists, so everyone now sees the same prices. The cheaper list had taken more money over the test as a whole, but the two prices were swapped over on 24 August, which means the before and after are not really one comparison — with 1 sale against 2 since the swap there was nothing to call it on. It was a decision to simplify, not a verdict.",
+        },
+        {
           title: "Paywall style",
           outcome:
-            "Concluded in favour of the forced paywall, and the forced screen is currently switched off, so everyone now gets the same experience. No comparison to make.",
+            "Finished. The forced screen was switched off, then removed from the site entirely on 31 August 2026 — the pricing pop-up can always be closed now. Everyone gets the same experience, so there is nothing left to compare.",
         },
         {
           title: "Survey design (white vs dark)",

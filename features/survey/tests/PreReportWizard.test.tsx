@@ -15,11 +15,6 @@ vi.mock("next/image", () => ({
 
 import PreReportWizard from "@features/survey/ui/PreReportWizard";
 
-// The 50/50 was concluded → any non-empty token now buckets to the forced
-// "treatment" arm. "control" is reached only via a missing token or the dev
-// `?arm=` override.
-const TREATMENT_TOKEN = "rpt_wizard_test_001";
-
 /** Click a button and flush the 200ms leave-animation timer. */
 function clickAndFlush(button: HTMLElement) {
   fireEvent.click(button);
@@ -67,7 +62,7 @@ describe("PreReportWizard", () => {
       "Rate each report section.",
       "Share your report with someone you care about.",
       "Invite your friends to grow.",
-      "Let's open your report.",
+      "Your personalised report is waiting for you.",
     ];
 
     expect(screen.getByText(headings[0])).toBeInTheDocument();
@@ -99,7 +94,7 @@ describe("PreReportWizard", () => {
       clickAndFlush(screen.getByRole("button", { name: /continue/i }));
     }
 
-    expect(screen.getByText("Let's open your report.")).toBeInTheDocument();
+    expect(screen.getByText("Your personalised report is waiting for you.")).toBeInTheDocument();
 
     // Click continue on last slide — 250ms leave animation + 600ms exit fade
     clickAndFlush(screen.getByRole("button", { name: /view your report/i }));
@@ -130,35 +125,24 @@ describe("PreReportWizard", () => {
   });
 });
 
-describe("PreReportWizard — coupled paywall (now forced)", () => {
-  it("missing token falls back to control (6 slides)", () => {
-    render(<PreReportWizard onComplete={vi.fn()} />);
-    expect(screen.getByText("1 / 6")).toBeInTheDocument();
-  });
-
-  it("treatment cohort (token present) swaps the final slide for the must-pay one", () => {
-    const onComplete = vi.fn();
-    render(<PreReportWizard reportToken={TREATMENT_TOKEN} onComplete={onComplete} />);
-
-    // Advance to slide index 4 (5th of 6) — the swapped slide must NOT appear yet
-    // (guards against an off-by-one in slides.slice(0, -1)).
-    for (let i = 0; i < 4; i++) {
-      clickAndFlush(screen.getByRole("button", { name: /continue/i }));
+/**
+ * The wizard used to have two endings: a neutral "Let's open your report." for
+ * the control arm and this must-pay one for the forced-paywall treatment arm,
+ * swapped in by report token. The A/B was removed on 2026-08-31 and the must-pay
+ * copy kept as the single ending, so the wizard no longer branches at all.
+ */
+describe("PreReportWizard — single ending", () => {
+  it("always ends on the must-pay slide, with or without a report token", () => {
+    for (const props of [{}, { reportToken: "rpt_wizard_test_001" }]) {
+      render(<PreReportWizard onComplete={vi.fn()} {...props} />);
+      expect(screen.getByText("1 / 6")).toBeInTheDocument();
+      for (let i = 0; i < 5; i++) {
+        clickAndFlush(screen.getAllByRole("button", { name: /continue/i })[0]!);
+      }
+      expect(screen.getByText("Your personalised report is waiting for you.")).toBeInTheDocument();
+      // The neutral ending is gone entirely — it is not reachable by any path.
+      expect(screen.queryByText("Let's open your report.")).not.toBeInTheDocument();
+      cleanup();
     }
-    expect(
-      screen.queryByText("Your personalised report is waiting for you.")
-    ).not.toBeInTheDocument();
-
-    // One more advance → final slide (index 5) is the swapped report-waiting slide.
-    clickAndFlush(screen.getByRole("button", { name: /continue/i }));
-    expect(screen.getByText("Your personalised report is waiting for you.")).toBeInTheDocument();
-    // The neutral "open your report" slide is replaced (gone) in the dark arm.
-    expect(screen.queryByText("Let's open your report.")).not.toBeInTheDocument();
-
-    clickAndFlush(screen.getByRole("button", { name: /view your report/i }));
-    act(() => {
-      vi.advanceTimersByTime(650);
-    });
-    expect(onComplete).toHaveBeenCalledTimes(1);
   });
 });

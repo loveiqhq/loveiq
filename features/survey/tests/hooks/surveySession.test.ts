@@ -2,10 +2,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   finalizeReportSession,
-  getReportPaywallDeadline,
-  peekReportPaywallDeadline,
-  REPORT_PAYWALL_COUNTDOWN_MS,
-  REPORT_PAYWALL_DEADLINE_PREFIX,
   getReportPricingSessionId,
   REPORT_SESSION_KEY,
   REPORT_PRICING_SESSION_PREFIX,
@@ -147,78 +143,5 @@ describe("surveySession", () => {
     setReportPricingSessionId({ pricingSessionId: "orphan" });
     // No storage key can be formed; nothing should be written.
     expect(sessionStorage.length).toBe(0);
-  });
-});
-
-/**
- * The urgency clock is three minutes long and, since 2026-08-19, is STARTED by the
- * report rather than by page load — it arms on reaching the first paywalled
- * chapter, the same moment the plans pop-up arms. That split is why there are two
- * readers: `peek` reports a clock that is already running, `get` starts one.
- */
-describe("report paywall countdown deadline", () => {
-  beforeEach(() => {
-    sessionStorage.clear();
-  });
-
-  it("runs for three minutes", () => {
-    expect(REPORT_PAYWALL_COUNTDOWN_MS).toBe(3 * 60 * 1_000);
-  });
-
-  it("peek does not start the clock", () => {
-    expect(peekReportPaywallDeadline({ token: "rpt_x" })).toBeNull();
-    // The important half: peeking must not have written anything, or every page
-    // load would anchor the countdown again.
-    expect(sessionStorage.length).toBe(0);
-  });
-
-  it("arming stores a deadline three minutes out, and peek then sees it", () => {
-    const before = Date.now();
-    const armed = getReportPaywallDeadline({ token: "rpt_x" });
-
-    expect(armed).toBeGreaterThanOrEqual(before + REPORT_PAYWALL_COUNTDOWN_MS);
-    expect(armed).toBeLessThanOrEqual(Date.now() + REPORT_PAYWALL_COUNTDOWN_MS);
-    expect(sessionStorage.getItem(`${REPORT_PAYWALL_DEADLINE_PREFIX}:token:rpt_x`)).toBe(
-      String(armed)
-    );
-    expect(peekReportPaywallDeadline({ token: "rpt_x" })).toBe(armed);
-  });
-
-  it("re-arming keeps the running clock instead of granting a fresh three minutes", () => {
-    const armed = getReportPaywallDeadline({ token: "rpt_x" });
-    expect(getReportPaywallDeadline({ token: "rpt_x" })).toBe(armed);
-  });
-
-  it("keeps an already-elapsed deadline, so the countdown cannot be farmed", () => {
-    const past = Date.now() - 5_000;
-    sessionStorage.setItem(`${REPORT_PAYWALL_DEADLINE_PREFIX}:token:rpt_x`, String(past));
-
-    expect(peekReportPaywallDeadline({ token: "rpt_x" })).toBe(past);
-    expect(getReportPaywallDeadline({ token: "rpt_x" })).toBe(past);
-  });
-
-  it("keys per report, so a second report starts its own clock", () => {
-    const first = getReportPaywallDeadline({ token: "rpt_a" });
-    // Not armed by the first report's clock...
-    expect(peekReportPaywallDeadline({ token: "rpt_b" })).toBeNull();
-
-    getReportPaywallDeadline({ token: "rpt_b" });
-    // ...and arming it leaves the first report's clock exactly where it was. (The
-    // two epoch values can be equal to the millisecond in a test, so the entries
-    // are what this asserts, not the numbers.)
-    expect(sessionStorage.getItem(`${REPORT_PAYWALL_DEADLINE_PREFIX}:token:rpt_b`)).not.toBeNull();
-    expect(peekReportPaywallDeadline({ token: "rpt_a" })).toBe(first);
-  });
-
-  it("falls back to session id, and to an unpersisted window with no key at all", () => {
-    const bySession = getReportPaywallDeadline({ sessionId: "sess-1" });
-    expect(sessionStorage.getItem(`${REPORT_PAYWALL_DEADLINE_PREFIX}:session:sess-1`)).toBe(
-      String(bySession)
-    );
-
-    // No token and no session: the countdown still works, it just cannot persist.
-    expect(peekReportPaywallDeadline({})).toBeNull();
-    expect(getReportPaywallDeadline({})).toBeGreaterThan(Date.now());
-    expect(sessionStorage.getItem(`${REPORT_PAYWALL_DEADLINE_PREFIX}:token:null`)).toBeNull();
   });
 });

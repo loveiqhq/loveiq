@@ -57,7 +57,6 @@ interface Props {
    */
   loop: { steps: readonly [string, string, string]; exitQuote: string } | null;
   copy: PartnershipCopy | null;
-  offerDeadline?: number;
   onUnlock: () => void;
   quote?: ReportPriceQuoteSnapshot | null;
   sectionTitle: string;
@@ -221,7 +220,6 @@ const PartnershipSection: FC<Props> = ({
   archetype,
   loop,
   copy,
-  offerDeadline,
   onUnlock,
   quote = null,
   sectionTitle,
@@ -282,7 +280,6 @@ const PartnershipSection: FC<Props> = ({
                 sectionTitle={sectionTitle}
                 tier={tier}
                 quote={quote}
-                offerDeadline={offerDeadline}
                 onUnlock={onUnlock}
               />
             </div>

@@ -1,4 +1,3 @@
-import type { ForcedPaywallCohort } from "@shared/experiments/forcedPaywall";
 import type { ReportAccessPlan } from "../server/access";
 
 /**
@@ -18,12 +17,10 @@ export function shouldAutoOpenOfferModal({
   isOfferLink,
   accessPlan,
   viewMode,
-  cohort,
 }: {
   isOfferLink: boolean;
   accessPlan: ReportAccessPlan;
   viewMode: "owner" | "shared";
-  cohort: ForcedPaywallCohort;
 }): boolean {
   // Not an offer deep-link — nothing to auto-open.
   if (!isOfferLink) return false;
@@ -31,8 +28,5 @@ export function shouldAutoOpenOfferModal({
   if (accessPlan !== null) return false;
   // Shared (recipient) views never see the owner paywall.
   if (viewMode === "shared") return false;
-  // Forced (treatment) arm opens its own non-closable hard wall on load; the
-  // closable offer modal must not preempt it.
-  if (cohort === "treatment") return false;
   return true;
 }

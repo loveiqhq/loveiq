@@ -26,11 +26,9 @@ import { scheduleAfterResponse } from "@shared/http/after-response";
 import { refreshJourneyMessage } from "@features/attribution/server/journey-message";
 import {
   getReportAccessPlanForSubmission,
-  resolveReportAccessToken,
   resolveSubmissionAccessContext,
 } from "@features/report/server/personalReport";
 import { isPlanOwnedForArchetype } from "@features/report/server/access";
-import { getForcedPaywallCohort } from "@shared/experiments/forcedPaywall";
 import {
   LANDING_VARIANT_COOKIE,
   normalizeLandingVariant,
@@ -118,28 +116,26 @@ function buildSuccessUrl({
   return `${origin}/checkout/return?${params.join("&")}`;
 }
 
+/**
+ * Where Stripe sends a buyer who backs out.
+ *
+ * Straight back to the report they came from, since the `/checkout` review page
+ * they used to land on was removed on 2026-08-31. An archetype-scoped purchase
+ * returns to that archetype's view so the reader is where they left off.
+ */
 function buildCancelUrl({
   archetypeSlug,
   origin,
-  plan,
   reportToken,
 }: {
   archetypeSlug?: string | null;
   origin: string;
-  plan: ReportPurchasePlanId;
   reportToken?: string | null;
 }) {
-  const params = [`plan=${encodeURIComponent(plan)}`];
-
-  if (reportToken) {
-    params.push(`token=${encodeURIComponent(reportToken)}`);
-  }
-
-  if (archetypeSlug) {
-    params.push(`archetype=${encodeURIComponent(archetypeSlug)}`);
-  }
-
-  return `${origin}/checkout?${params.join("&")}`;
+  const path = reportToken ? `/report/${encodeURIComponent(reportToken)}` : "/report";
+  return archetypeSlug
+    ? `${origin}${path}?archetype=${encodeURIComponent(archetypeSlug)}`
+    : `${origin}${path}`;
 }
 
 export async function POST(request: Request) {
@@ -242,18 +238,6 @@ export async function POST(request: Request) {
     const archetypeSlug = archetypeName ? toArchetypeSlug(archetypeName) : null;
     const planTitle = archetypeName ? `${archetypeName} report` : plan.title;
 
-    // Forced-paywall A/B arm, recomputed server-side from the canonical report
-    // token. Token checkouts carry it directly; session-only checkouts resolve
-    // it from the submission so the attribution arm matches the arm the user
-    // EXPERIENCED on the report (which keys on token ?? data.ownerToken). Never
-    // throws — a resolution miss defaults to control.
-    const forcedPaywallArm = getForcedPaywallCohort(
-      await resolveReportAccessToken({
-        reportSessionId: parsed.data.reportSessionId ?? null,
-        reportToken: parsed.data.reportToken ?? null,
-      })
-    );
-
     // White-landing A/B arm, read from the sticky cookie, so revenue is
     // attributable to the landing variant the buyer first saw. Defaults to
     // "control" when the cookie is absent (e.g. they never hit `/`) or when
@@ -334,8 +318,8 @@ export async function POST(request: Request) {
                 description: plan.description,
                 name: `LoveIQ ${planTitle}`,
               },
-              // `chargedPriceCents`, never `currentPriceCents`: it carries the urgency
-              // surcharge, and it is the same number every price surface renders, so
+              // `chargedPriceCents`, never `currentPriceCents`: it is the same number
+              // every price surface renders, so
               // the screen and the invoice cannot disagree.
               unit_amount: quote.chargedPriceCents,
             },
@@ -351,9 +335,6 @@ export async function POST(request: Request) {
           // about a €2 difference is answerable from the payment alone.
           currentPrice: String((quote.chargedPriceCents / 100).toFixed(2)),
           basePrice: String((quote.currentPriceCents / 100).toFixed(2)),
-          urgencySurcharge: String((quote.surchargeCents / 100).toFixed(2)),
-          urgencyExpired: quote.surchargeCents > 0 ? "1" : "0",
-          urgencyDeadlineAt: toStripeMetadataValue(quote.urgencyDeadlineAt),
           deviceType: quote.deviceType,
           discountStep: String(quote.discountStep),
           engagementScore: String(quote.engagementScore),
@@ -364,11 +345,6 @@ export async function POST(request: Request) {
           gaClientId: toStripeMetadataValue(parsed.data.gaClientId ?? null),
           gaSessionId: toStripeMetadataValue(parsed.data.gaSessionId ?? null),
           gaAnalyticsConsent: parsed.data.gaConsent ? "1" : "0",
-          // Forced-paywall A/B arm (computed above from the canonical report
-          // token, consent-independent). Mirrors experimentGroup → flows
-          // webhook → fulfillment → payment.metadata for conversion attribution
-          // that survives analytics-consent declines.
-          forcedPaywallArm,
           landingVariant,
           initialPrice: String((quote.initialPriceCents / 100).toFixed(2)),
           msrp: String((quote.msrpCents / 100).toFixed(2)),
@@ -399,7 +375,6 @@ export async function POST(request: Request) {
         cancel_url: buildCancelUrl({
           archetypeSlug,
           origin: siteUrl,
-          plan: parsed.data.plan,
           reportToken: parsed.data.reportToken ?? null,
         }),
       },

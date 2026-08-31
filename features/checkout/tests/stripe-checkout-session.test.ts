@@ -49,7 +49,6 @@ import {
   getReportPriceQuoteForContext,
   markReportPriceQuoteCheckoutStarted,
 } from "@features/pricing/logic/reportPricing";
-import { getForcedPaywallCohort } from "@shared/experiments/forcedPaywall";
 
 /** The quote the route resolves: full report, €27.49, urgency window still open. */
 const BASE_QUOTE = {
@@ -60,8 +59,6 @@ const BASE_QUOTE = {
   basePriceBucket: "full_center",
   basePriceCents: 2999,
   currentPriceCents: 2749,
-  urgencyDeadlineAt: null,
-  surchargeCents: 0,
   chargedPriceCents: 2749,
   initialPriceCents: 2999,
   discountMultiplier: 1,
@@ -191,7 +188,9 @@ describe("POST /api/stripe/checkout-session", () => {
         // hand-redeem test codes. Owned codes still auto-apply via discounts[]
         // (?promo= link); the two params are mutually exclusive.
         allow_promotion_codes: true,
-        cancel_url: "http://localhost/checkout?plan=full_report&archetype=spark-seeker",
+        // Backing out on Stripe returns to the REPORT. The /checkout review page
+        // that used to catch a cancellation was removed on 2026-08-31.
+        cancel_url: "http://localhost/report?archetype=spark-seeker",
         customer_email: "test@example.com",
         line_items: [
           expect.objectContaining({
@@ -219,7 +218,10 @@ describe("POST /api/stripe/checkout-session", () => {
     expect(markReportPriceQuoteCheckoutStarted).toHaveBeenCalledWith({ quoteId: 22 });
   });
 
-  it("stamps the forced-paywall arm (recomputed server-side from the report token) into session metadata", async () => {
+  it("no longer stamps a forced-paywall arm into session metadata", async () => {
+    // The A/B was removed on 2026-08-31. The key must be absent, not "control":
+    // fulfillment copies session metadata onto the durable payment row, so a
+    // constant would read downstream as a live arm every buyer was in.
     const createSession = vi.fn().mockResolvedValue({
       id: "cs_test_arm_789",
       url: "https://checkout.stripe.com/c/pay/cs_test_arm_789",
@@ -231,55 +233,20 @@ describe("POST /api/stripe/checkout-session", () => {
       checkout: { sessions: { create: createSession } },
     } as never);
 
-    const reportToken = "rpt_SkDN8YcTxXRivawCVtY6";
-    const expectedArm = getForcedPaywallCohort(reportToken);
-
     const res = await POST(
       makeRequest({
         archetype: "Spark Seeker",
         plan: "full_report",
         reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
-        reportToken,
+        reportToken: "rpt_SkDN8YcTxXRivawCVtY6",
       })
     );
 
     expect(res.status).toBe(200);
-    expect(expectedArm).toMatch(/^(treatment|control)$/);
-    expect(createSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        metadata: expect.objectContaining({ forcedPaywallArm: expectedArm }),
-      }),
-      expect.anything()
-    );
-  });
-
-  it("defaults the forced-paywall arm to control when no report token is present", async () => {
-    const createSession = vi.fn().mockResolvedValue({
-      id: "cs_test_arm_none",
-      url: "https://checkout.stripe.com/c/pay/cs_test_arm_none",
-    });
-
-    vi.mocked(isStripeCheckoutEnabled).mockReturnValue(true);
-    vi.mocked(getStripeCheckoutCustomerEmail).mockResolvedValue("test@example.com");
-    vi.mocked(getStripeServerClient).mockReturnValue({
-      checkout: { sessions: { create: createSession } },
-    } as never);
-
-    const res = await POST(
-      makeRequest({
-        archetype: "Spark Seeker",
-        plan: "full_report",
-        reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
-      })
-    );
-
-    expect(res.status).toBe(200);
-    expect(createSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        metadata: expect.objectContaining({ forcedPaywallArm: "control" }),
-      }),
-      expect.anything()
-    );
+    const metadata = createSession.mock.calls[0]![0].metadata as Record<string, unknown>;
+    expect(Object.keys(metadata)).not.toContain("forcedPaywallArm");
+    // The consent flag rides in the same block and must survive the removal.
+    expect(metadata).toHaveProperty("gaAnalyticsConsent");
   });
 
   it("rejects archetype when plan is all_reports (global unlock has no archetype scope)", async () => {
@@ -341,7 +308,7 @@ describe("POST /api/stripe/checkout-session", () => {
         }),
         success_url:
           "http://localhost/checkout/return?plan=full_report&session_id={CHECKOUT_SESSION_ID}&archetype=spark-seeker",
-        cancel_url: "http://localhost/checkout?plan=full_report&archetype=spark-seeker",
+        cancel_url: "http://localhost/report?archetype=spark-seeker",
       }),
       expect.objectContaining({
         idempotencyKey: expect.stringMatching(/^[0-9a-f]{64}$/),
@@ -349,13 +316,14 @@ describe("POST /api/stripe/checkout-session", () => {
     );
   });
 
-  it("charges the surcharged price once the reader's urgency window has closed", async () => {
+  it("charges chargedPriceCents, never the base currentPriceCents", async () => {
     // The number Stripe receives has to be the one the report showed. `chargedPriceCents`
-    // is that number; `currentPriceCents` is the base it was built from and must never be
-    // the amount charged.
+    // is that number; `currentPriceCents` is the base it was built from. They are equal
+    // today — the +2 EUR urgency surcharge that separated them was removed on
+    // 2026-08-31 — so this pins WHICH FIELD is read, which is the part that can rot.
     const createSession = vi.fn().mockResolvedValue({
-      id: "cs_test_session_expired",
-      url: "https://checkout.stripe.com/c/pay/cs_test_session_expired",
+      id: "cs_test_session_charged",
+      url: "https://checkout.stripe.com/c/pay/cs_test_session_charged",
     });
     vi.mocked(isStripeCheckoutEnabled).mockReturnValue(true);
     vi.mocked(getStripeCheckoutCustomerEmail).mockResolvedValue("test@example.com");
@@ -363,14 +331,11 @@ describe("POST /api/stripe/checkout-session", () => {
       checkout: { sessions: { create: createSession } },
     } as never);
 
-    const closed = {
+    vi.mocked(getReportPriceQuoteForContext).mockResolvedValue({
       ...BASE_QUOTE,
       currentPriceCents: 2749,
-      surchargeCents: 200,
       chargedPriceCents: 2949,
-      urgencyDeadlineAt: "2026-08-23T12:00:00.000Z",
-    };
-    vi.mocked(getReportPriceQuoteForContext).mockResolvedValue(closed);
+    });
 
     const res = await POST(
       makeRequest({
@@ -381,23 +346,11 @@ describe("POST /api/stripe/checkout-session", () => {
     );
 
     expect(res.status).toBe(200);
-    expect(createSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        line_items: [
-          expect.objectContaining({
-            price_data: expect.objectContaining({ unit_amount: 2949 }),
-          }),
-        ],
-        // The audit trail carries both halves, so a support question about a two-euro
-        // difference is answerable from the payment alone.
-        metadata: expect.objectContaining({
-          currentPrice: "29.49",
-          basePrice: "27.49",
-          urgencySurcharge: "2.00",
-          urgencyExpired: "1",
-        }),
-      }),
-      expect.anything()
-    );
+    const session = createSession.mock.calls[0]![0];
+    expect(session.line_items[0].price_data.unit_amount).toBe(2949);
+    // The urgency metadata went with the surcharge; nothing may reintroduce a
+    // second price into the audit trail.
+    expect(Object.keys(session.metadata)).not.toContain("urgencySurcharge");
+    expect(Object.keys(session.metadata)).not.toContain("urgencyDeadlineAt");
   });
 });

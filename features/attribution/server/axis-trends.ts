@@ -16,17 +16,16 @@
  * with no code change and nobody having to remember.
  *
  * `paywall` is absent by construction: not in CHART_AXES, and the RPC does not
- * emit it either. `survey` is absent differently and is worth the distinction —
- * it IS still emitted by the RPC, and is dropped purely because CHART_AXES does
- * not list it. Extra rows for an unlisted axis are filtered by `rowsForAxis`, so
- * they cost nothing; do not take the paywall sentence to mean an unlisted axis
- * cannot arrive in the data. That experiment concluded, so a chart would be inventing a
- * test that is not running.
+ * emit it either. `survey` and `pricing` are absent differently and the
+ * distinction is worth keeping — both ARE still emitted by the RPC, and are
+ * dropped purely because CHART_AXES does not list them. Extra rows for an
+ * unlisted axis are filtered by `rowsForAxis`, so they cost nothing; do not take
+ * the paywall sentence to mean an unlisted axis cannot arrive in the data. All
+ * three experiments concluded, so a chart would be inventing a test that is not
+ * running.
  */
 
 import { computeRate } from "@features/admin/server/digest-metrics";
-import { getPricingBucketsForPlan } from "@features/pricing/logic/reportPricing";
-import { DEFAULT_REPORT_PURCHASE_PLAN_ID } from "@features/checkout/server/reportPurchase";
 import { armLabel, AXIS_TITLES, isKnownArm } from "@features/attribution/server/labels";
 import {
   formatSignalSummary,
@@ -38,7 +37,7 @@ import {
 /** The axes that are actively randomised. Deliberately NOT derived from
  *  AXIS_TITLES, which also contains the CONCLUDED paywall and survey-theme axes —
  *  a keys() loop over that is exactly how a dead experiment gets charted. */
-export const CHART_AXES = ["pricing", "landing"] as const;
+export const CHART_AXES = ["landing"] as const;
 export type ChartAxis = (typeof CHART_AXES)[number];
 
 export interface AxisFunnelRow {
@@ -57,11 +56,6 @@ export interface AxisFunnelRow {
  * than caveated — a caveat under a misleading line is still a misleading line.
  */
 export const AXIS_VALID_FROM: Record<ChartAxis, { day: string; why: string } | null> = {
-  // Pricing 2.1 raised arm A roughly 4x (A 39.99/49.99/59 vs B 29/39/49).
-  pricing: {
-    day: "2026-08-24",
-    why: "the cheaper and dearer prices were changed on 24 Aug, so earlier days are a different product wearing the same labels",
-  },
   // Round 2 of the landing test: the current white design vs the pre-rebuild
   // one. Round 1 (dark vs white) reused the same "white" arm name, so days
   // before this belong to a different experiment.
@@ -139,26 +133,6 @@ function addDays(day: string, n: number): string {
   const t = Date.parse(`${day}T00:00:00Z`);
   if (Number.isNaN(t)) return day;
   return new Date(t + n * 86_400_000).toISOString().slice(0, 10);
-}
-
-/**
- * "dearer, base EUR 39.99" — DERIVED, never hardcoded.
- *
- * Pricing 2.1 inverted which arm was dearer on 2026-08-24 and nothing failed,
- * because the direction had been baked into arm names. The reader cannot judge a
- * price test without knowing which side is which, and a name cannot know. The
- * entry tier is the reference: every reader is shown that one.
- */
-function pricingSide(axis: ChartAxis, arm: string): string {
-  if (axis !== "pricing" || (arm !== "A" && arm !== "B")) return "";
-  const buckets = getPricingBucketsForPlan(DEFAULT_REPORT_PURCHASE_PLAN_ID);
-  const mine = buckets.find((b) => b.code === arm);
-  const other = buckets.find((b) => b.code !== arm && (b.code === "A" || b.code === "B"));
-  if (!mine || !other) return "";
-  const money = (cents: number) => `EUR ${(cents / 100).toFixed(2)}`;
-  if (mine.startingCents === other.startingCents) return ` — same base price both sides`;
-  const side = mine.startingCents > other.startingCents ? "dearer" : "cheaper";
-  return ` — ${side}, base ${money(mine.startingCents)}`;
 }
 
 /** "31 Aug" */
@@ -260,7 +234,7 @@ function countsFor(
 ): AxisCounts {
   const since = validFrom ? `since ${human(validFrom)} · ` : "";
   const armLine = (t: ArmTotals) =>
-    `• *${armLabel(axis, t.arm).short}*${pricingSide(axis, t.arm)} — ${t.completions} finished → ${t.checkouts} checkout → ${t.paid} paid`;
+    `• *${armLabel(axis, t.arm).short}* — ${t.completions} finished → ${t.checkouts} checkout → ${t.paid} paid`;
   return {
     axis,
     axisTitle,

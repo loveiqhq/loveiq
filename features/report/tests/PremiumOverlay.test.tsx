@@ -21,8 +21,6 @@ function makeQuote(overrides: Partial<ReportPriceQuoteSnapshot> = {}): ReportPri
     msrpCents: 4999,
     startingPriceCents: 1499,
     currentPriceCents: 1499,
-    urgencyDeadlineAt: null,
-    surchargeCents: 0,
     chargedPriceCents: 1499,
     initialPriceCents: 1499,
     discountMultiplier: 1,
@@ -82,7 +80,6 @@ describe("PremiumOverlay", () => {
         sectionTitle="Arousal, Desire & Pleasure"
         tier="full_report"
         quote={makeQuote({ currentPriceCents: 1499, chargedPriceCents: 1499, msrpCents: 4999 })}
-        offerDeadline={Date.now() + 180_000}
       />
     );
 
@@ -95,65 +92,40 @@ describe("PremiumOverlay", () => {
     expect(screen.queryByText(/You save/i)).not.toBeInTheDocument();
   });
 
-  it("hides the price block when no quote is available but still shows the countdown + CTA", () => {
+  it("hides the price block when no quote is available but still shows the CTA", () => {
     render(
       <PremiumOverlay
         archetype="Quiet Withdrawer"
         sectionTitle="About Fantasies"
         tier="full_report"
         quote={null}
-        offerDeadline={Date.now() + 180_000}
       />
     );
 
     expect(screen.queryByText(/€/)).not.toBeInTheDocument();
     expect(screen.queryByText(/% OFF/i)).not.toBeInTheDocument();
     expect(screen.queryByText("Otherwise")).not.toBeInTheDocument();
-    // Countdown still runs (pure urgency), and the CTA is always present.
-    expect(screen.getByRole("timer")).toBeInTheDocument();
-    expect(screen.getByText("Time left to secure this price")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /unlock your report/i })).toBeInTheDocument();
   });
 
-  it("renders a live MM:SS countdown for a future deadline", () => {
-    const { container } = render(
-      <PremiumOverlay
-        archetype="Spark Seeker"
-        sectionTitle="Arousal, Desire & Pleasure"
-        tier="full_report"
-        quote={makeQuote()}
-        offerDeadline={Date.now() + 180_000}
-      />
-    );
-
-    const timer = screen.getByRole("timer");
-    expect(timer).toHaveAttribute(
-      "aria-label",
-      expect.stringMatching(/Offer expires in \d{2}:\d{2}/)
-    );
-
-    const digits = Array.from(container.querySelectorAll(".rpm-cd-digits__num")).map(
-      (el) => el.textContent
-    );
-    expect(digits).toHaveLength(2);
-    // ~3 minutes remaining — not the expired 00:00 readout.
-    expect(digits.join(":")).not.toBe("00:00");
-  });
-
-  it("keeps the discount pill and shows 00:00 once the countdown has elapsed", () => {
+  it("shows no countdown — the urgency timer is gone", () => {
+    // The card used to print "Time left to secure this price" over a 3-minute
+    // countdown, and expiry added 2 EUR to every plan. Both were removed on
+    // 2026-08-31, so nothing on this card may imply a deadline.
     render(
       <PremiumOverlay
         archetype="Spark Seeker"
         sectionTitle="Arousal, Desire & Pleasure"
         tier="full_report"
         quote={makeQuote({ currentPriceCents: 1499, chargedPriceCents: 1499, msrpCents: 4999 })}
-        offerDeadline={Date.now() - 10_000}
       />
     );
 
-    // Pill stays (the discount is still valid); only the timer reads 00:00.
+    expect(screen.queryByRole("timer")).not.toBeInTheDocument();
+    expect(screen.queryByText(/time left/i)).not.toBeInTheDocument();
+    // The price and the discount pill are unaffected.
+    expect(screen.getByText("€14.99")).toBeInTheDocument();
     expect(screen.getByText(/70% OFF · SAVE €35\.00/i)).toBeInTheDocument();
-    expect(screen.getByRole("timer")).toHaveAttribute("aria-label", "Offer expires in 00:00");
   });
 
   it("calls onUnlock when the CTA is clicked", async () => {

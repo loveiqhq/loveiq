@@ -5,11 +5,10 @@ const base = {
   isOfferLink: true as boolean,
   accessPlan: null as "essentials" | "full_report" | "all_reports" | null,
   viewMode: "owner" as "owner" | "shared",
-  cohort: "control" as "treatment" | "control",
 };
 
 describe("shouldAutoOpenOfferModal", () => {
-  it("opens for an unpaid owner on a control-arm offer link", () => {
+  it("opens for an unpaid owner on an offer link", () => {
     expect(shouldAutoOpenOfferModal({ ...base })).toBe(true);
   });
 
@@ -27,17 +26,12 @@ describe("shouldAutoOpenOfferModal", () => {
     expect(shouldAutoOpenOfferModal({ ...base, viewMode: "shared" })).toBe(false);
   });
 
-  it("does not preempt the forced (treatment) hard wall", () => {
-    expect(shouldAutoOpenOfferModal({ ...base, cohort: "treatment" })).toBe(false);
-  });
-
   it("paid status wins even when every other condition would open it", () => {
     expect(
       shouldAutoOpenOfferModal({
         isOfferLink: true,
         accessPlan: "full_report",
         viewMode: "owner",
-        cohort: "control",
       })
     ).toBe(false);
   });

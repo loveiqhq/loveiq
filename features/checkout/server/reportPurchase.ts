@@ -134,35 +134,6 @@ export function getReportReturnHref(token?: string | null) {
   return token ? `/report/${encodeURIComponent(token)}` : "/report";
 }
 
-export function buildReportCheckoutHref({
-  archetype,
-  plan,
-  token,
-}: {
-  archetype?: string | null;
-  plan: ReportPurchasePlanId;
-  token?: string | null;
-}) {
-  const params = new URLSearchParams({ plan });
-
-  if (token) {
-    params.set("token", token);
-  }
-
-  if (archetype) {
-    // /checkout reads archetype as a slug (toArchetypeSlug-compatible) and
-    // calls fromArchetypeSlug on it. Slugify here so the URL stays stable
-    // and de-slugification round-trips cleanly for any archetype name with
-    // spaces (e.g. "Emotional Voyeur" → "emotional-voyeur").
-    const slug = toArchetypeSlug(archetype);
-    if (slug) {
-      params.set("archetype", slug);
-    }
-  }
-
-  return `/checkout?${params.toString()}`;
-}
-
 export function formatReportPurchasePrice(cents: number, currency = "EUR") {
   return new Intl.NumberFormat("en-IE", {
     currency,
