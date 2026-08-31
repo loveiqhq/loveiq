@@ -33,6 +33,7 @@
  * Usage: SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/brain-ingest-repo.mjs [--dry-run]
  */
 
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 
@@ -364,6 +365,116 @@ function collectCommits() {
   return rows;
 }
 
+/**
+ * WHY THIS SCRIPT NO LONGER REWRITES THE WHOLE CORPUS ON EVERY PUSH.
+ *
+ * It used to upsert all doc and commit rows every run, stamping a fresh
+ * `updated_at` so the sweep could delete whatever it had not touched. On
+ * 2026-08-31 that was measured at 472 doc + 1,630 commit = 2,102 rows per push.
+ *
+ * `updated_at` is indexed (`idx_brain_chunk_source` is `btree (source, updated_at
+ * DESC)`), so none of those could be a HOT update: each rewrote the heap row plus
+ * its entries in a 42 MB GIN index, a 30 MB HNSW vector index and a 13 MB trigram
+ * index. On a 400 MB-RAM Nano instance whose Disk IO budget Supabase had just warned
+ * about, an active hour of pushing was the single largest write event on the database
+ * that also serves the survey, the reports and checkout.
+ *
+ * Almost all of it was pointless: commit chunks are immutable once written, and docs
+ * change a file or two at a time.
+ *
+ * The stamp cannot simply be dropped, because BOTH sweeps delete on
+ * `updated_at < stampedAt` -- the note at the top of this file claiming commits are
+ * never swept is wrong, `sweepStaleSource("commit", ...)` is called below. Skipping
+ * unchanged rows under that predicate would mark every one of them an orphan. So the
+ * sweep moves to the basis it should always have had: the set of ids this run
+ * actually collected. That is strictly more precise than a timestamp, and it is
+ * already fully known in memory.
+ */
+/**
+ * Same majority rule the timestamp sweep uses: a mass id change (a docs
+ * reorganisation renames most `path#slug` ids) and a broken collection are
+ * indistinguishable from here, and stale rows are recoverable while deleted ones are
+ * not. Extracted so --self-check can assert it without touching the database.
+ */
+function wouldRefuseSweep(orphanCount, storedCount) {
+  return orphanCount > storedCount - orphanCount;
+}
+
+function contentHash(row) {
+  return createHash("sha256")
+    .update(`${row.title ?? ""}\u0000${row.body}`)
+    .digest("hex")
+    .slice(0, 16);
+}
+
+/** Stored `source_id -> meta.h` for one source, paged. Null on ANY failure. */
+async function storedHashes(source) {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const map = new Map();
+  for (let offset = 0; offset < 200_000; offset += 1000) {
+    const res = await fetch(
+      `${url}/rest/v1/brain_chunk?select=source_id,meta&source=eq.${encodeURIComponent(source)}` +
+        `&order=source_id.asc&limit=1000&offset=${offset}`,
+      { headers: { apikey: key, Authorization: `Bearer ${key}` } }
+    );
+    // FAIL CLOSED. A null answer makes the caller upsert everything and sweep by
+    // timestamp, i.e. exactly the old behaviour -- slow, but never destructive.
+    if (!res.ok) return null;
+    const batch = await res.json().catch(() => null);
+    if (!Array.isArray(batch)) return null;
+    for (const r of batch) if (r?.source_id) map.set(r.source_id, r.meta?.h ?? null);
+    if (batch.length < 1000) break;
+  }
+  return map;
+}
+
+/**
+ * Delete rows of `source` whose id this run did not collect. Replaces the
+ * timestamp sweep. Orphans are normally zero, so the DELETE usually never runs.
+ */
+async function sweepMissingIds(source, keepIds, storedIds) {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const orphans = [...storedIds].filter((id) => !keepIds.has(id));
+  if (orphans.length === 0) return 0;
+  // Same majority refusal as the timestamp sweep: a mass id change and a broken
+  // collection look identical from here, and stale rows are recoverable while
+  // deleted ones are not.
+  if (wouldRefuseSweep(orphans.length, storedIds.size)) {
+    console.warn(
+      `refusing to sweep ${source}: would delete ${orphans.length} of ${storedIds.size}`
+    );
+    return 0;
+  }
+  let deleted = 0;
+  for (let i = 0; i < orphans.length; i += 100) {
+    const list = orphans
+      .slice(i, i + 100)
+      .map((id) => `"${id.replace(/"/g, '""')}"`)
+      .join(",");
+    const res = await fetch(
+      `${url}/rest/v1/brain_chunk?source=eq.${encodeURIComponent(source)}` +
+        `&source_id=in.(${encodeURIComponent(list)})`,
+      {
+        method: "DELETE",
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
+          Prefer: "return=representation",
+        },
+      }
+    );
+    if (!res.ok) {
+      console.error(`sweep failed (${res.status}): ${(await res.text()).slice(0, 300)}`);
+      process.exit(1);
+    }
+    const gone = await res.json().catch(() => []);
+    deleted += Array.isArray(gone) ? gone.length : 0;
+  }
+  return deleted;
+}
+
 async function upsert(rows, stampedAt) {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -457,7 +568,36 @@ if (process.argv.includes("--self-check")) {
     console.error(`self-check FAILED: expected a multi-section doc to split, got ${many.length}`);
     process.exit(1);
   }
-  console.log(`self-check OK: opening line kept, multi-section doc split into ${many.length}`);
+  // The content hash decides what gets rewritten, and rewriting is what exhausted
+  // the disk IO budget. It must be stable for identical input and move for any change.
+  const base = { title: "t", body: "b" };
+  if (contentHash(base) !== contentHash({ title: "t", body: "b" })) {
+    console.error("self-check FAILED: contentHash is not stable for identical input");
+    process.exit(1);
+  }
+  for (const [label, row] of [
+    ["body", { title: "t", body: "b2" }],
+    ["title", { title: "t2", body: "b" }],
+  ]) {
+    if (contentHash(base) === contentHash(row)) {
+      console.error(`self-check FAILED: contentHash ignored a changed ${label}`);
+      process.exit(1);
+    }
+  }
+  // A title/body boundary, so "ab"+"" and "a"+"b" cannot collide.
+  if (contentHash({ title: "ab", body: "" }) === contentHash({ title: "a", body: "b" })) {
+    console.error("self-check FAILED: contentHash has no field boundary");
+    process.exit(1);
+  }
+  // And the sweep must refuse a majority deletion while allowing a normal one.
+  if (wouldRefuseSweep(1, 473) || !wouldRefuseSweep(300, 473)) {
+    console.error("self-check FAILED: the majority sweep guard is wrong");
+    process.exit(1);
+  }
+  console.log(
+    `self-check OK: opening line kept, doc split into ${many.length}, ` +
+      `content hash stable and field-separated, majority sweep guard refuses`
+  );
   process.exit(0);
 }
 
@@ -512,7 +652,32 @@ if (DRY_RUN) {
 // Stamped once, before any write, so the sweep below can only ever delete rows
 // that predate this run -- never a row a later batch of this same run wrote.
 const stampedAt = new Date().toISOString();
-await upsert([...docRows, ...commitRows], stampedAt);
+// Content hash on every row, so the next run can tell what genuinely changed.
+for (const r of [...docRows, ...commitRows]) r.meta = { ...r.meta, h: contentHash(r) };
+
+const storedDoc = await storedHashes("doc");
+const storedCommit = await storedHashes("commit");
+// Either both maps read cleanly or we fall back entirely to the old behaviour:
+// upsert everything, sweep by timestamp. Slow, but never destructive.
+const bySkipping = storedDoc !== null && storedCommit !== null;
+
+const allRows = [...docRows, ...commitRows];
+const toWrite = bySkipping
+  ? allRows.filter((r) => {
+      const stored = (r.source === "doc" ? storedDoc : storedCommit).get(r.source_id);
+      // undefined = row is new. null = stored before hashing existed, so rewrite
+      // once to give it a hash. Otherwise only a real content change qualifies.
+      return stored === undefined || stored !== r.meta.h;
+    })
+  : allRows;
+
+if (bySkipping) {
+  console.log(
+    `unchanged: ${allRows.length - toWrite.length} of ${allRows.length} chunk(s) skipped ` +
+      `(every write here rewrites four indexes, so this is the disk-IO win)`
+  );
+}
+await upsert(toWrite, stampedAt);
 
 // GUARDED BY THE DOC COUNT, NOT THE TOTAL. This sweep deletes `source=eq.doc`,
 // but the write it follows is dominated by ~1500 commit rows — so a total-row
@@ -534,21 +699,33 @@ const shallowAnswer = git(["rev-parse", "--is-shallow-repository"]).trim();
  * glob. Comparing against what is already stored turns "did we write anything"
  * into "did we write plausibly all of it".
  */
-async function safeToSweep(source, wroteRows) {
-  if (wroteRows <= 0) {
+/**
+ * The two guards that do NOT depend on how the sweep identifies orphans: did this run
+ * collect anything at all, and is this a full clone. `safeToSweep` adds a
+ * timestamp-based majority check on top; the id-set sweep does its own, because with
+ * unchanged rows skipped, "rows older than this run's stamp" is no longer the same
+ * question as "rows this run did not see".
+ */
+function sweepPreconditions(source, collected) {
+  if (collected <= 0) {
     console.warn(`no ${source} chunks collected — refusing to sweep ${source}`);
     return false;
   }
-  // `=== "false"` IS THE ONLY PERMISSIVE ANSWER. `git rev-parse` echoes an
-  // unrecognised flag and exits 0 (verified: `--is-not-a-real-flag` prints itself,
-  // rc 0), so on git < 2.15 the old `=== "true"` test read as "not shallow" and
-  // the guard failed open on exactly the machines least likely to have new git.
   if (shallowAnswer !== "false") {
     console.warn(
       `cannot confirm a full clone (git said ${JSON.stringify(shallowAnswer)}) — refusing to sweep ${source}`
     );
     return false;
   }
+  return true;
+}
+
+async function safeToSweep(source, wroteRows) {
+  if (!sweepPreconditions(source, wroteRows)) return false;
+  // `=== "false"` IS THE ONLY PERMISSIVE ANSWER for the shallow test, which is why it
+  // lives in sweepPreconditions above: `git rev-parse` echoes an unrecognised flag and
+  // exits 0, so the old `=== "true"` test read as "not shallow" on git < 2.15 and
+  // failed open on exactly the machines least likely to have new git.
 
   // HOW MANY ROWS WOULD THIS SWEEP ACTUALLY DELETE? Asked with the same predicate
   // as the DELETE, so after the upsert it counts precisely the orphans.
@@ -615,10 +792,21 @@ async function countChunks(source, before) {
   }
 }
 
-const sweptDocs = (await safeToSweep("doc", docRows.length))
-  ? await sweepStaleSource("doc", stampedAt)
-  : 0;
-const sweptCommits = (await safeToSweep("commit", commitRows.length))
-  ? await sweepStaleSource("commit", stampedAt)
-  : 0;
+async function sweepSource(source, rows, stored) {
+  // With rows skipped, "older than this run's stamp" no longer means "not seen this
+  // run", so the timestamp sweep would call almost everything an orphan. The id set
+  // is what the sweep always actually meant.
+  if (bySkipping) {
+    if (!sweepPreconditions(source, rows.length)) return 0;
+    return await sweepMissingIds(
+      source,
+      new Set(rows.map((r) => r.source_id)),
+      new Set(stored.keys())
+    );
+  }
+  return (await safeToSweep(source, rows.length)) ? await sweepStaleSource(source, stampedAt) : 0;
+}
+
+const sweptDocs = await sweepSource("doc", docRows, storedDoc);
+const sweptCommits = await sweepSource("commit", commitRows, storedCommit);
 console.log(`swept ${sweptDocs} stale doc chunk(s), ${sweptCommits} stale commit chunk(s)`);
