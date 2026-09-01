@@ -20,6 +20,7 @@ import logger from "@shared/observability/logger";
 import { domainMailboxes } from "./gmail";
 import { splitBody } from "./notion";
 import {
+  chunkPage,
   recordSweep,
   shouldSweep,
   sweepStale,
@@ -190,14 +191,12 @@ async function knownEvents(): Promise<Map<string, boolean>> {
       `/rest/v1/brain_chunk?select=source_id,meta&source=eq.${SOURCE}` +
         `&order=source_id.asc&limit=1000&offset=${offset}`
     );
-    // FAIL CLOSED, like Gmail: an empty map reads as "nothing indexed", and the
-    // sweep would then delete every event we hold.
-    if (!res.ok)
-      throw new Error(`calendar: could not read what is already indexed (${res.status})`);
-    const batch = (await res.json().catch(() => [])) as Array<{
+    // Fails closed on an unreadable status AND on an unreadable body: an empty or
+    // truncated map reads as "nothing indexed" and the sweep deletes the difference.
+    const batch = await chunkPage<{
       source_id?: string;
       meta?: { v?: number };
-    }>;
+    }>("calendar", res);
     for (const r of batch) {
       if (r.source_id) out.set(r.source_id, r.meta?.v === CALENDAR_BUILDER_VERSION);
     }

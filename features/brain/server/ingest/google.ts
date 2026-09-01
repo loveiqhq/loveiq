@@ -1039,7 +1039,21 @@ async function touchOlderChunks(
       );
       return 0;
     }
-    const batch = (await res.json().catch(() => [])) as Array<{ source_id?: string }>;
+    // The body needs the same fail-closed treatment as the status above, and for a
+    // sharper reason: this list decides which rows get CONFIRMED, so a truncated page
+    // leaves the rest unconfirmed and `sweepStale` deletes them. `chunkPage` throws;
+    // here the established behaviour for an unreadable list is to skip the touch, so
+    // match the `!res.ok` branch rather than change this job's failure mode.
+    const page = (await res.json().catch(() => null)) as Array<{ source_id?: string }> | null;
+    if (!Array.isArray(page)) {
+      logger.warn(
+        { source },
+        "brain-ingest: a page of the existing chunk list was unreadable; skipping the touch " +
+          "rather than confirming a truncated set"
+      );
+      return 0;
+    }
+    const batch = page;
     for (const row of batch) {
       if (row.source_id && !written.has(row.source_id)) stale.push(row.source_id);
     }

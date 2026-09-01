@@ -107,7 +107,7 @@ export async function GET(request: Request) {
       errorMessage = `drive skipped: ${result.skipped}`;
       await alertOnce(
         `skip:${result.skipped}`,
-        `:brain: brain-drive skipped (${escapeSlack(result.skipped)}). Notion is frozen but ` +
+        `:brain: brain-drive skipped (${escapeSlack(result.skipped)}). Drive is frozen but ` +
           `nothing failed, so this will not look broken.`
       );
     }

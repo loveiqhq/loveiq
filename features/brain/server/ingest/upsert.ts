@@ -341,6 +341,51 @@ export async function recordSweep(source: string, at = new Date().toISOString())
  * collection are indistinguishable from here. Stale rows are recoverable; deleted
  * ones are not.
  */
+/**
+ * ONE PAGE OF A PAGED `brain_chunk` LISTING, OR THROW.
+ *
+ * Every ingester builds its "do not delete this" keep set by paging this table, and
+ * five of them guarded the STATUS with a carefully-worded fail-closed throw and then
+ * swallowed a bad BODY on the very next line:
+ *
+ *     if (!res.ok) throw new Error("... aborting before the sweep ...");
+ *     const batch = (await res.json().catch(() => [])) as Row[];
+ *     ...
+ *     if (batch.length < 1000) break;
+ *
+ * `fetchWithTimeout` deliberately leaves the AbortController armed through the body
+ * read, so a response that stalls AFTER its headers resolves `ok: true` and then
+ * rejects inside `res.json()`. The catch yields `[]`, `0 < 1000` ends the loop, and a
+ * TRUNCATED keep set is returned as the complete corpus. The sweep in that same run
+ * then deletes every row the missing pages never mentioned, records success, and
+ * alerts nobody: page 12 of a 17-page read stalling costs about a quarter of the
+ * largest source.
+ *
+ * Throwing is the right failure. The ingest already turns a throw into a failed run
+ * with an ops alert, and a stale row is repaired by the next run while a deleted one
+ * is gone.
+ *
+ * This exists as ONE function because there were eight copies of the read and only
+ * two of them had been fixed. Eight copies is the reason the other six were still
+ * wrong.
+ */
+export async function chunkPage<T>(source: string, res: Response): Promise<T[]> {
+  if (!res.ok) {
+    throw new Error(
+      `brain-ingest ${source}: could not read the existing chunk list (status ${res.status}) — ` +
+        `aborting before the sweep rather than treating the corpus as empty`
+    );
+  }
+  const batch = (await res.json().catch(() => null)) as T[] | null;
+  if (!Array.isArray(batch)) {
+    throw new Error(
+      `brain-ingest ${source}: a page of the existing chunk list was unreadable — ` +
+        `aborting before the sweep rather than treating a truncated list as complete`
+    );
+  }
+  return batch;
+}
+
 export async function sweepMissing(source: string, seenIds: Set<string>): Promise<number> {
   const stored: string[] = [];
   for (let offset = 0; offset < 200_000; offset += 1000) {
@@ -487,4 +532,15 @@ export interface IngestResult {
   swept: number;
   skipped?: string;
   error?: string;
+  /**
+   * false when the walk did not see everything it meant to — a listing page cap, an
+   * export that failed, or the time budget running out mid-fetch.
+   *
+   * Deliberately NOT a `skipped`, because a partial walk still indexed real work and
+   * `skipped` alerts. It exists so the two cases are distinguishable at all: drive
+   * computed this flag, logged it, and then dropped it from the result, so a run that
+   * fetched one of three documents returned a byte-identical object to a complete one
+   * and `cron_run` recorded success for both.
+   */
+  complete?: boolean;
 }

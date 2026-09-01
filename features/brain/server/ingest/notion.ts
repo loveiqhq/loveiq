@@ -2,6 +2,7 @@ import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import {
+  chunkPage,
   recordSweep,
   shouldSweep,
   sweepMissing,
@@ -846,23 +847,11 @@ async function knownNotionEdits(): Promise<Map<string, { edited: string; v: numb
     const res = await supabaseFetch(
       `/rest/v1/brain_chunk?select=source_id,meta&source=eq.${SOURCE}&order=source_id.asc&limit=1000&offset=${offset}`
     );
-    if (!res.ok) {
-      /**
-       * FAIL CLOSED. Returning an empty map here reads as "nothing is indexed", so
-       * the run treats every existing row as unknown: continuation parts are
-       * neither written nor confirmed, and the sweep at the end of the SAME run
-       * deletes them as orphans — silently, reporting success, and never rebuilding
-       * them. A stale row is repaired by the next run; a deleted one is gone.
-       */
-      throw new Error(
-        `brain-ingest notion: could not read the existing chunk list (status ${res.status}) — ` +
-          `aborting before the sweep rather than treating the corpus as empty`
-      );
-    }
-    const batch = (await res.json().catch(() => [])) as Array<{
+    // Fails closed on an unreadable status AND on an unreadable body. See chunkPage.
+    const batch = await chunkPage<{
       source_id?: string;
       meta?: { edited?: unknown; v?: unknown } | null;
-    }>;
+    }>("notion", res);
     for (const row of batch) {
       const edited = row.meta?.edited;
       // A row with no version predates the stamp, so it reads as v0 and gets

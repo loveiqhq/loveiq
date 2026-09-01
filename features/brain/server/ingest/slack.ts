@@ -3,6 +3,7 @@ import logger from "@shared/observability/logger";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { splitBody } from "./notion";
 import {
+  chunkPage,
   recordSweep,
   shouldSweep,
   sweepStale,
@@ -266,23 +267,11 @@ async function knownSlackDays(): Promise<Map<string, boolean>> {
     const res = await supabaseFetch(
       `/rest/v1/brain_chunk?select=source_id,meta&source=eq.${SOURCE}&order=source_id.asc&limit=1000&offset=${offset}`
     );
-    if (!res.ok) {
-      /**
-       * FAIL CLOSED, and loudly. Returning an empty map reads as "nothing is
-       * indexed": every existing row is then neither written nor confirmed, and the
-       * sweep in this same run deletes it. Returning quietly was already safer than
-       * continuing, but it still let the run report success on a corpus it could
-       * not see.
-       */
-      throw new Error(
-        `brain-ingest slack: could not read the existing chunk list (status ${res.status}) — ` +
-          `aborting before the sweep rather than treating the corpus as empty`
-      );
-    }
-    const batch = (await res.json().catch(() => [])) as Array<{
+    // Fails closed on an unreadable status AND on an unreadable body. See chunkPage.
+    const batch = await chunkPage<{
       source_id?: string;
       meta?: { threadsComplete?: boolean; v?: number };
-    }>;
+    }>("slack", res);
     for (const r of batch) {
       if (!r.source_id) continue;
       const ok = r.meta?.threadsComplete !== false && r.meta?.v === SLACK_BUILDER_VERSION;

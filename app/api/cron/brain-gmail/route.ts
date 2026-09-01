@@ -92,7 +92,7 @@ export async function GET(request: Request) {
       errorMessage = `gmail skipped: ${result.skipped}`;
       await alertOnce(
         `skip:${result.skipped}`,
-        `:brain: brain-gmail skipped (${escapeSlack(result.skipped)}). Notion is frozen but ` +
+        `:brain: brain-gmail skipped (${escapeSlack(result.skipped)}). Gmail is frozen but ` +
           `nothing failed, so this will not look broken.`
       );
     }

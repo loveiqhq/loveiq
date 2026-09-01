@@ -10,6 +10,7 @@ import {
 import logger from "@shared/observability/logger";
 import { splitBody } from "./notion";
 import {
+  chunkPage,
   recordSweep,
   shouldSweep,
   sweepMissing,
@@ -396,21 +397,11 @@ async function knownThreads(): Promise<
       `/rest/v1/brain_chunk?select=source_id,meta&source=eq.${SOURCE}` +
         `&order=source_id.asc&limit=1000&offset=${offset}`
     );
-    if (!res.ok) {
-      /**
-       * FAIL CLOSED. An empty map reads as "nothing is indexed", so every existing
-       * row goes neither written nor confirmed and the sweep in this same run
-       * deletes it. A stale row is repaired next run; a deleted one is gone.
-       */
-      throw new Error(
-        `brain-ingest gmail: could not read the existing chunk list (status ${res.status}) — ` +
-          `aborting before the sweep rather than treating the corpus as empty`
-      );
-    }
-    const batch = (await res.json().catch(() => [])) as Array<{
+    // Fails closed on an unreadable status AND on an unreadable body. See chunkPage.
+    const batch = await chunkPage<{
       source_id?: string;
       meta?: { historyId?: string | null; v?: number } | null;
-    }>;
+    }>("gmail", res);
     for (const r of batch) {
       if (!r.source_id) continue;
       const current = r.meta?.v === GMAIL_BUILDER_VERSION;

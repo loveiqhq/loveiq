@@ -12,7 +12,7 @@ vi.mock("@features/admin/server/supabase", () => ({
   }),
 }));
 
-import { upsertChunks, type BrainRow } from "@features/brain/server/ingest/upsert";
+import { chunkPage, upsertChunks, type BrainRow } from "@features/brain/server/ingest/upsert";
 
 function row(over: Partial<BrainRow> = {}): BrainRow {
   return {
@@ -104,22 +104,65 @@ describe("a failed touch must never let the sweep run", () => {
 
 describe("every known-chunk read must fail closed", () => {
   /**
-   * All three ingesters answered an unreadable corpus list with an empty Map, which
+   * All five ingesters answered an unreadable corpus list with an empty Map, which
    * reads as "nothing is indexed": existing rows are then neither written nor
    * confirmed, and the sweep in the SAME run deletes them. For notion that meant
    * every continuation part (`#2`, `#3`, …) of every page it did not refetch,
    * silently, with the run reporting success and never rebuilding them.
+   *
+   * This used to be checked by grepping each ingester for the wording of its own
+   * comment, which is why it stayed green while the guard it described was only ever
+   * half of one: the status was checked and the BODY was swallowed into `[]` on the
+   * next line. A comment cannot fail. The read is now one shared function and these
+   * tests call it, so removing either half of the guard fails a test.
    */
-  it.each(["notion", "drive", "slack"])(
-    "%s aborts instead of treating the corpus as empty",
-    async (src) => {
-      const fs = await import("node:fs");
+  it("routes every ingester's known-chunk read through the one shared reader", async () => {
+    // Structural, not textual: the point of consolidating was that eight private
+    // copies is why six of them were still wrong.
+    const fs = await import("node:fs");
+    for (const src of ["notion", "drive", "slack", "gmail", "calendar"]) {
       const code = fs.readFileSync(`features/brain/server/ingest/${src}.ts`, "utf8");
-      expect(code).toMatch(/aborting before the sweep rather than treating the corpus as empty/);
-      // and the old fail-open must be gone
-      expect(code).not.toMatch(/if \(!res\.ok\) return new Map\(\);/);
+      expect(code, src).toMatch(/chunkPage</);
+      expect(code, src).not.toMatch(/res\.json\(\)\.catch\(\(\) => \[\]\)/);
     }
-  );
+  });
+
+  it("throws on an unreadable STATUS rather than reporting an empty corpus", async () => {
+    await expect(chunkPage("drive", new Response("", { status: 500 }))).rejects.toThrow(
+      /could not read the existing chunk list/
+    );
+  });
+
+  it("throws on an unreadable BODY, which is the half that was missing", async () => {
+    // `fetchWithTimeout` leaves the AbortController armed through the body read, so a
+    // response that stalls AFTER its headers arrives here as ok:true with a body that
+    // rejects. The old code turned that into `[]`, `0 < 1000` ended the paging loop,
+    // and a truncated keep set was returned as the complete corpus.
+    const stalled = new Response("{ not json", {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+    await expect(chunkPage("gmail", stalled)).rejects.toThrow(/unreadable/);
+  });
+
+  it("throws when the body parses but is not a list", async () => {
+    // PostgREST answers an error as a JSON OBJECT, which parses fine and has no
+    // `.length`, so it would have paged out as a zero-length page.
+    const errorObject = new Response(JSON.stringify({ code: "PGRST103", message: "nope" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+    await expect(chunkPage("notion", errorObject)).rejects.toThrow(/unreadable/);
+  });
+
+  it("returns the rows when the page is genuinely readable", async () => {
+    // Positive control: a guard that threw unconditionally would pass all of the above.
+    const page = new Response(JSON.stringify([{ source_id: "a" }, { source_id: "b" }]), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+    await expect(chunkPage<{ source_id?: string }>("slack", page)).resolves.toHaveLength(2);
+  });
 });
 
 describe("a write must be given longer than a read", () => {
