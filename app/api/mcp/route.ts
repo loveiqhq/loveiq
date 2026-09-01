@@ -351,6 +351,11 @@ const TOOLS = [
  * GET ONLY, enforced here rather than trusted from the caller. These keys can
  * refund charges and send mail; the tool exists to read.
  *
+ * GET IS NOT THE SAME AS READ-ONLY, and this comment used to assume it was. It
+ * holds for the REST services here, where writing needs POST/PATCH/DELETE. It does
+ * not hold for an RPC-over-HTTP API like Slack's, which answers a delete over GET
+ * because the verb is in the path. Those services carry an `allow` path allowlist.
+ *
  * `envKey: null` means the API needs no credential (the repo is public).
  */
 export const EXTERNAL_SERVICES: Record<
@@ -374,6 +379,14 @@ export const EXTERNAL_SERVICES: Record<
     /** true when the API is readable WITHOUT the credential and the token only
      *  raises a rate limit. The repository is public, so GitHub is the case. */
     optional?: boolean;
+    /**
+     * Paths this service may be asked for. Only needed where GET is not itself a
+     * read: the rest of the registry is REST, where a mutation requires POST,
+     * PATCH or DELETE and the hardcoded GET below genuinely is the guard. Slack is
+     * not REST — it is RPC over HTTP, the verb lives in the path, and it answers
+     * `GET /files.delete?file=…` perfectly happily. See the comment on `slack`.
+     */
+    allow?: RegExp;
     note: string;
   }
 > = {
@@ -397,6 +410,21 @@ export const EXTERNAL_SERVICES: Record<
     // exists precisely to hold read scopes.
     envKeys: ["SLACK_BRAIN_BOT_TOKEN", "SLACK_BOT_TOKEN"],
     auth: { kind: "bearer" },
+    /**
+     * GET IS NOT A READ HERE. Slack's Web API is RPC over HTTP: the method is the
+     * path and it accepts GET for destructive methods too. Asking this tool for
+     * `/files.delete?file=X` reached Slack and came back `missing_scope`, i.e. it
+     * was refused by the token's scopes, not by us. The brain bot DOES hold
+     * `chat:write`, `im:write` and `channels:join`, so posting into any channel it
+     * is in, DM-ing any user, and joining any public channel were all reachable
+     * through a tool whose description promises "Read-only".
+     *
+     * An allowlist, not a denylist of write verbs: Slack adds methods faster than
+     * we would maintain the exclusions, and a method we have not heard of should
+     * be refused rather than forwarded.
+     */
+    allow:
+      /^\/(auth\.test|team\.info|emoji\.list|(conversations|users)\.(list|info|history|replies|members)|users\.profile\.get)(\?|$)/,
     note: "conversations.list, conversations.history, conversations.replies, users.list. Reads only channels the bot is in, and only with the scopes it holds — a missing scope returns ok:false with missing_scope rather than an error.",
   },
   github: {
@@ -463,6 +491,39 @@ export const EXTERNAL_SERVICES: Record<
   },
 };
 
+/**
+ * WHICH rpc/ FUNCTIONS query_product_data MAY CALL.
+ *
+ * The tool told the model "Read-only by construction" and that was false. `table` was
+ * validated only for identifier SHAPE and for membership in PostgREST's OpenAPI
+ * document -- and that document lists every function the service role may execute. 21
+ * of 64 were not `get_*`, and 11 of those write: `submit_survey` inserts a real user
+ * and waitlist row, `unlock_all_archetypes` grants a paid report for free from two
+ * sequential bigints, `brain_set_embeddings` can overwrite the vectors semantic search
+ * runs on, `refresh_admin_submission_facts` rebuilds a materialized view. The
+ * description even tells the model to PREFER rpc/ functions, and the model has no way
+ * to know which of them write.
+ *
+ * A prefix plus a short allowlist, NOT a volatility check: volatility does not mean
+ * what we need here. Verified against pg_proc -- `brain_search`, `brain_daily_rollup`
+ * and `find_stuck_payments` are STABLE with no write statement, while
+ * `admin_segment_match_count_scalar` is VOLATILE and only reads. Conversely every one
+ * of the 11 writers is volatile AND security-definer, so volatility would have
+ * blocked readers and permitted nothing extra.
+ *
+ * The two `admin_segment_*` helpers are read-only but deliberately excluded: they take
+ * a jsonb rule blob and build SQL for an EXECUTE, which is not a shape to expose to a
+ * question-answering model, and no question needs them.
+ *
+ * Applied at DISCOVERY, so a writer is never advertised to the model at all, and the
+ * existing membership check then refuses it without a second gate.
+ */
+const READ_ONLY_RPCS = new Set(["brain_daily_rollup", "brain_search", "find_stuck_payments"]);
+
+function isReadOnlyRpc(fn: string): boolean {
+  return fn.startsWith("get_") || READ_ONLY_RPCS.has(fn);
+}
+
 let schemaCache: Map<string, string[]> | null = null;
 
 async function productSchema(): Promise<Map<string, string[]> | null> {
@@ -504,6 +565,8 @@ async function productSchema(): Promise<Map<string, string[]> | null> {
   for (const [path, def] of Object.entries(spec.paths ?? {})) {
     const key = path.replace(/^\//, "");
     if (!key.startsWith("rpc/") || out.has(key)) continue;
+    // Never advertise a function that writes. See READ_ONLY_RPCS.
+    if (!isReadOnlyRpc(key.slice(4))) continue;
     const body = (
       def as {
         post?: {
@@ -651,6 +714,16 @@ async function callTool(
       );
     }
 
+    // Checked BEFORE the membership test below, so a writer gets an honest refusal
+    // instead of "No such table" -- which would read as *the data does not exist*.
+    if (table.startsWith("rpc/") && !isReadOnlyRpc(table.slice(4))) {
+      return textResult(
+        `rpc/${table.slice(4)} writes to the database, so this tool will not call it. ` +
+          "query_product_data only reads. Use an rpc/get_* analysis function or a table.",
+        true
+      );
+    }
+
     const spec = await productSchema();
     if (spec && !spec.has(table)) {
       const near = [...spec.keys()]
@@ -666,9 +739,13 @@ async function callTool(
     const offset = Math.max(0, Number(args.offset) || 0);
     const isRpc = table.startsWith("rpc/");
 
-    // GET for tables, POST for functions. Neither can mutate: PostgREST needs
-    // PATCH/PUT/DELETE to write, and an rpc/ POST reaches only the VOLATILE
-    // functions the anon/service role is granted — all the get_* ones are reads.
+    // GET for tables, POST for functions.
+    //
+    // This comment used to claim "Neither can mutate … all the get_* ones are reads",
+    // and the second half quietly assumed the first. An rpc/ POST reaches every
+    // function the SERVICE ROLE may execute, and 11 of those wrote — including one
+    // that grants a paid report for free. The method is not the guard; the
+    // READ_ONLY_RPCS gate above is, and it runs before we get here.
     let path: string;
     let init: { method?: string; body?: string; headers?: Record<string, string> };
     if (isRpc) {
@@ -766,8 +843,31 @@ async function callTool(
     // The host is fixed by the registry; these checks stop the PATH from
     // escaping it. `//` would be read as protocol-relative, `..` walks up out of
     // the API's namespace, and `@` can smuggle a different host into a URL.
-    if (path.startsWith("//") || path.includes("..") || path.includes("@") || /\s/.test(path)) {
+    // Checked on the DECODED path: `%2e%2e` walks up exactly like `..` once the URL
+    // constructor normalises it, and the raw-string test never saw it. A path that
+    // is not valid percent-encoding is refused rather than guessed at.
+    let decodedPath: string;
+    try {
+      decodedPath = decodeURIComponent(path);
+    } catch {
       return textResult("path must be a simple path inside that service's API.", true);
+    }
+    if (
+      decodedPath.startsWith("//") ||
+      decodedPath.includes("..") ||
+      decodedPath.includes("@") ||
+      /\s/.test(decodedPath)
+    ) {
+      return textResult("path must be a simple path inside that service's API.", true);
+    }
+
+    // Some services answer destructive calls over GET; see `allow` on the registry.
+    if (svc.allow && !svc.allow.test(decodedPath)) {
+      return textResult(
+        `${key} only exposes its read methods through this tool, and "${decodedPath.split("?")[0]}" ` +
+          `is not one of them. This tool reads; it never writes.`,
+        true
+      );
     }
 
     const url = new URL(svc.base + path);

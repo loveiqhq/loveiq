@@ -665,9 +665,11 @@ does not inherit them:
 
 Two consequences worth keeping in view rather than rediscovering:
 
-1. `SLACK_BRAIN_TEAM_ID` is the only thing stopping another Slack workspace's
-   install from reading all of it, and `LOVEIQ_MCP_TOKEN` is one shared token, so
-   a leak of either is a leak of the whole corpus.
+1. `SLACK_BRAIN_TEAM_ID` is the only thing stopping another Slack workspace from
+   reading all of it, and `LOVEIQ_MCP_TOKEN` is one shared token, so a leak of
+   either is a leak of the whole corpus. The check reads the **speaker's**
+   workspace, not the envelope's — they differ in a shared (Slack Connect)
+   channel, and the bot is a member of at least one with outside participants.
 2. **Credentials are not documents.** `upsertChunks` refuses any chunk containing
    a recognisable secret — GitHub, Notion, Google, Slack, Stripe, AWS, JWTs,
    private keys — and logs the title so it can be rotated. Indexing a key is not

@@ -67,7 +67,12 @@ Required for it to answer at all: `BRAIN_LLM_KEY`,
 
 Strongly recommended: `BRAIN_LLM_REASONING_EFFORT=low` (measured 13.7s → 1.7s)
 and `SLACK_BRAIN_TEAM_ID` (without it, any workspace that installs the app can
-read revenue, ad spend and every internal doc).
+read revenue, ad spend and every internal doc). It is compared against the
+workspace of the person who **spoke** (`user_team`), not the envelope's `team_id`:
+in an externally-shared Slack Connect channel the envelope carries our own id while
+the human is in theirs, so gating on it let foreign participants of a shared channel
+question the whole corpus and push their text into it. An event carrying no team
+field at all is now declined rather than answered.
 
 Per-source, each one freezing that source when unset: `NOTION_TOKEN`,
 `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`,
@@ -162,13 +167,32 @@ Six tools, in two halves.
 | `query_product_data`     | Read any of them: payments, refunds, Resend delivery, Calendly bookings, submissions, answers, reports, shares, invites, waitlist, marketing spend, admin tables. Prefer an `rpc/get_*` function when one fits — they encode the business logic already                |
 | `query_external_service` | Read-only GET against nine outside services — Stripe, Resend, Slack, GitHub, PostHog, Vercel, Figma, Trustpilot, Clarity — for what they know and we do not store: dispute detail, payout timing, a Slack thread, an open pull request, a runtime error, a design file |
 
-**Read-only by construction, not by validation.** A table read is a GET, a
-function call is a POST to `/rpc`, and PostgREST needs PATCH/PUT/DELETE to write.
-The external gateway is GET-only against a fixed host registry — a tool taking an
-arbitrary URL would be an SSRF hole, since the deployment can reach the Supabase
-service-role endpoint and cloud metadata addresses. Table names must match an
-anchored identifier pattern and exist in the live schema. Every one of these is
-mutation-tested: removing any single guard fails a specific test.
+**Read-only by allowlist — the HTTP method was never the guard.** This section
+used to claim construction was enough: a table read is a GET, a function call is a
+POST to `/rpc`, and PostgREST needs PATCH/PUT/DELETE to write. The second half of
+that does not follow. An `rpc/` POST reaches every function the **service role** may
+execute, and 11 of the 21 non-`get_*` ones wrote — `submit_survey` inserts a real
+user, `unlock_all_archetypes` grants a paid report free from two sequential bigints,
+`brain_set_embeddings` can overwrite the vectors semantic search runs on. So
+`query_product_data` now calls `rpc/get_*` plus three named readers
+(`brain_search`, `brain_daily_rollup`, `find_stuck_payments`, each verified against
+`pg_proc`) and nothing else. Writers are filtered out at schema discovery, so they
+are never advertised to the model in the first place.
+
+The same mistake applied to the gateway. GET is a read for the REST services here,
+but Slack's API is RPC over HTTP — the verb is in the path, and it answers
+`GET /files.delete?file=…` quite happily; the only thing that refused it was the
+token's scopes, and the brain bot does hold `chat:write`, `im:write` and
+`channels:join`. Slack therefore carries a path allowlist of its read methods.
+The host is still fixed by the registry — a tool taking an arbitrary URL would be an
+SSRF hole, since the deployment can reach the Supabase service-role endpoint and
+cloud metadata addresses — and the namespace-escape check now runs on the **decoded**
+path, because `%2e%2e` walks up exactly like `..` once the URL is normalized.
+
+Table names must match an anchored identifier pattern and exist in the live schema.
+Every one of these guards is mutation-tested: removing any single one fails a
+specific test. That claim was previously made for guards no test executed, so it now
+means what it says — see "Mutation testing" below.
 
 **Two things the tools say out loud.** A capped result reports how many rows MATCH,
 not just how many came back — a truncated answer that does not admit it reads as

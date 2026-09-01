@@ -347,7 +347,13 @@ describe("/api/mcp", () => {
             ],
           },
         },
-        "/rpc/show_limit": { post: { parameters: [{ in: "body", schema: {} }] } },
+        "/rpc/get_report_counts": { post: { parameters: [{ in: "body", schema: {} }] } },
+        // A writer, to prove the catalogue never advertises one.
+        "/rpc/submit_survey": { post: { parameters: [{ in: "body", schema: {} }] } },
+        // The three read-only non-get_* functions the gate allows by name.
+        "/rpc/brain_search": { post: { parameters: [{ in: "body", schema: {} }] } },
+        "/rpc/brain_daily_rollup": { post: { parameters: [{ in: "body", schema: {} }] } },
+        "/rpc/find_stuck_payments": { post: { parameters: [{ in: "body", schema: {} }] } },
       },
     };
 
@@ -506,7 +512,48 @@ describe("/api/mcp", () => {
       expect(text).toContain("since_ts!");
       expect(text).toContain("utm_filter");
       expect(text).not.toContain("utm_filter!");
-      expect(text).toContain("rpc/show_limit((no arguments))");
+      expect(text).toContain("rpc/get_report_counts((no arguments))");
+      // A function that WRITES must never be offered to the model: the tool's own
+      // description tells it to prefer rpc/ functions, and it cannot tell them apart.
+      expect(text).not.toContain("submit_survey");
+    });
+
+    it("refuses an rpc/ function that WRITES, and does not call the database", async () => {
+      // "Read-only by construction" was false. `table` was checked for identifier
+      // shape and for membership in PostgREST's OpenAPI doc -- which lists every
+      // function the SERVICE ROLE may execute. 11 of the 21 non-get_* ones wrote.
+      wire([]);
+      for (const fn of [
+        "rpc/submit_survey", // inserts a real app_user + waitlist row
+        "rpc/unlock_all_archetypes", // grants a paid report free, from two bigints
+        "rpc/brain_set_embeddings", // can wipe the vectors semantic search runs on
+        "rpc/upsert_archetype_tier",
+        "rpc/create_report_share",
+        "rpc/refresh_admin_submission_facts",
+      ]) {
+        mockSupabaseFetch.mockClear();
+        const r = await call({ table: fn });
+        expect(r.isError, fn).toBe(true);
+        expect(r.content[0].text, fn).toMatch(/writes to the database/);
+        // The refusal must happen BEFORE the request, not be inferred from a failure.
+        expect(mockSupabaseFetch, fn).not.toHaveBeenCalled();
+      }
+    });
+
+    it("still calls the read-only functions, including the three non-get_* ones", async () => {
+      // Positive control: a gate that refused everything would pass the test above.
+      for (const fn of [
+        "rpc/get_conversion_funnel",
+        "rpc/brain_search",
+        "rpc/brain_daily_rollup",
+        "rpc/find_stuck_payments",
+      ]) {
+        wire([]);
+        mockSupabaseFetch.mockClear();
+        const r = await call({ table: fn });
+        expect(r.isError, fn).toBeFalsy();
+        expect(String(mockSupabaseFetch.mock.calls.at(-1)?.[0]), fn).toContain(fn);
+      }
     });
   });
 
@@ -539,6 +586,58 @@ describe("/api/mcp", () => {
       expect(mockFetch.mock.calls.length).toBe(2);
       for (const [, init] of mockFetch.mock.calls) {
         expect((init as { method?: string }).method).toBe("GET");
+      }
+    });
+
+    it("refuses Slack's write methods, which it happily serves over GET", async () => {
+      // Slack is RPC over HTTP: the verb is the path, so GET is not a read. Asking
+      // for /files.delete reached Slack and was refused by SCOPE, not by us -- and
+      // the brain bot does hold chat:write, im:write and channels:join.
+      process.env.SLACK_BRAIN_BOT_TOKEN = "xoxb-test";
+      for (const path of [
+        "/files.delete",
+        "/chat.postMessage",
+        "/chat.delete",
+        "/conversations.join",
+        "/conversations.invite",
+        "/admin.users.remove",
+        "/files.upload",
+      ]) {
+        mockFetch.mockClear();
+        const r = await call({ service: "slack", path });
+        expect(r.isError, path).toBe(true);
+        expect(r.content[0].text, path).toMatch(/only exposes its read methods/);
+        expect(mockFetch, path).not.toHaveBeenCalled();
+      }
+    });
+
+    it("still serves Slack's read methods", async () => {
+      // Positive control for the allowlist above.
+      process.env.SLACK_BRAIN_BOT_TOKEN = "xoxb-test";
+      for (const path of [
+        "/auth.test",
+        "/conversations.list",
+        "/conversations.history?channel=C1",
+        "/conversations.members",
+        "/users.info",
+        "/users.list",
+        "/team.info",
+      ]) {
+        mockFetch.mockClear();
+        const r = await call({ service: "slack", path });
+        expect(r.isError, path).toBeFalsy();
+        expect(mockFetch, path).toHaveBeenCalled();
+      }
+    });
+
+    it("rejects a percent-encoded path escape, which the raw-string check missed", async () => {
+      // `%2e%2e` is `..` once the URL constructor normalises it, so the namespace
+      // guard has to run on the DECODED path.
+      for (const path of ["/%2e%2e/%2e%2e/admin", "/v1%2f%2e%2e%2fadmin"]) {
+        mockFetch.mockClear();
+        const r = await call({ service: "stripe", path });
+        expect(r.isError, path).toBe(true);
+        expect(mockFetch, path).not.toHaveBeenCalled();
       }
     });
 

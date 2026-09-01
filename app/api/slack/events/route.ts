@@ -58,6 +58,13 @@ interface SlackEvent {
   channel_type?: string;
   ts?: string;
   thread_ts?: string;
+  // Who SPOKE, as opposed to whose workspace the envelope was addressed to. In a
+  // Slack Connect shared channel these differ: the envelope carries our own team_id
+  // while the human is in theirs. `user_team` is the current field; `team` and
+  // `source_team` appear on older/again-shared payloads.
+  user_team?: string;
+  team?: string;
+  source_team?: string;
 }
 
 interface SlackEnvelope {
@@ -103,6 +110,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
+  /**
+   * WHOSE WORKSPACE IS THE HUMAN IN? Not the envelope's.
+   *
+   * A signed request proves the sender is Slack, not that it is OUR Slack, and the
+   * envelope's `team_id` is the workspace the app is INSTALLED in -- ours -- even
+   * when the person who spoke is not in it. That is what an externally-shared
+   * (Slack Connect) channel is. Gating on the envelope therefore let any member of
+   * a foreign workspace in a shared channel both question the whole corpus and push
+   * their text into it. `user_team` names the speaker; `team` / `source_team` are
+   * the same thing on older or re-shared payloads.
+   *
+   * Falling back to the envelope keeps a same-workspace event working when Slack
+   * omits all three, but an event with NO team field at all now fails CLOSED --
+   * `expectedTeam && askerTeam !== expectedTeam` is true when askerTeam is
+   * undefined. The previous `&& payload.team_id` clause answered those.
+   *
+   * Computed once because BOTH gates need it: the question path below, and the
+   * public-channel branch that writes Slack messages into the corpus.
+   */
+  const expectedTeam = process.env.SLACK_BRAIN_TEAM_ID;
+  const askerTeam = event.user_team ?? event.team ?? event.source_team ?? payload.team_id;
+  const foreignWorkspace = Boolean(expectedTeam) && askerTeam !== expectedTeam;
+
   // LOOP GUARD. The brain's own reply into a DM comes straight back as another
   // `message.im`. Without this the bot answers itself until the daily quota is
   // gone. `subtype` also filters joins, edits and deletions, none of which are
@@ -133,10 +163,9 @@ export async function POST(request: Request) {
    */
   const isPublicChannelMessage = event.type === "message" && event.channel_type === "channel";
   if (isPublicChannelMessage) {
-    const team = process.env.SLACK_BRAIN_TEAM_ID;
-    if (team && payload.team_id && payload.team_id !== team) {
+    if (foreignWorkspace) {
       logger.warn(
-        { teamId: payload.team_id },
+        { askerTeam: askerTeam ?? null, envelopeTeam: payload.team_id ?? null },
         "brain: channel message from an unexpected workspace"
       );
       return NextResponse.json({ ok: true });
@@ -185,9 +214,15 @@ export async function POST(request: Request) {
   // customer, every internal doc -- so there is no per-source restriction to fall
   // back on if the app is ever installed somewhere else. Env-gated so an unset
   // value cannot lock the team out of its own bot.
-  const expectedTeam = process.env.SLACK_BRAIN_TEAM_ID;
-  if (expectedTeam && payload.team_id && payload.team_id !== expectedTeam) {
-    logger.warn({ teamId: payload.team_id }, "brain: event from an unexpected Slack workspace");
+  // The corpus is deliberately undifferentiated -- revenue, ad spend, cost per
+  // customer, compensation threads, every internal doc -- so there is no per-source
+  // restriction to fall back on if a stranger reaches this. See `askerTeam` above for
+  // why the envelope's team_id was the wrong field to gate on.
+  if (foreignWorkspace) {
+    logger.warn(
+      { askerTeam: askerTeam ?? null, envelopeTeam: payload.team_id ?? null },
+      "brain: event from an unexpected Slack workspace"
+    );
     return NextResponse.json({ ok: true });
   }
 
