@@ -29,7 +29,8 @@ const V3TopThree: FC<Props> = ({ percentages }) => {
 
   return (
     <section className="rv3-top3" data-node-id="10392:18812">
-      <p className="rv3-top3__label">Your three strongest patterns</p>
+      {/* The "Your three strongest patterns" label was removed from the frame
+          on 2026-09-05; the card now opens straight into the ranked rows. */}
       <ol className="rv3-top3__list">
         {ranked.map(([name, pct], idx) => {
           const theme = getReportTheme(name);

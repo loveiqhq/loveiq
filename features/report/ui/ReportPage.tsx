@@ -1959,7 +1959,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     <V3PartDivider
                       eyebrow={partDivider.part}
                       lead={partDivider.lead}
-                      accent={(partDivider.accent ?? "").replace("{A}", viewArchetype)}
+                      accent={partDivider.accent ?? ""}
                       tail={"tail" in partDivider ? partDivider.tail : undefined}
                     />
                   ) : (

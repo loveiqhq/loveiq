@@ -39,8 +39,10 @@ const TriggerCard: FC<{
   tone: Tone;
   title: string;
   rows: readonly AccelRow[];
-  note?: { lead: string; bold: string; tail: string } | null;
-}> = ({ tone, title, rows, note }) => {
+  /** Figma shows the count on the accelerators card only (10392:19413); the
+   * brakes card lost both its count and its closing note on 2026-09-05. */
+  showCount?: boolean;
+}> = ({ tone, title, rows, showCount = false }) => {
   const [ref, revealed] = useRevealOnView<HTMLDivElement>();
   return (
     <section
@@ -53,7 +55,7 @@ const TriggerCard: FC<{
           {tone === "shut" ? <CircleMinus /> : <CirclePlus />}
         </span>
         <p className="rv3-accel-card__title">{title}</p>
-        <p className="rv3-accel-card__count">{rows.length} triggers</p>
+        {showCount ? <p className="rv3-accel-card__count">{rows.length} triggers</p> : null}
       </header>
       <div className="rv3-accel-card__rows">
         {rows.map((row, i) => (
@@ -75,20 +77,6 @@ const TriggerCard: FC<{
           </div>
         ))}
       </div>
-      {note ? (
-        <div className="rv3-accel-card__note-wrap">
-          <p className="rv3-accel-card__note">
-            <span className="rv3-accel-card__mark" aria-hidden="true">
-              {tone === "shut" ? <CircleMinus /> : <CirclePlus />}
-            </span>
-            <span>
-              {note.lead}
-              <strong>{note.bold}</strong>
-              {note.tail}
-            </span>
-          </p>
-        </div>
-      ) : null}
     </section>
   );
 };
@@ -150,20 +138,8 @@ const V3Accelerators: FC<Props> = ({ opens, shuts, verdict, intro }) => {
 
       {intro ? <p className="rv3-accel__intro">{intro}</p> : null}
 
-      <TriggerCard
-        tone="shut"
-        title="What shuts you down"
-        rows={shuts}
-        note={{
-          lead: "Your system is ",
-          bold: side,
-          tail:
-            leaning === "shut"
-              ? " — always start by releasing, not adding."
-              : " — lead with what adds, not what you remove.",
-        }}
-      />
-      <TriggerCard tone="open" title="What opens you" rows={opens} />
+      <TriggerCard tone="shut" title="What shuts you down" rows={shuts} />
+      <TriggerCard tone="open" title="What opens you" rows={opens} showCount />
     </div>
   );
 };

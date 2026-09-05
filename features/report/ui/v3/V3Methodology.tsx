@@ -117,11 +117,11 @@ const V3Methodology: FC = () => {
 
   return (
     <section className="rv3-method" data-node-id="10392:18465">
-      <p className="rv3-method__eyebrow" data-node-id="10392:18467">
-        What shaped this report
-      </p>
+      {/* One serif heading. The designer removed the coral "WHAT SHAPED THIS
+          REPORT" eyebrow AND the separate "Methodology" heading on 2026-09-05;
+          the section now opens straight into this. */}
       <h2 className="rv3-method__heading" data-node-id="10392:18469">
-        Methodology
+        What shaped this report
       </h2>
       <p className="rv3-prose rv3-method__intro" data-node-id="10392:18471">
         To support self-understanding, we combined insights from multiple disciplines such as

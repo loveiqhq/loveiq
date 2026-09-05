@@ -110,11 +110,13 @@
   transform: translateX(-50%);
   white-space: nowrap;
 }
+/* 10392:19333 etc — the LEAD is upright Lora Regular in ink; only the accent
+ * segment is italic violet. The split is the designer's and is not simply the
+ * last word ("Your " + "erotic engine"). */
 .rv3-part__title {
-  color: var(--rv3-violet);
+  color: var(--rv3-ink);
   font-family: var(--font-serif);
   font-size: 22px;
-  font-style: italic;
   font-weight: 400;
   left: 50%;
   letter-spacing: -0.47px;
@@ -125,8 +127,9 @@
   transform: translateX(-50%);
   white-space: nowrap;
 }
-.rv3-part__title > span:first-child {
-  color: #191a1b;
+.rv3-part__title > span:nth-child(2) {
+  color: var(--rv3-violet);
+  font-style: italic;
 }
 
 /* ── Body prose — 10392:18463 / 18811 ───────────────────────────── */
@@ -383,17 +386,6 @@
   border-radius: 22px;
   box-shadow: 0 18px 22px rgba(22, 16, 33, 0.05);
   padding: 19px 17px;
-}
-.rv3-top3__label {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-  color: var(--rv3-muted);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.78px;
-  line-height: 18.2px;
-  margin-bottom: 6px;
-  padding: 0 12px 13px;
-  text-transform: uppercase;
 }
 .rv3-top3__list {
   list-style: none;
@@ -725,27 +717,16 @@
 .rv3-method {
   padding-top: 29px;
 }
-/* 10392:18467 — coral→pink gradient text, uppercase */
-.rv3-method__eyebrow {
-  background: linear-gradient(90deg, #fe6839 0%, #ff3d76 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 1.4px;
-  line-height: 16px;
-  margin: 0;
-  text-transform: uppercase;
-}
+/* 10392:18468/18469 — one serif heading, no eyebrow above it. */
 .rv3-method__heading {
   color: var(--rv3-ink);
   font-family: var(--font-serif);
-  font-size: 24px;
-  font-weight: 600;
-  letter-spacing: -0.3px;
-  line-height: 29px;
-  margin: 10px 0 0;
+  font-size: 23.187px;
+  font-weight: 500;
+  letter-spacing: -0.4637px;
+  line-height: 28.752px;
+  margin: 0;
+  padding-top: 10px;
 }
 .rv3-method__intro {
   padding-top: 20px;
@@ -1355,42 +1336,6 @@
 .report-chart-reveal:not(.is-revealed) .rv3-accel-row__fill {
   transform: scaleX(0);
 }
-.rv3-accel-card__note-wrap {
-  padding: 0 15px 14px;
-}
-.rv3-accel-card__note {
-  align-items: flex-start;
-  background: rgba(var(--tone), 0.09);
-  border: 1px solid rgba(var(--tone), 0.22);
-  border-radius: 12px;
-  color: var(--rv3-copy);
-  display: flex;
-  font-size: 12.5px;
-  gap: 9px;
-  line-height: 1.45;
-  margin: 0;
-  padding: 11px 13px;
-}
-.rv3-accel-card__note strong {
-  color: var(--rv3-ink);
-  font-weight: 700;
-}
-.rv3-accel-card__mark {
-  align-items: center;
-  background: rgba(var(--tone), 0.13);
-  border-radius: 5px;
-  color: var(--tone-ink);
-  display: flex;
-  flex-shrink: 0;
-  height: 15px;
-  justify-content: center;
-  width: 15px;
-}
-.rv3-accel-card__mark svg {
-  height: 11px;
-  width: 11px;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .rv3-accel-gauge__needle,
   .rv3-accel-row__fill {

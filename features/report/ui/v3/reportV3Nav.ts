@@ -88,15 +88,22 @@ export interface ReportV3PartDivider {
   /** "Part I" … "Part V". */
   part: string;
   lead: string;
-  /** Violet italic segment. `{A}` is replaced with the archetype name. */
+  /** Violet italic segment. */
   accent: string;
   tail?: string;
 }
 
 /**
- * Part dividers keyed by the FIRST chapter of each part. Parts II-V interpolate
- * the archetype into the title, so the violet segment is the archetype name
- * itself (Part I is the one fixed title).
+ * Part dividers keyed by the FIRST chapter of each part.
+ *
+ * These titles do NOT interpolate the archetype. They did until 2026-09-05,
+ * when the designer replaced "How the Spark Seeker works" / "The Spark Seeker's
+ * erotic engine" / "…connects" / "…edges" with archetype-neutral wording.
+ * Re-read live from the frames (10392:19333 / 20417 / 21106 / 21684), not from
+ * a cached dump.
+ *
+ * `lead` renders upright, `accent` italic violet — the split is the designer's
+ * and is NOT simply the last word ("Your " + "erotic engine").
  */
 export const REPORT_V3_PART_DIVIDER_BY_SECTION: Readonly<
   Record<string, ReportV3PartDivider>
@@ -104,30 +111,21 @@ export const REPORT_V3_PART_DIVIDER_BY_SECTION: Readonly<
   core_archetype: { part: "Part I", lead: "Your ", accent: "Constellation" },
   typical_arousal_accelerators_turn_ons_of_the_core_archetype: {
     part: "Part II",
-    lead: "How the ",
-    accent: "{A}",
-    tail: " works",
+    lead: "How your archetype ",
+    accent: "works",
   },
   libido_challenges_in_relationships: {
     part: "Part III",
-    lead: "The ",
-    accent: "{A}",
-    tail: "’s erotic engine",
+    lead: "Your ",
+    accent: "erotic engine",
   },
-  attachment_style: {
-    part: "Part IV",
-    lead: "How the ",
-    accent: "{A}",
-    tail: " connects",
-  },
+  attachment_style: { part: "Part IV", lead: "How you ", accent: "connect" },
   typical_sexual_fantasy_amp_practice_tendencies: {
     part: "Part V",
-    lead: "The ",
-    accent: "{A}",
-    tail: "’s edges",
+    lead: "Your ",
+    accent: "edges",
   },
 };
-
 /**
  * Sidebar / chapter-drawer navigation for V3, derived from the chapter list so
  * the nav can never drift from the body order the way V1's did.
@@ -144,7 +142,7 @@ export interface ReportV3NavPart {
 }
 
 const V3_PART_LABELS: Record<string, string> = {
-  "2": "How you work",
+  "2": "How your archetype works",
   "3": "Your erotic engine",
   "4": "How you connect",
   "5": "Your edges",
