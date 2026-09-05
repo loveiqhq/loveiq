@@ -6,6 +6,8 @@ import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { renderEduPara } from "./eduPara";
 import { copyParagraphs } from "./copyParagraphs";
+import V3Beliefs from "../v3/V3Beliefs";
+import { useIsV3 } from "../v3/V3Chapter";
 
 /**
  * Server-resolved beliefs copy (`getReport2Section(name, "beliefs")`), threaded
@@ -102,6 +104,7 @@ const BeliefsSection: FC<Props> = ({
   tier = "essentials",
 }) => {
   const [expanded, setExpanded] = useState(false);
+  const isV3 = useIsV3();
   if (!copy) return null;
 
   const keep = copy.keep.filter((v): v is string => !!v && v.trim().length > 0);
@@ -118,6 +121,19 @@ const BeliefsSection: FC<Props> = ({
   // When locked, tease the first two "keep" beliefs unblurred (universal-safe
   // in spirit — they're gentle, and the real per-archetype set is withheld
   // server-side anyway) and blur any that remain behind the overlay.
+
+  // V3 turns each limiting belief into its supportive version as the reader
+  // scrolls (Figma 10392:19945), instead of V1's static two-column keep/loosen
+  // card. Locked readers keep V1's teaser, which V3 has no frame for.
+  if (isV3 && !locked) {
+    return (
+      <div className="report-beliefs">
+        <h3 className="report-beliefs__heading">Typical Beliefs</h3>
+        {copy["learn.body"] ? <p className="rv3-chapter__lede">{copy["learn.body"]}</p> : null}
+        <V3Beliefs loosen={loosen} keep={keep} />
+      </div>
+    );
+  }
 
   return (
     <div className="report-beliefs">

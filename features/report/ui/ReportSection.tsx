@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FC, type ReactNode } from "react";
+import V3Chapter, { getV3Chapter, useIsV3 } from "./v3/V3Chapter";
 
 interface Props {
   children: ReactNode;
@@ -52,6 +53,10 @@ const ReportSection: FC<Props> = ({
 }) => {
   const ref = useRef<HTMLElement>(null);
   const [isVisible, setIsVisible] = useState(false);
+  // V3 swaps this wrapper's chrome for the numbered-chapter accordion. Read
+  // unconditionally so hook order stays stable across both variants.
+  const isV3 = useIsV3();
+  const v3Chapter = isV3 ? getV3Chapter(sectionId) : null;
   // String.prototype.split always returns ≥1 entries, so the first element is defined.
   const [eyebrow, ...titleSegments] = title.split(/:\s+/) as [string, ...string[]];
   const hasSplitTitle = titleSegments.length > 0;
@@ -119,6 +124,14 @@ const ReportSection: FC<Props> = ({
       observer.disconnect();
     };
   }, [isVisible, sectionId]);
+
+  if (v3Chapter) {
+    return (
+      <V3Chapter chapter={v3Chapter} sectionId={sectionId} feedbackWidget={feedbackWidget}>
+        {children}
+      </V3Chapter>
+    );
+  }
 
   return (
     <section

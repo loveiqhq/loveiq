@@ -6,6 +6,8 @@ import { trackSectionNavigated } from "@features/analytics/client";
 import { ReferFriendIcon, ShareReportIcon } from "./ReportActionIcons";
 import ReportNavBadge, { type ReportNavAccess } from "./ReportNavBadge";
 import { REPORT_NAV_PARTS } from "./reportNav";
+import { useIsV3 } from "./v3/V3Chapter";
+import { REPORT_V3_NAV_PARTS } from "./v3/reportV3Nav";
 
 interface Props {
   activeSectionId: string;
@@ -26,6 +28,7 @@ const ReportDesktopSidebar: FC<Props> = ({
   onSectionClick,
   onShareClick,
 }) => {
+  const navParts = useIsV3() ? REPORT_V3_NAV_PARTS : REPORT_NAV_PARTS;
   const navRef = useRef<HTMLElement>(null);
 
   // Capture wheel events on the desktop nav so the page doesn't scroll instead
@@ -117,7 +120,7 @@ const ReportDesktopSidebar: FC<Props> = ({
         </div>
 
         <nav ref={navRef} aria-label="Report sections" className="report-sidebar__nav">
-          {REPORT_NAV_PARTS.map((part) => (
+          {navParts.map((part) => (
             <div key={part.part} className="report-sidebar__part-group">
               <p className="report-sidebar__part">
                 {part.part} · {part.label}

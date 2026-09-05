@@ -6,6 +6,8 @@ import { trackSectionNavigated } from "@features/analytics/client";
 import { ReferFriendIcon, ShareReportIcon } from "./ReportActionIcons";
 import ReportNavBadge, { type ReportNavAccess } from "./ReportNavBadge";
 import { REPORT_NAV_PARTS } from "./reportNav";
+import { useIsV3 } from "./v3/V3Chapter";
+import { REPORT_V3_NAV_PARTS } from "./v3/reportV3Nav";
 
 interface Props {
   activeSectionId: string;
@@ -50,6 +52,7 @@ const ReportMobileNav: FC<Props> = ({
   onShareClick,
   onDrawerOpened,
 }) => {
+  const navParts = useIsV3() ? REPORT_V3_NAV_PARTS : REPORT_NAV_PARTS;
   const pillButtonRef = useRef<HTMLButtonElement>(null);
   const panelPillButtonRef = useRef<HTMLButtonElement>(null);
   const wasDrawerOpenRef = useRef(false);
@@ -313,7 +316,7 @@ const ReportMobileNav: FC<Props> = ({
               className="report-chapter-panel__nav"
               data-lenis-prevent
             >
-              {REPORT_NAV_PARTS.map((part) => (
+              {navParts.map((part) => (
                 <div key={part.part} className="report-chapter-panel__part-group">
                   <p className="report-chapter-panel__part">
                     {part.part} · {part.label}

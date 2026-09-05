@@ -32,6 +32,18 @@ import {
   RETIRED_REPORT_SECTION_IDS,
 } from "./reportNav";
 import ReportMobileNav from "./ReportMobileNav";
+import { V3ModeProvider } from "./v3/V3Chapter";
+import V3Intro from "./v3/V3Intro";
+import V3EndSummary from "./v3/V3EndSummary";
+import V3Methodology from "./v3/V3Methodology";
+import V3PartDivider from "./v3/V3PartDivider";
+import V3SnapshotIgnite from "./v3/V3SnapshotIgnite";
+import V3TopThree from "./v3/V3TopThree";
+import {
+  REPORT_V3_NAV_PARTS,
+  REPORT_V3_PART_DIVIDER_BY_SECTION,
+  REPORT_V3_SECTION_ORDER,
+} from "./v3/reportV3Nav";
 import ReportPricingModal from "./ReportPricingModal";
 import ReportStickyUnlockBar from "./ReportStickyUnlockBar";
 import ReportSection from "./ReportSection";
@@ -118,6 +130,7 @@ import {
 import { shouldAutoOpenOfferModal } from "../logic/paywallModal";
 import { useReportEngagementTimers } from "./hooks/useReportEngagementTimers";
 import "./report.css";
+import "./v3/reportV3.css";
 
 interface SnapshotContent {
   importanceLabel: string;
@@ -374,6 +387,8 @@ interface ReportPageProps {
 }
 
 interface ReportExperienceProps {
+  /** `?v3=1` — render the mobile-first V3 chrome instead of V1. */
+  isV3: boolean;
   accessPlan: ReportAccessPlan;
   archetypeTiers: Record<string, "essentials" | "full_report">;
   devParam: string | null;
@@ -471,6 +486,7 @@ interface ReportExperienceProps {
 const FEEDBACK_SUPPRESSED_SECTION_IDS = new Set(["core_archetype"]);
 
 const ReportExperience: FC<ReportExperienceProps> = ({
+  isV3,
   accessPlan,
   archetypeTiers,
   devParam,
@@ -791,7 +807,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   // are free by construction.
   const navAccessById = useMemo(() => {
     const access = new Map<string, ReportNavAccess>();
-    for (const part of REPORT_NAV_PARTS) {
+    for (const part of isV3 ? REPORT_V3_NAV_PARTS : REPORT_NAV_PARTS) {
       for (const item of part.items) {
         const section = resolvedSections.find((s) => s.id === (item.gateId ?? item.id));
         if (!section?.isPremium) {
@@ -808,7 +824,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       }
     }
     return access;
-  }, [resolvedSections, accessPlan, viewArchetypeTier]);
+  }, [resolvedSections, accessPlan, viewArchetypeTier, isV3]);
 
   /**
    * Build-time, deliberately not a runtime flag or a query parameter. A reader on
@@ -817,12 +833,12 @@ const ReportExperience: FC<ReportExperienceProps> = ({
    */
   const copyable = isNonProdDeploy();
 
-  return (
+  const experience = (
     <main
       id="main-content"
       ref={mainContentRef}
       tabIndex={-1}
-      className={`report-page${accessPlan === "full_report" || accessPlan === "all_reports" ? "" : " report-experience--sticky-pad"}${copyable ? " report-page--copyable" : ""}`}
+      className={`report-page${accessPlan === "full_report" || accessPlan === "all_reports" ? "" : " report-experience--sticky-pad"}${copyable ? " report-page--copyable" : ""}${isV3 ? " rv3" : ""}`}
       style={getReportThemeStyle(theme)}
       /**
        * Copy, right-click and drag are blocked on the LIVE site only. The report
@@ -925,8 +941,16 @@ const ReportExperience: FC<ReportExperienceProps> = ({
             />
 
             <div className="report-content">
+              {isV3 ? (
+                <>
+                  <V3Intro />
+                  <V3Methodology />
+                </>
+              ) : null}
               {resolvedSections.map((section) => {
-                const partDivider = REPORT_PART_DIVIDER_BY_SECTION[section.id];
+                const partDivider = isV3
+                  ? REPORT_V3_PART_DIVIDER_BY_SECTION[section.id]
+                  : REPORT_PART_DIVIDER_BY_SECTION[section.id];
                 const sectionNode = (() => {
                   const title = section.displayTitle;
                   const generalHtml = replacePlaceholders(
@@ -1009,6 +1033,35 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                         >
                           <MeansForYouSection archetype={viewArchetype} />
                         </ReportSection>
+                        {/* V3's Part I runs HERO -> "Summary of the <archetype>"
+                          -> Snapshot, where Snapshot is the Ignite accordion
+                          (which IS the five findings) plus "How you compare".
+                          V1's Snapshot / Findings / Insight Map blocks below are
+                          therefore suppressed: keeping Findings would render the
+                          same five findings twice, and V3 has no Insight Map at
+                          all (Figma 10392:19223 is the whole Part I tail). */}
+                        {/* The wrapper carries V1's `report-section is-visible`
+                          classes so the shared chart-reveal CSS that
+                          SnapshotCompare depends on still resolves outside a
+                          ReportSection. */}
+                        {isV3 ? (
+                          <section
+                            id="snapshot"
+                            data-report-section="true"
+                            className="report-section is-visible rv3-snap"
+                          >
+                            <h2 className="rv3-snapshot-heading" data-node-id="10392:19225">
+                              Snapshot &mdash; of the {viewArchetype}
+                            </h2>
+                            <V3SnapshotIgnite copy={findingsCopy} />
+                            <SnapshotCompare copy={snapshotCopy} thirdRowViz="dots" />
+                            <div className="rv3-chapter__feedback">
+                              {renderFeedback("findings", "Five things this report found")}
+                            </div>
+                          </section>
+                        ) : null}
+                        {isV3 ? null : (
+                        <>
                         {/* Empty title suppresses ReportSection's own large
                           header (hidden via CSS on #snapshot) — SnapshotSection
                           renders its own 29px "Your snapshot" heading per the
@@ -1063,6 +1116,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                             isSectionOpen={isMapTargetOpen}
                           />
                         </ReportSection>
+                        </>
+                        )}
                       </Fragment>
                     );
                   }
@@ -1105,7 +1160,10 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           8427:1070. The wrapper only provides scroll-reveal + the
                           #constellation anchor + the section divider. Free — no
                           gating; every archetype's row shows its own motto and
-                          links to that archetype's report (unlock-gated on click).*/}
+                          links to that archetype's report (unlock-gated on click).
+                          V3 numbers it chapter 5.4, BEFORE Importance (5.5), so
+                          there it is rendered standalone instead of inline. */}
+                        {isV3 ? null : (
                         <ReportSection
                           primaryArchetype={viewArchetype}
                           sectionId="constellation"
@@ -1120,6 +1178,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                             onViewArchetype={onUnlockArchetype}
                           />
                         </ReportSection>
+                        )}
                       </Fragment>
                     );
                   }
@@ -1509,12 +1568,15 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                             tier={partnershipTier}
                           />
                         </ReportSection>
-                        {/* "Challenges in Partnership" (Report 2.0, Figma 8427:2619)
+                        {isV3 ? null : (
+                        /* "Challenges in Partnership" (Report 2.0, Figma 8427:2619)
                           — no own row in report-general.ts; renders inline right
                           after Libido and shares its full_report gate. Gating is
                           resolved SERVER-SIDE (partnershipCopy.locked); a locked
                           client gets only universal framing. No feedbackWidget:
-                          it rides Libido's section shell above. */}
+                          it rides Libido's section shell above. In V3 this is
+                          promoted to its own chapter 4.4 after Curiosity, so this
+                          inline copy is suppressed there. */
                         <ReportSection
                           primaryArchetype={viewArchetype}
                           sectionId="challenges_in_partnership"
@@ -1534,6 +1596,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                             tier={partnershipTier}
                           />
                         </ReportSection>
+                        )}
                       </Fragment>
                     );
                   }
@@ -1891,15 +1954,92 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                   );
                 })();
 
-                return partDivider ? (
-                  <Fragment key={section.id}>
+                const dividerNode = partDivider ? (
+                  isV3 ? (
+                    <V3PartDivider
+                      eyebrow={partDivider.part}
+                      lead={partDivider.lead}
+                      accent={(partDivider.accent ?? "").replace("{A}", viewArchetype)}
+                      tail={"tail" in partDivider ? partDivider.tail : undefined}
+                    />
+                  ) : (
                     <ReportPartDivider {...partDivider} />
+                  )
+                ) : null;
+
+                // Part I in V3 carries the top-3 card and the Snapshot accordion
+                // between the divider and the Core Archetype chapter.
+                const v3PartOneExtras =
+                  isV3 && section.id === "core_archetype" ? (
+                    <V3TopThree percentages={percentages} />
+                  ) : null;
+
+                // V3 numbers "Other Archetypes" chapter 5.4, one ahead of
+                // Importance of Sexuality (5.5). V1 renders it inline AFTER
+                // Importance, which would invert the two.
+                const v3Constellation =
+                  isV3 && section.id === "the_importance_of_sexuality" ? (
+                    <ReportSection
+                      primaryArchetype={viewArchetype}
+                      sectionId="constellation"
+                      title=""
+                      feedbackWidget={renderFeedback("constellation", "Other archetypes")}
+                    >
+                      <ConstellationSection
+                        ranking={ranking}
+                        percentages={percentages}
+                        mottos={constellationMottos}
+                        viewArchetype={viewArchetype}
+                        onViewArchetype={onUnlockArchetype}
+                      />
+                    </ReportSection>
+                  ) : null;
+
+                // V3 promotes "Challenges in Partnership" to its own chapter 4.4,
+                // after Curiosity. V1 renders it inline under Libido (3.1 in V3),
+                // which would put chapter 4.4 two parts early.
+                const v3Partnership =
+                  isV3 && section.id === "curiosity_level" ? (
+                    <ReportSection
+                      primaryArchetype={viewArchetype}
+                      sectionId="challenges_in_partnership"
+                      title=""
+                      feedbackWidget={renderFeedback(
+                        "challenges_in_partnership",
+                        "Challenges in Partnership"
+                      )}
+                    >
+                      <PartnershipSection
+                        archetype={viewArchetype}
+                        copy={viewArchetype === primaryArchetype ? partnershipCopy : null}
+                        loop={viewArchetype === primaryArchetype ? partnershipLoop : null}
+                        onUnlock={() => unlockSection(section)}
+                        quote={fullReportQuote}
+                        sectionTitle="Challenges in Partnership"
+                        tier={
+                          isSectionIncludedInEssentials(section.id) ? "essentials" : "full_report"
+                        }
+                      />
+                    </ReportSection>
+                  ) : null;
+
+                if (!dividerNode && !v3PartOneExtras && !v3Partnership && !v3Constellation)
+                  return sectionNode;
+                return (
+                  <Fragment key={section.id}>
+                    {dividerNode}
+                    {v3PartOneExtras}
+                    {v3Constellation}
                     {sectionNode}
+                    {v3Partnership}
                   </Fragment>
-                ) : (
-                  sectionNode
                 );
               })}
+
+              {/* V3 closes with the "Summary" block (Figma 10392:25297), which
+                  V1 retired. It sits after the last chapter, before the closing
+                  note. */}
+              {isV3 ? <V3EndSummary archetype={viewArchetype} /> : null}
 
               {/* Report 2.0 closing note (Figma 8427:2837) — universal + free,
                   no gating, no CTA. Mounts LAST in the report content, right
@@ -1942,6 +2082,11 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       />
     </main>
   );
+
+  // V3 mode is announced via context so `ReportSection` — the one wrapper all 28
+  // render branches share — can swap its chrome for the numbered-chapter
+  // accordion without the variant being threaded through every call site.
+  return isV3 ? <V3ModeProvider>{experience}</V3ModeProvider> : experience;
 };
 
 const ReportPage: FC<ReportPageProps> = ({ token }) => {
@@ -1955,6 +2100,11 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     process.env.NODE_ENV === "development" ? (searchParams.get("dev_session") ?? null) : null;
   /* eslint-enable no-restricted-syntax */
   const sessionId = devParam ?? storedSessionId;
+
+  // `?v3=1` renders the mobile-first V3 chrome. Opt-in while it is being built,
+  // so the same token can be compared against the live report side by side.
+  const v3Param = searchParams.get("v3");
+  const isV3 = v3Param === "1" || v3Param === "true";
 
   // Honour the discount-email CTA deep-link: /report/[token]?offer=1&pricingSessionId=<uuid>
   const isOfferLink = searchParams.get("offer") === "1";
@@ -2518,15 +2668,24 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   // The redesigned report starts at the Part I divider — pre-2.0 intros and
   // sections the redesign folded into combined ones are filtered out here, at
   // the single point every consumer (render, nav, scroll-spy) reads from.
+  // V3 un-retires "Arousal, Desire & Pleasure" (chapter 3.3), which the V1
+  // redesign folded away — so the retired set is narrowed to whatever V3 does
+  // not explicitly ask for.
+  const sectionOrder = isV3 ? REPORT_V3_SECTION_ORDER : REPORT_SECTION_ORDER;
   const resolvedSections = resolveReportSections(reportSections, effectiveViewArchetype)
-    .filter((section) => !RETIRED_REPORT_SECTION_IDS.has(section.id))
+    .filter(
+      (section) =>
+        !RETIRED_REPORT_SECTION_IDS.has(section.id) ||
+        (isV3 && sectionOrder.includes(section.id))
+    )
+    .filter((section) => !isV3 || sectionOrder.includes(section.id))
     // Order by the Figma part containers, NOT by `sectionNumber` — the two
     // disagree (Beliefs is numbered after Attachment but comes FIRST in Part II,
     // and Accelerators & Brakes is numbered into Part III but belongs in II).
     // Anything unlisted keeps its numeric order and sorts last.
     .sort((a, b) => {
-      const ia = REPORT_SECTION_ORDER.indexOf(a.id);
-      const ib = REPORT_SECTION_ORDER.indexOf(b.id);
+      const ia = sectionOrder.indexOf(a.id);
+      const ib = sectionOrder.indexOf(b.id);
       if (ia === -1 && ib === -1) return a.sectionNumber - b.sectionNumber;
       if (ia === -1) return 1;
       if (ib === -1) return -1;
@@ -2537,6 +2696,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     <>
       <ReportExperience
         key={`${token ?? "browser"}:${sessionId ?? "anon"}`}
+        isV3={isV3}
         devParam={devParam}
         accessPlan={data.accessPlan}
         archetypeTiers={data.archetypeTiers ?? {}}

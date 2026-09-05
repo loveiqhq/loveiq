@@ -14,6 +14,8 @@ interface Props {
 
 export default async function Page({ params }: Props) {
   const { token } = await params;
+  // `?v3=1` selects the mobile-first V3 chrome; ReportPage reads it from the
+  // client-side search params, so no branching is needed here.
   return (
     <Suspense fallback={null}>
       <ReportPage token={token} />

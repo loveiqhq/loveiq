@@ -4,6 +4,8 @@ import { useState, type CSSProperties, type FC } from "react";
 import VerdictStar from "./VerdictStar";
 import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
+import V3Accelerators from "../v3/V3Accelerators";
+import { useIsV3 } from "../v3/V3Chapter";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { archetypeSlug } from "@/data/report2-config";
@@ -133,6 +135,7 @@ const AcceleratorsSection: FC<Props> = ({
   // return — a hook may not be conditional.
   const [chartRef, revealed] = useRevealOnView<HTMLDivElement>();
   const [verdictRef, verdictRevealed] = useRevealOnView<HTMLDivElement>();
+  const isV3 = useIsV3();
   if (!copy) return null;
 
   const locked = copy.locked;
@@ -144,6 +147,86 @@ const AcceleratorsSection: FC<Props> = ({
     (p): p is string => !!p
   );
   const hasEdu = !!copy["edu.teaser"] || eduParas.length > 0;
+
+  // Extracted so the V3 layout can render the same "Learn: …" collapsible
+  // without duplicating it. Identical markup either way.
+  const eduBlock = hasEdu ? (
+        <div className="report-accel__details">
+          <button
+            type="button"
+            className="report-accel__details-summary"
+            aria-expanded={locked ? false : expanded}
+            onClick={locked ? onUnlock : () => setExpanded((v) => !v)}
+          >
+            <span className="report-accel__details-icon" aria-hidden="true">
+              <BookIcon />
+            </span>
+            <span className="report-accel__details-eyebrow">
+              {copy["edu.eyebrow"] ?? "Learn: the dual-control model"}
+            </span>
+            <span
+              className={`report-accel__details-chevron${expanded ? " is-open" : ""}`}
+              aria-hidden="true"
+            >
+              ⌄
+            </span>
+          </button>
+
+          {/* Figma's "peek CTA" (node 8762:15996 on the twin attachment block,
+              and the pill visible in the accel mock 8946:4286). 13 of the 16
+              collapsibles already shipped it; this was one of three missing. */}
+          {locked || !expanded ? (
+            <div className="report-accel__details-peek report-learn-peek">
+              {copy["edu.teaser"] ? (
+                <p className="report-accel__details-teaser report-learn-teaser">
+                  {copy["edu.teaser"]}
+                  {copy["edu.body.p1"] ? ` ${copy["edu.body.p1"]}` : null}
+                </p>
+              ) : null}
+              {locked || eduParas.length > 0 ? (
+                <button
+                  type="button"
+                  className="report-accel__peek-cta report-learn-cta"
+                  onClick={locked ? onUnlock : () => setExpanded(true)}
+                >
+                  {locked ? "Unlock to read the full explanation" : "Read the full explanation"}
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <div className="report-accel__details-body">
+              {copy["edu.teaser"] ? (
+                <p className="report-accel__details-teaser report-learn-teaser-full">
+                  {copy["edu.teaser"]}
+                </p>
+              ) : null}
+              {eduParas.map((para, i) => (
+                <p key={i} className="report-accel__details-para">
+                  {renderEduPara(para)}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+  ) : null;
+
+  // V3 rearranges the same rows into a hero gauge plus two stacked cards, with
+  // brakes first (Figma 10392:19343). Locked readers keep V1's teaser treatment,
+  // which V3 has no frame for.
+  if (isV3 && !locked) {
+    return (
+      <div className="report-accel">
+        <h3 className="report-accel__heading">Accelerators &amp; Brakes</h3>
+        <V3Accelerators
+          opens={rows.opens}
+          shuts={rows.shuts}
+          verdict={rows.verdict}
+          intro={copy["learn.body"] ?? null}
+        />
+        {eduBlock}
+      </div>
+    );
+  }
 
   return (
     <div className="report-accel">
@@ -299,65 +382,7 @@ const AcceleratorsSection: FC<Props> = ({
           </div>
         ) : null}
 
-        {hasEdu ? (
-          <div className="report-accel__details">
-            <button
-              type="button"
-              className="report-accel__details-summary"
-              aria-expanded={locked ? false : expanded}
-              onClick={locked ? onUnlock : () => setExpanded((v) => !v)}
-            >
-              <span className="report-accel__details-icon" aria-hidden="true">
-                <BookIcon />
-              </span>
-              <span className="report-accel__details-eyebrow">
-                {copy["edu.eyebrow"] ?? "Learn: the dual-control model"}
-              </span>
-              <span
-                className={`report-accel__details-chevron${expanded ? " is-open" : ""}`}
-                aria-hidden="true"
-              >
-                ⌄
-              </span>
-            </button>
-
-            {/* Figma's "peek CTA" (node 8762:15996 on the twin attachment block,
-                and the pill visible in the accel mock 8946:4286). 13 of the 16
-                collapsibles already shipped it; this was one of three missing. */}
-            {locked || !expanded ? (
-              <div className="report-accel__details-peek report-learn-peek">
-                {copy["edu.teaser"] ? (
-                  <p className="report-accel__details-teaser report-learn-teaser">
-                    {copy["edu.teaser"]}
-                    {copy["edu.body.p1"] ? ` ${copy["edu.body.p1"]}` : null}
-                  </p>
-                ) : null}
-                {locked || eduParas.length > 0 ? (
-                  <button
-                    type="button"
-                    className="report-accel__peek-cta report-learn-cta"
-                    onClick={locked ? onUnlock : () => setExpanded(true)}
-                  >
-                    {locked ? "Unlock to read the full explanation" : "Read the full explanation"}
-                  </button>
-                ) : null}
-              </div>
-            ) : (
-              <div className="report-accel__details-body">
-                {copy["edu.teaser"] ? (
-                  <p className="report-accel__details-teaser report-learn-teaser-full">
-                    {copy["edu.teaser"]}
-                  </p>
-                ) : null}
-                {eduParas.map((para, i) => (
-                  <p key={i} className="report-accel__details-para">
-                    {renderEduPara(para)}
-                  </p>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : null}
+        {eduBlock}
       </article>
     </div>
   );

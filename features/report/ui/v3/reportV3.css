@@ -1,0 +1,1941 @@
+/*
+ * Report V3 — mobile-first report styles.
+ *
+ * Figma: "Report V3 — MOBILE 393 — UNTOGGLED (all chapters open) — 2026-09-04"
+ * (10392:18451). Every value here is measured off that frame or off one of the
+ * designer's component-state frames; node ids are cited per block.
+ *
+ * Prefixed `rv3-` so nothing collides with the 22k lines of V1 report.css, which
+ * still loads for the current report. V3 is additive — deleting this file and the
+ * v3/ directory returns the report to V1 exactly.
+ *
+ * Base canvas is 393px wide with a 16px page gutter, so content runs 361px.
+ * Sizes are px (not rem) because the design is specced in px against a fixed
+ * 393 viewport and the report is read at one text size.
+ */
+
+.rv3 {
+  --rv3-ink: #161021; /* color/ink/primary */
+  --rv3-copy: #3f3a4d; /* color/violet/26 */
+  --rv3-muted: #6b6678; /* color/ink/muted + color/grey/44 */
+  --rv3-violet: #795fc8; /* color/brand/violet */
+  --rv3-violet-ink: #6b5b95; /* color/ink/violet */
+  --rv3-lavender: #9d8ad7; /* color/brand/lavender */
+  --rv3-hairline: rgba(22, 16, 33, 0.08);
+  --rv3-gutter: 16px;
+
+  background: #fff;
+  color: var(--rv3-copy);
+  font-family: var(--font-sans);
+  /* NO layout here. `.rv3` lands on <main class="report-page">, which is the
+   * whole page including V1's desktop shell — clamping it to 393 collapses the
+   * sidebar grid at every viewport. The 393 column is applied to
+   * .report-content inside the max-width:1279px block instead. */
+}
+
+/* ── Section heading glow ────────────────────────────────────────
+ * 10392:18457 / 10392:18805. A 332x226 box holding two overlapping radial
+ * gradients, clipped by a 127px (intro) or 148px (part divider) container.
+ * get_design_context emits these as inline SVG data-URIs; they are plain
+ * elliptical radials, so CSS reproduces them exactly and stays themeable.
+ */
+.rv3-glow {
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+.rv3-glow::before {
+  background:
+    radial-gradient(
+      129.48px 103.96px at 175.96px 106.22px,
+      rgba(208, 89, 118, 0.14) 0%,
+      rgba(208, 89, 118, 0) 73%
+    ),
+    radial-gradient(
+      149.4px 117.52px at 166px 113px,
+      rgba(157, 138, 215, 0.24) 0%,
+      rgba(157, 138, 215, 0) 71%
+    );
+  content: "";
+  height: 226px;
+  /* Figma pins this 332px box at left:14.5 inside a 361 column, i.e. dead
+   * centre (14.5 + 166 = 180.5 = 361/2). Expressed as a centre offset it is
+   * identical at 361 and stays correct when the column is wider than mobile. */
+  left: 50%;
+  margin-left: -166px;
+  pointer-events: none;
+  position: absolute;
+  top: -49.5px;
+  width: 332px;
+}
+
+/* Intro heading — 10392:18458/18460 */
+.rv3-intro-heading {
+  height: 127px;
+}
+.rv3-intro-heading__text {
+  color: var(--rv3-violet);
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-style: italic;
+  font-weight: 400;
+  left: 50%;
+  letter-spacing: -0.47px;
+  line-height: 24.2px;
+  position: absolute;
+  text-align: center;
+  top: 51px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+/* ── Part divider — 10392:18805 ─────────────────────────────────── */
+.rv3-part {
+  height: 148px;
+}
+.rv3-part__glow::before {
+  top: -33.39px;
+}
+.rv3-part__eyebrow {
+  color: var(--rv3-violet-ink);
+  font-size: 13px;
+  font-weight: 600;
+  left: 50%;
+  letter-spacing: 2.6px;
+  line-height: 21.19px;
+  position: absolute;
+  text-align: center;
+  text-transform: uppercase;
+  top: 48px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.rv3-part__title {
+  color: var(--rv3-violet);
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-style: italic;
+  font-weight: 400;
+  left: 50%;
+  letter-spacing: -0.47px;
+  line-height: 24.2px;
+  position: absolute;
+  text-align: center;
+  top: 80px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.rv3-part__title > span:first-child {
+  color: #191a1b;
+}
+
+/* ── Body prose — 10392:18463 / 18811 ───────────────────────────── */
+.rv3-prose {
+  color: var(--rv3-copy);
+  font-size: 16px;
+  line-height: 25.6px;
+}
+.rv3-prose p + p {
+  margin-top: 25.6px;
+}
+.rv3-prose strong {
+  color: var(--rv3-ink);
+  font-weight: 700;
+}
+
+/* ── Snapshot "X3 IGNITE" accordion ──────────────────────────────
+ * Component states: 10392:25895 (at rest) and 10392:25610 / 25667 / 25724 /
+ * 25781 / 25838 (tiles 1-5 open). In-page instance is 10513:4910, which is
+ * 361 wide (rows 317) rather than the 357/313 of the standalone state frames —
+ * the standalone frames are the interaction spec, the in-page one is the size.
+ *
+ * At rest the panel composes to exactly 467px, which is also what Figma reports
+ * for the in-page instance: 26 top + 3 rule + 5x82 rows + 4x1 dividers + 24
+ * bottom. That arithmetic is the check that nothing in the stack is missing.
+ */
+.rv3-ignite {
+  background: #fff;
+  border-radius: 26px;
+  box-shadow: 0 22px 54px -20px rgba(103, 60, 120, 0.3);
+  isolation: isolate;
+  overflow: hidden;
+  padding: 26px 22px 24px;
+  position: relative;
+}
+
+/* Both washes are solid circles under a 28px Gaussian blur — NOT radial
+ * gradients. get_design_context reports them as radials and reports both as
+ * #F8694A; the exported SVG and a pixel sweep of all six state frames show the
+ * real rule: at rest they are coral + orchid at low opacity, and when a row
+ * opens BOTH adopt that row's ramp colour at full opacity. Verified to within
+ * 1/255 on every channel against all six frames. */
+.rv3-ignite__wash {
+  border-radius: 50%;
+  filter: blur(28px);
+  pointer-events: none;
+  position: absolute;
+  transition:
+    background-color 420ms ease,
+    opacity 420ms ease;
+  z-index: 0;
+}
+.rv3-ignite__wash--coral {
+  background: #f8694a;
+  height: 212px;
+  left: -58px;
+  opacity: 0.15;
+  top: -72px;
+  width: 212px;
+}
+.rv3-ignite__wash--orchid {
+  background: #c96dce;
+  bottom: -88px;
+  height: 232px;
+  left: 187px;
+  opacity: 0.13;
+  width: 232px;
+}
+.rv3-ignite.is-open .rv3-ignite__wash--coral {
+  background: var(--rv3-ramp);
+  opacity: 0.5;
+}
+.rv3-ignite.is-open .rv3-ignite__wash--orchid {
+  background: var(--rv3-ramp);
+  opacity: 0.42;
+}
+
+/* 10392:25614 — 44x3, coral to orchid */
+.rv3-ignite__rule {
+  background: linear-gradient(90deg, #fe6839 0%, #c36ddf 100%);
+  border-radius: 2px;
+  height: 3px;
+  position: relative;
+  width: 44px;
+  z-index: 1;
+}
+
+.rv3-ignite__rows {
+  position: relative;
+  z-index: 1;
+}
+.rv3-ignite__divider {
+  background: var(--rv3-hairline);
+  height: 1px;
+  width: 100%;
+}
+
+.rv3-ignite__row {
+  display: flex;
+  align-items: flex-start;
+  overflow: hidden;
+  width: 100%;
+}
+/* Edge col 3px with 8px vertical inset; ramp fills what is left, so it grows
+ * with the row instead of being a fixed 66/150px as the static frames show. */
+.rv3-ignite__edge {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  padding: 8px 0;
+  width: 3px;
+}
+.rv3-ignite__ramp {
+  background: var(--rv3-ramp);
+  border-radius: 1.5px;
+  flex: 1 0 0;
+  min-height: 1px;
+  opacity: 0;
+  transition: opacity 260ms ease;
+  width: 100%;
+}
+.rv3-ignite__row.is-open .rv3-ignite__ramp {
+  opacity: 1;
+}
+
+.rv3-ignite__content {
+  flex: 1 0 0;
+  min-width: 0;
+  padding-left: 20px;
+}
+
+/* 10392:25619 — the whole claim row is the hit target */
+.rv3-ignite__claim {
+  align-items: flex-start;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 12px;
+  padding: 17px 0;
+  text-align: left;
+  width: 100%;
+}
+.rv3-ignite__claim-text {
+  color: var(--rv3-ink);
+  flex: 1 0 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.17px;
+  line-height: 24px;
+  min-width: 0;
+}
+.rv3-ignite__chev {
+  color: #8f8a9c;
+  flex-shrink: 0;
+  height: 18px;
+  transition: transform 260ms ease;
+  width: 18px;
+}
+.rv3-ignite__row.is-open .rv3-ignite__chev {
+  transform: rotate(180deg);
+}
+
+/* 0fr -> 1fr animates to the content's natural height with no JS measuring. */
+.rv3-ignite__body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 300ms ease;
+}
+.rv3-ignite__row.is-open .rv3-ignite__body {
+  grid-template-rows: 1fr;
+}
+.rv3-ignite__body > div {
+  min-height: 0;
+  overflow: hidden;
+}
+.rv3-ignite__body-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 18px;
+}
+.rv3-ignite__turn {
+  color: var(--rv3-turn);
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 19px;
+}
+.rv3-ignite__mechanism {
+  color: var(--rv3-muted);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 19.5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rv3-ignite__wash,
+  .rv3-ignite__ramp,
+  .rv3-ignite__chev,
+  .rv3-ignite__body {
+    transition-duration: 1ms;
+  }
+}
+
+/* ── Header pill — 10392:25377 ──────────────────────────────────── */
+.rv3-header {
+  align-items: center;
+  background: #fff;
+  border-radius: 9999px;
+  box-shadow:
+    0 25px 40px rgba(22, 16, 33, 0.12),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.6);
+  display: flex;
+  justify-content: space-between;
+  /* 377 wide inside a 393 viewport = 8px inset, i.e. the 16px page gutter
+   * minus 8, so the pill sits proud of the text column. */
+  margin: 8px -8px 0;
+  padding: 12px 12px 12px 16px;
+}
+.rv3-header__lockup {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+.rv3-header__mark {
+  display: block;
+  height: 24px;
+  width: 27px;
+}
+.rv3-header__wordmark {
+  color: var(--rv3-ink);
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  line-height: 24px;
+  white-space: nowrap;
+}
+.rv3-header__iq {
+  background: linear-gradient(103.195deg, #d05976 25.07%, #c167cf 48.43%, #8887f6 74.65%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-style: italic;
+}
+
+/* ── Three strongest patterns — 10392:18812 ─────────────────────── */
+.rv3-top3 {
+  background: #fff;
+  border: 1px solid rgba(157, 138, 215, 0.3);
+  border-radius: 22px;
+  box-shadow: 0 18px 22px rgba(22, 16, 33, 0.05);
+  padding: 19px 17px;
+}
+.rv3-top3__label {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  color: var(--rv3-muted);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.78px;
+  line-height: 18.2px;
+  margin-bottom: 6px;
+  padding: 0 12px 13px;
+  text-transform: uppercase;
+}
+.rv3-top3__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.rv3-top3__row {
+  align-items: center;
+  border-radius: 12px;
+  column-gap: 12px;
+  display: grid;
+  grid-template-columns: 24px 24px 1fr 48px;
+  padding: 14px 12px 16px;
+  row-gap: 6px;
+}
+.rv3-top3__row + .rv3-top3__row {
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+.rv3-top3__row.is-lead {
+  background: color-mix(in srgb, var(--rv3-accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rv3-accent) 38%, transparent);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--rv3-accent) 65%, transparent);
+  padding: 15px 13px 16px;
+}
+/* The lead row draws its own border, so the row after it must not add a second
+ * rule on top of the tinted panel's edge. */
+.rv3-top3__row.is-lead + .rv3-top3__row {
+  border-top: 0;
+}
+.rv3-top3__rank {
+  color: #4b5563;
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  line-height: 18.72px;
+  text-align: right;
+}
+.rv3-top3__row.is-lead .rv3-top3__rank {
+  color: var(--rv3-accent-ink);
+  font-weight: 500;
+}
+.rv3-top3__icon {
+  align-items: center;
+  align-self: start;
+  background: var(--rv3-accent);
+  border-radius: 4px;
+  color: #fff;
+  display: flex;
+  height: 24px;
+  justify-content: center;
+  margin-top: 2px;
+  overflow: hidden;
+  width: 24px;
+}
+.rv3-top3__icon svg {
+  height: 14px;
+  width: 14px;
+}
+.rv3-top3__name {
+  color: var(--rv3-ink);
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 500;
+  grid-column: 3 / span 2;
+  line-height: 18px;
+  margin: 0;
+}
+.rv3-top3__row.is-lead .rv3-top3__name {
+  font-size: 18px;
+  line-height: 20.25px;
+}
+.rv3-top3__blurb {
+  color: rgba(63, 58, 77, 0.85);
+  font-size: 13px;
+  grid-column: 1 / span 4;
+  line-height: 19.5px;
+  margin: 0;
+  padding-top: 5px;
+}
+.rv3-top3__bar {
+  display: block;
+  grid-column: 1 / span 3;
+  height: 8px;
+  position: relative;
+}
+.rv3-top3__track,
+.rv3-top3__fill {
+  border-radius: 9999px;
+  height: 2px;
+  left: 0;
+  position: absolute;
+  top: 3px;
+}
+.rv3-top3__track {
+  background: rgba(0, 0, 0, 0.1);
+  width: 100%;
+}
+.rv3-top3__fill {
+  background: color-mix(in srgb, var(--rv3-accent) 60%, transparent);
+  width: var(--rv3-fill);
+}
+.rv3-top3__dot {
+  background: var(--rv3-accent);
+  border-radius: 9999px;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--rv3-accent) 85%, transparent);
+  height: 8px;
+  left: var(--rv3-fill);
+  margin-left: -4px;
+  position: absolute;
+  top: 0;
+  width: 8px;
+}
+.rv3-top3__pct {
+  color: var(--rv3-ink);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  line-height: 19.52px;
+  text-align: right;
+}
+.rv3-top3__row.is-lead .rv3-top3__pct {
+  font-weight: 700;
+}
+
+/* ── Flow spacing ────────────────────────────────────────────────
+ * Section offsets read off the master frame's absolute y positions:
+ * intro heading block pt 56 (10392:18457), intro prose inset 20
+ * (10392:18462), Part I band pt 20 (10392:18803), its prose pb 20
+ * (10392:18809), top-3 card follows immediately.
+ */
+.rv3-intro-heading {
+  margin-top: 56px;
+}
+.rv3-prose {
+  padding-top: 20px;
+}
+.rv3-part {
+  margin-top: 20px;
+}
+.rv3-section-heading {
+  color: var(--rv3-ink);
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 24px;
+  margin: 40px 0 20px;
+}
+
+/* ── Chapter shell — 10439:181 (eyebrow) + 10439:190 (title button) ── */
+.rv3-chapter {
+  padding-top: 22px;
+}
+.rv3-chapter__eyebrow {
+  align-items: center;
+  display: flex;
+  gap: 7px;
+  margin: 0;
+}
+.rv3-chapter__icon {
+  color: var(--rv3-violet);
+  flex-shrink: 0;
+  height: 14px;
+  width: 14px;
+}
+.rv3-chapter__number {
+  color: var(--rv3-violet);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 1.425px;
+  line-height: 14.725px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.rv3-chapter__rule {
+  background: rgba(121, 95, 200, 0.24);
+  flex: 1 1 auto;
+  height: 1px;
+  margin: 0 3px;
+}
+.rv3-chapter__button {
+  align-items: flex-start;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 8px;
+  padding: 11px 0 0;
+  text-align: left;
+  width: 100%;
+}
+.rv3-chapter__title {
+  color: var(--rv3-ink);
+  flex: 1 1 auto;
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.24px;
+  line-height: 25.6px;
+  min-width: 0;
+}
+.rv3-chapter__chev {
+  color: var(--rv3-violet);
+  flex-shrink: 0;
+  height: 15px;
+  /* Sits 8px below the title's cap height per the 15x27 Icon:transform box. */
+  margin-top: 8px;
+  transition: transform 260ms ease;
+  width: 15px;
+}
+.rv3-chapter.is-open .rv3-chapter__chev {
+  transform: rotate(180deg);
+}
+.rv3-chapter__body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 320ms ease;
+}
+.rv3-chapter.is-open .rv3-chapter__body {
+  grid-template-rows: 1fr;
+}
+.rv3-chapter__body > div {
+  min-height: 0;
+  overflow: hidden;
+}
+.rv3-chapter__body-inner {
+  padding-top: 12px;
+}
+.rv3-chapter__feedback {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 20px;
+}
+
+/* V3 is designed at 393. Below V1's 1280 sidebar breakpoint the page is that
+ * single column, centred; at and above it V1's shell (sidebar + content) is
+ * left alone, so desktop keeps a working layout until the desktop frames land.
+ *
+ * Scoping this to a max-width query matters: unscoped, `display:block` on
+ * .report-shell collapses the desktop grid and drops the sidebar on top of the
+ * content. */
+@media (max-width: 1279px) {
+  .rv3 .report-shell {
+    display: block;
+  }
+  .rv3 .report-content {
+    margin: 0 auto;
+    max-width: 393px;
+    padding: 0 16px;
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rv3-chapter__chev,
+  .rv3-chapter__body {
+    transition-duration: 1ms;
+  }
+}
+
+/* V1 sections render their own title heading, because V1's ReportSection is
+ * given `title=""` and hides its header. In V3 the chapter BUTTON is the title,
+ * so that inner heading duplicates it — Figma's chapter body opens straight into
+ * prose with no repeated heading.
+ *
+ * Every one of those headings is `report-<section>__heading`, sits exactly two
+ * levels inside the body (`body-inner > sectionRoot > heading`) and is its
+ * parent's first child. Constellation's `__heading` ("You're a constellation,
+ * not a type") is NOT a duplicate and sits one level in, so the `> * >` depth
+ * requirement excludes it. Verified against the live DOM: the selector matches
+ * 16 nodes, all of which exactly equal their own chapter title.
+ * ponytail: depth-based selector; if a section is restructured this silently
+ * stops hiding — the guard is V3ChapterHeadings.test.tsx. */
+.rv3 .rv3-chapter__body-inner > * > [class$="__heading"] {
+  display: none;
+}
+
+/* ── Header pill — 10392:25377 ───────────────────────────────────
+ * V1's ReportMobileNav already renders exactly the two elements V3's design
+ * has: the white LoveIQ lockup pill (10392:25377) and, under it, the
+ * "Chapter: X" selector (10392:25369). It also carries the scroll-spy and the
+ * chapter drawer, so V3 restyles it rather than shipping a second header.
+ */
+.rv3 .report-mobile-topbar {
+  border-radius: 9999px;
+  box-shadow:
+    0 25px 40px rgba(22, 16, 33, 0.12),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.6);
+  padding: 12px 12px 12px 16px;
+}
+.rv3 .report-mobile-topbar__wordmark {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  line-height: 24px;
+}
+.rv3 .report-mobile-topbar__love {
+  color: var(--rv3-ink);
+}
+/* Figma's own stops: 103.195deg, 25.07% / 48.43% / 74.65% — a slightly
+ * different sweep from the shared LoveIQWordmark (105deg, 20.51/48.14/79.16). */
+.rv3 .report-mobile-topbar__iq {
+  background: linear-gradient(103.195deg, #d05976 25.07%, #c167cf 48.43%, #8887f6 74.65%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-style: italic;
+}
+
+/* Figma stacks the page as: header pill 8->56, chapter pill 80->136, then the
+ * first Section box at y=112 (Container 0 + inner Container 32 + Section 80).
+ * V1's shell puts the .report-content BOX at y=32, so 80px of padding lands its
+ * first child on 112. .rv3-intro-heading's own 56px then puts the glow at 168
+ * and the "Introduction" wordmark at 219, exactly as the frame has them.
+ * The padding (rather than a margin) is deliberate: a margin here collapses
+ * through the content box and moves the box itself instead of its children. */
+@media (max-width: 1279px) {
+  .rv3 .report-content {
+    padding-top: 80px;
+  }
+}
+
+
+
+/* ── Methodology + science deck — 10392:18465 / 10360:9879 ──────── */
+.rv3-method {
+  padding-top: 29px;
+}
+/* 10392:18467 — coral→pink gradient text, uppercase */
+.rv3-method__eyebrow {
+  background: linear-gradient(90deg, #fe6839 0%, #ff3d76 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  line-height: 16px;
+  margin: 0;
+  text-transform: uppercase;
+}
+.rv3-method__heading {
+  color: var(--rv3-ink);
+  font-family: var(--font-serif);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  line-height: 29px;
+  margin: 10px 0 0;
+}
+.rv3-method__intro {
+  padding-top: 20px;
+}
+
+/* Horizontal deck. Bleeds to the page edges (the frame's scroll-content is 393
+ * wide inside a 361 column, i.e. -16 on each side) and snaps card to card. */
+.rv3-sci {
+  margin-top: 32px;
+}
+.rv3-sci__track {
+  display: flex;
+  gap: 10px;
+  margin: 0 -16px;
+  overflow-x: auto;
+  padding: 6px 16px;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.rv3-sci__track::-webkit-scrollbar {
+  display: none;
+}
+/* 10360:9880 — 212.22 x 276, 18px radius, 1px accent border at 32%, and a
+ * top-down accent wash that fades out by 58%. */
+.rv3-sci__card {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--rv3-accent) 6%, transparent) 0%,
+    transparent 58%
+  );
+  border: 1px solid color-mix(in srgb, var(--rv3-accent) 32%, transparent);
+  border-radius: 18px;
+  box-shadow: 0 12px 32px rgba(22, 16, 33, 0.05);
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 212.22px;
+  gap: 8.65px;
+  /* Figma fixes every Article at 276 so the seven cards align regardless of how
+   * long each question runs; the chapter list is bottom-anchored inside it. */
+  height: 276px;
+  padding: 15.93px 14.76px 16.72px;
+  scroll-snap-align: start;
+}
+.rv3-sci__rule {
+  background: var(--rv3-accent);
+  border-radius: 3px;
+  height: 3px;
+  width: 26px;
+}
+.rv3-sci__head {
+  align-items: center;
+  display: flex;
+  gap: 9.83px;
+  justify-content: space-between;
+}
+.rv3-sci__icon {
+  align-items: center;
+  background: color-mix(in srgb, var(--rv3-accent) 11%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rv3-accent) 30%, transparent);
+  border-radius: 10px;
+  color: var(--rv3-accent);
+  display: flex;
+  height: 34.98px;
+  justify-content: center;
+  width: 34.98px;
+}
+/* Mask, not <img>: an externally-loaded SVG cannot resolve `currentColor`, so
+ * the exported glyphs rendered black instead of their card accent. The mask
+ * paints the accent THROUGH the exact exported vector. */
+.rv3-sci__glyph {
+  background: var(--rv3-accent);
+  display: block;
+  height: 19.65px;
+  mask: var(--rv3-glyph) center / contain no-repeat;
+  -webkit-mask: var(--rv3-glyph) center / contain no-repeat;
+  width: 19.65px;
+}
+.rv3-sci__n {
+  color: var(--rv3-accent);
+  font-family: var(--font-serif);
+  font-size: 12.58px;
+  line-height: 12.58px;
+}
+.rv3-sci__title {
+  color: var(--rv3-ink);
+  font-family: var(--font-serif);
+  font-size: 16.9px;
+  font-weight: 500;
+  letter-spacing: -0.169px;
+  line-height: 19.43px;
+  margin: 0;
+}
+.rv3-sci__q {
+  color: var(--rv3-muted);
+  font-size: 12.58px;
+  line-height: 18.24px;
+  margin: 0;
+}
+/* Pushes the chapter list to the card's bottom so all seven align. */
+.rv3-sci__label {
+  color: var(--rv3-muted);
+  font-size: 10.22px;
+  font-weight: 700;
+  letter-spacing: 1.02px;
+  margin: auto 0 0;
+  text-transform: uppercase;
+}
+.rv3-sci__list {
+  display: flex;
+  flex-direction: column;
+  gap: 5.5px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.rv3-sci__list li {
+  align-items: center;
+  color: var(--rv3-ink);
+  display: flex;
+  font-size: 12.18px;
+  font-weight: 600;
+  gap: 7px;
+  line-height: 15.23px;
+}
+.rv3-sci__bullet {
+  background: var(--rv3-accent);
+  flex-shrink: 0;
+  height: 13px;
+  mask: url(/report/v3/science/chapter-bullet.svg) center / contain no-repeat;
+  -webkit-mask: url(/report/v3/science/chapter-bullet.svg) center / contain no-repeat;
+  width: 13px;
+}
+.rv3-sci__dots {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+  padding-top: 16px;
+}
+.rv3-sci__dots span {
+  background: rgba(22, 16, 33, 0.16);
+  border-radius: 9999px;
+  height: 4px;
+  transition:
+    background-color 200ms ease,
+    width 200ms ease;
+  width: 4px;
+}
+.rv3-sci__dots span.is-active {
+  background: #fe6839;
+  width: 14px;
+}
+
+/* 10392:18700 — three source cards */
+.rv3-src {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, 1fr);
+  padding-top: 24px;
+}
+.rv3-src__card {
+  background: #fff;
+  border: 1px solid rgba(22, 16, 33, 0.08);
+  border-radius: 14px;
+  box-shadow: 0 10px 24px rgba(22, 16, 33, 0.04);
+  padding: 12px 10px;
+}
+.rv3-src__title {
+  color: var(--rv3-ink);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 16px;
+  margin: 0 0 4px;
+}
+.rv3-src__body {
+  color: var(--rv3-muted);
+  font-size: 11px;
+  line-height: 15px;
+  margin: 0;
+}
+.rv3-method__outro {
+  padding-top: 28px;
+}
+/* 10392:18730 — the hairline that closes the methodology block */
+.rv3-method__rule {
+  background: rgba(22, 16, 33, 0.1);
+  height: 1px;
+  margin-top: 24px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rv3-sci__dots span {
+    transition-duration: 1ms;
+  }
+}
+
+/* ── Snapshot heading + "How you compare" — 10392:19224 / 19272 ─── */
+.rv3-snapshot-heading {
+  color: var(--rv3-ink);
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.24px;
+  line-height: 24px;
+  margin: 20px 0 20px;
+}
+/* V3 keeps V1's gradient-border card (its angle was fitted from the frame's own
+ * border pixels — better sourced than a single-edge sample) and changes only
+ * what Figma 10392:19272 moves: the padding, and stacking the three stats in one
+ * centred column instead of V1's side-by-side columns. */
+.rv3 .report-snapshot-compare {
+  margin-top: 20px;
+  padding: 32px 27px 18px;
+}
+.rv3 .report-snapshot-compare__cols {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding-top: 22px;
+}
+.rv3 .report-snapshot-compare__col {
+  align-items: center;
+  text-align: center;
+  width: 100%;
+}
+.rv3 .report-snapshot-compare__eyebrow {
+  color: var(--rv3-violet-ink);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 2.31px;
+  line-height: 21.45px;
+  margin: 0;
+  text-transform: uppercase;
+}
+.rv3 .report-snapshot-compare__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding-top: 22px;
+}
+.rv3 .report-snapshot-compare__row {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rv3 .report-snapshot-compare__rail {
+  display: flex;
+  gap: 5px;
+  height: 12px;
+  align-items: center;
+}
+.rv3 .report-snapshot-compare__rail span {
+  background: rgba(107, 91, 149, 0.22);
+  border-radius: 9999px;
+  height: 8px;
+  width: 8px;
+}
+.rv3 .report-snapshot-compare__rail span.is-on {
+  background: #d63200;
+}
+.rv3 .report-snapshot-compare__stat {
+  color: var(--rv3-violet-ink);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1.7px;
+  line-height: 21.45px;
+  margin: 0;
+  padding-top: 4px;
+  text-align: center;
+  text-transform: uppercase;
+}
+.rv3 .report-snapshot-compare__caption {
+  color: var(--rv3-muted);
+  font-size: 13px;
+  line-height: 17.55px;
+  margin: 0;
+  text-align: center;
+}
+
+/* V3 renames "What this means for you" to "Summary of the <archetype>"
+ * (Figma 10392:19204) and drops V1's own heading for it. */
+.rv3 #means_for_you .report-section__title,
+.rv3 #means_for_you .report-means__heading {
+  display: none;
+}
+.rv3-snap {
+  padding-top: 20px;
+}
+
+/* Figma types these against "Spark Seeker"; longer archetype names ("Relational
+ * Nurturer", "Minimalist Companion") overrun 393px on one line, so the title
+ * wraps and centres instead of clipping. */
+.rv3-part {
+  height: auto;
+  min-height: 148px;
+}
+.rv3-part__title {
+  left: 0;
+  max-width: 100%;
+  padding: 0 8px;
+  transform: none;
+  white-space: normal;
+  width: 100%;
+}
+.rv3-part__eyebrow {
+  left: 0;
+  transform: none;
+  width: 100%;
+}
+
+/* ── Closing summary — 10392:25297 ──────────────────────────────── */
+.rv3-endsummary {
+  padding: 33px 0 40px;
+  position: relative;
+}
+.rv3-endsummary__label {
+  color: var(--rv3-ink);
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.24px;
+  line-height: 22px;
+  margin: 0;
+}
+.rv3-endsummary__lede {
+  color: var(--rv3-ink);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 28px;
+  margin: 8px 0 0;
+}
+.rv3-endsummary__lede span {
+  color: var(--rv3-violet);
+}
+.rv3-endsummary__body {
+  padding-top: 21px;
+}
+
+/* ── Chapter 2.1 · Accelerators & Brakes — Figma 10392:19343 ─────
+ * Two tones drive everything: brakes #c2542f, accelerators #2e7d5b. Every tint
+ * below is one of those at the alpha Figma specifies. */
+.rv3-accel {
+  --rv3-shut: 194, 84, 47;
+  --rv3-open: 46, 125, 91;
+}
+.rv3-accel__intro {
+  color: var(--rv3-copy);
+  font-size: 16px;
+  line-height: 25.6px;
+  margin: 22px 0;
+}
+
+/* Hero — 10392:19344 */
+.rv3-accel-hero {
+  background:
+    linear-gradient(
+      90deg,
+      rgba(var(--rv3-open), 0.1) 0%,
+      rgba(255, 255, 255, 0) 50%,
+      rgba(var(--rv3-shut), 0.14) 100%
+    ),
+    #fff;
+  border: 1px solid rgba(22, 16, 33, 0.09);
+  border-radius: 22px;
+  box-shadow: 0 10px 15px -3px rgba(22, 16, 33, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+  padding: 20px 18px 18px;
+}
+.rv3-accel-hero__eyebrow {
+  color: #a29daf;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.6px;
+  line-height: 1.4;
+  margin: 0;
+  text-transform: uppercase;
+}
+.rv3-accel-hero__headline {
+  color: var(--rv3-ink);
+  font-family: var(--font-serif);
+  font-size: 27px;
+  font-weight: 500;
+  letter-spacing: -0.54px;
+  line-height: 1.14;
+  margin: 0;
+}
+.rv3-accel-hero__side--shut {
+  color: #c2542f;
+}
+.rv3-accel-hero__side--open {
+  color: #2e7d5b;
+}
+.rv3-accel-hero__sub {
+  color: var(--rv3-copy);
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 1.5;
+  margin: 0;
+}
+.rv3-accel-gauge {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding-top: 10px;
+}
+.rv3-accel-gauge__track {
+  background: linear-gradient(
+    90deg,
+    rgba(var(--rv3-open), 0.3) 0%,
+    rgba(22, 16, 33, 0.07) 50%,
+    rgba(var(--rv3-shut), 0.34) 100%
+  );
+  border-radius: 5px;
+  height: 10px;
+  position: relative;
+}
+.rv3-accel-gauge__tick {
+  background: rgba(22, 16, 33, 0.16);
+  height: 18px;
+  left: calc(50% + 1px);
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 1px;
+}
+/* Travels from centre to the reading on reveal; `--dot` is the resting value so
+ * an un-revealed gauge is never wrong. */
+.rv3-accel-gauge__needle {
+  background: #c2542f;
+  border: 2px solid #fff;
+  border-radius: 9999px;
+  box-shadow: 0 0 0 1px rgba(var(--rv3-shut), 0.5);
+  height: 16px;
+  left: var(--dot);
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  transition: left 900ms cubic-bezier(0.22, 1, 0.36, 1);
+  width: 16px;
+}
+.report-chart-reveal:not(.is-revealed) .rv3-accel-gauge__needle {
+  left: 50%;
+}
+.rv3-accel-gauge__ends {
+  display: flex;
+  justify-content: space-between;
+}
+.rv3-accel-gauge__end {
+  align-items: center;
+  display: flex;
+  font-size: 9.5px;
+  font-weight: 800;
+  gap: 6px;
+  letter-spacing: 1.045px;
+  text-transform: uppercase;
+}
+.rv3-accel-gauge__end svg {
+  height: 15px;
+  width: 15px;
+}
+.rv3-accel-gauge__end--open {
+  color: #2e7d5b;
+}
+.rv3-accel-gauge__end--shut {
+  color: #c2542f;
+}
+
+/* Trigger cards — 10392:19367 (shuts) / 19413 (opens) */
+.rv3-accel-card {
+  border-radius: 20px;
+  margin-top: 22px;
+  overflow: hidden;
+}
+.rv3-accel-card--shut {
+  background: rgba(var(--rv3-shut), 0.04);
+  border: 1px solid rgba(var(--rv3-shut), 0.24);
+  --tone: var(--rv3-shut);
+  --tone-ink: #c2542f;
+}
+.rv3-accel-card--open {
+  background: rgba(var(--rv3-open), 0.04);
+  border: 1px solid rgba(var(--rv3-open), 0.24);
+  --tone: var(--rv3-open);
+  --tone-ink: #2e7d5b;
+}
+.rv3-accel-card__head {
+  align-items: center;
+  background: rgba(var(--tone), 0.11);
+  border-bottom: 1px solid rgba(var(--tone), 0.2);
+  display: flex;
+  gap: 11px;
+  padding: 14px 15px;
+}
+.rv3-accel-card__badge {
+  align-items: center;
+  background: rgba(var(--tone), 0.14);
+  border: 1px solid rgba(var(--tone), 0.26);
+  border-radius: 9px;
+  color: var(--tone-ink);
+  display: flex;
+  flex-shrink: 0;
+  height: 26px;
+  justify-content: center;
+  width: 26px;
+}
+.rv3-accel-card__badge svg {
+  height: 16px;
+  width: 16px;
+}
+.rv3-accel-card__title {
+  color: var(--tone-ink);
+  flex: 1 0 0;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.43px;
+  line-height: 1.3;
+  margin: 0;
+  text-transform: uppercase;
+}
+.rv3-accel-card__count {
+  color: var(--tone-ink);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  line-height: 1.3;
+  margin: 0;
+  opacity: 0.7;
+}
+.rv3-accel-card__rows {
+  padding: 2px 15px 14px;
+}
+.rv3-accel-row {
+  border-bottom: 1px solid rgba(var(--tone), 0.14);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 13px 0;
+}
+.rv3-accel-row:last-child {
+  border-bottom: 0;
+}
+.rv3-accel-row__label {
+  margin: 0;
+}
+.rv3-accel-row--lead .rv3-accel-row__label {
+  color: var(--rv3-ink);
+  font-family: var(--font-serif);
+  font-size: 21px;
+  font-weight: 500;
+  letter-spacing: -0.42px;
+  line-height: 1.2;
+}
+.rv3-accel-row--strong .rv3-accel-row__label {
+  color: var(--rv3-ink);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.34;
+}
+.rv3-accel-row--also .rv3-accel-row__label {
+  color: #4a4557;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.34;
+}
+.rv3-accel-row__sub {
+  font-weight: 300;
+  line-height: 1.45;
+  margin: 0;
+}
+.rv3-accel-row--lead .rv3-accel-row__sub {
+  color: var(--rv3-copy);
+  font-size: 13.5px;
+}
+.rv3-accel-row--strong .rv3-accel-row__sub {
+  color: var(--rv3-muted);
+  font-size: 12.5px;
+}
+.rv3-accel-row--also .rv3-accel-row__sub {
+  color: #8f8a9c;
+  font-size: 12px;
+}
+.rv3-accel-row__scale {
+  height: 10px;
+  position: relative;
+}
+.rv3-accel-row__track,
+.rv3-accel-row__fill {
+  border-radius: 2.5px;
+  bottom: 0;
+  height: 5px;
+  left: 0;
+  position: absolute;
+}
+.rv3-accel-row__track {
+  background: rgba(var(--tone), 0.12);
+  right: 0;
+}
+.rv3-accel-row__fill {
+  background: rgba(var(--tone), 0.6);
+  /* Each bar grows a beat after the one above it. */
+  transform-origin: left center;
+  transition: transform 700ms cubic-bezier(0.22, 1, 0.36, 1) calc(var(--row, 0) * 70ms);
+}
+.report-chart-reveal:not(.is-revealed) .rv3-accel-row__fill {
+  transform: scaleX(0);
+}
+.rv3-accel-card__note-wrap {
+  padding: 0 15px 14px;
+}
+.rv3-accel-card__note {
+  align-items: flex-start;
+  background: rgba(var(--tone), 0.09);
+  border: 1px solid rgba(var(--tone), 0.22);
+  border-radius: 12px;
+  color: var(--rv3-copy);
+  display: flex;
+  font-size: 12.5px;
+  gap: 9px;
+  line-height: 1.45;
+  margin: 0;
+  padding: 11px 13px;
+}
+.rv3-accel-card__note strong {
+  color: var(--rv3-ink);
+  font-weight: 700;
+}
+.rv3-accel-card__mark {
+  align-items: center;
+  background: rgba(var(--tone), 0.13);
+  border-radius: 5px;
+  color: var(--tone-ink);
+  display: flex;
+  flex-shrink: 0;
+  height: 15px;
+  justify-content: center;
+  width: 15px;
+}
+.rv3-accel-card__mark svg {
+  height: 11px;
+  width: 11px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rv3-accel-gauge__needle,
+  .rv3-accel-row__fill {
+    transition-duration: 1ms;
+  }
+  .report-chart-reveal:not(.is-revealed) .rv3-accel-row__fill {
+    transform: none;
+  }
+  .report-chart-reveal:not(.is-revealed) .rv3-accel-gauge__needle {
+    left: var(--dot);
+  }
+}
+
+/* ── Chapter 2.2 · Typical Beliefs — Figma 10392:19945 ───────────
+ * A belief "turns" from limiting (dark italic) to supportive (green italic) as
+ * the reader scrolls past it. The crossfade + the rule filling from the top ARE
+ * the mid-scroll state the frame captures, so the transition needs no separate
+ * markup. */
+.rv3-beliefs {
+  padding: 26px 0 40px;
+}
+.rv3-beliefs__head {
+  align-items: flex-start;
+  display: flex;
+  gap: 9px;
+  padding-top: 24px;
+}
+.rv3-beliefs__eyebrow {
+  color: #c2542f;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 1.575px;
+  margin: 0 0 3px;
+  text-transform: uppercase;
+}
+.rv3-beliefs__sub {
+  color: var(--rv3-muted);
+  font-size: 12.5px;
+  font-weight: 300;
+  line-height: 17px;
+  margin: 0;
+}
+.rv3-beliefs__count {
+  background: rgba(194, 84, 47, 0.11);
+  border: 1px solid rgba(194, 84, 47, 0.24);
+  border-radius: 999px;
+  color: #c2542f;
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.63px;
+  padding: 2px 8px;
+}
+.rv3-beliefs__band {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 14px 0 4px;
+}
+.rv3-beliefs__band-left,
+.rv3-beliefs__band-right {
+  align-items: center;
+  display: flex;
+  font-size: 11px;
+  font-weight: 700;
+  gap: 6px;
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+}
+.rv3-beliefs__band-left {
+  color: #c2542f;
+}
+.rv3-beliefs__band-right {
+  color: #2e7d5b;
+}
+.rv3-beliefs__dot {
+  border-radius: 999px;
+  height: 7px;
+  width: 7px;
+}
+.rv3-beliefs__dot--shut {
+  background: #c2542f;
+}
+.rv3-beliefs__dot--open {
+  background: #2e7d5b;
+}
+.rv3-beliefs__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 10px;
+}
+.rv3-belief {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  padding: 15px 0;
+}
+.rv3-belief__rule {
+  align-self: stretch;
+  background: rgba(194, 84, 47, 0.42);
+  border-radius: 3px;
+  flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
+  width: 2.5px;
+}
+/* Fills top-down as the belief turns — the partially-filled rule in the frame
+ * is this transition caught mid-way. */
+.rv3-belief__rule-fill {
+  background: #2e7d5b;
+  border-radius: 3px;
+  height: 0;
+  left: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+  transition: height 620ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.rv3-belief.is-on .rv3-belief__rule-fill {
+  height: 100%;
+}
+/* The two lines occupy the same grid cell so one can cross-fade into the other
+ * without the row jumping height. */
+.rv3-belief__text {
+  display: grid;
+  flex: 1 0 0;
+  min-width: 0;
+}
+.rv3-belief__was,
+.rv3-belief__now {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-style: italic;
+  grid-area: 1 / 1;
+  line-height: 22px;
+  margin: 0;
+  transition: opacity 620ms ease;
+}
+.rv3-belief__was {
+  color: var(--rv3-ink);
+}
+.rv3-belief__now {
+  color: #2e7d5b;
+  opacity: 0;
+}
+.rv3-belief.is-on .rv3-belief__was {
+  opacity: 0;
+}
+.rv3-belief.is-on .rv3-belief__now {
+  opacity: 1;
+}
+.rv3-belief__chip {
+  align-items: center;
+  color: #2e7d5b;
+  display: flex;
+  font-size: 9px;
+  font-weight: 800;
+  gap: 5px;
+  grid-area: 2 / 1;
+  letter-spacing: 1.26px;
+  margin-top: 7px;
+  opacity: 0;
+  text-transform: uppercase;
+  transition: opacity 620ms ease;
+}
+.rv3-belief.is-on .rv3-belief__chip {
+  opacity: 1;
+}
+.rv3-belief__chip svg {
+  height: 9px;
+  width: 9px;
+}
+
+/* card/keeps — 10392:20020 */
+.rv3-keeps {
+  background:
+    linear-gradient(180deg, rgba(46, 125, 91, 0.11) 0%, rgba(46, 125, 91, 0.03) 100%),
+    #fff;
+  border: 1px solid rgba(46, 125, 91, 0.26);
+  border-radius: 20px;
+  box-shadow: 0 6px 14px -8px rgba(46, 125, 91, 0.34);
+  margin-top: 26px;
+  overflow: hidden;
+}
+.rv3-keeps__head {
+  align-items: center;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 13px;
+  padding: 16px 16px 15px;
+  text-align: left;
+  width: 100%;
+}
+.rv3-keeps__num {
+  align-items: center;
+  background: rgba(46, 125, 91, 0.15);
+  border: 1px solid rgba(46, 125, 91, 0.26);
+  border-radius: 14px;
+  color: #2e7d5b;
+  display: flex;
+  flex-shrink: 0;
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 500;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+.rv3-keeps__head-text {
+  display: flex;
+  flex: 1 0 0;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.rv3-keeps__title {
+  color: #23503f;
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: -0.145px;
+  line-height: 19px;
+}
+.rv3-keeps__sub {
+  color: #5c7a6d;
+  font-size: 12.5px;
+  font-weight: 300;
+}
+.rv3-keeps__chev {
+  color: #2e7d5b;
+  flex-shrink: 0;
+  height: 17px;
+  transition: transform 260ms ease;
+  width: 17px;
+}
+.rv3-keeps:not(.is-open) .rv3-keeps__chev {
+  transform: rotate(180deg);
+}
+.rv3-keeps__body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 320ms ease;
+}
+.rv3-keeps.is-open .rv3-keeps__body {
+  grid-template-rows: 1fr;
+}
+.rv3-keeps__body > div {
+  min-height: 0;
+  overflow: hidden;
+}
+.rv3-keeps__list {
+  list-style: none;
+  margin: 0;
+  padding: 0 16px 8px;
+}
+.rv3-keeps__list li {
+  align-items: center;
+  border-top: 1px solid rgba(46, 125, 91, 0.15);
+  color: #1d3a2f;
+  display: flex;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-style: italic;
+  gap: 11px;
+  line-height: 20.5px;
+  padding: 11px 0;
+}
+.rv3-keeps__tick {
+  align-items: center;
+  background: rgba(46, 125, 91, 0.16);
+  border-radius: 999px;
+  color: #2e7d5b;
+  display: flex;
+  flex-shrink: 0;
+  height: 20px;
+  justify-content: center;
+  width: 20px;
+}
+.rv3-keeps__tick svg {
+  height: 9px;
+  width: 9px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rv3-belief__rule-fill,
+  .rv3-belief__was,
+  .rv3-belief__now,
+  .rv3-belief__chip,
+  .rv3-keeps__chev,
+  .rv3-keeps__body {
+    transition-duration: 1ms;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════
+ * SHARED CHAPTER INTERNALS
+ *
+ * Chapters 2.3-5.6 are not new components the way 2.1 and 2.2 are — reading
+ * their frames (e.g. 2.4 at 10392:20223) shows V3 presents the SAME charts and
+ * copy V1 already renders, in a lighter, more typographic dress: one calm white
+ * card, a serif result word, violet-ink section eyebrows, and 16/25.6 prose,
+ * with V1's "What you will learn" pill replaced by a plain opening paragraph.
+ *
+ * V1's section markup is consistent enough to restyle in one place — 18 of the
+ * sections share `__card`, `__learn-pill*`, `__details*`, `__result`,
+ * `__eyebrow` and `__verdict`. Only typography and card chrome are touched
+ * here; layout and every chart are left to the section that owns them.
+ *
+ * Values are the V3 primitives read off Figma:
+ *   result word   Lora Medium 22 / 23.1, -0.34,  #6b6678   (10392:20226)
+ *   section label Manrope 800  13 / 19.5,  1.6,  #6b5b95   (10392:20289)
+ *   body prose    Manrope 400  16 / 25.6,        #3f3a4d   (10392:20291)
+ * ════════════════════════════════════════════════════════════════ */
+
+/* The pill is a V1 device; V3 opens a chapter with plain prose. */
+.rv3 .rv3-chapter [class$="__learn-pill"],
+.rv3 .rv3-chapter [class$="__learn-pill-icon"] {
+  display: none;
+}
+.rv3 .rv3-chapter [class$="__learn-pill-wrap"] {
+  display: block;
+  padding: 12px 0 0;
+}
+.rv3 .rv3-chapter [class$="__learn-body"] {
+  color: var(--rv3-copy);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 25.6px;
+  margin: 0;
+}
+
+/* One calm card per chapter rather than V1's tinted, nested panels. */
+.rv3 .rv3-chapter [class$="__card"] {
+  background: #fff;
+  border: 1px solid rgba(22, 16, 33, 0.09);
+  border-radius: 22px;
+  box-shadow: 0 10px 15px -3px rgba(22, 16, 33, 0.1);
+  margin-top: 22px;
+}
+
+.rv3 .rv3-chapter [class$="__result"] {
+  color: var(--rv3-muted);
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.34px;
+  line-height: 23.1px;
+}
+.rv3 .rv3-chapter [class$="__eyebrow"],
+.rv3 .rv3-chapter [class$="__result-eyebrow"],
+.rv3 .rv3-chapter [class$="__details-eyebrow"] {
+  color: var(--rv3-violet-ink);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 1.6px;
+  line-height: 19.5px;
+  text-transform: uppercase;
+}
+.rv3 .rv3-chapter [class$="__body"] p,
+.rv3 .rv3-chapter [class$="__details-para"],
+.rv3 .rv3-chapter [class$="__details-teaser"] {
+  color: var(--rv3-copy);
+  font-size: 16px;
+  line-height: 25.6px;
+}
+
+/* The "Learn: …" collapsible keeps V1's behaviour and takes V3's chrome. */
+.rv3 .rv3-chapter [class$="__details"] {
+  border: 1px solid rgba(121, 95, 200, 0.18);
+  border-radius: 18px;
+  /* Some sections give this block a negative inline margin so V1's card can
+   * bleed it edge to edge. Adding a border to that made it 6px wider than the
+   * column, so the box is pinned back inside. */
+  box-sizing: border-box;
+  margin-left: 0;
+  margin-right: 0;
+  margin-top: 22px;
+  max-width: 100%;
+  overflow: hidden;
+}
+.rv3 .rv3-chapter [class$="__details-summary"] {
+  background: rgba(121, 95, 200, 0.05);
+  padding: 14px 16px;
+}
+
+@media (min-width: 1280px) {
+  .rv3 .rv3-chapter [class$="__learn-body"],
+  .rv3 .rv3-chapter [class$="__body"] p,
+  .rv3 .rv3-chapter [class$="__details-para"] {
+    font-size: 17px;
+    line-height: 28px;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════
+ * DESKTOP
+ *
+ * The designer supplied only the 393 mobile board, so this is an original
+ * desktop treatment built from V3's own vocabulary rather than a guess at an
+ * unseen frame. Three rules drive it:
+ *
+ *   1. Reading measure stays close to mobile. V3's type is tuned for a 361px
+ *      column; stretching prose to 1024px is what made the interim look wrong.
+ *      The column grows to 680 — roughly 75 characters at 16px — and no wider.
+ *   2. Things that are lists on mobile become grids where the extra width
+ *      genuinely helps: the science deck stops scrolling and lays out, and the
+ *      three source cards spread.
+ *   3. Everything centred on mobile stays centred on the COLUMN, not the
+ *      viewport, so the glows and part dividers keep their relationship to the
+ *      text (this is why the glow is a centre offset rather than left:14.5).
+ * ════════════════════════════════════════════════════════════════ */
+@media (min-width: 1280px) {
+  .rv3 .report-content {
+    margin-inline: auto;
+    max-width: 680px;
+    padding-bottom: 80px;
+    padding-top: 56px;
+  }
+
+  /* Chapters get more air between them than the 22px mobile stack. */
+  .rv3-chapter {
+    padding-top: 44px;
+  }
+  .rv3-chapter__title {
+    font-size: 26px;
+    line-height: 33px;
+  }
+  .rv3-chapter__body-inner {
+    padding-top: 18px;
+  }
+
+  /* Part dividers become full-bleed bands so the parts read as real chapters
+   * of a book rather than another paragraph. */
+  .rv3-part {
+    min-height: 208px;
+  }
+  .rv3-part__eyebrow {
+    top: 74px;
+  }
+  .rv3-part__title {
+    font-size: 30px;
+    line-height: 34px;
+    top: 108px;
+  }
+  .rv3-glow::before {
+    height: 300px;
+    margin-left: -240px;
+    width: 480px;
+  }
+  .rv3-intro-heading {
+    height: 168px;
+  }
+  .rv3-intro-heading__text {
+    font-size: 28px;
+    line-height: 31px;
+    top: 68px;
+  }
+
+  /* The deck has room to sit as a grid, so it stops being a swipe surface. */
+  .rv3-sci__track {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(3, 1fr);
+    margin: 0;
+    overflow: visible;
+    padding: 6px 0;
+  }
+  .rv3-sci__card {
+    flex: initial;
+    height: auto;
+    min-height: 276px;
+  }
+  .rv3-sci__dots {
+    display: none;
+  }
+
+  .rv3-src {
+    gap: 14px;
+  }
+
+  /* Body copy gains a little size at the wider measure. */
+  .rv3-prose {
+    font-size: 17px;
+    line-height: 28px;
+  }
+  .rv3-method__heading {
+    font-size: 30px;
+    line-height: 36px;
+  }
+}
+
+/* Between the mobile column and the sidebar breakpoint, keep the single column
+ * but let it use the room — otherwise a tablet renders a 393 strip in a sea of
+ * white. */
+@media (min-width: 700px) and (max-width: 1279px) {
+  .rv3 .report-content {
+    max-width: 620px;
+  }
+  .rv3-sci__track {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(2, 1fr);
+    margin: 0;
+    overflow: visible;
+  }
+  .rv3-sci__card {
+    flex: initial;
+    height: auto;
+    min-height: 276px;
+  }
+  .rv3-sci__dots {
+    display: none;
+  }
+  .rv3-glow::before {
+    margin-left: -200px;
+    width: 400px;
+  }
+}
+
+/* The Sexual Stage chip rail is sized for V1's wider column and does not wrap,
+ * so it overhangs V3's 680px measure. Everything else that is wider than the
+ * column (notably the Fantasy practice table) already scrolls inside its own
+ * shell in V1, so it needs nothing here. */
+@media (min-width: 1280px) {
+  .rv3 .stage-explorer__chip-slot,
+  .rv3 .stage-explorer__chip-row {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+  .rv3 .stage-explorer__chip,
+  .rv3 .stage-explorer__chip-detail {
+    max-width: 100%;
+    min-width: 0;
+  }
+}
+
+/* Chapter lede — V3 opens a chapter with plain prose where V1 uses a
+ * "What you will learn" pill (Figma 10392:19605 and its siblings). */
+.rv3-chapter__lede {
+  color: var(--rv3-copy);
+  font-size: 16px;
+  line-height: 25.6px;
+  margin: 0;
+  padding-top: 12px;
+}
