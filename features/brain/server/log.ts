@@ -146,3 +146,108 @@ export async function questionsToday(): Promise<number | null> {
     return null;
   }
 }
+
+/**
+ * Emails, in any string. `brain_chunk`'s own migration promises "NO PII BEYOND
+ * WHAT SLACK ALREADY HAS ... not a name or email" of this table, and that promise
+ * was written when the only writer was the Slack route, whose arguments are a
+ * question and a Slack user id.
+ *
+ * The MCP door can carry more: `query_product_data` takes `filters` and `params`,
+ * so a perfectly ordinary call is `filters: ["email=eq.someone@example.com"]` --
+ * a customer's address, logged verbatim, into a table that promised it holds
+ * none. Redacting the VALUE keeps the promise while keeping the diagnostic:
+ * `["email=eq.[email]"]` still says which column was filtered and how, which is
+ * everything needed to reproduce a call that returned nothing.
+ */
+const EMAIL_IN_TEXT = /[\w.+-]+@[\w-]+\.[\w.-]+/g;
+
+/** Enough to reproduce a call; far short of storing a second copy of its payload. */
+const MAX_ARGS_CHARS = 2000;
+
+/**
+ * Tool arguments, redacted and capped, as something `jsonb` will accept.
+ *
+ * Returns a `{ truncated }` wrapper rather than repairing cut JSON. A half-object
+ * patched back to validity is a lie about what was sent, and this column exists
+ * to reproduce calls.
+ */
+function safeArgs(args: Record<string, unknown> | null | undefined): unknown {
+  if (!args || Object.keys(args).length === 0) return null;
+  let json: string;
+  try {
+    json = JSON.stringify(args) ?? "null";
+  } catch {
+    // Circular or otherwise unserialisable. Say so rather than dropping the row.
+    return { unserialisable: true };
+  }
+  const redacted = json.replace(EMAIL_IN_TEXT, "[email]");
+  if (redacted.length > MAX_ARGS_CHARS) {
+    return { truncated: redacted.slice(0, MAX_ARGS_CHARS) };
+  }
+  try {
+    return JSON.parse(redacted) as unknown;
+  } catch {
+    // Redaction cannot produce invalid JSON (it only rewrites inside strings), so
+    // this is unreachable in practice -- but a logging helper must not be the
+    // thing that throws.
+    return { truncated: redacted };
+  }
+}
+
+/**
+ * One row per MCP tool call, written AFTER the response has been flushed.
+ *
+ * A single INSERT rather than `claimQuestion` + `finishQuestion`: that pair's two
+ * round trips exist to survive Slack redelivering an un-acked event, and a
+ * JSON-RPC `tools/call` is never redelivered. There is nothing to claim, so the
+ * second round trip would buy nothing and cost latency on the door that is now
+ * the primary interface.
+ *
+ * `surface` is what makes the two doors separable in one table; it defaults to
+ * 'slack' in the schema, so nothing on the Slack path changed.
+ *
+ * NEVER THROWS. The caller wraps this in `scheduleAfterResponse`, which already
+ * catches -- this catches too, because losing a log line must never be able to
+ * cost an answer, and a second guard here is cheaper than reasoning about which
+ * one fires first.
+ */
+export async function recordToolCall(input: {
+  tool: string;
+  /** The human-meaningful argument: the search query, the document id, the table. */
+  question: string;
+  args?: Record<string, unknown> | null;
+  sourceCount?: number | null;
+  topScore?: number | null;
+  latencyMs: number;
+  error?: string | null;
+}): Promise<void> {
+  try {
+    await supabaseFetch("/rest/v1/brain_query", {
+      method: "POST",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        surface: "mcp",
+        tool: input.tool.slice(0, 100),
+        // Redacted like `args`, and for the same reason: `question` is a copy of
+        // the search query or the table name, so redacting one and not the other
+        // would store the address anyway and the promise would be theatre.
+        question: input.question.replace(EMAIL_IN_TEXT, "[email]").slice(0, 4000),
+        args: safeArgs(input.args),
+        source_count: input.sourceCount ?? null,
+        // A finite check, not `?? null`: NaN and Infinity are not valid JSON and
+        // PostgREST rejects the whole row, which would lose the record entirely.
+        top_score:
+          typeof input.topScore === "number" && Number.isFinite(input.topScore)
+            ? input.topScore
+            : null,
+        latency_ms: input.latencyMs,
+        error: input.error ? input.error.slice(0, 500) : null,
+        // Set on insert: unlike the Slack path there is no later PATCH to fill it.
+        answered_at: new Date().toISOString(),
+      }),
+    });
+  } catch (err) {
+    logger.warn({ err, tool: input.tool }, "mcp: could not record the tool call");
+  }
+}

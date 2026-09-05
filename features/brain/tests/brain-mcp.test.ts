@@ -30,10 +30,36 @@ vi.mock("@shared/http/ratelimit", () => ({
   getClientIp: () => "1.2.3.4",
 }));
 
+import { flushAfterResponse } from "@shared/http/after-response";
+import { recordToolCall } from "@features/brain/server/log";
 import { POST } from "@/app/api/mcp/route";
 import { CorpusUnavailableError } from "@features/brain/server/retrieve";
 
 const TOKEN = "test-token-0123456789";
+
+/**
+ * The Supabase calls the TOOL made, excluding the `brain_query` row that every
+ * call now writes after the response.
+ *
+ * Needed because the log write lands on the same mock. Without the filter,
+ * `.at(-1)` is the log write rather than the query under test, and
+ * `not.toHaveBeenCalled()` can never hold again — which would silently turn the
+ * rpc-writer refusal below into an assertion that passes for the wrong reason.
+ */
+function toolCalls(): unknown[][] {
+  return mockSupabaseFetch.mock.calls.filter(
+    ([path]) => !String(path).startsWith("/rest/v1/brain_query")
+  );
+}
+
+/** The `brain_query` rows written so far, decoded, oldest first. */
+function writes(): Array<Record<string, unknown>> {
+  return mockSupabaseFetch.mock.calls
+    .filter(([path]) => String(path).startsWith("/rest/v1/brain_query"))
+    .map(
+      ([, init]) => JSON.parse(String((init as { body: string }).body)) as Record<string, unknown>
+    );
+}
 
 function rpc(body: unknown, token: string | null = TOKEN): Request {
   return new Request("https://www.loveiq.org/api/mcp", {
@@ -190,6 +216,157 @@ describe("/api/mcp", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.result.isError).toBe(true);
+    });
+  });
+
+  describe("recording every call in brain_query", () => {
+    /**
+     * Until this landed, a successful `tools/call` wrote no row and logged no
+     * line. `brain_query` held ONE row in its entire history -- from Slack, from
+     * 2026-08-28 -- while the MCP door served every real question. Nothing could
+     * say what the team asks, which answers came back empty, or whether a change
+     * to ranking helped. Every later change to retrieval is a claim that needs
+     * this instrument to be checkable at all.
+     */
+    const call = (args: Record<string, unknown>) =>
+      POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 30,
+          method: "tools/call",
+          params: { name: "search_company_context", arguments: args },
+        })
+      );
+
+    beforeEach(() => {
+      mockSupabaseFetch.mockResolvedValue({
+        ok: true,
+        headers: new Headers(),
+        json: async () => [],
+      });
+    });
+
+    it("records the tool, the question and what came back", async () => {
+      mockRetrieve.mockResolvedValue([
+        { source: "doc", sourceId: "a", title: "t", url: null, body: "b", meta: {}, score: 2.5 },
+        {
+          source: "commit",
+          sourceId: "b",
+          title: "u",
+          url: null,
+          body: "c",
+          meta: {},
+          score: 1.25,
+        },
+      ]);
+      const body = await (await call({ query: "what is our revenue" })).json();
+      expect(body.result.isError).toBe(false);
+
+      await flushAfterResponse();
+      const rows = writes();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        surface: "mcp",
+        tool: "search_company_context",
+        question: "what is our revenue",
+        source_count: 2,
+        // The BEST score, not the last one -- the cheapest signal that retrieval
+        // is degrading is the top hit's score, and reading the wrong end of the
+        // array would report a healthy search as a failing one.
+        top_score: 2.5,
+        error: null,
+      });
+      expect(typeof rows[0]!.latency_ms).toBe("number");
+    });
+
+    it("records a refusal with the refusal text, which is the diagnosis", async () => {
+      const body = await (await call({ query: " " })).json();
+      expect(body.result.isError).toBe(true);
+
+      await flushAfterResponse();
+      const rows = writes();
+      expect(rows).toHaveLength(1);
+      expect(String(rows[0]!.error)).toMatch(/at least two characters/);
+      expect(rows[0]!.tool).toBe("search_company_context");
+    });
+
+    it("still answers when the recording write fails", async () => {
+      // The whole point of writing after the response: a bookkeeping failure must
+      // never be able to cost an answer. `finishQuestion` carries the same rule.
+      mockSupabaseFetch.mockRejectedValue(new Error("brain_query is down"));
+      mockRetrieve.mockResolvedValue([
+        { source: "doc", sourceId: "a", title: "t", url: null, body: "hello", meta: {}, score: 1 },
+      ]);
+      const body = await (await call({ query: "anything" })).json();
+      expect(body.result.isError).toBe(false);
+      expect(body.result.content[0].text).toContain("hello");
+      await expect(flushAfterResponse()).resolves.toBeUndefined();
+    });
+
+    it("never throws, even with nothing wrapping it", async () => {
+      /**
+       * `scheduleAfterResponse` catches too, so through the route this guard is
+       * invisible: removing it leaves the whole suite green. It was written that
+       * way and mutation testing caught it — a guard no test can fail is worse
+       * than none, because it gets trusted.
+       *
+       * Exercised directly because `recordToolCall` is exported, and the next
+       * caller is not obliged to wrap it.
+       */
+      mockSupabaseFetch.mockRejectedValue(new Error("brain_query is down"));
+      await expect(
+        recordToolCall({ tool: "t", question: "q", latencyMs: 1 })
+      ).resolves.toBeUndefined();
+    });
+
+    it("redacts email addresses from both the question and the arguments", async () => {
+      // `brain_chunk`'s migration promises this table holds "NO PII BEYOND WHAT
+      // SLACK ALREADY HAS ... not a name or email". That was written when the only
+      // writer was the Slack route; query_product_data takes filters, so an
+      // ordinary call carries a customer address.
+      mockRetrieve.mockResolvedValue([]);
+      await call({ query: "threads with customer@example.com about refunds" });
+
+      await flushAfterResponse();
+      const row = writes()[0]!;
+      expect(JSON.stringify(row)).not.toContain("customer@example.com");
+      expect(String(row.question)).toBe("threads with [email] about refunds");
+      expect(JSON.stringify(row.args)).toContain("[email]");
+    });
+
+    it("truncates oversized arguments instead of repairing cut JSON", async () => {
+      // A half-object patched back to validity is a lie about what was sent, and
+      // this column exists so a call can be reproduced.
+      mockRetrieve.mockResolvedValue([]);
+      await call({ query: "x".repeat(3000) });
+
+      await flushAfterResponse();
+      const args = writes()[0]!.args as Record<string, unknown>;
+      expect(typeof args.truncated).toBe("string");
+      expect(String(args.truncated).length).toBeLessThanOrEqual(2000);
+      expect(args.query).toBeUndefined();
+    });
+
+    it("records a non-search tool too, keyed on its own meaningful argument", async () => {
+      // Every tool is recorded, not just the one that happens to have a `query`.
+      mockRollup.mockResolvedValue([{ day: "2026-09-01", revenue: 10 }]);
+      await POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 31,
+          method: "tools/call",
+          params: { name: "get_business_numbers", arguments: { days: 7 } },
+        })
+      );
+      await flushAfterResponse();
+      const row = writes()[0]!;
+      expect(row.tool).toBe("get_business_numbers");
+      // No query/id/table/path on this tool, so the name is the legible fallback.
+      expect(row.question).toBe("get_business_numbers");
+      // Counted for every tool that has a natural count, so the column does not
+      // read as "this call returned nothing" when it means "nobody recorded it".
+      expect(row.source_count).toBe(1);
+      expect(row.top_score).toBeNull();
     });
   });
 
@@ -469,7 +646,7 @@ describe("/api/mcp", () => {
         order: "created_date_time.desc",
         limit: 10,
       });
-      const path = String(mockSupabaseFetch.mock.calls.at(-1)?.[0]);
+      const path = String(toolCalls().at(-1)?.[0]);
       expect(path).toContain("select=id%2Camount");
       expect(path).toContain("created_date_time=gte.2026-08-01");
       expect(path).toContain("amount=gt.0");
@@ -480,9 +657,9 @@ describe("/api/mcp", () => {
     it("caps limit at 1000 and floors it at 1", async () => {
       wire([]);
       await call({ table: "payment", limit: 99999 });
-      expect(String(mockSupabaseFetch.mock.calls.at(-1)?.[0])).toContain("limit=1000");
+      expect(String(toolCalls().at(-1)?.[0])).toContain("limit=1000");
       await call({ table: "payment", limit: -5 });
-      expect(String(mockSupabaseFetch.mock.calls.at(-1)?.[0])).toContain("limit=1");
+      expect(String(toolCalls().at(-1)?.[0])).toContain("limit=1");
     });
 
     it("surfaces a database error as a tool error rather than pretending there are no rows", async () => {
@@ -536,8 +713,20 @@ describe("/api/mcp", () => {
         expect(r.isError, fn).toBe(true);
         expect(r.content[0].text, fn).toMatch(/writes to the database/);
         // The refusal must happen BEFORE the request, not be inferred from a failure.
-        expect(mockSupabaseFetch, fn).not.toHaveBeenCalled();
+        expect(toolCalls(), fn).toHaveLength(0);
       }
+    });
+
+    it("records the row count it actually delivered, not the number fetched", async () => {
+      // `shown`, not `rows.length`: the record has to say what the caller received,
+      // or a result cut by the character ceiling reads back as a complete one.
+      wire([{ id: 1 }, { id: 2 }, { id: 3 }], { total: 3 });
+      await call({ table: "payment" });
+      await flushAfterResponse();
+      const row = writes().at(-1)!;
+      expect(row.tool).toBe("query_product_data");
+      expect(row.question).toBe("payment");
+      expect(row.source_count).toBe(3);
     });
 
     it("still calls the read-only functions, including the three non-get_* ones", async () => {
@@ -552,7 +741,7 @@ describe("/api/mcp", () => {
         mockSupabaseFetch.mockClear();
         const r = await call({ table: fn });
         expect(r.isError, fn).toBeFalsy();
-        expect(String(mockSupabaseFetch.mock.calls.at(-1)?.[0]), fn).toContain(fn);
+        expect(String(toolCalls().at(-1)?.[0]), fn).toContain(fn);
       }
     });
   });

@@ -714,7 +714,8 @@ Two consequences worth keeping in view rather than rediscovering:
   postpone deletion until we have more customers and data old enough to trim —
   as of that date 0 rows were even eligible). It only ever deletes operational
   throwaway data (abandoned survey drafts >30d, tracking events >180d, cron
-  logs >90d, invite events >180d, Stripe/Resend webhook receipts) — never
+  logs >90d, invite events >180d, company-brain question log >180d,
+  Stripe/Resend webhook receipts) — never
   submissions, answers, scoring, reports, payments, or users. **To turn on
   when ready:** (1) set `PURGE_OLD_DATA_ENABLED=true` in the prod Vercel env,
   and (2) re-add the `/api/cron/purge-old-data` entry to `vercel.json` crons

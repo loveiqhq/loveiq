@@ -18,9 +18,15 @@
  * Protected by `Authorization: Bearer ${CRON_SECRET}`. Skips on non-prod
  * cron hosts (the staging Vercel project shares the prod DB).
  *
- * Retention windows:
+ * Retention windows — the full list, because a partial one reads as complete and
+ * this block had drifted to naming three of eight:
  *   survey_partial_save     >30d   (auto-purges abandoned draft answers)
+ *   resend_webhook_event    >30d   (Svix idempotency; retry window is 5 minutes)
+ *   cron_run                >90d   (telemetry, ~5000 rows/day)
+ *   slack_dead_letter       >90d   (operational forensics)
  *   analytics_event         >180d  (engagement telemetry, no longer needed for ML/admin)
+ *   invite_event            >180d  (invite share + click attribution)
+ *   brain_query             >180d  (company-brain question log, both doors)
  *   payment_webhook_event   >365d  (Stripe events; one year is the dispute window)
  *
  * Note: rate limiter now lives in Upstash KV (per-key TTLs auto-evict) so no
@@ -74,6 +80,12 @@ const RETENTION_DAYS: RetentionRule[] = [
   // P-09: Slack dead-letter rows are operational forensics — 90 days
   // matches cron_run so a quarterly incident review still has the trail.
   { table: "slack_dead_letter", days: 90, column: "attempted_at" },
+  // Company-brain question log. Now written by the MCP door on EVERY tool call,
+  // where it was previously one Slack row a week — at the 120/min rate-limit
+  // ceiling this is the fastest-growing table in the list. 180 days is chosen to
+  // outlive a "did last quarter's ranking change help?" comparison, which is the
+  // whole reason the rows are kept.
+  { table: "brain_query", days: 180, column: "created_at" },
 ];
 
 function safeCompare(a: string, b: string): boolean {

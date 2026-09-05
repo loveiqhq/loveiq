@@ -3,9 +3,11 @@ import { NextResponse } from "next/server";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { googleCredentialShape, readVercelOidcToken } from "@shared/http/google-oauth";
 import { renderSources } from "@features/brain/server/answer";
+import { recordToolCall } from "@features/brain/server/log";
 import { brainDailyRollup } from "@features/brain/server/ingest/analytics";
 import { CorpusUnavailableError, retrieve } from "@features/brain/server/retrieve";
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { scheduleAfterResponse } from "@shared/http/after-response";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 
@@ -627,7 +629,15 @@ async function callTool(
   args: Record<string, unknown>,
   /** Vercel's per-request identity token, so the credential report tells the truth
    *  about what a REQUEST can see rather than about the (local-dev-only) env var. */
-  oidcForReport: string | null = null
+  oidcForReport: string | null = null,
+  /**
+   * Filled in by the branches that have numbers, read by POST for `brain_query`.
+   *
+   * An out-parameter rather than a widened return type: `callTool` has eight
+   * return sites, three of them mid-branch, and a third top-level key on a tool
+   * result is not something MCP defines.
+   */
+  stats: { sourceCount?: number; topScore?: number } = {}
 ) {
   if (name === "search_company_context") {
     const query = typeof args.query === "string" ? args.query : "";
@@ -657,6 +667,8 @@ async function callTool(
       );
     }
 
+    stats.sourceCount = chunks.length;
+    stats.topScore = chunks[0]?.score;
     // Was: raw `c.body`, joined by `---`. The Slack path removed that separator
     // BECAUSE a chunk could pose as the operator across it, then kept the fence,
     // `defence()` and a 24-payload forgery matrix to itself — while this door,
@@ -685,6 +697,7 @@ async function callTool(
      * 2026-04-19 — was simply unreachable through the tool that exists to serve it.
      */
     const { text: bodyText, shown } = renderRowsForTest(rows, MAX_RESULT_CHARS - 600);
+    stats.sourceCount = shown;
     const head =
       shown < covered
         ? `${shown} of ${covered} days returned — the rest did not fit the character ` +
@@ -716,6 +729,7 @@ async function callTool(
         `No table matches "${match}". Call list_product_tables with no argument to see all ${spec.size}.`
       );
     }
+    stats.sourceCount = lines.length;
     return textResult(
       `${lines.length} of ${spec.size} tables/views/functions:\n\n${lines.join("\n")}`
     );
@@ -819,6 +833,9 @@ async function callTool(
     // Reserve room for the header itself so the notice never gets cut off.
     const { text: bodyText, shown } = renderRowsForTest(rows, MAX_RESULT_CHARS - 600);
     const dropped = rows.length - shown;
+    // `shown`, not `rows.length`: the record should say what the caller received,
+    // which is the number the character ceiling actually let through.
+    stats.sourceCount = shown;
     const more = total !== null && Number(total) > offset + shown;
     const head =
       `${shown} rows returned` +
@@ -1215,14 +1232,47 @@ export async function POST(request: Request) {
   if (method === "tools/call") {
     const name = typeof params.name === "string" ? params.name : "";
     const args = (params.arguments ?? {}) as Record<string, unknown>;
+    const started = Date.now();
+    const stats: { sourceCount?: number; topScore?: number } = {};
+    let out: { content: Array<{ type: string; text: string }>; isError: boolean };
     try {
-      return result(id, await callTool(name, args, readVercelOidcToken(request)));
+      out = await callTool(name, args, readVercelOidcToken(request), stats);
     } catch (err) {
       logger.error({ err, tool: name }, "MCP tool call failed");
       // Returned as a tool RESULT, not a protocol error: the model can then say
       // what went wrong instead of the client showing a bare transport failure.
-      return result(id, textResult("That lookup failed. It has been logged.", true));
+      out = textResult("That lookup failed. It has been logged.", true);
     }
+    /**
+     * EVERY call is recorded, after the response is flushed.
+     *
+     * Until now a successful `tools/call` wrote no row and logged no line, so the
+     * only door anyone actually uses left no trace at all -- `brain_query` held a
+     * single row, from Slack, from 2026-08-28. Nothing could say what the team
+     * asks this thing, which of its answers were empty, or whether a change to
+     * ranking helped.
+     *
+     * `scheduleAfterResponse` is the house pattern (survey POST -> Slack) and
+     * already swallows and logs its own failures, so the caller waits zero
+     * milliseconds and a database blip cannot cost an answer.
+     */
+    scheduleAfterResponse("mcp-tool-call", () =>
+      recordToolCall({
+        tool: name,
+        // The one argument worth reading back at a glance, per tool. Falls back
+        // to the tool name so a no-argument call still records something legible.
+        question: String(args.query ?? args.id ?? args.table ?? args.path ?? name).slice(0, 4000),
+        args,
+        sourceCount: stats.sourceCount ?? null,
+        topScore: stats.topScore ?? null,
+        latencyMs: Date.now() - started,
+        // The refusal text IS the diagnosis -- "rpc/x writes to the database",
+        // "path must be a simple path". Storing it is what makes a bad call
+        // reproducible without the caller filing a report.
+        error: out.isError ? (out.content[0]?.text ?? "").slice(0, 500) : null,
+      })
+    );
+    return result(id, out);
   }
 
   return rpcError(id, -32601, `Method not found: ${method}`);
