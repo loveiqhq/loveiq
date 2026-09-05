@@ -212,6 +212,39 @@ describe("ingestDrive", () => {
     expect(written[0].body).toContain("We agreed to ship the paywall.");
   });
 
+  it("indexes nothing from the skip-listed documents, and everything else as before", async () => {
+    /**
+     * The list is by FILE ID on purpose. The obvious rule -- drop the big PDFs --
+     * also destroys the fourteen `LoveIQ_*_Preview.pdf` files, which are our own
+     * product, and the PhD thesis behind report copy. So the guard needs a
+     * positive control: one that skipped everything would pass a "was it skipped"
+     * assertion just as well.
+     */
+    files = [
+      {
+        ...FILE,
+        id: "1CK4rTwWyL9NPDrGNTTzy2-ElZGBuZ9PFh4eWa58b-2M",
+        name: "Pitchbook Investors Data",
+      },
+      { ...FILE, id: "1l98gvhLBXhbFf5wq3plctq7V9n-2Jx9z", name: "Come As You Are.pdf" },
+      { ...FILE, id: "1AbCdEf", name: "Notes by Gemini — Marcus / Eman 26 Aug" },
+    ];
+    await ingestDrive(STAMP);
+    const written = dbCalls
+      .filter(
+        (c) =>
+          c.method !== "GET" && c.path.includes("brain_chunk") && c.path.includes("on_conflict")
+      )
+      .flatMap((c) => JSON.parse(c.body) as Array<{ source_id: string; title: string }>);
+
+    // Positive control: the ordinary document is still indexed.
+    expect(written.map((r) => r.source_id)).toEqual(["doc:1AbCdEf"]);
+    // And the skipped ones are not fetched at all — not fetched-then-discarded,
+    // which would still spend the clock and the export quota on them.
+    expect(httpCalls.some((u) => u.includes("1CK4rTwWyL9NPDrGNTTzy2"))).toBe(false);
+    expect(httpCalls.some((u) => u.includes("1l98gvhLBXhbFf5wq3plctq7V9n-2Jx9z"))).toBe(false);
+  });
+
   it("reports NOTHING SHARED as a skip, not as an error or an empty success", async () => {
     // The service account sees only what somebody shared with it, so an empty list
     // on a fresh setup is the expected state. Treating it as a failure would fire

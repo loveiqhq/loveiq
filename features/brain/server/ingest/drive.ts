@@ -66,11 +66,53 @@ const PDF_MIME = "application/pdf";
  * one data export. Nothing stopped it, because no source caps a single document.
  * A 300-page contract fits comfortably under this; a data dump does not.
  *
- * ponytail: caps the NEW source only. The existing oversized Drive documents are
- * left alone deliberately -- shrinking them would delete indexed content nobody
- * asked to lose, and that is a call for a person, not for this change.
+ * Caps the NEW source only. The oversized documents that predate it needed a
+ * person's decision rather than a rule, and got one on 2026-09-06 --
+ * see SKIP_FILE_IDS below.
  */
 const PDF_TEXT_LIMIT = 400_000;
+
+/**
+ * Documents this ingester indexes nothing from.
+ *
+ * AN EXPLICIT ID LIST, NOT A RULE, and that is the whole point. The obvious rule
+ * -- "drop the big PDFs" -- destroys the fourteen `LoveIQ_*_Preview.pdf` files,
+ * which are 58-60 parts each of our OWN product and the only thing in the corpus
+ * that can answer what a given archetype's report actually says. It would also
+ * take the PhD thesis and the research papers, which are the sourcing behind
+ * user-facing claims. No size, extension or folder test separates those from a
+ * trade paperback; only a human reading the titles does.
+ *
+ * What is here: one investor data export at 3,242 chunks (10.5% of the entire
+ * corpus, from a spreadsheet), and fourteen third-party books at ~170 parts each.
+ * Together roughly 18% of everything indexed, none of it anything LoveIQ knows
+ * about itself -- and measured, they surface as top hits on questions they cannot
+ * answer, because a 2,400-character book page matches almost any vocabulary.
+ *
+ * Kept deliberately: the academic sources. Decision recorded 2026-09-06.
+ */
+/* eslint-disable no-secrets/no-secrets -- Google Drive FILE IDS, not credentials.
+   They appear in every Drive URL, and each is already stored in this corpus as
+   `brain_chunk.source_id` and inside each chunk's public `url`. Scoped rather
+   than file-level so a real secret added below this block is still caught. */
+const SKIP_FILE_IDS = new Set([
+  "1CK4rTwWyL9NPDrGNTTzy2-ElZGBuZ9PFh4eWa58b-2M", // Pitchbook Investors Data (3,242)
+  "1IM31OqVpLOl9Rs7Z3ndixKWeYqHX2xkp", // The 15 Commitments of Conscious Leadership.pdf
+  "1l98gvhLBXhbFf5wq3plctq7V9n-2Jx9z", // Come As You Are.pdf
+  "1RwRoB-igQqsvzE6LHno97G8WwqynTy6S", // The 7 Habits of Highly Effective People.pdf
+  "1hnM-VS1B3BAe3LHFRviEsAPRMdi3j_2z", // The Psychology of Human Sexuality.pdf
+  "1qYkpYT1qCsDVK9RLM6vFh-hYctVWa02E", // Magnificent Sex.pdf
+  "1NhDPQYzkYIqpJU3ltCnM_rK0sq3xyjSl", // Erotism.pdf
+  "1WDJ-weS-2WKa_I2oqhjGrMDpJ7jvT9mU", // Womens Anatomy of Arousal.pdf
+  "1gR4xfkr6TyPRaz0Io2m-Wf7BwufnEnx-", // Methods of Persuasion.pdf
+  "1rz74juprM1AaD6uYQGtFaATisFeiLLRA", // Why We Love.pdf
+  "13DIy7VHqC9kRej_u2Cz2esDS8AmdGD79", // Mating in Captivity.pdf
+  "1FoZvl6x7jp5Wlcik9XKfYJeXvX_Ifixt", // The Ethical Slut.pdf
+  "1bfIb9WMlptdXDXnmp551QycCI7hYlg8x", // The Hite Report.pdf
+  "1VE2ia5QOxvnXXrvP4qxWyKU1bigkFdgu", // Sex at Dawn.pdf
+  "1aSbmxqaOOmgX82AAanW-yQfC6kTBdnPp", // Bonk.pdf
+]);
+/* eslint-enable no-secrets/no-secrets */
 
 /** Below this, a pdf is a scan with no text layer, and indexing it yields a
  *  title-shaped chunk with no content. We have no OCR, so it is skipped. */
@@ -443,7 +485,14 @@ export async function ingestDrive(
   const known = await knownDriveEdits();
   const raw = await listDocs(token, isOutOfTime);
   const resolved = await resolveShortcuts(token, raw.items);
-  const listed = { items: resolved.docs, complete: raw.complete };
+  // Filtered here rather than at fetch time so the ids never reach `toFetch`,
+  // `touch` or `deferred` either: a skipped document must look absent to the
+  // sweep, not merely unfetched, or the sweep would protect the rows we are
+  // removing.
+  const listed = {
+    items: resolved.docs.filter((f) => !SKIP_FILE_IDS.has(f.id ?? "")),
+    complete: raw.complete,
+  };
 
   if (resolved.unreachable > 0 || resolved.skippedNonDoc > 0) {
     // Information, not a fault: a shortcut we cannot follow means the note lives
