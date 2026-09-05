@@ -27,7 +27,7 @@ import {
   trackPriceShown,
   type PaywallDismissSource,
 } from "@features/analytics/client";
-import { restoreScroll } from "@shared/ui/restore-scroll";
+import { lockBodyScroll, unlockBodyScroll } from "@shared/ui/body-scroll-lock";
 
 interface Props {
   accessPlan?: ReportAccessPlan;
@@ -104,17 +104,6 @@ const WHY_CARDS = [
     priceLed: true,
   },
 ] as const;
-
-interface ScrollLockState {
-  htmlOverflow: string;
-  bodyLeft: string;
-  bodyOverflow: string;
-  bodyPosition: string;
-  bodyRight: string;
-  bodyTop: string;
-  bodyWidth: string;
-  scrollY: number;
-}
 
 function PricingMethodMark({
   logo,
@@ -215,7 +204,6 @@ const ReportPricingModal: FC<Props> = ({
   const scrollRegionRef = useRef<HTMLDivElement>(null);
   const didOpenRef = useRef(false);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
-  const scrollLockRef = useRef<ScrollLockState | null>(null);
   const touchStartYRef = useRef<number | null>(null);
   const [focusMode, setFocusMode] = useState<"keyboard" | "pointer">("pointer");
 
@@ -343,25 +331,7 @@ const ReportPricingModal: FC<Props> = ({
   useEffect(() => {
     if (!open) return;
 
-    const scrollY = window.scrollY;
-    scrollLockRef.current = {
-      htmlOverflow: document.documentElement.style.overflow,
-      bodyLeft: document.body.style.left,
-      bodyOverflow: document.body.style.overflow,
-      bodyPosition: document.body.style.position,
-      bodyRight: document.body.style.right,
-      bodyTop: document.body.style.top,
-      bodyWidth: document.body.style.width,
-      scrollY,
-    };
-
-    document.documentElement.style.overflow = "hidden";
-    document.body.style.position = "fixed";
-    document.body.style.top = `-${scrollY}px`;
-    document.body.style.left = "0";
-    document.body.style.right = "0";
-    document.body.style.width = "100%";
-    document.body.style.overflow = "hidden";
+    lockBodyScroll();
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Tab") {
@@ -403,18 +373,7 @@ const ReportPricingModal: FC<Props> = ({
     document.addEventListener("touchmove", handleTouchMove, { passive: false });
 
     return () => {
-      const scrollLock = scrollLockRef.current;
-      document.documentElement.style.overflow = scrollLock?.htmlOverflow ?? "";
-      document.body.style.left = scrollLock?.bodyLeft ?? "";
-      document.body.style.overflow = scrollLock?.bodyOverflow ?? "";
-      document.body.style.position = scrollLock?.bodyPosition ?? "";
-      document.body.style.right = scrollLock?.bodyRight ?? "";
-      document.body.style.top = scrollLock?.bodyTop ?? "";
-      document.body.style.width = scrollLock?.bodyWidth ?? "";
-      if (scrollLock) {
-        restoreScroll(scrollLock.scrollY);
-      }
-      scrollLockRef.current = null;
+      unlockBodyScroll();
       document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("touchmove", handleTouchMove);
     };

@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState, type FC } from "react";
 import { trackSectionNavigated } from "@features/analytics/client";
+import { lockBodyScroll, unlockBodyScroll } from "@shared/ui/body-scroll-lock";
 import { ReferFriendIcon, ShareReportIcon } from "./ReportActionIcons";
 import ReportNavBadge, { type ReportNavAccess } from "./ReportNavBadge";
 import { REPORT_NAV_PARTS } from "./reportNav";
@@ -149,11 +150,8 @@ const ReportMobileNav: FC<Props> = ({
   // the page doesn't jump during the exit animation.
   useEffect(() => {
     if (!drawerMounted) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
+    lockBodyScroll();
+    return unlockBodyScroll;
   }, [drawerMounted]);
 
   useEffect(() => {

@@ -97,6 +97,7 @@ import { normalizeReportHtml } from "./reportContent";
 import {
   isSectionIncludedInEssentials,
   isSectionUnlockedForPlan,
+  doesAccessPlanCover,
   type ReportAccessPlan,
 } from "@features/report/server/access";
 import {
@@ -401,6 +402,15 @@ interface ReportExperienceProps {
     userName: string;
   };
   primaryArchetype: string;
+  /**
+   * The archetype the server actually resolved the Report 2.0 copy for.
+   * Usually `viewArchetype`; falls back to the primary when the reader asks
+   * for an archetype they have not bought, or briefly while a view switch
+   * is still refetching. Sections render their copy only when it matches
+   * what is on screen, so one archetype's prose never appears under
+   * another's name.
+   */
+  contentArchetype: string;
   pricingQuotes: Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot> | null;
   archetypeContent: Record<string, Record<string, string>>;
   practiceTendencies: Record<
@@ -489,6 +499,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   percentages,
   placeholderValues,
   primaryArchetype,
+  contentArchetype,
   pricingQuotes,
   archetypeContent,
   practiceTendencies,
@@ -822,7 +833,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       id="main-content"
       ref={mainContentRef}
       tabIndex={-1}
-      className={`report-page${accessPlan === "full_report" || accessPlan === "all_reports" ? "" : " report-experience--sticky-pad"}${copyable ? " report-page--copyable" : ""}`}
+      className={`report-page${doesAccessPlanCover(accessPlan, "full_report") ? "" : " report-experience--sticky-pad"}${copyable ? " report-page--copyable" : ""}`}
       style={getReportThemeStyle(theme)}
       /**
        * Copy, right-click and drag are blocked on the LIVE site only. The report
@@ -1134,7 +1145,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // primary archetype gets a copy block; when browsing another
                     // archetype's report the section falls back to null (renders
                     // nothing) — same handoff as beliefs/accel/stage.
-                    const isPrimaryView = viewArchetype === primaryArchetype;
+                    const hasArchetypeCopy = viewArchetype === contentArchetype;
                     return (
                       <ReportSection
                         key={section.id}
@@ -1145,9 +1156,9 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       >
                         <AttachmentPatternsSection
                           archetype={viewArchetype}
-                          copy={isPrimaryView ? attachmentCopy : null}
-                          plane={isPrimaryView ? attachmentPlane : null}
-                          family={isPrimaryView ? attachmentFamily : null}
+                          copy={hasArchetypeCopy ? attachmentCopy : null}
+                          plane={hasArchetypeCopy ? attachmentPlane : null}
+                          family={hasArchetypeCopy ? attachmentFamily : null}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1173,7 +1184,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // nothing. Empty title suppresses ReportSection's header
                     // (hidden via CSS on #core_insecurities) — the section renders
                     // its own "Core Insecurities" heading per Figma 8427:1517.
-                    const isPrimaryView = viewArchetype === primaryArchetype;
+                    const hasArchetypeCopy = viewArchetype === contentArchetype;
                     return (
                       <ReportSection
                         key={section.id}
@@ -1184,9 +1195,9 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       >
                         <InsecuritiesSection
                           archetype={viewArchetype}
-                          copy={isPrimaryView ? insecuritiesCopy : null}
-                          cueFamily={isPrimaryView ? insecurityCueFamily : null}
-                          graph={isPrimaryView ? insecurityGraph : null}
+                          copy={hasArchetypeCopy ? insecuritiesCopy : null}
+                          cueFamily={hasArchetypeCopy ? insecurityCueFamily : null}
+                          graph={hasArchetypeCopy ? insecurityGraph : null}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1211,7 +1222,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // ReportSection's header (hidden via CSS on
                     // #biochemical_reward_system_dynamics) — the section renders its
                     // own "Reward System" heading per Figma 8427:1758.
-                    const isPrimaryView = viewArchetype === primaryArchetype;
+                    const hasArchetypeCopy = viewArchetype === contentArchetype;
                     return (
                       <ReportSection
                         key={section.id}
@@ -1222,8 +1233,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       >
                         <RewardSection
                           archetype={viewArchetype}
-                          copy={isPrimaryView ? rewardCopy : null}
-                          config={isPrimaryView ? rewardConfig : null}
+                          copy={hasArchetypeCopy ? rewardCopy : null}
+                          config={hasArchetypeCopy ? rewardConfig : null}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1248,7 +1259,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // Empty title suppresses ReportSection's header (hidden via CSS
                     // on #energy_level) — the section renders its own "Energy & Risk"
                     // heading per Figma 8427:1843.
-                    const isPrimaryView = viewArchetype === primaryArchetype;
+                    const hasArchetypeCopy = viewArchetype === contentArchetype;
                     return (
                       <ReportSection
                         key={section.id}
@@ -1259,8 +1270,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       >
                         <EnergySection
                           archetype={viewArchetype}
-                          copy={isPrimaryView ? energyCopy : null}
-                          config={isPrimaryView ? energyConfig : null}
+                          copy={hasArchetypeCopy ? energyCopy : null}
+                          config={hasArchetypeCopy ? energyConfig : null}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1287,7 +1298,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // Empty title suppresses ReportSection's header (hidden via CSS
                     // on #power_orientation) — the section renders its own "Power
                     // Orientation" heading per Figma 8427:1947.
-                    const isPrimaryView = viewArchetype === primaryArchetype;
+                    const hasArchetypeCopy = viewArchetype === contentArchetype;
                     return (
                       <ReportSection
                         key={section.id}
@@ -1298,7 +1309,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       >
                         <PowerSection
                           archetype={viewArchetype}
-                          copy={isPrimaryView ? powerCopy : null}
+                          copy={hasArchetypeCopy ? powerCopy : null}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1326,7 +1337,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // Empty title suppresses ReportSection's header (hidden via CSS
                     // on #curiosity_level) — the section renders its own "Curiosity
                     // & Relationship Form" heading per Figma 8427:2004.
-                    const isPrimaryView = viewArchetype === primaryArchetype;
+                    const hasArchetypeCopy = viewArchetype === contentArchetype;
                     return (
                       <ReportSection
                         key={section.id}
@@ -1337,8 +1348,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       >
                         <CuriositySection
                           archetype={viewArchetype}
-                          copy={isPrimaryView ? curiosityCopy : null}
-                          relationshipFit={isPrimaryView ? relationshipFit : null}
+                          copy={hasArchetypeCopy ? curiosityCopy : null}
+                          relationshipFit={hasArchetypeCopy ? relationshipFit : null}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1365,7 +1376,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // Empty title suppresses ReportSection's header (hidden via CSS on
                     // #love_language) — the section renders its own "Love Language"
                     // heading per Figma 8427:2096.
-                    const isPrimaryView = viewArchetype === primaryArchetype;
+                    const hasArchetypeCopy = viewArchetype === contentArchetype;
                     return (
                       <ReportSection
                         key={section.id}
@@ -1376,8 +1387,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       >
                         <LoveLanguageSection
                           archetype={viewArchetype}
-                          copy={isPrimaryView ? lovelangCopy : null}
-                          order={isPrimaryView ? loveLanguageOrder : null}
+                          copy={hasArchetypeCopy ? lovelangCopy : null}
+                          order={hasArchetypeCopy ? loveLanguageOrder : null}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1404,7 +1415,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // Empty title suppresses ReportSection's header (hidden via CSS on
                     // #arousal_style) — the section renders its own "Arousal Style"
                     // heading per Figma 8427:2191.
-                    const isPrimaryView = viewArchetype === primaryArchetype;
+                    const hasArchetypeCopy = viewArchetype === contentArchetype;
                     return (
                       <ReportSection
                         key={section.id}
@@ -1415,8 +1426,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       >
                         <ArousalSection
                           archetype={viewArchetype}
-                          copy={isPrimaryView ? arousalCopy : null}
-                          config={isPrimaryView ? arousalConfig : null}
+                          copy={hasArchetypeCopy ? arousalCopy : null}
+                          config={hasArchetypeCopy ? arousalConfig : null}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1446,7 +1457,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // ReportSection's header (hidden via CSS on #initiation_style) —
                     // the section renders its own "Initiation Style" heading per
                     // Figma 8427:2283.
-                    const isPrimaryView = viewArchetype === primaryArchetype;
+                    const hasArchetypeCopy = viewArchetype === contentArchetype;
                     return (
                       <ReportSection
                         key={section.id}
@@ -1457,8 +1468,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       >
                         <InitiationSection
                           archetype={viewArchetype}
-                          copy={isPrimaryView ? initiationCopy : null}
-                          config={isPrimaryView ? initiationConfig : null}
+                          copy={hasArchetypeCopy ? initiationCopy : null}
+                          config={hasArchetypeCopy ? initiationConfig : null}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1487,7 +1498,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // title suppresses ReportSection's header (hidden via CSS on
                     // #libido_challenges_in_relationships) — the section renders its
                     // own "Libido Challenges" heading per Figma 8427:2561.
-                    const isPrimaryView = viewArchetype === primaryArchetype;
+                    const hasArchetypeCopy = viewArchetype === contentArchetype;
                     const partnershipTier = isSectionIncludedInEssentials(section.id)
                       ? "essentials"
                       : "full_report";
@@ -1501,8 +1512,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                         >
                           <LibidoSection
                             archetype={viewArchetype}
-                            copy={isPrimaryView ? libidoCopy : null}
-                            config={isPrimaryView ? libidoConfig : null}
+                            copy={hasArchetypeCopy ? libidoCopy : null}
+                            config={hasArchetypeCopy ? libidoConfig : null}
                             onUnlock={() => unlockSection(section)}
                             quote={fullReportQuote}
                             sectionTitle={title}
@@ -1526,8 +1537,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                         >
                           <PartnershipSection
                             archetype={viewArchetype}
-                            copy={isPrimaryView ? partnershipCopy : null}
-                            loop={isPrimaryView ? partnershipLoop : null}
+                            copy={hasArchetypeCopy ? partnershipCopy : null}
+                            loop={hasArchetypeCopy ? partnershipLoop : null}
                             onUnlock={() => unlockSection(section)}
                             quote={fullReportQuote}
                             sectionTitle={title}
@@ -1561,7 +1572,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // ReportSection's header (hidden via CSS on
                     // #typical_challenges_to_enjoy_sex_for_the_core_archetype) — the
                     // section renders its own "Challenges to Enjoy Sex" heading.
-                    const isPrimaryView = viewArchetype === primaryArchetype;
+                    const hasArchetypeCopy = viewArchetype === contentArchetype;
                     return (
                       <ReportSection
                         key={section.id}
@@ -1572,7 +1583,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       >
                         <EnjoymentSection
                           archetype={viewArchetype}
-                          copy={isPrimaryView ? enjoyCopy : null}
+                          copy={hasArchetypeCopy ? enjoyCopy : null}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1601,7 +1612,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // #typical_growth_potentials_for_the_core_archetype) — the
                     // section renders its own "Growth Potentials" heading per Figma
                     // 8427:2678.
-                    const isPrimaryView = viewArchetype === primaryArchetype;
+                    const hasArchetypeCopy = viewArchetype === contentArchetype;
                     return (
                       <ReportSection
                         key={section.id}
@@ -1612,8 +1623,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       >
                         <GrowthSection
                           archetype={viewArchetype}
-                          copy={isPrimaryView ? growthCopy : null}
-                          rungCount={isPrimaryView ? growthRungs : null}
+                          copy={hasArchetypeCopy ? growthCopy : null}
+                          rungCount={hasArchetypeCopy ? growthRungs : null}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1637,7 +1648,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // title suppresses ReportSection's header (hidden via CSS on
                     // #confidence_level) — the section renders its own "Confidence
                     // Level" heading per Figma 8427:1563.
-                    const isPrimaryView = viewArchetype === primaryArchetype;
+                    const hasArchetypeCopy = viewArchetype === contentArchetype;
                     return (
                       <ReportSection
                         key={section.id}
@@ -1648,8 +1659,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       >
                         <ConfidenceSection
                           archetype={viewArchetype}
-                          copy={isPrimaryView ? confidenceCopy : null}
-                          strip={isPrimaryView ? confidenceStrip : null}
+                          copy={hasArchetypeCopy ? confidenceCopy : null}
+                          strip={hasArchetypeCopy ? confidenceStrip : null}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1676,7 +1687,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // reward. Without this guard an `all_reports` reader browsing
                     // e.g. Spark Seeker saw the PRIMARY archetype's keep/loosen
                     // beliefs presented as Spark Seeker's.
-                    const isPrimaryView = viewArchetype === primaryArchetype;
+                    const hasArchetypeCopy = viewArchetype === contentArchetype;
                     const isBeliefsUnlocked = isSectionUnlockedForPlan({
                       accessPlan,
                       archetypeTier: viewArchetypeTier,
@@ -1693,7 +1704,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       >
                         <BeliefsSection
                           archetype={viewArchetype}
-                          copy={isPrimaryView ? beliefsCopy : null}
+                          copy={hasArchetypeCopy ? beliefsCopy : null}
                           isUnlocked={isBeliefsUnlocked}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
@@ -1766,7 +1777,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // its header (hidden via CSS on this section id) so the heading
                     // isn't duplicated. Only the primary archetype gets a fantasy
                     // copy block; browsing another archetype renders the tables only.
-                    const isPrimaryView = viewArchetype === primaryArchetype;
+                    const hasArchetypeCopy = viewArchetype === contentArchetype;
                     const isBackendUnlocked = isSectionUnlockedForPlan({
                       accessPlan,
                       archetypeTier: viewArchetypeTier,
@@ -1785,8 +1796,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       >
                         <FantasySection
                           archetype={viewArchetype}
-                          copy={isPrimaryView ? fantasyCopy : null}
-                          dots={isPrimaryView ? fantasyDots : null}
+                          copy={hasArchetypeCopy ? fantasyCopy : null}
+                          dots={hasArchetypeCopy ? fantasyDots : null}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={practiceSectionTitle}
@@ -1797,7 +1808,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                               // The Fantasy card already shows this section's
                               // paywall card over the blurred map, so the tables
                               // must not add a second one — one card per section.
-                              hideOverlay={isPrimaryView && fantasyCopy?.locked === true}
+                              hideOverlay={hasArchetypeCopy && fantasyCopy?.locked === true}
                               isPremium={section.isPremium}
                               isUnlocked={isBackendUnlocked}
                               onUnlock={() => unlockSection(section)}
@@ -1833,7 +1844,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // title suppresses ReportSection's header (hidden via CSS on
                     // #recommendations) — the section renders its own "Reading
                     // Recommendations" heading per Figma 8427:2777.
-                    const isPrimaryView = viewArchetype === primaryArchetype;
+                    const hasArchetypeCopy = viewArchetype === contentArchetype;
                     return (
                       <ReportSection
                         key={section.id}
@@ -1844,7 +1855,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       >
                         <ReadingSection
                           archetype={viewArchetype}
-                          copy={isPrimaryView ? readingCopy : null}
+                          copy={hasArchetypeCopy ? readingCopy : null}
                           onUnlock={() => unlockSection(section)}
                           quote={fullReportQuote}
                           sectionTitle={title}
@@ -1994,6 +2005,9 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     token,
     sessionId: token ? null : sessionId,
     pricingSessionIdOverride: pricingSessionIdFromUrl,
+    // Raw slug on purpose — the server validates it against the archetypes this
+    // reader has actually paid for and resolves the report copy for that one.
+    archetypeSlug: searchParams.get("archetype"),
   });
   // Pass both identifiers — the hook prefers whichever is present and the API
   // resolves the user server-side. Token is the durable identifier (works
@@ -2607,6 +2621,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         theme={theme}
         userEmail={data.userEmail}
         userName={data.userName}
+        contentArchetype={data.contentArchetype ?? primaryArchetype}
         viewArchetype={effectiveViewArchetype}
         viewMode={viewMode}
       />
@@ -2633,7 +2648,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           </div>
         </div>
       )}
-      {data.accessPlan !== "full_report" && data.accessPlan !== "all_reports" && (
+      {/* The bar sells `full_report`, so the question is whether the reader's plan
+          already covers that tier — not whether it equals one of two named plans.
+          `core` buys the top-3 archetypes AT full_report tier, so listing plans
+          by hand showed a paying core buyer a permanent "Unlock full report" bar
+          whose CTA sent them to Stripe for something they already owned. */}
+      {!doesAccessPlanCover(data.accessPlan, "full_report") && (
         <ReportStickyUnlockBar
           quote={pricingQuotes?.full_report ?? null}
           onCheckout={() => beginCheckout("full_report", effectiveViewArchetype)}

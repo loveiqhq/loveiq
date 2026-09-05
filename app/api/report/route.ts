@@ -42,7 +42,7 @@ import {
   resolveShareFromToken,
 } from "@features/report/server/shareAccess";
 import { maskEmail, verifyCookieForShare } from "@features/report/server/shareVerify";
-import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
+import { fromArchetypeSlug, KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
 
 const sessionIdSchema = z.object({
   pricingSessionId: z.string().uuid().optional(),
@@ -585,6 +585,37 @@ export async function GET(request: Request) {
       primaryArchetype,
     });
 
+    /**
+     * The archetype whose Report 2.0 copy this payload carries.
+     *
+     * Every `getReport2Section` / `getReport2Config` lookup below used to be
+     * keyed to `primaryArchetype`, and the client — knowing the payload could
+     * only describe the primary — passed `null` for every section when the
+     * reader was viewing a different one. So a `core` buyer (top 3) or an
+     * `all_reports` buyer (all 14) who followed one of the other archetype
+     * links in their email got the section shells, the feedback widgets and
+     * nothing in between: a blank report for something they had paid for.
+     * The copy for all 14 archetypes has always existed in `report2-copy.ts`;
+     * only the archetype to resolve it for was missing.
+     *
+     * Validated against the unlocked set HERE rather than trusted from the
+     * query string, so asking for an archetype you have not bought falls back
+     * to your primary instead of handing over another archetype's premium copy.
+     */
+    const requestedArchetype = fromArchetypeSlug(url.searchParams.get("archetype"));
+    const contentArchetype =
+      requestedArchetype && unlockedArchetypes.includes(requestedArchetype)
+        ? requestedArchetype
+        : primaryArchetype;
+    /**
+     * The tier the reader holds for the archetype they are actually viewing.
+     * Passing this is what makes per-archetype gating work: without it every
+     * call below fell back to the global `accessPlan`, which does not describe
+     * a per-archetype purchase at all.
+     */
+    // eslint-disable-next-line security/detect-object-injection -- contentArchetype is a validated KNOWN_ARCHETYPES name, never raw user input.
+    const contentArchetypeTier = archetypeTiers[contentArchetype] ?? null;
+
     if (isShareAccess && shareId !== null) {
       const viewedShareId = shareId;
       const wasFirstView = shareIsFirstView;
@@ -637,6 +668,16 @@ export async function GET(request: Request) {
     // module is server-only) and passed to the client SnapshotSection. Only the
     // slots that section renders are threaded, keyed to the viewer's primary
     // archetype. Empty object for archetypes without a snapshot copy block.
+    /**
+     * Part I stays keyed to the reader's PRIMARY archetype even when they are
+     * browsing another one. These four sections describe the reader — their
+     * findings, their insight map, their sexual stage, their comparison stats —
+     * not a Part II archetype chapter, so switching them would replace the
+     * reader's own values with the browsed archetype's. Pre-existing product
+     * decision, pinned by features/report/tests/ReportPage.archetypeHandoff.test.ts;
+     * revisit all four together if the browse view should describe the browsed
+     * archetype end to end.
+     */
     const snapshotSection = getReport2Section(primaryArchetype, "snapshot");
     // Card 1's stat lives in the initiation section (see the note below). Resolved
     // here rather than reusing `initiationSection`, which is declared further down.
@@ -711,9 +752,10 @@ export async function GET(request: Request) {
     // Shared viewers inherit the owner's plan via `accessPlan`, matching the
     // rest of the report's gift-view gating. Keyed to the primary archetype
     // (same handoff as snapshot/findings/stage).
-    const beliefsSection = getReport2Section(primaryArchetype, "beliefs");
+    const beliefsSection = getReport2Section(contentArchetype, "beliefs");
     const beliefsUnlocked = isSectionUnlockedForPlan({
       accessPlan,
+      archetypeTier: contentArchetypeTier,
       isPremium: true,
       sectionId: "typical_beliefs",
     });
@@ -792,13 +834,14 @@ export async function GET(request: Request) {
     // `attachmentFamily` (below), not from copy. `attachmentPlane` carries the
     // config geometry normalized to the map's 0..1 axis box; null for the 13
     // archetypes without real coords (never fabricated).
-    const attachmentSection = getReport2Section(primaryArchetype, "attachment");
+    const attachmentSection = getReport2Section(contentArchetype, "attachment");
     const attachmentUnlocked = isSectionUnlockedForPlan({
       accessPlan,
+      archetypeTier: contentArchetypeTier,
       isPremium: true,
       sectionId: "attachment_style",
     });
-    const attachmentConfig = getReport2Config(primaryArchetype);
+    const attachmentConfig = getReport2Config(contentArchetype);
     const attachmentFamily = attachmentConfig?.families?.attachment ?? null;
     // Geometry is keyed by attachment FAMILY, per Mark's handoff ("chart geometry
     // ... lives in the Figma components, not the copy. Only the ... dot-position
@@ -844,9 +887,10 @@ export async function GET(request: Request) {
     // gated content: shipped ONLY when the report is unlocked at the essentials
     // tier (or above). A locked client NEVER receives it. Shared viewers inherit
     // the owner's plan via `accessPlan`. Keyed to the primary archetype.
-    const accelSection = getReport2Section(primaryArchetype, "accel");
+    const accelSection = getReport2Section(contentArchetype, "accel");
     const accelUnlocked = isSectionUnlockedForPlan({
       accessPlan,
+      archetypeTier: contentArchetypeTier,
       isPremium: true,
       sectionId: "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
     });
@@ -875,13 +919,14 @@ export async function GET(request: Request) {
     // archetype. The cue family drives the graph's highlighted curve + axis
     // labels client-side (config `insecurity_graph` wins when present — only
     // Spiritual Lover has a full one today; the rest derive from the family).
-    const insecuritiesSection = getReport2Section(primaryArchetype, "insecurities");
+    const insecuritiesSection = getReport2Section(contentArchetype, "insecurities");
     const insecuritiesUnlocked = isSectionUnlockedForPlan({
       accessPlan,
+      archetypeTier: contentArchetypeTier,
       isPremium: true,
       sectionId: "core_insecurities",
     });
-    const insecuritiesConfig = getReport2Config(primaryArchetype);
+    const insecuritiesConfig = getReport2Config(contentArchetype);
     const insecurityCueFamily = insecuritiesUnlocked
       ? (insecuritiesConfig?.families?.insecurity_cue ?? null)
       : null;
@@ -926,9 +971,10 @@ export async function GET(request: Request) {
     // PremiumOverlay. Only Spiritual Lover carries full meters today; the other
     // archetypes fall back to no bars rather than fabricating. Shared viewers
     // inherit the owner's plan via `accessPlan`. Keyed to the primary archetype.
-    const rewardSection = getReport2Section(primaryArchetype, "reward");
+    const rewardSection = getReport2Section(contentArchetype, "reward");
     const rewardUnlocked = isSectionUnlockedForPlan({
       accessPlan,
+      archetypeTier: contentArchetypeTier,
       isPremium: true,
       sectionId: "biochemical_reward_system_dynamics",
     });
@@ -937,10 +983,10 @@ export async function GET(request: Request) {
     // all for 11 of 14. The per-archetype fallback in `data/report2-reward.ts` is
     // derived from each archetype's own reward prose and reproduces all three
     // existing configs exactly. Per-archetype config still wins where present.
-    const rewardFallback = getRewardProfile(report2ArchetypeSlug(primaryArchetype));
+    const rewardFallback = getRewardProfile(report2ArchetypeSlug(contentArchetype));
     const rewardConfig = rewardUnlocked
       ? (normalizeRewardConfig(
-          getReport2Config(primaryArchetype) as Record<string, unknown> | null
+          getReport2Config(contentArchetype) as Record<string, unknown> | null
         ) ??
         (rewardFallback
           ? normalizeRewardConfig({
@@ -985,14 +1031,15 @@ export async function GET(request: Request) {
     // render the curve framing WITHOUT the reader's readouts rather than
     // fabricating. Shared viewers inherit the owner's plan via `accessPlan`. Keyed
     // to the primary archetype.
-    const energySection = getReport2Section(primaryArchetype, "energy");
+    const energySection = getReport2Section(contentArchetype, "energy");
     const energyUnlocked = isSectionUnlockedForPlan({
       accessPlan,
+      archetypeTier: contentArchetypeTier,
       isPremium: true,
       sectionId: "energy_level",
     });
     const energyConfig = energyUnlocked
-      ? normalizeEnergyConfig(getReport2Config(primaryArchetype) as Record<string, unknown> | null)
+      ? normalizeEnergyConfig(getReport2Config(contentArchetype) as Record<string, unknown> | null)
       : null;
     const energyCopy = {
       "edu.eyebrow": energySection["edu.eyebrow"] ?? null,
@@ -1022,14 +1069,15 @@ export async function GET(request: Request) {
     // archetypes carry full arousal copy (result/insight.value/stats),
     // so nothing is fabricated. Shared viewers inherit the owner's plan via
     // `accessPlan`. Keyed to the primary archetype.
-    const arousalSection = getReport2Section(primaryArchetype, "arousal");
+    const arousalSection = getReport2Section(contentArchetype, "arousal");
     const arousalUnlocked = isSectionUnlockedForPlan({
       accessPlan,
+      archetypeTier: contentArchetypeTier,
       isPremium: true,
       sectionId: "arousal_style",
     });
     const arousalConfig = arousalUnlocked
-      ? normalizeArousalConfig(getReport2Config(primaryArchetype) as Record<string, unknown> | null)
+      ? normalizeArousalConfig(getReport2Config(contentArchetype) as Record<string, unknown> | null)
       : null;
     const arousalCopy = {
       // Universal — always shipped (frame the section for locked clients too).
@@ -1068,15 +1116,16 @@ export async function GET(request: Request) {
     // the blur). All 14 archetypes carry full initiation copy, so nothing is
     // fabricated. Shared viewers inherit the owner's plan. Keyed to the primary
     // archetype.
-    const initiationSection = getReport2Section(primaryArchetype, "initiation");
+    const initiationSection = getReport2Section(contentArchetype, "initiation");
     const initiationUnlocked = isSectionUnlockedForPlan({
       accessPlan,
+      archetypeTier: contentArchetypeTier,
       isPremium: true,
       sectionId: "initiation_style",
     });
     const initiationConfig = initiationUnlocked
       ? normalizeInitiationConfig(
-          getReport2Config(primaryArchetype) as Record<string, unknown> | null
+          getReport2Config(contentArchetype) as Record<string, unknown> | null
         )
       : null;
     const initiationCopy = {
@@ -1116,9 +1165,10 @@ export async function GET(request: Request) {
     // carry a `loop` today (the other 11 are null → the client renders no chips
     // rather than fabricating). All 14 carry full libido copy. Shared viewers
     // inherit the owner's plan. Keyed to the primary archetype.
-    const libidoSection = getReport2Section(primaryArchetype, "libido");
+    const libidoSection = getReport2Section(contentArchetype, "libido");
     const libidoUnlocked = isSectionUnlockedForPlan({
       accessPlan,
+      archetypeTier: contentArchetypeTier,
       isPremium: true,
       sectionId: "libido_challenges_in_relationships",
     });
@@ -1131,7 +1181,7 @@ export async function GET(request: Request) {
      * and the config is no longer consulted. Still withheld when locked.
      */
     const libidoConfig = libidoUnlocked
-      ? getLibidoLoopSteps(report2ArchetypeSlug(primaryArchetype))
+      ? getLibidoLoopSteps(report2ArchetypeSlug(contentArchetype))
       : null;
     const libidoCopy = {
       // Universal — always shipped (frame the section for locked clients too).
@@ -1169,12 +1219,12 @@ export async function GET(request: Request) {
     // per-archetype orbit/stage copy, so no cycle visual is fabricated — the
     // three rows carry the loop. All 14 carry full partnership copy. Shared
     // viewers inherit the owner's plan. Keyed to the primary archetype.
-    const partnershipSection = getReport2Section(primaryArchetype, "partnership");
+    const partnershipSection = getReport2Section(contentArchetype, "partnership");
     const partnershipUnlocked = libidoUnlocked;
     // The orbit's three steps + the reader's own bid. All 14 have their own (the
     // frames' footer: "All 14 need their own"); withheld when locked.
     const partnershipLoop = partnershipUnlocked
-      ? getPartnershipLoop(report2ArchetypeSlug(primaryArchetype))
+      ? getPartnershipLoop(report2ArchetypeSlug(contentArchetype))
       : null;
     const partnershipCopy = {
       // Universal — always shipped (frame the section for locked clients too).
@@ -1211,9 +1261,10 @@ export async function GET(request: Request) {
     // client (`enjoyCopy.locked`) receives those null and renders the hook teaser
     // + PremiumOverlay. All 14 carry full enjoy copy, so nothing is fabricated.
     // Shared viewers inherit the owner's plan. Keyed to the primary archetype.
-    const enjoySection = getReport2Section(primaryArchetype, "enjoy");
+    const enjoySection = getReport2Section(contentArchetype, "enjoy");
     const enjoyUnlocked = isSectionUnlockedForPlan({
       accessPlan,
+      archetypeTier: contentArchetypeTier,
       isPremium: true,
       sectionId: "typical_challenges_to_enjoy_sex_for_the_core_archetype",
     });
@@ -1254,13 +1305,14 @@ export async function GET(request: Request) {
     // for the elevation-profile step count when the rungs are withheld. All 14
     // carry full growth copy. Shared viewers inherit the owner's plan. Keyed to
     // the primary archetype.
-    const growthSection = getReport2Section(primaryArchetype, "growth");
+    const growthSection = getReport2Section(contentArchetype, "growth");
     const growthUnlocked = isSectionUnlockedForPlan({
       accessPlan,
+      archetypeTier: contentArchetypeTier,
       isPremium: true,
       sectionId: "typical_growth_potentials_for_the_core_archetype",
     });
-    const rawGrowthRungs = getReport2Config(primaryArchetype)?.growth_rungs;
+    const rawGrowthRungs = getReport2Config(contentArchetype)?.growth_rungs;
     const growthRungs =
       typeof rawGrowthRungs === "number" && Number.isFinite(rawGrowthRungs) && rawGrowthRungs > 0
         ? rawGrowthRungs
@@ -1296,9 +1348,10 @@ export async function GET(request: Request) {
     // only the books whose title exists (counts vary; never fabricated). All 14
     // carry full reading copy. Shared viewers inherit the owner's plan. Keyed to
     // the primary archetype.
-    const readingSection = getReport2Section(primaryArchetype, "reading");
+    const readingSection = getReport2Section(contentArchetype, "reading");
     const readingUnlocked = isSectionUnlockedForPlan({
       accessPlan,
+      archetypeTier: contentArchetypeTier,
       isPremium: true,
       sectionId: "recommendations",
     });
@@ -1335,14 +1388,15 @@ export async function GET(request: Request) {
     // per-archetype power datum today — no per-archetype dot positions exist, so
     // the plane layout is hardcoded client-side from the Figma). Shared viewers
     // inherit the owner's plan via `accessPlan`. Keyed to the primary archetype.
-    const powerSection = getReport2Section(primaryArchetype, "power");
+    const powerSection = getReport2Section(contentArchetype, "power");
     const powerUnlocked = isSectionUnlockedForPlan({
       accessPlan,
+      archetypeTier: contentArchetypeTier,
       isPremium: true,
       sectionId: "power_orientation",
     });
     const powerZoneInfo = powerUnlocked
-      ? getPowerZone(getReport2Config(primaryArchetype)?.families?.power_zone)
+      ? getPowerZone(getReport2Config(contentArchetype)?.families?.power_zone)
       : null;
     const powerCopy = {
       "edu.eyebrow": powerSection["edu.eyebrow"] ?? null,
@@ -1376,9 +1430,10 @@ export async function GET(request: Request) {
     // the chartnote states placements are illustrative. Nothing is fabricated.
     // `locked` only drives whether the client blurs the map behind the overlay.
     // Shared viewers inherit the owner's plan via `accessPlan`. Keyed to primary.
-    const fantasySection = getReport2Section(primaryArchetype, "fantasy");
+    const fantasySection = getReport2Section(contentArchetype, "fantasy");
     const fantasyUnlocked = isSectionUnlockedForPlan({
       accessPlan,
+      archetypeTier: contentArchetypeTier,
       isPremium: true,
       sectionId: "typical_sexual_fantasy_amp_practice_tendencies",
     });
@@ -1387,7 +1442,7 @@ export async function GET(request: Request) {
     // `features/report/server/fantasyMap.ts`. Withheld when locked: the client
     // then falls back to the universal illustrative layout behind the blur, so no
     // per-archetype placement leaks to an unpaid reader.
-    const fantasyDots = fantasyUnlocked ? getFantasyMapDots(primaryArchetype) : null;
+    const fantasyDots = fantasyUnlocked ? getFantasyMapDots(contentArchetype) : null;
     const fantasyCopy = {
       "edu.eyebrow": fantasySection["edu.eyebrow"] ?? null,
       "edu.teaser": fantasySection["edu.teaser"] ?? null,
@@ -1416,15 +1471,16 @@ export async function GET(request: Request) {
     // reproduces the real config exactly) — without it 13 of 14 drew a fit table
     // with no segments. Withheld from a locked client. Shared viewers inherit the
     // owner's plan via `accessPlan`. Keyed to the primary archetype.
-    const curiositySection = getReport2Section(primaryArchetype, "curiosity");
+    const curiositySection = getReport2Section(contentArchetype, "curiosity");
     const curiosityUnlocked = isSectionUnlockedForPlan({
       accessPlan,
+      archetypeTier: contentArchetypeTier,
       isPremium: true,
       sectionId: "curiosity_level",
     });
     const rawFit =
-      getReport2Config(primaryArchetype)?.relationship_fit ??
-      getRelationshipFit(report2ArchetypeSlug(primaryArchetype));
+      getReport2Config(contentArchetype)?.relationship_fit ??
+      getRelationshipFit(report2ArchetypeSlug(contentArchetype));
     const relationshipFit =
       curiosityUnlocked && rawFit && typeof rawFit === "object"
         ? (rawFit as Record<string, number>)
@@ -1463,9 +1519,10 @@ export async function GET(request: Request) {
     // edu WITHOUT the ranked list rather than fabricating. Also withheld from a
     // locked client. Shared viewers inherit the owner's plan via `accessPlan`.
     // Keyed to the primary archetype.
-    const lovelangSection = getReport2Section(primaryArchetype, "lovelang");
+    const lovelangSection = getReport2Section(contentArchetype, "lovelang");
     const lovelangUnlocked = isSectionUnlockedForPlan({
       accessPlan,
+      archetypeTier: contentArchetypeTier,
       isPremium: true,
       sectionId: "love_language",
     });
@@ -1474,8 +1531,8 @@ export async function GET(request: Request) {
     // archetype's own lovelang copy; the Spiritual Lover entry reproduces the real
     // config exactly). Without it 13 of 14 rendered NO ranked list at all.
     const rawLoveOrder =
-      getReport2Config(primaryArchetype)?.love_language_order ??
-      getLoveLanguageOrder(report2ArchetypeSlug(primaryArchetype));
+      getReport2Config(contentArchetype)?.love_language_order ??
+      getLoveLanguageOrder(report2ArchetypeSlug(contentArchetype));
     const loveLanguageOrder =
       lovelangUnlocked && Array.isArray(rawLoveOrder)
         ? rawLoveOrder.filter((v): v is string => typeof v === "string")
@@ -1504,13 +1561,14 @@ export async function GET(request: Request) {
     // Only Spiritual Lover carries a real `confidence_strip` today; the other 13
     // are null, so even unlocked they render the strip WITHOUT the reader's dot/
     // result (never fabricated). Keyed to the primary archetype.
-    const confidenceSection = getReport2Section(primaryArchetype, "confidence");
+    const confidenceSection = getReport2Section(contentArchetype, "confidence");
     const confidenceUnlocked = isSectionUnlockedForPlan({
       accessPlan,
+      archetypeTier: contentArchetypeTier,
       isPremium: true,
       sectionId: "confidence_level",
     });
-    const confidenceStripCfg = getReport2Config(primaryArchetype)?.confidence_strip as
+    const confidenceStripCfg = getReport2Config(contentArchetype)?.confidence_strip as
       | {
           you_dot_x?: number | null;
           result_word?: string | null;
@@ -1600,6 +1658,7 @@ export async function GET(request: Request) {
         ownerToken,
         viewMode: isShareAccess ? ("shared" as const) : ("owner" as const),
         primaryArchetype,
+        contentArchetype,
         percentages: scoring.v5_percentages || scoring.percentages || {},
         reportDate: submission.created_date_time,
         diagnostics: scoring.diagnostics ?? null,
