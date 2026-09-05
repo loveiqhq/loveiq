@@ -45,11 +45,17 @@ const QUOTE_PURCHASED = {
 };
 
 /** Route each PostgREST path to its fixture. */
-function route(handlers: { sub?: unknown; quotes?: unknown; events?: unknown }) {
+function route(handlers: {
+  sub?: unknown;
+  quotes?: unknown;
+  events?: unknown;
+  reportSessions?: unknown;
+}) {
   mockSupabaseFetch.mockImplementation(async (path: string) => {
     if (path.includes("/survey_submission?")) return ok(handlers.sub ?? [SUBMISSION]);
     if (path.includes("/report_price_quote?")) return ok(handlers.quotes ?? []);
     if (path.includes("/analytics_event?")) return ok(handlers.events ?? []);
+    if (path.includes("/report_session?")) return ok(handlers.reportSessions ?? []);
     throw new Error(`unexpected path: ${path}`);
   });
 }
@@ -73,11 +79,12 @@ describe("buildSubmissionJourney", () => {
     });
   });
 
-  it("fetches its three sources concurrently, not sequentially", async () => {
+  it("fetches its four sources concurrently, not sequentially", async () => {
     route({ quotes: [QUOTE_PURCHASED] });
     await buildSubmissionJourney(1296);
-    // One call per source, issued in one Promise.all wave.
-    expect(mockSupabaseFetch).toHaveBeenCalledTimes(3);
+    // One call per source, issued in one Promise.all wave. report_session is
+    // the fourth — the server-side proof that the report was opened.
+    expect(mockSupabaseFetch).toHaveBeenCalledTimes(4);
   });
 
   it("masks the email and never exposes the raw address", async () => {
@@ -163,6 +170,51 @@ describe("buildSubmissionJourney", () => {
     // first occurrence wins
     expect(j?.milestones.reportViewedAt).toBe("2026-08-24T10:15:00.000Z");
     expect(j?.milestones.paywallInitiatedAt).toBe("2026-08-24T10:20:00.000Z");
+  });
+
+  /**
+   * `report_viewed` in analytics_event is consent-gated and missed 45% of real
+   * opens on production (104 of 189 over 2026-08-25 → 09-05), so a reader who
+   * declined analytics looked like they never opened their report and every
+   * timing derived from it came back blank. `report_session` is written by the
+   * report route itself and cannot be suppressed.
+   */
+  describe("report-open milestone", () => {
+    it("uses report_session when the consent-gated event never fired", async () => {
+      route({
+        quotes: [QUOTE_PURCHASED],
+        events: [{ event_type: "paywall_initiated", event_time: "2026-08-24T10:20:00.000Z" }],
+        reportSessions: [{ started_at: "2026-08-24T10:14:00.000Z" }],
+      });
+      const j = await buildSubmissionJourney(1296);
+      expect(j?.milestones.reportViewedAt).toBe("2026-08-24T10:14:00.000Z");
+    });
+
+    it("takes whichever source saw the open first", async () => {
+      route({
+        quotes: [QUOTE_PURCHASED],
+        events: [{ event_type: "report_viewed", event_time: "2026-08-24T10:15:00.000Z" }],
+        reportSessions: [{ started_at: "2026-08-24T10:14:00.000Z" }],
+      });
+      const j = await buildSubmissionJourney(1296);
+      expect(j?.milestones.reportViewedAt).toBe("2026-08-24T10:14:00.000Z");
+    });
+
+    it("keeps the consent-gated event as a fallback for rows predating report_session", async () => {
+      route({
+        quotes: [QUOTE_PURCHASED],
+        events: [{ event_type: "report_viewed", event_time: "2026-08-24T10:15:00.000Z" }],
+        reportSessions: [],
+      });
+      const j = await buildSubmissionJourney(1296);
+      expect(j?.milestones.reportViewedAt).toBe("2026-08-24T10:15:00.000Z");
+    });
+
+    it("is null only when neither source saw an open", async () => {
+      route({ quotes: [QUOTE_PURCHASED], events: [], reportSessions: [] });
+      const j = await buildSubmissionJourney(1296);
+      expect(j?.milestones.reportViewedAt).toBeNull();
+    });
   });
 
   it("still returns a journey when a source fails, rather than throwing", async () => {

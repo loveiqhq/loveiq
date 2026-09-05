@@ -381,6 +381,17 @@ export async function POST(request: Request) {
       { idempotencyKey }
     );
 
+    // Nothing above this line may record a checkout. A session without a hosted
+    // URL cannot be handed off: the reader gets a 500 and never sees Stripe, so
+    // stamping the quote and telling Slack "checkout" first would report a
+    // checkout that demonstrably did not happen — and `checkout_started_at` is
+    // now the funnel's server-side truth for that stage, so the error would
+    // land in the digest and the journey rail too.
+    if (!session.url) {
+      logger.error({ sessionId: session.id }, "Stripe checkout session missing hosted URL");
+      return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
+    }
+
     await markReportPriceQuoteCheckoutStarted({ quoteId: quote.id });
 
     // Advance the Slack journey message to "checkout". After-response so the
@@ -390,11 +401,6 @@ export async function POST(request: Request) {
       scheduleAfterResponse("journey-message-checkout", async () => {
         await refreshJourneyMessage(submissionIdForJourney, "checkout");
       });
-    }
-
-    if (!session.url) {
-      logger.error({ sessionId: session.id }, "Stripe checkout session missing hosted URL");
-      return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
     }
 
     const successResponse: StripeCheckoutSessionResponse = {

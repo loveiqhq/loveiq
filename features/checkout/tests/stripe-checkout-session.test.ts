@@ -218,6 +218,36 @@ describe("POST /api/stripe/checkout-session", () => {
     expect(markReportPriceQuoteCheckoutStarted).toHaveBeenCalledWith({ quoteId: 22 });
   });
 
+  /**
+   * `checkout_started_at` is now the SERVER-SIDE TRUTH for the funnel's
+   * begin_checkout stage (migration 20260905180000) and for the Slack journey
+   * rail's "Checkout" dot. A session Stripe returns without a hosted URL cannot
+   * be handed off — the reader gets a 500 and never sees Stripe — so recording
+   * it would put a checkout that provably did not happen into both. The stamp
+   * and the Slack update therefore have to sit AFTER the hand-off guard, not
+   * before it, which is where they used to be.
+   */
+  it("records no checkout when the session has no hosted URL to hand off to", async () => {
+    const createSession = vi.fn().mockResolvedValue({ id: "cs_test_no_url", url: null });
+
+    vi.mocked(isStripeCheckoutEnabled).mockReturnValue(true);
+    vi.mocked(getStripeCheckoutCustomerEmail).mockResolvedValue("test@example.com");
+    vi.mocked(getStripeServerClient).mockReturnValue({
+      checkout: { sessions: { create: createSession } },
+    } as never);
+
+    const res = await POST(
+      makeRequest({
+        archetype: "Spark Seeker",
+        plan: "full_report",
+        reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+      })
+    );
+
+    expect(res.status).toBe(500);
+    expect(markReportPriceQuoteCheckoutStarted).not.toHaveBeenCalled();
+  });
+
   it("no longer stamps a forced-paywall arm into session metadata", async () => {
     // The A/B was removed on 2026-08-31. The key must be absent, not "control":
     // fulfillment copies session metadata onto the durable payment row, so a
