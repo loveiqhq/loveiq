@@ -1524,6 +1524,41 @@ export async function getReportPriceQuotesForContext({
   return Object.fromEntries(results) as Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot>;
 }
 
+/**
+ * Record that this reader reached the paywall, server-side.
+ *
+ * The funnel's `paywall_initiated` stage is a consent-gated client event and was
+ * the only stage with no server-side witness behind it — which matters more now
+ * that `begin_checkout` reads `checkout_started_at`, because a consent-gated
+ * stage sitting directly above a consent-independent one can invert in a quiet
+ * window. /api/price POST is that witness; it just never wrote anything down.
+ *
+ * Scoped to the submission, not one quote: the paywall is reached once per
+ * reader, not once per plan, and all four of their quotes get the same stamp so
+ * the funnel can count `DISTINCT survey_submission_id` exactly as it does for
+ * checkout. The `paywall_reached_at=is.null` filter makes it idempotent AND
+ * preserves the FIRST view — reopening the modal cannot move the timestamp
+ * later, which is what makes it usable as a funnel entry time.
+ */
+export async function markReportPriceQuotePaywallReached({
+  submissionId,
+}: {
+  submissionId: number;
+}) {
+  const response = await supabaseServiceFetch(
+    `/rest/v1/report_price_quote?survey_submission_id=eq.${submissionId}&paywall_reached_at=is.null`,
+    {
+      body: JSON.stringify({ paywall_reached_at: new Date().toISOString() }),
+      headers: { Prefer: "return=minimal" },
+      method: "PATCH",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("pricing_quote_paywall_reached_update_failed");
+  }
+}
+
 export async function markReportPriceQuoteCheckoutStarted({ quoteId }: { quoteId: number }) {
   const response = await supabaseServiceFetch(`/rest/v1/report_price_quote?id=eq.${quoteId}`, {
     body: JSON.stringify({

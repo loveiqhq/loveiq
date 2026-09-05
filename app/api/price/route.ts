@@ -6,6 +6,7 @@ import logger from "@shared/observability/logger";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { resolveSubmissionAccessContext } from "@features/report/server/personalReport";
 import { refreshJourneyMessage } from "@features/attribution/server/journey-message";
+import { markReportPriceQuotePaywallReached } from "@features/pricing/logic/reportPricing";
 import {
   getReportPriceQuoteForContext,
   getReportPriceQuotesForContext,
@@ -80,7 +81,16 @@ export async function POST(request: Request) {
         reportToken: parsed.data.token ?? null,
       });
       if (accessContext?.submissionId) {
-        await refreshJourneyMessage(accessContext.submissionId, "paywall");
+        const submissionId = accessContext.submissionId;
+        // Two independent writes, each in its own catch: the durable stamp is
+        // what the funnel reads and the Slack edit is what a human reads, and a
+        // failure in either must not cost the other.
+        try {
+          await markReportPriceQuotePaywallReached({ submissionId });
+        } catch (err) {
+          logger.warn({ err, submissionId }, "Unable to stamp paywall_reached_at");
+        }
+        await refreshJourneyMessage(submissionId, "paywall");
       }
     });
 
