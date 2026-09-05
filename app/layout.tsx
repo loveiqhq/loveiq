@@ -214,45 +214,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <link rel="dns-prefetch" href="https://www.google.com" />
         <link rel="dns-prefetch" href="https://www.gstatic.com" />
         <link rel="dns-prefetch" href="https://images.unsplash.com" />
-        {/* Google Consent Mode v2 — the DEFAULT state, and it has to be the first
-            dataLayer push on the page.
-            CookieYes only ever sends `consent` UPDATE, and because its own script is
-            lazyOnload that update landed at dataLayer index 7 on production —
-            AFTER the GA4 config (index 2) and after the Google Ads config (index 5).
-            With no default declared, consent is UNSET in that window and gtag treats
-            unset as permission to store, so `_gcl_au` (the Ads conversion-linker
-            cookie) was being written on every page load before the visitor had
-            chosen anything. Captured on www.loveiq.org 2026-09-05 with a fresh
-            browser profile: cookies before any consent click were
-            ['_gcl_au', 'cookieyes-consent'].
-            Declaring denied-by-default also fixes the other half. Google can only
-            MODEL the conversions of visitors who declined once it knows they
-            declined — and the decline is most of them here: of the 9 paid Stripe
-            sessions since 2026-08-06, 7 carried `gaAnalyticsConsent=0` and 8 had no
-            GA client id, which is why GA4 holds 24 purchases against 74 real
-            payments. The server-side Measurement Protocol replay cannot close that
-            gap, and must not: it skips deliberately without consent.
-            `wait_for_update` gives CookieYes time to send its update before tags
-            fire. beforeInteractive so it precedes GTM, the gtag shim and both
-            configs — the ordering IS the fix, so keep this above them. */}
-        {productionAnalyticsEnabled && (
-          <Script id="consent-default" strategy="beforeInteractive" nonce={nonce}>
-            {`
-            window.dataLayer = window.dataLayer || [];
-            window.gtag = window.gtag || function(){window.dataLayer.push(arguments);}
-            window.gtag('consent', 'default', {
-              ad_storage: 'denied',
-              ad_user_data: 'denied',
-              ad_personalization: 'denied',
-              analytics_storage: 'denied',
-              functionality_storage: 'denied',
-              personalization_storage: 'denied',
-              security_storage: 'granted',
-              wait_for_update: 500
-            });
-          `}
-          </Script>
-        )}
         <Script
           id="cookieyes"
           src="https://cdn-cookieyes.com/client_data/761bc9303937f7b41b200de8ed556d45/script.js"
