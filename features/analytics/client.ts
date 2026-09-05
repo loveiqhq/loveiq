@@ -846,7 +846,12 @@ export const trackGoogleAdsPurchaseConversion = (params: ReportPurchaseParams) =
   gtagSend("event", "conversion", {
     send_to: GOOGLE_ADS_PURCHASE_SEND_TO,
     value: typeof params.value === "number" ? params.value : 1.0,
-    currency: params.currency || "MXN",
+    // `currency` is required and always supplied: getPurchaseAnalytics() in
+    // app/api/stripe/checkout-session-status/route.ts returns null unless Stripe
+    // gave one. The old `|| "MXN"` fallback was unreachable, but it sat in the
+    // path that reports conversion VALUE to Google Ads — where a wrong currency
+    // silently rescales every bid target — so it is not a default worth keeping.
+    currency: params.currency,
     transaction_id: params.transaction_id || "",
   });
 };
