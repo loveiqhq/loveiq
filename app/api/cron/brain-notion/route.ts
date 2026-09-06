@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ingestNotion } from "@features/brain/server/ingest/notion";
+import { ingestNote } from "@features/brain/server/ingest/upsert";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { escapeSlack, notifySlack } from "@shared/observability/slack";
 import {
@@ -66,9 +67,12 @@ export async function GET(request: Request) {
     result = await ingestNotion(new Date().toISOString(), isOutOfTime);
     logger.info({ result }, "brain-notion: done");
 
+    // What the run saw, recorded whatever the status. Overwritten below if it failed.
+    errorMessage = ingestNote(result);
+
     if (result.skipped && !DELIBERATE_SKIPS.has(result.skipped)) {
       status = "error";
-      errorMessage = `notion skipped: ${result.skipped}`;
+      errorMessage = `notion skipped: ${result.skipped} — ${ingestNote(result)}`;
       await alertOnce(
         `skip:${result.skipped}`,
         `:brain: brain-notion skipped (${escapeSlack(result.skipped)}). Notion is frozen but ` +

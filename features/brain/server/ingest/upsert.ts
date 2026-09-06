@@ -386,6 +386,35 @@ export async function chunkPage<T>(source: string, res: Response): Promise<T[]> 
   return batch;
 }
 
+/**
+ * The one line a run leaves behind in `cron_run.error_message`: what it did, and
+ * whether it finished.
+ *
+ * `IngestResult.complete` exists because drive computed the flag and dropped it, so
+ * a run that fetched one of three documents recorded a byte-identical row to a
+ * complete one. The flag now reaches the routes — and every route then dropped it
+ * again, which is the same bug one level up. Gmail is what that cost: its walk had
+ * never once completed, and 24 consecutive runs recorded `success` with no message,
+ * because a converging re-walk is a deliberate skip and deliberate skips said
+ * nothing at all.
+ *
+ * `status` still answers "should anyone worry". This answers "what happened", which
+ * is the question you cannot go back and ask. Counts and flags only — never a value.
+ */
+export function ingestNote(r: IngestResult): string {
+  return (
+    r.detail ??
+    [
+      `rows=${r.rows}`,
+      `swept=${r.swept}`,
+      r.complete === undefined ? null : `complete=${r.complete}`,
+      r.skipped ? `skipped=${r.skipped}` : null,
+    ]
+      .filter(Boolean)
+      .join(" ")
+  );
+}
+
 export async function sweepMissing(source: string, seenIds: Set<string>): Promise<number> {
   const stored: string[] = [];
   for (let offset = 0; offset < 200_000; offset += 1000) {

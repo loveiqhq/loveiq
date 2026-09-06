@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ingestDrive } from "@features/brain/server/ingest/drive";
+import { ingestNote } from "@features/brain/server/ingest/upsert";
 import { readVercelOidcToken } from "@shared/http/google-oauth";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { escapeSlack, notifySlack } from "@shared/observability/slack";
@@ -102,9 +103,12 @@ export async function GET(request: Request) {
     result = await ingestDrive(new Date().toISOString(), isOutOfTime, readVercelOidcToken(request));
     logger.info({ result }, "brain-drive: done");
 
+    // What the run saw, recorded whatever the status. Overwritten below if it failed.
+    errorMessage = ingestNote(result);
+
     if (result.skipped && !DELIBERATE_SKIPS.has(result.skipped)) {
       status = "error";
-      errorMessage = `drive skipped: ${result.skipped}`;
+      errorMessage = `drive skipped: ${result.skipped} — ${ingestNote(result)}`;
       await alertOnce(
         `skip:${result.skipped}`,
         `:brain: brain-drive skipped (${escapeSlack(result.skipped)}). Drive is frozen but ` +

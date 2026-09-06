@@ -33,6 +33,7 @@ vi.mock("@shared/observability/slack", () => ({
   escapeSlack: (s: string) => s,
 }));
 
+import { ingestNote } from "@features/brain/server/ingest/upsert";
 import { GET } from "@/app/api/cron/brain-gmail/route";
 
 const req = () => new Request("https://www.loveiq.org/api/cron/brain-gmail");
@@ -106,5 +107,44 @@ describe("/api/cron/brain-gmail records WHY, not just whether", () => {
     await GET(req());
     expect(recorded[0]!.status).toBe("success");
     expect(recorded[0]!.error).toMatch(/complete=true/);
+  });
+});
+
+describe("ingestNote — the line every brain lane leaves behind", () => {
+  /**
+   * Four routes had the identical defect and only gmail's cost anything visible, so
+   * the rule lives in one function rather than four copies of a habit.
+   */
+  it("says whether the run finished, which is the whole point of the field", () => {
+    expect(ingestNote({ source: "drive", rows: 3, swept: 0, complete: false })).toBe(
+      "rows=3 swept=0 complete=false"
+    );
+    expect(ingestNote({ source: "drive", rows: 700, swept: 2, complete: true })).toBe(
+      "rows=700 swept=2 complete=true"
+    );
+  });
+
+  it("distinguishes a lane that does not report completeness from one that says false", () => {
+    // `complete` is optional; omitting it must not read as "did not finish".
+    expect(ingestNote({ source: "slack", rows: 5, swept: 0 })).toBe("rows=5 swept=0");
+  });
+
+  it("keeps the skip reason, which is what a person actually searches for", () => {
+    expect(
+      ingestNote({
+        source: "notion",
+        rows: 0,
+        swept: 0,
+        complete: false,
+        skipped: "notion-crawl-truncated",
+      })
+    ).toMatch(/skipped=notion-crawl-truncated/);
+  });
+
+  it("prefers a lane's own detail when it has one", () => {
+    // gmail builds a far richer line; the generic shape must not overwrite it.
+    expect(
+      ingestNote({ source: "gmail", rows: 1, swept: 0, detail: "stopped=page-cap@ec@loveiq.org" })
+    ).toBe("stopped=page-cap@ec@loveiq.org");
   });
 });

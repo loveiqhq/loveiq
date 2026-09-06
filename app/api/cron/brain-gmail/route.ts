@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ingestGmail } from "@features/brain/server/ingest/gmail";
+import { ingestNote } from "@features/brain/server/ingest/upsert";
 import { readVercelOidcToken } from "@shared/http/google-oauth";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { escapeSlack, notifySlack } from "@shared/observability/slack";
@@ -113,11 +114,11 @@ export async function GET(request: Request) {
      * `cron_run` to a healthy one, for weeks. `status` still says whether to worry;
      * this says what was seen. Overwritten below if the run is a real failure.
      */
-    if (result.detail) errorMessage = result.detail;
+    errorMessage = ingestNote(result);
 
     if (result.skipped && !DELIBERATE_SKIPS.has(result.skipped)) {
       status = "error";
-      errorMessage = `gmail skipped: ${result.skipped} — ${result.detail ?? "no detail"}`;
+      errorMessage = `gmail skipped: ${result.skipped} — ${ingestNote(result)}`;
       await alertOnce(
         `skip:${result.skipped}`,
         `:brain: brain-gmail skipped (${escapeSlack(result.skipped)}). Gmail is frozen but ` +

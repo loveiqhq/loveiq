@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ingestCalendar } from "@features/brain/server/ingest/calendar";
+import { ingestNote } from "@features/brain/server/ingest/upsert";
 import { readVercelOidcToken } from "@shared/http/google-oauth";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { escapeSlack, notifySlack } from "@shared/observability/slack";
@@ -88,9 +89,12 @@ export async function GET(request: Request) {
     );
     logger.info({ result }, "brain-calendar: done");
 
+    // What the run saw, recorded whatever the status. Overwritten below if it failed.
+    errorMessage = ingestNote(result);
+
     if (result.skipped && !DELIBERATE_SKIPS.has(result.skipped)) {
       status = "error";
-      errorMessage = `calendar skipped: ${result.skipped}`;
+      errorMessage = `calendar skipped: ${result.skipped} — ${ingestNote(result)}`;
       await alertOnce(
         `skip:${result.skipped}`,
         `:brain: brain-calendar skipped (${escapeSlack(result.skipped)}). Meetings are frozen ` +
