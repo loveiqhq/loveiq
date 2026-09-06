@@ -33,6 +33,15 @@ export interface BrainChunk {
   body: string;
   meta: Record<string, unknown>;
   score: number;
+  /**
+   * The period this chunk DESCRIBES, not when it was ingested. Null only for
+   * `doc` (repo markdown, which is current by construction).
+   *
+   * Carried through because "the call two days ago beats the commit from March"
+   * is unanswerable if the model cannot see either date. `brain_search` has
+   * always returned it; this mapper used to drop it on the floor.
+   */
+  periodEnd: string | null;
 }
 
 /**
@@ -195,6 +204,7 @@ export async function retrieve(question: string, limit = 12): Promise<BrainChunk
     body: String(r.body ?? ""),
     meta: (r.meta ?? {}) as Record<string, unknown>,
     score: typeof r.score === "number" ? r.score : 0,
+    periodEnd: typeof r.period_end === "string" ? r.period_end : null,
   }));
 
   // Rows arrive already ordered by score, so first-seen wins on both passes.

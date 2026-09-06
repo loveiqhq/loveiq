@@ -111,12 +111,13 @@ describe("/api/mcp", () => {
       expect(body.result.serverInfo.name).toBe("loveiq-brain");
     });
 
-    it("lists exactly the six tools, each with a schema", async () => {
+    it("lists exactly the seven tools, each with a schema", async () => {
       // Asserted exactly, not with toContain: a tool that disappears from the list
       // is unreachable to every connected Claude, and nothing else would notice.
       const body = await (await POST(rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }))).json();
       expect(body.result.tools.map((t: { name: string }) => t.name)).toEqual([
         "search_company_context",
+        "fetch_document",
         "get_business_numbers",
         "list_product_tables",
         "query_product_data",
@@ -124,6 +125,34 @@ describe("/api/mcp", () => {
         "list_sources",
       ]);
       for (const t of body.result.tools) expect(t.inputSchema.type).toBe("object");
+    });
+
+    it("marks every tool read-only, and only the outside-services one open-world", async () => {
+      /**
+       * `readOnlyHint` is what lets a client stop asking permission per call, so it
+       * is a promise about behaviour rather than decoration. This endpoint is
+       * read-only by construction -- a sibling test asserts it never issues PATCH,
+       * PUT or DELETE -- and this assertion is the tripwire for the day someone adds
+       * a tool that writes and copies the annotation block along with everything else.
+       *
+       * `destructiveHint`/`idempotentHint` are deliberately absent: per the MCP spec
+       * they only carry meaning when `readOnlyHint` is false, and setting them anyway
+       * states something untrue about tools that cannot destroy anything.
+       */
+      const body = await (await POST(rpc({ jsonrpc: "2.0", id: 21, method: "tools/list" }))).json();
+      const tools = body.result.tools as Array<{
+        name: string;
+        title?: string;
+        annotations?: Record<string, boolean>;
+      }>;
+      for (const t of tools) {
+        expect(t.annotations?.readOnlyHint, t.name).toBe(true);
+        expect(t.annotations, t.name).not.toHaveProperty("destructiveHint");
+        expect(typeof t.title, t.name).toBe("string");
+      }
+      expect(tools.filter((t) => t.annotations?.openWorldHint === true).map((t) => t.name)).toEqual(
+        ["query_external_service"]
+      );
     });
 
     it("tells the client about BOTH halves — indexed history and live state", async () => {
@@ -181,6 +210,51 @@ describe("/api/mcp", () => {
       expect(body.result.isError).toBe(false);
     });
 
+    it("gives the model a score, a date and a fetch handle for every hit", async () => {
+      /**
+       * All three were computed and thrown away. `retrieve.ts` dropped `period_end`
+       * in its mapper and `renderSources` printed no score, so the caller saw an
+       * ORDER and nothing else -- it could not tell a 3.0 hit from a 0.05 one, could
+       * not tell a decision from two days ago from a commit from March, and had no
+       * way to ask for the rest of a document it could only see one part of.
+       */
+      mockRetrieve.mockResolvedValue([
+        {
+          source: "drive",
+          sourceId: "doc:1AbC#4",
+          title: "Meeting notes: Sync",
+          url: null,
+          body: "We agreed to ship it.",
+          meta: { part: 4 },
+          score: 2.5,
+          periodEnd: "2026-08-22",
+        },
+      ]);
+      const text = (await (await call({ query: "what did we agree" })).json()).result.content[0]
+        .text as string;
+      expect(text).toContain("relevance: 2.50");
+      expect(text).toContain("date: 2026-08-22");
+      expect(text).toContain("id: drive/doc:1AbC#4");
+      // and the caller is told the number is not comparable across questions
+      expect(text).toMatch(/NOT comparable between questions/);
+      expect(text).toMatch(/the later `date:` is the current decision/);
+    });
+
+    it("names the sources it actually holds when nothing matches", async () => {
+      // The old message advertised Jira, which has 0 chunks, and omitted Notion,
+      // Slack, Gmail, Drive, the calendar and WhatsApp, which have 25,000 between
+      // them. It told the model to search a source that cannot answer and hid seven
+      // that can.
+      mockRetrieve.mockResolvedValue([]);
+      const text = (await (await call({ query: "something absent" })).json()).result.content[0]
+        .text as string;
+      expect(text).not.toMatch(/Jira/i);
+      expect(text).toMatch(/Notion/);
+      expect(text).toMatch(/Slack/);
+      expect(text).toMatch(/list_sources/);
+      expect(text).toMatch(/source code is not/i);
+    });
+
     /**
      * The single most important behaviour in this file. Telling a model the
      * corpus is empty when the database is unreachable makes it assert absence
@@ -216,6 +290,115 @@ describe("/api/mcp", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.result.isError).toBe(true);
+    });
+  });
+
+  describe("fetch_document", () => {
+    const call = (args: Record<string, unknown>) =>
+      POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 40,
+          method: "tools/call",
+          params: { name: "fetch_document", arguments: args },
+        })
+      ).then((r) => r.json().then((b) => b.result));
+
+    /** Rows a `source_id=like.<base>*` read would return, in the order Postgres gives. */
+    function wireParts(rows: Array<Record<string, unknown>>) {
+      mockSupabaseFetch.mockImplementation(async (path: string) => {
+        if (String(path).startsWith("/rest/v1/brain_query")) {
+          return { ok: true, headers: new Headers(), json: async () => [] };
+        }
+        return { ok: true, headers: new Headers(), json: async () => rows };
+      });
+    }
+
+    const part = (n: number, body: string) => ({
+      source: "drive",
+      source_id: n === 1 ? "doc:1AbC" : `doc:1AbC#${n}`,
+      title: n === 1 ? "Meeting notes: Sync" : `Meeting notes: Sync (part ${n} of 10)`,
+      url: "https://docs.google.com/document/d/1AbC/edit",
+      body,
+      meta: n === 1 ? { kind: "meeting-notes" } : { kind: "meeting-notes", part: n, parts: 10 },
+      period_end: "2026-08-22",
+    });
+
+    it("reassembles the parts in NUMERIC order, which a lexical sort gets wrong", async () => {
+      // Postgres returns `#10` before `#2` on a string sort, so a document read back
+      // in id order is a document read out of order — and nothing about the output
+      // would say so.
+      wireParts([part(1, "ONE"), part(10, "TEN"), part(2, "TWO")]);
+      const r = await call({ id: "drive/doc:1AbC" });
+      expect(r.isError).toBeFalsy();
+      const text = r.content[0].text as string;
+      expect(text.indexOf("ONE")).toBeLessThan(text.indexOf("TWO"));
+      expect(text.indexOf("TWO")).toBeLessThan(text.indexOf("TEN"));
+      expect(text).toContain("parts 1-10 of 3");
+    });
+
+    it("keeps the untrusted-data fence and the reading guide", async () => {
+      wireParts([part(1, "body text")]);
+      const text = (await call({ id: "drive/doc:1AbC" })).content[0].text as string;
+      expect(text).toMatch(/UNTRUSTED DATA/);
+      expect(text).toMatch(/<<<SOURCE 1>>>/);
+      expect(text).toMatch(/date: 2026-08-22/);
+    });
+
+    it("cuts on a part boundary and names the part to resume from", async () => {
+      // Half a chunk returned as a whole document is the exact failure this file is
+      // written against, so the budget can never split one.
+      wireParts([part(1, "A".repeat(900)), part(2, "B".repeat(900)), part(3, "C".repeat(900))]);
+      const r = await call({ id: "drive/doc:1AbC", max_chars: 2500 });
+      const text = r.content[0].text as string;
+      expect(text).toContain("from_part=3");
+      expect(text).not.toContain("C".repeat(900));
+      // and the part it did include is whole, not sliced
+      expect(text).toContain("B".repeat(900));
+    });
+
+    it("resumes from from_part", async () => {
+      wireParts([part(1, "FIRST"), part(2, "SECOND")]);
+      const text = (await call({ id: "drive/doc:1AbC", from_part: 2 })).content[0].text as string;
+      expect(text).not.toContain("FIRST");
+      expect(text).toContain("SECOND");
+      expect(text).toContain("this is all of it");
+    });
+
+    it("strips a numeric part suffix but never a doc heading that ends in digits", async () => {
+      // `docs/api.md#post-apistaging-login-2` is a HEADING, not part 2 of anything.
+      // Stripping trailing digits here is the `monthly:2026-08` -> `monthly:2026`
+      // collapse that retrieve.ts already carries a scar from.
+      wireParts([part(1, "x")]);
+      await call({ id: "drive/doc:1AbC#3" });
+      const read = toolCalls()
+        .map(([path]) => String(path))
+        .find((p) => p.includes("brain_chunk"))!;
+      expect(decodeURIComponent(read)).toContain("source_id=like.doc:1AbC*");
+
+      mockSupabaseFetch.mockClear();
+      wireParts([{ ...part(1, "y"), source: "doc", source_id: "docs/api.md#heading-2" }]);
+      await call({ id: "doc/docs/api.md#heading-2" });
+      const docRead = toolCalls()
+        .map(([path]) => String(path))
+        .find((p) => p.includes("brain_chunk"))!;
+      expect(decodeURIComponent(docRead)).toContain("source_id=like.docs/api.md#heading-2*");
+    });
+
+    it("refuses an id it did not print, and says where ids come from", async () => {
+      expect((await call({ id: "nonsense" })).isError).toBe(true);
+      expect((await call({ id: "notasource/x" })).isError).toBe(true);
+      wireParts([]);
+      const missing = await call({ id: "drive/doc:doesnotexist" });
+      expect(missing.isError).toBe(true);
+      expect(missing.content[0].text).toMatch(/search_company_context/);
+    });
+
+    it("reports an outage as an outage, not as a missing document", async () => {
+      mockSupabaseFetch.mockRejectedValue(new Error("down"));
+      const r = await call({ id: "drive/doc:1AbC" });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toMatch(/outage, not a missing document/);
     });
   });
 
@@ -717,6 +900,66 @@ describe("/api/mcp", () => {
       }
     });
 
+    it("REFUSES an unparseable filter instead of silently running unfiltered", async () => {
+      /**
+       * Measured against production before this fix: `["status=eq.succeeded"]`
+       * returned 85 matches, and adding one dotted filter returned 315 — a 3.7x
+       * overstatement, `isError: false`, byte-identical in shape to a correct
+       * answer. Three bare `continue`s, no notice, no log.
+       *
+       * The refusal happens BEFORE the request, like the rpc writer gate, so a
+       * caller can never receive rows from a query it did not ask for.
+       */
+      wire([{ id: 1 }], { total: 1 });
+      mockSupabaseFetch.mockClear();
+      const r = await call({ table: "payment", filters: ["not a filter at all"] });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toMatch(/could not be parsed/);
+      expect(r.content[0].text).toMatch(/UNFILTERED/);
+      expect(toolCalls().some(([p]) => String(p).includes("/rest/v1/payment"))).toBe(false);
+    });
+
+    it("ACCEPTS the dotted form PostgREST's own docs use, rather than dropping it", async () => {
+      // `col.op.value` is the syntax `or=` is documented with, so it is what a model
+      // writes. Rewriting it kills the measured bug at source; refusing it would only
+      // make the bug loud.
+      wire([{ id: 1 }], { total: 1 });
+      mockSupabaseFetch.mockClear();
+      const r = await call({
+        table: "payment",
+        filters: ["created_date_time.gte.2026-08-01", "status.not.eq.canceled"],
+      });
+      expect(r.isError).toBeFalsy();
+      const path = decodeURIComponent(String(toolCalls().at(-1)?.[0]));
+      expect(path).toContain("created_date_time=gte.2026-08-01");
+      expect(path).toContain("status=not.eq.canceled");
+    });
+
+    it("keeps dots inside a value when the = form is used", async () => {
+      wire([{ id: 1 }], { total: 1 });
+      mockSupabaseFetch.mockClear();
+      await call({ table: "payment", filters: ["email=like.*@loveiq.org"] });
+      const path = decodeURIComponent(String(toolCalls().at(-1)?.[0]));
+      expect(path).toContain("email=like.*@loveiq.org");
+    });
+
+    it("refuses rpc arguments it would silently ignore, and still runs a clean one", async () => {
+      // On the rpc branch select/filters/order/limit/offset were computed and thrown
+      // away while the header still printed offset paging advice. A caller who
+      // filtered got the full unfiltered set with no way to tell.
+      wire([{ day: "2026-09-01" }], { total: 1 });
+      mockSupabaseFetch.mockClear();
+      const refused = await call({ table: "rpc/get_report_counts", params: {}, limit: 10 });
+      expect(refused.isError).toBe(true);
+      expect(refused.content[0].text).toMatch(/silently dropped/);
+      expect(toolCalls().some(([p]) => String(p).includes("get_report_counts"))).toBe(false);
+
+      // Positive control: params-only still works, or the guard is just an outage.
+      wire([{ day: "2026-09-01" }], { total: 1 });
+      const ok = await call({ table: "rpc/get_report_counts", params: { since: "2026-01-01" } });
+      expect(ok.isError).toBeFalsy();
+    });
+
     it("records the row count it actually delivered, not the number fetched", async () => {
       // `shown`, not `rows.length`: the record has to say what the caller received,
       // or a result cut by the character ceiling reads back as a complete one.
@@ -1159,6 +1402,42 @@ describe("an oversized result must announce that it was cut", () => {
     expect(out).toMatch(/page with offset/);
     // The notice must fit INSIDE the cap, not push the payload past it.
     expect(out.length).toBeLessThanOrEqual(40_000);
+  });
+
+  it("parses both filter syntaxes and names what it cannot parse", async () => {
+    const { parseFiltersForTest } = await import("@/app/api/mcp/route");
+    expect(parseFiltersForTest(["status=eq.paid"])).toEqual({
+      parts: ["status=eq.paid"],
+      rejected: [],
+    });
+    expect(parseFiltersForTest(["created_date_time.gte.2026-08-01"]).parts).toEqual([
+      "created_date_time=gte.2026-08-01",
+    ]);
+    // A value containing dots must survive both forms.
+    expect(parseFiltersForTest(["email=like.*@loveiq.org"]).parts[0]).toContain(
+      encodeURIComponent("like.*@loveiq.org")
+    );
+    expect(parseFiltersForTest(["ts.gte.2026-08-01T00:00:00.000Z"]).parts[0]).toContain(
+      encodeURIComponent("gte.2026-08-01T00:00:00.000Z")
+    );
+    // Rejected, not dropped: an unknown operator is a typo, not a filter.
+    expect(parseFiltersForTest(["status.wat.paid"]).rejected).toEqual(["status.wat.paid"]);
+    expect(parseFiltersForTest(["garbage"]).rejected).toEqual(["garbage"]);
+    expect(parseFiltersForTest([42]).rejected).toEqual(["42"]);
+    expect(parseFiltersForTest(["=novalue"]).rejected).toEqual(["=novalue"]);
+  });
+
+  it("gives advice that fits the tool that was cut", async () => {
+    // Every tool used to be told to "select fewer columns", which is
+    // query_product_data's advice and means nothing to a search or a document
+    // fetch. Advice that does not apply reads as boilerplate, and gets skipped
+    // along with the warning it is attached to.
+    const { capWithNotice } = await import("@/app/api/mcp/route");
+    const cut = capWithNotice("x".repeat(80_000), "lower the limit, then fetch_document");
+    expect(cut).toMatch(/TRUNCATED/);
+    expect(cut).toMatch(/lower the limit, then fetch_document/);
+    expect(cut).not.toMatch(/select fewer columns/);
+    expect(cut.length).toBeLessThanOrEqual(40_000);
   });
 
   it("leaves a result that fits completely untouched", async () => {

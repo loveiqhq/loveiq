@@ -85,6 +85,9 @@ export async function chunksForDay(day: string): Promise<BrainChunk[]> {
       body: String(r.body ?? "").slice(0, SNIPPET),
       meta: (r.meta as Record<string, unknown>) ?? {},
       score: 0,
+      // Every row here is `period_end=eq.<day>` by construction, so the date is
+      // the day being briefed rather than something that needs selecting.
+      periodEnd: day,
     });
     if (out.length >= MAX_CHUNKS) break;
   }

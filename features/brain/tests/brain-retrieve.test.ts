@@ -19,6 +19,7 @@ interface RowInput {
   title?: string | null;
   score: number;
   path?: string;
+  period_end?: string | null;
 }
 
 function row(input: RowInput) {
@@ -31,6 +32,7 @@ function row(input: RowInput) {
     body: `body of ${input.source_id}`,
     meta: input.path ? { path: input.path } : {},
     updated_at: "2026-08-01T00:00:00Z",
+    period_end: input.period_end === undefined ? "2026-08-22" : input.period_end,
     score: input.score,
   };
 }
@@ -164,6 +166,34 @@ describe("retrieve — source diversity", () => {
 
     const out = await retrieve("anything", 8);
     expect(out.some((r) => r.sourceId === "monthly:2026-08")).toBe(true);
+  });
+
+  it("carries period_end and score out of the RPC, which the mapper used to drop", async () => {
+    /**
+     * `brain_search` has always returned `period_end`, and this mapper silently
+     * discarded it along with `id` and `updated_at`. Every consumer downstream was
+     * therefore date-blind, and "the call two days ago beats the commit from March"
+     * is not a judgement anything can make without the dates.
+     *
+     * Asserted HERE rather than through the MCP door, because every test there
+     * supplies `periodEnd` by hand through a mocked `retrieve` -- so deleting this
+     * one line left the entire 553-test suite green. Found by mutation, not review.
+     */
+    respondWith([
+      row({ source: "drive", source_id: "doc:1AbC", score: 2.5, period_end: "2026-09-04" }),
+      // `doc` genuinely carries no period; null must survive as null.
+      row({
+        source: "doc",
+        source_id: "CLAUDE.md#x",
+        score: 1.0,
+        period_end: null,
+        path: "CLAUDE.md",
+      }),
+    ]);
+    const out = await retrieve("anything", 5);
+    expect(out[0]!.periodEnd).toBe("2026-09-04");
+    expect(out[0]!.score).toBe(2.5);
+    expect(out[1]!.periodEnd).toBeNull();
   });
 
   it("respects the requested limit", async () => {

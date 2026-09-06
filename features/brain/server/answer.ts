@@ -138,7 +138,17 @@ function defence(text: string): string {
  * One renderer, both callers. A door added later gets the defence by construction
  * rather than by remembering.
  */
-export function renderSources(chunks: BrainChunk[]): string {
+export function renderSources(
+  chunks: BrainChunk[],
+  /**
+   * `forAgent` adds two lines a READER does not want and a TOOL CALLER cannot
+   * work without: the relevance score, and a handle to fetch the whole document.
+   * The Slack answer is prose for a person, and a bare number in that prompt is
+   * something the model quotes rather than uses. The defence is NOT optional and
+   * is not behind this flag -- only the extra lines are.
+   */
+  opts: { forAgent?: boolean } = {}
+): string {
   // Chunks were previously joined by "---", the SAME token that fenced the
   // question below it, and the `[n] title` heads were plain text a chunk could
   // forge. A commit message or Jira description containing "---\n\nQuestion: ..."
@@ -164,7 +174,25 @@ export function renderSources(chunks: BrainChunk[]): string {
       // as operator text. Scheme-checked too, the way the Slack renderer already
       // does -- the asymmetry between the two was the tell.
       const safeUrl = c.url && /^https?:\/\//i.test(c.url) ? defence(c.url) : null;
-      const inner = [head, safeUrl ? `url: ${safeUrl}` : null, forMarcus, "", defence(c.body)]
+      // WITHOUT A DATE, "decided two days ago beats committed in March" is not a
+      // judgement the model can make -- it cannot see either date. `label()` prints
+      // one for `commit` and for nothing else, so a Slack day, a Notion task, an
+      // email thread and a call transcript all arrived undated.
+      const dated = c.periodEnd ? `date: ${defence(c.periodEnd)}` : null;
+      // Defenced like every other quoted field: `source` and `sourceId` are corpus
+      // text. A mangled handle fails to fetch, which is the safe direction.
+      const handle = opts.forAgent ? `id: ${defence(c.source)}/${defence(c.sourceId)}` : null;
+      const relevance = opts.forAgent ? `relevance: ${c.score.toFixed(2)}` : null;
+      const inner = [
+        head,
+        handle,
+        dated,
+        relevance,
+        safeUrl ? `url: ${safeUrl}` : null,
+        forMarcus,
+        "",
+        defence(c.body),
+      ]
         .filter((line) => line !== null)
         .join("\n");
       return `<<<SOURCE ${n}>>>\n${inner}\n<<<END SOURCE ${n}>>>`;
