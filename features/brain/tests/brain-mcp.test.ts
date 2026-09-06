@@ -156,6 +156,30 @@ describe("/api/mcp", () => {
       );
     });
 
+    it("routes 'what do we charge' to the live half, where the answer actually is", async () => {
+      /**
+       * MEASURED 2026-09-06. "What is our current pricing for the report" returned four
+       * sources and NOT ONE contained a price. Top hit was an eight-month-old Google
+       * Sheets notification whose subject reads "Based on our current pricing logic" —
+       * a strong keyword match carrying no number, which is exactly the shape that
+       * produces a confident empty answer.
+       *
+       * Prices are computed per visitor from country, device, traffic source and
+       * behaviour, so they are STATE, not a document. No search of the written record
+       * can answer it, and the live half was never advertised as the place that can:
+       * the inventory listed payments, bookings, submissions, reports, shares, invites,
+       * the waitlist and marketing spend, and never pricing.
+       *
+       * Truth at the time, from `report_price_quote`: essentials 9.99, full_report 29,
+       * core 39, all_reports 49.
+       */
+      const list = await (await POST(rpc({ jsonrpc: "2.0", id: 25, method: "tools/list" }))).json();
+      const tools = list.result.tools as Array<{ name: string; description: string }>;
+      const live = tools.find((t) => t.name === "query_product_data")!;
+      expect(live.description).toMatch(/report_price_quote/);
+      expect(live.description).toMatch(/what do we charge/i);
+    });
+
     it("keeps the decision-record filter reachable, by the value the ingester emits", async () => {
       /**
        * A tool that names a filter value nothing produces LIES rather than errors.

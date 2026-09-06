@@ -505,7 +505,11 @@ const TOOLS = [
       "deliverability (resend_webhook_event, email_suppression), Stripe payments and " +
       "refunds (payment, payment_item, payment_webhook_event), Calendly bookings " +
       "(booking_event), survey submissions and answers, reports, shares, invites, the " +
-      "waitlist, marketing spend, and the admin tables. Read-only by construction. " +
+      "waitlist, marketing spend, and the admin tables. WHAT WE CHARGE LIVES HERE TOO " +
+      "(report_price_quote: plan, current_price, and the multipliers that produced it) " +
+      "— prices are computed per visitor, so they are state, not a document, and no " +
+      "search of the written record can answer 'what do we charge'. Read-only by " +
+      "construction. " +
       "Prefer an rpc/get_* function when one matches the question \u2014 they encode the " +
       "business logic already. Use search_company_context instead for anything written " +
       "down or historical narrative.",
@@ -1696,7 +1700,9 @@ export async function POST(request: Request) {
         "LIVE STATE, queried straight from the production database with full history and no " +
         "lag: payments and refunds, Resend email delivery and bounces, Calendly bookings, " +
         "survey submissions and answers, reports, shares, invites, the waitlist, marketing " +
-        "spend, and the admin tables. Use list_product_tables then query_product_data, and " +
+        "spend, the admin tables, and CURRENT PRICING (report_price_quote — prices are " +
+        "computed per visitor, so 'what do we charge' is a live question, not a written " +
+        "one). Use list_product_tables then query_product_data, and " +
         "prefer an rpc/get_* analysis function when one fits — those encode the business " +
         "logic already.\n\n" +
         "Which half to reach for: history for why something was decided or what a past " +
