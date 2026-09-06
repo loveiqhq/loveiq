@@ -85,6 +85,20 @@ import { sweepStale, upsertChunks, type BrainRow, type IngestResult } from "./up
  * stage", then +0.33, +0.30, +0.26, +0.20 — and EXACTLY 0.000 on "how many people
  * signed up in august" and "what did we spend on ads last month".
  *
+ * THAT FIRST WORDING WAS ONLY HALF A FIX, which re-asking in other words is what
+ * showed. "funnel drop-off by stage" moved three absent questions to ranks 10-11 and
+ * two into the top 5, but "at which step do we lose the most users" was still absent
+ * and "show me the stages people go through before paying" sat at 9 — the questions
+ * that never say the word "funnel". Averaged over six funnel phrasings against four
+ * unrelated ones, at the title's 2x weight:
+ *
+ *     funnel drop-off by stage                          funnel 0.385   other 0.556
+ *     + where we lose people                            funnel 0.565   other 0.579
+ *     funnel step by step, where we lose people ...      funnel 0.627   other 0.572
+ *
+ * +0.242 where it is wanted, +0.016 where it is not. A fix verified on the one
+ * phrasing that prompted it would have shipped as done.
+ *
  * REJECTED ALTERNATIVE, measured: a source penalty on `commit`, mirroring the
  * bulk-mail one. Swept 0 to 0.8 across ten business and five engineering questions.
  * Business targets in the top 3 moved 4/10 to 5/10 while engineering collapsed 4/5 to
@@ -93,7 +107,8 @@ import { sweepStale, upsertChunks, type BrainRow, type IngestResult } from "./up
  * problem.
  */
 const NUMBERS_VOCABULARY =
-  "revenue, paying customers, signups, visits, ad spend, conversion rate, funnel drop-off by stage";
+  "revenue, paying customers, signups, visits, ad spend, conversion rate, " +
+  "funnel step by step, where we lose people and drop off";
 
 const DAYS = 4000;
 const SOURCE = "analytics";
