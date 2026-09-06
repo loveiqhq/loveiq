@@ -285,6 +285,40 @@ describe("retrieve — failure and edge handling", () => {
     expect(JSON.parse(String(mockSupabaseFetch.mock.calls.at(-1)?.[1]?.body)).per_source).toBe(3);
   });
 
+  it("does not turn a malformed question into a claimed outage", async () => {
+    /**
+     * A NUL cannot exist inside a Postgres text value and a LONE SURROGATE is not
+     * valid UTF-8, so either makes PostgREST answer 400 — which this module raises,
+     * correctly for every other 400, as `CorpusUnavailableError`. The caller was then
+     * told the corpus was unavailable while it was perfectly healthy.
+     *
+     * Found 2026-09-06 by an adversarial probe pasting control characters into a
+     * question. Not exotic: that is what copying text out of a PDF or a terminal does.
+     * Measured at the time — bidi overrides, U+FFFD and ordinary control characters
+     * all pass through Postgres untouched; only these two break it.
+     */
+    const NUL = String.fromCharCode(0);
+    const LONE = String.fromCharCode(0xd800);
+    respondWith([]);
+    await expect(retrieve(`revenue ${NUL} august`, 5)).resolves.toEqual([]);
+    const sent = JSON.parse(String(mockSupabaseFetch.mock.calls.at(-1)?.[1]?.body)).query_text;
+    expect(sent).not.toContain(NUL);
+
+    respondWith([]);
+    await expect(retrieve(`revenue ${LONE} august`, 5)).resolves.toEqual([]);
+    const sent2 = JSON.parse(String(mockSupabaseFetch.mock.calls.at(-1)?.[1]?.body)).query_text;
+    // A lone surrogate makes the string un-encodable; well-formed output is the point.
+    expect(sent2.isWellFormed?.() ?? true).toBe(true);
+    expect(sent2).toContain("revenue");
+  });
+
+  it("still says CorpusUnavailableError when the corpus really is unavailable", async () => {
+    // The positive control. Sanitising input must not soften a genuine 500 into an
+    // empty result — that swap is the bug this whole rule exists to prevent, inverted.
+    mockSupabaseFetch.mockResolvedValue({ ok: false, status: 500, json: async () => ({}) });
+    await expect(retrieve("a real question", 5)).rejects.toThrow(CorpusUnavailableError);
+  });
+
   it("returns nothing for a too-short question without calling the database", async () => {
     const out = await retrieve("a", 8);
     expect(out).toEqual([]);

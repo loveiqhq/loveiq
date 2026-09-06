@@ -155,12 +155,37 @@ export class CorpusUnavailableError extends Error {
   }
 }
 
+/**
+ * TWO CHARACTERS TURN A BAD QUESTION INTO A FAKE OUTAGE.
+ *
+ * A NUL cannot exist inside a Postgres text value, and a LONE SURROGATE is not valid
+ * UTF-8 so the JSON body never survives encoding. Either one makes PostgREST answer
+ * 400, which this file — correctly, for every other 400 — raises as
+ * `CorpusUnavailableError`. The caller is then told "the corpus is unavailable" when
+ * the corpus is perfectly healthy and the QUESTION was malformed.
+ *
+ * That is the same defect this codebase keeps finding in other clothes: never report
+ * the shape of the REQUEST as the state of the world. Found 2026-09-06 by an
+ * adversarial probe pasting control characters into a question — which is not exotic,
+ * it is what happens when someone copies text out of a PDF or a terminal.
+ *
+ * Both are replaced rather than rejected. The rest of the question is still a
+ * perfectly good question, and answering it beats refusing over a byte the person
+ * never knowingly typed. Everything else — bidi overrides, U+FFFD, ordinary control
+ * characters — was measured to pass through Postgres untouched and is left alone.
+ */
+function sanitiseQuery(q: string): string {
+  return q
+    .replace(/\u0000/g, " ")
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD");
+}
+
 export async function retrieve(
   question: string,
   limit = 12,
   opts: RetrieveOptions = {}
 ): Promise<BrainChunk[]> {
-  const trimmed = question.trim();
+  const trimmed = sanitiseQuery(question).trim();
   if (trimmed.length < 2) return [];
 
   /**
