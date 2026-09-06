@@ -170,6 +170,10 @@ describe("/api/mcp", () => {
       // bodies per question and never learn that search shows one PART of each.
       expect(text).toMatch(/fetch_document/);
       expect(text).toMatch(/not comparable between questions/i);
+      // Narrowing is useless if the caller never learns it exists. A capability
+      // shipped without telling anyone is the shape of half-done work.
+      expect(text).toMatch(/sources/);
+      expect(text).toMatch(/meta/);
     });
 
     it("returns 202 with no body for a notification, which expects no response", async () => {

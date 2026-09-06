@@ -174,6 +174,16 @@ Six tools, in two halves.
 | `get_business_numbers`   | Exact daily funnel/revenue/ad-spend rows to compute with                                                                                                              |
 | `list_sources`           | What the corpus holds and how fresh each source is — call this first when an answer looks stale                                                                       |
 
+**You can narrow, and it is usually better than rewording.** `search_company_context`
+takes `sources` and `exclude_sources` (any of doc, commit, analytics, ga4, gsc, notion,
+drive, slack, gmail, calendar, whatsapp), `since` / `until`, and `meta` for indexed
+fields — a Notion task's `status` or `assignee`, a Slack `channel`, a commit `author`,
+a Gmail `mailbox`. Two things to know. Matching on `meta` is EXACT, so the statuses in
+use are `Done`, `Idea`, `Not Started`, `WIP`, `Backlog`, `Planning` and `In use` —
+"in_progress" matches nothing and says nothing. And any date range excludes repository
+documentation entirely, because `doc` chunks describe no period; use dates for "what
+happened recently", never for a policy lookup.
+
 **Read the score, but do not threshold on it.** Every hit carries a `relevance:`
 number and results are ordered by it, yet there is deliberately no relevance floor.
 Measured on this corpus, the top score for a question it ANSWERS ("why is the data
