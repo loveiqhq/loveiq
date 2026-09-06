@@ -153,11 +153,21 @@ Six tools, in two halves.
 
 **History — the indexed corpus:**
 
-| Tool                     | For                                                                                                 |
-| ------------------------ | --------------------------------------------------------------------------------------------------- |
-| `search_company_context` | Anything written down — a decision, a commit, a Notion page or database row, a past month's numbers |
-| `get_business_numbers`   | Exact daily funnel/revenue/ad-spend rows to compute with                                            |
-| `list_sources`           | What the corpus holds and how fresh each source is — call this first when an answer looks stale     |
+| Tool                     | For                                                                                                                                                                   |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `search_company_context` | Anything written down — a decision, a commit, a Notion page or database row, a past month's numbers. Each hit carries a `relevance:` score, a `date:` and an `id:`    |
+| `fetch_document`         | One document in full, reassembled from every part it was split into. Takes the `id:` from a search line; search only ever shows a document's single best-scoring part |
+| `get_business_numbers`   | Exact daily funnel/revenue/ad-spend rows to compute with                                                                                                              |
+| `list_sources`           | What the corpus holds and how fresh each source is — call this first when an answer looks stale                                                                       |
+
+**Read the score, but do not threshold on it.** Every hit carries a `relevance:`
+number and results are ordered by it, yet there is deliberately no relevance floor.
+Measured on this corpus, the top score for a question it ANSWERS ("why is the data
+retention purge turned off": 1.302) and one it CANNOT ("what is our AWS bill":
+1.288) overlap within 0.015 — any cutoff that catches the second silences the
+first. So the tool ships the number plus a sentence saying it ranks within one
+result set only, and the rule that matters most: when two sources conflict, the
+later `date:` is the current decision.
 
 **Live state — read at ask time, full history, no lag:**
 

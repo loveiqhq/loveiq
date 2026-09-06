@@ -1535,6 +1535,12 @@ export async function POST(request: Request) {
       serverInfo: { name: "loveiq-brain", version: "1.0.0" },
       instructions:
         "Everything LoveIQ knows about itself, in two halves.\n\n" +
+        "HOW TO USE IT WELL: search first, then fetch. `search_company_context` returns a " +
+        "ranked list where each hit carries a relevance score, the date the record " +
+        "describes, and an id — but only the single best-scoring PART of each document. " +
+        "When a hit matters, call `fetch_document` with that id to read the whole thing. " +
+        "Scores are not comparable between questions, so read the text rather than " +
+        "thresholding on the number, and when two sources conflict prefer the later date.\n\n" +
         "HISTORY, indexed and searchable: documentation, every git commit including the " +
         "plain-English 'For Marcus:' summaries, the whole Notion workspace (every database " +
         "and page, not just the task board), the team's Slack conversations day by day, the " +

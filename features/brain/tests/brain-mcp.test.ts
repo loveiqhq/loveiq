@@ -165,6 +165,11 @@ describe("/api/mcp", () => {
       expect(text).toMatch(/query_product_data/);
       expect(text).toMatch(/live/i);
       expect(text).not.toMatch(/Jira/);
+      // The triage protocol has to be here, not only in the tool descriptions: a
+      // caller that never reads past `initialize` would otherwise pull twelve full
+      // bodies per question and never learn that search shows one PART of each.
+      expect(text).toMatch(/fetch_document/);
+      expect(text).toMatch(/not comparable between questions/i);
     });
 
     it("returns 202 with no body for a notification, which expects no response", async () => {
