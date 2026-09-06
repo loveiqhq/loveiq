@@ -57,9 +57,46 @@ describe("isoWeek", () => {
 });
 
 describe("buildAnalyticsRows", () => {
-  it("emits a daily, a weekly and a monthly chunk", () => {
+  it("totals all time across months, which is the arithmetic nobody should ask a model to do", () => {
+    /**
+     * MEASURED 2026-09-06. "How much revenue have we made in total and how many
+     * paying customers do we have" returned `monthly:2026-09` — "Revenue: EUR 0.00,
+     * Paid customers: 0" — because no all-time grain existed and September is the
+     * most recent month. The truth was EUR 675.91 from 37 customers. The chunk was
+     * honestly labelled, and a reader skimming it still concludes the company has
+     * never earned anything.
+     *
+     * The alternative was making the model sum seven monthly chunks. This file
+     * already rejects that for weeks and months — "pre-totalled, so the answer is
+     * read rather than computed" — and the same argument decides this.
+     */
+    const rows = buildAnalyticsRows(
+      [
+        day("2026-07-10", { revenue: 100, reports_paid: 2 }),
+        day("2026-08-19", { revenue: 50, reports_paid: 1 }),
+      ],
+      STAMP
+    );
+    const all = rows.find((r) => r.source_id === "alltime");
+    expect(all, "an all-time chunk must exist").toBeDefined();
+    expect(all!.meta.revenue).toBe(150);
+    expect(all!.body).toMatch(/150/);
+    // It must say WHICH days it covers rather than implying eternity.
+    expect(all!.body).toMatch(/10 July 2026/);
+    expect(all!.body).toMatch(/19 August 2026/);
+    /**
+     * Dated as the LAST day covered, not the first. The recency term scores on
+     * `period_end`, so dating the one chunk that is never stale by its oldest day
+     * would bury it beneath every daily row — the exact failure the term was added
+     * to fix, pointed the other way.
+     */
+    expect(all!.period_end).toBe("2026-08-19");
+  });
+
+  it("emits a daily, a weekly, a monthly and an all-time chunk", () => {
     const rows = buildAnalyticsRows([day("2026-08-19")], STAMP);
     expect(rows.map((r) => r.source_id).sort()).toEqual([
+      "alltime",
       "daily:2026-08-19",
       "monthly:2026-08",
       "weekly:2026-W34",
@@ -80,14 +117,20 @@ describe("buildAnalyticsRows", () => {
      * title weight, against +0.04 on an unrelated question.
      */
     const rows = buildAnalyticsRows([day("2026-08-19")], STAMP);
-    expect(rows).toHaveLength(3); // day, week, month — all three must carry it
+    expect(rows).toHaveLength(4); // day, week, month, all-time — every one carries it
     for (const r of rows) {
       expect(r.title, r.source_id).toMatch(/revenue/i);
       expect(r.title, r.source_id).toMatch(/paying customers/i);
       expect(r.title, r.source_id).toMatch(/ad spend/i);
-      // and the period must still be readable, or the vocabulary has eaten it
+    }
+    // The period must still be readable on a DATED grain, or the vocabulary has
+    // eaten it. The all-time chunk names no month on purpose — it is not about one.
+    for (const r of rows.filter((x) => x.source_id !== "alltime")) {
       expect(r.title, r.source_id).toMatch(/August 2026/);
     }
+    expect(rows.find((r) => r.source_id === "alltime")!.title).toMatch(
+      /all time|in total|to date|lifetime/i
+    );
   });
 
   it("totals the weekly and monthly grains instead of repeating a day", () => {

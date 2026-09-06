@@ -549,6 +549,23 @@ export function buildAnalyticsRows(
   const out: BrainRow[] = [];
   const byWeek = new Map<string, Totals>();
   const byMonth = new Map<string, Totals>();
+  /**
+   * THE QUESTION EVERY FOUNDER AND INVESTOR ASKS FIRST, and until now the only
+   * grain that could not answer it.
+   *
+   * Measured 2026-09-06: "how much revenue have we made in total and how many
+   * paying customers do we have" returned `monthly:2026-09` — "Revenue: EUR 0.00,
+   * Paid customers: 0". Honestly labelled "September 2026 (monthly total)", and
+   * still the top hit for a question about ALL time, where the truth is EUR 675.91
+   * from 37 customers. Anyone skimming concludes the company has never earned a
+   * cent.
+   *
+   * The alternative is making the model add seven monthly chunks, which is what
+   * this file already refuses to do for weeks and months: "pre-totalled, so the
+   * answer is read rather than computed". `DAYS = 4000` means the rows for it are
+   * already fetched, so this costs one more `merge` per day and no API call.
+   */
+  let allTime: Totals | undefined;
 
   for (const r of rows) {
     const day = String(r.day).slice(0, 10);
@@ -556,6 +573,7 @@ export function buildAnalyticsRows(
     byWeek.set(week, merge(byWeek.get(week), r, day, adCost));
     const month = day.slice(0, 7);
     byMonth.set(month, merge(byMonth.get(month), r, day, adCost));
+    allTime = merge(allTime, r, day, adCost);
 
     const totals = seed(r, day, adCost);
     if (isEmpty(totals)) continue;
@@ -626,6 +644,33 @@ export function buildAnalyticsRows(
         ad_spend: t.adSpend,
       },
       updated_at: stampedAt,
+    });
+  }
+
+  if (allTime && !isEmpty(allTime)) {
+    // "all time", "in total", "so far", "to date", "since launch", "lifetime" —
+    // the words people actually type, per this file's own measured rule that the
+    // wording IS the retrieval index. The date range is spelled out too, so the
+    // answer says which days it covers rather than implying eternity.
+    const label = `all time, since launch — ${longDate(allTime.firstDay)} to ${longDate(allTime.lastDay)}`;
+    out.push({
+      source: SOURCE,
+      source_id: "alltime",
+      title:
+        `LoveIQ numbers — all time, in total, to date, lifetime since launch: ` +
+        `${NUMBERS_VOCABULARY}`,
+      url: null,
+      body: renderBody(label, allTime, adCost),
+      meta: {
+        grain: "alltime",
+        visitors: allTime.visitors,
+        revenue: allTime.revenue,
+        ad_spend: allTime.adSpend,
+      },
+      updated_at: stampedAt,
+      // The last day covered, so it sorts as current rather than ancient — the
+      // recency term would otherwise bury the one chunk that is never stale.
+      period_end: allTime.lastDay,
     });
   }
 
