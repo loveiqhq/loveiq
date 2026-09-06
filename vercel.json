@@ -115,10 +115,10 @@
       "maxDuration": 300
     },
     "app/api/cron/brain-fast/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 120
     },
     "app/api/cron/brain-notion/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 120
     },
     "app/api/cron/brain-gmail/route.ts": {
       "maxDuration": 300
@@ -127,7 +127,7 @@
       "maxDuration": 300
     },
     "app/api/cron/brain-calendar/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 120
     },
     "app/api/cron/brain-brief/route.ts": {
       "maxDuration": 120

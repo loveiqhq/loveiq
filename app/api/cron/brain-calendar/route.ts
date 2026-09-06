@@ -15,7 +15,21 @@ import logger from "@shared/observability/logger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+/**
+ * 120, not 60. The BUDGET is unchanged — what was missing is room for the tail.
+ *
+ * `maxDuration` does not make a run longer; it decides when the run is killed, and a
+ * kill writes NO `cron_run` row, so the worst runs are the ones that leave no trace.
+ * Measured over 7 days on 2026-09-06: brain-notion's worst completed run was 59,117ms
+ * against a 60,000ms ceiling — 883 milliseconds of margin — and brain-fast reached
+ * 56,596ms with a p95 of 44,141ms. Those are the SURVIVORS; anything that actually hit
+ * the ceiling is invisible by construction.
+ *
+ * 80s of tail room against a measured worst tail of 18s, and `brain-brief` has run at
+ * 120 since it was written. Raising the ceiling is close to free on Fluid Compute
+ * because billing follows active CPU, not the ceiling.
+ */
+export const maxDuration = 120;
 
 /**
  * GET /api/cron/brain-calendar

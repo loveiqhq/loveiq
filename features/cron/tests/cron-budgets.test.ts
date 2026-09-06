@@ -22,8 +22,17 @@ import { describe, expect, it } from "vitest";
 
 const CRON_DIR = "app/api/cron";
 
-/** The measured worst uninterruptible tail: gmail mid-re-walk, 58.1s against a 40s budget. */
-const WORST_TAIL_MS = 20_000;
+/**
+ * TWICE the measured worst uninterruptible tail (gmail mid-re-walk: 58.1s against a
+ * 40s budget, so 18s of tail).
+ *
+ * This was one worst-tail, and requiring exactly the worst case observed is not a
+ * margin — it passes the configuration that produces the incident. It did: with the
+ * bar at 20s, brain-fast, brain-notion and brain-calendar all sat at exactly 20s and
+ * the suite was green while brain-notion's worst completed run came within 883ms of
+ * being killed.
+ */
+const WORST_TAIL_MS = 40_000;
 
 const routes = readdirSync(CRON_DIR, { withFileTypes: true })
   .filter((d) => d.isDirectory())
