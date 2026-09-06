@@ -87,9 +87,19 @@ export async function GET(request: Request) {
     result = await ingestGmail(new Date().toISOString(), isOutOfTime, readVercelOidcToken(request));
     logger.info({ result }, "brain-gmail: done");
 
+    /**
+     * Record WHY even when nothing is wrong.
+     *
+     * `gmail-walk-in-progress` is a deliberate skip, so it left `error_message`
+     * empty — and a walk that has never once completed looked byte-identical in
+     * `cron_run` to a healthy one, for weeks. `status` still says whether to worry;
+     * this says what was seen. Overwritten below if the run is a real failure.
+     */
+    if (result.detail) errorMessage = result.detail;
+
     if (result.skipped && !DELIBERATE_SKIPS.has(result.skipped)) {
       status = "error";
-      errorMessage = `gmail skipped: ${result.skipped}`;
+      errorMessage = `gmail skipped: ${result.skipped} — ${result.detail ?? "no detail"}`;
       await alertOnce(
         `skip:${result.skipped}`,
         `:brain: brain-gmail skipped (${escapeSlack(result.skipped)}). Gmail is frozen but ` +

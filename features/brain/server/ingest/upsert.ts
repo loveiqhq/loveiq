@@ -543,4 +543,13 @@ export interface IngestResult {
    * and `cron_run` recorded success for both.
    */
   complete?: boolean;
+  /**
+   * One line of WHY, for `cron_run.error_message`.
+   *
+   * Same channel `google-oauth.ts` already uses, and for the same reason: Vercel's
+   * log query times out, so a diagnosis that only ever reaches the logs is a
+   * diagnosis nobody reads. Recorded whatever the status, so a run that is skipping
+   * on purpose still says what it saw. Never a secret — counts and flags only.
+   */
+  detail?: string;
 }

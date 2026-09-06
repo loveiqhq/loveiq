@@ -425,11 +425,27 @@ export async function ingestGmail(
   oidcToken?: string | null
 ): Promise<IngestResult> {
   if (isOutOfTime()) {
-    return { source: SOURCE, rows: 0, swept: 0, skipped: "gmail-time-budget" };
+    // Never started, which is not the same as started and truncated — and with a
+    // bare `skipped` the two were indistinguishable in `cron_run`.
+    return {
+      source: SOURCE,
+      rows: 0,
+      swept: 0,
+      skipped: "gmail-time-budget",
+      complete: false,
+      detail: "stopped=time-budget@before-walk",
+    };
   }
   const own = await getGoogleAccessToken(Date.now(), oidcToken);
   if (!own) {
-    return { source: SOURCE, rows: 0, swept: 0, skipped: "google-token-unavailable" };
+    return {
+      source: SOURCE,
+      rows: 0,
+      swept: 0,
+      skipped: "google-token-unavailable",
+      complete: false,
+      detail: `stopped=no-own-token credential=${googleCredentialShape(oidcToken)}`,
+    };
   }
 
   /**
@@ -457,6 +473,21 @@ export async function ingestGmail(
   const seen = new Set<string>();
   let complete = true;
   /**
+   * WHICH of the six ways to stop actually happened, first one wins.
+   *
+   * `complete=false` alone is not a diagnosis, and for gmail that mattered:
+   * `brain_sweep_state` has no gmail row at all, so the walk has NEVER completed —
+   * yet every hourly run recorded `success` with an empty `error_message`, because
+   * `gmail-walk-in-progress` is a deliberate skip. Six different faults all looked
+   * identical from SQL, and the one line that could tell them apart went only to a
+   * log stream that cannot be queried after the fact.
+   */
+  let stopReason = "";
+  const stop = (why: string) => {
+    complete = false;
+    if (!stopReason) stopReason = why;
+  };
+  /**
    * WHY the walk is incomplete decides whether anyone should be woken up.
    *
    * Running out of page budget is expected and self-healing: the next run picks up
@@ -478,14 +509,14 @@ export async function ingestGmail(
       // sweep run as if that person's mail had been deleted.
       logger.warn({ mailbox }, "brain-ingest gmail: no token for this mailbox, skipping it");
       failedMailboxes.push(mailbox);
-      complete = false;
+      stop(`no-token@${mailbox}`);
       degraded = true; // a mailbox we cannot reach will not fix itself
       continue;
     }
     let pageToken = "";
     for (let page = 0; page < MAX_PAGES; page++) {
       if (isOutOfTime()) {
-        complete = false;
+        stop(`time-budget@${mailbox}:p${page}`);
         break;
       }
       const listed = await gmailGet(
@@ -495,7 +526,7 @@ export async function ingestGmail(
           (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "")
       );
       if (!listed) {
-        complete = false;
+        stop(`listing-refused@${mailbox}:p${page}`);
         degraded = true; // Gmail refused the listing -- the 2026-08-30 outage shape
         break;
       }
@@ -510,7 +541,7 @@ export async function ingestGmail(
         const have = known.get(id);
         if (have?.current && have.historyId && have.historyId === t.historyId) continue;
         if (isOutOfTime()) {
-          complete = false;
+          stop(`time-budget@${mailbox}:p${page}:mid-page`);
           break;
         }
         const full = (await gmailGet(
@@ -532,7 +563,7 @@ export async function ingestGmail(
 
       pageToken = (listed.nextPageToken as string) ?? "";
       if (!pageToken) break;
-      if (page === MAX_PAGES - 1) complete = false;
+      if (page === MAX_PAGES - 1) stop(`page-cap@${mailbox}`);
     }
   }
 
@@ -541,7 +572,7 @@ export async function ingestGmail(
       { failed: failedThreads.size, limit: MAX_TOLERATED_THREAD_FAILURES },
       "brain-ingest gmail: too many thread fetches failed, treating the walk as incomplete"
     );
-    complete = false;
+    stop(`thread-fetch-failures=${failedThreads.size}`);
     degraded = true; // systemic, not the one-deleted-thread case handled above
   }
 
@@ -630,6 +661,17 @@ export async function ingestGmail(
   );
 
   /**
+   * The same facts, in the one place that can still be read tomorrow. Counts and
+   * mailbox addresses only — the addresses are already all over the corpus.
+   */
+  const detail =
+    `boxes=${boxes.length}${discovered ? "" : "(directory unavailable, fell back)"} ` +
+    `listed=${seen.size} fetched=${fetched} written=${written} kept=${touched} ` +
+    `swept=${swept} complete=${complete}` +
+    (stopReason ? ` stopped=${stopReason}` : "") +
+    (failedMailboxes.length ? ` unreachable=${failedMailboxes.join(",")}` : "");
+
+  /**
    * ORDER MATTERS, and getting it wrong hid a total outage.
    *
    * `gmail-nothing-to-index` is a DELIBERATE skip: it reports success and never
@@ -685,10 +727,19 @@ export async function ingestGmail(
       rows: written + touched,
       swept,
       skipped: converging ? "gmail-walk-in-progress" : "gmail-walk-incomplete",
+      complete,
+      detail,
     };
   }
   if (written === 0 && touched === 0) {
-    return { source: SOURCE, rows: 0, swept: 0, skipped: "gmail-nothing-to-index" };
+    return {
+      source: SOURCE,
+      rows: 0,
+      swept: 0,
+      skipped: "gmail-nothing-to-index",
+      complete,
+      detail,
+    };
   }
-  return { source: SOURCE, rows: written + touched, swept };
+  return { source: SOURCE, rows: written + touched, swept, complete, detail };
 }

@@ -378,3 +378,64 @@ describe("the sweep may only judge mailboxes it actually walked", () => {
     expect(deletedIds).not.toContain("thread:no-box");
   });
 });
+
+describe("the walk must say which of the six ways it stopped", () => {
+  /**
+   * `complete = false` was set at six different places and reported as one bit, so
+   * a page cap, a time budget, a refused listing and an unreachable mailbox all
+   * looked the same from `cron_run`. Gmail has never completed a walk — and with
+   * only that bit there was no way to tell, from stored data, which of the six was
+   * happening.
+   */
+  const thread = (n: number) => ({ id: `t${n}`, historyId: "9" });
+
+  it("names a refused listing, and says the walk did not complete", async () => {
+    listingOk = false;
+    const r = await ingestGmail("2026-09-06T00:00:00.000Z", () => false, null);
+    expect(r.complete).toBe(false);
+    expect(r.detail).toMatch(/stopped=listing-refused@/);
+  });
+
+  it("names the time budget, and distinguishes it from a refused listing", async () => {
+    listedThreads = [thread(1), thread(2)];
+    // False once so the walk actually starts, then true — otherwise this measures
+    // the "never started" path, which is a different outcome with its own detail.
+    let first = true;
+    const r = await ingestGmail(
+      "2026-09-06T00:00:00.000Z",
+      () => {
+        if (first) {
+          first = false;
+          return false;
+        }
+        return true;
+      },
+      null
+    );
+    expect(r.detail).toMatch(/stopped=time-budget@/);
+    expect(r.detail).not.toMatch(/listing-refused/);
+  });
+
+  it("reports the FIRST fault, not the last, when several mailboxes fail", async () => {
+    /**
+     * The first fault is the one that explains the rest. Last-wins would report the
+     * time budget running out on the fourth mailbox and bury the refused listing on
+     * the first — which is the difference between "slow" and "broken".
+     */
+    process.env.GMAIL_MAILBOXES = "first@loveiq.org,second@loveiq.org";
+    listingOk = false;
+    const r = await ingestGmail("2026-09-06T00:00:00.000Z", () => false, null);
+    expect(r.detail).toMatch(/stopped=listing-refused@first@loveiq\.org/);
+    expect(r.detail).not.toMatch(/stopped=listing-refused@second/);
+  });
+
+  it("reports a complete walk as complete, with its counts", async () => {
+    // The positive control: a detail that always said "stopped" would be useless.
+    listedThreads = [thread(1)];
+    const r = await ingestGmail("2026-09-06T00:00:00.000Z", () => false, null);
+    expect(r.complete).toBe(true);
+    expect(r.detail).toMatch(/complete=true/);
+    expect(r.detail).not.toMatch(/stopped=/);
+    expect(r.detail).toMatch(/listed=1/);
+  });
+});
