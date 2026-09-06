@@ -608,10 +608,25 @@ export function buildAnalyticsRows(
     byWeek.set(week, merge(byWeek.get(week), r, day, adCost));
     const month = day.slice(0, 7);
     byMonth.set(month, merge(byMonth.get(month), r, day, adCost));
-    allTime = merge(allTime, r, day, adCost);
 
     const totals = seed(r, day, adCost);
     if (isEmpty(totals)) continue;
+    /**
+     * AFTER the empty check, unlike the week and month above, and that placement is
+     * the whole correctness of the date range.
+     *
+     * `brain_daily_rollup(4000)` returns a row for every day in the window whether
+     * anything happened or not — measured, 3,846 of 4,000 rows are entirely zero.
+     * Accumulating those sets `firstDay` to the window edge, so the first version of
+     * this chunk announced "all time, since launch — Friday 25 September 2015", a
+     * date on which the company did not exist, and claimed its figures covered all
+     * 4,000 days. Every number in it was right and the period was nonsense.
+     *
+     * A week or a month absorbs the same zero rows harmlessly: the error cannot
+     * escape the month, and an all-zero one is dropped by `isEmpty` below. All time
+     * has no such bound, which is why only this one is guarded.
+     */
+    allTime = merge(allTime, r, day, adCost);
     const label = longDate(day);
     out.push({
       source: SOURCE,

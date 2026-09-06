@@ -153,6 +153,41 @@ describe("buildAnalyticsRows", () => {
     expect(daily.body).toMatch(/report to paying customer 5\.0%/);
   });
 
+  it("dates all time from the first day something happened, not the query window", () => {
+    /**
+     * CAUGHT IN PRODUCTION MINUTES AFTER SHIPPING IT. `brain_daily_rollup(4000)`
+     * returns a row per day whether anything happened or not — 3,846 of 4,000 rows
+     * are entirely zero — so accumulating them all set `firstDay` to the window edge
+     * and the chunk announced "all time, since launch — Friday 25 September 2015",
+     * a date on which the company did not exist, over "all 4000 days".
+     *
+     * Every figure in it was correct. The period was fiction, which is the more
+     * quotable half.
+     */
+    const rows = buildAnalyticsRows(
+      [
+        day("2020-01-01", {
+          unique_visitors: 0,
+          survey_starts: 0,
+          submissions: 0,
+          reports_created: 0,
+          reports_paid: 0,
+          revenue: 0,
+          // `isEmpty` checks opens and invites too. The fixture defaults to 7 opens,
+          // which made this "empty" row non-empty and failed the first draft of this
+          // test for a reason that had nothing to do with the code under test.
+          report_opens: 0,
+          invites_sent: 0,
+        }),
+        day("2026-08-19", { submissions: 5, reports_created: 5 }),
+      ],
+      STAMP
+    );
+    const all = rows.find((r) => r.source_id === "alltime")!;
+    expect(all.body).toMatch(/19 August 2026/);
+    expect(all.body).not.toMatch(/2020/);
+  });
+
   it("emits a daily, a weekly, a monthly and an all-time chunk", () => {
     const rows = buildAnalyticsRows([day("2026-08-19")], STAMP);
     expect(rows.map((r) => r.source_id).sort()).toEqual([
