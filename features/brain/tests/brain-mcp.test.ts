@@ -195,6 +195,18 @@ describe("/api/mcp", () => {
       }
       // Naming a value without saying when to reach for it is why it sat unused.
       expect(meta).toMatch(/what was DECIDED or AGREED rather than what was said/);
+      /**
+       * AND it must say what the browse does NOT cover. Measured 2026-09-06: only 23 of
+       * 747 Slack and WhatsApp day-chunks carry explicit decision language, because chat
+       * decisions are mostly implicit — "lets do that", a thumbs-up, a bare "agreed". So
+       * this filter lists meeting decisions and nothing else.
+       *
+       * An incomplete list presented as complete is worse than no list, which is the
+       * same silent-truncation failure as the per-bucket cap and the empty-filter
+       * message. Cheaper and more honest than a classifier with unmeasurable recall.
+       */
+      expect(meta).toMatch(/RECORDED CALLS ONLY/);
+      expect(meta).toMatch(/Slack|WhatsApp/);
       // And the reason a plain query is the wrong instrument for this question.
       expect(search.description).toMatch(/BROWSE, not a search/);
     });

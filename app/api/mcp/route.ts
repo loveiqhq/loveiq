@@ -407,7 +407,11 @@ const TOOLS = [
             "`list_sources` if you need current counts. Its counterpart " +
             'is {"section": "transcript"}. Reach ' +
             "for the summary whenever the question is what was DECIDED or AGREED rather " +
-            "than what was said.",
+            "than what was said. IT COVERS RECORDED CALLS ONLY. A decision taken in Slack " +
+            "or WhatsApp carries no section, so browsing this way will not list it — those " +
+            "are reachable by asking about the TOPIC, and they rank well when you do. Say " +
+            "the list is of meeting decisions rather than presenting it as everything the " +
+            "team has decided.",
         },
       },
       required: ["query"],
