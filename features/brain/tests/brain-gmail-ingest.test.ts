@@ -262,6 +262,36 @@ describe("a converging re-walk must not be as loud as an outage", () => {
     expect(result.skipped).toBe("gmail-walk-incomplete");
   });
 
+  it("stays loud when a stall is masked by rows the DATABASE already held", async () => {
+    /**
+     * THE PRODUCTION CASE, AND WHY THE TWO TESTS ABOVE PASS WITHOUT COVERING IT.
+     *
+     * They run against an EMPTY corpus, so `touched` is 0 and `written + touched`
+     * behaves exactly like `written`. In production the corpus holds ~9,000 rows,
+     * `touched` is built from what the DATABASE already has rather than from
+     * anything the walk did, and the sum is satisfied whether or not Gmail
+     * answered at all. The loud branch was reachable only while the corpus was
+     * empty -- once, ever, after a builder bump.
+     *
+     * Verified live on 2026-09-06: `brain_sweep_state` has NO gmail row, meaning
+     * gmail has never once completed a walk, across 24 consecutive runs in 24
+     * hours all recorded as `success` with no error.
+     *
+     * Progress is rows WRITTEN this run. What the database already held is not
+     * evidence that Gmail answered.
+     */
+    existing = Array.from({ length: 40 }, (_, i) => ({
+      source_id: `thread:old${i}`,
+      meta: { v: GMAIL_BUILDER_VERSION },
+    }));
+    listedThreads = [thread(1), thread(2), thread(3)];
+    let calls = 0;
+    // Budget expires after the entry guard, so the walk is truncated having
+    // written nothing -- while `touched` is 40.
+    const result = await ingestGmail("2026-08-31T00:00:00.000Z", () => calls++ > 0, null);
+    expect(result.skipped).toBe("gmail-walk-incomplete");
+  });
+
   it("is exhausted-on-arrival, not 'incomplete', when there was never any budget", async () => {
     const result = await ingestGmail("2026-08-31T00:00:00.000Z", () => true, null);
     expect(result.skipped).toBe("gmail-time-budget");

@@ -634,7 +634,18 @@ export async function ingestGmail(
     // Quiet ONLY for a budget-truncated walk that actually advanced. A truncated
     // walk that wrote nothing is a stall, not progress -- that is how a mis-set
     // time budget would otherwise defer every run forever in silence.
-    const converging = !degraded && written + touched > 0;
+    // `written`, NOT `written + touched`. `touched` is derived from `known` -- the
+    // rows the DATABASE already holds -- so in production it is ~9,000 whether or
+    // not Gmail answered a single request, and the sum is satisfied by the corpus
+    // rather than by the run. That made the loud branch reachable only while the
+    // corpus was EMPTY: once, ever, after a builder bump.
+    //
+    // Measured live on 2026-09-06: `brain_sweep_state` has no gmail row at all, so
+    // gmail has never once completed a walk -- across 24 consecutive runs in 24
+    // hours, every one recorded `success` with no error. The comment above already
+    // said what it wanted ("a truncated walk that wrote nothing is a stall, not
+    // progress"); the expression just measured the wrong thing.
+    const converging = !degraded && written > 0;
     return {
       source: SOURCE,
       rows: written + touched,
