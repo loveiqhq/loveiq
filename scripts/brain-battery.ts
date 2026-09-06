@@ -834,6 +834,46 @@ function sourceCoverageProbes(): RetrievalProbe[] {
 }
 
 /**
+ * Figures that MOVE, read from the database at run time.
+ *
+ * These probes first hardcoded 82 September signups and 1,887 all-time submissions.
+ * Both were correct when written and both were stale within the hour — 83 and 1,888 —
+ * so the battery reported two defects that did not exist. This file's own header
+ * already says why: "HARDCODING THEM MADE THIS HARNESS EXPIRE BY THE CALENDAR. A
+ * quality gate that goes red on its own gets run once and then ignored, which is worse
+ * than not having one." I wrote that warning into the retrieval half and then walked
+ * straight into it.
+ *
+ * Read from `survey_submission`, NOT from the corpus. Asserting that the index holds a
+ * number the index reported is circular; asserting it holds the number the SOURCE
+ * TABLE holds is a real accuracy check — and the one that would catch an ingester
+ * drifting away from the truth.
+ *
+ * August and earlier stay hardcoded deliberately: a closed month cannot change, and a
+ * literal is clearer there than a query.
+ */
+interface LiveCounts {
+  monthSignups: number | null;
+  allTimeSubmissions: number | null;
+}
+
+async function readLiveCounts(): Promise<LiveCounts> {
+  const count = async (query: string): Promise<number | null> => {
+    const res = await supabaseFetch(`/rest/v1/survey_submission?select=id&${query}`, {
+      headers: { Prefer: "count=exact", Range: "0-0" },
+    });
+    if (!res.ok) return null;
+    const n = Number(res.headers.get("content-range")?.split("/")[1]);
+    return Number.isFinite(n) ? n : null;
+  };
+  const firstOfMonth = `${new Date().toISOString().slice(0, 7)}-01`;
+  return {
+    monthSignups: await count(`created_date_time=gte.${firstOfMonth}`),
+    allTimeSubmissions: await count("id=gt.0"),
+  };
+}
+
+/**
  * PER-SOURCE DEPTH — every source, three levels: can it be REACHED, does the right
  * FACT come back, and does a NARROW question inside it land.
  *
@@ -845,7 +885,7 @@ function sourceCoverageProbes(): RetrievalProbe[] {
  * turned out to be MY probes being stricter than production, so where a bar is loose
  * it says why.
  */
-function perSourceDepthProbes(): RetrievalProbe[] {
+function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
   const P = (
     kind: string,
     q: string,
@@ -860,11 +900,13 @@ function perSourceDepthProbes(): RetrievalProbe[] {
     P("an-starts-aug", "how many people started the survey in august", bodyHas(/\b544\b/)),
     P("an-opens-aug", "how many reports were opened in august", bodyHas(/\b347\b/)),
     P("an-paid-aug", "how many paying customers did we have in august", bodyHas(/\b7\b/)),
-    P("an-sept-signups", "how many signups so far this month", bodyHas(/\b82\b/)),
-    P(
-      "an-alltime-signups",
-      "how many people have completed the survey in total ever",
-      bodyHas(/1887/)
+    P("an-sept-signups", "how many signups so far this month", (h) =>
+      live.monthSignups === null ? [] : bodyHas(new RegExp(`\\b${live.monthSignups}\\b`))(h)
+    ),
+    P("an-alltime-signups", "how many people have completed the survey in total ever", (h) =>
+      live.allTimeSubmissions === null
+        ? []
+        : bodyHas(new RegExp(`\\b${live.allTimeSubmissions}\\b`))(h)
     ),
     P("an-cac", "what does a paying customer cost us", bodyHas(/[Cc]ost per paying customer/)),
     P("an-cps", "what does one signup cost in ad spend", bodyHas(/[Cc]ost per signup/)),
@@ -1439,10 +1481,15 @@ function adversarialProbes(): RetrievalProbe[] {
 }
 
 async function runRetrievalBattery(only: string | null): Promise<number> {
+  const live = await readLiveCounts();
+  console.log(
+    `live figures read from the database: ${live.monthSignups ?? "?"} signups this month, ` +
+      `${live.allTimeSubmissions ?? "?"} submissions all time`
+  );
   const all = [
     ...retrievalProbes(),
     ...sourceCoverageProbes(),
-    ...perSourceDepthProbes(),
+    ...perSourceDepthProbes(live),
     ...adversarialProbes(),
   ];
   const probes = only ? all.filter((p) => p.kind.includes(only) || p.q.includes(only)) : all;
