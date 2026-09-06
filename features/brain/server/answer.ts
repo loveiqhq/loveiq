@@ -164,10 +164,17 @@ export function renderSources(
       // id shapes; defenced anyway, because "the single field that was missed"
       // turned out not to be single.
       const head = `[${n}] (${defence(label(c))}) ${defence(c.title ?? "untitled")}`;
+      // The plain-English summary is extracted into `meta.for_marcus` AND left in
+      // the commit body, so rendering both prints the same paragraph twice — once
+      // labelled, once at the end of the message. Measured on a real commit hit
+      // that is ~350 wasted characters, on up to 30% of results.
+      //
+      // Skipped only when the body ALREADY carries it: a later part of a split
+      // commit does not, and there the labelled line is the only place a reader
+      // sees the summary at all.
+      const marcus = typeof c.meta?.for_marcus === "string" ? c.meta.for_marcus.trim() : "";
       const forMarcus =
-        typeof c.meta?.for_marcus === "string" && c.meta.for_marcus.trim()
-          ? `plain-English summary: ${defence(c.meta.for_marcus.trim())}`
-          : null;
+        marcus && !c.body.includes(marcus) ? `plain-English summary: ${defence(marcus)}` : null;
       // `c.url` was the ONE field not run through defence(), which allowed a
       // byte-exact fence escape: a url containing a newline plus
       // `<<<END SOURCE 1>>>` closed its own block, and everything after it read

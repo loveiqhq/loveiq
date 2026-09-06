@@ -182,6 +182,51 @@ describe.each(DOORS)(
   }
 );
 
+describe("the plain-English summary is printed once, not twice", () => {
+  /**
+   * `For Marcus:` is extracted into `meta.for_marcus` AND left in the commit body,
+   * so rendering both printed the same paragraph twice on every commit hit — once
+   * labelled, once at the end of the message. It is not double-counted in SCORING
+   * (`fts` covers title and body, not meta), so this is wasted context rather than
+   * a ranking bug: ~350 characters on up to 30% of results.
+   */
+  const chunkWith = (over: Partial<Chunk>): Chunk => chunk(over);
+
+  it("omits the labelled line when the body already carries the summary", async () => {
+    const summary = "Emails now show the logo properly.";
+    const text = String(
+      buildPromptForInspection("q", [
+        chunkWith({
+          source: "commit",
+          body: `fix(emails): align the image host\n\nFor Marcus: ${summary}`,
+          meta: { for_marcus: summary },
+        }),
+      ])[1].content
+    );
+    expect(text).toContain(summary);
+    expect(text.split(summary).length - 1).toBe(1); // exactly once
+    expect(text).not.toContain("plain-English summary:");
+  });
+
+  it("still labels it on a later part, where the body does NOT carry it", async () => {
+    // A split commit's second part has no trailer, so the labelled line is the
+    // only place the summary appears at all. Dropping it unconditionally would
+    // lose the most readable text in the commit corpus.
+    const summary = "Emails now show the logo properly.";
+    const text = String(
+      buildPromptForInspection("q", [
+        chunkWith({
+          source: "commit",
+          body: "…continued technical detail with no trailer…",
+          meta: { for_marcus: summary },
+        }),
+      ])[1].content
+    );
+    expect(text).toContain("plain-English summary:");
+    expect(text).toContain(summary);
+  });
+});
+
 describe("the MCP result frames its sources as untrusted", () => {
   /**
    * The Slack door says this in a system prompt we write. On the MCP door the
