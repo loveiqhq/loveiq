@@ -360,6 +360,32 @@ const TOOLS = [
             "A question in plain language. Relative periods ('this month', 'last week') " +
             "are resolved to the absolute periods the corpus stores.",
         },
+        /**
+         * NO `body: none | snippet | full` MODE, DELIBERATELY. The plan for this
+         * server carried one, with `snippet` (400 chars) as the intended default and
+         * a predicted 4x cut in response size. Measured on 2026-09-06 before building
+         * it, over 20 real questions at the default limit, both premises failed:
+         *
+         *   full bodies      18,787 chars/call average  (the plan assumed ~26,000)
+         *   400-char snippet  8,011 chars/call average  — a 2.3x cut, not 4x
+         *
+         * The floor is fixed framing: the untrusted-data preamble, the reading guide,
+         * and per-hit title/id/date/relevance/url metadata come to ~8,000 chars on
+         * their own, so snippeting the bodies cannot go below it. Meanwhile the median
+         * body is only ~1,500-2,300 chars, which is affordable, and the escape hatch
+         * for a cut hit is `fetch_document` — which returns EVERY part of the document,
+         * far more than the one part it replaced. Snippet-by-default would therefore
+         * spend more tokens on exactly the questions where the answer matters.
+         *
+         * And the lever already exists and is already used: of 18 logged MCP searches,
+         * 16 passed an explicit `limit`, averaging 4.1. A limit-4 call with full bodies
+         * is already about the size snippet mode was designed to force. Callers
+         * self-regulate; the default does not need to do it for them.
+         *
+         * Caveat kept honest: those 18 calls are one agent's, not the team's. If real
+         * usage later shows full-limit calls hitting the 40,000-char ceiling, revisit —
+         * `body: "none"` for broad title-scanning is the variant with a real use case.
+         */
         limit: {
           type: "number",
           description:
