@@ -186,7 +186,8 @@ happened recently", never for a policy lookup.
 
 **Asking what was DECIDED is a filter, not a wording.** `{"section": "summary"}`
 selects the structured half of every recorded call — Summary, Details, an explicit
-`Decisions / Aligned` list, Next steps — 583 chunks across 114 meetings, split from
+`Decisions / Aligned` list, Next steps — 583 chunks across 114 meetings as of
+2026-09-06, and growing with every call, split from
 the raw transcript at ingest by Google's own divider. Its counterpart is
 `{"section": "transcript"}`.
 
