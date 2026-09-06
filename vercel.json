@@ -73,22 +73,22 @@
       "maxDuration": 60
     },
     "app/api/cron/survey-paused/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 50
     },
     "app/api/cron/nurture-sequence/route.ts": {
       "maxDuration": 60
     },
     "app/api/cron/invite-reminders/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 50
     },
     "app/api/cron/payment-fulfillment-sweep/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 50
     },
     "app/api/cron/deep-engagement-alert/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 50
     },
     "app/api/cron/security-storm-detector/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 50
     },
     "app/api/cron/funnel-digest/route.ts": {
       "maxDuration": 60
@@ -103,7 +103,7 @@
       "maxDuration": 60
     },
     "app/api/cron/purge-old-data/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 50
     },
     "app/api/cron/table-size-digest/route.ts": {
       "maxDuration": 30
@@ -121,7 +121,7 @@
       "maxDuration": 60
     },
     "app/api/cron/brain-gmail/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 300
     },
     "app/api/cron/brain-drive/route.ts": {
       "maxDuration": 300

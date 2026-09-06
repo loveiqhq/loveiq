@@ -14,7 +14,24 @@ import logger from "@shared/observability/logger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+/**
+ * 300, not 60 — the same ceiling `brain-drive` already runs at, for the same reason.
+ *
+ * At 60 this job was in a DEADLOCK, which the walk detail made visible the moment it
+ * was recorded: `stopped=time-budget@mo@loveiq.org:p2:mid-page`. The walk restarts at
+ * the first mailbox every run and dies partway down the list, so every mailbox after
+ * the cut is never reached — and a thread whose row is stale-version is refetched on
+ * EVERY run, because "not current" forces a refetch and a refetch that produces no
+ * rows leaves it stale. Those permanent refetches consume the budget that would have
+ * carried the walk further. The sweep is what resolves such a row, the sweep needs a
+ * complete walk, and the walk cannot complete while it is paying for them: the loop
+ * feeds itself.
+ *
+ * Measured on the 11:11 run: 10 mailboxes, 4,032 threads listed, 156 fetched, 31.9s
+ * against a 30s budget. Three of the ten mailboxes have no current-version row at
+ * all — the walk has never once reached them.
+ */
+export const maxDuration = 300;
 
 /**
  * GET /api/cron/brain-gmail
@@ -57,19 +74,20 @@ export async function GET(request: Request) {
   // Notion's tail (upsert of up to 1,400 rows, touch batches, sweep) runs after
   // this expires and cannot be interrupted, so leave it room.
   /**
-   * 30 seconds of FETCHING, not 40.
+   * 220 seconds of FETCHING against a 300s ceiling.
    *
    * The budget only bounds the walk. Everything after it — the upsert, the touch
    * batches, the sweep — cannot be interrupted, and that tail grows with how much
    * the walk fetched. Measured on gmail mid-re-walk: 58.1s total against a 40s
-   * budget, so an 18s tail, against a 60s ceiling. Two seconds of margin is not
-   * margin.
+   * budget, so an 18s tail. 80 seconds of margin is four times the worst tail seen,
+   * which matters most on the FIRST run to get this far: it has the whole backlog to
+   * fetch and is the one run that will actually sweep.
    *
    * A killed run is not a slow run: `ingestGmail` upserts AFTER its loop, so a
    * timeout throws away everything that run fetched. Trading ~25% of the walk per
    * run for never losing a whole one is the right way round.
    */
-  const isOutOfTime = () => Date.now() - startedAtMs > 30_000;
+  const isOutOfTime = () => Date.now() - startedAtMs > 220_000;
 
   const dayKey = new Date().toISOString().slice(0, 10);
   const alertOnce = async (name: string, text: string) => {
