@@ -628,7 +628,11 @@ export async function ingestDrive(
   // Recorded BEFORE the sweep: a throw after the record defers 20 hours, a throw
   // before it retried hourly forever.
   if (sweeping) await recordSweep(SOURCE);
-  const swept = sweeping ? await sweepMissing(SOURCE, new Set([...writtenIds, ...confirmed])) : 0;
+  const swept = sweeping
+    ? await sweepMissing(SOURCE, new Set([...writtenIds, ...confirmed]), {
+        scopeKey: "owner",
+      })
+    : 0;
 
   logger.info(
     {

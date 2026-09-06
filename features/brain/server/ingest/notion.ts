@@ -639,7 +639,11 @@ export async function ingestNotion(
   // which is now true even for a run cut short, so stale rows are never deleted
   // just because the clock ran out. It still refuses if the crawl itself was
   // incomplete, because then pages may be missing from `candidates` entirely.
-  const swept = sweeping ? await sweepMissing(SOURCE, new Set([...writtenIds, ...confirmed])) : 0;
+  const swept = sweeping
+    ? await sweepMissing(SOURCE, new Set([...writtenIds, ...confirmed]), {
+        scopeKey: "database",
+      })
+    : 0;
 
   logger.info(
     {

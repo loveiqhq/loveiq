@@ -415,28 +415,93 @@ export function ingestNote(r: IngestResult): string {
   );
 }
 
-export async function sweepMissing(source: string, seenIds: Set<string>): Promise<number> {
+/**
+ * A scope losing EVERY one of its rows at once is an access change, not a cleanup.
+ *
+ * `meta.owner` on drive, `meta.mailbox` on gmail, `meta.database` on notion: each names
+ * where a row came from. Documents do not all get deleted on the same day, so a scope
+ * emptying completely means the walk stopped being able to SEE it — a permission
+ * revoked, a share removed, a credential swapped.
+ *
+ * The majority guard below does not cover this. Measured 2026-09-06, drive's largest
+ * owner holds 48.5% of the source — it would be deleted whole and the guard would miss
+ * it by 1.5 points. And this is not hypothetical: production Drive once listed 24
+ * documents where a laptop listed 512, and only the majority guard stopped each run
+ * removing the other ~11,000 chunks. At 48% it would not have.
+ *
+ * Two conditions, because scopes legitimately empty. A one-off file gets unshared and
+ * its single row should not block every future sweep — so the vanishing scope must hold
+ * BOTH at least 5% of the source AND at least 20 rows before it is read as lost access.
+ * Rows with no scope are never judged: absence of evidence is not evidence of deletion.
+ */
+const SCOPE_VANISH_SHARE = 0.05;
+const SCOPE_VANISH_MIN_ROWS = 20;
+
+export async function sweepMissing(
+  source: string,
+  seenIds: Set<string>,
+  opts: { scopeKey?: string } = {}
+): Promise<number> {
   const stored: string[] = [];
+  /** source_id -> the scope it belongs to, when this source names one. */
+  const scopeOf = new Map<string, string>();
   for (let offset = 0; offset < 200_000; offset += 1000) {
     const res = await supabaseFetch(
-      `/rest/v1/brain_chunk?select=source_id&source=eq.${encodeURIComponent(source)}` +
+      `/rest/v1/brain_chunk?select=source_id,meta&source=eq.${encodeURIComponent(source)}` +
         `&order=source_id.asc&limit=1000&offset=${offset}`
     );
     if (!res.ok) {
       logger.warn({ source, status: res.status }, "brain sweep skipped: could not list stored ids");
       return 0;
     }
-    const batch = (await res.json().catch(() => null)) as Array<{ source_id?: string }> | null;
+    const batch = (await res.json().catch(() => null)) as Array<{
+      source_id?: string;
+      meta?: Record<string, unknown> | null;
+    }> | null;
     if (!Array.isArray(batch)) {
       logger.warn({ source }, "brain sweep skipped: unreadable stored-id page");
       return 0;
     }
-    for (const r of batch) if (r?.source_id) stored.push(r.source_id);
+    for (const r of batch) {
+      if (!r?.source_id) continue;
+      stored.push(r.source_id);
+      const scope = opts.scopeKey ? r.meta?.[opts.scopeKey] : undefined;
+      if (typeof scope === "string" && scope) scopeOf.set(r.source_id, scope);
+    }
     if (batch.length < 1000) break;
   }
   if (stored.length === 0) return 0;
 
   const orphans = stored.filter((id) => !seenIds.has(id));
+
+  if (opts.scopeKey && orphans.length > 0) {
+    const held = new Map<string, number>();
+    for (const id of stored) {
+      const sc = scopeOf.get(id);
+      if (sc) held.set(sc, (held.get(sc) ?? 0) + 1);
+    }
+    const losing = new Map<string, number>();
+    for (const id of orphans) {
+      const sc = scopeOf.get(id);
+      if (sc) losing.set(sc, (losing.get(sc) ?? 0) + 1);
+    }
+    const vanishing = [...losing.entries()].filter(
+      ([sc, n]) =>
+        n === held.get(sc) && n >= SCOPE_VANISH_MIN_ROWS && n >= stored.length * SCOPE_VANISH_SHARE
+    );
+    if (vanishing.length > 0) {
+      logger.warn(
+        {
+          source,
+          scopeKey: opts.scopeKey,
+          vanishing: vanishing.map(([sc, n]) => `${sc}=${n}`),
+          stored: stored.length,
+        },
+        "brain sweep skipped: an entire scope would disappear at once, which is lost access rather than deleted documents"
+      );
+      return 0;
+    }
+  }
   if (orphans.length === 0) return 0;
   if (orphans.length > stored.length - orphans.length) {
     logger.warn(

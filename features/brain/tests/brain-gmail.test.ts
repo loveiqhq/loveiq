@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -6,6 +6,7 @@ vi.mock("@shared/observability/logger", () => ({
 
 import {
   GMAIL_BUILDER_VERSION,
+  excludeMailboxes,
   mailboxes,
   messageText,
   person,
@@ -207,6 +208,50 @@ describe("threadToRows — one chunk per THREAD", () => {
     const rows = threadToRows(long, "me", "s");
     expect(rows.length).toBeGreaterThan(1);
     expect(rows.map((r) => r.body).join("\n")).toContain("message number 59");
+  });
+});
+
+describe("excludeMailboxes", () => {
+  /**
+   * The directory drops a person when their account is SUSPENDED. A colleague can leave
+   * with their account still live during handover, and their mail can simply not be
+   * wanted — this is the switch for that case.
+   *
+   * Deliberately configuration, not a constant: the repository is public, and a list of
+   * named individuals whose mail the company chose not to read does not belong in it.
+   */
+  const saved = process.env.GMAIL_EXCLUDE_MAILBOXES;
+  afterEach(() => {
+    if (saved === undefined) delete process.env.GMAIL_EXCLUDE_MAILBOXES;
+    else process.env.GMAIL_EXCLUDE_MAILBOXES = saved;
+  });
+
+  it("walks everything when nothing is excluded", () => {
+    delete process.env.GMAIL_EXCLUDE_MAILBOXES;
+    expect(excludeMailboxes(["a@x.org", "b@x.org"])).toEqual(["a@x.org", "b@x.org"]);
+    process.env.GMAIL_EXCLUDE_MAILBOXES = "   ";
+    expect(excludeMailboxes(["a@x.org"])).toEqual(["a@x.org"]);
+  });
+
+  it("drops the named mailboxes and keeps the rest", () => {
+    process.env.GMAIL_EXCLUDE_MAILBOXES = "gone@x.org, other@x.org";
+    expect(excludeMailboxes(["a@x.org", "gone@x.org", "other@x.org", "b@x.org"])).toEqual([
+      "a@x.org",
+      "b@x.org",
+    ]);
+  });
+
+  it("matches regardless of case or padding, because an address is not case-sensitive", () => {
+    // A list typed by a human into an env var, matched against a list returned by the
+    // Google directory. Expecting those to agree byte-for-byte is how an exclusion
+    // silently does nothing at all.
+    process.env.GMAIL_EXCLUDE_MAILBOXES = "  GONE@X.org ";
+    expect(excludeMailboxes(["a@x.org", "gone@x.org"])).toEqual(["a@x.org"]);
+  });
+
+  it("ignores a name that matches nobody rather than emptying the walk", () => {
+    process.env.GMAIL_EXCLUDE_MAILBOXES = "nosuchperson@x.org";
+    expect(excludeMailboxes(["a@x.org", "b@x.org"])).toEqual(["a@x.org", "b@x.org"]);
   });
 });
 

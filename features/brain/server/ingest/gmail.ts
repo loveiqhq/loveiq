@@ -94,6 +94,41 @@ export function mailboxes(): string[] {
 }
 
 /**
+ * Mailboxes to leave out, whatever the directory says.
+ *
+ * The directory drops a person when their account is SUSPENDED, which is the right
+ * default but not the only case: a colleague can leave with their account still live
+ * during handover, and their mail can simply not be wanted in the corpus. This is the
+ * switch for that, and it is deliberately an ENV VAR rather than a constant — the
+ * repository is public, and a list of named individuals whose mail the company chose
+ * not to read does not belong in it. It also means the decision can be changed without
+ * a deploy.
+ *
+ * Excluding a mailbox does NOT remove what is already indexed. `sweepMissing` keeps
+ * rows from any mailbox this run did not walk — see the keep-set in `ingestGmail` — so
+ * an excluded mailbox's history is preserved rather than quietly deleted. Removing it
+ * is a separate, deliberate act.
+ */
+export function excludeMailboxes(boxes: string[]): string[] {
+  const raw = (process.env.GMAIL_EXCLUDE_MAILBOXES ?? "").trim();
+  if (!raw) return boxes;
+  const drop = new Set(
+    raw
+      .split(",")
+      .map((m) => m.trim().toLowerCase())
+      .filter(Boolean)
+  );
+  const kept = boxes.filter((m) => !drop.has(m.trim().toLowerCase()));
+  if (kept.length !== boxes.length) {
+    logger.info(
+      { excluded: boxes.length - kept.length, walking: kept.length },
+      "brain-ingest gmail: mailboxes excluded by configuration"
+    );
+  }
+  return kept;
+}
+
+/**
  * Every active person in the Workspace domain, asked of the directory itself.
  *
  * Preferred over a hand-maintained `GMAIL_MAILBOXES` list because that list goes
@@ -466,7 +501,7 @@ export async function ingestGmail(
    * would list no mailboxes, write nothing, and let the sweep delete the corpus.
    */
   const discovered = await domainMailboxes(oidcToken);
-  const boxes = discovered && discovered.length > 0 ? discovered : mailboxes();
+  const boxes = excludeMailboxes(discovered && discovered.length > 0 ? discovered : mailboxes());
 
   const known = await knownThreads();
   const rows: BrainRow[] = [];
@@ -643,7 +678,11 @@ export async function ingestGmail(
   // Recorded BEFORE the sweep: a throw after the record defers 20 hours, a throw
   // before it retried hourly forever.
   if (sweeping) await recordSweep(SOURCE);
-  const swept = sweeping ? await sweepMissing(SOURCE, new Set([...writtenIds, ...confirmed])) : 0;
+  const swept = sweeping
+    ? await sweepMissing(SOURCE, new Set([...writtenIds, ...confirmed]), {
+        scopeKey: "mailbox",
+      })
+    : 0;
 
   logger.info(
     {

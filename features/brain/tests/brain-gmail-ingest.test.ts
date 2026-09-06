@@ -74,8 +74,11 @@ let listedThreads: Array<{ id: string; historyId: string }> = [];
 let touchedIds: string[] = [];
 /** Ids this run actually DELETED. Gmail sweeps by id set now, not by timestamp. */
 const deletedIds: string[] = [];
+/** Every URL the walk requested — the only way to see WHICH mailboxes it visited. */
+const fetchedUrls: string[] = [];
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: vi.fn(async (url: string) => {
+    fetchedUrls.push(url);
     // Directory API: pretend delegation cannot resolve the domain's mailboxes,
     // which is the real-world state this test exists for.
     if (url.includes("admin/directory")) {
@@ -144,7 +147,9 @@ beforeEach(() => {
   listedThreads = [];
   touchedIds = [];
   deletedIds.length = 0;
+  fetchedUrls.length = 0;
   process.env.GMAIL_MAILBOXES = "";
+  delete process.env.GMAIL_EXCLUDE_MAILBOXES;
 });
 
 describe("a broken Gmail walk must not report success", () => {
@@ -437,5 +442,47 @@ describe("the walk must say which of the six ways it stopped", () => {
     expect(r.detail).toMatch(/complete=true/);
     expect(r.detail).not.toMatch(/stopped=/);
     expect(r.detail).toMatch(/listed=1/);
+  });
+});
+
+describe("a mailbox can be excluded from the walk without deleting its history", () => {
+  /**
+   * WIRING, not logic. `excludeMailboxes` has its own unit tests and they all passed
+   * while the walk ignored it entirely — proven by mutation: replacing the call at the
+   * call site with the identity function left every one of them green. A helper that is
+   * correct and never invoked is the same as no helper.
+   *
+   * The directory drops a person when their account is SUSPENDED, which does not cover
+   * a colleague who has left while their account is still live during handover.
+   */
+  const thread = (n: number) => ({ id: `t${n}`, historyId: "9" });
+
+  it("does not visit a mailbox named in the exclusion list", async () => {
+    process.env.GMAIL_MAILBOXES = "stays@loveiq.org,goes@loveiq.org";
+    process.env.GMAIL_EXCLUDE_MAILBOXES = "goes@loveiq.org";
+    listedThreads = [thread(1)];
+    await ingestGmail("2026-09-06T00:00:00.000Z", () => false, null);
+    expect(fetchedUrls.some((u) => u.includes("stays%40loveiq.org"))).toBe(true);
+    expect(fetchedUrls.some((u) => u.includes("goes%40loveiq.org"))).toBe(false);
+  });
+
+  it("keeps the excluded mailbox's existing rows rather than sweeping them", async () => {
+    /**
+     * The half that makes exclusion safe. An unwalked mailbox is not a deleted one —
+     * the keep-set spares it — so turning a mailbox off preserves its history instead
+     * of quietly destroying it. Removing that history is a separate, deliberate act.
+     */
+    process.env.GMAIL_MAILBOXES = "stays@loveiq.org,goes@loveiq.org";
+    process.env.GMAIL_EXCLUDE_MAILBOXES = "goes@loveiq.org";
+    listedThreads = [thread(1)];
+    existing = [
+      { source_id: "thread:old", meta: { v: 1, mailbox: "goes@loveiq.org" } },
+      ...Array.from({ length: 4 }, (_, i) => ({
+        source_id: `thread:k${i}`,
+        meta: { v: GMAIL_BUILDER_VERSION, mailbox: "stays@loveiq.org" },
+      })),
+    ];
+    await ingestGmail("2026-09-06T00:00:00.000Z", () => false, null);
+    expect(deletedIds).not.toContain("thread:old");
   });
 });
