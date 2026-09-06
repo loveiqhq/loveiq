@@ -143,6 +143,50 @@ const FILE = {
 };
 
 describe("docToRows", () => {
+  /**
+   * A Gemini note is two documents in one file, and `brain_search` collapses a
+   * document to one part. Measured across all 114 notes on four decision-shaped
+   * questions, the surviving part was a TRANSCRIPT part 24-46% of the time -- so
+   * on roughly a third of meetings the decision record was discarded at random.
+   */
+  describe("splitting the decision record from the transcript", () => {
+    const DIVIDER = "You should review Gemini's notes to make sure they're accurate.";
+    const notes = "Summary\n\nThe team aligned on the consumer pivot.\n\n" + "N".repeat(2600);
+    const transcript =
+      "Mark: I give you 20 seconds because I also need shoes.\n\n" + "T".repeat(2600);
+
+    const sections = (rows: ReturnType<typeof docToRows>) =>
+      rows.map((r) => (r.meta as { section?: string }).section);
+
+    it("marks the parts before Google's divider as the record and the rest as transcript", () => {
+      const rows = docToRows(FILE, `${notes}\n\n${DIVIDER}\n\n${transcript}`, STAMP);
+      expect(rows.length).toBeGreaterThan(2);
+      const marks = sections(rows);
+      // Every part is labelled, the labels are contiguous, and both halves exist.
+      expect(marks.every((m) => m === "summary" || m === "transcript")).toBe(true);
+      expect(marks).toContain("summary");
+      expect(marks).toContain("transcript");
+      expect(marks.lastIndexOf("summary")).toBeLessThan(marks.indexOf("transcript"));
+      // The part holding the divider keeps the tail of the notes, so it is record.
+      const dividerAt = rows.findIndex((r) => r.body.includes("You should review Gemini"));
+      expect(marks[dividerAt]).toBe("summary");
+    });
+
+    it("leaves the section UNSET when the divider is absent, rather than guessing", () => {
+      // Google's string, not ours. If they change it, this must fail loudly rather
+      // than silently mislabel half of every meeting note.
+      const rows = docToRows(FILE, `${notes}\n\n${transcript}`, STAMP);
+      expect(sections(rows).every((m) => m === undefined)).toBe(true);
+    });
+
+    it("does not label an ordinary Drive document", () => {
+      const plain = { ...FILE, name: "Q3 planning spreadsheet" };
+      const rows = docToRows(plain, `${notes}\n\n${DIVIDER}\n\n${transcript}`, STAMP);
+      expect(rows[0].title.startsWith("Drive:")).toBe(true);
+      expect(sections(rows).every((m) => m === undefined)).toBe(true);
+    });
+  });
+
   it("titles a Gemini note as MEETING NOTES, because the title feeds the search index", () => {
     // "Drive: LoveIQ Sync - … - Notes by Gemini" contains no word anyone would use
     // to ask for it, and the title is half of what brain_search matches on.

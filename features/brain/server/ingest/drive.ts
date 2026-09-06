@@ -114,6 +114,14 @@ const SKIP_FILE_IDS = new Set([
 ]);
 /* eslint-enable no-secrets/no-secrets */
 
+/**
+ * Google's own divider between Gemini's written notes and the raw transcript.
+ * Verified present in 114 of 114 meeting notes in the corpus. Google's string,
+ * not ours, so if they change it this fails loudly (section unset + a warning)
+ * rather than mislabelling half of every note.
+ */
+const TRANSCRIPT_DIVIDER = /You should review Gemini's notes to make sure they'?re accurate/i;
+
 /** Below this, a pdf is a scan with no text layer, and indexing it yields a
  *  title-shaped chunk with no content. We have no OCR, so it is skipped. */
 const PDF_MIN_CHARS = 200;
@@ -390,15 +398,46 @@ export function docToRows(file: DriveFile, text: string, stampedAt: string): Bra
   // Split rather than let the write path slice the tail off — a call note is
   // routinely longer than the 2,400-character ceiling.
   const parts = splitBody(base.body);
+
+  /**
+   * A GEMINI NOTE IS TWO DOCUMENTS IN ONE FILE: the structured decision record
+   * (Summary, Details, Decisions/Aligned, Suggested next steps) and then the raw
+   * transcript.
+   *
+   * That matters because `brain_search` collapses a document to its single
+   * highest-scoring part. Measured across all 114 notes on four decision-shaped
+   * questions, the winning part is a TRANSCRIPT part 24-46% of the time — so on
+   * roughly a third of meetings the decision record is discarded at random and
+   * "I give you 20 seconds because I also need to get shoes" is returned instead.
+   *
+   * Marking the halves lets the dedup prefer the record deterministically. The
+   * transcript is not lost: `fetch_document` returns the whole file, which is why
+   * this can be a preference rather than a reserved retrieval slot.
+   *
+   * The boundary is GOOGLE'S OWN divider, not a heuristic of ours — verified
+   * present in 114 of 114 notes. Three files contain it twice, so the FIRST
+   * occurrence wins. When it is absent the section is left unset rather than
+   * guessed, and the run says so.
+   */
+  const dividerAt = isMeetingNote ? parts.findIndex((part) => TRANSCRIPT_DIVIDER.test(part)) : -1;
+  if (isMeetingNote && dividerAt < 0) {
+    logger.warn(
+      { file: file.id, name },
+      "brain-drive: meeting note has no transcript divider; leaving section unset"
+    );
+  }
+  const sectionOf = (i: number): "summary" | "transcript" | undefined =>
+    dividerAt < 0 ? undefined : i <= dividerAt ? "summary" : "transcript";
+
   return parts.map((body, i) =>
     i === 0
-      ? { ...base, body }
+      ? { ...base, body, meta: { ...base.meta, section: sectionOf(0) } }
       : {
           ...base,
           source_id: `${base.source_id}#${i + 1}`,
           title: `${base.title} (part ${i + 1} of ${parts.length})`,
           body,
-          meta: { ...base.meta, part: i + 1, parts: parts.length },
+          meta: { ...base.meta, part: i + 1, parts: parts.length, section: sectionOf(i) },
         }
   );
 }
