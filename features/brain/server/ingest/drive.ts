@@ -122,6 +122,18 @@ const SKIP_FILE_IDS = new Set([
  */
 const TRANSCRIPT_DIVIDER = /You should review Gemini's notes to make sure they'?re accurate/i;
 
+/**
+ * The two halves of a Gemini meeting note.
+ *
+ * Exported because the `search_company_context` tool description tells callers to
+ * filter on these EXACT strings — `{"section": "summary"}` is how you ask for what
+ * was decided rather than what was said. A rename here would leave that description
+ * pointing at a value nothing emits, which is a tool that lies rather than one that
+ * errors, so a test couples the two.
+ */
+export const DRIVE_SECTIONS = ["summary", "transcript"] as const;
+export type DriveSection = (typeof DRIVE_SECTIONS)[number];
+
 /** Below this, a pdf is a scan with no text layer, and indexing it yields a
  *  title-shaped chunk with no content. We have no OCR, so it is skipped. */
 const PDF_MIN_CHARS = 200;
@@ -426,7 +438,7 @@ export function docToRows(file: DriveFile, text: string, stampedAt: string): Bra
       "brain-drive: meeting note has no transcript divider; leaving section unset"
     );
   }
-  const sectionOf = (i: number): "summary" | "transcript" | undefined =>
+  const sectionOf = (i: number): DriveSection | undefined =>
     dividerAt < 0 ? undefined : i <= dividerAt ? "summary" : "transcript";
 
   return parts.map((body, i) =>

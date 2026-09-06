@@ -34,6 +34,7 @@ import { flushAfterResponse } from "@shared/http/after-response";
 import { recordToolCall } from "@features/brain/server/log";
 import { POST } from "@/app/api/mcp/route";
 import { CorpusUnavailableError } from "@features/brain/server/retrieve";
+import { DRIVE_SECTIONS } from "@features/brain/server/ingest/drive";
 
 const TOKEN = "test-token-0123456789";
 
@@ -153,6 +154,49 @@ describe("/api/mcp", () => {
       expect(tools.filter((t) => t.annotations?.openWorldHint === true).map((t) => t.name)).toEqual(
         ["query_external_service"]
       );
+    });
+
+    it("keeps the decision-record filter reachable, by the value the ingester emits", async () => {
+      /**
+       * A tool that names a filter value nothing produces LIES rather than errors.
+       *
+       * `{"section": "summary"}` is the decision record: the structured half of every
+       * recorded call, carrying its explicit Decisions/Aligned list. It is the filter
+       * for the question this brain exists to answer — "has this already been
+       * decided?" — and until today the schema mentioned `section` only in a list of
+       * field names, never its values, so nothing could reach it.
+       *
+       * MEASURED 2026-09-06, "what decisions were made recently":
+       *   without the filter — a Claude Code newsletter at 1.98 and an Upwork
+       *   timesheet at 1.96, both ABOVE a WhatsApp thread deciding to stop the
+       *   pricing test (1.93) and a Slack thread agreeing the higher-priced
+       *   variant (1.68). Generic words rank on vocabulary, and robot mail is
+       *   full of "review", "submitted" and "agreed".
+       *   with it — three of three results are real Decisions/Aligned blocks.
+       *
+       * Asserted against the RUNTIME description rather than the source file, so
+       * that re-wrapping a concatenated string cannot break it and, more
+       * importantly, so it checks what the model is actually handed.
+       */
+      const body = await (await POST(rpc({ jsonrpc: "2.0", id: 22, method: "tools/list" }))).json();
+      const search = (
+        body.result.tools as Array<{
+          name: string;
+          description: string;
+          inputSchema: { properties?: Record<string, { description?: string }> };
+        }>
+      ).find((t) => t.name === "search_company_context")!;
+      const meta = search.inputSchema.properties?.meta?.description ?? "";
+
+      // Guards the guard: an empty section list would make the loop below vacuous.
+      expect(DRIVE_SECTIONS.length).toBe(2);
+      for (const section of DRIVE_SECTIONS) {
+        expect(`${search.description} ${meta}`, section).toContain(`{"section": "${section}"}`);
+      }
+      // Naming a value without saying when to reach for it is why it sat unused.
+      expect(meta).toMatch(/what was DECIDED or AGREED rather than what was said/);
+      // And the reason a plain query is the wrong instrument for this question.
+      expect(search.description).toMatch(/BROWSE, not a search/);
     });
 
     it("tells the client about BOTH halves — indexed history and live state", async () => {

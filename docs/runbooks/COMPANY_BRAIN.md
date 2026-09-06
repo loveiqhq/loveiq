@@ -184,6 +184,31 @@ use are `Done`, `Idea`, `Not Started`, `WIP`, `Backlog`, `Planning` and `In use`
 documentation entirely, because `doc` chunks describe no period; use dates for "what
 happened recently", never for a policy lookup.
 
+**Asking what was DECIDED is a filter, not a wording.** `{"section": "summary"}`
+selects the structured half of every recorded call — Summary, Details, an explicit
+`Decisions / Aligned` list, Next steps — 583 chunks across 114 meetings, split from
+the raw transcript at ingest by Google's own divider. Its counterpart is
+`{"section": "transcript"}`.
+
+This matters because a generic decision question ranks on vocabulary, and robot mail
+is full of "review", "submitted" and "agreed". Measured 2026-09-06, asking "what
+decisions were made recently" over the whole corpus returned a Claude Code newsletter
+at 1.98 and a freelancer-platform billing notification at 1.96 — both **above** a WhatsApp thread deciding to
+stop the higher-priced pricing test (1.93) and a Slack thread agreeing to keep it
+(1.68). The same question with `{"section": "summary"}` and a `since` date returned
+three of three real `Decisions / Aligned` blocks: pricing deferred pending report
+analysis, designer hiring paused in favour of Claude, 20 assessment products targeted
+by end of September.
+
+The rule: **a topic question is a search, a general "what have we decided" is a
+browse.** Search the topic when you have one — that path is fine, the 22 Aug consumer-
+pivot decision returns at rank 2. Reach for the filter when you do not.
+
+A caveat worth stating rather than rounding away: this covers **meeting** decisions
+only. Decisions taken in Slack or WhatsApp are indexed and findable by topic, but
+carry no `section`, so the browse path will not list them. That gap is the remaining
+half of the decision index, and it is not built.
+
 **Read the score, but do not threshold on it.** Every hit carries a `relevance:`
 number and results are ordered by it, yet there is deliberately no relevance floor.
 Measured on this corpus, the top score for a question it ANSWERS ("why is the data
