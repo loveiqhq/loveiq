@@ -234,6 +234,57 @@ describe("retrieve — failure and edge handling", () => {
     expect(body.per_source).toBe(3);
   });
 
+  it("lifts the per-bucket cap when the caller has NARROWED, so a filter is not also a truncation", async () => {
+    /**
+     * `per_source` is a DIVERSITY rule — it stops one source taking every slot on an
+     * open question. When the caller names the source, or filters on metadata only one
+     * source carries, there is nothing left to diversify against and the cap silently
+     * truncates exactly what was asked for.
+     *
+     * MEASURED 2026-09-06 against production, `sources:['notion'] meta:{status:'WIP'}`:
+     * 3 rows back at per_source 3, 12 at 12, out of 49 WIP tasks on the board. The
+     * caller asked for six and got three with nothing saying so. It capped the decision
+     * browse the same way, quietly undercutting the filter documented one commit
+     * earlier as the way to ask what the team had decided.
+     */
+    respondWith([]);
+    await retrieve("which tasks are in progress", 12, {
+      sources: ["notion"],
+      meta: { status: "WIP" },
+    });
+    expect(JSON.parse(String(mockSupabaseFetch.mock.calls.at(-1)?.[1]?.body)).per_source).toBe(12);
+
+    // `meta` alone collapses the buckets too — its keys are source-specific.
+    mockSupabaseFetch.mockClear();
+    respondWith([]);
+    await retrieve("what did we decide", 6, { meta: { section: "summary" } });
+    expect(JSON.parse(String(mockSupabaseFetch.mock.calls.at(-1)?.[1]?.body)).per_source).toBe(6);
+  });
+
+  it("leaves the cap alone for filters that do NOT collapse the buckets", async () => {
+    /**
+     * The positive control, and the reason this is not simply "raise it whenever any
+     * filter is set". A date range or an exclusion still leaves candidates spread
+     * across ten sources, so diversity still does real work there and the current
+     * behaviour is measured. Raising it for those would change ranking on the common
+     * case to fix a problem they do not have.
+     */
+    respondWith([]);
+    await retrieve("what happened recently", 12, {
+      since: "2026-01-01",
+      excludeSources: ["commit"],
+    });
+    expect(JSON.parse(String(mockSupabaseFetch.mock.calls.at(-1)?.[1]?.body)).per_source).toBe(3);
+  });
+
+  it("never lowers the cap below the diversity floor, however small the limit", async () => {
+    // `Math.max`, not a plain assignment: a caller asking for one hit must not shrink
+    // the candidate pool to one and lose the ranking that picks the right one.
+    respondWith([]);
+    await retrieve("a narrow question", 1, { sources: ["slack"] });
+    expect(JSON.parse(String(mockSupabaseFetch.mock.calls.at(-1)?.[1]?.body)).per_source).toBe(3);
+  });
+
   it("returns nothing for a too-short question without calling the database", async () => {
     const out = await retrieve("a", 8);
     expect(out).toEqual([]);

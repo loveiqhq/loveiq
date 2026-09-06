@@ -193,7 +193,33 @@ export async function retrieve(
         // `expandRelativePeriods` for the measured scores.
         query_text: expandRelativePeriods(trimmed),
         k: CANDIDATE_CEILING,
-        per_source: PER_BUCKET_CANDIDATES,
+        /**
+         * A NARROWED REQUEST MUST NOT BE BOUND BY THE DIVERSITY CAP.
+         *
+         * `PER_BUCKET_CANDIDATES` exists to stop one source taking every slot on an
+         * open question. When the caller has named the source, or filtered on metadata
+         * only one source carries, there is nothing to diversify AGAINST — the cap
+         * stops being a fairness rule and becomes a silent truncation of exactly what
+         * was asked for.
+         *
+         * MEASURED 2026-09-06, `sources:['notion'] meta:{status:'WIP'}`: 3 rows back
+         * at `per_source` 3, 12 at 12, against 49 WIP tasks in the board. The caller
+         * asked for six and got three, with nothing saying it had been cut. It also
+         * capped the decision browse — `{"section":"summary"}` returned three meetings
+         * however many were in range, which quietly undercut the filter documented one
+         * commit earlier as the way to ask what was decided.
+         *
+         * Only `sources` and `meta` collapse the bucket count, so only they raise it.
+         * `since`/`until` and `exclude_sources` leave the buckets spread and their
+         * current behaviour is measured, so they are deliberately left alone.
+         * `CANDIDATE_CEILING` still bounds the total, and the share cap has a backfill
+         * for the single-source case — verified: the same filter at `per_source` 12
+         * returns 12, so nothing downstream re-imposes the limit.
+         */
+        per_source:
+          opts.sources?.length || (opts.meta && Object.keys(opts.meta).length)
+            ? Math.max(PER_BUCKET_CANDIDATES, limit)
+            : PER_BUCKET_CANDIDATES,
         // SEMANTIC RECALL. Postgres cannot run the model, so the question is
         // embedded here and the vector passed in. Null when embedding fails, which
         // the SQL treats as "lexical only" — an embedding outage degrades the

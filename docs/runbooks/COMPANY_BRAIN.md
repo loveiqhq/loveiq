@@ -310,13 +310,34 @@ build.
 
 ```bash
 npm run brain:ask "how are we doing this month"   # exercises the real answer path
-npm run brain:battery                             # 25 adversarial questions
+npm run brain:battery                             # 25 adversarial questions, Slack door
+npm run brain:battery:retrieval                   # 10 probes on the MCP door, ~10s
 ```
 
 The battery reads its expected figures out of the corpus at run time, so it does
 not go stale, and it refuses to run without `BRAIN_LLM_KEY` rather than reporting
 25 misleading failures. It is deliberately **not** part of `npm run check`: it
 makes real model and database calls.
+
+**Run `brain:battery:retrieval` after ANY change to ranking, filters or an
+ingester.** The probes above drive `answerQuestion`, which is the Slack door —
+retrieval plus a small model writing prose. MCP is the primary interface and it
+ships the sources themselves, so its correctness is a question about _which rows
+come back_, not how a summariser phrased them; asserting on prose conflates the two
+and when it fails you cannot tell which half broke. Retrieval mode calls
+`retrieve()` directly: no model, so no `BRAIN_LLM_KEY`, no per-minute rate limit and
+no 12s pacing — the whole set runs in about ten seconds, which is the difference
+between a gate that gets run and one that gets skipped. It is read-only (one
+`brain_search` RPC, no writes), so point it at production, which is the only place
+the corpus exists.
+
+Every probe is a defect that really happened, and the set is mutation-tested — the
+per-bucket cap below was found by it on its first run, and reverting that fix turns
+two probes red. Two lessons are baked into the file itself: `wip-tasks` first
+asserted `hits < 3`, which sat exactly ON the cap and so passed while the bug was
+live; and `record-beats-transcript` was vacuous until it was restricted to `drive`,
+because with no meeting document in the results "every meeting hit is a transcript"
+is trivially true. A precondition that can silently not hold is not a test.
 
 **MEASURED 2026-08-28: the free tier is not viable for a team tool.** A full
 25-question run, paced 16s apart, degraded monotonically as it went:

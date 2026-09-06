@@ -12,6 +12,7 @@
  */
 
 import { answerQuestion } from "@features/brain/server/answer";
+import { retrieve, type BrainChunk, type RetrieveOptions } from "@features/brain/server/retrieve";
 import { supabaseFetch } from "@features/admin/server/supabase";
 
 interface Probe {
@@ -164,6 +165,257 @@ function buildProbes(f: LiveFigures): Probe[] {
   ];
 }
 
+/**
+ * THE RETRIEVAL BATTERY — the door that is actually the product.
+ *
+ * The probes above drive `answerQuestion`, which is the SLACK door: retrieval plus a
+ * small model writing prose. MCP is the primary interface now, and it ships the
+ * sources themselves, so its correctness is a question about WHICH ROWS COME BACK —
+ * not about how a summariser phrased them. Asserting on prose conflates the two, and
+ * when it fails you cannot tell which half broke.
+ *
+ * This mode calls `retrieve()` directly. No model, so no `BRAIN_LLM_KEY`, no
+ * per-minute rate limit and no 12s pacing — the whole set runs in seconds, which is
+ * the difference between a gate that runs and one that gets skipped. It is read-only:
+ * `retrieve` issues one `brain_search` RPC and writes nothing, so this is safe against
+ * production, which is the only place the corpus actually exists.
+ *
+ * EVERY PROBE HERE IS A DEFECT THAT REALLY HAPPENED. A battery of invented cases
+ * measures imagination; this one measures the bugs that got through.
+ */
+interface RetrievalProbe {
+  kind: string;
+  q: string;
+  opts?: RetrieveOptions;
+  limit?: number;
+  /** Problems with the ranked hits, empty when clean. Plain JS beats a matcher DSL. */
+  check: (hits: BrainChunk[]) => string[];
+}
+
+/** Sources written BY the company about itself, as opposed to mail it received. */
+const FIRST_PARTY = new Set(["doc", "notion", "slack", "whatsapp", "drive", "commit"]);
+
+const describe = (h: BrainChunk): string =>
+  `${h.source}${h.meta?.section ? `/${String(h.meta.section)}` : ""} "${(h.title ?? "").slice(0, 55)}" @${h.score.toFixed(2)}`;
+
+function retrievalProbes(): RetrievalProbe[] {
+  return [
+    {
+      /**
+       * THE PROBE THIS WHOLE PLAN STARTED FROM. Measured 2026-09-05: zero of the 46
+       * correctly-shaped `Status: WIP · Assigned to: …` rows came back; the top hits
+       * were two commits ABOUT the Notion integration and two private HR documents.
+       * Filters were the fix, and this is the assertion that they still work.
+       */
+      kind: "wip-tasks",
+      q: "which tasks are in progress and who is assigned to them",
+      opts: { sources: ["notion"], meta: { status: "WIP" } },
+      limit: 6,
+      check: (h) => {
+        const bad = h.filter((x) => x.source !== "notion" || x.meta?.status !== "WIP");
+        return [
+          // A SHORT PAGE IS THE BUG, not a detail. 49 WIP rows exist, so anything less
+          // than the six asked for is truncation. This threshold was `< 3` when first
+          // written, which sat exactly ON the per-bucket cap and so passed while the
+          // cap was silently returning 3 of 49 — a probe that could not fail on the
+          // defect it was sitting on.
+          h.length < 6
+            ? `only ${h.length} of 6 asked for, and 49 WIP rows exist — truncated`
+            : null,
+          bad.length ? `not WIP notion rows: ${bad.map(describe).join(", ")}` : null,
+        ].filter((x): x is string => x !== null);
+      },
+    },
+    {
+      /**
+       * The 22 Aug consumer-pivot decision, which once ranked 135th of 3,341 and
+       * survived the stage-1 cut of 150 by fifteen places — by luck, not design.
+       */
+      kind: "decision-by-topic",
+      q: "what did we decide about micro assessments and the consumer pivot",
+      limit: 5,
+      check: (h) =>
+        h.slice(0, 3).some((x) => x.source === "drive" && x.meta?.section === "summary")
+          ? []
+          : [`no meeting decision record in the top 3: ${h.slice(0, 3).map(describe).join(", ")}`],
+    },
+    {
+      /**
+       * A meeting note is two documents in one file and the dedup keeps ONE part.
+       * Before `058bf21a` the raw transcript won roughly a third of the time, so a
+       * decision question returned "I give you 20 seconds because I also need to get
+       * shoes". The record must win whenever a meeting document comes back at all.
+       */
+      kind: "record-beats-transcript",
+      q: "what did we agree about pricing in our calls",
+      // Restricted to drive so a meeting document is GUARANTEED to come back. Without
+      // this the probe was vacuous: commits and mail filled the top 8, no meeting hit
+      // appeared, and "every meeting hit is a transcript" was trivially satisfied by
+      // there being none. A precondition that can silently not hold is not a test.
+      opts: { sources: ["drive"] },
+      limit: 8,
+      check: (h) => {
+        const meetings = h.filter((x) => x.meta?.section);
+        const raw = meetings.filter((x) => x.meta?.section === "transcript");
+        return [
+          meetings.length === 0 ? "no meeting document came back, so this proved nothing" : null,
+          meetings.length && raw.length === meetings.length
+            ? `every meeting hit is a raw transcript: ${raw.map(describe).join(", ")}`
+            : null,
+        ].filter((x): x is string => x !== null);
+      },
+    },
+    {
+      /** The decision browse. Undiscoverable until 2026-09-06; now documented. */
+      kind: "decision-browse",
+      q: "what decisions were made recently and what was agreed",
+      opts: { meta: { section: "summary" }, since: "2026-08-01" },
+      limit: 6,
+      check: (h) => {
+        const bad = h.filter((x) => x.meta?.section !== "summary");
+        return [
+          // 91 summary chunks across 24 meetings sit inside this window, so a short
+          // page means the browse was capped — which is precisely what made the
+          // filter documented one commit earlier quietly useless.
+          h.length < 6 ? `only ${h.length} of 6 asked for, from 24 meetings in range` : null,
+          bad.length ? `not decision records: ${bad.map(describe).join(", ")}` : null,
+        ].filter((x): x is string => x !== null);
+      },
+    },
+    {
+      /**
+       * MEASURED 2026-09-06 and still open: an Atlassian usage-pricing marketing mail
+       * scored 2.12 on a pricing DECISION question, above LoveIQ's own pricing spec at
+       * 1.96. Received mail describing someone else's product must not outrank what the
+       * company wrote about its own. The bulk penalty is -0.25 and demonstrably not
+       * enough; raising it was measured and REJECTED because it demotes substantive
+       * domain newsletters too. Left failing on purpose until there is a fix that
+       * measures better — a red probe that names a real defect beats a green suite.
+       */
+      kind: "bulk-must-not-outrank-first-party",
+      q: "what did we decide about the pricing test and the higher priced variant",
+      limit: 8,
+      check: (h) => {
+        const firstAt = h.findIndex((x) => FIRST_PARTY.has(x.source));
+        if (firstAt < 0) return ["no first-party source came back at all"];
+        const above = h
+          .slice(0, firstAt)
+          .concat(h.slice(firstAt + 1, 4))
+          .filter((x) => x.source === "gmail" && x.meta?.bulk === true);
+        return above.length
+          ? [`bulk mail in the top 4 alongside first-party: ${above.map(describe).join(", ")}`]
+          : [];
+      },
+    },
+    {
+      /**
+       * THE RECENCY REGRESSION RISK. `doc` chunks carry no period, so scoring them as
+       * infinitely old destroys every policy lookup — which is why the decay term uses
+       * `coalesce(period_end, CURRENT_DATE)`. This is the probe that would have caught
+       * getting that wrong.
+       */
+      kind: "undated-docs-still-reachable",
+      q: "why is the data retention purge turned off",
+      limit: 5,
+      check: (h) =>
+        h.slice(0, 3).some((x) => x.source === "doc")
+          ? []
+          : [`no documentation in the top 3: ${h.slice(0, 3).map(describe).join(", ")}`],
+    },
+    {
+      /** A filter that does not filter is worse than none: it looks like an answer. */
+      kind: "sources-filter-is-exclusive",
+      q: "what has the team been talking about",
+      opts: { sources: ["slack"] },
+      limit: 6,
+      check: (h) => {
+        const bad = h.filter((x) => x.source !== "slack");
+        return bad.length ? [`leaked past sources=[slack]: ${bad.map(describe).join(", ")}`] : [];
+      },
+    },
+    {
+      /** `exclude_sources: ['commit']` is the documented cure for changelog noise. */
+      kind: "exclude-filter-holds",
+      q: "how does the brain ingest work",
+      opts: { excludeSources: ["commit"] },
+      limit: 8,
+      check: (h) => {
+        const bad = h.filter((x) => x.source === "commit");
+        return bad.length
+          ? [`commits survived the exclusion: ${bad.map(describe).join(", ")}`]
+          : [];
+      },
+    },
+    {
+      /**
+       * Documented behaviour that would otherwise change in silence: any date range
+       * drops every `doc` chunk, because documentation describes no period. The tool
+       * description promises this, so a change here makes the tool wrong.
+       */
+      kind: "date-range-excludes-docs",
+      q: "why is the data retention purge turned off",
+      opts: { since: "2026-01-01" },
+      limit: 8,
+      check: (h) => {
+        const docs = h.filter((x) => x.source === "doc");
+        return docs.length
+          ? [
+              `docs survived a date range, so the documented caveat is now false: ${docs.map(describe).join(", ")}`,
+            ]
+          : [];
+      },
+    },
+    {
+      /**
+       * A narrow filter must return NOTHING rather than something adjacent — the whole
+       * point of the empty-result message shipped in `548ae1b8`.
+       */
+      kind: "impossible-filter-returns-empty",
+      q: "quarterly procurement of industrial widgets",
+      opts: { sources: ["notion"], meta: { status: "NoSuchStatusExists" } },
+      limit: 5,
+      check: (h) =>
+        h.length === 0
+          ? []
+          : [`a status nothing uses matched ${h.length}: ${h.map(describe).join(", ")}`],
+    },
+  ];
+}
+
+async function runRetrievalBattery(only: string | null): Promise<number> {
+  const all = retrievalProbes();
+  const probes = only ? all.filter((p) => p.kind.includes(only) || p.q.includes(only)) : all;
+  let failures = 0;
+
+  for (const p of probes) {
+    const started = Date.now();
+    let hits: BrainChunk[] = [];
+    let issues: string[] = [];
+    try {
+      hits = await retrieve(p.q, p.limit ?? 12, p.opts ?? {});
+      issues = p.check(hits);
+    } catch (err) {
+      // An outage must read as an outage, never as "the corpus has no such thing" —
+      // the same distinction the MCP tool draws for callers.
+      issues = [`retrieval threw: ${err instanceof Error ? err.message : String(err)}`];
+    }
+    const ms = Date.now() - started;
+    if (issues.length) failures++;
+    console.log(
+      `\n${issues.length ? "FAIL" : "ok  "} [${p.kind}] ${JSON.stringify(p.q.slice(0, 62))}` +
+        `${p.opts ? ` ${JSON.stringify(p.opts)}` : ""}`
+    );
+    console.log(`      ${hits.length} hits in ${ms}ms`);
+    if (issues.length) for (const i of issues) console.log(`      ISSUE: ${i}`);
+    console.log("      " + (hits.slice(0, 3).map(describe).join("\n      ") || "(nothing)"));
+  }
+
+  console.log(
+    `\n=== retrieval: ${probes.length - failures}/${probes.length} clean, ${failures} flagged ===`
+  );
+  return failures;
+}
+
 /** Strip thousands separators so `1,110.85` matches an expected `1110.85`. The
  *  model formats money for humans; the corpus stores it raw. */
 function normalise(text: string): string {
@@ -213,7 +465,14 @@ function flag(p: Probe, text: string, status: string, ms: number, sources: numbe
 
 async function main(): Promise<void> {
   const onlyIdx = process.argv.indexOf("--only");
-  const only = onlyIdx > -1 ? process.argv[onlyIdx + 1] : null;
+  const only = onlyIdx > -1 ? (process.argv[onlyIdx + 1] ?? null) : null;
+
+  // Retrieval mode measures the MCP door and needs no model, so it must be checked
+  // BEFORE the LLM-key gate below — otherwise the mode that can always run would be
+  // refused for a key it never uses.
+  if (process.argv.includes("--retrieval")) {
+    process.exit((await runRetrievalBattery(only)) ? 1 : 0);
+  }
   // Without a model every probe reports `unconfigured`, which renders as 24 FAILs
   // and buries the one real cause. Say it once and stop.
   if (!process.env.BRAIN_LLM_KEY) {

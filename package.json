@@ -30,6 +30,7 @@
     "test": "vitest run",
     "brain:ask": "tsx scripts/brain-ask.ts",
     "brain:battery": "tsx scripts/brain-battery.ts",
+    "brain:battery:retrieval": "tsx scripts/brain-battery.ts --retrieval",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run --config vitest.integration.config.ts",
