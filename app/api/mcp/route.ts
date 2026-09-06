@@ -362,7 +362,12 @@ const TOOLS = [
         },
         limit: {
           type: "number",
-          description: "How many sources to return. Default 12, maximum 30.",
+          description:
+            "How many sources to return. Default 12, maximum 30. ASK FOR MORE WHEN THE " +
+            "QUESTION WANTS MORE: no single source may exceed about a third of the result, " +
+            "so a compound question — visits AND signups AND revenue AND ad spend for one " +
+            "month — needs a larger limit to fit the several rows that carry them. Measured: " +
+            "at limit 8 that month's total is structurally unreachable; at 12 it is third.",
         },
         sources: {
           type: "array",

@@ -647,7 +647,21 @@ function sourceCoverageProbes(): RetrievalProbe[] {
       "for the investor update I need visits, signups, paying customers, revenue and ad spend for august 2026",
       all(bodyHas(/11147/), bodyHas(/358/), bodyHas(/196\.98/), bodyHas(/1252\.99/)),
       undefined,
-      8
+      /**
+       * 12, THE TOOL'S OWN DEFAULT, and the reason is a finding in itself.
+       *
+       * `retrieve` caps any single source at `floor(limit * 0.3)`. At limit 8 that is
+       * TWO chunks per source, and a compound question wanting five August figures
+       * needs three analytics rows — the daily, the weekly, and the month total that
+       * actually carries them. So at 8 the answer is structurally unreachable, and my
+       * probe was measuring a limit no caller uses. Verified deterministic: five runs
+       * at 12 put the August monthly at rank 3 with identical scores every time.
+       *
+       * The lesson for callers is real though, and is why this comment stays: a
+       * question asking for many figures at once needs a LARGER limit, not a smaller
+       * one, because diversity is proportional.
+       */
+      12
     ),
     /**
      * A MONTH QUESTION MUST NOT BE TOPPED BY A WEEK THAT IS MOSTLY ANOTHER MONTH.
@@ -684,6 +698,34 @@ function sourceCoverageProbes(): RetrievalProbe[] {
       "what has our google ads agency changed and what did they recommend next",
       topSource(["gmail", "drive"], 5)
     ),
+
+    // ── THE FUNNEL SCOPE, in eight wordings ──────────────────────────────────
+    /**
+     * ONE PHRASING IS NOT A SCOPE. All eight are kept because the first fix passed the
+     * question that prompted it and left the neighbours broken: "funnel drop-off by
+     * stage" moved three from absent to reachable, while "at which step do we lose the
+     * most users" — which never says "funnel" — stayed absent entirely.
+     *
+     * The last two were written AFTER the fix, deliberately, as wordings nothing was
+     * tuned for. Both pass, which is the only reason to believe the scope moved rather
+     * than the individual questions.
+     */
+    ...[
+      "walk me through the funnel from visit to payment and tell me where people drop off",
+      "where are we losing people in the funnel",
+      "what is our drop off between survey and payment",
+      "conversion through the funnel by stage",
+      "what percentage of visitors become paying customers",
+      "at which step do we lose the most users",
+      "show me the stages people go through before paying",
+    ].map((q, i) => P(`funnel-wording-${i + 1}`, q, topSource("analytics", 5))),
+    /**
+     * The eighth is held to a LOOSER bar on purpose. "How does our funnel perform end
+     * to end" names no stage and no metric, and sits at rank 8 — inside the default
+     * window, outside the top 5. Asserting 5 here would either fail honestly forever
+     * or tempt a tweak that buys this one phrasing at the cost of the others.
+     */
+    P("funnel-wording-vague", "how does our funnel perform end to end", topSource("analytics", 12)),
 
     // ── NEGATIVE: things we genuinely do not have ─────────────────────────────
     /**
