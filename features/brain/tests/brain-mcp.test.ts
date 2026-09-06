@@ -215,6 +215,51 @@ describe("/api/mcp", () => {
       expect(body.result.isError).toBe(false);
     });
 
+    it("passes caller filters through to retrieval, where they can actually narrow", async () => {
+      /**
+       * They MUST reach `brain_search`. Filtering after `retrieve()` returns would
+       * filter after the top-k, so `sources:["drive"]` would come back empty on a
+       * corpus that is half Drive — silent loss dressed as absence.
+       */
+      mockRetrieve.mockResolvedValue([]);
+      await call({
+        query: "which tasks are in progress",
+        sources: ["notion"],
+        exclude_sources: ["commit"],
+        since: "2026-08-01",
+        until: "2026-09-01",
+        meta: { status: "WIP" },
+      });
+      expect(mockRetrieve).toHaveBeenLastCalledWith("which tasks are in progress", 12, {
+        sources: ["notion"],
+        excludeSources: ["commit"],
+        since: "2026-08-01",
+        until: "2026-09-01",
+        meta: { status: "WIP" },
+      });
+    });
+
+    it("ignores malformed filters rather than passing nonsense to the database", async () => {
+      // A model will send these. A string where an array belongs, or a nested
+      // object in `meta`, must not become a query — `meta @> ...` is containment,
+      // so a nested object matches structurally in ways nobody writing
+      // {status:"WIP"} intends.
+      mockRetrieve.mockResolvedValue([]);
+      await call({
+        query: "anything",
+        sources: "notion",
+        exclude_sources: [],
+        meta: { nested: { deep: true }, status: "WIP", count: 3 },
+      });
+      expect(mockRetrieve).toHaveBeenLastCalledWith("anything", 12, {
+        sources: undefined,
+        excludeSources: undefined,
+        since: undefined,
+        until: undefined,
+        meta: { status: "WIP", count: "3" },
+      });
+    });
+
     it("gives the model a score, a date and a fetch handle for every hit", async () => {
       /**
        * All three were computed and thrown away. `retrieve.ts` dropped `period_end`
@@ -286,7 +331,7 @@ describe("/api/mcp", () => {
 
       mockRetrieve.mockResolvedValue([]);
       await call({ query: "x".repeat(10), limit: 9999 });
-      expect(mockRetrieve).toHaveBeenLastCalledWith(expect.any(String), 30);
+      expect(mockRetrieve).toHaveBeenLastCalledWith(expect.any(String), 30, expect.any(Object));
     });
 
     it("surfaces an unexpected failure as a tool result, not a transport error", async () => {

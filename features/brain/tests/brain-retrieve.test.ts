@@ -208,6 +208,32 @@ describe("retrieve — source diversity", () => {
 });
 
 describe("retrieve — failure and edge handling", () => {
+  it("sends only the filters the caller actually set", async () => {
+    // Every filter defaults to NULL in the function and NULL means "no filter", so
+    // an omitted key and an explicit null behave identically — but sending only
+    // what was asked for keeps the arguments recorded in `brain_query` readable as
+    // the caller's intent rather than as a wall of nulls.
+    respondWith([]);
+    await retrieve("a question", 5, { sources: ["notion"], meta: { status: "WIP" } });
+    const body = JSON.parse(String(mockSupabaseFetch.mock.calls.at(-1)?.[1]?.body));
+    expect(body.sources).toEqual(["notion"]);
+    expect(body.meta_filter).toEqual({ status: "WIP" });
+    expect(body).not.toHaveProperty("since");
+    expect(body).not.toHaveProperty("until");
+    expect(body).not.toHaveProperty("exclude_sources");
+  });
+
+  it("sends no filter keys at all when the caller passes none", async () => {
+    respondWith([]);
+    await retrieve("a question", 5);
+    const body = JSON.parse(String(mockSupabaseFetch.mock.calls.at(-1)?.[1]?.body));
+    for (const key of ["sources", "exclude_sources", "since", "until", "meta_filter"]) {
+      expect(body, key).not.toHaveProperty(key);
+    }
+    // and the unfiltered contract is unchanged
+    expect(body.per_source).toBe(3);
+  });
+
   it("returns nothing for a too-short question without calling the database", async () => {
     const out = await retrieve("a", 8);
     expect(out).toEqual([]);

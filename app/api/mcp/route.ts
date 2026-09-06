@@ -324,6 +324,44 @@ const TOOLS = [
           type: "number",
           description: "How many sources to return. Default 12, maximum 30.",
         },
+        sources: {
+          type: "array",
+          items: { type: "string", enum: SOURCES_FOR_TEST },
+          description:
+            "Restrict to these sources. Omit for all. Use it when you know where the " +
+            "answer lives — a board task, a Slack day, a call note — rather than " +
+            "hoping the wording matches.",
+        },
+        exclude_sources: {
+          type: "array",
+          items: { type: "string", enum: SOURCES_FOR_TEST },
+          description:
+            "Everything EXCEPT these. `['commit']` is the useful one: engineering " +
+            "commits describe changes to the data using the same words as the data, " +
+            "so they crowd the top of business questions.",
+        },
+        since: {
+          type: "string",
+          description:
+            "Earliest date the record DESCRIBES, YYYY-MM-DD. NOTE: repository " +
+            "documentation carries no date, so ANY date range excludes all 487 doc " +
+            "chunks. Use it for 'what happened recently', not for policy lookups.",
+        },
+        until: {
+          type: "string",
+          description: "Latest date the record describes, YYYY-MM-DD. Same caveat as `since`.",
+        },
+        meta: {
+          type: "object",
+          description:
+            'Exact-match on indexed metadata, e.g. {"status": "WIP"}. Notion board ' +
+            "tasks carry status, assignee, priority, due, impact, database; slack " +
+            "carries channel and day; commit carries author, date, sha; gmail carries " +
+            "mailbox and bulk; drive carries owner, kind and section. Values are " +
+            "matched EXACTLY — the statuses actually in use are Done, Idea, " +
+            "Not Started, WIP, Backlog, Planning and In use, so 'in_progress' or " +
+            "'In Progress' will match nothing.",
+        },
       },
       required: ["query"],
     },
@@ -833,9 +871,32 @@ async function callTool(
     }
     const limit = Math.min(30, Math.max(1, Number(args.limit) || 12));
 
+    const asStrings = (v: unknown): string[] | undefined =>
+      Array.isArray(v) && v.every((x) => typeof x === "string") && v.length > 0
+        ? (v as string[])
+        : undefined;
+    const asMeta = (v: unknown): Record<string, string> | undefined => {
+      if (!v || typeof v !== "object" || Array.isArray(v)) return undefined;
+      const out: Record<string, string> = {};
+      for (const [key, val] of Object.entries(v as Record<string, unknown>)) {
+        // Only scalars: `meta @> ...` is containment, and a nested object would
+        // match structurally in ways a caller writing {status:"WIP"} never intends.
+        if (typeof val === "string" || typeof val === "number" || typeof val === "boolean") {
+          out[key] = String(val);
+        }
+      }
+      return Object.keys(out).length > 0 ? out : undefined;
+    };
+
     let chunks;
     try {
-      chunks = await retrieve(query, limit);
+      chunks = await retrieve(query, limit, {
+        sources: asStrings(args.sources),
+        excludeSources: asStrings(args.exclude_sources),
+        since: typeof args.since === "string" ? args.since : undefined,
+        until: typeof args.until === "string" ? args.until : undefined,
+        meta: asMeta(args.meta),
+      });
     } catch (err) {
       if (!(err instanceof CorpusUnavailableError)) throw err;
       // Deliberately NOT "no results". Telling a model the corpus is empty when

@@ -45,6 +45,28 @@ export interface BrainChunk {
 }
 
 /**
+ * Caller-passed narrowing, all optional and all applied INSIDE `brain_search` --
+ * never here.
+ *
+ * Filtering after `retrieve()` returns would filter after the top-k, so
+ * `sources: ["drive"]` would come back empty on a corpus that is half Drive:
+ * silent loss dressed as absence, which is the one failure this subsystem is
+ * written against.
+ */
+export interface RetrieveOptions {
+  /** Only these sources. */
+  sources?: string[];
+  /** Everything except these. */
+  excludeSources?: string[];
+  /** Earliest period the chunk DESCRIBES, `YYYY-MM-DD`. Excludes undated `doc` rows. */
+  since?: string;
+  /** Latest period the chunk describes, `YYYY-MM-DD`. */
+  until?: string;
+  /** Exact-match metadata, e.g. `{ status: "WIP" }`. Keys a source lacks match nothing. */
+  meta?: Record<string, string>;
+}
+
+/**
  * Candidates requested per (source, grain) bucket, and the global ceiling on the
  * candidate set.
  *
@@ -133,7 +155,11 @@ export class CorpusUnavailableError extends Error {
   }
 }
 
-export async function retrieve(question: string, limit = 12): Promise<BrainChunk[]> {
+export async function retrieve(
+  question: string,
+  limit = 12,
+  opts: RetrieveOptions = {}
+): Promise<BrainChunk[]> {
   const trimmed = question.trim();
   if (trimmed.length < 2) return [];
 
@@ -173,6 +199,15 @@ export async function retrieve(question: string, limit = 12): Promise<BrainChunk
         // the SQL treats as "lexical only" — an embedding outage degrades the
         // answers rather than breaking search.
         query_embedding: queryVector,
+        // Only the keys the caller actually set. Every filter defaults to NULL in
+        // the function and NULL means "no filter", so an omitted key and an
+        // explicit null behave identically -- but sending only what was asked for
+        // keeps the arguments recorded in `brain_query` readable as intent.
+        ...(opts.sources?.length ? { sources: opts.sources } : {}),
+        ...(opts.excludeSources?.length ? { exclude_sources: opts.excludeSources } : {}),
+        ...(opts.since ? { since: opts.since } : {}),
+        ...(opts.until ? { until: opts.until } : {}),
+        ...(opts.meta && Object.keys(opts.meta).length ? { meta_filter: opts.meta } : {}),
       }),
     });
     if (!res.ok) {
