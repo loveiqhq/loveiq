@@ -53,6 +53,26 @@ import { sweepStale, upsertChunks, type BrainRow, type IngestResult } from "./up
  * older rows exist. Measured after raising the clamp: 400 days 0.9ms, 4000 days
  * 2.6ms. LoveIQ's data starts 2026-03-24.
  */
+/**
+ * The words a person actually uses, appended to every analytics title.
+ *
+ * The title is half of what `brain_search` matches on and carries twice the weight
+ * of the body, and "LoveIQ numbers — August 2026" shares NOT ONE WORD with "what is
+ * our revenue and how many paying customers do we have". Measured on that question:
+ * `word_similarity` against the title goes 0.072 -> 0.424, a +0.70 gain at the title
+ * weight, which is larger than the entire recency term.
+ *
+ * This file already learned the lesson one level down -- the BODY says "Signups
+ * (completed surveys)" and "Paid customers" precisely so that a human word matches
+ * ours. The title never got the same treatment, so the numbers were reachable only
+ * by a question that already spoke our vocabulary.
+ *
+ * Vocabulary rather than a sentence, deliberately: `word_similarity` scores the best
+ * matching EXTENT of the title, so extra relevant words raise the match and do not
+ * dilute it. Measured against an unrelated question the gain is +0.04, i.e. noise.
+ */
+const NUMBERS_VOCABULARY = "revenue, paying customers, signups, visits, ad spend";
+
 const DAYS = 4000;
 const SOURCE = "analytics";
 
@@ -543,7 +563,7 @@ export function buildAnalyticsRows(
     out.push({
       source: SOURCE,
       source_id: `daily:${day}`,
-      title: `LoveIQ numbers — ${label}`,
+      title: `LoveIQ numbers — ${label}: ${NUMBERS_VOCABULARY}`,
       url: null,
       body: renderBody(`${label} (${day})`, totals, adCost),
       meta: {
@@ -565,7 +585,7 @@ export function buildAnalyticsRows(
     out.push({
       source: SOURCE,
       source_id: `weekly:${week}`,
-      title: `LoveIQ numbers — ${label}`,
+      title: `LoveIQ numbers — ${label}: ${NUMBERS_VOCABULARY}`,
       url: null,
       body: renderBody(`${label} (${week})`, t, adCost),
       meta: { grain: "week", week, visitors: t.visitors, revenue: t.revenue, ad_spend: t.adSpend },
@@ -581,7 +601,7 @@ export function buildAnalyticsRows(
     out.push({
       source: SOURCE,
       source_id: `monthly:${month}`,
-      title: `LoveIQ numbers — ${label} (monthly total)`,
+      title: `LoveIQ numbers — ${label} (monthly total): ${NUMBERS_VOCABULARY}`,
       url: null,
       // Three sources each labelled a DIFFERENT partial range "whole month" —
       // analytics ran to today, GA4 to yesterday, GSC to two days ago — so the

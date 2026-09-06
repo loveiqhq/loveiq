@@ -67,6 +67,29 @@ describe("buildAnalyticsRows", () => {
     expect(rows.every((r) => r.source === "analytics")).toBe(true);
   });
 
+  it("puts the words people ask with in the TITLE, not only in the body", () => {
+    /**
+     * The title carries twice the weight of the body in `brain_search`, and
+     * "LoveIQ numbers — August 2026" shares not one word with "what is our revenue
+     * and how many paying customers do we have" -- measured live, that question
+     * returned the COMMIT that fixed a revenue bug instead of the revenue.
+     *
+     * This file already applies the rule one level down: the body says "Signups
+     * (completed surveys)" and "Paid customers" so a human word matches ours.
+     * Measured for the title: word_similarity 0.072 -> 0.424, a +0.70 gain at the
+     * title weight, against +0.04 on an unrelated question.
+     */
+    const rows = buildAnalyticsRows([day("2026-08-19")], STAMP);
+    expect(rows).toHaveLength(3); // day, week, month — all three must carry it
+    for (const r of rows) {
+      expect(r.title, r.source_id).toMatch(/revenue/i);
+      expect(r.title, r.source_id).toMatch(/paying customers/i);
+      expect(r.title, r.source_id).toMatch(/ad spend/i);
+      // and the period must still be readable, or the vocabulary has eaten it
+      expect(r.title, r.source_id).toMatch(/August 2026/);
+    }
+  });
+
   it("totals the weekly and monthly grains instead of repeating a day", () => {
     // The whole reason the coarser grains exist: the model should read a total,
     // not add seven numbers up itself.
