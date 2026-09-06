@@ -26,16 +26,30 @@ message. It replies in a thread, and every answer lists the sources it used.
 - **Current state assembled from many changes.** The price of the report exists
   only as a chain of dated commits across two A/B arms and a feature flag. It
   cannot reliably replay that into "the price right now".
-- **People and money outside the product.** No HR data, no payroll, no bank
-  balance, no runway. It should decline these; if it ever answers one, that is a
-  bug worth reporting.
+- **Money outside the product.** No payroll, no bank balance, no runway — those
+  live in systems nothing here reads.
+- **People, though — read this one carefully.** This list used to say the brain
+  holds no HR data and "should decline these; if it ever answers one, that is a
+  bug". That is not true and has not been for some time. Company email, recorded
+  call notes and Notion pages are all indexed, so performance conversations,
+  feedback and compensation discussion are in the corpus, and they surface
+  UNBIDDEN — measured, an ordinary product question ("which Notion tasks are in
+  progress") returned a private performance review and a recorded call about a
+  named individual. Open access is the deliberate company decision (2026-08-28,
+  reaffirmed 2026-09-05), not an oversight; `NOTION_EXCLUDE_TITLES` keeps named
+  pages out and nothing equivalent exists for Gmail or Drive. Ask accordingly.
 - **Follow-up questions.** Each question is answered on its own. "Is that good or
   bad?" has no memory of what came before — repeat the subject.
 
 **When it is wrong:** say so in the thread and tell whoever maintains this. Every
-question and the answer it gave are recorded in the `brain_query` table, so a
-wrong answer can be found again and diagnosed. That only works if someone reports
-it — there is no automatic feedback signal.
+question is recorded in `brain_query`, so a wrong answer can be found again and
+diagnosed — but what is stored differs by door, and the difference matters when
+you go looking. The Slack path stores the question AND the answer it gave. The
+MCP path stores the question, the tool, the arguments, how many sources came
+back, the top relevance score and the latency, but NOT an answer, because it
+never writes one: it returns sources and the calling model does the reasoning.
+So an MCP complaint is reproducible from the recorded arguments, not readable as
+a transcript. Filter on `surface` to tell the two apart.
 
 ## For operators
 
