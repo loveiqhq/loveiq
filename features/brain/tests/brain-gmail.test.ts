@@ -318,7 +318,11 @@ describe("a stale-version row must never be confirmed", () => {
       fs.readFileSync("features/brain/server/ingest/gmail.ts", "utf8")
     );
     expect(src).toMatch(/return have\.current;/);
-    expect(src).toMatch(/belongs to the sweep, not to the touch list/);
+    // The second assertion here used to grep for the COMMENT above that line, which
+    // could only ever detect a rewording — and did, on 2026-09-06. The behaviour it
+    // was standing in for is now proven directly, under mutation, by
+    // "still sweeps a stale row from a mailbox it did walk" in
+    // brain-gmail-ingest.test.ts. Grep the code, not the prose.
   });
 
   it("only skips a refetch when the row is CURRENT and its historyId matches", async () => {

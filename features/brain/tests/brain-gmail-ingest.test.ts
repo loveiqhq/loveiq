@@ -319,3 +319,62 @@ describe("a converging re-walk must not be as loud as an outage", () => {
     expect(block).not.toContain('"gmail-walk-incomplete"');
   });
 });
+
+describe("the sweep may only judge mailboxes it actually walked", () => {
+  /**
+   * A LATENT DATA-LOSS BUG, found by looking at production rather than at the code.
+   *
+   * `domainMailboxes` lists `isSuspended=false` users, so an offboarded colleague
+   * silently drops off the walk the day their account is suspended — which the
+   * function's own doc comment says is fine, because "a departed colleague's mail
+   * stays in the corpus as history but stops being re-read."
+   *
+   * It did not stay. Their rows are never listed, never written, and — being
+   * stale-version after any builder bump — never confirmed either, so
+   * `sweepMissing` reads them as deleted from the source. Measured 2026-09-06:
+   * 232 rows across philipp.leonhard@, sk@ and teamwork@ sat in exactly that
+   * state, 3.3% of the source, well under the majority guard. The first walk to
+   * complete would have deleted all of them without a word.
+   *
+   * The rule is that "not seen" only means "gone" if we looked where it lives.
+   */
+  const thread = (n: number) => ({ id: `t${n}`, historyId: "9" });
+  const current = (id: string) => ({
+    source_id: `thread:${id}`,
+    meta: { v: GMAIL_BUILDER_VERSION, mailbox: "me" },
+  });
+
+  beforeEach(() => {
+    listedThreads = [thread(1)];
+    existing = [
+      // The offboarded colleague: stale version, mailbox nobody walks any more.
+      { source_id: "thread:gone-box", meta: { v: 1, mailbox: "philipp.leonhard@loveiq.org" } },
+      // Same staleness, but in a mailbox this run DID walk — still a sweep target.
+      { source_id: "thread:stale-here", meta: { v: 1, mailbox: "me" } },
+      // Keeps the orphan count a minority so the guard cannot pass this by refusing.
+      current("k1"),
+      current("k2"),
+      current("k3"),
+      current("k4"),
+    ];
+  });
+
+  it("keeps rows from a mailbox that is no longer walked", async () => {
+    await ingestGmail("2026-09-06T00:00:00.000Z", () => false, null);
+    expect(deletedIds).not.toContain("thread:gone-box");
+  });
+
+  it("still sweeps a stale row from a mailbox it did walk", async () => {
+    // The positive control. A blanket "keep everything stale" would pass the test
+    // above while undoing the v2-stub cleanup that rule was written for.
+    await ingestGmail("2026-09-06T00:00:00.000Z", () => false, null);
+    expect(deletedIds).toContain("thread:stale-here");
+  });
+
+  it("keeps a row it cannot attribute to any mailbox", async () => {
+    // Absence of evidence is not evidence of deletion.
+    existing.push({ source_id: "thread:no-box", meta: { v: 1 } });
+    await ingestGmail("2026-09-06T00:00:00.000Z", () => false, null);
+    expect(deletedIds).not.toContain("thread:no-box");
+  });
+});

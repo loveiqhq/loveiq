@@ -389,9 +389,12 @@ export function threadToRows(thread: GmailThread, mailbox: string, stampedAt: st
  * the v2 rebuild exactly this way.
  */
 async function knownThreads(): Promise<
-  Map<string, { historyId: string | null; current: boolean }>
+  Map<string, { historyId: string | null; current: boolean; mailbox: string | null }>
 > {
-  const out = new Map<string, { historyId: string | null; current: boolean }>();
+  const out = new Map<
+    string,
+    { historyId: string | null; current: boolean; mailbox: string | null }
+  >();
   for (let offset = 0; offset < 100_000; offset += 1000) {
     const res = await supabaseFetch(
       `/rest/v1/brain_chunk?select=source_id,meta&source=eq.${SOURCE}` +
@@ -400,12 +403,16 @@ async function knownThreads(): Promise<
     // Fails closed on an unreadable status AND on an unreadable body. See chunkPage.
     const batch = await chunkPage<{
       source_id?: string;
-      meta?: { historyId?: string | null; v?: number } | null;
+      meta?: { historyId?: string | null; v?: number; mailbox?: string | null } | null;
     }>("gmail", res);
     for (const r of batch) {
       if (!r.source_id) continue;
       const current = r.meta?.v === GMAIL_BUILDER_VERSION;
-      out.set(r.source_id, { historyId: current ? (r.meta?.historyId ?? null) : null, current });
+      out.set(r.source_id, {
+        historyId: current ? (r.meta?.historyId ?? null) : null,
+        current,
+        mailbox: typeof r.meta?.mailbox === "string" ? r.meta.mailbox : null,
+      });
     }
     if (batch.length < 1000) break;
   }
@@ -539,6 +546,14 @@ export async function ingestGmail(
   }
 
   const written = await upsertChunks(rows);
+  /**
+   * Mailboxes this run walked — the only ones the sweep may judge.
+   *
+   * No need to subtract `failedMailboxes`: a mailbox we could not reach already
+   * sets `complete = false`, and the sweep does not run at all on an incomplete
+   * walk. Filtering here as well would be unreachable code.
+   */
+  const walked = new Set(boxes);
   const writtenIds = new Set(rows.map((r) => r.source_id));
   const rewritten = new Set([...writtenIds].map((id) => id.split("#")[0]));
   /**
@@ -564,9 +579,28 @@ export async function ingestGmail(
          * a chunk in an older shape until the next run rewrites it.
          */
         if (failedThreads.has(base)) return true;
-        // Never confirm a stale-version row. It was either dropped from the source
-        // or is no longer something we would index (a stub, under v2); either way
-        // it belongs to the sweep, not to the touch list.
+        /**
+         * A row from a mailbox THIS WALK DID NOT COVER is not missing — it is
+         * history, and the sweep has no evidence about it either way.
+         *
+         * `domainMailboxes` lists `isSuspended=false` users, so an offboarded
+         * colleague drops off the list the day their account is suspended. Their
+         * mail is then never listed, never written, and — being stale-version by
+         * the next builder bump — never confirmed, so `sweepMissing` reads it as
+         * deleted. Measured 2026-09-06: 232 rows across philipp.leonhard@, sk@ and
+         * teamwork@ were in exactly that state, 3.3% of the source, which clears
+         * the majority guard comfortably. The first walk to complete would have
+         * deleted every one of them, silently, and the doc comment on
+         * `domainMailboxes` promises the opposite: "a departed colleague's mail
+         * stays in the corpus as history but stops being re-read."
+         *
+         * An unattributable row (no mailbox in `meta`) is kept for the same
+         * reason — absence of evidence is not evidence of deletion.
+         */
+        if (!have.mailbox || !walked.has(have.mailbox)) return true;
+        // Never confirm a stale-version row FROM A MAILBOX WE DID WALK. It was
+        // either dropped from the source or is no longer something we would index
+        // (a stub, under v2); either way it belongs to the sweep, not the keep set.
         return have.current;
       })
       .map(([id]) => id))();
