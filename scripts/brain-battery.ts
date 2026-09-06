@@ -913,26 +913,102 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
     P("an-net", "are we profitable or losing money", bodyHas(/Net: EUR/)),
 
     // ── GA4 ──────────────────────────────────────────────────────────────────
+    /**
+     * PERIOD PLUS METRIC LABEL, NEVER THE VALUE, and that is a correction rather than
+     * a preference.
+     *
+     * These six pinned August's exact figures -- 3530 sessions, 3415 users, 608.74 for
+     * one campaign. All six went red on 2026-09-07 with the right chunk still at rank
+     * 1, because GOOGLE revised a closed month: August sessions moved 3530 -> 3439 and
+     * the ingester faithfully rewrote the chunk. Nothing about retrieval had changed.
+     *
+     * A retrieval battery cannot police Google's numbers, and pinning them means the
+     * suite expires on someone else's schedule -- the same defect that expired the
+     * signup counts earlier the same day, which is why `readLiveCounts` exists.
+     * Reading the expected figure out of the chunk would fix the expiry and assert
+     * nothing: the index would be confirming itself.
+     *
+     * So each probe pins the PERIOD and the METRIC LABEL in ONE body. That still fails
+     * on everything worth catching -- the wrong month, the wrong source, an empty or
+     * malformed body, a question that no longer routes to the record answering it --
+     * and it cannot expire. `ga4-brand` and `ga4-channels` below were already written
+     * this way, and they were the two that stayed green.
+     *
+     * TOP 3, not the default 12, and mutation testing is why. Asked about JUNE while
+     * still asserting August, the twelve-deep version of the sessions probe STAYED
+     * GREEN -- every month's monthly chunk scores closely, so August sits in the top
+     * twelve for any month's question and the probe proved only that GA4 exists. The
+     * old pinned-number version had the same hole. At three, the month the question
+     * names has to actually win, and the June mutation goes red.
+     *
+     * KNOWN LIMIT, found by that same mutation and NOT fixed here. Two of the three
+     * mutated probes go red; `ga4-sessions` does not, and the reason is a real defect
+     * rather than a weak probe. Asked "how many sessions did google analytics record
+     * in JUNE 2026", retrieval returns SEPTEMBER at rank 1 (3.46) with June second
+     * (3.39) -- the recency term added on 2026-09-06 outweighs the month the question
+     * names. It matters more than a second-place finish sounds, because the tool
+     * guidance tells the reader to prefer the LATER date when sources conflict, which
+     * points straight at the wrong month. "how many page views in june", without the
+     * year, ranks June first: adding "2026" matches every 2026 chunk and lets recency
+     * decide. February is worse in a different way -- daily chunks outrank the monthly
+     * total entirely.
+     *
+     * Left alone deliberately. The candidate fixes are query stuffing, which measured
+     * as noise (appending "whole month" fixes June, "2026-02 monthly total" fixes
+     * February, neither fixes both, and the scores separating them differ by ~0.1),
+     * or a hard since/until filter derived from the question, which would be
+     * deterministic but would wrongly constrain every source on a question like "what
+     * did we decide in June about pricing". This module's own comment already records
+     * that these monthly chunks sit within noise of each other; tuning against that is
+     * how the last regression arrived.
+     */
     P(
       "ga4-sessions",
       "how many sessions did google analytics record in august 2026",
-      bodyHas(/3530/)
+      bodyHas(/August 2026[\s\S]{0,200}Sessions: \d+/, 3)
     ),
     P(
       "ga4-users",
       "how many users were there in august according to google analytics",
-      bodyHas(/3415/)
+      // `\bUsers`, capitalised, so "New users" cannot satisfy the users probe.
+      bodyHas(/August 2026[\s\S]{0,250}\bUsers: \d+/, 3)
     ),
-    P("ga4-pageviews", "how many page views in august", bodyHas(/4024/)),
-    P("ga4-clicks", "how many ad clicks did we get in august", bodyHas(/1515/)),
-    P("ga4-impressions", "how many ad impressions in august", bodyHas(/31886/)),
-    P("ga4-pmax", "what did the performance max campaign cost in august", bodyHas(/608\.74/)),
+    P(
+      "ga4-pageviews",
+      "how many page views in august",
+      bodyHas(/August 2026[\s\S]{0,300}Page views: \d+/, 3)
+    ),
+    P(
+      "ga4-clicks",
+      "how many ad clicks did we get in august",
+      bodyHas(/August 2026[\s\S]{0,500}\d+ ad clicks/, 3)
+    ),
+    P(
+      "ga4-impressions",
+      "how many ad impressions in august",
+      bodyHas(/August 2026[\s\S]{0,500}\d+ ad impressions/, 3)
+    ),
+    P(
+      "ga4-pmax",
+      "what did the performance max campaign cost in august",
+      bodyHas(/August 2026[\s\S]{0,700}Performance Max EUR [\d.]+/, 3)
+    ),
     P("ga4-brand", "how much did the brand campaign cost", bodyHas(/LoveIQ - Brand/)),
     P("ga4-channels", "which channels send us the most traffic", bodyHas(/Direct|Paid Search/)),
 
     // ── GSC ──────────────────────────────────────────────────────────────────
-    P("gsc-clicks", "how many google search clicks did we get in august", bodyHas(/\b84\b/)),
-    P("gsc-impr", "how many search impressions in august", bodyHas(/1446/)),
+    // Same treatment as GA4 above, applied before these expire rather than after:
+    // Search Console restates a closed month too, and these were pinned to 84 and 1446.
+    P(
+      "gsc-clicks",
+      "how many google search clicks did we get in august",
+      bodyHas(/August 2026[\s\S]{0,200}Google search clicks: \d+/, 3)
+    ),
+    P(
+      "gsc-impr",
+      "how many search impressions in august",
+      bodyHas(/August 2026[\s\S]{0,250}Impressions: \d+/, 3)
+    ),
     P(
       "gsc-ctr",
       "what is our click through rate from google search",
@@ -1207,16 +1283,46 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
       )
     ),
     /**
-     * The behaviour itself, asserted rather than left as folklore: a filter whose query
-     * finds nothing returns nothing, and that is NOT the same as the author having no
-     * commits. Measured — the same filter with "bump dependency version security
-     * update" returns 5. Both halves are checked above and here so neither can drift.
+     * WHAT A FILTER ACTUALLY GUARANTEES, and what it does not.
+     *
+     * This probe used to assert that a filter plus a query matching nothing returns
+     * NOTHING -- "what have they been working on" against that author gave 0, and the
+     * emptiness was read as proof the filter narrows instead of selecting. It went red
+     * on 2026-09-07 returning 4, with no new commits by that author and no change to
+     * the filter, and the premise turned out to be the thing at fault.
+     *
+     * Measured directly: with the same filter, PURE GIBBERISH ("zqxjvbn plorkuth mimsy
+     * borogove") also returns 4, at ~0.92 against ~1.46 for the real question. There is
+     * no relevance floor in this search, deliberately -- the design exposes the score
+     * and tells the caller to read the text rather than threshold on the number, which
+     * is exactly what the tool guidance says. So "a filtered search returns nothing when
+     * the query does not match" was never true; the old probe was passing on an accident
+     * of scoring, and asserting an accident is worse than asserting nothing.
+     *
+     * The two guarantees that ARE real are asserted instead.
      */
     P(
-      "filter-narrows-it-does-not-select",
+      // 1. A filter is a filter: an author with no commits yields nothing, however
+      //    well the query itself matches the corpus.
+      "filter-empty-when-nothing-matches-it",
       "what have they been working on",
-      (h) =>
-        h.length === 0 ? [] : [`expected recall to find no dependabot commit, got ${h.length}`],
+      (h) => (h.length === 0 ? [] : [`expected 0 for an author with no commits, got ${h.length}`]),
+      { sources: ["commit"], meta: { author: "nobody-who-does-not-exist[bot]" } },
+      4
+    ),
+    P(
+      // 2. And it narrows rather than ranks: everything returned obeys it even when the
+      //    query is meaningless — which is the case the no-floor design makes reachable,
+      //    so it is the case worth pinning.
+      "filter-still-obeyed-by-a-meaningless-query",
+      "zqxjvbn plorkuth mimsy borogove",
+      (h) => {
+        const wrong = h.filter((x) => x.meta?.author !== "dependabot[bot]");
+        return [
+          h.length === 0 ? "expected the no-floor design to still return rows" : null,
+          wrong.length ? `filter not applied: ${wrong.map(describe).join(", ")}` : null,
+        ].filter((x): x is string => x !== null);
+      },
       { sources: ["commit"], meta: { author: "dependabot[bot]" } },
       4
     ),
