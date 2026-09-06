@@ -294,6 +294,39 @@ describe("/api/mcp", () => {
       expect(text).toMatch(/the later `date:` is the current decision/);
     });
 
+    it("says a narrow FILTER found nothing, never that the corpus is empty", async () => {
+      /**
+       * Filters narrow what recall already found; they do not select on their own.
+       * So `meta:{status:"WIP"}` with a query that matches nothing returns zero rows
+       * — and the generic message would have the model report that LoveIQ has no
+       * work in progress while 49 rows say otherwise.
+       *
+       * Same family as the CorpusUnavailableError rule this file already enforces:
+       * the shape of the REQUEST must never be reported as the state of the world.
+       */
+      mockRetrieve.mockResolvedValue([]);
+      const text = (
+        await (
+          await call({ query: "anything", meta: { status: "WIP" }, sources: ["notion"] })
+        ).json()
+      ).result.content[0].text as string;
+      expect(text).toMatch(/WITH THE FILTERS YOU SET/);
+      expect(text).toMatch(/status.*WIP/);
+      expect(text).toMatch(/sources=notion/);
+      expect(text).toMatch(/not an empty corpus/i);
+      // and it must NOT claim the corpus lacks the subject
+      expect(text).not.toMatch(/Nothing in the indexed corpus/);
+    });
+
+    it("still gives the plain empty-corpus message when no filter was set", async () => {
+      // Positive control: a message that always blamed filters would be just as wrong.
+      mockRetrieve.mockResolvedValue([]);
+      const text = (await (await call({ query: "anything" })).json()).result.content[0]
+        .text as string;
+      expect(text).toMatch(/Nothing in the indexed corpus/);
+      expect(text).not.toMatch(/WITH THE FILTERS YOU SET/);
+    });
+
     it("names the sources it actually holds when nothing matches", async () => {
       // The old message advertised Jira, which has 0 chunks, and omitted Notion,
       // Slack, Gmail, Drive, the calendar and WhatsApp, which have 25,000 between

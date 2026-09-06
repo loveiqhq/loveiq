@@ -890,15 +890,17 @@ async function callTool(
       return Object.keys(out).length > 0 ? out : undefined;
     };
 
+    const opts = {
+      sources: asStrings(args.sources),
+      excludeSources: asStrings(args.exclude_sources),
+      since: typeof args.since === "string" ? args.since : undefined,
+      until: typeof args.until === "string" ? args.until : undefined,
+      meta: asMeta(args.meta),
+    };
+
     let chunks;
     try {
-      chunks = await retrieve(query, limit, {
-        sources: asStrings(args.sources),
-        excludeSources: asStrings(args.exclude_sources),
-        since: typeof args.since === "string" ? args.since : undefined,
-        until: typeof args.until === "string" ? args.until : undefined,
-        meta: asMeta(args.meta),
-      });
+      chunks = await retrieve(query, limit, opts);
     } catch (err) {
       if (!(err instanceof CorpusUnavailableError)) throw err;
       // Deliberately NOT "no results". Telling a model the corpus is empty when
@@ -911,6 +913,33 @@ async function callTool(
       );
     }
     if (chunks.length === 0) {
+      /**
+       * A NARROW FILTER IS NOT AN EMPTY CORPUS, and the two must never read alike.
+       *
+       * Filters narrow what recall already found; they do not select on their own.
+       * So `meta:{status:"WIP"}` with a query that matches nothing lexically or
+       * semantically returns zero rows — and the generic message would have the
+       * model report that LoveIQ has no work in progress, while 49 rows say
+       * otherwise. Same family as `CorpusUnavailableError`: never let the shape of
+       * the request be reported as the state of the world.
+       */
+      const applied = [
+        opts.sources?.length ? `sources=${opts.sources.join(",")}` : null,
+        opts.excludeSources?.length ? `exclude_sources=${opts.excludeSources.join(",")}` : null,
+        opts.since ? `since=${opts.since}` : null,
+        opts.until ? `until=${opts.until}` : null,
+        opts.meta ? `meta=${JSON.stringify(opts.meta)}` : null,
+      ].filter((x): x is string => x !== null);
+      if (applied.length > 0) {
+        return textResult(
+          `Nothing matched "${query}" WITH THE FILTERS YOU SET (${applied.join(", ")}). ` +
+            `That is a narrow request, not an empty corpus — filters narrow what the ` +
+            `search already found, they do not select on their own. Re-run without them, ` +
+            `or widen them, before concluding the record does not exist. Note that any ` +
+            `since/until range excludes repository documentation, which carries no date, ` +
+            `and that meta values match EXACTLY.`
+        );
+      }
       return textResult(
         `Nothing in the indexed corpus matches "${query}". Indexed: repository ` +
           `documentation, git commits, the Notion workspace (board and pages), Slack, ` +
