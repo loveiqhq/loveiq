@@ -74,7 +74,7 @@ const MAX_TOLERATED_THREAD_FAILURES = 25;
 
 /** Bump when the row SHAPE changes; a mismatch counts as stale. See notion.ts. */
 // v2: v1 indexed notification stubs (bodies of "96" and whitespace) as threads.
-export const GMAIL_BUILDER_VERSION = 3;
+export const GMAIL_BUILDER_VERSION = 4;
 
 /**
  * Mailboxes to read. `me` is whoever the credential belongs to.
@@ -214,6 +214,43 @@ export async function domainMailboxes(oidcToken?: string | null): Promise<string
 const EXCLUDE =
   "-in:spam -in:trash -in:chats -category:promotions -category:social -category:forums";
 
+/**
+ * Subjects to keep out of the corpus entirely, as Gmail `-subject:` terms.
+ *
+ * The company runs more than one product, and a sibling project's issue tracker
+ * mails this workspace all day. Measured 2026-09-06 on twelve ordinary LoveIQ
+ * questions: that project's tickets took rank 1 on four of them and the ENTIRE
+ * top three on "what analytics and tracking do we have" and "what is the status
+ * of the backend work" -- generic engineering wording matches a ticket queue far
+ * better than it matches a decision. The tickets are real work, just not this
+ * product's, and the brain is asked about this product.
+ *
+ * Applied at the LISTING, not at row-building, and that placement is the whole
+ * point: `seen` is filled from the listing, and `sweepMissing` keeps anything in
+ * `seen`. A thread filtered later would still be protected and its old rows would
+ * live forever. Filtered here it is never listed, so the sweep removes what is
+ * already stored with no separate deletion step.
+ *
+ * An ENV VAR rather than a constant, for the same reason as
+ * `GMAIL_EXCLUDE_MAILBOXES`: the repository is public and another team's project
+ * codename does not belong in it, and the decision can be reversed without a
+ * deploy. Verified before enabling: of 1,308 indexed chunks whose subject carried
+ * the excluded term, 1,308 were issue-tracker notifications and none was human
+ * mail, so this costs no conversation.
+ */
+export function excludeSubjects(): string {
+  const raw = (process.env.GMAIL_EXCLUDE_SUBJECTS ?? "").trim();
+  if (!raw) return "";
+  const terms = raw
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean)
+    // Gmail treats these as operators inside a term; a stray one silently changes
+    // the query's meaning rather than failing, so they are dropped.
+    .filter((t) => !/[():{}"\s]/.test(t));
+  return terms.map((t) => ` -subject:${t}`).join("");
+}
+
 interface GmailHeader {
   name?: string;
   value?: string;
@@ -336,8 +373,29 @@ export function stripQuoted(text: string): string {
  * notification threads accumulate messages, so it promoted ticket spam above the
  * actual commits.
  */
+/**
+ * One message that no person typed.
+ *
+ * `List-Unsubscribe` alone caught marketing and missed the larger half. Measured
+ * 2026-09-06: 2,694 indexed chunks -- 29% of all mail, 11% of the whole corpus --
+ * were machine-generated notifications (issue trackers, failed deploys, security
+ * alerts) carrying NO demotion at all, against 47 that the header caught. Bulk
+ * senders subscribe to RFC 2369 because they must; a notification robot does not
+ * have to and mostly does not.
+ *
+ * RFC 3834 is the standard the robots do follow: `Auto-Submitted` on anything a
+ * program generated, with `no` reserved for mail a human actually sent. The older
+ * `Precedence: bulk` is the pre-RFC spelling of the same claim and still common.
+ */
+const machineSent = (m: GmailMessage): boolean =>
+  header(m, "List-Unsubscribe") !== "" ||
+  // "no" means a person sent it, so anything else -- auto-generated,
+  // auto-replied, auto-notified -- is the robot saying so itself.
+  (header(m, "Auto-Submitted") !== "" && !/^no$/i.test(header(m, "Auto-Submitted").trim())) ||
+  /^(bulk|auto_reply|list|junk)$/i.test(header(m, "Precedence").trim());
+
 export function isBulkMail(msgs: GmailMessage[]): boolean {
-  return msgs.length > 0 && msgs.every((m) => header(m, "List-Unsubscribe") !== "");
+  return msgs.length > 0 && msgs.every(machineSent);
 }
 
 /** A person, without the angle-bracket noise: "Marcus <m@x.com>" -> "Marcus". */
@@ -557,7 +615,7 @@ export async function ingestGmail(
       const listed = await gmailGet(
         token,
         mailbox,
-        `/threads?maxResults=${PAGE_SIZE}&q=${encodeURIComponent(EXCLUDE)}` +
+        `/threads?maxResults=${PAGE_SIZE}&q=${encodeURIComponent(EXCLUDE + excludeSubjects())}` +
           (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "")
       );
       if (!listed) {

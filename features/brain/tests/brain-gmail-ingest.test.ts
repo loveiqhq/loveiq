@@ -150,6 +150,7 @@ beforeEach(() => {
   fetchedUrls.length = 0;
   process.env.GMAIL_MAILBOXES = "";
   delete process.env.GMAIL_EXCLUDE_MAILBOXES;
+  delete process.env.GMAIL_EXCLUDE_SUBJECTS;
 });
 
 describe("a broken Gmail walk must not report success", () => {
@@ -484,5 +485,42 @@ describe("a mailbox can be excluded from the walk without deleting its history",
     ];
     await ingestGmail("2026-09-06T00:00:00.000Z", () => false, null);
     expect(deletedIds).not.toContain("thread:old");
+  });
+});
+
+describe("subject exclusions must reach the Gmail listing query", () => {
+  /** The decoded `q=` of the first thread-listing request the walk made. */
+  const listingQuery = (): string => {
+    const url = fetchedUrls.find((u) => /\/threads\?maxResults/.test(u));
+    if (!url) throw new Error("the walk never listed any threads");
+    return decodeURIComponent(/[?&]q=([^&]*)/.exec(url)?.[1] ?? "");
+  };
+
+  /**
+   * THE GUARD THIS EXISTS FOR, found by mutation testing on 2026-09-06.
+   *
+   * `excludeSubjects()` had six unit tests of its own and all six passed while the
+   * call was deleted from the listing URL — the parser was covered, the WIRING was
+   * not, so the whole exclusion could be silently dead with a green suite. The
+   * listing is also the only placement that works: `seen` is filled from it and
+   * `sweepMissing` protects everything in `seen`, so filtering anywhere later would
+   * leave the already-indexed rows alive forever.
+   */
+  it("puts the configured term in the query the walk actually sends", async () => {
+    process.env.GMAIL_EXCLUDE_SUBJECTS = "SHOWUP";
+    await ingestGmail("2026-08-30T00:00:00.000Z", () => false, null);
+    expect(listingQuery()).toContain("-subject:SHOWUP");
+  });
+
+  it("still excludes Google's own noise buckets alongside it", async () => {
+    process.env.GMAIL_EXCLUDE_SUBJECTS = "SHOWUP";
+    await ingestGmail("2026-08-30T00:00:00.000Z", () => false, null);
+    expect(listingQuery()).toContain("-in:spam");
+  });
+
+  it("sends no subject exclusion at all when none is configured", async () => {
+    delete process.env.GMAIL_EXCLUDE_SUBJECTS;
+    await ingestGmail("2026-08-30T00:00:00.000Z", () => false, null);
+    expect(listingQuery()).not.toContain("-subject:");
   });
 });

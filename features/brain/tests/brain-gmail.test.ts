@@ -13,6 +13,7 @@ import {
   stripQuoted,
   threadToRows,
   isBulkMail,
+  excludeSubjects,
 } from "@features/brain/server/ingest/gmail";
 
 const b64 = (s: string) =>
@@ -438,5 +439,118 @@ describe("isBulkMail — newsletters must not outrank colleagues", () => {
     const rows = threadToRows({ ...thread, messages: [long] }, "me", "stamp");
     expect(rows.length).toBeGreaterThan(0);
     for (const r of rows) expect((r.meta as { bulk: boolean }).bulk).toBe(true);
+  });
+});
+
+describe("isBulkMail — RFC 3834, the half List-Unsubscribe missed", () => {
+  const msg = (from: string, extraHeaders: Array<{ name: string; value: string }> = []) => ({
+    id: `m${from}${extraHeaders.map((h) => h.value).join("")}`,
+    internalDate: "1787900000000",
+    payload: {
+      headers: [
+        { name: "Subject", value: "Something" },
+        { name: "From", value: from },
+        ...extraHeaders,
+      ],
+      mimeType: "text/plain",
+      body: { data: b64("text") },
+    },
+  });
+
+  /**
+   * The measurement that motivated this: 2,694 indexed chunks were machine-generated
+   * notifications carrying no demotion, against 47 the List-Unsubscribe test caught.
+   * A notification robot has no reason to offer an unsubscribe link; it announces
+   * itself with Auto-Submitted instead.
+   */
+  it("flags an issue-tracker notification that offers no unsubscribe link", () => {
+    expect(
+      isBulkMail([msg("Jira <jira@x.test>", [{ name: "Auto-Submitted", value: "auto-generated" }])])
+    ).toBe(true);
+  });
+
+  it("flags an auto-reply", () => {
+    expect(
+      isBulkMail([msg("OOO <a@x.test>", [{ name: "Auto-Submitted", value: "auto-replied" }])])
+    ).toBe(true);
+  });
+
+  /**
+   * `no` is the ONE value RFC 3834 reserves for mail a person actually sent. Reading
+   * the header's presence rather than its value would demote every well-behaved
+   * client that states it.
+   */
+  it("does NOT flag mail that explicitly says a human sent it", () => {
+    expect(
+      isBulkMail([msg("Eman <ec@loveiq.org>", [{ name: "Auto-Submitted", value: "no" }])])
+    ).toBe(false);
+  });
+
+  it("flags the pre-RFC spelling, Precedence: bulk", () => {
+    expect(isBulkMail([msg("N <n@x.test>", [{ name: "Precedence", value: "bulk" }])])).toBe(true);
+  });
+
+  it("ignores a Precedence value that is not a bulk claim", () => {
+    expect(isBulkMail([msg("N <n@x.test>", [{ name: "Precedence", value: "urgent" }])])).toBe(
+      false
+    );
+  });
+
+  it("is case-insensitive about header name and value", () => {
+    expect(
+      isBulkMail([msg("N <n@x.test>", [{ name: "auto-submitted", value: "Auto-Generated" }])])
+    ).toBe(true);
+  });
+
+  /**
+   * Same `every` rule the List-Unsubscribe test earned: a deploy-failure thread the
+   * team then discussed is a conversation, and burying it would take the discussion
+   * with it. This is why the ops-alert mail keeps its demotion narrow.
+   */
+  it("does not flag a robot thread once a person replies in it", () => {
+    expect(
+      isBulkMail([
+        msg("Vercel <n@vercel.test>", [{ name: "Auto-Submitted", value: "auto-generated" }]),
+        msg("Eman <ec@loveiq.org>"),
+      ])
+    ).toBe(false);
+  });
+});
+
+describe("excludeSubjects — keeping a sibling project's tickets out", () => {
+  const OLD = process.env.GMAIL_EXCLUDE_SUBJECTS;
+  afterEach(() => {
+    if (OLD === undefined) delete process.env.GMAIL_EXCLUDE_SUBJECTS;
+    else process.env.GMAIL_EXCLUDE_SUBJECTS = OLD;
+  });
+
+  it("adds nothing when unset, so the query is unchanged", () => {
+    delete process.env.GMAIL_EXCLUDE_SUBJECTS;
+    expect(excludeSubjects()).toBe("");
+  });
+
+  it("adds nothing when set to blank", () => {
+    process.env.GMAIL_EXCLUDE_SUBJECTS = "   ";
+    expect(excludeSubjects()).toBe("");
+  });
+
+  it("emits a Gmail -subject: term per entry", () => {
+    process.env.GMAIL_EXCLUDE_SUBJECTS = "SHOWUP";
+    expect(excludeSubjects()).toBe(" -subject:SHOWUP");
+  });
+
+  it("handles several entries and tolerates padding", () => {
+    process.env.GMAIL_EXCLUDE_SUBJECTS = " SHOWUP , OTHERPROJ ";
+    expect(excludeSubjects()).toBe(" -subject:SHOWUP -subject:OTHERPROJ");
+  });
+
+  /**
+   * Gmail does not reject a malformed term, it reinterprets the query — so a stray
+   * colon or paren would silently change WHICH mail is excluded rather than failing.
+   * Dropped rather than escaped: there is no legitimate reason for one here.
+   */
+  it("drops a term carrying Gmail query operators rather than changing the query's meaning", () => {
+    process.env.GMAIL_EXCLUDE_SUBJECTS = "SHOWUP,from:x@y.test,in(box),a b";
+    expect(excludeSubjects()).toBe(" -subject:SHOWUP");
   });
 });
