@@ -411,6 +411,14 @@ const TOOLS = [
             "and Next steps — separated from the raw transcript at ingest. Call " +
             "`list_sources` if you need current counts. Its counterpart " +
             'is {"section": "transcript"}. Reach ' +
+            "WHO DID WHAT: a commit's author lives ONLY in `meta.author` — measured, 1,542 " +
+            "of 1,715 commit chunks are by one person and just 39 mention that name in their " +
+            "text at all, so \'what has X been committing\' can never match on the name and " +
+            "returns their calendar invites instead. Filter on it. The values are exactly " +
+            "\'Eman Cickusic\', \'FerhadJukicc\', \'dependabot[bot]\' and \'Eman\' (two early " +
+            "commits under a short name) — matching is exact, so a first name alone finds " +
+            "nothing. Notion\'s `assignee` behaves the same way: \'Eman Cickusic\', " +
+            "\'Marcus Börner\', \'Mark Oldenburg\'. " +
             "for the summary whenever the question is what was DECIDED or AGREED rather " +
             "than what was said. IT COVERS RECORDED CALLS ONLY. A decision taken in Slack " +
             "or WhatsApp carries no section, so browsing this way will not list it — those " +

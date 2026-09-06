@@ -833,8 +833,379 @@ function sourceCoverageProbes(): RetrievalProbe[] {
   ];
 }
 
+/**
+ * PER-SOURCE DEPTH — every source, three levels: can it be REACHED, does the right
+ * FACT come back, and does a NARROW question inside it land.
+ *
+ * Every expected value here was verified independently against SQL or against the
+ * chunk itself before the probe was written. That ordering matters: a probe written
+ * from a search result asserts that retrieval agrees with itself.
+ *
+ * Failures here are findings, not noise. Four of the first five in the earlier round
+ * turned out to be MY probes being stricter than production, so where a bar is loose
+ * it says why.
+ */
+function perSourceDepthProbes(): RetrievalProbe[] {
+  const P = (
+    kind: string,
+    q: string,
+    check: (h: BrainChunk[]) => string[],
+    opts?: RetrieveOptions,
+    limit?: number
+  ): RetrievalProbe => ({ kind, q, check, opts, limit });
+
+  return [
+    // ── ANALYTICS ────────────────────────────────────────────────────────────
+    P("an-visits-aug", "how many website visits did we get in august 2026", bodyHas(/11147/)),
+    P("an-starts-aug", "how many people started the survey in august", bodyHas(/\b544\b/)),
+    P("an-opens-aug", "how many reports were opened in august", bodyHas(/\b347\b/)),
+    P("an-paid-aug", "how many paying customers did we have in august", bodyHas(/\b7\b/)),
+    P("an-sept-signups", "how many signups so far this month", bodyHas(/\b82\b/)),
+    P(
+      "an-alltime-signups",
+      "how many people have completed the survey in total ever",
+      bodyHas(/1887/)
+    ),
+    P("an-cac", "what does a paying customer cost us", bodyHas(/[Cc]ost per paying customer/)),
+    P("an-cps", "what does one signup cost in ad spend", bodyHas(/[Cc]ost per signup/)),
+    P("an-net", "are we profitable or losing money", bodyHas(/Net: EUR/)),
+
+    // ── GA4 ──────────────────────────────────────────────────────────────────
+    P(
+      "ga4-sessions",
+      "how many sessions did google analytics record in august 2026",
+      bodyHas(/3530/)
+    ),
+    P(
+      "ga4-users",
+      "how many users were there in august according to google analytics",
+      bodyHas(/3415/)
+    ),
+    P("ga4-pageviews", "how many page views in august", bodyHas(/4024/)),
+    P("ga4-clicks", "how many ad clicks did we get in august", bodyHas(/1515/)),
+    P("ga4-impressions", "how many ad impressions in august", bodyHas(/31886/)),
+    P("ga4-pmax", "what did the performance max campaign cost in august", bodyHas(/608\.74/)),
+    P("ga4-brand", "how much did the brand campaign cost", bodyHas(/LoveIQ - Brand/)),
+    P("ga4-channels", "which channels send us the most traffic", bodyHas(/Direct|Paid Search/)),
+
+    // ── GSC ──────────────────────────────────────────────────────────────────
+    P("gsc-clicks", "how many google search clicks did we get in august", bodyHas(/\b84\b/)),
+    P("gsc-impr", "how many search impressions in august", bodyHas(/1446/)),
+    P(
+      "gsc-ctr",
+      "what is our click through rate from google search",
+      bodyHas(/5\.81%|Click-through rate/)
+    ),
+    P(
+      "gsc-position",
+      "what is our average position in google search",
+      bodyHas(/[Aa]verage position/)
+    ),
+    P("gsc-brand-term", "do people search for loveiq by name", bodyHas(/loveiq|love iq/i)),
+    P("gsc-typo-term", "do people search for helloiq", bodyHas(/helloiq/i)),
+
+    // ── NOTION ───────────────────────────────────────────────────────────────
+    P(
+      "no-wip",
+      "which tasks are in progress",
+      (h) => {
+        const bad = h.filter((x) => x.meta?.status !== "WIP");
+        return bad.length ? [`not WIP: ${bad.map(describe).join(", ")}`] : [];
+      },
+      { sources: ["notion"], meta: { status: "WIP" } },
+      6
+    ),
+    P(
+      "no-done",
+      "what work has been completed",
+      (h) => {
+        const bad = h.filter((x) => x.meta?.status !== "Done");
+        return bad.length ? [`not Done: ${bad.map(describe).join(", ")}`] : [];
+      },
+      { sources: ["notion"], meta: { status: "Done" } },
+      6
+    ),
+    P(
+      "no-backlog",
+      "what is sitting in the backlog",
+      (h) => {
+        const bad = h.filter((x) => x.meta?.status !== "Backlog");
+        return bad.length ? [`not Backlog: ${bad.map(describe).join(", ")}`] : [];
+      },
+      { sources: ["notion"], meta: { status: "Backlog" } },
+      5
+    ),
+    P(
+      "no-ideas",
+      "what ideas have been captured",
+      (h) => {
+        const bad = h.filter((x) => x.meta?.status !== "Idea");
+        return bad.length ? [`not Idea: ${bad.map(describe).join(", ")}`] : [];
+      },
+      { sources: ["notion"], meta: { status: "Idea" } },
+      5
+    ),
+    P(
+      "no-assignee-marcus",
+      "what is Marcus working on",
+      (h) => {
+        const bad = h.filter((x) => x.meta?.assignee !== "Marcus Börner");
+        return bad.length ? [`wrong assignee: ${bad.map(describe).join(", ")}`] : [];
+      },
+      { sources: ["notion"], meta: { assignee: "Marcus Börner" } },
+      5
+    ),
+    P(
+      "no-assignee-eman",
+      "what is Eman responsible for",
+      (h) => {
+        const bad = h.filter((x) => x.meta?.assignee !== "Eman Cickusic");
+        return bad.length ? [`wrong assignee: ${bad.map(describe).join(", ")}`] : [];
+      },
+      { sources: ["notion"], meta: { assignee: "Eman Cickusic" } },
+      5
+    ),
+    P("no-research", "what research papers are we tracking", topSource("notion", 8), {
+      sources: ["notion"],
+    }),
+    P("no-competitors", "who do we consider competitors", topSource("notion", 8), {
+      sources: ["notion"],
+    }),
+    P("no-influencers", "which influencers are we tracking", topSource("notion", 8), {
+      sources: ["notion"],
+    }),
+    P("no-priority", "what is the highest priority work", topSource("notion", 8), {
+      sources: ["notion"],
+    }),
+
+    // ── SLACK ────────────────────────────────────────────────────────────────
+    ...(
+      [
+        "all-loveiq",
+        "bugs-issues",
+        "hr",
+        "ux-suggestions",
+        "payments",
+        "prod-alerts",
+        "therapist-validation",
+        "incoming-surveys",
+      ] as const
+    ).map((ch) =>
+      P(
+        `sl-${ch}`,
+        `what is discussed in the ${ch} channel`,
+        (h) => {
+          const bad = h.filter((x) => x.meta?.channel !== ch);
+          return bad.length ? [`wrong channel: ${bad.map(describe).join(", ")}`] : [];
+        },
+        { sources: ["slack"], meta: { channel: ch } },
+        4
+      )
+    ),
+    P("sl-alert", "have there been production alerts", topSource("slack", 8), {
+      sources: ["slack"],
+    }),
+    P("sl-ux", "what ux problems have people reported", topSource("slack", 8), {
+      sources: ["slack"],
+    }),
+
+    // ── DRIVE ────────────────────────────────────────────────────────────────
+    P("dr-b2c", "did we choose B2C or B2B", bodyHas(/B2C/)),
+    P("dr-designer", "are we hiring a designer", bodyHas(/designer/i)),
+    P("dr-assessment-target", "how many assessment products are we targeting", bodyHas(/\b20\b/)),
+    P(
+      "dr-record-label",
+      "what is the record label strategy for therapists",
+      bodyHas(/record label/i)
+    ),
+    P(
+      "dr-summary-only",
+      "what was decided in our calls",
+      (h) => {
+        const bad = h.filter((x) => x.meta?.section !== "summary");
+        return bad.length ? [`not a decision record: ${bad.map(describe).join(", ")}`] : [];
+      },
+      { sources: ["drive"], meta: { section: "summary" } },
+      6
+    ),
+    P(
+      "dr-transcript-only",
+      "what were the exact words used in a call",
+      (h) => {
+        const bad = h.filter((x) => x.meta?.section !== "transcript");
+        return bad.length ? [`not a transcript: ${bad.map(describe).join(", ")}`] : [];
+      },
+      { sources: ["drive"], meta: { section: "transcript" } },
+      6
+    ),
+    P("dr-docs-not-meetings", "what documents are on the company drive", topSource("drive", 6), {
+      sources: ["drive"],
+    }),
+
+    // ── CALENDAR ─────────────────────────────────────────────────────────────
+    P("ca-sem", "was there a meeting about SEM", all(topSource("calendar", 8), bodyHas(/SEM/i))),
+    P(
+      "ca-attendees",
+      "who attends the loveiq sync",
+      all(topSource("calendar", 8), bodyHas(/With:|Organised by/))
+    ),
+    P("ca-cto", "was there a meeting about the CTO role", topSource("calendar", 8)),
+    P("ca-patient-hub", "did we meet about the patient hub", topSource(["calendar", "drive"], 8)),
+
+    // ── GMAIL ────────────────────────────────────────────────────────────────
+    P("gm-ads-agency", "what did our ads agency report", topSource("gmail", 6)),
+    P(
+      "gm-conversions-email",
+      "what does google ads say about our conversions",
+      topSource("gmail", 8)
+    ),
+    P(
+      "gm-mailbox-hello",
+      "what arrives in the hello mailbox",
+      (h) => {
+        const bad = h.filter((x) => x.meta?.mailbox !== "hello@loveiq.org");
+        return bad.length ? [`wrong mailbox: ${bad.map(describe).join(", ")}`] : [];
+      },
+      { sources: ["gmail"], meta: { mailbox: "hello@loveiq.org" } },
+      5
+    ),
+    P(
+      "gm-bulk-flagged",
+      "what newsletters do we receive",
+      (h) => {
+        const any = h.filter((x) => x.source === "gmail" && x.meta?.bulk === true);
+        return any.length ? [] : ["no bulk-flagged mail came back for a newsletter question"];
+      },
+      { sources: ["gmail"] },
+      8
+    ),
+    P(
+      "gm-not-only-bulk",
+      "what did a colleague email about pricing",
+      (h) => {
+        const top3 = at(h, 3).filter((x) => x.source === "gmail");
+        return top3.length && top3.every((x) => x.meta?.bulk === true)
+          ? ["every gmail hit in the top 3 is bulk mail"]
+          : [];
+      },
+      { sources: ["gmail"] },
+      8
+    ),
+
+    // ── WHATSAPP ─────────────────────────────────────────────────────────────
+    P(
+      "wa-pricing",
+      "what did the team say on whatsapp about the pricing test",
+      all(topSource("whatsapp", 5), bodyHas(/pricing/i)),
+      { sources: ["whatsapp"] }
+    ),
+    P(
+      "wa-people",
+      "who talks in the whatsapp group",
+      all(topSource("whatsapp", 5), bodyHas(/Between:/)),
+      { sources: ["whatsapp"] }
+    ),
+    P(
+      "wa-report-feedback",
+      "what did the team say about the new report",
+      topSource("whatsapp", 8),
+      { sources: ["whatsapp"] }
+    ),
+
+    // ── COMMIT ───────────────────────────────────────────────────────────────
+    P(
+      "cm-marcus-line",
+      "explain a recent change in plain english",
+      bodyHas(/plain-English summary/)
+    ),
+    /**
+     * REPLACED, because the original asserted something no ranking can deliver. "What
+     * has Eman been committing" cannot match on the name: 1,542 of 1,715 commit chunks
+     * are authored by that person and only 39 mention it in their text, because the
+     * author lives in `meta.author` and `fts` covers title and body only. The question
+     * returned their calendar invites and emails, which is the honest consequence.
+     *
+     * Putting the author in every commit title was considered and rejected: it would
+     * add one very common token to 1,542 titles and pull commits into every question
+     * that happens to name a colleague. The filter already answers it exactly, so the
+     * fix was to say so in the tool description — and what this asserts is that the
+     * filter really is exact, per author, which is the capability being pointed at.
+     */
+    ...(
+      [
+        ["Eman Cickusic", "what have they been working on"],
+        ["FerhadJukicc", "what have they been working on"],
+        /**
+         * A DIFFERENT QUESTION FOR THE BOT, and the reason is the finding. Asking "what
+         * have they been working on" with `author=dependabot[bot]` returns NOTHING —
+         * correctly. Filters narrow what recall already found; they do not select. The
+         * 72 dependency-bump commits share no vocabulary with that phrasing, so none
+         * reach the candidate set and the filter has nothing left to narrow.
+         *
+         * Measured: the same filter with "bump dependency version security update"
+         * returns 5 and "dependabot" returns 4. The capability is fine — the first
+         * version of this probe asked the filter to do recall's job, which is exactly
+         * what the empty-result message shipped this morning exists to explain.
+         */
+        ["dependabot[bot]", "bump dependency version security update"],
+      ] as const
+    ).map(([who, q]) =>
+      P(
+        `cm-author-${who.slice(0, 6)}`,
+        q,
+        (h) => {
+          const bad = h.filter((x) => x.meta?.author !== who);
+          return [
+            h.length === 0 ? `no commits at all for ${who}` : null,
+            bad.length ? `wrong author: ${bad.map(describe).join(", ")}` : null,
+          ].filter((x): x is string => x !== null);
+        },
+        { sources: ["commit"], meta: { author: who } },
+        4
+      )
+    ),
+    /**
+     * The behaviour itself, asserted rather than left as folklore: a filter whose query
+     * finds nothing returns nothing, and that is NOT the same as the author having no
+     * commits. Measured — the same filter with "bump dependency version security
+     * update" returns 5. Both halves are checked above and here so neither can drift.
+     */
+    P(
+      "filter-narrows-it-does-not-select",
+      "what have they been working on",
+      (h) =>
+        h.length === 0 ? [] : [`expected recall to find no dependabot commit, got ${h.length}`],
+      { sources: ["commit"], meta: { author: "dependabot[bot]" } },
+      4
+    ),
+    P("cm-brain", "what changed in the company brain recently", topSource("commit", 5)),
+    P("cm-paywall", "what did we change about the paywall", topSource("commit", 6)),
+
+    // ── DOC ──────────────────────────────────────────────────────────────────
+    P(
+      "dc-security",
+      "how do we scan for leaked secrets",
+      all(topSource("doc", 5), bodyHas(/TruffleHog|secret/i))
+    ),
+    P("dc-incident", "what do we do in a security incident", topSource("doc", 6)),
+    P(
+      "dc-env-coupon",
+      "what does STRIPE_COUPON_100 do",
+      all(topSource("doc", 5), bodyHas(/100%|coupon/i))
+    ),
+    P(
+      "dc-env-purge",
+      "what turns the data purge on",
+      all(topSource("doc", 6), bodyHas(/PURGE_OLD_DATA_ENABLED/))
+    ),
+    P("dc-78h", "why is the 78 hour call invite paused", bodyHas(/NURTURE_78H|call invite/i)),
+    P("dc-gdpr", "what is our lawful basis for processing", topSource("doc", 8)),
+    P("dc-admin-api", "what admin api routes exist", topSource("doc", 6)),
+  ];
+}
+
 async function runRetrievalBattery(only: string | null): Promise<number> {
-  const all = [...retrievalProbes(), ...sourceCoverageProbes()];
+  const all = [...retrievalProbes(), ...sourceCoverageProbes(), ...perSourceDepthProbes()];
   const probes = only ? all.filter((p) => p.kind.includes(only) || p.q.includes(only)) : all;
   let failures = 0;
 

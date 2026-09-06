@@ -230,6 +230,18 @@ describe("/api/mcp", () => {
        * message. Cheaper and more honest than a classifier with unmeasurable recall.
        */
       expect(meta).toMatch(/RECORDED CALLS ONLY/);
+      /**
+       * And the same shape for WHO DID WHAT. Measured 2026-09-06: 1,542 of 1,715 commit
+       * chunks are by one author and only 39 mention that name in their text, so "what
+       * has X been committing" matched their calendar invites and emails instead —
+       * the author exists only in `meta.author`, which is not indexed as text.
+       *
+       * The exact values matter more than the field: matching is exact and the data is
+       * inconsistent ("Eman Cickusic" 1,542, but "Eman" for two early commits), so a
+       * caller guessing a first name gets silence.
+       */
+      expect(meta).toMatch(/meta\.author/);
+      expect(meta).toMatch(/matching is exact/);
       expect(meta).toMatch(/Slack|WhatsApp/);
       // And the reason a plain query is the wrong instrument for this question.
       expect(search.description).toMatch(/BROWSE, not a search/);
