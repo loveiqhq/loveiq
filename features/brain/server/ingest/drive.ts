@@ -111,6 +111,45 @@ const SKIP_FILE_IDS = new Set([
   "1bfIb9WMlptdXDXnmp551QycCI7hYlg8x", // The Hite Report.pdf
   "1VE2ia5QOxvnXXrvP4qxWyKU1bigkFdgu", // Sex at Dawn.pdf
   "1aSbmxqaOOmgX82AAanW-yQfC6kTBdnPp", // Bonk.pdf
+
+  //
+  // A SIBLING PRODUCT'S ENGINEERING DOCS, 20 files and 121 chunks. Same decision as
+  // its issue-tracker mail (GMAIL_EXCLUDE_SUBJECTS) and for the same measured reason,
+  // taken one step later: with that mail gone, THESE took rank 1 on three of twenty
+  // ordinary LoveIQ questions -- "what is the status of the backend work", "what
+  // analytics and tracking do we have", "what is the plan for sign in and accounts".
+  // Per chunk they were worse than the 1,308 mails, because a long-form title
+  // ("Backend Foundation Report", "Analytics Summary") matches generic engineering
+  // wording and the title carries double weight in the ranker.
+  //
+  // Ids rather than a title or folder rule: four of the twenty carry no trace of the
+  // project in their filename and would survive any name test, and no size or folder
+  // test separates them from our own docs. Deliberately UNLABELLED here -- the file
+  // ids are already public in every chunk's url, but the project's name is not, and
+  // this repository is public. Verified before removal: none of the twenty contains
+  // LoveIQ content. Thirteen chunks match the string "LoveIQ" and all thirteen are
+  // the Atlassian hostname in a ticket url, not our product.
+  //
+  "1AxlHrIVgycXHlVWOtc-YMaUFJzb7jzYh", // sibling project, 2 chunks
+  "1m4bdzMVjzoEcnZW36OH2sPzSMmIYHMnB", // sibling project, 2 chunks
+  "1rZyQIk2tk11bHOyXz_653cBkNwQNY70f", // sibling project, 4 chunks
+  "1bMAv-8gS1dFFzhLi1QcNn5dlWs5Wybf7", // sibling project, 5 chunks
+  "1ErNBksqyb0rnKq6uWuUfxPUZnInIZwkC", // sibling project, 4 chunks
+  "1_BPPebFUwiKZK7YN1r3oeJDE4fcAO0nu", // sibling project, 6 chunks
+  "1SKbX_eJkgMy-1ZdmxVt7vq6fRX2sGYDe", // sibling project, 3 chunks
+  "1Mk2utAPMa0_o20UJjWVMJw9Ep104OG5m", // sibling project, 4 chunks
+  "1jy5P4HfVfUqlqixnaDd-TurpHQWcZvKn", // sibling project, 5 chunks
+  "1bgXowHv0oQKY4lBvl1bvA_6Zbkh9UNNX", // sibling project, 3 chunks
+  "1ZM0APARBf5dmgv15dQ47FXjxOUOqHgUq", // sibling project, 9 chunks
+  "1-VodwT9lGUF3CkQd_0E8VqHE-ufylDdL", // sibling project, 4 chunks
+  "1TYrhNkRorQxVOWR4O6_uu7Ka6BrZJdmv", // sibling project, 24 chunks
+  "1SrWmoox8w9o5Y6vZcUFmheeTrgGQ8CiK", // sibling project, 5 chunks
+  "1118DEybDx5mDZBST0l1zrAaqlCTX3Lyy", // sibling project, 10 chunks
+  "1CdI8DqPBblaWO-yyF7kxh26Lea0NKSSR", // sibling project, 6 chunks
+  "1i3Zo0MNbZ8OKRZQg83i0emuQjDumPx3Y", // sibling project, 6 chunks
+  "1XVHkrtsCPQTQap0rujC7n02PElqqqE5s", // sibling project, 5 chunks
+  "1aBr687qwORqJrHmju18eNLAwo-R6tl6Y", // sibling project, 7 chunks
+  "1wTYYD4it-lnlVJ0pUOMWvOu6hNHe7wh5", // sibling project, 5 chunks
 ]);
 /* eslint-enable no-secrets/no-secrets */
 
