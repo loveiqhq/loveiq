@@ -125,6 +125,10 @@ describe("buildAnalyticsRows", () => {
     expect(daily.body).toMatch(/Conversion rate \(CVR\)/);
     expect(daily.body).toMatch(/report to paying customer 10\.0%/);
     expect(daily.title).toMatch(/conversion rate/i);
+    // and the funnel wording, which is what makes these chunks REACHABLE at all for
+    // a drop-off question — the body term runs after the stage-1 cut they were losing.
+    expect(daily.title).toMatch(/funnel/i);
+    expect(daily.title).toMatch(/drop-off/i);
   });
 
   it("drops a conversion-rate leg rather than printing the word null", () => {

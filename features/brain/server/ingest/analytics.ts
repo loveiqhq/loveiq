@@ -70,8 +70,30 @@ import { sweepStale, upsertChunks, type BrainRow, type IngestResult } from "./up
  * Vocabulary rather than a sentence, deliberately: `word_similarity` scores the best
  * matching EXTENT of the title, so extra relevant words raise the match and do not
  * dilute it. Measured against an unrelated question the gain is +0.04, i.e. noise.
+ *
+ * "funnel drop-off by stage" added 2026-09-06, and WHY IT HAD TO BE THE TITLE is the
+ * part worth keeping. Five funnel questions — "where are we losing people in the
+ * funnel", "what is our drop off between survey and payment", "how does our funnel
+ * perform end to end" — returned NO analytics chunk at all, at any rank. Not a ranking
+ * problem: `hits` matched 5,130 chunks, stage 1 keeps 400, and these lost the cut.
+ * Stage 1 scores ts_rank, title similarity, the vector arm and recency; the BODY term
+ * is stage 2, applied only to survivors. So the "Conversion rate (CVR) through the
+ * funnel" line added to the body an hour earlier could not help recall at all — the
+ * word had to be in the TITLE or the chunk was never seen.
+ *
+ * Measured at the title's 2x weight: +0.46 on "conversion through the funnel by
+ * stage", then +0.33, +0.30, +0.26, +0.20 — and EXACTLY 0.000 on "how many people
+ * signed up in august" and "what did we spend on ads last month".
+ *
+ * REJECTED ALTERNATIVE, measured: a source penalty on `commit`, mirroring the
+ * bulk-mail one. Swept 0 to 0.8 across ten business and five engineering questions.
+ * Business targets in the top 3 moved 4/10 to 5/10 while engineering collapsed 4/5 to
+ * 1/5 — and the three questions above stayed absent at every value, because a penalty
+ * cannot promote a candidate that was never in the set. Wrong instrument for a recall
+ * problem.
  */
-const NUMBERS_VOCABULARY = "revenue, paying customers, signups, visits, ad spend, conversion rate";
+const NUMBERS_VOCABULARY =
+  "revenue, paying customers, signups, visits, ad spend, conversion rate, funnel drop-off by stage";
 
 const DAYS = 4000;
 const SOURCE = "analytics";

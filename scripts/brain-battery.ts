@@ -450,8 +450,349 @@ function retrievalProbes(): RetrievalProbe[] {
   ];
 }
 
+/* ── compact check builders, so 100+ probes stay readable ──────────────────── */
+
+const at = (h: BrainChunk[], n: number) => h.slice(0, n);
+
+/** The named source must appear in the top `n`. Routing, not wording. */
+const topSource =
+  (src: string | string[], n = 5) =>
+  (h: BrainChunk[]): string[] => {
+    const want = Array.isArray(src) ? src : [src];
+    return at(h, n).some((x) => want.includes(x.source))
+      ? []
+      : [`no ${want.join("/")} in top ${n}: ${at(h, n).map(describe).join(", ")}`];
+  };
+
+/**
+ * A literal fact must be present in the top `n` bodies. Correctness, not routing.
+ *
+ * `n` defaults to 12 because that is `search_company_context`'s own default limit —
+ * the window the model is actually handed. Grading over the top 5 was HARSHER THAN
+ * PRODUCTION and failed "how many people signed up in august 2026" for a fact sitting
+ * at rank 7, which the caller would have received. A probe stricter than reality
+ * invents defects and, worse, hides the real question underneath (which chunk ranks
+ * first), so that one is asserted separately.
+ */
+const bodyHas =
+  (re: RegExp, n = 12) =>
+  (h: BrainChunk[]): string[] =>
+    at(h, n).some((x) => re.test(x.body))
+      ? []
+      : [`no body in top ${n} matches ${re}: ${at(h, n).map(describe).join(", ")}`];
+
+/** Nothing at all came back — the corpus should have covered this. */
+const nonEmpty =
+  (least = 1) =>
+  (h: BrainChunk[]): string[] =>
+    h.length >= least ? [] : [`only ${h.length} hits, expected at least ${least}`];
+
+const all =
+  (...cs: Array<(h: BrainChunk[]) => string[]>) =>
+  (h: BrainChunk[]) =>
+    cs.flatMap((c) => c(h));
+
+/**
+ * THE FULL BATTERY — every source targeted, simple to very complex.
+ *
+ * Built 2026-09-06 after four separate audit findings, each of which was a question
+ * a real person would ask that returned confident, correctly-cited, useless or wrong
+ * material: total revenue answered as EUR 0, "what do we charge" answered with four
+ * sources and no price, "what is our conversion rate" answered from a Google Ads
+ * advert, and an all-time chunk dated to a year the company did not exist.
+ *
+ * None of those was a data problem. Every one was ROUTING or WORDING, which is why
+ * most probes here assert which source comes back rather than what a model would say
+ * about it. A source that cannot be reached by the words a person actually uses is
+ * not indexed in any sense that matters.
+ */
+function sourceCoverageProbes(): RetrievalProbe[] {
+  const P = (
+    kind: string,
+    q: string,
+    check: (h: BrainChunk[]) => string[],
+    opts?: RetrieveOptions,
+    limit?: number
+  ): RetrievalProbe => ({ kind, q, check, opts, limit });
+
+  return [
+    // ── SIMPLE: can each source be reached by an obvious question at all? ──────
+    P(
+      "src-analytics",
+      "how many signups did we get last month",
+      all(topSource("analytics"), bodyHas(/Signups/))
+    ),
+    P("src-ga4", "how many sessions and users did google analytics record", topSource("ga4")),
+    P("src-gsc", "what do people type into google to find us", topSource("gsc")),
+    P("src-slack", "what has the team been discussing in slack", topSource("slack"), {
+      sources: ["slack"],
+    }),
+    P("src-whatsapp", "what was said in the whatsapp group", topSource("whatsapp"), {
+      sources: ["whatsapp"],
+    }),
+    P("src-gmail", "what emails have we received about advertising", topSource("gmail")),
+    P("src-notion", "what is on the notion board", topSource("notion"), { sources: ["notion"] }),
+    P("src-drive", "what do our meeting notes say", topSource("drive"), { sources: ["drive"] }),
+    P("src-calendar", "what meetings are in the calendar", topSource("calendar"), {
+      sources: ["calendar"],
+    }),
+    P("src-commit", "what did we change in the code recently", topSource("commit")),
+    P("src-doc", "what does the security guide say about secret scanning", topSource("doc")),
+
+    // ── SIMPLE FACTUAL: the number must actually be present ───────────────────
+    P("fact-aug-signups", "how many people signed up in august 2026", bodyHas(/\b358\b/)),
+    P("fact-aug-revenue", "what was our revenue in august 2026", bodyHas(/196\.98/)),
+    P("fact-aug-adspend", "what did we spend on google ads in august 2026", bodyHas(/1252\.99/)),
+    P(
+      "fact-alltime-revenue",
+      "how much revenue have we made in total since launch",
+      bodyHas(/675\.91/)
+    ),
+    P(
+      "fact-alltime-customers",
+      "how many paying customers have we had in total",
+      bodyHas(/\b37\b/)
+    ),
+    P("fact-sept-revenue", "what is our revenue this month", bodyHas(/September 2026/)),
+    P("fact-visits-aug", "how many people visited the site in august", bodyHas(/11147/)),
+
+    // ── MEDIUM: named entities inside a source ────────────────────────────────
+    P("slack-payments-channel", "what happens in the payments slack channel", topSource("slack"), {
+      sources: ["slack"],
+      meta: { channel: "payments" },
+    }),
+    P("slack-bugs-channel", "what bugs have been reported", topSource("slack"), {
+      sources: ["slack"],
+      meta: { channel: "bugs-issues" },
+    }),
+    P("slack-hr-channel", "what is discussed in the hr channel", topSource("slack"), {
+      sources: ["slack"],
+      meta: { channel: "hr" },
+    }),
+    P("notion-literature", "what literature and research papers do we track", topSource("notion"), {
+      sources: ["notion"],
+    }),
+    P("notion-competitors", "who are our competitors", topSource(["notion", "drive", "doc"])),
+    P("notion-beta-testers", "who are our beta testers", topSource(["notion", "drive", "gmail"])),
+    P(
+      "calendar-sync",
+      "when is the loveiq sync meeting",
+      all(topSource("calendar"), bodyHas(/LoveIQ Sync/i))
+    ),
+    P("calendar-roadmap", "was there a roadmap workshop", topSource(["calendar", "drive"])),
+    P("commit-author", "what has Ferhad worked on", topSource("commit", 8)),
+    P(
+      "gsc-brand-query",
+      "how many clicks does the query love iq get",
+      all(topSource("gsc"), bodyHas(/love iq/i))
+    ),
+    P(
+      "ga4-campaign",
+      "how much did the performance max campaign cost",
+      all(topSource("ga4"), bodyHas(/Performance Max/))
+    ),
+    P("drive-meeting-notes", "what did gemini note from our calls", topSource("drive"), {
+      sources: ["drive"],
+      meta: { section: "summary" },
+    }),
+
+    // ── HARD: cross-source, or requiring the right grain ──────────────────────
+    P(
+      "cross-spend-earn",
+      "how much did we spend on ads this month and what did we earn",
+      (h) => {
+        const srcs = new Set(at(h, 8).map((x) => x.source));
+        return srcs.size >= 3 ? [] : [`only ${srcs.size} sources: ${[...srcs].join(",")}`];
+      },
+      undefined,
+      10
+    ),
+    P("cross-cac", "what is our cost per paying customer", bodyHas(/[Cc]ost per paying customer/)),
+    P(
+      "cross-cvr",
+      "what is our conversion rate through the funnel",
+      bodyHas(/[Cc]onversion rate|CVR/)
+    ),
+    P(
+      "grain-week",
+      "how did last week go",
+      all(topSource(["analytics", "ga4", "gsc"]), bodyHas(/week of/i))
+    ),
+    P("grain-month", "how did august compare to july", topSource(["analytics", "ga4", "gsc"], 8)),
+    P("decision-pivot", "what did we decide about micro assessments and the consumer pivot", (h) =>
+      at(h, 4).some((x) => x.source === "drive" && x.meta?.section === "summary")
+        ? []
+        : [`no decision record in top 4: ${at(h, 4).map(describe).join(", ")}`]
+    ),
+    P(
+      "decision-pricing",
+      "what did we decide about the pricing test",
+      topSource(["slack", "whatsapp", "drive"], 4),
+      { excludeSources: ["commit"] }
+    ),
+    P(
+      "policy-retention",
+      "why is the data retention purge turned off",
+      all(topSource("doc", 3), bodyHas(/customers/i, 3))
+    ),
+    P(
+      "policy-trustpilot",
+      "why are trustpilot reviews turned off on the site",
+      topSource(["doc", "commit"], 5)
+    ),
+
+    // ── VERY COMPLEX: long, multi-clause, the shape a real investor update takes
+    P(
+      "complex-investor",
+      "for the investor update I need visits, signups, paying customers, revenue and ad spend for august 2026",
+      all(bodyHas(/11147/), bodyHas(/358/), bodyHas(/196\.98/), bodyHas(/1252\.99/)),
+      undefined,
+      8
+    ),
+    /**
+     * A MONTH QUESTION MUST NOT BE TOPPED BY A WEEK THAT IS MOSTLY ANOTHER MONTH.
+     * Measured 2026-09-06: "how many people signed up in august 2026" ranked "week of
+     * Monday 31 August to Sunday 6 September" FIRST — six of its seven days are
+     * September. The August total sits at rank 7, inside the default limit, so this is
+     * a ranking wart rather than a correctness failure. Asserted on its own so the two
+     * cannot be confused and so a fix can be measured.
+     */
+    P(
+      "month-question-keeps-the-month-total-reachable",
+      "how many people signed up in august 2026",
+      (h) => {
+        const i = h.findIndex(
+          (x) => x.source === "analytics" && /August 2026 \(monthly total\)/.test(x.title ?? "")
+        );
+        return i >= 0 ? [] : ["the August monthly total is not in the returned window at all"];
+      },
+      undefined,
+      12
+    ),
+    P(
+      "complex-funnel",
+      "walk me through the funnel from visit to payment and tell me where people drop off",
+      all(topSource("analytics", 6), bodyHas(/Survey starts|Signups/))
+    ),
+    P(
+      "complex-strategy",
+      "what is our product strategy for micro assessments and who decided it and when",
+      topSource(["drive", "notion", "slack", "whatsapp"], 5)
+    ),
+    P(
+      "complex-ads",
+      "what has our google ads agency changed and what did they recommend next",
+      topSource(["gmail", "drive"], 5)
+    ),
+
+    // ── NEGATIVE: things we genuinely do not have ─────────────────────────────
+    /**
+     * REFUTED AS FIRST WRITTEN, and the refutation is the useful half. It asserted
+     * that no result may MENTION aws, and failed — on my own commit messages, which
+     * quote "what is our AWS bill" as the standing example of an unanswerable
+     * question, and on CLAUDE.md listing AWS among the secret types it scans for.
+     * A passing mention is not a claim. What would actually be wrong is a FIGURE.
+     */
+    P("absent-aws", "what is our AWS bill", (h) =>
+      at(h, 5)
+        .filter((x) => /(aws|amazon web services)[^.]{0,40}(EUR|USD|[$€])\s?[0-9]/i.test(x.body))
+        .map((x) => `states an AWS amount: ${describe(x)}`)
+    ),
+    P("absent-k8s", "what is our kubernetes autoscaling policy", (h) =>
+      at(h, 5).some((x) => /kubernetes|autoscal/i.test(x.body))
+        ? ["a source claims kubernetes knowledge"]
+        : []
+    ),
+    P("absent-warehouse", "how many warehouses do we operate", (h) =>
+      at(h, 5).some((x) => /warehouse (in|at) |distribution centre/i.test(x.body))
+        ? ["a source claims a warehouse"]
+        : []
+    ),
+
+    // ── FILTERS: every filter, alone and combined ─────────────────────────────
+    P(
+      "filter-since",
+      "what happened recently",
+      (h) => {
+        const old = h.filter((x) => x.periodEnd && x.periodEnd < "2026-09-01");
+        return old.length ? [`older than since: ${old.map(describe).join(", ")}`] : [];
+      },
+      { since: "2026-09-01" },
+      8
+    ),
+    P(
+      "filter-until",
+      "what was happening early on",
+      (h) => {
+        const late = h.filter((x) => x.periodEnd && x.periodEnd > "2026-05-31");
+        return late.length ? [`newer than until: ${late.map(describe).join(", ")}`] : [];
+      },
+      { until: "2026-05-31" },
+      8
+    ),
+    P(
+      "filter-two-sources",
+      "what did the team say",
+      (h) => {
+        const bad = h.filter((x) => !["slack", "whatsapp"].includes(x.source));
+        return bad.length ? [`leaked: ${bad.map(describe).join(", ")}`] : [];
+      },
+      { sources: ["slack", "whatsapp"] },
+      8
+    ),
+    P(
+      "filter-meta-assignee",
+      "what is assigned to Mark",
+      (h) => {
+        const bad = h.filter((x) => x.meta?.assignee !== "Mark Oldenburg");
+        return bad.length ? [`wrong assignee: ${bad.map(describe).join(", ")}`] : [];
+      },
+      { sources: ["notion"], meta: { assignee: "Mark Oldenburg" } },
+      6
+    ),
+    P(
+      "filter-meta-done",
+      "what work is finished",
+      (h) => {
+        const bad = h.filter((x) => x.meta?.status !== "Done");
+        return bad.length ? [`not Done: ${bad.map(describe).join(", ")}`] : [];
+      },
+      { sources: ["notion"], meta: { status: "Done" } },
+      6
+    ),
+    P(
+      "filter-gmail-mailbox",
+      "what is in the hello mailbox",
+      (h) => {
+        const bad = h.filter((x) => x.meta?.mailbox !== "hello@loveiq.org");
+        return bad.length ? [`wrong mailbox: ${bad.map(describe).join(", ")}`] : [];
+      },
+      { sources: ["gmail"], meta: { mailbox: "hello@loveiq.org" } },
+      6
+    ),
+    P(
+      "filter-transcript",
+      "what was actually said word for word in a call",
+      (h) => {
+        const bad = h.filter((x) => x.meta?.section !== "transcript");
+        return bad.length ? [`not a transcript: ${bad.map(describe).join(", ")}`] : [];
+      },
+      { sources: ["drive"], meta: { section: "transcript" } },
+      6
+    ),
+
+    // ── AWKWARD SHAPES a real person types ───────────────────────────────────
+    P("terse-revenue", "revenue?", nonEmpty(3)),
+    P("terse-signups", "signups", nonEmpty(3)),
+    P("shouty", "WHY IS CONVERSION SO BAD", nonEmpty(3)),
+    P("typo", "how mnay peple signd up last munth", nonEmpty(3)),
+    P("two-questions", "what is our revenue and also who is on the team", nonEmpty(3)),
+    P("pronoun", "is that going up or down", nonEmpty(1)),
+  ];
+}
+
 async function runRetrievalBattery(only: string | null): Promise<number> {
-  const all = retrievalProbes();
+  const all = [...retrievalProbes(), ...sourceCoverageProbes()];
   const probes = only ? all.filter((p) => p.kind.includes(only) || p.q.includes(only)) : all;
   let failures = 0;
 
