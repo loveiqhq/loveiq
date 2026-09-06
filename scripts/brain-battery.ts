@@ -294,6 +294,11 @@ function retrievalProbes(): RetrievalProbe[] {
        */
       kind: "bulk-must-not-outrank-first-party",
       q: "what did we decide about the pricing test and the higher priced variant",
+      // Commits excluded ON PURPOSE. With them in, the engineering changelog fills the
+      // top slots and pushes received mail below 4, so the probe passed for a reason
+      // that had nothing to do with the thing it claims to measure. Removing the
+      // crowding is what makes bulk mail actually compete.
+      opts: { excludeSources: ["commit"] },
       limit: 8,
       check: (h) => {
         const firstAt = h.findIndex((x) => FIRST_PARTY.has(x.source));
@@ -378,6 +383,69 @@ function retrievalProbes(): RetrievalProbe[] {
         h.length === 0
           ? []
           : [`a status nothing uses matched ${h.length}: ${h.map(describe).join(", ")}`],
+    },
+    {
+      /**
+       * THE CASE `per_source` EXISTS FOR, kept as a regression guard now that the cap
+       * is lifted for narrowed requests. Measured before it existed: this question
+       * returned 30 of the top 32 from `ga4` alone — every GA4 chunk carries "Google
+       * Analytics" in its title — so the revenue row was never a candidate and only
+       * half the question could be answered. Unfiltered questions must stay diverse.
+       */
+      kind: "cross-source-stays-diverse",
+      q: "how much did we spend on google ads this month and what did we earn",
+      limit: 10,
+      check: (h) => {
+        const sources = new Set(h.map((x) => x.source));
+        return sources.size < 3
+          ? [`only ${sources.size} distinct sources: ${[...sources].join(", ")}`]
+          : [];
+      },
+    },
+    {
+      /** `until` gets far less use than `since`, so it gets far less scrutiny. */
+      kind: "until-filter-holds",
+      q: "what was the team working on",
+      opts: { until: "2026-06-30" },
+      limit: 8,
+      check: (h) => {
+        const late = h.filter((x) => x.periodEnd && x.periodEnd > "2026-06-30");
+        return late.length
+          ? [
+              `newer than until=2026-06-30: ${late.map((x) => `${describe(x)} @${x.periodEnd}`).join(", ")}`,
+            ]
+          : [];
+      },
+    },
+    {
+      /** Filters must COMPOSE. Each is tested alone above; nothing tested them together. */
+      kind: "filters-compose",
+      q: "what has the team decided and shipped",
+      opts: { sources: ["drive"], meta: { section: "summary" }, since: "2026-07-01" },
+      limit: 8,
+      check: (h) => {
+        const bad = h.filter(
+          (x) =>
+            x.source !== "drive" ||
+            x.meta?.section !== "summary" ||
+            (x.periodEnd !== null && x.periodEnd < "2026-07-01")
+        );
+        return [
+          h.length === 0 ? "three filters together matched nothing" : null,
+          bad.length ? `escaped one of the three filters: ${bad.map(describe).join(", ")}` : null,
+        ].filter((x): x is string => x !== null);
+      },
+    },
+    {
+      /**
+       * A caller asking for the documented maximum must GET it on an open question.
+       * The tool advertises `limit` up to 30; a ceiling that silently binds below that
+       * is the same silent-truncation family as the per-bucket cap.
+       */
+      kind: "limit-is-honoured",
+      q: "what has the company been doing",
+      limit: 25,
+      check: (h) => (h.length >= 20 ? [] : [`asked for 25 on an open question, got ${h.length}`]),
     },
   ];
 }

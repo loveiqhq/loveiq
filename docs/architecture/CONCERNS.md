@@ -122,7 +122,10 @@
 
 **Supabase tier:**
 
-- Current capacity: Depends on plan (free tier: 500MB, 50k requests/month)
+- Current capacity: depends on plan. The free tier is 500MB, but THIS project is
+  not on it — measured 2026-09-06, the Postgres volume is 8.35 GB with 6.85 GB
+  free. Do not plan against the free-tier number; see the storage note in
+  `docs/runbooks/COMPANY_BRAIN.md` for how to re-measure it.
 - Limit: API rate limits, database size
 - Symptoms at limit: 429 errors, insert failures
 - Scaling path: Upgrade Supabase plan

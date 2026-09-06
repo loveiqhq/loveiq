@@ -745,8 +745,9 @@ chunks) with the cut stated in the text, because nothing else in this pipeline c
 a single document — see the note on `PDF_TEXT_LIMIT`.
 
 A local run with the user credential produced **512 documents / 11,185 chunks**,
-which took the corpus from 4,797 to 15,835 and the database from ~121 MB to 289 MB
-of the 500 MB free-tier ceiling. Retrieval stays balanced because the ranker
+which took the corpus from 4,797 to 15,835 and the database from ~121 MB to 289 MB.
+(That figure was once written as "of the 500 MB free-tier ceiling", which was wrong —
+see the storage note below; this project's Postgres volume is 8.35 GB.) Retrieval stays balanced because the ranker
 reserves slots per source — spot-checked across five questions, Drive appears
 without displacing gsc, ga4, slack or notion.
 
@@ -1111,12 +1112,34 @@ boundary was drawn by the people in them rather than by the company.
 - **Revenue is attributed to report-creation date, not payment date**, and
   refunds are excluded rather than netted. Harmless while there are zero refunds;
   revisit at the first one.
-- **One Drive file is 13% of the corpus.** "Pitchbook Investors Data" is 3,242
-  chunks — a data export, not knowledge — because no source caps a single
-  document. New PDFs are capped at ~167 chunks, but the existing oversized Drive
-  files are deliberately left alone: shrinking them would delete indexed content
-  nobody asked to lose. Worth a decision when storage gets tight (321 MB of 500 MB
-  as of 2026-08-30).
+- **~~One Drive file is 13% of the corpus.~~ RESOLVED 2026-09-05.** "Pitchbook
+  Investors Data" was 3,242 chunks — a data export, not knowledge — because no
+  source caps a single document. It was deleted along with the third-party book
+  PDFs; 2 chunks bearing the name survive, and both are passing mentions inside
+  other documents. The largest single document is now **3.7%** of the corpus.
+  New PDFs are still capped at ~167 chunks.
+
+  **The reasoning that framed this was wrong, and the correction matters more than
+  the item.** "Worth a decision when storage gets tight (321 MB of 500 MB)"
+  measured `pg_database_size` against the FREE-TIER ceiling, which this project is
+  not on. Measured 2026-09-06 from Supabase's own metrics, the Postgres volume
+  (`/data`, `nvme1n1`) is **8.35 GB with 6.85 GB free — 82% free**, against a
+  logical database size of 405 MB. Storage was never the constraint it was
+  described as, and at least one decision was argued on that premise.
+
+  **Re-measure it rather than trusting this paragraph** — no public API exposes it,
+  but the privileged Prometheus endpoint does:
+
+  ```bash
+  curl -s -u "service_role:$SUPABASE_SERVICE_ROLE_KEY" \
+    "https://<project-ref>.supabase.co/customer/v1/privileged/metrics" \
+    | grep node_filesystem_.*data
+  ```
+
+  `nvme1n1` mounted at `/data` is Postgres. `nvme0n1p2` at `/` is the OS volume —
+  10.36 GB with 2.11 GB free, platform-managed, and NOT where the corpus lives, so
+  do not read its pressure as a corpus problem.
+
 - **Bulk email outranks conversation on broad questions.** Gmail is the largest
   source, and a subscribed newsletter can still surface for a vague question. Near
   duplicates are handled (one row per document, and gmail collapses on subject
