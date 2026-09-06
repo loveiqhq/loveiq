@@ -93,6 +93,66 @@ describe("buildAnalyticsRows", () => {
     expect(all!.period_end).toBe("2026-08-19");
   });
 
+  it("names the funnel rates 'conversion rate', the words a growth question uses", () => {
+    /**
+     * MEASURED 2026-09-06, and this is the most dangerous miss found in the audit.
+     * "What is our conversion rate" returned a GOOGLE ADS MARKETING EMAIL at 3.08 —
+     * "47 conversions", "cost per conversion EUR 5.99", "clickthrough rate 6.17%".
+     * Those are ad-platform conversions, not the business's, and answering with
+     * 6.17% would be fluent, cited, and wrong.
+     *
+     * It won because it says "conversion" a dozen times while our own numbers said
+     * it exactly never — the body printed "Paid customers: 7 (2.0% of reports)" and
+     * left the reader to supply the word. Same rule this file has now applied three
+     * times: THE WORDING IS THE RETRIEVAL INDEX.
+     *
+     * No new fact is added. Every percentage here is already printed above; what is
+     * added is the name people search by, and the division already done.
+     */
+    const rows = buildAnalyticsRows(
+      [
+        day("2026-08-19", {
+          unique_visitors: 1000,
+          survey_starts: 100,
+          submissions: 50,
+          reports_created: 50,
+          reports_paid: 5,
+        }),
+      ],
+      STAMP
+    );
+    const daily = rows.find((r) => r.source_id === "daily:2026-08-19")!;
+    expect(daily.body).toMatch(/Conversion rate \(CVR\)/);
+    expect(daily.body).toMatch(/report to paying customer 10\.0%/);
+    expect(daily.title).toMatch(/conversion rate/i);
+  });
+
+  it("drops a conversion-rate leg rather than printing the word null", () => {
+    /**
+     * `pct` returns NULL by design when a step exceeds the one above it, because
+     * that means the two metrics have different tracking start dates — which is how
+     * "Signups: 453 (115.9% of starts)" was once published as a rate. Interpolating
+     * that into a template renders the literal string "null", which is worse than
+     * the ratio it was protecting against. Caught while writing this line.
+     */
+    const rows = buildAnalyticsRows(
+      [
+        day("2026-08-19", {
+          unique_visitors: 0,
+          survey_starts: 0,
+          submissions: 40,
+          reports_created: 40,
+          reports_paid: 2,
+        }),
+      ],
+      STAMP
+    );
+    const daily = rows.find((r) => r.source_id === "daily:2026-08-19")!;
+    expect(daily.body).not.toMatch(/null/);
+    // the one leg that IS computable still appears
+    expect(daily.body).toMatch(/report to paying customer 5\.0%/);
+  });
+
   it("emits a daily, a weekly, a monthly and an all-time chunk", () => {
     const rows = buildAnalyticsRows([day("2026-08-19")], STAMP);
     expect(rows.map((r) => r.source_id).sort()).toEqual([

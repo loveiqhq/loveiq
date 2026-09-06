@@ -71,7 +71,7 @@ import { sweepStale, upsertChunks, type BrainRow, type IngestResult } from "./up
  * matching EXTENT of the title, so extra relevant words raise the match and do not
  * dilute it. Measured against an unrelated question the gain is +0.04, i.e. noise.
  */
-const NUMBERS_VOCABULARY = "revenue, paying customers, signups, visits, ad spend";
+const NUMBERS_VOCABULARY = "revenue, paying customers, signups, visits, ad spend, conversion rate";
 
 const DAYS = 4000;
 const SOURCE = "analytics";
@@ -499,6 +499,41 @@ function renderBody(period: string, t: Totals, ad: AdCost): string {
     `Signups (completed surveys): ${withPct(t.submissions, t.submissions, t.starts, "starts")}`,
     `Reports created: ${t.reports} · Reports first opened: ${t.opens}`,
     `Paid customers: ${withPct(t.paid, t.paid, t.reports, "reports")} · Revenue: EUR ${t.revenue.toFixed(2)}`,
+    /**
+     * THE SAME RATES AGAIN, UNDER THE NAME PEOPLE ACTUALLY USE.
+     *
+     * Every percentage here is already printed above, so this line adds no new
+     * fact — it adds the words "conversion rate" and "CVR", which appeared nowhere
+     * in this chunk. Measured 2026-09-06: "what is our conversion rate" returned a
+     * GOOGLE ADS MARKETING EMAIL at 3.08 — "47 conversions", "cost per conversion
+     * EUR 5.99", "clickthrough rate 6.17%" — because that email says "conversion"
+     * a dozen times and our own numbers never said it once. Those are ad-platform
+     * conversions, not the business's, and answering with 6.17% would be fluent,
+     * sourced, and wrong.
+     *
+     * This is the file's own rule applied a third time: THE WORDING IS THE
+     * RETRIEVAL INDEX. Already divided, per the note below on the two numbers
+     * everyone wants — a model asked to compute a rate from counts in separate
+     * chunks gets it wrong or declines.
+     */
+    ((): string | null => {
+      /**
+       * `pct` returns NULL on purpose when a ratio would mislead — a step larger
+       * than the one above it means the two metrics have different tracking start
+       * dates, which is how "Signups: 453 (115.9% of starts)" was once published as
+       * a conversion rate. Interpolating that straight into a template renders the
+       * literal string "null", so each leg is dropped rather than printed.
+       */
+      const legs = [
+        ["visit to survey start", pct(t.starts, t.visitors)],
+        ["survey start to signup", pct(t.submissions, t.starts)],
+        ["report to paying customer", pct(t.paid, t.reports)],
+      ].filter((l): l is [string, string] => l[1] !== null);
+      return legs.length
+        ? `Conversion rate (CVR) through the funnel: ` +
+            legs.map(([name, p]) => `${name} ${p}`).join(" · ")
+        : null;
+    })(),
     t.invites ? `Invites sent: ${t.invites}` : null,
     sources ? `Traffic sources: ${sources}` : null,
     // The two numbers everyone actually wants, next to each other and already
