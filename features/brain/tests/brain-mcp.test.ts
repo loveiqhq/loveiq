@@ -1285,11 +1285,30 @@ describe("/api/mcp", () => {
       );
     });
 
-    it("rejects a path that tries to escape the API namespace", async () => {
-      for (const path of ["//evil.example.com/x", "/../../admin", "/x@evil.example.com", "/a b"]) {
+    it("rejects a path that tries to escape the API namespace, and says which rule tripped", async () => {
+      /**
+       * The security property is `isError` plus NO fetch — that part is unchanged and
+       * is what this test has always been for.
+       *
+       * The message used to be one sentence for all four cases: "path must be a simple
+       * path inside that service's API." Measured 2026-09-06, that is the sentence a
+       * caller gets for PostHog's OWN documented idiom, `/projects/@current/...`, and
+       * it is indistinguishable from "PostHog is unreachable". The caller then has no
+       * way to learn that the numeric project id works. Naming the rule is strictly
+       * more informative than the old assertion, so this checks that instead.
+       */
+      const cases: Array<[string, RegExp]> = [
+        ["//evil.example.com/x", /protocol-relative/],
+        ["/../../admin", /walks out of this service/],
+        ["/x@evil.example.com", /smuggle a different host/],
+        ["/a b", /whitespace/],
+      ];
+      for (const [path, reason] of cases) {
         const r = await call({ service: "stripe", path });
         expect(r.isError, path).toBe(true);
-        expect(r.content[0].text).toMatch(/simple path/);
+        expect(r.content[0].text, path).toMatch(reason);
+        // and it must not be mistaken for an outage
+        expect(r.content[0].text, path).toMatch(/not a sign the service is unreachable/);
       }
       expect(mockFetch).not.toHaveBeenCalled();
     });

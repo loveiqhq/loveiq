@@ -1363,13 +1363,35 @@ async function callTool(
     } catch {
       return textResult("path must be a simple path inside that service's API.", true);
     }
-    if (
-      decodedPath.startsWith("//") ||
-      decodedPath.includes("..") ||
-      decodedPath.includes("@") ||
-      /\s/.test(decodedPath)
-    ) {
-      return textResult("path must be a simple path inside that service's API.", true);
+    /**
+     * SAY WHICH RULE TRIPPED, because a refusal that does not is indistinguishable
+     * from a broken tool.
+     *
+     * The `@` rule is the one that bites in practice: PostHog documents its own
+     * endpoints as `/projects/@current/...`, so reaching for the service's canonical
+     * idiom got "path must be a simple path inside that service's API" and nothing
+     * else. Measured 2026-09-06 — the caller has no way to tell that from "PostHog is
+     * unreachable", and the workaround (the numeric project id, which the registry
+     * note already carries) is invisible. The guard stays exactly as strict; only the
+     * explanation changes.
+     */
+    const pathFault = decodedPath.startsWith("//")
+      ? "it starts with `//`, which a URL parser reads as protocol-relative — that is a different host"
+      : decodedPath.includes("..")
+        ? "it contains `..`, which walks out of this service's namespace"
+        : decodedPath.includes("@")
+          ? "it contains `@`, which can smuggle a different host into a URL. PostHog's own " +
+            "`/projects/@current/` must be written with the numeric project id instead — " +
+            "list_sources names it"
+          : /\s/.test(decodedPath)
+            ? "it contains whitespace"
+            : null;
+    if (pathFault) {
+      return textResult(
+        `That path was refused because ${pathFault}. This is a check on the PATH, not a ` +
+          `sign the service is unreachable or has no data — fix the path and ask again.`,
+        true
+      );
     }
 
     // Some services answer destructive calls over GET; see `allow` on the registry.
