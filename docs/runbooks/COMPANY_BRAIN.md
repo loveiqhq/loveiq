@@ -212,10 +212,20 @@ half of the decision index, and it is not built.
 
 **Read the score, but do not threshold on it.** Every hit carries a `relevance:`
 number and results are ordered by it, yet there is deliberately no relevance floor.
-Measured on this corpus, the top score for a question it ANSWERS ("why is the data
-retention purge turned off": 1.302) and one it CANNOT ("what is our AWS bill":
-1.288) overlap within 0.015 — any cutoff that catches the second silences the
-first. So the tool ships the number plus a sentence saying it ranks within one
+Measured **twice**, and the second time is the interesting one. In 2026-08 the top
+score for a question it ANSWERS ("why is the data retention purge turned off": 1.302)
+and one it CANNOT ("what is our AWS bill": 1.288) overlapped within 0.015.
+
+Re-measured 2026-09-06 with eight probes on each side, after the recency term and the
+semantic arm: **answerable spans 2.390–3.572, unanswerable 1.655–3.300 — an overlap of
+0.911**, and "what is our AWS bill this month" at 3.300 outscores six of the eight
+questions the corpus genuinely answers. Separation got _worse_, not better: the new
+terms lifted every score without discriminating.
+
+Any cutoff that catches the second silences the first, so there is still no floor. The
+guidance shipped to callers no longer names a figure either — "a top score near 1.3 is
+ambiguous" had decayed below the entire observed range, which would read as reassurance
+about a 2.4 that is in fact the lowest answerable score on record. So the tool ships the number plus a sentence saying it ranks within one
 result set only, and the rule that matters most: when two sources conflict, the
 later `date:` is the current decision.
 

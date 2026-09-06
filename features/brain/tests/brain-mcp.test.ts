@@ -371,6 +371,44 @@ describe("/api/mcp", () => {
       expect(text).not.toMatch(/WITH THE FILTERS YOU SET/);
     });
 
+    it("never calibrates the score against a NUMBER, because that number decays", async () => {
+      /**
+       * The guidance used to read "a top score near 1.3 occurs both when the corpus
+       * answers the question and when it merely shares vocabulary with it". Measured
+       * 2026-09-06 the scores span 1.655 to 3.572 — 1.3 is below the ENTIRE range, so
+       * the sentence had quietly inverted: a reader takes today's 2.4 for a comfortable
+       * margin when it is the lowest answerable score on record.
+       *
+       * The relationship does not decay — an unanswerable question outscoring an
+       * answerable one stayed true across both measurements, and got more true (the
+       * overlap went from 0.015 to 0.911). So the shipped text states that, and this
+       * asserts no bare decimal creeps back in.
+       */
+      mockRetrieve.mockResolvedValue([
+        {
+          source: "doc",
+          sourceId: "doc/x.md",
+          title: "X",
+          url: null,
+          body: "something",
+          meta: {},
+          score: 2.4,
+        },
+      ]);
+      const guide = (await (await call({ query: "anything" })).json()).result.content[0]
+        .text as string;
+      const list = await (await POST(rpc({ jsonrpc: "2.0", id: 23, method: "tools/list" }))).json();
+      const search = (list.result.tools as Array<{ name: string; description: string }>).find(
+        (t) => t.name === "search_company_context"
+      )!;
+      // No "0.9"-style calibration decimals in the text the model is handed. Version
+      // numbers and dates are not scores, so only bare decimals below 10 are refused.
+      expect(guide).not.toMatch(/score[^.]{0,40}\b\d\.\d/i);
+      expect(search.description).not.toMatch(/score[^.]{0,40}\b\d\.\d/i);
+      // ...and it still says the thing that matters.
+      expect(guide).toMatch(/higher than an answerable one/i);
+    });
+
     it("names the sources it actually holds when nothing matches", async () => {
       // The old message advertised Jira, which has 0 chunks, and omitted Notion,
       // Slack, Gmail, Drive, the calendar and WhatsApp, which have 25,000 between

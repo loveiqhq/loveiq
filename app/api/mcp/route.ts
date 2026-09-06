@@ -266,18 +266,32 @@ export const SOURCES_FOR_TEST = [
  * problem: there is no system prompt of ours on this door, so anything the caller
  * needs to know has to travel inside the result.
  *
- * THE CALIBRATION SENTENCE IS THE IMPORTANT ONE, and it is measured. Top scores for
- * questions the corpus ANSWERS ("why is the data retention purge turned off": 1.302)
- * and questions it CANNOT ("what is our AWS bill this month": 1.288) overlap within
- * 0.015. So no threshold can separate them, this server ships none, and a model told
- * to trust a high score would be misled by exactly the queries it should decline.
+ * THE CALIBRATION SENTENCE IS THE IMPORTANT ONE, and it is measured — twice now, and
+ * the second measurement is why the sentence no longer names a number.
+ *
+ * 2026-08: "why is the data retention purge turned off" (answerable) scored 1.302 and
+ * "what is our AWS bill this month" (unanswerable) 1.288 — overlapping within 0.015.
+ *
+ * 2026-09-06, eight probes each side: answerable spans 2.390–3.572, unanswerable
+ * 1.655–3.300. The overlap is now 0.911, and "what is our AWS bill this month" at
+ * 3.300 outscores SIX of the eight questions the corpus genuinely answers. Scores rose
+ * with the recency term and the semantic arm; separation got worse, not better.
+ *
+ * So no threshold can separate them, this server ships none, and a model told to trust
+ * a high score would be misled by exactly the queries it should decline. The shipped
+ * sentence states the RELATIONSHIP rather than a figure, because "near 1.3" was already
+ * below the entire observed range — guidance that decays into the opposite of its
+ * meaning, since a reader would take today's 2.4 for a comfortable margin when it is
+ * the lowest answerable score on record.
  */
 const RESULT_GUIDE =
   "HOW TO READ THESE. Each source carries a `relevance:` score, an `id:` you can pass " +
   "to fetch_document for the whole document, and a `date:` where the record is dated. " +
   "Scores rank within THIS result set only and are NOT comparable between questions: " +
-  "measured on this corpus, a top score near 1.3 occurs both when the corpus answers " +
-  "the question and when it merely shares vocabulary with it. Read the text, not the " +
+  "an unanswerable question can and does score HIGHER than an answerable one. Measured " +
+  "on this corpus, a question about a service the company does not use outscored six of " +
+  "eight questions the corpus genuinely answers, and pure gibberish still returns cited " +
+  "sources. A high score means the words matched, nothing more. Read the text, not the " +
   "number. If none of these sources actually addresses what was asked, say the corpus " +
   "does not cover it rather than assembling an answer from adjacent material. When two " +
   "sources conflict, the later `date:` is the current decision. If the wrong SOURCE " +
