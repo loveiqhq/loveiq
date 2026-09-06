@@ -112,3 +112,50 @@ describe("embedding must never outlive the cron that called it", () => {
     expect(elapsed).toBeLessThan(6000);
   });
 });
+
+describe("embedMissing cannot outlive the function that calls it", () => {
+  /**
+   * `embedBatch` defaults to 6 attempts at 120s each -- the BACKFILL script's
+   * patience, which has no ceiling. `brain-fast` has a 60s `maxDuration`, so one
+   * cold edge worker (the model is ~130MB and loads on first call) can hang longer
+   * than the function may live. Vercel kills it, and `recordCronRun` sits in the
+   * `finally` that never runs, so the run counts as neither success nor failure --
+   * it does not exist.
+   *
+   * Observed on 2026-09-06: retitling 187 analytics chunks nulled their embeddings,
+   * the 08:52 brain-fast run had real work for the first time in a while, and it
+   * left NO cron_run row while every neighbouring run recorded 7-10s and success.
+   *
+   * `isOutOfTime` cannot cover this -- it is checked BETWEEN attempts, never during
+   * one -- so the bound has to be the per-request timeout itself.
+   */
+  it("forwards the caller's per-request bounds to the embed call", async () => {
+    respond = () =>
+      new Response(JSON.stringify({ embeddings: [[0.1, 0.2, 0.3]] }), { status: 200 });
+    const { embedMissing } = await import("@features/brain/server/embed");
+    chunkRows = [{ id: 1, title: "t", body: "text long enough to be worth embedding" }];
+
+    await embedMissing(() => false, 1, { attempts: 2, timeoutMs: 15_000 });
+
+    const embedCalls = calls.filter((c) => c.url.includes("brain-embed"));
+    expect(embedCalls.length).toBeGreaterThan(0);
+    for (const c of embedCalls) {
+      expect(c.timeoutMs).toBe(15_000);
+      // never the unbounded backfill default, which is what killed the cron
+      expect(c.timeoutMs).not.toBe(120_000);
+    }
+  });
+
+  it("still defaults to the patient backfill bound when no caller sets one", async () => {
+    // The script has no ceiling and would rather wait than lose a batch, so the
+    // default must NOT become the cron's bound.
+    respond = () =>
+      new Response(JSON.stringify({ embeddings: [[0.1, 0.2, 0.3]] }), { status: 200 });
+    const { embedMissing } = await import("@features/brain/server/embed");
+    chunkRows = [{ id: 2, title: "t", body: "text long enough to be worth embedding" }];
+
+    await embedMissing(() => false, 1);
+    const embedCalls = calls.filter((c) => c.url.includes("brain-embed"));
+    expect(embedCalls.at(-1)?.timeoutMs).toBe(120_000);
+  });
+});

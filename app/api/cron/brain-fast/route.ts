@@ -150,7 +150,13 @@ export async function GET(request: Request) {
      * ~670/day, so a full re-index still wants `scripts/brain-embed-backfill.ts`.
      */
     try {
-      const embed = await embedMissing(isOutOfTime, 3);
+      // Bounded so ONE embed request cannot outlive this function. Worst case
+      // 2 x 15s plus 1.5s of backoff, against a 60s ceiling with ~10s of ingest
+      // already spent. The unbounded default (6 x 120s) is the backfill script's
+      // patience and killed this cron silently -- see embedMissing's docblock.
+      // A batch that times out is simply retried next run; embedMissing is driven
+      // by `embedding IS NULL`, so it is restartable by construction.
+      const embed = await embedMissing(isOutOfTime, 3, { attempts: 2, timeoutMs: 15_000 });
       logger.info({ embed }, "brain-fast: embedded new chunks");
       if (embed.remaining > 2_000) {
         await alertOnce(

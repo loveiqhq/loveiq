@@ -157,7 +157,27 @@ export interface EmbedResult {
  */
 export async function embedMissing(
   isOutOfTime: () => boolean = () => false,
-  maxBatches = 1000
+  maxBatches = 1000,
+  /**
+   * Per-request bounds for ONE embed call, for callers that live inside a function
+   * ceiling.
+   *
+   * The default here is the BACKFILL's patience: 6 attempts at 120s each, plus
+   * 22.5s of backoff. That is correct for `scripts/brain-embed-backfill.ts`, which
+   * has no ceiling and would rather wait than lose a batch. It is catastrophic
+   * inside `brain-fast`, whose `maxDuration` is 60s: a single cold edge worker --
+   * the model is ~130MB and loads on first call -- hangs longer than the function
+   * is allowed to live, Vercel kills it, and `recordCronRun` sits in the `finally`
+   * that never runs. The run then counts as neither success nor failure. It does
+   * not exist.
+   *
+   * Observed exactly that on 2026-09-06: retitling 187 analytics chunks nulled
+   * their embeddings, the 08:52 brain-fast run had real work for the first time in
+   * a while, and it left NO cron_run row while every neighbouring run recorded
+   * 7-10s and success. `isOutOfTime` cannot save it -- that is checked BETWEEN
+   * attempts, never during one.
+   */
+  opts: { attempts?: number; timeoutMs?: number } = {}
 ): Promise<EmbedResult> {
   let embedded = 0;
 
@@ -186,7 +206,7 @@ export async function embedMissing(
       const slice = rows.slice(i, i + EMBED_BATCH);
       const vectors = await embedBatch(
         slice.map((r) => embedText(r.title, r.body)),
-        { isOutOfTime }
+        { isOutOfTime, attempts: opts.attempts, timeoutMs: opts.timeoutMs }
       );
       if (!vectors || vectors.length !== slice.length) {
         logger.warn(

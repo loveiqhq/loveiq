@@ -32,13 +32,22 @@ let embedResult: { embedded: number; remaining: number; complete: boolean } = {
   complete: true,
 };
 let embedThrows = false;
-const embedCalls: Array<{ maxBatches: number | undefined }> = [];
+const embedCalls: Array<{
+  maxBatches: number | undefined;
+  opts: { attempts?: number; timeoutMs?: number } | undefined;
+}> = [];
 vi.mock("@features/brain/server/embed", () => ({
-  embedMissing: vi.fn(async (_isOutOfTime: unknown, maxBatches?: number) => {
-    embedCalls.push({ maxBatches });
-    if (embedThrows) throw new Error("edge worker refused");
-    return embedResult;
-  }),
+  embedMissing: vi.fn(
+    async (
+      _isOutOfTime: unknown,
+      maxBatches?: number,
+      opts?: { attempts?: number; timeoutMs?: number }
+    ) => {
+      embedCalls.push({ maxBatches, opts });
+      if (embedThrows) throw new Error("edge worker refused");
+      return embedResult;
+    }
+  ),
 }));
 
 vi.mock("@shared/http/is-prod-cron-host", () => ({ isProdCronHost: () => prodHost }));
@@ -252,6 +261,47 @@ describe("brain-fast embeds the chunks it just ingested", () => {
     });
     await GET(req());
     expect(order.indexOf("ingest")).toBeLessThan(order.indexOf("embed"));
+  });
+
+  it("bounds the embed call so one request cannot outlive this function", async () => {
+    /**
+     * `embedBatch`'s default is the BACKFILL's patience -- 6 attempts at 120s each
+     * inside a function whose `maxDuration` is 60. One cold edge worker then hangs
+     * longer than the function may live, Vercel kills it, and `recordCronRun` sits
+     * in a `finally` that never runs: the run counts as neither success nor
+     * failure and simply does not appear.
+     *
+     * Observed on 2026-09-06 -- the 08:52 run wrote no cron_run row at all while
+     * every neighbouring run recorded 7-10s and success.
+     *
+     * Asserted HERE and not only in embed.ts: forwarding the bound is useless if
+     * this caller stops passing one, and removing it there left the whole suite
+     * green. Found by mutation.
+     */
+    // Self-contained: a sibling test replaces this mock's implementation and the
+    // replacement persists, so relying on the module-level capture would make this
+    // pass or fail on test ORDER rather than on the code.
+    const seen: Array<{ maxBatches?: number; opts?: { attempts?: number; timeoutMs?: number } }> =
+      [];
+    const { embedMissing } = await import("@features/brain/server/embed");
+    vi.mocked(embedMissing).mockImplementation(
+      async (
+        _isOutOfTime?: unknown,
+        maxBatches?: number,
+        opts?: { attempts?: number; timeoutMs?: number }
+      ) => {
+        seen.push({ maxBatches, opts });
+        return embedResult;
+      }
+    );
+
+    await GET(req());
+    const last = seen.at(-1);
+    expect(last?.opts?.timeoutMs).toBeGreaterThan(0);
+    expect(last?.opts?.timeoutMs).toBeLessThanOrEqual(30_000);
+    expect(last?.opts?.attempts).toBeLessThanOrEqual(3);
+    // worst case must fit under the 60s ceiling alongside the ingest that precedes it
+    expect((last?.opts?.timeoutMs ?? 0) * (last?.opts?.attempts ?? 0)).toBeLessThan(45_000);
   });
 
   it("raises a backlog too big for this lane to drain, instead of falling behind quietly", async () => {
