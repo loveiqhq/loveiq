@@ -62,7 +62,9 @@ export default function ConsentBannerOffset() {
       // by its full height would push the CTA off the top of the screen — worse
       // than being covered. Past that point nothing can be made reachable, so
       // stop moving.
-      const offset = coversBottom ? Math.min(Math.ceil(rect.height), Math.floor(window.innerHeight * 0.6)) : 0;
+      const offset = coversBottom
+        ? Math.min(Math.ceil(rect.height), Math.floor(window.innerHeight * 0.6))
+        : 0;
       root.style.setProperty("--liq-consent-h", `${offset}px`);
     }
 
