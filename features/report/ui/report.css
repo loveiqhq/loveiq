@@ -7440,7 +7440,10 @@
   position: relative;
 }
 
+/* The whole blurred block opens the paywall (handler is on this wrapper — see
+   FindingsSection), so it must read as tappable. */
 .report-findings__upsell {
+  cursor: pointer;
   /* Centred on the blurred block, per Figma 8988:16141. Anchoring to the group
      rather than the card keeps it centred on the WITHHELD rows at any width,
      without a magic percentage that drifts when the copy rewraps. */
@@ -7481,21 +7484,6 @@
     transform 0.15s ease,
     box-shadow 0.15s ease;
   box-shadow: 0 12px 30px -14px rgba(254, 104, 57, 0.7);
-}
-
-/* The wrapper `.report-findings__upsell` is `position:absolute; inset:0`, so it
-   spans the entire blurred block — 334x238 on a Pixel 7 — while only the 235x41
-   button did anything. 88% of what looks like the unlock affordance swallowed
-   taps, and PostHog recorded 39 Android + 26 iOS dead clicks on
-   `div.report-findings__upsell` in 90 days: readers aiming at the CTA and
-   missing. Stretch the button's hit area over its wrapper (the button is
-   `position: static`, so this resolves against `.report-findings__upsell`).
-   Keyboard and screen-reader behaviour are unchanged — the button is still the
-   only control. */
-.report-findings__unlock::after {
-  content: "";
-  position: absolute;
-  inset: 0;
 }
 
 .report-findings__unlock:hover {

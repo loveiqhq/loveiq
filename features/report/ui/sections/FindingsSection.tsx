@@ -124,11 +124,31 @@ const FindingsSection: FC<Props> = ({ copy, onUnlock }) => {
             ))}
 
             {locked ? (
-              <div className="report-findings__upsell">
+              /**
+               * The handler sits on the WRAPPER, not the button.
+               *
+               * This wrapper is `position:absolute; inset:0` over the whole
+               * blurred block (334x238 on a Pixel 7) with one 235x44 button
+               * centred in it, so 88% of what reads as the unlock affordance
+               * used to swallow taps — PostHog logged 39 Android + 26 iOS
+               * `dead_click` events on `div.report-findings__upsell` in 90 days,
+               * readers aiming at the CTA and missing.
+               *
+               * A CSS `::after` hit-area expansion on the button is NOT a
+               * cross-engine fix: Safari treats form controls as containing
+               * blocks, so `inset: 0` resolved against the 235x44 button there
+               * while stretching to the full 242x363 wrapper on Chromium
+               * (measured on production, iPhone SE vs Pixel 7). The wrapper's
+               * own click covers both engines.
+               *
+               * The button keeps its semantics, so keyboard and screen-reader
+               * behaviour are unchanged — its click simply bubbles to here.
+               */
+              <div className="report-findings__upsell" onClick={onUnlock}>
                 {/* Figma labels this CTA "Unlock the Full Report →" — distinct
                     from PremiumOverlay's "Unlock your report" (8993:19194),
                     which is a different component in the design. */}
-                <button type="button" className="report-findings__unlock" onClick={onUnlock}>
+                <button type="button" className="report-findings__unlock">
                   Unlock the Full Report →
                 </button>
               </div>
