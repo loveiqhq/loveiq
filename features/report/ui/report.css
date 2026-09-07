@@ -2473,7 +2473,8 @@
   min-height: 100vh;
   min-height: 100svh;
   padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
-    max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+    max(1rem, env(safe-area-inset-bottom), var(--liq-consent-h, 0px))
+    max(1rem, env(safe-area-inset-left));
 }
 
 .report-pricing-modal__dialog {
@@ -7465,6 +7466,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-height: 44px;
   padding: 13px 30px;
   border: none;
   border-radius: 9999px;
@@ -7479,6 +7481,21 @@
     transform 0.15s ease,
     box-shadow 0.15s ease;
   box-shadow: 0 12px 30px -14px rgba(254, 104, 57, 0.7);
+}
+
+/* The wrapper `.report-findings__upsell` is `position:absolute; inset:0`, so it
+   spans the entire blurred block — 334x238 on a Pixel 7 — while only the 235x41
+   button did anything. 88% of what looks like the unlock affordance swallowed
+   taps, and PostHog recorded 39 Android + 26 iOS dead clicks on
+   `div.report-findings__upsell` in 90 days: readers aiming at the CTA and
+   missing. Stretch the button's hit area over its wrapper (the button is
+   `position: static`, so this resolves against `.report-findings__upsell`).
+   Keyboard and screen-reader behaviour are unchanged — the button is still the
+   only control. */
+.report-findings__unlock::after {
+  content: "";
+  position: absolute;
+  inset: 0;
 }
 
 .report-findings__unlock:hover {
@@ -16188,7 +16205,8 @@
   justify-content: center;
   align-items: flex-start;
   padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
-    max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+    max(1rem, env(safe-area-inset-bottom), var(--liq-consent-h, 0px))
+    max(1rem, env(safe-area-inset-left));
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
@@ -17245,7 +17263,11 @@
 .report-sticky-unlock--mobile {
   left: 0;
   right: 0;
-  bottom: 0;
+  /* Step above the CookieYes banner while it is up. That banner is fixed at
+     z-index 9999999 and 316px tall on a phone (38-49% of the viewport), so at
+     bottom:0 this bar is both invisible and untappable until consent is
+     answered — measured on production 2026-09-07. See ConsentBannerOffset. */
+  bottom: var(--liq-consent-h, 0px);
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
@@ -17317,6 +17339,13 @@
   flex: 0 0 auto;
   width: auto;
   height: auto;
+  /* The pill painted at 126x34 — under the 44px (Apple HIG) / 48dp (Material)
+     minimum, on the primary revenue CTA. A `::after` hit-area expansion is not
+     an option here: `.rpm-cta` sets `overflow: hidden` for its sheen animation,
+     which clips any pseudo-element back to the button box (measured — the
+     expansion had no effect at all). So the button itself grows to the minimum;
+     the bar gets 10px taller. */
+  min-height: 44px;
   padding: 7px 12px;
   font-size: 12px;
   white-space: nowrap;
@@ -17328,7 +17357,7 @@
 /* Desktop variant — centered rounded banner (Figma 7635:13901). */
 .report-sticky-unlock--desktop {
   left: 50%;
-  bottom: 16px;
+  bottom: calc(16px + var(--liq-consent-h, 0px));
   transform: translateX(-50%);
   width: calc(100vw - 32px);
   padding: 0;

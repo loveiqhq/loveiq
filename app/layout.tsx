@@ -5,6 +5,7 @@ import { Lora, Manrope } from "next/font/google";
 import { headers } from "next/headers";
 import SmoothScroll from "@shared/ui/SmoothScroll";
 import { NonceProvider } from "@shared/ui/NonceProvider";
+import ConsentBannerOffset from "@shared/ui/ConsentBannerOffset";
 import HydrationMarker from "@shared/ui/HydrationMarker";
 import UtmCapture from "@shared/ui/UtmCapture";
 import { GtmScript, GtmNoScript } from "@shared/ui/GtmScript";
@@ -359,6 +360,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           Skip to main content
         </a>
         <HydrationMarker />
+        <ConsentBannerOffset />
         <UtmCapture />
         <WebVitals />
         <UxSignals />
