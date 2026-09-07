@@ -237,14 +237,27 @@ async function driveGet(token: string, path: string): Promise<Response> {
 async function listDocs(
   token: string,
   isOutOfTime: () => boolean
-): Promise<{ items: DriveFile[]; complete: boolean }> {
+): Promise<{ items: DriveFile[]; complete: boolean; stopped?: string }> {
   const out: DriveFile[] = [];
   let complete = true;
+  /**
+   * WHICH of the ways to stop actually happened, first one wins.
+   *
+   * `complete=false` alone is not a diagnosis. Measured 2026-09-07, brain-drive had
+   * reported it on 21 of 21 runs with no way to tell a listing cap from a refused
+   * page from the clock — and the three want completely different fixes. Gmail
+   * already learned this and named its exits; this is the same idea.
+   */
+  let stopped: string | undefined;
+  const stop = (why: string) => {
+    complete = false;
+    stopped ??= why;
+  };
   let pageToken: string | undefined;
 
   for (let page = 0; page < MAX_PAGES; page++) {
     if (isOutOfTime()) {
-      complete = false;
+      stop(`time-budget@listing:p${page}`);
       break;
     }
     // Shortcuts come back in the same query so a second pass is not needed.
@@ -265,7 +278,7 @@ async function listDocs(
     if (!res.ok) {
       const detail = (await res.text().catch(() => "")).slice(0, 300);
       logger.warn({ status: res.status, detail }, "brain-ingest drive: list failed");
-      return { items: out, complete: false };
+      return { items: out, complete: false, stopped: `listing-refused@p${page}:${res.status}` };
     }
     const json = (await res.json().catch(() => null)) as {
       files?: DriveFile[];
@@ -274,9 +287,11 @@ async function listDocs(
     for (const f of json?.files ?? []) if (f.id) out.push(f);
     pageToken = json?.nextPageToken;
     if (!pageToken) break;
-    if (page === MAX_PAGES - 1) complete = false;
+    // The cap is PAGE_SIZE * MAX_PAGES documents. Named separately because hitting it
+    // is a capacity decision to revisit, not a fault to chase.
+    if (page === MAX_PAGES - 1) stop(`page-cap@${MAX_PAGES}x${PAGE_SIZE}`);
   }
-  return { items: out, complete };
+  return { items: out, complete, stopped };
 }
 
 /**
@@ -582,6 +597,7 @@ export async function ingestDrive(
   const listed = {
     items: resolved.docs.filter((f) => !SKIP_FILE_IDS.has(f.id ?? "")),
     complete: raw.complete,
+    stopped: raw.stopped,
   };
 
   if (resolved.unreachable > 0 || resolved.skippedNonDoc > 0) {
@@ -610,6 +626,11 @@ export async function ingestDrive(
   const touch: string[] = [];
   const toFetch: DriveFile[] = [];
   let complete = listed.complete;
+  let stopped: string | undefined = listed.stopped;
+  const stop = (why: string) => {
+    complete = false;
+    stopped ??= why;
+  };
 
   for (const file of listed.items) {
     const sourceId = `doc:${file.id}`;
@@ -624,7 +645,7 @@ export async function ingestDrive(
 
   for (const file of toFetch) {
     if (isOutOfTime()) {
-      complete = false;
+      stop(`time-budget@fetch:${rows.length}rows`);
       break;
     }
     try {
@@ -638,7 +659,7 @@ export async function ingestDrive(
     } catch (err) {
       // One unreadable document must not cost the rest of the run.
       logger.warn({ err, file: file.id }, "brain-ingest drive: export failed");
-      complete = false;
+      stop("export-failed");
     }
   }
 
@@ -686,5 +707,13 @@ export async function ingestDrive(
   );
   // `complete` was logged and then dropped, so a walk that fetched one document of
   // three returned exactly the same object as one that fetched all three.
-  return { source: SOURCE, rows: written + touched, swept, complete };
+  return {
+    source: SOURCE,
+    rows: written + touched,
+    swept,
+    complete,
+    detail:
+      `docs=${listed.items.length} written=${written} touched=${touched} swept=${swept} ` +
+      `complete=${complete}${stopped ? ` stopped=${stopped}` : ""}`,
+  };
 }

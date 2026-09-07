@@ -50,7 +50,9 @@ export const maxDuration = 120;
 
 /** Skips that mean "not set up yet", which must never alert. */
 const DELIBERATE_SKIPS = new Set([
-  "google-token-unavailable",
+  // `google-token-unavailable` is deliberately ABSENT -- see brain-drive for the
+  // reasoning. A revoked credential is a fault, and it was silent in all three
+  // Google crons at once.
   "calendar-nothing-to-index",
   "calendar-time-budget",
 ]);
@@ -116,6 +118,19 @@ export async function GET(request: Request) {
           `> If this says \`calendar-walk-incomplete\` on the very first run, the delegation grant ` +
           `in the Google Admin console is probably missing \`.../auth/calendar.readonly\` — mailbox ` +
           `discovery uses a different scope, so the domain list works and every calendar is then refused.`
+      );
+    }
+
+    // A PARTIAL WALK IS NOT A SKIP. `sweepMissing` only runs after a walk that
+    // finished -- deliberately, so an outage cannot delete the corpus -- which means a
+    // permanently incomplete walk silently disables deletion for this source. Branched
+    // on nowhere until 2026-09-07; see brain-drive for the run that exposed it.
+    if (!result.skipped && result.complete === false) {
+      await alertOnce(
+        "incomplete",
+        `:brain: brain-calendar walked only part of the calendar (${escapeSlack(ingestNote(result))}). ` +
+          `Nothing failed, so this looks healthy -- but the sweep only runs after a ` +
+          `complete walk, so cancelled meetings are staying in the corpus.`
       );
     }
     return NextResponse.json({ ok: status === "success", result });

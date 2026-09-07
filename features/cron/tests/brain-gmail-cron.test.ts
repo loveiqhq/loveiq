@@ -108,6 +108,98 @@ describe("/api/cron/brain-gmail records WHY, not just whether", () => {
     expect(recorded[0]!.status).toBe("success");
     expect(recorded[0]!.error).toMatch(/complete=true/);
   });
+
+  /**
+   * A PARTIAL WALK IS NOT A SKIP, and until 2026-09-07 it was not anything at all.
+   *
+   * `result.complete` was computed, recorded, and branched on in NO cron route. The
+   * cost is specific: `sweepMissing` only runs after a walk that finished, so a
+   * permanently incomplete walk silently disables deletion for that source. Measured
+   * the same day, brain-drive had reported `complete=false swept=0` on 21 of 21 runs
+   * since the note was added the day before, and nothing said a word.
+   */
+  it("alerts when the walk finished only part of the mailbox", async () => {
+    mockIngest.mockResolvedValue({
+      source: "gmail",
+      rows: 40,
+      swept: 0,
+      complete: false,
+      detail: "boxes=9 listed=3769 fetched=176 written=40 swept=0 complete=false",
+    });
+    await GET(req());
+    // Not a failure — it indexed real work, and `status` must stay success or the
+    // alert becomes indistinguishable from an outage.
+    expect(recorded[0]!.status).toBe("success");
+    expect(notified).toHaveLength(1);
+    expect(notified[0]!.text).toMatch(/walked only part/);
+    // The consequence, not just the fact — a reader needs to know deletions stopped.
+    expect(notified[0]!.text).toMatch(/sweep only runs after a complete walk/);
+  });
+
+  it("says nothing when the walk completed", async () => {
+    mockIngest.mockResolvedValue({
+      source: "gmail",
+      rows: 9000,
+      swept: 4,
+      complete: true,
+      detail: "complete=true",
+    });
+    await GET(req());
+    expect(notified).toHaveLength(0);
+  });
+
+  /**
+   * The skip branch has already spoken, and a run that never walked has no
+   * completeness worth reporting. Two alerts for one event trains people to ignore
+   * both.
+   */
+  it("does not add an incompleteness alert on top of a skip", async () => {
+    mockIngest.mockResolvedValue({
+      source: "gmail",
+      rows: 0,
+      swept: 0,
+      skipped: "gmail-walk-incomplete",
+      complete: false,
+      detail: "stopped=listing-refused",
+    });
+    await GET(req());
+    expect(notified).toHaveLength(1);
+    expect(notified[0]!.text).not.toMatch(/walked only part/);
+  });
+
+  /**
+   * A REVOKED CREDENTIAL IS A FAULT, NOT A CONFIGURATION CHOICE.
+   *
+   * `google-token-unavailable` sat in DELIBERATE_SKIPS for gmail, drive AND calendar,
+   * so the single most likely way for three sources to go dark at once was also the
+   * quietest. `brain-ingest` documents the opposite policy in as many words. The three
+   * lists now match the policy.
+   */
+  it("alerts when the Google credential is unavailable", async () => {
+    mockIngest.mockResolvedValue({
+      source: "gmail",
+      rows: 0,
+      swept: 0,
+      skipped: "google-token-unavailable",
+      detail: "rows=0 swept=0",
+    });
+    await GET(req());
+    expect(recorded[0]!.status).toBe("error");
+    expect(notified).toHaveLength(1);
+    expect(notified[0]!.text).toMatch(/google-token-unavailable/);
+  });
+
+  it("still says nothing when Google was simply never configured", async () => {
+    mockIngest.mockResolvedValue({
+      source: "gmail",
+      rows: 0,
+      swept: 0,
+      skipped: "gmail-nothing-to-index",
+      detail: "rows=0 swept=0",
+    });
+    await GET(req());
+    expect(notified).toHaveLength(0);
+  });
 });
 
 describe("ingestNote — the line every brain lane leaves behind", () => {

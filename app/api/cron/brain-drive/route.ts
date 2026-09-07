@@ -44,9 +44,17 @@ export const maxDuration = 300;
  * Runs at :52, clear of gmail (:11), calendar (:26) and notion (:41).
  */
 
-/** Skips that mean "not set up yet", which must never alert. */
+/**
+ * Skips that mean "not set up yet", which must never alert.
+ *
+ * `google-token-unavailable` is deliberately NOT here, matching the policy
+ * `brain-ingest` documents: a REVOKED credential is a fault, not a configuration
+ * choice, and it is the one fault that freezes Gmail, Drive and Calendar together.
+ * It sat in all three of those lists, so the single most likely way for three
+ * sources to go dark at once was also the quietest. `google-not-configured` stays
+ * and is what covers an environment where Google was never wired up.
+ */
 const DELIBERATE_SKIPS = new Set([
-  "google-token-unavailable",
   "drive-nothing-shared",
   "drive-time-budget",
   "google-not-configured",
@@ -89,7 +97,7 @@ export async function GET(request: Request) {
 
   const dayKey = new Date().toISOString().slice(0, 10);
   const alertOnce = async (name: string, text: string) => {
-    const key = `brain_gmail_failed:${name}`;
+    const key = `brain_drive_failed:${name}`;
     if (!(await tryClaimSlackAlert(key, "day", dayKey))) return;
     await notifySlack({ channel: "ops", kind: "brain_ingest_failed", text });
     await markSlackAlertDelivered(key, "day", dayKey);
@@ -113,6 +121,31 @@ export async function GET(request: Request) {
         `skip:${result.skipped}`,
         `:brain: brain-drive skipped (${escapeSlack(result.skipped)}). Drive is frozen but ` +
           `nothing failed, so this will not look broken.`
+      );
+    }
+
+    /**
+     * A PARTIAL WALK IS NOT A SKIP, and until now it was not anything at all.
+     *
+     * `complete === false` was computed, written to `cron_run.error_message` by
+     * `ingestNote`, and then read by nobody -- it is branched on in no cron route.
+     * Measured 2026-09-07: brain-drive had reported `complete=false swept=0` on 21 of
+     * 21 runs since that note was added the day before, and nothing said so.
+     *
+     * The consequence is the part worth alerting on. `sweepMissing` only runs after a
+     * walk that finished, deliberately, so an outage cannot delete the corpus -- which
+     * means a permanently incomplete walk silently disables deletion for that source.
+     * Documents removed at the origin stay indexed and answerable forever.
+     *
+     * Guarded on `!result.skipped` because a skipped run never walked, so its
+     * completeness is meaningless and the skip branch above has already spoken.
+     */
+    if (!result.skipped && result.complete === false) {
+      await alertOnce(
+        "incomplete",
+        `:brain: brain-drive walked only part of Drive (${escapeSlack(ingestNote(result))}). ` +
+          `Nothing failed, so this looks healthy -- but the sweep only runs after a ` +
+          `complete walk, so documents deleted from Drive are staying in the corpus.`
       );
     }
     return NextResponse.json({ ok: status === "success", result });

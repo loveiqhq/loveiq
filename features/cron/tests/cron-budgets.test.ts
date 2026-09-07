@@ -84,3 +84,35 @@ describe("cron time budgets must fit under the ceiling that kills them", () => {
     }
   );
 });
+
+/**
+ * AN ALERT KEY BELONGING TO A DIFFERENT CRON SUPPRESSES THIS ONE'S ALERTS.
+ *
+ * `alertOnce` claims `tryClaimSlackAlert(key, "day", today)`, so the key IS the
+ * once-per-day lock. Found on 2026-09-07: `brain-drive` built its key as
+ * `brain_gmail_failed:${name}` -- a copy-paste. Gmail runs at :11 and drive at :52,
+ * so on any day both failed, gmail claimed the lock first and drive's failure alert
+ * was swallowed for the rest of the day. Nothing was broken enough to notice; the
+ * alert simply never arrived.
+ *
+ * Cheap to get wrong again -- these routes are near-identical and are written by
+ * copying the last one -- and invisible when it happens, because a suppressed alert
+ * and a healthy day look the same. So the key is asserted to name its own cron.
+ */
+describe("an alert dedup key must name the cron that owns it", () => {
+  const keyed = routes
+    .map((r) => ({ ...r, m: /const key = `([a-z0-9_]+):\$\{name\}`/.exec(r.src) }))
+    .filter((r) => r.m !== null);
+
+  it("finds the keys at all, so a rename cannot silently empty this suite", () => {
+    // A regex that matches nothing passes every assertion below it.
+    expect(keyed.length).toBeGreaterThanOrEqual(6);
+  });
+
+  it.each(keyed.map((r) => [r.name, r.m![1]!] as const))(
+    "%s uses a key naming itself, not another cron (%s)",
+    (name, key) => {
+      expect(key).toContain(name.replace(/-/g, "_"));
+    }
+  );
+});

@@ -306,6 +306,28 @@ describe("ingestDrive", () => {
     expect((await ingestDrive(STAMP)).skipped).toBe("drive-list-failed");
   });
 
+  /**
+   * WHY IT STOPPED, not merely that it did.
+   *
+   * `complete=false` was reported on 21 of 21 brain-drive runs on 2026-09-07 with no
+   * way to tell a listing cap from a refused page from the clock — and those want
+   * three completely different fixes. One of them is a capacity decision
+   * (PAGE_SIZE * MAX_PAGES documents), one is an access problem, one is a budget.
+   */
+  it("names the page cap when the listing never runs out of pages", async () => {
+    alwaysMorePages = true;
+    const res = await ingestDrive(STAMP);
+    expect(res.complete).toBe(false);
+    expect(res.detail).toMatch(/stopped=page-cap@\d+x\d+/);
+  });
+
+  it("names no stop reason at all on a walk that finished", async () => {
+    const res = await ingestDrive(STAMP);
+    expect(res.complete).toBe(true);
+    expect(res.detail).toMatch(/complete=true/);
+    expect(res.detail).not.toMatch(/stopped=/);
+  });
+
   it("does not re-export a document whose modifiedTime is unchanged", async () => {
     const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
     existing = [{ source_id: "doc:1AbCdEf", meta: { edited: FILE.modifiedTime, v } }];

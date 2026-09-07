@@ -56,7 +56,9 @@ export const maxDuration = 300;
 // `gmail-walk-in-progress` is deliberate: a multi-run re-walk that is advancing.
 // `gmail-walk-incomplete` (no rows written) stays loud — that is the outage shape.
 const DELIBERATE_SKIPS = new Set([
-  "google-token-unavailable",
+  // `google-token-unavailable` is deliberately ABSENT -- see brain-drive for the
+  // reasoning. A revoked credential is a fault, and it was silent in all three
+  // Google crons at once.
   "gmail-nothing-to-index",
   "gmail-walk-in-progress",
 ]);
@@ -123,6 +125,19 @@ export async function GET(request: Request) {
         `skip:${result.skipped}`,
         `:brain: brain-gmail skipped (${escapeSlack(result.skipped)}). Gmail is frozen but ` +
           `nothing failed, so this will not look broken.`
+      );
+    }
+
+    // A PARTIAL WALK IS NOT A SKIP. `sweepMissing` only runs after a walk that
+    // finished -- deliberately, so an outage cannot delete the corpus -- which means a
+    // permanently incomplete walk silently disables deletion for this source. Branched
+    // on nowhere until 2026-09-07; see brain-drive for the run that exposed it.
+    if (!result.skipped && result.complete === false) {
+      await alertOnce(
+        "incomplete",
+        `:brain: brain-gmail walked only part of Gmail (${escapeSlack(ingestNote(result))}). ` +
+          `Nothing failed, so this looks healthy -- but the sweep only runs after a ` +
+          `complete walk, so threads deleted from the mailbox are staying in the corpus.`
       );
     }
     return NextResponse.json({ ok: status === "success", result });

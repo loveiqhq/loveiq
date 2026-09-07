@@ -25,6 +25,7 @@ import {
   verifyCronAuth,
 } from "@shared/observability/slack-alert-dedup";
 import { buildAnomalySnapshot } from "@features/admin/server/alerts";
+import { describeBrainHealth, readBrainHealth } from "@features/brain/server/health";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -95,6 +96,32 @@ export async function GET(request: Request) {
       logger.error({ err }, "anomaly-watcher: cron stall check failed");
     }
 
+    /**
+     * And watch the brain from out here too, for the same reason.
+     *
+     * MCP on claude.ai and in the terminal is the surface people use, and every call
+     * it serves has been recorded in `brain_query` since 2026-09-06 while nothing read
+     * the table. This is that read: an outage, a tool throwing, or searches coming
+     * back empty. Silent otherwise -- see `describeBrainHealth`.
+     */
+    let brain: string | null = null;
+    try {
+      const health = await readBrainHealth();
+      brain = health && describeBrainHealth(health);
+      if (brain && (await tryClaimSlackAlert("brain_health", "day", dayKey))) {
+        await notifySlack({
+          channel: "ops",
+          kind: "brain_health",
+          username: "ops_alerts",
+          text: `:brain: *Brain* — ${escapeSlack(brain)}`,
+          context: { ...health },
+        });
+        await markSlackAlertDelivered("brain_health", "day", dayKey);
+      }
+    } catch (err) {
+      logger.error({ err }, "anomaly-watcher: brain health check failed");
+    }
+
     return NextResponse.json({
       ok: true,
       day: dayKey,
@@ -103,6 +130,7 @@ export async function GET(request: Request) {
       suppressed,
       deferred,
       stalled,
+      brain,
     });
   } catch (err) {
     logger.error({ err }, "anomaly-watcher cron failed");

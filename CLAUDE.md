@@ -722,8 +722,21 @@ Two consequences worth keeping in view rather than rediscovering:
   when ready:** (1) set `PURGE_OLD_DATA_ENABLED=true` in the prod Vercel env,
   and (2) re-add the `/api/cron/purge-old-data` entry to `vercel.json` crons
   (schedule `30 3 * * *`). Review the retention-window list in the route first.
-  The `table-size-digest` cron (non-destructive) stays on so growth is visible
-  — watch it to decide when to enable the purge.
+  **`table-size-digest` is NOT running, despite what this used to say here.** It was
+  unscheduled along with the other informational digests on 2026-07-26 (`25a9ca64`,
+  "pause informational digest + engagement pings (keep only alerts)") — the route and
+  its `functions` entry survive, but it has no `crons` entry, so it has not fired
+  since. It last ran 2026-07-26 and nothing reported its absence, because the cron
+  stall watchdog only watches crons that are scheduled. Check growth on demand instead
+  (`table-size-digest` can be invoked directly, or read `pg_database_size`), and note
+  that storage was never the constraint an earlier note claimed: measured 2026-09-06,
+  the Postgres volume is 8.35 GB with 82% free.
+
+  Paused in the same commit and equally not running: `funnel-digest`,
+  `product-digest`, `deep-engagement-alert`, and `tech-digest` — the last of which
+  carries `fetchCronHealth`, the only aggregate view of cron health, so that view has
+  no schedule invoking it either.
+
 - **Add retention for unbounded telemetry tables** not yet covered:
   `survey_behavior_event`, `report_session` (holds IP/UA — privacy angle),
   `funnel_event`, `booking_event` + `calendly_webhook_event` (the latter two hold

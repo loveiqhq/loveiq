@@ -93,6 +93,19 @@ export async function GET(request: Request) {
           `nothing failed, so this will not look broken.`
       );
     }
+
+    // A PARTIAL WALK IS NOT A SKIP. `sweepMissing` only runs after a walk that
+    // finished -- deliberately, so an outage cannot delete the corpus -- which means a
+    // permanently incomplete walk silently disables deletion for this source. Branched
+    // on nowhere until 2026-09-07; see brain-drive for the run that exposed it.
+    if (!result.skipped && result.complete === false) {
+      await alertOnce(
+        "incomplete",
+        `:brain: brain-notion walked only part of Notion (${escapeSlack(ingestNote(result))}). ` +
+          `Nothing failed, so this looks healthy -- but the sweep only runs after a ` +
+          `complete walk, so pages deleted in Notion are staying in the corpus.`
+      );
+    }
     return NextResponse.json({ ok: status === "success", result });
   } catch (err) {
     status = "error";
