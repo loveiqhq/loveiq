@@ -491,13 +491,25 @@ export async function GET(request: Request) {
     let unlockedArchetypeColumn: string[] = [];
     let archetypeTiersFromDb: Record<string, "essentials" | "full_report"> = {};
 
+    /**
+     * Kicked off here rather than awaited at its use site below, so it overlaps
+     * the access-plan round trips instead of adding another one after them. The
+     * flag is independent of everything in this block. Share viewers keep their
+     * curated view regardless, so they never need it and never pay for it.
+     */
+    const paywallEnforcedPromise = isShareAccess
+      ? null
+      : isFeatureEnabled("report_paywall_enforced", true).catch(() => true);
+
     try {
-      await ensurePersonalReportForSubmission({
+      // `ensure` reads the personal_report row and returns it; handing that row
+      // to the access-plan lookup below saves it re-reading the same row.
+      const ensuredReport = await ensurePersonalReportForSubmission({
         reportToken: tokenParsed?.success ? tokenParsed.data.token : null,
         submissionId: submission.id,
       });
 
-      const access = await getReportAccessPlanForSubmission(submission.id);
+      const access = await getReportAccessPlanForSubmission(submission.id, ensuredReport);
       accessPlan = access.accessPlan;
       unlockedArchetypeColumn = access.unlockedArchetypeColumn ?? [];
       archetypeTiersFromDb = access.archetypeTiers ?? {};
@@ -545,7 +557,7 @@ export async function GET(request: Request) {
     // absent or Supabase is unreachable, so an infra blip can never give the
     // product away. Share-link viewers keep their curated gift view; the switch
     // only lifts the owner's paywall.
-    if (!isShareAccess && !(await isFeatureEnabled("report_paywall_enforced", true))) {
+    if (paywallEnforcedPromise && !(await paywallEnforcedPromise)) {
       accessPlan = "all_reports";
     }
 

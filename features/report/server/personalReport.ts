@@ -362,13 +362,25 @@ export async function getPaidPlansForSubmission(
   return Array.from(paid);
 }
 
-export async function getReportAccessPlanForSubmission(submissionId: number): Promise<{
+export async function getReportAccessPlanForSubmission(
+  submissionId: number,
+  /**
+   * An already-fetched `personal_report` row, when the caller has one.
+   *
+   * `ensurePersonalReportForSubmission` reads this exact row and returns it, and
+   * every caller here called that first — so the row was being fetched twice per
+   * report view, one wasted Supabase round trip on the hottest route. Passing it
+   * through removes the second read. Omitted, the behaviour is unchanged.
+   */
+  prefetchedReport?: PersonalReportRow | null
+): Promise<{
   accessPlan: ReportAccessPlan;
   archetypeTiers: ArchetypeTierMap;
   personalReportId: number | null;
   unlockedArchetypeColumn: string[];
 }> {
-  const personalReport = await fetchPersonalReportForSubmission(submissionId);
+  const personalReport =
+    prefetchedReport !== undefined ? prefetchedReport : await fetchPersonalReportForSubmission(submissionId);
 
   if (!personalReport) {
     return {
