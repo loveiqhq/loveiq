@@ -76,13 +76,13 @@ describe("periodAnchor — where the recency term measures from", () => {
   });
 
   it("anchors an explicit month and year to that month's last day", () => {
-    expect(periodAnchor("how many sessions in june 2026", NOW)).toBe("2026-06-30");
-    expect(periodAnchor("what did we spend in february 2026", NOW)).toBe("2026-02-28");
-    expect(periodAnchor("how many users in december 2025", NOW)).toBe("2025-12-31");
+    expect(periodAnchor("how many sessions in june 2026", NOW)?.date).toBe("2026-06-30");
+    expect(periodAnchor("what did we spend in february 2026", NOW)?.date).toBe("2026-02-28");
+    expect(periodAnchor("how many users in december 2025", NOW)?.date).toBe("2025-12-31");
   });
 
   it("reads the ISO period key the corpus itself uses", () => {
-    expect(periodAnchor("what happened in 2026-04", NOW)).toBe("2026-04-30");
+    expect(periodAnchor("what happened in 2026-04", NOW)?.date).toBe("2026-04-30");
   });
 
   /**
@@ -92,14 +92,14 @@ describe("periodAnchor — where the recency term measures from", () => {
    * question about a month with no data.
    */
   it("never anchors in the future", () => {
-    expect(periodAnchor("how many sessions in october 2026", NOW)).toBe("2026-09-07");
-    expect(periodAnchor("how are we doing this month", NOW)).toBe("2026-09-07");
+    expect(periodAnchor("how many sessions in october 2026", NOW)?.date).toBe("2026-09-07");
+    expect(periodAnchor("how are we doing this month", NOW)?.date).toBe("2026-09-07");
   });
 
   it("anchors the relative expressions to the same dates it already hints", () => {
-    expect(periodAnchor("how did last month go", NOW)).toBe("2026-08-31");
-    expect(periodAnchor("what happened yesterday", NOW)).toBe("2026-09-06");
-    expect(periodAnchor("how did last year go", NOW)).toBe("2025-12-31");
+    expect(periodAnchor("how did last month go", NOW)?.date).toBe("2026-08-31");
+    expect(periodAnchor("what happened yesterday", NOW)?.date).toBe("2026-09-06");
+    expect(periodAnchor("how did last year go", NOW)?.date).toBe("2025-12-31");
   });
 
   /**
@@ -118,5 +118,79 @@ describe("periodAnchor — where the recency term measures from", () => {
     expect(expandRelativePeriods("how many sessions in june 2026", NOW)).toBe(
       "how many sessions in june 2026"
     );
+  });
+});
+
+describe("periodAnchor — how coarse the named period is", () => {
+  const NOW = new Date("2026-09-07T10:00:00.000Z");
+
+  /**
+   * THE DEFECT THIS EXISTS FOR. Without a grain, "how many sessions in june 2026"
+   * answered with the week of 22-28 June — 90 sessions against the month's 3,969.
+   * The right month, the wrong number, stated with equal confidence. Measured across
+   * nine months, the monthly total led only 3 times.
+   */
+  it("calls a named month a month", () => {
+    expect(periodAnchor("how many sessions in june 2026", NOW)?.grain).toBe("month");
+    expect(periodAnchor("how did last month go", NOW)?.grain).toBe("month");
+    expect(periodAnchor("what happened in 2026-04", NOW)?.grain).toBe("month");
+  });
+
+  it("calls a named day a day, so a month total cannot displace it", () => {
+    expect(periodAnchor("what happened yesterday", NOW)?.grain).toBe("day");
+    expect(periodAnchor("what happened today", NOW)?.grain).toBe("day");
+  });
+
+  /**
+   * A period still running clamps its DATE to today but keeps its month GRAIN — the
+   * question is still about a month, and answering it with one day of that month would
+   * be the same wrong-number failure.
+   */
+  it("keeps the month grain even when the date is clamped to today", () => {
+    const a = periodAnchor("how are we doing this month", NOW);
+    expect(a?.date).toBe("2026-09-07");
+    expect(a?.grain).toBe("month");
+  });
+});
+
+describe("periodAnchor — a single day is not the month that contains it", () => {
+  const NOW = new Date("2026-09-07T10:00:00.000Z");
+
+  /**
+   * THE BUG THIS EXISTS FOR, found by a probe rather than by review. "27 june 2026"
+   * CONTAINS "june 2026", so a month-only detector called it a month — and the grain
+   * penalty then demoted the very day being asked about, answering a question about one
+   * day with the whole month's total. The day patterns are therefore tested first, and
+   * the ordering is the fix.
+   */
+  it("reads a day written before the month", () => {
+    expect(periodAnchor("how many sessions on 27 june 2026", NOW)).toEqual({
+      date: "2026-06-27",
+      grain: "day",
+    });
+  });
+
+  it("reads a day written after the month, with or without a comma", () => {
+    expect(periodAnchor("how many sessions on june 27, 2026", NOW)?.date).toBe("2026-06-27");
+    expect(periodAnchor("how many sessions on june 27 2026", NOW)?.grain).toBe("day");
+  });
+
+  it("reads an ordinal day", () => {
+    expect(periodAnchor("how many sessions on 3rd may 2026", NOW)).toEqual({
+      date: "2026-05-03",
+      grain: "day",
+    });
+  });
+
+  it("reads a full ISO date as a day and an ISO month as a month", () => {
+    expect(periodAnchor("what happened on 2026-06-27", NOW)?.grain).toBe("day");
+    expect(periodAnchor("what happened in 2026-04", NOW)?.grain).toBe("month");
+  });
+
+  it("still reads a bare month and year as a month", () => {
+    expect(periodAnchor("how many sessions in june 2026", NOW)).toEqual({
+      date: "2026-06-30",
+      grain: "month",
+    });
   });
 });

@@ -455,6 +455,32 @@ function retrievalProbes(): RetrievalProbe[] {
 const at = (h: BrainChunk[], n: number) => h.slice(0, n);
 
 /**
+ * A signup figure that trails the live table by no more than one ingest cycle.
+ *
+ * Reads the LABELLED line rather than any number in the body, because these chunks carry
+ * visits, starts, reports and revenue too, and "some number near N appears somewhere"
+ * would pass on a coincidence. Tolerance is generous downward and zero upward: the
+ * corpus is written from the table, so it can lag and cannot lead.
+ */
+const signupsNear =
+  (liveCount: number | null) =>
+  (h: BrainChunk[]): string[] => {
+    if (liveCount === null) return [];
+    const tolerance = Math.max(10, Math.round(liveCount * 0.02));
+    const seen: number[] = [];
+    for (const x of at(h, 12)) {
+      const m = /Signups \(completed surveys\): (\d+)/.exec(x.body);
+      if (!m) continue;
+      const n = Number(m[1]);
+      seen.push(n);
+      if (n <= liveCount && n >= liveCount - tolerance) return [];
+    }
+    return seen.length === 0
+      ? ["no signup figure in the results at all"]
+      : [`corpus says ${seen.join("/")}, live says ${liveCount} (tolerance -${tolerance})`];
+  };
+
+/**
  * THE HIGHEST-RANKED MONTHLY TOTAL MUST BE THE MONTH THE QUESTION NAMED.
  *
  * Written for the defect fixed on 2026-09-07: the recency term outranked an explicitly
@@ -468,6 +494,25 @@ const at = (h: BrainChunk[], n: number) => h.slice(0, n);
  * happen is a DIFFERENT month's total outranking the named one -- that is the bug, and
  * it is what this compares.
  */
+/**
+ * THE MONTH TOTAL MUST LEAD, not a day inside it.
+ *
+ * `namedMonthLeads` below checks the right MONTH wins and was passing while the answer
+ * was still wrong: "how many sessions in june 2026" led with the week of 22-28 June, 90
+ * sessions against the month's 3,969. Right month, wrong number, same confidence — and
+ * no probe could see it, because the probe only ever compared months to each other.
+ * Measured across nine months before the grain penalty, the monthly total led 3 times.
+ */
+const monthTotalLeads = (h: BrainChunk[]): string[] => {
+  const dated = h.filter((x) => x.meta?.grain !== undefined && x.meta?.grain !== null);
+  if (dated.length === 0) return ["no dated analytics row returned at all"];
+  return String(dated[0]!.meta?.grain) === "month"
+    ? []
+    : [
+        `a ${String(dated[0]!.meta?.grain)} row leads a whole-month question: ${describe(dated[0]!)}`,
+      ];
+};
+
 const namedMonthLeads =
   (month: string) =>
   (h: BrainChunk[]): string[] => {
@@ -943,13 +988,28 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
     P("an-starts-aug", "how many people started the survey in august", bodyHas(/\b544\b/)),
     P("an-opens-aug", "how many reports were opened in august", bodyHas(/\b347\b/)),
     P("an-paid-aug", "how many paying customers did we have in august", bodyHas(/\b7\b/)),
-    P("an-sept-signups", "how many signups so far this month", (h) =>
-      live.monthSignups === null ? [] : bodyHas(new RegExp(`\\b${live.monthSignups}\\b`))(h)
-    ),
-    P("an-alltime-signups", "how many people have completed the survey in total ever", (h) =>
-      live.allTimeSubmissions === null
-        ? []
-        : bodyHas(new RegExp(`\\b${live.allTimeSubmissions}\\b`))(h)
+    /**
+     * WITHIN THE INGEST LAG, not equal to it — and that is a correction to this
+     * morning's correction.
+     *
+     * These once hard-coded 82 and 1887, and expired within the hour. Reading the count
+     * live fixed the expiry and bought a RACE: the analytics ingester rewrites its
+     * window every 15 minutes, so between two cron runs the corpus is legitimately
+     * behind the table. Caught 2026-09-07 with the corpus at 87/1892 against a live
+     * 88/1893 — one submission, arrived 14 minutes after the last write. The right
+     * chunks were at rank 1 and rank 4; nothing about retrieval was wrong.
+     *
+     * So the assertion is the one that is actually true: the corpus may TRAIL live by up
+     * to a cron cycle, and may never exceed it or fall far behind. That still fails on a
+     * number that is wrong rather than merely stale, and on no figure at all — which is
+     * what this probe is for. Exact agreement is an ingest property and does not belong
+     * in a retrieval battery, the same conclusion the GA4 probes reached above.
+     */
+    P("an-sept-signups", "how many signups so far this month", signupsNear(live.monthSignups)),
+    P(
+      "an-alltime-signups",
+      "how many people have completed the survey in total ever",
+      signupsNear(live.allTimeSubmissions)
     ),
     P("an-cac", "what does a paying customer cost us", bodyHas(/[Cc]ost per paying customer/)),
     P("an-cps", "what does one signup cost in ad spend", bodyHas(/[Cc]ost per signup/)),
@@ -1071,6 +1131,37 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
      * dated 2026-06-25; unanchored it was absent from the top 8 entirely, outranked by a
      * September commit about something else.
      */
+    // GRAIN, not just which month. All nine months were checked and only three led with
+    // the month total before the penalty. Removing `anchor_grain` turns june, may and
+    // august red; DECEMBER SURVIVES THE MUTATION and is kept anyway — its gap was 0.021,
+    // so without the penalty it is a coin flip that happens to land right, which is the
+    // same "passes by luck" shape the dependabot probe turned out to be.
+    P("grain-june", "how many sessions in june 2026", monthTotalLeads, { sources: ["ga4"] }, 5),
+    P("grain-may", "how many ad clicks in may 2026", monthTotalLeads, { sources: ["ga4"] }, 5),
+    P("grain-august", "how many sessions in august 2026", monthTotalLeads, { sources: ["ga4"] }, 5),
+    P(
+      "grain-december",
+      "how many users in december 2025",
+      monthTotalLeads,
+      { sources: ["ga4"] },
+      5
+    ),
+    /**
+     * AND THE PENALTY MUST NOT REACH A DAY QUESTION. Asking about one day should still
+     * answer with that day; the penalty only fires for a month-grain anchor.
+     */
+    P(
+      "grain-day-question-still-gets-a-day",
+      "how many sessions on 27 june 2026",
+      (h) => {
+        const dated = h.filter((x) => x.meta?.grain);
+        return dated.length && String(dated[0]!.meta?.grain) === "month"
+          ? [`a month total leads a single-day question: ${describe(dated[0]!)}`]
+          : [];
+      },
+      { sources: ["ga4"] },
+      5
+    ),
     P("period-does-not-bury-the-decision", "what did we decide in june 2026 about pricing", (h) =>
       h.some((x) => /flat report prices/i.test(x.title ?? "") || /9\.99/.test(x.body))
         ? []

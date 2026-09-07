@@ -273,9 +273,9 @@ export async function retrieve(
          * reaches the decision record; it is only re-weighted. Null when no period is
          * named, which is the arithmetic the function had before this existed.
          */
-        ...((): { anchor_date?: string } => {
+        ...((): { anchor_date?: string; anchor_grain?: string } => {
           const anchor = periodAnchor(trimmed);
-          return anchor ? { anchor_date: anchor } : {};
+          return anchor ? { anchor_date: anchor.date, anchor_grain: anchor.grain } : {};
         })(),
       }),
     });

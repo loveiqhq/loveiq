@@ -46,7 +46,20 @@ import { isoWeek, longDate, longMonth } from "@features/brain/server/ingest/anal
  * bare-month case measured fine without an anchor ("how many page views in june" already
  * ranks June first) — so the risky half buys nothing.
  */
-export function periodAnchor(question: string, now = new Date()): string | null {
+export interface PeriodAnchor {
+  /** Last day of the period, clamped to today. */
+  date: string;
+  /**
+   * How coarse the period is. `brain_search` uses it to stop a DAY inside the month
+   * outranking the month itself: asked "how many sessions in june 2026" the corpus
+   * answered with the week of 22-28 June (90 sessions) rather than the month (3,969),
+   * which is a wrong number stated confidently. Only 726 chunks carry a grain at all --
+   * the analytics, ga4 and gsc series -- so nothing else is affected by it.
+   */
+  grain: "month" | "day";
+}
+
+export function periodAnchor(question: string, now = new Date()): PeriodAnchor | null {
   return detect(question, now).anchor;
 }
 
@@ -54,7 +67,7 @@ export function expandRelativePeriods(question: string, now = new Date()): strin
   return detect(question, now).search;
 }
 
-function detect(question: string, now: Date): { search: string; anchor: string | null } {
+function detect(question: string, now: Date): { search: string; anchor: PeriodAnchor | null } {
   const day = (offset: number): Date => {
     const d = new Date(
       Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + offset)
@@ -70,14 +83,18 @@ function detect(question: string, now: Date): { search: string; anchor: string |
   const hints: string[] = [];
   const q = question.toLowerCase();
   /** Last day of the named period, clamped to today. First match wins. */
-  let anchor: string | null = null;
+  let anchor: PeriodAnchor | null = null;
   const today = iso(day(0));
   const setAnchor = (v: string) => {
     if (anchor !== null) return;
     // A month key ("2026-06") resolves to that month's last day; a full date is itself.
-    const end =
-      v.length === 7 ? iso(new Date(Date.UTC(Number(v.slice(0, 4)), Number(v.slice(5, 7)), 0))) : v;
-    anchor = end > today ? today : end;
+    // The LENGTH is also what tells the two apart, which is why the grain comes from
+    // here rather than being passed in at every call site.
+    const isMonth = v.length === 7;
+    const end = isMonth
+      ? iso(new Date(Date.UTC(Number(v.slice(0, 4)), Number(v.slice(5, 7)), 0)))
+      : v;
+    anchor = { date: end > today ? today : end, grain: isMonth ? "month" : "day" };
   };
   const add = (...parts: string[]) => {
     for (const p of parts) if (p && !hints.includes(p)) hints.push(p);
@@ -141,12 +158,32 @@ function detect(question: string, now: Date): { search: string; anchor: string |
     "november",
     "december",
   ];
+  const mm = (name: string) => String(MONTHS.indexOf(name) + 1).padStart(2, "0");
+  const dd = (n: string) => n.padStart(2, "0");
+  // A SINGLE DAY IS TESTED FIRST, and the order is the whole point. "27 june 2026"
+  // contains "june 2026", so a month-only detector reads it as a question about the
+  // month and then demotes the very day being asked about -- which is exactly what the
+  // grain penalty did until a probe caught it.
+  const isoDay = /\b(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])\b/.exec(q);
+  const dayFirst = new RegExp(
+    `\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${MONTHS.join("|")})\\s+(\\d{4})\\b`
+  ).exec(q);
+  const monthFirst = new RegExp(
+    `\\b(${MONTHS.join("|")})\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s+(\\d{4})\\b`
+  ).exec(q);
   const named = new RegExp(`\\b(${MONTHS.join("|")})\\s+(\\d{4})\\b`).exec(q);
-  if (named) {
-    setAnchor(`${named[2]}-${String(MONTHS.indexOf(named[1]!) + 1).padStart(2, "0")}`);
-  } else {
-    const iso = /\b(\d{4})-(0[1-9]|1[0-2])\b/.exec(q);
-    if (iso) setAnchor(`${iso[1]}-${iso[2]}`);
+  const isoMonth = /\b(\d{4})-(0[1-9]|1[0-2])\b/.exec(q);
+
+  if (isoDay) {
+    setAnchor(`${isoDay[1]}-${isoDay[2]}-${isoDay[3]}`);
+  } else if (dayFirst) {
+    setAnchor(`${dayFirst[3]}-${mm(dayFirst[2]!)}-${dd(dayFirst[1]!)}`);
+  } else if (monthFirst) {
+    setAnchor(`${monthFirst[3]}-${mm(monthFirst[1]!)}-${dd(monthFirst[2]!)}`);
+  } else if (named) {
+    setAnchor(`${named[2]}-${mm(named[1]!)}`);
+  } else if (isoMonth) {
+    setAnchor(`${isoMonth[1]}-${isoMonth[2]}`);
   }
 
   return {
