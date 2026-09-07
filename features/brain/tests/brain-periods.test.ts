@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { expandRelativePeriods } from "@features/brain/server/periods";
+import { expandRelativePeriods, periodAnchor } from "@features/brain/server/periods";
 
 // A Friday, so week/month/year boundaries are all mid-period.
 const NOW = new Date("2026-08-28T10:00:00Z");
@@ -64,5 +64,59 @@ describe("expandRelativePeriods", () => {
   it("handles a leap day", () => {
     const leap = new Date("2024-03-01T10:00:00Z");
     expect(expandRelativePeriods("yesterday", leap)).toContain("2024-02-29");
+  });
+});
+
+describe("periodAnchor — where the recency term measures from", () => {
+  const NOW = new Date("2026-09-07T10:00:00.000Z");
+
+  it("returns nothing when the question names no period, so recency is untouched", () => {
+    expect(periodAnchor("what did we decide about pricing", NOW)).toBeNull();
+    expect(periodAnchor("who is on the team", NOW)).toBeNull();
+  });
+
+  it("anchors an explicit month and year to that month's last day", () => {
+    expect(periodAnchor("how many sessions in june 2026", NOW)).toBe("2026-06-30");
+    expect(periodAnchor("what did we spend in february 2026", NOW)).toBe("2026-02-28");
+    expect(periodAnchor("how many users in december 2025", NOW)).toBe("2025-12-31");
+  });
+
+  it("reads the ISO period key the corpus itself uses", () => {
+    expect(periodAnchor("what happened in 2026-04", NOW)).toBe("2026-04-30");
+  });
+
+  /**
+   * The clamp. October has not happened, so anchoring on its last day would measure
+   * every row we hold as distant and rank on nothing but distance. Clamped to today it
+   * degrades to exactly the unanchored behaviour, which is the honest answer to a
+   * question about a month with no data.
+   */
+  it("never anchors in the future", () => {
+    expect(periodAnchor("how many sessions in october 2026", NOW)).toBe("2026-09-07");
+    expect(periodAnchor("how are we doing this month", NOW)).toBe("2026-09-07");
+  });
+
+  it("anchors the relative expressions to the same dates it already hints", () => {
+    expect(periodAnchor("how did last month go", NOW)).toBe("2026-08-31");
+    expect(periodAnchor("what happened yesterday", NOW)).toBe("2026-09-06");
+    expect(periodAnchor("how did last year go", NOW)).toBe("2025-12-31");
+  });
+
+  /**
+   * THE FALSE POSITIVE THIS AVOIDS. "may" is an auxiliary verb and "march" a common
+   * noun, so detecting a bare month name would anchor questions that name no period at
+   * all and silently re-rank them. A year makes it unambiguous, and the bare-month case
+   * measured fine without an anchor.
+   */
+  it("does not treat a month word used as ordinary English as a period", () => {
+    expect(periodAnchor("how may we improve the report", NOW)).toBeNull();
+    expect(periodAnchor("what is the march of progress on pricing", NOW)).toBeNull();
+    expect(periodAnchor("how many page views in june", NOW)).toBeNull();
+  });
+
+  it("leaves the search-string expansion it shares code with unchanged", () => {
+    expect(expandRelativePeriods("how many sessions in june 2026", NOW)).toBe(
+      "how many sessions in june 2026"
+    );
   });
 });

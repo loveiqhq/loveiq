@@ -454,6 +454,31 @@ function retrievalProbes(): RetrievalProbe[] {
 
 const at = (h: BrainChunk[], n: number) => h.slice(0, n);
 
+/**
+ * THE HIGHEST-RANKED MONTHLY TOTAL MUST BE THE MONTH THE QUESTION NAMED.
+ *
+ * Written for the defect fixed on 2026-09-07: the recency term outranked an explicitly
+ * named month, so "how many sessions did google analytics record in june 2026" answered
+ * with SEPTEMBER, and "in march 2026" did not return March at all. Six of nine period
+ * questions were right; the three wrong ones all lost to a MORE RECENT period, and
+ * nothing in the suite could see it.
+ *
+ * Deliberately NOT "the top hit is month X". Several sources publish a monthly total for
+ * the same month and which of them leads is noise, and legitimately so. What must never
+ * happen is a DIFFERENT month's total outranking the named one -- that is the bug, and
+ * it is what this compares.
+ */
+const namedMonthLeads =
+  (month: string) =>
+  (h: BrainChunk[]): string[] => {
+    const monthly = h.filter((x) => /\(monthly total\)/i.test(x.title ?? ""));
+    if (monthly.length === 0) return [`no monthly total returned at all for ${month}`];
+    const first = monthly[0]!;
+    return new RegExp(month, "i").test(first.title ?? "")
+      ? []
+      : [`${month} is outranked by another month: ${describe(first)}`];
+  };
+
 /** The named source must appear in the top `n`. Routing, not wording. */
 const topSource =
   (src: string | string[], n = 5) =>
@@ -740,10 +765,28 @@ function sourceCoverageProbes(): RetrievalProbe[] {
         .filter((x) => /(aws|amazon web services)[^.]{0,40}(EUR|USD|[$€])\s?[0-9]/i.test(x.body))
         .map((x) => `states an AWS amount: ${describe(x)}`)
     ),
+    /**
+     * REFUTED THE SAME WAY `absent-aws` above was, and it took longer to notice because
+     * it passed by luck. It asserted that nothing in the top 5 may MENTION kubernetes or
+     * autoscaling. It went red on 2026-09-07 on INCIDENT_RESPONSE_AGENT.md, whose CI/CD
+     * evidence checklist lists "kube-apiserver audit logs" and "Kubernetes events ... if
+     * available" among the things to collect during an incident. That is generic runbook
+     * boilerplate, not a claim that this company runs Kubernetes.
+     *
+     * Nothing about retrieval changed to cause it: the question names no period, so the
+     * anchored recency term is arithmetically identical for it. The corpus moved instead
+     * -- the RFC 3834 backfill demoted several hundred more machine-sent mails that
+     * morning, and a `doc` chunk rose into the top 5 behind them.
+     *
+     * So it asserts a CLAIM now: a result stating that WE have such a setup. Verified
+     * sound rather than assumed -- zero chunks in the whole corpus match the ownership
+     * pattern, so it passes honestly today and fails the moment something asserts we run
+     * Kubernetes, which is the hallucination it exists to catch.
+     */
     P("absent-k8s", "what is our kubernetes autoscaling policy", (h) =>
-      at(h, 5).some((x) => /kubernetes|autoscal/i.test(x.body))
-        ? ["a source claims kubernetes knowledge"]
-        : []
+      at(h, 5)
+        .filter((x) => /\b(we|our|loveiq)\b[^.]{0,60}\b(kubernetes|autoscal\w*)\b/i.test(x.body))
+        .map((x) => `claims a kubernetes setup: ${describe(x)}`)
     ),
     P("absent-warehouse", "how many warehouses do we operate", (h) =>
       at(h, 5).some((x) => /warehouse (in|at) |distribution centre/i.test(x.body))
@@ -995,6 +1038,44 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
     ),
     P("ga4-brand", "how much did the brand campaign cost", bodyHas(/LoveIQ - Brand/)),
     P("ga4-channels", "which channels send us the most traffic", bodyHas(/Direct|Paid Search/)),
+
+    // ── NAMED PERIODS ────────────────────────────────────────────────────────
+    // WHICH OF THESE ACTUALLY DEFEND THE 2026-09-07 FIX, established by removing the
+    // anchor and re-running rather than assumed: `period-june`, `period-march` and
+    // `period-does-not-bury-the-decision` go red without it. The rest passed before the
+    // change too and are regression guards, not evidence — `period-february`'s original
+    // failure was daily rows outranking the monthly total, a separate and still-open
+    // grain problem that `namedMonthLeads` deliberately does not test. Said plainly
+    // because a probe that cannot fail for the reason you think reads exactly like one
+    // that can.
+    P(
+      "period-june",
+      "how many sessions did google analytics record in june 2026",
+      namedMonthLeads("June 2026")
+    ),
+    P("period-march", "what did we spend on ads in march 2026", namedMonthLeads("March 2026")),
+    P("period-february", "how many sessions in february 2026", namedMonthLeads("February 2026")),
+    P(
+      "period-december-last-year",
+      "how many users in december 2025",
+      namedMonthLeads("December 2025")
+    ),
+    // The relative branches feed the same anchor. "last month" was already right before
+    // the change and must stay right after it.
+    P("period-last-month", "how did last month go", namedMonthLeads("August 2026")),
+    P("period-this-month", "how are we doing this month", namedMonthLeads("September 2026")),
+    /**
+     * THE ANCHOR MUST NOT COST THE ANSWER. A question naming a month while wanting
+     * something undated is the case a hard since/until filter would have destroyed, and
+     * the reason an anchor was chosen over one. The June pricing decision is a commit
+     * dated 2026-06-25; unanchored it was absent from the top 8 entirely, outranked by a
+     * September commit about something else.
+     */
+    P("period-does-not-bury-the-decision", "what did we decide in june 2026 about pricing", (h) =>
+      h.some((x) => /flat report prices/i.test(x.title ?? "") || /9\.99/.test(x.body))
+        ? []
+        : ["the June pricing decision is not in the results at all"]
+    ),
 
     // ── GSC ──────────────────────────────────────────────────────────────────
     // Same treatment as GA4 above, applied before these expire rather than after:

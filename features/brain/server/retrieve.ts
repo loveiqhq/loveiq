@@ -1,6 +1,6 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
-import { expandRelativePeriods } from "@features/brain/server/periods";
+import { expandRelativePeriods, periodAnchor } from "@features/brain/server/periods";
 
 /**
  * Retrieval half of the company brain: turn a question into the handful of
@@ -259,6 +259,24 @@ export async function retrieve(
         ...(opts.since ? { since: opts.since } : {}),
         ...(opts.until ? { until: opts.until } : {}),
         ...(opts.meta && Object.keys(opts.meta).length ? { meta_filter: opts.meta } : {}),
+        /**
+         * WHERE THE RECENCY TERM MEASURES FROM, when the question names a period.
+         *
+         * The 0.6 recency weight is a prior about what is wanted when the question does
+         * not say. Once it does say, the prior competes with the answer and was measured
+         * winning: "how many sessions did google analytics record in june 2026" returned
+         * SEPTEMBER at rank 1, and "in march 2026" did not return March in the top 3 at
+         * all -- three of nine period questions lost to a more recent period.
+         *
+         * Not a filter. Nothing is excluded, so a question that names a month while
+         * wanting something undated ("what did we decide in June about pricing") still
+         * reaches the decision record; it is only re-weighted. Null when no period is
+         * named, which is the arithmetic the function had before this existed.
+         */
+        ...((): { anchor_date?: string } => {
+          const anchor = periodAnchor(trimmed);
+          return anchor ? { anchor_date: anchor } : {};
+        })(),
       }),
     });
     if (!res.ok) {
