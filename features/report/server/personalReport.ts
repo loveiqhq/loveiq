@@ -380,7 +380,9 @@ export async function getReportAccessPlanForSubmission(
   unlockedArchetypeColumn: string[];
 }> {
   const personalReport =
-    prefetchedReport !== undefined ? prefetchedReport : await fetchPersonalReportForSubmission(submissionId);
+    prefetchedReport !== undefined
+      ? prefetchedReport
+      : await fetchPersonalReportForSubmission(submissionId);
 
   if (!personalReport) {
     return {

@@ -41,7 +41,9 @@ describe("getReportAccessPlanForSubmission — round trips", () => {
   it("without a prefetched row it reads personal_report AND payment", async () => {
     mockFetchWithTimeout
       .mockResolvedValueOnce(ok([{ id: 7, unlocked_archetypes: [], archetype_tiers: {} }]))
-      .mockResolvedValueOnce(ok([{ id: 1, metadata: { plan: "full_report" }, payment_date_time: null }]));
+      .mockResolvedValueOnce(
+        ok([{ id: 1, metadata: { plan: "full_report" }, payment_date_time: null }])
+      );
 
     const res = await getReportAccessPlanForSubmission(42);
 
