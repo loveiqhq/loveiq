@@ -170,7 +170,7 @@ interface Totals {
 }
 
 /** Is this day inside the window ad data actually covers? */
-function adCovers(ad: AdCost, day: string): boolean {
+export function adCovers(ad: AdCost, day: string): boolean {
   return ad.from !== null && ad.to !== null && day >= ad.from && day <= ad.to;
 }
 
@@ -276,7 +276,7 @@ export interface AdCost {
 }
 
 /** Spend per day, read back from the `ga4` chunks written earlier in this run. */
-async function adCostByDay(): Promise<AdCost> {
+export async function adCostByDay(): Promise<AdCost> {
   const out = new Map<string, number>();
   let from: string | null = null;
   let to: string | null = null;

@@ -15,8 +15,17 @@ vi.mock("@features/admin/server/supabase", () => ({
   supabaseFetch: (...a: unknown[]) => mockSupabaseFetch(...(a as [])),
 }));
 const mockRollup = vi.fn();
+let mockAdCost: { byDay: Map<string, number>; from: string | null; to: string | null } = {
+  byDay: new Map(),
+  from: null,
+  to: null,
+};
 vi.mock("@features/brain/server/ingest/analytics", () => ({
   brainDailyRollup: (...a: unknown[]) => mockRollup(...(a as [never])),
+  adCostByDay: async () => mockAdCost,
+  // The real predicate, not a stub: the whole point of it is the window edges.
+  adCovers: (ad: { from: string | null; to: string | null }, day: string) =>
+    ad.from !== null && ad.to !== null && day >= ad.from && day <= ad.to,
 }));
 
 const mockRateLimit = vi.fn(async () => ({ allowed: true }));
@@ -539,6 +548,49 @@ describe("/api/mcp", () => {
       body,
       meta: n === 1 ? { kind: "meeting-notes" } : { kind: "meeting-notes", part: n, parts: 10 },
       period_end: "2026-08-22",
+    });
+
+    /** Same, but with the exact-count header PostgREST returns for `Prefer: count=exact`. */
+    function wirePartsWithTotal(rows: Array<Record<string, unknown>>, total: number) {
+      mockSupabaseFetch.mockImplementation(async (path: string) => {
+        if (String(path).startsWith("/rest/v1/brain_query")) {
+          return { ok: true, headers: new Headers(), json: async () => [] };
+        }
+        return {
+          ok: true,
+          headers: new Headers({ "content-range": `0-${rows.length - 1}/${total}` }),
+          json: async () => rows,
+        };
+      });
+    }
+
+    /**
+     * THE 400-ROW CAP, WHICH USED TO BE INVISIBLE.
+     *
+     * The parts query is `limit=400` with no count, so `parts.length` counted what came
+     * back rather than what exists. A document over the cap printed a denominator that
+     * was simply wrong AND said "this is all of it" — the same shape as `list_sources`
+     * once reporting 307 commits against 1,448, where the round number was the only tell.
+     */
+    it("says so when the document has more parts than the query returns", async () => {
+      wirePartsWithTotal([part(1, "ONE"), part(2, "TWO")], 900);
+      const r = await call({ id: "drive/doc:1AbC" });
+      const text = r.content[0].text as string;
+      expect(text).toMatch(/this document has 900 parts and only the first 2 were read/);
+      expect(text).toMatch(/the tail is NOT included/);
+    });
+
+    it("stays quiet when everything matched was returned", async () => {
+      wirePartsWithTotal([part(1, "ONE"), part(2, "TWO")], 2);
+      const r = await call({ id: "drive/doc:1AbC" });
+      expect(r.content[0].text as string).not.toMatch(/WARNING/);
+    });
+
+    /** An unreadable count is not the same as "not capped", and must not claim either. */
+    it("does not warn when the count header is missing", async () => {
+      wireParts([part(1, "ONE")]);
+      const r = await call({ id: "drive/doc:1AbC" });
+      expect(r.content[0].text as string).not.toMatch(/WARNING/);
     });
 
     it("reassembles the parts in NUMERIC order, which a lexical sort gets wrong", async () => {
@@ -1583,10 +1635,88 @@ describe("/api/mcp", () => {
       );
       const text = (await res.json()).result.content[0].text as string;
       expect(text).toMatch(/Asked for 400 days; 2 returned/);
-      expect(text).toMatch(/Not a truncation/);
+      // It used to assert "Not a truncation". That sentence was false in the only case
+      // that reaches it: the rollup returns one row per day in range whatever the
+      // activity, so a short count means the 4000-day ceiling fired, and telling the
+      // caller there is simply no older data makes the company look younger than it is.
+      expect(text).toMatch(/IS a truncation of the request/);
+      expect(text).not.toMatch(/Not a truncation/);
     });
 
-    it("explains an empty result rather than implying a missing source", async () => {
+    /**
+     * THE TOOL IS TITLED "Funnel, revenue and ad spend" AND RETURNED NO SPEND.
+     *
+     * `brain_daily_rollup` has no spend column — day, visitors, starts, submissions,
+     * reports, revenue, opens, invites, top_sources and nothing else. The promise in the
+     * title and description was simply unmet, and nothing said so. Spend now comes from
+     * the `ga4` day chunks the corpus already holds.
+     */
+    it("returns ad spend for days GA4 covers", async () => {
+      mockRollup.mockResolvedValue([{ day: "2026-08-28" }, { day: "2026-08-27" }]);
+      mockAdCost = {
+        byDay: new Map([["2026-08-28", 41.5]]),
+        from: "2026-08-01",
+        to: "2026-08-31",
+      };
+      const res = await POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "get_business_numbers", arguments: { days: 2 } },
+        })
+      );
+      const text = (await res.json()).result.content[0].text as string;
+      expect(text).toMatch(/"ad_spend":41\.5/);
+      // A covered day with no recorded spend is genuinely zero, not unknown.
+      expect(text).toMatch(/"day":"2026-08-27"[^}]*"ad_spend":0/);
+      expect(text).toMatch(/Ad spend is known for 2026-08-01 to 2026-08-31/);
+    });
+
+    /**
+     * ABSENT, NOT ZERO — the direction that matters.
+     *
+     * GA4 is ingested over a shorter window than this rollup covers, so a straddling
+     * period pairs full revenue with partial spend. Where the corpus builder got this
+     * wrong it published "Net: EUR 291.68" for a month that lost several hundred, and
+     * "Net: EUR 519.00" where the truth was -1581. Understating spend overstates profit.
+     */
+    it("omits ad_spend entirely for days outside GA4's window rather than reporting zero", async () => {
+      mockRollup.mockResolvedValue([{ day: "2026-01-05" }]);
+      mockAdCost = { byDay: new Map(), from: "2026-08-01", to: "2026-08-31" };
+      const res = await POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "get_business_numbers", arguments: { days: 1 } },
+        })
+      );
+      const text = (await res.json()).result.content[0].text as string;
+      // The JSON KEY, not the word: the header legitimately explains what the absence
+      // of ad_spend means, so matching the bare word tested the explanation instead of
+      // the data. This assertion failed on exactly that and the probe was the bug.
+      expect(text).not.toMatch(/"ad_spend":/);
+      expect(text).toMatch(/means unknown, not zero/);
+    });
+
+    it("still returns the funnel numbers when the ad-spend read fails", async () => {
+      mockRollup.mockResolvedValue([{ day: "2026-08-28", submissions: 7 }]);
+      mockAdCost = { byDay: new Map(), from: null, to: null };
+      const res = await POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "get_business_numbers", arguments: { days: 1 } },
+        })
+      );
+      const text = (await res.json()).result.content[0].text as string;
+      expect(text).toMatch(/"submissions":7/);
+      expect(text).toMatch(/No ad-spend data is available/);
+    });
+
+    it("calls an empty rollup a fault, not a quiet period", async () => {
       mockRollup.mockResolvedValue([]);
       const res = await POST(
         rpc({
@@ -1597,7 +1727,12 @@ describe("/api/mcp", () => {
         })
       );
       const text = (await res.json()).result.content[0].text as string;
-      expect(text).toMatch(/not a missing data source/);
+      // Was /not a missing data source/, attached to text claiming the rollup "counts
+      // only days with activity". It does not — it generate_series-es every day, so an
+      // empty result cannot mean a quiet period and saying so would be the one reading
+      // guaranteed to be wrong.
+      expect(text).toMatch(/fault in the query or the database/);
+      expect(text).toMatch(/do not report it as zero activity/);
     });
   });
 

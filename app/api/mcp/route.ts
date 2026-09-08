@@ -4,7 +4,7 @@ import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { googleCredentialShape, readVercelOidcToken } from "@shared/http/google-oauth";
 import { renderSources } from "@features/brain/server/answer";
 import { recordToolCall } from "@features/brain/server/log";
-import { brainDailyRollup } from "@features/brain/server/ingest/analytics";
+import { adCostByDay, adCovers, brainDailyRollup } from "@features/brain/server/ingest/analytics";
 import { CorpusUnavailableError, retrieve } from "@features/brain/server/retrieve";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { scheduleAfterResponse } from "@shared/http/after-response";
@@ -462,7 +462,10 @@ const TOOLS = [
     annotations: { readOnlyHint: true, openWorldHint: false },
     description:
       "The full text of ONE indexed thing — a call transcript, an email thread, a Notion " +
-      "page, a Drive document — reassembled from every part it was split into. Take the " +
+      "page, a Drive document — reassembled from every part it was split into. The one " +
+      "exception is a `doc` id: repository markdown is indexed per heading and its ids " +
+      "end in a slug that can itself end in a digit, so parts are NOT merged and you get " +
+      "the single heading you asked for, plus the file path to read the rest. Take the " +
       "`id:` printed on a search_company_context line and pass it back verbatim. Use this " +
       "AFTER triage: search tells you which document matters, this tells you what it " +
       "actually says, and a search result only ever shows you the single best-scoring part " +
@@ -505,9 +508,11 @@ const TOOLS = [
         days: {
           type: "number",
           description:
-            "How many days back, from today. Default 30. There is no practical ceiling — " +
-            "ask for the whole history if you want it, and the answer says so if the range " +
-            "had to be reduced.",
+            "How many days back, from today. Default 30; 4000 is the hard ceiling the " +
+            "database function enforces, and the answer says so when the range was " +
+            "reduced. Every day in the range comes back, including days with no " +
+            "activity. `ad_spend` appears only on days GA4 actually covers — its " +
+            "absence means unknown, never zero.",
         },
       },
     },
@@ -1073,15 +1078,26 @@ async function callTool(
 
     const { base, sep } = documentParts(src, rawId);
     let rows: Array<Record<string, unknown>>;
+    /**
+     * ASK FOR THE TRUE COUNT, because 400 is a cap and a cap that cannot be seen is the
+     * one bug this file keeps fixing. Without it a document with more than 400 parts lost
+     * the overflow AND printed "of {parts.length}" as the denominator, so the caller was
+     * told a wrong total with no notice — the same shape as `list_sources` once reporting
+     * 307 commits against 1,448.
+     */
+    let matchedTotal: number | null = null;
     try {
       const res = await supabaseFetch(
         `/rest/v1/brain_chunk?select=source,source_id,title,url,body,meta,period_end` +
           `&source=eq.${encodeURIComponent(src)}` +
-          `&source_id=like.${encodeURIComponent(base)}*&limit=400`
+          `&source_id=like.${encodeURIComponent(base)}*&limit=400`,
+        { headers: { Prefer: "count=exact" } }
       );
       if (!res.ok) {
         return textResult(`Could not read that document (status ${res.status}).`, true);
       }
+      const total = Number(res.headers.get("content-range")?.split("/")[1]);
+      matchedTotal = Number.isFinite(total) ? total : null;
       rows = (await res.json().catch(() => [])) as Array<Record<string, unknown>>;
       if (!Array.isArray(rows)) throw new Error("non-array body");
     } catch {
@@ -1142,9 +1158,22 @@ async function callTool(
     const last = partNumber(taken[taken.length - 1]!);
     const nextPart = last + 1;
     const more = wanted.length > taken.length;
+    /**
+     * THE 400-ROW CAP, SAID OUT LOUD WHEN IT FIRES.
+     *
+     * `parts.length` counts what came back, not what exists, so a document over the cap
+     * printed a denominator that was simply wrong and claimed "this is all of it".
+     * `matchedTotal` is the real count from `content-range`; null means the header was
+     * unreadable, which is distinct from "not capped" and says so rather than guessing.
+     */
+    const capped = matchedTotal !== null && matchedTotal > rows.length;
     const head =
       `parts ${first}-${last} of ${parts.length}` +
       (more ? ` — call again with from_part=${nextPart} for the rest.` : " — this is all of it.") +
+      (capped
+        ? ` WARNING: this document has ${matchedTotal} parts and only the first ${rows.length} ` +
+          `were read, so the count above understates it and the tail is NOT included.`
+        : "") +
       (src === "doc"
         ? ` This is one heading of a repository file; open ${String((taken[0]!.meta as Record<string, unknown>)?.path ?? "the file")} for the whole document.`
         : "") +
@@ -1162,32 +1191,87 @@ async function callTool(
     // asked for a year, which reads as "that is all there is". The database
     // function clamps at 4000 days as a DoS guard; if a request is reduced, say so.
     const asked = Math.max(1, Number(args.days) || 30);
-    const rows = await brainDailyRollup(asked);
-    if (rows.length === 0) {
-      return textResult(
-        "No rows for that window. Note this counts only days with activity — an empty " +
-          "result means no recorded activity in that range, not a missing data source."
-      );
-    }
+    /**
+     * AD SPEND IS FETCHED SEPARATELY, BECAUSE THE ROLLUP DOES NOT HAVE IT.
+     *
+     * This tool is titled "Funnel, revenue and ad spend" and its description promised
+     * ad-spend figures. `brain_daily_rollup` returns day, visitors, starts, submissions,
+     * reports, revenue, opens, invites and top_sources -- and no spend column at all, so
+     * the promise was simply unmet and nothing said so. Spend lives on the `ga4` day
+     * chunks' `meta.ad_cost`; `adCostByDay` is the reader `analytics.ts` already uses,
+     * paged correctly, rather than a second copy of that query.
+     */
+    const [rows, ad] = await Promise.all([
+      brainDailyRollup(asked),
+      // NON-FATAL. The funnel and revenue figures are the point; spend is an addition,
+      // and a spend read that fails must not cost the caller the numbers it did get.
+      // Days then carry no `ad_spend`, which already means "unknown".
+      adCostByDay().catch(() => ({ byDay: new Map<string, number>(), from: null, to: null })),
+    ]);
+    /**
+     * A DAY OUTSIDE GA4'S WINDOW GETS NO `ad_spend` KEY, NOT A ZERO.
+     *
+     * `adCovers` is the same predicate the corpus builder uses, and why it exists is
+     * written where it lives: GA4 is ingested over a shorter window than this rollup
+     * covers, so a straddling period pairs FULL revenue with PARTIAL spend. Measured
+     * there, that published "Net: EUR 291.68" for a month that actually lost several
+     * hundred, and "Net: EUR 519.00" where the truth was -1581. Understating spend
+     * overstates profit, which is the direction that matters, so an unknown day must
+     * read as unknown rather than as a confident zero.
+     */
+    const merged = rows.map((r) =>
+      adCovers(ad, r.day) ? { ...r, ad_spend: ad.byDay.get(r.day) ?? 0 } : r
+    );
     const covered = rows.length;
     /**
      * Compact, and cut on a row boundary. Pretty-printing made 131 days cost the
      * whole 40,000-character ceiling, so asking for the full history returned
-     * malformed JSON cut mid-object and the company's first month — 2026-03-24 to
-     * 2026-04-19 — was simply unreachable through the tool that exists to serve it.
+     * malformed JSON cut mid-object and the company's first month -- 2026-03-24 to
+     * 2026-04-19 -- was simply unreachable through the tool that exists to serve it.
      */
-    const { text: bodyText, shown } = renderRowsForTest(rows, MAX_RESULT_CHARS - 600);
+    const { text: bodyText, shown } = renderRowsForTest(merged, MAX_RESULT_CHARS - 600);
     stats.sourceCount = shown;
+    const spendNote =
+      ad.from && ad.to
+        ? `Ad spend is known for ${ad.from} to ${ad.to}; days outside that carry no ` +
+          `ad_spend field, which means unknown, not zero.\n\n`
+        : `No ad-spend data is available, so no day carries an ad_spend field.\n\n`;
     const head =
       shown < covered
-        ? `${shown} of ${covered} days returned — the rest did not fit the character ` +
+        ? `${shown} of ${covered} days returned -- the rest did not fit the character ` +
           `ceiling. Ask for a narrower period to see them.\n\n`
         : covered < asked
-          ? `Asked for ${asked} days; ${covered} returned, which is every day the database ` +
-            `holds in that range. Not a truncation — there is no data before the earliest ` +
-            `day below.\n\n`
+          ? // THE CLAMP, NAMED. This used to read "Not a truncation -- there is no data
+            // before the earliest day below", which is false in the only case that can
+            // reach it. The rollup generate_series-es every day and left-joins, so it
+            // returns exactly clamp(days,1,4000) rows whatever the activity -- verified
+            // live: days=5 gives 5 rows, days=10000 gives 4000. So `covered` can fall
+            // short of `asked` ONLY when the 4000-day guard fires, and calling that "no
+            // data" told the caller the company is younger than it is.
+            `Asked for ${asked} days; ${covered} returned -- 4000 days is the database ` +
+            `function's ceiling, so the range was reduced. This IS a truncation of the ` +
+            `request, not the limit of the data.\n\n`
           : "";
-    return textResult(head + bodyText);
+    /**
+     * AN EMPTY ROLLUP IS A FAULT, NOT AN ABSENCE OF ACTIVITY.
+     *
+     * The branch here used to say "this counts only days with activity — an empty result
+     * means no recorded activity in that range". The function does not work that way: it
+     * generate_series-es every day and left-joins, so it returns exactly clamp(days,1,4000)
+     * rows whatever happened. Verified live: days=5 returns 5 rows, days=1 returns 1, and
+     * zero-activity days come back as zeroes. So the old text described behaviour that
+     * does not exist, in a branch production cannot reach — and if it ever IS reached,
+     * "no activity" is the one reading that is certainly wrong.
+     */
+    if (rows.length === 0) {
+      return textResult(
+        "The rollup returned no rows at all. It is built to return one row per day in " +
+          "range regardless of activity, so this is a fault in the query or the database, " +
+          "NOT a quiet period — do not report it as zero activity.",
+        true
+      );
+    }
+    return textResult(head + spendNote + bodyText);
   }
 
   if (name === "list_product_tables") {
