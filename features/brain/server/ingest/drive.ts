@@ -659,7 +659,12 @@ export async function ingestDrive(
     } catch (err) {
       // One unreadable document must not cost the rest of the run.
       logger.warn({ err, file: file.id }, "brain-ingest drive: export failed");
-      stop("export-failed");
+      // WHICH document, not just that one failed. The id lands in
+      // `cron_run.error_message` via the note, so the answer survives in a table
+      // anyone can query -- the log line above is in a buffer that holds hours, and
+      // this cron runs hourly, so by the time anyone looks it has rolled off. Drive
+      // file ids are opaque and already public in every chunk's url.
+      stop(`export-failed:${file.id}`);
     }
   }
 

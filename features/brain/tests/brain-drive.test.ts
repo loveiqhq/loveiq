@@ -339,7 +339,10 @@ describe("ingestDrive", () => {
     exportFails = true;
     const res = await ingestDrive(STAMP);
     expect(res.complete).toBe(false);
-    expect(res.detail).toMatch(/stopped=export-failed/);
+    // The FILE ID, not just the failure class. The log line naming it sits in a
+    // buffer that holds hours while this cron runs hourly, so by the time anyone
+    // looks it has rolled off; the note in `cron_run` is what survives.
+    expect(res.detail).toMatch(/stopped=export-failed:1AbCdEf/);
     // The listing was fine, so deletion is still safe.
     expect(res.sweepBlocked).toBe(false);
   });
