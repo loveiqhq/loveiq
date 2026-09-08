@@ -250,7 +250,7 @@ describe("/api/mcp", () => {
        * caller guessing a first name gets silence.
        */
       expect(meta).toMatch(/meta\.author/);
-      expect(meta).toMatch(/matching is exact/);
+      expect(meta).toMatch(/matching is exact/i);
       expect(meta).toMatch(/Slack|WhatsApp/);
       // And the reason a plain query is the wrong instrument for this question.
       expect(search.description).toMatch(/BROWSE, not a search/);
@@ -1566,6 +1566,30 @@ describe("/api/mcp", () => {
       delete process.env.TRUSTPILOT_API_KEY;
     });
 
+    /**
+     * THE `note` STRINGS WERE BUILT AND SENT NOWHERE.
+     *
+     * Nine services each carry a `note` describing what they actually expose — Clarity's
+     * single endpoint and the fact numOfDays accepts only 1, 2 or 3; PostHog's project id
+     * and EU host; what the project-scoped Vercel token refuses. The only reference to
+     * any of them was a test assertion, so no client ever saw one, and a model had to
+     * guess nine API surfaces from four example paths. One refusal even told it to call
+     * `list_sources` for PostHog's project id, which `list_sources` did not print.
+     */
+    it("prints what each service actually exposes, not just whether it is reachable", async () => {
+      wireCorpusForSources();
+      const text = await sourcesText();
+      // The parameter a caller cannot guess and gets refused for guessing wrong.
+      expect(text).toMatch(/numOfDays, which accepts only 1, 2 or 3/);
+      // The pointer a refusal message sends the model here to find.
+      expect(text).toMatch(/244778/);
+      // Every service says something, not just the two asserted above.
+      for (const svc of ["stripe", "resend", "slack", "github", "vercel", "figma", "clarity"]) {
+        const line = new RegExp(`${svc}: (reachable|NOT REACHABLE)[^\\n]*\\n\\s+\\S`);
+        expect(text).toMatch(line);
+      }
+    });
+
     it("says GitHub is reachable without a credential", async () => {
       wireCorpusForSources();
       delete process.env.GITHUB_TOKEN;
@@ -1923,5 +1947,31 @@ describe("a source must report the health of the job that actually feeds it", ()
     );
     expect(src).toMatch(/drive:\s*"brain-drive"/);
     expect(src).not.toMatch(/drive:\s*"brain-fast"/);
+  });
+});
+
+describe("the instructions must name every tool the server offers", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRateLimit.mockResolvedValue({ allowed: true });
+    process.env.LOVEIQ_MCP_TOKEN = TOKEN;
+  });
+
+  /**
+   * A CLIENT THAT READS ONLY `instructions` LEARNS THE SERVER FROM IT.
+   *
+   * Two of the seven tools were named nowhere in it — `query_external_service`, which
+   * is the entire door to nine outside services, and `get_business_numbers`. A model
+   * given the instructions and nothing else would never reach for either. Nothing
+   * connected the two strings, so adding a tool and forgetting the prose was silent.
+   */
+  it("mentions each tool by name", async () => {
+    const res = await POST(rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }));
+    const instructions = (await res.json()).result.instructions as string;
+    const listed = await POST(rpc({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }));
+    const tools = (await listed.json()).result.tools as Array<{ name: string }>;
+    expect(tools.length).toBeGreaterThanOrEqual(7);
+    const missing = tools.map((t) => t.name).filter((n) => !instructions.includes(n));
+    expect(missing).toEqual([]);
   });
 });

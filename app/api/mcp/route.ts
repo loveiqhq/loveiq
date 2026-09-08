@@ -434,23 +434,23 @@ const TOOLS = [
             "'In Progress' will match nothing. " +
             'THE DECISION RECORD: {"section": "summary"} is every recorded call\'s ' +
             "structured half — Summary, Details, an explicit Decisions/Aligned list, " +
-            "and Next steps — separated from the raw transcript at ingest. Call " +
-            "`list_sources` if you need current counts. Its counterpart " +
-            'is {"section": "transcript"}. Reach ' +
-            "WHO DID WHAT: a commit's author lives ONLY in `meta.author` — measured, 1,542 " +
-            "of 1,715 commit chunks are by one person and just 39 mention that name in their " +
-            "text at all, so \'what has X been committing\' can never match on the name and " +
-            "returns their calendar invites instead. Filter on it. The values are exactly " +
-            "\'Eman Cickusic\', \'FerhadJukicc\', \'dependabot[bot]\' and \'Eman\' (two early " +
-            "commits under a short name) — matching is exact, so a first name alone finds " +
-            "nothing. Notion\'s `assignee` behaves the same way: \'Eman Cickusic\', " +
-            "\'Marcus Börner\', \'Mark Oldenburg\'. " +
-            "for the summary whenever the question is what was DECIDED or AGREED rather " +
-            "than what was said. IT COVERS RECORDED CALLS ONLY. A decision taken in Slack " +
-            "or WhatsApp carries no section, so browsing this way will not list it — those " +
-            "are reachable by asking about the TOPIC, and they rank well when you do. Say " +
-            "the list is of meeting decisions rather than presenting it as everything the " +
-            "team has decided.",
+            "and Next steps — separated from the raw transcript at ingest. Its " +
+            'counterpart is {"section": "transcript"}. Reach for the summary whenever ' +
+            "the question is what was DECIDED or AGREED rather than what was said. " +
+            "IT COVERS RECORDED CALLS ONLY. A decision taken in Slack or WhatsApp " +
+            "carries no section, so browsing this way will not list it — those are " +
+            "reachable by asking about the TOPIC, and they rank well when you do. Say " +
+            "the list is of meeting decisions rather than presenting it as everything " +
+            "the team has decided. Call `list_sources` if you need current counts. " +
+            "WHO DID WHAT: a commit's author lives ONLY in `meta.author`, and the " +
+            "commit text almost never repeats the name, so 'what has X been " +
+            "committing' cannot match on the name and returns their calendar invites " +
+            "instead. Filter on it. Matching is EXACT, so a first name alone finds " +
+            "nothing: the values in use are 'Eman Cickusic', 'FerhadJukicc', " +
+            "'dependabot[bot]' and 'Eman'. Notion's `assignee` behaves the same way — " +
+            "'Eman Cickusic', 'Marcus Börner', 'Mark Oldenburg'. Treat both lists as " +
+            "what existed when this was written, not as a guarantee; people join and " +
+            "leave, and nothing recomputes this sentence.",
         },
       },
       required: ["query"],
@@ -586,7 +586,13 @@ const TOOLS = [
         offset: { type: "number", description: "Rows to skip, for paging past the cap." },
         params: {
           type: "object",
-          description: "Arguments for an rpc/ function, as an object.",
+          description:
+            "Arguments for an rpc/ function, as an object. An rpc call takes ITS " +
+            "ARGUMENTS HERE AND NOWHERE ELSE: select, filters, order, limit and offset " +
+            "are refused on an rpc rather than applied, because PostgREST ignores some " +
+            "of them and honours others, and a half-applied query looks exactly like a " +
+            "fully applied one. Shape the result inside the function's own parameters, " +
+            "or read a table instead.",
         },
       },
       required: ["table"],
@@ -597,13 +603,18 @@ const TOOLS = [
     title: "Read an outside service",
     annotations: { readOnlyHint: true, openWorldHint: true },
     description:
-      "Read any GET endpoint of the outside services LoveIQ runs on: Stripe (charges, " +
-      "disputes, refunds, payouts, balance, customers), Resend (domains, audiences), Slack " +
-      "(channel list and message history), GitHub (issues, pull requests, releases, CI " +
-      "runs), PostHog (product analytics, when configured). Read-only, and the API keys " +
-      "stay on the server. Use this for what those services know that our own database " +
-      "does not — dispute detail, a Slack discussion, an open pull request. For payments " +
-      "and email events we already store, query_product_data is faster and has full history.",
+      "Read any GET endpoint of the outside services LoveIQ runs on. All nine: Stripe " +
+      "(charges, disputes, refunds, payouts, balance, customers), Resend (domains, " +
+      "audiences), Slack (channel list and message history), GitHub (issues, pull " +
+      "requests, releases, CI runs), Vercel (deployments, builds, runtime errors), Figma " +
+      "(design files and comments), Trustpilot (customer reviews), Clarity (rage clicks, " +
+      "dead clicks, JS errors), PostHog (product analytics). Read-only, and the API keys " +
+      "stay on the server. CALL list_sources FIRST when you do not know a service's " +
+      "surface — it prints, per service, whether it is reachable on this deployment and " +
+      "exactly what that service exposes, including the ids and required parameters you " +
+      "cannot guess. Use this for what those services know that our own database does " +
+      "not — dispute detail, a Slack discussion, an open pull request. For payments and " +
+      "email events we already store, query_product_data is faster and has full history.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1743,11 +1754,25 @@ async function callTool(
     // The live half, computed from process.env at request time. Deliberately not
     // written into any prose: whether a credential exists is a moving fact, and
     // copying it into a description is how the same bug shipped four times.
+    /**
+     * THE `note` FIELD IS RENDERED HERE, AND UNTIL NOW IT WENT NOWHERE.
+     *
+     * Each service carries a `note` describing what it actually exposes -- Clarity's
+     * single endpoint and its numOfDays values, PostHog's project id and EU host, what
+     * the project-scoped Vercel token refuses. Nine of them, written carefully, and the
+     * only reference anywhere was a test assertion: no client has ever seen one. The
+     * model was left to guess an API surface from four example paths, and one refusal
+     * even pointed it at `list_sources` for PostHog's project id -- which list_sources
+     * did not print. Now it does.
+     */
     const live = Object.entries(EXTERNAL_SERVICES).map(([name, svc]) => {
       const has = svc.envKeys.some((k) => process.env[k]);
-      if (has) return `${name}: reachable`;
-      if (svc.optional) return `${name}: reachable without a credential`;
-      return `${name}: NOT REACHABLE — ${svc.envKeys.join(" or ")} is unset on this deployment`;
+      const state = has
+        ? "reachable"
+        : svc.optional
+          ? "reachable without a credential"
+          : `NOT REACHABLE — ${svc.envKeys.join(" or ")} is unset on this deployment`;
+      return `${name}: ${state}\n    ${svc.note}`;
     });
 
     // Google's credential state belongs in a tool whose job is reporting what can
@@ -1850,6 +1875,12 @@ export async function POST(request: Request) {
         "one). Use list_product_tables then query_product_data, and " +
         "prefer an rpc/get_* analysis function when one fits — those encode the business " +
         "logic already.\n\n" +
+        "OUTSIDE SERVICES, read live: query_external_service reaches Stripe, Resend, " +
+        "Slack, GitHub, Vercel, Figma, Trustpilot, Clarity and PostHog. list_sources " +
+        "prints which are reachable on this deployment and exactly what each exposes, " +
+        "including ids and required parameters you cannot guess. And get_business_numbers " +
+        "returns the funnel, revenue and ad spend per day straight from the database when " +
+        "you want figures to compute with rather than narrative.\n\n" +
         "Which half to reach for: history for why something was decided or what a past " +
         "period looked like; live for what is true right now. Never infer a current number " +
         "from an indexed chunk when query_product_data can read it directly, and never " +
@@ -1892,6 +1923,12 @@ export async function POST(request: Request) {
         tool: name,
         // The one argument worth reading back at a glance, per tool. Falls back
         // to the tool name so a no-argument call still records something legible.
+        //
+        // DELIBERATELY NOT `args.match` OR `args.days`, though an audit flagged their
+        // absence. `question: "7"` for a 7-day request is less legible than the tool
+        // name, not more — and `args` already stores `{days: 7}` in full while `tool`
+        // is its own column, so nothing is lost. The fallback exists to keep the column
+        // readable at a glance, not to duplicate `args`.
         question: String(args.query ?? args.id ?? args.table ?? args.path ?? name).slice(0, 4000),
         args,
         sourceCount: stats.sourceCount ?? null,
