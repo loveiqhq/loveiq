@@ -58,8 +58,15 @@ export function getSessionId(): string {
      * operation is insecure.` events.
      *
      * Every other accessor in this file already caught that. This one did not,
-     * and it is called during render (`usePartialSave`), so the throw took the
-     * whole survey down for those visitors — the first step of the funnel.
+     * and it is called during render (`useRef(getSessionId())` in
+     * `usePartialSave`), so for those visitors it threw inside a React render.
+     *
+     * Scope of the claim, honestly: the THROW is proven (removing this catch
+     * fails three unit tests). The user-visible symptom is NOT — a browser
+     * probe with storage disabled could not get past the survey intro, which
+     * renders identically either way, so what a real visitor saw once the
+     * engine mounted was never demonstrated. Treat this as a certain code
+     * defect with unmeasured field impact, not as a diagnosed outage.
      *
      * A per-page-load id keeps the survey and its partial saves working for the
      * visit. It does not survive a reload, which is the correct trade: a
