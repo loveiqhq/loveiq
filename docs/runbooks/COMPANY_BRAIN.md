@@ -778,31 +778,37 @@ see the storage note below; this project's Postgres volume is 8.35 GB.) Retrieva
 reserves slots per source — spot-checked across five questions, Drive appears
 without displacing gsc, ga4, slack or notion.
 
-#### Production sees far less than this, and that is the open item
+#### Production sees the whole Drive — this was the open item and it is closed
 
-The nightly and 15-minute jobs authenticate as
-`ga4-reader@loveiq-brain.iam.gserviceaccount.com`, which sees only what has been
-SHARED with it — in practice the `Google Meet` folder. The 11,185 chunks were
-written with `ec@loveiq.org`'s own credential from a laptop.
+**RESOLVED, verified 2026-09-08.** This section used to say the production service
+account saw only the `Google Meet` folder, that the corpus had been written from a
+laptop with `ec@loveiq.org`'s own credential, and that the sweep was refusing to run
+until access was fixed. That is no longer true, and it was believed for long enough to
+send someone off sharing folders that were already shared.
 
-That is safe but not self-maintaining: a production Drive run sees a fraction of the
-corpus, so its sweep would delete the rest — and does not, because `sweepStale`
-refuses any deletion that would remove the majority of a source. It logs
-`brain sweep skipped: it would delete the majority of this source` every run until
-access is fixed. The data is not at risk; the freshness is.
+**How it was verified**, because "it looks fine" is not evidence:
 
-**To fix it,** share these with the service account as Viewer (sharing is
-inherited, so the folders cover everything inside them):
+- The hourly run's own note reports `docs=707` — documents the PRODUCTION walk listed.
+- `touched=10527` is the count of stored chunk ids the walk accounted for, built only
+  from `listed.items`, against **10,516** drive chunks actually stored. The walk
+  therefore saw every stored document.
+- 8,128 of those chunks (458 documents) are owned by `ema.djedovic@loveiq.org` and
+  `teamwork@loveiq.org`, i.e. NOT by the credential that first indexed them. Those are
+  precisely the rows this section claimed production could not see.
+- `brain_sweep_state` records a drive sweep at 2026-09-07 15:52 that removed nothing,
+  which is what a healthy full walk looks like.
 
-- the four top-level folders — `04_Software`, `Google Meet`, `Meet Recordings`, `pdf`
-- the 75 loose files sitting at the root of My Drive (select all, share once)
+**The trap to avoid when re-checking this.** `swept=0` proves nothing on its own: it is
+equally what you see when the sweep ran and found nothing AND when it refused because
+too much would disappear. `meta.owner` freshness proves nothing either — there is no
+confirm write any more, so an unchanged document keeps an old `updated_at` forever and
+looks frozen whether or not it was seen. The number that discriminates is `touched`
+against the stored chunk count.
 
-A user refresh token would also work and is what the laptop uses, but it is the
-wrong answer for production: Workspace reauth policy kills refresh tokens carrying
-sensitive scopes every few weeks — it did exactly that on 2026-08-28 — so Drive
-would freeze periodically until somebody clicked a browser prompt. A service account
-has no user session and never reauths. The 144 items other people have shared into
-our Drive stay out of reach either way; they are owned elsewhere.
+**What IS still true:** the walk reports `complete=false` every run, because one
+document fails to export (`stopped=export-failed:<fileId>` names it). That does not
+block the sweep — drive gates sweeping on the LISTING alone, since an unexported
+document is still listed and so never looks deleted.
 
 ### Slack is PUSHED, not polled
 
