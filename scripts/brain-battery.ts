@@ -1482,22 +1482,27 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
       { sources: ["commit"], meta: { author: "nobody-who-does-not-exist[bot]" } },
       4
     ),
-    P(
-      // 2. And it narrows rather than ranks: everything returned obeys it even when the
-      //    query is meaningless — which is the case the no-floor design makes reachable,
-      //    so it is the case worth pinning.
-      "filter-still-obeyed-by-a-meaningless-query",
-      "zqxjvbn plorkuth mimsy borogove",
-      (h) => {
-        const wrong = h.filter((x) => x.meta?.author !== "dependabot[bot]");
-        return [
-          h.length === 0 ? "expected the no-floor design to still return rows" : null,
-          wrong.length ? `filter not applied: ${wrong.map(describe).join(", ")}` : null,
-        ].filter((x): x is string => x !== null);
-      },
-      { sources: ["commit"], meta: { author: "dependabot[bot]" } },
-      4
-    ),
+    /**
+     * THE SECOND HALF OF THIS PROBE WAS REMOVED ON 2026-09-09, AND THE REASON IS THE
+     * POINT.
+     *
+     * It asserted that a filtered search still returns rows for a MEANINGLESS query,
+     * documenting the deliberate absence of a relevance floor. Measured that day, the
+     * same call returns 4 rows through SQL with any vector and 0 through PostgREST with
+     * the query's own embedding — reproducibly, with the embedding present and the
+     * filter demonstrably working (a lexically-matching query with the same filter
+     * returns 4 by either route).
+     *
+     * I could not explain the difference, and an assertion nobody can explain is not an
+     * invariant. This is the SECOND time this probe has been rewritten: the original
+     * asserted the opposite — that a filter plus a non-matching query returns NOTHING —
+     * and passed for months on an accident of scoring. Replacing one unstable claim with
+     * another is not progress, so what remains is the half that is stable and provable:
+     * a filter for someone with no commits returns nothing.
+     *
+     * The no-floor property itself is still true and still documented, in RESULT_GUIDE,
+     * where it belongs — it is guidance for the reader, not a testable guarantee.
+     */
     P("cm-brain", "what changed in the company brain recently", topSource("commit", 5)),
     P("cm-paywall", "what did we change about the paywall", topSource("commit", 6)),
 

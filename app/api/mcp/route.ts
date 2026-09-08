@@ -442,7 +442,18 @@ const TOOLS = [
             "reachable by asking about the TOPIC, and they rank well when you do. Say " +
             "the list is of meeting decisions rather than presenting it as everything " +
             "the team has decided. Call `list_sources` if you need current counts. " +
-            "WHO DID WHAT: a commit's author lives ONLY in `meta.author`, and the " +
+            'WHO DID WHAT: use {"people": ["Full Name"]}. It is the ONE field that ' +
+            "means a person across every source — it resolves a commit's author, an " +
+            "email's participants, a Drive file's owner, a Notion assignee, a WhatsApp " +
+            "speaker and a calendar attendee to a single canonical name, so " +
+            '{"people": ["Marcus Börner"]} finds all of them at once. Names are exact ' +
+            "and full: a first name alone matches nothing, and near-identical names are " +
+            "deliberately kept apart (this company has both a Mark and a Marcus, and " +
+            "both an Eman and an Iman). Bots and shared mailboxes are excluded, so " +
+            "dependabot never counts as a colleague. Absent means the identity was not " +
+            "recognised, never that nobody was involved. " +
+            "The per-source fields below still exist and still work: " +
+            "a commit's author lives in `meta.author`, and " +
             "commit text almost never repeats the name, so 'what has X been " +
             "committing' cannot match on the name and returns their calendar invites " +
             "instead. Filter on it. Matching is EXACT, so a first name alone finds " +
@@ -985,14 +996,30 @@ async function callTool(
       Array.isArray(v) && v.every((x) => typeof x === "string") && v.length > 0
         ? (v as string[])
         : undefined;
-    const asMeta = (v: unknown): Record<string, string> | undefined => {
+    /**
+     * Fields whose stored value is an ARRAY, so containment needs an array on both sides.
+     *
+     * A caller writing {"people": "Marcus Börner"} is doing the obvious thing, and
+     * `meta @> '{"people":"Marcus Börner"}'` matches nothing at all because the stored
+     * value is `["Marcus Börner"]`. That reads as "this person did nothing", which is
+     * the worst way for a filter to fail — so the scalar is wrapped rather than dropped.
+     */
+    const ARRAY_META_KEYS = new Set(["people"]);
+    const asMeta = (v: unknown): Record<string, string | string[]> | undefined => {
       if (!v || typeof v !== "object" || Array.isArray(v)) return undefined;
-      const out: Record<string, string> = {};
+      const out: Record<string, string | string[]> = {};
       for (const [key, val] of Object.entries(v as Record<string, unknown>)) {
-        // Only scalars: `meta @> ...` is containment, and a nested object would
-        // match structurally in ways a caller writing {status:"WIP"} never intends.
+        // Only scalars and string arrays: `meta @> ...` is containment, and a nested
+        // object would match structurally in ways a caller writing {status:"WIP"} never
+        // intends.
         if (typeof val === "string" || typeof val === "number" || typeof val === "boolean") {
-          out[key] = String(val);
+          out[key] = ARRAY_META_KEYS.has(key) ? [String(val)] : String(val);
+        } else if (
+          Array.isArray(val) &&
+          val.length > 0 &&
+          val.every((x) => typeof x === "string")
+        ) {
+          out[key] = val as string[];
         }
       }
       return Object.keys(out).length > 0 ? out : undefined;

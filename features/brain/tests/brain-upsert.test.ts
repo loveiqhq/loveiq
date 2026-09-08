@@ -6,7 +6,17 @@ vi.mock("@shared/observability/logger", () => ({
 
 const posted: string[] = [];
 vi.mock("@features/admin/server/supabase", () => ({
-  supabaseFetch: vi.fn(async (_path: string, init?: RequestInit) => {
+  supabaseFetch: vi.fn(async (path: string, init?: RequestInit) => {
+    /**
+     * Only the chunk WRITES are recorded. `upsertChunks` also reads the person registry
+     * now, to derive `meta.people` in one place rather than in seven ingesters — and
+     * recording that GET shifted every index in this file, so `posted[0]` became a
+     * request with no body and two assertions failed on `JSON.parse(undefined)`.
+     * Filtering by path keeps these tests about the payload they are named for.
+     */
+    if (path.includes("/brain_person")) {
+      return new Response("[]", { status: 200 });
+    }
     posted.push(String(init?.body));
     return new Response("", { status: 201 });
   }),

@@ -63,7 +63,15 @@ export interface RetrieveOptions {
   /** Latest period the chunk describes, `YYYY-MM-DD`. */
   until?: string;
   /** Exact-match metadata, e.g. `{ status: "WIP" }`. Keys a source lacks match nothing. */
-  meta?: Record<string, string>;
+  /**
+   * `string` for a scalar field, `string[]` for one stored as an array.
+   *
+   * `meta @> filter` is containment, so matching a value inside `meta.people` — which is
+   * an array — requires an array on the filter side too. A bare string silently matches
+   * nothing, which is the worst possible failure for a filter: it reads as "this person
+   * did nothing" rather than "that is the wrong shape".
+   */
+  meta?: Record<string, string | string[]>;
 }
 
 /**

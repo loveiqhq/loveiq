@@ -1,5 +1,6 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
+import { loadPeople, peopleIn } from "@features/brain/server/people";
 
 /**
  * Shared write path for every non-git ingester (Jira, Google analytics).
@@ -107,6 +108,21 @@ function clean(row: BrainRow): BrainRow {
 export async function upsertChunks(rows: BrainRow[]): Promise<number> {
   if (rows.length === 0) return 0;
 
+  /**
+   * ONE PLACE, SO EVERY SOURCE GAINS IT AT ONCE.
+   *
+   * `meta.people` is derived here rather than in seven ingesters, for the same reason the
+   * credential refusal below lives here: a rule each caller has to remember is a rule
+   * that will be forgotten by the eighth. Every ingester already records identity in some
+   * field -- author, participants, owner, assignee, speakers, organizer, attendees -- and
+   * this is the only step that turns those into one name.
+   *
+   * A registry that cannot be read leaves `meta.people` UNSET, never empty. An empty
+   * array asserts "nobody here", and stripping the field from a whole run would look
+   * exactly like a corpus in which nobody wrote anything.
+   */
+  const byAlias = await loadPeople();
+
   // A duplicate key inside ONE batch makes Postgres raise "ON CONFLICT DO UPDATE
   // command cannot affect row a second time" and fails the whole request, so
   // de-duplicate here rather than trusting every caller to.
@@ -123,7 +139,11 @@ export async function upsertChunks(rows: BrainRow[]): Promise<number> {
       );
       continue;
     }
-    byKey.set(`${row.source} ${row.source_id}`, clean(row));
+    const people = peopleIn(row.meta ?? {}, byAlias);
+    byKey.set(
+      `${row.source} ${row.source_id}`,
+      clean(people ? { ...row, meta: { ...(row.meta ?? {}), people } } : row)
+    );
   }
   const unique = [...byKey.values()];
 
