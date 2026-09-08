@@ -13514,6 +13514,10 @@
 }
 
 .report-map-featured__link {
+  /* Renders as an <a> when the section is owned (always, for Arousal), so the
+     underline has to be turned off explicitly — the pill next to it already
+     does this. */
+  text-decoration: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -13571,6 +13575,8 @@
 }
 
 .report-map-row {
+  /* The whole row opens the section / paywall — see InsightMapSection. */
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: space-between;

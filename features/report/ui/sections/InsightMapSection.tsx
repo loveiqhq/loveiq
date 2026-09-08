@@ -164,8 +164,41 @@ const PatternRow: FC<{
   isSectionOpen: (sectionId: string) => boolean;
 }> = ({ symbol, symbolColor, title, sub, cta, target, onOpen, isSectionOpen }) => {
   if (!sub) return null;
+  const open = isSectionOpen(target);
   return (
-    <div className="report-map-row">
+    /**
+     * The whole row activates, not just the pill.
+     *
+     * The title and "WHAT YOU'LL LEARN" text sit beside the CTA rather than
+     * inside it, and readers tap the text: 97 dead clicks on
+     * `.report-map-row` / `.report-map-row__learn-text` across ~96 sessions in
+     * 15 days. When the section is locked that CTA is what OPENS THE PAYWALL,
+     * so each miss is a paywall open we never got.
+     *
+     * Same shape as the fix on the findings block: the handler goes on the
+     * container, the anchor/button inside keeps the semantics, so keyboard and
+     * screen-reader behaviour are unchanged and a tap on the pill itself still
+     * routes through exactly one handler (the inner click bubbles to here).
+     */
+    <div
+      className="report-map-row"
+      onClick={() => {
+        /**
+         * Not a click if the reader was selecting text. `.report-page` sets
+         * `user-select: none` on the live site (the report is the paid
+         * product), so this cannot happen there — but `.report-page--copyable`
+         * turns selection back on for staging, previews and local dev, which is
+         * how the team quotes report copy. Without this, highlighting a line
+         * there would open the paywall.
+         */
+        if (typeof window !== "undefined" && window.getSelection()?.toString()) return;
+        if (open) {
+          window.location.hash = target;
+        } else {
+          onOpen(target);
+        }
+      }}
+    >
       {/* No per-row padlock. Figma names this section "… lock top-right" and one
           was added per withheld row, but Eman had them pulled on 2026-08-19 — in
           BOTH states. Access is still legible without them: the group carries its
@@ -191,12 +224,14 @@ const PatternRow: FC<{
           the sticky header exactly as sidebar navigation does. Scripted
           scrolling landed 250-700px short because the page reflows after the
           jump. Still a button when locked — it opens the paywall, not a link. */}
-      {isSectionOpen(target) ? (
+      {open ? (
         <a className="report-map-row__cta" href={`#${target}`}>
           {cta}
         </a>
       ) : (
-        <button type="button" className="report-map-row__cta" onClick={() => onOpen(target)}>
+        /* No onClick here: the row above owns it, and the click bubbles up. Two
+           handlers would open the paywall twice on a direct hit. */
+        <button type="button" className="report-map-row__cta">
           {cta}
         </button>
       )}
@@ -286,13 +321,33 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onOpen, isSectionOpen }
           <h4 className="report-map-featured__title">{featuredTitle}</h4>
           {featuredSub ? <p className="report-map-featured__sub">{featuredSub}</p> : null}
           <IgnitionCurve family={family} />
-          <button
-            type="button"
-            className="report-map-featured__link"
-            onClick={() => onOpen("arousal_style")}
-          >
-            See how your desire switches on →
-          </button>
+          {/**
+           * An anchor when the section is open — which for Arousal is ALWAYS,
+           * as this card's own eyebrow says ("Arousal · always unlocked").
+           *
+           * It used to call `onOpen` unconditionally, and `openMapTarget` in
+           * ReportPage begins `if (unlocked) return;`. So this button did
+           * nothing at all, for every reader, on the one card advertised as
+           * free. Confirmed on production: the tap reached the button (hit
+           * tested) and produced no navigation, no scroll and no modal.
+           * PostHog recorded 6 dead clicks on this exact label.
+           *
+           * Mirrors PatternRow below: anchor when owned so it inherits the
+           * sections' scroll-margin-top, button when locked so it can paywall.
+           */}
+          {isSectionOpen("arousal_style") ? (
+            <a className="report-map-featured__link" href="#arousal_style">
+              See how your desire switches on →
+            </a>
+          ) : (
+            <button
+              type="button"
+              className="report-map-featured__link"
+              onClick={() => onOpen("arousal_style")}
+            >
+              See how your desire switches on →
+            </button>
+          )}
         </article>
       ) : null}
 

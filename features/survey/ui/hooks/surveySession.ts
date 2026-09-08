@@ -25,14 +25,54 @@ function getReportPricingSessionStorageKey({
   return null;
 }
 
+/**
+ * Fallback id for a browser that refuses storage. Module-level so every caller
+ * in the page agrees on one id.
+ */
+let inMemorySessionId: string | null = null;
+
+function newId(): string {
+  // `crypto.randomUUID` needs a secure context and is missing in some in-app
+  // WebViews — the same environments that refuse storage, so it cannot be
+  // assumed here of all places.
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export function getSessionId(): string {
   if (!canUseStorage()) return "";
-  let id = sessionStorage.getItem(SURVEY_SESSION_KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    sessionStorage.setItem(SURVEY_SESSION_KEY, id);
+  try {
+    let id = sessionStorage.getItem(SURVEY_SESSION_KEY);
+    if (!id) {
+      id = newId();
+      sessionStorage.setItem(SURVEY_SESSION_KEY, id);
+    }
+    return id;
+  } catch {
+    /**
+     * Storage does not merely go missing — it THROWS. Safari private mode and
+     * several in-app WebViews raise SecurityError on every access, and we see
+     * those users: one production session logged 28 `SecurityError: The
+     * operation is insecure.` events.
+     *
+     * Every other accessor in this file already caught that. This one did not,
+     * and it is called during render (`usePartialSave`), so the throw took the
+     * whole survey down for those visitors — the first step of the funnel.
+     *
+     * A per-page-load id keeps the survey and its partial saves working for the
+     * visit. It does not survive a reload, which is the correct trade: a
+     * forgotten draft beats a survey that will not open.
+     */
+    inMemorySessionId ??= newId();
+    return inMemorySessionId;
   }
-  return id;
+}
+
+/** Reset the in-memory fallback — for tests only. */
+export function __resetInMemorySessionIdForTests(): void {
+  inMemorySessionId = null;
 }
 
 export function setReportSessionId(sessionId: string): void {
