@@ -35,6 +35,7 @@ vi.mock("@features/report/server/personalReport", () => ({
   ),
   resolveSubmissionAccessContext: vi.fn().mockResolvedValue(null),
   getReportAccessPlanForSubmission: vi.fn(),
+  lookupReportTokenBySubmissionId: vi.fn().mockResolvedValue(null),
 }));
 
 import { POST } from "@/app/api/stripe/checkout-session/route";
@@ -49,6 +50,10 @@ import {
   getReportPriceQuoteForContext,
   markReportPriceQuoteCheckoutStarted,
 } from "@features/pricing/logic/reportPricing";
+import {
+  lookupReportTokenBySubmissionId,
+  resolveSubmissionAccessContext,
+} from "@features/report/server/personalReport";
 
 /** The quote the route resolves: full report, €27.49, urgency window still open. */
 const BASE_QUOTE = {
@@ -382,5 +387,151 @@ describe("POST /api/stripe/checkout-session", () => {
     // second price into the audit trail.
     expect(Object.keys(session.metadata)).not.toContain("urgencySurcharge");
     expect(Object.keys(session.metadata)).not.toContain("urgencyDeadlineAt");
+  });
+});
+
+/**
+ * "Link of Paywall brought a user back to the survey beginning."
+ *
+ * A session-driven checkout — bare `/report`, token in storage only — sent no
+ * URL token, so Stripe's success and cancel URLs both fell back to bare
+ * `/report`. That URL re-derives the reader's identity FROM STORAGE, and the
+ * cross-site Stripe round trip is exactly where Safari ITP and in-app WebViews
+ * drop it. With no identifier the report renders "No saved report session",
+ * whose only button is `/survey` — the survey beginning. On the success path it
+ * strands someone who has just paid.
+ *
+ * The server already resolves the submission for the already-owns precheck, so
+ * the canonical token is one indexed lookup away. Put it in the URL and the
+ * return no longer depends on storage at all.
+ */
+describe("Stripe return URLs identify the report without storage", () => {
+  function enableStripe() {
+    const createSession = vi.fn().mockResolvedValue({
+      id: "cs_test_return_url",
+      url: "https://checkout.stripe.com/c/pay/cs_test_return_url",
+    });
+    vi.mocked(isStripeCheckoutEnabled).mockReturnValue(true);
+    vi.mocked(getStripeCheckoutCustomerEmail).mockResolvedValue("test@example.com");
+    vi.mocked(getStripeServerClient).mockReturnValue({
+      checkout: { sessions: { create: createSession } },
+    } as never);
+    return createSession;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(verifyCsrfToken).mockResolvedValue(true);
+    vi.mocked(checkRateLimit).mockResolvedValue({
+      allowed: true,
+      remaining: 9,
+      resetAt: new Date(),
+    });
+    vi.mocked(getReportPriceQuoteForContext).mockResolvedValue({ ...BASE_QUOTE });
+    vi.mocked(resolveSubmissionAccessContext).mockResolvedValue(null);
+    vi.mocked(lookupReportTokenBySubmissionId).mockResolvedValue(null);
+  });
+
+  it("puts the RESOLVED token in both URLs for a session-only checkout", async () => {
+    const createSession = enableStripe();
+    vi.mocked(resolveSubmissionAccessContext).mockResolvedValue({
+      submissionId: 568,
+      userEmail: "reader@example.com",
+      userId: 41,
+    });
+    vi.mocked(lookupReportTokenBySubmissionId).mockResolvedValue("rpt_ABCDEFGHIJKLMNOPQRST");
+
+    const res = await POST(
+      makeRequest({
+        archetype: "Spark Seeker",
+        plan: "full_report",
+        reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+      })
+    );
+    expect(res.status).toBe(200);
+
+    const session = createSession.mock.calls[0]![0];
+    // Cancel: backing out returns to the reader's OWN report, not bare /report.
+    expect(session.cancel_url).toBe(
+      "http://localhost/report/rpt_ABCDEFGHIJKLMNOPQRST?archetype=spark-seeker"
+    );
+    // Success: the paid reader can be routed back even with storage wiped.
+    expect(session.success_url).toContain("token=rpt_ABCDEFGHIJKLMNOPQRST");
+    // Resolved from the submission the route already had — no second session lookup.
+    expect(lookupReportTokenBySubmissionId).toHaveBeenCalledWith(568);
+  });
+
+  it("neither URL can send a reader to the survey", async () => {
+    const createSession = enableStripe();
+    vi.mocked(resolveSubmissionAccessContext).mockResolvedValue({
+      submissionId: 568,
+      userEmail: null,
+      userId: null,
+    });
+    vi.mocked(lookupReportTokenBySubmissionId).mockResolvedValue("rpt_ABCDEFGHIJKLMNOPQRST");
+
+    await POST(
+      makeRequest({
+        archetype: "Spark Seeker",
+        plan: "essentials",
+        reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+      })
+    );
+    const session = createSession.mock.calls[0]![0];
+    // The bare `/report` fallback is the ONLY thing that can reach the
+    // "No saved report session" screen, and that screen's only action is
+    // `/survey`. Pin the absence of the fallback, not just the presence of the
+    // token — `/report?x=1` would satisfy a token check on cancel_url alone.
+    for (const url of [session.cancel_url, session.success_url]) {
+      expect(url).not.toMatch(/\/report(\?|$)/);
+      expect(url).not.toContain("/survey");
+    }
+  });
+
+  it("prefers the URL token and skips the lookup entirely", async () => {
+    const createSession = enableStripe();
+    vi.mocked(resolveSubmissionAccessContext).mockResolvedValue({
+      submissionId: 568,
+      userEmail: null,
+      userId: null,
+    });
+
+    await POST(
+      makeRequest({
+        archetype: "Spark Seeker",
+        plan: "full_report",
+        reportToken: "rpt_URLTOKEN0123456789AB",
+      })
+    );
+
+    const session = createSession.mock.calls[0]![0];
+    expect(session.cancel_url).toBe(
+      "http://localhost/report/rpt_URLTOKEN0123456789AB?archetype=spark-seeker"
+    );
+    expect(lookupReportTokenBySubmissionId).not.toHaveBeenCalled();
+  });
+
+  it("still creates the session when the token lookup finds nothing", async () => {
+    // Best-effort: an unresolvable token keeps the OLD behaviour rather than
+    // failing a checkout — a bare-/report return beats no checkout at all.
+    const createSession = enableStripe();
+    vi.mocked(resolveSubmissionAccessContext).mockResolvedValue({
+      submissionId: 568,
+      userEmail: null,
+      userId: null,
+    });
+    vi.mocked(lookupReportTokenBySubmissionId).mockResolvedValue(null);
+
+    const res = await POST(
+      makeRequest({
+        archetype: "Spark Seeker",
+        plan: "full_report",
+        reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+      })
+    );
+    expect(res.status).toBe(200);
+    expect(createSession.mock.calls[0]![0].cancel_url).toBe(
+      "http://localhost/report?archetype=spark-seeker"
+    );
   });
 });
