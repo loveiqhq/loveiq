@@ -712,6 +712,8 @@ export async function ingestDrive(
     rows: written + touched,
     swept,
     complete,
+    // Drive's sweep gate is the LISTING, not the fetch -- see `sweepBlocked`.
+    sweepBlocked: !listed.complete,
     detail:
       `docs=${listed.items.length} written=${written} touched=${touched} swept=${swept} ` +
       `complete=${complete}${stopped ? ` stopped=${stopped}` : ""}`,

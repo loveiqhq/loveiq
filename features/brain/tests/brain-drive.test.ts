@@ -83,6 +83,7 @@ let exportBody = "Summary\n\nWe agreed to ship the paywall.";
 let listOk = true;
 let targets: Record<string, unknown> = {};
 let alwaysMorePages = false;
+let exportFails = false;
 const httpCalls: string[] = [];
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: vi.fn(async (url: string) => {
@@ -100,6 +101,7 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
       };
     }
     if (url.includes("/export?")) {
+      if (exportFails) return { ok: false, status: 500, text: async () => "boom" };
       return { ok: true, status: 200, text: async () => "﻿" + exportBody.replace(/\n/g, "\r\n") };
     }
     // single-file metadata GET, which is how a shortcut's TARGET is resolved
@@ -239,6 +241,7 @@ describe("ingestDrive", () => {
     files = [FILE];
     listOk = true;
     alwaysMorePages = false;
+    exportFails = false;
     targets = {};
   });
 
@@ -319,6 +322,32 @@ describe("ingestDrive", () => {
     const res = await ingestDrive(STAMP);
     expect(res.complete).toBe(false);
     expect(res.detail).toMatch(/stopped=page-cap@\d+x\d+/);
+  });
+
+  /**
+   * THE FALSE ALARM THIS PINS, shipped and caught within a day.
+   *
+   * A failed export makes the walk incomplete but does NOT block the sweep: the
+   * document was still LISTED, so it never looks deleted, which is why drive gates
+   * sweeping on `listed.complete` alone. An alert keyed on `complete` therefore told
+   * people "documents deleted from Drive are staying in the corpus" on every run,
+   * while drive was in fact sweeping normally — verified against `brain_sweep_state`,
+   * which recorded a drive sweep at the very run that reported `complete=false
+   * stopped=export-failed`.
+   */
+  it("does not call the sweep blocked when only an export failed", async () => {
+    exportFails = true;
+    const res = await ingestDrive(STAMP);
+    expect(res.complete).toBe(false);
+    expect(res.detail).toMatch(/stopped=export-failed/);
+    // The listing was fine, so deletion is still safe.
+    expect(res.sweepBlocked).toBe(false);
+  });
+
+  it("DOES call the sweep blocked when the listing was cut short", async () => {
+    alwaysMorePages = true;
+    const res = await ingestDrive(STAMP);
+    expect(res.sweepBlocked).toBe(true);
   });
 
   it("names no stop reason at all on a walk that finished", async () => {
@@ -429,6 +458,7 @@ describe("Google Meet shortcuts", () => {
     existing = [];
     listOk = true;
     alwaysMorePages = false;
+    exportFails = false;
     targets = {};
     process.env.NOTION_TOKEN = "ntn_test";
   });
@@ -545,6 +575,7 @@ describe("PDFs — the 213 files that used to be invisible", () => {
     httpCalls.length = 0;
     listOk = true;
     alwaysMorePages = false;
+    exportFails = false;
     targets = {};
   });
 
@@ -605,6 +636,7 @@ describe("Drive reads as a PERSON, not as the service account", () => {
     delegatedToken = "delegated-token";
     listOk = true;
     alwaysMorePages = false;
+    exportFails = false;
     targets = {};
     exportBody = "Summary\n\nWe agreed to ship the paywall.";
     delete process.env.GOOGLE_WORKSPACE_ADMIN;
@@ -690,6 +722,7 @@ describe("a failed sweep must not retry every hour", () => {
     files = [FILE];
     listOk = true;
     alwaysMorePages = false;
+    exportFails = false;
     targets = {};
     existing = [];
   });

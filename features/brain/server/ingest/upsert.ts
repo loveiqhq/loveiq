@@ -638,6 +638,22 @@ export interface IngestResult {
    */
   complete?: boolean;
   /**
+   * True when THIS run could not sweep because it did not see the whole source.
+   *
+   * Deliberately separate from `complete`, because they are not the same question and
+   * conflating them produced a false alarm within a day of shipping one. `complete` is
+   * "did the walk index everything it meant to"; this is "would deleting anything the
+   * walk did not see be safe". Drive gates its sweep on the LISTING alone -- a failed
+   * export leaves the document listed, so it never looks deleted -- while gmail and
+   * calendar gate on the whole walk. Measured 2026-09-07: drive reported
+   * `complete=false stopped=export-failed` on every run while sweeping normally, so an
+   * alert keyed on `complete` told people deletions were broken when they were not.
+   *
+   * Undefined means the source does not distinguish the two; callers fall back to
+   * `complete === false`.
+   */
+  sweepBlocked?: boolean;
+  /**
    * One line of WHY, for `cron_run.error_message`.
    *
    * Same channel `google-oauth.ts` already uses, and for the same reason: Vercel's

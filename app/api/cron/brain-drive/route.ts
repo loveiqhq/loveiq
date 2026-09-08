@@ -140,7 +140,10 @@ export async function GET(request: Request) {
      * Guarded on `!result.skipped` because a skipped run never walked, so its
      * completeness is meaningless and the skip branch above has already spoken.
      */
-    if (!result.skipped && result.complete === false) {
+    // `sweepBlocked ?? complete === false`, not `complete` alone: the two are
+    // different questions and keying on the wrong one raised a false alarm within a
+    // day. Drive sweeps normally while reporting `complete=false stopped=export-failed`.
+    if (!result.skipped && (result.sweepBlocked ?? result.complete === false)) {
       await alertOnce(
         "incomplete",
         `:brain: brain-drive walked only part of Drive (${escapeSlack(ingestNote(result))}). ` +

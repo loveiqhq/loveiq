@@ -136,6 +136,25 @@ describe("/api/cron/brain-gmail records WHY, not just whether", () => {
     expect(notified[0]!.text).toMatch(/sweep only runs after a complete walk/);
   });
 
+  /**
+   * INCOMPLETE IS NOT THE SAME AS "DELETIONS ARE BROKEN", and keying the alert on the
+   * wrong one of those raised a false alarm within a day of shipping it. Drive gates
+   * its sweep on the LISTING, so a failed export leaves it sweeping normally while
+   * reporting `complete=false` — and the alert said deletions had stopped.
+   */
+  it("says nothing when the walk was incomplete but the sweep still ran", async () => {
+    mockIngest.mockResolvedValue({
+      source: "gmail",
+      rows: 40,
+      swept: 2,
+      complete: false,
+      sweepBlocked: false,
+      detail: "complete=false stopped=export-failed",
+    });
+    await GET(req());
+    expect(notified).toHaveLength(0);
+  });
+
   it("says nothing when the walk completed", async () => {
     mockIngest.mockResolvedValue({
       source: "gmail",

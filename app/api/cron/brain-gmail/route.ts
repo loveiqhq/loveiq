@@ -132,7 +132,10 @@ export async function GET(request: Request) {
     // finished -- deliberately, so an outage cannot delete the corpus -- which means a
     // permanently incomplete walk silently disables deletion for this source. Branched
     // on nowhere until 2026-09-07; see brain-drive for the run that exposed it.
-    if (!result.skipped && result.complete === false) {
+    // `sweepBlocked ?? complete === false`, not `complete` alone: the two are
+    // different questions and keying on the wrong one raised a false alarm within a
+    // day. Drive sweeps normally while reporting `complete=false stopped=export-failed`.
+    if (!result.skipped && (result.sweepBlocked ?? result.complete === false)) {
       await alertOnce(
         "incomplete",
         `:brain: brain-gmail walked only part of Gmail (${escapeSlack(ingestNote(result))}). ` +
