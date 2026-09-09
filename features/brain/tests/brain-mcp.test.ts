@@ -507,13 +507,18 @@ describe("/api/mcp", () => {
         until: "2026-09-01",
         meta: { status: "WIP" },
       });
-      expect(mockRetrieve).toHaveBeenLastCalledWith("which tasks are in progress", 12, {
-        sources: ["notion"],
-        excludeSources: ["commit"],
-        since: "2026-08-01",
-        until: "2026-09-01",
-        meta: { status: "WIP" },
-      });
+      expect(mockRetrieve).toHaveBeenLastCalledWith(
+        "which tasks are in progress",
+        12,
+        {
+          sources: ["notion"],
+          excludeSources: ["commit"],
+          since: "2026-08-01",
+          until: "2026-09-01",
+          meta: { status: "WIP" },
+        },
+        expect.any(Object)
+      );
     });
 
     it("ignores malformed filters rather than passing nonsense to the database", async () => {
@@ -528,13 +533,18 @@ describe("/api/mcp", () => {
         exclude_sources: [],
         meta: { nested: { deep: true }, status: "WIP", count: 3 },
       });
-      expect(mockRetrieve).toHaveBeenLastCalledWith("anything", 12, {
-        sources: undefined,
-        excludeSources: undefined,
-        since: undefined,
-        until: undefined,
-        meta: { status: "WIP", count: "3" },
-      });
+      expect(mockRetrieve).toHaveBeenLastCalledWith(
+        "anything",
+        12,
+        {
+          sources: undefined,
+          excludeSources: undefined,
+          since: undefined,
+          until: undefined,
+          meta: { status: "WIP", count: "3" },
+        },
+        expect.any(Object)
+      );
     });
 
     it("gives the model a score, a date and a fetch handle for every hit", async () => {
@@ -679,7 +689,14 @@ describe("/api/mcp", () => {
 
       mockRetrieve.mockResolvedValue([]);
       await call({ query: "x".repeat(10), limit: 9999 });
-      expect(mockRetrieve).toHaveBeenLastCalledWith(expect.any(String), 30, expect.any(Object));
+      // The fourth argument is an out-parameter for what the caps cut; it carries no
+      // input meaning, so only the three that do are asserted.
+      expect(mockRetrieve).toHaveBeenLastCalledWith(
+        expect.any(String),
+        30,
+        expect.any(Object),
+        expect.any(Object)
+      );
     });
 
     it("surfaces an unexpected failure as a tool result, not a transport error", async () => {

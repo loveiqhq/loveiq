@@ -5,7 +5,11 @@ import { googleCredentialShape, readVercelOidcToken } from "@shared/http/google-
 import { renderSources } from "@features/brain/server/answer";
 import { recordToolCall } from "@features/brain/server/log";
 import { adCostByDay, adCovers, brainDailyRollup } from "@features/brain/server/ingest/analytics";
-import { CorpusUnavailableError, retrieve } from "@features/brain/server/retrieve";
+import {
+  CorpusUnavailableError,
+  retrieve,
+  type RetrieveShaping,
+} from "@features/brain/server/retrieve";
 import {
   priorDecisions,
   recordDecision,
@@ -1459,8 +1463,10 @@ async function callTool(
     };
 
     let chunks;
+    /** What the per-source and per-grain caps cut, so the reshaping is not invisible. */
+    const shaping: RetrieveShaping = {};
     try {
-      chunks = await retrieve(query, limit, opts);
+      chunks = await retrieve(query, limit, opts, shaping);
     } catch (err) {
       if (!(err instanceof CorpusUnavailableError)) throw err;
       // Deliberately NOT "no results". Telling a model the corpus is empty when
@@ -1565,8 +1571,28 @@ async function callTool(
     // `defence()` and a 24-payload forgery matrix to itself — while this door,
     // the one wired into sessions holding bash, file and production-write tools,
     // pasted the same corpus verbatim. Same renderer now; see `renderSources`.
+    /**
+     * SAID, BECAUSE THE ALTERNATIVE IS A SILENT LIE OF OMISSION.
+     *
+     * The caps stop one source filling the whole result set, which is right — but they
+     * make a source with twenty good matches look like a source with three, and nothing
+     * distinguishes that from it genuinely having three. A reader concludes the corpus is
+     * thin on something it is not thin on. Naming the source and the count is what turns
+     * an invisible reshaping into a next step: narrow with `sources` and see the rest.
+     */
+    const heldBack = shaping.heldBack
+      ? `\n\nHELD BACK BY THE PER-SOURCE CAP, not by relevance: ` +
+        [...shaping.heldBack.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .map(([src, n]) => `${n} more from ${src}`)
+          .join(", ") +
+        `. One source is not allowed to fill the whole result. If that is the source you ` +
+        `want, ask again with sources:["${[...shaping.heldBack.keys()][0]}"] and you will ` +
+        `get them.`
+      : "";
+
     return textResult(
-      `${UNTRUSTED_SOURCES_PREAMBLE}\n\n${prior}${RESULT_GUIDE}\n\n${renderSources(chunks, { forAgent: true })}`,
+      `${UNTRUSTED_SOURCES_PREAMBLE}\n\n${prior}${RESULT_GUIDE}${heldBack}\n\n${renderSources(chunks, { forAgent: true })}`,
       false,
       "lower the limit, then fetch_document the ids that matter"
     );

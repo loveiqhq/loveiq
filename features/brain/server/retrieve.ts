@@ -188,10 +188,28 @@ function sanitiseQuery(q: string): string {
     .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD");
 }
 
+/**
+ * What the caps held back, so a reshaped result set does not read as the whole picture.
+ *
+ * The two caps below are deliberate and load-bearing, but they are invisible at the point
+ * of use: a source with twenty good matches can be represented by three, and the reader
+ * has no way to tell that from the source having only three. That looks like an answer
+ * about the whole corpus and is an answer about a deliberately flattened slice of it.
+ *
+ * Filled in as an out-parameter rather than widening the return type, matching the
+ * `stats` idiom already used at the tool boundary — every existing caller keeps working
+ * and simply learns nothing, which is what it did before.
+ */
+export interface RetrieveShaping {
+  /** Source -> how many of its matches were cut to make room for other sources. */
+  heldBack?: Map<string, number>;
+}
+
 export async function retrieve(
   question: string,
   limit = 12,
-  opts: RetrieveOptions = {}
+  opts: RetrieveOptions = {},
+  shaping: RetrieveShaping = {}
 ): Promise<BrainChunk[]> {
   const trimmed = sanitiseQuery(question).trim();
   if (trimmed.length < 2) return [];
@@ -365,9 +383,21 @@ export async function retrieve(
 
   // If the cap left room unused because no other source had candidates, fill it
   // back in by score rather than returning a short list.
+  let backfilled = 0;
   for (const row of deferred) {
     if (picked.length >= limit) break;
     picked.push(row);
+    backfilled++;
+  }
+
+  // Whatever the backfill could not reach was cut by a cap, not by relevance. Counted
+  // per source, because "ga4 had four more matches" is the fact that makes a reader
+  // narrow with `sources` instead of concluding ga4 had nothing else to say.
+  const cut = deferred.slice(backfilled);
+  if (cut.length > 0) {
+    const byySource = new Map<string, number>();
+    for (const row of cut) byySource.set(row.source, (byySource.get(row.source) ?? 0) + 1);
+    shaping.heldBack = byySource;
   }
 
   // The backfill appends AFTER every capped pick, so a deferred row scoring 1.02
