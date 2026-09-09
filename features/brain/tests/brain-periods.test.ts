@@ -39,9 +39,15 @@ describe("expandRelativePeriods", () => {
     expect(expandRelativePeriods("how many signups currently", NOW)).toContain("August 2026");
   });
 
-  it("leaves a question that already names its period untouched", () => {
-    // This one already worked: monthly:2026-08 ranked 1 at score 1.340.
-    expect(expandRelativePeriods("how did august go", NOW)).toBe("how did august go");
+  it("supplies the year a bare month name leaves out", () => {
+    /**
+     * CHANGED 2026-09-09, on measurement. This used to assert that "how did august go"
+     * was left alone, on the reasoning that the month word alone already ranked August
+     * first. Sweeping 162 numeric questions showed otherwise: "how many signups june"
+     * and "what were our signups august" returned SEPTEMBER's figure, because with
+     * nothing anchored the recency term simply picks the newest month.
+     */
+    expect(expandRelativePeriods("how did august go", NOW)).toBe("how did august go August 2026");
     expect(expandRelativePeriods("revenue?", NOW)).toBe("revenue?");
     expect(expandRelativePeriods("", NOW)).toBe("");
   });
@@ -108,10 +114,41 @@ describe("periodAnchor — where the recency term measures from", () => {
    * all and silently re-rank them. A year makes it unambiguous, and the bare-month case
    * measured fine without an anchor.
    */
+  /**
+   * THE HALF THAT MUST NEVER CHANGE. "May" is an auxiliary verb and "march" a common
+   * noun, so anchoring on them bare would silently re-rank questions about nothing of
+   * the kind. They are recognised only after a preposition.
+   */
   it("does not treat a month word used as ordinary English as a period", () => {
     expect(periodAnchor("how may we improve the report", NOW)).toBeNull();
     expect(periodAnchor("what is the march of progress on pricing", NOW)).toBeNull();
-    expect(periodAnchor("how many page views in june", NOW)).toBeNull();
+    expect(periodAnchor("we may need to change the pricing", NOW)).toBeNull();
+  });
+
+  /**
+   * THE HALF THAT DID CHANGE, and why. Ten of the twelve month names are not English
+   * words, and a bare one is how people actually ask — nobody says "June 2026" out
+   * loud. Leaving them unanchored meant recency picked the newest month instead:
+   * measured, "how many signups june" answered with September's figure.
+   */
+  it("anchors an unambiguous month name on its own", () => {
+    expect(periodAnchor("how many page views in june", NOW)).toEqual({
+      date: "2026-06-30",
+      grain: "month",
+    });
+    expect(periodAnchor("what were our signups august", NOW)?.date).toBe("2026-08-31");
+    // After a preposition, the two English words are months again.
+    expect(periodAnchor("what happened in may", NOW)?.date).toBe("2026-05-31");
+  });
+
+  /**
+   * A MONTH THAT HAS NOT ARRIVED IS LAST YEAR'S. Asked in September, "december" means
+   * the December that happened, not the one three months away — a business question is
+   * never about a month with no data in it.
+   */
+  it("reads a future-sounding month as the most recent one that happened", () => {
+    expect(periodAnchor("how did december go", NOW)?.date).toBe("2025-12-31");
+    expect(periodAnchor("signups in october", NOW)?.date).toBe("2025-10-31");
   });
 
   it("leaves the search-string expansion it shares code with unchanged", () => {

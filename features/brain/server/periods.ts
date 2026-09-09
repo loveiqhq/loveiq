@@ -40,11 +40,12 @@ import { isoWeek, longDate, longMonth } from "@features/brain/server/ingest/anal
  * of it is a date we have no data for, and anchoring there would push the current month
  * DOWN relative to a month that has closed. Clamping keeps today's behaviour exactly.
  *
- * Bare month names are deliberately NOT detected. "may" is a common auxiliary verb and
- * "march" a common noun, so "how may we improve this" would anchor to May and quietly
- * re-rank a question about nothing of the kind. A year makes it unambiguous, and the
- * bare-month case measured fine without an anchor ("how many page views in june" already
- * ranks June first) — so the risky half buys nothing.
+ * Bare month names ARE detected, for the ten that are not also English words. "may" and
+ * "march" are recognised only after a preposition ("in may"), since "how may we improve
+ * this" must not anchor to May. This was originally left out entirely on the grounds
+ * that the bare case "measured fine without an anchor" — measured on one question, and
+ * false: sweeping 162 numeric questions, "how many signups june" returned SEPTEMBER's
+ * figure, because with nothing anchored the recency term just picks the newest month.
  */
 export interface PeriodAnchor {
   /** Last day of the period, clamped to today. */
@@ -184,6 +185,40 @@ function detect(question: string, now: Date): { search: string; anchor: PeriodAn
     setAnchor(`${named[2]}-${mm(named[1]!)}`);
   } else if (isoMonth) {
     setAnchor(`${isoMonth[1]}-${isoMonth[2]}`);
+  } else {
+    /**
+     * A BARE MONTH NAME, which is how people actually ask.
+     *
+     * This was deliberately left out, on the reasoning that "may" is an auxiliary verb
+     * and "march" a common noun, so "how may we improve this" would anchor to May — and
+     * that the bare case "measured fine without an anchor" anyway. The first half is
+     * true of exactly two months. The second half was measured on one question and does
+     * not hold: sweeping 162 numeric questions on 2026-09-09, "how many signups june"
+     * and "what were our signups august" returned SEPTEMBER's figure, because with no
+     * anchor the recency term simply picks the newest month. A confidently wrong number
+     * for a question anyone would ask.
+     *
+     * So the ten unambiguous months are detected bare, and the two English words are
+     * detected only after a preposition — "in may" is a month, "how may we" is not.
+     *
+     * THE YEAR IS THE MOST RECENT ONE THAT HAS HAPPENED. Asked in September, "june"
+     * means this June and "december" means last December; a business question is never
+     * about a month that has not arrived.
+     */
+    const AMBIGUOUS = new Set(["may", "march"]);
+    const plain = MONTHS.filter((m) => !AMBIGUOUS.has(m));
+    const bare =
+      new RegExp(`\\b(${plain.join("|")})\\b`).exec(q) ??
+      new RegExp(`\\b(?:in|during|for)\\s+(${[...AMBIGUOUS].join("|")})\\b`).exec(q);
+    if (bare) {
+      const idx = MONTHS.indexOf(bare[1]!);
+      const nowY = now.getUTCFullYear();
+      const year = idx <= now.getUTCMonth() ? nowY : nowY - 1;
+      const key = `${year}-${String(idx + 1).padStart(2, "0")}`;
+      setAnchor(key);
+      // The year the reader left out, so the lexical arm can match the month's own title.
+      add(longMonth(key));
+    }
   }
 
   return {

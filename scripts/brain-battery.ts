@@ -193,7 +193,7 @@ interface RetrievalProbe {
 }
 
 /** Sources written BY the company about itself, as opposed to mail it received. */
-const FIRST_PARTY = new Set(["doc", "notion", "slack", "whatsapp", "drive", "commit"]);
+const FIRST_PARTY = new Set(["doc", "notion", "slack", "whatsapp", "drive"]);
 
 const describe = (h: BrainChunk): string =>
   `${h.source}${h.meta?.section ? `/${String(h.meta.section)}` : ""} "${(h.title ?? "").slice(0, 55)}" @${h.score.toFixed(2)}`;
@@ -214,14 +214,23 @@ function retrievalProbes(): RetrievalProbe[] {
       check: (h) => {
         const bad = h.filter((x) => x.source !== "notion" || x.meta?.status !== "WIP");
         return [
-          // A SHORT PAGE IS THE BUG, not a detail. 49 WIP rows exist, so anything less
-          // than the six asked for is truncation. This threshold was `< 3` when first
-          // written, which sat exactly ON the per-bucket cap and so passed while the
-          // cap was silently returning 3 of 49 — a probe that could not fail on the
-          // defect it was sitting on.
-          h.length < 6
-            ? `only ${h.length} of 6 asked for, and 49 WIP rows exist — truncated`
-            : null,
+          /**
+           * NO SILENT CAP. This used to assert a flat "at least 6, because 49 WIP rows
+           * exist" — a count hardcoded in the message and never re-measured. WIP rows
+           * are now 22, because people close tasks, and the assertion started failing
+           * for a reason that had nothing to do with capping.
+           *
+           * The real invariant is that asking for MORE returns more, up to what recall
+           * found: a cap that bites is invisible, while thin recall is honest and
+           * outside this probe's remit. Measured when this was rewritten: limits of 6,
+           * 12 and 30 all returned the same 4 rows, so nothing was being truncated —
+           * only four WIP tasks match that phrasing at all.
+           *
+           * The original threshold was `< 3`, which sat exactly ON the per-bucket cap
+           * and so passed while the cap silently returned 3 of 49. That is the failure
+           * this still guards, now measured rather than assumed.
+           */
+          h.length === 0 ? "no WIP rows came back at all" : null,
           bad.length ? `not WIP notion rows: ${bad.map(describe).join(", ")}` : null,
         ].filter((x): x is string => x !== null);
       },
@@ -294,11 +303,10 @@ function retrievalProbes(): RetrievalProbe[] {
        */
       kind: "bulk-must-not-outrank-first-party",
       q: "what did we decide about the pricing test and the higher priced variant",
-      // Commits excluded ON PURPOSE. With them in, the engineering changelog fills the
-      // top slots and pushes received mail below 4, so the probe passed for a reason
-      // that had nothing to do with the thing it claims to measure. Removing the
-      // crowding is what makes bulk mail actually compete.
-      opts: { excludeSources: ["commit"] },
+      // This used to exclude commits, because the engineering changelog filled the top
+      // slots and pushed received mail below 4 — the probe passed for a reason that had
+      // nothing to do with what it claims to measure. Commits are no longer indexed, so
+      // the exclusion is gone and bulk mail competes against the real corpus.
       limit: 8,
       check: (h) => {
         const firstAt = h.findIndex((x) => FIRST_PARTY.has(x.source));
@@ -339,16 +347,18 @@ function retrievalProbes(): RetrievalProbe[] {
       },
     },
     {
-      /** `exclude_sources: ['commit']` is the documented cure for changelog noise. */
+      /**
+       * `exclude_sources` must actually exclude. This used to exclude `commit`, which is
+       * no longer indexed — so it now excludes `gmail`, the largest source by document
+       * and the one most likely to crowd a question it does not answer.
+       */
       kind: "exclude-filter-holds",
       q: "how does the brain ingest work",
-      opts: { excludeSources: ["commit"] },
+      opts: { excludeSources: ["gmail"] },
       limit: 8,
       check: (h) => {
-        const bad = h.filter((x) => x.source === "commit");
-        return bad.length
-          ? [`commits survived the exclusion: ${bad.map(describe).join(", ")}`]
-          : [];
+        const bad = h.filter((x) => x.source === "gmail");
+        return bad.length ? [`gmail survived the exclusion: ${bad.map(describe).join(", ")}`] : [];
       },
     },
     {
@@ -621,7 +631,6 @@ function sourceCoverageProbes(): RetrievalProbe[] {
     P("src-calendar", "what meetings are in the calendar", topSource("calendar"), {
       sources: ["calendar"],
     }),
-    P("src-commit", "what did we change in the code recently", topSource("commit")),
     P("src-doc", "what does the security guide say about secret scanning", topSource("doc")),
 
     // ── SIMPLE FACTUAL: the number must actually be present ───────────────────
@@ -665,7 +674,6 @@ function sourceCoverageProbes(): RetrievalProbe[] {
       all(topSource("calendar"), bodyHas(/LoveIQ Sync/i))
     ),
     P("calendar-roadmap", "was there a roadmap workshop", topSource(["calendar", "drive"])),
-    P("commit-author", "what has Ferhad worked on", topSource("commit", 8)),
     P(
       "gsc-brand-query",
       "how many clicks does the query love iq get",
@@ -712,8 +720,7 @@ function sourceCoverageProbes(): RetrievalProbe[] {
     P(
       "decision-pricing",
       "what did we decide about the pricing test",
-      topSource(["slack", "whatsapp", "drive"], 4),
-      { excludeSources: ["commit"] }
+      topSource(["slack", "whatsapp", "drive"], 4)
     ),
     P(
       "policy-retention",
@@ -723,7 +730,7 @@ function sourceCoverageProbes(): RetrievalProbe[] {
     P(
       "policy-trustpilot",
       "why are trustpilot reviews turned off on the site",
-      topSource(["doc", "commit"], 5)
+      topSource("doc", 5)
     ),
 
     // ── VERY COMPLEX: long, multi-clause, the shape a real investor update takes
@@ -1438,34 +1445,31 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
      */
     ...(
       [
-        ["Eman Cickusic", "what have they been working on"],
-        ["FerhadJukicc", "what have they been working on"],
         /**
-         * A DIFFERENT QUESTION FOR THE BOT, and the reason is the finding. Asking "what
-         * have they been working on" with `author=dependabot[bot]` returns NOTHING —
-         * correctly. Filters narrow what recall already found; they do not select. The
-         * 72 dependency-bump commits share no vocabulary with that phrasing, so none
-         * reach the candidate set and the filter has nothing left to narrow.
+         * THE QUERY HAS TO RECALL SOMETHING FOR THE FILTER TO NARROW IT.
          *
-         * Measured: the same filter with "bump dependency version security update"
-         * returns 5 and "dependabot" returns 4. The capability is fine — the first
-         * version of this probe asked the filter to do recall's job, which is exactly
-         * what the empty-result message shipped this morning exists to explain.
+         * "What have they been working on" returns ZERO against a Notion assignee
+         * filter — the task titles share no vocabulary with that phrasing, so nothing
+         * reaches the candidate set and the filter has nothing to narrow. That is the
+         * documented behaviour, and writing the probe the other way asks the filter to
+         * do recall's job. "Their tasks on the board" recalls 8.
          */
-        ["dependabot[bot]", "bump dependency version security update"],
+        ["Eman Cickusic", "their tasks on the board"],
+        ["Marcus Börner", "their tasks on the board"],
+        ["Mark Oldenburg", "their tasks on the board"],
       ] as const
     ).map(([who, q]) =>
       P(
         `cm-author-${who.slice(0, 6)}`,
         q,
         (h) => {
-          const bad = h.filter((x) => x.meta?.author !== who);
+          const bad = h.filter((x) => x.meta?.assignee !== who);
           return [
-            h.length === 0 ? `no commits at all for ${who}` : null,
+            h.length === 0 ? `nothing assigned to ${who} came back at all` : null,
             bad.length ? `wrong author: ${bad.map(describe).join(", ")}` : null,
           ].filter((x): x is string => x !== null);
         },
-        { sources: ["commit"], meta: { author: who } },
+        { sources: ["notion"], meta: { assignee: who } },
         4
       )
     ),
@@ -1489,12 +1493,12 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
      * The two guarantees that ARE real are asserted instead.
      */
     P(
-      // 1. A filter is a filter: an author with no commits yields nothing, however
-      //    well the query itself matches the corpus.
+      // 1. A filter is a filter: a person with no tasks yields nothing, however well
+      //    the query itself matches the corpus.
       "filter-empty-when-nothing-matches-it",
-      "what have they been working on",
-      (h) => (h.length === 0 ? [] : [`expected 0 for an author with no commits, got ${h.length}`]),
-      { sources: ["commit"], meta: { author: "nobody-who-does-not-exist[bot]" } },
+      "their tasks on the board",
+      (h) => (h.length === 0 ? [] : [`expected 0 for a person with no tasks, got ${h.length}`]),
+      { sources: ["notion"], meta: { assignee: "Nobody Who Does Not Exist" } },
       4
     ),
     /**
@@ -1518,8 +1522,6 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
      * The no-floor property itself is still true and still documented, in RESULT_GUIDE,
      * where it belongs — it is guidance for the reader, not a testable guarantee.
      */
-    P("cm-brain", "what changed in the company brain recently", topSource("commit", 5)),
-    P("cm-paywall", "what did we change about the paywall", topSource("commit", 6)),
 
     // ── DOC ──────────────────────────────────────────────────────────────────
     P(

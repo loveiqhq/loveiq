@@ -57,7 +57,7 @@ a transcript. Filter on `surface` to tell the two apart.
 
 | Source                                 | Where from                                                             | When                    |
 | -------------------------------------- | ---------------------------------------------------------------------- | ----------------------- |
-| Repo docs + git commits                | `.github/workflows/brain-ingest.yml` → `scripts/brain-ingest-repo.mjs` | on every push to `main` |
+| Repo docs                              | `.github/workflows/brain-ingest.yml` → `scripts/brain-ingest-repo.mjs` | on every push to `main` |
 | GA4, call notes, funnel numbers, Slack | `/api/cron/brain-fast`                                                 | every 15 min            |
 | Notion (board + pages)                 | `/api/cron/brain-notion`                                               | hourly, at :41          |
 | Gmail (every mailbox on the domain)    | `/api/cron/brain-gmail`                                                | hourly, at :11          |

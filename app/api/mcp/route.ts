@@ -254,7 +254,6 @@ export const SOURCES_FOR_TEST = [
   // that creates the first one, per the rule below about `jira`.
   "decision",
   "doc",
-  "commit",
   "analytics",
   "ga4",
   "gsc",
@@ -352,7 +351,7 @@ const TOOLS = [
     title: "Search the company record",
     annotations: { readOnlyHint: true, openWorldHint: false },
     description:
-      "Search LoveIQ's own written record: repository documentation, every git commit " +
+      "Search LoveIQ's own written record: repository documentation " +
       "(including the plain-English 'For Marcus:' summaries), the Notion workspace — both " +
       "the team board with each task's status, priority and assignee, and the written " +
       "pages — the team's Slack conversations, the company email, the WhatsApp team group " +
@@ -437,9 +436,9 @@ const TOOLS = [
           type: "array",
           items: { type: "string", enum: SOURCES_FOR_TEST },
           description:
-            "Everything EXCEPT these. `['commit']` is the useful one: engineering " +
-            "commits describe changes to the data using the same words as the data, " +
-            "so they crowd the top of business questions.",
+            "Everything EXCEPT these. Use it when one source keeps answering a question " +
+            "it does not actually hold — the result says which source was held back and " +
+            "by how much, so it tells you what to exclude.",
         },
         since: {
           type: "string",
@@ -457,7 +456,7 @@ const TOOLS = [
           description:
             'Exact-match on indexed metadata, e.g. {"status": "WIP"}. Notion board ' +
             "tasks carry status, assignee, priority, due, impact, database; slack " +
-            "carries channel and day; commit carries author, date, sha; gmail carries " +
+            "carries channel and day; gmail carries " +
             "mailbox and bulk; drive carries owner, kind and section. Values are " +
             "matched EXACTLY — the statuses actually in use are Done, Idea, " +
             "Not Started, WIP, Backlog, Planning and In use, so 'in_progress' or " +
@@ -473,7 +472,7 @@ const TOOLS = [
             "the list is of meeting decisions rather than presenting it as everything " +
             "the team has decided. Call `list_sources` if you need current counts. " +
             'WHO DID WHAT: use {"people": ["Full Name"]}. It is the ONE field that ' +
-            "means a person across every source — it resolves a commit's author, an " +
+            "means a person across every source — it resolves an " +
             "email's participants, a Drive file's owner, a Notion assignee, a WhatsApp " +
             "speaker and a calendar attendee to a single canonical name, so " +
             '{"people": ["Marcus Börner"]} finds all of them at once. Names are exact ' +
@@ -482,13 +481,11 @@ const TOOLS = [
             "both an Eman and an Iman). Bots and shared mailboxes are excluded, so " +
             "dependabot never counts as a colleague. Absent means the identity was not " +
             "recognised, never that nobody was involved. " +
-            "The per-source fields below still exist and still work: " +
-            "a commit's author lives in `meta.author`, and " +
-            "commit text almost never repeats the name, so 'what has X been " +
-            "committing' cannot match on the name and returns their calendar invites " +
-            "instead. Filter on it. Matching is EXACT, so a first name alone finds " +
-            "nothing: the values in use are 'Eman Cickusic', 'FerhadJukicc', " +
-            "'dependabot[bot]' and 'Eman'. Notion's `assignee` behaves the same way — " +
+            "The per-source fields below still exist and still work: a Notion page's " +
+            "writer is in `meta.author`, and page text almost never repeats the name, so " +
+            "asking who wrote something cannot match on the name and returns their " +
+            "meetings instead. Filter on it. Matching is EXACT, so a first name alone " +
+            "finds nothing. Notion's `assignee` behaves the same way — " +
             "'Eman Cickusic', 'Marcus Börner', 'Mark Oldenburg'. Treat both lists as " +
             "what existed when this was written, not as a guarantee; people join and " +
             "leave, and nothing recomputes this sentence.",
@@ -1400,7 +1397,6 @@ async function productSchema(): Promise<Map<string, string[]> | null> {
  */
 function documentParts(source: string, rawId: string): { base: string; sep: "#" | "-" | null } {
   // `<sha>`, `<sha>-2`, `<sha>-3`. The sha is exactly 40 hex characters.
-  if (source === "commit") return { base: rawId.slice(0, 40), sep: "-" };
   // `doc` also suffixes with `-<n>`, but its ids END in a heading slug that can
   // itself end in a digit, so stripping trailing digits merges unrelated headings.
   // That is the `monthly:2026-08` -> `monthly:2026` bug retrieve.ts carries a scar
@@ -1544,7 +1540,7 @@ async function callTool(
       }
       return textResult(
         `Nothing in the indexed corpus matches "${query}". Indexed: repository ` +
-          `documentation, git commits, the Notion workspace (board and pages), Slack, ` +
+          `documentation, the Notion workspace (board and pages), Slack, ` +
           `company email, the WhatsApp group, the calendar, Google Drive documents and ` +
           `call notes, and dated business numbers. Source code is not indexed — read the ` +
           `repository directly. Call list_sources before concluding LoveIQ has no record ` +

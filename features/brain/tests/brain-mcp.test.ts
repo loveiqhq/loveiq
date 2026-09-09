@@ -324,14 +324,16 @@ describe("/api/mcp", () => {
        */
       expect(meta).toMatch(/RECORDED CALLS ONLY/);
       /**
-       * And the same shape for WHO DID WHAT. Measured 2026-09-06: 1,542 of 1,715 commit
-       * chunks are by one author and only 39 mention that name in their text, so "what
-       * has X been committing" matched their calendar invites and emails instead —
-       * the author exists only in `meta.author`, which is not indexed as text.
+       * And the same shape for WHO DID WHAT. `meta.author` used to be a commit field and
+       * the example was written from commit data; commits are no longer indexed, and the
+       * field now carries a NOTION PAGE'S writer — 1,283 pages that had no identity at
+       * all until it did.
        *
-       * The exact values matter more than the field: matching is exact and the data is
-       * inconsistent ("Eman Cickusic" 1,542, but "Eman" for two early commits), so a
-       * caller guessing a first name gets silence.
+       * The point survives the change of source, which is why the assertion does: page
+       * text almost never repeats its author's name, so asking who wrote something
+       * cannot match on the name and returns their meetings instead. The field is the
+       * only way in, and matching is exact, so a caller guessing a first name gets
+       * silence.
        */
       expect(meta).toMatch(/meta\.author/);
       expect(meta).toMatch(/matching is exact/i);

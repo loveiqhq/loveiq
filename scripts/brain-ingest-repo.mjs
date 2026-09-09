@@ -2,33 +2,43 @@
 
 /**
  * Ingest the repo's own knowledge into the company-brain corpus: every tracked
- * markdown doc, chunked on headings, plus every commit message.
+ * markdown doc, chunked on headings.
  *
- * WHY THIS RUNS IN A GITHUB ACTION AND NOT A VERCEL CRON. Both inputs live in
- * git: the docs are files and the commits are history. In an Action both are
- * simply present on disk. From a Vercel function neither is -- Next.js only
+ * WHY THIS RUNS IN A GITHUB ACTION AND NOT A VERCEL CRON. The docs live in git and are
+ * simply present on disk in an Action. From a Vercel function they are not: Next.js only
  * bundles what is imported, so reading arbitrary `.md` at runtime means fighting
- * `outputFileTracingIncludes`, and `git log` is not there at all. Docs and
- * commits also only change on push, so ingest-on-push is both simpler and
- * fresher than a nightly crawl.
+ * `outputFileTracingIncludes`. Docs also only change on push, so ingest-on-push is both
+ * simpler and fresher than a nightly crawl.
  *
- * WHY COMMITS ARE WORTH INDEXING AT ALL. This repo's convention puts a
- * plain-English `For Marcus:` line at the end of every commit message, written
- * for a non-technical reader. That makes the commit log the single best corpus
- * here for "what changed and why" questions from someone who does not read code
- * -- which is most of who this brain is for. Those lines are lifted into
- * `meta.for_marcus` so the answer layer can prefer them.
+ * COMMIT MESSAGES ARE NO LONGER INDEXED, AND THE REASONING IS WORTH KEEPING.
+ *
+ * They used to be, for a good reason: this repo's convention puts a plain-English
+ * `For Marcus:` line at the end of every commit, written for a non-technical reader.
+ * The trouble was volume against value. 1,795 chunks of dense, well-written prose match
+ * almost any question lexically, and only 513 of them carried that summary at all -- the
+ * other 71% were pure engineering detail.
+ *
+ * MEASURED 2026-09-09 on the questions a founder actually asks: six of eight had a commit
+ * as their top hit and none of those commits contained the answer. "How much are we
+ * spending on ads" returned a commit about deleting a coverage threshold; excluding
+ * commits returned September's actual spend. "What happened in the last team meeting"
+ * returned a commit about calendar code; excluding them returned the meeting. Against
+ * that, excluding commits changed only ONE of five engineering questions -- "what did we
+ * change in the code recently" is answered by the repo docs, not by the log.
+ *
+ * Demoting rather than removing was tried first and measured worse: a 0.25 penalty pushed
+ * commits out of the top five for the questions where they ARE the answer, and penalties
+ * of 0.05 to 0.10 changed nothing at all.
+ *
+ * The history is not lost -- it is in GitHub, where the people who want it already look.
+ * This corpus is for the company, not for the codebase.
  *
  * IDEMPOTENT. Upserts on the natural key (source, source_id), then sweeps any row
  * of that source it did not touch this run -- that is how a deleted file or a
  * renamed heading stops being retrievable.
  *
- * COMMITS ARE SWEPT TOO, which they did not used to be. "Append-only" held only
- * while chunking never changed: the moment a commit's body is re-chunked into
- * fewer parts (stripping machine trailers did exactly that), the leftover
- * `<sha>-2` rows become permanently unreachable orphans that can still be
- * retrieved and cited. Both sweeps are guarded by the write count OF THEIR OWN
- * SOURCE, never the total.
+ * THE SWEEP IS GUARDED BY THE WRITE COUNT OF ITS OWN SOURCE, never the total, so a run
+ * that failed to read the docs can never be mistaken for a run that found none.
  *
  * Usage: SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... node scripts/brain-ingest-repo.mjs [--dry-run]
  */
@@ -269,100 +279,6 @@ function collectDocs() {
     console.warn(`${skipped} markdown file(s) are in the git index but missing from the worktree`);
   }
   return { rows, fileCount: readCount, listedCount: files.length };
-}
-
-/**
- * Drop machine trailers from a commit body before it is indexed.
- *
- * 532 of 1,516 commit chunks carried `Co-Authored-By:` lines, and one chunk's
- * entire body was a single 68-character trailer — a zero-information row that can
- * still be retrieved and rendered to the reader as a numbered source. Worse, this
- * repo's commit convention forbids AI attribution precisely because the Slack
- * commit channel must read as the team's own work, and the brain answers into
- * Slack: without this it can quote those trailers straight back.
- */
-function stripTrailers(body) {
-  return (body ?? "")
-    .split("\n")
-    .filter(
-      (line) =>
-        !/^\s*(co-authored-by|signed-off-by|generated[- ]with|reviewed-by|helped-by)\s*:/i.test(
-          line
-        )
-    )
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-function collectCommits() {
-  // Unit/record separators so a commit body containing newlines, pipes or tabs
-  // cannot break the parse.
-  const raw = git(["log", "--no-merges", "--pretty=format:%H%x1f%an%x1f%aI%x1f%s%x1f%b%x1e"]);
-  const rows = [];
-  for (const rec of raw.split("\x1e")) {
-    const t = rec.replace(/^\n/, "");
-    if (!t.trim()) continue;
-    const [sha, author, date, subject, rawBody = ""] = t.split("\x1f");
-    if (!sha || !subject) continue;
-    const body = stripTrailers(rawBody);
-    const message = body.trim() ? `${subject}\n\n${body.trim()}` : subject;
-
-    // A commit whose entire message is one word — "fix", "update", "test" — cannot
-    // answer anything, but it CAN win a retrieval slot (`word_similarity` scores a
-    // 3-character body highly against a short query) and is then rendered to the
-    // reader as a numbered source.
-    //
-    // 8 is deliberately the low end. Measured on this history: <8 drops 71 commits
-    // and every one is a single word; <15 would drop 201, taking real messages
-    // like "fix lint" with it. The point is to remove chunks with no information,
-    // not to curate.
-    if (message.trim().length < 8) continue;
-
-    // This repo's commit convention puts a plain-English summary for a
-    // non-technical reader at the END of the message. Lifting it into meta means
-    // it survives on EVERY part of a split commit, and gives the answer layer a
-    // ready-made non-technical phrasing to prefer.
-    // Greedy, not lazy: these summaries wrap over several lines, and a lazy
-    // match with the `m` flag stops at the first line end -- measured, it kept
-    // 69 of 251 chars on a real commit.
-    const forMarcus = /^For Marcus:\s*([\s\S]+)$/im.exec(body ?? "")?.[1]?.trim() ?? null;
-
-    // Commit messages here are long-form -- 66 of them exceeded the 2400-char
-    // ceiling, the worst at 6412. They get the same slicing as docs rather than
-    // truncation, because truncating from the end would drop exactly the
-    // `For Marcus:` line that makes a commit legible to the people this brain is
-    // for. Every part keeps the subject as its title, so a matching part still
-    // says which commit it came from.
-    const parts = hardSplit(message);
-    parts.forEach((part, i) => {
-      rows.push({
-        source: "commit",
-        source_id: i === 0 ? sha : `${sha}-${i + 1}`,
-        title: subject,
-        url: `https://github.com/${REPO}/commit/${sha}`,
-        body: part,
-        // The commit's own date, so recency ties break on when the work happened
-        // rather than on when we last ingested — `updated_at` is stamped once per
-        // run and cannot order anything.
-        // UTC, not the author's local date. `%aI` carries an offset, so slicing
-        // the first 10 characters gave the committer's local day — 162 of 1510
-        // commits landed one day later than their UTC instant, and since
-        // brain_search tie-breaks on period_end, a late-night European commit
-        // outranked chunks genuinely dated the same real day. Every other source
-        // uses UTC dates.
-        period_end: typeof date === "string" ? new Date(date).toISOString().slice(0, 10) : null,
-        meta: {
-          sha: sha.slice(0, 8),
-          author,
-          date,
-          for_marcus: forMarcus,
-          ...(parts.length > 1 ? { part: i + 1, parts: parts.length } : {}),
-        },
-      });
-    });
-  }
-  return rows;
 }
 
 /**
@@ -612,13 +528,11 @@ if (!onMain && !process.argv.includes("--dump-json") && !process.argv.includes("
 }
 
 const { rows: docRows, fileCount, listedCount } = collectDocs();
-const commitRows = collectCommits();
-const withMarcus = commitRows.filter((r) => r.meta.for_marcus).length;
 
 if (process.argv.includes("--dump-json")) {
   // Machine-readable dump for the audit harness, and for diffing what a future
   // change to the chunker actually alters.
-  process.stdout.write(JSON.stringify([...docRows, ...commitRows]));
+  process.stdout.write(JSON.stringify([...docRows]));
   process.exit(0);
 }
 
@@ -628,10 +542,9 @@ console.log(
       ? ""
       : ` (${listedCount - fileCount} of ${listedCount} listed files unreadable)`)
 );
-console.log(`commits: ${commitRows.length} (${withMarcus} with a "For Marcus:" summary)`);
 
 if (DRY_RUN) {
-  const sample = [...docRows.slice(0, 2), ...commitRows.slice(0, 2)];
+  const sample = docRows.slice(0, 4);
   console.log("\n--dry-run, sample rows:");
   for (const r of sample) {
     console.log(`\n[${r.source}] ${r.source_id}`);
@@ -653,18 +566,17 @@ if (DRY_RUN) {
 // that predate this run -- never a row a later batch of this same run wrote.
 const stampedAt = new Date().toISOString();
 // Content hash on every row, so the next run can tell what genuinely changed.
-for (const r of [...docRows, ...commitRows]) r.meta = { ...r.meta, h: contentHash(r) };
+for (const r of [...docRows]) r.meta = { ...r.meta, h: contentHash(r) };
 
 const storedDoc = await storedHashes("doc");
-const storedCommit = await storedHashes("commit");
 // Either both maps read cleanly or we fall back entirely to the old behaviour:
 // upsert everything, sweep by timestamp. Slow, but never destructive.
-const bySkipping = storedDoc !== null && storedCommit !== null;
+const bySkipping = storedDoc !== null;
 
-const allRows = [...docRows, ...commitRows];
+const allRows = [...docRows];
 const toWrite = bySkipping
   ? allRows.filter((r) => {
-      const stored = (r.source === "doc" ? storedDoc : storedCommit).get(r.source_id);
+      const stored = storedDoc.get(r.source_id);
       // undefined = row is new. null = stored before hashing existed, so rewrite
       // once to give it a hash. Otherwise only a real content change qualifies.
       return stored === undefined || stored !== r.meta.h;
@@ -808,5 +720,4 @@ async function sweepSource(source, rows, stored) {
 }
 
 const sweptDocs = await sweepSource("doc", docRows, storedDoc);
-const sweptCommits = await sweepSource("commit", commitRows, storedCommit);
-console.log(`swept ${sweptDocs} stale doc chunk(s), ${sweptCommits} stale commit chunk(s)`);
+console.log(`swept ${sweptDocs} stale doc chunk(s)`);
