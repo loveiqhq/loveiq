@@ -8,6 +8,7 @@ import {
   dayToRows,
   renderMessage,
   SLACK_BUILDER_VERSION,
+  slackPermalink,
   tsDate,
 } from "@features/brain/server/ingest/slack";
 
@@ -270,5 +271,73 @@ describe("a day is not final until it is over", () => {
     // and the write-skip must agree, or the fetch would be wasted
     expect(src).toMatch(/if \(day < yesterday && known\.get/);
     expect(src).not.toMatch(/if \(day !== today && known\.get/);
+  });
+});
+
+describe("slackPermalink — the link every Slack citation used to lack", () => {
+  /**
+   * MEASURED 2026-09-09: 538 of 538 Slack chunks carried `url: null`, alone among the
+   * sources that have a URL to give — Drive, Gmail, commits, Notion and the calendar
+   * were all at 100%. A reader could see that Slack said something and had no way to go
+   * and read the thread around it.
+   */
+  it("builds Slack's own permalink form", () => {
+    expect(slackPermalink("https://loveiq.slack.com", "C09P0Q266R1", "1788946114.878279")).toBe(
+      "https://loveiq.slack.com/archives/C09P0Q266R1/p1788946114878279"
+    );
+  });
+
+  /** `auth.test` returns the workspace URL with a trailing slash. */
+  it("does not double the slash", () => {
+    expect(slackPermalink("https://loveiq.slack.com/", "C1", "1.2")).toBe(
+      "https://loveiq.slack.com/archives/C1/p12"
+    );
+  });
+
+  /**
+   * A WRONG LINK IS WORSE THAN NONE, because it looks like evidence. Any missing piece
+   * yields null rather than a URL assembled around a gap.
+   */
+  it.each([
+    [null, "C1", "1.2"],
+    ["https://x.slack.com", undefined, "1.2"],
+    ["https://x.slack.com", "C1", undefined],
+  ])("returns null when a piece is missing (%j, %j, %j)", (ws, ch, ts) => {
+    expect(slackPermalink(ws, ch, ts)).toBeNull();
+  });
+});
+
+describe("dayToRows carries the link", () => {
+  it("puts the link on every part of a long day, not just the first", () => {
+    // A day long enough to split, so the citation for part 4 is clickable too.
+    const lines = Array.from(
+      { length: 400 },
+      (_, i) => `Eman: message number ${i} ${"x".repeat(40)}`
+    );
+    const rows = dayToRows(
+      "all-loveiq",
+      "2026-09-08",
+      lines,
+      "stamp",
+      true,
+      "https://loveiq.slack.com/archives/C1/p1788946114878279"
+    );
+    expect(rows.length).toBeGreaterThan(1);
+    for (const r of rows) {
+      expect(r.url, r.source_id).toBe("https://loveiq.slack.com/archives/C1/p1788946114878279");
+    }
+  });
+
+  /** Unchanged from before links existed: a day with no link is still indexed. */
+  it("still builds a day when there is no link to give", () => {
+    const rows = dayToRows("bugs-issues", "2026-08-27", ["Eman: hi"], "stamp");
+    expect(rows[0]!.url).toBeNull();
+  });
+
+  /** The version gate is what makes stored days rebuild and backfill their links. */
+  it("stamps the builder version that forces the rebuild", () => {
+    const rows = dayToRows("bugs-issues", "2026-08-27", ["Eman: hi"], "stamp");
+    expect(rows[0]!.meta.v).toBe(SLACK_BUILDER_VERSION);
+    expect(SLACK_BUILDER_VERSION).toBeGreaterThanOrEqual(6);
   });
 });

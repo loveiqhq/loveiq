@@ -55,7 +55,7 @@ const MAX_RETRIES = 4;
 // v3: v1-v2 stored every thread reply BEFORE its parent and in reverse order.
 // v2: v1 wrote days whose thread replies had been dropped by a 429 without
 // recording the gap, so every v1 row must be rebuilt rather than trusted.
-export const SLACK_BUILDER_VERSION = 5;
+export const SLACK_BUILDER_VERSION = 6;
 
 /**
  * Message subtypes that are membership bookkeeping, not conversation. Slack emits
@@ -217,12 +217,37 @@ export function tsDate(ts: string): string {
   return new Date(Number(ts.split(".")[0]) * 1000).toISOString().slice(0, 10);
 }
 
+/**
+ * A clickable Slack link for a day's conversation.
+ *
+ * EVERY SLACK CITATION WAS UNCLICKABLE until this: 538 of 538 chunks carried `url: null`,
+ * alone among the sources that have a URL to give. A reader could see that Slack said
+ * something and had no way to go and read the thread around it.
+ *
+ * Slack's own permalink form, built rather than fetched: `chat.getPermalink` would be one
+ * Tier-3 API call per day-chunk — 538 of them on a rebuild — for a string that is
+ * entirely derivable. The ts of the day's FIRST message, so the link opens where the
+ * conversation started rather than at whatever is newest in the channel now.
+ *
+ * Returns null rather than a guess when either piece is missing; a wrong link is worse
+ * than none, because it looks like evidence.
+ */
+export function slackPermalink(
+  workspaceUrl: string | null,
+  channelId: string | undefined,
+  ts: string | undefined
+): string | null {
+  if (!workspaceUrl || !channelId || !ts) return null;
+  return `${workspaceUrl.replace(/\/+$/, "")}/archives/${channelId}/p${ts.replace(".", "")}`;
+}
+
 export function dayToRows(
   channel: string,
   day: string,
   lines: string[],
   stampedAt: string,
-  threadsComplete = true
+  threadsComplete = true,
+  url: string | null = null
 ): BrainRow[] {
   if (lines.length === 0) return [];
   const title = `Slack #${channel} — ${day}`;
@@ -230,7 +255,7 @@ export function dayToRows(
     source: SOURCE,
     source_id: `ch:${channel}:${day}`,
     title,
-    url: null,
+    url,
     body: [title, ...lines].join("\n"),
     meta: {
       kind: "slack-day",
@@ -354,6 +379,19 @@ export async function ingestSlack(
   );
 
   const names = await userNames(token);
+  /**
+   * The workspace's own domain, read once per run rather than per link.
+   *
+   * Permalinks are `https://<workspace>.slack.com/archives/...`, and the domain is the
+   * one part that cannot be derived from a message. Non-fatal: without it every link is
+   * null, which is exactly the behaviour that existed before links did.
+   */
+  const auth = await slackGet(token, "auth.test", {}, isOutOfTime);
+  const workspaceUrl = typeof auth?.url === "string" ? auth.url : null;
+  if (!workspaceUrl) {
+    logger.warn("brain-slack: could not read the workspace URL, so day links will be absent");
+  }
+
   const known = await knownSlackDays();
   const rows: BrainRow[] = [];
   const today = new Date().toISOString().slice(0, 10);
@@ -379,6 +417,8 @@ export async function ingestSlack(
      * to whom. Reversing entries and flattening afterwards keeps each thread intact.
      */
     const byDay = new Map<string, Array<{ line: string | null; replies: string[] }>>();
+    /** The oldest message of each day, which is where its permalink should open. */
+    const firstTs = new Map<string, string>();
     const threadGaps = new Set<string>();
     let cursor = "";
 
@@ -455,6 +495,19 @@ export async function ingestSlack(
          */
         if (!line && !(m.reply_count ?? 0)) continue;
         const day = tsDate(m.ts);
+        /**
+         * The day's OLDEST message, kept by comparison rather than by arrival order.
+         *
+         * Today the comparison is redundant and mutation testing says so: history comes
+         * back newest-first and pages backwards, so an unconditional `set` would leave
+         * the same oldest ts behind. It is kept because that ordering is Slack's choice
+         * and not ours — if it ever changed, or a caller added an `oldest`-first fetch,
+         * every link would silently point at the end of a conversation instead of its
+         * start, and nothing would fail. A string compare is correct here: Slack ts
+         * values are fixed-width seconds.microseconds.
+         */
+        const seen = firstTs.get(day);
+        if (!seen || m.ts < seen) firstTs.set(day, m.ts);
         const bucket = byDay.get(day) ?? [];
         const entry = { line, replies: [] as string[] };
 
@@ -522,7 +575,16 @@ export async function ingestSlack(
       const lines = [...entries]
         .reverse()
         .flatMap((e) => (e.line ? [e.line, ...e.replies] : e.replies));
-      rows.push(...dayToRows(ch.name as string, day, lines, stampedAt, whole));
+      rows.push(
+        ...dayToRows(
+          ch.name as string,
+          day,
+          lines,
+          stampedAt,
+          whole,
+          slackPermalink(workspaceUrl, ch.id as string | undefined, firstTs.get(day))
+        )
+      );
     }
   }
 
