@@ -288,7 +288,37 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
       hasCompleted.current = true;
       trackNavigation("complete");
       const duration = Date.now() - new Date(startedAt).getTime();
-      trackSurveyComplete(duration, totalQuestions);
+      /**
+       * `survey_completed` arrives at PostHog 2.06 times per session in
+       * production (209 of 218 sessions fire it twice) while the server-side
+       * record is singular — 79 `direction=complete` rows across 79 sessions.
+       * So the survey completes once and only the analytics copy is inflated,
+       * which doubles every event-counted completion metric. That reaches
+       * further than tidiness: Google Ads bids on "Survey completed".
+       *
+       * The pair carries `duration_ms` values 2-80ms apart, so they are two
+       * evaluations of `Date.now()` — two real calls, not a delivery retry.
+       * `hasCompleted` is a ref and therefore per-mount, and neither a repeat
+       * Next nor a remount with the finished index restored reproduces it
+       * (both asserted in SurveyEngine.completeOnce.test.tsx). Rather than
+       * guess at the trigger, key idempotency to the VISIT so it holds however
+       * a second call arrives — including from a second live instance.
+       *
+       * Storage is not assumed: Safari private mode and some in-app WebViews
+       * throw on every access, so a failure falls through to firing. Losing the
+       * event would be worse than counting it twice.
+       */
+      let alreadyReported = false;
+      const completionKey = `loveiq-survey-completed:${startedAt}`;
+      try {
+        alreadyReported = window.sessionStorage.getItem(completionKey) === "1";
+        if (!alreadyReported) window.sessionStorage.setItem(completionKey, "1");
+      } catch {
+        alreadyReported = false;
+      }
+      if (!alreadyReported) {
+        trackSurveyComplete(duration, totalQuestions);
+      }
       submitSurvey(answers, startedAt, utmTracker);
       goTo(totalQuestions); // one past the end → triggers completion
       return;

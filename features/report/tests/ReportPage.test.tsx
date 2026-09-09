@@ -65,6 +65,7 @@ vi.mock("@features/analytics/client", () => ({
 }));
 
 import ReportPage from "@features/report/ui/ReportPage";
+import * as analytics from "@features/analytics/client";
 import { archetypeContent } from "@/data/report-archetypes";
 import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
 import type { ReportPracticeTendencyContentForUser } from "@features/report/ui/hooks/useReportData";
@@ -708,5 +709,50 @@ describe("ReportPage", () => {
     } finally {
       mockSearchParams.mockImplementation(() => new URLSearchParams());
     }
+  });
+
+  /**
+   * `locked_card_price_shown` reached PostHog 331 times across 276 sessions while
+   * writing ZERO rows to `analytics_event` from 2026-08-01 onward. The cause was
+   * effect ORDER: `persistAnalyticsEvent` drops any event fired before
+   * `window.__loveiqReportSubmissionId` is set, and the submission context used
+   * to be published ~1500 lines BELOW this effect. Its one-shot ref is set
+   * before the call, so the dropped attempt was never retried.
+   *
+   * The damage was to what we believed rather than to what readers saw: the
+   * admin funnel read as though 39% of report readers never saw a price, when
+   * the client-side event shows 89% did.
+   */
+  describe("persisted analytics can be attributed", () => {
+    function withSubmission(id: number | null) {
+      const base = buildSuccessResponse();
+      return { ...base, data: { ...base.data, submissionId: id } };
+    }
+
+    it("publishes the submission context BEFORE the locked-card price event", async () => {
+      mockUseReportData.mockReturnValue(withSubmission(1920));
+
+      render(<ReportPage />);
+
+      const setCtx = vi.mocked(analytics.setReportSubmissionContext);
+      const priceShown = vi.mocked(analytics.trackLockedCardPriceShown);
+      await waitFor(() => expect(priceShown).toHaveBeenCalled());
+      expect(setCtx).toHaveBeenCalledWith(1920);
+      // Order IS the defect — both merely firing is not enough.
+      expect(Math.min(...setCtx.mock.invocationCallOrder)).toBeLessThan(
+        Math.min(...priceShown.mock.invocationCallOrder)
+      );
+    });
+
+    it("does not burn the one-shot ref when there is no submission to attribute to", async () => {
+      mockUseReportData.mockReturnValue(withSubmission(null));
+
+      render(<ReportPage />);
+      await waitFor(() => expect(mockTrackReportViewed).toHaveBeenCalled());
+
+      // Firing here would persist nothing AND mark the event done for the whole
+      // pageview, which is exactly how five weeks of rows were lost.
+      expect(vi.mocked(analytics.trackLockedCardPriceShown)).not.toHaveBeenCalled();
+    });
   });
 });

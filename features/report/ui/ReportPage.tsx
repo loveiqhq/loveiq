@@ -402,6 +402,9 @@ interface ReportExperienceProps {
     userName: string;
   };
   primaryArchetype: string;
+  /** Needed so mount-time persisted analytics can be attributed. See the
+   * locked-card price effect below. */
+  submissionId: number | null;
   /**
    * The archetype the server actually resolved the Report 2.0 copy for.
    * Usually `viewArchetype`; falls back to the primary when the reader asks
@@ -498,6 +501,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   ownerToken,
   percentages,
   placeholderValues,
+  submissionId,
   primaryArchetype,
   contentArchetype,
   pricingQuotes,
@@ -594,6 +598,22 @@ const ReportExperience: FC<ReportExperienceProps> = ({
     if (lockedCardPriceFiredRef.current) return;
     if (!hasLockedPremiumCards) return;
     if (!fullReportQuote) return;
+    /**
+     * This event reached PostHog 331 times across 276 sessions while writing
+     * ZERO rows to `analytics_event` from 2026-08-01 onward, which made the
+     * admin funnel read as though 39% of report readers never saw a price when
+     * the client event shows 89% did.
+     *
+     * `persistAnalyticsEvent` drops anything fired before
+     * `window.__loveiqReportSubmissionId` is set, and the parent published that
+     * context in its own effect. React runs CHILD effects before parent ones,
+     * so this mount-time event could never win that race — and its one-shot ref
+     * was set before the call, so the dropped attempt was never retried.
+     *
+     * Publishing the context here removes the ordering dependency entirely.
+     */
+    if (!submissionId) return;
+    setReportSubmissionContext(submissionId);
     lockedCardPriceFiredRef.current = true;
     trackLockedCardPriceShown({
       plan: "full_report",
@@ -606,7 +626,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       msrp: fullReportQuote.msrpCents / 100,
       initial_price: fullReportQuote.initialPriceCents / 100,
     });
-  }, [hasLockedPremiumCards, fullReportQuote]);
+  }, [hasLockedPremiumCards, fullReportQuote, submissionId]);
   // Auto-open the Refer-a-Friend modal when the page is loaded with ?invite=1.
   // Reminder emails (`invite-reminder-1`/`-2`) deep-link to /report?invite=1
   // — they would silently fail without this auto-open.
@@ -2551,6 +2571,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     <>
       <ReportExperience
         key={`${token ?? "browser"}:${sessionId ?? "anon"}`}
+        submissionId={data.submissionId ?? null}
         devParam={devParam}
         accessPlan={data.accessPlan}
         archetypeTiers={data.archetypeTiers ?? {}}
