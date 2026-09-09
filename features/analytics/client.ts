@@ -859,6 +859,18 @@ export const trackReportPurchase = (params: ReportPurchaseParams) => {
   if (typeof window === "undefined") return;
   if (!isProductionSite()) return;
   if (!hasCookieYesConsent("analytics")) return;
+  /**
+   * A `purchase` in the dataLayer becomes a GA4 purchase and then a Google Ads
+   * conversion the bidding algorithm optimises on, so one that carried no money
+   * must never be pushed. Measured 2026-09-09: 34 of these landed on a single
+   * day with `value: 0` — device-matrix test purchases redeemed with a 100%-off
+   * code — telling Ads there were 34 sales worth nothing.
+   *
+   * The browser cannot see `payment.is_test`, but every test and comp purchase
+   * is £0/€0 by construction, so value is the discriminator available here. The
+   * server sibling guards on both (`sendGa4PurchaseEvent`).
+   */
+  if (!(params.value > 0)) return;
 
   window.dataLayer = window.dataLayer || [];
   window.dataLayer.push({

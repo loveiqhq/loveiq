@@ -43,6 +43,14 @@ export interface PosthogPurchaseInput {
   itemName: string;
   /** Optional extra properties (cluster, arm, device, …). */
   params?: Record<string, string | number | undefined>;
+  /**
+   * True when the payer is staff — the same classification written to
+   * `payment.is_test`. Unlike the GA4 sibling this does NOT skip the send:
+   * PostHog is our own analytics and losing test purchases there would hide
+   * QA activity. It is tagged instead so counts can be filtered, which is what
+   * `purchase` at 40 events against 5 real sales needed and did not have.
+   */
+  isTest?: boolean;
 }
 
 export async function sendPosthogPurchaseEvent(input: PosthogPurchaseInput): Promise<void> {
@@ -90,6 +98,9 @@ export async function sendPosthogPurchaseEvent(input: PosthogPurchaseInput): Pro
       // GA4 sibling so the two are comparable side by side.
       $revenue: input.value,
       value: input.value,
+      // Tagged so a test purchase is filterable rather than silently inflating
+      // the count — `purchase` read 40 events against 5 real sales without it.
+      is_test: input.isTest === true,
       // Server-sent, so mark it — otherwise it is indistinguishable from a
       // browser event when debugging a count mismatch.
       $lib: "loveiq-server",

@@ -72,6 +72,11 @@ export interface Ga4PurchaseInput {
   itemName: string;
   /** Optional extra GA4 event params (cluster, arm, device, …). */
   params?: Record<string, string | number | undefined>;
+  /**
+   * True when the payer is staff — the same classification written to
+   * `payment.is_test`. A test purchase must never become an Ads conversion.
+   */
+  isTest?: boolean;
 }
 
 /**
@@ -93,6 +98,35 @@ export async function sendGa4PurchaseEvent(input: Ga4PurchaseInput): Promise<voi
     logger.info(
       { transactionId: input.transactionId },
       "Non-production deploy — skipping server-side GA4 purchase event"
+    );
+    return;
+  }
+
+  /**
+   * A GA4 purchase becomes a Google Ads conversion the bidding algorithm
+   * optimises on, so a purchase that carried no money must never be sent.
+   *
+   * Measured 2026-09-09: 34 `purchase` events landed on 2026-09-07 with
+   * `value: 0.0` — device-matrix test purchases redeemed with a 100%-off promo
+   * code. Nothing excluded them, so Ads was told there were 34 sales worth
+   * nothing, which is the strongest possible signal that conversions are free
+   * and cheap to buy.
+   *
+   * Two independent reasons to skip, because they catch different cases:
+   * `isTest` catches a staff purchase at any price, and a non-positive value
+   * catches a 100%-off comp (including the post-call grant) made by anyone.
+   */
+  if (input.isTest) {
+    logger.info(
+      { transactionId: input.transactionId },
+      "Test purchase — skipping server-side GA4 purchase event"
+    );
+    return;
+  }
+  if (!(input.value > 0)) {
+    logger.info(
+      { transactionId: input.transactionId, value: input.value },
+      "Zero-value purchase — skipping server-side GA4 purchase event"
     );
     return;
   }

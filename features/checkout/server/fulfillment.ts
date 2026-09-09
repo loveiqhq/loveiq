@@ -1425,6 +1425,9 @@ async function syncCheckoutSessionPayment({
         consentGranted: settledSession.metadata?.gaAnalyticsConsent === "1",
         transactionId: settledSession.id,
         value: amount ?? 0,
+        isTest: isStaffEmail(
+          settledSession.customer_details?.email ?? settledSession.customer_email ?? null
+        ),
         currency: (settledSession.currency ?? "eur").toUpperCase(),
         itemName: getReportPurchasePlan(plan).title,
         params: {
@@ -1450,6 +1453,9 @@ async function syncCheckoutSessionPayment({
         email: recipient.email,
         transactionId: settledSession.id,
         value: amount ?? 0,
+        isTest: isStaffEmail(
+          settledSession.customer_details?.email ?? settledSession.customer_email ?? null
+        ),
         currency: (settledSession.currency ?? "eur").toUpperCase(),
         plan,
         itemName: getReportPurchasePlan(plan).title,
