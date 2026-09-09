@@ -13,6 +13,7 @@ import {
 } from "@features/brain/server/decisions";
 import { postToSlack, SlackTargetError } from "@features/brain/server/act/slack";
 import { createNotionPage, NotionTargetError } from "@features/brain/server/act/notion";
+import { EmailRefusal, MAX_RECIPIENTS, sendEmail } from "@features/brain/server/act/email";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
@@ -684,6 +685,60 @@ const TOOLS = [
         },
       },
       required: ["parent", "title"],
+    },
+  },
+  {
+    name: "send_email",
+    title: "Draft an email, and send it only when told to",
+    annotations: {
+      readOnlyHint: false,
+      /**
+       * THE ONLY TOOL HERE MARKED DESTRUCTIVE, and the word is doing real work. Nothing
+       * else on this server produces something that cannot be undone by anyone: a Slack
+       * message can be deleted by a person, a Notion page archived, a decision record
+       * corrected. An email is gone the moment it is accepted.
+       */
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+    description:
+      "Write an email from the company address, and send it ONLY when explicitly told " +
+      "to.\n\n" +
+      "DRAFTS BY DEFAULT. Without `send: true` nothing leaves — it renders exactly what " +
+      "would go out, checks every recipient against the opt-out list, and hands it back " +
+      "to be read. THIS IS THE ONE ACTION ON THIS SERVER THAT NOBODY CAN UNDO, including " +
+      "the person who asked for it, so do not set `send: true` unless the person you are " +
+      "working with has seen the text and asked for it to go. Draft first, always.\n\n" +
+      `At most ${MAX_RECIPIENTS} recipients: more than a handful under the company's ` +
+      "domain is a campaign someone has to sign off, not a message. Anyone who has opted " +
+      "out is refused, and so is a send where the opt-out list could not be read — that " +
+      "is a failure to check, not permission to proceed. The sender address is fixed and " +
+      "cannot be set from here. Every send is mirrored to the team's ops channel " +
+      "immediately.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        to: {
+          type: "array",
+          items: { type: "string" },
+          description: `Recipient addresses, at most ${MAX_RECIPIENTS}.`,
+        },
+        subject: { type: "string", description: "The subject line." },
+        body: { type: "string", description: "The message, as plain text." },
+        reply_to: {
+          type: "string",
+          description: "Where replies should go, if not the default company address.",
+        },
+        send: {
+          type: "boolean",
+          description:
+            "Leave unset or false to draft. `true` DISPATCHES IT IMMEDIATELY and it " +
+            "cannot be recalled. Only ever true when a person has read the text and " +
+            "asked for it to be sent.",
+        },
+      },
+      required: ["to", "subject", "body"],
     },
   },
   {
@@ -1590,6 +1645,64 @@ async function callTool(
       false,
       "lower max_chars, or page with from_part"
     );
+  }
+
+  if (name === "send_email") {
+    const to = Array.isArray(args.to)
+      ? args.to.filter((x): x is string => typeof x === "string")
+      : [];
+    const subject = typeof args.subject === "string" ? args.subject : "";
+    const body = typeof args.body === "string" ? args.body : "";
+    // Only a literal `true` sends. A truthy string like "false" must not dispatch mail.
+    const send = args.send === true;
+
+    try {
+      const r = await sendEmail({
+        to,
+        subject,
+        body,
+        replyTo:
+          typeof args.reply_to === "string" && args.reply_to.trim()
+            ? args.reply_to.trim()
+            : undefined,
+        send,
+      });
+      stats.sourceCount = r.draft.to.length;
+
+      const opted = r.draft.suppression.filter((x) => x.state !== "clear");
+      const header = r.sent
+        ? `SENT. This cannot be recalled.${r.id ? ` id: ${r.id}` : ""}`
+        : `DRAFT — nothing has been sent. Show this to the person you are working with, ` +
+          `and call again with \`send: true\` only if they ask for it to go.`;
+
+      return textResult(
+        `${header}\n\n` +
+          `From:    ${r.draft.from}\n` +
+          `To:      ${r.draft.to.join(", ")}\n` +
+          (r.draft.replyTo ? `Reply-to: ${r.draft.replyTo}\n` : "") +
+          `Subject: ${r.draft.subject}\n\n` +
+          `${r.draft.body}\n` +
+          (opted.length > 0
+            ? `\n${"─".repeat(60)}\n` +
+              opted
+                .map((x) =>
+                  x.state === "suppressed"
+                    ? `${x.email} HAS OPTED OUT — a send to them will be refused.`
+                    : `Could not check whether ${x.email} has opted out; a send will be ` +
+                      `refused until that check succeeds.`
+                )
+                .join("\n")
+            : "")
+      );
+    } catch (err) {
+      if (err instanceof EmailRefusal) return textResult(err.message, true);
+      logger.error({ err }, "brain: could not send email");
+      return textResult(
+        `Could not send: ${err instanceof Error ? err.message : "unknown error"}. ` +
+          `Nothing was sent.`,
+        true
+      );
+    }
   }
 
   if (name === "write_to_notion") {
@@ -2694,7 +2807,10 @@ export async function POST(request: Request) {
         "IT CAN ALSO ACT. `post_to_slack` posts a message to a channel or sends someone " +
         "a direct message; it cannot be undone, since this bot may write but not delete. " +
         "`write_to_notion` adds a page or a task to the Notion workspace, which is " +
-        "reversible. Do what you were asked to do, and never announce your own progress.\n\n" +
+        "reversible. `send_email` DRAFTS by default and sends only when explicitly told " +
+        "to — it is the one action here that nobody can undo, so draft it, show it, and " +
+        "send only if asked. Do what you were asked to do, and never announce your own " +
+        "progress.\n\n" +
         "COUNTING AND LISTING ARE SEPARATE TOOLS, because search cannot do either. " +
         "`search_company_context` ranks and stops at 30, so a number counted off its " +
         "results is a floor and a list built from them is 'the 30 most relevant', never " +
