@@ -12,6 +12,7 @@ import {
   renderPriorDecisions,
 } from "@features/brain/server/decisions";
 import { postToSlack, SlackTargetError } from "@features/brain/server/act/slack";
+import { createNotionPage, NotionTargetError } from "@features/brain/server/act/notion";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
@@ -630,6 +631,59 @@ const TOOLS = [
         },
       },
       required: ["channel", "text"],
+    },
+  },
+  {
+    name: "write_to_notion",
+    title: "Add a page or a task to Notion",
+    annotations: {
+      readOnlyHint: false,
+      // Additive and reversible — a page created here can be archived in Notion, unlike
+      // a Slack message, which this bot has no permission to remove.
+      destructiveHint: false,
+      // Calling twice creates two pages. Notion has no natural key to dedupe against.
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+    description:
+      "Create a page in Notion, or add a row to one of its databases — a task on the " +
+      "board, a write-up, a research note.\n\n" +
+      "THE WORKSPACE HAS 35 DATABASES WITH NOTHING IN COMMON, from 5 properties to 42, " +
+      'and two of them are both called "Board". So name the database and this tool ' +
+      "reads its live schema before writing; if the name is wrong, ambiguous, or a " +
+      "property or value is not one it accepts, the refusal lists exactly what would " +
+      "have worked. Read the refusal instead of guessing again.\n\n" +
+      "Reversible: a page created here can be archived in Notion. Calling twice creates " +
+      "two pages. Every call is logged with what it wrote.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        parent: {
+          type: "string",
+          description:
+            "The database to add a row to, by name (e.g. `Board`) or id — or the id of " +
+            "an existing page to nest a new page under. Call with a name that does not " +
+            "exist to be shown every database there is.",
+        },
+        title: { type: "string", description: "The page title, or the task name." },
+        content: {
+          type: "string",
+          description:
+            "Body text. Blank lines separate paragraphs. Notion takes at most 100 " +
+            "paragraphs in one go; anything beyond that is reported, never silently cut.",
+        },
+        properties: {
+          type: "object",
+          description:
+            'Database fields as plain values, e.g. {"Status":"Backlog",' +
+            '"Priority":"High 🔥","Due Date":"2026-09-20"}. Checked against the ' +
+            "live schema — a select that does not accept the value is refused WITH its " +
+            "accepted values, rather than quietly inventing a new option. Only applies " +
+            "when the parent is a database; `people` and `relation` fields cannot be set " +
+            "here because they need Notion's internal ids.",
+        },
+      },
+      required: ["parent", "title"],
     },
   },
   {
@@ -1536,6 +1590,44 @@ async function callTool(
       false,
       "lower max_chars, or page with from_part"
     );
+  }
+
+  if (name === "write_to_notion") {
+    const parent = typeof args.parent === "string" ? args.parent.trim() : "";
+    const title = typeof args.title === "string" ? args.title.trim() : "";
+    if (!parent) return textResult("Name the database or page to write into.", true);
+    if (!title) return textResult("Give the page a title.", true);
+
+    try {
+      const page = await createNotionPage({
+        parent,
+        title,
+        content: typeof args.content === "string" ? args.content : undefined,
+        properties:
+          args.properties && typeof args.properties === "object" && !Array.isArray(args.properties)
+            ? (args.properties as Record<string, unknown>)
+            : undefined,
+      });
+      stats.sourceCount = 1;
+      return textResult(
+        `Created in ${page.parentLabel}: ${title}\n` +
+          (page.url ? `${page.url}\n` : "") +
+          `id: ${page.id}\n` +
+          (page.droppedBlocks > 0
+            ? `\nWARNING: ${page.droppedBlocks} paragraph(s) were NOT written — Notion ` +
+              `takes at most 100 in one create. Add the rest in Notion, or split it up.\n`
+            : "") +
+          `\nIt will appear in searches here after the next Notion ingest, not immediately.`
+      );
+    } catch (err) {
+      if (err instanceof NotionTargetError) return textResult(err.message, true);
+      logger.error({ err }, "brain: could not write to Notion");
+      return textResult(
+        `Could not write to Notion: ${err instanceof Error ? err.message : "unknown error"}. ` +
+          `Nothing was created.`,
+        true
+      );
+    }
   }
 
   if (name === "post_to_slack") {
@@ -2600,8 +2692,9 @@ export async function POST(request: Request) {
         "from an indexed chunk when query_product_data can read it directly, and never " +
         "conclude something does not exist from an empty search — check list_sources first.\n\n" +
         "IT CAN ALSO ACT. `post_to_slack` posts a message to a channel or sends someone " +
-        "a direct message. It cannot be undone — this bot may write but not delete — so " +
-        "post what you were asked to post, and never your own progress.\n\n" +
+        "a direct message; it cannot be undone, since this bot may write but not delete. " +
+        "`write_to_notion` adds a page or a task to the Notion workspace, which is " +
+        "reversible. Do what you were asked to do, and never announce your own progress.\n\n" +
         "COUNTING AND LISTING ARE SEPARATE TOOLS, because search cannot do either. " +
         "`search_company_context` ranks and stops at 30, so a number counted off its " +
         "results is a floor and a list built from them is 'the 30 most relevant', never " +
