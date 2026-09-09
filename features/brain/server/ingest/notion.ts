@@ -67,7 +67,7 @@ const MAX_CONTENT_PAGES = 300;
 // v6: v1-v5 indexed only TOP-LEVEL blocks — every toggle, column, callout body,
 // nested bullet and table row was dropped (~19% of the workspace text). Every
 // older row must be refetched, not trusted.
-export const BUILDER_VERSION = 6;
+export const BUILDER_VERSION = 7;
 
 interface RichText {
   plain_text?: string;
@@ -85,6 +85,9 @@ interface NotionPage {
   url?: string;
   created_time?: string;
   last_edited_time?: string;
+  /** Notion returns these on every page; both are user ids, not names. */
+  created_by?: { id?: string };
+  last_edited_by?: { id?: string };
   archived?: boolean;
   in_trash?: boolean;
   parent?: { type?: string; database_id?: string };
@@ -413,11 +416,68 @@ export function taskToRow(
   };
 }
 
+/**
+ * Notion's user directory, humans only, as id -> display name.
+ *
+ * A THIRD OF THIS WORKSPACE'S NOTION USERS ARE BOTS — several called "Notion MCP" —
+ * and pages they created would otherwise be attributed to them. `peopleIn` already
+ * refuses bots at the registry, but only for names it knows; an unknown bot name would
+ * sail straight through as an unrecognised person and leave the page unattributed
+ * either way. Filtering on Notion's own `type` is the reliable cut.
+ *
+ * Best-effort: a failure yields an empty map, which is exactly the behaviour that
+ * existed before pages carried an author at all.
+ */
+export async function notionHumans(token: string): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  try {
+    let cursor = "";
+    for (let page = 0; page < 10; page++) {
+      const res = await notionGet(
+        token,
+        `/users?page_size=100${cursor ? `&start_cursor=${encodeURIComponent(cursor)}` : ""}`
+      );
+      for (const u of (res.results ?? []) as Array<{ id?: string; name?: string; type?: string }>) {
+        if (u.type === "person" && u.id && u.name) out.set(u.id, u.name);
+      }
+      if (res.has_more !== true) break;
+      cursor = typeof res.next_cursor === "string" ? res.next_cursor : "";
+      if (!cursor) break;
+    }
+  } catch (err) {
+    logger.warn({ err }, "brain-notion: could not read the user list, pages will be unattributed");
+  }
+  return out;
+}
+
 /** A written page as a chunk. */
-export function pageToRow(page: NotionPage, text: string, stampedAt: string): BrainRow | null {
+/**
+ * WHO WROTE IT, which Notion pages carried nowhere.
+ *
+ * Measured 2026-09-09: 163 of 1,446 Notion chunks were attributed — 11%. Tasks had an
+ * `assignee` and pages had no identity field at all, so 1,283 chunks of the company's
+ * written workspace answered "what has X written" with nothing.
+ *
+ * `created_by` is the author of the page, which is the useful one; `last_edited_by` is
+ * frequently the integration itself or whoever fixed a typo. Only the author is written,
+ * and only when it resolves to a PERSON — Notion's user list is a third of bots
+ * ("Notion MCP"), and attributing a page to one makes "who writes the most" answer with
+ * a robot, which is the same failure `peopleIn` already refuses at the registry.
+ *
+ * `author` is a scalar identity field to `peopleIn`, so the shared upsert path derives
+ * `meta.people` from it with no new resolution logic.
+ */
+export function pageToRow(
+  page: NotionPage,
+  text: string,
+  stampedAt: string,
+  /** Notion user id -> display name, for HUMANS only. Bots are absent by construction. */
+  people: Map<string, string> = new Map()
+): BrainRow | null {
   const title = titleOf(page).trim();
   if (!page.id || !title) return null;
   const edited = page.last_edited_time ?? page.created_time ?? null;
+  const author = page.created_by?.id ? people.get(page.created_by.id) : undefined;
 
   return {
     source: SOURCE,
@@ -425,7 +485,15 @@ export function pageToRow(page: NotionPage, text: string, stampedAt: string): Br
     title: `Notion: ${title}`,
     url: page.url ?? null,
     body: [title, text].filter(Boolean).join("\n\n"),
-    meta: { kind: "page", v: BUILDER_VERSION, created: page.created_time ?? null, edited },
+    meta: {
+      kind: "page",
+      v: BUILDER_VERSION,
+      created: page.created_time ?? null,
+      edited,
+      // Absent rather than null when unresolved, matching `peopleIn`: a null author
+      // asserts "written by nobody", which of a page someone typed is never true.
+      ...(author ? { author } : {}),
+    },
     updated_at: stampedAt,
     period_end: typeof edited === "string" ? edited.slice(0, 10) : null,
   };
@@ -478,6 +546,8 @@ export async function ingestNotion(
   const excluded = excludedTitles();
   const rows: BrainRow[] = [];
   let complete = true;
+
+  const notionPeople = await notionHumans(token);
 
   // ---- what exists, so unchanged pages need no content fetch ---------------
   const known = await knownNotionEdits();
@@ -587,7 +657,7 @@ export async function ingestNotion(
 
     const row = item.dbTitle
       ? taskToRow(item.raw, stampedAt, item.dbTitle, text)
-      : pageToRow(item.raw, text, stampedAt);
+      : pageToRow(item.raw, text, stampedAt, notionPeople);
     if (!row) continue;
 
     // Split rather than let the write path slice the tail off. Part 1 keeps the

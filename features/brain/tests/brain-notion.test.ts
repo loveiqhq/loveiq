@@ -3,10 +3,15 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
+const mockFetch = vi.fn();
+vi.mock("@shared/http/fetch-with-timeout", () => ({
+  fetchWithTimeout: (...a: unknown[]) => mockFetch(...(a as [])),
+}));
 
 import {
   blocksToText,
   isExcluded,
+  notionHumans,
   pageToRow,
   propertyToText,
   taskToRow,
@@ -179,5 +184,121 @@ describe("citation label", () => {
     const { labelForTest } = await import("@features/brain/server/answer");
     expect(labelForTest({ source: "notion", sourceId: "task:abc", meta: {} })).toBe("notion board");
     expect(labelForTest({ source: "notion", sourceId: "page:abc", meta: {} })).toBe("notion page");
+  });
+});
+
+describe("pageToRow records who wrote the page", () => {
+  /**
+   * MEASURED 2026-09-09: 163 of 1,446 Notion chunks were attributed — 11%. Tasks had an
+   * `assignee`; pages had no identity field at all. So 1,283 chunks of the company's
+   * written workspace answered "what has X written" with nothing.
+   */
+  const HUMANS = new Map([
+    ["2a0d872b", "Eman Cickusic"],
+    ["3c9d872b", "Sanjin Kacevac"],
+  ]);
+  const page = (over: Record<string, unknown> = {}) => ({
+    id: "p1",
+    url: "https://notion.so/p1",
+    created_time: "2026-09-01T10:00:00.000Z",
+    last_edited_time: "2026-09-02T10:00:00.000Z",
+    properties: { title: { type: "title", title: [{ plain_text: "A page" }] } },
+    ...over,
+  });
+
+  it("attributes a page to whoever created it", () => {
+    const row = pageToRow(page({ created_by: { id: "2a0d872b" } }), "body", "stamp", HUMANS)!;
+    // `author` is a scalar identity field to `peopleIn`, so the shared upsert path turns
+    // this into `meta.people` with no second copy of the matching rules.
+    expect(row.meta.author).toBe("Eman Cickusic");
+  });
+
+  /**
+   * A THIRD OF THIS WORKSPACE'S NOTION USERS ARE BOTS, several called "Notion MCP".
+   * Attributing their pages to them makes "who writes the most" answer with a robot —
+   * and an unknown bot NAME would sail past the registry as an unrecognised person, so
+   * filtering on Notion's own `type` at the source is the reliable cut.
+   */
+  it("does not attribute a page created by a bot", () => {
+    // The map holds humans only, so a bot id simply is not in it.
+    const row = pageToRow(page({ created_by: { id: "324e0cbe" } }), "body", "stamp", HUMANS)!;
+    expect(row.meta).not.toHaveProperty("author");
+  });
+
+  /** Absent rather than null, matching `peopleIn`: a null author asserts "written by
+   *  nobody", which of a page somebody typed is never true. */
+  it("leaves the field off when there is nobody to name", () => {
+    expect(pageToRow(page(), "body", "stamp", HUMANS)!.meta).not.toHaveProperty("author");
+    expect(
+      pageToRow(page({ created_by: { id: "unknown" } }), "b", "s", HUMANS)!.meta
+    ).not.toHaveProperty("author");
+  });
+
+  /**
+   * THE AUTHOR, NOT THE LAST EDITOR. `last_edited_by` is frequently the integration
+   * itself or whoever fixed a typo, and crediting them would quietly reassign every page
+   * anyone has ever touched.
+   */
+  it("uses the creator rather than the last editor", () => {
+    const row = pageToRow(
+      page({ created_by: { id: "2a0d872b" }, last_edited_by: { id: "3c9d872b" } }),
+      "body",
+      "stamp",
+      HUMANS
+    )!;
+    expect(row.meta.author).toBe("Eman Cickusic");
+  });
+
+  it("still builds a page when the user list could not be read", () => {
+    const row = pageToRow(page({ created_by: { id: "2a0d872b" } }), "body", "stamp")!;
+    expect(row.source_id).toBe("page:p1");
+    expect(row.meta).not.toHaveProperty("author");
+  });
+});
+
+describe("notionHumans — the directory the attribution depends on", () => {
+  /** Shapes taken from what this workspace's /v1/users actually returns. */
+  const USERS = [
+    { id: "2a0d872b", name: "Eman Cickusic", type: "person", person: { email: "ec@loveiq.org" } },
+    { id: "3d5d872b", name: "Fatih Hadzic", type: "person", person: { email: "fh@loveiq.org" } },
+    { id: "324e0cbe", name: "Notion MCP", type: "bot" },
+    { id: "39ee0cbe", name: "Notion MCP", type: "bot" },
+    { id: "nameless", type: "person" },
+  ];
+
+  /**
+   * A THIRD OF THIS WORKSPACE'S NOTION USERS ARE BOTS — three of the ten are called
+   * "Notion MCP". Pages they create would be attributed to them, and "who writes the
+   * most" would answer with a robot. Filtering on Notion's own `type` is the reliable
+   * cut: an unknown bot NAME would pass the person registry as an unrecognised person.
+   */
+  it("keeps people and drops bots", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ results: USERS, has_more: false }),
+    });
+    const humans = await notionHumans("secret");
+    expect([...humans.values()].sort()).toEqual(["Eman Cickusic", "Fatih Hadzic"]);
+    expect(humans.has("324e0cbe")).toBe(false);
+  });
+
+  it("pages through a directory bigger than one response", async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ results: [USERS[0]], has_more: true, next_cursor: "c1" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ results: [USERS[1]], has_more: false }),
+      });
+    expect((await notionHumans("secret")).size).toBe(2);
+  });
+
+  /** Best-effort: a failure leaves pages unattributed, which is what happened before
+   *  they carried an author at all — it must never fail the whole ingest. */
+  it("returns an empty directory rather than throwing", async () => {
+    mockFetch.mockResolvedValue({ ok: false, status: 500, text: async () => "boom" });
+    expect((await notionHumans("secret")).size).toBe(0);
   });
 });
