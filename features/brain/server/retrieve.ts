@@ -1,5 +1,6 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
+import { expandBusinessVocabulary } from "./vocabulary";
 import { expandRelativePeriods, periodAnchor } from "@features/brain/server/periods";
 
 /**
@@ -272,6 +273,17 @@ export interface RetrieveShaping {
   heldBack?: Map<string, number>;
 }
 
+/**
+ * The text both arms actually search on: the question, plus the corpus's own words for
+ * the periods and the metrics it names.
+ *
+ * ONE FUNCTION so the lexical query and the embedding cannot drift apart. They were
+ * already meant to see identical text, and two call sites is how that stops being true.
+ */
+function searchText(question: string): string {
+  return expandBusinessVocabulary(expandRelativePeriods(question));
+}
+
 export async function retrieve(
   question: string,
   limit = 12,
@@ -297,7 +309,7 @@ export async function retrieve(
   let queryVector: string | null = null;
   try {
     const { embedQuery } = await import("./embed");
-    queryVector = await embedQuery(expandRelativePeriods(trimmed));
+    queryVector = await embedQuery(searchText(trimmed));
   } catch (err) {
     logger.warn({ err }, "brain: could not embed the question, falling back to lexical search");
   }
@@ -318,7 +330,7 @@ export async function retrieve(
         // the corpus uses. Without this, "how are we doing this month" returned
         // May, June and July and omitted the current month entirely -- see
         // `expandRelativePeriods` for the measured scores.
-        query_text: expandRelativePeriods(trimmed),
+        query_text: searchText(trimmed),
         k: CANDIDATE_CEILING,
         /**
          * A NARROWED REQUEST MUST NOT BE BOUND BY THE DIVERSITY CAP.
