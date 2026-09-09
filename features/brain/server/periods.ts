@@ -57,7 +57,7 @@ export interface PeriodAnchor {
    * which is a wrong number stated confidently. Only 726 chunks carry a grain at all --
    * the analytics, ga4 and gsc series -- so nothing else is affected by it.
    */
-  grain: "month" | "day";
+  grain: "month" | "day" | "week" | "alltime";
 }
 
 export function periodAnchor(question: string, now = new Date()): PeriodAnchor | null {
@@ -86,7 +86,22 @@ function detect(question: string, now: Date): { search: string; anchor: PeriodAn
   /** Last day of the named period, clamped to today. First match wins. */
   let anchor: PeriodAnchor | null = null;
   const today = iso(day(0));
-  const setAnchor = (v: string) => {
+  /**
+   * FOUR GRAINS, BECAUSE THE CORPUS HAS FOUR.
+   *
+   * `week` and `alltime` were missing, and the grain penalty treats "not the grain asked
+   * for" as a demotion — so a chunk at a grain the anchor could never name was penalised
+   * on every question that set an anchor at all. Measured 2026-09-10:
+   *
+   *   "how many visits did we get in the week ending 30 August 2026" answered 206
+   *   (Sunday the 30th) against the week's 2,477 — a 12x understatement, and the weekly
+   *   row had the HIGHEST content score in the set.
+   *
+   *   "how much have we earned in total" returned the all-time row at rank 1; adding one
+   *   adverb, "…in total currently", set a month anchor and deleted it from the top four,
+   *   answering with September month-to-date instead.
+   */
+  const setAnchor = (v: string, explicit = false, grainOverride?: PeriodAnchor["grain"]) => {
     if (anchor !== null) return;
     // A month key ("2026-06") resolves to that month's last day; a full date is itself.
     // The LENGTH is also what tells the two apart, which is why the grain comes from
@@ -95,12 +110,36 @@ function detect(question: string, now: Date): { search: string; anchor: PeriodAn
     const end = isMonth
       ? iso(new Date(Date.UTC(Number(v.slice(0, 4)), Number(v.slice(5, 7)), 0)))
       : v;
-    anchor = { date: end > today ? today : end, grain: isMonth ? "month" : "day" };
+    // MEASURED BOTH WAYS on 2026-09-10 before keeping the month clamp. Without it,
+    // "revenue in January 2027" answers with January 2026 at rank 1 -- a confident
+    // wrong-YEAR answer, the exact class this file exists to prevent -- while
+    // "how many sessions in october 2026" loses its coherent September neighbours to a
+    // spam email and a compliance doc. With it, the one case the clamp costs ("what
+    // meetings are scheduled for January 2027") still returns the 2027 row, at rank 2
+    // instead of rank 1. That trade is worth taking.
+    const grain: PeriodAnchor["grain"] = grainOverride ?? (isMonth ? "month" : "day");
+    const future = end > today;
+    anchor = { date: future && (isMonth || !explicit) ? today : end, grain };
   };
   const add = (...parts: string[]) => {
     for (const p of parts) if (p && !hints.includes(p)) hints.push(p);
   };
 
+  /**
+   * ALL-TIME AND WEEK ANCHORS, SET FIRST, because they beat every other reading.
+   *
+   * "how much have we earned in total currently" names the lifetime figure and then a
+   * vague present-tense marker. The marker set a MONTH anchor, `setAnchor` is
+   * first-wins, and the all-time row — the only chunk that answers the question — was
+   * then penalised out of the result. Same for a week: "the week of 24 to 30 August
+   * 2026" matched the explicit-date branch on its trailing date and anchored on Sunday
+   * the 30th, so the weekly row was demoted 0.8 on a question that named a week.
+   */
+  if (/\b(?:in total|all[- ]time|altogether|lifetime|since launch|ever|to date)\b/.test(q)) {
+    // No date to anchor ON — the point is the grain, so the reference is today and the
+    // penalty does the work.
+    setAnchor(today, true, "alltime");
+  }
   // Order matters: "last month" contains "month", so the more specific
   // expressions are tested first and each match is independent.
   if (/\b(this|current) month\b|\bmonth to date\b|\bso far this month\b|\bmtd\b/.test(q)) {
@@ -183,9 +222,81 @@ function detect(question: string, now: Date): { search: string; anchor: PeriodAn
   // contains "june 2026", so a month-only detector reads it as a question about the
   // month and then demotes the very day being asked about -- which is exactly what the
   // grain penalty did until a probe caught it.
+  /**
+   * A NAMED WEEK, ahead of the explicit-date branches below.
+   *
+   * "the week of 24 to 30 August 2026" carries two dates, and the day branch matched one
+   * of them — anchoring on a single Sunday and demoting the weekly row 0.8 on a question
+   * that named a week. Measured: "how many visits in the week ending 30 August 2026"
+   * answered 206 against the week's 2,477.
+   */
+  if (/\bweek (?:of|beginning|starting|commencing|ending)\b/.test(q)) {
+    const isoInWeek = /\b(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])\b/.exec(q);
+    // The LAST date in the phrase is the week's END, which is how a weekly row is dated.
+    const dayInWeek = new RegExp(
+      `\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?(${MONTHS.join("|")})\\s+(\\d{4})\\b`,
+      "g"
+    );
+    let m: RegExpExecArray | null;
+    let last: RegExpExecArray | null = null;
+    while ((m = dayInWeek.exec(q)) !== null) last = m;
+    if (isoInWeek) {
+      setAnchor(`${isoInWeek[1]}-${isoInWeek[2]}-${isoInWeek[3]}`, true, "week");
+    } else if (last) {
+      setAnchor(`${last[3]}-${mm(last[2]!)}-${dd(last[1]!)}`, true, "week");
+    }
+  }
+
   const isoDay = /\b(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])\b/.exec(q);
+  /**
+   * A DAY WRITTEN IN WORDS IS STILL A DAY.
+   *
+   * This required a NUMERIC day and no filler, so "the thirteenth of June 2026" and
+   * "13th of June 2026" both fell through to `named` and anchored on the MONTH. That was
+   * survivable while the grain penalty was 0.5 and a demotion; at 0.8 it is a deletion.
+   * Measured 2026-09-10: four such questions put the correct day row OUTSIDE THE TOP 400
+   * — not merely below the month, gone — while the same question written "13 June 2026"
+   * returned it at rank 1. The month name and the year still matched, so the answer
+   * looked confident and was about the wrong period.
+   */
+  const ORDINAL_WORDS: Record<string, number> = {
+    first: 1,
+    second: 2,
+    third: 3,
+    fourth: 4,
+    fifth: 5,
+    sixth: 6,
+    seventh: 7,
+    eighth: 8,
+    ninth: 9,
+    tenth: 10,
+    eleventh: 11,
+    twelfth: 12,
+    thirteenth: 13,
+    fourteenth: 14,
+    fifteenth: 15,
+    sixteenth: 16,
+    seventeenth: 17,
+    eighteenth: 18,
+    nineteenth: 19,
+    twentieth: 20,
+    "twenty-first": 21,
+    "twenty-second": 22,
+    "twenty-third": 23,
+    "twenty-fourth": 24,
+    "twenty-fifth": 25,
+    "twenty-sixth": 26,
+    "twenty-seventh": 27,
+    "twenty-eighth": 28,
+    "twenty-ninth": 29,
+    thirtieth: 30,
+    "thirty-first": 31,
+  };
+  const ORDINAL_ALT = Object.keys(ORDINAL_WORDS)
+    .sort((a, b) => b.length - a.length)
+    .join("|");
   const dayFirst = new RegExp(
-    `\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${MONTHS.join("|")})\\s+(\\d{4})\\b`
+    `\\b(\\d{1,2}|${ORDINAL_ALT})(?:st|nd|rd|th)?\\s+(?:of\\s+)?(${MONTHS.join("|")})\\s+(\\d{4})\\b`
   ).exec(q);
   const monthFirst = new RegExp(
     `\\b(${MONTHS.join("|")})\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s+(\\d{4})\\b`
@@ -194,15 +305,19 @@ function detect(question: string, now: Date): { search: string; anchor: PeriodAn
   const isoMonth = /\b(\d{4})-(0[1-9]|1[0-2])\b/.exec(q);
 
   if (isoDay) {
-    setAnchor(`${isoDay[1]}-${isoDay[2]}-${isoDay[3]}`);
+    setAnchor(`${isoDay[1]}-${isoDay[2]}-${isoDay[3]}`, true);
   } else if (dayFirst) {
-    setAnchor(`${dayFirst[3]}-${mm(dayFirst[2]!)}-${dd(dayFirst[1]!)}`);
+    const spelled = ORDINAL_WORDS[dayFirst[1]!];
+    setAnchor(
+      `${dayFirst[3]}-${mm(dayFirst[2]!)}-${dd(spelled ? String(spelled) : dayFirst[1]!)}`,
+      true
+    );
   } else if (monthFirst) {
-    setAnchor(`${monthFirst[3]}-${mm(monthFirst[1]!)}-${dd(monthFirst[2]!)}`);
+    setAnchor(`${monthFirst[3]}-${mm(monthFirst[1]!)}-${dd(monthFirst[2]!)}`, true);
   } else if (named) {
-    setAnchor(`${named[2]}-${mm(named[1]!)}`);
+    setAnchor(`${named[2]}-${mm(named[1]!)}`, true);
   } else if (isoMonth) {
-    setAnchor(`${isoMonth[1]}-${isoMonth[2]}`);
+    setAnchor(`${isoMonth[1]}-${isoMonth[2]}`, true);
   } else {
     /**
      * A BARE MONTH NAME, which is how people actually ask.

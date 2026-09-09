@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { googleCredentialShape, readVercelOidcToken } from "@shared/http/google-oauth";
 import { renderSources } from "@features/brain/server/answer";
+import { redactUrlSecrets } from "@features/brain/server/ingest/upsert";
 import { recordToolCall } from "@features/brain/server/log";
 import { adCostByDay, adCovers, brainDailyRollup } from "@features/brain/server/ingest/analytics";
 import {
@@ -1453,7 +1454,26 @@ function documentParts(source: string, rawId: string): { base: string; sep: "#" 
 function partNumber(row: Record<string, unknown>): number {
   const meta = (row.meta ?? {}) as Record<string, unknown>;
   const n = Number(meta.part);
-  return Number.isFinite(n) && n > 0 ? n : 1;
+  if (Number.isFinite(n) && n > 0) return n;
+  /**
+   * FALL BACK TO THE ID, because `meta.part` is only as good as the last ingest.
+   *
+   * WhatsApp recorded the part number in the title and not in `meta` until 2026-09-10,
+   * so every part of a split day answered 1: the sort was a no-op and a four-part
+   * conversation rendered 2, 1, 3, 4 -- starting from its middle -- under a header
+   * reading "parts 1-1 of 4 — this is all of it", with `from_part=2` matching nothing.
+   * Rows written before that fix still carry no `meta.part`, and re-ingesting is not
+   * something a reader can wait for.
+   *
+   * Anchored on the four-digit time for the same reason `documentParts` is: the time is
+   * itself trailing digits.
+   */
+  const id = String(row.source_id ?? "");
+  const wa = /#wa-\d{4}-\d{2}-\d{2}-\d{4}-(\d{1,3})$/.exec(id);
+  if (wa) return Number(wa[1]);
+  const hash = /#(\d{1,3})$/.exec(id);
+  if (hash) return Number(hash[1]);
+  return 1;
 }
 
 /**
@@ -1510,15 +1530,26 @@ const PRIVATE_SUFFIXES = [
   "zipcode",
   "postal_code",
   "signature",
-  // jsonb blobs that hold whatever the writer put there. `survey_partial_save.answers`
-  // is 976 rows of verbatim draft survey answers -- the exact class a recorded decision
-  // forbids -- and `booking_event.raw` carries Calendly invitee names and emails. The
-  // redactor recurses into these now, but a blob whose inner keys are unknown must be
-  // masked whole rather than walked hopefully.
+  // Special-category and free-text personal data with no recognisable VALUE shape, so
+  // the value-based pass below cannot see them and only the name can. `gender` and
+  // `relationship_status` sit in the same table and the same 1,865 rows as
+  // `sexual_orientation`, which was masked while they were not.
+  "gender",
+  "relationship_status",
+  "birthday",
+  "personal_message",
+  "comment",
+  // jsonb blobs whose inner keys are unknown. `survey_partial_save.answers` is 976 rows
+  // of verbatim draft survey answers -- the exact class a recorded decision forbids --
+  // and `booking_event.raw` carries Calendly invitee names and emails.
+  //
+  // `metadata` and `payload` are deliberately NOT here. Masking them whole turned the
+  // entire pricing-2.0 and nurture analytics surface into a four-hex tag -- plan,
+  // discountStep, trafficSource, countryTier, nurtureEmailsSent -- to hide one token key
+  // inside. The recursion walks into them and the value pass below catches the token,
+  // which is the same protection without the cost.
   "answers",
   "raw",
-  "metadata",
-  "payload",
 ];
 
 /**
@@ -1592,6 +1623,25 @@ function redactPrivateColumns(rows: unknown[]): { rows: unknown[]; redacted: str
       if (PRIVATE_COLUMN.test(key)) {
         hit.add(key);
         copy[key] = privateTag(copy[key]);
+        continue;
+      }
+      /**
+       * BY VALUE, NOT ONLY BY NAME -- because a name denylist misses a column every time
+       * someone adds one.
+       *
+       * `personal_report.url` is `/report/rpt_<20>`: 1,920 live unlock links, each of
+       * which opens a paid report with no login, in a column called `url`. The corpus
+       * side of the same token class had already been closed and scrubbed; the live side
+       * handed them out at up to 200 rows a call, because `url` is not a private-sounding
+       * word. This is the same redactor the ingest path uses, so the two halves of the
+       * brain now recognise the same secrets.
+       */
+      if (typeof copy[key] === "string") {
+        const masked = redactUrlSecrets(copy[key] as string);
+        if (masked !== copy[key]) {
+          hit.add(key);
+          copy[key] = masked;
+        }
         continue;
       }
       copy[key] = walk(copy[key], depth + 1);
@@ -1891,8 +1941,19 @@ async function callTool(
      * most assertive sentence the tool emits, a deliberate record was being offered as
      * best evidence for questions it does not touch.
      */
-    const RELEVANCE_FLOOR = 2.0;
-    const topScore = chunks[0]?.contentScore ?? 0;
+    /**
+     * 1.85, re-measured after the anchor moved to the best content match in the set.
+     *
+     * Swept over 16 questions the corpus answers well and 12 it provably cannot: at 1.85
+     * the warning fires on 2 of the good ones and catches 12 of 12 junk (Youden 0.875);
+     * at 2.00, 4 and 12 of 12 (0.750); at 1.75 it starts missing junk (7 of 12). The
+     * four it wrongly warned at 2.00 were the questions the vocabulary expansion exists
+     * to make work -- "how much money have we made" answers correctly from the all-time
+     * row and scores 1.80, because a title reading "all time, in total, to date,
+     * lifetime since launch" shares few words with the question.
+     */
+    const RELEVANCE_FLOOR = 1.85;
+    const topScore = chunks.reduce((best, c) => Math.max(best, c.contentScore), 0);
     const rankedIn = chunks.filter(
       (c) =>
         c.source === "decision" &&
@@ -1934,10 +1995,21 @@ async function callTool(
             title: c.title,
             decidedOn: c.periodEnd,
           }))
-        : // A weak match must not produce the most assertive sentence the tool emits.
-          weakMatch
-          ? []
-          : await priorDecisions(query)
+        : /**
+           * THE LOOKUP RUNS EVEN ON A WEAK MATCH, which is the opposite of what this did.
+           *
+           * Skipping it disabled the exact path that exists to catch a decision the
+           * ranked search missed, precisely when the ranked search is weakest. Measured
+           * 2026-09-10: "can we add a github ingester so PRs are searchable" put
+           * *Decision: Do not index GitHub pull requests* at rank 1 with a ratio of 1.00
+           * and a content score of 1.99 -- one hundredth under the old floor -- so the
+           * ranked path dropped it, the weak-match gate then skipped the lookup too, and
+           * a question about a settled decision surfaced nothing at all.
+           *
+           * The lookup has its own floor and its own decision-only search, so it is not
+           * the ranked result's confidence being borrowed.
+           */
+          await priorDecisions(query)
     );
     // Was: raw `c.body`, joined by `---`. The Slack path removed that separator
     // BECAUSE a chunk could pose as the operator across it, then kept the fence,
@@ -1964,9 +2036,14 @@ async function callTool(
      */
     const shortOfLimit =
       chunks.length > 0 && chunks.length < limit && !shaping.heldBack
-        ? `\n\nFEWER THAN THE ${limit} ASKED FOR: the ranking held ${chunks.length}. No cap ` +
-          `trimmed this — that is everything the search found worth returning, so a ` +
-          `narrower \`sources\` will not reveal more. Reword the question instead.\n`
+        ? `\n\nFEWER THAN THE ${limit} ASKED FOR: the ranking held ${chunks.length}.` +
+          (shaping.collapsed
+            ? ` ${shaping.collapsed} more were folded in as another part or another ` +
+              `occurrence of something already listed — one recurring meeting is one row ` +
+              `here, however many times it repeats. Name a date to reach a specific one.\n`
+            : ` No cap trimmed this — that is everything the search found worth ` +
+              `returning, so a narrower \`sources\` will not reveal more. Reword the ` +
+              `question instead.\n`)
         : "";
     const heldBack = shaping.heldBack
       ? `\n\nHELD BACK BY THE PER-SOURCE CAP, not by relevance: ` +
@@ -2015,7 +2092,9 @@ async function callTool(
       const res = await supabaseFetch(
         `/rest/v1/brain_chunk?select=source,source_id,title,url,body,meta,period_end` +
           `&source=eq.${encodeURIComponent(src)}` +
-          `&source_id=like.${encodeURIComponent(base)}*&limit=400`,
+          // ORDERED. PostgREST returns rows in whatever order the plan produced, and the
+          // sort below could not repair it while every part reported number 1.
+          `&source_id=like.${encodeURIComponent(base)}*&order=source_id.asc&limit=400`,
         { headers: { Prefer: "count=exact" } }
       );
       if (!res.ok) {

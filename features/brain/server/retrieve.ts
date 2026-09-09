@@ -271,6 +271,20 @@ function sanitiseQuery(q: string): string {
 export interface RetrieveShaping {
   /** Source -> how many of its matches were cut to make room for other sources. */
   heldBack?: Map<string, number>;
+  /**
+   * How many candidates were dropped as another part or occurrence of something already
+   * in the list.
+   *
+   * REPORTED because the caller's "you asked for N and the ranking held fewer" notice
+   * was making a false claim without it. `sources:["calendar"]` at limit 8 returns 12
+   * candidates that collapse to 2-3 parents -- seven occurrences of one recurring
+   * meeting become one row -- and collapsed siblings never reach `deferred`, so
+   * `heldBack` stays empty and the notice said "No cap trimmed this, that is everything
+   * the search found worth returning". Twelve were found and ten discarded. That is the
+   * shape of the request reported as the state of the world, which is the one move this
+   * codebase refuses everywhere else.
+   */
+  collapsed?: number;
 }
 
 /**
@@ -439,7 +453,10 @@ export async function retrieve(
   const seenParents = new Set<string>();
   for (const row of candidates) {
     const key = parentKey(row);
-    if (seenParents.has(key)) continue;
+    if (seenParents.has(key)) {
+      shaping.collapsed = (shaping.collapsed ?? 0) + 1;
+      continue;
+    }
     seenParents.add(key);
     bestPerParent.push(row);
   }

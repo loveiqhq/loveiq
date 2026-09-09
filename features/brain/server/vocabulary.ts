@@ -31,23 +31,52 @@ const HOUSE_TERMS: Array<[RegExp, string]> = [
   // Money. "made" and "earned" both collided with ordinary English -- "we made a
   // horror film", "Fatih made the change" -- which is why the metric word has to be
   // added rather than hoped for.
-  [/\b(?:money|earn(?:ed|ings)?|income|takings|turnover)\b/i, "revenue"],
-  [/\bhow much (?:have we|did we|do we) (?:make|made)\b/i, "revenue"],
-  // Traffic. "traffic" alone matched an ad network's cold outreach twice.
-  [/\b(?:traffic|visitors?|footfall)\b/i, "visits"],
+  // A COST QUESTION IS NOT A REVENUE QUESTION, and "money" appears in both. Measured
+  // 2026-09-10: "how much money did we pay Upwork" filled 8 of 12 slots with analytics
+  // rows and dropped the contractor thread out of the result entirely. Every pattern
+  // below therefore needs the question to be about money COMING IN.
+  [/\b(?:income|takings|turnover)\b/i, "revenue"],
+  [
+    /\bhow much (?:money |cash )?(?:have we|did we|do we) (?:make|made|earn|earned|bring in)\b/i,
+    "revenue",
+  ],
+  [/\b(?:money|cash) (?:have we|did we|do we) (?:make|made|earn|earned|bring in)\b/i, "revenue"],
+  [/\bwhat (?:is|are|was) (?:our|the) (?:revenue|earnings|sales|profit|takings)\b/i, "revenue"],
+  [/\bhow much (?:are we|have we been) (?:losing|making)\b/i, "revenue"],
+  // Traffic. "traffic" alone matched an ad network's cold outreach twice -- and also
+  // matched "traffic to the Berlin office", which is about a building.
+  [/\b(?:what|how) (?:is|are|much|many) (?:our|the) (?:traffic|visitors?)\b/i, "visits"],
+  [/\bour traffic\b|\btraffic (?:numbers|source|sources|seasonal)\b/i, "visits"],
+  [/\bhow many (?:visitors?|people) (?:do we|did we|are|visit)\b/i, "visits"],
   // People who paid, as opposed to people who signed up.
   [/\b(?:buyers?|purchasers?|customers who paid|paying users?)\b/i, "paying customers"],
   // People who finished the survey. "new users" returned no signup figure at all.
-  [/\b(?:new users?|registrations?|sign[- ]?ups?)\b/i, "signups"],
+  // "how many" / "how much" is required, because the bare phrase is also an email
+  // subject -- "New user has been added" -- and the plain question already found it.
+  [/\bhow many (?:new users?|registrations?|sign[- ]?ups?)\b/i, "signups"],
+  [/\b(?:registrations?|sign[- ]?ups?) (?:did we|do we|have we)\b/i, "signups"],
   // Funnel health. Asking whether something "works" names no metric at all.
-  [/\bfunnel\b|\bdrop[- ]?off\b|\bconversion\b/i, "conversion rate"],
+  // `conversion` alone is a word people use about UX, so it needs a question shape.
+  // `funnel` alone is also a thing you draw: "the funnel diagram in Figma" put ten
+  // analytics rows above the Notion card that literally answers it.
+  [/\b(?:is|how is) (?:the |our )?funnel (?:working|doing|performing)\b/i, "conversion rate"],
+  [/\b(?:our|the) funnel (?:conversion|numbers|performance|health)\b/i, "conversion rate"],
+  [/\bdrop[- ]?off\b|\b(?:what|how) (?:is|are|was) (?:our|the) conversion\b/i, "conversion rate"],
   // The open-ended founder questions, which name no metric and no period.
   [
     /\bhow (?:are we|is (?:it|business|the company)) (?:doing|going)\b|\bhow's business\b/i,
     "revenue signups visits",
   ],
   [/\b(?:profitable|profitability|are we making money)\b/i, "revenue ad spend"],
-  [/\b(?:growing|growth)\b/i, "signups revenue"],
+  // `growth` is also a job title ("Growth Lead", "running growth") and a direction
+  // ("growth direction"), and matching those pulled a hiring conversation toward the
+  // monthly numbers -- measured, "which candidate did we speak to about running growth
+  // at the end of March 2026" moved the right calendar event from rank 1 to rank 3.
+  // A question ABOUT growth says "are we" or "how much".
+  [
+    /\b(?:are we growing|is (?:the )?(?:business|company) growing|how (?:much|fast) (?:are we|have we) grow)/i,
+    "signups revenue",
+  ],
 ];
 
 /**

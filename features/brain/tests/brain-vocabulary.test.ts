@@ -28,6 +28,18 @@ describe("plain English reaches the numbers", () => {
     reaches("are we growing", "signups");
   });
 
+  it("does not fire on the trigger word used in a non-metric sense", () => {
+    for (const q of [
+      "which candidate did we speak to about running growth at the end of March 2026",
+      "who is the Growth Lead",
+      "what is our growth direction",
+      "New user has been added to the workspace",
+      "who argued that a simpler interface drives conversion",
+    ]) {
+      expect(expandBusinessVocabulary(q), `misfired on: ${q}`).toBe(q);
+    }
+  });
+
   it("leaves a question that already speaks the house language alone", () => {
     // Adding a word the asker already used would double its weight on a question that
     // never needed the help.

@@ -168,6 +168,13 @@ const BARE_SECRET_RE = new RegExp(
     // on a first pass ("shr_", "ppd_") and matched nothing at all.
     "rpts?_[A-Za-z0-9_-]{12,}", // report access + share tokens
     "rpp_[A-Za-z0-9_-]{12,}", // prepaid report access token
+    // Third-party one-click links found live in the mailbox and in Slack. Each one acts
+    // on a named customer with no authentication: the Calendly link CANCELS their
+    // booking, the customer.io link unsubscribes them, and a Stripe receipt shows the
+    // payer's name, email and card.
+    "calendly\\.com/cancellations/[A-Za-z0-9-]{8,}",
+    "track\\.customer\\.io/(?:\\S*?/)?unsubscribe/[A-Za-z0-9_-]{8,}",
+    "pay\\.stripe\\.com/receipts/[A-Za-z0-9_/-]{12,}",
   ].join("|"),
   "g"
 );
@@ -196,6 +203,10 @@ function clean(row: BrainRow): BrainRow {
     title: redactUrlSecrets(row.title.split(NUL_BYTE).join("")),
     // Redacted BEFORE the length cap, so a masked value cannot push real text out.
     body: redactUrlSecrets(row.body.split(NUL_BYTE).join("")).slice(0, MAX_BODY_CHARS),
+    // `url` too. It was the one field of the three left unguarded, and `renderSources`
+    // prints it on every search line — 588 chunks carry a query string there. Nothing
+    // leaked through it today; a field that is exempt by omission is how the next one does.
+    url: row.url === null ? null : redactUrlSecrets(row.url),
     // PostgREST rejects a bulk insert whose objects do not all carry the SAME
     // keys — "All object keys must match" (PGRST102), and it fails the whole
     // batch, not the offending row. `period_end` is optional, and JSON.stringify

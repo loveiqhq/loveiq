@@ -960,7 +960,8 @@ describe("/api/mcp", () => {
         title: `WhatsApp: LoveIQ — 2026-08-25 10:46 (${n}/3)`,
         url: null,
         body: `part ${n} body`,
-        meta: n === 1 ? { kind: "whatsapp-chat" } : { kind: "whatsapp-chat", part: n, parts: 3 },
+        // Deliberately WITHOUT `meta.part` — see the test below for why.
+        meta: { kind: "whatsapp-chat" },
         period_end: "2026-08-25",
       });
       // Asking with a PART id must still reach the whole document, which is the case
@@ -996,6 +997,37 @@ describe("/api/mcp", () => {
       wireParts([wa(1)]);
       await call({ id: "whatsapp/wa:1@g.us#wa-2026-08-25-1046" });
       expect(lastChunkRead()).toContain("wa-2026-08-25-1046");
+    });
+
+    it("reads the part number off the id when the ingest did not record one", async () => {
+      // Rows written before 2026-09-10 carry the part number in the title and not in
+      // `meta`, so every part answered 1: the sort was a no-op, the header claimed a
+      // four-part day was complete at one part, and `from_part` matched nothing.
+      const wa = (n: number) => ({
+        source: "whatsapp",
+        source_id: `wa:1@g.us#wa-2026-08-25-1046${n === 1 ? "" : `-${n}`}`,
+        title: `WhatsApp: LoveIQ — 2026-08-25 10:46 (${n}/3)`,
+        url: null,
+        body: `part ${n} body`,
+        meta: { kind: "whatsapp-chat" }, // no `part` — the real state of every such row
+        period_end: "2026-08-25",
+      });
+      wireParts([wa(2), wa(1), wa(3)]); // out of order, as PostgREST returns them
+      const r = await call({ id: "whatsapp/wa:1@g.us#wa-2026-08-25-1046" });
+      const text = r.content[0].text as string;
+      // Rendered in order, not in the order the database happened to return.
+      expect(text.indexOf("part 1 body")).toBeLessThan(text.indexOf("part 2 body"));
+      expect(text.indexOf("part 2 body")).toBeLessThan(text.indexOf("part 3 body"));
+      // And the header counts what is really there.
+      expect(text).toMatch(/parts 1-3 of 3/);
+      expect(text).not.toMatch(/parts 1-1/);
+
+      // `from_part` reaches a later part instead of matching nothing.
+      wireParts([wa(1), wa(2), wa(3)]);
+      const later = await call({ id: "whatsapp/wa:1@g.us#wa-2026-08-25-1046", from_part: 2 });
+      expect(later.isError).toBeFalsy();
+      expect(later.content[0].text).toContain("part 2 body");
+      expect(later.content[0].text).not.toContain("part 1 body");
     });
 
     /** Same, but with the exact-count header PostgREST returns for `Prefer: count=exact`. */

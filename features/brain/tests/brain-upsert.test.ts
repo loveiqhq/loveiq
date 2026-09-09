@@ -434,10 +434,9 @@ describe("the repo ingester redacts the same things the shared write path does",
       "BARE_SECRET_RE not found in the script — the guard moved or was deleted"
     ).toBeTruthy();
 
-     
     const paramList = eval(params!) as string;
     const paramRe = new RegExp(`([?&#][a-z0-9_.-]*(?:${paramList})=)[^\\s&"'<>)\\]]+`, "gi");
-     
+
     const bareRe = eval(bare!) as RegExp;
     const scriptRedact = (t: string) =>
       t.replace(paramRe, "$1[redacted]").replace(new RegExp(bareRe.source, "g"), "[redacted]");

@@ -71,6 +71,46 @@ describe("expandRelativePeriods", () => {
     expect(expandRelativePeriods("", NOW)).toBe("");
   });
 
+  /**
+   * FOUR GRAINS, BECAUSE THE CORPUS HAS FOUR. `week` and `alltime` were missing, and the
+   * grain penalty treats "not the grain asked for" as a demotion -- so a chunk at a grain
+   * no anchor could ever name was penalised on every question that anchored at all.
+   *
+   * Measured 2026-09-10: "how many visits did we get in the week ending 30 August 2026"
+   * answered 206 (that Sunday) against the week's 2,477 -- a 12x understatement, with the
+   * weekly row holding the HIGHEST content score in the result. And "how much have we
+   * earned in total" returned the all-time row at rank 1, while "...in total currently"
+   * -- one adverb more -- set a month anchor and deleted it from the top four.
+   */
+  it("reads a named week as a week, not as the day it ends on", () => {
+    for (const q of [
+      "how much revenue did we make in the week of 24 to 30 August 2026",
+      "how many visits did we get in the week ending 30 August 2026",
+      "what happened in the week beginning 24 August 2026",
+    ] as const) {
+      const a = periodAnchor(q, NOW);
+      expect(a?.grain, `wrong grain for: ${q}`).toBe("week");
+    }
+    // The LAST date in the phrase is the week's end, which is how a weekly row is dated.
+    expect(periodAnchor("the week of 24 to 30 August 2026", NOW)?.date).toBe("2026-08-30");
+    // A plain day question is still a day.
+    expect(periodAnchor("how many signups on 30 August 2026", NOW)?.grain).toBe("day");
+  });
+
+  it("reads a lifetime question as its own grain, whatever else is in the sentence", () => {
+    for (const q of [
+      "how much have we earned in total",
+      "how much have we earned in total currently",
+      "how many signups all time",
+      "what have we made since launch",
+      "how many reports altogether",
+    ] as const) {
+      expect(periodAnchor(q, NOW)?.grain, `wrong grain for: ${q}`).toBe("alltime");
+    }
+    // And a question that names a month is still a month question.
+    expect(periodAnchor("how much revenue in June 2026", NOW)?.grain).toBe("month");
+  });
+
   it("crosses a year boundary correctly", () => {
     const jan = new Date("2026-01-05T10:00:00Z");
     expect(expandRelativePeriods("last month", jan)).toContain("December 2025");
@@ -116,9 +156,52 @@ describe("periodAnchor — where the recency term measures from", () => {
    * degrades to exactly the unanchored behaviour, which is the honest answer to a
    * question about a month with no data.
    */
-  it("never anchors in the future", () => {
+  it("never anchors on a future MONTH", () => {
     expect(periodAnchor("how many sessions in october 2026", NOW)?.date).toBe("2026-09-07");
     expect(periodAnchor("how are we doing this month", NOW)?.date).toBe("2026-09-07");
+    expect(periodAnchor("revenue in january 2027", NOW)?.date).toBe("2026-09-07");
+  });
+
+  /**
+   * A FUTURE DAY IS NOT THE SAME CASE. The clamp above is right because a month that has
+   * not happened holds no numbers. A named future DAY routinely has a record -- 93 of
+   * 299 calendar chunks are future-dated -- and once the recency decay became symmetric,
+   * clamping made those unreachable: "the LoveIQ Sync on 6 January 2027" put the right
+   * row at rank 46 even though its content score BEAT the winner's. Content preferred
+   * the right answer and recency overruled it.
+   */
+  it("anchors on a future DAY the asker named, so the record is reachable", () => {
+    expect(periodAnchor("the LoveIQ Sync on 6 January 2027", NOW)?.date).toBe("2027-01-06");
+    expect(periodAnchor("what is scheduled for 2027-01-06", NOW)?.date).toBe("2027-01-06");
+    // Still a day anchor, so the grain penalty aims at day rows.
+    expect(periodAnchor("the LoveIQ Sync on 6 January 2027", NOW)?.grain).toBe("day");
+  });
+
+  /**
+   * A DAY WRITTEN IN WORDS IS STILL A DAY.
+   *
+   * `dayFirst` needed a numeric day and no filler, so "the thirteenth of June 2026" fell
+   * through to the month branch. Survivable while the grain penalty was a demotion; at
+   * 0.8 it is a deletion -- measured 2026-09-10, four such questions put the correct day
+   * row OUTSIDE THE TOP 400, while the same question written "13 June 2026" returned it
+   * at rank 1. The month and year still matched, so the answer looked confident and was
+   * about the wrong period.
+   */
+  it("reads a day spelled out in words, with or without 'of'", () => {
+    for (const [q, want] of [
+      ["how many signups on the thirteenth of June 2026", "2026-06-13"],
+      ["how many signups on 13th of June 2026", "2026-06-13"],
+      ["how many signups on 13 June 2026", "2026-06-13"],
+      ["what happened on the third of January 2026", "2026-01-03"],
+      ["revenue on the twenty-first of August 2026", "2026-08-21"],
+      ["revenue on the thirty-first of August 2026", "2026-08-31"],
+    ] as const) {
+      const a = periodAnchor(q, NOW);
+      expect(a?.date, `wrong anchor for: ${q}`).toBe(want);
+      expect(a?.grain, `wrong grain for: ${q}`).toBe("day");
+    }
+    // A month question must still read as a month.
+    expect(periodAnchor("how much revenue in June 2026", NOW)?.grain).toBe("month");
   });
 
   it("anchors the relative expressions to the same dates it already hints", () => {
