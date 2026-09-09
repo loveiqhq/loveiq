@@ -11,6 +11,7 @@ import {
   recordDecision,
   renderPriorDecisions,
 } from "@features/brain/server/decisions";
+import { postToSlack, SlackTargetError } from "@features/brain/server/act/slack";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
@@ -524,7 +525,12 @@ const TOOLS = [
      * recording a decision adds a record, and re-recording the same decision on the same
      * day updates that one record rather than creating a second.
      */
-    annotations: { readOnlyHint: false, openWorldHint: false, idempotentHint: true },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     description:
       "Record a decision so the company can find it later. Use this whenever something " +
       "is settled — in a call, in chat, or in this conversation — rather than leaving it " +
@@ -577,6 +583,53 @@ const TOOLS = [
         },
       },
       required: ["decision", "actor"],
+    },
+  },
+  {
+    name: "post_to_slack",
+    title: "Say something in Slack",
+    /**
+     * `idempotentHint: false` is the load-bearing one: calling this twice posts twice,
+     * so a client must never retry it on a timeout. `destructiveHint: false` is honest —
+     * a message is additive — but see the description: additive is not the same as
+     * reversible, and this bot cannot delete.
+     */
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+    description:
+      "Post a message to a Slack channel, or send someone a direct message, as the " +
+      "company brain.\n\n" +
+      "THIS CANNOT BE TAKEN BACK. The bot can write but has no permission to delete, so " +
+      "anything posted here has to be removed by a person in Slack, and colleagues see it " +
+      "the moment it lands. Calling this twice posts twice — it is not safe to retry. " +
+      "Post what you were asked to post; do not post a message the person has not seen, " +
+      "and do not use it to announce your own progress.\n\n" +
+      "Every call is logged with its full text. Slack's own mrkdwn applies: *bold*, " +
+      "_italic_, `code`, <https://url|label>. @-mentions of channels are deliberately " +
+      "inert, so no message from here can notify everyone.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        channel: {
+          type: "string",
+          description:
+            "`#channel-name` to post in a channel, or `@person` to send a direct " +
+            "message. A raw Slack id works too. If the name is wrong, the refusal lists " +
+            "every channel this bot can reach — read it rather than guessing again.",
+        },
+        text: { type: "string", description: "The message. Slack mrkdwn." },
+        thread_ts: {
+          type: "string",
+          description:
+            "Reply inside an existing thread instead of posting a new message. The `ts` " +
+            "of the message to reply to, as returned when it was posted.",
+        },
+      },
+      required: ["channel", "text"],
     },
   },
   {
@@ -1483,6 +1536,44 @@ async function callTool(
       false,
       "lower max_chars, or page with from_part"
     );
+  }
+
+  if (name === "post_to_slack") {
+    const channel = typeof args.channel === "string" ? args.channel.trim() : "";
+    const text = typeof args.text === "string" ? args.text.trim() : "";
+    if (!channel) return textResult("Name a channel, like #all-loveiq.", true);
+    // An empty post is a caller bug that would put a blank message in front of colleagues
+    // with no way to remove it.
+    if (!text) return textResult("There is no message to post.", true);
+
+    try {
+      const posted = await postToSlack({
+        channel,
+        text,
+        threadTs:
+          typeof args.thread_ts === "string" && args.thread_ts.trim()
+            ? args.thread_ts.trim()
+            : undefined,
+      });
+      stats.sourceCount = 1;
+      return textResult(
+        `Posted to ${posted.target.label}.\n` +
+          (posted.permalink ? `${posted.permalink}\n` : "") +
+          `ts: ${posted.ts} — pass this as \`thread_ts\` to reply in the thread.\n\n` +
+          `It is visible now and this bot cannot delete it; a correction has to be a new ` +
+          `message, or a person removing it in Slack.`
+      );
+    } catch (err) {
+      // A bad channel name is the caller's to fix and the message says how; anything else
+      // is ours, and must not be dressed up as the caller's mistake.
+      if (err instanceof SlackTargetError) return textResult(err.message, true);
+      logger.error({ err }, "brain: could not post to Slack");
+      return textResult(
+        `Could not post to Slack: ${err instanceof Error ? err.message : "unknown error"}. ` +
+          `Nothing was sent.`,
+        true
+      );
+    }
   }
 
   if (name === "count_context" || name === "browse_context") {
@@ -2508,6 +2599,9 @@ export async function POST(request: Request) {
         "period looked like; live for what is true right now. Never infer a current number " +
         "from an indexed chunk when query_product_data can read it directly, and never " +
         "conclude something does not exist from an empty search — check list_sources first.\n\n" +
+        "IT CAN ALSO ACT. `post_to_slack` posts a message to a channel or sends someone " +
+        "a direct message. It cannot be undone — this bot may write but not delete — so " +
+        "post what you were asked to post, and never your own progress.\n\n" +
         "COUNTING AND LISTING ARE SEPARATE TOOLS, because search cannot do either. " +
         "`search_company_context` ranks and stops at 30, so a number counted off its " +
         "results is a floor and a list built from them is 'the 30 most relevant', never " +
