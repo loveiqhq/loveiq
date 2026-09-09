@@ -41,27 +41,23 @@ function respondWith(rows: unknown[]) {
   mockSupabaseFetch.mockResolvedValue({ ok: true, status: 200, json: async () => rows });
 }
 
-const SHA_A = "a".repeat(40);
-const SHA_B = "b".repeat(40);
-const SHA_C = "c".repeat(40);
-
 beforeEach(() => vi.clearAllMocks());
 afterEach(() => vi.clearAllMocks());
 
 describe("retrieve — parent dedupe", () => {
-  it("collapses several parts of one commit into its best-scoring part", async () => {
+  it("collapses several parts of one document into its best-scoring part", async () => {
     // Measured on the real corpus: a query matched parts 1 and 2 of the same
-    // commit at ranks 2 and 3, which wastes prompt budget and shows the reader
+    // document at ranks 2 and 3, which wastes prompt budget and shows the reader
     // the same citation twice.
     respondWith([
-      row({ source: "commit", source_id: SHA_A, score: 2.0 }),
-      row({ source: "commit", source_id: `${SHA_A}-2`, score: 1.9 }),
-      row({ source: "commit", source_id: `${SHA_A}-3`, score: 1.8 }),
-      row({ source: "commit", source_id: SHA_B, score: 1.0 }),
+      row({ source: "doc", source_id: "CLAUDE.md#a", score: 2.0, path: "CLAUDE.md" }),
+      row({ source: "doc", source_id: "CLAUDE.md#b", score: 1.9, path: "CLAUDE.md" }),
+      row({ source: "doc", source_id: "CLAUDE.md#c", score: 1.8, path: "CLAUDE.md" }),
+      row({ source: "doc", source_id: "SECURITY.md#a", score: 1.0, path: "SECURITY.md" }),
     ]);
 
     const out = await retrieve("anything", 8);
-    expect(out.map((r) => r.sourceId)).toEqual([SHA_A, SHA_B]);
+    expect(out.map((r) => r.sourceId)).toEqual(["CLAUDE.md#a", "SECURITY.md#a"]);
   });
 
   it("collapses several headings of one document into its best-scoring chunk", async () => {
@@ -103,26 +99,50 @@ describe("retrieve — parent dedupe", () => {
     expect(out).toHaveLength(2);
   });
 
-  it("keeps the higher-scoring part when it is not the first-listed one", async () => {
+  it("keeps the higher-scoring occurrence when it is not the first-listed one", async () => {
     respondWith([
-      row({ source: "commit", source_id: `${SHA_A}-2`, score: 3.0 }),
-      row({ source: "commit", source_id: SHA_A, score: 1.0 }),
+      row({ source: "calendar", source_id: "event:sync@g.com:2026-07-22", score: 3.0 }),
+      row({ source: "calendar", source_id: "event:sync@g.com:2026-07-15", score: 1.0 }),
     ]);
     const out = await retrieve("anything", 8);
     expect(out).toHaveLength(1);
     expect(out[0]!.score).toBe(3.0);
   });
+
+  /**
+   * ONE RECURRING MEETING IS ONE THING. Occurrences are indexed separately so a
+   * question about a specific date has something to return, but 212 of 380 calendar
+   * chunks are occurrences of the single "LoveIQ Sync" — measured 2026-09-09, "who is
+   * in the recurring sync" filled all twelve slots with copies of one event.
+   *
+   * The old-shape `event:<uid>` row an earlier builder wrote collapses into the same
+   * parent as its `event:<uid>:<day>` replacement, which is the other half of this:
+   * un-collapsed, that exact-duplicate pair took two of the top three slots on
+   * seventeen measured questions.
+   */
+  it("collapses every occurrence of one recurring meeting into its best one", async () => {
+    respondWith([
+      row({ source: "calendar", source_id: "event:sync@g.com:2026-09-09", score: 2.4 }),
+      row({ source: "calendar", source_id: "event:sync@g.com:2026-09-08", score: 2.3 }),
+      row({ source: "calendar", source_id: "event:sync@g.com", score: 2.2 }),
+      row({ source: "calendar", source_id: "event:other@g.com:2026-09-09", score: 2.1 }),
+    ]);
+    const out = await retrieve("anything", 8);
+    expect(out).toHaveLength(2);
+    expect(out[0]!.sourceId).toBe("event:sync@g.com:2026-09-09");
+    expect(out[1]!.sourceId).toBe("event:other@g.com:2026-09-09");
+  });
 });
 
 describe("retrieve — source diversity", () => {
   it("stops one source from crowding out an authoritative doc", async () => {
-    // The corpus holds 1,475 commit chunks against 454 doc chunks, and commit
-    // titles are short subject lines that score well on word-similarity. Without
-    // a cap, "why is the data retention purge turned off" put three commits above
-    // the CLAUDE.md section that literally answers it.
+    // The corpus holds 8,700 gmail chunks against 454 doc chunks, and a mail subject
+    // is a short line that scores well on word-similarity. Without a cap, "why is the
+    // data retention purge turned off" put three notification emails above the
+    // CLAUDE.md section that literally answers it.
     const rows = [
       ...Array.from({ length: 10 }, (_, i) =>
-        row({ source: "commit", source_id: `${String(i)}${"f".repeat(39)}`, score: 2 - i * 0.01 })
+        row({ source: "gmail", source_id: `thread:${String(i)}`, score: 2 - i * 0.01 })
       ),
       row({ source: "doc", source_id: "CLAUDE.md#postponed", score: 1.1, path: "CLAUDE.md" }),
     ];
@@ -135,15 +155,15 @@ describe("retrieve — source diversity", () => {
     // AND the list is full.
     expect(out.some((r) => r.sourceId === "CLAUDE.md#postponed")).toBe(true);
     expect(out).toHaveLength(5);
-    expect(out.filter((r) => r.source === "commit").length).toBeLessThan(5);
+    expect(out.filter((r) => r.source === "gmail").length).toBeLessThan(5);
   });
 
   it("fills the cap back in when no other source has candidates", async () => {
-    // A commit-only result set must still return a full list rather than being
+    // A single-source result set must still return a full list rather than being
     // truncated to the per-source cap.
     respondWith(
       Array.from({ length: 10 }, (_, i) =>
-        row({ source: "commit", source_id: `${String(i)}${"e".repeat(39)}`, score: 2 - i * 0.01 })
+        row({ source: "gmail", source_id: `thread:e${String(i)}`, score: 2 - i * 0.01 })
       )
     );
     const out = await retrieve("anything", 5);
@@ -200,7 +220,7 @@ describe("retrieve — source diversity", () => {
     respondWith([
       row({ source: "doc", source_id: "a.md#1", score: 3, path: "a.md" }),
       row({ source: "doc", source_id: "b.md#1", score: 2, path: "b.md" }),
-      row({ source: "commit", source_id: SHA_C, score: 1 }),
+      row({ source: "notion", source_id: "task:c", score: 1 }),
     ]);
     const out = await retrieve("anything", 2);
     expect(out).toHaveLength(2);
@@ -272,7 +292,7 @@ describe("retrieve — failure and edge handling", () => {
     respondWith([]);
     await retrieve("what happened recently", 12, {
       since: "2026-01-01",
-      excludeSources: ["commit"],
+      excludeSources: ["gmail"],
     });
     expect(JSON.parse(String(mockSupabaseFetch.mock.calls.at(-1)?.[1]?.body)).per_source).toBe(3);
   });

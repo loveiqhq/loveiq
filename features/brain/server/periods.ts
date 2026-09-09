@@ -138,8 +138,26 @@ function detect(question: string, now: Date): { search: string; anchor: PeriodAn
     setAnchor(`${now.getUTCFullYear() - 1}-12`);
   }
   // "right now" / "at the moment" are asking for the latest period we hold.
+  /**
+   * A VAGUE PRESENT-TENSE MARKER ANCHORS BUT DOES NOT ADD WORDS.
+   *
+   * "right now", "currently", "latest" mean CURRENT STATE, not a named month — and
+   * appending "September 2026" to the search text made every one of them a question
+   * about September. Measured 2026-09-09: "what is everyone working on right now"
+   * returned the Google Search Console monthly total, because that chunk's title
+   * contains the month the hint had just injected. Drop "right now" from the same
+   * question and it returned meeting notes and the Notion board.
+   *
+   * The hint predates the anchor and is now redundant for the questions it was written
+   * for: with the anchor alone, "how many signups currently", "what is our cost per
+   * customer right now" and "what is our revenue at the moment" all still return the
+   * September analytics row first — the metric words do that work. Meanwhile "what is
+   * the latest on the paywall" reaches the paywall page instead of a traffic report.
+   *
+   * An EXPLICIT period ("this month", "last month") still adds its name, because there
+   * the reader has named the thing they want.
+   */
   if (/\bright now\b|\bat the moment\b|\bcurrently\b|\blatest\b/.test(q)) {
-    add(longMonth(monthKey(0)));
     setAnchor(monthKey(0));
   }
 

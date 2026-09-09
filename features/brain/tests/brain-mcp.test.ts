@@ -417,13 +417,16 @@ describe("/api/mcp", () => {
      * where it ranks.
      */
     const chunk = (over: Partial<Record<string, unknown>> = {}) => ({
-      source: "commit",
-      sourceId: "abc123",
-      title: "feat: something",
+      source: "notion",
+      sourceId: "task:abc123",
+      title: "Board: something",
       url: null,
       body: "…",
       meta: {},
       score: 3.4,
+      // Defaults to the total, which is what an un-overridden row means: all of this
+      // score came from matching. Tests that care about the relevance floor set it.
+      contentScore: (over.score as number | undefined) ?? 3.4,
       periodEnd: "2026-09-01",
       ...over,
     });
@@ -491,7 +494,7 @@ describe("/api/mcp", () => {
       });
       const body = await (await call({ query: "should we switch to per-person tokens" })).json();
       expect(body.result.isError).toBe(false);
-      expect(body.result.content[0].text).toContain("feat: something");
+      expect(body.result.content[0].text).toContain("Board: something");
     });
 
     /**
@@ -550,23 +553,35 @@ describe("/api/mcp", () => {
       );
     });
 
-    it("ignores malformed filters rather than passing nonsense to the database", async () => {
+    it("refuses malformed filters rather than silently running unfiltered", async () => {
       // A model will send these. A string where an array belongs, or a nested
       // object in `meta`, must not become a query — `meta @> ...` is containment,
       // so a nested object matches structurally in ways nobody writing
       // {status:"WIP"} intends.
       mockRetrieve.mockResolvedValue([]);
-      await call({
-        query: "anything",
-        sources: "notion",
-        exclude_sources: [],
-        meta: { nested: { deep: true }, status: "WIP", count: 3 },
-      });
+      // A STRING WHERE AN ARRAY BELONGS IS REFUSED, NOT DROPPED. Dropping it ran the
+      // search against the FULL corpus and printed no applied-filter line, so the output
+      // was byte-identical to a filtered search and the caller had no way to tell they
+      // had read a general answer as a specific one.
+      const bad = (await (await call({ query: "anything", sources: "notion" })).json()).result;
+      expect(bad.isError).toBe(true);
+      expect(bad.content[0].text).toMatch(/`sources` must be a non-empty array/);
+      expect(mockRetrieve).not.toHaveBeenCalled();
+
+      // Same rule for a meta value the containment filter cannot express.
+      const badMeta = (
+        await (await call({ query: "anything", meta: { status: { eq: "WIP" } } })).json()
+      ).result;
+      expect(badMeta.isError).toBe(true);
+      expect(badMeta.content[0].text).toMatch(/`meta` must be an object of string values/);
+
+      // A well-formed request still passes through untouched, scalars coerced.
+      await call({ query: "anything", sources: ["notion"], meta: { status: "WIP", count: 3 } });
       expect(mockRetrieve).toHaveBeenLastCalledWith(
         "anything",
         12,
         {
-          sources: undefined,
+          sources: ["notion"],
           excludeSources: undefined,
           since: undefined,
           until: undefined,
@@ -680,6 +695,91 @@ describe("/api/mcp", () => {
       expect(guide).toMatch(/higher than an answerable one/i);
     });
 
+    /**
+     * A BAD ARGUMENT REPORTED AS A DATABASE OUTAGE SENDS THE READER TO THE WRONG PLACE.
+     *
+     * `since`/`until` were forwarded unvalidated, Postgres 400s, and `retrieve()`
+     * correctly raises `CorpusUnavailableError` — which this tool reports as "the
+     * knowledge base is unreachable". Measured: `until: "2026-09-31"` — September has
+     * 30 days, an ordinary off-by-one — told the reader the database was down.
+     *
+     * Shape alone was not enough either: `2026-13-45` and `2026-02-30` pass any
+     * `\d{4}-\d{2}-\d{2}` test and reach Postgres exactly the same way.
+     */
+    it("names a bad date as a bad date, never as an outage", async () => {
+      mockRetrieve.mockResolvedValue([]);
+      for (const bad of ["last friday", "2026-13-45", "2026-02-30", "2026-09-31", "Aug 2026"]) {
+        const r = (await (await call({ query: "anything", since: bad })).json()).result;
+        expect(r.isError).toBe(true);
+        expect(r.content[0].text).toMatch(/must be a real calendar date/);
+        expect(r.content[0].text).toMatch(/NOT with the knowledge base/);
+        expect(r.content[0].text).not.toMatch(/unreachable/);
+      }
+      expect(mockRetrieve).not.toHaveBeenCalled();
+      // A real date still passes straight through.
+      await call({ query: "anything", since: "2026-02-28", until: "2026-09-30" });
+      expect(mockRetrieve).toHaveBeenCalled();
+    });
+
+    /**
+     * FRESHNESS STANDING IN FOR RELEVANCE, CAUGHT AND SAID OUT LOUD.
+     *
+     * Measured 2026-09-09: "which of our customer personas uses Headspace or Whoop", a
+     * question the corpus cannot answer, returned eight hits scoring 2.309 down to
+     * 2.097 — a band indistinguishable from a good answer's, because it was almost
+     * entirely the recency term. `content_score` is the same score with recency and
+     * both penalties removed, which is the number that separates the two.
+     *
+     * The message carries the VERDICT and no numbers: this file already refuses to hand
+     * the model a decimal to threshold on, and having applied a threshold here, printing
+     * it would invite the reader to re-decide it with a different one.
+     */
+    it("says nothing matched well when the hits are recent rather than relevant", async () => {
+      mockRetrieve.mockResolvedValue([
+        chunk({ score: 2.31, contentScore: 1.71 }),
+        chunk({ sourceId: "task:b", score: 2.1, contentScore: 1.5 }),
+      ]);
+      const weak = (await (await call({ query: "anything" })).json()).result.content[0]
+        .text as string;
+      expect(weak).toMatch(/NOTHING BELOW MATCHED THE QUESTION STRONGLY/);
+      expect(weak).toMatch(/NOT evidence that LoveIQ has no record/);
+      // The hits are still returned — this is a caveat, never a refusal.
+      expect(weak).toContain("Board: something");
+      // No decimal for the model to re-threshold on.
+      expect(weak).not.toMatch(/score[^.]{0,40}\b\d\.\d/i);
+
+      // A genuinely good match says none of it.
+      mockRetrieve.mockResolvedValue([chunk({ score: 3.4, contentScore: 3.4 })]);
+      const strong = (await (await call({ query: "anything" })).json()).result.content[0]
+        .text as string;
+      expect(strong).not.toMatch(/NOTHING BELOW MATCHED/);
+    });
+
+    /**
+     * THE MOST ASSERTIVE SENTENCE THE TOOL EMITS MUST NOT FIRE ON A WEAK MATCH.
+     *
+     * `decision` is 4 rows of 22,667 — 0.02% of the corpus — and took rank 1 on 10.9%
+     * of 137 measured questions, appearing in the top 3 of 27 of them, 19 of which
+     * touched no decision at all. The ratio test could not see it because it compared
+     * TOTAL scores, and a record written today collects nearly the whole recency term.
+     */
+    it("does not claim a prior decision when nothing matched well", async () => {
+      mockRetrieve.mockResolvedValue([
+        chunk({
+          source: "decision",
+          sourceId: "decision:2026-09-09-abc",
+          title: "Decision: Do not index GitHub pull requests",
+          score: 2.31,
+          contentScore: 1.71,
+          periodEnd: "2026-09-09",
+        }),
+      ]);
+      const text = (await (await call({ query: "how long should a Guide article be" })).json())
+        .result.content[0].text as string;
+      expect(text).not.toMatch(/PRIOR DECISION ON RECORD/);
+      expect(text).toMatch(/NOTHING BELOW MATCHED/);
+    });
+
     it("names the sources it actually holds when nothing matches", async () => {
       // The old message advertised Jira, which has 0 chunks, and omitted Notion,
       // Slack, Gmail, Drive, the calendar and WhatsApp, which have 25,000 between
@@ -769,6 +869,29 @@ describe("/api/mcp", () => {
       body,
       meta: n === 1 ? { kind: "meeting-notes" } : { kind: "meeting-notes", part: n, parts: 10 },
       period_end: "2026-08-22",
+    });
+
+    /**
+     * PAGING PAST THE END IS THE HAPPY PATH, NOT A CRASH.
+     *
+     * The head line tells callers to "call again with from_part=N for the rest", so
+     * walking one step too far is what following that instruction looks like at the
+     * end of a document. It used to reach `partNumber(taken[0]!)` on an empty array and
+     * surface as "That lookup failed. It has been logged." — indistinguishable from an
+     * outage, for a document that reads perfectly.
+     */
+    it("says it reached the end instead of failing when from_part is past the last part", async () => {
+      wireParts([part(1, "one"), part(2, "two"), part(3, "three")]);
+      for (const from of [4, 999999]) {
+        const r = await call({ id: "drive/doc:1AbC", from_part: from });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0].text).toMatch(/reached the end of this document/);
+        expect(r.content[0].text).toMatch(/nothing is missing and nothing failed/);
+        expect(r.content[0].text).not.toMatch(/lookup failed/);
+      }
+      // The ordinary case is untouched.
+      const ok = await call({ id: "drive/doc:1AbC", from_part: 2 });
+      expect(ok.content[0].text).toContain("two");
     });
 
     /** Same, but with the exact-count header PostgREST returns for `Prefer: count=exact`. */
@@ -1124,7 +1247,7 @@ describe("/api/mcp", () => {
       wire([{ bucket: "(all)", n: 1, total: 1 }]);
       const r = await call({ since: "the summer" });
       expect(r.isError).toBe(true);
-      expect(r.content[0].text).toMatch(/`since` must be a date/);
+      expect(r.content[0].text).toMatch(/`since` must be a real calendar date/);
     });
 
     /**
@@ -2260,6 +2383,93 @@ describe("/api/mcp", () => {
       return body.result as { content: Array<{ text: string }>; isError?: boolean };
     }
 
+    /**
+     * THE READ SIDE OF THE DECISION THE WRITE SIDE ALREADY HONOURS.
+     *
+     * `decision:2026-09-09-3d275f5327` says verbatim survey answers must not enter "an
+     * open-access corpus that is pasted into model prompts". The corpus half obeys it;
+     * this tool, on the same server, had no data-class gate at all and `select` defaults
+     * to `*`. Measured live on 2026-09-09: `user_profile.sexual_orientation` 1,861 rows,
+     * `app_user.email` 1,870, `report_session.ip_address` 10,107, unrevoked
+     * `report_access_token` 1,929, and the whole `admin_users` allowlist.
+     */
+    describe("private columns never leave the tool", () => {
+      const ROWS = [
+        {
+          id: 1,
+          email: "someone@example.com",
+          ip_address: "8.8.8.8",
+          share_token: "tok_abcdef",
+          sexual_orientation: "bisexual",
+          answer_text: "something a customer wrote",
+          amount: 14.99,
+          status: "succeeded",
+          metric_key: "signups",
+        },
+        { id: 2, email: "someone@example.com", amount: 9.99, status: "succeeded" },
+        { id: 3, email: "other@example.com", amount: 4.99, status: "failed" },
+      ];
+
+      it("masks the value of every private column and says which", async () => {
+        wire(ROWS);
+        const r = await call({ table: "payment", limit: 3 });
+        const text = r.content[0].text;
+        for (const secret of [
+          "someone@example.com",
+          "other@example.com",
+          "8.8.8.8",
+          "tok_abcdef",
+          "bisexual",
+          "something a customer wrote",
+        ]) {
+          expect(text).not.toContain(secret);
+        }
+        expect(text).toMatch(/Masked as private/);
+        for (const col of [
+          "email",
+          "ip_address",
+          "share_token",
+          "sexual_orientation",
+          "answer_text",
+        ]) {
+          expect(text).toContain(col);
+        }
+      });
+
+      it("keeps the business columns, so the answer is still usable", async () => {
+        wire(ROWS);
+        const text = (await call({ table: "payment", limit: 3 })).content[0].text;
+        // Values a business question actually needs, including a `*_key` column —
+        // `metric_key`, `week_key`, `chart_key` and nine more are identifiers, not
+        // secrets, and masking them would break the KPI tables to protect nothing.
+        expect(text).toContain("14.99");
+        expect(text).toContain("succeeded");
+        expect(text).toContain("signups");
+        expect(text).toContain('"id":1');
+      });
+
+      it("gives one value one tag, so rows can still be matched to each other", async () => {
+        wire(ROWS);
+        const text = (await call({ table: "payment", limit: 3 })).content[0].text;
+        const tags = [...text.matchAll(/\[private #([0-9a-f]{4})\]/g)].map((m) => m[1]);
+        expect(tags.length).toBeGreaterThan(0);
+        // Rows 1 and 2 share an email; row 3 does not. Correlation survives redaction,
+        // which is the whole reason this is a tag and not a blank.
+        const emailTags = [...text.matchAll(/"email":"\[private #([0-9a-f]{4})\]"/g)].map(
+          (m) => m[1]
+        );
+        expect(emailTags).toHaveLength(3);
+        expect(emailTags[0]).toBe(emailTags[1]);
+        expect(emailTags[2]).not.toBe(emailTags[0]);
+      });
+
+      it("says nothing about masking when there is nothing to mask", async () => {
+        wire([{ id: 1, amount: 5, status: "succeeded" }]);
+        const text = (await call({ table: "payment", limit: 1 })).content[0].text;
+        expect(text).not.toMatch(/Masked as private/);
+      });
+    });
+
     it("refuses a table name that is not a plain identifier", async () => {
       wire([]);
       for (const table of ["payment; drop table x", "pay ment", "../secrets", "payment)--"]) {
@@ -2932,10 +3142,31 @@ describe("/api/mcp", () => {
 
     /** A range outside the data is a correct answer about an empty period, not a fault. */
     it("distinguishes a range with no days from a broken rollup", async () => {
-      const r = await call({ since: "2099-01-01", until: "2099-01-31" });
+      // A PAST range outside the data. The future case is refused earlier now — see
+      // the next test — because it used to answer with the rollup's own extent, and
+      // that extent was computed from the bad argument.
+      const r = await call({ since: "2000-01-01", until: "2000-01-31" });
       expect(r.isError).toBeFalsy();
       expect(r.content[0].text).toMatch(/outside the data/);
       expect(r.content[0].text).not.toMatch(/fault in the query/);
+    });
+
+    /**
+     * A YEAR TYPO USED TO ANSWER THAT THE COMPANY IS ONE DAY OLD.
+     *
+     * `asked` is days back from today, so a future `since` went negative, was clamped
+     * to 1, one row was fetched, and the out-of-range branch then reported that single
+     * row as the rollup's true extent: "The rollup has 1 days ending today". The rollup
+     * holds 500+ days. Refusing before the fetch is what stops a bad argument from
+     * being reported as a fact about the business.
+     */
+    it("refuses a future `since` instead of reporting the rollup as one day long", async () => {
+      const r = await call({ since: "2099-01-01", until: "2099-01-31" });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toMatch(/is in the future/);
+      expect(r.content[0].text).toMatch(/says nothing about how much history exists/);
+      // The one sentence that was false, in the words it was false in.
+      expect(r.content[0].text).not.toMatch(/rollup has 1 days/);
     });
 
     it("still reports a genuinely empty rollup as a fault", async () => {

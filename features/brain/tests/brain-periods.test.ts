@@ -32,11 +32,30 @@ describe("expandRelativePeriods", () => {
     expect(out).toContain("2026-08-27");
   });
 
-  it("treats 'right now' and 'currently' as the current period", () => {
-    expect(expandRelativePeriods("what is our cost per customer right now", NOW)).toContain(
-      "August 2026"
+  /**
+   * CHANGED 2026-09-09. These used to assert that "right now" and "currently" ADD the
+   * month name to the search text. They anchor instead, and add nothing.
+   *
+   * The words mean current STATE, not a named month, and injecting "September 2026"
+   * turned every such question into a question about September: "what is everyone
+   * working on right now" returned the Google Search Console monthly total, whose title
+   * contains the month the hint had just added. The hint also turned out to be redundant
+   * where it did help — with the anchor alone, "how many signups currently" still
+   * returns the September analytics row first, because the metric word does that work.
+   */
+  it("treats 'right now' and 'currently' as the current period, without naming it", () => {
+    expect(expandRelativePeriods("what is our cost per customer right now", NOW)).toBe(
+      "what is our cost per customer right now"
     );
-    expect(expandRelativePeriods("how many signups currently", NOW)).toContain("August 2026");
+    // Clamped to today, never the end of a month still running — the documented rule.
+    expect(periodAnchor("what is our cost per customer right now", NOW)).toEqual({
+      date: "2026-08-28",
+      grain: "month",
+    });
+    expect(expandRelativePeriods("how many signups currently", NOW)).toBe(
+      "how many signups currently"
+    );
+    expect(periodAnchor("how many signups currently", NOW)?.date).toBe("2026-08-28");
   });
 
   it("supplies the year a bare month name leaves out", () => {

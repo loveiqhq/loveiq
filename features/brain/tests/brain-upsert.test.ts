@@ -324,3 +324,71 @@ describe("the sweep runs about once a day, and fails closed", () => {
     await expect(recordSweep("gmail")).resolves.toBeUndefined();
   });
 });
+
+/**
+ * A ONE-TIME LINK IS A CREDENTIAL, AND THE MAILBOX IS FULL OF THEM.
+ *
+ * `CREDENTIAL_PATTERNS` catches static API keys and REFUSES the whole chunk, which is
+ * right when the chunk is a leak. Short-lived auth material in a URL wants the opposite
+ * handling: it arrives inside ordinary email threads that do carry content, and one of
+ * the shapes (`?token=`) is our own unsubscribe link — so refusing the chunk would
+ * delete real email to remove a parameter.
+ *
+ * Not theoretical. `/api/cron/brain-gmail` runs hourly and an admin magic link is valid
+ * for one hour, so a link mailed at :05 was searchable at :11 with most of its life
+ * left, in a table everyone can read and every retrieval pastes into a model prompt.
+ * Measured 2026-09-09 before this landed: 10 chunks carrying `token_hash=`, 10 `?token=`,
+ * plus Supabase signup verifications and a third-party password reset. 41 were redacted.
+ */
+describe("authentication material in a link never reaches the corpus", () => {
+  const SECRETS = [
+    [
+      "https://www.loveiq.org/admin/auth/callback?token_hash=63bfcdb4aaaa1111&type=magiclink",
+      "63bfcdb4aaaa1111",
+    ],
+    [
+      "https://auth.supabase.io/auth/v1/verify?token=abcdef1234567890&type=signup",
+      "abcdef1234567890",
+    ],
+    ["https://www.upwork.com/reset?uart=QQQQwwww1111&x=1", "QQQQwwww1111"],
+    ["click https://loveiq.org/unsubscribe?token=aaaabbbbccccdddd to stop", "aaaabbbbccccdddd"],
+    ["https://accounts.google.com/o/oauth2?code=4/0AVGpvxyz-abcdefgh", "4/0AVGpvxyz-abcdefgh"],
+    ["https://api.example.com/v1?api_key=sk9f8e7d6c5b4a3f2e1d&page=2", "sk9f8e7d6c5b4a3f2e1d"],
+  ] as const;
+
+  it("masks the value of every authentication parameter", async () => {
+    const { redactUrlSecrets } = await import("@features/brain/server/ingest/upsert");
+    for (const [text, secret] of SECRETS) {
+      const out = redactUrlSecrets(text);
+      expect(out).not.toContain(secret);
+      expect(out).toContain("[redacted]");
+    }
+  });
+
+  it("keeps the parameter NAME, so a reader can still tell what the mail carried", async () => {
+    const { redactUrlSecrets } = await import("@features/brain/server/ingest/upsert");
+    expect(redactUrlSecrets(SECRETS[0][0])).toContain("token_hash=[redacted]");
+    // And the rest of the URL survives — this is a mask, not a deletion.
+    expect(redactUrlSecrets(SECRETS[0][0])).toContain("type=magiclink");
+  });
+
+  it("leaves ordinary text alone, because a guard that eats real content is worse", async () => {
+    const { redactUrlSecrets } = await import("@features/brain/server/ingest/upsert");
+    for (const benign of [
+      "the error code is 404 and the page renders fine",
+      "see https://loveiq.org/report/abc123 for the full report",
+      "the survey key metric is signups, tracked under metric_key=signups",
+      "PR #1234 changed the token bucket rate limiter",
+    ]) {
+      expect(redactUrlSecrets(benign)).toBe(benign);
+    }
+  });
+
+  it("redacts a longer parameter name that a shorter one is a prefix of", async () => {
+    const { redactUrlSecrets } = await import("@features/brain/server/ingest/upsert");
+    // `token` is a prefix of `token_hash`; alternation is leftmost-first in JS, so the
+    // list is sorted longest-first rather than relying on the trailing `=` to save it.
+    expect(redactUrlSecrets("?token_hash=aaaabbbbccccdddd")).toBe("?token_hash=[redacted]");
+    expect(redactUrlSecrets("?access_token=aaaabbbbccccdddd")).toBe("?access_token=[redacted]");
+  });
+});

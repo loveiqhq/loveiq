@@ -34,6 +34,18 @@ export interface BrainChunk {
   meta: Record<string, unknown>;
   score: number;
   /**
+   * How much of `score` came from MATCHING the question -- full text, title and body
+   * trigrams, semantic distance -- with recency and the two penalties excluded.
+   *
+   * WHY THE TOTAL IS NOT ENOUGH. Measured 2026-09-09, "which of our customer personas
+   * uses Headspace or Whoop" -- a question the corpus cannot answer -- returned eight
+   * hits scoring 2.309 to 2.097. That band is indistinguishable from a good answer's,
+   * because it was almost entirely the recency term: every hit was either dated this
+   * week or undated. Scores are not comparable between questions, but the share of a
+   * score that is actually about the question is.
+   */
+  contentScore: number;
+  /**
    * The period this chunk DESCRIBES, not when it was ingested. Null only for
    * `doc` (repo markdown, which is current by construction).
    *
@@ -170,8 +182,25 @@ function bucketKey(row: BrainChunk): string {
  * through untouched.
  */
 function parentKey(row: BrainChunk): string {
-  // `<sha>` and `<sha>-2` are the same commit; the sha is exactly 40 hex chars.
-  if (row.source === "commit") return `commit:${row.sourceId.slice(0, 40)}`;
+  /**
+   * ONE RECURRING MEETING IS ONE THING, however many times it repeats.
+   *
+   * Occurrences are indexed separately on purpose -- `event:<uid>:<day>` -- because
+   * without it nine daily syncs overwrote each other and "what was discussed in the
+   * sync on 22 July" had nothing to return. But 212 of 380 calendar chunks are
+   * occurrences of the single "LoveIQ Sync", and they are near-identical text, so
+   * un-collapsed they flood the result set: measured 2026-09-09, "who is in the
+   * recurring sync" filled all twelve slots with copies of one event.
+   *
+   * Collapsing here rather than at ingest keeps both: every occurrence stays indexed
+   * and reachable by date, and the best-scoring one represents the series in a ranked
+   * list. It also folds the `event:<uid>` rows an older builder wrote into the same
+   * parent as their `event:<uid>:<day>` replacements, which were otherwise exact
+   * duplicates taking two of the top three slots on seventeen measured questions.
+   */
+  if (row.source === "calendar") {
+    return `calendar:${row.sourceId.replace(/:\d{4}-\d{2}-\d{2}$/, "")}`;
+  }
 
   // Two headings of one document are the same document.
   if (row.source === "doc") {
@@ -381,6 +410,15 @@ export async function retrieve(
     body: String(r.body ?? ""),
     meta: (r.meta ?? {}) as Record<string, unknown>,
     score: typeof r.score === "number" ? r.score : 0,
+    // Falls back to the total rather than to 0. A 0 would read as "matched nothing",
+    // which is the assertion this field exists to make -- so an older function that
+    // does not return the column must not be able to make it by accident.
+    contentScore:
+      typeof r.content_score === "number"
+        ? r.content_score
+        : typeof r.score === "number"
+          ? r.score
+          : 0,
     periodEnd: typeof r.period_end === "string" ? r.period_end : null,
   }));
 

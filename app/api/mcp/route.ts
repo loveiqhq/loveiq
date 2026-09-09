@@ -352,7 +352,7 @@ const TOOLS = [
     annotations: { readOnlyHint: true, openWorldHint: false },
     description:
       "Search LoveIQ's own written record: repository documentation " +
-      "(including the plain-English 'For Marcus:' summaries), the Notion workspace — both " +
+      "and architecture notes, the Notion workspace — both " +
       "the team board with each task's status, priority and assignee, and the written " +
       "pages — the team's Slack conversations, the company email, the WhatsApp team group " +
       "day by day, the calendar of who met whom, and the notes from " +
@@ -1418,6 +1418,182 @@ function partNumber(row: Record<string, unknown>): number {
  * because a count that filters differently from the list beside it just disagrees
  * with it and gives no way to tell which is wrong.
  */
+/**
+ * Columns whose VALUES never leave this tool.
+ *
+ * WHY THIS EXISTS. The corpus half of the brain honours a recorded decision --
+ * `decision:2026-09-09-3d275f5327`, "Do not index verbatim survey answers... it would
+ * put customer names, email addresses and sexual orientation into an open-access corpus
+ * that is pasted into model prompts" -- and the live half, on the same server, had no
+ * data-class gate at all. `select` defaults to `*`, so an ordinary look at a table
+ * returned whatever it held. Reachable and measured on 2026-09-09:
+ * `user_profile.sexual_orientation` 1,861 rows, `app_user.email` 1,870,
+ * `report_session.ip_address` 10,107, unrevoked `report_access_token` 1,929, the whole
+ * `admin_users` allowlist, and `survey_submission_answer.answer_text` at 9,241.
+ *
+ * An agent that cites that decision and then calls this tool in the same turn would
+ * state "we keep customer PII out of model prompts" while disproving it.
+ *
+ * REDACTED, NOT REFUSED, and the row is kept. Refusing the column would break ordinary
+ * work -- "how many users set an orientation", "which payments failed" -- for data the
+ * caller never needed to READ. The write-RPC gate already refuses; this is the read side
+ * of the same idea, and it is a denylist on purpose: an allowlist over 131 tables would
+ * be wrong the day someone adds a column, and wrong in the direction that leaks.
+ */
+/** Matched bare or as a `<something>_` suffix: `email` also covers `customer_email`. */
+const PRIVATE_SUFFIXES = [
+  "email",
+  "token",
+  "secret",
+  "password",
+  "passwd",
+  "pwd",
+  "hash",
+  "ip",
+  "ip_address",
+  "phone",
+  "first_name",
+  "last_name",
+  "full_name",
+  "display_name",
+  "customer_name",
+  "invitee_name",
+  "answer_text",
+  "sexual_orientation",
+  "gender_identity",
+  "user_agent",
+  "zip",
+  "zipcode",
+  "postal_code",
+  "signature",
+];
+
+/**
+ * Matched WHOLE only, never as a suffix.
+ *
+ * Verified against every column PostgREST exposes: a bare or suffixed `key` is a
+ * business identifier in this schema -- `metric_key`, `week_key`, `chart_key`,
+ * `dashboard_key`, `source_key` and nine more -- so `key` must not join the list
+ * above. Masking those would have broken the KPI tables and protected nothing, which
+ * is the "a guard that eats real content is worse than no guard" rule the corpus
+ * credential list already states.
+ */
+const PRIVATE_EXACT = [
+  "api_key",
+  "apikey",
+  "secret_key",
+  "private_key",
+  "signing_key",
+  "service_key",
+  "anon_key",
+  "publishable_key",
+  "access_key",
+];
+
+const PRIVATE_COLUMN = new RegExp(
+  `^(?:.*_)?(?:${PRIVATE_SUFFIXES.join("|")})$|^(?:${PRIVATE_EXACT.join("|")})$`,
+  "i"
+);
+
+/**
+ * A STABLE TAG, not a blank.
+ *
+ * `[redacted]` would break the analysis this tool is for: "do these three payments
+ * belong to one person" needs the values to be COMPARABLE, not readable. The same
+ * value always yields the same tag and a different value never does, so rows can be
+ * correlated and grouped while no identity is emitted. Non-reversible: four hex
+ * characters over an unknown input space is a label, not a ciphertext.
+ */
+function privateTag(value: unknown): string {
+  const s = String(value);
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) | 0;
+  return `[private #${(h >>> 0).toString(16).padStart(8, "0").slice(0, 4)}]`;
+}
+
+/**
+ * Mask private columns in place, and report WHICH -- silence would read as an empty
+ * column, which is the one conclusion that is certainly wrong.
+ */
+function redactPrivateColumns(rows: unknown[]): { rows: unknown[]; redacted: string[] } {
+  const hit = new Set<string>();
+  const out = rows.map((row) => {
+    if (!row || typeof row !== "object" || Array.isArray(row)) return row;
+    const copy: Record<string, unknown> = { ...(row as Record<string, unknown>) };
+    for (const key of Object.keys(copy)) {
+      if (!PRIVATE_COLUMN.test(key)) continue;
+      if (copy[key] === null || copy[key] === undefined) continue;
+      hit.add(key);
+      copy[key] = privateTag(copy[key]);
+    }
+    return copy;
+  });
+  return { rows: out, redacted: [...hit].sort() };
+}
+
+/**
+ * A DATE ARGUMENT THAT IS NOT A DATE, NAMED AS SUCH.
+ *
+ * Shape alone was never enough. `2026-13-45` and `2026-02-30` pass any
+ * `\d{4}-\d{2}-\d{2}` test, reach Postgres, come back as a 400, and every caller in
+ * this file reports a non-OK response as the knowledge base being unreachable — which
+ * is exactly the failure the shape check was added to prevent. Measured 2026-09-09:
+ * `until: "2026-09-31"` (September has 30 days, an ordinary off-by-one) told the reader
+ * the database was down and to look somewhere else entirely.
+ *
+ * Returns the message rather than throwing, so each tool keeps its own error shape.
+ */
+function badDateMessage(key: string, val: string | undefined): string | null {
+  if (val === undefined) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})([T ].*)?$/.exec(val);
+  if (m) {
+    const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    const dt = new Date(Date.UTC(y, mo - 1, d));
+    // Round-trip: JS rolls 2026-02-30 forward to 2026-03-02, so a date that survives
+    // unchanged is a date that exists.
+    if (dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d) {
+      return null;
+    }
+  }
+  return (
+    `\`${key}\` must be a real calendar date like 2026-09-09 — "${val}" is not one. ` +
+    `This is a problem with the argument, NOT with the knowledge base: the corpus is ` +
+    `fine and the same request with a valid date will work. Relative dates are not ` +
+    `read; work out the day and pass it.`
+  );
+}
+
+/**
+ * A FILTER THAT WAS PRESENT AND WRONG, refused instead of silently dropped.
+ *
+ * `asStrings` and `asMeta` return `undefined` for "absent" and for "present but the
+ * wrong shape" alike, and search prints no applied-filter line on a non-empty result —
+ * so `sources: "notion"` (a string, not an array) returned the FULL UNFILTERED corpus
+ * in output byte-identical to a filtered search. That is the same class this file
+ * already refuses for `query_product_data`'s filters, and for the same stated reason:
+ * a caller who believes they narrowed and did not will read a general answer as a
+ * specific one.
+ */
+function malformedFilterMessage(args: Record<string, unknown>): string | null {
+  for (const key of ["sources", "exclude_sources"] as const) {
+    if (args[key] !== undefined && asStrings(args[key]) === undefined) {
+      return (
+        `\`${key}\` must be a non-empty array of source names, e.g. ["notion","slack"]. ` +
+        `Refused rather than ignored — running it unfiltered would have looked identical ` +
+        `to a filtered search and there would be no way to tell.`
+      );
+    }
+  }
+  if (args.meta !== undefined && asMeta(args.meta) === undefined) {
+    return (
+      `\`meta\` must be an object of string values, e.g. {"status":"WIP"}. Nested objects ` +
+      `and operator forms like {"status":{"eq":"WIP"}} are not read. Refused rather than ` +
+      `ignored, which would have returned the unfiltered corpus with no notice.`
+    );
+  }
+  return null;
+}
+
 const asStrings = (v: unknown): string[] | undefined =>
   Array.isArray(v) && v.every((x) => typeof x === "string") && v.length > 0
     ? (v as string[])
@@ -1468,6 +1644,16 @@ async function callTool(
       return textResult("Provide a question of at least two characters.", true);
     }
     const limit = Math.min(30, Math.max(1, Number(args.limit) || 12));
+
+    const badFilter = malformedFilterMessage(args);
+    if (badFilter) return textResult(badFilter, true);
+    for (const key of ["since", "until"] as const) {
+      const msg = badDateMessage(
+        key,
+        typeof args[key] === "string" ? (args[key] as string) : undefined
+      );
+      if (msg) return textResult(msg, true);
+    }
 
     const opts = {
       sources: asStrings(args.sources),
@@ -1584,11 +1770,61 @@ async function callTool(
      * decision MAY bear on the question and to ignore it if not.
      */
     const PRIOR_DECISION_RATIO = 0.85;
-    const topScore = chunks[0]?.score ?? 0;
+    /**
+     * THE FLOOR IS ON THE CONTENT MATCH, NOT ON THE TOTAL.
+     *
+     * The KNOWN RESIDUAL this block used to carry — "a question as vague as 'how is the
+     * company doing' returns a decision at rank 1 with a ratio of 1.00, because the
+     * decisions are the newest things in the corpus and recency decides a query with no
+     * content" — was not unsolvable, it was unmeasurable: `score` blends the match with
+     * a recency term worth up to 0.6, and four records written today collect nearly all
+     * of it. `content_score` is that same score with recency and both penalties removed,
+     * so the ratio now compares like with like.
+     *
+     * Measured 2026-09-09 over 137 questions: `decision` is 4 rows of 22,667 — 0.02% of
+     * the corpus — and took rank 1 on 10.9% of them, appearing in the top 3 of 27
+     * questions, 19 of which touched no decision at all ("how long should a Guide article
+     * be" → *Decision: The company brain may write and act in other systems*). Since the
+     * runbook tells readers decisions are the ones to trust first, and this block is the
+     * most assertive sentence the tool emits, a deliberate record was being offered as
+     * best evidence for questions it does not touch.
+     */
+    const RELEVANCE_FLOOR = 2.0;
+    const topScore = chunks[0]?.contentScore ?? 0;
     const rankedIn = chunks.filter(
       (c) =>
-        c.source === "decision" && (topScore <= 0 || c.score / topScore >= PRIOR_DECISION_RATIO)
+        c.source === "decision" &&
+        c.contentScore >= RELEVANCE_FLOOR &&
+        (topScore <= 0 || c.contentScore / topScore >= PRIOR_DECISION_RATIO)
     );
+    /**
+     * NOTHING HERE MATCHED WELL, SAID PLAINLY — and never as "there is no record".
+     *
+     * Measured 2026-09-09: "which of our customer personas uses Headspace or Whoop", a
+     * question the corpus cannot answer, returned eight hits scoring 2.309 down to 2.097
+     * — a band indistinguishable from a good answer's, because it was almost entirely
+     * recency. Every hit was dated this week or undated. The tool's own result guide
+     * already warned the model in prose that gibberish returns confident sources; a
+     * number beats a warning it has to remember.
+     *
+     * The floor is calibrated, not chosen. Across twelve questions with known-good
+     * answers and eight the corpus genuinely cannot answer, the good ones scored 2.37
+     * and up on content and the unanswerable ones 1.71 and down — with one honest
+     * exception that proves the rule: "who won the 1998 world cup" scored 3.12 because a
+     * newsletter in the corpus really does say "post–World Cup blues". The floor reports
+     * how well the corpus matched, which is all it can know; whether the match is ABOUT
+     * the company is the reader's judgement and stays there.
+     */
+    const weakMatch =
+      chunks.length > 0 && topScore < RELEVANCE_FLOOR
+        ? `\n\nNOTHING BELOW MATCHED THE QUESTION STRONGLY. Judged on how much each hit ` +
+          `overlaps what was asked — with recency and every other bonus removed — none of ` +
+          `them clears the bar a genuine answer clears. So these are the closest things in ` +
+          `the corpus, not answers, and they are probably about something else entirely. ` +
+          `This is NOT evidence that LoveIQ has no record of it: ask again in different ` +
+          `words, or narrow with \`sources\`. Prefer saying the written record is thin over ` +
+          `answering from what is below.\n`
+        : "";
     const prior = renderPriorDecisions(
       rankedIn.length > 0
         ? rankedIn.map((c) => ({
@@ -1596,7 +1832,10 @@ async function callTool(
             title: c.title,
             decidedOn: c.periodEnd,
           }))
-        : await priorDecisions(query)
+        : // A weak match must not produce the most assertive sentence the tool emits.
+          weakMatch
+          ? []
+          : await priorDecisions(query)
     );
     // Was: raw `c.body`, joined by `---`. The Slack path removed that separator
     // BECAUSE a chunk could pose as the operator across it, then kept the fence,
@@ -1624,7 +1863,7 @@ async function callTool(
       : "";
 
     return textResult(
-      `${UNTRUSTED_SOURCES_PREAMBLE}\n\n${prior}${RESULT_GUIDE}${heldBack}\n\n${renderSources(chunks, { forAgent: true })}`,
+      `${UNTRUSTED_SOURCES_PREAMBLE}\n\n${prior}${RESULT_GUIDE}${weakMatch}${heldBack}\n\n${renderSources(chunks, { forAgent: true })}`,
       false,
       "lower the limit, then fetch_document the ids that matter"
     );
@@ -1711,6 +1950,24 @@ async function callTool(
       used += size;
     }
 
+    /**
+     * PAST THE END IS AN ANSWER, NOT A FAILURE.
+     *
+     * The head line tells callers to "call again with from_part=N for the rest", so
+     * walking one part too far is the happy path, not abuse. It used to reach
+     * `partNumber(taken[0]!)` on an empty array and surface as "That lookup failed. It
+     * has been logged." — indistinguishable from an outage, for a document that is
+     * perfectly readable. `browse_context` already answers its identical boundary well.
+     */
+    if (taken.length === 0) {
+      const highest = partNumber(parts[parts.length - 1]!);
+      return textResult(
+        `There is no part ${from} of "${raw}": it has ${parts.length} part` +
+          `${parts.length === 1 ? "" : "s"}, the last being part ${highest}. You have reached ` +
+          `the end of this document — nothing is missing and nothing failed.`
+      );
+    }
+
     const chunks = taken.map((r) => ({
       source: String(r.source ?? ""),
       sourceId: String(r.source_id ?? ""),
@@ -1719,6 +1976,7 @@ async function callTool(
       body: String(r.body ?? ""),
       meta: (r.meta ?? {}) as Record<string, unknown>,
       score: 0,
+      contentScore: 0,
       periodEnd: typeof r.period_end === "string" ? r.period_end : null,
     }));
     stats.sourceCount = chunks.length;
@@ -1961,20 +2219,19 @@ async function callTool(
      * A caller who typed "last friday" would be told the database is down, look somewhere
      * else entirely, and never learn the argument was the problem.
      */
-    const DATEISH = /^\d{4}-\d{2}-\d{2}([T ].*)?$/;
     for (const [key, val] of [
       ["since", opts.since],
       ["until", opts.until],
       ["learned_since", learnedSince],
     ] as const) {
-      if (val !== undefined && !DATEISH.test(val)) {
-        return textResult(
-          `\`${key}\` must be a date like 2026-09-09 — "${val}" is not one. This tool does ` +
-            `not read relative dates; work out the day and pass it.`,
-          true
-        );
-      }
+      // Shared with search, and now rejecting impossible dates as well as unparseable
+      // ones: the old shape-only check passed `2026-13-45` straight through to a
+      // Postgres 400, which this tool reports as "the knowledge base did not answer".
+      const msg = badDateMessage(key, val);
+      if (msg) return textResult(msg, true);
     }
+    const badCountFilter = malformedFilterMessage(args);
+    if (badCountFilter) return textResult(badCountFilter, true);
     /**
      * SAID AT THE POINT THE NUMBER IS READ, not only in the schema.
      *
@@ -1996,6 +2253,10 @@ async function callTool(
      *  the same trap as a filtered search reading like an empty corpus. */
     const applied =
       [
+        // `q` narrows harder than every other filter and was the one thing missing:
+        // a zero result said "(no filters)", which is the single reading that is
+        // certainly wrong, and a positive count under-reported what cut 7,580 to 14.
+        typeof args.q === "string" && args.q.trim() ? `q=${args.q.trim()}` : null,
         opts.sources?.length ? `sources=${opts.sources.join(",")}` : null,
         opts.excludeSources?.length ? `exclude_sources=${opts.excludeSources.join(",")}` : null,
         opts.since ? `since=${opts.since}` : null,
@@ -2057,8 +2318,11 @@ async function callTool(
        * document count it is fourth. The chunk figure is still worth having (it is how
        * much text sits behind the answer) but it is not what "how many" asks.
        */
+      // The parenthetical is only ever a detail ABOUT a non-zero count. "0 (3 stored
+      // parts)" contradicts itself — it asserts nothing matched and then counts three
+      // of them — and it appeared whenever a group had parts but no document leader.
       const both = (docs: number, chunks: number) =>
-        docs === chunks ? `${docs}` : `${docs} (${chunks} stored parts)`;
+        docs === chunks || docs === 0 ? `${docs}` : `${docs} (${chunks} stored parts)`;
       if (!grouped) {
         return textResult(`${both(totalDocs, total)} records match (${applied}).` + backfillCaveat);
       }
@@ -2311,6 +2575,22 @@ async function callTool(
     }
 
     const today = new Date().toISOString().slice(0, 10);
+    /**
+     * A FUTURE `since` USED TO REPORT THE COMPANY AS ONE DAY OLD.
+     *
+     * `asked` is days back from today, so a future date goes negative, `Math.max(1, …)`
+     * clamped it to a single day, and the out-of-range branch below then reported
+     * `rows.length` — that same 1 — as the rollup's true extent: "The rollup has 1 days
+     * ending today". A year typo therefore answered that LoveIQ has one day of business
+     * history, which is the exact failure the comment on that branch warns about.
+     */
+    if (since && since > today) {
+      return textResult(
+        `\`since\` (${since}) is in the future, so no day can fall in that range. The ` +
+          `rollup ends today (${today}) — this says nothing about how much history exists.`,
+        true
+      );
+    }
     // Far enough back to reach `since`, inclusive of both ends.
     const asked = since
       ? Math.max(
@@ -2580,8 +2860,12 @@ async function callTool(
     // the same silent-cap bug that made list_sources report 307 commits instead
     // of 1,448.
     const total = res.headers.get("content-range")?.split("/")[1] ?? null;
+    // BEFORE rendering, so no path can print a raw value: the rpc branch and the table
+    // branch both land here, which is why the gate is at the render step rather than in
+    // the two request builders.
+    const { rows: safeRows, redacted } = redactPrivateColumns(rows);
     // Reserve room for the header itself so the notice never gets cut off.
-    const { text: bodyText, shown } = renderRowsForTest(rows, MAX_RESULT_CHARS - 600);
+    const { text: bodyText, shown } = renderRowsForTest(safeRows, MAX_RESULT_CHARS - 600);
     const dropped = rows.length - shown;
     // `shown`, not `rows.length`: the record should say what the caller received,
     // which is the number the character ceiling actually let through.
@@ -2600,6 +2884,13 @@ async function callTool(
                 : "Raise limit or page with offset"
             } to see the rest.`
           : ".") +
+      (redacted.length > 0
+        ? ` Masked as private, so the value is never pasted into a prompt: ` +
+          `${redacted.join(", ")}. The column is NOT empty and the rows are real — the same ` +
+          `underlying value always shows the same #tag, so rows can still be matched to each ` +
+          `other. Filtering and counting on these columns works normally; only reading the ` +
+          `value does not.`
+        : "") +
       "\n\n";
     return textResult(head + bodyText);
   }
@@ -3006,8 +3297,8 @@ export async function POST(request: Request) {
         "fields such as a Notion task's status or assignee. " +
         "Scores are not comparable between questions, so read the text rather than " +
         "thresholding on the number, and when two sources conflict prefer the later date.\n\n" +
-        "HISTORY, indexed and searchable: documentation, every git commit including the " +
-        "plain-English 'For Marcus:' summaries, the whole Notion workspace (every database " +
+        "HISTORY, indexed and searchable: documentation and architecture notes, the whole " +
+        "Notion workspace (every database " +
         "and page, not just the task board), the team's Slack conversations day by day, the " +
         "company email thread by thread, the WhatsApp team group day by day, the calendar " +
         "of meetings and who attended them, the " +

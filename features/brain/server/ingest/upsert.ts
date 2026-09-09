@@ -83,6 +83,66 @@ const CREDENTIAL_PATTERNS: Array<[string, RegExp]> = [
   ["figma", /\bfigd_[A-Za-z0-9_-]{24,}/],
 ];
 
+/**
+ * Query parameters whose VALUE is authentication material.
+ *
+ * SEPARATE FROM `CREDENTIAL_PATTERNS`, AND REDACTED RATHER THAN REFUSED, because
+ * these two kinds of secret want opposite handling. A Stripe key in a chunk means
+ * the whole chunk is a leak and losing it costs nothing. A one-time link is
+ * different: mailboxes are full of them, they sit inside ordinary threads that DO
+ * carry content, and one of the shapes below (`?token=`) is also our own
+ * unsubscribe link — so refusing the chunk would delete real email to remove a
+ * parameter. Masking the value keeps the thread and takes the secret.
+ *
+ * Why this is not theoretical. `/api/cron/brain-gmail` runs hourly and an admin
+ * magic link is valid for one hour, so a link mailed at :05 was searchable at :11
+ * with most of its life left — and `brain_chunk` is read by everyone and pasted
+ * into model prompts. Measured on 2026-09-09, before this: 10 chunks carrying
+ * `token_hash=`, 10 `?token=`, plus Supabase signup verifications and a third-party
+ * password reset.
+ *
+ * ponytail: URL parameters only. A code quoted in prose ("your code is 123456") is
+ * not caught — it is not directly usable without the matching session, and every
+ * pattern loose enough to catch it also eats "the error code is 404". Revisit if a
+ * provider starts mailing bearer tokens as prose.
+ */
+const SECRET_PARAMS = [
+  "token",
+  "token_hash",
+  "access_token",
+  "refresh_token",
+  "id_token",
+  "auth",
+  "code",
+  "otp",
+  "secret",
+  "password",
+  "passwd",
+  "pwd",
+  "api_key",
+  "apikey",
+  "key",
+  "sig",
+  "signature",
+  "session",
+  "uart", // Upwork's password-reset parameter, found live in the mailbox
+];
+
+const SECRET_PARAM_RE = new RegExp(
+  `([?&#](?:${[...SECRET_PARAMS].sort((a, b) => b.length - a.length).join("|")})=)[^\\s&"'<>)\\]]{8,}`,
+  "gi"
+);
+
+/**
+ * Mask the value of any authentication parameter, keeping the surrounding text.
+ *
+ * The parameter NAME survives on purpose: a reader who needs to know an email
+ * carried a magic link can still see that it did, and can go to the mailbox.
+ */
+export function redactUrlSecrets(text: string): string {
+  return text.replace(SECRET_PARAM_RE, "$1[redacted]");
+}
+
 /** The credential kind found in this text, or null. */
 export function credentialKind(text: string): string | null {
   for (const [kind, pattern] of CREDENTIAL_PATTERNS) {
@@ -94,8 +154,9 @@ export function credentialKind(text: string): string | null {
 function clean(row: BrainRow): BrainRow {
   return {
     ...row,
-    title: row.title.split(NUL_BYTE).join(""),
-    body: row.body.split(NUL_BYTE).join("").slice(0, MAX_BODY_CHARS),
+    title: redactUrlSecrets(row.title.split(NUL_BYTE).join("")),
+    // Redacted BEFORE the length cap, so a masked value cannot push real text out.
+    body: redactUrlSecrets(row.body.split(NUL_BYTE).join("")).slice(0, MAX_BODY_CHARS),
     // PostgREST rejects a bulk insert whose objects do not all carry the SAME
     // keys — "All object keys must match" (PGRST102), and it fails the whole
     // batch, not the offending row. `period_end` is optional, and JSON.stringify
