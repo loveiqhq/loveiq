@@ -385,3 +385,72 @@ describe("dayToRows records who spoke", () => {
     for (const r of rows) expect(r.meta.speakers, r.source_id).toEqual(["Eman Cickusic"]);
   });
 });
+
+describe("reactions, the cheapest agreement signal there is", () => {
+  /**
+   * MEASURED 2026-09-09: only 23 of 747 Slack and WhatsApp day-chunks carry explicit
+   * decision language. People do not write "agreed, let us do it" — they put a thumb up
+   * on the message. Slack returns `reactions` on every history message and the ingester
+   * read none of them, so a proposal the whole team endorsed was indistinguishable in the
+   * corpus from one nobody answered.
+   */
+  it("records who agreed, and how many", () => {
+    const line = renderMessage(
+      {
+        user: "U1",
+        text: "shall we ship the flat pricing on monday",
+        ts: "1",
+        reactions: [
+          { name: "+1", count: 3 },
+          { name: "tada", count: 1 },
+        ],
+      },
+      NAMES
+    );
+    expect(line).toContain("[reactions: +1 x3, tada x1]");
+  });
+
+  /**
+   * WORDS, NOT EMOJI. The corpus is searched with `to_tsvector`, and 👍 tokenises to
+   * nothing at all — so the emoji character would be stored and permanently unfindable.
+   * Slack's own name is kept verbatim rather than mapped to a meaning, because any
+   * mapping would be a guess about what this team means by a given emoji.
+   */
+  it("stores a searchable name rather than the emoji character", () => {
+    const line = renderMessage(
+      { user: "U1", text: "ok", ts: "1", reactions: [{ name: "heavy_check_mark", count: 2 }] },
+      NAMES
+    );
+    expect(line).toContain("heavy_check_mark");
+    expect(line).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
+
+  it("adds nothing when nobody reacted", () => {
+    expect(renderMessage({ user: "U0BSZ4VRX26", text: "hello", ts: "1" }, NAMES)).toBe(
+      "Eman: hello"
+    );
+    expect(
+      renderMessage({ user: "U0BSZ4VRX26", text: "hello", ts: "1", reactions: [] }, NAMES)
+    ).toBe("Eman: hello");
+  });
+
+  /** A reaction that was added and then removed comes back with count 0; recording it
+   *  would report agreement that no longer exists. */
+  it("ignores a reaction nobody holds any more", () => {
+    const line = renderMessage(
+      { user: "U0BSZ4VRX26", text: "hello", ts: "1", reactions: [{ name: "+1", count: 0 }] },
+      NAMES
+    );
+    expect(line).toBe("Eman: hello");
+  });
+
+  it("keeps reactions on a thread reply too", () => {
+    const line = renderMessage(
+      { user: "U1", text: "agreed", ts: "1", reactions: [{ name: "+1", count: 1 }] },
+      NAMES,
+      true
+    );
+    expect(line).toContain("↳");
+    expect(line).toContain("[reactions: +1 x1]");
+  });
+});

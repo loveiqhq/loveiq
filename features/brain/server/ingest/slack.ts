@@ -55,7 +55,7 @@ const MAX_RETRIES = 4;
 // v3: v1-v2 stored every thread reply BEFORE its parent and in reverse order.
 // v2: v1 wrote days whose thread replies had been dropped by a 429 without
 // recording the gap, so every v1 row must be rebuilt rather than trusted.
-export const SLACK_BUILDER_VERSION = 7;
+export const SLACK_BUILDER_VERSION = 8;
 
 /**
  * Message subtypes that are membership bookkeeping, not conversation. Slack emits
@@ -85,6 +85,8 @@ interface SlackMessage {
   ts?: string;
   thread_ts?: string;
   reply_count?: number;
+  /** Already on every `conversations.history` message; simply never read until now. */
+  reactions?: Array<{ name?: string; count?: number }>;
 }
 
 interface SlackChannel {
@@ -173,6 +175,28 @@ async function userNames(token: string): Promise<Map<string, string>> {
   return out;
 }
 
+/**
+ * Reactions, rendered into the line as agreement.
+ *
+ * THE CHEAPEST AGREEMENT SIGNAL THERE IS, and it was being thrown away. Slack returns
+ * `reactions` on every history message and the ingester read none of them. Measured
+ * 2026-09-09, only 23 of 747 Slack and WhatsApp day-chunks carry explicit decision
+ * language — people do not write "agreed, let us do it", they put a thumb up on the
+ * message. Without reactions a proposal that the whole team endorsed is indistinguishable
+ * in the corpus from one nobody answered.
+ *
+ * Written as words rather than emoji characters, because the corpus is searched with
+ * `to_tsvector` and a 👍 tokenises to nothing — "reactions: thumbsup x3" is findable,
+ * the emoji is not. The raw name is Slack's own (`+1`, `heavy_check_mark`, `tada`), kept
+ * verbatim rather than mapped, since any mapping would be a guess about what the team
+ * means by a given emoji.
+ */
+function reactionSuffix(m: SlackMessage): string {
+  const rs = (m.reactions ?? []).filter((r) => r.name && (r.count ?? 0) > 0);
+  if (rs.length === 0) return "";
+  return `  [reactions: ${rs.map((r) => `${r.name} x${r.count}`).join(", ")}]`;
+}
+
 export function renderMessage(
   m: SlackMessage,
   names: Map<string, string>,
@@ -193,7 +217,7 @@ export function renderMessage(
     .replace(/&gt;/g, ">")
     .replace(/&amp;/g, "&");
   const who = names.get(m.user) ?? m.user;
-  return `${indent ? "  ↳ " : ""}${who}: ${body}`;
+  return `${indent ? "  ↳ " : ""}${who}: ${body}${reactionSuffix(m)}`;
 }
 
 /**
