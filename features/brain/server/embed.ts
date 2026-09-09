@@ -184,8 +184,26 @@ export async function embedMissing(
   for (let batch = 0; batch < maxBatches; batch++) {
     if (isOutOfTime()) return { embedded, remaining: await countMissing(), complete: false };
 
+    /**
+     * NEWEST FIRST, and the direction is the whole point.
+     *
+     * A chunk with no embedding still matches lexically, but scores ZERO on the semantic
+     * term while its rivals score 0.4-0.8 — so it is not merely less findable, it is
+     * actively outranked by older rows saying the same thing. Ordering the queue
+     * `id.asc` put every freshly-written chunk at the BACK of it, which aimed that
+     * penalty squarely at the newest facts.
+     *
+     * MEASURED 2026-09-09: "how many signups so far this month" returned AUGUST's monthly
+     * total and September's daily rows, while September's own monthly total — written
+     * that morning, matching "September" and "signups" lexically — did not appear at all.
+     * It was 181 rows down a queue drained oldest-first.
+     *
+     * The tail is guarded by the backlog alarm in brain-fast rather than by fairness
+     * here: if new rows ever arrive faster than they can be embedded, `remaining` grows
+     * and says so, and that is a problem no ordering fixes.
+     */
     const res = await supabaseFetch(
-      `/rest/v1/brain_chunk?select=id,title,body&embedding=is.null&order=id.asc&limit=${READ_BATCH}`
+      `/rest/v1/brain_chunk?select=id,title,body&embedding=is.null&order=id.desc&limit=${READ_BATCH}`
     );
     if (!res.ok) {
       logger.warn({ status: res.status }, "brain-embed: could not read chunks");

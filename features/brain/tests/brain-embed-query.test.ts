@@ -15,9 +15,12 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
 }));
 
 let chunkRows: Array<{ id: number; title: string; body: string }> = [];
+/** Every chunk-read path this run issued, so the QUEUE ORDER can be asserted. */
+const chunkReads: string[] = [];
 vi.mock("@features/admin/server/supabase", () => ({
   supabaseFetch: vi.fn(async (path: string) => {
     if (path.includes("select=id,title,body")) {
+      chunkReads.push(path);
       return { ok: true, headers: new Headers(), json: async () => chunkRows };
     }
     return {
@@ -157,5 +160,32 @@ describe("embedMissing cannot outlive the function that calls it", () => {
     await embedMissing(() => false, 1);
     const embedCalls = calls.filter((c) => c.url.includes("brain-embed"));
     expect(embedCalls.at(-1)?.timeoutMs).toBe(120_000);
+  });
+});
+
+describe("which chunks get embedded first", () => {
+  /**
+   * NEWEST FIRST, AND THE DIRECTION IS THE WHOLE POINT.
+   *
+   * A chunk with no embedding still matches lexically but scores ZERO on the semantic
+   * term while its rivals score 0.4-0.8 — so it is not merely less findable, it is
+   * actively OUTRANKED by older rows saying the same thing. Draining the queue
+   * oldest-first put every freshly-written chunk at the back of it and aimed that
+   * penalty squarely at the newest facts.
+   *
+   * MEASURED 2026-09-09: "how many signups so far this month" returned AUGUST's monthly
+   * total and September's daily rows, while September's own monthly total — written that
+   * morning and matching both "September" and "signups" lexically — did not appear at
+   * all. It was 181 rows down a queue drained oldest-first.
+   */
+  it("drains the queue newest first, so today's numbers are searchable today", async () => {
+    chunkReads.length = 0;
+    chunkRows = [];
+    respond = () => new Response(JSON.stringify({ embeddings: [] }), { status: 200 });
+    const { embedMissing } = await import("@features/brain/server/embed");
+    await embedMissing(() => false, 1);
+    expect(chunkReads.length).toBeGreaterThan(0);
+    expect(chunkReads[0]).toContain("order=id.desc");
+    expect(chunkReads[0]).not.toContain("order=id.asc");
   });
 });

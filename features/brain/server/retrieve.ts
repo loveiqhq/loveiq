@@ -105,6 +105,17 @@ const CANDIDATE_CEILING = 100;
  *    rank below the cut either way. Do not raise it without first showing the answers
  *    change.
  *
+ * 3. DEMOTING `commit` MAKES SEARCH WORSE, AND IT WAS TRIED. Six of eight questions a
+ *    founder actually asks had a bad top hit, mostly a commit — "how much money have we
+ *    made" returned one titled "the brain could not say what the company has earned in
+ *    total". A -0.25 penalty on `commit` (matching the bulk-mail one) does fix those: the
+ *    last-team-meeting question moves from a commit about calendar code to the meeting
+ *    itself. It also takes the battery from 210/213 to 208/213, because it pushes commits
+ *    out of the TOP FIVE for the questions where commits ARE the answer — "what did we
+ *    change in the code recently" returned no commit at all. Two fixed, two broken, so it
+ *    was reverted. If this is revisited, the thing to fix is question ROUTING (a money
+ *    question belongs to `get_business_numbers`), not source weighting.
+ *
  * 2. NEITHER THE EMBEDDING EDGE FUNCTION NOR THE DATABASE COLD-STARTS. `brain_query`
  *    shows searches after a 5-minute idle averaging 2,371ms against 1,219ms warm, which
  *    reads exactly like one. It is not: after a real six-minute idle, measured directly,
