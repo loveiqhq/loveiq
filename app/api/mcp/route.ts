@@ -1916,6 +1916,21 @@ async function callTool(
      * thin on something it is not thin on. Naming the source and the count is what turns
      * an invisible reshaping into a next step: narrow with `sources` and see the rest.
      */
+    /**
+     * FEWER THAN ASKED FOR IS ALSO A FACT ABOUT THE REQUEST.
+     *
+     * The held-back notice only fires when a cap actually cut something. Measured
+     * 2026-09-09: `limit: 30` on "report pricing" returned 25 hits with no notice of any
+     * kind, so nothing distinguished "the ranking held 25" from "a cap trimmed it to 25"
+     * — and the two want opposite next steps. This is the other half of the same
+     * honesty: say when the pool ran out.
+     */
+    const shortOfLimit =
+      chunks.length > 0 && chunks.length < limit && !shaping.heldBack
+        ? `\n\nFEWER THAN THE ${limit} ASKED FOR: the ranking held ${chunks.length}. No cap ` +
+          `trimmed this — that is everything the search found worth returning, so a ` +
+          `narrower \`sources\` will not reveal more. Reword the question instead.\n`
+        : "";
     const heldBack = shaping.heldBack
       ? `\n\nHELD BACK BY THE PER-SOURCE CAP, not by relevance: ` +
         [...shaping.heldBack.entries()]
@@ -1928,7 +1943,7 @@ async function callTool(
       : "";
 
     return textResult(
-      `${UNTRUSTED_SOURCES_PREAMBLE}\n\n${prior}${RESULT_GUIDE}${weakMatch}${heldBack}\n\n${renderSources(chunks, { forAgent: true })}`,
+      `${UNTRUSTED_SOURCES_PREAMBLE}\n\n${prior}${RESULT_GUIDE}${weakMatch}${shortOfLimit}${heldBack}\n\n${renderSources(chunks, { forAgent: true })}`,
       false,
       "lower the limit, then fetch_document the ids that matter"
     );
@@ -2722,27 +2737,32 @@ async function callTool(
         ? `Ad spend is known for ${ad.from} to ${ad.to}; days outside that carry no ` +
           `ad_spend field, which means unknown, not zero.\n\n`
         : `No ad-spend data is available, so no day carries an ad_spend field.\n\n`;
+    /**
+     * THE CLAMP AND THE CHARACTER CEILING ARE TWO DIFFERENT CUTS, and both have to be
+     * said in the SAME sentence because they compose.
+     *
+     * These used to be alternative branches, and the second one was unreachable in
+     * production: any `asked` above 4000 returns 4000 rows, 4000 rows always exceed the
+     * character ceiling, so the first branch fired every time and the clamp was never
+     * mentioned. `days: 999999` silently became 4000, then ~165, and the answer reported
+     * only the second of those two reductions.
+     *
+     * `asked` is compared against `rows.length`, the UNFILTERED fetch, never against
+     * `covered` — with a since/until range `covered` is the slice kept from the fetch and
+     * is SUPPOSED to be smaller, so comparing them would announce a truncation on every
+     * ordinary month query.
+     */
+    const clamped =
+      rows.length < asked
+        ? `The range was also reduced before that: ${asked} days were asked for and 4000 ` +
+          `is the database function's ceiling. `
+        : "";
     const head =
       shown < covered
         ? `${shown} of ${covered} days returned -- the rest did not fit the character ` +
-          `ceiling. Ask for a narrower period to see them.\n\n`
-        : // COMPARED AGAINST THE UNFILTERED FETCH, not the range.
-          // `asked` is how many days back the rollup was told to go; with a `since`/
-          // `until` range, `covered` is the slice kept from that, so it is SUPPOSED to be
-          // smaller. Comparing them would announce "the range was reduced, this IS a
-          // truncation" for every ordinary month query — a confident false alarm about
-          // the one thing this branch exists to report honestly.
-          rows.length < asked
-          ? // THE CLAMP, NAMED. This used to read "Not a truncation -- there is no data
-            // before the earliest day below", which is false in the only case that can
-            // reach it. The rollup generate_series-es every day and left-joins, so it
-            // returns exactly clamp(days,1,4000) rows whatever the activity -- verified
-            // live: days=5 gives 5 rows, days=10000 gives 4000. So `covered` can fall
-            // short of `asked` ONLY when the 4000-day guard fires, and calling that "no
-            // data" told the caller the company is younger than it is.
-            `Asked for ${asked} days; ${covered} returned -- 4000 days is the database ` +
-            `function's ceiling, so the range was reduced. This IS a truncation of the ` +
-            `request, not the limit of the data.\n\n`
+          `ceiling. ${clamped}Ask for a narrower period to see them.\n\n`
+        : clamped
+          ? `${clamped}This IS a truncation of the request, not the limit of the data.\n\n`
           : "";
     /**
      * AN EMPTY ROLLUP IS A FAULT, NOT AN ABSENCE OF ACTIVITY.

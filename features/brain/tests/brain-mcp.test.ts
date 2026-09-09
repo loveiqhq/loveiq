@@ -780,6 +780,31 @@ describe("/api/mcp", () => {
       expect(text).toMatch(/NOTHING BELOW MATCHED/);
     });
 
+    /**
+     * FEWER THAN ASKED FOR IS ALSO A FACT ABOUT THE REQUEST.
+     *
+     * The held-back notice only fires when a cap actually cut something. Measured
+     * 2026-09-09: `limit: 30` returned 25 hits with no notice of any kind, so nothing
+     * distinguished "the ranking held 25" from "a cap trimmed it to 25" -- and the two
+     * want opposite next steps, narrowing versus rewording.
+     */
+    it("says when the ranking held fewer than the limit asked for", async () => {
+      mockRetrieve.mockResolvedValue([chunk(), chunk({ sourceId: "task:b" })]);
+      const short = (await (await call({ query: "anything", limit: 12 })).json()).result.content[0]
+        .text as string;
+      expect(short).toMatch(/FEWER THAN THE 12 ASKED FOR: the ranking held 2/);
+      expect(short).toMatch(/No cap trimmed this/);
+      expect(short).toMatch(/Reword the question instead/);
+
+      // A full page says nothing.
+      mockRetrieve.mockResolvedValue(
+        Array.from({ length: 12 }, (_, i) => chunk({ sourceId: `task:${i}` }))
+      );
+      const full = (await (await call({ query: "anything", limit: 12 })).json()).result.content[0]
+        .text as string;
+      expect(full).not.toMatch(/FEWER THAN THE/);
+    });
+
     it("names the sources it actually holds when nothing matches", async () => {
       // The old message advertised Jira, which has 0 chunks, and omitted Notion,
       // Slack, Gmail, Drive, the calendar and WhatsApp, which have 25,000 between
@@ -3360,13 +3385,43 @@ describe("/api/mcp", () => {
         })
       );
       const text = (await res.json()).result.content[0].text as string;
-      expect(text).toMatch(/Asked for 400 days; 2 returned/);
+      expect(text).toMatch(/400 days were asked for and 4000 is the database/);
       // It used to assert "Not a truncation". That sentence was false in the only case
       // that reaches it: the rollup returns one row per day in range whatever the
       // activity, so a short count means the 4000-day ceiling fired, and telling the
       // caller there is simply no older data makes the company look younger than it is.
       expect(text).toMatch(/IS a truncation of the request/);
       expect(text).not.toMatch(/Not a truncation/);
+    });
+
+    /**
+     * THE CLAMP USED TO BE UNREACHABLE, so the one thing it had to report never appeared.
+     *
+     * It was an ALTERNATIVE branch to the character-ceiling notice, and in production the
+     * two always compose: `asked` above 4000 returns 4000 rows, and 4000 rows never fit
+     * the character ceiling. So `days: 999999` was reduced twice and the answer mentioned
+     * only the second reduction.
+     */
+    it("names BOTH reductions when the range was clamped and then truncated", async () => {
+      // 4000 rows: past the clamp, and far past the character ceiling.
+      mockRollup.mockResolvedValue(
+        Array.from({ length: 4000 }, (_, i) => ({
+          day: `2026-08-${String((i % 28) + 1).padStart(2, "0")}`,
+          visitors: 1,
+          revenue: 0,
+        }))
+      );
+      const res = await POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "get_business_numbers", arguments: { since: "2000-01-01" } },
+        })
+      );
+      const text = (await res.json()).result.content[0].text as string;
+      expect(text).toMatch(/did not fit the character ceiling/);
+      expect(text).toMatch(/4000 is the database function's ceiling/);
     });
 
     /**
