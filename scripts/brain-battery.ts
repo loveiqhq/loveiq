@@ -1526,6 +1526,52 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
     P("dc-78h", "why is the 78 hour call invite paused", bodyHas(/NURTURE_78H|call invite/i)),
     P("dc-gdpr", "what is our lawful basis for processing", topSource("doc", 8)),
     P("dc-admin-api", "what admin api routes exist", topSource("doc", 6)),
+
+    // ── DECISION ─────────────────────────────────────────────────────────────
+    /**
+     * Written by `record_decision`, not ingested from anywhere. These probe the claim
+     * the tool makes to its caller — that a decision is findable by its wording as soon
+     * as it is written — and they are the only probes here whose subject the brain
+     * produced itself.
+     *
+     * Deliberately NOT `topSource("decision", 1)`: rank 1 for a well-worded question is
+     * the intent, but a probe that demands it makes every future decision recorded on a
+     * nearby topic a failure of this one. Top 3 is the property that matters — a
+     * decision the corpus holds must be in the window the model is handed.
+     */
+    P(
+      "dec-survey-text",
+      "why are we not indexing the survey free text answers",
+      all(topSource("decision", 3), bodyHas(/special-category|PII|ZIP/i, 3))
+    ),
+    P(
+      "dec-github",
+      "did we decide anything about indexing github",
+      all(topSource("decision", 3), bodyHas(/dependabot|97%|robot/i, 3))
+    ),
+    P(
+      "dec-write-access",
+      "is the brain allowed to write to other systems without asking first",
+      topSource("decision", 3)
+    ),
+    /**
+     * WHAT WAS REJECTED HAS TO COME BACK WITH IT. The whole argument for recording
+     * alternatives is that someone months later reads why the other option was not
+     * taken; if only the chosen half is retrievable, the record has not done its job.
+     */
+    P(
+      "dec-rejected-half-survives",
+      "what did we consider instead of one shared credential for the brain",
+      bodyHas(/Rejected:[\s\S]{0,400}[Pp]er-person/, 3)
+    ),
+    /** Attributed, and reachable by the person filter rather than by spelling a name
+     *  into the question — the join the person spine exists for. */
+    P(
+      "dec-attributed",
+      "decisions about the company brain",
+      all(topSource("decision", 3), nonEmpty(1)),
+      { sources: ["decision"], meta: { people: ["Eman Cickusic"] } }
+    ),
   ];
 }
 

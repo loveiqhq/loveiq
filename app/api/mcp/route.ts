@@ -529,7 +529,9 @@ const TOOLS = [
       "can supersede an earlier one. WRITE DOWN WHAT WAS REJECTED, not only what was " +
       "chosen: the most expensive thing a company re-does is an argument it already had. " +
       "Every call is logged and mirrored to the team's ops channel, so record what was " +
-      "actually agreed and attribute it honestly.",
+      "actually agreed and attribute it honestly. Recording the same decision on the " +
+      "same day REPLACES the earlier record rather than adding a second one, so when you " +
+      "correct one, pass every field again and not only the one you are changing.",
     inputSchema: {
       type: "object",
       properties: {
@@ -571,6 +573,119 @@ const TOOLS = [
         },
       },
       required: ["decision", "actor"],
+    },
+  },
+  {
+    name: "count_context",
+    title: "Count what we hold, and break it down",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "HOW MANY, and how many each. Answers questions `search_company_context` " +
+      "structurally cannot: it ranks and returns at most 30 chunks, so any number read " +
+      "off it is a floor, not a count. Use this for 'how many meetings did we have in " +
+      "August', 'how much of what we hold is email', 'who has written the most', 'how " +
+      "many Notion tasks are still WIP'. NEVER count by listing search results.\n\n" +
+      "The filters are `search_company_context`'s, clause for clause, so a count and a " +
+      "search agree. One deliberate difference: `q` here means ALL of these words, not " +
+      "any — 'report pricing' counts 548 records, where the search's wider recall net " +
+      "casts 6,252 and lets ranking sort them out. A count has no ranking to hide behind.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        group_by: {
+          type: "string",
+          description:
+            "Omit for a single total. `source` splits by where a record came from, " +
+            "`month` by the month it describes, and ANY OTHER VALUE is read as a " +
+            "metadata key — `people` (who is named), `status`, `assignee`, `kind`, " +
+            "`topic`. A chunk naming three people counts under all three, so buckets " +
+            "can sum to more than the total; the total counts records.",
+        },
+        q: {
+          type: "string",
+          description:
+            "Optional. Count only records containing ALL of these words. Omit to count " +
+            "on the filters alone, which is usually what a 'how many' question means.",
+        },
+        sources: {
+          type: "array",
+          items: { type: "string" },
+          description: "Only these sources. Call list_sources for the names.",
+        },
+        exclude_sources: {
+          type: "array",
+          items: { type: "string" },
+          description: "Skip these sources.",
+        },
+        since: {
+          type: "string",
+          description:
+            "YYYY-MM-DD. Filters on the date a record DESCRIBES, not when it was indexed. " +
+            "Any date range excludes repository documentation, which carries no date.",
+        },
+        until: { type: "string", description: "YYYY-MM-DD, inclusive." },
+        meta: {
+          type: "object",
+          description:
+            'Indexed metadata, matched EXACTLY — e.g. {"status":"WIP"} or ' +
+            '{"people":"Marcus Börner"} for everything one person is named in.',
+        },
+      },
+    },
+  },
+  {
+    name: "browse_context",
+    title: "List records without ranking them",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "ENUMERATE, newest first, with no relevance ranking and no search words at all. " +
+      "Use it when the question names a category rather than a topic: every meeting note " +
+      "since June, all decisions, the WIP tasks, what came in last week. " +
+      "`search_company_context` cannot do this — it needs a query, routes everything " +
+      "through relevance, and stops at 30, so 'list all X' silently becomes 'the 30 " +
+      "most X-ish things'.\n\n" +
+      "Returns titles, dates and ids — not bodies. Read one with `fetch_document`. Pages " +
+      "with `offset`, and always tells you the true total so you know what you have not " +
+      "seen yet.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: { type: "number", description: "1-100, default 25." },
+        offset: {
+          type: "number",
+          description: "Skip this many. Page with it; the total is reported.",
+        },
+        order: {
+          type: "string",
+          description:
+            "`newest` (default) or `oldest`, by the date each record DESCRIBES — so " +
+            "SCHEDULED MEETINGS THAT HAVE NOT HAPPENED YET LEAD A `newest` LIST. Undated " +
+            "records — repository documentation — sort last either way.",
+        },
+        sources: {
+          type: "array",
+          items: { type: "string" },
+          description: "Only these sources. Call list_sources for the names.",
+        },
+        exclude_sources: {
+          type: "array",
+          items: { type: "string" },
+          description: "Skip these sources.",
+        },
+        since: {
+          type: "string",
+          description:
+            "YYYY-MM-DD. Filters on the date a record DESCRIBES, not when it was indexed. " +
+            "Any date range excludes repository documentation, which carries no date.",
+        },
+        until: { type: "string", description: "YYYY-MM-DD, inclusive." },
+        meta: {
+          type: "object",
+          description:
+            'Indexed metadata, matched EXACTLY — e.g. {"status":"WIP"} or ' +
+            '{"people":"Marcus Börner"} for everything one person is named in.',
+        },
+      },
     },
   },
   {
@@ -1038,6 +1153,41 @@ function partNumber(row: Record<string, unknown>): number {
   return Number.isFinite(n) && n > 0 ? n : 1;
 }
 
+/**
+ * Caller-supplied filters, parsed once. Shared by `search_company_context`,
+ * `count_context` and `browse_context` — three tools whose filters MUST agree,
+ * because a count that filters differently from the list beside it just disagrees
+ * with it and gives no way to tell which is wrong.
+ */
+const asStrings = (v: unknown): string[] | undefined =>
+  Array.isArray(v) && v.every((x) => typeof x === "string") && v.length > 0
+    ? (v as string[])
+    : undefined;
+/**
+ * Fields whose stored value is an ARRAY, so containment needs an array on both sides.
+ *
+ * A caller writing {"people": "Marcus Börner"} is doing the obvious thing, and
+ * `meta @> '{"people":"Marcus Börner"}'` matches nothing at all because the stored
+ * value is `["Marcus Börner"]`. That reads as "this person did nothing", which is
+ * the worst way for a filter to fail — so the scalar is wrapped rather than dropped.
+ */
+const ARRAY_META_KEYS = new Set(["people"]);
+const asMeta = (v: unknown): Record<string, string | string[]> | undefined => {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return undefined;
+  const out: Record<string, string | string[]> = {};
+  for (const [key, val] of Object.entries(v as Record<string, unknown>)) {
+    // Only scalars and string arrays: `meta @> ...` is containment, and a nested
+    // object would match structurally in ways a caller writing {status:"WIP"} never
+    // intends.
+    if (typeof val === "string" || typeof val === "number" || typeof val === "boolean") {
+      out[key] = ARRAY_META_KEYS.has(key) ? [String(val)] : String(val);
+    } else if (Array.isArray(val) && val.length > 0 && val.every((x) => typeof x === "string")) {
+      out[key] = val as string[];
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+};
+
 async function callTool(
   name: string,
   args: Record<string, unknown>,
@@ -1059,39 +1209,6 @@ async function callTool(
       return textResult("Provide a question of at least two characters.", true);
     }
     const limit = Math.min(30, Math.max(1, Number(args.limit) || 12));
-
-    const asStrings = (v: unknown): string[] | undefined =>
-      Array.isArray(v) && v.every((x) => typeof x === "string") && v.length > 0
-        ? (v as string[])
-        : undefined;
-    /**
-     * Fields whose stored value is an ARRAY, so containment needs an array on both sides.
-     *
-     * A caller writing {"people": "Marcus Börner"} is doing the obvious thing, and
-     * `meta @> '{"people":"Marcus Börner"}'` matches nothing at all because the stored
-     * value is `["Marcus Börner"]`. That reads as "this person did nothing", which is
-     * the worst way for a filter to fail — so the scalar is wrapped rather than dropped.
-     */
-    const ARRAY_META_KEYS = new Set(["people"]);
-    const asMeta = (v: unknown): Record<string, string | string[]> | undefined => {
-      if (!v || typeof v !== "object" || Array.isArray(v)) return undefined;
-      const out: Record<string, string | string[]> = {};
-      for (const [key, val] of Object.entries(v as Record<string, unknown>)) {
-        // Only scalars and string arrays: `meta @> ...` is containment, and a nested
-        // object would match structurally in ways a caller writing {status:"WIP"} never
-        // intends.
-        if (typeof val === "string" || typeof val === "number" || typeof val === "boolean") {
-          out[key] = ARRAY_META_KEYS.has(key) ? [String(val)] : String(val);
-        } else if (
-          Array.isArray(val) &&
-          val.length > 0 &&
-          val.every((x) => typeof x === "string")
-        ) {
-          out[key] = val as string[];
-        }
-      }
-      return Object.keys(out).length > 0 ? out : undefined;
-    };
 
     const opts = {
       sources: asStrings(args.sources),
@@ -1289,6 +1406,133 @@ async function callTool(
       `${UNTRUSTED_SOURCES_PREAMBLE}\n\n${RESULT_GUIDE}\n\n${head}${renderSources(chunks, { forAgent: true })}`,
       false,
       "lower max_chars, or page with from_part"
+    );
+  }
+
+  if (name === "count_context" || name === "browse_context") {
+    const opts = {
+      sources: asStrings(args.sources),
+      excludeSources: asStrings(args.exclude_sources),
+      since: typeof args.since === "string" ? args.since : undefined,
+      until: typeof args.until === "string" ? args.until : undefined,
+      meta: asMeta(args.meta),
+    };
+    /** Reported back on every result. A number with no statement of what was counted is
+     *  the same trap as a filtered search reading like an empty corpus. */
+    const applied =
+      [
+        opts.sources?.length ? `sources=${opts.sources.join(",")}` : null,
+        opts.excludeSources?.length ? `exclude_sources=${opts.excludeSources.join(",")}` : null,
+        opts.since ? `since=${opts.since}` : null,
+        opts.until ? `until=${opts.until}` : null,
+        opts.meta ? `meta=${JSON.stringify(opts.meta)}` : null,
+      ]
+        .filter((x): x is string => x !== null)
+        .join(", ") || "no filters";
+
+    if (name === "count_context") {
+      const res = await supabaseFetch("/rest/v1/rpc/brain_count", {
+        method: "POST",
+        body: JSON.stringify({
+          group_by:
+            typeof args.group_by === "string" && args.group_by.trim() ? args.group_by.trim() : null,
+          q: typeof args.q === "string" && args.q.trim() ? args.q.trim() : null,
+          sources: opts.sources ?? null,
+          exclude_sources: opts.excludeSources ?? null,
+          since: opts.since ?? null,
+          until: opts.until ?? null,
+          meta_filter: opts.meta ?? null,
+        }),
+      });
+      if (!res.ok) {
+        logger.error({ status: res.status }, "brain: count_context failed");
+        // Never "zero". An unreachable corpus reported as a count of nothing is the
+        // same lie as an outage reported as an empty search.
+        return textResult(
+          "Could not count — the knowledge base did not answer. This is a failure, not " +
+            "a count of zero.",
+          true
+        );
+      }
+      const rows = (await res.json()) as Array<{ bucket: string; n: number; total: number }>;
+      if (rows.length === 0) {
+        return textResult(
+          `Nothing matches (${applied}). That is what this request selected, not what the ` +
+            `company has — widen it before concluding the record does not exist.`
+        );
+      }
+      const total = rows[0]!.total;
+      const grouped = typeof args.group_by === "string" && args.group_by.trim();
+      stats.sourceCount = rows.length;
+      if (!grouped) {
+        return textResult(`${total} records match (${applied}).`);
+      }
+      const sum = rows.reduce((a, r) => a + Number(r.n), 0);
+      const lines = rows.map((r) => `  ${String(r.n).padStart(6)}  ${r.bucket}`).join("\n");
+      return textResult(
+        `${total} records match (${applied}), by ${args.group_by}:\n\n${lines}\n\n` +
+          (sum > total
+            ? `Buckets sum to ${sum}, above the ${total} records matched: a record naming ` +
+              `several values is counted under each. \`${args.group_by}\` is one of those fields.\n`
+            : "") +
+          (rows.length >= 50 ? "Showing the 50 largest buckets — there are more.\n" : "") +
+          "`(none)` means the field is absent on those records, which is not the same as empty."
+      );
+    }
+
+    const limit = Math.min(100, Math.max(1, Number(args.limit) || 25));
+    const offset = Math.max(0, Number(args.offset) || 0);
+    const oldest = args.order === "oldest";
+    const qs = new URLSearchParams();
+    qs.set("select", "source,source_id,title,url,period_end,meta");
+    // NULLS LAST both ways: repository documentation carries no date, and letting it
+    // head an "oldest first" listing buries everything the caller asked for.
+    qs.set("order", oldest ? "period_end.asc.nullslast" : "period_end.desc.nullslast");
+    qs.set("limit", String(limit));
+    if (offset > 0) qs.set("offset", String(offset));
+    if (opts.sources?.length) qs.set("source", `in.(${opts.sources.join(",")})`);
+    if (opts.excludeSources?.length)
+      qs.append("source", `not.in.(${opts.excludeSources.join(",")})`);
+    if (opts.since) qs.append("period_end", `gte.${opts.since}`);
+    if (opts.until) qs.append("period_end", `lte.${opts.until}`);
+    if (opts.meta) qs.set("meta", `cs.${JSON.stringify(opts.meta)}`);
+
+    const res = await supabaseFetch(`/rest/v1/brain_chunk?${qs.toString()}`, {
+      headers: { Prefer: "count=exact" },
+    });
+    if (!res.ok) {
+      logger.error({ status: res.status }, "brain: browse_context failed");
+      return textResult(
+        "Could not list — the knowledge base did not answer. This is a failure, not an " +
+          "empty shelf.",
+        true
+      );
+    }
+    const rows = (await res.json()) as Array<Record<string, unknown>>;
+    const total = Number(res.headers.get("content-range")?.split("/")[1] ?? "-1");
+    if (rows.length === 0) {
+      return textResult(
+        `Nothing matches (${applied}). That is what this request selected, not what the ` +
+          `company has — widen it before concluding the record does not exist.`
+      );
+    }
+    stats.sourceCount = rows.length;
+    const lines = rows
+      .map((r) => {
+        const date = typeof r.period_end === "string" ? r.period_end : "no date";
+        return `${date}  [${String(r.source)}]  ${String(r.title ?? "(untitled)")}\n          id: ${String(r.source_id)}`;
+      })
+      .join("\n");
+    const shownTo = offset + rows.length;
+    return textResult(
+      `${UNTRUSTED_SOURCES_PREAMBLE}\n\n` +
+        `${total >= 0 ? `${total} records match` : "Records matching"} (${applied}). ` +
+        `Showing ${offset + 1}-${shownTo}${oldest ? ", oldest first" : ", newest first"}.\n\n` +
+        `${lines}\n\n` +
+        (total > shownTo
+          ? `${total - shownTo} more — call again with offset=${shownTo}.\n`
+          : "That is all of them.\n") +
+        "Titles and dates only. `fetch_document` with an id reads the record itself."
     );
   }
 
@@ -2019,7 +2263,10 @@ export async function POST(request: Request) {
         "and page, not just the task board), the team's Slack conversations day by day, the " +
         "company email thread by thread, the WhatsApp team group day by day, the calendar " +
         "of meetings and who attended them, the " +
-        "notes from every recorded call, and dated business numbers. Use " +
+        "notes from every recorded call, dated business numbers, and decisions written " +
+        "down directly with `record_decision` — those last are the ones to trust first " +
+        "when asking what was decided, because they were recorded deliberately rather " +
+        "than reconstructed from a transcript. Use " +
         "search_company_context, and list_sources when you need to know how fresh a source " +
         "is.\n\n" +
         "LIVE STATE, queried straight from the production database with full history and no " +
@@ -2040,6 +2287,12 @@ export async function POST(request: Request) {
         "period looked like; live for what is true right now. Never infer a current number " +
         "from an indexed chunk when query_product_data can read it directly, and never " +
         "conclude something does not exist from an empty search — check list_sources first.\n\n" +
+        "COUNTING AND LISTING ARE SEPARATE TOOLS, because search cannot do either. " +
+        "`search_company_context` ranks and stops at 30, so a number counted off its " +
+        "results is a floor and a list built from them is 'the 30 most relevant', never " +
+        "'all'. Use `count_context` for how many — it groups by source, by month, by who " +
+        "is named, or by any indexed field — and `browse_context` to enumerate a " +
+        "category newest-first with paging and a true total.\n\n" +
         "DECISIONS ARE THE POINT OF THIS SERVER, and they are the thinnest thing in it — " +
         "most of what is recorded is a by-product of somebody happening to hold a call " +
         "that was transcribed. So two habits matter more than any search technique. " +
