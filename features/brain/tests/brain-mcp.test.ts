@@ -691,8 +691,17 @@ describe("/api/mcp", () => {
         })
       ).then((r) => r.json().then((b) => b.result));
 
-    /** The rows `brain_count` returns: every row repeats the distinct-chunk total. */
-    function wire(rows: Array<{ bucket: string; n: number; total: number }>, ok = true) {
+    /**
+     * The rows `brain_count` returns. Every row repeats both totals — `n`/`total` count
+     * stored chunks, `docs`/`total_docs` count documents, and a long document is many
+     * chunks. Omitting the document figures in a test means one chunk per document, which
+     * is true of six of the twelve real sources.
+     */
+    function wire(
+      rows: Array<{ bucket: string; n: number; docs?: number; total: number; total_docs?: number }>,
+      ok = true
+    ) {
+      const filled = rows.map((r) => ({ docs: r.n, total_docs: r.total, ...r }));
       mockSupabaseFetch.mockImplementation(async (path: string) => {
         if (String(path).startsWith("/rest/v1/brain_query")) {
           return { ok: true, headers: new Headers(), json: async () => [] };
@@ -701,7 +710,7 @@ describe("/api/mcp", () => {
           ok,
           status: ok ? 200 : 500,
           headers: new Headers(),
-          json: async () => rows,
+          json: async () => filled,
           text: async () => "",
         };
       });
@@ -714,6 +723,76 @@ describe("/api/mcp", () => {
       // What was counted, always. A number with no statement of its filters is the same
       // trap as a filtered search reading like an empty corpus.
       expect(r.content[0].text).toMatch(/sources=calendar/);
+    });
+
+    /**
+     * IT COUNTED STORED CHUNKS AND CALLED THEM RECORDS.
+     *
+     * Found by measuring production, not by reading the code. A long document is stored
+     * as many rows — the largest call note in this corpus is 311 of them — so "how many
+     * call notes do we have" answered 10,516 against a true 696, and Drive looked like
+     * the largest thing the company owns when by document it is fourth. Both figures are
+     * useful; only one of them is the answer to "how many".
+     */
+    it("answers with documents, not with the parts they are stored in", async () => {
+      wire([{ bucket: "(all)", n: 10516, docs: 696, total: 10516, total_docs: 696 }]);
+      const text = (await call({ sources: ["drive"] })).content[0].text;
+      expect(text).toMatch(/^696 \(10516 stored parts\) records match/);
+      // Never the chunk count on its own — that is the number that was wrong.
+      expect(text).not.toMatch(/^10516 records/);
+    });
+
+    it("does not clutter a source with no split between the two", async () => {
+      wire([{ bucket: "(all)", n: 91, total: 91 }]);
+      expect((await call({ sources: ["calendar"] })).content[0].text).toMatch(/^91 records match/);
+    });
+
+    /**
+     * The BUCKET LINE leads with documents and puts stored parts in brackets. Which is
+     * not the same claim as the buckets being RANKED by documents — that ordering is the
+     * function's `ORDER BY` and this test cannot see it, since the renderer just prints
+     * what it was handed. The ranking was verified against production instead: by stored
+     * parts Drive leads Gmail 10,516 to 8,192, and by documents Gmail leads 3,698 to 696,
+     * which is the order `brain_count('source')` actually returns.
+     */
+    it("leads each bucket with documents and brackets the stored parts", async () => {
+      wire([
+        { bucket: "gmail", n: 8192, docs: 3698, total: 18708, total_docs: 4394 },
+        { bucket: "drive", n: 10516, docs: 696, total: 18708, total_docs: 4394 },
+      ]);
+      const text = (await call({ group_by: "source" })).content[0].text;
+      expect(text).toMatch(/696\s+drive\s+\(10516 parts\)/);
+      expect(text).toMatch(/3698\s+gmail\s+\(8192 parts\)/);
+      // The header is documents too, not the 18,708 parts they are stored in.
+      expect(text).toMatch(/^4394 \(18708 stored parts\) records match/);
+    });
+
+    /**
+     * `first_seen_at` WAS BACKFILLED, AND THE NUMBER IS ONLY AS GOOD AS THAT.
+     *
+     * 23,667 of 23,990 rows carry an estimate copied from `updated_at`, so a window
+     * reaching back before the backfill counts records a sweep merely re-wrote as newly
+     * learned. Stated where the number is read, not only in the schema — and keyed to
+     * the date, so it stops appearing by itself as the estimate ages out.
+     */
+    it("marks a learned_since window that predates the backfill as an upper bound", async () => {
+      wire([{ bucket: "(all)", n: 2005, docs: 1599, total: 2005, total_docs: 1599 }]);
+      expect((await call({ learned_since: "2026-09-08" })).content[0].text).toMatch(/UPPER BOUND/);
+    });
+
+    it("does not caveat a window that starts after the backfill", async () => {
+      wire([{ bucket: "(all)", n: 3, total: 3 }]);
+      expect((await call({ learned_since: "2026-09-20" })).content[0].text).not.toMatch(
+        /UPPER BOUND/
+      );
+    });
+
+    it("explains `(none)` only when there is a `(none)` bucket to explain", async () => {
+      wire([
+        { bucket: "drive", n: 10516, docs: 696, total: 23990, total_docs: 8790 },
+        { bucket: "gmail", n: 8192, docs: 3698, total: 23990, total_docs: 8790 },
+      ]);
+      expect((await call({ group_by: "source" })).content[0].text).not.toMatch(/`\(none\)` means/);
     });
 
     it("renders the buckets largest first", async () => {
@@ -803,6 +882,59 @@ describe("/api/mcp", () => {
       // "this person did nothing".
       expect(sent.meta_filter).toEqual({ people: ["Marcus Börner"] });
     });
+
+    /**
+     * "WHAT IS NEW" AND "WHAT HAPPENED RECENTLY" ARE DIFFERENT QUESTIONS, and until
+     * `first_seen_at` existed only the second was askable. An August meeting indexed
+     * yesterday is August to `since` and yesterday to `learned_since`; answering the
+     * first with the second reports a batch re-ingest as news.
+     */
+    it("filters on when the brain learned something, separately from when it happened", async () => {
+      wire([{ bucket: "(all)", n: 12, total: 12 }]);
+      const r = await call({ since: "2026-08-01", learned_since: "2026-09-08" });
+      const sent = JSON.parse(
+        String(
+          (
+            mockSupabaseFetch.mock.calls.find(([p]) => String(p).includes("brain_count"))![1] as {
+              body?: string;
+            }
+          ).body
+        )
+      );
+      expect(sent.since).toBe("2026-08-01");
+      expect(sent.learned_since).toBe("2026-09-08");
+      // Both are reported back, or a reader cannot tell which window produced the number.
+      expect(r.content[0].text).toMatch(/learned_since=2026-09-08/);
+      expect(r.content[0].text).toMatch(/since=2026-08-01/);
+    });
+
+    it("refuses a date it cannot read rather than letting Postgres reject it as an outage", async () => {
+      wire([{ bucket: "(all)", n: 1, total: 1 }]);
+      const r = await call({ since: "the summer" });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toMatch(/`since` must be a date/);
+    });
+
+    /**
+     * A MISTYPED FIELD NAME LOOKS EXACTLY LIKE A FIELD NOTHING CARRIES. Both put every
+     * record in `(none)`, and the second is a real answer while the first is a typo —
+     * so the one case where they are distinguishable, a single `(none)` bucket holding
+     * everything, has to say so out loud.
+     */
+    it("flags a group_by that matched no field on any record", async () => {
+      wire([{ bucket: "(none)", n: 4, total: 4 }]);
+      const r = await call({ group_by: "asignee", sources: ["decision"] });
+      expect(r.content[0].text).toMatch(/NOT ONE carries a `asignee`/);
+      expect(r.content[0].text).toMatch(/wrong field name/);
+    });
+
+    it("does not flag a legitimate (none) bucket sitting beside real ones", async () => {
+      wire([
+        { bucket: "Eman Cickusic", n: 5587, total: 23962 },
+        { bucket: "(none)", n: 9593, total: 23962 },
+      ]);
+      expect((await call({ group_by: "people" })).content[0].text).not.toMatch(/NOT ONE carries/);
+    });
   });
 
   describe("browse_context — enumerating without ranking", () => {
@@ -840,11 +972,57 @@ describe("/api/mcp", () => {
       meta: {},
     });
 
+    /**
+     * IT LISTED THE SAME DOCUMENT FIFTEEN TIMES.
+     *
+     * The tool exists because "list all X" was silently becoming "the 30 most X-ish
+     * things". Listing stored chunks reproduced that one layer down: a page of Drive
+     * results was five copies of two call notes. Both part conventions must be matched —
+     * most sources omit `part` on the opening chunk, repository documentation sets it to
+     * 1 — and matching only the first drops all 493 repo chunks from every listing.
+     */
+    it("lists one row per document, not one per stored part", async () => {
+      wire([row(1)], 696);
+      const r = await call({ sources: ["drive"] });
+      const url = decodeURIComponent(
+        String(mockSupabaseFetch.mock.calls.find(([p]) => String(p).includes("brain_chunk"))![0])
+      );
+      expect(url).toContain("or=(meta->>part.is.null,meta->>part.eq.1)");
+      // The total then counts documents too, so the header is not 10,516 for 696 notes.
+      expect(r.content[0].text).toMatch(/696 records match/);
+      expect(r.content[0].text).toMatch(/appears once here/);
+    });
+
+    /**
+     * THE SELECT MUST COVER EVERY COLUMN THE RENDERER READS.
+     *
+     * A mock answers whatever the select clause asked for, so trimming a column too many
+     * is invisible to every other test here: the fixture still has `title`, and the
+     * listing still prints it. In production the column would simply be absent and every
+     * row would render as "(untitled)" — or as "learned undefined" — with nothing
+     * failing. This asserts the request rather than the response, which is the only place
+     * the mistake is visible.
+     */
+    it("asks for every column it renders", async () => {
+      wire([row(1)], 1);
+      await call({ order: "recently_learned" });
+      const url = decodeURIComponent(
+        String(mockSupabaseFetch.mock.calls.find(([p]) => String(p).includes("brain_chunk"))![0])
+      );
+      const select = /[?&]select=([^&]+)/.exec(url)![1]!.split(",");
+      for (const column of ["source", "source_id", "title", "period_end", "first_seen_at"]) {
+        expect(select, `renderer reads ${column}`).toContain(column);
+      }
+    });
+
     it("lists titles, dates and the id needed to read one", async () => {
       wire([row(3)], 1);
       const text = (await call({ sources: ["calendar"] })).content[0].text;
       expect(text).toMatch(/Meeting 3/);
-      expect(text).toMatch(/calendar:evt-3/);
+      // `<source>/<source_id>`, the ONLY form `fetch_document` accepts and the form
+      // `search_company_context` prints. This printed the bare source_id, so following
+      // the instruction on the very next line — "fetch_document with an id" — failed.
+      expect(text).toMatch(/id: calendar\/calendar:evt-3/);
       expect(text).toMatch(/2026-08-03/);
       expect(text).toMatch(/fetch_document/);
     });
@@ -914,6 +1092,68 @@ describe("/api/mcp", () => {
       expect(url).toContain('meta=cs.{"status":"WIP"}');
     });
 
+    it("orders by when the brain learned it, and shows that date", async () => {
+      wire([{ ...row(1), first_seen_at: "2026-09-09T07:05:27.724+00:00" }], 1);
+      const r = await call({ order: "recently_learned", learned_since: "2026-09-08" });
+      const url = decodeURIComponent(
+        String(mockSupabaseFetch.mock.calls.find(([p]) => String(p).includes("brain_chunk"))![0])
+      );
+      expect(url).toContain("order=first_seen_at.desc");
+      expect(url).toContain("first_seen_at=gte.2026-09-08");
+      // The date shown has to be the one the ordering used, or the list reads as unsorted.
+      expect(r.content[0].text).toMatch(/learned 2026-09-09/);
+      expect(r.content[0].text).toMatch(/most recently learned first/);
+    });
+
+    /**
+     * PAGING ONE STEP TOO FAR IS NOT AN OUTAGE.
+     *
+     * Found by probing production rather than by reading the code: PostgREST answers a
+     * range starting past the end with `416 Requested Range Not Satisfiable` and a body
+     * that is not an array. The failure branch caught it and reported that the knowledge
+     * base could not be reached — for the ordinary act of asking for the next page — and
+     * `rows.length` would have thrown on the way there had it not.
+     */
+    it("says you reached the end, rather than reporting an outage, on a page past the last", async () => {
+      mockSupabaseFetch.mockImplementation(async (path: string) => {
+        if (String(path).startsWith("/rest/v1/brain_query")) {
+          return { ok: true, headers: new Headers(), json: async () => [] };
+        }
+        return {
+          ok: false,
+          status: 416,
+          headers: new Headers({ "content-range": "*/23990" }),
+          json: async () => ({ code: "PGRST103" }),
+          text: async () => "",
+        };
+      });
+      const r = await call({ offset: 99999, limit: 25 });
+      expect(r.isError).toBeFalsy();
+      expect(r.content[0].text).toMatch(/reached the end/);
+      // The real total is in the header even on a 416, so there is no excuse for hiding it.
+      expect(r.content[0].text).toMatch(/23990 records match/);
+      expect(r.content[0].text).toMatch(/offset 23965/);
+      expect(r.content[0].text).not.toMatch(/did not answer/);
+    });
+
+    /**
+     * A CALLER'S TYPO MUST NOT BE REPORTED AS A DATABASE FAILURE. Postgres rejects
+     * "last friday" with a 400, which the failure branch would have rendered as "the
+     * knowledge base did not answer" — sending the reader to look at infrastructure for
+     * a mistake in their own argument.
+     */
+    it("names a bad date as a bad date", async () => {
+      wire([row(1)], 1);
+      const r = await call({ learned_since: "last friday" });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toMatch(/learned_since/);
+      expect(r.content[0].text).toMatch(/not one/);
+      // Refused before the request, so nothing was asked of the database at all.
+      expect(
+        mockSupabaseFetch.mock.calls.filter(([p]) => !String(p).startsWith("/rest/v1/brain_query"))
+      ).toHaveLength(0);
+    });
+
     it("reports a failure as a failure, not an empty shelf", async () => {
       wire([], 0, false);
       const r = await call({});
@@ -925,6 +1165,24 @@ describe("/api/mcp", () => {
       wire([], 0);
       const r = await call({ sources: ["decision"], since: "2030-01-01" });
       expect(r.content[0].text).toMatch(/not what the company has/);
+    });
+
+    /**
+     * THE BOUNDARY A PAGER ACTUALLY LANDS ON, and the worse of the two end-of-list bugs.
+     *
+     * `offset > total` returns 416 and was reported as an outage. `offset == total` —
+     * where a caller arrives immediately after reading the last page — returns a
+     * perfectly ordinary 206 with an empty array, and was reported as NOTHING MATCHING,
+     * for a filter with four records in it. Same false conclusion as an empty corpus,
+     * reached from the opposite direction.
+     */
+    it("says you reached the end when the offset lands exactly on the total", async () => {
+      wire([], 4);
+      const r = await call({ sources: ["decision"], offset: 4, limit: 2 });
+      expect(r.content[0].text).toMatch(/reached the end/);
+      expect(r.content[0].text).toMatch(/only 4 records match/);
+      // The distinction that matters: records exist, this page just has none of them.
+      expect(r.content[0].text).not.toMatch(/not what the company has/);
     });
 
     /** Corpus text reaches the model through this tool too, and a title is corpus text. */
@@ -1012,8 +1270,10 @@ describe("/api/mcp", () => {
       expect(row.source).toBe("decision");
       expect(row.title).toContain("flat tiers");
       expect(row.body).toContain("Rejected: Keeping the discount ladder");
-      // The id is what supersedes a decision later, so it has to come back to the caller.
-      expect(r.content[0].text).toContain(row.source_id);
+      // The id is what supersedes a decision later, so it has to come back to the caller
+      // — and in the form `fetch_document` accepts, since the same sentence tells them
+      // to use it there.
+      expect(r.content[0].text).toContain(`decision/${row.source_id}`);
     });
 
     /**
@@ -1050,6 +1310,26 @@ describe("/api/mcp", () => {
       });
       expect(r.isError).toBe(true);
       expect(r.content[0].text).toMatch(/Nothing was written/);
+    });
+
+    /**
+     * A READER COPIES THE ID THEY WERE SHOWN, which is the `decision/…` form printed on
+     * every search line and by this tool itself. Storing that verbatim would produce
+     * `Supersedes: decision/decision:…`, which matches no record — so either form is
+     * accepted and normalised to the one the records are keyed on.
+     */
+    it("accepts a supersedes id in either of the two forms the reader has seen", async () => {
+      for (const given of ["decision:2026-08-22-abc123", "decision/decision:2026-08-22-abc123"]) {
+        mockSupabaseFetch.mockClear();
+        await call({
+          decision: "Move report pricing to flat tiers",
+          actor: "Eman",
+          supersedes: given,
+        });
+        const [row] = JSON.parse(String((writes()[0]![1] as { body?: string }).body));
+        expect(row.body, given).toContain("Supersedes: decision:2026-08-22-abc123");
+        expect(row.meta.supersedes, given).toBe("decision:2026-08-22-abc123");
+      }
     });
 
     /** Act-freely was chosen over confirm-first, so a failed write must be reported as

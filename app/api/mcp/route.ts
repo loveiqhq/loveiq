@@ -607,6 +607,17 @@ const TOOLS = [
             "Optional. Count only records containing ALL of these words. Omit to count " +
             "on the filters alone, which is usually what a 'how many' question means.",
         },
+        learned_since: {
+          type: "string",
+          description:
+            "YYYY-MM-DD, or an ISO timestamp. WHEN THE BRAIN LEARNED IT, which is a " +
+            "different question from `since`/`until` — those filter the date a record " +
+            "DESCRIBES, so an August meeting indexed yesterday is August to them and " +
+            "yesterday to this. Use this for 'what is new', 'what changed since Friday', " +
+            "'what have I not seen'. Records first written before 2026-09-09 carry a " +
+            "backfilled estimate that can read LATER than the truth, so treat a hit from " +
+            "before that date as an upper bound.",
+        },
         sources: {
           type: "array",
           items: { type: "string" },
@@ -660,7 +671,20 @@ const TOOLS = [
           description:
             "`newest` (default) or `oldest`, by the date each record DESCRIBES — so " +
             "SCHEDULED MEETINGS THAT HAVE NOT HAPPENED YET LEAD A `newest` LIST. Undated " +
-            "records — repository documentation — sort last either way.",
+            "records — repository documentation — sort last either way. " +
+            "`recently_learned` instead orders by when the brain first saw each record, " +
+            "which is what 'what is new' actually means.",
+        },
+        learned_since: {
+          type: "string",
+          description:
+            "YYYY-MM-DD, or an ISO timestamp. WHEN THE BRAIN LEARNED IT, which is a " +
+            "different question from `since`/`until` — those filter the date a record " +
+            "DESCRIBES, so an August meeting indexed yesterday is August to them and " +
+            "yesterday to this. Use this for 'what is new', 'what changed since Friday', " +
+            "'what have I not seen'. Records first written before 2026-09-09 carry a " +
+            "backfilled estimate that can read LATER than the truth, so treat a hit from " +
+            "before that date as an upper bound.",
         },
         sources: {
           type: "array",
@@ -1417,6 +1441,47 @@ async function callTool(
       until: typeof args.until === "string" ? args.until : undefined,
       meta: asMeta(args.meta),
     };
+    const learnedSince =
+      typeof args.learned_since === "string" && args.learned_since.trim()
+        ? args.learned_since.trim()
+        : undefined;
+    /**
+     * VALIDATED HERE, because Postgres rejects a bad date with a 400 and the failure
+     * branch below reports any non-OK response as the knowledge base being unreachable.
+     * A caller who typed "last friday" would be told the database is down, look somewhere
+     * else entirely, and never learn the argument was the problem.
+     */
+    const DATEISH = /^\d{4}-\d{2}-\d{2}([T ].*)?$/;
+    for (const [key, val] of [
+      ["since", opts.since],
+      ["until", opts.until],
+      ["learned_since", learnedSince],
+    ] as const) {
+      if (val !== undefined && !DATEISH.test(val)) {
+        return textResult(
+          `\`${key}\` must be a date like 2026-09-09 — "${val}" is not one. This tool does ` +
+            `not read relative dates; work out the day and pass it.`,
+          true
+        );
+      }
+    }
+    /**
+     * SAID AT THE POINT THE NUMBER IS READ, not only in the schema.
+     *
+     * `first_seen_at` was backfilled from `updated_at` on 2026-09-09, and 23,667 of
+     * 23,990 rows still carry that estimate — so a window reaching back before then
+     * counts rows a sweep merely re-wrote as newly learned. Today that is most of them.
+     * It self-corrects as rows are rewritten with a true value, and the caveat then stops
+     * appearing on its own, because it is keyed to the date and not to a flag.
+     */
+    const FIRST_SEEN_BACKFILLED_ON = "2026-09-09";
+    const backfillCaveat =
+      learnedSince && learnedSince.slice(0, 10) <= FIRST_SEEN_BACKFILLED_ON
+        ? `\n\nTREAT THIS AS AN UPPER BOUND. \`first_seen_at\` was backfilled on ` +
+          `${FIRST_SEEN_BACKFILLED_ON} from the date each record was last written, so a ` +
+          `window reaching back to or before then counts records that were merely ` +
+          `re-indexed as newly learned. Windows starting after that date are exact.`
+        : "";
     /** Reported back on every result. A number with no statement of what was counted is
      *  the same trap as a filtered search reading like an empty corpus. */
     const applied =
@@ -1426,6 +1491,7 @@ async function callTool(
         opts.since ? `since=${opts.since}` : null,
         opts.until ? `until=${opts.until}` : null,
         opts.meta ? `meta=${JSON.stringify(opts.meta)}` : null,
+        learnedSince ? `learned_since=${learnedSince}` : null,
       ]
         .filter((x): x is string => x !== null)
         .join(", ") || "no filters";
@@ -1442,6 +1508,7 @@ async function callTool(
           since: opts.since ?? null,
           until: opts.until ?? null,
           meta_filter: opts.meta ?? null,
+          learned_since: learnedSince ?? null,
         }),
       });
       if (!res.ok) {
@@ -1454,7 +1521,13 @@ async function callTool(
           true
         );
       }
-      const rows = (await res.json()) as Array<{ bucket: string; n: number; total: number }>;
+      const rows = (await res.json()) as Array<{
+        bucket: string;
+        n: number;
+        docs: number;
+        total: number;
+        total_docs: number;
+      }>;
       if (rows.length === 0) {
         return textResult(
           `Nothing matches (${applied}). That is what this request selected, not what the ` +
@@ -1462,32 +1535,69 @@ async function callTool(
         );
       }
       const total = rows[0]!.total;
+      const totalDocs = rows[0]!.total_docs;
       const grouped = typeof args.group_by === "string" && args.group_by.trim();
       stats.sourceCount = rows.length;
+      /**
+       * DOCUMENTS FIRST, CHUNKS SECOND, and never only the second.
+       *
+       * A long document is stored as many rows — the largest call note here is 311 of
+       * them. Counting rows answered "how many call notes do we have" with 10,516 against
+       * a true 696, and made Drive look like the biggest thing the company owns when by
+       * document count it is fourth. The chunk figure is still worth having (it is how
+       * much text sits behind the answer) but it is not what "how many" asks.
+       */
+      const both = (docs: number, chunks: number) =>
+        docs === chunks ? `${docs}` : `${docs} (${chunks} stored parts)`;
       if (!grouped) {
-        return textResult(`${total} records match (${applied}).`);
+        return textResult(`${both(totalDocs, total)} records match (${applied}).` + backfillCaveat);
       }
-      const sum = rows.reduce((a, r) => a + Number(r.n), 0);
-      const lines = rows.map((r) => `  ${String(r.n).padStart(6)}  ${r.bucket}`).join("\n");
+      const sum = rows.reduce((a, r) => a + Number(r.docs), 0);
+      const lines = rows
+        .map(
+          (r) =>
+            `  ${String(r.docs).padStart(6)}  ${r.bucket}${r.docs === r.n ? "" : `  (${r.n} parts)`}`
+        )
+        .join("\n");
       return textResult(
-        `${total} records match (${applied}), by ${args.group_by}:\n\n${lines}\n\n` +
-          (sum > total
-            ? `Buckets sum to ${sum}, above the ${total} records matched: a record naming ` +
+        `${both(totalDocs, total)} records match (${applied}), by ${args.group_by}:\n\n${lines}\n\n` +
+          backfillCaveat +
+          (sum > totalDocs
+            ? `Buckets sum to ${sum}, above the ${totalDocs} records matched: a record naming ` +
               `several values is counted under each. \`${args.group_by}\` is one of those fields.\n`
             : "") +
           (rows.length >= 50 ? "Showing the 50 largest buckets — there are more.\n" : "") +
-          "`(none)` means the field is absent on those records, which is not the same as empty."
+          (rows.length === 1 && rows[0]!.bucket === "(none)"
+            ? `Every matching record is in \`(none)\` — NOT ONE carries a \`${args.group_by}\` ` +
+              `field, so either that is the wrong field name or this is the wrong set of ` +
+              `records. Check the spelling against a record from browse_context before ` +
+              `reading anything into this.`
+            : rows.some((r) => r.bucket === "(none)")
+              ? "`(none)` means the field is absent on those records, which is not the " +
+                "same as it being empty."
+              : "")
       );
     }
 
     const limit = Math.min(100, Math.max(1, Number(args.limit) || 25));
     const offset = Math.max(0, Number(args.offset) || 0);
     const oldest = args.order === "oldest";
+    const byLearned = args.order === "recently_learned";
     const qs = new URLSearchParams();
-    qs.set("select", "source,source_id,title,url,period_end,meta");
+    // Only what is rendered. `url` and `meta` were selected and never printed, which is
+    // a jsonb column pulled over the wire per row for nothing; `fetch_document` carries
+    // both for the one record a reader actually opens.
+    qs.set("select", "source,source_id,title,period_end,first_seen_at");
     // NULLS LAST both ways: repository documentation carries no date, and letting it
     // head an "oldest first" listing buries everything the caller asked for.
-    qs.set("order", oldest ? "period_end.asc.nullslast" : "period_end.desc.nullslast");
+    qs.set(
+      "order",
+      byLearned
+        ? "first_seen_at.desc"
+        : oldest
+          ? "period_end.asc.nullslast"
+          : "period_end.desc.nullslast"
+    );
     qs.set("limit", String(limit));
     if (offset > 0) qs.set("offset", String(offset));
     if (opts.sources?.length) qs.set("source", `in.(${opts.sources.join(",")})`);
@@ -1496,10 +1606,49 @@ async function callTool(
     if (opts.since) qs.append("period_end", `gte.${opts.since}`);
     if (opts.until) qs.append("period_end", `lte.${opts.until}`);
     if (opts.meta) qs.set("meta", `cs.${JSON.stringify(opts.meta)}`);
+    if (learnedSince) qs.set("first_seen_at", `gte.${learnedSince}`);
+    /**
+     * ONE ROW PER DOCUMENT, NOT ONE PER STORED CHUNK.
+     *
+     * A long document is many rows — the largest call note here is 311 of them — so
+     * "list the call notes" returned the same note fifteen times over and called it a
+     * listing. That is the identical failure this tool was built to fix ("all X" turning
+     * into "the 30 most X-ish"), one layer further down, and it also made the reported
+     * total 10,516 for 696 notes.
+     *
+     * TWO CONVENTIONS, and matching only one silently drops a whole source: most sources
+     * omit `part` on the opening chunk, repository documentation sets `part = 1`.
+     * `fetch_document` reads the rest of a document, so nothing here is unreachable.
+     */
+    qs.set("or", "(meta->>part.is.null,meta->>part.eq.1)");
 
     const res = await supabaseFetch(`/rest/v1/brain_chunk?${qs.toString()}`, {
       headers: { Prefer: "count=exact" },
     });
+    const total = Number(res.headers.get("content-range")?.split("/")[1] ?? "-1");
+    /**
+     * THE END OF THE LIST, WHICH POSTGREST SIGNALS TWO DIFFERENT WAYS.
+     *
+     * Both were found by probing production, and each produced a different lie:
+     *   offset  > total  ->  `416 Requested Range Not Satisfiable`, a body that is not an
+     *                        array, and so the failure branch below announcing that the
+     *                        knowledge base could not be reached.
+     *   offset == total  ->  a perfectly ordinary `206` with an empty array, and so the
+     *                        empty-result branch announcing that NOTHING MATCHES — for a
+     *                        filter with four records in it.
+     *
+     * The second is the worse of the two and the more likely: it is exactly where a
+     * caller lands after reading the last page. Keyed on the total rather than on either
+     * status, since the total is the thing that actually decides it.
+     */
+    const endOfList = () =>
+      textResult(
+        `There is no page at offset ${offset}: ${total >= 0 ? `only ${total} records match` : "fewer records match"} ` +
+          `(${applied}). Nothing is wrong and nothing is missing — you have reached the ` +
+          `end of the list. ` +
+          (total > 0 ? `The last page starts at offset ${Math.max(0, total - limit)}.` : "")
+      );
+    if (res.status === 416) return endOfList();
     if (!res.ok) {
       logger.error({ status: res.status }, "brain: browse_context failed");
       return textResult(
@@ -1509,7 +1658,8 @@ async function callTool(
       );
     }
     const rows = (await res.json()) as Array<Record<string, unknown>>;
-    const total = Number(res.headers.get("content-range")?.split("/")[1] ?? "-1");
+    // Records exist and this page has none of them: paged past the end, not empty.
+    if (rows.length === 0 && total > 0) return endOfList();
     if (rows.length === 0) {
       return textResult(
         `Nothing matches (${applied}). That is what this request selected, not what the ` +
@@ -1519,20 +1669,30 @@ async function callTool(
     stats.sourceCount = rows.length;
     const lines = rows
       .map((r) => {
-        const date = typeof r.period_end === "string" ? r.period_end : "no date";
-        return `${date}  [${String(r.source)}]  ${String(r.title ?? "(untitled)")}\n          id: ${String(r.source_id)}`;
+        // Show the date the ordering used, or the list reads as unsorted.
+        const date = byLearned
+          ? `learned ${String(r.first_seen_at ?? "").slice(0, 10)}`
+          : typeof r.period_end === "string"
+            ? r.period_end
+            : "no date";
+        // `<source>/<source_id>`, the form `fetch_document` accepts and the form
+        // `search_company_context` prints. Printing the bare source_id here — as this did
+        // — hands the reader an id that the very next tool refuses.
+        return `${date}  [${String(r.source)}]  ${String(r.title ?? "(untitled)")}\n          id: ${String(r.source)}/${String(r.source_id)}`;
       })
       .join("\n");
     const shownTo = offset + rows.length;
     return textResult(
       `${UNTRUSTED_SOURCES_PREAMBLE}\n\n` +
         `${total >= 0 ? `${total} records match` : "Records matching"} (${applied}). ` +
-        `Showing ${offset + 1}-${shownTo}${oldest ? ", oldest first" : ", newest first"}.\n\n` +
+        `Showing ${offset + 1}-${shownTo}${byLearned ? ", most recently learned first" : oldest ? ", oldest first" : ", newest first"}.\n\n` +
         `${lines}\n\n` +
         (total > shownTo
           ? `${total - shownTo} more — call again with offset=${shownTo}.\n`
           : "That is all of them.\n") +
-        "Titles and dates only. `fetch_document` with an id reads the record itself."
+        "One line per document, titles and dates only — a long document is stored in " +
+        "many parts and appears once here. `fetch_document` with an id reads the whole " +
+        "thing."
     );
   }
 
@@ -1574,7 +1734,10 @@ async function callTool(
         rejected: str(args.rejected),
         topic: str(args.topic),
         decidedOn,
-        supersedes: str(args.supersedes),
+        // The reader sees `decision/decision:2026-…` on a search line and on this tool's
+        // own output, and the record itself is keyed on the bare id. Accepting either
+        // rather than refusing the one that was actually shown to them.
+        supersedes: str(args.supersedes)?.replace(/^decision\//, ""),
       });
     } catch (err) {
       logger.error({ err }, "brain: could not record a decision");
@@ -1583,7 +1746,7 @@ async function callTool(
 
     stats.sourceCount = 1;
     return textResult(
-      `Recorded. id: ${recorded.id} (decided ${recorded.decidedOn}, by ${actor})\n\n` +
+      `Recorded. id: decision/${recorded.id} (decided ${recorded.decidedOn}, by ${actor})\n\n` +
         "Findable by its wording immediately, fully indexed within about fifteen " +
         "minutes, and `fetch_document` reads it back by that id at once. " +
         "Quote the id if a later decision replaces this one." +
@@ -2096,6 +2259,12 @@ async function callTool(
        * job nobody wired up.
        */
       if (source === "whatsapp") return " · pushed from WhatsApp Desktop, not a scheduled job";
+      // Written by `record_decision`, so there is no job to be behind. Said explicitly:
+      // an empty clause here reads as an ingester whose state could not be determined,
+      // and the staleness guidance below would otherwise apply a rule that cannot hold —
+      // no decisions recorded lately means nothing was decided, not that anything broke.
+      if (source === "decision")
+        return " · written directly by record_decision, not ingested — a gap here means nothing was recorded, not that a job failed";
       const cron = CRON_FOR_SOURCE[source];
       if (!cron) return "";
       const run = lastRun.get(cron);
@@ -2348,7 +2517,12 @@ export async function POST(request: Request) {
         // name, not more — and `args` already stores `{days: 7}` in full while `tool`
         // is its own column, so nothing is lost. The fallback exists to keep the column
         // readable at a glance, not to duplicate `args`.
-        question: String(args.query ?? args.id ?? args.table ?? args.path ?? name).slice(0, 4000),
+        // `decision` and `q` ARE legible sentences, which is the test — unlike `days`
+        // or `group_by`. For the one tool that writes, the decision text is what makes
+        // the log reviewable at a glance rather than a list of `record_decision` rows.
+        question: String(
+          args.query ?? args.decision ?? args.q ?? args.id ?? args.table ?? args.path ?? name
+        ).slice(0, 4000),
         args,
         sourceCount: stats.sourceCount ?? null,
         topScore: stats.topScore ?? null,
