@@ -1,6 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { buildDecisionRow } from "@features/brain/server/decisions";
+vi.mock("@shared/observability/logger", () => ({
+  default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}));
+const mockSupabaseFetch = vi.fn();
+vi.mock("@features/admin/server/supabase", () => ({
+  supabaseFetch: (...a: unknown[]) => mockSupabaseFetch(...(a as [])),
+}));
+
+import {
+  buildDecisionRow,
+  priorDecisions,
+  proposesSomething,
+  renderPriorDecisions,
+} from "@features/brain/server/decisions";
 import { peopleIn, type Person } from "@features/brain/server/people";
 
 const NOW = new Date("2026-09-09T14:30:00Z");
@@ -109,5 +122,166 @@ describe("buildDecisionRow", () => {
     expect(buildDecisionRow({ ...base, decidedOn: "last tuesday" }, NOW).period_end).toBe(
       "2026-09-09"
     );
+  });
+});
+
+describe("noticing that something was already decided", () => {
+  /**
+   * THE GATE IS A COST CONTROL, NOT A CORRECTNESS CONTROL.
+   *
+   * The rule is "before PROPOSING a change of direction, check whether it was already
+   * decided", so only a proposal can contradict a decision — "how many people signed up
+   * last month" cannot. The lookup behind this gate costs 164-200ms against a search that
+   * averages about a second, and in measurement it caught no proposal that the free path
+   * (a decision that ranked into the ordinary results) had not already caught. So the
+   * gate keeps a piece of insurance from being billed to every question that will never
+   * claim on it.
+   */
+  it.each([
+    "should we index the survey answers",
+    "let's add a github ingester",
+    "can we give each person their own token",
+    "I think we should switch to per-person tokens",
+    "why don't we reconsider the pricing",
+    "instead of one token, propose a per-user scheme",
+    "Should the brain ask before writing?",
+  ])("treats %j as a proposal", (q) => {
+    expect(proposesSomething(q)).toBe(true);
+  });
+
+  it.each([
+    "how many people signed up last month",
+    "what is our current report pricing",
+    "summarise the last team meeting",
+    "what did we discuss yesterday",
+    "what does STRIPE_COUPON_100 do",
+    "why did checkout starts collapse in august",
+  ])("does not treat %j as a proposal", (q) => {
+    expect(proposesSomething(q)).toBe(false);
+  });
+
+  it("says nothing when there is nothing to say", () => {
+    expect(renderPriorDecisions([])).toBe("");
+  });
+
+  /**
+   * THE WORDING HAS TO SURVIVE BEING WRONG, which matters more than any threshold.
+   *
+   * A vague enough question — "how is the company doing" — puts a decision at rank 1 with
+   * a ratio of 1.00, because decisions are the newest rows in the corpus and recency
+   * decides a query with no content in it. No score rule separates that case, and
+   * inventing one against four decision records would be fitting noise. So the block
+   * claims only that a decision MAY bear on the question, and says to ignore it if not.
+   */
+  it("offers the decision rather than asserting the question is closed", () => {
+    const out = renderPriorDecisions([
+      {
+        sourceId: "decision:2026-09-09-abc",
+        title: "Decision: Keep one shared credential",
+        decidedOn: "2026-09-09",
+      },
+    ]);
+    expect(out).toMatch(/may already be settled/);
+    expect(out).toMatch(/ignore this block/);
+    expect(out).toMatch(/matched by wording, not judgement/);
+    // Never a flat assertion that it IS settled.
+    expect(out).not.toMatch(/this is settled|has been decided already, do not/i);
+  });
+
+  it("strips the stored title prefix, which the heading already says", () => {
+    const out = renderPriorDecisions([
+      {
+        sourceId: "decision:2026-09-09-abc",
+        title: "Decision: Keep one shared credential",
+        decidedOn: "2026-09-09",
+      },
+    ]);
+    expect(out).toContain("• Keep one shared credential");
+    expect(out).not.toContain("• Decision: Keep");
+  });
+
+  /** The id has to be the form `fetch_document` accepts, since the block says to use it. */
+  it("prints an id the reader can actually fetch", () => {
+    const out = renderPriorDecisions([
+      { sourceId: "decision:2026-09-09-abc", title: null, decidedOn: null },
+    ]);
+    expect(out).toContain("id: decision/decision:2026-09-09-abc");
+    expect(out).toContain("(untitled)");
+  });
+
+  it("pluralises when it found more than one", () => {
+    const two = renderPriorDecisions([
+      { sourceId: "a", title: "Decision: one", decidedOn: "2026-09-09" },
+      { sourceId: "b", title: "Decision: two", decidedOn: "2026-09-08" },
+    ]);
+    expect(two).toMatch(/PRIOR DECISIONS ON RECORD/);
+    expect(two).toMatch(/Read them with/);
+  });
+});
+
+describe("priorDecisions — the lookup behind the gate", () => {
+  const row = (over: Record<string, unknown> = {}) => ({
+    source_id: "decision:2026-09-09-abc",
+    title: "Decision: Keep one shared credential",
+    period_end: "2026-09-09",
+    score: 2.4,
+    ...over,
+  });
+
+  beforeEach(() => {
+    mockSupabaseFetch.mockReset();
+    mockSupabaseFetch.mockResolvedValue({ ok: true, json: async () => [row()] });
+  });
+
+  /** The gate is the whole cost saving: 164-200ms not spent on a question that could
+   *  not contradict a decision even in principle. */
+  it("does not even ask the database about a question that proposes nothing", async () => {
+    expect(await priorDecisions("how many people signed up last month")).toEqual([]);
+    expect(mockSupabaseFetch).not.toHaveBeenCalled();
+  });
+
+  it("asks about a proposal", async () => {
+    const found = await priorDecisions("should we switch to per-person tokens");
+    expect(found).toHaveLength(1);
+    expect(found[0]!.sourceId).toBe("decision:2026-09-09-abc");
+  });
+
+  /**
+   * NO EMBEDDING, DELIBERATELY. This runs on the path of every proposal, and embedding
+   * the question a second time would add 229-411ms. Decisions are titled with the
+   * decision text itself, so the lexical arms are the right instrument: six phrasings
+   * that should match scored 1.69-2.91 with no vector involved.
+   */
+  it("runs lexically, without paying to embed the question again", async () => {
+    await priorDecisions("should we switch to per-person tokens");
+    const sent = JSON.parse(String((mockSupabaseFetch.mock.calls[0]![1] as { body: string }).body));
+    expect(sent.query_embedding).toBeNull();
+    expect(sent.sources).toEqual(["decision"]);
+  });
+
+  /**
+   * A FLOOR, WHICH THE RANKED SEARCH DELIBERATELY HAS NOT GOT.
+   *
+   * An unsolicited claim needs more confidence than a list someone asked for: telling a
+   * reader "this was already decided" about something unrelated is a confident wrong
+   * answer they did not request. Measured over sixteen questions, the six that should
+   * match scored 1.69 and up while the ten that should not topped out at 1.18.
+   */
+  it("drops a weak match rather than interrupting on it", async () => {
+    mockSupabaseFetch.mockResolvedValue({ ok: true, json: async () => [row({ score: 1.18 })] });
+    expect(await priorDecisions("should we do something entirely unrelated")).toEqual([]);
+  });
+
+  it("keeps a match that clears the floor", async () => {
+    mockSupabaseFetch.mockResolvedValue({ ok: true, json: async () => [row({ score: 1.69 })] });
+    expect(await priorDecisions("should we give everyone their own token")).toHaveLength(1);
+  });
+
+  /** Additive: this decorates an answer that is already complete without it. */
+  it("stays quiet when the lookup fails, rather than failing the search", async () => {
+    mockSupabaseFetch.mockRejectedValue(new Error("down"));
+    expect(await priorDecisions("should we switch to per-person tokens")).toEqual([]);
+    mockSupabaseFetch.mockResolvedValue({ ok: false, status: 500, json: async () => ({}) });
+    expect(await priorDecisions("should we switch to per-person tokens")).toEqual([]);
   });
 });

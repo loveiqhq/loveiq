@@ -6,7 +6,11 @@ import { renderSources } from "@features/brain/server/answer";
 import { recordToolCall } from "@features/brain/server/log";
 import { adCostByDay, adCovers, brainDailyRollup } from "@features/brain/server/ingest/analytics";
 import { CorpusUnavailableError, retrieve } from "@features/brain/server/retrieve";
-import { recordDecision } from "@features/brain/server/decisions";
+import {
+  priorDecisions,
+  recordDecision,
+  renderPriorDecisions,
+} from "@features/brain/server/decisions";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
@@ -1296,13 +1300,61 @@ async function callTool(
 
     stats.sourceCount = chunks.length;
     stats.topScore = chunks[0]?.score;
+
+    /**
+     * NOTICING, WHICH IS THE POINT.
+     *
+     * A decision sitting at rank 3 of a twelve-source list is exactly what a reader
+     * skims past — so when one ranked in, it is LIFTED OUT rather than left in place.
+     * The first version skipped the block in that case on the theory that the model
+     * could already see it, and the result was that it never fired at all: the cases
+     * where a decision is relevant are precisely the cases where it ranks.
+     *
+     * Ranked-in needs no floor: the search already judged it worth the top-N, which is
+     * the same judgement the reader is trusting for everything else in the list, and a
+     * full-search score is not comparable to the lexical-only one the floor was measured
+     * against anyway. Only the lookup path — an unsolicited claim about something the
+     * search did NOT return — has to clear a bar.
+     *
+     * The lookup costs one round trip and no embedding, and only when no decision ranked.
+     * Additive throughout: if it fails or finds nothing, the answer is what it was.
+     */
+    /**
+     * WITHIN this result set, scores ARE comparable — that is the one comparison the
+     * result guide says is valid — so a decision is lifted out only if it scores close
+     * to the best thing the search found. Measured: the four questions that should
+     * trigger it put the decision at rank 1-2 with a ratio of 0.99-1.00, while
+     * "summarise the last team meeting" put one at rank 8 with 0.66.
+     *
+     * KNOWN RESIDUAL, kept rather than tuned away: a question as vague as "how is the
+     * company doing" returns a decision at rank 1 with a ratio of 1.00, because the
+     * decisions are the newest things in the corpus and recency decides a query with no
+     * content. No score rule separates that, and inventing one against four decision
+     * records would be fitting noise. The block's wording is what carries it — it says a
+     * decision MAY bear on the question and to ignore it if not.
+     */
+    const PRIOR_DECISION_RATIO = 0.85;
+    const topScore = chunks[0]?.score ?? 0;
+    const rankedIn = chunks.filter(
+      (c) =>
+        c.source === "decision" && (topScore <= 0 || c.score / topScore >= PRIOR_DECISION_RATIO)
+    );
+    const prior = renderPriorDecisions(
+      rankedIn.length > 0
+        ? rankedIn.map((c) => ({
+            sourceId: c.sourceId,
+            title: c.title,
+            decidedOn: c.periodEnd,
+          }))
+        : await priorDecisions(query)
+    );
     // Was: raw `c.body`, joined by `---`. The Slack path removed that separator
     // BECAUSE a chunk could pose as the operator across it, then kept the fence,
     // `defence()` and a 24-payload forgery matrix to itself — while this door,
     // the one wired into sessions holding bash, file and production-write tools,
     // pasted the same corpus verbatim. Same renderer now; see `renderSources`.
     return textResult(
-      `${UNTRUSTED_SOURCES_PREAMBLE}\n\n${RESULT_GUIDE}\n\n${renderSources(chunks, { forAgent: true })}`,
+      `${UNTRUSTED_SOURCES_PREAMBLE}\n\n${prior}${RESULT_GUIDE}\n\n${renderSources(chunks, { forAgent: true })}`,
       false,
       "lower the limit, then fetch_document the ids that matter"
     );

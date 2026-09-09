@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import { supabaseFetch } from "@features/admin/server/supabase";
 import { upsertChunks, type BrainRow } from "@features/brain/server/ingest/upsert";
 import { notifySlack, escapeSlack } from "@shared/observability/slack";
 import logger from "@shared/observability/logger";
@@ -146,4 +147,114 @@ export async function recordDecision(
   }
 
   return { id: row.source_id, sourceId: row.source_id, decidedOn: row.period_end as string };
+}
+
+/**
+ * THE INTERJECTION: a decision the asker may be about to contradict.
+ *
+ * This is the thing the owner asked for when they said the brain should "notice and speak
+ * up". The rule already exists in prose — `search_company_context`'s description and the
+ * server instructions both say to check whether something was already decided before
+ * proposing a change of direction — but prose is advice a model may or may not act on.
+ * This puts the decision in front of it without being asked.
+ *
+ * LEXICAL ONLY, NO EMBEDDING. This runs on the path of every question, and embedding the
+ * query a second time would add 229-411ms to each one. Decisions are titled with the
+ * decision text itself, so the title-trigram and ts_rank arms are exactly the right
+ * instrument — verified: six phrasings that should match scored 1.69-2.91 with no vector
+ * involved.
+ *
+ * A FLOOR, WHICH THE RANKED SEARCH DELIBERATELY DOES NOT HAVE. An unsolicited claim needs
+ * more confidence than a list someone asked for: telling a reader "this was already
+ * decided" about something unrelated is a confident wrong answer they did not request,
+ * and it is how proactivity stops being trusted. Measured over sixteen questions, the six
+ * that should match scored 1.69 and up while the ten that should not topped out at 1.18 —
+ * so 1.5 sits between them with margin on both sides.
+ *
+ * AND THE WORDING SURVIVES BEING WRONG ANYWAY, which matters more than the floor. It says
+ * a decision MAY bear on the question and to check, never that the question is settled.
+ * A false positive then costs a sentence of reading rather than a wrong answer.
+ */
+const PRIOR_DECISION_FLOOR = 1.5;
+
+export interface PriorDecision {
+  sourceId: string;
+  title: string | null;
+  decidedOn: string | null;
+}
+
+/**
+ * Does this question PROPOSE something, as opposed to asking what is true?
+ *
+ * The rule this whole feature implements is "before proposing a change of direction,
+ * check whether it was already decided" — so the lookup only has to run for questions
+ * that propose. "How many people signed up last month" cannot contradict a decision.
+ *
+ * MEASURED, AND THE REASON THE GATE EXISTS AT ALL: the lookup costs 164-200ms against a
+ * search that averages about a second, and in testing it produced no true positive that
+ * the free path had not already caught — all four proposals put the decision at rank 1-2
+ * of the ordinary search, where lifting it out costs nothing. So the lookup is insurance
+ * for a corpus with hundreds of decisions competing against 24,000 other chunks, and
+ * insurance should not be billed to every question that will never claim on it.
+ */
+const PROPOSES =
+  /\b(should we|should i|shall we|let'?s|can we|could we|we should|why don'?t we|instead of|switch to|move to|propose|proposal|suggest|rethink|reconsider)\b|^should\b/i;
+
+export function proposesSomething(question: string): boolean {
+  return PROPOSES.test(question);
+}
+
+export async function priorDecisions(question: string): Promise<PriorDecision[]> {
+  if (!proposesSomething(question)) return [];
+  try {
+    const res = await supabaseFetch("/rest/v1/rpc/brain_search", {
+      method: "POST",
+      body: JSON.stringify({
+        query_text: question.slice(0, 1000),
+        k: 3,
+        sources: ["decision"],
+        // Explicitly null: the whole point is to skip the embedding round trip.
+        query_embedding: null,
+      }),
+    });
+    if (!res.ok) return [];
+    const rows = (await res.json()) as Array<{
+      source_id: string;
+      title: string | null;
+      period_end: string | null;
+      score: number;
+    }>;
+    return rows
+      .filter((r) => Number(r.score) >= PRIOR_DECISION_FLOOR)
+      .map((r) => ({ sourceId: r.source_id, title: r.title, decidedOn: r.period_end }));
+  } catch (err) {
+    // Never allowed to cost the answer. This is an addition to a result that is already
+    // complete without it.
+    logger.warn({ err }, "brain: could not check for a prior decision");
+    return [];
+  }
+}
+
+/** The block prepended to a search result. Empty string when there is nothing to say. */
+export function renderPriorDecisions(found: PriorDecision[]): string {
+  if (found.length === 0) return "";
+  const lines = found
+    .map(
+      (d) =>
+        // The stored title is "Decision: <the decision>", and the heading above already
+        // says as much. Stripped here rather than in the lookup, so a decision that
+        // ranked into the results and one that had to be looked up render identically.
+        `  • ${String(d.title ?? "(untitled)").replace(/^Decision:\s*/, "")}` +
+        `${d.decidedOn ? ` (decided ${d.decidedOn})` : ""}\n    id: decision/${d.sourceId}`
+    )
+    .join("\n");
+  return (
+    `PRIOR DECISION${found.length > 1 ? "S" : ""} ON RECORD — this may already be settled:\n\n` +
+    `${lines}\n\n` +
+    `Read ${found.length > 1 ? "them" : "it"} with \`fetch_document\` before proposing anything ` +
+    `that would change direction here. If it does settle the question, say so and say when ` +
+    `it was decided rather than re-opening it. If it turns out not to bear on the question, ` +
+    `ignore this block — it was matched by wording, not judgement.\n\n` +
+    `${"─".repeat(70)}\n\n`
+  );
 }

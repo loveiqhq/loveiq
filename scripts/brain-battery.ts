@@ -524,6 +524,21 @@ const namedMonthLeads =
       : [`${month} is outranked by another month: ${describe(first)}`];
   };
 
+/**
+ * A decision must rank within 85% of the top hit, which is the threshold
+ * `search_company_context` uses to lift it above the results as a PRIOR DECISION block.
+ * Asserting the ratio rather than the rank, because the ratio is what the code reads.
+ */
+const decisionRanksHigh = (h: BrainChunk[]): string[] => {
+  const top = h[0]?.score ?? 0;
+  const d = h.find((x) => x.source === "decision");
+  if (!d) return [`no decision returned at all: ${at(h, 3).map(describe).join(", ")}`];
+  const ratio = top > 0 ? d.score / top : 0;
+  return ratio >= 0.85
+    ? []
+    : [`decision scores ${ratio.toFixed(2)} of the top hit, below the 0.85 that lifts it out`];
+};
+
 /** The named source must appear in the top `n`. Routing, not wording. */
 const topSource =
   (src: string | string[], n = 5) =>
@@ -1571,6 +1586,31 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
       "decisions about the company brain",
       all(topSource("decision", 3), nonEmpty(1)),
       { sources: ["decision"], meta: { people: ["Eman Cickusic"] } }
+    ),
+
+    /**
+     * THE PRECONDITION FOR NOTICING, and the one that can fail silently.
+     *
+     * `search_company_context` lifts a decision above the results when it scores within
+     * 85% of the top hit. That is free and it is where all four measured true positives
+     * came from — but it depends entirely on a contradicting decision RANKING, and
+     * nothing else here would notice if ranking drifted and it stopped. The interjection
+     * would simply go quiet, which looks exactly like having nothing to say.
+     *
+     * Phrased as a person would phrase a proposal, not as a search query, because that is
+     * what has to work.
+     */
+    P(
+      "dec-notice-survey",
+      "we should index the survey free text answers, it's our biggest untapped source",
+      decisionRanksHigh
+    ),
+    P("dec-notice-github", "let's add a github ingester for pull requests", decisionRanksHigh),
+    P("dec-notice-writes", "should the brain ask before it writes anything", decisionRanksHigh),
+    P(
+      "dec-notice-tokens",
+      "can we give each person their own token for the brain",
+      decisionRanksHigh
     ),
   ];
 }

@@ -329,6 +329,94 @@ describe("/api/mcp", () => {
       expect(body.result.isError).toBe(false);
     });
 
+    /**
+     * NOTICING, WHICH IS WHAT THE OWNER ASKED THIS SERVER TO DO.
+     *
+     * A decision at rank 3 of a twelve-source list is exactly what a reader skims past,
+     * so one that ranks well is LIFTED OUT above the results. The first version did the
+     * opposite — it skipped the block whenever a decision had ranked in, on the theory
+     * that the model could already see it — and the effect was that it never fired at
+     * all, because the questions where a decision is relevant are exactly the questions
+     * where it ranks.
+     */
+    const chunk = (over: Partial<Record<string, unknown>> = {}) => ({
+      source: "commit",
+      sourceId: "abc123",
+      title: "feat: something",
+      url: null,
+      body: "…",
+      meta: {},
+      score: 3.4,
+      periodEnd: "2026-09-01",
+      ...over,
+    });
+
+    it("lifts a decision out of the results when it ranks with them", async () => {
+      mockRetrieve.mockResolvedValue([
+        chunk(),
+        chunk({
+          source: "decision",
+          sourceId: "decision:2026-09-09-abc",
+          title: "Decision: Do not index GitHub pull requests",
+          score: 3.38,
+          periodEnd: "2026-09-09",
+        }),
+      ]);
+      const text = (await (await call({ query: "let's add a github ingester" })).json()).result
+        .content[0].text;
+      expect(text).toMatch(/PRIOR DECISION ON RECORD/);
+      expect(text).toContain("Do not index GitHub pull requests");
+      expect(text).toContain("id: decision/decision:2026-09-09-abc");
+      // Above the result guide, not buried under it — the whole point is that it is seen.
+      expect(text.indexOf("PRIOR DECISION")).toBeLessThan(text.indexOf("HOW TO READ THESE"));
+    });
+
+    /**
+     * WITHIN one result set the scores ARE comparable, which is the one comparison the
+     * result guide permits. Measured: the four questions that should trigger this put the
+     * decision at rank 1-2 with a ratio of 0.99-1.00 against the top hit, while
+     * "summarise the last team meeting" put one at rank 8 with 0.66.
+     */
+    it("leaves a weakly-ranked decision where it is", async () => {
+      mockRetrieve.mockResolvedValue([
+        chunk({ score: 3.23 }),
+        chunk({
+          source: "decision",
+          sourceId: "decision:2026-09-09-abc",
+          title: "Decision: Keep one shared credential",
+          score: 2.12,
+          periodEnd: "2026-09-09",
+        }),
+      ]);
+      const text = (await (await call({ query: "summarise the last team meeting" })).json()).result
+        .content[0].text;
+      expect(text).not.toMatch(/PRIOR DECISION/);
+      // Still returned as an ordinary source — demoted from the block, not hidden.
+      expect(text).toContain("Keep one shared credential");
+    });
+
+    it("says nothing when no decision came back at all", async () => {
+      mockRetrieve.mockResolvedValue([chunk()]);
+      const text = (await (await call({ query: "how many people signed up last month" })).json())
+        .result.content[0].text;
+      expect(text).not.toMatch(/PRIOR DECISION/);
+    });
+
+    /**
+     * ADDITIVE, ALWAYS. This block is an extra on a result that is already complete
+     * without it, so a failure in the lookup must cost the extra and never the answer.
+     */
+    it("still answers when the decision lookup fails", async () => {
+      mockRetrieve.mockResolvedValue([chunk()]);
+      mockSupabaseFetch.mockImplementation(async (path: string) => {
+        if (String(path).includes("brain_search")) throw new Error("down");
+        return { ok: true, headers: new Headers(), json: async () => [] };
+      });
+      const body = await (await call({ query: "should we switch to per-person tokens" })).json();
+      expect(body.result.isError).toBe(false);
+      expect(body.result.content[0].text).toContain("feat: something");
+    });
+
     it("passes caller filters through to retrieval, where they can actually narrow", async () => {
       /**
        * They MUST reach `brain_search`. Filtering after `retrieve()` returns would
