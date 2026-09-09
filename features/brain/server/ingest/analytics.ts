@@ -622,7 +622,7 @@ function renderBody(period: string, t: Totals, ad: AdCost): string {
       ? `Cost per signup${adGap ? `, over the ${cov.coveredDays} day(s) ad data covers` : ""}: ${money(t.adSpendCovered / t.submissionsCovered)}`
       : null,
     t.adSpendCovered > 0 && cov.coveredDays > 0
-      ? `Cost per paying customer${adGap ? `, over the ${cov.coveredDays} day(s) ad data covers` : ""}: ${
+      ? `Cost per paying customer, customer acquisition cost (CAC)${adGap ? `, over the ${cov.coveredDays} day(s) ad data covers` : ""}: ${
           t.paidCovered > 0
             ? money(t.adSpendCovered / t.paidCovered)
             : "no paying customers in those days"
@@ -636,6 +636,35 @@ function renderBody(period: string, t: Totals, ad: AdCost): string {
       : null,
     t.adSpend > 0 && cov.coveredDays === 0
       ? `No net or cost-per-customer figure: the ad spend above covers none of this period.`
+      : null,
+    /**
+     * THE DERIVED FIGURES, UNDER THE NAMES PEOPLE ACTUALLY TYPE.
+     *
+     * Every number here is arithmetic on two numbers already printed above, so this adds
+     * no fact — it adds the words. Measured 2026-09-10, "what is our average order
+     * value" returned a Notion card about harvesting a therapist database and "what is
+     * our lifetime value per customer" returned the all-time row without the figure in
+     * it: the data was there and the vocabulary was not. Same rule as the CVR line
+     * above, for the same reason.
+     *
+     * ALREADY DIVIDED, because a model asked to compute a ratio from counts in separate
+     * chunks gets it wrong or declines.
+     *
+     * LTV EQUALS AOV HERE, AND THAT IS SAID OUT LOUD. LoveIQ sells a one-off report, not
+     * a subscription, so a customer's lifetime value is their single purchase. Printing
+     * an LTV that silently assumed repeat business would be the most flattering possible
+     * wrong number.
+     */
+    t.paid > 0 && t.revenue > 0
+      ? `Average order value (AOV), and lifetime value (LTV) per paying customer: ` +
+        `${money(t.revenue / t.paid)} — these are the same figure because a report is a ` +
+        `one-off purchase, not a subscription, so a customer's lifetime is one order.`
+      : null,
+    t.paidCovered > 0 && t.adSpendCovered > 0 && t.revenueCovered > 0 && cov.coveredDays > 0
+      ? `LTV to CAC ratio${adGap ? `, over the ${cov.coveredDays} day(s) ad data covers` : ""}: ` +
+        `${(t.revenueCovered / t.paidCovered / (t.adSpendCovered / t.paidCovered)).toFixed(2)} ` +
+        `(lifetime value ${money(t.revenueCovered / t.paidCovered)} against acquisition cost ` +
+        `${money(t.adSpendCovered / t.paidCovered)})`
       : null,
   ]
     .filter((line) => line !== null)

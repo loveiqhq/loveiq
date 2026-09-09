@@ -419,7 +419,7 @@ describe("buildAnalyticsRows", () => {
     const monthly = String(rows.find((r) => r.source_id === "monthly:2026-06")?.body ?? "");
     expect(monthly).toContain("Cost per signup, over the 2 day(s) ad data covers: EUR 10.00");
     expect(monthly).toContain(
-      "Cost per paying customer, over the 2 day(s) ad data covers: EUR 50.00"
+      "Cost per paying customer, customer acquisition cost (CAC), over the 2 day(s) ad data covers: EUR 50.00"
     );
   });
 
@@ -568,5 +568,34 @@ describe("the analytics titles that decide which grain answers", () => {
     expect(weekLabel("2025-12-29", "2026-01-04")).toBe(
       "week of Monday 29 December 2025 to Sunday 4 January 2026"
     );
+  });
+});
+
+/**
+ * THE FIGURES PEOPLE ASK FOR BY NAME.
+ *
+ * Every number here is arithmetic on two numbers already in the chunk, so this adds no
+ * fact — it adds the vocabulary. Measured 2026-09-10: "what is our average order value"
+ * returned a Notion card about harvesting a therapist database, and "what is our lifetime
+ * value per customer" returned the right all-time row without the figure in it. The data
+ * was there; the words were not.
+ */
+describe("the derived business figures are stated, not left to be computed", () => {
+  it("prints AOV and LTV as one figure, and says why they are the same", () => {
+    const rows = buildAnalyticsRows([day("2026-08-19", { reports_paid: 4, revenue: "60" })], STAMP);
+    const body = rows.find((r) => r.source_id === "daily:2026-08-19")!.body;
+    expect(body).toMatch(/Average order value \(AOV\)/);
+    expect(body).toMatch(/lifetime value \(LTV\)/);
+    expect(body).toContain("EUR 15.00"); // 60 / 4, already divided
+    // The claim that would be flattering and wrong is the one that must be ruled out.
+    expect(body).toMatch(/one-off purchase, not a subscription/);
+  });
+
+  it("says nothing at all when there is nothing to divide", () => {
+    // Never state a zero as a fact: no paying customers means no AOV, not an AOV of 0.
+    const rows = buildAnalyticsRows([day("2026-08-19", { reports_paid: 0, revenue: "0" })], STAMP);
+    const body = rows.find((r) => r.source_id === "daily:2026-08-19")!.body;
+    expect(body).not.toMatch(/Average order value/);
+    expect(body).not.toMatch(/LTV to CAC/);
   });
 });

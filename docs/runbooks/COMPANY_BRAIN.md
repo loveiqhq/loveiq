@@ -29,6 +29,52 @@ message. It replies in a thread, and every answer lists the sources it used.
   `query_product_data` for `report_price_quote`, not the written record.
 - **Money outside the product.** No payroll, no bank balance, no runway — those
   live in systems nothing here reads.
+
+### The business metrics we do and do not have
+
+Written down because the honest answer to half of these is "that number does not
+exist for a business shaped like ours", and a search that cannot say so returns
+something adjacent and confident instead. Measured 2026-09-10: fourteen standard
+metric questions, and the ones with no answer returned a Notion card about
+harvesting a therapist database, a security-audit doc, and a colleague's interview
+notes.
+
+**We have these, already divided, in the `analytics` rows:**
+
+| Metric                                                     | Where                                      |
+| ---------------------------------------------------------- | ------------------------------------------ |
+| Revenue, per day, week, month and all time                 | `analytics`                                |
+| Paying customers                                           | `analytics`                                |
+| Average order value (AOV)                                  | `analytics`                                |
+| Lifetime value (LTV) per customer                          | `analytics` — identical to AOV, see below  |
+| Customer acquisition cost (CAC)                            | `analytics`, as "cost per paying customer" |
+| LTV to CAC ratio                                           | `analytics`                                |
+| Cost per signup                                            | `analytics`                                |
+| Conversion rate at every funnel step                       | `analytics`                                |
+| Ad spend, and net after it                                 | `analytics`                                |
+| Visits, survey starts, signups, reports created and opened | `analytics`                                |
+
+**We do not have these, and here is why:**
+
+- **MRR, ARR, churn, retention, renewal.** LoveIQ sells a one-off report, not a
+  subscription. There is no recurring revenue to measure and nothing to churn from.
+  The equivalent question is "how much revenue did we make last month", which the
+  `analytics` monthly rows answer exactly. For the same reason **LTV equals AOV** —
+  a customer's lifetime is one order — and any LTV larger than the order value would
+  be an assumption about repeat business we have no evidence for.
+- **NPS, CSAT, satisfaction score.** Not collected. The nearest real signal is the
+  per-chapter report feedback (a thumbs up or down with an optional comment), which
+  lives in `report_section_feedback` and is reachable with `query_product_data`.
+- **Active users, DAU, MAU, sign-in counts.** There are no end-user accounts to log
+  into — a report is opened from a link. The nearest measures are visits and
+  "reports first opened", both in `analytics`.
+- **Cap table, burn rate, runway, payroll, bank balance, gross margin.** None of these
+  are in any system the brain reads. Gross margin in particular would need Stripe's
+  fees per charge, which the rollup does not carry, so it is not stated rather than
+  estimated.
+- **Refund rate.** Refunds are handled — a `charge.refunded` webhook re-locks the
+  report — but the count is not in the `analytics` rows. Ask `query_product_data` for
+  the `payment` table.
 - **People, though — read this one carefully.** This list used to say the brain
   holds no HR data and "should decline these; if it ever answers one, that is a
   bug". That is not true and has not been for some time. Company email, recorded
