@@ -764,6 +764,29 @@ function sourceCoverageProbes(): RetrievalProbe[] {
      * cannot be confused and so a fix can be measured.
      */
     P(
+      "superseded-copies-do-not-outrank-the-live-document",
+      "what is in the Spark Seeker report",
+      (h) => {
+        // The team marks retired work in the title. Measured 2026-09-09, before the
+        // demotion: `Copy of [OLD]` took ranks 1, 2, 3 AND 4 across drive and gmail,
+        // with the live [WIP] template at 5 -- so anyone asking about report copy read
+        // superseded content first. 308 chunks carry a superseded mark against 100 [WIP].
+        const superseded = (t: string | null) => /\[OLD\]|Copy of /i.test(t ?? "");
+        const live = h.findIndex((x) => /\[WIP\]/i.test(x.title ?? ""));
+        const stale = h.findIndex((x) => superseded(x.title));
+        const problems: string[] = [];
+        if (live < 0) problems.push("the live [WIP] template is not in the window at all");
+        else if (stale >= 0 && stale < live)
+          problems.push(`a superseded copy ranks ${live - stale} above the live document`);
+        // Demoted, never excluded: "what did the old template say" is a fair question.
+        if (stale < 0)
+          problems.push("no superseded copy is reachable — they were excluded, not demoted");
+        return problems;
+      },
+      undefined,
+      12
+    ),
+    P(
       "month-question-keeps-the-month-total-reachable",
       "how many people signed up in august 2026",
       (h) => {
