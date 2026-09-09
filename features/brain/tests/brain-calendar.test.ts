@@ -73,11 +73,44 @@ describe("eventToRows", () => {
    * six-person meeting six times; `iCalUID` is identical across all copies, so the
    * upsert collapses them and whoever is read last simply confirms it.
    */
-  it("keys on iCalUID, so one meeting is stored once no matter how many calendars hold it", () => {
+  it("keys across guests, so one meeting is stored once no matter how many calendars hold it", () => {
     const fromEman = eventToRows(meeting({ id: "copy-eman" }), STAMP)[0]!;
     const fromMarcus = eventToRows(meeting({ id: "copy-marcus" }), STAMP)[0]!;
-    expect(fromEman.source_id).toBe("event:abc123@google.com");
     expect(fromMarcus.source_id).toBe(fromEman.source_id);
+  });
+
+  /**
+   * AND THE OTHER HALF, WHICH THE UID ALONE GOT CATASTROPHICALLY WRONG.
+   *
+   * `iCalUID` is shared by every OCCURRENCE of a recurring series too, and
+   * `singleEvents=true` expands those into one item per occurrence — so every weekly
+   * sync collapsed onto a single row and whichever occurrence was written last won.
+   *
+   * MEASURED against the live calendar: sixteen February instances, FOUR distinct
+   * iCalUIDs, nine daily "LoveIQ Sync" occurrences sharing one. The corpus held 4 rows
+   * for that month against 14 meetings that produced notes. Every one of those meetings
+   * happened; the record of all but the last of each series was overwritten.
+   */
+  it("keeps each occurrence of a recurring series as its own record", () => {
+    const feb10 = eventToRows(
+      meeting({ id: "series_20260210T080000Z", start: { dateTime: "2026-02-10T08:00:00Z" } }),
+      STAMP
+    )[0]!;
+    const feb11 = eventToRows(
+      meeting({ id: "series_20260211T080000Z", start: { dateTime: "2026-02-11T08:00:00Z" } }),
+      STAMP
+    )[0]!;
+    // Same series, same iCalUID, different days — and therefore different records.
+    expect(feb10.source_id).not.toBe(feb11.source_id);
+    expect(feb10.source_id).toContain("2026-02-10");
+    expect(feb11.source_id).toContain("2026-02-11");
+  });
+
+  /** An event with no resolvable day keeps the old shape: there is nothing to separate
+   *  it by, and inventing a suffix would only make the id unstable. */
+  it("falls back to the bare uid when the event has no day", () => {
+    const row = eventToRows(meeting({ start: {} }), STAMP)[0]!;
+    expect(row.source_id).toBe("event:abc123@google.com");
   });
 
   it("dates the chunk by the day the meeting happens, not by when it was read", () => {

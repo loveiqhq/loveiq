@@ -36,7 +36,21 @@ const TIMEOUT_MS = 20_000;
 const PAGE_SIZE = 250;
 const MAX_PAGES = 12;
 
-export const CALENDAR_BUILDER_VERSION = 1;
+/**
+ * 2 — the occurrence key. THE BUMP IS LOAD-BEARING HERE, unlike in the other ingesters
+ * where it only forces a re-fetch.
+ *
+ * `known` is read solely to decide which stored rows to TOUCH, so that the sweep does not
+ * take them. Every row written under version 1 is keyed on the bare `iCalUID`, and those
+ * ids will never be written again — so if they still counted as current they would be
+ * touched forever and the old series-collapsed rows would outlive the fix. Marking them
+ * stale is what lets the sweep clear them once the new rows exist.
+ *
+ * The sweep's majority-deletion guard permits it: ~92 stale rows against the ~350 the
+ * corrected key produces is nowhere near a majority. Until the first sweep runs, both
+ * shapes are present and one occurrence per series appears twice.
+ */
+export const CALENDAR_BUILDER_VERSION = 2;
 
 /**
  * How far back and forward to read.
@@ -100,12 +114,29 @@ export function isWorthIndexing(e: CalEvent): boolean {
 export function eventToRows(e: CalEvent, stampedAt: string): BrainRow[] {
   if (!isWorthIndexing(e)) return [];
   /**
-   * Keyed on `iCalUID`, NOT on the per-calendar `id`.
+   * Keyed on `iCalUID` PLUS THE DAY, and the day is not optional.
    *
-   * One meeting exists once on every guest's calendar with a different `id` each
-   * time. Using `id` would store a six-person meeting six times; `iCalUID` is the
-   * same across all copies, so the upsert collapses them to one and whoever is read
-   * last simply confirms it.
+   * `iCalUID` alone is right for one half of the problem and catastrophically wrong for
+   * the other. One meeting exists once on every guest's calendar with a different `id`
+   * each time, so keying on `id` would store a six-person meeting six times — that is
+   * what the uid solves. But `iCalUID` is ALSO shared by every occurrence of a recurring
+   * series, and `singleEvents=true` expands those into one item per occurrence. So every
+   * weekly sync collapsed onto a single row and whichever occurrence was written last
+   * won.
+   *
+   * MEASURED 2026-02: sixteen instances on the calendar, FOUR distinct iCalUIDs — nine
+   * daily "LoveIQ Sync" occurrences sharing one. The corpus held 4 rows for that month
+   * against 14 meetings that produced notes, and 92 rows in total for fourteen months of
+   * a company that meets several times a week. Every one of those meetings had happened;
+   * the record of all but the last of each series was simply overwritten.
+   *
+   * `uid + day` keeps the property that mattered — every guest's copy of one occurrence
+   * shares both — while separating occurrences. An event with no resolvable day keeps
+   * the old shape, since there is nothing to separate it by.
+   *
+   * ponytail: day granularity, not the full start timestamp. A series recurring twice in
+   * one day would still collapse; nothing in this workspace does, and a timestamp key
+   * changes on every reschedule and orphans the old row.
    */
   const uid = (e.iCalUID || e.id || "").trim();
   if (!uid) return [];
@@ -139,7 +170,7 @@ export function eventToRows(e: CalEvent, stampedAt: string): BrainRow[] {
 
   const base: BrainRow = {
     source: SOURCE,
-    source_id: `event:${uid}`,
+    source_id: day ? `event:${uid}:${day}` : `event:${uid}`,
     title,
     url: e.htmlLink ?? null,
     body: lines.join("\n"),
