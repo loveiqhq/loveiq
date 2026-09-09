@@ -54,7 +54,7 @@ Already divided, in the `analytics` rows, so nothing has to be computed:
 | Ad spend, and net after it                                 | `analytics`                                |
 | Visits, survey starts, signups, reports created and opened | `analytics`                                |
 
-### Business metrics we do NOT have: MRR, ARR, churn, retention, NPS, DAU, MAU, runway, burn rate, cap table, gross margin
+### Business metrics we do NOT have: MRR, ARR, churn, retention, net promoter score (NPS), customer satisfaction, active users (DAU, MAU), runway, burn rate, cap table, gross margin
 
 Each one below is a real question with a real answer — the answer is that the
 number does not exist for a business shaped like ours, and what to ask instead.
