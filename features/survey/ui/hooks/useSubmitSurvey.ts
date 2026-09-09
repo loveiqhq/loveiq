@@ -128,11 +128,27 @@ export function useSubmitSurvey() {
             /* token extraction is best-effort */
           }
           syncPendingCompletion(null);
-          // Identify BEFORE the capture below, so survey_completed is already
-          // attributed. distinct_id is the lower-cased email, which is exactly
-          // what the server-side purchase uses (features/analytics/server/posthog.ts)
-          // — otherwise the Stripe-webhook purchase would land on an orphan
-          // person and no funnel could join browsing to revenue.
+          /**
+           * Identify on submit. distinct_id is the lower-cased email, which is
+           * exactly what the server-side purchase uses
+           * (features/analytics/server/posthog.ts) — otherwise the
+           * Stripe-webhook purchase would land on an orphan person and no
+           * funnel could join browsing to revenue.
+           *
+           * There used to be a `posthog.capture("survey_completed")` directly
+           * below this, added so the event landed AFTER the identify. But
+           * `SurveyEngine` already reports completion through
+           * `trackSurveyComplete`, so every completion was counted TWICE:
+           * measured at 2.06 events per session, 209 of 218 sessions firing a
+           * pair 30-95ms apart (the gap being this path recomputing its own
+           * duration). Server-side truth was singular the whole time — 79
+           * `direction=complete` rows across 79 sessions.
+           *
+           * Removing it costs nothing, because `identify` merges the
+           * anonymous person into the identified one and carries this
+           * session's earlier events with it. The engine's call also reaches
+           * GA4, which a bare `posthog.capture` never did.
+           */
           if (payload.email) {
             const identity = payload.email.trim().toLowerCase();
             posthog.identify(identity, {
@@ -140,10 +156,6 @@ export function useSubmitSurvey() {
               ...(payload.firstName ? { first_name: payload.firstName } : {}),
             });
           }
-          posthog.capture("survey_completed", {
-            duration_ms: payload.durationMs,
-            total_questions: surveyQuestions.length,
-          });
           setStatus("success");
           return;
         }

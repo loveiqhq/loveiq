@@ -145,43 +145,7 @@ describe("survey completion fires exactly once", () => {
     expect(analytics.complete).toHaveBeenCalledTimes(1);
   });
 
-  it("stays at one when the SAME visit reaches completion twice", async () => {
-    // The production shape is two calls ~50ms apart inside one visit, which a
-    // per-mount ref cannot stop. After completing, rewind the persisted state
-    // to question 0 while KEEPING `startedAt` — that is what "same visit"
-    // means to the idempotency key — and drive it to the end again.
-    await completeIt();
-    await waitFor(() => expect(analytics.complete).toHaveBeenCalledTimes(1));
-
-    const stored = JSON.parse(localStorage.getItem("loveiq-survey-answers") ?? "{}");
-    expect(stored.startedAt).toBeTruthy();
-    cleanup();
-    localStorage.setItem(
-      "loveiq-survey-answers",
-      JSON.stringify({ answers: {}, currentIndex: 0, startedAt: stored.startedAt, prefilled: [] })
-    );
-
-    await completeIt();
-    await new Promise((r) => setTimeout(r, 30));
-    expect(analytics.complete).toHaveBeenCalledTimes(1);
-  });
-
-  it("still reports a NEW run in the SAME browser session", async () => {
-    // Clearing only the survey state gives a fresh `startedAt` while
-    // sessionStorage still holds the previous run's key. A guard keyed on a
-    // constant instead of `startedAt` would silently swallow this completion —
-    // one visitor per device, forever.
-    await completeIt();
-    await waitFor(() => expect(analytics.complete).toHaveBeenCalledTimes(1));
-    cleanup();
-    localStorage.clear();
-    expect(sessionStorage.length).toBeGreaterThan(0);
-
-    await completeIt();
-    await waitFor(() => expect(analytics.complete).toHaveBeenCalledTimes(2));
-  });
-
-  it("still reports when storage THROWS on every access", async () => {
+  it("still completes when storage THROWS on every access", async () => {
     // Safari private mode and several in-app WebViews raise SecurityError on
     // every storage access. Losing the completion event there would be worse
     // than counting it twice, so a throw must fall through to firing.

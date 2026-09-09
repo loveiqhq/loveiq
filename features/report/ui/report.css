@@ -13461,6 +13461,10 @@
   border-radius: 27px 27px 0 0;
   background: linear-gradient(180deg, #faf7fe 0%, #ffffff 100%);
   box-shadow: 0 22.5px 56.4px rgba(22, 16, 33, 0.06);
+  /* The whole card activates — matching `.report-map-row` below. This also
+     stops the UX dead-click listener reporting taps on it, which classes a
+     `cursor: pointer` ancestor as interactive. */
+  cursor: pointer;
 }
 
 .report-map-featured__eyebrow {

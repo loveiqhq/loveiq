@@ -142,4 +142,71 @@ describe("InsightMapSection — the whole row activates", () => {
     expect(row.getAttribute("role")).toBeNull();
     expect(row.getAttribute("tabindex")).toBeNull();
   });
+
+  /**
+   * Fixing the featured card's LINK left its body inert, and readers tap the
+   * body. Measured after that deploy: `article.report-map-featured` still dead
+   * in 3 sessions, its title in 1, its sub in 1, its eyebrow in 2 — out of only
+   * 16 report sessions, so roughly a third of readers tapped the card and got
+   * nothing. Same defect as the rows, one element over.
+   */
+  describe("the featured Arousal card activates as a whole", () => {
+    const featured = () => document.querySelector(".report-map-featured") as HTMLElement;
+
+    it("navigates when the card TITLE is tapped and the section is owned", async () => {
+      renderMap({ open: true });
+      const title = featured().querySelector(".report-map-featured__title") as HTMLElement;
+      await userEvent.click(title);
+      expect(window.location.hash).toBe("#arousal_style");
+    });
+
+    it("navigates when the EYEBROW is tapped — the newest dead spot", async () => {
+      window.location.hash = "";
+      renderMap({ open: true });
+      const eyebrow = featured().querySelector(".report-map-featured__eyebrow-text") as HTMLElement;
+      await userEvent.click(eyebrow);
+      expect(window.location.hash).toBe("#arousal_style");
+    });
+
+    it("opens the paywall from the card body when Arousal is somehow locked", async () => {
+      const { onOpen } = renderMap({ open: false });
+      const sub = featured().querySelector(".report-map-featured__sub") as HTMLElement;
+      await userEvent.click(sub);
+      expect(onOpen).toHaveBeenCalledWith("arousal_style");
+    });
+
+    it("fires once — not twice — when the inner link itself is tapped", async () => {
+      // Both the button and the card firing would flash the paywall open twice.
+      const { onOpen } = renderMap({ open: false });
+      const link = featured().querySelector(".report-map-featured__link") as HTMLElement;
+      await userEvent.click(link);
+      expect(onOpen).toHaveBeenCalledTimes(1);
+    });
+
+    it("still activates by KEYBOARD on the inner button", async () => {
+      // Removing the button's own onClick must not cost keyboard users, since
+      // Enter fires a click that bubbles to the card.
+      const { onOpen } = renderMap({ open: false });
+      const link = featured().querySelector(".report-map-featured__link") as HTMLElement;
+      link.focus();
+      expect(document.activeElement).toBe(link);
+      await userEvent.keyboard("{Enter}");
+      expect(onOpen).toHaveBeenCalledTimes(1);
+    });
+
+    it("ignores a tap that carried a text selection", async () => {
+      const { onOpen } = renderMap({ open: false });
+      const spy = vi
+        .spyOn(window, "getSelection")
+        .mockReturnValue({ toString: () => "always unlocked" } as unknown as Selection);
+      try {
+        await userEvent.click(
+          featured().querySelector(".report-map-featured__title") as HTMLElement
+        );
+        expect(onOpen).not.toHaveBeenCalled();
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  });
 });

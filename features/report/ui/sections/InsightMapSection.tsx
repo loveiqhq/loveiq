@@ -313,7 +313,26 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onOpen, isSectionOpen }
 
       {/* Featured tile — Arousal, always unlocked (Figma "Article"). */}
       {featuredTitle ? (
-        <article className="report-map-featured">
+        /**
+         * The whole card activates, not just the link at the bottom of it.
+         *
+         * Fixing the link alone left the body inert, and readers tap the body:
+         * measured after that deploy, `article.report-map-featured` was still
+         * dead in 3 sessions, its title in 1, its sub in 1, and its eyebrow in
+         * 2 — out of only 16 report sessions. Same defect as the rows below,
+         * one element over, which is why it is now the same shape as them.
+         */
+        <article
+          className="report-map-featured"
+          onClick={() => {
+            if (typeof window !== "undefined" && window.getSelection()?.toString()) return;
+            if (isSectionOpen("arousal_style")) {
+              window.location.hash = "arousal_style";
+            } else {
+              onOpen("arousal_style");
+            }
+          }}
+        >
           <div className="report-map-featured__eyebrow">
             <span className="report-map-featured__dot" aria-hidden="true" />
             <span className="report-map-featured__eyebrow-text">Arousal · always unlocked</span>
@@ -340,11 +359,12 @@ const InsightMapSection: FC<Props> = ({ archetype, copy, onOpen, isSectionOpen }
               See how your desire switches on →
             </a>
           ) : (
-            <button
-              type="button"
-              className="report-map-featured__link"
-              onClick={() => onOpen("arousal_style")}
-            >
+            /* No own `onClick`: the card wrapper owns it, and having both fired
+               `onOpen` twice — the paywall would flash open twice. The click
+               still bubbles, so keyboard Enter/Space on this button works
+               exactly as before (asserted in the tests). Same shape as
+               PatternRow. */
+            <button type="button" className="report-map-featured__link">
               See how your desire switches on →
             </button>
           )}
