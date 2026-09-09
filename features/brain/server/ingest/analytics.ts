@@ -452,6 +452,35 @@ export function longDate(iso: string): string {
   return `${WEEKDAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
+/**
+ * "week of Monday 22 to Sunday 28 June 2026" — the month and year said ONCE.
+ *
+ * WHY THIS IS NOT COSMETIC. The old form spelled the range as two full dates, so a
+ * weekly row's title carried "June 2026" twice against the monthly total's once, and
+ * the lexical arms score a repeat. Measured 2026-09-09: on content alone the week beat
+ * the month by 0.80 for "revenue in June 2026", which the 0.5 grain penalty cannot
+ * close — so 20 of 110 terse revenue questions answered with ONE WEEK of a month.
+ * "revenue in August 2026" returned EUR 41.00 against the month's EUR 196.98, right
+ * label, wrong number, same confidence. The verbose phrasing ("how much revenue did we
+ * make in August 2026") worked, because more query words diluted the title advantage.
+ *
+ * Every word a person would search for survives: both weekday names, both day numbers,
+ * the month and the year. Only the duplicate is gone.
+ */
+export function weekLabel(firstDay: string, lastDay: string): string {
+  const a = new Date(`${firstDay}T00:00:00Z`);
+  const b = new Date(`${lastDay}T00:00:00Z`);
+  const sameMonth =
+    a.getUTCMonth() === b.getUTCMonth() && a.getUTCFullYear() === b.getUTCFullYear();
+  const sameYear = a.getUTCFullYear() === b.getUTCFullYear();
+  const head = sameMonth
+    ? `${WEEKDAYS[a.getUTCDay()]} ${a.getUTCDate()}`
+    : sameYear
+      ? `${WEEKDAYS[a.getUTCDay()]} ${a.getUTCDate()} ${MONTHS[a.getUTCMonth()]}`
+      : longDate(firstDay);
+  return `week of ${head} to ${longDate(lastDay)}`;
+}
+
 /** "August 2026" from "2026-08". */
 export function longMonth(ym: string): string {
   const [y, m] = ym.split("-");
@@ -686,7 +715,7 @@ export function buildAnalyticsRows(
   for (const [week, t] of byWeek) {
     if (isEmpty(t)) continue;
     // A date range beats "2026-W34": nobody asks a question using a week number.
-    const label = `week of ${longDate(t.firstDay)} to ${longDate(t.lastDay)}`;
+    const label = weekLabel(t.firstDay, t.lastDay);
     out.push({
       source: SOURCE,
       source_id: `weekly:${week}`,
@@ -706,7 +735,25 @@ export function buildAnalyticsRows(
     out.push({
       source: SOURCE,
       source_id: `monthly:${month}`,
-      title: `LoveIQ numbers — ${label} (monthly total): ${NUMBERS_VOCABULARY}`,
+      /**
+       * THE GRAIN LEADS, AND THE DATE SITS NEXT TO THE VOCABULARY.
+       *
+       * "June 2026 (monthly total): revenue" put two words between the month and the
+       * word people search for, and `word_similarity` scores the best CONTIGUOUS word
+       * extent -- so the daily row "Monday 29 June 2026: revenue" matched "revenue in
+       * June 2026" better than the monthly total did, and a single day answered
+       * questions about a whole month. Measured 2026-09-09 over 17 month-shaped
+       * questions: this form 17/17, the old one 12/17. The five it lost were exactly
+       * the terse ones -- "revenue August 2026", "June 2026 revenue" -- where the query
+       * is short enough that one extent decides the whole ranking.
+       *
+       * MEASURE THIS WITH THE EMBEDDINGS DRAINED. A re-ingest rewrites the rows and
+       * clears their embeddings, and the semantic term is weighted 8, so a chunk read
+       * back before `embedMissing` catches up scores up to 2.4 low. This exact change
+       * was measured, looked 0.6 WORSE, and was reverted on that basis -- the drop was
+       * entirely the missing vector. Ingest, drain, then measure.
+       */
+      title: `LoveIQ numbers — monthly total for ${label}: ${NUMBERS_VOCABULARY}`,
       url: null,
       // Three sources each labelled a DIFFERENT partial range "whole month" —
       // analytics ran to today, GA4 to yesterday, GSC to two days ago — so the

@@ -295,8 +295,10 @@ describe("buildAnalyticsRows", () => {
   it("labels a week by its date range, not by a week number nobody uses", () => {
     const rows = buildAnalyticsRows([day("2026-08-17"), day("2026-08-19")], STAMP);
     const weekly = rows.find((r) => r.source_id === "weekly:2026-W34");
-    expect(weekly?.title).toContain("Monday 17 August 2026");
+    expect(weekly?.title).toContain("Monday 17");
     expect(weekly?.title).toContain("Wednesday 19 August 2026");
+    // Said once across the range, not once per end. See the weekLabel tests below.
+    expect(weekly?.title?.match(/August/g)).toHaveLength(1);
   });
 
   it("never states a zero visit count as a fact, and never divides by zero", () => {
@@ -526,5 +528,45 @@ describe("a day counts as empty only when NOTHING happened", () => {
     );
     expect(src).toMatch(/rpc\/brain_daily_rollup\?limit=1000&offset=\$\{offset\}/);
     expect(src).toMatch(/if \(rows\.length < 1000\) break;/);
+  });
+});
+
+/**
+ * A TITLE THAT SPELLS THE MONTH TWICE OUTRANKS THE MONTH ITSELF.
+ *
+ * Both titles here are shaped by one measured failure: `word_similarity` scores the
+ * best CONTIGUOUS word extent of the title, so repeating "June 2026" gave the weekly
+ * row two chances where the monthly total had one, and putting "(monthly total)"
+ * between the date and the vocabulary gave the DAILY row a tighter extent than the
+ * month. Measured 2026-09-09: 20 of 110 terse revenue questions answered with a single
+ * week of the month asked about -- "revenue in August 2026" returned EUR 41.00 against
+ * the month's EUR 196.98, right label, wrong number, same confidence.
+ *
+ * These are ranking-critical strings, not cosmetics, which is why they are asserted.
+ */
+describe("the analytics titles that decide which grain answers", () => {
+  it("names the month once in a weekly title, and keeps every searchable word", async () => {
+    const { weekLabel } = await import("@features/brain/server/ingest/analytics");
+    const label = weekLabel("2026-06-22", "2026-06-28");
+    expect(label).toBe("week of Monday 22 to Sunday 28 June 2026");
+    // Everything a person would type is still there.
+    for (const word of ["Monday", "22", "Sunday", "28", "June", "2026", "week"]) {
+      expect(label).toContain(word);
+    }
+    // The duplicate is what had to go.
+    expect(label.match(/June/g)).toHaveLength(1);
+    expect(label.match(/2026/g)).toHaveLength(1);
+  });
+
+  it("spells both months when a week straddles them, and both years at new year", async () => {
+    const { weekLabel } = await import("@features/brain/server/ingest/analytics");
+    // Dropping the first month here would make the range unreadable, so the rule is
+    // "say it once", never "say it less".
+    expect(weekLabel("2026-06-29", "2026-07-05")).toBe(
+      "week of Monday 29 June to Sunday 5 July 2026"
+    );
+    expect(weekLabel("2025-12-29", "2026-01-04")).toBe(
+      "week of Monday 29 December 2025 to Sunday 4 January 2026"
+    );
   });
 });

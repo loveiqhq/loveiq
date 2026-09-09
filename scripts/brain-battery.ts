@@ -768,7 +768,10 @@ function sourceCoverageProbes(): RetrievalProbe[] {
       "how many people signed up in august 2026",
       (h) => {
         const i = h.findIndex(
-          (x) => x.source === "analytics" && /August 2026 \(monthly total\)/.test(x.title ?? "")
+          (x) =>
+            x.source === "analytics" &&
+            x.meta?.grain === "month" &&
+            /August 2026/.test(x.title ?? "")
         );
         return i >= 0 ? [] : ["the August monthly total is not in the returned window at all"];
       },
