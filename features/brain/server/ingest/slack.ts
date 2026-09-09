@@ -55,7 +55,7 @@ const MAX_RETRIES = 4;
 // v3: v1-v2 stored every thread reply BEFORE its parent and in reverse order.
 // v2: v1 wrote days whose thread replies had been dropped by a 429 without
 // recording the gap, so every v1 row must be rebuilt rather than trusted.
-export const SLACK_BUILDER_VERSION = 6;
+export const SLACK_BUILDER_VERSION = 7;
 
 /**
  * Message subtypes that are membership bookkeeping, not conversation. Slack emits
@@ -247,7 +247,8 @@ export function dayToRows(
   lines: string[],
   stampedAt: string,
   threadsComplete = true,
-  url: string | null = null
+  url: string | null = null,
+  speakers: string[] = []
 ): BrainRow[] {
   if (lines.length === 0) return [];
   const title = `Slack #${channel} — ${day}`;
@@ -263,6 +264,16 @@ export function dayToRows(
       channel,
       day,
       messages: lines.length,
+      /**
+       * WHO SPOKE, which is what joins Slack to everyone else.
+       *
+       * Measured 2026-09-09: 0 of 538 Slack chunks carried `meta.people`, so filtering
+       * by a colleague found their commits, their email and their calendar and NONE of
+       * their conversation — in a company that works in chat. `speakers` is already an
+       * identity field to `peopleIn`, so writing it here is enough: the shared upsert
+       * path derives `meta.people` from it with no new resolution logic.
+       */
+      ...(speakers.length > 0 ? { speakers } : {}),
       // False when a reply fetch was rate-limited away. A past day is otherwise
       // skipped forever on later runs, so without this flag a thread lost to one
       // 429 would never come back.
@@ -419,6 +430,16 @@ export async function ingestSlack(
     const byDay = new Map<string, Array<{ line: string | null; replies: string[] }>>();
     /** The oldest message of each day, which is where its permalink should open. */
     const firstTs = new Map<string, string>();
+    /** Everyone who spoke that day, parents and thread replies alike. */
+    const speakers = new Map<string, Set<string>>();
+    const noteSpeaker = (day: string, userId: string | undefined) => {
+      if (!userId) return;
+      const set = speakers.get(day) ?? new Set<string>();
+      // The display name, not the Slack id: the person registry is keyed on names and
+      // addresses, and a raw `U09PLQQ8PM1` resolves to nobody.
+      set.add(names.get(userId) ?? userId);
+      speakers.set(day, set);
+    };
     const threadGaps = new Set<string>();
     let cursor = "";
 
@@ -542,7 +563,12 @@ export async function ingestSlack(
             for (const r of (replies.messages as SlackMessage[]) ?? []) {
               if (r.ts === m.ts) continue;
               const rl = renderMessage(r, names, true);
-              if (rl) entry.replies.push(rl);
+              if (rl) {
+                entry.replies.push(rl);
+                // A thread is usually where the argument happens, so someone who only
+                // ever replies would otherwise never register as having spoken.
+                noteSpeaker(day, r.user);
+              }
             }
             rCursor =
               ((replies.response_metadata as Record<string, string>) ?? {}).next_cursor ?? "";
@@ -554,6 +580,9 @@ export async function ingestSlack(
         // Keep the entry only if something human survived: the parent, a reply, or
         // both. A bot parent with no human replies contributes nothing.
         if (entry.line || entry.replies.length > 0) {
+          // Only when something of theirs actually survived into the day: a bot parent
+          // whose replies were all dropped must not credit anyone with speaking.
+          if (entry.line) noteSpeaker(day, m.user);
           bucket.push(entry);
           byDay.set(day, bucket);
         }
@@ -582,7 +611,8 @@ export async function ingestSlack(
           lines,
           stampedAt,
           whole,
-          slackPermalink(workspaceUrl, ch.id as string | undefined, firstTs.get(day))
+          slackPermalink(workspaceUrl, ch.id as string | undefined, firstTs.get(day)),
+          [...(speakers.get(day) ?? [])].sort()
         )
       );
     }

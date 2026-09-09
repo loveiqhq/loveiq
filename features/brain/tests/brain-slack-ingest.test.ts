@@ -334,10 +334,54 @@ describe("dayToRows carries the link", () => {
     expect(rows[0]!.url).toBeNull();
   });
 
-  /** The version gate is what makes stored days rebuild and backfill their links. */
-  it("stamps the builder version that forces the rebuild", () => {
+  /**
+   * The version stamped on a row is what `knownSlackDays` compares against, and a
+   * mismatch is what marks a stored day stale and rebuilds it.
+   *
+   * NO ASSERTION ON THE NUMBER ITSELF. Nothing in a unit test can tell version 6 from 7
+   * — the effect is entirely on rows already stored in production — so a floor like
+   * `>= 6` only looks like a check, and goes stale at the next bump. What is worth
+   * pinning is that the row carries the same constant the staleness gate reads.
+   */
+  it("stamps the builder version the staleness gate compares against", () => {
     const rows = dayToRows("bugs-issues", "2026-08-27", ["Eman: hi"], "stamp");
     expect(rows[0]!.meta.v).toBe(SLACK_BUILDER_VERSION);
-    expect(SLACK_BUILDER_VERSION).toBeGreaterThanOrEqual(6);
+  });
+});
+
+describe("dayToRows records who spoke", () => {
+  /**
+   * MEASURED 2026-09-09: 0 of 538 Slack chunks carried `meta.people`, so filtering the
+   * corpus by a colleague returned their commits, their email and their calendar and
+   * NONE of their conversation — in a company that works in chat.
+   *
+   * `speakers` is already an identity field to `peopleIn`, so the shared upsert path
+   * turns it into `meta.people` with no new resolution logic. This asserts the field the
+   * spine reads, which is the contract that matters.
+   */
+  it("puts the speakers where the person spine will find them", () => {
+    const rows = dayToRows("all-loveiq", "2026-09-08", ["Eman: hi"], "stamp", true, null, [
+      "Eman Cickusic",
+      "Marcus Börner",
+    ]);
+    expect(rows[0]!.meta.speakers).toEqual(["Eman Cickusic", "Marcus Börner"]);
+  });
+
+  /**
+   * ABSENT, NOT EMPTY, when nobody was resolved — the same distinction `peopleIn` makes.
+   * An empty array asserts "nobody spoke here", which of a Slack day is never true.
+   */
+  it("leaves the field off entirely rather than claiming nobody spoke", () => {
+    const rows = dayToRows("all-loveiq", "2026-09-08", ["Eman: hi"], "stamp");
+    expect(rows[0]!.meta).not.toHaveProperty("speakers");
+  });
+
+  it("carries the speakers onto every part of a split day", () => {
+    const lines = Array.from({ length: 400 }, (_, i) => `Eman: message ${i} ${"x".repeat(40)}`);
+    const rows = dayToRows("all-loveiq", "2026-09-08", lines, "stamp", true, null, [
+      "Eman Cickusic",
+    ]);
+    expect(rows.length).toBeGreaterThan(1);
+    for (const r of rows) expect(r.meta.speakers, r.source_id).toEqual(["Eman Cickusic"]);
   });
 });

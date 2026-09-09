@@ -9,6 +9,8 @@ const slackCalls: string[] = [];
 /** Conversation types Slack will accept; anything else answers missing_scope. */
 let supportedTypes = new Set(["public_channel", "private_channel", "mpim"]);
 let listHttpFails = false;
+/** Opt-in, so every other test keeps the call sequence it asserts on. */
+let withThreadReply = false;
 
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: vi.fn(async (url: string) => {
@@ -36,16 +38,41 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
       return ok({ ok: true, channels: all.filter((c) => asked.some((t) => typeOf(c) === t)) });
     }
     if (u.pathname.endsWith("/users.list")) {
-      return ok({ ok: true, members: [{ id: "U1", profile: { real_name: "Eman" } }] });
+      return ok({
+        ok: true,
+        members: [
+          { id: "U1", profile: { real_name: "Eman" } },
+          { id: "U2", profile: { real_name: "Marcus Börner" } },
+        ],
+      });
     }
     if (u.pathname.endsWith("/conversations.history")) {
       return ok({
         ok: true,
-        messages: [{ user: "U1", text: "a real human message", ts: "1756600000.0" }],
+        messages: [
+          {
+            user: "U1",
+            text: "a real human message",
+            ts: "1756600000.0",
+            ...(withThreadReply ? { reply_count: 1 } : {}),
+          },
+        ],
       });
     }
     if (u.pathname.endsWith("/conversations.replies")) {
-      return ok({ ok: true, messages: [] });
+      return ok({
+        ok: true,
+        messages: withThreadReply
+          ? [
+              { user: "U1", text: "a real human message", ts: "1756600000.0" },
+              { user: "U2", text: "and the answer", ts: "1756600100.0" },
+            ]
+          : [],
+      });
+    }
+    // The workspace domain, which is the one part of a permalink no message carries.
+    if (u.pathname.endsWith("/auth.test")) {
+      return ok({ ok: true, url: "https://loveiq.slack.com/" });
     }
     return ok({ ok: true });
   }),
@@ -57,9 +84,17 @@ function typeOf(c: { is_private?: boolean; is_mpim?: boolean }): string {
   return "public_channel";
 }
 
+/** Rows this run wrote, so the walk's actual output can be asserted, not just its calls. */
+const upserted: Array<Record<string, never>> = [];
+
 vi.mock("@features/admin/server/supabase", () => ({
   supabaseFetch: vi.fn(async (path: string, init?: RequestInit) => {
     const method = (init?.method ?? "GET").toUpperCase();
+    if (method === "POST" && path.includes("brain_chunk")) {
+      for (const r of JSON.parse(String(init?.body ?? "[]")) as Array<Record<string, never>>) {
+        upserted.push(r);
+      }
+    }
     if (method === "GET" && path.includes("brain_sweep_state")) {
       return { ok: true, status: 200, headers: new Headers(), json: async () => [] };
     }
@@ -75,6 +110,8 @@ import { ingestSlack } from "@features/brain/server/ingest/slack";
 const STAMP = "2026-08-31T12:00:00.000Z";
 
 beforeEach(() => {
+  upserted.length = 0;
+  withThreadReply = false;
   slackCalls.length = 0;
   supportedTypes = new Set(["public_channel", "private_channel", "mpim"]);
   listHttpFails = false;
@@ -136,5 +173,47 @@ describe("missing private scopes must not take public channels down", () => {
     listHttpFails = true;
     const res = await ingestSlack(STAMP);
     expect(res.skipped).toBe("slack-list-failed");
+  });
+});
+
+describe("a walked day carries who spoke and where to read it", () => {
+  /**
+   * THE END-TO-END HALF, and the reason it exists: the unit tests cover `dayToRows` and
+   * `slackPermalink` in isolation, and both would keep passing if the WALK collected the
+   * wrong thing. Mutation testing showed exactly that — storing raw Slack ids
+   * (`U09PLQQ8PM1`) instead of display names passed every unit test, while resolving to
+   * nobody in the person registry and leaving Slack at 0% attributed, which is the bug
+   * this work exists to fix.
+   */
+  it("resolves speakers to names the person registry can match", async () => {
+    await ingestSlack(STAMP);
+    const day = upserted.find((r) => String(r.source_id).startsWith("ch:all-loveiq:"));
+    expect(day, "no slack day was written").toBeDefined();
+    // "Eman", from users.list — not "U1", which resolves to nobody.
+    expect((day as never as { meta: { speakers?: string[] } }).meta.speakers).toEqual(["Eman"]);
+  });
+
+  /**
+   * A THREAD IS USUALLY WHERE THE ARGUMENT HAPPENS, and someone who only ever answers
+   * in threads would otherwise never register as having spoken at all — their name is
+   * in no parent message. Found by mutation: removing the reply-side call passed every
+   * other test here.
+   */
+  it("credits someone who only spoke in a thread reply", async () => {
+    withThreadReply = true;
+    await ingestSlack(STAMP);
+    const day = upserted.find((r) => String(r.source_id).startsWith("ch:all-loveiq:"));
+    expect((day as never as { meta: { speakers?: string[] } }).meta.speakers).toEqual([
+      "Eman",
+      "Marcus Börner",
+    ]);
+  });
+
+  it("gives the day a link built from the channel id and its first message", async () => {
+    await ingestSlack(STAMP);
+    const day = upserted.find((r) => String(r.source_id).startsWith("ch:all-loveiq:"));
+    expect((day as never as { url: string }).url).toBe(
+      "https://loveiq.slack.com/archives/C1/p17566000000"
+    );
   });
 });
