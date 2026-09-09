@@ -30,7 +30,7 @@ message. It replies in a thread, and every answer lists the sources it used.
 - **Money outside the product.** No payroll, no bank balance, no runway — those
   live in systems nothing here reads.
 
-### The business metrics we do and do not have
+### Business metrics we have: revenue, AOV, LTV, CAC, conversion rate, ad spend
 
 Written down because the honest answer to half of these is "that number does not
 exist for a business shaped like ours", and a search that cannot say so returns
@@ -39,7 +39,7 @@ metric questions, and the ones with no answer returned a Notion card about
 harvesting a therapist database, a security-audit doc, and a colleague's interview
 notes.
 
-**We have these, already divided, in the `analytics` rows:**
+Already divided, in the `analytics` rows, so nothing has to be computed:
 
 | Metric                                                     | Where                                      |
 | ---------------------------------------------------------- | ------------------------------------------ |
@@ -54,7 +54,10 @@ notes.
 | Ad spend, and net after it                                 | `analytics`                                |
 | Visits, survey starts, signups, reports created and opened | `analytics`                                |
 
-**We do not have these, and here is why:**
+### Business metrics we do NOT have: MRR, ARR, churn, retention, NPS, DAU, MAU, runway, burn rate, cap table, gross margin
+
+Each one below is a real question with a real answer — the answer is that the
+number does not exist for a business shaped like ours, and what to ask instead.
 
 - **MRR, ARR, churn, retention, renewal.** LoveIQ sells a one-off report, not a
   subscription. There is no recurring revenue to measure and nothing to churn from.
