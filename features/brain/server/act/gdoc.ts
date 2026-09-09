@@ -1,4 +1,9 @@
-import { DOCS_WRITE_SCOPE, DRIVE_WRITE_SCOPE, getDelegatedToken } from "@shared/http/google-oauth";
+import {
+  DOCS_WRITE_SCOPE,
+  DRIVE_WRITE_SCOPE,
+  getDelegatedToken,
+  getGoogleAccessToken,
+} from "@shared/http/google-oauth";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 
 /**
@@ -26,10 +31,12 @@ export class GoogleDocRefusal extends Error {}
 export class DelegationNotGranted extends Error {
   constructor(scope: string) {
     super(
-      `Google has not authorised this server for ${scope}. Someone with Workspace admin ` +
-        `access has to add it under Security → Access and data control → API controls → ` +
-        `Manage Domain Wide Delegation, for client id 116552495667268648554. Nothing was ` +
-        `written.`
+      `Google refused a delegated token for ${scope} even with a working credential, so ` +
+        `the scope is not authorised for this workspace. Someone with Workspace admin ` +
+        `access adds it under Security → Access and data control → API controls → Manage ` +
+        `Domain Wide Delegation, for client id 116552495667268648554. TWO SEPARATE ` +
+        `SWITCHES are needed and this is only one of them: the other is the Docs API ` +
+        `being enabled on the Cloud project. Nothing was written.`
     );
   }
 }
@@ -40,7 +47,29 @@ function admin(): string {
   return who;
 }
 
+/**
+ * `getDelegatedToken` returns null for several different problems, and this used to
+ * report every one of them as a missing Workspace grant.
+ *
+ * FOUND THE FIRST TIME IT RAN FOR REAL. There was no usable Google credential at all —
+ * the run had fallen through to the refresh token, which is dead by design — and the
+ * tool answered "Google has not authorised this server… ask a Workspace admin". The
+ * grant was already in place. That sends someone into an admin console to fix something
+ * that is not broken, which is the exact failure this file is written against.
+ *
+ * So the caller credential is checked first, and only a delegation that fails WITH a
+ * working credential is reported as a missing grant.
+ */
 async function token(scope: string, oidc?: string | null): Promise<string> {
+  const caller = await getGoogleAccessToken(Date.now(), oidc);
+  if (!caller) {
+    throw new Error(
+      "There is no usable Google credential on this deployment, so nothing was even " +
+        "attempted. This is NOT the Workspace grant — do not go and change it. In " +
+        "production the credential comes from Vercel's OIDC token; locally, mint one " +
+        "with gcloud and set GOOGLE_OAUTH_ACCESS_TOKEN."
+    );
+  }
   const t = await getDelegatedToken(admin(), scope, Date.now(), oidc);
   if (!t) throw new DelegationNotGranted(scope);
   return t;

@@ -8,9 +8,11 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: (...a: unknown[]) => mockFetch(...(a as [])),
 }));
 const mockDelegated = vi.fn();
+const mockCaller = vi.fn();
 vi.mock("@shared/http/google-oauth", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@shared/http/google-oauth")>()),
   getDelegatedToken: (...a: unknown[]) => mockDelegated(...(a as [])),
+  getGoogleAccessToken: (...a: unknown[]) => mockCaller(...(a as [])),
 }));
 
 import {
@@ -44,6 +46,7 @@ function wire(over: { folders?: Array<{ id: string; name: string }>; fail?: stri
 beforeEach(() => {
   mockFetch.mockReset();
   mockDelegated.mockReset().mockResolvedValue("ya29.token");
+  mockCaller.mockReset().mockResolvedValue("ya29.caller");
   process.env.GOOGLE_WORKSPACE_ADMIN = "ec@loveiq.org";
   wire();
 });
@@ -75,6 +78,23 @@ describe("the Workspace grant", () => {
    * against the service account's client id, and until then the exchange returns
    * `unauthorized_client` no matter what the code does.
    */
+  /**
+   * "NO CREDENTIAL" AND "SCOPE NOT GRANTED" ARE DIFFERENT PROBLEMS, and this reported
+   * both as the second. Found the first time the tool ran for real: there was no usable
+   * Google credential — the run had fallen through to the refresh token, which is dead
+   * by design — and it answered "ask a Workspace admin" while the grant was already in
+   * place. Sending someone into an admin console to fix something that is not broken is
+   * the exact failure this file exists to avoid.
+   */
+  it("does not blame the Workspace grant when there is no credential at all", async () => {
+    mockCaller.mockResolvedValue(null);
+    const err = await createGoogleDoc({ title: "x" }).catch((e: Error) => e);
+    expect(err).not.toBeInstanceOf(DelegationNotGranted);
+    expect((err as Error).message).toMatch(/NOT the Workspace grant/);
+    // Refused before asking Google anything, so nothing was half-done.
+    expect(mockDelegated).not.toHaveBeenCalled();
+  });
+
   it("names the admin console when the scope is not authorised", async () => {
     mockDelegated.mockResolvedValue(null);
     const err = await createGoogleDoc({ title: "x" }).catch((e: Error) => e);
