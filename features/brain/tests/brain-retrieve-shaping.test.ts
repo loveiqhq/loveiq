@@ -126,3 +126,52 @@ describe("paging a ranked list", () => {
     expect(await retrieve("anything", 5, {})).toHaveLength(5);
   });
 });
+
+/**
+ * PAGING MUST BE A CONTINUATION, NOT A RE-RANKING.
+ *
+ * Measured 2026-09-09 at limit 6: offsets 0/6/12 returned 18 slots holding only 12
+ * distinct documents -- page 3 repeated 5 of page 2's 6 -- and 6 documents were
+ * unreachable by paging at all. Two causes, both about the window: the per-source cap
+ * was sized from `limit + offset`, so it grew with the page number and each page shaped
+ * a different set; and the whole window was sorted BEFORE slicing, so a backfilled row
+ * scoring above an earlier capped pick moved into page 1's positions as the window grew
+ * and page 2 showed it again.
+ */
+/**
+ * PAGING MUST BE A CONTINUATION, NOT A RE-RANKING.
+ *
+ * Measured 2026-09-09 at limit 6: offsets 0/6/12 returned 18 slots holding only 12
+ * distinct documents -- page 3 repeated 5 of page 2's 6 -- and 6 documents were
+ * unreachable by paging at all. Two causes, both about the window: the per-source cap
+ * was sized from `limit + offset`, so it grew with the page number and each page shaped
+ * a different set; and the whole window was sorted BEFORE slicing, so a backfilled row
+ * scoring above an earlier capped pick moved into page 1's positions as the window grew
+ * and page 2 showed it again.
+ */
+describe("retrieve — paging returns each document once", () => {
+  it("never repeats a document across pages", async () => {
+    // `bulk` owns the whole top of the ranking; four other sources sit below it. That is
+    // what makes the cap reorder anything, and an evenly-spread fixture does not.
+    const rows = [
+      ...Array.from({ length: 12 }, (_, i) => row("bulk", i, 3 - i * 0.01)),
+      ...["b", "c", "d", "e"].map((src, i) => row(src, i, 2)),
+    ];
+    const seen: string[] = [];
+    for (const offset of [0, 4, 8]) {
+      wire(rows);
+      const page = await retrieve("anything", 4, { offset });
+      expect(page).toHaveLength(4);
+      seen.push(...page.map((r) => `${r.source}:${r.sourceId}`));
+    }
+    const repeated = seen.filter((id, i) => seen.indexOf(id) !== i);
+    expect(repeated).toEqual([]);
+  });
+
+  it("orders each page by score, so citation [1] is the best thing on that page", async () => {
+    wire(Array.from({ length: 20 }, (_, i) => row(`s${i % 5}`, i, 3 - i * 0.01)));
+    const page = await retrieve("anything", 5, { offset: 5 });
+    const scores = page.map((r) => r.score);
+    expect(scores).toEqual([...scores].sort((a, b) => b - a));
+  });
+});

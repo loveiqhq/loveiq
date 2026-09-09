@@ -497,13 +497,7 @@ export async function retrieve(
     shaping.heldBack = byySource;
   }
 
-  // The backfill appends AFTER every capped pick, so a deferred row scoring 1.02
-  // could sit at slot 12 while slot 3 scored 0.99. Citations are rendered [1]…[n]
-  // in this order, and a reader reasonably assumes [1] is the most relevant.
-  // Sorting at the end costs nothing and cannot change WHICH rows were chosen.
-  picked.sort((a, b) => b.score - a.score);
-
-  // Sliced AFTER sorting, so page 2 is genuinely the next-most-relevant and not whatever
-  // the capping happened to defer.
-  return offset > 0 ? picked.slice(offset) : picked;
+  const page = offset > 0 ? picked.slice(offset) : picked;
+  page.sort((a, b) => b.score - a.score);
+  return page;
 }

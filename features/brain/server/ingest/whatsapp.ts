@@ -199,6 +199,12 @@ export function dayRows(input: DayRowInput): BrainRow[] {
         day,
         speakers: speakers.slice(0, 12),
         messages: msgs.length,
+        // Same spelling as every other source, because the three readers of this key
+        // -- fetch_document's paging, brain_search's document de-duplication, and
+        // browse_context's one-line-per-document filter -- look for `part`/`parts` and
+        // nothing else. Recording it only in the title, as this did, made a three-part
+        // day announce "parts 1-1 of 1 — this is all of it" while holding two more.
+        ...(parts.length > 1 ? { part: i + 1, parts: parts.length } : {}),
       },
       updated_at: stampedAt,
       period_end: day,
