@@ -66,6 +66,21 @@ const EXPIRY_SKEW_MS = 60_000;
 export const GA4_SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
 export const SEARCH_CONSOLE_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
 export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
+/**
+ * WRITE scopes, requested per call and deliberately NOT added to `IMPERSONATION_SCOPES`.
+ *
+ * `getDelegatedToken` takes the scope as an argument, so each caller asks for exactly
+ * what it needs and an unauthorised scope fails only that one exchange with
+ * `unauthorized_client`. Verified 2026-09-09: a `documents` request was refused in the
+ * same run where a `drive.readonly` request succeeded, so adding these could not have
+ * broken the ingesters even before the Workspace grant existed.
+ *
+ * Both require the service account's client id (116552495667268648554) to list them
+ * under Domain Wide Delegation in the Workspace Admin console. Until that is done every
+ * call using them fails with a message naming the admin console.
+ */
+export const DOCS_WRITE_SCOPE = "https://www.googleapis.com/auth/documents";
+export const DRIVE_WRITE_SCOPE = "https://www.googleapis.com/auth/drive";
 export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 export const DIRECTORY_SCOPE = "https://www.googleapis.com/auth/admin.directory.user.readonly";
 export const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";

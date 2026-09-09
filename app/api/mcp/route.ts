@@ -14,6 +14,12 @@ import {
 import { postToSlack, SlackTargetError } from "@features/brain/server/act/slack";
 import { createNotionPage, NotionTargetError } from "@features/brain/server/act/notion";
 import { EmailRefusal, MAX_RECIPIENTS, sendEmail } from "@features/brain/server/act/email";
+import {
+  appendToGoogleDoc,
+  createGoogleDoc,
+  DelegationNotGranted,
+  GoogleDocRefusal,
+} from "@features/brain/server/act/gdoc";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
@@ -739,6 +745,50 @@ const TOOLS = [
         },
       },
       required: ["to", "subject", "body"],
+    },
+  },
+  {
+    name: "write_to_google_doc",
+    title: "Create a Google Doc, or add to one",
+    annotations: {
+      readOnlyHint: false,
+      // Additive by construction: this tool creates and appends, and has no operation
+      // that removes or overwrites anything, whatever the granted scope permits.
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+    description:
+      "Create a Google Doc, or add text to the end of an existing one.\n\n" +
+      "TWO OPERATIONS AND NO THIRD. It can create and it can append. It cannot delete, " +
+      "overwrite, or edit text already in a document — so the worst it can do is put a " +
+      "paragraph somewhere unhelpful, which a person can remove. To create, give a " +
+      "`title`. To append, give a `document`.\n\n" +
+      "Documents are created as the Workspace account the server acts for, so they are " +
+      "owned by a person and shareable normally rather than stranded in a robot's Drive. " +
+      "Text is inserted as plain text — Markdown is not rendered, so write prose, not " +
+      "syntax.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description: "Creates a NEW document with this title. Give this or `document`.",
+        },
+        document: {
+          type: "string",
+          description:
+            "Appends to an EXISTING document. Its id, or the whole " +
+            "https://docs.google.com/document/d/… link. Give this or `title`.",
+        },
+        content: { type: "string", description: "The text to write. Plain text." },
+        folder: {
+          type: "string",
+          description:
+            "When creating: a Drive folder to file it in, by name or id. Omitted leaves " +
+            "it in My Drive. A name matching several folders is refused with their ids.",
+        },
+      },
     },
   },
   {
@@ -1645,6 +1695,60 @@ async function callTool(
       false,
       "lower max_chars, or page with from_part"
     );
+  }
+
+  if (name === "write_to_google_doc") {
+    const title = typeof args.title === "string" ? args.title.trim() : "";
+    const document = typeof args.document === "string" ? args.document.trim() : "";
+    const content = typeof args.content === "string" ? args.content : "";
+
+    // Exactly one of the two, because they are different actions and guessing which was
+    // meant would either create a stray document or write into the wrong one.
+    if (title && document) {
+      return textResult(
+        "Give `title` to create a new document OR `document` to add to an existing one, " +
+          "not both.",
+        true
+      );
+    }
+    if (!title && !document) {
+      return textResult(
+        "Give `title` to create a new document, or `document` to add to an existing one.",
+        true
+      );
+    }
+
+    try {
+      const r = document
+        ? await appendToGoogleDoc({ document, content, oidc: oidcForReport })
+        : await createGoogleDoc({
+            title,
+            content,
+            folder:
+              typeof args.folder === "string" && args.folder.trim()
+                ? args.folder.trim()
+                : undefined,
+            oidc: oidcForReport,
+          });
+      stats.sourceCount = 1;
+      return textResult(
+        `${r.created ? "Created" : "Added to"}: ${r.title}\n` +
+          `${r.url}\n` +
+          (r.folder ? `filed in: ${r.folder}\n` : "") +
+          `\nIt will appear in searches here after the next Drive ingest, not immediately.`
+      );
+    } catch (err) {
+      // The Workspace grant is a person's job in an admin console, not a retry, so it is
+      // reported as its own thing rather than as a generic failure.
+      if (err instanceof DelegationNotGranted) return textResult(err.message, true);
+      if (err instanceof GoogleDocRefusal) return textResult(err.message, true);
+      logger.error({ err }, "brain: could not write a Google Doc");
+      return textResult(
+        `Could not write: ${err instanceof Error ? err.message : "unknown error"}. ` +
+          `Nothing was written.`,
+        true
+      );
+    }
   }
 
   if (name === "send_email") {
@@ -2806,8 +2910,9 @@ export async function POST(request: Request) {
         "conclude something does not exist from an empty search — check list_sources first.\n\n" +
         "IT CAN ALSO ACT. `post_to_slack` posts a message to a channel or sends someone " +
         "a direct message; it cannot be undone, since this bot may write but not delete. " +
-        "`write_to_notion` adds a page or a task to the Notion workspace, which is " +
-        "reversible. `send_email` DRAFTS by default and sends only when explicitly told " +
+        "`write_to_notion` adds a page or a task to the Notion workspace, and " +
+        "`write_to_google_doc` creates a Google Doc or appends to one — both reversible, " +
+        "and neither can delete anything. `send_email` DRAFTS by default and sends only when explicitly told " +
         "to — it is the one action here that nobody can undo, so draft it, show it, and " +
         "send only if asked. Do what you were asked to do, and never announce your own " +
         "progress.\n\n" +
