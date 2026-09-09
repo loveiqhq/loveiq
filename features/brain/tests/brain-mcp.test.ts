@@ -121,13 +121,14 @@ describe("/api/mcp", () => {
       expect(body.result.serverInfo.name).toBe("loveiq-brain");
     });
 
-    it("lists exactly the seven tools, each with a schema", async () => {
+    it("lists exactly the eight tools, each with a schema", async () => {
       // Asserted exactly, not with toContain: a tool that disappears from the list
       // is unreachable to every connected Claude, and nothing else would notice.
       const body = await (await POST(rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }))).json();
       expect(body.result.tools.map((t: { name: string }) => t.name)).toEqual([
         "search_company_context",
         "fetch_document",
+        "record_decision",
         "get_business_numbers",
         "list_product_tables",
         "query_product_data",
@@ -137,17 +138,21 @@ describe("/api/mcp", () => {
       for (const t of body.result.tools) expect(t.inputSchema.type).toBe("object");
     });
 
-    it("marks every tool read-only, and only the outside-services one open-world", async () => {
+    it("declares exactly one writing tool, and only the outside-services one open-world", async () => {
       /**
-       * `readOnlyHint` is what lets a client stop asking permission per call, so it
-       * is a promise about behaviour rather than decoration. This endpoint is
-       * read-only by construction -- a sibling test asserts it never issues PATCH,
-       * PUT or DELETE -- and this assertion is the tripwire for the day someone adds
-       * a tool that writes and copies the annotation block along with everything else.
+       * `readOnlyHint` is what lets a client stop asking permission per call, so it is a
+       * promise about behaviour rather than decoration.
        *
-       * `destructiveHint`/`idempotentHint` are deliberately absent: per the MCP spec
-       * they only carry meaning when `readOnlyHint` is false, and setting them anyway
-       * states something untrue about tools that cannot destroy anything.
+       * THIS TRIPWIRE HAS NOW FIRED ONCE, WHICH IS WHY IT IS WRITTEN THIS WAY. It used to
+       * assert every tool was read-only; `record_decision` is deliberately not, so the
+       * assertion became a NAMED exception rather than a loosened one. A second writing
+       * tool added by copying an annotation block still breaks this test, which is the
+       * only reason it is worth having.
+       *
+       * `destructiveHint` stays absent everywhere: per the MCP spec it means something
+       * only when `readOnlyHint` is false, and `record_decision` destroys nothing —
+       * re-recording the same decision on the same day updates one record, and
+       * superseding keeps the record it supersedes.
        */
       const body = await (await POST(rpc({ jsonrpc: "2.0", id: 21, method: "tools/list" }))).json();
       const tools = body.result.tools as Array<{
@@ -155,8 +160,10 @@ describe("/api/mcp", () => {
         title?: string;
         annotations?: Record<string, boolean>;
       }>;
+      expect(tools.filter((t) => t.annotations?.readOnlyHint !== true).map((t) => t.name)).toEqual([
+        "record_decision",
+      ]);
       for (const t of tools) {
-        expect(t.annotations?.readOnlyHint, t.name).toBe(true);
         expect(t.annotations, t.name).not.toHaveProperty("destructiveHint");
         expect(typeof t.title, t.name).toBe("string");
       }
@@ -668,6 +675,140 @@ describe("/api/mcp", () => {
       const r = await call({ id: "drive/doc:1AbC" });
       expect(r.isError).toBe(true);
       expect(r.content[0].text).toMatch(/outage, not a missing document/);
+    });
+  });
+
+  describe("record_decision — the one tool that writes", () => {
+    const call = (args: Record<string, unknown>) =>
+      POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 60,
+          method: "tools/call",
+          params: { name: "record_decision", arguments: args },
+        })
+      ).then((r) => r.json().then((b) => b.result));
+
+    /** Every Supabase write this tool made, excluding the `brain_query` log row. */
+    const writes = () =>
+      mockSupabaseFetch.mock.calls.filter(
+        ([path, init]) =>
+          !String(path).startsWith("/rest/v1/brain_query") &&
+          (init as { method?: string } | undefined)?.method === "POST"
+      );
+
+    beforeEach(() => {
+      mockSupabaseFetch.mockImplementation(async () => ({
+        ok: true,
+        headers: new Headers(),
+        json: async () => [],
+        text: async () => "",
+      }));
+    });
+
+    /**
+     * A ONE-WORD "DECISION" IS THE FAILURE THIS TOOL EXISTS TO FIX.
+     *
+     * The measured problem is titles that share no word with the question they answer:
+     * a record titled "Decision: pricing" reproduces it exactly, and unlike a bad
+     * meeting-note title it would be written deliberately and kept forever.
+     */
+    it("refuses a placeholder instead of recording one", async () => {
+      const r = await call({ decision: "pricing", actor: "Eman Cickusic" });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toMatch(/full sentence/);
+      expect(writes()).toHaveLength(0);
+    });
+
+    it("refuses an unattributed decision", async () => {
+      const r = await call({ decision: "Move report pricing to flat tiers", actor: "  " });
+      expect(r.isError).toBe(true);
+      expect(writes()).toHaveLength(0);
+    });
+
+    /**
+     * A malformed date used to become today silently, which does not back-date a late
+     * entry — it MIS-dates it, and every `since`/`until` question then reads the record
+     * as having happened on the day someone typed it up.
+     */
+    it("refuses a date it cannot read rather than quietly stamping today", async () => {
+      const r = await call({
+        decision: "Move report pricing to flat tiers",
+        actor: "Eman Cickusic",
+        decided_on: "last tuesday",
+      });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toMatch(/2026-09-09/);
+      expect(writes()).toHaveLength(0);
+    });
+
+    it("records a real one, with the decision text in the title", async () => {
+      const r = await call({
+        decision: "Move report pricing to flat tiers and drop the per-user uplift",
+        actor: "Eman Cickusic",
+        rejected: "Keeping the discount ladder",
+        topic: "pricing",
+      });
+      expect(r.isError).toBe(false);
+      const [path, init] = writes()[0]!;
+      expect(String(path)).toContain("brain_chunk");
+      const [row] = JSON.parse(String((init as { body?: string }).body));
+      expect(row.source).toBe("decision");
+      expect(row.title).toContain("flat tiers");
+      expect(row.body).toContain("Rejected: Keeping the discount ladder");
+      // The id is what supersedes a decision later, so it has to come back to the caller.
+      expect(r.content[0].text).toContain(row.source_id);
+    });
+
+    /**
+     * WRITING DOWN WHAT WAS REJECTED IS THE HALF THAT STOPS THE ARGUMENT BEING RE-RUN,
+     * and it is the half a caller in a hurry omits. The record is still written — a
+     * partial decision beats none — and the omission is said out loud rather than
+     * enforced, because refusing here would lose real decisions to a formatting rule.
+     */
+    it("says so when nothing was recorded about the alternatives", async () => {
+      const bare = await call({ decision: "Move report pricing to flat tiers", actor: "Eman" });
+      expect(bare.isError).toBe(false);
+      expect(bare.content[0].text).toMatch(/REJECTED/);
+      expect(writes()).toHaveLength(1);
+
+      mockSupabaseFetch.mockClear();
+      const full = await call({
+        decision: "Move report pricing to flat tiers",
+        actor: "Eman",
+        rejected: "The discount ladder",
+      });
+      expect(full.content[0].text).not.toMatch(/REJECTED/);
+    });
+
+    /**
+     * A DECISION CARRYING SOMETHING SHAPED LIKE A CREDENTIAL IS DROPPED BY THE SHARED
+     * WRITE PATH — correctly, for a 200-row ingest batch. Here the batch is one row, so
+     * the drop is the whole write, and it returns a count rather than raising. Reporting
+     * "Recorded" for it is the one failure the caller cannot see and will not retry.
+     */
+    it("does not report success for a decision the write path refused", async () => {
+      const r = await call({
+        decision: "Rotate the deploy key, the old one was ghp_" + "a".repeat(36),
+        actor: "Eman",
+      });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toMatch(/Nothing was written/);
+    });
+
+    /** Act-freely was chosen over confirm-first, so a failed write must be reported as
+     *  one. Silently answering "recorded" to a decision that was not is the worst
+     *  outcome available: the caller stops trying and the record does not exist. */
+    it("reports a failed write instead of claiming it recorded", async () => {
+      mockSupabaseFetch.mockImplementation(async (path: string) => {
+        if (String(path).startsWith("/rest/v1/brain_query")) {
+          return { ok: true, headers: new Headers(), json: async () => [] };
+        }
+        return { ok: false, status: 500, headers: new Headers(), text: async () => "boom" };
+      });
+      const r = await call({ decision: "Move report pricing to flat tiers", actor: "Eman" });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toMatch(/Nothing was written/);
     });
   });
 
@@ -1960,7 +2101,7 @@ describe("the instructions must name every tool the server offers", () => {
   /**
    * A CLIENT THAT READS ONLY `instructions` LEARNS THE SERVER FROM IT.
    *
-   * Two of the seven tools were named nowhere in it — `query_external_service`, which
+   * Two of the tools were named nowhere in it — `query_external_service`, which
    * is the entire door to nine outside services, and `get_business_numbers`. A model
    * given the instructions and nothing else would never reach for either. Nothing
    * connected the two strings, so adding a tool and forgetting the prose was silent.

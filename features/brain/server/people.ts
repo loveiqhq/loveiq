@@ -29,7 +29,7 @@ export interface Person {
 }
 
 /** Scalar identity fields. Notion joins several assignees with ", ", so values are split. */
-const SCALAR_FIELDS = ["author", "assignee", "owner", "organizer"] as const;
+const SCALAR_FIELDS = ["author", "assignee", "owner", "organizer", "actor"] as const;
 /** Array identity fields. */
 const ARRAY_FIELDS = ["participants", "speakers", "attendees"] as const;
 

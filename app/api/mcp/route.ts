@@ -6,6 +6,7 @@ import { renderSources } from "@features/brain/server/answer";
 import { recordToolCall } from "@features/brain/server/log";
 import { adCostByDay, adCovers, brainDailyRollup } from "@features/brain/server/ingest/analytics";
 import { CorpusUnavailableError, retrieve } from "@features/brain/server/retrieve";
+import { recordDecision } from "@features/brain/server/decisions";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
@@ -232,6 +233,9 @@ export function capWithNotice(
 /** Exported only so the "no indexed source is invisible" test reads the SAME
  * array the route uses — a copy in the test would drift with the bug. */
 export const SOURCES_FOR_TEST = [
+  // Written by `record_decision`, not ingested from anywhere. Listed here in the commit
+  // that creates the first one, per the rule below about `jira`.
+  "decision",
   "doc",
   "commit",
   "analytics",
@@ -503,6 +507,70 @@ const TOOLS = [
         },
       },
       required: ["id"],
+    },
+  },
+  {
+    name: "record_decision",
+    title: "Write down what was decided",
+    /**
+     * THE ONLY TOOL HERE THAT WRITES.
+     *
+     * `readOnlyHint: false` so a client can tell, and `openWorldHint: false` because it
+     * touches nothing outside our own corpus. `destructiveHint` is deliberately absent:
+     * recording a decision adds a record, and re-recording the same decision on the same
+     * day updates that one record rather than creating a second.
+     */
+    annotations: { readOnlyHint: false, openWorldHint: false, idempotentHint: true },
+    description:
+      "Record a decision so the company can find it later. Use this whenever something " +
+      "is settled — in a call, in chat, or in this conversation — rather than leaving it " +
+      "to be reconstructed from a transcript later. Decisions written this way are " +
+      "searchable immediately alongside everything else, carry a date and an author, and " +
+      "can supersede an earlier one. WRITE DOWN WHAT WAS REJECTED, not only what was " +
+      "chosen: the most expensive thing a company re-does is an argument it already had. " +
+      "Every call is logged and mirrored to the team's ops channel, so record what was " +
+      "actually agreed and attribute it honestly.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        decision: {
+          type: "string",
+          description:
+            "What was decided, as one plain sentence someone would recognise months " +
+            "later. This becomes the title and is what future searches match on, so " +
+            "'switch report pricing to flat tiers and drop the per-user uplift' works " +
+            "and 'pricing update' does not.",
+        },
+        actor: {
+          type: "string",
+          description:
+            "Who decided it, as their full name. There is one shared credential on this " +
+            "server, so this is taken on trust and never verified — record who actually " +
+            "decided, not who is typing.",
+        },
+        why: { type: "string", description: "The reasoning, if there is any worth keeping." },
+        rejected: {
+          type: "string",
+          description:
+            "What was considered and NOT chosen, and why. This is the half that stops " +
+            "the same argument being had again.",
+        },
+        topic: {
+          type: "string",
+          description: "One word for what this is about, e.g. 'pricing', 'paywall', 'report'.",
+        },
+        decided_on: {
+          type: "string",
+          description: "YYYY-MM-DD. Defaults to today. Use the real date if recording late.",
+        },
+        supersedes: {
+          type: "string",
+          description:
+            "The id of the decision this replaces, as printed when it was recorded or on " +
+            "a search line. The older record is kept — superseding is history, not deletion.",
+        },
+      },
+      required: ["decision", "actor"],
     },
   },
   {
@@ -1224,6 +1292,66 @@ async function callTool(
     );
   }
 
+  if (name === "record_decision") {
+    const decision = typeof args.decision === "string" ? args.decision.trim() : "";
+    const actor = typeof args.actor === "string" ? args.actor.trim() : "";
+    /**
+     * A one-word "decision" is not one. "pricing" as a title is exactly the failure this
+     * tool exists to fix — it matches no question anyone asks, and it would be recorded
+     * forever. 12 characters is low enough to admit a terse real decision and high enough
+     * to reject a placeholder.
+     */
+    if (decision.length < 12) {
+      return textResult(
+        "Write the decision as a full sentence someone would recognise months later — " +
+          "what was decided, not the topic it was about.",
+        true
+      );
+    }
+    if (!actor) {
+      return textResult("Say who decided it, as their full name.", true);
+    }
+    const decidedOn = typeof args.decided_on === "string" ? args.decided_on.trim() : undefined;
+    // A malformed date silently became today, which back-dates nothing and mis-dates the
+    // record without telling anyone. `buildDecisionRow` also defaults, so this is the
+    // difference between "not given" and "given wrong".
+    if (decidedOn !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(decidedOn)) {
+      return textResult("`decided_on` must look like 2026-09-09.", true);
+    }
+    const str = (v: unknown): string | undefined =>
+      typeof v === "string" && v.trim() ? v.trim() : undefined;
+
+    let recorded;
+    try {
+      recorded = await recordDecision({
+        decision,
+        actor,
+        why: str(args.why),
+        rejected: str(args.rejected),
+        topic: str(args.topic),
+        decidedOn,
+        supersedes: str(args.supersedes),
+      });
+    } catch (err) {
+      logger.error({ err }, "brain: could not record a decision");
+      return textResult("Could not record that decision. Nothing was written.", true);
+    }
+
+    stats.sourceCount = 1;
+    return textResult(
+      `Recorded. id: ${recorded.id} (decided ${recorded.decidedOn}, by ${actor})\n\n` +
+        "Findable by its wording immediately, fully indexed within about fifteen " +
+        "minutes, and `fetch_document` reads it back by that id at once. " +
+        "Quote the id if a later decision replaces this one." +
+        (str(args.rejected)
+          ? ""
+          : "\n\nNothing was recorded about what was REJECTED. If alternatives were " +
+            "weighed, record this again with `rejected` — that is the half that stops " +
+            "the same argument being re-run."),
+      false
+    );
+  }
+
   if (name === "get_business_numbers") {
     // No 120-day ceiling. The old one silently returned 120 days to a caller who
     // asked for a year, which reads as "that is all there is". The database
@@ -1911,7 +2039,18 @@ export async function POST(request: Request) {
         "Which half to reach for: history for why something was decided or what a past " +
         "period looked like; live for what is true right now. Never infer a current number " +
         "from an indexed chunk when query_product_data can read it directly, and never " +
-        "conclude something does not exist from an empty search — check list_sources first.",
+        "conclude something does not exist from an empty search — check list_sources first.\n\n" +
+        "DECISIONS ARE THE POINT OF THIS SERVER, and they are the thinnest thing in it — " +
+        "most of what is recorded is a by-product of somebody happening to hold a call " +
+        "that was transcribed. So two habits matter more than any search technique. " +
+        "FIRST, BEFORE PROPOSING A CHANGE OF DIRECTION — a different price, a rebuilt " +
+        "page, a dropped feature, a new tool — SEARCH WHETHER IT WAS ALREADY DECIDED, and " +
+        "if it was, say so and say when, rather than re-opening it silently. A team that " +
+        "re-argues a settled question is the specific waste this exists to prevent. " +
+        "SECOND, WHEN SOMETHING IS SETTLED — in a call, in chat, or in the conversation " +
+        "you are in — call `record_decision` so the next person can find it. Write down " +
+        "what was rejected as well as what was chosen. Recording is the only way the " +
+        "corpus gets better at the thing it is for.",
     });
   }
 
