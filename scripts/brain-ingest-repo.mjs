@@ -90,6 +90,34 @@ const BATCH = 200;
 const git = (args) => execFileSync("git", args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
 
 /** GitHub's heading anchor: lowercased, punctuation dropped, spaces to dashes. */
+/**
+ * AUTHENTICATION MATERIAL, MASKED -- a duplicate of `redactUrlSecrets` in
+ * `features/brain/server/ingest/upsert.ts`.
+ *
+ * This script deliberately does NOT go through `upsertChunks`: it runs in a GitHub
+ * Action with no Next.js module graph and POSTs to PostgREST directly. That is also why
+ * it was the one write path with no redaction at all -- an audit on 2026-09-10 found the
+ * gap by reading the code rather than by finding a leak, which is the good order.
+ *
+ * Kept in sync BY TEST, not by hope: `features/brain/tests/brain-upsert.test.ts` asserts
+ * the two implementations agree on the same fixtures, so a pattern added to one and not
+ * the other fails the suite.
+ */
+const SECRET_PARAMS =
+  "token|token_hash|access_token|refresh_token|id_token|auth|code|otp|secret|password|" +
+  "passwd|pwd|api_key|apikey|key|sig|signature|session|uart";
+const SECRET_PARAM_RE = new RegExp(
+  `([?&#][a-z0-9_.-]*(?:${SECRET_PARAMS})=)[^\\s&"'<>)\\]]+`,
+  "gi"
+);
+const BARE_SECRET_RE = /rpts?_[A-Za-z0-9_-]{12,}|rpp_[A-Za-z0-9_-]{12,}/g;
+
+export function redactUrlSecrets(text) {
+  return String(text)
+    .replace(SECRET_PARAM_RE, "$1[redacted]")
+    .replace(BARE_SECRET_RE, "[redacted]");
+}
+
 function anchor(heading) {
   return heading
     .toLowerCase()
@@ -240,9 +268,9 @@ export function chunkMarkdown(path, text) {
       return {
         source: "doc",
         source_id: n === 1 ? base : `${base}-${n}`,
-        title: buildTitle(c.crumb),
+        title: redactUrlSecrets(buildTitle(c.crumb)),
         url: `https://github.com/${REPO}/blob/main/${path}${c.anchorId ? `#${c.anchorId}` : ""}`,
-        body: c.body,
+        body: redactUrlSecrets(c.body),
         // A doc describes no period; null sorts last on the recency tie-break.
         period_end: null,
         meta: { path, heading: c.heading, part: n, covers: c.covered.slice(0, 12) },
@@ -467,6 +495,23 @@ process.chdir(git(["rev-parse", "--show-toplevel"]).trim());
  * dropped it. Silent, exit 0, no part marker.
  */
 if (process.argv.includes("--self-check")) {
+  // Authentication material must not survive into a chunk. This write path bypasses
+  // `upsertChunks`, so it is the one place the shared guard cannot reach.
+  for (const [input, mustChange] of [
+    ["see https://www.loveiq.org/report/rpt_AbCd1234EfGh5678IjKl", true],
+    ["join?invitation_token=abcdef1234567890", true],
+    ["callback?token_hash=63bfcdb4aaaa1111&type=magiclink", true],
+    ["the plan is full_report and the metric_key is signups", false],
+    ["https://github.com/loveiqhq/loveiq/blob/main/docs/runbooks/SECURITY.md", false],
+  ]) {
+    const out = redactUrlSecrets(input);
+    if ((out !== input) !== mustChange) {
+      console.error(
+        `self-check FAILED: redactUrlSecrets ${mustChange ? "missed" : "mangled"}: ${input}`
+      );
+      process.exit(1);
+    }
+  }
   const lede = "LoveIQ pays Stripe 2.9% plus 30 cents per sale.";
   const long = Array.from({ length: 45 }, () => "Filler about the checkout funnel.").join(" ");
   const chunks = chunkMarkdown("docs/PROBE.md", `${lede}\n\n## Details\n\n${long}\n`);

@@ -392,3 +392,62 @@ describe("authentication material in a link never reaches the corpus", () => {
     expect(redactUrlSecrets("?access_token=aaaabbbbccccdddd")).toBe("?access_token=[redacted]");
   });
 });
+
+/**
+ * TWO IMPLEMENTATIONS OF ONE RULE, KEPT IN AGREEMENT BY TEST.
+ *
+ * `scripts/brain-ingest-repo.mjs` deliberately does not use `upsertChunks` -- it runs in
+ * a GitHub Action with no Next.js module graph and speaks to PostgREST directly -- which
+ * is precisely why it was the one write path with no redaction at all until 2026-09-10.
+ * Duplicating the patterns is the right call for that constraint; leaving them to drift
+ * apart is not, and a pattern added to one and not the other is exactly the failure that
+ * would go unnoticed.
+ *
+ * The script cannot be imported (importing it runs its main against a live database), so
+ * its patterns are read out of the source and exercised against the same fixtures.
+ */
+describe("the repo ingester redacts the same things the shared write path does", () => {
+  const FIXTURES: Array<[string, boolean]> = [
+    ["https://www.loveiq.org/report/rpt_AbCd1234EfGh5678IjKl", true],
+    ["open rpts_AbCd1234EfGh5678IjKl to see it", true],
+    ["prepaid rpp_AbCd1234EfGh5678IjKlMnOp to unlock", true],
+    ["https://github.com/join?invitation_token=abcdef1234567890", true],
+    ["callback?token_hash=63bfcdb4aaaa1111&type=magiclink", true],
+    ["https://x.com/y?auth_token=abcd1234", true],
+    ["wrapped reset?token=ab\n  cdefgh", true],
+    ["the plan is full_report and the metric_key is signups", false],
+    ["https://docs.google.com/document/d/1BSVy-_IUY1X6cCyuw5FWrxCMcCA8uDDnO/edit", false],
+    ["https://www.notion.so/loveiq/Board-8f2a1c9d4e5b6a7c8d9e0f1a2b3c4d5e", false],
+  ];
+
+  it("agrees with the shared implementation on every fixture", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync("scripts/brain-ingest-repo.mjs", "utf8");
+    const params = /const SECRET_PARAMS =\n([\s\S]*?);\n/.exec(src)?.[1];
+    const bare = /const BARE_SECRET_RE = (\/[\s\S]*?\/[a-z]*);/.exec(src)?.[1];
+    expect(
+      params,
+      "SECRET_PARAMS not found in the script — the guard moved or was deleted"
+    ).toBeTruthy();
+    expect(
+      bare,
+      "BARE_SECRET_RE not found in the script — the guard moved or was deleted"
+    ).toBeTruthy();
+
+     
+    const paramList = eval(params!) as string;
+    const paramRe = new RegExp(`([?&#][a-z0-9_.-]*(?:${paramList})=)[^\\s&"'<>)\\]]+`, "gi");
+     
+    const bareRe = eval(bare!) as RegExp;
+    const scriptRedact = (t: string) =>
+      t.replace(paramRe, "$1[redacted]").replace(new RegExp(bareRe.source, "g"), "[redacted]");
+
+    const { redactUrlSecrets } = await import("@features/brain/server/ingest/upsert");
+    for (const [input, mustChange] of FIXTURES) {
+      const shared = redactUrlSecrets(input);
+      const script = scriptRedact(input);
+      expect(script, `script disagrees with upsert.ts on: ${input}`).toBe(shared);
+      expect(shared !== input, `wrong verdict on: ${input}`).toBe(mustChange);
+    }
+  });
+});

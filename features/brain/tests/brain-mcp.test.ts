@@ -708,7 +708,17 @@ describe("/api/mcp", () => {
      */
     it("names a bad date as a bad date, never as an outage", async () => {
       mockRetrieve.mockResolvedValue([]);
-      for (const bad of ["last friday", "2026-13-45", "2026-02-30", "2026-09-31", "Aug 2026"]) {
+      for (const bad of [
+        "last friday",
+        "2026-13-45",
+        "2026-02-30",
+        "2026-09-31",
+        "Aug 2026",
+        "2026-09-09T99:99:99",
+        "2026-09-09T24:00:01",
+        "2026-09-09T12:60",
+        "2026-09-09Tbanana",
+      ]) {
         const r = (await (await call({ query: "anything", since: bad })).json()).result;
         expect(r.isError).toBe(true);
         expect(r.content[0].text).toMatch(/must be a real calendar date/);
@@ -716,9 +726,21 @@ describe("/api/mcp", () => {
         expect(r.content[0].text).not.toMatch(/unreachable/);
       }
       expect(mockRetrieve).not.toHaveBeenCalled();
-      // A real date still passes straight through.
-      await call({ query: "anything", since: "2026-02-28", until: "2026-09-30" });
-      expect(mockRetrieve).toHaveBeenCalled();
+      // Real dates AND real timestamps still pass straight through — the time portion is
+      // validated, not rejected.
+      for (const good of [
+        "2026-02-28",
+        "2024-02-29",
+        "2026-09-09T12:30",
+        "2026-09-09T12:30:45",
+        "2026-09-09 12:30:45",
+        "2026-09-09T12:30:45.123Z",
+        "2026-09-09T12:30:45+02:00",
+      ]) {
+        mockRetrieve.mockClear();
+        await call({ query: "anything", since: good });
+        expect(mockRetrieve, `wrongly refused: ${good}`).toHaveBeenCalled();
+      }
     });
 
     /**
@@ -2572,6 +2594,58 @@ describe("/api/mcp", () => {
         expect(emailTags).toHaveLength(3);
         expect(emailTags[0]).toBe(emailTags[1]);
         expect(emailTags[2]).not.toBe(emailTags[0]);
+      });
+
+      /**
+       * ONE CHARACTER DEFEATED THE WHOLE GATE.
+       *
+       * The mask matches the returned KEY NAME, so a PostgREST alias renames the column
+       * before it arrives and there is nothing left to match. Measured 2026-09-10:
+       * `select:"id,email"` returned `[private #08e1]`; `select:"id,e:email"` returned
+       * the real address, with no mask AND no "Masked as private" notice, so the output
+       * was indistinguishable from a clean answer. The same trick reached 1,933 live
+       * report-unlock tokens, each of which opens a paid personal report with no login.
+       */
+      it("refuses a select that renames, casts or embeds", async () => {
+        wire(ROWS);
+        for (const select of [
+          "id,e:email",
+          "id,email::text",
+          "id,user_profile(sexual_orientation)",
+          "id,user_profile(*)",
+        ]) {
+          const r = await call({ table: "payment", select });
+          expect(r.isError, `not refused: ${select}`).toBe(true);
+          expect(r.content[0].text).toMatch(/may not rename a column/);
+          expect(r.content[0].text).toMatch(/masked by NAME/);
+        }
+        // The plain form still works.
+        const ok = await call({ table: "payment", select: "id,amount,status" });
+        expect(ok.isError).toBeFalsy();
+      });
+
+      /**
+       * A NESTED VALUE WAS COPIED THROUGH WHOLE. The mask iterated top-level keys only,
+       * so an embedded resource or a jsonb blob carried its contents out untouched --
+       * `survey_partial_save.answers` is 976 rows of verbatim draft survey answers, the
+       * exact class a recorded decision forbids reaching a model prompt.
+       */
+      it("masks private values nested inside an object or an array", async () => {
+        wire([
+          {
+            id: 1,
+            amount: 5,
+            user_profile: { sexual_orientation: "redacted-me", country: "DE" },
+            contacts: [{ email: "nested@example.com" }, { email: "other@example.com" }],
+          },
+        ]);
+        const text = (await call({ table: "payment" })).content[0].text;
+        expect(text).not.toContain("redacted-me");
+        expect(text).not.toContain("nested@example.com");
+        expect(text).not.toContain("other@example.com");
+        // Non-private neighbours inside the same nested object survive.
+        expect(text).toContain('"country":"DE"');
+        expect(text).toMatch(/Masked as private/);
       });
 
       it("says nothing about masking when there is nothing to mask", async () => {

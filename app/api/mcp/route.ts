@@ -1510,6 +1510,15 @@ const PRIVATE_SUFFIXES = [
   "zipcode",
   "postal_code",
   "signature",
+  // jsonb blobs that hold whatever the writer put there. `survey_partial_save.answers`
+  // is 976 rows of verbatim draft survey answers -- the exact class a recorded decision
+  // forbids -- and `booking_event.raw` carries Calendly invitee names and emails. The
+  // redactor recurses into these now, but a blob whose inner keys are unknown must be
+  // masked whole rather than walked hopefully.
+  "answers",
+  "raw",
+  "metadata",
+  "payload",
 ];
 
 /**
@@ -1561,17 +1570,35 @@ function privateTag(value: unknown): string {
  */
 function redactPrivateColumns(rows: unknown[]): { rows: unknown[]; redacted: string[] } {
   const hit = new Set<string>();
-  const out = rows.map((row) => {
-    if (!row || typeof row !== "object" || Array.isArray(row)) return row;
-    const copy: Record<string, unknown> = { ...(row as Record<string, unknown>) };
+  /**
+   * RECURSIVE, because the flat version was walked around twice on 2026-09-10.
+   *
+   * `select=id,user_profile(sexual_orientation)` is a PostgREST embedded resource: the
+   * value is a nested object, and iterating top-level keys copied it through untouched.
+   * `select=id,user_profile(*)` dumped every profile column the same way. jsonb columns
+   * are the same shape from here -- `survey_partial_save.answers` holds 976 rows of
+   * verbatim draft survey answers under a key the name denylist does not list, and
+   * `booking_event.raw` holds Calendly invitee names and emails.
+   *
+   * Depth-limited because a cycle is impossible in JSON but a pathological nesting is
+   * not, and this runs on every row of every page.
+   */
+  const walk = (value: unknown, depth: number): unknown => {
+    if (depth > 8 || value === null || typeof value !== "object") return value;
+    if (Array.isArray(value)) return value.map((v) => walk(v, depth + 1));
+    const copy: Record<string, unknown> = { ...(value as Record<string, unknown>) };
     for (const key of Object.keys(copy)) {
-      if (!PRIVATE_COLUMN.test(key)) continue;
       if (copy[key] === null || copy[key] === undefined) continue;
-      hit.add(key);
-      copy[key] = privateTag(copy[key]);
+      if (PRIVATE_COLUMN.test(key)) {
+        hit.add(key);
+        copy[key] = privateTag(copy[key]);
+        continue;
+      }
+      copy[key] = walk(copy[key], depth + 1);
     }
     return copy;
-  });
+  };
+  const out = rows.map((row) => walk(row, 0));
   return { rows: out, redacted: [...hit].sort() };
 }
 
@@ -1610,15 +1637,25 @@ function intArg(value: unknown, fallback: number, min: number, max: number): num
  */
 function badDateMessage(key: string, val: string | undefined): string | null {
   if (val === undefined) return null;
-  const m = /^(\d{4})-(\d{2})-(\d{2})([T ].*)?$/.exec(val);
+  const m =
+    /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$/.exec(
+      val
+    );
   if (m) {
     const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
     const dt = new Date(Date.UTC(y, mo - 1, d));
     // Round-trip: JS rolls 2026-02-30 forward to 2026-03-02, so a date that survives
     // unchanged is a date that exists.
-    if (dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d) {
-      return null;
-    }
+    const dateReal =
+      dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
+    // The time portion is checked too. It used to be `([T ].*)?$` -- anything at all --
+    // so `2026-09-09T99:99:99` passed, reached Postgres, 400ed, and was reported as the
+    // knowledge base being unreachable. That is the exact failure this function exists to
+    // remove, surviving inside the fix for it.
+    const timeReal =
+      m[4] === undefined ||
+      (Number(m[4]) <= 23 && Number(m[5]) <= 59 && (m[6] === undefined || Number(m[6]) <= 60));
+    if (dateReal && timeReal) return null;
   }
   return (
     `\`${key}\` must be a real calendar date like 2026-09-09 — "${val}" is not one. ` +
@@ -2867,6 +2904,31 @@ async function callTool(
         true
       );
     }
+    /**
+     * A `select` MAY NOT RENAME OR EMBED, because the privacy gate matches key names.
+     *
+     * Measured 2026-09-10: `select: "id,email"` returned `[private #08e1]`, and
+     * `select: "id,e:email"` -- one character more -- returned the real address with no
+     * mask and no notice, so the output was indistinguishable from a clean answer. The
+     * same trick reached 1,933 live report-unlock tokens, each of which opens a paid
+     * personal report with no login.
+     *
+     * Refused rather than mask-by-position, because an alias has no legitimate use here
+     * and a rule that has to model PostgREST's whole select grammar is a rule that will
+     * be walked around again. Embedded resources (`user_profile(*)`) are refused for the
+     * same reason even though the redactor now recurses: two guards, because this one is
+     * the class of bug that keeps recurring.
+     */
+    if (typeof args.select === "string" && /[:(]/.test(args.select)) {
+      return textResult(
+        "`select` may not rename a column (`alias:column`), cast it (`column::type`) or " +
+          "embed a related table (`table(columns)`). Ask for the columns plainly, e.g. " +
+          '"id,created_date_time,amount". Renaming is refused because private columns are ' +
+          "masked by NAME, so a renamed column would come back unmasked and the answer " +
+          "would look exactly like a clean one.",
+        true
+      );
+    }
     const selectList =
       typeof args.select === "string" && args.select.trim() ? args.select.trim() : "*";
     const limit = intArg(args.limit, 100, 1, MAX_PRODUCT_ROWS);
@@ -2960,7 +3022,11 @@ async function callTool(
         // this returned 2,047 (1.4%), cut mid-key, with isError:false and nothing
         // said. This is the rpc path the tool description tells the model to PREFER.
         // capWithNotice cuts at the real ceiling and says that it did.
-        `That returned a single value rather than rows: ${JSON.stringify(rows)}`
+        // THROUGH THE GATE AND THE FENCE, like every other return from this tool. This
+        // branch ran before both, so an rpc returning a jsonb object of personal data
+        // would have rendered it raw.
+        `${UNTRUSTED_DATA_PREAMBLE}\n\nThat returned a single value rather than rows: ` +
+          `${JSON.stringify(redactPrivateColumns([rows]).rows[0])}`
       );
     }
 
@@ -3141,9 +3207,41 @@ async function callTool(
     if (!res.ok) {
       return textResult(`${key} returned ${res.status}:\n${text}`, true);
     }
+    /**
+     * THE SAME PRIVACY GATE AS THE DATABASE HALF, because it is the same data class.
+     *
+     * Measured 2026-09-10: `service:"stripe", path:"/customers"` returned live customer
+     * records with raw email addresses, and dropping the filter pages the whole customer
+     * list. Stripe, Resend and Calendly all hold the personal data that
+     * `query_product_data` masks -- one tool over, with no trick needed, on the same
+     * server, against a recorded decision that says this must not reach a model prompt.
+     *
+     * Applied to the PARSED payload so the recursion reaches nested objects, which is
+     * how every one of these APIs shapes its responses. Unparseable bodies fall through
+     * unchanged: a redactor that mangles a non-JSON response would be a new bug, and the
+     * services here all return JSON.
+     */
+    let payload = text || "(empty response)";
+    let externalRedacted: string[] = [];
+    try {
+      const parsed: unknown = JSON.parse(text);
+      const { rows: safe, redacted } = redactPrivateColumns([parsed]);
+      if (redacted.length > 0) {
+        payload = JSON.stringify(safe[0]);
+        externalRedacted = redacted;
+      }
+    } catch {
+      // Not JSON. Returned as-is, exactly as before.
+    }
+    const externalNote =
+      externalRedacted.length > 0
+        ? `\n\nMasked as private, so the value is never pasted into a prompt: ` +
+          `${externalRedacted.join(", ")}. The field is NOT empty — the same underlying ` +
+          `value always shows the same #tag, so records can still be matched to each other.`
+        : "";
     // Fenced like the corpus tools are. A GitHub issue body on a PUBLIC repository is
     // writable by anyone, and this returned it as raw unframed JSON.
-    return textResult(`${UNTRUSTED_DATA_PREAMBLE}\n\n${text || "(empty response)"}`);
+    return textResult(`${UNTRUSTED_DATA_PREAMBLE}${externalNote}\n\n${payload}`);
   }
 
   if (name === "list_sources") {

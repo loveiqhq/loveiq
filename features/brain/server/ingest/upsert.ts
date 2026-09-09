@@ -128,9 +128,48 @@ const SECRET_PARAMS = [
   "uart", // Upwork's password-reset parameter, found live in the mailbox
 ];
 
+/**
+ * The parameter name may carry any prefix -- `auth_token`, `invitation_token`,
+ * `reset_secret`. Enumerating exact names missed three live chunks, one of them a
+ * GitHub organisation-join credential, because `[?&#]` had to sit immediately before
+ * the listed word.
+ *
+ * NO LENGTH FLOOR. It started at 8 to avoid masking trivia, and a mail client wrapping
+ * a long URL leaves as few as two characters after `token=` on the first line -- so the
+ * floor skipped exactly the lines that needed it and left the whole link readable.
+ * There is no value in a short auth parameter that is worth printing, so any non-empty
+ * one is masked.
+ */
 const SECRET_PARAM_RE = new RegExp(
-  `([?&#](?:${[...SECRET_PARAMS].sort((a, b) => b.length - a.length).join("|")})=)[^\\s&"'<>)\\]]{8,}`,
+  `([?&#][a-z0-9_.-]*(?:${[...SECRET_PARAMS].sort((a, b) => b.length - a.length).join("|")})=)` +
+    `[^\\s&"'<>)\\]]+`,
   "gi"
+);
+
+/**
+ * SECRETS THAT ARE NOT QUERY PARAMETERS AT ALL.
+ *
+ * A report-unlock link is `https://www.loveiq.org/report/rpt_<20 chars>` -- the token is
+ * a PATH SEGMENT, so it carries no `?`, `&` or `#` and the parameter rule above could
+ * never see it. Measured 2026-09-10: 117 chunks held one, 86 of them reachable by an
+ * ordinary search, and one landed in the same response as the decision saying customer
+ * data must never reach a model prompt. `/report/<token>` opens a paid personal report
+ * with no login, and there were 1,933 live tokens.
+ *
+ * Prefixed shapes only, for the same reason `CREDENTIAL_PATTERNS` is: a generic
+ * "long opaque string in a path" rule would eat Drive file ids, Notion page ids and
+ * message permalinks, and a guard that eats real content is worse than no guard.
+ */
+const BARE_SECRET_RE = new RegExp(
+  [
+    // Verified against the live tables rather than guessed: `report_access_token.token`
+    // is `rpt_` + 20, `report_share.share_token` is `rpts_` + 20, and
+    // `prepaid_report_access.prepaid_token` is `rpp_` + 32. Two of these were invented
+    // on a first pass ("shr_", "ppd_") and matched nothing at all.
+    "rpts?_[A-Za-z0-9_-]{12,}", // report access + share tokens
+    "rpp_[A-Za-z0-9_-]{12,}", // prepaid report access token
+  ].join("|"),
+  "g"
 );
 
 /**
@@ -140,7 +179,7 @@ const SECRET_PARAM_RE = new RegExp(
  * carried a magic link can still see that it did, and can go to the mailbox.
  */
 export function redactUrlSecrets(text: string): string {
-  return text.replace(SECRET_PARAM_RE, "$1[redacted]");
+  return text.replace(SECRET_PARAM_RE, "$1[redacted]").replace(BARE_SECRET_RE, "[redacted]");
 }
 
 /** The credential kind found in this text, or null. */

@@ -14,18 +14,19 @@ message. It replies in a thread, and every answer lists the sources it used.
 | ---------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | "how are we doing this month"                              | The funnel rollup carries visits, signups, revenue and ad spend per day, week and month |
 | "how much did we spend on Google Ads and what did we earn" | Spend and revenue sit in the same chunk, already divided, so nothing has to be computed |
-| "why did we stop the dark landing page test"               | Every commit is indexed, including the plain-English `For Marcus:` summary              |
+| "why did we stop the dark landing page test"               | Recorded call notes and the Slack day it was discussed both carry the reasoning         |
 | "why is the data retention purge turned off"               | `CLAUDE.md` records deliberately-deferred work and the reason                           |
 | "what does `STRIPE_COUPON_100` do"                         | The whole environment-variable table is indexed                                         |
 
 **It is weak at, and will say so rather than guess:**
 
 - **Anything only in code.** Only markdown is indexed — no `.ts`, no SQL
-  migrations, no CSVs. "What are the 14 archetypes" returns styling commits, not
-  the archetype definitions.
-- **Current state assembled from many changes.** The price of the report exists
-  only as a chain of dated commits across two A/B arms and a feature flag. It
-  cannot reliably replay that into "the price right now".
+  migrations, no CSVs, and since 2026-09-09 no git commits either (see "Why
+  commits are not indexed" below). "What are the 14 archetypes" returns
+  documentation about the archetypes, not the definitions themselves.
+- **Current state assembled from many changes.** The price of the report is
+  computed per visitor, so "what do we charge" is a live question — ask
+  `query_product_data` for `report_price_quote`, not the written record.
 - **Money outside the product.** No payroll, no bank balance, no runway — those
   live in systems nothing here reads.
 - **People, though — read this one carefully.** This list used to say the brain
@@ -73,6 +74,41 @@ with zero rows tells the model to search something that cannot answer.
 
 Both are idempotent and both sweep rows they did not rewrite, guarded by the
 write count **of their own source** so an empty run can never wipe a source.
+
+Git commits are **not** a source either, since 2026-09-09. They were 1,795 chunks —
+7.5% of the corpus — and the `[skip ci]`/dependabot noise in them consistently
+outranked real answers, while everything a commit explained is also in the
+documentation it changed, the call it came out of, or the Slack day it was discussed.
+Removing them also took contributor names and git email addresses out of an
+open-access corpus, which is a privacy reduction rather than a cost. `scripts/brain-ingest-repo.mjs`
+still runs on every push; it indexes the markdown and nothing else.
+
+### What can never enter the corpus
+
+Two classes are refused or masked at the **shared write path**, so every source gains
+the rule at once and no ingester has to remember it:
+
+- **Static credentials** — API keys, tokens and private keys matched by
+  `CREDENTIAL_PATTERNS`. The whole chunk is refused and a warning is logged with the
+  title and never the value, so someone can go and rotate it.
+- **One-time links** — the value after any authentication query parameter
+  (`token_hash`, `access_token`, `uart`, `code`, …) is masked to `[redacted]`, keeping
+  the parameter name and the rest of the thread. Masked rather than refused because a
+  mailbox is full of them, they arrive inside threads that carry real content, and one
+  of the shapes is our own unsubscribe link.
+
+  This is not theoretical: the Gmail cron runs hourly and an admin magic link is valid
+  for one hour, so before 2026-09-09 a link mailed at :05 was searchable at :11 with
+  most of its life left. 41 already-indexed chunks were redacted in place.
+
+The live half has its own gate. `query_product_data` masks 21 private columns —
+emails, names, IP addresses, report and share tokens, `sexual_orientation`,
+`password_hash`, verbatim survey answers — replacing each value with a stable
+`[private #xxxx]` tag. Filtering and counting on those columns still work, and the same
+underlying value always shows the same tag, so rows can be correlated without any
+identity being pasted into a prompt. `*_key` columns (`metric_key`, `week_key`,
+`chart_key` and eleven more) are deliberately NOT masked: they are business
+identifiers, and masking them would break the KPI tables to protect nothing.
 
 ### Environment variables
 
@@ -169,20 +205,29 @@ Six tools, in two halves.
 
 | Tool                     | For                                                                                                                                                                   |
 | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `search_company_context` | Anything written down — a decision, a commit, a Notion page or database row, a past month's numbers. Each hit carries a `relevance:` score, a `date:` and an `id:`    |
+| `search_company_context` | Anything written down — a decision, a Notion page or database row, a call note, a past month's numbers. Each hit carries a `relevance:` score, a `date:` and an `id:` |
 | `fetch_document`         | One document in full, reassembled from every part it was split into. Takes the `id:` from a search line; search only ever shows a document's single best-scoring part |
 | `get_business_numbers`   | Exact daily funnel/revenue/ad-spend rows to compute with                                                                                                              |
 | `list_sources`           | What the corpus holds and how fresh each source is — call this first when an answer looks stale                                                                       |
 
 **You can narrow, and it is usually better than rewording.** `search_company_context`
-takes `sources` and `exclude_sources` (any of doc, commit, analytics, ga4, gsc, notion,
+takes `sources` and `exclude_sources` (any of doc, decision, analytics, ga4, gsc, notion,
 drive, slack, gmail, calendar, whatsapp), `since` / `until`, and `meta` for indexed
-fields — a Notion task's `status` or `assignee`, a Slack `channel`, a commit `author`,
-a Gmail `mailbox`. Two things to know. Matching on `meta` is EXACT, so the statuses in
-use are `Done`, `Idea`, `Not Started`, `WIP`, `Backlog`, `Planning` and `In use` —
-"in_progress" matches nothing and says nothing. And any date range excludes repository
-documentation entirely, because `doc` chunks describe no period; use dates for "what
-happened recently", never for a policy lookup.
+fields — a Notion task's `status` or `assignee`, a Slack `channel`, a Gmail `mailbox`.
+Two things to know. Matching on `meta` is EXACT, and the values in use change as people
+edit the board, so **ask rather than guess**: `count_context` with `group_by:"status"`
+lists every status with its count. A list written down here was wrong within days — it
+named seven statuses while 28 were in use, and anyone trusting it would never have tried
+`Open` and would have reported that nothing was open. And any date range excludes
+repository documentation entirely, because `doc` chunks describe no period; use dates for
+"what happened recently", never for a policy lookup.
+
+**When nothing really matched, it now says so.** A result set whose best hit is weak on
+content — as opposed to merely recent — carries `NOTHING BELOW MATCHED THE QUESTION
+STRONGLY`. That is not "the company has no record of this"; it means these are the
+closest things in the corpus and are probably about something else. Reword or narrow
+rather than answering from what is below it. Added 2026-09-09, after a question about a
+service the company does not use returned eight confidently-scored hits.
 
 **Asking what was DECIDED is a filter, not a wording.** `{"section": "summary"}`
 selects the structured half of every recorded call — Summary, Details, an explicit
