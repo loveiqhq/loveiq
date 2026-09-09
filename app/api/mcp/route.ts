@@ -937,16 +937,26 @@ const TOOLS = [
     title: "Funnel, revenue and ad spend",
     annotations: { readOnlyHint: true, openWorldHint: false },
     description:
-      "The funnel, revenue and ad-spend figures for recent days, straight from the " +
+      "The funnel, revenue and ad-spend figures per day, straight from the " +
       "database rather than from the search index. Use when you want exact numbers to " +
       "compute with; use search_company_context when you want the narrative around them.",
     inputSchema: {
       type: "object",
       properties: {
+        since: {
+          type: "string",
+          description:
+            "YYYY-MM-DD. The first day to return. Use `since`+`until` for a NAMED " +
+            "period — 'August' is since 2026-08-01 until 2026-08-31 — rather than " +
+            "counting days back and doing arithmetic. Comparing two months is two " +
+            "calls with two ranges.",
+        },
+        until: { type: "string", description: "YYYY-MM-DD, inclusive. Defaults to today." },
         days: {
           type: "number",
           description:
-            "How many days back, from today. Default 30; 4000 is the hard ceiling the " +
+            "How many days back, from today. An alternative to `since`/`until`, not a " +
+            "companion — passing both is refused. Default 30; 4000 is the hard ceiling the " +
             "database function enforces, and the answer says so when the range was " +
             "reduced. Every day in the range comes back, including days with no " +
             "activity. `ad_spend` appears only on days GA4 actually covers — its " +
@@ -2241,7 +2251,53 @@ async function callTool(
     // No 120-day ceiling. The old one silently returned 120 days to a caller who
     // asked for a year, which reads as "that is all there is". The database
     // function clamps at 4000 days as a DoS guard; if a request is reduced, say so.
-    const asked = Math.max(1, Number(args.days) || 30);
+    /**
+     * A NAMED PERIOD, RATHER THAN ARITHMETIC AT THE CALL SITE.
+     *
+     * This only ever took "days back from today", so "how did August compare with
+     * September" meant working out two offsets, pulling both ranges whole, and slicing
+     * them client-side — every step a chance to be off by one, silently. A range is what
+     * the question actually contains.
+     *
+     * No migration: `brain_daily_rollup` already returns a `day` on every row, so the
+     * range is served by fetching far enough back and filtering. The cost is reading a
+     * few hundred rows to keep thirty, which is one extra page at most.
+     */
+    const DAYISH = /^\d{4}-\d{2}-\d{2}$/;
+    const since = typeof args.since === "string" ? args.since.trim() : "";
+    const until = typeof args.until === "string" ? args.until.trim() : "";
+    if ((since || until) && args.days !== undefined) {
+      return textResult(
+        "Give `days` OR a `since`/`until` range, not both — they answer the same " +
+          "question two different ways and there is no sensible way to combine them.",
+        true
+      );
+    }
+    for (const [key, val] of [
+      ["since", since],
+      ["until", until],
+    ] as const) {
+      if (val && !DAYISH.test(val)) {
+        return textResult(`\`${key}\` must be a date like 2026-08-01 — "${val}" is not one.`, true);
+      }
+    }
+    if (until && !since) {
+      return textResult("`until` needs a `since` — give the first day of the range too.", true);
+    }
+    if (since && until && until < since) {
+      return textResult(`\`until\` (${until}) is before \`since\` (${since}).`, true);
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    // Far enough back to reach `since`, inclusive of both ends.
+    const asked = since
+      ? Math.max(
+          1,
+          Math.round(
+            (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${since}T00:00:00Z`)) / 86_400_000
+          ) + 1
+        )
+      : Math.max(1, Number(args.days) || 30);
     /**
      * AD SPEND IS FETCHED SEPARATELY, BECAUSE THE ROLLUP DOES NOT HAVE IT.
      *
@@ -2270,10 +2326,12 @@ async function callTool(
      * overstates profit, which is the direction that matters, so an unknown day must
      * read as unknown rather than as a confident zero.
      */
-    const merged = rows.map((r) =>
+    // The range is applied AFTER the fetch, because the rollup counts back from today.
+    const inRange = since ? rows.filter((r) => r.day >= since && (!until || r.day <= until)) : rows;
+    const merged = inRange.map((r) =>
       adCovers(ad, r.day) ? { ...r, ad_spend: ad.byDay.get(r.day) ?? 0 } : r
     );
-    const covered = rows.length;
+    const covered = inRange.length;
     /**
      * Compact, and cut on a row boundary. Pretty-printing made 131 days cost the
      * whole 40,000-character ceiling, so asking for the full history returned
@@ -2291,7 +2349,13 @@ async function callTool(
       shown < covered
         ? `${shown} of ${covered} days returned -- the rest did not fit the character ` +
           `ceiling. Ask for a narrower period to see them.\n\n`
-        : covered < asked
+        : // COMPARED AGAINST THE UNFILTERED FETCH, not the range.
+          // `asked` is how many days back the rollup was told to go; with a `since`/
+          // `until` range, `covered` is the slice kept from that, so it is SUPPOSED to be
+          // smaller. Comparing them would announce "the range was reduced, this IS a
+          // truncation" for every ordinary month query — a confident false alarm about
+          // the one thing this branch exists to report honestly.
+          rows.length < asked
           ? // THE CLAMP, NAMED. This used to read "Not a truncation -- there is no data
             // before the earliest day below", which is false in the only case that can
             // reach it. The rollup generate_series-es every day and left-joins, so it
@@ -2314,6 +2378,21 @@ async function callTool(
      * does not exist, in a branch production cannot reach — and if it ever IS reached,
      * "no activity" is the one reading that is certainly wrong.
      */
+    /**
+     * AN EMPTY RANGE AND AN EMPTY ROLLUP ARE DIFFERENT THINGS.
+     *
+     * A range that lands outside the data — a future month, or one before the company
+     * existed — returns rows from the rollup and nothing after the filter. That is a
+     * correct answer about a period with no days in it, and reporting it as a database
+     * fault would send someone to look at infrastructure over a date they chose.
+     */
+    if (rows.length > 0 && inRange.length === 0) {
+      return textResult(
+        `No days fall in ${since}${until ? ` to ${until}` : " onwards"}. The rollup has ` +
+          `${rows.length} days ending today, the earliest being ${rows[rows.length - 1]?.day ?? "unknown"} — ` +
+          `so that range is outside the data, which is not the same as a period with no activity.`
+      );
+    }
     if (rows.length === 0) {
       return textResult(
         "The rollup returned no rows at all. It is built to return one row per day in " +

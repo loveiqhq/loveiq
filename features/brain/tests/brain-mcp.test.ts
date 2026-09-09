@@ -2842,6 +2842,89 @@ describe("/api/mcp", () => {
     return String((await res.json()).result.content[0].text);
   }
 
+  describe("get_business_numbers over a named period", () => {
+    const call = (args: Record<string, unknown>) =>
+      POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 96,
+          method: "tools/call",
+          params: { name: "get_business_numbers", arguments: args },
+        })
+      ).then((r) => r.json().then((b) => b.result));
+
+    /** The rollup counts back from today, so a range is served by fetching far enough
+     *  back and filtering — these are the days it would return. */
+    const daysBack = (n: number) =>
+      Array.from({ length: n }, (_, i) => {
+        const d = new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10);
+        return { day: d, visitors: 10, starts: 2, submissions: 1, reports: 1, revenue: 5 };
+      });
+
+    beforeEach(() => {
+      mockRollup.mockReset().mockResolvedValue(daysBack(120));
+      mockAdCost = { byDay: new Map(), from: null, to: null };
+    });
+
+    /**
+     * "AUGUST VERSUS SEPTEMBER" USED TO BE ARITHMETIC AT THE CALL SITE — two offsets
+     * worked out by hand, two full ranges pulled, sliced client-side, every step a
+     * chance to be off by one silently.
+     */
+    it("returns only the days in the range", async () => {
+      const since = new Date(Date.now() - 10 * 86_400_000).toISOString().slice(0, 10);
+      const until = new Date(Date.now() - 5 * 86_400_000).toISOString().slice(0, 10);
+      const text = (await call({ since, until })).content[0].text;
+      expect(text).toContain(since);
+      expect(text).toContain(until);
+      // A day just outside the range must not be in the payload.
+      const outside = new Date(Date.now() - 11 * 86_400_000).toISOString().slice(0, 10);
+      expect(text).not.toContain(`"${outside}"`);
+    });
+
+    /**
+     * THE CLAMP WARNING MUST NOT FIRE FOR AN ORDINARY MONTH.
+     *
+     * `asked` is how many days back the rollup was told to go; with a range, the kept
+     * slice is SUPPOSED to be smaller. Comparing the two would announce "the range was
+     * reduced — this IS a truncation of the request" on every month query, which is a
+     * confident false alarm about the one thing that branch exists to report honestly.
+     */
+    it("does not cry truncation when a range is simply narrower than the fetch", async () => {
+      const since = new Date(Date.now() - 40 * 86_400_000).toISOString().slice(0, 10);
+      const until = new Date(Date.now() - 10 * 86_400_000).toISOString().slice(0, 10);
+      const text = (await call({ since, until })).content[0].text;
+      expect(text).not.toMatch(/IS a truncation/);
+      expect(text).not.toMatch(/ceiling/);
+    });
+
+    /** A range outside the data is a correct answer about an empty period, not a fault. */
+    it("distinguishes a range with no days from a broken rollup", async () => {
+      const r = await call({ since: "2099-01-01", until: "2099-01-31" });
+      expect(r.isError).toBeFalsy();
+      expect(r.content[0].text).toMatch(/outside the data/);
+      expect(r.content[0].text).not.toMatch(/fault in the query/);
+    });
+
+    it("still reports a genuinely empty rollup as a fault", async () => {
+      mockRollup.mockResolvedValue([]);
+      const r = await call({ days: 30 });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toMatch(/fault in the query/);
+    });
+
+    it.each([
+      [{ days: 30, since: "2026-08-01" }, /not both/],
+      [{ since: "last august" }, /must be a date/],
+      [{ until: "2026-08-31" }, /needs a `since`/],
+      [{ since: "2026-08-31", until: "2026-08-01" }, /is before/],
+    ])("refuses %j", async (args, pattern) => {
+      const r = await call(args);
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toMatch(pattern);
+    });
+  });
+
   describe("get_business_numbers must not truncate silently", () => {
     it("passes the full requested range through, with no 120-day ceiling", async () => {
       // The old code did Math.min(120, ...), so a caller asking for a year got 120

@@ -89,6 +89,27 @@ const PER_BUCKET_CANDIDATES = 3;
 const CANDIDATE_CEILING = 100;
 
 /**
+ * TWO LATENCY NON-ISSUES, MEASURED 2026-09-09, recorded so they are not "fixed" later.
+ *
+ * 1. THE HNSW INDEX RETURNS ~41 ROWS FOR A LIMIT OF 120, because `hnsw.ef_search`
+ *    defaults to 40. That looks like a recall bug in the arm whose entire job is recall,
+ *    and it is not one worth acting on: raising `ef_search` to 120 or 200 produced a
+ *    BYTE-IDENTICAL top-12 on the queries tested, while costing latency. The lexical arms
+ *    supply ~1,700 candidates on a typical question, so the marginal semantic candidates
+ *    rank below the cut either way. Do not raise it without first showing the answers
+ *    change.
+ *
+ * 2. NEITHER THE EMBEDDING EDGE FUNCTION NOR THE DATABASE COLD-STARTS. `brain_query`
+ *    shows searches after a 5-minute idle averaging 2,371ms against 1,219ms warm, which
+ *    reads exactly like one. It is not: after a real six-minute idle, measured directly,
+ *    the embed call came back in 364ms against a 475ms warm baseline and the SQL was
+ *    faster too. The penalty is the VERCEL function cold-starting, it applies to every
+ *    tool on this server at roughly 1.4-2.4x, and search only looks worse because its
+ *    warm baseline is the largest. An earlier reading blamed the embedding because the
+ *    idle gap had been computed per-tool rather than per-function.
+ */
+
+/**
  * No single BUCKET — a source at one grain — may exceed this share of the
  * returned set, so long as other buckets have candidates left to fill the gap.
  *
