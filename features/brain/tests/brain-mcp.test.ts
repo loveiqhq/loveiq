@@ -492,6 +492,32 @@ describe("/api/mcp", () => {
       expect(body.result.content[0].text).toContain("feat: something");
     });
 
+    /**
+     * PAGING PAST THE RANKING IS NOT AN EMPTY CORPUS. Only about 100 candidates are
+     * ranked at all, so a search runs out of pages long before the corpus runs out of
+     * documents — and "nothing at offset 60" reported the same way as "LoveIQ has no
+     * record of this" is the single failure this whole server is written against.
+     */
+    it("reports the end of the ranking, not the end of the company record", async () => {
+      mockRetrieve.mockResolvedValue([]);
+      const text = (await (await call({ query: "pricing", offset: 60 })).json()).result.content[0]
+        .text;
+      expect(text).toMatch(/end of the ranking/);
+      expect(text).toMatch(/NOT the end of what LoveIQ knows/);
+      expect(text).not.toMatch(/Nothing in the indexed corpus/);
+    });
+
+    it("passes the offset through to retrieval", async () => {
+      mockRetrieve.mockResolvedValue([]);
+      await call({ query: "pricing", offset: 12 });
+      expect(mockRetrieve).toHaveBeenLastCalledWith(
+        "pricing",
+        expect.any(Number),
+        expect.objectContaining({ offset: 12 }),
+        expect.any(Object)
+      );
+    });
+
     it("passes caller filters through to retrieval, where they can actually narrow", async () => {
       /**
        * They MUST reach `brain_search`. Filtering after `retrieve()` returns would
@@ -511,6 +537,7 @@ describe("/api/mcp", () => {
         "which tasks are in progress",
         12,
         {
+          offset: 0,
           sources: ["notion"],
           excludeSources: ["commit"],
           since: "2026-08-01",
@@ -542,6 +569,9 @@ describe("/api/mcp", () => {
           since: undefined,
           until: undefined,
           meta: { status: "WIP", count: "3" },
+          // Asserted EXACTLY, including this, because the point of the test is that
+          // nothing malformed survives — `objectContaining` would let an extra key past.
+          offset: 0,
         },
         expect.any(Object)
       );

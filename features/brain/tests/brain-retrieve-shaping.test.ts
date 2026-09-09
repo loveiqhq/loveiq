@@ -85,3 +85,44 @@ describe("what the per-source cap cut", () => {
     expect(await retrieve("anything", 12)).toHaveLength(1);
   });
 });
+
+describe("paging a ranked list", () => {
+  const many = Array.from({ length: 40 }, (_, i) => row("commit", i, 5 - i * 0.01));
+
+  it("returns the next page, in score order", async () => {
+    wire(many);
+    const page1 = await retrieve("anything", 5);
+    const page2 = await retrieve("anything", 5, { offset: 5 });
+    expect(page1.map((r) => r.sourceId)).not.toEqual(page2.map((r) => r.sourceId));
+    // Page 2 starts where page 1 ended, so scores keep descending across the boundary.
+    expect(page2[0]!.score).toBeLessThanOrEqual(page1[page1.length - 1]!.score);
+  });
+
+  /**
+   * SLICED AFTER SORTING, so page 2 is genuinely the next-most-relevant rather than
+   * whatever the per-source cap happened to defer. The caps run over the whole window
+   * being fetched, not over each page separately.
+   */
+  it("keeps the whole sequence in score order across pages", async () => {
+    wire(many);
+    const all = [
+      ...(await retrieve("anything", 5)),
+      ...(await retrieve("anything", 5, { offset: 5 })),
+    ];
+    const scores = all.map((r) => r.score);
+    expect([...scores].sort((a, b) => b - a)).toEqual(scores);
+  });
+
+  /** Paging past the ranked candidates is the end of the RANKING, not of the corpus —
+   *  the tool says so rather than reporting an empty result. */
+  it("returns nothing past the end rather than wrapping around", async () => {
+    wire(many);
+    expect(await retrieve("anything", 5, { offset: 500 })).toHaveLength(0);
+  });
+
+  it("is unchanged when no offset is given", async () => {
+    wire(many);
+    expect(await retrieve("anything", 5)).toHaveLength(5);
+    expect(await retrieve("anything", 5, {})).toHaveLength(5);
+  });
+});

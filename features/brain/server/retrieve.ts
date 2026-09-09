@@ -62,6 +62,12 @@ export interface RetrieveOptions {
   since?: string;
   /** Latest period the chunk describes, `YYYY-MM-DD`. */
   until?: string;
+  /**
+   * Skip this many of the ranked results. Relevance decays down a ranked list, so a
+   * deep page is mostly noise — this exists for "show me more like these", not for
+   * walking the corpus, which is what `browse_context` is for.
+   */
+  offset?: number;
   /** Exact-match metadata, e.g. `{ status: "WIP" }`. Keys a source lacks match nothing. */
   /**
    * `string` for a scalar field, `string[]` for one stored as an array.
@@ -232,6 +238,15 @@ export async function retrieve(
   opts: RetrieveOptions = {},
   shaping: RetrieveShaping = {}
 ): Promise<BrainChunk[]> {
+  /**
+   * PAGING A RANKED LIST, bounded by the candidate pool rather than pretending to be
+   * endless. `CANDIDATE_CEILING` is how many rows the SQL returns to rank at all, so
+   * there is no page beyond it — and the caps and de-duplication then cut that further.
+   * Asking past the end returns nothing, which the tool reports as the end rather than
+   * as an empty corpus.
+   */
+  const offset = Math.max(0, Math.floor(opts.offset ?? 0));
+  const want = limit + offset;
   const trimmed = sanitiseQuery(question).trim();
   if (trimmed.length < 2) return [];
 
@@ -376,7 +391,7 @@ export async function retrieve(
   //     allowance -- measured, ga4 took 12 of 14 slots that way and squeezed the
   //     revenue row out entirely.
   // Capping both keeps every grain reachable AND every source represented.
-  const sourceCap = Math.max(1, Math.floor(limit * MAX_SOURCE_SHARE));
+  const sourceCap = Math.max(1, Math.floor(want * MAX_SOURCE_SHARE));
   // ONE per bucket on the first pass, then backfill by score. Anything higher
   // lets a source spend its whole allowance on the grain that happens to score
   // marginally best: measured, `analytics` filled all four of its slots with two
@@ -391,7 +406,7 @@ export async function retrieve(
   const deferred: BrainChunk[] = [];
 
   for (const row of bestPerParent) {
-    if (picked.length >= limit) break;
+    if (picked.length >= want) break;
     const bucket = bucketKey(row);
     if ((perSource.get(row.source) ?? 0) >= sourceCap || (perBucket.get(bucket) ?? 0) >= grainCap) {
       deferred.push(row);
@@ -406,7 +421,7 @@ export async function retrieve(
   // back in by score rather than returning a short list.
   let backfilled = 0;
   for (const row of deferred) {
-    if (picked.length >= limit) break;
+    if (picked.length >= want) break;
     picked.push(row);
     backfilled++;
   }
@@ -427,5 +442,7 @@ export async function retrieve(
   // Sorting at the end costs nothing and cannot change WHICH rows were chosen.
   picked.sort((a, b) => b.score - a.score);
 
-  return picked;
+  // Sliced AFTER sorting, so page 2 is genuinely the next-most-relevant and not whatever
+  // the capping happened to defer.
+  return offset > 0 ? picked.slice(offset) : picked;
 }

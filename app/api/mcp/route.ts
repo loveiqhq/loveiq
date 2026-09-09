@@ -407,6 +407,15 @@ const TOOLS = [
          * usage later shows full-limit calls hitting the 40,000-char ceiling, revisit —
          * `body: "none"` for broad title-scanning is the variant with a real use case.
          */
+        offset: {
+          type: "number",
+          description:
+            "Skip this many of the ranked results, to see the next page. Relevance " +
+            "decays down a ranked list, so a deep page is mostly noise — this is for " +
+            "'show me more like these', not for walking the corpus, which is what " +
+            "`browse_context` is for. Only about 100 candidates are ranked at all, so " +
+            "paging runs out well before the corpus does, and the result says when it has.",
+        },
         limit: {
           type: "number",
           description:
@@ -1470,6 +1479,7 @@ async function callTool(
       since: typeof args.since === "string" ? args.since : undefined,
       until: typeof args.until === "string" ? args.until : undefined,
       meta: asMeta(args.meta),
+      offset: Math.max(0, Number(args.offset) || 0),
     };
 
     let chunks;
@@ -1486,6 +1496,22 @@ async function callTool(
           "contains an answer. This is an outage, not an empty result — do not conclude " +
           "that LoveIQ has no record of this.",
         true
+      );
+    }
+    /**
+     * PAGING PAST THE RANKING IS NOT AN EMPTY CORPUS.
+     *
+     * Only about 100 candidates are ranked at all, and the caps cut that further, so a
+     * search runs out of pages long before the corpus runs out of documents. Reporting
+     * "nothing at offset 60" the same way as "LoveIQ has no record of this" is the single
+     * failure this whole server is written against.
+     */
+    if (chunks.length === 0 && (opts.offset ?? 0) > 0) {
+      return textResult(
+        `No results past offset ${opts.offset}. A ranked search considers roughly 100 ` +
+          `candidates, so paging reaches the end of the ranking long before the end of ` +
+          `what LoveIQ knows — this is NOT the end of what LoveIQ knows. To go wider, ` +
+          `narrow the question, or use browse_context, which enumerates instead of ranking.`
       );
     }
     if (chunks.length === 0) {
