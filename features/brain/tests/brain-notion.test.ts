@@ -302,3 +302,49 @@ describe("notionHumans — the directory the attribution depends on", () => {
     expect((await notionHumans("secret")).size).toBe(0);
   });
 });
+
+/**
+ * OUR TASK BOARD IS CALLED "Board", AND WE HAVE NO BOARD OF DIRECTORS.
+ *
+ * Titles are weighted twice in ranking, so "what did the board say" and "when is our next
+ * board meeting" were answered with "Board: Sanity check price elasticity data" and
+ * "Board: Meeting summary" — confidently, off our own formatting prefix. Four of the
+ * thirteen worst answers measured on 2026-09-10 were this single collision.
+ *
+ * No title can separate the two senses of the word, so it moves to the body where it is
+ * weighted once: a task question still matches it, a governance question no longer wins
+ * with it. Notion itself is untouched — the database keeps its name, and `meta.database`
+ * still carries it so filters are unaffected.
+ */
+describe("the task board's name does not sit in the ranked title", () => {
+  const page = {
+    id: "p1",
+    url: "https://notion.so/p1",
+    created_time: "2026-09-01T00:00:00Z",
+    last_edited_time: "2026-09-02T00:00:00Z",
+    properties: {
+      Name: { type: "title", title: [{ plain_text: "Sanity check price elasticity data" }] },
+      Status: { type: "status", status: { name: "WIP" } },
+    },
+  };
+
+  it("keeps the word out of the title and puts it in the body", async () => {
+    const { taskToRow } = await import("@features/brain/server/ingest/notion");
+    const row = taskToRow(page as never, "2026-09-10T00:00:00Z", "👷🏻‍♂️ Board")!;
+    expect(row.title).toBe("Notion task: Sanity check price elasticity data");
+    expect(row.title).not.toMatch(/board/i);
+    // Still findable as the board, and still filterable by it.
+    expect(row.body).toMatch(/board/i);
+    expect(row.meta.database).toBe("👷🏻‍♂️ Board");
+  });
+
+  it("leaves every other database's name where it was", async () => {
+    const { taskToRow } = await import("@features/brain/server/ingest/notion");
+    for (const db of ["Literature", "Competitor Tracker", "Ideas - General"]) {
+      const row = taskToRow(page as never, "2026-09-10T00:00:00Z", db)!;
+      expect(row.title, `renamed a database it should not touch: ${db}`).toBe(
+        `${db}: Sanity check price elasticity data`
+      );
+    }
+  });
+});

@@ -67,7 +67,7 @@ const MAX_CONTENT_PAGES = 300;
 // v6: v1-v5 indexed only TOP-LEVEL blocks — every toggle, column, callout body,
 // nested bullet and table row was dropped (~19% of the workspace text). Every
 // older row must be refetched, not trusted.
-export const BUILDER_VERSION = 7;
+export const BUILDER_VERSION = 8;
 
 interface RichText {
   plain_text?: string;
@@ -390,12 +390,31 @@ export function taskToRow(
 
   const label = dbTitle?.trim() || "Board";
 
+  /**
+   * THE DATABASE NAME MOVES OUT OF THE TITLE AND INTO THE BODY. Notion is untouched --
+   * this is only what we index.
+   *
+   * Our task board is called "Board", titles are weighted twice, and there is no board
+   * of directors anywhere in the corpus -- so "what did the board say" and "when is our
+   * next board meeting" were answered with "Board: Sanity check price elasticity data"
+   * and "Board: Meeting summary", confidently, off our own formatting prefix. Four of
+   * the thirteen worst answers measured on 2026-09-10 were this one collision.
+   *
+   * No title can separate the two senses of the word, so the word moves to where it is
+   * weighted once instead of twice: "what is on the board" still matches through the
+   * body, while a governance question no longer beats a real answer with it. The name is
+   * also still in `meta.database`, so a filter on it is unaffected.
+   */
+  const prefix = /(^|\s)board(\s|$)/i.test(label) ? "Notion task" : label;
+
   return {
     source: SOURCE,
     source_id: `task:${page.id}`,
-    title: `${label}: ${title}`,
+    title: `${prefix}: ${title}`,
     url: page.url ?? null,
-    body: [title, header, extras, text?.trim() || null].filter(Boolean).join("\n\n"),
+    body: [title, `On the ${label} board in Notion`, header, extras, text?.trim() || null]
+      .filter(Boolean)
+      .join("\n\n"),
     meta: {
       kind: "task",
       v: BUILDER_VERSION,

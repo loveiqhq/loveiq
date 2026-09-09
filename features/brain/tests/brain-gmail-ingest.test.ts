@@ -524,3 +524,82 @@ describe("subject exclusions must reach the Gmail listing query", () => {
     expect(listingQuery()).not.toContain("-subject:");
   });
 });
+
+/**
+ * WHO WROTE IT, coarsely — the one fact that separates a colleague from a vendor.
+ *
+ * The sender's address was already being read and thrown away by `person()`, which keeps
+ * the display name only, so "was this from inside the company" was unanswerable from what
+ * we stored. Measured 2026-09-10: gmail took rank 1 on 88 of 468 real questions and was
+ * wrong on 59% of them (repository documentation: 12%), and 77% of its rank-1 wins were
+ * vendor or notification mail. The internal half is genuinely useful — the team-sync
+ * invitation is what correctly answers "when is the weekly team sync" — so the two have
+ * to be told apart rather than the source demoted wholesale.
+ */
+describe("a thread records whether we were writing or being written at", () => {
+  it("reads the domain, never the address", async () => {
+    const { senderDomain } = await import("@features/brain/server/ingest/gmail");
+    expect(senderDomain("Marcus <m@loveiq.org>")).toBe("loveiq.org");
+    expect(senderDomain('"Stripe" <noreply@stripe.com>')).toBe("stripe.com");
+    expect(senderDomain("ema.djedovic@loveiq.org")).toBe("loveiq.org");
+    expect(senderDomain("no-reply@e.substack.com")).toBe("e.substack.com");
+    expect(senderDomain("not an address")).toBeNull();
+    // The repository is public and `meta` is returned verbatim by every search, so the
+    // local part must never survive.
+    expect(senderDomain("Marcus <m@loveiq.org>")).not.toContain("m@");
+  });
+
+  it("counts a thread as ours when ANY message came from us", async () => {
+    const { threadToRows } = await import("@features/brain/server/ingest/gmail");
+    const msg = (from: string, text: string) => ({
+      internalDate: "1788000000000",
+      payload: {
+        headers: [
+          { name: "From", value: from },
+          { name: "To", value: "team@loveiq.org" },
+          { name: "Subject", value: "A subject line" },
+        ],
+        mimeType: "text/plain",
+        body: { data: Buffer.from(text).toString("base64url") },
+      },
+    });
+    const rows = (t: ReturnType<typeof msg>[]) =>
+      threadToRows({ id: "t1", messages: t } as never, "team@loveiq.org", "2026-09-10T00:00:00Z");
+
+    const vendorOnly = rows([
+      msg(
+        '"Stripe" <noreply@stripe.com>',
+        "Your invoice for August is ready to view in the billing dashboard, no action needed."
+      ),
+    ]);
+    expect(vendorOnly[0]?.meta.correspondents).toBe("external");
+
+    // A vendor thread a colleague REPLIED to is a conversation we had, not a broadcast.
+    const replied = rows([
+      msg(
+        '"Stripe" <noreply@stripe.com>',
+        "Your invoice for August is ready to view in the billing dashboard, no action needed."
+      ),
+      msg("Eman <ec@loveiq.org>", "Paid this one, closing the loop on it."),
+    ]);
+    expect(replied[0]?.meta.correspondents).toBe("internal");
+
+    // A colleague's own domain is ours.
+    const ownDomain = rows([
+      msg(
+        "Mark <mo@markoldenburg.com>",
+        "Sending over the deck now, it has the pricing slide we talked through yesterday."
+      ),
+    ]);
+    expect(ownDomain[0]?.meta.correspondents).toBe("internal");
+
+    // gmail.com is NOT ours: it is where most inbound vendor and candidate mail arrives.
+    const personal = rows([
+      msg(
+        "Someone <someone@gmail.com>",
+        "I would like to apply for the growth role you advertised, my CV is attached below."
+      ),
+    ]);
+    expect(personal[0]?.meta.correspondents).toBe("external");
+  });
+});

@@ -74,7 +74,7 @@ const MAX_TOLERATED_THREAD_FAILURES = 25;
 
 /** Bump when the row SHAPE changes; a mismatch counts as stale. See notion.ts. */
 // v2: v1 indexed notification stubs (bodies of "96" and whitespace) as threads.
-export const GMAIL_BUILDER_VERSION = 4;
+export const GMAIL_BUILDER_VERSION = 5;
 
 /**
  * Mailboxes to read. `me` is whoever the credential belongs to.
@@ -398,6 +398,28 @@ export function isBulkMail(msgs: GmailMessage[]): boolean {
   return msgs.length > 0 && msgs.every(machineSent);
 }
 
+/**
+ * The DOMAIN an address belongs to, lowercased: `"Marcus <m@loveiq.org>"` -> `loveiq.org`.
+ *
+ * The domain and never the address, because this repository is public and `meta` is
+ * returned verbatim by every search. A domain answers the only question being asked --
+ * did this come from inside the company -- and carries nobody's identity.
+ */
+export function senderDomain(addr: string): string | null {
+  const at = /<?([^\s<>@"]+)@([A-Za-z0-9.-]+\.[A-Za-z]{2,})>?/.exec(addr);
+  return at?.[2] ? at[2].toLowerCase() : null;
+}
+
+/**
+ * Domains that are US, not a vendor writing to us.
+ *
+ * `markoldenburg.com` is a colleague's own domain and its mail is ordinary internal
+ * correspondence; `gmail.com` deliberately is NOT here, because it is where most of the
+ * inbound vendor and candidate mail comes from and treating it as internal would defeat
+ * the whole distinction.
+ */
+const OUR_DOMAINS = new Set(["loveiq.org", "loveiq.com", "markoldenburg.com"]);
+
 /** A person, without the angle-bracket noise: "Marcus <m@x.com>" -> "Marcus". */
 export function person(addr: string): string {
   const named = /^\s*"?([^"<]+?)"?\s*</.exec(addr);
@@ -447,6 +469,27 @@ export function threadToRows(thread: GmailThread, mailbox: string, stampedAt: st
       mailbox,
       messages: msgs.length,
       participants,
+      /**
+       * WHO WROTE IT, coarsely: `internal` when a message in the thread came from one of
+       * our own domains, `external` when every sender is somebody else's.
+       *
+       * The sender's address was already being read and then thrown away by `person()`,
+       * which keeps the display name only -- so "was this from a colleague or from
+       * Stripe" was unanswerable from what we stored. Measured 2026-09-10: gmail took
+       * rank 1 on 88 of 468 real questions and was wrong on 59% of them, against 12% for
+       * repository documentation, and 77% of its rank-1 wins were vendor or notification
+       * mail. The useful half is internal: the team-sync invitation is what correctly
+       * answers "when is the weekly team sync".
+       *
+       * A THREAD is internal if ANY message in it came from us -- a vendor thread a
+       * colleague replied to is a conversation we had, not a broadcast at us.
+       */
+      correspondents: msgs.some((m) => {
+        const d = senderDomain(header(m, "From"));
+        return d !== null && OUR_DOMAINS.has(d);
+      })
+        ? "internal"
+        : "external",
       // Bulk mail is still INDEXED -- open culture, nothing excluded -- it just
       // must not outrank a colleague's actual answer on a vague question.
       bulk: isBulkMail(msgs),
