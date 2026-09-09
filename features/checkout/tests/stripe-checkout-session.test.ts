@@ -26,13 +26,8 @@ vi.mock("@features/pricing/logic/reportPricing", () => ({
   markReportPriceQuoteCheckoutStarted: vi.fn().mockResolvedValue(undefined),
 }));
 
-// Deterministic arm resolution: mirror the real helper (token → itself, no
-// token → null) WITHOUT any Supabase round-trip, so the arm assertions don't
-// depend on whether a test DB is configured.
+// No Supabase round-trip in these assertions.
 vi.mock("@features/report/server/personalReport", () => ({
-  resolveReportAccessToken: vi.fn(
-    async ({ reportToken }: { reportToken?: string | null }) => reportToken ?? null
-  ),
   resolveSubmissionAccessContext: vi.fn().mockResolvedValue(null),
   getReportAccessPlanForSubmission: vi.fn(),
   lookupReportTokenBySubmissionId: vi.fn().mockResolvedValue(null),

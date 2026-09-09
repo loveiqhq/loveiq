@@ -63,6 +63,7 @@ backout
 base64url
 behaviours
 blindspot
+chromium
 clinerules
 continuerules
 cookieyes
@@ -70,6 +71,7 @@ cooldown
 creds
 cursorrules
 cutover
+deadzone
 dedup
 dmarc
 domainkey
@@ -81,6 +83,7 @@ gtag
 hotspot
 hotspots
 iamcredentials
+inapp
 ingester
 kubeconfig
 livemode
@@ -101,11 +104,13 @@ semgrepignore
 signups
 softmax
 stabilises
+supa
 teamspace
 teamspaces
 trgm
 unconfigured
 watchlist
+webkit
 webshells
 whsec
 windsurfrules
