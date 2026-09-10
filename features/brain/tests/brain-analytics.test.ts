@@ -599,3 +599,43 @@ describe("the derived business figures are stated, not left to be computed", () 
     expect(body).not.toMatch(/LTV to CAC/);
   });
 });
+
+/**
+ * COMPARING MONTHS IS ONE CHUNK'S JOB, NOT TWELVE.
+ *
+ * The per-source cap gives analytics three slots and the per-grain cap reserves one for a
+ * day and one for a week, so AT MOST TWO monthly rows ever come back. Measured 2026-09-10,
+ * "which month had the most visits" answered September (2,718) against August's 11,147,
+ * and it could not have answered better — no ranking change reaches a shape problem, and
+ * a model handed two months out of seven cannot pick the largest.
+ */
+describe("the all-time row carries the month-by-month comparison", () => {
+  const months = [
+    day("2026-06-15", { unique_visitors: 500, submissions: 90, revenue: "10" }),
+    day("2026-07-15", { unique_visitors: 200, submissions: 20, revenue: "80" }),
+    day("2026-08-15", { unique_visitors: 900, submissions: 40, revenue: "30" }),
+  ];
+
+  it("lists every month and names the best one for each metric", () => {
+    const body = buildAnalyticsRows(months, STAMP).find((r) => r.source_id === "alltime")!.body;
+    for (const m of ["June 2026", "July 2026", "August 2026"]) expect(body).toContain(m);
+    // Stated, not left to be computed — the whole point.
+    expect(body).toMatch(/most visits: August 2026/);
+    expect(body).toMatch(/most signups: June 2026/);
+    expect(body).toMatch(/most revenue: July 2026/);
+  });
+
+  it("says nothing when there is only one month to compare", () => {
+    const body = buildAnalyticsRows([months[0]!], STAMP).find(
+      (r) => r.source_id === "alltime"
+    )!.body;
+    expect(body).not.toMatch(/Month by month/);
+  });
+
+  it("puts it on the all-time row only, not on every month", () => {
+    const rows = buildAnalyticsRows(months, STAMP);
+    const monthly = rows.filter((r) => r.source_id.startsWith("monthly:"));
+    expect(monthly.length).toBeGreaterThan(0);
+    for (const r of monthly) expect(r.body).not.toMatch(/Month by month/);
+  });
+});

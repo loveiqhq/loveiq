@@ -524,6 +524,50 @@ function renderSources(sources: Record<string, number>): string | null {
 }
 
 /** The shared body all three grains use, so a reader sees one consistent shape. */
+/**
+ * EVERY MONTH SIDE BY SIDE, PLUS THE ANSWER TO "WHICH WAS BEST".
+ *
+ * Comparing months is the one question the retrieval shape cannot serve: the per-source
+ * cap gives analytics three slots and the per-grain cap reserves one for a day and one
+ * for a week, so at most TWO monthly rows ever come back. Measured 2026-09-10, "which
+ * month had the most visits" answered September (2,718) against August's 11,147, and
+ * "which month had the most signups" answered August (358) against June's 497 -- both
+ * confidently, and neither could have been right with two months to choose from.
+ *
+ * Stated rather than left to be computed, exactly like the conversion-rate and AOV lines:
+ * a model asked to compute across separate chunks gets it wrong or declines. Lives on the
+ * all-time row alone, which is the only chunk whose subject is the whole history.
+ */
+function monthByMonth(byMonth: Map<string, Totals>): string | null {
+  const months = [...byMonth.entries()].filter(([, t]) => !isEmpty(t)).sort();
+  if (months.length < 2) return null;
+
+  const rows = months.map(
+    ([key, t]) =>
+      `  ${longMonth(key)}: visits ${t.visitors} · signups ${t.submissions} · ` +
+      `revenue ${money(t.revenue)} · ad spend ${money(t.adSpend)}`
+  );
+
+  /** The largest month for one metric, or null when nothing was ever recorded for it. */
+  const best = (pick: (t: Totals) => number, name: string): string | null => {
+    const top = months.reduce((a, b) => (pick(b[1]) > pick(a[1]) ? b : a));
+    return pick(top[1]) > 0 ? `${name}: ${longMonth(top[0])}` : null;
+  };
+  const winners = [
+    best((t) => t.visitors, "most visits"),
+    best((t) => t.submissions, "most signups"),
+    best((t) => t.revenue, "most revenue"),
+  ].filter(Boolean);
+
+  return [
+    "Month by month, best and worst month, how each month compares:",
+    ...rows,
+    winners.length ? `Best month — ${winners.join(" · ")}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 function renderBody(period: string, t: Totals, ad: AdCost): string {
   const sources = renderSources(t.sources);
 
@@ -823,7 +867,9 @@ export function buildAnalyticsRows(
         `LoveIQ numbers — all time, in total, to date, lifetime since launch: ` +
         `${NUMBERS_VOCABULARY}`,
       url: null,
-      body: renderBody(label, allTime, adCost),
+      body: [renderBody(label, allTime, adCost), monthByMonth(byMonth)]
+        .filter(Boolean)
+        .join("\n\n"),
       meta: {
         grain: "alltime",
         visitors: allTime.visitors,
