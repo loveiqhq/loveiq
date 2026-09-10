@@ -39,6 +39,9 @@
 - Was: Components named `Section05` through `Section12` with no description
 - Fix: Renamed to descriptive names: `S01Hero.tsx` through `S15Testimonials.tsx`
 - Evidence: `features/landing/ui/S01Hero.tsx` ... `S15Testimonials.tsx`
+- Since: those files were the DARK landing arm, retired 2026-06-19 and deleted. The
+  live sections are `W*.tsx` under `features/landing/ui/white/`. The entry above is
+  kept as the record of what was decided in January, not as a description of the tree.
 
 **Temporary files in root:** RESOLVED (2026-01)
 
