@@ -61,11 +61,24 @@ two actual free-text responses. It is not a count of people and never was. That 
 record ranked second for "how many survey responses do we have", and decision records are
 the source the runbook tells readers to trust first.
 
-## What "the board" means here
+## Investors, funding, board meetings, the board: we have none of these
 
-"Board" is the name of our **Notion task board**. LoveIQ has no board of directors, no
-investors and no board meetings, so a question about any of those has no answer in the
-corpus — the honest response is that we have no such record.
+"Board" is the name of our **Notion task board**. There is no board of directors, no
+board meetings, no investors, no cap table, no funding round and no term sheet. A question
+about any of those has no answer here, and the honest response is to say we have no such
+record — not to return something adjacent.
+
+**The wrong answers this displaces**, all measured 2026-09-10:
+
+- _"who are our investors"_ → a shared spreadsheet titled "Pitchbook Investors Data",
+  which is market research, plus two AQVC fundraising newsletters. Nothing in it names an
+  investor in LoveIQ, because there is none.
+- _"what is our funding situation"_ → LP and VC newsletters from a mailing list
+  ("Not Every Fund Is Ready for LP Introductions"). Reading them as ours implies we are
+  raising, or that AQVC is in a round with us. Neither is recorded anywhere.
+- _"when is our next board meeting"_ → an all-day calendar hold called "Roadmap workshop".
+  It is a working session, not a board meeting.
+- _"what did the board say"_ → whichever task card ranked highest that day.
 
 Task cards are titled `Notion task: …` in the index for exactly this reason; the database
 is still called Board in Notion and `meta.database` still says so.

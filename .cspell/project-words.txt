@@ -28,6 +28,7 @@ Lora
 Manrope
 Marcus
 PITR
+Pitchbook
 Playwright
 PostHog
 PostgREST
