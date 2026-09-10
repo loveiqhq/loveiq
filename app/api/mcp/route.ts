@@ -1937,7 +1937,7 @@ async function callTool(
      * the corpus — and took rank 1 on 10.9% of them, appearing in the top 3 of 27
      * questions, 19 of which touched no decision at all ("how long should a Guide article
      * be" → *Decision: The company brain may write and act in other systems*). Since the
-     * runbook tells readers decisions are the ones to trust first, and this block is the
+     * runbook used to tell readers decisions were the ones to trust first, and this block is the
      * most assertive sentence the tool emits, a deliberate record was being offered as
      * best evidence for questions it does not touch.
      */
@@ -3596,9 +3596,11 @@ export async function POST(request: Request) {
         "company email thread by thread, the WhatsApp team group day by day, the calendar " +
         "of meetings and who attended them, the " +
         "notes from every recorded call, dated business numbers, and decisions written " +
-        "down directly with `record_decision` — those last are the ones to trust first " +
-        "when asking what was decided, because they were recorded deliberately rather " +
-        "than reconstructed from a transcript. Use " +
+        "down directly with `record_decision`. A decision record is deliberate rather " +
+        "than reconstructed from a transcript, so it is the best evidence about the " +
+        "thing it actually decides — but only about that. A number quoted inside one is " +
+        "not authoritative for anything else; check it against the source that owns it. " +
+        "Use " +
         "search_company_context, and list_sources when you need to know how fresh a source " +
         "is.\n\n" +
         "LIVE STATE, queried straight from the production database with full history and no " +
