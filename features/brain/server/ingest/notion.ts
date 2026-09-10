@@ -67,7 +67,7 @@ const MAX_CONTENT_PAGES = 300;
 // v6: v1-v5 indexed only TOP-LEVEL blocks — every toggle, column, callout body,
 // nested bullet and table row was dropped (~19% of the workspace text). Every
 // older row must be refetched, not trusted.
-export const BUILDER_VERSION = 8;
+export const BUILDER_VERSION = 9;
 
 interface RichText {
   plain_text?: string;
@@ -407,10 +407,27 @@ export function taskToRow(
    */
   const prefix = /(^|\s)board(\s|$)/i.test(label) ? "Notion task" : label;
 
+  /**
+   * FINISHED WORK SAYS SO IN THE TITLE, not only in the body.
+   *
+   * The status was already in the body and a reader still concluded the work had
+   * shipped: measured 2026-09-10, "who owns the report redesign and when is it due"
+   * returned a card reading "Status: Done - Completed 2026-07-15" while Report 3.0 was
+   * actively in flight, and "when will the report be finished" was answered by another
+   * Done card. The title is what a result list shows and what a reader skims, so the one
+   * word that changes the meaning of the whole card belongs in it.
+   *
+   * Information, not suppression: the card ranks exactly where it did, it simply cannot
+   * be mistaken for live work. Only terminal states are marked -- an in-progress status
+   * adds nothing a reader needs at a glance.
+   */
+  const DONE = /^(done|complete|completed|shipped|cancell?ed|archived|won't do|wont do)\b/i;
+  const closed = status && DONE.test(status.trim()) ? ` (${status.trim()})` : "";
+
   return {
     source: SOURCE,
     source_id: `task:${page.id}`,
-    title: `${prefix}: ${title}`,
+    title: `${prefix}${closed}: ${title}`,
     url: page.url ?? null,
     body: [title, `On the ${label} board in Notion`, header, extras, text?.trim() || null]
       .filter(Boolean)

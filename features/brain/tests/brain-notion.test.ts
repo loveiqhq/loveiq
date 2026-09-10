@@ -338,6 +338,41 @@ describe("the task board's name does not sit in the ranked title", () => {
     expect(row.meta.database).toBe("👷🏻‍♂️ Board");
   });
 
+  /**
+   * The status was already in the body and a reader still concluded the work had shipped.
+   * Measured 2026-09-10: "who owns the report redesign and when is it due" returned a card
+   * reading "Status: Done - Completed 2026-07-15" while Report 3.0 was in flight, and
+   * "when will the report be finished" was answered by another Done card. The title is
+   * what a result list shows.
+   */
+  it("marks finished work in the title, and only finished work", async () => {
+    const { taskToRow } = await import("@features/brain/server/ingest/notion");
+    const withStatus = (name: string) =>
+      taskToRow(
+        {
+          ...page,
+          properties: {
+            ...page.properties,
+            Status: { type: "status", status: { name } },
+          },
+        } as never,
+        "2026-09-10T00:00:00Z",
+        "👷🏻‍♂️ Board"
+      )!.title;
+
+    for (const done of ["Done", "Completed", "Shipped", "Cancelled", "Archived"]) {
+      expect(withStatus(done), `not marked: ${done}`).toBe(
+        `Notion task (${done}): Sanity check price elasticity data`
+      );
+    }
+    // Live work is left alone — an in-progress status adds nothing at a glance.
+    for (const live of ["WIP", "In Review", "Backlog", "Idea", "Not Started", "Open"]) {
+      expect(withStatus(live), `wrongly marked: ${live}`).toBe(
+        "Notion task: Sanity check price elasticity data"
+      );
+    }
+  });
+
   it("leaves every other database's name where it was", async () => {
     const { taskToRow } = await import("@features/brain/server/ingest/notion");
     for (const db of ["Literature", "Competitor Tracker", "Ideas - General"]) {
