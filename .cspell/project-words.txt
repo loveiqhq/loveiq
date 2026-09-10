@@ -37,6 +37,7 @@ Resend
 SBOM
 SLSA
 Semgrep
+Sexualist
 Stripe
 Subprocessors
 Subresource
