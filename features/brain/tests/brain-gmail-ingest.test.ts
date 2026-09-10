@@ -549,6 +549,50 @@ describe("a thread records whether we were writing or being written at", () => {
     expect(senderDomain("Marcus <m@loveiq.org>")).not.toContain("m@");
   });
 
+  it("knows a colleague writing from a personal address", async () => {
+    const { threadToRows } = await import("@features/brain/server/ingest/gmail");
+    // TWO of the team write from personal gmail addresses -- `brain_person` records
+    // `marcus.boerner@gmail.com` and `fatihhadzic64@gmail.com` -- so the sending domain
+    // alone gets them exactly backwards. Measured 2026-09-11: a colleague's mail about
+    // pricing was classified as a vendor broadcast, and it is one of the best gmail hits
+    // in the corpus.
+    const registry = new Map([
+      ["marcus.boerner@gmail.com", { canonical: "Marcus Börner" }],
+      ["marcus börner", { canonical: "Marcus Börner" }],
+    ]);
+    const msg = (from: string) => ({
+      internalDate: "1788000000000",
+      payload: {
+        headers: [
+          { name: "From", value: from },
+          { name: "To", value: "team@loveiq.org" },
+          { name: "Subject", value: "Pricing" },
+        ],
+        mimeType: "text/plain",
+        body: {
+          data: Buffer.from(
+            "Here is the pricing change we discussed, take a look before Thursday please."
+          ).toString("base64url"),
+        },
+      },
+    });
+    const run = (from: string, reg: typeof registry | null) =>
+      threadToRows(
+        { id: "t2", messages: [msg(from)] } as never,
+        "team@loveiq.org",
+        "2026-09-11T00:00:00Z",
+        reg as never
+      )[0]?.meta.correspondents;
+
+    expect(run("Marcus <marcus.boerner@gmail.com>", registry)).toBe("internal");
+    // Matched on the display name too, because Gmail supplies whichever was configured.
+    expect(run("Marcus Börner <someone.else@gmail.com>", registry)).toBe("internal");
+    // A stranger on the same domain is still a stranger.
+    expect(run("Recruiter <recruiter@gmail.com>", registry)).toBe("external");
+    // No registry degrades to the domain check rather than calling everything external.
+    expect(run("Eman <ec@loveiq.org>", null)).toBe("internal");
+  });
+
   it("counts a thread as ours when ANY message came from us", async () => {
     const { threadToRows } = await import("@features/brain/server/ingest/gmail");
     const msg = (from: string, text: string) => ({

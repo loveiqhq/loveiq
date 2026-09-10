@@ -8,6 +8,7 @@ import {
   GMAIL_SCOPE,
 } from "@shared/http/google-oauth";
 import logger from "@shared/observability/logger";
+import { loadPeople } from "@features/brain/server/people";
 import { splitBody } from "./notion";
 import {
   chunkPage,
@@ -74,7 +75,7 @@ const MAX_TOLERATED_THREAD_FAILURES = 25;
 
 /** Bump when the row SHAPE changes; a mismatch counts as stale. See notion.ts. */
 // v2: v1 indexed notification stubs (bodies of "96" and whitespace) as threads.
-export const GMAIL_BUILDER_VERSION = 5;
+export const GMAIL_BUILDER_VERSION = 6;
 
 /**
  * Mailboxes to read. `me` is whoever the credential belongs to.
@@ -411,14 +412,37 @@ export function senderDomain(addr: string): string | null {
 }
 
 /**
- * Domains that are US, not a vendor writing to us.
+ * Domains that are US — a fast path, not the whole rule.
  *
- * `markoldenburg.com` is a colleague's own domain and its mail is ordinary internal
- * correspondence; `gmail.com` deliberately is NOT here, because it is where most of the
- * inbound vendor and candidate mail comes from and treating it as internal would defeat
- * the whole distinction.
+ * `gmail.com` is deliberately NOT here: it is where most inbound vendor and candidate
+ * mail arrives. But two colleagues write from personal gmail addresses
+ * (`brain_person` records them), so the domain alone gets them exactly backwards —
+ * measured 2026-09-11, a colleague's mail about pricing was classified as a vendor
+ * broadcast. The registry below is what actually decides; this only saves a lookup.
  */
 const OUR_DOMAINS = new Set(["loveiq.org", "loveiq.com", "markoldenburg.com"]);
+
+/**
+ * Was this message written by someone on the team?
+ *
+ * The people registry is the authority, because it is the only thing that knows a
+ * colleague's personal address. It holds twelve rows -- the team, not everyone we have
+ * ever corresponded with -- so "the sender is in it" really does mean "one of us".
+ * Bots and shared mailboxes are excluded by `kind` in `peopleIn`'s loader; a shared
+ * mailbox writing to us is still us, so it counts here.
+ *
+ * Matched on the ADDRESS and on the display name, because Gmail supplies whichever the
+ * sender configured.
+ */
+function fromTeam(fromHeader: string, byAlias: Map<string, { canonical: string }> | null): boolean {
+  const domain = senderDomain(fromHeader);
+  if (domain !== null && OUR_DOMAINS.has(domain)) return true;
+  if (!byAlias) return false;
+  const address = /<?([^\s<>@"]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})>?/.exec(fromHeader)?.[1];
+  if (address && byAlias.has(address.toLowerCase())) return true;
+  const shown = person(fromHeader).toLowerCase();
+  return shown.length > 0 && byAlias.has(shown);
+}
 
 /** A person, without the angle-bracket noise: "Marcus <m@x.com>" -> "Marcus". */
 export function person(addr: string): string {
@@ -427,7 +451,17 @@ export function person(addr: string): string {
   return addr.replace(/[<>]/g, "").trim();
 }
 
-export function threadToRows(thread: GmailThread, mailbox: string, stampedAt: string): BrainRow[] {
+export function threadToRows(
+  thread: GmailThread,
+  mailbox: string,
+  stampedAt: string,
+  /**
+   * The people registry, loaded ONCE per run by the caller. Passed in rather than looked
+   * up here because this runs per thread and there are thousands of them -- the same
+   * reason `notion.ts` passes its user directory into `pageToRow`.
+   */
+  byAlias: Map<string, { canonical: string }> | null = null
+): BrainRow[] {
   const msgs = (thread.messages ?? []).filter((m) => m.payload);
   if (!thread.id || msgs.length === 0) return [];
 
@@ -484,10 +518,7 @@ export function threadToRows(thread: GmailThread, mailbox: string, stampedAt: st
        * A THREAD is internal if ANY message in it came from us -- a vendor thread a
        * colleague replied to is a conversation we had, not a broadcast at us.
        */
-      correspondents: msgs.some((m) => {
-        const d = senderDomain(header(m, "From"));
-        return d !== null && OUR_DOMAINS.has(d);
-      })
+      correspondents: msgs.some((m) => fromTeam(header(m, "From"), byAlias))
         ? "internal"
         : "external",
       // Bulk mail is still INDEXED -- open culture, nothing excluded -- it just
@@ -605,6 +636,15 @@ export async function ingestGmail(
   const boxes = excludeMailboxes(discovered && discovered.length > 0 ? discovered : mailboxes());
 
   const known = await knownThreads();
+  /**
+   * The people registry, once for the whole walk.
+   *
+   * It is what tells a colleague's personal gmail address from a vendor's -- two of the
+   * team write from one, so the sending DOMAIN alone gets them exactly backwards. Null
+   * when the registry cannot be read, which degrades to the domain check rather than
+   * misclassifying everything as external.
+   */
+  const people = await loadPeople();
   const rows: BrainRow[] = [];
   const seen = new Set<string>();
   let complete = true;
@@ -694,7 +734,7 @@ export async function ingestGmail(
           continue;
         }
         fetched += 1;
-        rows.push(...threadToRows(full, mailbox, stampedAt));
+        rows.push(...threadToRows(full, mailbox, stampedAt, people));
       }
 
       pageToken = (listed.nextPageToken as string) ?? "";
