@@ -149,3 +149,28 @@ weekly billing notification addressed to Marcus, and "what is the pricing model"
 Drive requirements document describing a four-step discount ladder (+24h x0.75, +72h x0.50,
 +7d x0.35, +14d x0.25) that pricing 2.0 retired — one 50% code at 72h is the nearest thing
 that still fires. Both measured 2026-09-10.
+
+## What the survey asks about, and how long it takes
+
+**65 questions**, generated from `data/survey-source.csv` into `data/survey-data.ts`.
+They fall into ten categories:
+
+| Questions | Category                                   |
+| --------: | ------------------------------------------ |
+|        14 | Background & Lifestyle                     |
+|        12 | Arousal Styles — Cues, Conditions & Brakes |
+|        12 | Next Steps & Preferences                   |
+|         7 | Attachment Style & Emotional Safety        |
+|         5 | Spontaneous Desire vs Responsive Desire    |
+|         5 | Communication Style                        |
+|         4 | Partner-Related Needs                      |
+|         3 | Current Sexual Wellbeing & Pain Points     |
+|         2 | Identity & Conditioning                    |
+|         1 | Relational Patterns & Boundaries           |
+
+The answers themselves are deliberately NOT indexed — see the decision record on verbatim
+survey answers. The _questions_ are, through the repository CSV.
+
+**The wrong answer this displaces:** "what does the survey ask about" returned a Gmail
+thread titled "Survey - What about turning it into a series", which is a discussion about
+the survey rather than its contents.
