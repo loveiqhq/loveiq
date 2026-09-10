@@ -423,23 +423,26 @@ describe("the repo ingester redacts the same things the shared write path does",
   it("agrees with the shared implementation on every fixture", async () => {
     const { readFileSync } = await import("node:fs");
     const src = readFileSync("scripts/brain-ingest-repo.mjs", "utf8");
-    const params = /const SECRET_PARAMS =\n([\s\S]*?);\n/.exec(src)?.[1];
-    const bare = /const BARE_SECRET_RE = (\/[\s\S]*?\/[a-z]*);/.exec(src)?.[1];
-    expect(
-      params,
-      "SECRET_PARAMS not found in the script — the guard moved or was deleted"
-    ).toBeTruthy();
-    expect(
-      bare,
-      "BARE_SECRET_RE not found in the script — the guard moved or was deleted"
-    ).toBeTruthy();
 
-    const paramList = eval(params!) as string;
+    /**
+     * PARSED, NOT EVALUATED. The first version of this ran the extracted source through
+     * the dynamic evaluator, which the repository's own security check refuses on sight — and
+     * it is right to: a test that evaluates a string read off disk is a code-injection
+     * path, however well-intentioned. Both shapes are simple enough to read literally.
+     */
+    const paramsSrc = /const SECRET_PARAMS =\n([\s\S]*?);\n/.exec(src)?.[1];
+    const bareSrc = /const BARE_SECRET_RE = \/([\s\S]*?)\/([a-z]*);/.exec(src)?.[1];
+    expect(paramsSrc, "SECRET_PARAMS not found — the guard moved or was deleted").toBeTruthy();
+    expect(bareSrc, "BARE_SECRET_RE not found — the guard moved or was deleted").toBeTruthy();
+
+    // A concatenation of double-quoted string literals: take what is inside the quotes.
+    const paramList = [...paramsSrc!.matchAll(/"([^"]*)"/g)].map((m) => m[1]).join("");
+    expect(paramList).toContain("token_hash");
+
     const paramRe = new RegExp(`([?&#][a-z0-9_.-]*(?:${paramList})=)[^\\s&"'<>)\\]]+`, "gi");
-
-    const bareRe = eval(bare!) as RegExp;
+    const bareRe = new RegExp(bareSrc!, "g");
     const scriptRedact = (t: string) =>
-      t.replace(paramRe, "$1[redacted]").replace(new RegExp(bareRe.source, "g"), "[redacted]");
+      t.replace(paramRe, "$1[redacted]").replace(bareRe, "[redacted]");
 
     const { redactUrlSecrets } = await import("@features/brain/server/ingest/upsert");
     for (const [input, mustChange] of FIXTURES) {

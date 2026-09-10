@@ -260,8 +260,21 @@ jobs:
             exit 1
           fi
 
-          # Check for hardcoded secrets patterns
-          if grep -rE "(api[_-]?key|api[_-]?secret|password|secret[_-]?key|private[_-]?key|token)\s*=\s*['\"][^'\"]{20,}" app/ lib/ features/ shared/ --include="*.ts" --include="*.tsx" --include="*.js"; then
+          # Check for hardcoded secrets patterns.
+          #
+          # `lib/` was removed in the features/ refactor, so this used to grep a path that
+          # does not exist: grep exited 2, the `if` took the else branch every time, and
+          # the check reported success on every commit for months. That is the same dead
+          # -check failure the eval() comment above documents, sitting one check below it.
+          # A guard that cannot fire is worse than no guard, because it reads as coverage.
+          #
+          # Tests are excluded on purpose: fixtures are where fake credentials belong, and
+          # the TruffleHog job in this same workflow scans the WHOLE repository, tests
+          # included, with real entropy analysis. This grep is the cheap first pass over
+          # shipping source; TruffleHog is the real one.
+          if grep -rE "(api[_-]?key|api[_-]?secret|password|secret[_-]?key|private[_-]?key|token)\s*=\s*['\"][^'\"]{20,}" \
+              app/ features/ shared/ --include="*.ts" --include="*.tsx" --include="*.js" \
+              | grep -vE "(^|/)(tests?|__tests__|__mocks__)/|\.(test|spec)\.(ts|tsx|js)"; then
             echo "⚠️  Potential hardcoded secrets found"
             exit 1
           fi
