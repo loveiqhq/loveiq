@@ -47,6 +47,7 @@ Svix
 TrustBox
 Trustpilot
 Upstash
+Upwork
 Vercel
 Virality
 Vitest

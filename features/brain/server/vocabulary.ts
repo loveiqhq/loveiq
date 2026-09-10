@@ -46,7 +46,10 @@ const HOUSE_TERMS: Array<[RegExp, string]> = [
   // Traffic. "traffic" alone matched an ad network's cold outreach twice -- and also
   // matched "traffic to the Berlin office", which is about a building.
   [/\b(?:what|how) (?:is|are|much|many) (?:our|the) (?:traffic|visitors?)\b/i, "visits"],
-  [/\bour traffic\b|\btraffic (?:numbers|source|sources|seasonal)\b/i, "visits"],
+  [
+    /\bour (?:traffic|visitors)\b|\btraffic (?:numbers|source|sources|seasonal)\b|\bsources? of traffic\b/i,
+    "visits",
+  ],
   [/\bhow many (?:visitors?|people) (?:do we|did we|are|visit)\b/i, "visits"],
   // People who paid, as opposed to people who signed up.
   [/\b(?:buyers?|purchasers?|customers who paid|paying users?)\b/i, "paying customers"],

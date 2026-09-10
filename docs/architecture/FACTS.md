@@ -118,3 +118,34 @@ privacy policy" and "what is in our terms of service about liability" were answe
 **Vercel's** and **Google's** own policy-update emails — where the word "we" means the
 vendor, not us. Measured 2026-09-10; the reader's honest conclusion was that our terms
 were being revised.
+
+## What we charge for a report
+
+**The price is computed per visitor, so it is a live question, not a written one.** The
+authoritative answer is always `report_price_quote` via `query_product_data` — one row per
+quote, carrying the plan, the base price and every multiplier that moved it.
+
+As of 2026-09-11 there are four plans, and the price most recently quoted for each:
+
+| Plan          | Recently quoted |
+| ------------- | --------------- |
+| `essentials`  | EUR 9.99        |
+| `full_report` | EUR 29          |
+| `core`        | EUR 39          |
+| `all_reports` | EUR 49          |
+
+Those are starting points, not a price list. The quote is adjusted per visitor by
+`country_multiplier`, `device_multiplier`, `traffic_multiplier`, `behavioral_multiplier`
+and `engagement_multiplier`, and then by `discount_step` as the offer ages — which is why
+**what people actually paid ranges from EUR 3.74 to EUR 129.49**, and why the average
+order value in the analytics rows (EUR 18.27 all-time) is far below any list price.
+
+Discounts also arrive from the nurture emails: a 50%-off code at 30h and a 75%-off code at
+54h, minted per user against `STRIPE_COUPON_50` / `STRIPE_COUPON_75`, plus a manual 100%
+post-call grant.
+
+**The wrong answers this displaces:** "what do we charge for the report" returned an Upwork
+weekly billing notification addressed to Marcus, and "what is the pricing model" returned a
+Drive requirements document describing a four-step discount ladder (+24h x0.75, +72h x0.50,
++7d x0.35, +14d x0.25) that pricing 2.0 retired — one 50% code at 72h is the nearest thing
+that still fires. Both measured 2026-09-10.
