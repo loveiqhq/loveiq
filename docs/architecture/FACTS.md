@@ -69,3 +69,39 @@ corpus — the honest response is that we have no such record.
 
 Task cards are titled `Notion task: …` in the index for exactly this reason; the database
 is still called Board in Notion and `meta.database` still says so.
+
+## Our privacy policy, terms of use and terms and conditions
+
+They are **published pages, not markdown**, so their text is not in the index — only
+`.md` files are ingested. The canonical source of each is the page itself:
+
+| Document               | Page                    | Source                              |
+| ---------------------- | ----------------------- | ----------------------------------- |
+| Privacy Policy         | `/privacy-policy`       | `app/privacy-policy/page.tsx`       |
+| Terms of Use           | `/terms-of-use`         | `app/terms-of-use/page.tsx`         |
+| Terms and Conditions   | `/terms-and-conditions` | `app/terms-and-conditions/page.tsx` |
+| Cookie Policy, Imprint | `/cookies`, `/imprint`  | `app/cookies/`, `app/imprint/`      |
+
+**What each one covers**, taken from its own section headings so this page can be checked
+against the source rather than trusted:
+
+- **Privacy Policy** — Controller · Scope · Categories of Personal Data (account and
+  identity, psychometric and survey, usage and technical, payment) · Purposes of
+  Processing · Automated Processing and AI · Recipients of Data (infrastructure and
+  hosting, payments) · and the rights and retention sections below those.
+- **Terms of Use** — Purpose of LoveIQ · Eligibility · User Account · Acceptable Use ·
+  Data Integrity · Reliance on Results · Content Standards · Monitoring and Enforcement ·
+  Platform Changes · Termination · Liability · Governing Law.
+- **Terms and Conditions** — Scope of Services · Account Registration · Contract
+  Formation · Prices and Payments · Subscription Terms · User Obligations · Intellectual
+  Property · Availability and Changes · Liability · Termination · Governing Law ·
+  Jurisdiction.
+
+For the processing detail behind the Privacy Policy, the indexed compliance documents are
+`docs/compliance/ROPA.md` (records of processing), `LAWFUL_BASIS.md` and `DPIA.md`.
+
+**The wrong answer this displaces:** with no first-party text in the index, "what is our
+privacy policy" and "what is in our terms of service about liability" were answered with
+**Vercel's** and **Google's** own policy-update emails — where the word "we" means the
+vendor, not us. Measured 2026-09-10; the reader's honest conclusion was that our terms
+were being revised.
