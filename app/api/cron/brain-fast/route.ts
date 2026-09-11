@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ingestAnalytics } from "@features/brain/server/ingest/analytics";
+import { ingestPeople } from "@features/brain/server/ingest/people";
 import { BACKFILL_DAYS, ingestGa4 } from "@features/brain/server/ingest/google";
 import { ingestSlack } from "@features/brain/server/ingest/slack";
 import { embedMissing } from "@features/brain/server/embed";
@@ -165,6 +166,9 @@ export async function GET(request: Request) {
     // GA4 first: `analytics` reads its ad spend back out of the chunks it writes.
     await run("ga4", () => ingestGa4(stampedAt, isOutOfTime, windowDays, oidcToken));
     await run("analytics", () => ingestAnalytics(stampedAt));
+    // One row, read straight from the person registry. Cheap enough to rebuild every
+    // run, and a role correction is then live within the quarter hour.
+    await run("people", () => ingestPeople(stampedAt));
     await run("slack", () => ingestSlack(stampedAt, isOutOfTime));
 
     /**
