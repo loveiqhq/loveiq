@@ -1312,6 +1312,31 @@ export const surveyQuestions: SurveyQuestion[] = [
     formatGuidance: "Select one option.",
   },
   {
+    qId: "16009",
+    cId: 16,
+    chapter: "Next Steps & Preferences",
+    question:
+      "If these existed for what you most want to work on in your sex life, which would you actually buy first?",
+    answerType: "single",
+    options: [
+      "A 15-minute read that tells me what mine looks like — €19",
+      "A 4-week guided program with weekly exercises — €119",
+      "One 60-minute session with a practitioner — €149",
+      "A small live group of six people over four sessions — €229",
+      "None of these right now",
+    ],
+    required: true,
+    guide:
+      'Nothing is for sale here and no payment is taken. We are working out what would actually be worth building, so "none of these" is a real answer and just as useful as the others.',
+    supportAndGuidance:
+      'Nothing is for sale here and no payment is taken. We are working out what would actually be worth building, so "none of these" is a real answer and just as useful as the others.',
+    comment:
+      "Tells us which format people would genuinely pay for so we build that one first instead of guessing.",
+    howAnswerIsUsed:
+      "Tells us which format people would genuinely pay for so we build that one first instead of guessing.",
+    formatGuidance: "Select one option.",
+  },
+  {
     qId: "16011",
     cId: 16,
     chapter: "Next Steps & Preferences",

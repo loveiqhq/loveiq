@@ -37,6 +37,18 @@ const PLAN_LADDERS = {
 >;
 
 const PRICING_SIGNAL_QIDS = ["15001", "16012", "03005", "03010", "03012"] as const;
+
+/**
+ * 16009 is NOT in the list above, and must not be added to it.
+ *
+ * That question asks which of four priced formats someone would buy first, and its
+ * options carry euro amounts. They are hypothetical — they exist to rank the formats
+ * against each other, not to charge anyone. Feeding them into pricing would break in both
+ * directions: the reader could be quoted a number they were shown in a survey, and the
+ * measurement itself would stop being clean, because a stated preference collected before
+ * the paywall would then be entangled with the price that preference produced.
+ */
+
 const PRICING_SIGNAL_SELECT = [
   "answer_text",
   "normalized_value",
