@@ -47,6 +47,23 @@ export function scale1_7to0_1(x: unknown): number | null {
   return (v - 1) / 6;
 }
 
+/** The overlay id carrying the urgency answer (question 16002). */
+export const URGENCY_OVERLAY_ID = "OVL_URGENCY";
+
+/**
+ * Invert `scale1_7to0_1`, returning the answer on the scale it was given on.
+ *
+ * Exposed because a 0-1 float is the engine's working form, not something a product
+ * decision should be written against — "urgency 5 and above" is a sentence about the
+ * question the respondent saw.
+ */
+export function urgencyFromOverlay(value: number | undefined, missing: boolean): number | null {
+  // Missing must stay null rather than becoming the 0.5 default's 4. A caller that cannot
+  // distinguish "middling" from "never answered" will act on a value nobody gave.
+  if (missing || typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.round(value * 6 + 1);
+}
+
 export function softmax(scores: Record<string, number>, temperature = 1.0): Record<string, number> {
   const keys = Object.keys(scores);
   // `keys` is taken from `scores`, so `scores[k]` is always defined.
@@ -725,6 +742,10 @@ export function scoreArchetypes(
     rawScore,
     percent,
     primaryArchetype,
+    urgency: urgencyFromOverlay(
+      overlaysScalar[URGENCY_OVERLAY_ID],
+      overlaysMissing.has(URGENCY_OVERLAY_ID)
+    ),
     diagnostics: {
       uDimensions,
       dimensionWeightsBase: baseWeights,

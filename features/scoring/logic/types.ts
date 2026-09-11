@@ -104,6 +104,21 @@ export interface ScoringResult {
   rawScore: Record<string, number>;
   percent: Record<string, number>;
   primaryArchetype: string;
+  /**
+   * How urgent this person says working on their sexuality is, on the 1-7 scale the
+   * question (16002) was actually asked on — NOT the 0-1 form the engine works in.
+   *
+   * Promoted out of `diagnostics` because it is a product signal rather than a debugging
+   * detail: it splits the audience close to evenly, which is what makes it usable for
+   * deciding what to show someone. The score was already computed on every submission;
+   * only a way to reach it was missing.
+   *
+   * `null` when the question was not answered. Deliberately not 4: an unanswered overlay
+   * defaults to 0.5 internally, which converts back to a perfectly plausible mid-scale
+   * answer nobody gave. Anything keyed on this must be able to tell "middling" from
+   * "unknown", or it will confidently act on a number it invented.
+   */
+  urgency: number | null;
   diagnostics: {
     uDimensions: Record<string, number>;
     dimensionWeightsBase: Record<string, number>;
