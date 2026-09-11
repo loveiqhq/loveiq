@@ -29,6 +29,9 @@ vi.mock("@features/survey/ui/hooks/useSurveyState", () => ({
     },
     setAnswer: mockSetAnswer,
     getAnswer: mockGetAnswer,
+    // The submit path reads the answers through this, never the `answers` closure —
+    // see features/survey/tests/hooks/latestAnswers.test.ts for why.
+    getLatestAnswers: () => ({}),
     setCurrentIndex: mockSetCurrentIndex,
     clearState: vi.fn(),
   }),

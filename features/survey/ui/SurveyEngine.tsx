@@ -56,6 +56,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     progress,
     setAnswer,
     getAnswer,
+    getLatestAnswers,
     setCurrentIndex,
   } = useSurveyState();
   const {
@@ -299,7 +300,10 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
        * as well as PostHog.
        */
       trackSurveyComplete(duration, totalQuestions);
-      submitSurvey(answers, startedAt, utmTracker);
+      // `getLatestAnswers()`, never the `answers` closure: on the last question the
+      // answer and this submit are two clicks apart, and the closure can predate the
+      // first of them. See the note in useSurveyState.
+      submitSurvey(getLatestAnswers(), startedAt, utmTracker);
       goTo(totalQuestions); // one past the end → triggers completion
       return;
     }
@@ -317,7 +321,11 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     question,
     goTo,
     submitSurvey,
-    answers,
+    // `answers` is deliberately NOT a dependency. Nothing in this callback reads it any
+    // more, and leaving it out is what makes `goNext` stable across answer changes — so
+    // the auto-advance timer's captured copy is the same function and still reads fresh
+    // answers through getLatestAnswers().
+    getLatestAnswers,
     trackNavigation,
     isEmailValid,
     isSelectionCountValid,

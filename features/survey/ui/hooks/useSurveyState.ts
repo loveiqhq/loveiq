@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { surveyQuestions } from "@/data/survey-data";
 import type { SurveyAnswerValue } from "@features/survey/server/types";
 import {
@@ -73,6 +73,26 @@ function loadState(): SurveyState {
 export function useSurveyState() {
   const [state, setState] = useState<SurveyState>(loadState);
 
+  /**
+   * The answers, readable SYNCHRONOUSLY — before React has committed the render that
+   * `setAnswer` queued.
+   *
+   * This exists for one specific loss. `goNext` in SurveyEngine closes over `answers`,
+   * and on the final question the answer is given and the survey submitted in two clicks
+   * a fraction of a second apart. Click Next before React commits the state update from
+   * the option click and the submit sends the map WITHOUT the last answer — no error, no
+   * retry, the answer simply is not in the payload.
+   *
+   * Measured on production 2026-09-11: 202 of 1,764 completed submissions in 120 days
+   * (11.5%) had NO row for 16015, the marketing opt-in, which is the last question. Of
+   * the 20 whose draft outlived the submission, all 20 held the answer client-side and
+   * 11 of them said "Yes" — consent given, never recorded, never added to the audience.
+   *
+   * Writing the ref inside `setAnswer` rather than in an effect is the whole point: an
+   * effect runs after commit, which is exactly the window being missed.
+   */
+  const answersRef = useRef(state.answers);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
@@ -83,8 +103,16 @@ export function useSurveyState() {
   }, [state]);
 
   const setAnswer = useCallback((qId: string, value: AnswerValue) => {
+    answersRef.current = { ...answersRef.current, [qId]: value };
     setState((s) => ({ ...s, answers: { ...s.answers, [qId]: value } }));
   }, []);
+
+  /**
+   * The answers as of the last `setAnswer`, not as of the last render. Anything that
+   * SENDS the answers must read them through this — a closure over `answers` can be one
+   * interaction stale, and on the final question that interaction is the whole answer.
+   */
+  const getLatestAnswers = useCallback(() => answersRef.current, []);
 
   const getAnswer = useCallback(
     (qId: string): AnswerValue | null => {
@@ -99,6 +127,7 @@ export function useSurveyState() {
 
   const clearState = useCallback(() => {
     // Starting over drops the landing prefill too, so all 59 questions return.
+    answersRef.current = {};
     setState({
       answers: {},
       currentIndex: 0,
@@ -123,6 +152,7 @@ export function useSurveyState() {
     progress,
     setAnswer,
     getAnswer,
+    getLatestAnswers,
     setCurrentIndex,
     clearState,
   };
