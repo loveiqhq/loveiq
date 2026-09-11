@@ -1,7 +1,16 @@
 import { surveyQuestions } from "@/data/survey-data";
+import { isHidden } from "@features/survey/questionFlags";
 import type { SurveyAnswers, SurveyAnswerValue } from "./types";
 
-export const SURVEY_TOTAL_QUESTIONS = surveyQuestions.length;
+/**
+ * How many questions a respondent is actually asked.
+ *
+ * Hidden questions are excluded deliberately, and this is the load-bearing half of
+ * hiding one: `isCompletionReady` below tests `answerCount >= SURVEY_TOTAL_QUESTIONS`, so
+ * counting a question nobody is shown would wait forever for an answer that cannot
+ * arrive, and no survey would ever register as complete.
+ */
+export const SURVEY_TOTAL_QUESTIONS = surveyQuestions.filter((q) => !isHidden(q.qId)).length;
 
 export function countSurveyAnswers(answers: SurveyAnswers): number {
   return Object.keys(answers).filter((key) => !key.endsWith("_other")).length;

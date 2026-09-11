@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef, type FC } from "react";
 import { surveyQuestions } from "@/data/survey-data";
+import { isHidden } from "@features/survey/questionFlags";
 import { useSurveyState, type AnswerValue } from "./hooks/useSurveyState";
 import SurveyHeader from "./SurveyHeader";
 import SurveyNav from "./SurveyNav";
@@ -102,7 +103,10 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   // Joined into a string so the memo key is stable across re-renders.
   const prefilledKey = prefilled.join(",");
   const orderedQuestions = useMemo(
-    () => orderEmailLast(surveyQuestions).filter((q) => !prefilledKey.split(",").includes(q.qId)),
+    () =>
+      orderEmailLast(surveyQuestions)
+        .filter((q) => !isHidden(q.qId))
+        .filter((q) => !prefilledKey.split(",").includes(q.qId)),
     [prefilledKey]
   );
   const totalQuestions = orderedQuestions.length;

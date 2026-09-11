@@ -35,3 +35,30 @@ export const RANDOMISE_QIDS: ReadonlySet<string> = new Set(["16001", "16011", "1
 export function isRandomised(qId: string): boolean {
   return RANDOMISE_QIDS.has(qId);
 }
+
+/**
+ * Questions that stay defined but are no longer ASKED.
+ *
+ * Hiding rather than deleting, because the two are not the same act. Deleting a question
+ * takes its row out of the CSV; the answers already given stay in the database but the
+ * question itself has to be reconstructed from an archive to read them back. Hiding
+ * leaves the definition exactly where it was, so historical answers keep resolving
+ * against a question that still exists, and turning it back on is one line.
+ *
+ * `15011` (sexual orientation) is here because it is Article 9 special-category data that
+ * fed one admin chart. It does not predict purchase, route an intervention or move the
+ * archetype — `OVL_ORIENTATION` is a diagnostics-only overlay no weight rule reads — so
+ * continuing to collect it buys nothing and carries real obligations. The ~1,250 answers
+ * already given are untouched; what happens to them is a decision for legal, not a
+ * side effect of a code change.
+ *
+ * Anything added here MUST also drop out of `SURVEY_TOTAL_QUESTIONS`
+ * (`features/survey/server/utils.ts`), or `isCompletionReady` waits for an answer that
+ * can never arrive and the survey becomes impossible to finish.
+ */
+export const HIDDEN_QIDS: ReadonlySet<string> = new Set(["15011"]);
+
+/** Whether this question is still defined but no longer asked. */
+export function isHidden(qId: string): boolean {
+  return HIDDEN_QIDS.has(qId);
+}
