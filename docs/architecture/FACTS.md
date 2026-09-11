@@ -140,9 +140,19 @@ and `engagement_multiplier`, and then by `discount_step` as the offer ages — w
 **what people actually paid ranges from EUR 3.74 to EUR 129.49**, and why the average
 order value in the analytics rows (EUR 18.27 all-time) is far below any list price.
 
-Discounts also arrive from the nurture emails: a 50%-off code at 30h and a 75%-off code at
-54h, minted per user against `STRIPE_COUPON_50` / `STRIPE_COUPON_75`, plus a manual 100%
-post-call grant.
+A discount also arrives from the nurture email. There are **two** stages —
+`72h_no_unlock` and `78h_no_unlock`, and `type Stage` in
+`app/api/cron/nurture-sequence/route.ts` is the source of truth. In practice a reader who
+does not convert receives exactly ONE follow-up: `72h_no_unlock`, which mints a per-user
+50%-off Stripe promotion code from `STRIPE_COUPON_50` with a 24-hour expiry.
+`78h_no_unlock` carries no discount at all — it invites a 20-minute call — and is paused
+by default behind `NURTURE_78H_CALL_ENABLED`. There is a manual 100% post-call grant.
+
+Pricing 2.0 retired the earlier escalating ladder; the 6h reminders and the 30h/54h
+discounts are gone. This paragraph previously described that retired ladder, copied from
+an out-of-date version of `CLAUDE.md` — which is the exact mistake `CLAUDE.md` warns
+against, and it mattered because this page now ranks first on nearly every pricing
+question, so the false claim rode along with the correct price table.
 
 **The wrong answers this displaces:** "what do we charge for the report" returned an Upwork
 weekly billing notification addressed to Marcus, and "what is the pricing model" returned a
