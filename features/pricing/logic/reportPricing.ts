@@ -189,12 +189,7 @@ const PRICING_SESSION_ID_REGEX =
 export type PricingExperimentGroup = "A" | "B";
 export type PricingDeviceType = "iOS" | "Android" | "Desktop";
 export type PricingTrafficSource =
-  | "direct"
-  | "newsletter"
-  | "google"
-  | "instagram"
-  | "tiktok"
-  | "other";
+  "direct" | "newsletter" | "google" | "instagram" | "tiktok" | "other";
 export type PricingBehavioralBucket = "zero" | "light" | "moderate" | "consistent" | "serious";
 
 export interface ReportPriceQuoteSnapshot {

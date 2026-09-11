@@ -43,9 +43,12 @@ async function main() {
         `  ${label.padEnd(4)} ${JSON.stringify(res)}  ${((Date.now() - at) / 1000).toFixed(0)}s`
       );
       if (res.skipped) {
-        console.log(
+        // A skip is a failure to do the job, not a success. Exiting 0 here made a
+        // missing GA4_PROPERTY_ID look like a completed backfill.
+        console.error(
           `  ${label.padEnd(4)} SKIPPED (${res.skipped}) — nothing was written, and the sweep did not run.`
         );
+        process.exitCode = 1;
       }
     } catch (err) {
       // One source failing must not stop the other, and must not look like success.

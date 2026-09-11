@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import posthog from "posthog-js";
+import { recoverFromError } from "@shared/ui/chunkLoadError";
 import Link from "next/link";
 import { LoveIQMark, LoveIQWordmark } from "@shared/ui/branding/LoveIQBrand";
 
@@ -68,7 +69,7 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
           {/* Primary: Try again */}
           <button
             type="button"
-            onClick={reset}
+            onClick={() => recoverFromError(error, reset)}
             className="group relative inline-flex h-[54px] min-w-[200px] cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-full bg-gradient-brand px-8 text-[15px] font-semibold text-white shadow-pill transition hover:-translate-y-[2px] focus-visible-ring"
           >
             <span

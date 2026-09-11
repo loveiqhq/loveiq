@@ -763,8 +763,12 @@ describe("/api/mcp", () => {
       ]);
       const weak = (await (await call({ query: "anything" })).json()).result.content[0]
         .text as string;
-      expect(weak).toMatch(/NOTHING BELOW MATCHED THE QUESTION STRONGLY/);
+      expect(weak).toMatch(/WEAK MATCH — worth a second look/);
       expect(weak).toMatch(/NOT evidence that LoveIQ has no record/);
+      // The claim is sized to the signal: measured over 322 questions it is right about
+      // half the time it fires, so it must read as a nudge and never as a verdict.
+      expect(weak).toMatch(/right about half the time/);
+      expect(weak).toMatch(/nudge, not a\s+verdict/);
       // The hits are still returned — this is a caveat, never a refusal.
       expect(weak).toContain("Board: something");
       // No decimal for the model to re-threshold on.
@@ -774,7 +778,7 @@ describe("/api/mcp", () => {
       mockRetrieve.mockResolvedValue([chunk({ score: 3.4, contentScore: 3.4 })]);
       const strong = (await (await call({ query: "anything" })).json()).result.content[0]
         .text as string;
-      expect(strong).not.toMatch(/NOTHING BELOW MATCHED/);
+      expect(strong).not.toMatch(/WEAK MATCH/);
     });
 
     /**
@@ -799,7 +803,7 @@ describe("/api/mcp", () => {
       const text = (await (await call({ query: "how long should a Guide article be" })).json())
         .result.content[0].text as string;
       expect(text).not.toMatch(/PRIOR DECISION ON RECORD/);
-      expect(text).toMatch(/NOTHING BELOW MATCHED/);
+      expect(text).toMatch(/WEAK MATCH/);
     });
 
     /**
@@ -2317,6 +2321,61 @@ describe("/api/mcp", () => {
       expect(JSON.stringify(row.args)).toContain("[email]");
     });
 
+    it("separates battery traffic from real usage, so the log can answer what the team hits", async () => {
+      /**
+       * The batteries drive these same handlers over the same corpus and write the
+       * same rows, deliberate failures included — a bogus service name, a malformed
+       * document id. Measured 2026-09-11: all nine of that day's logged errors were
+       * probes, and nothing in the table could say so. This is the only record of
+       * how the team uses the brain, so untagged test traffic makes the first
+       * question anyone asks of it unanswerable.
+       */
+      mockRetrieve.mockResolvedValue([]);
+      await POST(
+        new Request("https://www.loveiq.org/api/mcp", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${TOKEN}`,
+            "x-loveiq-mcp-client": "battery",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name: "search_company_context", arguments: { query: "anything" } },
+          }),
+        })
+      );
+      await flushAfterResponse();
+      expect(writes()[0]!.surface).toBe("mcp-battery");
+    });
+
+    it("treats an unrecognised client as real traffic rather than inventing a bucket", async () => {
+      // The header is caller-supplied and this column is what usage analysis groups
+      // by, so free text would let a caller fragment its own traffic into buckets
+      // nobody thinks to query. Anything but the known value is plain `mcp`.
+      mockRetrieve.mockResolvedValue([]);
+      await POST(
+        new Request("https://www.loveiq.org/api/mcp", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${TOKEN}`,
+            "x-loveiq-mcp-client": "definitely-not-the-battery",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name: "search_company_context", arguments: { query: "anything" } },
+          }),
+        })
+      );
+      await flushAfterResponse();
+      expect(writes()[0]!.surface).toBe("mcp");
+    });
+
     it("truncates oversized arguments instead of repairing cut JSON", async () => {
       // A half-object patched back to validity is a lie about what was sent, and
       // this column exists so a call can be reproduced.
@@ -3222,6 +3281,11 @@ describe("/api/mcp", () => {
         drive: "call",
         gmail: "email",
         slack: "slack",
+        // NOT the bare id. "people" occurs all over the tools JSON — in count_context's
+        // group_by, in the meta filter description — so checking for it passed even with
+        // the roster removed from the prose entirely. A source whose id is a common noun
+        // needs a distinctive phrase here or this guard is vacuous for it.
+        people: "who works here",
       };
       const sources = (mod as { SOURCES_FOR_TEST?: string[] }).SOURCES_FOR_TEST ?? [];
       expect(sources.length).toBeGreaterThan(0);

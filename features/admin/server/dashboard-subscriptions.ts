@@ -3,13 +3,7 @@ import logger from "@shared/observability/logger";
 
 export type DashboardSubscriptionCadence = "daily" | "weekly" | "monthly";
 export type DashboardSubscriptionAudience =
-  | "leadership"
-  | "strategy"
-  | "product"
-  | "growth"
-  | "tech"
-  | "ops"
-  | "research";
+  "leadership" | "strategy" | "product" | "growth" | "tech" | "ops" | "research";
 
 export interface DashboardSubscriptionOption {
   key: string;

@@ -63,11 +63,7 @@ interface SubmissionOutcomeContext {
 }
 
 type SignalKey =
-  | "report_viewed"
-  | "repeat_session"
-  | "multi_day_return"
-  | "shared_report"
-  | "sent_referral";
+  "report_viewed" | "repeat_session" | "multi_day_return" | "shared_report" | "sent_referral";
 
 interface OutcomeStats {
   monetizationRate: number;

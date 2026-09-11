@@ -280,6 +280,45 @@ function num(v: string | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/**
+ * A PARTIAL FETCH MUST NOT OVERWRITE A COMPLETE AGGREGATE.
+ *
+ * The nightly window is 10 days (see DAYS) and older rows are KEPT by `touchChunks`
+ * rather than refetched — but the weekly and monthly rows were rebuilt from whatever
+ * days that window happened to contain, and written straight over the correct ones.
+ *
+ * Measured 2026-09-11, and severe. The window covered 1-11 September plus the boundary
+ * day 31 August, so `monthly:2026-08` was rewritten from that ONE day: 215 sessions and
+ * EUR 34.47, against the real 3,530 and EUR 1,252.97 that its own 31 daily rows still
+ * summed to — understated sixteenfold. The label read "whole month", because the only
+ * check was `lastDay >= monthEnd` and 31 August IS the month end. A single day was
+ * published as August's total, and the campaign breakdown for the month vanished with it.
+ *
+ * It recurs every month, for whichever period the window straddles.
+ *
+ * The rule: write a period's aggregate only when this fetch covered the period from its
+ * first day, or when the period is still RUNNING — where partial is the honest answer and
+ * is labelled "so far". Otherwise leave the row alone; the touch keeps the complete one.
+ * A backfill has a window wide enough that every period passes.
+ */
+function periodIsComplete(
+  periodFirstDay: string,
+  periodLastDay: string,
+  windowStart: string,
+  today: string
+): boolean {
+  return windowStart <= periodFirstDay && periodLastDay <= today;
+}
+
+/** Monday of the ISO week containing `day`, and the Sunday that ends it. */
+function isoWeekBounds(day: string): { first: string; last: string } {
+  const d = new Date(`${day}T00:00:00Z`);
+  const shift = (d.getUTCDay() + 6) % 7; // Monday = 0
+  const mon = new Date(d.getTime() - shift * 86_400_000);
+  const sun = new Date(mon.getTime() + 6 * 86_400_000);
+  return { first: mon.toISOString().slice(0, 10), last: sun.toISOString().slice(0, 10) };
+}
+
 export async function ingestGa4(
   stampedAt: string,
   isOutOfTime: () => boolean = () => false,
@@ -639,7 +678,12 @@ export async function ingestGa4(
     });
   }
 
+  const windowStart = isoDaysAgo(windowDays);
   for (const [week, t] of ga4Weeks) {
+    const wk = isoWeekBounds(t.lastDay);
+    const wholeWeek = periodIsComplete(wk.first, wk.last, windowStart, todayUtc);
+    // A finished week this fetch only partly covered: leave the complete row alone.
+    if (!wholeWeek && wk.last < todayUtc) continue;
     const label = `week of ${longDate(t.firstDay)} to ${longDate(t.lastDay)}`;
     chunks.push({
       source: GA4_SOURCE,
@@ -654,6 +698,9 @@ export async function ingestGa4(
   }
 
   for (const [month, t] of ga4Months) {
+    const wholeMonth = periodIsComplete(`${month}-01`, monthEnd(month), windowStart, todayUtc);
+    // A finished month this fetch only partly covered: leave the complete row alone.
+    if (!wholeMonth && monthEnd(month) < todayUtc) continue;
     const label = longMonth(month);
     chunks.push({
       source: GA4_SOURCE,
@@ -662,7 +709,7 @@ export async function ingestGa4(
       url: null,
       body: renderGa4(
         `${label} — ${
-          t.lastDay >= monthEnd(month)
+          wholeMonth
             ? "whole month"
             : `month so far, ${longDate(t.firstDay)} to ${longDate(t.lastDay)}`
         } (${month})`,
@@ -947,7 +994,13 @@ export async function ingestSearchConsole(
     });
   }
 
+  const windowStart = isoDaysAgo(windowDays);
+  const todayUtc = isoDaysAgo(0);
   for (const [week, t] of gscWeeks) {
+    const wk = isoWeekBounds(t.lastDay);
+    const wholeWeek = periodIsComplete(wk.first, wk.last, windowStart, todayUtc);
+    // A finished week this fetch only partly covered: leave the complete row alone.
+    if (!wholeWeek && wk.last < todayUtc) continue;
     const label = `week of ${longDate(t.firstDay)} to ${longDate(t.lastDay)}`;
     chunks.push({
       source: GSC_SOURCE,
@@ -962,6 +1015,9 @@ export async function ingestSearchConsole(
   }
 
   for (const [month, t] of gscMonths) {
+    const wholeMonth = periodIsComplete(`${month}-01`, monthEnd(month), windowStart, todayUtc);
+    // A finished month this fetch only partly covered: leave the complete row alone.
+    if (!wholeMonth && monthEnd(month) < todayUtc) continue;
     const label = longMonth(month);
     chunks.push({
       source: GSC_SOURCE,
@@ -970,7 +1026,7 @@ export async function ingestSearchConsole(
       url: null,
       body: renderGsc(
         `${label} — ${
-          t.lastDay >= monthEnd(month)
+          wholeMonth
             ? "whole month"
             : `month so far, ${longDate(t.firstDay)} to ${longDate(t.lastDay)}`
         } (${month})`,

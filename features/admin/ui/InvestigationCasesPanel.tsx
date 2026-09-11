@@ -5,11 +5,7 @@ import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 import { getCsrfToken } from "@shared/http/csrf-client";
 
 type CaseStatus =
-  | "needs-review"
-  | "root-cause-found"
-  | "question-change-candidate"
-  | "monitoring"
-  | "closed";
+  "needs-review" | "root-cause-found" | "question-change-candidate" | "monitoring" | "closed";
 type CasePriority = "low" | "medium" | "high";
 type RootCause =
   | "question-friction"

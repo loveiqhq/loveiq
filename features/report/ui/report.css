@@ -1508,6 +1508,12 @@
   align-items: center;
   justify-content: center;
   padding: 2rem 1rem;
+  /* The whole overlay opens the paywall, so it should say so. Invisible on
+     touch — which is where all 48 dead taps were — and on a desktop it stops
+     the card lying about being unclickable. It also lets the UX dead-click
+     listener recognise it as interactive, so our own monitoring stops
+     reporting a defect that is fixed. */
+  cursor: pointer;
 }
 
 /* Full dimension / attachment locked cards (Figma 7954-35930) render in normal
@@ -22578,5 +22584,21 @@
 @media (max-width: 359px) {
   .report-beliefs__preview--locked > .report-premium-overlay {
     min-height: 1860px;
+  }
+}
+
+/* ── Very narrow phones (≤347px): one trait per row ────────────────────────
+   The hero card's trait grid is `1fr 1fr`, and a `1fr` track cannot shrink
+   below its content's min-width — so instead of wrapping, the right column
+   ran past the edge and was clipped by the card. Measured on production at
+   320px: 27px cut off, enough to lose whole words ("Initiation — h…",
+   "Power — wh… leads, who y…", "Submissive/sw…"). The grid needs ~348px for
+   two columns, so below that a single column is the only readable layout.
+
+   Scoped to 347px so nothing at or above the current breakpoint moves; ~2.5%
+   of sessions are on a viewport this narrow. */
+@media (max-width: 347px) {
+  .report-hero-card__traits {
+    grid-template-columns: 1fr;
   }
 }

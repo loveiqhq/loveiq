@@ -70,3 +70,72 @@ describe("plain English reaches the numbers", () => {
     expect(added).toBeLessThanOrEqual(4);
   });
 });
+
+describe("terms added 2026-09-11, each from a measured miss", () => {
+  /**
+   * From an 18-question sweep written in plain English rather than house words.
+   * Twelve already worked. These are the ones that did not, and nothing else was
+   * added — an unobserved synonym can only add noise.
+   */
+  it("reaches the nurture sequence from the words a person actually uses", () => {
+    // Both returned NOTHING relevant in 8 results: a random email thread, the
+    // commit-message convention, a landing-page task. "nurture emails" returned the
+    // right documents at 3.69. The corpus had the answer and only its own word for it.
+    expect(
+      expandBusinessVocabulary("the follow-up messages we send after someone finishes")
+    ).toContain("nurture");
+    expect(expandBusinessVocabulary("what do we email people who never came back")).toContain(
+      "nurture"
+    );
+  });
+
+  it("does NOT fire on the same English in a different sense", () => {
+    /**
+     * The first version of the second pattern matched any "never came back" and fired
+     * on a hiring question — "the candidate never came back to us about the offer" —
+     * pulling it toward the marketing emails. The subject now has to be a group.
+     */
+    for (const q of [
+      "the candidate never came back to us about the offer",
+      "did Mark follow up with the therapist",
+      "when did Fatih come back from holiday",
+      "what is the password policy for admin accounts",
+      "how do we sort the results by score",
+      "which categories of expense are reimbursable",
+    ]) {
+      expect(expandBusinessVocabulary(q), `"${q}" must not be rewritten`).toBe(q);
+    }
+  });
+
+  it("reaches staging and archetypes from plain description", () => {
+    expect(expandBusinessVocabulary("the password page in front of the test site")).toContain(
+      "staging"
+    );
+    expect(expandBusinessVocabulary("what categories do we sort people into")).toContain(
+      "archetype"
+    );
+  });
+});
+
+describe("a synonym, never the answer", () => {
+  it("bridges chargeback to dispute and logger to its folder", () => {
+    // Both measured: nothing in 30 results with the plain phrasing, rank 1 with the
+    // corpus's own word.
+    expect(expandBusinessVocabulary("what we do when a card gets charged back")).toContain(
+      "dispute"
+    );
+    expect(expandBusinessVocabulary("where does the logger come from")).toContain("observability");
+  });
+
+  it("refuses to paste a vendor name into the question", () => {
+    /**
+     * "what is the test card number" wants Stripe's 4242 and "what do we use to send
+     * email" wants Resend — and the only bridging word is the VENDOR'S. Every other
+     * term here maps a person's word to the corpus's word for the same thing; these
+     * would paste the ANSWER in, and keep doing it after we changed provider. Left
+     * unmapped on purpose, and this is the test that says so.
+     */
+    expect(expandBusinessVocabulary("what is the test card number")).not.toMatch(/stripe/i);
+    expect(expandBusinessVocabulary("what do we use to send email")).not.toMatch(/resend/i);
+  });
+});

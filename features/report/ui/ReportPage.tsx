@@ -865,6 +865,37 @@ const ReportExperience: FC<ReportExperienceProps> = ({
        * `user-select: none` below stops a selection ever being made, so leaving
        * it on would make an unblocked `onCopy` useless.
        */
+      /**
+       * A tap on a blurred locked preview opens that chapter's paywall.
+       *
+       * The previews are build-time rasters of the REAL chapter (see
+       * LockedPreviewImage), so they are indistinguishable from content a
+       * reader is meant to touch — and on production 16 sessions tapped
+       * `img.report-locked-preview__img` and got nothing back. In several
+       * chapters the paywall card is not even adjacent: Accelerators puts the
+       * teased columns and their rasters above the fold and the card down in
+       * the locked tail, so the overlay's own click handler never sees these.
+       *
+       * Delegated here rather than threading `onUnlock` through the fourteen
+       * sections that render a preview: one handler covers every chapter,
+       * including any added later. It forwards to the nearest paywall CTA
+       * above the preview, which keeps the real unlock path — and its
+       * analytics — as the single implementation.
+       */
+      onClick={(event) => {
+        const preview = (event.target as HTMLElement).closest?.(".report-locked-preview");
+        if (!preview) return;
+        // Bounded walk: unbounded, a chapter with no paywall card of its own
+        // would reach up and open a DIFFERENT chapter's paywall.
+        let node = preview.parentElement;
+        for (let depth = 0; node && depth < 6; depth += 1, node = node.parentElement) {
+          const cta = node.querySelector<HTMLElement>(".report-premium-overlay__cta");
+          if (cta) {
+            cta.click();
+            return;
+          }
+        }
+      }}
       {...(copyable
         ? {}
         : {

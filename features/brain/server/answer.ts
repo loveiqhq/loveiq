@@ -23,12 +23,7 @@ import logger from "@shared/observability/logger";
 const MAX_SOURCES = 14;
 
 export type BrainStatus =
-  | "answered"
-  | "no_results"
-  | "rate_limited"
-  | "unconfigured"
-  | "unavailable"
-  | "error";
+  "answered" | "no_results" | "rate_limited" | "unconfigured" | "unavailable" | "error";
 
 export interface BrainSource {
   n: number;
@@ -179,12 +174,31 @@ export function renderSources(
       // text. A mangled handle fails to fetch, which is the safe direction.
       const handle = opts.forAgent ? `id: ${defence(c.source)}/${defence(c.sourceId)}` : null;
       const relevance = opts.forAgent ? `relevance: ${c.score.toFixed(2)}` : null;
+      /**
+       * SAY WHEN A DECISION HAS BEEN REPLACED, on the decision itself.
+       *
+       * `supersedes` was recorded on the NEW decision and read back by nothing, so
+       * the replaced one carried no trace of having been replaced. A reader who
+       * searched their way onto it got generic advice to "prefer the later date" —
+       * useless unless they already knew a later one existed. This is the line that
+       * tells them, on the record they are actually looking at.
+       *
+       * Placed in the head block, above the body, because a reader who stops early
+       * must still see it. The id is defenced like every other quoted field.
+       */
+      const supersededBy = (c.meta as { superseded_by?: unknown } | null)?.superseded_by;
+      const replaced =
+        typeof supersededBy === "string" && supersededBy
+          ? `SUPERSEDED — this decision was replaced by decision/${defence(supersededBy)}. ` +
+            `It is kept as history; read the replacement before acting on this.`
+          : null;
       const inner = [
         head,
         handle,
         dated,
         relevance,
         safeUrl ? `url: ${safeUrl}` : null,
+        replaced,
         "",
         defence(c.body),
       ]

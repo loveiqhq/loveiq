@@ -221,13 +221,24 @@ export async function recordToolCall(input: {
   topScore?: number | null;
   latencyMs: number;
   error?: string | null;
+  /**
+   * Which MCP client made the call. Defaults to `mcp` — real traffic.
+   *
+   * The batteries drive the same handlers over the same corpus and write the same
+   * rows, including DELIBERATE failures: a bogus service name, a malformed document
+   * id. Measured 2026-09-11, all nine of the day's logged errors were my own probes,
+   * and nothing in the table could say so. This is the only record of how the team
+   * uses the brain and what fails for them, so test traffic mixed into it makes the
+   * first question anyone asks of it unanswerable.
+   */
+  surface?: "mcp" | "mcp-battery";
 }): Promise<void> {
   try {
     await supabaseFetch("/rest/v1/brain_query", {
       method: "POST",
       headers: { Prefer: "return=minimal" },
       body: JSON.stringify({
-        surface: "mcp",
+        surface: input.surface ?? "mcp",
         tool: input.tool.slice(0, 100),
         // Redacted like `args`, and for the same reason: `question` is a copy of
         // the search query or the table name, so redacting one and not the other

@@ -7,13 +7,7 @@ export type InitiativePriority = "low" | "medium" | "high";
 export type BetStatus = "proposed" | "active" | "validated" | "invalidated" | "parked";
 export type BetConfidence = "low" | "medium" | "high";
 export type CompetitiveMoveType =
-  | "feature"
-  | "pricing"
-  | "positioning"
-  | "distribution"
-  | "partnership"
-  | "brand"
-  | "other";
+  "feature" | "pricing" | "positioning" | "distribution" | "partnership" | "brand" | "other";
 export type ImpactLevel = "low" | "medium" | "high" | "critical";
 export type DependencyStrength = "weak" | "medium" | "strong";
 

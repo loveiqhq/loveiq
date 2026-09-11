@@ -3,12 +3,7 @@ export type AdminOsTone = "good" | "watch" | "risk";
 export type AdminActionStatus = "open" | "in-progress" | "blocked" | "done";
 export type AdminActionPriority = "high" | "medium" | "low";
 export type AdminActionSourceType =
-  | "general"
-  | "metric"
-  | "decision"
-  | "experiment"
-  | "release"
-  | "investigation";
+  "general" | "metric" | "decision" | "experiment" | "release" | "investigation";
 
 export interface AdminMetricOptionLite {
   key: string;

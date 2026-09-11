@@ -268,8 +268,7 @@ const getCookieValue = (name: string) => {
  * only, so it typechecked `set` and rejected every `event` call.
  */
 type GtagCall =
-  | ["event", string, Record<string, unknown>?]
-  | ["set", "user_properties", Record<string, unknown>];
+  ["event", string, Record<string, unknown>?] | ["set", "user_properties", Record<string, unknown>];
 
 /** Applies a queued tuple to gtag. The cast is needed because TypeScript cannot
  *  resolve an overload from a spread of a union tuple; the runtime shim takes
@@ -581,10 +580,7 @@ export const trackPaywallView = (items: PaywallPlanItem[]) => {
  * the founder's "forced" vs "initiated" distinction.
  */
 export type PaywallInitiatedSource =
-  | "lock_click"
-  | "archetype_unlock"
-  | "offer_link"
-  | "archetype_breakdown_footer";
+  "lock_click" | "archetype_unlock" | "offer_link" | "archetype_breakdown_footer";
 
 export interface PaywallInitiatedParams {
   source: PaywallInitiatedSource;

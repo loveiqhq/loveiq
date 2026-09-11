@@ -23,6 +23,9 @@ vi.mock("@features/brain/server/ingest/analytics", () => ({
 vi.mock("@features/brain/server/ingest/slack", () => ({
   ingestSlack: vi.fn(async () => ({ source: "slack", rows: 526, swept: 0 })),
 }));
+vi.mock("@features/brain/server/ingest/people", () => ({
+  ingestPeople: vi.fn(async () => ({ source: "people", rows: 1, swept: 0 })),
+}));
 
 // Embedding runs at the end of this lane. Stubbed here so the tests above stay
 // about ingestion; the tests at the bottom of this file drive it directly.

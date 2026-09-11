@@ -22,10 +22,7 @@ type MetricStatus = "good" | "watch" | "risk" | "unknown";
 type ReviewStatus = "fresh" | "due" | "overdue" | "never" | "unknown";
 type ReadoutMethod = "conversion-rate" | "count-delta" | "average-value";
 type StatisticalSignificance =
-  | "significant-lift"
-  | "significant-regression"
-  | "inconclusive"
-  | "insufficient-data";
+  "significant-lift" | "significant-regression" | "inconclusive" | "insufficient-data";
 
 interface MetricOption {
   key: string;

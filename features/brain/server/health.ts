@@ -62,7 +62,15 @@ export interface BrainHealth {
 async function countWhere(filter: string): Promise<number | undefined> {
   const since = new Date(Date.now() - WINDOW_HOURS * 3_600_000).toISOString();
   const res = await supabaseFetch(
-    `/rest/v1/brain_query?select=id&created_at=gte.${encodeURIComponent(since)}&${filter}`,
+    `/rest/v1/brain_query?select=id&created_at=gte.${encodeURIComponent(since)}` +
+      // The batteries drive these same tools and write the same rows, deliberate
+      // failures included — an unknown Slack channel, a malformed document id. This
+      // watcher exists to report what the TEAM experiences, and synthetic traffic is
+      // not that. It would not raise a false alarm today (no probe produces the
+      // outage or failure phrases) but it inflates `calls` and `searches`, which
+      // DILUTES the empty-search ratio and makes a real problem less likely to cross
+      // the threshold. A monitor quietened by its own test suite is the worst kind.
+      `&surface=neq.mcp-battery&${filter}`,
     { headers: { Prefer: "count=exact", Range: "0-0" } }
   );
   if (!res.ok) return undefined;

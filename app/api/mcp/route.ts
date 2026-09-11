@@ -6,6 +6,7 @@ import { renderSources } from "@features/brain/server/answer";
 import { redactUrlSecrets } from "@features/brain/server/ingest/upsert";
 import { recordToolCall } from "@features/brain/server/log";
 import { adCostByDay, adCovers, brainDailyRollup } from "@features/brain/server/ingest/analytics";
+import { ARRAY_META_KEYS } from "@features/brain/server/retrieve";
 import {
   CorpusUnavailableError,
   retrieve,
@@ -264,6 +265,9 @@ export const SOURCES_FOR_TEST = [
   "gmail",
   "calendar",
   "whatsapp",
+  // Built from `brain_person` by the fast cron, not ingested from an outside system.
+  // Listed here in the commit that creates the first chunk, per the `jira` rule below.
+  "people",
 ];
 // `jira` is deliberately absent. The 1,037 issues in loveiq.atlassian.net are real
 // and actively updated, but `JIRA_API_TOKEN` has never been set, so the corpus holds
@@ -481,7 +485,28 @@ const TOOLS = [
             'Exact-match on indexed metadata, e.g. {"status": "WIP"}. Notion board ' +
             "tasks carry status, assignee, priority, due, impact, database; slack " +
             "carries channel and day; gmail carries " +
-            "mailbox and bulk; drive carries owner, kind and section. Values are " +
+            "mailbox and bulk; drive carries owner, kind and section. " +
+            "EVERY SOURCE CARRIES `people`: the colleagues a record names, normalised to " +
+            "one spelling from the person registry, so it joins across all of them — the " +
+            'same person is `author` on one source and `speakers` on another. {"people": ' +
+            '["Mark Oldenburg"]} returns that person across whatsapp, notion, gmail, slack ' +
+            "and drive at once, which is the only way to ask what someone has said or " +
+            "decided; asking by name in the question text matches only records that happen " +
+            "to spell it in their body. " +
+            "A bare string is accepted for it, and for the other list-valued keys " +
+            "(`speakers`, `participants`, `attendees`, `covers`): they are wrapped for " +
+            "you, so a filter can no longer come back empty merely because of its shape. " +
+            'Use count_context with group_by:"people" to see the exact spellings in use. ' +
+            "`links` JOINS A MEETING TO ITS OWN NOTES. A calendar event and the Gemini " +
+            "notes from that same meeting are separate records: the event knows who was " +
+            "INVITED, the notes know what was SAID. Pass the id printed on either one — " +
+            '{"links": ["calendar/event:…"]} — to reach the other side. 83 meetings are ' +
+            "joined; a meeting with no recording has none, which is absence of a " +
+            "recording and not absence of the meeting. " +
+            "DO NOT USE `attendees` TO FIND A PERSON: calendar attendees are raw email " +
+            "addresses and one colleague appears under two of them, so filtering it by a " +
+            "name matches nothing at all. `people` is the normalised view of those same " +
+            "events. Values are " +
             "matched EXACTLY, so 'in_progress' will not match 'In Progress'. The values " +
             "in use change as people edit the board, so ASK rather than guess: " +
             'count_context with group_by:"status" lists every one with its count. A list ' +
@@ -624,7 +649,10 @@ const TOOLS = [
           type: "string",
           description:
             "The id of the decision this replaces, as printed when it was recorded or on " +
-            "a search line. The older record is kept — superseding is history, not deletion.",
+            "a search line. The older record is kept — superseding is history, not " +
+            "deletion — and is stamped so that anyone who later searches their way onto " +
+            "it is told, on that record, that it was replaced and by which. Without this " +
+            "the old decision keeps reading as current.",
         },
       },
       required: ["decision", "actor"],
@@ -1758,7 +1786,11 @@ const asStrings = (v: unknown): string[] | undefined =>
  * value is `["Marcus Börner"]`. That reads as "this person did nothing", which is
  * the worst way for a filter to fail — so the scalar is wrapped rather than dropped.
  */
-const ARRAY_META_KEYS = new Set(["people"]);
+// The list lives in `retrieve.ts` and is imported, not copied. This was a second
+// Set holding only "people", so `count_context` and `browse_context` — which do
+// NOT route through `retrieve()` — silently dropped a bare-string filter on
+// `speakers`, `participants`, `attendees` or `covers`, returning an empty result
+// that reads as "nothing matched". Two lists of the same thing had drifted.
 const asMeta = (v: unknown): Record<string, string | string[]> | undefined => {
   if (!v || typeof v !== "object" || Array.isArray(v)) return undefined;
   const out: Record<string, string | string[]> = {};
@@ -1793,7 +1825,14 @@ async function callTool(
   if (name === "search_company_context") {
     const query = typeof args.query === "string" ? args.query : "";
     if (query.trim().length < 2) {
-      return textResult("Provide a question of at least two characters.", true);
+      // Names the PARAMETER, not the concept. "Provide a question" sent a caller
+      // looking for an argument called `question`, which does not exist — the
+      // refusal read as "your question was too short" rather than "wrong key".
+      return textResult(
+        "`query` is required and must be at least two characters. It is the question " +
+          'itself, in plain words — e.g. {"query": "who is the CEO"}.',
+        true
+      );
     }
     const limit = intArg(args.limit, 12, 1, 30);
 
@@ -1970,7 +2009,27 @@ async function callTool(
      * already warned the model in prose that gibberish returns confident sources; a
      * number beats a warning it has to remember.
      *
-     * The floor is calibrated, not chosen. Across twelve questions with known-good
+     * CALIBRATED ON 28 QUESTIONS, THEN RE-MEASURED ON 322 — AND IT DID NOT GENERALISE.
+     * The original sweep reported Youden 0.875 at 1.85. Against 322 real questions the
+     * same floor fires 32 times at 53% precision and 22% recall, and no threshold does
+     * better: useful answers sit at a median content score of 2.53, not-useful ones at
+     * 2.35, and the distributions overlap almost completely. Precision never exceeds 55%
+     * anywhere between 1.85 and 2.30 — raising it buys recall and loses precision, one
+     * for one.
+     *
+     * The reason is that a high content score means the corpus contains the question's
+     * WORDS, not its answer: a spam mail titled "your traffic numbers" scores 2.30.
+     *
+     * So the signal is kept and the CLAIM is cut down to fit it. It used to assert that
+     * nothing below matched and to prefer saying the record was thin; at coin-flip
+     * precision that told readers to distrust fifteen correct answers, including the
+     * traffic question the vocabulary fix was written for. It now says what it is: a
+     * nudge that is right about half the time. A cheap hedge on a wrong answer is worth
+     * more than the cost of an unnecessary one — but only if it does not overstate.
+     *
+     * Do not re-tune this on a small sample. That is how it got here.
+     *
+     * The original sweep, kept for the record: across twelve questions with known-good
      * answers and eight the corpus genuinely cannot answer, the good ones scored 2.37
      * and up on content and the unanswerable ones 1.71 and down — with one honest
      * exception that proves the rule: "who won the 1998 world cup" scored 3.12 because a
@@ -1980,13 +2039,14 @@ async function callTool(
      */
     const weakMatch =
       chunks.length > 0 && topScore < RELEVANCE_FLOOR
-        ? `\n\nNOTHING BELOW MATCHED THE QUESTION STRONGLY. Judged on how much each hit ` +
-          `overlaps what was asked — with recency and every other bonus removed — none of ` +
-          `them clears the bar a genuine answer clears. So these are the closest things in ` +
-          `the corpus, not answers, and they are probably about something else entirely. ` +
-          `This is NOT evidence that LoveIQ has no record of it: ask again in different ` +
-          `words, or narrow with \`sources\`. Prefer saying the written record is thin over ` +
-          `answering from what is below.\n`
+        ? `\n\nWEAK MATCH — worth a second look before trusting this. Judged on how much ` +
+          `the best hit overlaps the question, with recency and every other bonus removed, ` +
+          `this scores below where a solid answer usually sits. Treat it as a nudge, not a ` +
+          `verdict: measured over 322 real questions it is right about half the time it ` +
+          `fires, so read the text and decide. It is NOT evidence that LoveIQ has no record ` +
+          `of this. If the sources below do not actually address what was asked, say the ` +
+          `written record is thin rather than assembling an answer from adjacent material; ` +
+          `if one of them plainly does answer it, use it.\n`
         : "";
     const prior = renderPriorDecisions(
       rankedIn.length > 0
@@ -2066,10 +2126,44 @@ async function callTool(
   if (name === "fetch_document") {
     const raw = typeof args.id === "string" ? args.id.trim() : "";
     const slash = raw.indexOf("/");
-    const src = slash > 0 ? raw.slice(0, slash) : "";
+    let src = slash > 0 ? raw.slice(0, slash) : "";
     // Split on the FIRST slash only: a `doc` source_id is a repo path and contains
     // its own slashes.
-    const rawId = slash > 0 ? raw.slice(slash + 1) : "";
+    let rawId = slash > 0 ? raw.slice(slash + 1) : "";
+
+    /**
+     * RESOLVE AN ID THAT LOST ITS SOURCE PREFIX, rather than refusing it.
+     *
+     * Measured over real calls: the commonest way this tool is called wrongly is a
+     * bare `source_id` — "decision:2026-09-09-3d275f5327" — because the id is read
+     * out of a previous answer's prose instead of copied off a search line. The
+     * refusal was correct and taught the format, and callers kept doing it anyway.
+     *
+     * Resolving is safe only when it is unambiguous, and it is not always: 264 of
+     * 22,457 source_ids exist under more than one source (`daily:2026-01-02` is both
+     * a ga4 row and a gsc row). So one match is used, several are NAMED so the
+     * caller can pick, and none falls through to the refusal below. Guessing between
+     * them would answer a question about search traffic with analytics numbers.
+     */
+    if (!src && raw) {
+      const res = await supabaseFetch(
+        `/rest/v1/brain_chunk?select=source&source_id=eq.${encodeURIComponent(raw)}`
+      );
+      const owners = res.ok
+        ? [...new Set(((await res.json()) as Array<{ source: string }>).map((r) => r.source))]
+        : [];
+      if (owners.length === 1) {
+        src = owners[0]!;
+        rawId = raw;
+      } else if (owners.length > 1) {
+        return textResult(
+          `"${raw}" exists under ${owners.length} sources, so I will not guess which you ` +
+            `mean. Ask again with one of: ${owners.map((o) => `${o}/${raw}`).join(", ")}.`,
+          true
+        );
+      }
+    }
+
     if (!SOURCES_FOR_TEST.includes(src) || !rawId) {
       return textResult(
         `id must be "<source>/<source_id>", exactly as printed on a search line. ` +
@@ -2587,6 +2681,27 @@ async function callTool(
     if (opts.until) qs.append("period_end", `lte.${opts.until}`);
     if (opts.meta) qs.set("meta", `cs.${JSON.stringify(opts.meta)}`);
     if (learnedSince) qs.set("first_seen_at", `gte.${learnedSince}`);
+    /**
+     * `q` WAS ACCEPTED, ECHOED BACK, AND IGNORED.
+     *
+     * Every other filter on this tool reached the query; this one never did. So
+     * browsing narrowed nothing and the header still said so: measured 2026-09-11,
+     * `q: "zzzznotaword"` — a string in no record at all — answered "7605 records
+     * match (q=zzzznotaword)", which is the entire corpus reported as matches. With
+     * `sources:["calendar"]` it claimed 293 matched while `count_context` put the
+     * real figure at 1.
+     *
+     * A filter that silently does nothing is worse than one that errors, and a COUNT
+     * that states the filter it did not apply is worse still — the caller has no way
+     * to see it, and `browse_context` exists precisely to be trusted about totals.
+     *
+     * `plfts` is PostgREST's `plainto_tsquery`, which is exactly what `brain_count`
+     * uses (`c.fts @@ plainto_tsquery('english', …)`), so the two tools now agree on
+     * what "matches" means rather than each having an opinion.
+     */
+    if (typeof args.q === "string" && args.q.trim()) {
+      qs.set("fts", `plfts(english).${args.q.trim().slice(0, 1000)}`);
+    }
     /**
      * ONE ROW PER DOCUMENT, NOT ONE PER STORED CHUNK.
      *
@@ -3372,6 +3487,7 @@ async function callTool(
       gmail: "brain-gmail",
       calendar: "brain-calendar",
       gsc: "brain-ingest",
+      people: "brain-fast",
     };
 
     /**
@@ -3595,7 +3711,8 @@ export async function POST(request: Request) {
         "and page, not just the task board), the team's Slack conversations day by day, the " +
         "company email thread by thread, the WhatsApp team group day by day, the calendar " +
         "of meetings and who attended them, the " +
-        "notes from every recorded call, dated business numbers, and decisions written " +
+        "notes from every recorded call, dated business numbers, who works here and what " +
+        "each person does, and decisions written " +
         "down directly with `record_decision`. A decision record is deliberate rather " +
         "than reconstructed from a transcript, so it is the best evidence about the " +
         "thing it actually decides — but only about that. A number quoted inside one is " +
@@ -3700,6 +3817,10 @@ export async function POST(request: Request) {
         sourceCount: stats.sourceCount ?? null,
         topScore: stats.topScore ?? null,
         latencyMs: Date.now() - started,
+        // Allow-listed, not free text: the header is caller-supplied and this column
+        // is what the usage analysis groups by, so an arbitrary value would let a
+        // caller fragment its own traffic into buckets nobody thinks to query.
+        surface: request.headers.get("x-loveiq-mcp-client") === "battery" ? "mcp-battery" : "mcp",
         // The refusal text IS the diagnosis -- "rpc/x writes to the database",
         // "path must be a simple path". Storing it is what makes a bad call
         // reproducible without the caller filing a report.

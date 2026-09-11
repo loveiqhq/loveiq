@@ -83,9 +83,134 @@ async function readLiveFigures(): Promise<LiveFigures> {
   return out;
 }
 
+/**
+ * ORDER MATTERS HERE, because the run does not finish.
+ *
+ * The default model is Google's FREE tier, which has a DAILY cap: measured
+ * 2026-09-11, a full run got through 12 probes and then reported
+ * "I've hit today's limit on the free model tier" for the remaining 35. The
+ * harness correctly marks those `untested` rather than failed — but a truncated
+ * run only ever tests whatever happens to be first.
+ *
+ * So the regression probes lead: each one pins a wrong answer this system really
+ * gave, and those are worth a scarce budget more than a smoke test is. Slice the
+ * rest across days with `--only <kind-prefix>` (e.g. `--only role-`), or set
+ * BRAIN_LLM_BASE_URL / BRAIN_LLM_MODEL at a paid provider to run it in one go.
+ *
+ * The RETRIEVAL battery has no such limit — no model, no key, whole set in
+ * seconds. That is the gate; this is the occasional deeper check.
+ */
 function buildProbes(f: LiveFigures): Probe[] {
   const has = (v?: string) => (v ? [v] : undefined);
   return [
+    /* ------------------------------------------------------------------------
+     * WRONG ANSWERS THIS SYSTEM ACTUALLY GAVE, each pinned so it cannot return.
+     *
+     * Added 2026-09-11 after a graded question set that lived only in a scratch
+     * directory was lost with the session that made it. A number nobody can
+     * recompute is not a measurement, so every finding worth keeping now lives
+     * here, in the repository, as an assertion that re-runs.
+     *
+     * `forbid` carries most of the weight. Several of these failures were not
+     * "no answer" but a confident answer assembled from the wrong document, and
+     * naming the specific wrong string is the only way to catch its return.
+     * ---------------------------------------------------------------------- */
+
+    // --- who works here ------------------------------------------------------
+    // Measured: "who is the CEO" returned forty chunks, every one about some
+    // OTHER company's chief executive, the loudest being a Supabase welcome email.
+    {
+      kind: "role-ceo",
+      q: "who is the CEO",
+      expect: ["Mark"],
+      forbid: ["Supabase", "Paul"],
+    },
+    { kind: "role-cto", q: "who is the CTO", expect: ["Eman"] },
+    { kind: "role-roster", q: "who is on the team and what does each person do", expect: ["Mark"] },
+    // A role the owner gave with an explicit caveat must never harden into fact.
+    { kind: "role-unconfirmed", q: "what is Sanjin's role", expect: ["unconfirmed"] },
+
+    // --- counts belong to the live half --------------------------------------
+    // Measured: FACTS.md took rank 1 for these at up to a full point above the
+    // analytics row that holds the number, on questions it does not answer.
+    {
+      kind: "count-refunds-routes-live",
+      q: "how many refunds have we had",
+      expect: ["payment"],
+    },
+    { kind: "count-signups-live", q: "how many signups do we have", expect: has(f.signups) },
+    { kind: "count-waitlist-live", q: "how many people are on the waitlist" },
+    // 5,705 counts free-text ANSWER FIELDS (ZIP codes, emails, names), not people,
+    // and it sat inside a decision record — the source readers are told to trust first.
+    {
+      kind: "count-not-answer-fields",
+      q: "how many survey responses do we have",
+      forbid: ["5,705", "5705"],
+    },
+
+    // --- product facts -------------------------------------------------------
+    // "Erotic Adventurer" and friends appear in a December 2025 ideas page and in
+    // no product code; the brain once mixed them into the live list.
+    {
+      kind: "archetypes-current-only",
+      q: "what are the archetypes",
+      expect: ["Spark Seeker"],
+      forbid: ["Erotic Adventurer", "Romantic Nurturer", "Logical Sexualist"],
+    },
+    // Renamed at V9. The old names must not come back as current.
+    {
+      kind: "archetype-renames",
+      q: "was any archetype renamed",
+      forbid: ["Approval Seeker is", "Power Orchestrator is"],
+    },
+    // A Drive file called "Refund Template" is an EMPLOYEE EXPENSE FORM. It held
+    // ranks 1, 2 and 4, so the honest reading was that we have no customer refunds.
+    {
+      kind: "refund-path",
+      q: "how do refunds work",
+      expect: ["Stripe"],
+      forbid: ["Employee ID", "Business Justification"],
+    },
+
+    // --- traffic: two correct numbers, so say which ---------------------------
+    // Our own tracking recorded 11,147 visits for August; GA4 recorded 3,530
+    // sessions. Adding them, or quoting one as the other, is the failure.
+    {
+      kind: "traffic-two-measures",
+      q: "how many people visited the site in August 2026",
+      forbid: ["14677", "14,677"],
+    },
+
+    // --- things we genuinely do not have -------------------------------------
+    // "Board" is a Notion task board. There is no board of directors and no
+    // investors, and the brain used to answer with market-research spreadsheets
+    // and VC newsletters as though they were ours.
+    {
+      kind: "absent-investors",
+      q: "who are our investors",
+      shouldDecline: true,
+      forbid: ["Pitchbook"],
+    },
+    { kind: "absent-board", q: "when is our next board meeting", shouldDecline: true },
+    { kind: "absent-funding", q: "what is our funding situation", shouldDecline: true },
+    { kind: "absent-valuation", q: "what is our valuation", shouldDecline: true },
+    // Judgment nobody has written down. Declining is the CORRECT answer here —
+    // these were previously graded as failures, which punished honesty.
+    { kind: "absent-judgment-worry", q: "what should I worry about", shouldDecline: true },
+    {
+      kind: "absent-judgment-breakeven",
+      q: "what would it take to break even",
+      shouldDecline: true,
+    },
+
+    // --- onboarding ----------------------------------------------------------
+    // Two in five documentation headings were once searchable nowhere, because a
+    // packed section lost its heading into metadata that is not indexed.
+    { kind: "onboard-prepush", q: "what runs on the pre-push hook", expect: ["test"] },
+    { kind: "onboard-testcard", q: "what is the Stripe test card number", expect: ["4242"] },
+    { kind: "onboard-logger", q: "where do I import the logger from", expect: ["observability"] },
+    { kind: "onboard-newsection", q: "how do I add a new landing section", expect: ["white"] },
+
     // --- terse -------------------------------------------------------------
     { kind: "one-word", q: "revenue?", expect: has(f.revenue) },
     { kind: "two-word", q: "ad spend", expect: has(f.adSpend) },
@@ -197,6 +322,33 @@ const FIRST_PARTY = new Set(["doc", "notion", "slack", "whatsapp", "drive"]);
 
 const describe = (h: BrainChunk): string =>
   `${h.source}${h.meta?.section ? `/${String(h.meta.section)}` : ""} "${(h.title ?? "").slice(0, 55)}" @${h.score.toFixed(2)}`;
+
+/**
+ * A COUNT OF REAL ACTIVITY MUST NOT BE ANSWERED BY A WRITTEN PAGE.
+ *
+ * Measured 2026-09-11: `FACTS.md` took rank 1 for "how many people bought" at 3.50
+ * against the `analytics` row that actually holds the number at 2.43 — a full point
+ * ahead, on a question it does not answer. Three more went the same way. Its section
+ * headings ("How many people have taken the survey", "Refunds: what happens to a
+ * customer's money") share words with the question; that is the whole mechanism.
+ *
+ * The fix was not to make it lose. A page that magnetises counting questions should
+ * ANSWER them, so it now carries a signpost saying every such count is live and
+ * naming the tools. This asserts the rank-1 hit is either that signpost or the dated
+ * `analytics` row — never a page that merely sounds like it counts something.
+ */
+const countRoutedLive = (h: BrainChunk[]): string[] => {
+  const top = h[0];
+  if (!top) return ["nothing came back for a counting question"];
+  const isSignpost = /every count of real activity is live/i.test(top.title ?? "");
+  const isDatedFigure = top.source === "analytics" || top.source === "ga4";
+  return isSignpost || isDatedFigure
+    ? []
+    : [
+        `a counting question was answered by ${describe(top)} — neither the live-count ` +
+          `signpost nor a dated analytics row`,
+      ];
+};
 
 function retrievalProbes(): RetrievalProbe[] {
   return [
@@ -456,6 +608,30 @@ function retrievalProbes(): RetrievalProbe[] {
       q: "what has the company been doing",
       limit: 25,
       check: (h) => (h.length >= 20 ? [] : [`asked for 25 on an open question, got ${h.length}`]),
+    },
+    {
+      kind: "count-goes-live-bought",
+      q: "how many people bought",
+      limit: 12,
+      check: countRoutedLive,
+    },
+    {
+      kind: "count-goes-live-refunds",
+      q: "how many refunds have we had",
+      limit: 12,
+      check: countRoutedLive,
+    },
+    {
+      kind: "count-goes-live-signups",
+      q: "how many signups do we have",
+      limit: 12,
+      check: countRoutedLive,
+    },
+    {
+      kind: "count-goes-live-waitlist",
+      q: "how many people are on the waitlist",
+      limit: 12,
+      check: countRoutedLive,
     },
   ];
 }
@@ -1348,7 +1524,26 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
     }),
 
     // ── DRIVE ────────────────────────────────────────────────────────────────
-    P("dr-b2c", "did we choose B2C or B2B", bodyHas(/B2C/)),
+    /**
+     * THIS PROBE ASSERTED MORE THAN THE TOOL PROMISES, and cost four attempts at
+     * "fixing" a ranking that was never wrong.
+     *
+     * The answer — a meeting note recording the pivot from B2B to B2C — is drive's
+     * THIRD-best hit. At limit 12 the per-source cap gives drive two slots, so it is
+     * cut; at limit 20 drive gets three and it comes back at rank 10. Nothing about
+     * its score changed. Measured across limits 12/20/30, and the top scorer sits
+     * 0.90 above it, so no plausible re-weighting would have moved it either.
+     *
+     * The cap exists so one source cannot fill the result, and the tool ANNOUNCES
+     * what it held back — "1 more from drive … ask again with sources:[…]" — which is
+     * the contract. Asserting that every answer survives a cap designed to drop
+     * things is asserting the cap does not work.
+     *
+     * So this now checks what the system actually guarantees: the answer is reachable
+     * once the cap is not binding. The honesty of the notice is covered separately by
+     * the `heldBack` assertions.
+     */
+    P("dr-b2c", "did we choose B2C or B2B", bodyHas(/B2C/, 20), undefined, 20),
     P("dr-designer", "are we hiring a designer", bodyHas(/designer/i)),
     P("dr-assessment-target", "how many assessment products are we targeting", bodyHas(/\b20\b/)),
     P(
@@ -1968,6 +2163,417 @@ function flag(p: Probe, text: string, status: string, ms: number, sources: numbe
   return issues;
 }
 
+/**
+ * THE MCP BATTERY — the door the team actually uses.
+ *
+ * The retrieval arm asserts which rows `brain_search` returns; the answer arm asserts
+ * what a small model writes from them in Slack. NEITHER exercises the MCP tool
+ * handlers, and MCP is the primary interface: claude.ai calls these tools directly
+ * and reads their TEXT. Everything between `retrieve()` and that text — argument
+ * parsing, filter normalisation, private-column masking, the result guide, the
+ * untrusted-data frame, the caps and their notices — was covered only by unit tests
+ * against fixtures, never against the real corpus.
+ *
+ * Like the retrieval arm and unlike the answer arm, this needs NO model and no API
+ * quota, so it can actually be run.
+ *
+ * NOTHING HERE CREATES ANYTHING. The five writing tools act on the real company, so
+ * only their REFUSAL paths are exercised — an unknown Slack channel, an unknown Notion
+ * database, an email with no recipient — plus `send_email` in its default DRAFT mode,
+ * which composes and dispatches nothing. Those guards are the whole protection against
+ * an accidental write, so they are worth a probe; the success paths were verified by
+ * hand against the real services on 2026-09-11, creating a Notion page, a Google Doc
+ * and a decision record, each deleted straight after.
+ */
+interface McpProbe {
+  kind: string;
+  tool: string;
+  args: Record<string, unknown>;
+  check: (text: string) => string[];
+}
+
+const contains =
+  (...needles: string[]) =>
+  (text: string): string[] =>
+    needles
+      .filter((n) => !text.toLowerCase().includes(n.toLowerCase()))
+      .map((n) => `missing "${n}"`);
+
+const absent =
+  (...needles: string[]) =>
+  (text: string): string[] =>
+    needles.filter((n) => text.toLowerCase().includes(n.toLowerCase())).map((n) => `LEAKED "${n}"`);
+
+const both =
+  (...cs: Array<(t: string) => string[]>) =>
+  (t: string) =>
+    cs.flatMap((c) => c(t));
+
+function mcpProbes(): McpProbe[] {
+  return [
+    // The roster, which did not exist this morning: "who is the CEO" returned forty
+    // chunks about OTHER companies' chief executives, loudest a vendor welcome email.
+    {
+      kind: "mcp-role-ceo",
+      tool: "search_company_context",
+      args: { query: "who is the CEO", limit: 6 },
+      check: contains("Mark Oldenburg", "Who works at LoveIQ"),
+    },
+    // A count of real activity must reach the live-data signpost, not a page that
+    // merely has "how many" in a heading.
+    {
+      kind: "mcp-count-signpost",
+      tool: "search_company_context",
+      args: { query: "how many people bought", limit: 6 },
+      check: contains("every count of real activity is live"),
+    },
+    // THE SILENT-FILTER TRAP. `people` is stored as an array and the filter is jsonb
+    // containment, so a bare string used to match nothing and return an empty result
+    // that reads as "this person said nothing". It is wrapped now; this is the proof
+    // at the door rather than in the module.
+    {
+      kind: "mcp-meta-string-filter",
+      tool: "search_company_context",
+      args: { query: "what has been discussed", limit: 6, meta: { people: "Mark Oldenburg" } },
+      check: (t) => (/SOURCE 1/.test(t) ? [] : ["a bare-string people filter returned no sources"]),
+    },
+    // Every search result must carry the frame that tells the model the corpus is
+    // data and not instructions. Anyone can write into it: the public contact form
+    // emails a mailbox this index reads.
+    {
+      kind: "mcp-untrusted-frame",
+      tool: "search_company_context",
+      args: { query: "what did we decide about pricing", limit: 4 },
+      check: contains("UNTRUSTED DATA", "HOW TO READ THESE"),
+    },
+    // count_context and browse_context do NOT route through `retrieve()`, so they get
+    // their meta filter normalised only by the route. A second copy of the array-key
+    // list lived there holding just "people", so a bare-string filter on any other
+    // list-valued key came back empty from these two while working in search.
+    {
+      kind: "mcp-count-array-key-bypass",
+      tool: "count_context",
+      args: { meta: { speakers: "Eman" } },
+      check: (t) =>
+        /\b[1-9]\d*\b/.test(t) ? [] : ["a bare-string speakers filter counted nothing"],
+    },
+    {
+      kind: "mcp-browse-array-key-bypass",
+      tool: "browse_context",
+      args: { meta: { speakers: "Eman" }, limit: 3 },
+      check: (t) =>
+        /whatsapp|slack/i.test(t) ? [] : ["a bare-string speakers filter browsed nothing"],
+    },
+    // Links are wiped whenever the calendar ingest rewrites its rows, and restored by
+    // the linker called from that same cron. If that ordering is ever broken — or the
+    // linker stops running — the corpus degrades silently back to two unrelated halves
+    // and no search fails to announce it. This is the thing that would notice.
+    // `q` was accepted, echoed into the header, and never reached the query: browsing
+    // for a string in NO record answered "7605 records match", the whole corpus. A
+    // filter that silently does nothing is bad; a count that states the filter it did
+    // not apply is worse, because browse_context exists to be trusted about totals.
+    {
+      kind: "mcp-browse-q-actually-filters",
+      tool: "browse_context",
+      args: { q: "zzzznotawordanywhere", limit: 2 },
+      check: contains("Nothing matches"),
+    },
+    // And the two tools must agree on what "matches" means — browse now uses
+    // PostgREST's plfts, which is the plainto_tsquery brain_count already used.
+    {
+      kind: "mcp-browse-agrees-with-count",
+      tool: "browse_context",
+      args: { q: "pricing", sources: ["calendar"], limit: 2 },
+      check: contains("1 records match"),
+    },
+    {
+      kind: "mcp-links-present",
+      tool: "count_context",
+      args: { group_by: "links" },
+      check: (t) =>
+        /\bcalendar\/event:/.test(t)
+          ? []
+          : ["no meeting links in the corpus — the linker has not run, or an ingest wiped them"],
+    },
+    {
+      kind: "mcp-count-group-people",
+      tool: "count_context",
+      args: { group_by: "people" },
+      check: contains("Mark Oldenburg"),
+    },
+    // list_sources is how a caller learns what exists and whether it is fresh. A
+    // source missing from it is invisible; an unmapped one renders a BLANK health
+    // clause, which reads as "state unknown" rather than "no job needed".
+    {
+      kind: "mcp-list-sources",
+      tool: "list_sources",
+      args: {},
+      check: both(contains("people", "whatsapp", "decision"), (t) => {
+        // Scoped to the SOURCE LINES. The response also prints a legend explaining
+        // what NEVER INGESTED means, so a whole-body `absent` check fails on the
+        // explanation rather than on any source — which it did, first run.
+        const dead = t
+          .split("\n")
+          .filter((l) => /^\s*\w+:\s+\d+ chunks/.test(l))
+          .filter((l) => l.includes("NEVER INGESTED"));
+        return dead.map((l) => `a source reports no data at all: ${l.trim().slice(0, 80)}`);
+      }),
+    },
+    // FETCH'S WHOLE PROMISE IS REASSEMBLY. A document split across parts must come
+    // back whole from ANY of its part ids, and the completeness claim it prints must
+    // be true. This checks the claim against itself rather than against a fixed
+    // string: if it says "parts 1-N of N — this is all of it", there must be N source
+    // blocks. A tool that returns one chunk and calls it the whole document is worse
+    // than one that admits it cannot reassemble.
+    {
+      kind: "mcp-fetch-reassembles",
+      tool: "fetch_document",
+      args: { id: "slack/ch:all-loveiq:2026-08-20#2" },
+      check: (t) => {
+        if (/could not be found|no such document/i.test(t)) {
+          return [
+            "the fixture document is gone — repoint this probe, do not assume reassembly broke",
+          ];
+        }
+        const claim = /parts?\s+\d+(?:-(\d+))?\s+of\s+(\d+)\s+—\s+this is all of it/i.exec(t);
+        if (!claim) return ["no completeness claim printed at all"];
+        const total = Number(claim[2]);
+        const blocks = (t.match(/<<<SOURCE \d+>>>/g) ?? []).length;
+        return blocks === total
+          ? []
+          : [`claims "all of it" over ${total} parts but returned ${blocks} source block(s)`];
+      },
+    },
+    // A malformed id must teach the format rather than fail blankly — this one cost
+    // me a cycle when a sibling message named a parameter that does not exist.
+    // The commonest real misuse: an id read out of an earlier answer's prose rather
+    // than copied off a search line, so it lost its source prefix. Resolved when
+    // unambiguous.
+    {
+      kind: "mcp-fetch-bare-id",
+      tool: "fetch_document",
+      args: { id: "CLAUDE.md#pre-push-hook-standard" },
+      check: contains("pre-push", "npm test"),
+    },
+    // ...but 264 source_ids exist under more than one source, and guessing between
+    // a ga4 row and a gsc row would answer a traffic question with search numbers.
+    {
+      kind: "mcp-fetch-ambiguous-id",
+      tool: "fetch_document",
+      args: { id: "daily:2026-01-02" },
+      check: contains("exists under", "ga4/daily:2026-01-02", "gsc/daily:2026-01-02"),
+    },
+    {
+      kind: "mcp-fetch-bad-id",
+      tool: "fetch_document",
+      // NOT a bare-but-real source_id: those resolve now, and this probe used one
+      // until that landed and turned it into a false alarm. This matches nothing.
+      args: { id: "no-such-document-anywhere-12345" },
+      check: contains("<source>/<source_id>"),
+    },
+    // Phase-0 complaint, re-checked: the title promised ad spend the payload lacked.
+    // It is there now, with an explicit coverage window so a missing day reads as
+    // unknown rather than zero.
+    {
+      kind: "mcp-business-numbers",
+      tool: "get_business_numbers",
+      args: { days: 14 },
+      check: both(contains("ad_spend", "unique_visitors", "which means unknown, not zero"), (t) =>
+        /"day":"\d{4}-\d{2}-\d{2}"/.test(t) ? [] : ["no dated rows came back"]
+      ),
+    },
+    // An unconfigured service must not read as an empty result. This is the
+    // difference between "we have no Stripe data" and "nobody set the key".
+    {
+      kind: "mcp-external-unconfigured",
+      tool: "query_external_service",
+      args: { service: "clarity", path: "/project-live-insights" },
+      check: contains("not configured", "not an empty result"),
+    },
+    {
+      kind: "mcp-external-unknown",
+      tool: "query_external_service",
+      args: { service: "bogus", path: "/x" },
+      check: contains("Unknown service", "stripe", "posthog"),
+    },
+    {
+      kind: "mcp-browse",
+      tool: "browse_context",
+      args: { sources: ["decision"], limit: 5 },
+      check: contains("Decision:"),
+    },
+    {
+      kind: "mcp-list-tables",
+      tool: "list_product_tables",
+      args: {},
+      check: contains("survey_submission"),
+    },
+    // THE SECURITY GUARD. `query_product_data` reads production tables directly, so
+    // a column holding an email or a report token must come back masked. A regression
+    // here leaks customer data into a chat transcript.
+    // --- the writing tools, refusal paths only -----------------------------
+    // A refusal that does not say WHICH channels exist sends the caller guessing, and
+    // a guess at a writing tool is a message in the wrong room that cannot be deleted.
+    {
+      kind: "mcp-slack-unknown-channel",
+      tool: "post_to_slack",
+      args: { channel: "__no_such_channel__", text: "this must never post" },
+      check: contains("no channel called", "prod-alerts"),
+    },
+    {
+      kind: "mcp-notion-unknown-parent",
+      tool: "write_to_notion",
+      args: { parent: "__no_such_database__", title: "this must never be created" },
+      check: contains("No database called", "Board"),
+    },
+    // DRAFT IS THE DEFAULT, and it is the only thing standing between a mistake and a
+    // message a customer reads. Email is the one action here nobody can recall.
+    {
+      kind: "mcp-email-drafts-by-default",
+      tool: "send_email",
+      args: {
+        to: ["ec@loveiq.org"],
+        subject: "battery probe — must not send",
+        body: "If this arrives as an email, the default changed and that is a serious regression.",
+      },
+      // The positive assertion is the precise one. A bare absent("Sent") matched inside
+      // the draft's own words — "nothing has been sent" — and failed a passing tool.
+      check: contains("DRAFT", "nothing has been sent", "send: true"),
+    },
+    {
+      kind: "mcp-email-needs-a-recipient",
+      tool: "send_email",
+      args: { to: [], subject: "x", body: "y" },
+      check: contains("recipient"),
+    },
+    {
+      kind: "mcp-private-columns-masked",
+      tool: "query_product_data",
+      args: { table: "survey_submission", limit: 3 },
+      check: absent("@gmail.com", "@hotmail.com", "@yahoo."),
+    },
+  ];
+}
+
+/**
+ * EVERY ARRAY-VALUED META KEY MUST BE IN `ARRAY_META_KEYS`, or a filter on it comes
+ * back empty and reads as "nothing matched".
+ *
+ * This is not hypothetical. `links` was introduced and the set was not updated the
+ * same day, and the filter returned 0 hits against 9 rows that plainly contained the
+ * value — the second time that exact trap fired, hours after the first was fixed. A
+ * hardcoded list that must be edited whenever the data changes will drift; this reads
+ * the real corpus and fails when it has.
+ */
+async function checkArrayMetaKeysAreHandled(): Promise<string[]> {
+  const { ARRAY_META_KEYS } = await import("@features/brain/server/retrieve");
+  const { supabaseFetch } = await import("@features/admin/server/supabase");
+  const sources = [
+    "drive",
+    "gmail",
+    "notion",
+    "slack",
+    "whatsapp",
+    "calendar",
+    "doc",
+    "decision",
+    "analytics",
+    "people",
+  ];
+  const found = new Map<string, string>();
+  for (const source of sources) {
+    const res = await supabaseFetch(
+      `/rest/v1/brain_chunk?select=meta&source=eq.${source}&limit=400`
+    );
+    if (!res.ok) return [`could not read ${source} to check metadata shapes`];
+    for (const row of (await res.json()) as Array<{ meta: Record<string, unknown> | null }>) {
+      for (const [k, v] of Object.entries(row.meta ?? {})) {
+        if (Array.isArray(v) && !found.has(k)) found.set(k, source);
+      }
+    }
+  }
+  return [...found.entries()]
+    .filter(([k]) => !ARRAY_META_KEYS.has(k))
+    .map(
+      ([k, src]) =>
+        `meta.${k} (on ${src}) is an array but is NOT in ARRAY_META_KEYS — a bare-string ` +
+        `filter on it returns nothing and reads as "no matches"`
+    );
+}
+
+async function runMcpBattery(only: string | null): Promise<number> {
+  const { POST } = await import("@/app/api/mcp/route");
+  const token = process.env.LOVEIQ_MCP_TOKEN;
+  if (!token) {
+    console.error(
+      "LOVEIQ_MCP_TOKEN is not set, so the MCP door cannot be opened. Nothing was tested."
+    );
+    return 1;
+  }
+
+  const all = mcpProbes();
+  const probes = only ? all.filter((p) => p.kind.includes(only) || p.tool.includes(only)) : all;
+  let failures = 0;
+
+  // Not a tool call, so it sits outside the probe list — but it guards the same door.
+  if (!only || "mcp-array-keys-all-handled".includes(only)) {
+    const drift = await checkArrayMetaKeysAreHandled();
+    if (drift.length) failures += 1;
+    console.log(`\n${drift.length ? "FAIL" : "ok  "} [mcp-array-keys-all-handled] metadata shapes`);
+    for (const d of drift) console.log(`      ISSUE: ${d}`);
+  }
+
+  for (const p of probes) {
+    const started = Date.now();
+    let issues: string[] = [];
+    let text = "";
+    try {
+      const res = await POST(
+        new Request("https://www.loveiq.org/api/mcp", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            // Keeps deliberate probe failures out of the real usage record.
+            "x-loveiq-mcp-client": "battery",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name: p.tool, arguments: p.args },
+          }),
+        })
+      );
+      const body = (await res.json()) as {
+        result?: { content?: Array<{ text?: string }>; isError?: boolean };
+        error?: { message?: string };
+      };
+      if (body.error) issues = [`json-rpc error: ${body.error.message ?? "?"}`];
+      else {
+        text = body.result?.content?.[0]?.text ?? "";
+        // An empty body is an outage, never "the corpus has nothing" — the same
+        // distinction the tool itself draws for its callers.
+        if (!text) issues = ["the tool returned no text at all"];
+        else issues = p.check(text);
+      }
+    } catch (err) {
+      issues = [`threw: ${err instanceof Error ? err.message : String(err)}`];
+    }
+    const ms = Date.now() - started;
+    if (issues.length) failures++;
+    console.log(
+      `\n${issues.length ? "FAIL" : "ok  "} [${p.kind}] ${p.tool}  ${ms}ms  ${text.length} chars`
+    );
+    for (const i of issues) console.log(`      ISSUE: ${i}`);
+  }
+
+  console.log(
+    `\n=== mcp: ${probes.length - failures}/${probes.length} clean, ${failures} flagged ===`
+  );
+  return failures;
+}
+
 async function main(): Promise<void> {
   const onlyIdx = process.argv.indexOf("--only");
   const only = onlyIdx > -1 ? (process.argv[onlyIdx + 1] ?? null) : null;
@@ -1977,6 +2583,10 @@ async function main(): Promise<void> {
   // refused for a key it never uses.
   if (process.argv.includes("--retrieval")) {
     process.exit((await runRetrievalBattery(only)) ? 1 : 0);
+  }
+  // Same reason as --retrieval: no model, so it must be reachable without a key.
+  if (process.argv.includes("--mcp")) {
+    process.exit((await runMcpBattery(only)) ? 1 : 0);
   }
   // Without a model every probe reports `unconfigured`, which renders as 24 FAILs
   // and buries the one real cause. Say it once and stop.

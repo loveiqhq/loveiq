@@ -107,6 +107,10 @@ export function buildDecisionRow(input: DecisionInput, now: Date): BrainRow {
   };
 }
 
+/** The date the row describes, which is the decision's own date and not today's. */
+const decidedOnOf = (row: { period_end?: string | null }): string =>
+  row.period_end ?? new Date().toISOString().slice(0, 10);
+
 export async function recordDecision(
   input: DecisionInput,
   now: Date = new Date()
@@ -121,6 +125,57 @@ export async function recordDecision(
   const written = await upsertChunks([row]);
   if (written === 0) {
     throw new Error(`decision refused at the write path: ${row.source_id}`);
+  }
+
+  /**
+   * MARK THE DECISION THIS ONE REPLACES, on the older record itself.
+   *
+   * `supersedes` was written into the new decision's metadata, its body and the Slack
+   * mirror — and read back by nothing. So the REPLACED decision carried no trace of
+   * having been replaced, and a reader who searched their way onto it was told, at
+   * most, to "prefer the later date" by generic guidance. They would have to already
+   * know a later one existed. That is the failure a supersession record exists to
+   * prevent, and it was the half that was missing.
+   *
+   * Superseding is history, not deletion: the old row keeps its text and stays
+   * findable, it just now says what replaced it.
+   *
+   * Never fails the write. The new decision is the thing being recorded; losing it
+   * because the back-reference could not be stamped would be the worse trade.
+   */
+  if (input.supersedes) {
+    const older = input.supersedes.trim().replace(/^decision\//, "");
+    try {
+      const res = await supabaseFetch(
+        `/rest/v1/brain_chunk?select=id,meta&source=eq.decision&source_id=eq.${encodeURIComponent(older)}`
+      );
+      const rows = res.ok
+        ? ((await res.json()) as Array<{ id: number; meta: Record<string, unknown> | null }>)
+        : [];
+      if (rows.length === 0) {
+        // Said out loud rather than swallowed: a typo'd id means the new decision
+        // claims to replace something that does not exist, and nobody would know.
+        logger.warn(
+          { supersedes: older, by: row.source_id },
+          "brain: a decision claims to supersede an id that is not in the corpus"
+        );
+      }
+      for (const old of rows) {
+        await supabaseFetch(`/rest/v1/brain_chunk?id=eq.${old.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+          body: JSON.stringify({
+            meta: {
+              ...(old.meta ?? {}),
+              superseded_by: row.source_id,
+              superseded_on: decidedOnOf(row),
+            },
+          }),
+        });
+      }
+    } catch (err) {
+      logger.warn({ err, supersedes: older }, "brain: could not mark the superseded decision");
+    }
   }
 
   /**

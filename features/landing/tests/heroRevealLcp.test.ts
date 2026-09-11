@@ -95,7 +95,7 @@ describe("hero above-the-fold reveal", () => {
      */
     const blocks: string[] = [];
     const needle = "@media (prefers-reduced-motion: reduce)";
-    for (let from = 0; ; ) {
+    for (let from = 0; ;) {
       const open = css.indexOf(needle, from);
       if (open === -1) break;
       let depth = 0;

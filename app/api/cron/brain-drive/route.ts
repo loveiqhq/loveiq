@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ingestDrive } from "@features/brain/server/ingest/drive";
+import { linkMeetings } from "@features/brain/server/ingest/link";
 import { ingestNote } from "@features/brain/server/ingest/upsert";
 import { readVercelOidcToken } from "@shared/http/google-oauth";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -110,6 +111,26 @@ export async function GET(request: Request) {
   try {
     result = await ingestDrive(new Date().toISOString(), isOutOfTime, readVercelOidcToken(request));
     logger.info({ result }, "brain-drive: done");
+
+    /**
+     * Link the meeting notes this run may have just written.
+     *
+     * Drive preserves existing links today only because it SKIPS chunks whose content
+     * has not changed — an optimisation, not a guarantee, and one that quietly becomes
+     * the thing holding half the links up. A newly ingested note also needs joining
+     * within the hour rather than waiting for the calendar cron. Both reasons point
+     * the same way, and the linker is idempotent: with nothing to do it writes zero.
+     *
+     * Secondary to the ingest, like the calendar side — caught and logged, never
+     * thrown, because a linker that could fail the cron feeding it is the tail
+     * wagging the dog.
+     */
+    try {
+      const linked = await linkMeetings();
+      logger.info({ linked }, "brain-drive: meeting links");
+    } catch (err) {
+      logger.error({ err }, "brain-drive: linking meetings failed");
+    }
 
     // What the run saw, recorded whatever the status. Overwritten below if it failed.
     errorMessage = ingestNote(result);

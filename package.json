@@ -31,6 +31,7 @@
     "brain:ask": "tsx scripts/brain-ask.ts",
     "brain:battery": "tsx scripts/brain-battery.ts",
     "brain:battery:retrieval": "tsx scripts/brain-battery.ts --retrieval",
+    "brain:battery:mcp": "tsx --env-file-if-exists=.env.local scripts/brain-battery.ts --mcp",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run --config vitest.integration.config.ts",
@@ -57,7 +58,7 @@
     "setup": "npm install && node -e \"const fs=require('fs');if(!fs.existsSync('.env.local')){fs.copyFileSync('.env.example','.env.local');console.log('.env.local created from .env.example')}else{console.log('.env.local already exists')}\"",
     "update:product-kpis": "node scripts/update-product-kpis.js",
     "prepare": "husky",
-    "brain:backfill-google": "tsx scripts/brain-backfill-google.ts",
+    "brain:backfill-google": "tsx --env-file-if-exists=.env.local scripts/brain-backfill-google.ts",
     "brain:rebuild-notion": "tsx scripts/brain-rebuild-notion.ts"
   },
   "dependencies": {
@@ -108,7 +109,7 @@
     "markdownlint-cli2": "0.23.2",
     "msw": "^2.14.6",
     "postcss": "^8.5.25",
-    "prettier": "^3.8.4",
+    "prettier": "^3.9.6",
     "tailwindcss": "^3.4.19",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
