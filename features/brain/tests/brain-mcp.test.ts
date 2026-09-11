@@ -763,8 +763,12 @@ describe("/api/mcp", () => {
       ]);
       const weak = (await (await call({ query: "anything" })).json()).result.content[0]
         .text as string;
-      expect(weak).toMatch(/NOTHING BELOW MATCHED THE QUESTION STRONGLY/);
+      expect(weak).toMatch(/WEAK MATCH — worth a second look/);
       expect(weak).toMatch(/NOT evidence that LoveIQ has no record/);
+      // The claim is sized to the signal: measured over 322 questions it is right about
+      // half the time it fires, so it must read as a nudge and never as a verdict.
+      expect(weak).toMatch(/right about half the time/);
+      expect(weak).toMatch(/nudge, not a\s+verdict/);
       // The hits are still returned — this is a caveat, never a refusal.
       expect(weak).toContain("Board: something");
       // No decimal for the model to re-threshold on.
@@ -774,7 +778,7 @@ describe("/api/mcp", () => {
       mockRetrieve.mockResolvedValue([chunk({ score: 3.4, contentScore: 3.4 })]);
       const strong = (await (await call({ query: "anything" })).json()).result.content[0]
         .text as string;
-      expect(strong).not.toMatch(/NOTHING BELOW MATCHED/);
+      expect(strong).not.toMatch(/WEAK MATCH/);
     });
 
     /**
@@ -799,7 +803,7 @@ describe("/api/mcp", () => {
       const text = (await (await call({ query: "how long should a Guide article be" })).json())
         .result.content[0].text as string;
       expect(text).not.toMatch(/PRIOR DECISION ON RECORD/);
-      expect(text).toMatch(/NOTHING BELOW MATCHED/);
+      expect(text).toMatch(/WEAK MATCH/);
     });
 
     /**

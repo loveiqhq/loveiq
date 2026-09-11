@@ -1970,7 +1970,27 @@ async function callTool(
      * already warned the model in prose that gibberish returns confident sources; a
      * number beats a warning it has to remember.
      *
-     * The floor is calibrated, not chosen. Across twelve questions with known-good
+     * CALIBRATED ON 28 QUESTIONS, THEN RE-MEASURED ON 322 — AND IT DID NOT GENERALISE.
+     * The original sweep reported Youden 0.875 at 1.85. Against 322 real questions the
+     * same floor fires 32 times at 53% precision and 22% recall, and no threshold does
+     * better: useful answers sit at a median content score of 2.53, not-useful ones at
+     * 2.35, and the distributions overlap almost completely. Precision never exceeds 55%
+     * anywhere between 1.85 and 2.30 — raising it buys recall and loses precision, one
+     * for one.
+     *
+     * The reason is that a high content score means the corpus contains the question's
+     * WORDS, not its answer: a spam mail titled "your traffic numbers" scores 2.30.
+     *
+     * So the signal is kept and the CLAIM is cut down to fit it. It used to assert that
+     * nothing below matched and to prefer saying the record was thin; at coin-flip
+     * precision that told readers to distrust fifteen correct answers, including the
+     * traffic question the vocabulary fix was written for. It now says what it is: a
+     * nudge that is right about half the time. A cheap hedge on a wrong answer is worth
+     * more than the cost of an unnecessary one — but only if it does not overstate.
+     *
+     * Do not re-tune this on a small sample. That is how it got here.
+     *
+     * The original sweep, kept for the record: across twelve questions with known-good
      * answers and eight the corpus genuinely cannot answer, the good ones scored 2.37
      * and up on content and the unanswerable ones 1.71 and down — with one honest
      * exception that proves the rule: "who won the 1998 world cup" scored 3.12 because a
@@ -1980,13 +2000,14 @@ async function callTool(
      */
     const weakMatch =
       chunks.length > 0 && topScore < RELEVANCE_FLOOR
-        ? `\n\nNOTHING BELOW MATCHED THE QUESTION STRONGLY. Judged on how much each hit ` +
-          `overlaps what was asked — with recency and every other bonus removed — none of ` +
-          `them clears the bar a genuine answer clears. So these are the closest things in ` +
-          `the corpus, not answers, and they are probably about something else entirely. ` +
-          `This is NOT evidence that LoveIQ has no record of it: ask again in different ` +
-          `words, or narrow with \`sources\`. Prefer saying the written record is thin over ` +
-          `answering from what is below.\n`
+        ? `\n\nWEAK MATCH — worth a second look before trusting this. Judged on how much ` +
+          `the best hit overlaps the question, with recency and every other bonus removed, ` +
+          `this scores below where a solid answer usually sits. Treat it as a nudge, not a ` +
+          `verdict: measured over 322 real questions it is right about half the time it ` +
+          `fires, so read the text and decide. It is NOT evidence that LoveIQ has no record ` +
+          `of this. If the sources below do not actually address what was asked, say the ` +
+          `written record is thin rather than assembling an answer from adjacent material; ` +
+          `if one of them plainly does answer it, use it.\n`
         : "";
     const prior = renderPriorDecisions(
       rankedIn.length > 0
