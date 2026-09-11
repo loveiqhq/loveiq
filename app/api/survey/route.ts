@@ -88,6 +88,22 @@ const surveySchema = z.object({
     .regex(/^[A-Za-z0-9_-]+$/)
     .optional()
     .nullable(),
+  /**
+   * The order answer options were SHOWN in, per question — `{ "<qId>": ["<label>", …] }`.
+   *
+   * Needed to separate primacy bias from real preference when ranking multi-select
+   * answers: randomising the order without recording it just replaces one unusable
+   * dataset with another.
+   *
+   * Bounded on every axis for the same reason `answers` is — this lands in JSONB, and
+   * the client is untrusted. Never used to resolve an answer (submit_survey matches on
+   * exact option text), so a wrong or absent value costs analysis, never correctness.
+   */
+  optionOrder: z
+    .record(z.string().min(1).max(16), z.array(z.string().max(500)).max(60))
+    .refine((obj) => Object.keys(obj).length <= 200, { message: "Too many option orders" })
+    .optional()
+    .nullable(),
   website: z.string().max(0).optional().nullable(),
 });
 
@@ -229,6 +245,7 @@ export async function POST(request: Request) {
     utmTracker,
     sessionId,
     posthogSessionId,
+    optionOrder,
     website,
   } = parsed.data;
   const normalizedEmail = email.trim().toLowerCase();
@@ -324,6 +341,7 @@ export async function POST(request: Request) {
       utmTracker: mergedUtmTracker,
       sessionId,
       posthogSessionId,
+      optionOrder,
       marketingOptIn,
     });
     const tSubmit = performance.now();

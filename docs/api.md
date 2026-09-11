@@ -128,20 +128,31 @@ Submits a completed survey and schedules downstream scoring/notification work af
   "durationMs": 120000,
   "utmTracker": "{\"utm_source\":\"referral\"}",
   "sessionId": "11111111-1111-1111-1111-111111111111",
+  "optionOrder": { "16001": ["Option B", "Option A", "Option C"] },
   "website": ""
 }
 ```
 
-| Field        | Type   | Required | Notes                                                             |
-| ------------ | ------ | -------- | ----------------------------------------------------------------- |
-| `email`      | string | Yes      | Valid email, max 320 chars.                                       |
-| `firstName`  | string | Yes      | Max 80 chars.                                                     |
-| `answers`    | object | Yes      | Record of question ID to string, string array, or integer 1 to 7. |
-| `startedAt`  | string | Yes      | ISO 8601 datetime.                                                |
-| `durationMs` | number | Yes      | Integer from `0` to `86,400,000`.                                 |
-| `utmTracker` | string | No       | Max 500 chars.                                                    |
-| `sessionId`  | string | No       | UUID-like submission/session identifier.                          |
-| `website`    | string | No       | Honeypot field and must stay empty.                               |
+| Field         | Type   | Required | Notes                                                             |
+| ------------- | ------ | -------- | ----------------------------------------------------------------- |
+| `email`       | string | Yes      | Valid email, max 320 chars.                                       |
+| `firstName`   | string | Yes      | Max 80 chars.                                                     |
+| `answers`     | object | Yes      | Record of question ID to string, string array, or integer 1 to 7. |
+| `startedAt`   | string | Yes      | ISO 8601 datetime.                                                |
+| `durationMs`  | number | Yes      | Integer from `0` to `86,400,000`.                                 |
+| `utmTracker`  | string | No       | Max 500 chars.                                                    |
+| `sessionId`   | string | No       | UUID-like submission/session identifier.                          |
+| `optionOrder` | object | No       | Order options were shown in, per question ID. See below.          |
+| `website`     | string | No       | Honeypot field and must stay empty.                               |
+
+**`optionOrder`** records the order answer options were displayed in, so rankings drawn
+from multi-select questions can be corrected for primacy bias. Keys are question IDs (max
+16 chars, max 200 keys); values are arrays of option labels, top to bottom as shown (max
+60 entries, each max 500 chars). Present only for questions that opt into randomisation
+(`features/survey/questionFlags.ts`), and absent entirely when the respondent's browser
+blocks storage, since no stable order can be established. Stored on
+`survey_submission.option_order`; it never affects how an answer is resolved, because
+`submit_survey` matches picks by exact option text.
 
 **Responses:**
 

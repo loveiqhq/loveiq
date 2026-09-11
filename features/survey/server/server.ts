@@ -47,6 +47,13 @@ export interface SurveySubmissionPayload {
    */
   posthogSessionId?: string | null;
   /**
+   * Order the answer options were shown in, per question — `{ "<qId>": ["<label>", …] }`.
+   * Stored on `survey_submission.option_order`. Absent for questions that do not
+   * randomise, and for any respondent whose browser blocks storage (no session id, so no
+   * stable shuffle). Analysis-only: nothing reads it to resolve an answer.
+   */
+  optionOrder?: Record<string, string[]> | null;
+  /**
    * Marketing-opt-in answer (Q16015). `true` = user picked "Yes", `false` =
    * "No", `null` (or absent) = unknown / question not answered. Stored on
    * `survey_submission.marketing_opt_in`; when true, the row also gets a
@@ -190,7 +197,7 @@ export async function submitSurveyOnce(
   // is logged and swallowed — the submission itself already succeeded and the
   // audit-trail gap can be backfilled if needed.
   try {
-    const consentPatch: Record<string, string> = {
+    const consentPatch: Record<string, string | Record<string, string[]>> = {
       consent_at: new Date().toISOString(),
       terms_version: CONSENT_TERMS_VERSION,
     };
@@ -205,6 +212,14 @@ export async function submitSurveyOnce(
     // only loss is a link in a Slack message.
     if (payload.posthogSessionId) {
       consentPatch.posthog_session_id = payload.posthogSessionId;
+    }
+    // Shown option order rides along for the same reason as the replay id above: it is
+    // one nullable value the answer fan-out has no use for, so it is not worth changing
+    // the submit_survey signature (and its migration, and every caller) to carry it.
+    // Best-effort to match — a lost order costs one submission's worth of primacy
+    // correction, never the submission itself.
+    if (payload.optionOrder && Object.keys(payload.optionOrder).length > 0) {
+      consentPatch.option_order = payload.optionOrder;
     }
     await supabaseServiceFetch(`/rest/v1/survey_submission?id=eq.${submissionId}`, {
       method: "PATCH",

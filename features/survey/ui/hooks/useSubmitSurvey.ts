@@ -7,6 +7,8 @@ import { getCsrfToken } from "@shared/http/csrf-client";
 import type { SurveyAnswers } from "@features/survey/server/types";
 import { getSurveyContactInfo } from "@features/survey/server/utils";
 import type { AnswerValue } from "./useSurveyState";
+import { isRandomised } from "@features/survey/questionFlags";
+import { orderedOptions } from "../questionOrder";
 import { getSessionId, setReportSessionId } from "./surveySession";
 import {
   clearPendingCompletion,
@@ -16,6 +18,32 @@ import {
 } from "./surveyStorage";
 
 type SubmitStatus = "idle" | "submitting" | "success" | "error";
+
+/**
+ * The order this respondent was shown the options in, for every randomised question
+ * they answered — `{ "<qId>": ["<option text>", ...] }`.
+ *
+ * Recomputed here rather than reported up from the question components. `orderedOptions`
+ * is deterministic given (question, sessionId) and the components derive their order the
+ * same way, so recomputing yields exactly what was on screen without threading render
+ * state through the engine. If the session id is unavailable (storage blocked — see
+ * `getSessionId`) the components could not have shuffled either, so an empty map is the
+ * honest answer rather than a fabricated order.
+ */
+function buildOptionOrder(
+  answers: Record<string, AnswerValue>,
+  sessionId: string | undefined
+): Record<string, string[]> {
+  const shown: Record<string, string[]> = {};
+  if (!sessionId) return shown;
+
+  for (const question of surveyQuestions) {
+    if (!isRandomised(question.qId)) continue;
+    if (answers[question.qId] === undefined) continue; // never shown, or skipped
+    shown[question.qId] = orderedOptions(question, sessionId);
+  }
+  return shown;
+}
 
 /**
  * PostHog's `$session_id` for the session that just filled in the survey, so the
@@ -89,6 +117,7 @@ export function useSubmitSurvey() {
 
       // Read once: two calls could straddle a PostHog session rollover.
       const replaySessionId = posthogSessionId();
+      const optionOrder = buildOptionOrder(payload.answers, payload.sessionId);
 
       try {
         const res = await fetch("/api/survey", {
@@ -106,6 +135,7 @@ export function useSubmitSurvey() {
             ...(payload.utmTracker ? { utmTracker: payload.utmTracker } : {}),
             ...(payload.sessionId ? { sessionId: payload.sessionId } : {}),
             ...(replaySessionId ? { posthogSessionId: replaySessionId } : {}),
+            ...(Object.keys(optionOrder).length > 0 ? { optionOrder } : {}),
           }),
         });
 
