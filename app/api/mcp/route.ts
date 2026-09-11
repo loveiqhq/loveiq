@@ -264,6 +264,9 @@ export const SOURCES_FOR_TEST = [
   "gmail",
   "calendar",
   "whatsapp",
+  // Built from `brain_person` by the fast cron, not ingested from an outside system.
+  // Listed here in the commit that creates the first chunk, per the `jira` rule below.
+  "people",
 ];
 // `jira` is deliberately absent. The 1,037 issues in loveiq.atlassian.net are real
 // and actively updated, but `JIRA_API_TOKEN` has never been set, so the corpus holds
@@ -3408,6 +3411,7 @@ async function callTool(
       gmail: "brain-gmail",
       calendar: "brain-calendar",
       gsc: "brain-ingest",
+      people: "brain-fast",
     };
 
     /**
@@ -3631,7 +3635,8 @@ export async function POST(request: Request) {
         "and page, not just the task board), the team's Slack conversations day by day, the " +
         "company email thread by thread, the WhatsApp team group day by day, the calendar " +
         "of meetings and who attended them, the " +
-        "notes from every recorded call, dated business numbers, and decisions written " +
+        "notes from every recorded call, dated business numbers, who works here and what " +
+        "each person does, and decisions written " +
         "down directly with `record_decision`. A decision record is deliberate rather " +
         "than reconstructed from a transcript, so it is the best evidence about the " +
         "thing it actually decides — but only about that. A number quoted inside one is " +

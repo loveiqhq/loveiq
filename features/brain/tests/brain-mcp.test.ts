@@ -3226,6 +3226,11 @@ describe("/api/mcp", () => {
         drive: "call",
         gmail: "email",
         slack: "slack",
+        // NOT the bare id. "people" occurs all over the tools JSON — in count_context's
+        // group_by, in the meta filter description — so checking for it passed even with
+        // the roster removed from the prose entirely. A source whose id is a common noun
+        // needs a distinctive phrase here or this guard is vacuous for it.
+        people: "who works here",
       };
       const sources = (mod as { SOURCES_FOR_TEST?: string[] }).SOURCES_FOR_TEST ?? [];
       expect(sources.length).toBeGreaterThan(0);
