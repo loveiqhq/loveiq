@@ -314,7 +314,13 @@ function searchText(question: string): string {
  * file, which is not where the model reading the tool schema is looking; I walked into
  * it myself with the comment on screen.
  */
-const ARRAY_META_KEYS = new Set(["people", "speakers", "participants", "attendees", "covers"]);
+export const ARRAY_META_KEYS = new Set([
+  "people",
+  "speakers",
+  "participants",
+  "attendees",
+  "covers",
+]);
 
 export function normaliseMetaFilter(
   meta: Record<string, string | string[]>

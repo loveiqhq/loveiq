@@ -6,6 +6,7 @@ import { renderSources } from "@features/brain/server/answer";
 import { redactUrlSecrets } from "@features/brain/server/ingest/upsert";
 import { recordToolCall } from "@features/brain/server/log";
 import { adCostByDay, adCovers, brainDailyRollup } from "@features/brain/server/ingest/analytics";
+import { ARRAY_META_KEYS } from "@features/brain/server/retrieve";
 import {
   CorpusUnavailableError,
   retrieve,
@@ -1776,7 +1777,11 @@ const asStrings = (v: unknown): string[] | undefined =>
  * value is `["Marcus Börner"]`. That reads as "this person did nothing", which is
  * the worst way for a filter to fail — so the scalar is wrapped rather than dropped.
  */
-const ARRAY_META_KEYS = new Set(["people"]);
+// The list lives in `retrieve.ts` and is imported, not copied. This was a second
+// Set holding only "people", so `count_context` and `browse_context` — which do
+// NOT route through `retrieve()` — silently dropped a bare-string filter on
+// `speakers`, `participants`, `attendees` or `covers`, returning an empty result
+// that reads as "nothing matched". Two lists of the same thing had drifted.
 const asMeta = (v: unknown): Record<string, string | string[]> | undefined => {
   if (!v || typeof v !== "object" || Array.isArray(v)) return undefined;
   const out: Record<string, string | string[]> = {};
@@ -1811,7 +1816,14 @@ async function callTool(
   if (name === "search_company_context") {
     const query = typeof args.query === "string" ? args.query : "";
     if (query.trim().length < 2) {
-      return textResult("Provide a question of at least two characters.", true);
+      // Names the PARAMETER, not the concept. "Provide a question" sent a caller
+      // looking for an argument called `question`, which does not exist — the
+      // refusal read as "your question was too short" rather than "wrong key".
+      return textResult(
+        "`query` is required and must be at least two characters. It is the question " +
+          'itself, in plain words — e.g. {"query": "who is the CEO"}.',
+        true
+      );
     }
     const limit = intArg(args.limit, 12, 1, 30);
 

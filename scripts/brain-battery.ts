@@ -2144,6 +2144,209 @@ function flag(p: Probe, text: string, status: string, ms: number, sources: numbe
   return issues;
 }
 
+/**
+ * THE MCP BATTERY — the door the team actually uses.
+ *
+ * The retrieval arm asserts which rows `brain_search` returns; the answer arm asserts
+ * what a small model writes from them in Slack. NEITHER exercises the MCP tool
+ * handlers, and MCP is the primary interface: claude.ai calls these tools directly
+ * and reads their TEXT. Everything between `retrieve()` and that text — argument
+ * parsing, filter normalisation, private-column masking, the result guide, the
+ * untrusted-data frame, the caps and their notices — was covered only by unit tests
+ * against fixtures, never against the real corpus.
+ *
+ * Like the retrieval arm and unlike the answer arm, this needs NO model and no API
+ * quota, so it can actually be run. READ-ONLY BY CONSTRUCTION: it calls no tool that
+ * writes. `record_decision`, `post_to_slack`, `write_to_notion`, `write_to_google_doc`
+ * and `send_email` act on the real company and are deliberately absent.
+ */
+interface McpProbe {
+  kind: string;
+  tool: string;
+  args: Record<string, unknown>;
+  check: (text: string) => string[];
+}
+
+const contains =
+  (...needles: string[]) =>
+  (text: string): string[] =>
+    needles
+      .filter((n) => !text.toLowerCase().includes(n.toLowerCase()))
+      .map((n) => `missing "${n}"`);
+
+const absent =
+  (...needles: string[]) =>
+  (text: string): string[] =>
+    needles.filter((n) => text.toLowerCase().includes(n.toLowerCase())).map((n) => `LEAKED "${n}"`);
+
+const both =
+  (...cs: Array<(t: string) => string[]>) =>
+  (t: string) =>
+    cs.flatMap((c) => c(t));
+
+function mcpProbes(): McpProbe[] {
+  return [
+    // The roster, which did not exist this morning: "who is the CEO" returned forty
+    // chunks about OTHER companies' chief executives, loudest a vendor welcome email.
+    {
+      kind: "mcp-role-ceo",
+      tool: "search_company_context",
+      args: { query: "who is the CEO", limit: 6 },
+      check: contains("Mark Oldenburg", "Who works at LoveIQ"),
+    },
+    // A count of real activity must reach the live-data signpost, not a page that
+    // merely has "how many" in a heading.
+    {
+      kind: "mcp-count-signpost",
+      tool: "search_company_context",
+      args: { query: "how many people bought", limit: 6 },
+      check: contains("every count of real activity is live"),
+    },
+    // THE SILENT-FILTER TRAP. `people` is stored as an array and the filter is jsonb
+    // containment, so a bare string used to match nothing and return an empty result
+    // that reads as "this person said nothing". It is wrapped now; this is the proof
+    // at the door rather than in the module.
+    {
+      kind: "mcp-meta-string-filter",
+      tool: "search_company_context",
+      args: { query: "what has been discussed", limit: 6, meta: { people: "Mark Oldenburg" } },
+      check: (t) => (/SOURCE 1/.test(t) ? [] : ["a bare-string people filter returned no sources"]),
+    },
+    // Every search result must carry the frame that tells the model the corpus is
+    // data and not instructions. Anyone can write into it: the public contact form
+    // emails a mailbox this index reads.
+    {
+      kind: "mcp-untrusted-frame",
+      tool: "search_company_context",
+      args: { query: "what did we decide about pricing", limit: 4 },
+      check: contains("UNTRUSTED DATA", "HOW TO READ THESE"),
+    },
+    // count_context and browse_context do NOT route through `retrieve()`, so they get
+    // their meta filter normalised only by the route. A second copy of the array-key
+    // list lived there holding just "people", so a bare-string filter on any other
+    // list-valued key came back empty from these two while working in search.
+    {
+      kind: "mcp-count-array-key-bypass",
+      tool: "count_context",
+      args: { meta: { speakers: "Eman" } },
+      check: (t) =>
+        /\b[1-9]\d*\b/.test(t) ? [] : ["a bare-string speakers filter counted nothing"],
+    },
+    {
+      kind: "mcp-browse-array-key-bypass",
+      tool: "browse_context",
+      args: { meta: { speakers: "Eman" }, limit: 3 },
+      check: (t) =>
+        /whatsapp|slack/i.test(t) ? [] : ["a bare-string speakers filter browsed nothing"],
+    },
+    {
+      kind: "mcp-count-group-people",
+      tool: "count_context",
+      args: { group_by: "people" },
+      check: contains("Mark Oldenburg"),
+    },
+    // list_sources is how a caller learns what exists and whether it is fresh. A
+    // source missing from it is invisible; an unmapped one renders a BLANK health
+    // clause, which reads as "state unknown" rather than "no job needed".
+    {
+      kind: "mcp-list-sources",
+      tool: "list_sources",
+      args: {},
+      check: both(contains("people", "whatsapp", "decision"), (t) => {
+        // Scoped to the SOURCE LINES. The response also prints a legend explaining
+        // what NEVER INGESTED means, so a whole-body `absent` check fails on the
+        // explanation rather than on any source — which it did, first run.
+        const dead = t
+          .split("\n")
+          .filter((l) => /^\s*\w+:\s+\d+ chunks/.test(l))
+          .filter((l) => l.includes("NEVER INGESTED"));
+        return dead.map((l) => `a source reports no data at all: ${l.trim().slice(0, 80)}`);
+      }),
+    },
+    {
+      kind: "mcp-browse",
+      tool: "browse_context",
+      args: { sources: ["decision"], limit: 5 },
+      check: contains("Decision:"),
+    },
+    {
+      kind: "mcp-list-tables",
+      tool: "list_product_tables",
+      args: {},
+      check: contains("survey_submission"),
+    },
+    // THE SECURITY GUARD. `query_product_data` reads production tables directly, so
+    // a column holding an email or a report token must come back masked. A regression
+    // here leaks customer data into a chat transcript.
+    {
+      kind: "mcp-private-columns-masked",
+      tool: "query_product_data",
+      args: { table: "survey_submission", limit: 3 },
+      check: absent("@gmail.com", "@hotmail.com", "@yahoo."),
+    },
+  ];
+}
+
+async function runMcpBattery(only: string | null): Promise<number> {
+  const { POST } = await import("@/app/api/mcp/route");
+  const token = process.env.LOVEIQ_MCP_TOKEN;
+  if (!token) {
+    console.error(
+      "LOVEIQ_MCP_TOKEN is not set, so the MCP door cannot be opened. Nothing was tested."
+    );
+    return 1;
+  }
+
+  const all = mcpProbes();
+  const probes = only ? all.filter((p) => p.kind.includes(only) || p.tool.includes(only)) : all;
+  let failures = 0;
+
+  for (const p of probes) {
+    const started = Date.now();
+    let issues: string[] = [];
+    let text = "";
+    try {
+      const res = await POST(
+        new Request("https://www.loveiq.org/api/mcp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name: p.tool, arguments: p.args },
+          }),
+        })
+      );
+      const body = (await res.json()) as {
+        result?: { content?: Array<{ text?: string }>; isError?: boolean };
+        error?: { message?: string };
+      };
+      if (body.error) issues = [`json-rpc error: ${body.error.message ?? "?"}`];
+      else {
+        text = body.result?.content?.[0]?.text ?? "";
+        // An empty body is an outage, never "the corpus has nothing" — the same
+        // distinction the tool itself draws for its callers.
+        if (!text) issues = ["the tool returned no text at all"];
+        else issues = p.check(text);
+      }
+    } catch (err) {
+      issues = [`threw: ${err instanceof Error ? err.message : String(err)}`];
+    }
+    const ms = Date.now() - started;
+    if (issues.length) failures++;
+    console.log(
+      `\n${issues.length ? "FAIL" : "ok  "} [${p.kind}] ${p.tool}  ${ms}ms  ${text.length} chars`
+    );
+    for (const i of issues) console.log(`      ISSUE: ${i}`);
+  }
+
+  console.log(
+    `\n=== mcp: ${probes.length - failures}/${probes.length} clean, ${failures} flagged ===`
+  );
+  return failures;
+}
+
 async function main(): Promise<void> {
   const onlyIdx = process.argv.indexOf("--only");
   const only = onlyIdx > -1 ? (process.argv[onlyIdx + 1] ?? null) : null;
@@ -2153,6 +2356,10 @@ async function main(): Promise<void> {
   // refused for a key it never uses.
   if (process.argv.includes("--retrieval")) {
     process.exit((await runRetrievalBattery(only)) ? 1 : 0);
+  }
+  // Same reason as --retrieval: no model, so it must be reachable without a key.
+  if (process.argv.includes("--mcp")) {
+    process.exit((await runMcpBattery(only)) ? 1 : 0);
   }
   // Without a model every probe reports `unconfigured`, which renders as 24 FAILs
   // and buries the one real cause. Say it once and stop.
