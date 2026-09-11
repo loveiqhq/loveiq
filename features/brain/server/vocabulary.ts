@@ -80,6 +80,33 @@ const HOUSE_TERMS: Array<[RegExp, string]> = [
     /\b(?:are we growing|is (?:the )?(?:business|company) growing|how (?:much|fast) (?:are we|have we) grow)/i,
     "signups revenue",
   ],
+  // The automated emails that chase someone who finished the survey and never paid.
+  // Measured 2026-09-11, the two worst misses in an 18-question plain-English sweep:
+  // "the follow-up messages we send after someone finishes" and "what do we email
+  // people who never came back" both returned NOTHING relevant in 8 — a random email
+  // thread, the commit-message convention, a landing-page task — while "nurture
+  // emails" returned the right documents at 3.69. The corpus has the answer and only
+  // answers to its own word for it.
+  //
+  // Both patterns need the EMAIL noun or the full phrase. Bare "follow up" is what a
+  // person does after a meeting, and bare "came back" is a returning visitor.
+  [/\b(?:follow[- ]?up|chaser?|re-?engagement)\s+(?:e-?mails?|messages?|sequence)\b/i, "nurture"],
+  // THE SUBJECT HAS TO BE A GROUP. The first version of this matched any "never came
+  // back" and fired on "the candidate never came back to us about the offer" — a
+  // hiring conversation pulled toward the marketing emails. `went cold` was dropped
+  // in the same pass: nobody was measured saying it, and an unobserved synonym can
+  // only add noise.
+  [
+    /\b(?:people|users?|customers?|visitors?|readers?)\s+(?:who\s+)?(?:never|did ?n.?t|have ?n.?t)\s+(?:came?|come)\s+back\b/i,
+    "nurture",
+  ],
+  // The password screen in front of the non-production site. "staging" is the house
+  // word and a person says "test site"; measured at rank 4, and the gate is the only
+  // thing that page does.
+  [/\bpassword (?:page|gate|screen|wall)\b|\b(?:test|preview) site\b/i, "staging"],
+  // The fourteen types. "archetype" is house vocabulary a new joiner does not have.
+  // Measured at rank 7 for "what categories do we sort people into".
+  [/\bsort people into\b|\bcategor(?:y|ies)\b[^.]{0,24}\bpeople into\b/i, "archetype"],
 ];
 
 /**

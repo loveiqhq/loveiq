@@ -2245,6 +2245,19 @@ function mcpProbes(): McpProbe[] {
       check: (t) =>
         /whatsapp|slack/i.test(t) ? [] : ["a bare-string speakers filter browsed nothing"],
     },
+    // Links are wiped whenever the calendar ingest rewrites its rows, and restored by
+    // the linker called from that same cron. If that ordering is ever broken — or the
+    // linker stops running — the corpus degrades silently back to two unrelated halves
+    // and no search fails to announce it. This is the thing that would notice.
+    {
+      kind: "mcp-links-present",
+      tool: "count_context",
+      args: { group_by: "links" },
+      check: (t) =>
+        /\bcalendar\/event:/.test(t)
+          ? []
+          : ["no meeting links in the corpus — the linker has not run, or an ingest wiped them"],
+    },
     {
       kind: "mcp-count-group-people",
       tool: "count_context",

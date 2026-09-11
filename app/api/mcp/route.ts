@@ -497,6 +497,12 @@ const TOOLS = [
             "(`speakers`, `participants`, `attendees`, `covers`): they are wrapped for " +
             "you, so a filter can no longer come back empty merely because of its shape. " +
             'Use count_context with group_by:"people" to see the exact spellings in use. ' +
+            "`links` JOINS A MEETING TO ITS OWN NOTES. A calendar event and the Gemini " +
+            "notes from that same meeting are separate records: the event knows who was " +
+            "INVITED, the notes know what was SAID. Pass the id printed on either one — " +
+            '{"links": ["calendar/event:…"]} — to reach the other side. 83 meetings are ' +
+            "joined; a meeting with no recording has none, which is absence of a " +
+            "recording and not absence of the meeting. " +
             "DO NOT USE `attendees` TO FIND A PERSON: calendar attendees are raw email " +
             "addresses and one colleague appears under two of them, so filtering it by a " +
             "name matches nothing at all. `people` is the normalised view of those same " +
@@ -643,7 +649,10 @@ const TOOLS = [
           type: "string",
           description:
             "The id of the decision this replaces, as printed when it was recorded or on " +
-            "a search line. The older record is kept — superseding is history, not deletion.",
+            "a search line. The older record is kept — superseding is history, not " +
+            "deletion — and is stamped so that anyone who later searches their way onto " +
+            "it is told, on that record, that it was replaced and by which. Without this " +
+            "the old decision keeps reading as current.",
         },
       },
       required: ["decision", "actor"],

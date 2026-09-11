@@ -25,6 +25,19 @@ import logger from "@shared/observability/logger";
  * meetings that happen to share a name and a day. 90 keeps the five and refuses
  * the three.
  *
+ * IT MUST RUN AFTER THE CALENDAR INGEST, and that is not a preference.
+ *
+ * `ingestCalendar` rewrites every event row on every run, and a rewrite replaces the
+ * whole `meta` object — so it wipes `links`, which nothing in the ingest path knows
+ * about. Observed directly: a calendar cron at 18:26 left 0 of 83 events linked, and
+ * the next linker run restored all 83. Drive is the opposite: it skips chunks whose
+ * content has not changed, so note links survive its hourly pass untouched.
+ *
+ * So the calendar half self-heals ONLY because this is called from that same cron,
+ * immediately after. That dependency is invisible from either file, which is why it
+ * is written here and guarded by `mcp-links-present` in the MCP battery — if links
+ * ever go missing wholesale, that probe is what says so.
+ *
  * A WRONG LINK IS WORSE THAN A MISSING ONE. It would attribute one meeting's
  * attendees to another meeting's decisions, silently. So where a name and date
  * have several candidate events the CLOSEST wins, and if even that is outside the
