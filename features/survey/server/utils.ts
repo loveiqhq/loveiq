@@ -12,6 +12,22 @@ import type { SurveyAnswers, SurveyAnswerValue } from "./types";
  */
 export const SURVEY_TOTAL_QUESTIONS = surveyQuestions.filter((q) => !isHidden(q.qId)).length;
 
+/**
+ * Question id → how many options may be selected, for the questions that cap.
+ *
+ * The cap is authored as ordinary guidance copy ("Select up to two options.") and parsed
+ * out by `scripts/update-survey.js`, so this map follows the survey data rather than
+ * restating it — a cap changed in the CSV takes effect here without a code edit.
+ *
+ * Exists so the API can enforce the same limit the UI does. The client already blocks the
+ * extra pick, so this is a guard against a modified client, not a path real users reach.
+ */
+export const SURVEY_SELECTION_CAPS: ReadonlyMap<string, number> = new Map(
+  surveyQuestions
+    .filter((q): q is typeof q & { maxSelections: number } => typeof q.maxSelections === "number")
+    .map((q) => [q.qId, q.maxSelections])
+);
+
 export function countSurveyAnswers(answers: SurveyAnswers): number {
   return Object.keys(answers).filter((key) => !key.endsWith("_other")).length;
 }

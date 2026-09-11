@@ -22,6 +22,7 @@ import { pickEmailVariant } from "@shared/emails/ab-variant";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { ensurePersonalReportForSubmission } from "@features/report/server/personalReport";
 import type { SurveyAnswers } from "@features/survey/server/types";
+import { surveyAnswersSchema } from "@features/survey/server/answersSchema";
 import {
   computeSurveyScoring,
   ensureSubmissionScored,
@@ -53,18 +54,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const surveySchema = z.object({
   email: z.string().email().max(320),
   firstName: z.string().max(80),
-  // Keys are question IDs (numeric, ≤~12 chars). Bound key length AND key count
-  // so an oversized junk-key body can't bloat downstream JSONB. [Audit L1]
-  answers: z
-    .record(
-      z.string().min(1).max(16),
-      z.union([
-        z.string().max(1000),
-        z.array(z.string().max(500)).max(20),
-        z.number().int().min(1).max(7),
-      ])
-    )
-    .refine((obj) => Object.keys(obj).length <= 200, { message: "Too many answers" }),
+  // Key/value bounds and the per-question selection cap live in the schema module so
+  // they can be tested directly — Next.js rejects arbitrary exports from a route file.
+  answers: surveyAnswersSchema,
   startedAt: z.string().datetime(),
   durationMs: z.number().int().min(0).max(86_400_000),
   // 1000 (not 500) so a Google Ads click id (gclid, ~100 chars) captured

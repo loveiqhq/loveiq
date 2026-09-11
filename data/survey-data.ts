@@ -1207,7 +1207,8 @@ export const surveyQuestions: SurveyQuestion[] = [
       "This sets the main focus of your next-step suggestions, so the report starts with what matters most to you now.",
     howAnswerIsUsed:
       "This sets the main focus of your next-step suggestions, so the report starts with what matters most to you now.",
-    formatGuidance: "Select all that apply.",
+    formatGuidance: "Select up to two options.",
+    maxSelections: 2,
   },
   {
     qId: "16002",
@@ -1407,7 +1408,8 @@ export const surveyQuestions: SurveyQuestion[] = [
       "This tells us which obstacles to prioritize first so the report focuses on what is actually blocking progress.",
     howAnswerIsUsed:
       "This tells us which obstacles to prioritize first so the report focuses on what is actually blocking progress.",
-    formatGuidance: "Select all that apply.",
+    formatGuidance: "Select one option.",
+    maxSelections: 1,
   },
   {
     qId: "16015",

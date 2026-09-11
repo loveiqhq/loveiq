@@ -423,7 +423,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 - Other
 - I don't use a label",N/A,We use this to avoid assumptions and make the language and examples more relevant to your context.
 16000,16,Next Steps & Preferences,What you actually want next — and what's realistic for you right now — shapes the kind of plan we suggest.,,,,,,
-16001,16,Next Steps & Preferences,Which changes would actually improve your sex life over the next 3 months?,Multiple choice,Select all that apply.,What would make the biggest real difference in 3 months — not what sounds important on paper?,"- Wanting sex more often — more drive, easier to get turned on
+16001,16,Next Steps & Preferences,Which changes would actually improve your sex life over the next 3 months?,Multiple choice,Select up to two options.,What would make the biggest real difference in 3 months — not what sounds important on paper?,"- Wanting sex more often — more drive, easier to get turned on
 - More pleasure or easier orgasms
 - Less pain or physical discomfort during sex
 - Feeling more emotionally close during sex
@@ -489,7 +489,7 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 5 = Slightly true: Understanding your sexuality feels meaningfully relevant to your wellbeing, relationships, or growth.
 6 = Mostly true: This feels like a strong area of importance for your life and self-understanding.
 7 = Completely true: Understanding your sexuality feels deeply important to your life, wellbeing, or growth.",This helps us decide how central this topic should be in your recommendations and how much depth to give it.
-16014,16,Next Steps & Preferences,What's actually getting in the way of improving your sexuality right now?,Multiple choice,Select all that apply.,What's truly blocking movement right now — not what sounds important in theory?,"- I'm not sure what would actually help
+16014,16,Next Steps & Preferences,What's actually getting in the way of improving your sexuality right now?,Multiple choice,Select one option.,What's truly blocking movement right now — not what sounds important in theory?,"- I'm not sure what would actually help
 - I don't have enough time or energy
 - The person I'm with isn't on the same page or willing to engage
 - It doesn't feel emotionally safe enough yet

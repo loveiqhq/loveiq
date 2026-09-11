@@ -154,6 +154,13 @@ blocks storage, since no stable order can be established. Stored on
 `survey_submission.option_order`; it never affects how an answer is resolved, because
 `submit_survey` matches picks by exact option text.
 
+**Selection caps.** Some multi-select questions limit how many options may be chosen. The
+limit is authored as the guidance sentence the respondent reads ("Select up to two
+options.") and parsed into `maxSelections` by `scripts/update-survey.js`. An `answers`
+array longer than its question's cap is rejected with `400 { "error": "Invalid input" }`.
+The UI enforces the same limit, so this guards against a modified client rather than a
+path real users reach.
+
 **Responses:**
 
 | Status | Body                                                                          | Meaning                                                 |
