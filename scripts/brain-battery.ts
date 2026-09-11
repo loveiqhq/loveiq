@@ -2367,7 +2367,12 @@ async function runMcpBattery(only: string | null): Promise<number> {
       const res = await POST(
         new Request("https://www.loveiq.org/api/mcp", {
           method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            // Keeps deliberate probe failures out of the real usage record.
+            "x-loveiq-mcp-client": "battery",
+          },
           body: JSON.stringify({
             jsonrpc: "2.0",
             id: 1,

@@ -2321,6 +2321,61 @@ describe("/api/mcp", () => {
       expect(JSON.stringify(row.args)).toContain("[email]");
     });
 
+    it("separates battery traffic from real usage, so the log can answer what the team hits", async () => {
+      /**
+       * The batteries drive these same handlers over the same corpus and write the
+       * same rows, deliberate failures included — a bogus service name, a malformed
+       * document id. Measured 2026-09-11: all nine of that day's logged errors were
+       * probes, and nothing in the table could say so. This is the only record of
+       * how the team uses the brain, so untagged test traffic makes the first
+       * question anyone asks of it unanswerable.
+       */
+      mockRetrieve.mockResolvedValue([]);
+      await POST(
+        new Request("https://www.loveiq.org/api/mcp", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${TOKEN}`,
+            "x-loveiq-mcp-client": "battery",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name: "search_company_context", arguments: { query: "anything" } },
+          }),
+        })
+      );
+      await flushAfterResponse();
+      expect(writes()[0]!.surface).toBe("mcp-battery");
+    });
+
+    it("treats an unrecognised client as real traffic rather than inventing a bucket", async () => {
+      // The header is caller-supplied and this column is what usage analysis groups
+      // by, so free text would let a caller fragment its own traffic into buckets
+      // nobody thinks to query. Anything but the known value is plain `mcp`.
+      mockRetrieve.mockResolvedValue([]);
+      await POST(
+        new Request("https://www.loveiq.org/api/mcp", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${TOKEN}`,
+            "x-loveiq-mcp-client": "definitely-not-the-battery",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name: "search_company_context", arguments: { query: "anything" } },
+          }),
+        })
+      );
+      await flushAfterResponse();
+      expect(writes()[0]!.surface).toBe("mcp");
+    });
+
     it("truncates oversized arguments instead of repairing cut JSON", async () => {
       // A half-object patched back to validity is a lie about what was sent, and
       // this column exists so a call can be reproduced.

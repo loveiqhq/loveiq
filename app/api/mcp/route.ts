@@ -3753,6 +3753,10 @@ export async function POST(request: Request) {
         sourceCount: stats.sourceCount ?? null,
         topScore: stats.topScore ?? null,
         latencyMs: Date.now() - started,
+        // Allow-listed, not free text: the header is caller-supplied and this column
+        // is what the usage analysis groups by, so an arbitrary value would let a
+        // caller fragment its own traffic into buckets nobody thinks to query.
+        surface: request.headers.get("x-loveiq-mcp-client") === "battery" ? "mcp-battery" : "mcp",
         // The refusal text IS the diagnosis -- "rpc/x writes to the database",
         // "path must be a simple path". Storing it is what makes a bad call
         // reproducible without the caller filing a report.
