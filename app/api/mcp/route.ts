@@ -2117,10 +2117,44 @@ async function callTool(
   if (name === "fetch_document") {
     const raw = typeof args.id === "string" ? args.id.trim() : "";
     const slash = raw.indexOf("/");
-    const src = slash > 0 ? raw.slice(0, slash) : "";
+    let src = slash > 0 ? raw.slice(0, slash) : "";
     // Split on the FIRST slash only: a `doc` source_id is a repo path and contains
     // its own slashes.
-    const rawId = slash > 0 ? raw.slice(slash + 1) : "";
+    let rawId = slash > 0 ? raw.slice(slash + 1) : "";
+
+    /**
+     * RESOLVE AN ID THAT LOST ITS SOURCE PREFIX, rather than refusing it.
+     *
+     * Measured over real calls: the commonest way this tool is called wrongly is a
+     * bare `source_id` — "decision:2026-09-09-3d275f5327" — because the id is read
+     * out of a previous answer's prose instead of copied off a search line. The
+     * refusal was correct and taught the format, and callers kept doing it anyway.
+     *
+     * Resolving is safe only when it is unambiguous, and it is not always: 264 of
+     * 22,457 source_ids exist under more than one source (`daily:2026-01-02` is both
+     * a ga4 row and a gsc row). So one match is used, several are NAMED so the
+     * caller can pick, and none falls through to the refusal below. Guessing between
+     * them would answer a question about search traffic with analytics numbers.
+     */
+    if (!src && raw) {
+      const res = await supabaseFetch(
+        `/rest/v1/brain_chunk?select=source&source_id=eq.${encodeURIComponent(raw)}`
+      );
+      const owners = res.ok
+        ? [...new Set(((await res.json()) as Array<{ source: string }>).map((r) => r.source))]
+        : [];
+      if (owners.length === 1) {
+        src = owners[0]!;
+        rawId = raw;
+      } else if (owners.length > 1) {
+        return textResult(
+          `"${raw}" exists under ${owners.length} sources, so I will not guess which you ` +
+            `mean. Ask again with one of: ${owners.map((o) => `${o}/${raw}`).join(", ")}.`,
+          true
+        );
+      }
+    }
+
     if (!SOURCES_FOR_TEST.includes(src) || !rawId) {
       return textResult(
         `id must be "<source>/<source_id>", exactly as printed on a search line. ` +

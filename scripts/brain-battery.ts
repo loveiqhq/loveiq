@@ -2290,10 +2290,29 @@ function mcpProbes(): McpProbe[] {
     },
     // A malformed id must teach the format rather than fail blankly — this one cost
     // me a cycle when a sibling message named a parameter that does not exist.
+    // The commonest real misuse: an id read out of an earlier answer's prose rather
+    // than copied off a search line, so it lost its source prefix. Resolved when
+    // unambiguous.
+    {
+      kind: "mcp-fetch-bare-id",
+      tool: "fetch_document",
+      args: { id: "CLAUDE.md#pre-push-hook-standard" },
+      check: contains("pre-push", "npm test"),
+    },
+    // ...but 264 source_ids exist under more than one source, and guessing between
+    // a ga4 row and a gsc row would answer a traffic question with search numbers.
+    {
+      kind: "mcp-fetch-ambiguous-id",
+      tool: "fetch_document",
+      args: { id: "daily:2026-01-02" },
+      check: contains("exists under", "ga4/daily:2026-01-02", "gsc/daily:2026-01-02"),
+    },
     {
       kind: "mcp-fetch-bad-id",
       tool: "fetch_document",
-      args: { id: "CLAUDE.md#environment-variables" },
+      // NOT a bare-but-real source_id: those resolve now, and this probe used one
+      // until that landed and turned it into a false alarm. This matches nothing.
+      args: { id: "no-such-document-anywhere-12345" },
       check: contains("<source>/<source_id>"),
     },
     // Phase-0 complaint, re-checked: the title promised ad spend the payload lacked.
