@@ -14,6 +14,7 @@ vi.mock("@features/admin/server/supabase", () => ({
   }),
 }));
 
+import { supabaseFetch } from "@features/admin/server/supabase";
 import { describeBrainHealth, readBrainHealth, WINDOW_HOURS } from "@features/brain/server/health";
 
 beforeEach(() => {
@@ -89,6 +90,35 @@ describe("describeBrainHealth — silent unless something is actually wrong", ()
     const said = describeBrainHealth(health({ outages: 1, failures: 1 }));
     expect(said).toContain("unreachable");
     expect(said).toContain("failed outright");
+  });
+});
+
+describe("readBrainHealth excludes the batteries' own traffic", () => {
+  it("never counts a synthetic call as something the team experienced", async () => {
+    /**
+     * The batteries drive the same tools and write the same rows, deliberate
+     * failures included. Measured 2026-09-11: over 24 hours the watcher was reading
+     * 211 rows of which 145 — 68% — were probes. That would not raise a false alarm
+     * (no probe produces the outage or failure phrase) but it pads `calls` and
+     * `searches`, diluting the empty-search RATIO so a real problem is less likely
+     * to cross the threshold. A monitor quietened by its own test suite is worse
+     * than no monitor, because it is trusted.
+     */
+    responses = [
+      { ok: true, total: 1 },
+      { ok: true, total: 1 },
+      { ok: true, total: 0 },
+      { ok: true, total: 0 },
+      { ok: true, total: 0 },
+    ];
+    await readBrainHealth();
+    const calls = vi.mocked(supabaseFetch).mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    for (const [url] of calls) {
+      expect(String(url), "every health count must exclude battery traffic").toContain(
+        "surface=neq.mcp-battery"
+      );
+    }
   });
 });
 
