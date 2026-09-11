@@ -753,6 +753,31 @@ export function getBehavioralPricing(answer: string | null | undefined): {
   return { bucket: "light", multiplier: 0.9 };
 }
 
+/**
+ * Whether answers about sexual fantasy may contribute to the engagement score.
+ *
+ * OFF, deliberately. 03005, 03010 and 03012 are Article 9 special-category answers, and
+ * while this was on, a value derived from them was computed on every quote, written to
+ * `report_price_quote.engagement_score`, and passed onward to Stripe as checkout metadata
+ * and into purchase analytics. The uplift flag stopped it changing anyone's PRICE; it did
+ * not stop it being produced, persisted against a commercial record and shared with a
+ * payment processor.
+ *
+ * Switching it off here rather than deleting the code, so the decision is one visible
+ * line and reversing it is a deliberate act with a name attached, rather than an
+ * archaeology exercise. `PRICING_SIGNAL_QIDS` and `fantasySignalCount` are intentionally
+ * left intact for the same reason.
+ *
+ * Residual worth knowing: `fantasySignalCount` is still derived and still stored on the
+ * quote row as `fantasy_signal_count`. It no longer influences any price or any score, so
+ * nothing flows onward from it, but it has not stopped being recorded. Stopping that is a
+ * separate change with its own data-contract question.
+ *
+ * No revenue impact: the engagement multiplier only applies when `pricing_uplift_enabled`
+ * is on, and it has been off since 2026-08-03.
+ */
+const FANTASY_SIGNAL_FEEDS_PRICING = false;
+
 export function getEngagementScore({
   fantasySignalCount,
   previewViews,
@@ -772,7 +797,7 @@ export function getEngagementScore({
     score += 20;
   }
 
-  if (fantasySignalCount > 0) {
+  if (FANTASY_SIGNAL_FEEDS_PRICING && fantasySignalCount > 0) {
     score += 20;
   }
 
