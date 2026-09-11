@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ingestCalendar } from "@features/brain/server/ingest/calendar";
+import { linkMeetings } from "@features/brain/server/ingest/link";
 import { ingestNote } from "@features/brain/server/ingest/upsert";
 import { readVercelOidcToken } from "@shared/http/google-oauth";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -104,6 +105,22 @@ export async function GET(request: Request) {
       readVercelOidcToken(request)
     );
     logger.info({ result }, "brain-calendar: done");
+
+    /**
+     * Join each meeting to its own notes, right after the calendar half is fresh.
+     *
+     * Here rather than in the fast lane because the link needs BOTH sides and this
+     * is the slower of the two: Drive notes land hourly at :52, calendar at :26, so
+     * a new note is joined within about half an hour either way. Secondary to the
+     * ingest — a linker that could fail the cron feeding it would be the tail wagging
+     * the dog — so it is caught and logged, never thrown.
+     */
+    try {
+      const linked = await linkMeetings();
+      logger.info({ linked }, "brain-calendar: meeting links");
+    } catch (err) {
+      logger.error({ err }, "brain-calendar: linking meetings failed");
+    }
 
     // What the run saw, recorded whatever the status. Overwritten below if it failed.
     errorMessage = ingestNote(result);

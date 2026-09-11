@@ -320,6 +320,12 @@ export const ARRAY_META_KEYS = new Set([
   "participants",
   "attendees",
   "covers",
+  // Added the same day `links` was introduced — and only after a filter on it
+  // silently returned nothing, which is exactly the failure this set exists to
+  // prevent. ANY new array-valued meta key must be listed here; the MCP battery's
+  // `mcp-array-keys-all-handled` probe reads the live corpus and fails when one is
+  // missing, so this cannot drift again unnoticed.
+  "links",
 ]);
 
 export function normaliseMetaFilter(

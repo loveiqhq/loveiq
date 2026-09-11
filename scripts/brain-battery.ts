@@ -2405,6 +2405,52 @@ function mcpProbes(): McpProbe[] {
   ];
 }
 
+/**
+ * EVERY ARRAY-VALUED META KEY MUST BE IN `ARRAY_META_KEYS`, or a filter on it comes
+ * back empty and reads as "nothing matched".
+ *
+ * This is not hypothetical. `links` was introduced and the set was not updated the
+ * same day, and the filter returned 0 hits against 9 rows that plainly contained the
+ * value — the second time that exact trap fired, hours after the first was fixed. A
+ * hardcoded list that must be edited whenever the data changes will drift; this reads
+ * the real corpus and fails when it has.
+ */
+async function checkArrayMetaKeysAreHandled(): Promise<string[]> {
+  const { ARRAY_META_KEYS } = await import("@features/brain/server/retrieve");
+  const { supabaseFetch } = await import("@features/admin/server/supabase");
+  const sources = [
+    "drive",
+    "gmail",
+    "notion",
+    "slack",
+    "whatsapp",
+    "calendar",
+    "doc",
+    "decision",
+    "analytics",
+    "people",
+  ];
+  const found = new Map<string, string>();
+  for (const source of sources) {
+    const res = await supabaseFetch(
+      `/rest/v1/brain_chunk?select=meta&source=eq.${source}&limit=400`
+    );
+    if (!res.ok) return [`could not read ${source} to check metadata shapes`];
+    for (const row of (await res.json()) as Array<{ meta: Record<string, unknown> | null }>) {
+      for (const [k, v] of Object.entries(row.meta ?? {})) {
+        if (Array.isArray(v) && !found.has(k)) found.set(k, source);
+      }
+    }
+  }
+  return [...found.entries()]
+    .filter(([k]) => !ARRAY_META_KEYS.has(k))
+    .map(
+      ([k, src]) =>
+        `meta.${k} (on ${src}) is an array but is NOT in ARRAY_META_KEYS — a bare-string ` +
+        `filter on it returns nothing and reads as "no matches"`
+    );
+}
+
 async function runMcpBattery(only: string | null): Promise<number> {
   const { POST } = await import("@/app/api/mcp/route");
   const token = process.env.LOVEIQ_MCP_TOKEN;
@@ -2418,6 +2464,14 @@ async function runMcpBattery(only: string | null): Promise<number> {
   const all = mcpProbes();
   const probes = only ? all.filter((p) => p.kind.includes(only) || p.tool.includes(only)) : all;
   let failures = 0;
+
+  // Not a tool call, so it sits outside the probe list — but it guards the same door.
+  if (!only || "mcp-array-keys-all-handled".includes(only)) {
+    const drift = await checkArrayMetaKeysAreHandled();
+    if (drift.length) failures += 1;
+    console.log(`\n${drift.length ? "FAIL" : "ok  "} [mcp-array-keys-all-handled] metadata shapes`);
+    for (const d of drift) console.log(`      ISSUE: ${d}`);
+  }
 
   for (const p of probes) {
     const started = Date.now();
