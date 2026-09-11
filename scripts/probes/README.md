@@ -87,3 +87,17 @@ DEVICE="iPhone SE" node scripts/probes/audit-paywall-layout.mjs
   `elementFromPoint` returns the overlay and the probe finds nothing tappable.
   The previews this matters for are the exposed ones; scroll and hit-test every
   preview until one is genuinely reachable.
+- **Sticky chrome covers the bottom of whatever you aim at.** The sticky unlock
+  bar sits over the lower ~90px of the viewport, so a drag aimed at a card's
+  centre moved the CTA bar and nothing else — read as "swiping is broken" on a
+  carousel that swipes fine. Scan for a point whose `elementFromPoint` belongs
+  to the target before gesturing at it.
+- **`scroll-behavior: smooth` makes a synchronous control read lie.** Assigning
+  `el.scrollLeft += 300` and reading it back in the same tick returns the OLD
+  value, because the animation has not started. It looked like the element could
+  not scroll at all. Wait, then read.
+- **A scroll step bigger than the viewport can jump clean over the target.** A
+  620px step on an iPhone 15 Pro (659px tall) leapt over a 421px carousel and
+  ran to the bottom of a 34,725px page, reporting "never reached" for an element
+  that was present the whole time. Scroll to the element, or step smaller than
+  the viewport.

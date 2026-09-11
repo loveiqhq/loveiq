@@ -418,7 +418,15 @@ const SexualStageExplorer: FC<Props> = ({ userStageLabel }) => {
 
           <div className="stage-explorer__mobile-orbit-center">
             <CycleIcon />
-            <p>Flip the below cards to explore other sexual stages.</p>
+            {/* "Swipe", not "Flip". The cards are a horizontal scroll-snap
+                carousel (`overflow-x: auto` + `scroll-snap-type: x mandatory`)
+                with no flip face — nothing here has ever flipped. Readers took
+                the instruction literally and tapped: 45 sessions on
+                `stage-explorer__mobile`, 34 on `stage-card`, 35 on
+                `stage-rows__row` and 26 on the orbit logged dead clicks in 30
+                days. Verified on production that a real touch drag does scroll
+                this carousel, so the new verb is the one that works. */}
+            <p>Swipe the cards below to explore other sexual stages.</p>
           </div>
 
           {STAGES.map((stage, idx) => {
