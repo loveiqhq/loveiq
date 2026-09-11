@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ingestSearchConsole } from "@features/brain/server/ingest/google";
+import { BACKFILL_DAYS, ingestSearchConsole } from "@features/brain/server/ingest/google";
 import type { IngestResult } from "@features/brain/server/ingest/upsert";
 import { readVercelOidcToken } from "@shared/http/google-oauth";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -78,6 +78,19 @@ export async function GET(request: Request) {
     // write the same rows.
     return NextResponse.json({ skipped: true, reason: "non-prod-cron-host" });
   }
+
+  /**
+   * A ONE-OFF DEEPER WINDOW, for repairing an aggregate the nightly window cannot reach.
+   * Same reasoning as `brain-fast`: a finished month is no longer rewritten unless the
+   * fetch covered it from its first day, so one already corrupted stays corrupted until
+   * somebody widens the window deliberately. Measured 2026-09-11, gsc August read 1 click
+   * against its own daily rows' 84. Bounded by BACKFILL_DAYS, and behind the cron secret.
+   */
+  const requestedDays = Number(new URL(request.url).searchParams.get("days"));
+  const windowDays =
+    Number.isFinite(requestedDays) && requestedDays > 0
+      ? Math.min(Math.trunc(requestedDays), BACKFILL_DAYS)
+      : undefined;
 
   const startedAtMs = Date.now();
   const checkSlow = startCronTimer("brain-ingest", maxDuration);
@@ -169,7 +182,7 @@ export async function GET(request: Request) {
     // must be read here and passed down. Reading it from process.env is exactly
     // what made the keyless path fail silently in production.
     const oidcToken = readVercelOidcToken(request);
-    await run("gsc", () => ingestSearchConsole(stampedAt, isOutOfTime, undefined, oidcToken));
+    await run("gsc", () => ingestSearchConsole(stampedAt, isOutOfTime, windowDays, oidcToken));
     // Notion last, and given the run's clock: it is the only source whose cost
     // scales with page COUNT rather than row count (one request per page for
     // block content), so it is the one most likely to need cutting short.

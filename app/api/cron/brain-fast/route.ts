@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ingestAnalytics } from "@features/brain/server/ingest/analytics";
-import { ingestGa4 } from "@features/brain/server/ingest/google";
+import { BACKFILL_DAYS, ingestGa4 } from "@features/brain/server/ingest/google";
 import { ingestSlack } from "@features/brain/server/ingest/slack";
 import { embedMissing } from "@features/brain/server/embed";
 import type { IngestResult } from "@features/brain/server/ingest/upsert";
@@ -85,6 +85,28 @@ export async function GET(request: Request) {
     return NextResponse.json({ skipped: true, reason: "non-prod-cron-host" });
   }
 
+  /**
+   * A ONE-OFF DEEPER WINDOW, for repairing an aggregate the nightly window cannot reach.
+   *
+   * The nightly fetch is ten days, and a finished month is now deliberately NOT rewritten
+   * unless the fetch covered it from its first day — which is what stops a single trailing
+   * day being published as a whole month. The cost of that guard is that a month already
+   * corrupted stays corrupted: nothing will ever cover it again.
+   *
+   * Measured 2026-09-11, and this is not hypothetical: ga4 August read 215 sessions
+   * against its own daily rows' 3,530, and gsc August read 1 click against 84.
+   *
+   * So the window is overridable, once, by whoever holds the cron secret. Bounded by
+   * BACKFILL_DAYS because a wider fetch is not more correct, only slower and likelier to
+   * be truncated — and Search Console's `date x query` report is one row per query per
+   * day, which is exactly what the ten-day default exists to avoid.
+   */
+  const requestedDays = Number(new URL(request.url).searchParams.get("days"));
+  const windowDays =
+    Number.isFinite(requestedDays) && requestedDays > 0
+      ? Math.min(Math.trunc(requestedDays), BACKFILL_DAYS)
+      : undefined;
+
   const startedAtMs = Date.now();
   const checkSlow = startCronTimer("brain-fast", maxDuration);
   // Well inside maxDuration: every ingester has a tail (upsert, touch, sweep) that
@@ -141,7 +163,7 @@ export async function GET(request: Request) {
     // keyless Google path fail silently in production.
     const oidcToken = readVercelOidcToken(request);
     // GA4 first: `analytics` reads its ad spend back out of the chunks it writes.
-    await run("ga4", () => ingestGa4(stampedAt, isOutOfTime, undefined, oidcToken));
+    await run("ga4", () => ingestGa4(stampedAt, isOutOfTime, windowDays, oidcToken));
     await run("analytics", () => ingestAnalytics(stampedAt));
     await run("slack", () => ingestSlack(stampedAt, isOutOfTime));
 
