@@ -792,6 +792,19 @@ Check browser DevTools Network tab for response. Common causes:
 - `ScrollAnimator` component handles this on landing page
 - Check if `IntersectionObserver` is being set up correctly
 
+### Next.js 16 differs from what an AI model was trained on
+
+APIs, conventions and file structure all changed. Before writing code against a
+Next API, read the relevant guide in `node_modules/next/dist/docs/` rather than
+relying on recall, and heed deprecation notices.
+
+`next dev` offers to write this note itself, as a managed block appended to this
+file whenever it detects an AI coding agent. That is turned off
+(`agentRules: false` in `next.config.js`) because the block arrives with its own
+H1, which fails markdownlint and blocks the push — and because this file is
+hand-curated and feeds the company brain, so an external tool should not be
+editing it. The content is kept here instead.
+
 ### Local dev slower than expected
 
 - Next.js 16 uses Turbopack in dev by default

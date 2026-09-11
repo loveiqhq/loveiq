@@ -22,6 +22,13 @@ const nextConfig = {
    * load, so there is no effect on what users download.
    */
   productionBrowserSourceMaps: true,
+  // `next dev` appends a managed block with its own H1 to CLAUDE.md whenever it
+  // detects an AI coding agent. Two H1s fail markdownlint, so the pre-push hook
+  // then rejects the push -- and this repo is worked in by coding agents daily.
+  // The block's one useful point (Next 16 differs from training data; read
+  // node_modules/next/dist/docs/) is written into CLAUDE.md by hand instead, so
+  // nothing is lost and no external tool edits our curated doc.
+  agentRules: false,
   images: {
     remotePatterns: [
       {
