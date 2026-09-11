@@ -2263,6 +2263,64 @@ function mcpProbes(): McpProbe[] {
         return dead.map((l) => `a source reports no data at all: ${l.trim().slice(0, 80)}`);
       }),
     },
+    // FETCH'S WHOLE PROMISE IS REASSEMBLY. A document split across parts must come
+    // back whole from ANY of its part ids, and the completeness claim it prints must
+    // be true. This checks the claim against itself rather than against a fixed
+    // string: if it says "parts 1-N of N — this is all of it", there must be N source
+    // blocks. A tool that returns one chunk and calls it the whole document is worse
+    // than one that admits it cannot reassemble.
+    {
+      kind: "mcp-fetch-reassembles",
+      tool: "fetch_document",
+      args: { id: "slack/ch:all-loveiq:2026-08-20#2" },
+      check: (t) => {
+        if (/could not be found|no such document/i.test(t)) {
+          return [
+            "the fixture document is gone — repoint this probe, do not assume reassembly broke",
+          ];
+        }
+        const claim = /parts?\s+\d+(?:-(\d+))?\s+of\s+(\d+)\s+—\s+this is all of it/i.exec(t);
+        if (!claim) return ["no completeness claim printed at all"];
+        const total = Number(claim[2]);
+        const blocks = (t.match(/<<<SOURCE \d+>>>/g) ?? []).length;
+        return blocks === total
+          ? []
+          : [`claims "all of it" over ${total} parts but returned ${blocks} source block(s)`];
+      },
+    },
+    // A malformed id must teach the format rather than fail blankly — this one cost
+    // me a cycle when a sibling message named a parameter that does not exist.
+    {
+      kind: "mcp-fetch-bad-id",
+      tool: "fetch_document",
+      args: { id: "CLAUDE.md#environment-variables" },
+      check: contains("<source>/<source_id>"),
+    },
+    // Phase-0 complaint, re-checked: the title promised ad spend the payload lacked.
+    // It is there now, with an explicit coverage window so a missing day reads as
+    // unknown rather than zero.
+    {
+      kind: "mcp-business-numbers",
+      tool: "get_business_numbers",
+      args: { days: 14 },
+      check: both(contains("ad_spend", "unique_visitors", "which means unknown, not zero"), (t) =>
+        /"day":"\d{4}-\d{2}-\d{2}"/.test(t) ? [] : ["no dated rows came back"]
+      ),
+    },
+    // An unconfigured service must not read as an empty result. This is the
+    // difference between "we have no Stripe data" and "nobody set the key".
+    {
+      kind: "mcp-external-unconfigured",
+      tool: "query_external_service",
+      args: { service: "clarity", path: "/project-live-insights" },
+      check: contains("not configured", "not an empty result"),
+    },
+    {
+      kind: "mcp-external-unknown",
+      tool: "query_external_service",
+      args: { service: "bogus", path: "/x" },
+      check: contains("Unknown service", "stripe", "posthog"),
+    },
     {
       kind: "mcp-browse",
       tool: "browse_context",
