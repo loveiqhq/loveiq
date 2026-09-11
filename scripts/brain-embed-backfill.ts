@@ -15,9 +15,25 @@ async function main() {
         `(${Math.round((Date.now() - t0) / 1000)}s, total ${Math.round((Date.now() - started) / 60000)}m)`
     );
     if (r.complete) return console.log("  done — every chunk has an embedding");
-    if (r.remaining === -1) return console.log("  stopped on an error, see the log above");
-    if (r.embedded === 0) return console.log("  no progress this pass, stopping");
+    // Stopping early leaves chunks the search cannot match by meaning. The semantic
+    // term is weighted 8, so an unembedded row scores up to 2.4 low and simply does
+    // not surface — a silent quality loss, not a visible outage. Exiting 0 here told
+    // a caller the corpus was fully embedded when it was not.
+    if (r.remaining === -1) {
+      console.error("  stopped on an error, see the log above");
+      process.exitCode = 1;
+      return;
+    }
+    if (r.embedded === 0) {
+      console.error(`  no progress this pass, stopping — ${r.remaining} chunks still unembedded`);
+      process.exitCode = 1;
+      return;
+    }
   }
+  // Falling out of the loop means 60 passes did not finish the backlog. Without
+  // this the script ended silently, with no output at all, on exit 0.
+  console.error("  gave up after 60 passes with chunks still unembedded — re-run to continue");
+  process.exitCode = 1;
 }
 void main();
 
