@@ -177,8 +177,7 @@ export async function postToSlack(input: {
       ? String(
           (
             (await slack("conversations.open", { body: { users: target.id } })).channel as
-              | { id: string }
-              | undefined
+              { id: string } | undefined
           )?.id ?? target.id
         )
       : target.id;

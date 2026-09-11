@@ -61,7 +61,7 @@ describe("production analytics gate", () => {
   function gatedRanges(source: string): Array<[number, number]> {
     const ranges: Array<[number, number]> = [];
     const needle = "{productionAnalyticsEnabled &&";
-    for (let from = 0; ; ) {
+    for (let from = 0; ;) {
       const open = source.indexOf(needle, from);
       if (open === -1) break;
       let depth = 0;

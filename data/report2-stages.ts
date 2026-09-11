@@ -11,12 +11,7 @@
  * of these six by name.
  */
 export type StageId =
-  | "recharging"
-  | "repairing"
-  | "awakening"
-  | "expanding"
-  | "grounded"
-  | "evolving";
+  "recharging" | "repairing" | "awakening" | "expanding" | "grounded" | "evolving";
 
 export interface Stage {
   id: StageId;

@@ -23,12 +23,7 @@ import logger from "@shared/observability/logger";
 const MAX_SOURCES = 14;
 
 export type BrainStatus =
-  | "answered"
-  | "no_results"
-  | "rate_limited"
-  | "unconfigured"
-  | "unavailable"
-  | "error";
+  "answered" | "no_results" | "rate_limited" | "unconfigured" | "unavailable" | "error";
 
 export interface BrainSource {
   n: number;

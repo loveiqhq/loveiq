@@ -260,8 +260,7 @@ describe("conversion-digest handler", () => {
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     const image = arg.blocks.find((b) => (b as { type?: string }).type === "image") as
-      | { image_url?: string }
-      | undefined;
+      { image_url?: string } | undefined;
     expect(image?.image_url).toMatch(
       /^https:\/\/www\.loveiq\.org\/api\/admin\/digest-image\/conversion-by-arm\?d=[\w-]+&s=[\w-]+$/
     );
@@ -1004,8 +1003,7 @@ describe("conversion-digest chart series", () => {
     );
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     const image = arg.blocks.find((b) => (b as { type?: string }).type === "image") as
-      | { image_url?: string }
-      | undefined;
+      { image_url?: string } | undefined;
     expect(image?.image_url).toBeDefined();
     expect(image!.image_url!.length).toBeLessThan(2800);
   });

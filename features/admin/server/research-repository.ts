@@ -4,13 +4,7 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 
 export type ResearchRepositoryEntryType =
-  | "signal"
-  | "theme"
-  | "pain-point"
-  | "contradiction"
-  | "wording"
-  | "answer-quality"
-  | "custom";
+  "signal" | "theme" | "pain-point" | "contradiction" | "wording" | "answer-quality" | "custom";
 
 export type ResearchRepositoryStatus = "draft" | "active" | "validated" | "archived";
 export type ResearchRepositoryPriority = "low" | "medium" | "high";
@@ -51,12 +45,7 @@ export interface ResearchRepositorySnapshotEntry extends AdminResearchRepository
   review_state: "fresh" | "due" | "overdue" | "none";
   open_review_count: number;
   latest_review_status:
-    | "requested"
-    | "in-review"
-    | "approved"
-    | "changes-requested"
-    | "rejected"
-    | null;
+    "requested" | "in-review" | "approved" | "changes-requested" | "rejected" | null;
   linked_action: {
     id: number;
     title: string;
