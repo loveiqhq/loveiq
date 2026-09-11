@@ -373,6 +373,21 @@ const UNTRUSTED_DATA_PREAMBLE =
  * Not linted: a threshold rule cannot separate `maximum 1000` from `487 doc chunks`, and
  * a rule that fires on both would be turned off. Fix the instances, keep the habit.
  */
+/**
+ * Keys the CLIENT adds to `arguments`, which no tool declares and none may refuse.
+ *
+ * Both carry a JSON string of the arguments the model MEANT to send, and appear when
+ * its tool input was cut off mid-stream. They are the client's own recovery channel,
+ * not something the model chose. Found by reading what production actually sent
+ * before turning the unknown-argument refusal on: one real `search_company_context`
+ * call arrived with `__unparsedToolInput` ALONGSIDE a perfectly good `query`, so a
+ * strict refusal would have failed a call that worked, at the exact moment the
+ * client was trying to rescue it.
+ *
+ * Add to this set only with a logged example — every entry is a hole in the guard.
+ */
+const CLIENT_INJECTED_ARGS = new Set(["__unparsedToolInput", "truncated"]);
+
 const TOOLS = [
   {
     name: "search_company_context",
@@ -944,6 +959,13 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
+        q: {
+          type: "string",
+          description:
+            "Optional. List only records containing ALL of these words. Omit to list on " +
+            "the filters alone. Unlike search_company_context this does NOT rank — it is " +
+            "a filter, so the order stays whatever `order` says.",
+        },
         limit: { type: "number", description: "1-100, default 25." },
         offset: {
           type: "number",
@@ -1822,6 +1844,45 @@ async function callTool(
    */
   stats: { sourceCount?: number; topScore?: number } = {}
 ) {
+  /**
+   * An argument a tool does not declare is REFUSED, never ignored.
+   *
+   * No inputSchema sets `additionalProperties: false`, so until now every tool
+   * silently swallowed keys it had never heard of. That is the worst possible
+   * failure for a filter: the call succeeds, and the WIDER answer that comes
+   * back is indistinguishable from a correctly narrowed one. An invented
+   * `match` on get_business_numbers returned every column of every day, and
+   * nothing in the reply said the narrowing had not happened.
+   *
+   * It matters more than tidiness on the tools that write. `send_email` is
+   * draft-unless-`send: true`; a caller that paired `send: true` with an
+   * invented `dry_run: true` would have been protected by exactly nothing.
+   *
+   * Enforced HERE and deliberately not as `additionalProperties: false` on the
+   * schemas, which looks like the tidier fix and is the wrong one: the client
+   * validates arguments before sending them, so it would reject its own
+   * CLIENT_INJECTED_ARGS and fail the call it was trying to rescue. The server
+   * is the only place that can tell the model's mistakes from the client's.
+   */
+  const declared = TOOLS.find((t) => t.name === name)?.inputSchema.properties as
+    Record<string, unknown> | undefined;
+  if (declared) {
+    const quoted = (keys: string[]) => keys.map((k) => `\`${k}\``).join(", ");
+    const unknown = Object.keys(args)
+      .filter((k) => !(k in declared))
+      .filter((k) => !CLIENT_INJECTED_ARGS.has(k));
+    if (unknown.length) {
+      const takes = Object.keys(declared);
+      return textResult(
+        `${name} has no argument named ${quoted(unknown)}. ` +
+          (takes.length ? `It takes ${quoted(takes)}.` : "It takes no arguments at all.") +
+          " The call was refused rather than run without it: a filter that is dropped " +
+          "in silence returns a wider answer that reads exactly like a narrow one.",
+        true
+      );
+    }
+  }
+
   if (name === "search_company_context") {
     const query = typeof args.query === "string" ? args.query : "";
     if (query.trim().length < 2) {

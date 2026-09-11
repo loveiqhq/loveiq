@@ -2501,6 +2501,143 @@ async function checkArrayMetaKeysAreHandled(): Promise<string[]> {
     );
 }
 
+/**
+ * Every documented parameter must actually CHANGE the answer.
+ *
+ * Two bugs of this exact shape shipped within a day of each other, in opposite
+ * directions. `browse_context.q` was documented, echoed back in the header, and
+ * never reached the query — `q: "zzzznotaword"` answered "7605 records match".
+ * Then the fix implemented it and forgot to declare it, so the parameter worked
+ * but no caller could discover it. Neither was visible from reading the schema
+ * or from reading the handler; only calling the tool twice and diffing shows it.
+ *
+ * A parameter that is accepted and ignored is worse than one that is refused:
+ * the call succeeds, and the unfiltered answer is indistinguishable from a
+ * filtered one. Write tools are deliberately absent — this calls each tool
+ * twice, which is not a thing to do to `send_email`.
+ */
+/**
+ * Removes the header's echo of the filters before two answers are compared.
+ *
+ * The tools repeat what they were asked back at the caller — "410 records match
+ * (q=pricing)" — which is good for a reader and useless for this check: a
+ * parameter that is accepted and then ignored STILL changes the text, because
+ * the echo changed even though the records did not. That is precisely the bug
+ * being hunted, and comparing raw text scores it as working. Measured: with
+ * `browse_context.q` deliberately re-broken, the raw comparison passed and only
+ * the echo differed — "7619 records match (q=pricing)" against "7619 records
+ * match (no filters)", the same 7619 rows both times.
+ */
+function stripFilterEcho(text: string): string {
+  return text.replace(/\((?:no filters|[^()\n]*=[^()\n]*)\)/g, "");
+}
+
+async function checkEveryDocumentedParamDoesSomething(): Promise<string[]> {
+  const { POST } = await import("@/app/api/mcp/route");
+  const token = process.env.LOVEIQ_MCP_TOKEN;
+  const call = async (tool: string, args: Record<string, unknown>) => {
+    const res = await POST(
+      new Request("https://www.loveiq.org/api/mcp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          "x-loveiq-mcp-client": "battery",
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: tool, arguments: args },
+        }),
+      })
+    );
+    const body = (await res.json()) as {
+      result?: { isError?: boolean; content?: Array<{ text?: string }> };
+    };
+    return {
+      error: body.result?.isError === true,
+      text: body.result?.content?.[0]?.text ?? "",
+    };
+  };
+
+  /** [tool, arguments that work on their own, the parameter, a value that must bite]. */
+  const cases: Array<[string, Record<string, unknown>, string, unknown]> = [
+    ["search_company_context", { query: "pricing", limit: 6 }, "limit", 3],
+    ["search_company_context", { query: "pricing", limit: 6 }, "sources", ["notion"]],
+    [
+      "search_company_context",
+      { query: "pricing", limit: 6 },
+      "exclude_sources",
+      ["gmail", "drive"],
+    ],
+    ["search_company_context", { query: "pricing", limit: 6 }, "since", "2026-08-01"],
+    ["search_company_context", { query: "pricing", limit: 6 }, "until", "2026-02-01"],
+    ["search_company_context", { query: "pricing", limit: 6 }, "offset", 3],
+    [
+      "search_company_context",
+      { query: "pricing", limit: 6 },
+      "meta",
+      { people: "Mark Oldenburg" },
+    ],
+    ["browse_context", { limit: 4 }, "q", "pricing"],
+    ["browse_context", { limit: 4 }, "limit", 2],
+    ["browse_context", { limit: 4 }, "sources", ["notion"]],
+    ["browse_context", { limit: 4 }, "order", "oldest"],
+    ["browse_context", { limit: 4 }, "offset", 2],
+    ["browse_context", { limit: 4 }, "since", "2026-08-01"],
+    ["browse_context", { limit: 4 }, "until", "2026-02-01"],
+    ["browse_context", { limit: 4 }, "learned_since", "2026-09-10"],
+    ["browse_context", { limit: 4 }, "exclude_sources", ["calendar", "gmail"]],
+    ["count_context", {}, "q", "pricing"],
+    ["count_context", {}, "sources", ["notion"]],
+    ["count_context", {}, "group_by", "source"],
+    ["count_context", {}, "since", "2026-08-01"],
+    ["count_context", {}, "until", "2026-02-01"],
+    ["count_context", {}, "learned_since", "2026-09-10"],
+    ["count_context", {}, "exclude_sources", ["gmail"]],
+    ["count_context", {}, "meta", { people: "Mark Oldenburg" }],
+    ["get_business_numbers", { days: 30 }, "days", 3],
+    ["get_business_numbers", {}, "since", "2026-08-01"],
+    ["get_business_numbers", { since: "2026-08-01" }, "until", "2026-08-15"],
+    ["list_product_tables", {}, "match", "payment"],
+    // The live half. `filters` is the one that would hurt most if it were dropped:
+    // the answer would be every row of the table, presented as the matching ones.
+    ["query_product_data", { table: "payment", limit: 5 }, "limit", 2],
+    ["query_product_data", { table: "payment", limit: 5 }, "select", "id"],
+    ["query_product_data", { table: "payment", limit: 5 }, "offset", 2],
+    ["query_product_data", { table: "payment", limit: 5 }, "filters", ["is_test=eq.true"]],
+    // `.desc`, NOT `.asc` — measured: unordered rows come back in insertion order,
+    // which IS ascending, so an ascending probe passes against a tool that ignores
+    // `order` entirely. It scored "no effect" here until the value was strengthened.
+    ["query_product_data", { table: "payment", limit: 5 }, "order", "created_date_time.desc"],
+    // Big enough to exceed the 1000-char floor `max_chars` is clamped to; a smaller
+    // document is already under it and every value looks identical.
+    ["fetch_document", { id: "slack/ch:all-loveiq:2026-08-20#2" }, "max_chars", 1000],
+  ];
+
+  const issues: string[] = [];
+  for (const [tool, base, param, value] of cases) {
+    const plain = await call(tool, base);
+    const withParam = await call(tool, { ...base, [param]: value });
+    // A refusal on either side means the case itself is wrong, and saying so
+    // beats reporting "no effect" for a call that never ran.
+    if (plain.error || withParam.error) {
+      issues.push(
+        `${tool}.${param}: the probe itself was refused, so nothing was measured ` +
+          `(${(withParam.error ? withParam.text : plain.text).slice(0, 90)})`
+      );
+    } else if (stripFilterEcho(plain.text) === stripFilterEcho(withParam.text)) {
+      issues.push(
+        `${tool}.${param} is documented but changed NOTHING — the same answer came ` +
+          `back with and without it, so a caller that filters on it is reading a ` +
+          `wider result that looks narrow`
+      );
+    }
+  }
+  return issues;
+}
+
 async function runMcpBattery(only: string | null): Promise<number> {
   const { POST } = await import("@/app/api/mcp/route");
   const token = process.env.LOVEIQ_MCP_TOKEN;
@@ -2521,6 +2658,15 @@ async function runMcpBattery(only: string | null): Promise<number> {
     if (drift.length) failures += 1;
     console.log(`\n${drift.length ? "FAIL" : "ok  "} [mcp-array-keys-all-handled] metadata shapes`);
     for (const d of drift) console.log(`      ISSUE: ${d}`);
+  }
+
+  if (!only || "mcp-params-all-do-something".includes(only)) {
+    const dead = await checkEveryDocumentedParamDoesSomething();
+    if (dead.length) failures += 1;
+    console.log(
+      `\n${dead.length ? "FAIL" : "ok  "} [mcp-params-all-do-something] documented parameters`
+    );
+    for (const d of dead) console.log(`      ISSUE: ${d}`);
   }
 
   for (const p of probes) {

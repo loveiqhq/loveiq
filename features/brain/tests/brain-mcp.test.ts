@@ -3046,6 +3046,49 @@ describe("/api/mcp", () => {
     });
   });
 
+  describe("an argument no tool declares", () => {
+    async function callTool(name: string, args: Record<string, unknown>) {
+      const res = await POST(
+        rpc({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } })
+      );
+      return (await res.json()).result as { content: Array<{ text: string }>; isError?: boolean };
+    }
+
+    it("is refused, naming both the bad key and the real ones", async () => {
+      const res = await callTool("get_business_numbers", { days: 7, match: "revenue" });
+      expect(res.isError).toBe(true);
+      expect(res.content[0].text).toContain("`match`");
+      // The refusal has to say what IS accepted, or the caller's only move is to guess.
+      expect(res.content[0].text).toContain("`days`");
+    });
+
+    it("is refused on a tool that takes none at all", async () => {
+      const res = await callTool("list_sources", { source: "notion" });
+      expect(res.isError).toBe(true);
+      expect(res.content[0].text).toContain("no arguments at all");
+    });
+
+    /**
+     * The exemption exists because production sends these, not because it is tidy.
+     * Both carry a JSON string of the arguments the model MEANT to send, and appear
+     * when its tool input was cut off mid-stream — one real call arrived with
+     * `__unparsedToolInput` ALONGSIDE a perfectly good `query`. Refusing them would
+     * fail a working call at the moment the client was trying to rescue it, and the
+     * only place that would ever show up is production.
+     */
+    it.each(["__unparsedToolInput", "truncated"])(
+      "tolerates %s, which the client adds and the model never chose",
+      async (key) => {
+        const res = await callTool("search_company_context", {
+          query: "pricing",
+          limit: 3,
+          [key]: '{"query":"pricing"',
+        });
+        expect(res.isError).not.toBe(true);
+      }
+    );
+  });
+
   describe("query_external_service — read-only gateway", () => {
     async function call(args: Record<string, unknown>) {
       const res = await POST(
@@ -3068,14 +3111,24 @@ describe("/api/mcp", () => {
     });
 
     it("only ever issues GET — these keys can refund charges and send mail", async () => {
-      // The caller must not be able to pick the method, so this also passes a
-      // method it should ignore.
-      await call({ service: "stripe", path: "/charges", method: "DELETE" });
+      await call({ service: "stripe", path: "/charges" });
       await call({ service: "resend", path: "/domains" });
       expect(mockFetch.mock.calls.length).toBe(2);
       for (const [, init] of mockFetch.mock.calls) {
         expect((init as { method?: string }).method).toBe("GET");
       }
+    });
+
+    it("refuses a caller that tries to pick the method, instead of quietly GETting", async () => {
+      // `method` is not a parameter this tool has, and the answer is now a refusal
+      // rather than a silent downgrade. That is the stronger of the two: the old
+      // behaviour issued a GET the caller never asked for and returned its body as
+      // though the DELETE had been considered, which reads like the delete was
+      // attempted and came back empty. No request leaves the building now.
+      const res = await call({ service: "stripe", path: "/charges", method: "DELETE" });
+      expect(res.isError).toBe(true);
+      expect(res.content[0].text).toContain("`method`");
+      expect(mockFetch.mock.calls.length).toBe(0);
     });
 
     it("refuses Slack's write methods, which it happily serves over GET", async () => {
