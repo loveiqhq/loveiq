@@ -14,7 +14,10 @@ export function stagingCookies(origin) {
   let password = process.env.STAGING_PASSWORD;
   if (!password) {
     try {
-      const env = readFileSync(new URL("../.env.local", import.meta.url), "utf8");
+      // ../../ — this file is scripts/probes/, so one level up is scripts/.
+      // It was ../ and silently read nothing; production is not gated, so the
+      // empty cookie list looked fine until a probe pointed at local dev.
+      const env = readFileSync(new URL("../../.env.local", import.meta.url), "utf8");
       password = env
         .match(/^STAGING_PASSWORD=(.*)$/m)?.[1]
         ?.trim()

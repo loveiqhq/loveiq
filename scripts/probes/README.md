@@ -77,3 +77,13 @@ DEVICE="iPhone SE" node scripts/probes/audit-paywall-layout.mjs
 - **Every probe needs a mutation mode.** `MUTATE=1` on the paywall-card probe
   suppresses the handler under test; all devices must fail under it. A probe
   that cannot fail proves nothing.
+- **"A modal appeared" is not "my click opened it."** The report's scroll
+  paywall opens by itself a second or two after scrolling stops, so a probe that
+  taps and then waits for a modal goes GREEN with the handler under test
+  suppressed — this one did, on all three devices. Assert the specific effect
+  (here: the chapter's CTA received a click), or sit through a control window
+  first and prove the modal stays shut.
+- **Most locked previews are covered by their own paywall card**, so
+  `elementFromPoint` returns the overlay and the probe finds nothing tappable.
+  The previews this matters for are the exposed ones; scroll and hit-test every
+  preview until one is genuinely reachable.
