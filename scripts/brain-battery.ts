@@ -162,6 +162,114 @@ function buildProbes(f: LiveFigures): Probe[] {
     { kind: "empty", q: "" },
     { kind: "punctuation", q: "???" },
     { kind: "nonsense", q: "asdkfj qwoeiru zxcvmn" },
+
+    /* ------------------------------------------------------------------------
+     * WRONG ANSWERS THIS SYSTEM ACTUALLY GAVE, each pinned so it cannot return.
+     *
+     * Added 2026-09-11 after a graded question set that lived only in a scratch
+     * directory was lost with the session that made it. A number nobody can
+     * recompute is not a measurement, so every finding worth keeping now lives
+     * here, in the repository, as an assertion that re-runs.
+     *
+     * `forbid` carries most of the weight. Several of these failures were not
+     * "no answer" but a confident answer assembled from the wrong document, and
+     * naming the specific wrong string is the only way to catch its return.
+     * ---------------------------------------------------------------------- */
+
+    // --- who works here ------------------------------------------------------
+    // Measured: "who is the CEO" returned forty chunks, every one about some
+    // OTHER company's chief executive, the loudest being a Supabase welcome email.
+    {
+      kind: "role-ceo",
+      q: "who is the CEO",
+      expect: ["Mark"],
+      forbid: ["Supabase", "Paul"],
+    },
+    { kind: "role-cto", q: "who is the CTO", expect: ["Eman"] },
+    { kind: "role-roster", q: "who is on the team and what does each person do", expect: ["Mark"] },
+    // A role the owner gave with an explicit caveat must never harden into fact.
+    { kind: "role-unconfirmed", q: "what is Sanjin's role", expect: ["unconfirmed"] },
+
+    // --- counts belong to the live half --------------------------------------
+    // Measured: FACTS.md took rank 1 for these at up to a full point above the
+    // analytics row that holds the number, on questions it does not answer.
+    {
+      kind: "count-refunds-routes-live",
+      q: "how many refunds have we had",
+      expect: ["payment"],
+    },
+    { kind: "count-signups-live", q: "how many signups do we have", expect: has(f.signups) },
+    { kind: "count-waitlist-live", q: "how many people are on the waitlist" },
+    // 5,705 counts free-text ANSWER FIELDS (ZIP codes, emails, names), not people,
+    // and it sat inside a decision record — the source readers are told to trust first.
+    {
+      kind: "count-not-answer-fields",
+      q: "how many survey responses do we have",
+      forbid: ["5,705", "5705"],
+    },
+
+    // --- product facts -------------------------------------------------------
+    // "Erotic Adventurer" and friends appear in a December 2025 ideas page and in
+    // no product code; the brain once mixed them into the live list.
+    {
+      kind: "archetypes-current-only",
+      q: "what are the archetypes",
+      expect: ["Spark Seeker"],
+      forbid: ["Erotic Adventurer", "Romantic Nurturer", "Logical Sexualist"],
+    },
+    // Renamed at V9. The old names must not come back as current.
+    {
+      kind: "archetype-renames",
+      q: "was any archetype renamed",
+      forbid: ["Approval Seeker is", "Power Orchestrator is"],
+    },
+    // A Drive file called "Refund Template" is an EMPLOYEE EXPENSE FORM. It held
+    // ranks 1, 2 and 4, so the honest reading was that we have no customer refunds.
+    {
+      kind: "refund-path",
+      q: "how do refunds work",
+      expect: ["Stripe"],
+      forbid: ["Employee ID", "Business Justification"],
+    },
+
+    // --- traffic: two correct numbers, so say which ---------------------------
+    // Our own tracking recorded 11,147 visits for August; GA4 recorded 3,530
+    // sessions. Adding them, or quoting one as the other, is the failure.
+    {
+      kind: "traffic-two-measures",
+      q: "how many people visited the site in August 2026",
+      forbid: ["14677", "14,677"],
+    },
+
+    // --- things we genuinely do not have -------------------------------------
+    // "Board" is a Notion task board. There is no board of directors and no
+    // investors, and the brain used to answer with market-research spreadsheets
+    // and VC newsletters as though they were ours.
+    {
+      kind: "absent-investors",
+      q: "who are our investors",
+      shouldDecline: true,
+      forbid: ["Pitchbook"],
+    },
+    { kind: "absent-board", q: "when is our next board meeting", shouldDecline: true },
+    { kind: "absent-funding", q: "what is our funding situation", shouldDecline: true },
+    { kind: "absent-valuation", q: "what is our valuation", shouldDecline: true },
+    // Judgment nobody has written down. Declining is the CORRECT answer here —
+    // these were previously graded as failures, which punished honesty.
+    { kind: "absent-judgment-worry", q: "what should I worry about", shouldDecline: true },
+    {
+      kind: "absent-judgment-breakeven",
+      q: "what would it take to break even",
+      shouldDecline: true,
+    },
+
+    // --- onboarding ----------------------------------------------------------
+    // Two in five documentation headings were once searchable nowhere, because a
+    // packed section lost its heading into metadata that is not indexed.
+    { kind: "onboard-prepush", q: "what runs on the pre-push hook", expect: ["test"] },
+    { kind: "onboard-testcard", q: "what is the Stripe test card number", expect: ["4242"] },
+    { kind: "onboard-logger", q: "where do I import the logger from", expect: ["observability"] },
+    { kind: "onboard-newsection", q: "how do I add a new landing section", expect: ["white"] },
   ];
 }
 
