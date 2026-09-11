@@ -56,3 +56,24 @@ DEVICE="iPhone SE" node scripts/probes/audit-paywall-layout.mjs
   filtered too — so a probe can never verify itself through analytics.
 - **Verifying against production writes real data**: telemetry rows, and live
   Stripe sessions. Clean up after yourself.
+- **A hidden element is usually still in the DOM.** The pricing modal keeps ONE
+  permanently-mounted dialog node, hidden via `visibility` and opacity. Probes
+  built on `!!querySelector(...)` therefore read "open" forever — one reported
+  "would not stay shut" on all three devices while the app closed correctly every
+  time. Assert what a reader can see: `visibility`, opacity and height.
+- **`locator.click()` is not a tap.** It bypasses hit-testing and can drive a
+  hidden duplicate of the control, so the probe believes it clicked and the app
+  never moved. Tap coordinates.
+- **Don't assume a point on an element is tappable.** On a short viewport the
+  sticky chapter-pill nav sits on top of the paywall card, and a fixed offset
+  tapped the nav instead — reported as the app being broken. Scan for a point
+  whose `elementFromPoint` really belongs to the target.
+- **An open modal scroll-locks the body.** A `scrollIntoView` issued before that
+  lock releases silently does nothing; the card stayed off screen about one run
+  in two. Retry the scroll rather than failing.
+- **Verify that an edit to a probe actually applied.** Several string
+  replacements here silently matched nothing after Prettier rewrapped the lines,
+  and the "fixed" probe reran unchanged — twice looking like an app defect.
+- **Every probe needs a mutation mode.** `MUTATE=1` on the paywall-card probe
+  suppresses the handler under test; all devices must fail under it. A probe
+  that cannot fail proves nothing.
