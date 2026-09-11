@@ -105,3 +105,29 @@ describe("the people roster", () => {
     expect(mockUpsert).not.toHaveBeenCalled();
   });
 });
+
+describe("the metadata filter", () => {
+  // Measured 2026-09-11: `speakers` and `participants` both returned 0 hits for a
+  // bare string and worked as an array. jsonb containment makes that a SUCCESSFUL
+  // query with no rows, so an empty result reads as "this person said nothing"
+  // rather than "wrong shape" — the worst failure a filter can have.
+  it("wraps a bare string for a list-valued key, so the filter cannot fail silently", async () => {
+    const { normaliseMetaFilter } = await import("@features/brain/server/retrieve");
+    for (const key of ["people", "speakers", "participants", "attendees", "covers"]) {
+      expect(normaliseMetaFilter({ [key]: "Mark Oldenburg" })).toEqual({
+        [key]: ["Mark Oldenburg"],
+      });
+    }
+  });
+
+  it("leaves a scalar key alone — wrapping status would break every Notion filter", async () => {
+    const { normaliseMetaFilter } = await import("@features/brain/server/retrieve");
+    expect(normaliseMetaFilter({ status: "WIP" })).toEqual({ status: "WIP" });
+    expect(normaliseMetaFilter({ channel: "all-loveiq" })).toEqual({ channel: "all-loveiq" });
+  });
+
+  it("passes an array through unchanged", async () => {
+    const { normaliseMetaFilter } = await import("@features/brain/server/retrieve");
+    expect(normaliseMetaFilter({ people: ["A", "B"] })).toEqual({ people: ["A", "B"] });
+  });
+});

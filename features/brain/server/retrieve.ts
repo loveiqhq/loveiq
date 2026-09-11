@@ -298,6 +298,34 @@ function searchText(question: string): string {
   return expandBusinessVocabulary(expandRelativePeriods(question));
 }
 
+/**
+ * Keys stored as a JSON array, so a bare string on the filter side matches nothing.
+ *
+ * Measured 2026-09-11 over every source: `people` (8 sources), `speakers` (slack,
+ * whatsapp), `participants` (gmail), `covers` (doc) and `attendees` (calendar) are
+ * arrays, and NONE of them ever appears as a scalar — so wrapping is unambiguous.
+ *
+ * WHY WRAP RATHER THAN DOCUMENT. `meta @> filter` is jsonb containment: a filter of
+ * {"speakers": "Eman"} against a stored ["Eman"] is false, so the query succeeds and
+ * returns nothing. That is the worst failure a filter can have — an empty result reads
+ * as "this person said nothing", not "you passed the wrong shape" — and the caller has
+ * no way to tell the two apart. Measured: `speakers` and `participants` both returned
+ * 0 hits as a string and worked as an array. The trap was already written down in this
+ * file, which is not where the model reading the tool schema is looking; I walked into
+ * it myself with the comment on screen.
+ */
+const ARRAY_META_KEYS = new Set(["people", "speakers", "participants", "attendees", "covers"]);
+
+export function normaliseMetaFilter(
+  meta: Record<string, string | string[]>
+): Record<string, string | string[]> {
+  const out: Record<string, string | string[]> = {};
+  for (const [k, v] of Object.entries(meta)) {
+    out[k] = typeof v === "string" && ARRAY_META_KEYS.has(k) ? [v] : v;
+  }
+  return out;
+}
+
 export async function retrieve(
   question: string,
   limit = 12,
@@ -386,7 +414,9 @@ export async function retrieve(
         ...(opts.excludeSources?.length ? { exclude_sources: opts.excludeSources } : {}),
         ...(opts.since ? { since: opts.since } : {}),
         ...(opts.until ? { until: opts.until } : {}),
-        ...(opts.meta && Object.keys(opts.meta).length ? { meta_filter: opts.meta } : {}),
+        ...(opts.meta && Object.keys(opts.meta).length
+          ? { meta_filter: normaliseMetaFilter(opts.meta) }
+          : {}),
         /**
          * WHERE THE RECENCY TERM MEASURES FROM, when the question names a period.
          *

@@ -489,11 +489,14 @@ const TOOLS = [
             "and drive at once, which is the only way to ask what someone has said or " +
             "decided; asking by name in the question text matches only records that happen " +
             "to spell it in their body. " +
-            "IT MUST BE AN ARRAY. `people` is stored as a list and the filter is jsonb " +
-            'containment, so {"people": "Mark Oldenburg"} — a bare string — matches NOTHING ' +
-            'and returns an empty result that reads as "this person said nothing" rather ' +
-            'than "wrong shape". Use count_context with group_by:"people" to see the ' +
-            "exact spellings in use. Values are " +
+            "A bare string is accepted for it, and for the other list-valued keys " +
+            "(`speakers`, `participants`, `attendees`, `covers`): they are wrapped for " +
+            "you, so a filter can no longer come back empty merely because of its shape. " +
+            'Use count_context with group_by:"people" to see the exact spellings in use. ' +
+            "DO NOT USE `attendees` TO FIND A PERSON: calendar attendees are raw email " +
+            "addresses and one colleague appears under two of them, so filtering it by a " +
+            "name matches nothing at all. `people` is the normalised view of those same " +
+            "events. Values are " +
             "matched EXACTLY, so 'in_progress' will not match 'In Progress'. The values " +
             "in use change as people edit the board, so ASK rather than guess: " +
             'count_context with group_by:"status" lists every one with its count. A list ' +
