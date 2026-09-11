@@ -23,6 +23,15 @@ interface Probe {
   q: string;
   /** A regex the right answer contains — or `__DECLINE__` / `__NOT__<pattern>`. */
   re: string;
+  /**
+   * Sources that must NOT be allowed to satisfy `re`.
+   *
+   * For questions ABOUT the brain's own gaps. Writing "asked X, the corpus has no
+   * answer" into a runbook puts that sentence in the corpus, where it then matches the
+   * probe for X — the test passes by finding its own description. That happened: the
+   * B2C probe went green the moment COMPANY_BRAIN.md documented why it was red.
+   */
+  not_from?: string[];
 }
 
 const LIMIT = 8;
@@ -81,7 +90,10 @@ async function main() {
       ok = firstTrap === -1 || (firstFix !== -1 && firstFix < firstTrap);
     } else {
       const want = new RegExp(p.re, "i");
-      rank = text.findIndex((t) => want.test(t));
+      const eligible = p.not_from
+        ? hits.map((h, i) => (p.not_from!.includes(h.source) ? "" : text[i]))
+        : text;
+      rank = eligible.findIndex((t) => t && want.test(t));
       ok = rank !== -1;
     }
 

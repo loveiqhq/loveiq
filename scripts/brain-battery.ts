@@ -2532,6 +2532,49 @@ function stripFilterEcho(text: string): string {
   return text.replace(/\((?:no filters|[^()\n]*=[^()\n]*)\)/g, "");
 }
 
+/**
+ * Has the corpus grown a common title word nobody has ruled on?
+ *
+ * `brain_search`'s per-word title-trigram RECALL arm skips words listed in
+ * `brain_title_stopword`, because a word in a third of all titles discriminates
+ * nothing and drags its whole share of the corpus into scoring. The list was
+ * derived by measurement, and measurement goes stale: a new ingester with a new
+ * title prefix, or a rename, puts a word above the threshold that nobody decided
+ * about — and nothing would say so.
+ *
+ * So the list is re-derived here from the live corpus and compared. A word above
+ * the threshold must have a ROW, not necessarily a skip: "report" sits at 5.6% and
+ * is deliberately KEPT because the product is a report. The row is the decision;
+ * its absence is the oversight. Same shape as mcp-array-keys-all-handled, which
+ * exists because the same class of drift bit twice.
+ */
+async function checkTitleStopwordsAreCurrent(): Promise<string[]> {
+  const { supabaseFetch } = await import("@features/admin/server/supabase");
+  const THRESHOLD = 4.0;
+
+  const listed = await supabaseFetch("/rest/v1/brain_title_stopword?select=word,skip");
+  if (!listed.ok) return ["could not read brain_title_stopword"];
+  const known = new Set(((await listed.json()) as Array<{ word: string }>).map((r) => r.word));
+
+  // The per-word cost is what the arm actually pays, so it is measured the way the
+  // arm pays it: how many TITLES the word matches, not how often it appears.
+  const res = await supabaseFetch("/rest/v1/rpc/brain_title_word_frequency", {
+    method: "POST",
+    body: JSON.stringify({ min_pct: THRESHOLD }),
+  });
+  if (!res.ok) return ["could not re-derive title word frequencies"];
+  const rows = (await res.json()) as Array<{ word: string; pct: number }>;
+
+  return rows
+    .filter((r) => !known.has(r.word))
+    .map(
+      (r) =>
+        `"${r.word}" is in ${r.pct}% of titles and has no row in brain_title_stopword — ` +
+        `decide whether to skip it or keep it deliberately, because right now every ` +
+        `question containing it pulls ${r.pct}% of the corpus into scoring`
+    );
+}
+
 async function checkEveryDocumentedParamDoesSomething(): Promise<string[]> {
   const { POST } = await import("@/app/api/mcp/route");
   const token = process.env.LOVEIQ_MCP_TOKEN;
@@ -2658,6 +2701,15 @@ async function runMcpBattery(only: string | null): Promise<number> {
     if (drift.length) failures += 1;
     console.log(`\n${drift.length ? "FAIL" : "ok  "} [mcp-array-keys-all-handled] metadata shapes`);
     for (const d of drift) console.log(`      ISSUE: ${d}`);
+  }
+
+  if (!only || "mcp-title-stopwords-current".includes(only)) {
+    const stale = await checkTitleStopwordsAreCurrent();
+    if (stale.length) failures += 1;
+    console.log(
+      `\n${stale.length ? "FAIL" : "ok  "} [mcp-title-stopwords-current] title word frequencies`
+    );
+    for (const d of stale) console.log(`      ISSUE: ${d}`);
   }
 
   if (!only || "mcp-params-all-do-something".includes(only)) {

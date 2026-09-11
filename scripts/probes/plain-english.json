@@ -392,7 +392,8 @@
   {
     "t": "XHARD",
     "q": "did we choose B2C or B2B",
-    "re": "B2C"
+    "re": "B2C",
+    "not_from": ["doc"]
   },
   {
     "t": "XHARD",
