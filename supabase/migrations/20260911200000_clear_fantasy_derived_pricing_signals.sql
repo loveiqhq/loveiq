@@ -28,9 +28,18 @@
 -- and the seven that differed were discount steps. The guard at the end asserts the same
 -- property holds afterwards rather than trusting that reasoning.
 --
+-- NOT BATCHED, deliberately. The runbook asks for batching on long-running UPDATEs; this
+-- is not one. Measured 2026-09-11: report_price_quote is 8,768 kB over 6,030 rows, 3,732 of
+-- them touched, and NO index covers engagement_score, engagement_multiplier or
+-- fantasy_signal_count, so there is no index maintenance on top of the row rewrites.
+-- Splitting it would trade a sub-second lock for a partially-applied state.
+--
 -- IDEMPOTENT. Both statements are guarded on the value they set, so re-running is a
--- no-op. Deliberately not reversible: restoring an Article 9-derived value is not
--- something a down-migration should make easy.
+-- no-op.
+--
+-- ROLLBACK PATH: PITR restore only. Once fantasy_signal_count is zeroed there is no record
+-- of which rows carried a signal, so the prior scores cannot be reconstructed from this
+-- table — which is the point, not an oversight. See the paired file in supabase/rollbacks/.
 
 BEGIN;
 

@@ -81,7 +81,7 @@ test.describe("Survey — Slide navigation", () => {
 
     // Slide 3 → 4
     await continueBtn.click();
-    await expect(page.getByRole("heading", { name: /how the survey works/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /how the test works/i })).toBeVisible();
     await expect(page.getByText("4 / 4")).toBeVisible();
   });
 
@@ -109,7 +109,7 @@ test.describe("Survey — Slide navigation", () => {
     await expect(page.getByRole("heading", { name: /your privacy matters/i })).toBeVisible();
 
     await continueBtn.click();
-    await expect(page.getByRole("heading", { name: /how the survey works/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /how the test works/i })).toBeVisible();
 
     await continueBtn.click();
     await expect(page.getByRole("heading", { name: /before we begin/i })).toBeVisible({
@@ -297,7 +297,7 @@ test.describe("Survey — Full happy path", () => {
 
     // Slide 4
     await continueBtn.click();
-    await expect(page.getByRole("heading", { name: /how the survey works/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /how the test works/i })).toBeVisible();
 
     // Consent
     await continueBtn.click();
@@ -312,25 +312,25 @@ test.describe("Survey — Full happy path", () => {
     // Agree → enters SurveyEngine
     await page.getByRole("button", { name: /i agree/i }).click();
 
-    // --- Q1: "What is your email?" (open/email, required) ---
-    await expect(page.getByRole("heading", { name: /what is your email/i })).toBeVisible({
+    // --- Q1: "What is your name?" (00001, open/text, required) ---
+    // NOT email. The email question moved to second-from-last on 2026-08-16 when the
+    // "email last" arm of `survey-email-position-ab` shipped to everyone; `orderEmailLast`
+    // now renders it at Q56 of 57, immediately before the marketing opt-in. This spec
+    // still expected it first, so it had been failing silently ever since — E2E is not a
+    // CI gate, so nothing reported it.
+    await expect(page.getByRole("heading", { name: /what is your name/i })).toBeVisible({
       timeout: 5000,
     });
     await expect(page.getByText("0%")).toBeVisible();
     await expect(page.getByRole("button", { name: /previous/i })).toBeDisabled();
 
-    await page.getByRole("textbox").fill("test@example.com");
-
-    // --- Q2: "What is your name?" (open/text, required) ---
-    await page.getByRole("button", { name: /next/i }).click();
-    await expect(page.getByRole("heading", { name: /what is your name/i })).toBeVisible({
-      timeout: 5000,
-    });
     await page.getByRole("textbox").fill("Test");
 
-    // --- Q3: scale question about satisfaction ---
+    // --- Q2: 01002, the first scale question ---
     await page.getByRole("button", { name: /next/i }).click();
-    await expect(page.getByRole("heading", { name: /satisfied/i })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole("heading", { name: /satisfied with my sex life/i })).toBeVisible({
+      timeout: 5000,
+    });
 
     // --- Go back and verify persistence ---
     await page.getByRole("button", { name: /previous/i }).click();
@@ -339,8 +339,11 @@ test.describe("Survey — Full happy path", () => {
     });
     await expect(page.getByRole("textbox")).toHaveValue("Test");
 
-    // --- Pause / Exit navigates to homepage ---
+    // --- Pause opens the resume dialog (it does not navigate away) ---
+    // `handlePause` saves the draft and opens `SurveyPauseModal`; it has not navigated to
+    // "/" since the modal was introduced. This spec still waited for that navigation.
     await page.getByRole("button", { name: /pause/i }).click();
-    await page.waitForURL("/", { timeout: 5000 });
+    await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole("button", { name: /continue where I left off/i })).toBeVisible();
   });
 });

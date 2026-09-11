@@ -1,0 +1,22 @@
+-- Rollback for supabase/migrations/20260911200000_clear_fantasy_derived_pricing_signals.sql
+-- (clears sexual-preference-derived values from report_price_quote).
+--
+-- ROLLBACK PATH: PITR restore only. There is deliberately no SQL undo.
+--
+-- The forward migration sets fantasy_signal_count = 0 and subtracts the 20 points it
+-- contributed from engagement_score. Once the count is zeroed there is no record of which
+-- rows carried a signal, so the original scores cannot be reconstructed from this table.
+--
+-- That is the intended outcome, not an oversight. The values were derived from three
+-- Article 9 special-category answers (03005 / 03010 / 03012); keeping a shadow copy so the
+-- change could be undone would preserve exactly the data the change exists to remove.
+--
+-- If a restore is genuinely required — and it should not be, because nothing reads these
+-- values any more and no price depends on them (`chargedPriceCents` comes from the stored
+-- `current_price`, which the forward migration does not touch) — use Supabase
+-- point-in-time recovery to a moment before the migration ran, per
+-- docs/runbooks/DISASTER_RECOVERY.md. Recompute rather than restore where possible: the
+-- behavioural half of the score (survey duration, preview views) is still derivable from
+-- survey_submission.duration_ms and the report_session rows.
+--
+-- Intentionally contains no executable SQL.
