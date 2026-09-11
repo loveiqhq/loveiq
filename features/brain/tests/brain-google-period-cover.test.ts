@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@shared/observability/logger", () => ({
@@ -78,5 +80,64 @@ describe("windowCoveringWholePeriods", () => {
       const got = windowCoveringWholePeriods(d, new Date("2026-08-28T04:47:00Z"));
       expect(got).toBeLessThanOrEqual(d + 31);
     }
+  });
+});
+
+/**
+ * THE HALF THE WIDENING CANNOT REACH.
+ *
+ * `windowCoveringWholePeriods` pulls the fetch back to cover the whole week and the whole
+ * month containing the window start — and covering the whole WEEK is what drags a single
+ * day of the PREVIOUS month in with it. On 2026-09-11 a 10-day window starts 1 September,
+ * a Tuesday, so the week reaches back to 31 August: one August day, fetched, and the
+ * monthly aggregation then rebuilt `monthly:2026-08` out of it.
+ *
+ * Measured in production that day: the ga4 August row read 215 sessions and EUR 34.47
+ * while its own 31 daily rows summed to 3,530 and EUR 1,252.97 — understated sixteenfold,
+ * and labelled "whole month", because the only check was `lastDay >= monthEnd` and 31
+ * August IS the month end. The campaign breakdown for August disappeared with it.
+ *
+ * The helper's own comment predicted this ("would rebuild the previous, complete month
+ * from that single trailing day"); the widening closes the time-of-day case and not this
+ * one. So the write itself must refuse: a finished period is only rewritten when the
+ * fetch actually covered it from its first day.
+ */
+describe("a partial fetch never overwrites a finished aggregate", () => {
+  const monthEnd = (m: string) => {
+    const [y, mm] = m.split("-").map(Number);
+    return new Date(Date.UTC(y!, mm!, 0)).toISOString().slice(0, 10);
+  };
+  /** The rule as `google.ts` applies it. */
+  const wouldWrite = (month: string, windowStart: string, today: string) => {
+    const complete = windowStart <= `${month}-01` && monthEnd(month) <= today;
+    return complete || monthEnd(month) >= today;
+  };
+
+  it("skips a finished month the window only clipped", () => {
+    // The real case: window start 31 August, today 11 September.
+    expect(wouldWrite("2026-08", "2026-08-31", "2026-09-11")).toBe(false);
+    // And a month the window never touched at all.
+    expect(wouldWrite("2026-07", "2026-08-31", "2026-09-11")).toBe(false);
+  });
+
+  it("still writes the month that is still running", () => {
+    // Partial is the honest answer here, and it is labelled "month so far".
+    expect(wouldWrite("2026-09", "2026-08-31", "2026-09-11")).toBe(true);
+  });
+
+  it("writes every month when a backfill genuinely covered them", () => {
+    for (const m of ["2026-07", "2026-08"]) {
+      expect(wouldWrite(m, "2025-05-01", "2026-09-11"), `backfill skipped ${m}`).toBe(true);
+    }
+  });
+
+  it("keeps the widening wired in, which is what makes the above rare", () => {
+    // The helper was correct and fully tested for a year; what matters is that the
+    // production path still calls it. A fix that stops being called still passes its
+    // own tests.
+    const src = readFileSync("features/brain/server/ingest/google.ts", "utf8");
+    const calls = src.split("windowCoveringWholePeriods(").length - 1;
+    // One definition plus a call in each of the two ingesters.
+    expect(calls, "the widening is no longer called from the fetch path").toBeGreaterThanOrEqual(3);
   });
 });
