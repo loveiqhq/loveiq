@@ -9,12 +9,13 @@ This document covers the client-side survey experience at `/survey`: entry point
 
 ## Entry Points
 
-| Surface                    | Backing file(s)                                                                 | Notes                                                                          |
-| -------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `/survey` route            | [`app/survey/page.tsx`](../app/survey/page.tsx)                                 | Exports page metadata and renders `SurveyPage`.                                |
-| Survey orchestrator        | [`features/survey/ui/SurveyPage.tsx`](../features/survey/ui/SurveyPage.tsx)     | Controls intro, prep slides, consent, and the handoff into `SurveyEngine`.     |
-| Question engine            | [`features/survey/ui/SurveyEngine.tsx`](../features/survey/ui/SurveyEngine.tsx) | Renders questions, post-submit states, and retry/start-over behavior.          |
-| Question order and content | [`data/survey-data.ts`](../data/survey-data.ts)                                 | Canonical question list used for progress, question order, and chapter labels. |
+| Surface                    | Backing file(s)                                                                 | Notes                                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `/survey` route            | [`app/survey/page.tsx`](../app/survey/page.tsx)                                 | Exports page metadata and renders `SurveyPage`.                                               |
+| Survey orchestrator        | [`features/survey/ui/SurveyPage.tsx`](../features/survey/ui/SurveyPage.tsx)     | Controls intro, prep slides, consent, and the handoff into `SurveyEngine`.                    |
+| Question engine            | [`features/survey/ui/SurveyEngine.tsx`](../features/survey/ui/SurveyEngine.tsx) | Renders questions, post-submit states, and retry/start-over behavior.                         |
+| Question order and content | [`data/survey-data.ts`](../data/survey-data.ts)                                 | Canonical question list used for progress, question order, and chapter labels.                |
+| Removed questions          | [removed-survey-questions.md](survey-removed-questions.md)                      | Verbatim copies of retired questions, with restore steps. Their answers stay in the database. |
 
 ## Step Model
 

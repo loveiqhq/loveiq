@@ -100,6 +100,7 @@ nvme
 organisational
 passwordless
 paywalled
+prefs
 recaptcha
 recognisable
 searchconsole

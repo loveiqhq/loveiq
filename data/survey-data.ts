@@ -502,33 +502,6 @@ export const surveyQuestions: SurveyQuestion[] = [
     formatGuidance: "Select one option.",
   },
   {
-    qId: "03014",
-    cId: 3,
-    chapter: "Arousal Styles — Cues, Conditions & Brakes",
-    question: "During sex, I can usually reach orgasm when I want to.",
-    answerType: "scale",
-    options: [],
-    required: true,
-    guide:
-      "Think about typical partnered sex in recent months, in decent conditions. This is about pattern, not pressure.",
-    supportAndGuidance:
-      "Think about typical partnered sex in recent months, in decent conditions. This is about pattern, not pressure.",
-    scaleLabels: { low: "Not true at all", high: "Completely true" },
-    comment:
-      "Used to tailor pacing, expectations, and guidance around orgasm and partnered pleasure. It does not directly define your archetype.",
-    howAnswerIsUsed:
-      "Used to tailor pacing, expectations, and guidance around orgasm and partnered pleasure. It does not directly define your archetype.",
-    hoverStates: {
-      "1": "Not true at all: Orgasm with a partner is very uncommon for you, even when you want it and conditions are reasonably supportive.",
-      "2": "Mostly not true: Orgasm with a partner is possible, but only in rare or unusually favorable situations.",
-      "3": "Slightly not true: Orgasm with a partner happens from time to time, but it is not something you can generally count on.",
-      "4": "Mixed / depends: Orgasm with a partner happens with some consistency, though it still feels variable and not fully dependable.",
-      "5": "Slightly true: Orgasm with a partner is available to you fairly often and feels like a recurring part of partnered sex.",
-      "6": "Mostly true: Orgasm with a partner happens in most supportive situations when you want it.",
-      "7": "Completely true: Orgasm with a partner is highly accessible and reliably available to you when you want it.",
-    },
-  },
-  {
     qId: "08002",
     cId: 8,
     chapter: "Attachment Style & Emotional Safety",
@@ -1336,31 +1309,6 @@ export const surveyQuestions: SurveyQuestion[] = [
     howAnswerIsUsed:
       "This helps us decide whether your recommendations should feel more self-directed, relational, structured, or guided.",
     formatGuidance: "Select one option.",
-  },
-  {
-    qId: "16008",
-    cId: 16,
-    chapter: "Next Steps & Preferences",
-    question: "What kind of support would actually help you most with your top focus?",
-    answerType: "multiple",
-    options: [
-      "Self-guided tools I can use on my own (prompts, exercises, reflections)",
-      "A short, structured program over a few weeks",
-      "A live group, workshop, or circle",
-      "Support I can do together with the person I'm with",
-      "1-on-1 work with a professional",
-      "Not sure yet",
-    ],
-    required: true,
-    guide:
-      "Pick what would actually make your next step easier in real life — not what sounds most impressive.",
-    supportAndGuidance:
-      "Pick what would actually make your next step easier in real life — not what sounds most impressive.",
-    comment:
-      "This shapes the format of your recommendations—more practical, reflective, structured, or supportive.",
-    howAnswerIsUsed:
-      "This shapes the format of your recommendations—more practical, reflective, structured, or supportive.",
-    formatGuidance: "Select all that apply.",
   },
   {
     qId: "16011",
