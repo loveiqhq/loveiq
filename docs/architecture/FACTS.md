@@ -92,10 +92,12 @@ two actual free-text responses. It is not a count of people and never was. That 
 record ranked second for "how many survey responses do we have", and decision records are
 the source the runbook tells readers to trust first.
 
-## Investors, funding, board meetings, the board: we have none of these
+## Investors, funding, valuation, board meetings, the board: we have none of these
 
 "Board" is the name of our **Notion task board**. There is no board of directors, no
-board meetings, no investors, no cap table, no funding round and no term sheet. A question
+board meetings, no investors, no cap table, no funding round and no term sheet. **There
+is no valuation** — nobody has priced the company, so there is no number to report, and
+the same goes for pre-money, post-money, equity split and ownership percentage. A question
 about any of those has no answer here, and the honest response is to say we have no such
 record — not to return something adjacent.
 
@@ -113,6 +115,36 @@ record — not to return something adjacent.
 
 Task cards are titled `Notion task: …` in the index for exactly this reason; the database
 is still called Board in Notion and `meta.database` still says so.
+
+## What we run on, and what we do not: there is no AWS bill
+
+Everything is rented, and it is a short list. **Vercel** hosts the site and runs every
+API route and cron. **Supabase** is the database. **Resend** sends all email — every
+survey confirmation, nurture email, report link and invite. **Stripe** takes the money.
+**Upstash Redis** backs the rate limiter. Google Cloud is used for APIs only — Analytics,
+Search Console, Drive, Gmail and Calendar, through one service account — never for hosting.
+
+**There is no AWS account and no AWS bill.** No EC2, no S3, no Lambda, no RDS. Nor is
+there a server anyone administers, a Kubernetes cluster, a Docker host or a VPS. A
+question about any of those has no answer because the thing does not exist — which is
+different from the record being missing, and worth saying plainly rather than returning
+the nearest infrastructure-shaped document.
+
+Stripe runs in test mode as well as live. The **test card number is 4242 4242 4242 4242**,
+with any future expiry date and any CVC; a purchase made with it fulfills through the real
+webhook path, so it unlocks a real report against test money.
+
+## We are a website, not an app: there is nothing to download
+
+LoveIQ runs in a browser at loveiq.org. There is **no mobile app** — nothing on the App
+Store or Google Play, no React Native or Expo anywhere, and no separate mobile repository
+(we have six code repositories, all of them web). The assessment, the report and the
+checkout are all pages.
+
+So "do we have an app", "when is the app launching" and "what is our app rating" have no
+answer for the same reason as the AWS question: the thing does not exist. The word "app"
+does appear constantly in the codebase — it is the Next.js `app/` directory — and that is
+not a product.
 
 ## Our privacy policy, terms of use and terms and conditions
 

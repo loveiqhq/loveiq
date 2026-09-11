@@ -59,7 +59,8 @@
     "update:product-kpis": "node scripts/update-product-kpis.js",
     "prepare": "husky",
     "brain:backfill-google": "tsx --env-file-if-exists=.env.local scripts/brain-backfill-google.ts",
-    "brain:rebuild-notion": "tsx scripts/brain-rebuild-notion.ts"
+    "brain:rebuild-notion": "tsx scripts/brain-rebuild-notion.ts",
+    "brain:drift": "tsx --env-file-if-exists=.env.local scripts/brain-mcp-drift.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

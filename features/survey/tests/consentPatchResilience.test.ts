@@ -15,8 +15,7 @@ vi.mock("@shared/http/circuit-breaker", () => ({
 
 const ok = (body: unknown = {}) =>
   ({ ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) }) as
-    | Response
-    | never;
+    Response | never;
 
 /**
  * The consent stamp (`consent_at` + `terms_version`) is the GDPR Art. 5(2) accountability

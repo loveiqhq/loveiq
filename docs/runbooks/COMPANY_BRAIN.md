@@ -414,14 +414,46 @@ build.
 
 ```bash
 npm run brain:ask "how are we doing this month"   # exercises the real answer path
-npm run brain:battery                             # 25 adversarial questions, Slack door
-npm run brain:battery:retrieval                   # 10 probes on the MCP door, ~10s
+npm run brain:battery                             # adversarial questions, Slack door, needs a model key
+npm run brain:battery:retrieval                   # ranking and filters, no key, ~2 min
+npm run brain:battery:mcp                         # drives the real MCP handlers, no key, seconds
+npm run brain:drift                               # is the DEPLOYED brain this repo? see below
 ```
+
+Each arm prints its own total, which is why none is quoted here — a count written
+into prose is a number nothing recomputes, and both of the ones that used to be on
+this page had rotted by the time anyone read them.
 
 The battery reads its expected figures out of the corpus at run time, so it does
 not go stale, and it refuses to run without `BRAIN_LLM_KEY` rather than reporting
 25 misleading failures. It is deliberately **not** part of `npm run check`: it
 makes real model and database calls.
+
+### Everything above tests the repo, not the deployment
+
+`npm run brain:drift` is the only check that talks to the deployed server. Every
+other one — the unit tests, all three battery arms — imports the route module and
+calls it in process. claude.ai does not do that: it talks to whatever is deployed,
+which is a different thing whenever a deploy has not landed, has failed, or came
+from another branch. Nothing else in this repo can see that gap.
+
+It has been wrong before. The pricing clause lived in `MCP_INSTRUCTIONS` in the
+repo while production served a version without it, so the model in production was
+working from an older brief than the one under test, and every check passed.
+
+It compares what the model actually reads — the server's brief, each tool's
+description, and each tool's parameter names — and exits non-zero on any
+difference, so it can gate a deploy rather than merely report on one. Run it
+**after** a deploy of anything under `app/api/mcp/`:
+
+```bash
+npm run brain:drift                          # against production
+MCP_URL=https://staging.../api/mcp npm run brain:drift
+```
+
+A parameter is the common case. `browse_context.q` existed in the repo and not in
+the deployed schema for twenty minutes, during which no caller could have known
+the parameter was there.
 
 **Run `brain:battery:retrieval` after ANY change to ranking, filters or an
 ingester.** The probes above drive `answerQuestion`, which is the Slack door —
@@ -457,8 +489,8 @@ The latency climbed monotonically — 13.7s, 10.5, 2.8, 10.5, 11.2, 13.1, 7.4, 1
 outright as rate limited. So the free tier's ceiling is roughly twenty questions per
 run, and the quality was never the problem.
 
-Contrast `brain:battery:retrieval`: 192 probes in about ten seconds, no key, no rate
-limit. That is why it is the gate to run habitually and this one is not.
+Contrast `brain:battery:retrieval`: a couple of hundred probes in about two minutes,
+no key, no rate limit. That is why it is the gate to run habitually and this one is not.
 
 **MEASURED 2026-08-28: the free tier is not viable for a team tool.** A full
 25-question run, paced 16s apart, degraded monotonically as it went:

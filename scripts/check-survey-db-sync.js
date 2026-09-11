@@ -99,7 +99,12 @@ async function main() {
     // with a NULL answer_option_id. Every pick for that question is lost, silently — the
     // same failure mode as a missing option, reached a different way. The script already
     // fetched `type` and never compared it.
-    if (db.type && q.answerType && db.type !== q.answerType && !TYPE_ALIASES[q.answerType]?.includes(db.type)) {
+    if (
+      db.type &&
+      q.answerType &&
+      db.type !== q.answerType &&
+      !TYPE_ALIASES[q.answerType]?.includes(db.type)
+    ) {
       critical++;
       lines.push(
         `[CRITICAL] ${q.qId}: type mismatch — client "${q.answerType}", DB "${db.type}". ` +
