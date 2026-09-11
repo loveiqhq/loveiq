@@ -248,16 +248,20 @@ Add it as a custom connector with:
 drops the `Authorization` header, so the apex presents as a confusing 401 with a
 token that is perfectly valid.
 
-Six tools, in two halves.
+**Fourteen tools, in three groups.** Nine read, five write. The write ones act
+immediately and are described at the bottom of this section — a teammate who reads
+only the first table will not know the brain can send an email.
 
 **History — the indexed corpus:**
 
-| Tool                     | For                                                                                                                                                                   |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `search_company_context` | Anything written down — a decision, a Notion page or database row, a call note, a past month's numbers. Each hit carries a `relevance:` score, a `date:` and an `id:` |
-| `fetch_document`         | One document in full, reassembled from every part it was split into. Takes the `id:` from a search line; search only ever shows a document's single best-scoring part |
-| `get_business_numbers`   | Exact daily funnel/revenue/ad-spend rows to compute with                                                                                                              |
-| `list_sources`           | What the corpus holds and how fresh each source is — call this first when an answer looks stale                                                                       |
+| Tool                     | For                                                                                                                                                                             |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `search_company_context` | Anything written down — a decision, a Notion page or database row, a call note, a past month's numbers. Each hit carries a `relevance:` score, a `date:` and an `id:`           |
+| `fetch_document`         | One document in full, reassembled from every part it was split into. Takes the `id:` from a search line; search only ever shows a document's single best-scoring part           |
+| `get_business_numbers`   | Exact daily funnel/revenue/ad-spend rows to compute with                                                                                                                        |
+| `list_sources`           | What the corpus holds and how fresh each source is — call this first when an answer looks stale                                                                                 |
+| `count_context`          | How many, and broken down by source, month or person. Search ranks and caps at 30, so it can never answer "how many" — this reads the whole corpus                              |
+| `browse_context`         | Everything matching a filter, in date order and without ranking: every meeting note, every open task, everything learned since Tuesday. Use when you want a list, not an answer |
 
 **You can narrow, and it is usually better than rewording.** `search_company_context`
 takes `sources` and `exclude_sources` (any of doc, decision, analytics, ga4, gsc, notion,
@@ -393,6 +397,28 @@ compared).
 deployment serves the MCP endpoint happily but never re-ingests — the corpus there
 is frozen at whatever production last wrote. Reading a stale corpus from staging is
 fine; concluding a source has died from it is not.
+
+**It can also act. Five tools write, and they do it immediately:**
+
+These are not drafts-for-approval. There is no confirmation step, by design — asking
+permission for every write makes the thing useless. Every call is recorded in
+`brain_query` with its full arguments, so anything wrong is visible and reversible.
+
+| Tool                  | What it does                                                                                                                                                                        |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `record_decision`     | Writes down what was decided, by whom, and what it supersedes. The highest-value one: decisions are otherwise reconstructed from whoever happened to record a call                  |
+| `post_to_slack`       | Posts or replies in any channel the bot is in. Cannot be unsent                                                                                                                     |
+| `write_to_notion`     | Creates a page or a task                                                                                                                                                            |
+| `write_to_google_doc` | Creates a Doc, or appends to one                                                                                                                                                    |
+| `send_email`          | **Drafts by default.** It sends only when explicitly passed `send: true` — the one write that leaves the company and cannot be recalled, so it is the one that needs the extra word |
+
+**Why `record_decision` matters more than it looks.** Decision records are the thing
+the brain exists for and the thing it has least of: four records against a corpus of
+twenty-three thousand chunks. The consequence is measurable — asked "did we choose
+B2C or B2B", the only material in the whole corpus is one passage from a job
+interview about bridging both, because nobody ever wrote the decision down. Every
+decision recorded is a question the brain can answer properly instead of guessing at
+from an adjacent document.
 
 ### Slack app setup, in two phases
 
