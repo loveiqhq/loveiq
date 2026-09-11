@@ -481,7 +481,19 @@ const TOOLS = [
             'Exact-match on indexed metadata, e.g. {"status": "WIP"}. Notion board ' +
             "tasks carry status, assignee, priority, due, impact, database; slack " +
             "carries channel and day; gmail carries " +
-            "mailbox and bulk; drive carries owner, kind and section. Values are " +
+            "mailbox and bulk; drive carries owner, kind and section. " +
+            "EVERY SOURCE CARRIES `people`: the colleagues a record names, normalised to " +
+            "one spelling from the person registry, so it joins across all of them — the " +
+            'same person is `author` on one source and `speakers` on another. {"people": ' +
+            '["Mark Oldenburg"]} returns that person across whatsapp, notion, gmail, slack ' +
+            "and drive at once, which is the only way to ask what someone has said or " +
+            "decided; asking by name in the question text matches only records that happen " +
+            "to spell it in their body. " +
+            "IT MUST BE AN ARRAY. `people` is stored as a list and the filter is jsonb " +
+            'containment, so {"people": "Mark Oldenburg"} — a bare string — matches NOTHING ' +
+            'and returns an empty result that reads as "this person said nothing" rather ' +
+            'than "wrong shape". Use count_context with group_by:"people" to see the ' +
+            "exact spellings in use. Values are " +
             "matched EXACTLY, so 'in_progress' will not match 'In Progress'. The values " +
             "in use change as people edit the board, so ASK rather than guess: " +
             'count_context with group_by:"status" lists every one with its count. A list ' +
