@@ -2156,9 +2156,15 @@ function flag(p: Probe, text: string, status: string, ms: number, sources: numbe
  * against fixtures, never against the real corpus.
  *
  * Like the retrieval arm and unlike the answer arm, this needs NO model and no API
- * quota, so it can actually be run. READ-ONLY BY CONSTRUCTION: it calls no tool that
- * writes. `record_decision`, `post_to_slack`, `write_to_notion`, `write_to_google_doc`
- * and `send_email` act on the real company and are deliberately absent.
+ * quota, so it can actually be run.
+ *
+ * NOTHING HERE CREATES ANYTHING. The five writing tools act on the real company, so
+ * only their REFUSAL paths are exercised — an unknown Slack channel, an unknown Notion
+ * database, an email with no recipient — plus `send_email` in its default DRAFT mode,
+ * which composes and dispatches nothing. Those guards are the whole protection against
+ * an accidental write, so they are worth a probe; the success paths were verified by
+ * hand against the real services on 2026-09-11, creating a Notion page, a Google Doc
+ * and a decision record, each deleted straight after.
  */
 interface McpProbe {
   kind: string;
@@ -2355,6 +2361,41 @@ function mcpProbes(): McpProbe[] {
     // THE SECURITY GUARD. `query_product_data` reads production tables directly, so
     // a column holding an email or a report token must come back masked. A regression
     // here leaks customer data into a chat transcript.
+    // --- the writing tools, refusal paths only -----------------------------
+    // A refusal that does not say WHICH channels exist sends the caller guessing, and
+    // a guess at a writing tool is a message in the wrong room that cannot be deleted.
+    {
+      kind: "mcp-slack-unknown-channel",
+      tool: "post_to_slack",
+      args: { channel: "__no_such_channel__", text: "this must never post" },
+      check: contains("no channel called", "prod-alerts"),
+    },
+    {
+      kind: "mcp-notion-unknown-parent",
+      tool: "write_to_notion",
+      args: { parent: "__no_such_database__", title: "this must never be created" },
+      check: contains("No database called", "Board"),
+    },
+    // DRAFT IS THE DEFAULT, and it is the only thing standing between a mistake and a
+    // message a customer reads. Email is the one action here nobody can recall.
+    {
+      kind: "mcp-email-drafts-by-default",
+      tool: "send_email",
+      args: {
+        to: ["ec@loveiq.org"],
+        subject: "battery probe — must not send",
+        body: "If this arrives as an email, the default changed and that is a serious regression.",
+      },
+      // The positive assertion is the precise one. A bare absent("Sent") matched inside
+      // the draft's own words — "nothing has been sent" — and failed a passing tool.
+      check: contains("DRAFT", "nothing has been sent", "send: true"),
+    },
+    {
+      kind: "mcp-email-needs-a-recipient",
+      tool: "send_email",
+      args: { to: [], subject: "x", body: "y" },
+      check: contains("recipient"),
+    },
     {
       kind: "mcp-private-columns-masked",
       tool: "query_product_data",
