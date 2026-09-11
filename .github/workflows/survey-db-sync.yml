@@ -1,0 +1,68 @@
+name: Survey DB Sync
+
+# Guards the failure that dropped multi-select answers from 2026-05-19 to 2026-06-14:
+# `data/survey-data.ts` (what the browser sends) drifting from `answer_option.option_text`
+# and `survey_question.type` (what `submit_survey` matches against). A label or a type the
+# database does not recognise does not raise an error — the pick is stored as raw text
+# with a NULL answer_option_id and quietly stops joining to anything.
+#
+# The check needs live credentials, so it cannot run in the pull-request job. It runs on
+# pushes that touch the survey definition, daily, and on demand.
+
+on:
+  push:
+    branches: [main, staging]
+    paths:
+      - "data/survey-data.ts"
+      - "data/survey-source.csv"
+      - "supabase/migrations/**"
+      - "scripts/check-survey-db-sync.js"
+      - ".github/workflows/survey-db-sync.yml"
+  schedule:
+    # Daily: drift can also arrive from the database side — a migration applied by hand,
+    # or copy edited directly in the admin — which no push would catch.
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Survey copy matches the database
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # `check-survey-db-sync.js` exits 0 when credentials are absent, so that a
+      # credential-less job never breaks. That is the right default for the script and the
+      # wrong one for this workflow: an unset secret would turn the guard into a green
+      # tick that checks nothing, which is worse than not having the job. Fail loudly
+      # instead — a missing secret is a broken guard, not a passing build.
+      - name: Require credentials
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          missing=""
+          [ -n "$SUPABASE_URL" ] || missing="$missing SUPABASE_URL"
+          [ -n "$SUPABASE_SERVICE_ROLE_KEY" ] || missing="$missing SUPABASE_SERVICE_ROLE_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secret(s):$missing — this guard cannot run and must not report success."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # No dependencies: the script uses only `node:fs` and global `fetch`.
+      - name: Check survey copy against the database
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/check-survey-db-sync.js

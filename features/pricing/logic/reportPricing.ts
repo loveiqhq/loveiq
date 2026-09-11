@@ -36,22 +36,32 @@ const PLAN_LADDERS = {
   ReadonlyArray<{ delayMs: number; multiplier: number; step: number }>
 >;
 
-const PRICING_SIGNAL_QIDS = ["15001", "16012", "03005", "03010", "03012"] as const;
-
 /**
- * 16009 is NOT in the list above, and must not be added to it.
+ * The survey answers pricing is allowed to read: country (15001) and the behavioural
+ * spend band (16012). Nothing else.
  *
- * That question asks which of four priced formats someone would buy first, and its
- * options carry euro amounts. They are hypothetical — they exist to rank the formats
- * against each other, not to charge anyone. Feeding them into pricing would break in both
- * directions: the reader could be quoted a number they were shown in a survey, and the
- * measurement itself would stop being clean, because a stated preference collected before
- * the paywall would then be entangled with the price that preference produced.
+ * `03005`, `03010` and `03012` used to be here. They are sexual-preference answers —
+ * Article 9 special-category data — and reading them produced `fantasySignalCount`, which
+ * added 20 points to the engagement score, was written to `report_price_quote`, and was
+ * passed onward to Stripe as checkout metadata and into purchase analytics. The uplift
+ * flag only ever stopped it changing a PRICE; it never stopped the value being derived,
+ * stored against a payment record and shared with a processor.
+ *
+ * They are removed rather than gated, because a gate leaves the derivation running: the
+ * quote row keeps a column populated from those answers whether or not anything reads it.
+ * Do not add a sexual-preference qid back to this list.
+ *
+ * 16009 does not belong here either, for a different reason. It asks which of four priced
+ * formats someone would buy first, and its options carry euro amounts — hypothetical ones,
+ * there to rank the formats against each other, not to charge anyone. Feeding them into
+ * pricing would break in both directions: the reader could be quoted a number they were
+ * shown in a survey, and the measurement would stop being clean, because a preference
+ * stated before the paywall would then be entangled with the price it produced.
  */
+const PRICING_SIGNAL_QIDS = ["15001", "16012"] as const;
 
 const PRICING_SIGNAL_SELECT = [
   "answer_text",
-  "normalized_value",
   "survey_question!inner(frontend_qid)",
   "answer_option!fk_ssa_answer_option(option_text)",
 ].join(",");
@@ -232,7 +242,6 @@ export interface ReportPriceQuoteSnapshot {
   engagementScore: number;
   engagementMultiplier: number;
   reportPreviewViews: number;
-  fantasySignalCount: number;
   surveyDurationMs: number | null;
   initialPriceTimestamp: string;
   expiresAt: string;
@@ -288,7 +297,6 @@ interface SubmissionAnswerRow {
     option_text?: string | null;
   } | null;
   answer_text: string | null;
-  normalized_value: number | null;
   survey_question: {
     frontend_qid: string;
   } | null;
@@ -410,7 +418,6 @@ interface PricingContext {
   utmTracker: string | null;
   countryCode: string | null;
   behavioralAnswer: string | null;
-  fantasySignalCount: number;
 }
 
 function getSupabaseServiceConfig() {
@@ -766,36 +773,16 @@ export function getBehavioralPricing(answer: string | null | undefined): {
 }
 
 /**
- * Whether answers about sexual fantasy may contribute to the engagement score.
+ * How engaged this reader looks, from behaviour only: how long they spent on the survey
+ * and how many times they came back to the preview.
  *
- * OFF, deliberately. 03005, 03010 and 03012 are Article 9 special-category answers, and
- * while this was on, a value derived from them was computed on every quote, written to
- * `report_price_quote.engagement_score`, and passed onward to Stripe as checkout metadata
- * and into purchase analytics. The uplift flag stopped it changing anyone's PRICE; it did
- * not stop it being produced, persisted against a commercial record and shared with a
- * payment processor.
- *
- * Switching it off here rather than deleting the code, so the decision is one visible
- * line and reversing it is a deliberate act with a name attached, rather than an
- * archaeology exercise. `PRICING_SIGNAL_QIDS` and `fantasySignalCount` are intentionally
- * left intact for the same reason.
- *
- * Residual worth knowing: `fantasySignalCount` is still derived and still stored on the
- * quote row as `fantasy_signal_count`. It no longer influences any price or any score, so
- * nothing flows onward from it, but it has not stopped being recorded. Stopping that is a
- * separate change with its own data-contract question.
- *
- * No revenue impact: the engagement multiplier only applies when `pricing_uplift_enabled`
- * is on, and it has been off since 2026-08-03.
+ * Sexual-fantasy answers used to add a third +20 here. That component is gone — see
+ * `PRICING_SIGNAL_QIDS`. The score is therefore capped at 40 rather than 60.
  */
-const FANTASY_SIGNAL_FEEDS_PRICING = false;
-
 export function getEngagementScore({
-  fantasySignalCount,
   previewViews,
   surveyDurationMs,
 }: {
-  fantasySignalCount: number;
   previewViews: number;
   surveyDurationMs: number | null;
 }) {
@@ -806,10 +793,6 @@ export function getEngagementScore({
   }
 
   if (previewViews >= 2) {
-    score += 20;
-  }
-
-  if (FANTASY_SIGNAL_FEEDS_PRICING && fantasySignalCount > 0) {
     score += 20;
   }
 
@@ -946,7 +929,6 @@ function toSnapshot(
     engagementScore: row.engagement_score,
     engagementMultiplier: row.engagement_multiplier,
     reportPreviewViews: row.report_preview_views,
-    fantasySignalCount: row.fantasy_signal_count,
     surveyDurationMs: row.survey_duration_ms,
     initialPriceTimestamp: row.initial_price_timestamp,
     expiresAt: row.expires_at,
@@ -1023,32 +1005,6 @@ async function getPricingContext({
     answerRows.find((row) => row.survey_question?.frontend_qid === "16012")?.answer_text ??
     null;
 
-  const fantasySignalCount = answerRows.reduce((count, row) => {
-    const qid = row.survey_question?.frontend_qid;
-    const optionText =
-      row.answer_option?.option_text?.toLowerCase() ?? row.answer_text?.toLowerCase() ?? "";
-
-    if (qid === "03005" && optionText.includes("fantasy")) {
-      return count + 1;
-    }
-
-    if (
-      qid === "03010" &&
-      (optionText.includes("adventurous") ||
-        optionText.includes("taboo") ||
-        optionText.includes("edge") ||
-        optionText.includes("high-risk"))
-    ) {
-      return count + 1;
-    }
-
-    if (qid === "03012" && (row.normalized_value ?? 0) >= 5) {
-      return count + 1;
-    }
-
-    return count;
-  }, 0);
-
   return {
     personalReportId: personalReport.id,
     reportToken: reportToken ?? null,
@@ -1060,7 +1016,6 @@ async function getPricingContext({
     utmTracker: submissionRow.utm_tracker ?? appUser?.utm_tracker ?? null,
     countryCode: countryAnswer ?? null,
     behavioralAnswer,
-    fantasySignalCount,
   };
 }
 
@@ -1162,7 +1117,6 @@ function buildQuotePayload({
   const engagementScore =
     existingQuote?.engagement_score ??
     getEngagementScore({
-      fantasySignalCount: context.fantasySignalCount,
       previewViews: context.previewViews,
       surveyDurationMs: context.surveyDurationMs,
     });
@@ -1269,7 +1223,10 @@ function buildQuotePayload({
       engagement_multiplier: engagementMultiplier,
       engagement_score: engagementScore,
       expires_at: new Date(now.getTime() + QUOTE_VALIDITY_MS).toISOString(),
-      fantasy_signal_count: context.fantasySignalCount,
+      // Always 0: nothing is derived from sexual-preference answers any more.
+      // The column stays because historical rows reference it; the 2026-09-11 migration
+      // zeroed those. See PRICING_SIGNAL_QIDS.
+      fantasy_signal_count: 0,
       initial_price: toEuroAmount(initialPriceCents),
       initial_price_timestamp: initialPriceTimestamp,
       last_viewed_at: now.toISOString(),

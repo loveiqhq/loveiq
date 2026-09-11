@@ -10,7 +10,9 @@ question two quarters after it disappeared.
 
 **Every historical answer is still in the database and still queryable.** Removing a
 question stops it being _asked_; it does not delete what people already answered. The
-`survey_question` and `answer_option` rows stay, so old submissions keep resolving.
+`survey_question` and `answer_option` rows stay, so old submissions keep resolving. The
+question rows are marked `status = 'retired'` rather than deleted: nothing references
+`status` when reading an answer, so every historical answer stays joinable.
 
 ## How to restore one
 
@@ -20,6 +22,18 @@ question stops it being _asked_; it does not delete what people already answered
 3. Paste the overlay spec back into the `overlays` array in `data/scoring-config.ts`.
 4. Run `npx vitest run features/scoring/tests/label-coverage.test.ts`, which cross-checks
    the survey data against the scoring config and fails if only one side was restored.
+5. Flip the database row back to active — the questions were marked `status = 'retired'`
+   by `20260911200200_retire_survey_questions_03014_16008.sql`:
+
+   ```sql
+   UPDATE survey_question SET status = 'active', updated_date_time = now()
+   WHERE frontend_qid = '<qid>';
+   ```
+
+   Skipping this does **not** break submission (`submit_survey` looks a question up by
+   `frontend_qid`, not by status), so the restored question would collect answers
+   normally — but it would show up as config drift on /admin/health and would be missed
+   by `scripts/check-survey-db-sync.js`, which only reads active rows.
 
 Do not hand-edit `data/survey-data.ts` — it is generated, and the next regeneration would
 silently drop the change.

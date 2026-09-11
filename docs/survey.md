@@ -15,7 +15,7 @@ This document covers the client-side survey experience at `/survey`: entry point
 | Survey orchestrator        | [`features/survey/ui/SurveyPage.tsx`](../features/survey/ui/SurveyPage.tsx)     | Controls intro, prep slides, consent, and the handoff into `SurveyEngine`.                    |
 | Question engine            | [`features/survey/ui/SurveyEngine.tsx`](../features/survey/ui/SurveyEngine.tsx) | Renders questions, post-submit states, and retry/start-over behavior.                         |
 | Question order and content | [`data/survey-data.ts`](../data/survey-data.ts)                                 | Canonical question list used for progress, question order, and chapter labels.                |
-| Removed questions          | [removed-survey-questions.md](survey-removed-questions.md)                      | Verbatim copies of retired questions, with restore steps. Their answers stay in the database. |
+| Removed questions          | [survey-removed-questions.md](survey-removed-questions.md)                      | Verbatim copies of retired questions, with restore steps. Their answers stay in the database. |
 
 ## Step Model
 
@@ -75,6 +75,78 @@ Inside `SurveyEngine`, the completion path moves through three internal phases:
 - `onComplete` from `SurveyEngine` clears persisted survey state, pending completion data, and UTM/session survey keys before redirecting back to `/`.
 - A successful `/api/survey` response also clears persisted storage from the client side, but the completion UI continues to render from in-memory state until the user leaves the flow.
 - `SurveyConfirmation` exposes retry and start-over flows. Retry reuses the pending completion snapshot. Start over routes through the `onComplete` reset path.
+
+## Answers That Drive Product Decisions
+
+Three survey answers are computed on every submission and exposed on the scoring result
+(`features/scoring/logic/types.ts`), rather than being left in the diagnostics bag where
+nothing could reach them:
+
+| Field          | Question                                                       | Shape                              | Null / empty means                |
+| -------------- | -------------------------------------------------------------- | ---------------------------------- | --------------------------------- |
+| `urgency`      | 16002 "Working on my sexuality is a priority for me right now" | `1`–`7`, the scale it was asked on | Not answered — **never** assume 4 |
+| `focusPrimary` | 16001 "Which changes would actually improve your sex life…"    | The **first** option picked        | Not answered                      |
+| `barrierTags`  | 16014 "What's actually getting in the way…"                    | Tag array (capped at one pick)     | Not answered                      |
+
+`focusPrimary` is the first pick, which is only meaningful because 16001's options are
+shown in a randomised, recorded order — with a fixed order it would largely mean
+"whichever option we listed first". It holds because the answer array keeps click order
+end to end: `MultipleChoiceQuestion` appends with `[...selected, option]`, and both
+scoring paths (the live submit and the admin recovery) score the submitted JSON rather
+than re-reading the fanned-out rows.
+
+**Reading these back from the database.** `scoring_result` stores an explicit column list
+and these three are not among its columns — they are computed per request. The values they
+are derived from _are_ stored, inside the `diagnostics` JSON, and every scored row has all
+three (1,960 of 1,960 as of 2026-09-11), so nothing needs backfilling. A consumer working
+from the database reads:
+
+| Field          | Where it lives in `scoring_result.diagnostics`                   |
+| -------------- | ---------------------------------------------------------------- |
+| `urgency`      | `overlaysScalar -> 'OVL_URGENCY'` (0–1; multiply by 6 and add 1) |
+| `focusPrimary` | `overlaysText -> 'OVL_FOCUS_PRIMARY'`, first array element       |
+| `barrierTags`  | `overlaysTags -> 'OVL_BARRIER_TAGS'`                             |
+
+Note on the barrier: it does **not** predict which format someone would buy. Cross-tabbed
+against 16007, "work with a professional" moves only between 4.8% and 12.3% around a 7.5%
+baseline. Use the barrier for what an offer is _about_, and help style for what shape it
+takes.
+
+### Measuring CTA click-through by urgency band
+
+This needs no instrumentation — `analytics_event` already carries `survey_submission_id`,
+and the urgency answer is on the same submission, so it is a join. Deliberately kept as a
+first-party query rather than an event property: 16002 is an answer about someone's sex
+life, and attaching it to a client-side analytics payload would send special-category-
+derived data to a third-party processor, which is the mistake `PRICING_SIGNAL_QIDS`
+exists to prevent.
+
+```sql
+with urgency as (
+  select ssa.survey_submission_id as sid, ssa.normalized_value as u
+  from survey_submission_answer ssa
+  join survey_question q on q.id = ssa.survey_question_id
+  where q.frontend_qid = '16002' and ssa.normalized_value is not null
+),
+banded as (
+  select sid,
+         case when u >= 5 then 'high (5-7)' when u <= 3 then 'low (1-3)' else 'mid (4)' end as band
+  from urgency
+)
+select b.band,
+       count(distinct b.sid) as people,
+       count(distinct ae.survey_submission_id) filter (where ae.event_type in
+         ('sticky_unlock_clicked','lock_icon_clicked','paywall_initiated')) as clicked_cta,
+       count(distinct ae.survey_submission_id) filter (where ae.event_type = 'begin_checkout')
+         as began_checkout
+from banded b
+left join analytics_event ae on ae.survey_submission_id = b.sid
+group by b.band order by b.band;
+```
+
+Run on 2026-09-11, this returned a real split — high-urgency readers clicked a paywall CTA
+at 5.8% against 1.7% for low urgency, and began checkout at 9.1% against 6.6%. That is the
+evidence the urgency-gated CTA was meant to rest on.
 
 ## Related Coverage
 

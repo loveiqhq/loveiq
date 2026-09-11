@@ -50,6 +50,32 @@ export function scale1_7to0_1(x: unknown): number | null {
 /** The overlay id carrying the urgency answer (question 16002). */
 export const URGENCY_OVERLAY_ID = "OVL_URGENCY";
 
+/** The overlay id carrying the wanted-changes answer (question 16001). */
+export const FOCUS_PRIMARY_OVERLAY_ID = "OVL_FOCUS_PRIMARY";
+
+/** The overlay id carrying the barrier answer (question 16014). */
+export const BARRIER_TAGS_OVERLAY_ID = "OVL_BARRIER_TAGS";
+
+/**
+ * The FIRST change someone picked on 16001 — their primary focus.
+ *
+ * 16001 is capped at two picks, and the answer array arrives in the order the respondent
+ * actually clicked (`MultipleChoiceQuestion` appends with `[...selected, option]`, and
+ * both scoring paths — the live submit and the admin recovery — score the submitted JSON
+ * rather than re-reading the fanned-out rows, so nothing re-sorts it in between). That
+ * makes element 0 a real answer to "which matters most", not an artefact of render order.
+ *
+ * Which is the whole reason the option order is randomised and recorded: with a fixed
+ * order, "first pick" would largely mean "whichever we happened to list first".
+ *
+ * Returns null rather than a guess when nothing was picked. A caller ordering content by
+ * focus must be able to fall back deliberately.
+ */
+export function focusPrimaryFromOverlay(value: unknown): string | null {
+  const first = Array.isArray(value) ? value[0] : value;
+  return typeof first === "string" && first.trim() !== "" ? first : null;
+}
+
 /**
  * Invert `scale1_7to0_1`, returning the answer on the scale it was given on.
  *
@@ -746,6 +772,8 @@ export function scoreArchetypes(
       overlaysScalar[URGENCY_OVERLAY_ID],
       overlaysMissing.has(URGENCY_OVERLAY_ID)
     ),
+    focusPrimary: focusPrimaryFromOverlay(overlaysText[FOCUS_PRIMARY_OVERLAY_ID]),
+    barrierTags: overlaysTags[BARRIER_TAGS_OVERLAY_ID] ?? [],
     diagnostics: {
       uDimensions,
       dimensionWeightsBase: baseWeights,

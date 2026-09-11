@@ -3,8 +3,28 @@ import { verifyAdminSession } from "@features/admin/server/auth";
 import { hasRole } from "@features/admin/server/roles";
 import { logAdminAction } from "@features/admin/server/audit";
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { RANDOMISE_QIDS } from "@features/survey/questionFlags";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
+
+/**
+ * The order this respondent saw a randomised question's options in, as a "|"-joined list
+ * top-to-bottom — the shape an analyst can split on without a JSON parser.
+ *
+ * Empty when the question does not randomise, when the submission predates recording
+ * (2026-09-11), or when the best-effort write that carries it did not land. An empty cell
+ * means "unknown", NOT "authored order": rankings from those rows are not comparable with
+ * rankings from rows that have an order.
+ */
+function shownOrderFor(optionOrder: unknown, qId: string): string {
+  if (!optionOrder || typeof optionOrder !== "object") return "";
+  // Matched rather than indexed: `option_order` is client-supplied JSONB, so a computed
+  // member access on it is a prototype-pollution sink (and lints as one).
+  const shown = Object.entries(optionOrder as Record<string, unknown>).find(
+    ([key]) => key === qId
+  )?.[1];
+  return Array.isArray(shown) ? shown.filter((o) => typeof o === "string").join(" | ") : "";
+}
 
 /** Extract utm_source from a JSON utm_tracker string, falling back to the raw value. */
 function parseUtmSource(tracker: string | null, fallback = "Direct"): string {
@@ -96,7 +116,7 @@ export async function GET(request: Request) {
     : "app_user!fk_survey_submission_user(email,first_name)";
   const scoringJoin = archetype ? ",scoring_result!inner(primary_archetype)" : "";
 
-  let query = `/rest/v1/survey_submission?select=id,status,start_date_time,created_date_time,duration_ms,utm_tracker,${userJoin}${scoringJoin}&order=created_date_time.desc`;
+  let query = `/rest/v1/survey_submission?select=id,status,start_date_time,created_date_time,duration_ms,utm_tracker,option_order,${userJoin}${scoringJoin}&order=created_date_time.desc`;
   if (status) query += `&status=eq.${encodeURIComponent(status)}`;
   if (dateFrom) query += `&start_date_time=gte.${encodeURIComponent(dateFrom)}`;
   if (dateTo) query += `&start_date_time=lte.${encodeURIComponent(dateTo + "T23:59:59.999Z")}`;
@@ -125,6 +145,8 @@ export async function GET(request: Request) {
       created_date_time: string;
       duration_ms: number | null;
       utm_tracker: string | null;
+      /** `{ "<qId>": ["<option text>", …] }` — see `shownOrderFor`. Null before 2026-09-11. */
+      option_order: Record<string, unknown> | null;
       app_user: { email: string; first_name: string } | null;
     }>;
 
@@ -137,6 +159,7 @@ export async function GET(request: Request) {
       completed_at: r.created_date_time,
       duration_ms: r.duration_ms,
       utm_source: parseUtmSource(r.utm_tracker),
+      option_order: r.option_order ?? null,
     }));
 
     // Fetch scoring results for all submissions
@@ -289,6 +312,11 @@ export async function GET(request: Request) {
         `${qId}_time_sec`,
         `${qId}_revisions`,
         `${qId}_skipped`,
+        // Only for questions that randomise. Without the order this respondent actually
+        // saw, their picks on a ranked multi-select cannot be separated from the
+        // advantage of an option sitting near the top — which is the entire reason the
+        // order is recorded. Empty for submissions before 2026-09-11.
+        ...(RANDOMISE_QIDS.has(qId) ? [`${qId}_shown_order`] : []),
       ]),
     ];
     const rows = filteredSubmissions.map((s) => {
@@ -326,6 +354,7 @@ export async function GET(request: Request) {
           meta.get(qId)?.time_spent ?? "",
           meta.get(qId)?.revisions ?? "",
           meta.get(qId)?.skipped ? "yes" : "",
+          ...(RANDOMISE_QIDS.has(qId) ? [shownOrderFor(s.option_order, qId)] : []),
         ]),
       ];
     });

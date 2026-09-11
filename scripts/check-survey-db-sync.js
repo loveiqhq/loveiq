@@ -47,6 +47,14 @@ const client = new Function(`return [${arrMatch[1]}]`)();
 
 const norm = (s) => (s == null ? "" : String(s));
 
+/**
+ * Client answerTypes that legitimately map to a different DB `type`.
+ *
+ * `country` is a client-side render hint — a searchable country list — stored as a plain
+ * single-choice question. This is the only such alias; anything else is real drift.
+ */
+const TYPE_ALIASES = { country: ["single"] };
+
 async function rest(pathAndQuery) {
   const res = await fetch(`${url}/rest/v1/${pathAndQuery}`, {
     headers: { apikey: key, Authorization: `Bearer ${key}` },
@@ -85,6 +93,20 @@ async function main() {
       critical++;
       continue;
     }
+    // Question TYPE, not just its options. `submit_survey` switches on the DB's `type`,
+    // not the client's: if the client renders a multi-select and the row says 'single',
+    // the RPC runs `v_value #>> '{}'` over an array, matches nothing, and stores raw JSON
+    // with a NULL answer_option_id. Every pick for that question is lost, silently — the
+    // same failure mode as a missing option, reached a different way. The script already
+    // fetched `type` and never compared it.
+    if (db.type && q.answerType && db.type !== q.answerType && !TYPE_ALIASES[q.answerType]?.includes(db.type)) {
+      critical++;
+      lines.push(
+        `[CRITICAL] ${q.qId}: type mismatch — client "${q.answerType}", DB "${db.type}". ` +
+          `submit_survey branches on the DB type, so every pick would be stored unlinked.`
+      );
+    }
+
     if (q.answerType === "single" || q.answerType === "multiple") {
       const dbSet = new Set((db.options || []).map(norm));
       const missing = (q.options || []).filter((o) => !dbSet.has(norm(o)));
@@ -98,6 +120,13 @@ async function main() {
     }
   }
 
+  // The other direction. A question left `status = 'active'` in the DB after being taken
+  // out of the survey is not a data-loss risk — nothing can submit an answer to a question
+  // nobody is shown — so it is a WARNING, not a failure. It still matters: the admin drift
+  // detector raises it at severity "risk", and "active" is untrue of a retired question.
+  const clientQids = new Set(client.map((q) => q.qId));
+  const staleActive = [...dbByQid.keys()].filter((qid) => !clientQids.has(qid));
+
   if (critical > 0) {
     console.error("Survey DB↔client option drift detected — picks would be silently unlinked:\n");
     console.error(lines.join("\n"));
@@ -106,8 +135,15 @@ async function main() {
     );
     process.exit(1);
   }
+  if (staleActive.length > 0) {
+    console.warn(
+      `check-survey-db-sync: WARNING — ${staleActive.length} question(s) still active in the DB ` +
+        `but no longer asked: ${staleActive.join(", ")}. Set status='retired' so /admin/health ` +
+        `stops reporting config drift. Not a failure: no answer can be lost this way.`
+    );
+  }
   console.log(
-    `check-survey-db-sync: OK — all client options present in DB across ${client.length} questions.`
+    `check-survey-db-sync: OK — all client options present in DB, and types agree, across ${client.length} questions.`
   );
 }
 

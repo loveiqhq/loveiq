@@ -42,7 +42,6 @@ function buildPricingQuote(
     engagementScore: 0,
     engagementMultiplier: 1,
     reportPreviewViews: 0,
-    fantasySignalCount: 0,
     surveyDurationMs: 600000,
     initialPriceTimestamp:
       discountStep === 0

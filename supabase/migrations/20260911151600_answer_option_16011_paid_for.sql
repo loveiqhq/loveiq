@@ -16,7 +16,7 @@
 -- these" were kept with their exact existing wording, so their rows — and the answers
 -- already linked to them — carry straight over.
 --
--- The four retired options are deliberately NOT deleted. Existing
+-- The five retired options are deliberately NOT deleted. Existing
 -- survey_submission_answer_options rows reference them by id; removing them would break
 -- the foreign key and take real answers with it. They simply stop being offered.
 --
