@@ -64,6 +64,7 @@ aspf
 autocapture
 backout
 base64url
+behaviour
 behaviours
 blindspot
 chromium
@@ -101,6 +102,10 @@ organisational
 passwordless
 paywalled
 prefs
+randomisation
+randomise
+randomised
+randomising
 recaptcha
 recognisable
 searchconsole
@@ -113,6 +118,7 @@ teamspace
 teamspaces
 trgm
 unconfigured
+unshuffled
 watchlist
 webkit
 webshells
