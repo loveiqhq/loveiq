@@ -7,10 +7,16 @@ const mockSupabaseFetch = vi.fn();
 vi.mock("@features/admin/server/supabase", () => ({
   supabaseFetch: (...a: unknown[]) => mockSupabaseFetch(...(a as [])),
 }));
+const mockUpsertChunks = vi.fn(async () => 1);
+vi.mock("@features/brain/server/ingest/upsert", () => ({
+  upsertChunks: (...a: unknown[]) => mockUpsertChunks(...(a as [])),
+}));
+vi.mock("@shared/observability/slack", () => ({ notifySlack: vi.fn(async () => undefined) }));
 
 import {
   buildDecisionRow,
   priorDecisions,
+  recordDecision,
   proposesSomething,
   renderPriorDecisions,
 } from "@features/brain/server/decisions";
@@ -283,5 +289,66 @@ describe("priorDecisions — the lookup behind the gate", () => {
     expect(await priorDecisions("should we switch to per-person tokens")).toEqual([]);
     mockSupabaseFetch.mockResolvedValue({ ok: false, status: 500, json: async () => ({}) });
     expect(await priorDecisions("should we switch to per-person tokens")).toEqual([]);
+  });
+});
+
+describe("superseding is history a reader can see, not just metadata", () => {
+  beforeEach(() => {
+    mockSupabaseFetch.mockReset();
+    mockUpsertChunks.mockReset();
+    mockUpsertChunks.mockResolvedValue(1);
+  });
+
+  it("marks the REPLACED decision, because that is the record a reader lands on", async () => {
+    /**
+     * `supersedes` was written into the NEW decision's metadata, body and Slack
+     * mirror — and read back by nothing. The replaced decision carried no trace of
+     * having been replaced, so a reader who searched their way onto it got only the
+     * generic "prefer the later date", which is useless unless they already know a
+     * later one exists.
+     */
+    const seen: Array<{ path: string; body?: Record<string, unknown> }> = [];
+    mockSupabaseFetch.mockImplementation(async (path: string, init?: { body?: string }) => {
+      seen.push({ path, body: init?.body ? JSON.parse(init.body) : undefined });
+      if (init?.body) return { ok: true, json: async () => [] };
+      return { ok: true, json: async () => [{ id: 7, meta: { kind: "decision" } }] };
+    });
+
+    await recordDecision({
+      decision: "the new way",
+      actor: "A Person",
+      supersedes: "decision/decision:2026-01-01-aaaaaaaaaa",
+    });
+
+    const patch = seen.find((x) => x.path.includes("id=eq.7"));
+    expect(patch, "the older decision must be patched").toBeTruthy();
+    const meta = (patch!.body as { meta: Record<string, unknown> }).meta;
+    expect(String(meta.superseded_by)).toMatch(/^decision:/);
+    // Superseding is history, not deletion: the old row keeps what it already had.
+    expect(meta.kind).toBe("decision");
+  });
+
+  it("strips a `decision/` prefix, because that is how the id is printed", async () => {
+    const reads: string[] = [];
+    mockSupabaseFetch.mockImplementation(async (path: string, init?: { body?: string }) => {
+      if (!init?.body) reads.push(path);
+      return { ok: true, json: async () => [] };
+    });
+    await recordDecision({
+      decision: "x",
+      actor: "A Person",
+      supersedes: "decision/decision:2026-01-01-bbbbbbbbbb",
+    });
+    expect(reads.some((r) => r.includes("decision%3A2026-01-01-bbbbbbbbbb"))).toBe(true);
+    expect(reads.some((r) => r.includes("decision%2Fdecision"))).toBe(false);
+  });
+
+  it("still records the decision when the older one cannot be marked", async () => {
+    // The new decision is the thing being recorded. Losing it because a
+    // back-reference could not be stamped would be the worse trade.
+    mockSupabaseFetch.mockRejectedValue(new Error("brain_chunk is down"));
+    await expect(
+      recordDecision({ decision: "still recorded", actor: "A Person", supersedes: "decision:x" })
+    ).resolves.toMatchObject({ id: expect.stringContaining("decision:") });
   });
 });
