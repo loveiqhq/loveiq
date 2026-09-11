@@ -388,7 +388,7 @@ const UNTRUSTED_DATA_PREAMBLE =
  */
 const CLIENT_INJECTED_ARGS = new Set(["__unparsedToolInput", "truncated"]);
 
-const TOOLS = [
+export const TOOLS = [
   {
     name: "search_company_context",
     title: "Search the company record",
@@ -3710,6 +3710,84 @@ async function callTool(
   );
 }
 
+/**
+ * The server's own brief, read by the client at `initialize` and by nothing else.
+ *
+ * Named and exported rather than written inline, so `npm run brain:drift` can hold
+ * it against what is actually deployed. It has been out of step once already: the
+ * pricing clause lived in the repo while production served a version without it,
+ * and no test could see the difference because every test calls this module rather
+ * than the deployment.
+ */
+export const MCP_INSTRUCTIONS =
+  "Everything LoveIQ knows about itself, in two halves.\n\n" +
+  "HOW TO USE IT WELL: search first, then fetch. `search_company_context` returns a " +
+  "ranked list where each hit carries a relevance score, the date the record " +
+  "describes, and an id — but only the single best-scoring PART of each document. " +
+  "When a hit matters, call `fetch_document` with that id to read the whole thing. " +
+  "When you know WHERE the answer lives, narrow instead of guessing words: " +
+  "`sources` / `exclude_sources`, `since` / `until`, and `meta` for indexed " +
+  "fields such as a Notion task's status or assignee. " +
+  "Scores are not comparable between questions, so read the text rather than " +
+  "thresholding on the number, and when two sources conflict prefer the later date.\n\n" +
+  "HISTORY, indexed and searchable: documentation and architecture notes, the whole " +
+  "Notion workspace (every database " +
+  "and page, not just the task board), the team's Slack conversations day by day, the " +
+  "company email thread by thread, the WhatsApp team group day by day, the calendar " +
+  "of meetings and who attended them, the " +
+  "notes from every recorded call, dated business numbers, who works here and what " +
+  "each person does, and decisions written " +
+  "down directly with `record_decision`. A decision record is deliberate rather " +
+  "than reconstructed from a transcript, so it is the best evidence about the " +
+  "thing it actually decides — but only about that. A number quoted inside one is " +
+  "not authoritative for anything else; check it against the source that owns it. " +
+  "Use " +
+  "search_company_context, and list_sources when you need to know how fresh a source " +
+  "is.\n\n" +
+  "LIVE STATE, queried straight from the production database with full history and no " +
+  "lag: payments and refunds, Resend email delivery and bounces, Calendly bookings, " +
+  "survey submissions and answers, reports, shares, invites, the waitlist, marketing " +
+  "spend, the admin tables, and CURRENT PRICING (report_price_quote — prices are " +
+  "computed per visitor, so 'what do we charge' is a live question, not a written " +
+  "one). Use list_product_tables then query_product_data, and " +
+  "prefer an rpc/get_* analysis function when one fits — those encode the business " +
+  "logic already.\n\n" +
+  "OUTSIDE SERVICES, read live: query_external_service reaches Stripe, Resend, " +
+  "Slack, GitHub, Vercel, Figma, Trustpilot, Clarity and PostHog. list_sources " +
+  "prints which are reachable on this deployment and exactly what each exposes, " +
+  "including ids and required parameters you cannot guess. And get_business_numbers " +
+  "returns the funnel, revenue and ad spend per day straight from the database when " +
+  "you want figures to compute with rather than narrative.\n\n" +
+  "Which half to reach for: history for why something was decided or what a past " +
+  "period looked like; live for what is true right now. Never infer a current number " +
+  "from an indexed chunk when query_product_data can read it directly, and never " +
+  "conclude something does not exist from an empty search — check list_sources first.\n\n" +
+  "IT CAN ALSO ACT. `post_to_slack` posts a message to a channel or sends someone " +
+  "a direct message; it cannot be undone, since this bot may write but not delete. " +
+  "`write_to_notion` adds a page or a task to the Notion workspace, and " +
+  "`write_to_google_doc` creates a Google Doc or appends to one — both reversible, " +
+  "and neither can delete anything. `send_email` DRAFTS by default and sends only when explicitly told " +
+  "to — it is the one action here that nobody can undo, so draft it, show it, and " +
+  "send only if asked. Do what you were asked to do, and never announce your own " +
+  "progress.\n\n" +
+  "COUNTING AND LISTING ARE SEPARATE TOOLS, because search cannot do either. " +
+  "`search_company_context` ranks and stops at 30, so a number counted off its " +
+  "results is a floor and a list built from them is 'the 30 most relevant', never " +
+  "'all'. Use `count_context` for how many — it groups by source, by month, by who " +
+  "is named, or by any indexed field — and `browse_context` to enumerate a " +
+  "category newest-first with paging and a true total.\n\n" +
+  "DECISIONS ARE THE POINT OF THIS SERVER, and they are the thinnest thing in it — " +
+  "most of what is recorded is a by-product of somebody happening to hold a call " +
+  "that was transcribed. So two habits matter more than any search technique. " +
+  "FIRST, BEFORE PROPOSING A CHANGE OF DIRECTION — a different price, a rebuilt " +
+  "page, a dropped feature, a new tool — SEARCH WHETHER IT WAS ALREADY DECIDED, and " +
+  "if it was, say so and say when, rather than re-opening it silently. A team that " +
+  "re-argues a settled question is the specific waste this exists to prevent. " +
+  "SECOND, WHEN SOMETHING IS SETTLED — in a call, in chat, or in the conversation " +
+  "you are in — call `record_decision` so the next person can find it. Write down " +
+  "what was rejected as well as what was chosen. Recording is the only way the " +
+  "corpus gets better at the thing it is for.";
+
 export async function POST(request: Request) {
   const expected = process.env.LOVEIQ_MCP_TOKEN;
   if (!expected) {
@@ -3756,74 +3834,7 @@ export async function POST(request: Request) {
       protocolVersion: PROTOCOL_VERSION,
       capabilities: { tools: {} },
       serverInfo: { name: "loveiq-brain", version: "1.0.0" },
-      instructions:
-        "Everything LoveIQ knows about itself, in two halves.\n\n" +
-        "HOW TO USE IT WELL: search first, then fetch. `search_company_context` returns a " +
-        "ranked list where each hit carries a relevance score, the date the record " +
-        "describes, and an id — but only the single best-scoring PART of each document. " +
-        "When a hit matters, call `fetch_document` with that id to read the whole thing. " +
-        "When you know WHERE the answer lives, narrow instead of guessing words: " +
-        "`sources` / `exclude_sources`, `since` / `until`, and `meta` for indexed " +
-        "fields such as a Notion task's status or assignee. " +
-        "Scores are not comparable between questions, so read the text rather than " +
-        "thresholding on the number, and when two sources conflict prefer the later date.\n\n" +
-        "HISTORY, indexed and searchable: documentation and architecture notes, the whole " +
-        "Notion workspace (every database " +
-        "and page, not just the task board), the team's Slack conversations day by day, the " +
-        "company email thread by thread, the WhatsApp team group day by day, the calendar " +
-        "of meetings and who attended them, the " +
-        "notes from every recorded call, dated business numbers, who works here and what " +
-        "each person does, and decisions written " +
-        "down directly with `record_decision`. A decision record is deliberate rather " +
-        "than reconstructed from a transcript, so it is the best evidence about the " +
-        "thing it actually decides — but only about that. A number quoted inside one is " +
-        "not authoritative for anything else; check it against the source that owns it. " +
-        "Use " +
-        "search_company_context, and list_sources when you need to know how fresh a source " +
-        "is.\n\n" +
-        "LIVE STATE, queried straight from the production database with full history and no " +
-        "lag: payments and refunds, Resend email delivery and bounces, Calendly bookings, " +
-        "survey submissions and answers, reports, shares, invites, the waitlist, marketing " +
-        "spend, the admin tables, and CURRENT PRICING (report_price_quote — prices are " +
-        "computed per visitor, so 'what do we charge' is a live question, not a written " +
-        "one). Use list_product_tables then query_product_data, and " +
-        "prefer an rpc/get_* analysis function when one fits — those encode the business " +
-        "logic already.\n\n" +
-        "OUTSIDE SERVICES, read live: query_external_service reaches Stripe, Resend, " +
-        "Slack, GitHub, Vercel, Figma, Trustpilot, Clarity and PostHog. list_sources " +
-        "prints which are reachable on this deployment and exactly what each exposes, " +
-        "including ids and required parameters you cannot guess. And get_business_numbers " +
-        "returns the funnel, revenue and ad spend per day straight from the database when " +
-        "you want figures to compute with rather than narrative.\n\n" +
-        "Which half to reach for: history for why something was decided or what a past " +
-        "period looked like; live for what is true right now. Never infer a current number " +
-        "from an indexed chunk when query_product_data can read it directly, and never " +
-        "conclude something does not exist from an empty search — check list_sources first.\n\n" +
-        "IT CAN ALSO ACT. `post_to_slack` posts a message to a channel or sends someone " +
-        "a direct message; it cannot be undone, since this bot may write but not delete. " +
-        "`write_to_notion` adds a page or a task to the Notion workspace, and " +
-        "`write_to_google_doc` creates a Google Doc or appends to one — both reversible, " +
-        "and neither can delete anything. `send_email` DRAFTS by default and sends only when explicitly told " +
-        "to — it is the one action here that nobody can undo, so draft it, show it, and " +
-        "send only if asked. Do what you were asked to do, and never announce your own " +
-        "progress.\n\n" +
-        "COUNTING AND LISTING ARE SEPARATE TOOLS, because search cannot do either. " +
-        "`search_company_context` ranks and stops at 30, so a number counted off its " +
-        "results is a floor and a list built from them is 'the 30 most relevant', never " +
-        "'all'. Use `count_context` for how many — it groups by source, by month, by who " +
-        "is named, or by any indexed field — and `browse_context` to enumerate a " +
-        "category newest-first with paging and a true total.\n\n" +
-        "DECISIONS ARE THE POINT OF THIS SERVER, and they are the thinnest thing in it — " +
-        "most of what is recorded is a by-product of somebody happening to hold a call " +
-        "that was transcribed. So two habits matter more than any search technique. " +
-        "FIRST, BEFORE PROPOSING A CHANGE OF DIRECTION — a different price, a rebuilt " +
-        "page, a dropped feature, a new tool — SEARCH WHETHER IT WAS ALREADY DECIDED, and " +
-        "if it was, say so and say when, rather than re-opening it silently. A team that " +
-        "re-argues a settled question is the specific waste this exists to prevent. " +
-        "SECOND, WHEN SOMETHING IS SETTLED — in a call, in chat, or in the conversation " +
-        "you are in — call `record_decision` so the next person can find it. Write down " +
-        "what was rejected as well as what was chosen. Recording is the only way the " +
-        "corpus gets better at the thing it is for.",
+      instructions: MCP_INSTRUCTIONS,
     });
   }
 
