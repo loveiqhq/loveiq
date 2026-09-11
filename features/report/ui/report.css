@@ -1508,6 +1508,12 @@
   align-items: center;
   justify-content: center;
   padding: 2rem 1rem;
+  /* The whole overlay opens the paywall, so it should say so. Invisible on
+     touch — which is where all 48 dead taps were — and on a desktop it stops
+     the card lying about being unclickable. It also lets the UX dead-click
+     listener recognise it as interactive, so our own monitoring stops
+     reporting a defect that is fixed. */
+  cursor: pointer;
 }
 
 /* Full dimension / attachment locked cards (Figma 7954-35930) render in normal
