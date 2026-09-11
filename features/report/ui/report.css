@@ -22586,3 +22586,19 @@
     min-height: 1860px;
   }
 }
+
+/* ── Very narrow phones (≤347px): one trait per row ────────────────────────
+   The hero card's trait grid is `1fr 1fr`, and a `1fr` track cannot shrink
+   below its content's min-width — so instead of wrapping, the right column
+   ran past the edge and was clipped by the card. Measured on production at
+   320px: 27px cut off, enough to lose whole words ("Initiation — h…",
+   "Power — wh… leads, who y…", "Submissive/sw…"). The grid needs ~348px for
+   two columns, so below that a single column is the only readable layout.
+
+   Scoped to 347px so nothing at or above the current breakpoint moves; ~2.5%
+   of sessions are on a viewport this narrow. */
+@media (max-width: 347px) {
+  .report-hero-card__traits {
+    grid-template-columns: 1fr;
+  }
+}
