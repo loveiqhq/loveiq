@@ -6,6 +6,22 @@ const withBundleAnalyzer = require("@next/bundle-analyzer")({
 const nextConfig = {
   transpilePackages: ["lenis"],
   poweredByHeader: false,
+  /**
+   * Publish browser source maps so production stack traces are readable.
+   *
+   * Without these, every frame PostHog captures resolves to a minified name —
+   * `z`, `sK`, `sa` — against a hashed chunk, and each one is annotated
+   * "Could not find sourcemap for source url". That message is PostHog already
+   * TRYING to fetch a map from the asset URL: its docs only require an upload
+   * step "if your source maps are not publicly hosted". Serving them is
+   * therefore the whole fix — no posthog-cli, no CI secret, no API key.
+   *
+   * This costs nothing in exposure: the repository is public, so the
+   * unminified source is already readable on GitHub. Maps are fetched on
+   * demand by devtools and by PostHog's backend, never by a visitor's page
+   * load, so there is no effect on what users download.
+   */
+  productionBrowserSourceMaps: true,
   images: {
     remotePatterns: [
       {
