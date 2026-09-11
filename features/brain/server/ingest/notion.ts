@@ -67,7 +67,7 @@ const MAX_CONTENT_PAGES = 300;
 // v6: v1-v5 indexed only TOP-LEVEL blocks — every toggle, column, callout body,
 // nested bullet and table row was dropped (~19% of the workspace text). Every
 // older row must be refetched, not trusted.
-export const BUILDER_VERSION = 9;
+export const BUILDER_VERSION = 10;
 
 interface RichText {
   plain_text?: string;
@@ -424,6 +424,53 @@ export function taskToRow(
   const DONE = /^(done|complete|completed|shipped|cancell?ed|archived|won't do|wont do)\b/i;
   const closed = status && DONE.test(status.trim()) ? ` (${status.trim()})` : "";
 
+  /**
+   * A DERIVED STATE, BECAUSE THE RAW STATUS IS A NAME PEOPLE RENAME.
+   *
+   * `meta.status` is whatever the Notion column says, and around 2026-09-08 the board
+   * moved to per-person statuses -- `Eman - WIP`, `Mark - WIP`, `Marcus - WIP`,
+   * `Sanjin - WIP`, `Fatih - WIP`. Exactly ONE card still said plain `WIP`, last edited
+   * 25 June. So `meta:{status:"WIP"}` -- promised in four tool descriptions and asserted
+   * by the `wip-tasks` battery probe -- matched one dead card while 21 live ones were
+   * invisible, and the probe stayed GREEN on that single row. A rename silently disabled
+   * a documented filter and a passing test at the same time.
+   *
+   * ADDED ALONGSIDE, NEVER REPLACING. Collapsing at the write path is how
+   * `features/attribution/server/labels.ts` lost the difference between "control" and
+   * "not recorded" -- the raw value stays exactly as Notion spells it, and this is a
+   * second field derived from it. A filter on `status` still works for anyone who wants
+   * the literal column.
+   *
+   * Terminal is tested FIRST so a future `Eman - Done` lands as done rather than being
+   * caught by the person prefix, and anything unrecognised falls to `idea` rather than
+   * being guessed into open work -- a backlog item wrongly called open is a false alarm
+   * in every plan-health check downstream.
+   *
+   * MEASURED against every status in the workspace on 2026-09-12, because the regexes
+   * were written from the Board alone and the workspace is much wider:
+   *   done  Done, Done TBD, Published, In use
+   *   open  WIP (and the five `<name> - WIP`), Active, Current, Open, Planning,
+   *         To discuss, In Development, Editing
+   *   idea  Backlog, Idea, Not Started, Draft, Missing, Needs check, Needs updates
+   *
+   * `In Development` and `Editing` were caught by that sweep sitting in `idea`, which
+   * was wrong. `Parttime`, `Full` and `Reference` also appear, from the Team Members
+   * and Claude Artifacts databases -- those are not work states at all, and they land
+   * in `idea` where they are inert. Plan health reads the Board only, so they never
+   * reach it; only the search filter sees them, where a harmless bucket is fine.
+   */
+  const TERMINAL =
+    /\b(done|complete|completed|shipped|cancell?ed|archived|published|in use|won'?t do)\b/i;
+  const ACTIVE =
+    /\b(wip|in progress|in development|in review|editing|current|active|open|planning|to discuss|doing)\b/i;
+  const state: "open" | "done" | "idea" | null = !status
+    ? null
+    : TERMINAL.test(status)
+      ? "done"
+      : ACTIVE.test(status)
+        ? "open"
+        : "idea";
+
   return {
     source: SOURCE,
     source_id: `task:${page.id}`,
@@ -437,6 +484,7 @@ export function taskToRow(
       v: BUILDER_VERSION,
       database: label,
       status: status || null,
+      state,
       priority: priority || null,
       impact: impact || null,
       assignee: assignee || null,

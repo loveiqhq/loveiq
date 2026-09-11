@@ -388,6 +388,46 @@ const UNTRUSTED_DATA_PREAMBLE =
  */
 const CLIENT_INJECTED_ARGS = new Set(["__unparsedToolInput", "truncated"]);
 
+/**
+ * Tables the schema has and the model must not be told about.
+ *
+ * `list_product_tables` reads PostgREST's OpenAPI doc, so it advertises everything the
+ * database exposes. A strategy/intelligence layer was built here and never filled:
+ * MEASURED 2026-09-12, every table below holds ZERO rows except `admin_goals` and
+ * `admin_action_item`, which hold ONE each — worse than zero, because one row reads as
+ * maintained.
+ *
+ * Naming them costs a real call and can cost a wrong answer: a model that queries
+ * `admin_competitive_watch`, gets nothing, and reports "no competitors are being
+ * tracked" has stated a fact about the market on the strength of an empty table nobody
+ * ever wrote to. This repo already learned the rule in the other direction — a source
+ * with no chunks is kept OUT of the source list, because naming it tells the model to
+ * search something that cannot answer.
+ *
+ * NOT DROPPED, deliberately: dropping means deleting ~10 admin routes, their server
+ * modules, their UIs and their tests, to remove something that is inert while empty.
+ * Hidden is the cheap half of that, and reversible in one line.
+ *
+ * `admin_metric_registry` is deliberately ABSENT from this list — it is the one table
+ * here that holds definitions rather than an activity log, and it is seeded.
+ */
+const NEVER_LIST = new Set([
+  "admin_strategy_bet",
+  "admin_strategy_initiative",
+  "admin_competitive_watch",
+  "admin_decision_entry",
+  "admin_metric_benchmark",
+  "admin_experiment",
+  "admin_investigation_case",
+  "admin_research_repository_entry",
+  "admin_alert_rule",
+  "digest_recommendation_history",
+  "report_section_kpi",
+  "survey_question_kpi",
+  "admin_goals",
+  "admin_action_item",
+]);
+
 export const TOOLS = [
   {
     name: "search_company_context",
@@ -497,10 +537,16 @@ export const TOOLS = [
         meta: {
           type: "object",
           description:
-            'Exact-match on indexed metadata, e.g. {"status": "WIP"}. Notion board ' +
-            "tasks carry status, assignee, priority, due, impact, database; slack " +
+            'Exact-match on indexed metadata, e.g. {"state": "open"}. Notion board ' +
+            "tasks carry state, status, assignee, priority, due, impact, database; slack " +
             "carries channel and day; gmail carries " +
             "mailbox and bulk; drive carries owner, kind and section. " +
+            "ON A NOTION TASK, FILTER `state`, NOT `status`. `state` is `open`, `done` " +
+            "or `idea`, derived once at ingest. `status` is the raw Notion column, and " +
+            "people rename it: in September the board moved from `WIP` to `Eman - WIP`, " +
+            '`Mark - WIP` and three more, after which {"status":"WIP"} matched ONE card ' +
+            "last touched in June while 21 live ones were invisible. `status` is still " +
+            "indexed and still exact-matched when you want the literal column value. " +
             "EVERY SOURCE CARRIES `people`: the colleagues a record names, normalised to " +
             "one spelling from the person registry, so it joins across all of them — the " +
             'same person is `author` on one source and `speakers` on another. {"people": ' +
@@ -936,7 +982,7 @@ export const TOOLS = [
         meta: {
           type: "object",
           description:
-            'Indexed metadata, matched EXACTLY — e.g. {"status":"WIP"} or ' +
+            'Indexed metadata, matched EXACTLY — e.g. {"state":"open"} or ' +
             '{"people":"Marcus Börner"} for everything one person is named in.',
         },
       },
@@ -1011,7 +1057,7 @@ export const TOOLS = [
         meta: {
           type: "object",
           description:
-            'Indexed metadata, matched EXACTLY — e.g. {"status":"WIP"} or ' +
+            'Indexed metadata, matched EXACTLY — e.g. {"state":"open"} or ' +
             '{"people":"Marcus Börner"} for everything one person is named in.',
         },
       },
@@ -1788,8 +1834,8 @@ function malformedFilterMessage(args: Record<string, unknown>): string | null {
   }
   if (args.meta !== undefined && asMeta(args.meta) === undefined) {
     return (
-      `\`meta\` must be an object of string values, e.g. {"status":"WIP"}. Nested objects ` +
-      `and operator forms like {"status":{"eq":"WIP"}} are not read. Refused rather than ` +
+      `\`meta\` must be an object of string values, e.g. {"state":"open"}. Nested objects ` +
+      `and operator forms like {"state":{"eq":"open"}} are not read. Refused rather than ` +
       `ignored, which would have returned the unfiltered corpus with no notice.`
     );
   }
@@ -3105,6 +3151,7 @@ async function callTool(
     }
     const match = typeof args.match === "string" ? args.match.toLowerCase().trim() : "";
     const lines = [...spec.entries()]
+      .filter(([table]) => !NEVER_LIST.has(table))
       .filter(([table]) => !match || table.toLowerCase().includes(match))
       .map(([table, cols]) => `${table}(${cols.join(", ")})`);
     if (lines.length === 0) {
@@ -3113,8 +3160,17 @@ async function callTool(
       );
     }
     stats.sourceCount = lines.length;
+    // `listable`, not `spec.size`: quoting the raw total against a filtered listing
+    // makes the hidden rows look like something `match` excluded, which is the kind of
+    // silent reshaping every other cap in this file announces.
+    const listable = [...spec.keys()].filter((t) => !NEVER_LIST.has(t)).length;
     return textResult(
-      `${lines.length} of ${spec.size} tables/views/functions:\n\n${lines.join("\n")}`
+      `${lines.length} of ${listable} tables/views/functions:\n\n${lines.join("\n")}` +
+        (match
+          ? ""
+          : "\n\nStrategy and planning tables exist in the schema and are deliberately " +
+            "unused, so they are not listed: decisions live in the indexed corpus and are " +
+            "reached with search_company_context, not in admin_decision_entry.")
     );
   }
 

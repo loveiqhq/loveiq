@@ -6,12 +6,19 @@
  * called. The audience is non-technical: nobody reading a Slack message should
  * have to know that `white_prev` means the pre-rebuild landing page.
  *
- * Read the RAW stored value. Three existing helpers in this repo
- * (`recordVisit.ts`, the admin explorer, and the `get_landing_variant_funnel`
- * RPC) collapse anything that isn't `"white"` down to `"control"`, which means
- * round-2 `white_prev` traffic is currently reported as the RETIRED dark arm.
- * That is a live mislabelling — do not route values through those helpers before
- * they get here.
+ * Read the RAW stored value, and never substitute an arm for a missing one.
+ *
+ * This warning used to name three helpers that collapsed anything not `"white"`
+ * down to `"control"`. All three are fixed now — `recordVisit.ts` stores the raw
+ * value, `get_landing_variant_funnel` was corrected on 2026-08-27 and returns
+ * `unknown`, and `features/admin/server/explorer.ts` was the last, on 2026-09-12.
+ * A warning that names already-fixed code sends the next reader to the wrong file,
+ * so it is rewritten rather than left standing.
+ *
+ * What the rule protects, measured 2026-09-12: **809 of 1,969 completed submissions
+ * carry no arm at all**, and the real `control` arm has 53 and ran for five days in
+ * June. Defaulting a missing arm to any real arm therefore does not add a rounding
+ * error — it invents a 16x result for a test that was already over.
  */
 
 /** The four experiment axes we can attribute a person to, server-side. */

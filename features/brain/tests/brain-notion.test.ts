@@ -88,6 +88,70 @@ describe("taskToRow", () => {
     expect(row?.body).toContain("Due: 2026-08-28");
   });
 
+  /**
+   * THE RENAME THAT BROKE A DOCUMENTED FILTER AND KEPT A TEST GREEN.
+   *
+   * Around 2026-09-08 the board moved from `WIP` to per-person statuses. Exactly one
+   * card still said plain `WIP`, last edited 25 June, so `meta:{status:"WIP"}` --
+   * promised in four tool descriptions -- matched that one dead card while 21 live ones
+   * were invisible, and the `wip-tasks` battery probe passed on it.
+   *
+   * `meta.state` is the derived answer, and these are the statuses actually in the
+   * workspace, read out of production on 2026-09-12. The battery probe checks the DATA;
+   * this checks the CODE, and neither substitutes for the other -- a broken derivation
+   * with a correctly-backfilled table would look green to the battery alone.
+   */
+  it.each([
+    ["WIP", "open"],
+    ["Eman - WIP", "open"],
+    ["Mark - WIP", "open"],
+    ["Marcus - WIP", "open"],
+    ["Sanjin - WIP", "open"],
+    ["Fatih - WIP", "open"],
+    ["To discuss", "open"],
+    ["Active", "open"],
+    ["Current", "open"],
+    ["Open", "open"],
+    ["Planning", "open"],
+    ["In Development", "open"],
+    ["Editing", "open"],
+    ["Done", "done"],
+    ["Done TBD", "done"],
+    ["Published", "done"],
+    ["In use", "done"],
+    // Terminal is tested first, so a per-person DONE cannot be caught by the prefix.
+    ["Eman - Done", "done"],
+    ["Backlog", "idea"],
+    ["Idea", "idea"],
+    ["Not Started", "idea"],
+    ["Draft", "idea"],
+    ["Missing", "idea"],
+    // Not work states at all — Team Members and Claude Artifacts. Inert, never "open".
+    ["Parttime", "idea"],
+    ["Reference", "idea"],
+  ])("derives state %s -> %s", (status, expected) => {
+    const row = taskToRow(
+      {
+        ...TASK,
+        properties: { ...TASK.properties, Status: { type: "select", select: { name: status } } },
+      },
+      "s"
+    );
+    expect(row?.meta.state).toBe(expected);
+    // The raw value is never collapsed at the write path — that is how
+    // features/attribution/server/labels.ts lost "control" vs "not recorded".
+    expect(row?.meta.status).toBe(status);
+  });
+
+  it("leaves state null when there is no status at all, rather than guessing one", () => {
+    const row = taskToRow(
+      { ...TASK, properties: { ...TASK.properties, Status: { type: "select", select: null } } },
+      "s"
+    );
+    expect(row?.meta.state).toBeNull();
+    expect(row?.meta.status).toBeNull();
+  });
+
   it("omits properties that are empty rather than printing blanks", () => {
     const row = taskToRow(TASK, "s");
     expect(row?.body).not.toContain("Impact:");

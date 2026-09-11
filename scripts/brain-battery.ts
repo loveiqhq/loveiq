@@ -361,10 +361,27 @@ function retrievalProbes(): RetrievalProbe[] {
        */
       kind: "wip-tasks",
       q: "which tasks are in progress and who is assigned to them",
-      opts: { sources: ["notion"], meta: { status: "WIP" } },
-      limit: 6,
+      opts: { sources: ["notion"], meta: { state: "open" } },
+      limit: 12,
       check: (h) => {
-        const bad = h.filter((x) => x.source !== "notion" || x.meta?.status !== "WIP");
+        const bad = h.filter((x) => x.source !== "notion" || x.meta?.state !== "open");
+        /**
+         * DISTINCT RAW STATUSES, NOT A COUNT OF ROWS.
+         *
+         * This probe filtered on `status:"WIP"` until 2026-09-12 and was GREEN on ONE
+         * row -- a card last edited 25 June -- because the board had quietly moved to
+         * per-person statuses (`Eman - WIP`, `Mark - WIP`, and three more). 21 live
+         * tasks were invisible to a filter four tool descriptions promise, and the test
+         * that was supposed to notice reported success.
+         *
+         * A row count is what rotted last time: it was pinned at 49, then rewritten to
+         * "at least 3" when people closed tasks, and that threshold sat low enough to
+         * survive the collapse to one. So the assertion is on the SHAPE instead --
+         * several different raw statuses collapsing into one derived state is precisely
+         * what `meta.state` exists to do, and it cannot be satisfied by a single
+         * orphaned value however the board is renamed next.
+         */
+        const statuses = new Set(h.map((x) => String(x.meta?.status ?? "")).filter(Boolean));
         return [
           /**
            * NO SILENT CAP. This used to assert a flat "at least 6, because 49 WIP rows
@@ -382,8 +399,15 @@ function retrievalProbes(): RetrievalProbe[] {
            * and so passed while the cap silently returned 3 of 49. That is the failure
            * this still guards, now measured rather than assumed.
            */
-          h.length === 0 ? "no WIP rows came back at all" : null,
-          bad.length ? `not WIP notion rows: ${bad.map(describe).join(", ")}` : null,
+          h.length < 5
+            ? `only ${h.length} open tasks came back; the board has 25 and this filter ` +
+              `matched one stale row for months`
+            : null,
+          statuses.size < 3
+            ? `all ${h.length} hits share ${statuses.size} raw status(es) (${[...statuses].join(", ")}) ` +
+              `— the derived state is not collapsing the per-person statuses it exists for`
+            : null,
+          bad.length ? `not open notion rows: ${bad.map(describe).join(", ")}` : null,
         ].filter((x): x is string => x !== null);
       },
     },
@@ -2401,6 +2425,33 @@ function mcpProbes(): McpProbe[] {
       tool: "browse_context",
       args: { sources: ["decision"], limit: 5 },
       check: contains("Decision:"),
+    },
+    {
+      /**
+       * The strategy layer was built and never filled: 13 admin tables at zero rows and
+       * two at one row, measured 2026-09-12. `list_product_tables` reads PostgREST's
+       * OpenAPI doc, so it advertised all of them — and a model that queries
+       * `admin_competitive_watch`, gets nothing and reports "no competitors are tracked"
+       * has stated a fact about the market from an empty table nobody ever wrote to.
+       *
+       * `admin_metric_registry` must still be listed: it is the one that holds
+       * definitions rather than an activity log, and it is seeded.
+       */
+      kind: "mcp-empty-tables-hidden",
+      tool: "list_product_tables",
+      args: {},
+      check: (t) =>
+        [
+          ...["admin_strategy_bet", "admin_decision_entry", "admin_goals", "report_section_kpi"]
+            .filter((name) => t.includes(`${name}(`))
+            .map((name) => `${name} is advertised and holds no usable rows`),
+          t.includes("admin_metric_registry(")
+            ? null
+            : "admin_metric_registry is hidden, but it is seeded and must stay listed",
+          t.includes("deliberately")
+            ? null
+            : "the listing does not say the strategy tables were omitted on purpose",
+        ].filter((x): x is string => x !== null),
     },
     {
       kind: "mcp-list-tables",
