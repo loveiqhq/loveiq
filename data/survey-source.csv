@@ -464,12 +464,11 @@ QID,CID,Category & chapter,Question,Answer format,Answer format guidance,Info an
 - Sign up for a program or course
 - Work with a professional (therapist, coach, etc.)
 - I usually only act once it becomes urgent",N/A,"This helps us decide whether your recommendations should feel more self-directed, relational, structured, or guided."
-16011,16,Next Steps & Preferences,Which of these are already part of your life?,Multiple choice,Select all that apply.,Helps us recommend things that feel familiar and doable — not a whole new world for you to figure out.,"- Therapy, coaching, or counseling
-- Books or other long reads
-- Apps for things like meditation, sleep, or breathwork
-- Paid subscriptions (streaming, podcasts, lifestyle apps)
-- Online courses, programs, or paid communities
-- None of these",N/A,This helps us understand the kinds of support tools and formats you already engage with.
+16011,16,Next Steps & Preferences,Which of these have you actually paid for in the last 12 months?,Multiple choice,Select all that apply.,Only count what you actually paid for in the last year — not what you read about or were given for free.,"- Therapy, coaching, or counseling
+- Books, courses, or programs
+- An app or subscription
+- A retreat, workshop, or group
+- None of these",N/A,This tells us what kinds of support you already pay for so your next steps land at a level that fits.
 16012,16,Next Steps & Preferences,"Roughly how much do you spend per year on personal growth — books, courses, therapy, coaching, apps?",Single choice,Select one option.,A rough estimate is fine. Include both one-off purchases and ongoing subscriptions or memberships.,"- €0
 - €1–99
 - €100–299

@@ -1315,25 +1315,24 @@ export const surveyQuestions: SurveyQuestion[] = [
     qId: "16011",
     cId: 16,
     chapter: "Next Steps & Preferences",
-    question: "Which of these are already part of your life?",
+    question: "Which of these have you actually paid for in the last 12 months?",
     answerType: "multiple",
     options: [
       "Therapy, coaching, or counseling",
-      "Books or other long reads",
-      "Apps for things like meditation, sleep, or breathwork",
-      "Paid subscriptions (streaming, podcasts, lifestyle apps)",
-      "Online courses, programs, or paid communities",
+      "Books, courses, or programs",
+      "An app or subscription",
+      "A retreat, workshop, or group",
       "None of these",
     ],
     required: true,
     guide:
-      "Helps us recommend things that feel familiar and doable — not a whole new world for you to figure out.",
+      "Only count what you actually paid for in the last year — not what you read about or were given for free.",
     supportAndGuidance:
-      "Helps us recommend things that feel familiar and doable — not a whole new world for you to figure out.",
+      "Only count what you actually paid for in the last year — not what you read about or were given for free.",
     comment:
-      "This helps us understand the kinds of support tools and formats you already engage with.",
+      "This tells us what kinds of support you already pay for so your next steps land at a level that fits.",
     howAnswerIsUsed:
-      "This helps us understand the kinds of support tools and formats you already engage with.",
+      "This tells us what kinds of support you already pay for so your next steps land at a level that fits.",
     formatGuidance: "Select all that apply.",
   },
   {
