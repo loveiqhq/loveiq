@@ -7,6 +7,37 @@
 > Each entry names the wrong answer it exists to displace, so nobody deletes it later
 > wondering why it was ever here. Sourced from a 468-question audit on 2026-09-10.
 
+## How many: every count of real activity is live, and is not on this page
+
+Measured 2026-09-11: this page took rank 1 for "how many people bought", "how many
+refunds have we had", "how many signups do we have" and "how many people are on the
+waitlist" — and it holds none of those numbers. Its headings share words with the
+questions; that is all. The correct source scored a full point lower and was pushed
+down the list.
+
+So, plainly: **if the question counts people, payments, reports, emails, invites,
+shares, refunds or anyone on the waitlist, no written page is the answer.** Those
+numbers change hourly. Read them live with `list_product_tables` then
+`query_product_data`, or `get_business_numbers` for revenue, ad spend and the funnel.
+The `analytics` rows ("LoveIQ numbers — …") carry the same figures already summed by
+day, month and all-time, and each one is dated.
+
+Traffic is the one place where two different numbers are both correct, so say which you
+mean. **Our own** visit count is live in the database like everything else
+(`brain_daily_rollup`, or `get_business_numbers`). **Google's** measurement — GA4
+sessions, Search Console clicks and impressions — is not in our database at all; it
+exists only as dated `ga4` and `gsc` rows in the index.
+
+They disagree, and not slightly: for August 2026 our own tracking recorded **11,147
+visits** while GA4 recorded **3,530 sessions** for the same month — GA4 saw about a
+third. Neither is wrong. They count different things (ours counts a returning person
+once per day; GA4 counts sessions), and GA4 is additionally blocked for a share of
+visitors by ad blockers and by consent — the same roughly-one-third coverage measured
+separately for purchases. Quote one, name which, and never add them together.
+
+A number quoted in any other document — this one included — is only what was true when
+someone typed it. Quote it with its date, or go and read the live one.
+
 ## The 14 archetypes: the current names
 
 Sensual Connector · Spark Seeker · Relational Nurturer · Radiant Performer ·
@@ -49,7 +80,7 @@ It held ranks 1, 2 and 4 for "how do refunds work", and nothing about customer r
 appeared at all, so the honest reading of the brain's answer was that LoveIQ has no
 customer refund path.
 
-## How many people have taken the survey
+## Survey submissions: where the completed-survey count lives
 
 The count of completed surveys is in the `analytics` rows, all-time and per month —
 `Signups (completed surveys)`. It is also `survey_submission` in the live database.

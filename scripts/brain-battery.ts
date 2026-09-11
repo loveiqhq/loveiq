@@ -198,6 +198,33 @@ const FIRST_PARTY = new Set(["doc", "notion", "slack", "whatsapp", "drive"]);
 const describe = (h: BrainChunk): string =>
   `${h.source}${h.meta?.section ? `/${String(h.meta.section)}` : ""} "${(h.title ?? "").slice(0, 55)}" @${h.score.toFixed(2)}`;
 
+/**
+ * A COUNT OF REAL ACTIVITY MUST NOT BE ANSWERED BY A WRITTEN PAGE.
+ *
+ * Measured 2026-09-11: `FACTS.md` took rank 1 for "how many people bought" at 3.50
+ * against the `analytics` row that actually holds the number at 2.43 — a full point
+ * ahead, on a question it does not answer. Three more went the same way. Its section
+ * headings ("How many people have taken the survey", "Refunds: what happens to a
+ * customer's money") share words with the question; that is the whole mechanism.
+ *
+ * The fix was not to make it lose. A page that magnetises counting questions should
+ * ANSWER them, so it now carries a signpost saying every such count is live and
+ * naming the tools. This asserts the rank-1 hit is either that signpost or the dated
+ * `analytics` row — never a page that merely sounds like it counts something.
+ */
+const countRoutedLive = (h: BrainChunk[]): string[] => {
+  const top = h[0];
+  if (!top) return ["nothing came back for a counting question"];
+  const isSignpost = /every count of real activity is live/i.test(top.title ?? "");
+  const isDatedFigure = top.source === "analytics" || top.source === "ga4";
+  return isSignpost || isDatedFigure
+    ? []
+    : [
+        `a counting question was answered by ${describe(top)} — neither the live-count ` +
+          `signpost nor a dated analytics row`,
+      ];
+};
+
 function retrievalProbes(): RetrievalProbe[] {
   return [
     {
@@ -456,6 +483,30 @@ function retrievalProbes(): RetrievalProbe[] {
       q: "what has the company been doing",
       limit: 25,
       check: (h) => (h.length >= 20 ? [] : [`asked for 25 on an open question, got ${h.length}`]),
+    },
+    {
+      kind: "count-goes-live-bought",
+      q: "how many people bought",
+      limit: 12,
+      check: countRoutedLive,
+    },
+    {
+      kind: "count-goes-live-refunds",
+      q: "how many refunds have we had",
+      limit: 12,
+      check: countRoutedLive,
+    },
+    {
+      kind: "count-goes-live-signups",
+      q: "how many signups do we have",
+      limit: 12,
+      check: countRoutedLive,
+    },
+    {
+      kind: "count-goes-live-waitlist",
+      q: "how many people are on the waitlist",
+      limit: 12,
+      check: countRoutedLive,
     },
   ];
 }
