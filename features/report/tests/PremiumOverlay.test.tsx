@@ -172,3 +172,93 @@ describe("PremiumOverlay", () => {
     expect(screen.queryByText("Included in")).not.toBeInTheDocument();
   });
 });
+
+/**
+ * The paywall card read as one clickable unit and only its button was wired, so
+ * every tap that missed the button was a pricing view we never got. Measured on
+ * production: `div.report-premium-overlay` tapped dead in 25 sessions, its card
+ * in 15, its offer row in 15, its feature titles and subtitles in 8 each.
+ *
+ * Same defect as the Insight Map rows and the featured card — on the one
+ * surface that decides revenue.
+ */
+describe("the whole paywall overlay activates", () => {
+  function renderOverlay() {
+    const onUnlock = vi.fn();
+    const { container } = render(
+      <PremiumOverlay
+        archetype="Spiritual Lover"
+        sectionTitle="Typical Beliefs"
+        tier="full_report"
+        onUnlock={onUnlock}
+        quote={makeQuote()}
+      />
+    );
+    return { onUnlock, container };
+  }
+
+  it("opens the paywall when the OVERLAY backdrop is tapped", async () => {
+    const { onUnlock, container } = renderOverlay();
+    await userEvent.click(container.querySelector(".report-premium-overlay") as HTMLElement);
+    expect(onUnlock).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens it when the CARD body is tapped", async () => {
+    const { onUnlock, container } = renderOverlay();
+    await userEvent.click(container.querySelector(".report-premium-overlay__card") as HTMLElement);
+    expect(onUnlock).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens it from a feature row — 8 sessions died on exactly this", async () => {
+    const { onUnlock, container } = renderOverlay();
+    const feature =
+      container.querySelector(".report-premium-overlay__feature-title") ??
+      container.querySelector(".report-premium-overlay__features") ??
+      container.querySelector(".report-premium-overlay__head");
+    expect(feature).not.toBeNull();
+    await userEvent.click(feature as HTMLElement);
+    expect(onUnlock).toHaveBeenCalledTimes(1);
+  });
+
+  it("fires EXACTLY ONCE when the CTA itself is tapped — no double modal", async () => {
+    const { onUnlock, container } = renderOverlay();
+    await userEvent.click(container.querySelector(".report-premium-overlay__cta") as HTMLElement);
+    expect(onUnlock).toHaveBeenCalledTimes(1);
+  });
+
+  it("still activates by KEYBOARD on the CTA", async () => {
+    // Removing the button's own onClick must cost keyboard users nothing:
+    // Enter fires a click that bubbles to the overlay.
+    const { onUnlock, container } = renderOverlay();
+    const cta = container.querySelector(".report-premium-overlay__cta") as HTMLElement;
+    cta.focus();
+    expect(document.activeElement).toBe(cta);
+    await userEvent.keyboard("{Enter}");
+    expect(onUnlock).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a tap that carried a text selection", async () => {
+    const { onUnlock, container } = renderOverlay();
+    const spy = vi
+      .spyOn(window, "getSelection")
+      .mockReturnValue({ toString: () => "14-day money-back" } as unknown as Selection);
+    try {
+      await userEvent.click(
+        container.querySelector(".report-premium-overlay__card") as HTMLElement
+      );
+      expect(onUnlock).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("keeps the CTA a real button for screen readers", () => {
+    const { container } = renderOverlay();
+    const cta = container.querySelector(".report-premium-overlay__cta") as HTMLElement;
+    expect(cta.tagName).toBe("BUTTON");
+    // The wrapper must not become a competing interactive element.
+    const overlay = container.querySelector(".report-premium-overlay") as HTMLElement;
+    expect(overlay.getAttribute("role")).toBeNull();
+    expect(overlay.getAttribute("tabindex")).toBeNull();
+  });
+});

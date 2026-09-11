@@ -122,7 +122,31 @@ const PremiumOverlay: FC<Props> = ({ onUnlock, quote = null }) => {
   const pillText = badge ? (saveLabel ? `${badge} · SAVE ${saveLabel}` : badge) : null;
 
   return (
-    <div className="report-premium-overlay">
+    /**
+     * The WHOLE overlay activates, not just the button inside it.
+     *
+     * This is the paywall, so every miss is a pricing view we never got.
+     * Measured on production: readers tapped `div.report-premium-overlay` in 25
+     * sessions, its card in 15, its offer row in 15, and its feature titles and
+     * subtitles in 8 each — all dead, because only the CTA was wired. Same
+     * defect as the Insight Map rows and the featured card, on the one surface
+     * that decides revenue.
+     *
+     * The overlay is `position: absolute; inset: 0` over the locked section, so
+     * this makes tapping a locked chapter anywhere offer to unlock it — which is
+     * already the established behaviour for locked blocks elsewhere.
+     */
+    <div
+      className="report-premium-overlay"
+      onClick={() => {
+        // `.report-page` sets `user-select: none` in production, but
+        // `.report-page--copyable` re-enables it on staging and locally, which
+        // is how the team quotes report copy. A drag that ends inside the card
+        // must not open the paywall.
+        if (typeof window !== "undefined" && window.getSelection()?.toString()) return;
+        onUnlock?.();
+      }}
+    >
       <div className="report-premium-overlay__card">
         <div className="report-premium-overlay__head">
           <div className="report-premium-overlay__icon" aria-hidden="true">
@@ -190,7 +214,12 @@ const PremiumOverlay: FC<Props> = ({ onUnlock, quote = null }) => {
             single "Full Report" pill, so it told the reader nothing and only put a
             step between the guarantees and the CTA. */}
 
-        <button type="button" className="report-premium-overlay__cta" onClick={onUnlock}>
+        {/* No own `onClick`: the overlay owns it. Having both fired `onUnlock`
+            twice, which opens the pricing modal twice. The click still bubbles,
+            so keyboard Enter and Space on this button behave exactly as before
+            (asserted in the tests). Same shape as PatternRow and the featured
+            Insight Map card. */}
+        <button type="button" className="report-premium-overlay__cta">
           Unlock your report
         </button>
       </div>
