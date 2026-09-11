@@ -107,7 +107,30 @@ const HOUSE_TERMS: Array<[RegExp, string]> = [
   // The fourteen types. "archetype" is house vocabulary a new joiner does not have.
   // Measured at rank 7 for "what categories do we sort people into".
   [/\bsort people into\b|\bcategor(?:y|ies)\b[^.]{0,24}\bpeople into\b/i, "archetype"],
+  // A chargeback IS a dispute — a pure synonym, not a fact that can change. Measured:
+  // "what we do when a card gets charged back" found nothing in 30; "how do disputes
+  // work" is rank 1.
+  [/\bcharge[- ]?backs?\b|\bcharged back\b/i, "dispute"],
+  // Where a module lives. Measured: "where does the logger come from" found nothing in
+  // 30 while "where do I import the logger from" is rank 1 — the corpus says
+  // `@shared/observability/logger` and a person says "come from".
+  [
+    /\b(?:where (?:does|do|is)|which (?:file|module))\b[^.]{0,20}\blogger\b/i,
+    "import observability",
+  ],
 ];
+
+/**
+ * DELIBERATELY NOT MAPPED, though both were measured missing.
+ *
+ * "what is the test card number" wants Stripe's 4242 card, and "what do we use to
+ * send email" wants Resend — and in both cases the only word that would bridge the
+ * gap is the VENDOR'S NAME. Every term above maps a person's word to the corpus's
+ * word for the same thing; these would instead paste the ANSWER into the question,
+ * and would silently keep doing so after we changed provider. A wrong answer that
+ * arrives at rank 1 is worse than a right one at rank 8, which is where the email
+ * question already lands.
+ */
 
 /**
  * At most this many added terms.

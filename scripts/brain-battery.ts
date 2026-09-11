@@ -1524,7 +1524,26 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
     }),
 
     // ── DRIVE ────────────────────────────────────────────────────────────────
-    P("dr-b2c", "did we choose B2C or B2B", bodyHas(/B2C/)),
+    /**
+     * THIS PROBE ASSERTED MORE THAN THE TOOL PROMISES, and cost four attempts at
+     * "fixing" a ranking that was never wrong.
+     *
+     * The answer — a meeting note recording the pivot from B2B to B2C — is drive's
+     * THIRD-best hit. At limit 12 the per-source cap gives drive two slots, so it is
+     * cut; at limit 20 drive gets three and it comes back at rank 10. Nothing about
+     * its score changed. Measured across limits 12/20/30, and the top scorer sits
+     * 0.90 above it, so no plausible re-weighting would have moved it either.
+     *
+     * The cap exists so one source cannot fill the result, and the tool ANNOUNCES
+     * what it held back — "1 more from drive … ask again with sources:[…]" — which is
+     * the contract. Asserting that every answer survives a cap designed to drop
+     * things is asserting the cap does not work.
+     *
+     * So this now checks what the system actually guarantees: the answer is reachable
+     * once the cap is not binding. The honesty of the notice is covered separately by
+     * the `heldBack` assertions.
+     */
+    P("dr-b2c", "did we choose B2C or B2B", bodyHas(/B2C/, 20), undefined, 20),
     P("dr-designer", "are we hiring a designer", bodyHas(/designer/i)),
     P("dr-assessment-target", "how many assessment products are we targeting", bodyHas(/\b20\b/)),
     P(

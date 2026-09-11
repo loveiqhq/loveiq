@@ -116,3 +116,26 @@ describe("terms added 2026-09-11, each from a measured miss", () => {
     );
   });
 });
+
+describe("a synonym, never the answer", () => {
+  it("bridges chargeback to dispute and logger to its folder", () => {
+    // Both measured: nothing in 30 results with the plain phrasing, rank 1 with the
+    // corpus's own word.
+    expect(expandBusinessVocabulary("what we do when a card gets charged back")).toContain(
+      "dispute"
+    );
+    expect(expandBusinessVocabulary("where does the logger come from")).toContain("observability");
+  });
+
+  it("refuses to paste a vendor name into the question", () => {
+    /**
+     * "what is the test card number" wants Stripe's 4242 and "what do we use to send
+     * email" wants Resend — and the only bridging word is the VENDOR'S. Every other
+     * term here maps a person's word to the corpus's word for the same thing; these
+     * would paste the ANSWER in, and keep doing it after we changed provider. Left
+     * unmapped on purpose, and this is the test that says so.
+     */
+    expect(expandBusinessVocabulary("what is the test card number")).not.toMatch(/stripe/i);
+    expect(expandBusinessVocabulary("what do we use to send email")).not.toMatch(/resend/i);
+  });
+});
