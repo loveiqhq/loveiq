@@ -210,7 +210,7 @@ export function chunkMarkdown(path, text) {
       last.body.length + seg.body.length + 2 <= TARGET_CHARS &&
       last.body.length < TARGET_CHARS
     ) {
-      last.body += `\n\n${seg.body}`;
+      last.body += seg.heading ? `\n\n${seg.heading}\n${seg.body}` : `\n\n${seg.body}`;
       if (seg.heading && !last.covered.includes(seg.heading)) last.covered.push(seg.heading);
       continue;
     }

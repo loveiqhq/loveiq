@@ -453,3 +453,91 @@ describe("the repo ingester redacts the same things the shared write path does",
     }
   });
 });
+
+/**
+ * A PACKED SECTION'S HEADING WAS SEARCHABLE NOWHERE.
+ *
+ * The chunker splits markdown on headings and then greedily packs consecutive sections
+ * together. A chunk's TITLE carries its first segment's heading; every other section
+ * packed into it kept its body and lost its heading — the words went into `meta.covers`,
+ * which is metadata and is not indexed, so they existed in no searchable field at all.
+ *
+ * Measured 2026-09-11 over 90 markdown files and 509 chunks: 344 headings — two in five —
+ * were reachable by no query. That is why "what is the pre push hook" found nothing while
+ * `### Pre-push hook standard` sat in CLAUDE.md with its body intact, and the same for
+ * `### Build fails with "Module not found"`. A heading is the most question-shaped line a
+ * section has; it is exactly what somebody types.
+ */
+describe("every section heading stays findable after packing", () => {
+  /** The chunker's functions, without the top-level script that talks to the database. */
+  async function loadChunker() {
+    const { readFileSync, writeFileSync, mkdtempSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { tmpdir } = await import("node:os");
+    const src = readFileSync("scripts/brain-ingest-repo.mjs", "utf8").split("\n");
+    const end = src.findIndex((l) => l.startsWith("process.chdir("));
+    expect(end, "the script's top-level execution boundary moved").toBeGreaterThan(0);
+    const dir = mkdtempSync(join(tmpdir(), "chunker-"));
+    const file = join(dir, "chunker.mjs");
+    writeFileSync(file, src.slice(0, end).join("\n"));
+    return (await import(file)) as {
+      chunkMarkdown: (
+        path: string,
+        text: string
+      ) => Array<{ title: string; body: string; meta: { covers?: string[] } }>;
+    };
+  }
+
+  it("keeps a merged section's heading in the body", async () => {
+    const { chunkMarkdown } = await loadChunker();
+    // Two short sections: the second WILL be packed into the first.
+    const doc = [
+      "## First section",
+      "",
+      "Some prose that is comfortably longer than the sixty-character minimum so it stands.",
+      "",
+      "## Pre-push hook standard",
+      "",
+      "Pre-push runs the unit tests only; end-to-end belongs in continuous integration.",
+      "",
+    ].join("\n");
+    const chunks = chunkMarkdown("CLAUDE.md", doc);
+    const merged = chunks.find((c) => c.meta.covers?.includes("Pre-push hook standard"));
+    expect(merged, "the second section was not packed, so this proves nothing").toBeDefined();
+    expect(
+      `${merged!.title} ${merged!.body}`,
+      "a packed section's heading is searchable nowhere"
+    ).toContain("Pre-push hook standard");
+  });
+
+  it("leaves no heading unreachable across the whole repository", async () => {
+    const { chunkMarkdown } = await loadChunker();
+    const { readFileSync } = await import("node:fs");
+    const { execFileSync } = await import("node:child_process");
+    const files = execFileSync("git", ["ls-files", "*.md"], { encoding: "utf8" })
+      .split("\n")
+      .filter(Boolean)
+      .filter((f) => !/^(\.agents|\.claude|\.codeium|docs\/plans|\.source-artifacts)\//.test(f));
+
+    const lost: string[] = [];
+    for (const f of files) {
+      let text: string;
+      try {
+        text = readFileSync(f, "utf8");
+      } catch {
+        continue;
+      }
+      for (const c of chunkMarkdown(f, text)) {
+        for (const h of c.meta.covers ?? []) {
+          // "Architecture" inside ARCHITECTURE.md is dropped from the title on purpose —
+          // the filename already carries the word, and repeating it dilutes the title's
+          // trigram weight. That collapse is deliberate and is the only allowed case.
+          if (c.title.includes(h) || c.body.includes(h)) continue;
+          if (c.title.toLowerCase().includes(h.toLowerCase())) continue;
+          lost.push(`${h} (${f})`);
+        }
+      }
+    }
+    expect(lost, `headings searchable nowhere: ${lost.slice(0, 5).join(", ")}`).toHaveLength(0);
+  });
+});
