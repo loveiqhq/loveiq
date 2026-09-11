@@ -54,27 +54,28 @@ All paired files live in `supabase/rollbacks/` and share the forward migration's
 timestamp with a `_down` suffix. CONCURRENTLY index drops run outside a
 transaction (no `BEGIN/COMMIT`); everything else is wrapped.
 
-| Forward migration                                          | Reverts                                           | Data loss on rollback?                           |
-| ---------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------ |
-| `20260514120000_v9_archetype_renames.sql`                  | 3 archetype display-name renames (data rewrite)   | No (idempotent reverse UPDATE)                   |
-| `20260525120000_data_subject_request_log.sql`              | DROP TABLE (DSAR audit trail)                     | **Yes** — compliance trail; export first         |
-| `20260525120100_system_flags.sql`                          | DROP TABLE (kill switches)                        | Flag state only; features fail-open to enabled   |
-| `20260525120200_scoring_result_config_sha.sql`             | DROP COLUMN + index (config SHA)                  | **Yes** — per-row config hash                    |
-| `20260525120300_report_access_token_expires_at.sql`        | DROP COLUMN (token expiry)                        | Any ops-minted expiries become permanent         |
-| `20260526120000_resend_webhook_event.sql`                  | DROP TABLE (Resend idempotency)                   | Dedup history only; webhook fails-open           |
-| `20260526120100_payment_unique_constraints.sql`            | DROP 2 partial UNIQUE indexes (CONCURRENTLY)      | No (re-opens duplicate-row race)                 |
-| `20260526120200_marketing_opt_in_terms_version.sql`        | DROP COLUMN (consent version)                     | **Yes** — Art. 7(1) consent evidence; export     |
-| `20260526120300_app_user_processing_restricted_at.sql`     | DROP COLUMN + partial index (Art. 18 restriction) | **Yes** — restriction markers; export first      |
-| `20260527120000_payment_personal_report_fk_set_null.sql`   | FK SET NULL → RESTRICT                            | No (existing NULLs not restored)                 |
-| `20260527120100_pg_trgm_admin_search.sql`                  | DROP trgm index (CONCURRENTLY; extension left)    | No (search falls back to seq scan)               |
-| `20260527120200_dsar_cascade_fks.sql`                      | 18 FKs CASCADE → RESTRICT                         | No (cascade-deleted rows not restored)           |
-| `20260527120300_slack_dead_letter.sql`                     | DROP TABLE (Slack DLQ)                            | Replay trail only; delivery unaffected           |
-| `20260911102618_survey_submission_option_order.sql`        | DROP COLUMN (shown option order)                  | **Yes** — recorded display orders, unrecoverable |
-| `20260911151600_answer_option_16011_paid_for.sql`          | DELETE 3 added answer options                     | No — refuses if any answer references them       |
-| `20260911152724_survey_question_16009_priced_choice.sql`   | DELETE question 16009 + options + mapping         | No — refuses if 16009 has answers                |
-| `20260911200000_clear_fantasy_derived_pricing_signals.sql` | Nothing — **PITR restore only**                   | **Yes, by design** — Article 9-derived values    |
-| `20260911200100_survey_question_16011_paid_for_text.sql`   | 16011 question + subinfo back to prior copy       | No (exact prior strings captured)                |
-| `20260911200200_retire_survey_questions_03014_16008.sql`   | status 'retired' → 'active'                       | No (flag only)                                   |
+| Forward migration                                          | Reverts                                           | Data loss on rollback?                                  |
+| ---------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------- |
+| `20260514120000_v9_archetype_renames.sql`                  | 3 archetype display-name renames (data rewrite)   | No (idempotent reverse UPDATE)                          |
+| `20260525120000_data_subject_request_log.sql`              | DROP TABLE (DSAR audit trail)                     | **Yes** — compliance trail; export first                |
+| `20260525120100_system_flags.sql`                          | DROP TABLE (kill switches)                        | Flag state only; features fail-open to enabled          |
+| `20260525120200_scoring_result_config_sha.sql`             | DROP COLUMN + index (config SHA)                  | **Yes** — per-row config hash                           |
+| `20260525120300_report_access_token_expires_at.sql`        | DROP COLUMN (token expiry)                        | Any ops-minted expiries become permanent                |
+| `20260526120000_resend_webhook_event.sql`                  | DROP TABLE (Resend idempotency)                   | Dedup history only; webhook fails-open                  |
+| `20260526120100_payment_unique_constraints.sql`            | DROP 2 partial UNIQUE indexes (CONCURRENTLY)      | No (re-opens duplicate-row race)                        |
+| `20260526120200_marketing_opt_in_terms_version.sql`        | DROP COLUMN (consent version)                     | **Yes** — Art. 7(1) consent evidence; export            |
+| `20260526120300_app_user_processing_restricted_at.sql`     | DROP COLUMN + partial index (Art. 18 restriction) | **Yes** — restriction markers; export first             |
+| `20260527120000_payment_personal_report_fk_set_null.sql`   | FK SET NULL → RESTRICT                            | No (existing NULLs not restored)                        |
+| `20260527120100_pg_trgm_admin_search.sql`                  | DROP trgm index (CONCURRENTLY; extension left)    | No (search falls back to seq scan)                      |
+| `20260527120200_dsar_cascade_fks.sql`                      | 18 FKs CASCADE → RESTRICT                         | No (cascade-deleted rows not restored)                  |
+| `20260527120300_slack_dead_letter.sql`                     | DROP TABLE (Slack DLQ)                            | Replay trail only; delivery unaffected                  |
+| `20260911102618_survey_submission_option_order.sql`        | DROP COLUMN (shown option order)                  | **Yes** — recorded display orders, unrecoverable        |
+| `20260911151600_answer_option_16011_paid_for.sql`          | DELETE 3 added answer options                     | No — refuses if any answer references them              |
+| `20260911152724_survey_question_16009_priced_choice.sql`   | DELETE question 16009 + options + mapping         | No — refuses if 16009 has answers                       |
+| `20260911200000_clear_fantasy_derived_pricing_signals.sql` | Nothing — **PITR restore only**                   | **Yes, by design** — Article 9-derived values           |
+| `20260911200100_survey_question_16011_paid_for_text.sql`   | 16011 question + subinfo back to prior copy       | No (exact prior strings captured)                       |
+| `20260911200200_retire_survey_questions_03014_16008.sql`   | status 'retired' → 'active'                       | No (flag only)                                          |
+| `20260911233000_recover_lost_marketing_opt_in_answers.sql` | Restored 16015 answers + opt-in flags             | **Yes** — removes restored consent; scoped by audit log |
 
 ## Writing a new rollback
 
