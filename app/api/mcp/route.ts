@@ -2682,6 +2682,27 @@ async function callTool(
     if (opts.meta) qs.set("meta", `cs.${JSON.stringify(opts.meta)}`);
     if (learnedSince) qs.set("first_seen_at", `gte.${learnedSince}`);
     /**
+     * `q` WAS ACCEPTED, ECHOED BACK, AND IGNORED.
+     *
+     * Every other filter on this tool reached the query; this one never did. So
+     * browsing narrowed nothing and the header still said so: measured 2026-09-11,
+     * `q: "zzzznotaword"` — a string in no record at all — answered "7605 records
+     * match (q=zzzznotaword)", which is the entire corpus reported as matches. With
+     * `sources:["calendar"]` it claimed 293 matched while `count_context` put the
+     * real figure at 1.
+     *
+     * A filter that silently does nothing is worse than one that errors, and a COUNT
+     * that states the filter it did not apply is worse still — the caller has no way
+     * to see it, and `browse_context` exists precisely to be trusted about totals.
+     *
+     * `plfts` is PostgREST's `plainto_tsquery`, which is exactly what `brain_count`
+     * uses (`c.fts @@ plainto_tsquery('english', …)`), so the two tools now agree on
+     * what "matches" means rather than each having an opinion.
+     */
+    if (typeof args.q === "string" && args.q.trim()) {
+      qs.set("fts", `plfts(english).${args.q.trim().slice(0, 1000)}`);
+    }
+    /**
      * ONE ROW PER DOCUMENT, NOT ONE PER STORED CHUNK.
      *
      * A long document is many rows — the largest call note here is 311 of them — so

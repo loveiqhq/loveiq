@@ -2268,6 +2268,24 @@ function mcpProbes(): McpProbe[] {
     // the linker called from that same cron. If that ordering is ever broken — or the
     // linker stops running — the corpus degrades silently back to two unrelated halves
     // and no search fails to announce it. This is the thing that would notice.
+    // `q` was accepted, echoed into the header, and never reached the query: browsing
+    // for a string in NO record answered "7605 records match", the whole corpus. A
+    // filter that silently does nothing is bad; a count that states the filter it did
+    // not apply is worse, because browse_context exists to be trusted about totals.
+    {
+      kind: "mcp-browse-q-actually-filters",
+      tool: "browse_context",
+      args: { q: "zzzznotawordanywhere", limit: 2 },
+      check: contains("Nothing matches"),
+    },
+    // And the two tools must agree on what "matches" means — browse now uses
+    // PostgREST's plfts, which is the plainto_tsquery brain_count already used.
+    {
+      kind: "mcp-browse-agrees-with-count",
+      tool: "browse_context",
+      args: { q: "pricing", sources: ["calendar"], limit: 2 },
+      check: contains("1 records match"),
+    },
     {
       kind: "mcp-links-present",
       tool: "count_context",
