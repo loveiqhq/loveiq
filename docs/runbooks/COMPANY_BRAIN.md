@@ -413,8 +413,8 @@ permission for every write makes the thing useless. Every call is recorded in
 | `send_email`          | **Drafts by default.** It sends only when explicitly passed `send: true` — the one write that leaves the company and cannot be recalled, so it is the one that needs the extra word |
 
 **Why `record_decision` matters more than it looks.** Decision records are the thing
-the brain exists for and the thing it has least of: four records against a corpus of
-twenty-three thousand chunks. The consequence is measurable — asked "did we choose
+the brain exists for and, measured 2026-09-12 before the miner first ran, the thing it had
+least of: four records against a corpus of twenty-three thousand chunks. The consequence is measurable — asked "did we choose
 B2C or B2B", the only material in the whole corpus is one passage from a job
 interview about bridging both, because nobody ever wrote the decision down. Every
 decision recorded is a question the brain can answer properly instead of guessing at
@@ -1239,9 +1239,11 @@ proven in production.
 ### Decisions are mined out of meeting notes, and marked as reconstructed
 
 The decision record is the best evidence this corpus holds and was the thinnest thing in
-it: **four records against 22,951 chunks**, because it depended on somebody remembering to
-write one. Meanwhile 121 meeting documents carry 356 passages of explicit decision
-language that nobody promoted to a record.
+it. **MEASURED 2026-09-12, before any mining ran: four records against 22,951 chunks**,
+because it depended on somebody remembering to write one — while 121 meeting documents
+carried 356 passages of explicit decision language that nobody had promoted to a record.
+Those are the numbers that motivated this job, not a current count; the current one is
+`count_context` with `sources:["decision"]`.
 
 `/api/cron/brain-mine` reads eight meetings a night and writes what was **settled** in
 them as ordinary decision records. Steady state is about 0.5 meetings a day, so eight is
