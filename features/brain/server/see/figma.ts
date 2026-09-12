@@ -31,15 +31,6 @@ export const MAX_IMAGE_B64 = 1_400_000;
 /** Taller (or wider) than this and no scale keeps the text readable after downscaling. */
 export const MAX_ASPECT = 3;
 
-export interface FigmaNodeBox {
-  id: string;
-  name: string;
-  type: string;
-  width: number;
-  height: number;
-  children: Array<{ id: string; name: string; type: string; width: number; height: number }>;
-}
-
 export type ShowDesignOutcome =
   | { kind: "image"; text: string; data: string; mimeType: string }
   | { kind: "text"; text: string; isError: boolean }

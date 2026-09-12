@@ -2234,6 +2234,21 @@ const both =
     cs.flatMap((c) => c(t));
 
 function mcpProbes(): McpProbe[] {
+  /**
+   * FIFTEEN OF THE SEVENTEEN TOOLS ARE DRIVEN HERE, AND THE TWO THAT ARE NOT ARE
+   * DELIBERATE.
+   *
+   * `record_decision` and `write_to_google_doc` succeed by CHANGING something: a battery
+   * that ran them on every invocation would write a decision record into the corpus and
+   * a document into Drive each time, and the decision record is the one row type the
+   * model is told to trust most. The other three writers are probed only on their
+   * REFUSAL paths — an unknown Slack channel, an unknown Notion parent, an email with no
+   * recipient — which is why they appear.
+   *
+   * Both are covered by mocked unit tests in `features/brain/tests/` with direct
+   * tool-call assertions. If this ratio bothers a future reader: the fix is more unit
+   * coverage, not a live probe that leaves litter behind on every run.
+   */
   return [
     // The roster, which did not exist this morning: "who is the CEO" returned forty
     // chunks about OTHER companies' chief executives, loudest a vendor welcome email.
