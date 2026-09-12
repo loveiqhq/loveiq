@@ -53,12 +53,42 @@ const MOBILE = { width: 390, height: 844 };
  * both are named.
  */
 const SHOTS = [
-  { name: "landing-white", path: "/?variant=white", viewport: VIEWPORT, what: "the landing page, arm `white`, above the fold" },
-  { name: "landing-white-prev", path: "/?variant=white_prev", viewport: VIEWPORT, what: "the landing page, arm `white_prev`, above the fold" },
-  { name: "landing-white-mobile", path: "/?variant=white", viewport: MOBILE, what: "the landing page, arm `white`, on a phone" },
-  { name: "landing-white-prev-mobile", path: "/?variant=white_prev", viewport: MOBILE, what: "the landing page, arm `white_prev`, on a phone" },
-  { name: "survey-intro", path: "/survey", viewport: VIEWPORT, what: "the first thing a visitor sees when starting the assessment" },
-  { name: "survey-intro-mobile", path: "/survey", viewport: MOBILE, what: "the assessment intro on a phone" },
+  {
+    name: "landing-white",
+    path: "/?variant=white",
+    viewport: VIEWPORT,
+    what: "the landing page, arm `white`, above the fold",
+  },
+  {
+    name: "landing-white-prev",
+    path: "/?variant=white_prev",
+    viewport: VIEWPORT,
+    what: "the landing page, arm `white_prev`, above the fold",
+  },
+  {
+    name: "landing-white-mobile",
+    path: "/?variant=white",
+    viewport: MOBILE,
+    what: "the landing page, arm `white`, on a phone",
+  },
+  {
+    name: "landing-white-prev-mobile",
+    path: "/?variant=white_prev",
+    viewport: MOBILE,
+    what: "the landing page, arm `white_prev`, on a phone",
+  },
+  {
+    name: "survey-intro",
+    path: "/survey",
+    viewport: VIEWPORT,
+    what: "the first thing a visitor sees when starting the assessment",
+  },
+  {
+    name: "survey-intro-mobile",
+    path: "/survey",
+    viewport: MOBILE,
+    what: "the assessment intro on a phone",
+  },
   { name: "about", path: "/about", viewport: VIEWPORT, what: "the about page, above the fold" },
   { name: "glossary", path: "/glossary", viewport: VIEWPORT, what: "the glossary index" },
   { name: "trust-zone", path: "/trust-zone", viewport: VIEWPORT, what: "the trust page" },
@@ -113,7 +143,9 @@ async function main() {
         height: shot.viewport.height,
         consentBannerDismissed: true,
       });
-      console.log(`  captured ${shot.name.padEnd(22)} ${shot.viewport.width}x${shot.viewport.height}`);
+      console.log(
+        `  captured ${shot.name.padEnd(22)} ${shot.viewport.width}x${shot.viewport.height}`
+      );
     } catch (err) {
       // A page that fails to capture is REPORTED, never silently absent: a missing shot
       // must read as "we did not get one", not as "that page looks like nothing".
@@ -129,7 +161,9 @@ async function main() {
     join(OUT_DIR, "manifest.json"),
     `${JSON.stringify({ capturedAt: startedAt, origin: ORIGIN, shots: captured }, null, 2)}\n`
   );
-  console.log(`\n  ${captured.length}/${SHOTS.length} captured into public/page-shots at ${startedAt}`);
+  console.log(
+    `\n  ${captured.length}/${SHOTS.length} captured into public/page-shots at ${startedAt}`
+  );
   if (captured.length < SHOTS.length) {
     console.error("  Some pages did not capture — the manifest lists only what succeeded.");
   }

@@ -39,7 +39,6 @@
     "test:e2e": "playwright test",
     "test:visual": "playwright test --project=\"Desktop Chrome\" e2e/visual-regression.spec.ts",
     "typecheck": "tsc --noEmit",
-    "format:check": "prettier --check .",
     "format:fix": "prettier --write .",
     "audit:high": "npm audit --audit-level=high",
     "sbom": "npx --yes @cyclonedx/cyclonedx-npm --ignore-npm-errors --output-file sbom.json",
@@ -122,6 +121,9 @@
       "eslint --fix"
     ],
     "*.{json,md,css,yml,yaml}": [
+      "prettier --write"
+    ],
+    "*.{mjs,cjs,js}": [
       "prettier --write"
     ]
   },
