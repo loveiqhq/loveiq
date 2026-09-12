@@ -2428,6 +2428,84 @@ function mcpProbes(): McpProbe[] {
     },
     {
       /**
+       * `get_predictive_insights` published a 30-day revenue forecast overstated ~4.3x
+       * for six months: no `is_test` filter (41 of 46 succeeded payments in the window
+       * were test), a payment-ATTEMPT success rate multiplied by SUBMISSIONS, EUR
+       * printed as dollars, and `confidence: high` off the contaminated count. Deleted
+       * rather than repaired on 2026-09-12 — a 30-day forecast on five real payments is
+       * not information however carefully the arithmetic is done.
+       *
+       * This asserts the money is gone, not that the function is. The other three
+       * insights are real and stay.
+       */
+      kind: "mcp-no-invented-forecast",
+      tool: "query_product_data",
+      args: { table: "rpc/get_predictive_insights", params: { p_days: 30 } },
+      check: (t: string) =>
+        [
+          t.includes("revenue_forecast") ? "the revenue forecast is back" : null,
+          /\$\s?\d/.test(t) ? "a dollar figure is being reported; this company bills in EUR" : null,
+          t.includes("friction_zone") || t.includes("volume_projection")
+            ? null
+            : "the real insights are gone too — the cut took more than the forecast",
+        ].filter((x): x is string => x !== null),
+    },
+    {
+      /**
+       * The brain held a working Figma credential and no way to learn which file to
+       * point it at: the key lived only in `docs/plans/`, which is excluded from ingest
+       * for a measured ranking reason. It is configuration, so it is printed by
+       * `list_sources` at call time rather than indexed as a document.
+       */
+      kind: "mcp-figma-file-key-visible",
+      tool: "list_sources",
+      args: {},
+      check: (t: string) =>
+        [
+          t.includes("IdxyUUVvJSYRTpI9CYRtJI") ? null : "the Figma file key is not printed",
+          t.includes("Report_4.0") ? null : "the page list is missing, so no frame is findable",
+          // Nothing may advertise a tool this server does not offer.
+          t.includes("show_design") && !t.includes("show_design`")
+            ? "names show_design, which does not exist yet"
+            : null,
+        ].filter((x): x is string => x !== null),
+    },
+    {
+      /**
+       * THE EDGE WAS STORED AND RENDERED BY NOTHING.
+       *
+       * `ingest/link.ts` joins a calendar event to the Gemini notes from that same
+       * meeting and writes the handle onto 1,316 chunks. Until 2026-09-12 it was read
+       * only by a caller who already passed `{"links": [...]}` back in -- a filter you
+       * can only use once you have the id, and the id appeared nowhere.
+       *
+       * `mcp-links-present` does NOT cover this: it counts links in the CORPUS, so it
+       * stays green with the rendering deleted. Two probes, two different failures.
+       *
+       * Drive rather than calendar, and a query rather than a fixed id: 1,233 drive
+       * chunks carry links against 83 calendar ones, and a hardcoded event id rots
+       * because occurrences are per-day.
+       */
+      kind: "mcp-links-rendered",
+      tool: "search_company_context",
+      args: { query: "meeting notes", sources: ["drive"], limit: 6 },
+      check: (t: string) => {
+        const lines = t.split("\n").filter((l) => l.startsWith("linked:"));
+        return [
+          lines.length === 0
+            ? "no `linked:` line rendered, though drive meeting notes carry the edge"
+            : null,
+          lines.length && !lines.some((l) => l.includes("calendar/"))
+            ? "a linked line rendered but points at no calendar event"
+            : null,
+          lines.length && !lines.some((l) => l.includes("fetch_document"))
+            ? "the linked line does not say which tool reads the id"
+            : null,
+        ].filter((x): x is string => x !== null);
+      },
+    },
+    {
+      /**
        * The strategy layer was built and never filled: 13 admin tables at zero rows and
        * two at one row, measured 2026-09-12. `list_product_tables` reads PostgREST's
        * OpenAPI doc, so it advertised all of them — and a model that queries

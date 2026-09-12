@@ -1279,6 +1279,15 @@ export const TOOLS = [
  *
  * `envKey: null` means the API needs no credential (the repo is public).
  */
+/**
+ * The one Figma file every LoveIQ design lives in. Read at call time so it can be
+ * changed in the environment without a deploy, with the real key as the default so an
+ * unset var degrades to "correct" rather than to "broken".
+ */
+export function figmaFileKey(): string {
+  return process.env.FIGMA_FILE_KEY?.trim() || "IdxyUUVvJSYRTpI9CYRtJI";
+}
+
 export const EXTERNAL_SERVICES: Record<
   string,
   {
@@ -1372,9 +1381,32 @@ export const EXTERNAL_SERVICES: Record<
     base: "https://api.figma.com/v1",
     envKeys: ["FIGMA_TOKEN", "FIGMA_ACCESS_TOKEN"],
     auth: { kind: "header", name: "X-Figma-Token" },
+    /**
+     * THE FILE KEY IS CONFIGURATION, NOT A DOCUMENT, and it is printed here because it
+     * was previously unfindable.
+     *
+     * Every LoveIQ design lives in ONE Figma file. Its key appeared in exactly one place
+     * in the repo -- `docs/plans/2026-03-13-survey-redesign.md` -- and `docs/plans/` is
+     * excluded from corpus ingest for a measured reason (plan docs ranked 3rd on four
+     * unrelated questions). So the brain held a working Figma credential and no way to
+     * learn which file to point it at. Un-excluding the directory to fix that would
+     * reintroduce a known ranking harm to publish one constant.
+     *
+     * The env var lets it be changed without a deploy; the literal is the documented
+     * default so an unset var is not an outage.
+     */
     note:
-      "Files, nodes, comments and component metadata for the design system. Figma uses its own " +
-      "header rather than a bearer token.",
+      "Files, nodes, comments and component metadata. Figma uses its own header rather " +
+      "than a bearer token. " +
+      `EVERY LoveIQ DESIGN IS IN ONE FILE, key \`${figmaFileKey()}\` — pages: ` +
+      "Systematic & Architecture, Brand positioning, Website, Legal pages, Survey, " +
+      "Report_2.0, Report_3.0, Report_4.0, Psychograph concepts, Pay to survey, " +
+      "Refer a friend, Share Report. Report_3.0 and Report_4.0 exist in the design and " +
+      "NOT in the code. " +
+      "Start with `/files/<key>?depth=1` (about 9 KB, the page list); a whole page at " +
+      "`depth=2` exceeds the 40,000-character result cap and comes back truncated. " +
+      "`/images/<key>?ids=<node>` returns a URL to a render, which is a LINK and not a " +
+      "picture — nothing here can look at it.",
   },
   trustpilot: {
     base: "https://api.trustpilot.com/v1",
@@ -3832,6 +3864,24 @@ export const MCP_INSTRUCTIONS =
   "'all'. Use `count_context` for how many — it groups by source, by month, by who " +
   "is named, or by any indexed field — and `browse_context` to enumerate a " +
   "category newest-first with paging and a true total.\n\n" +
+  "THIS IS AN ANALYST'S DOOR, NOT ONLY A LIBRARIAN'S. Before writing your own query " +
+  "over raw rows, look at what is already computed: `list_product_tables` lists 44 " +
+  "read-only `get_*` functions that encode the business logic already — among them " +
+  "`get_conversion_funnel` and `get_dropoff_everywhere` for where people leave, " +
+  "`get_question_abandonment_top_n` and `get_question_discrimination` for which survey " +
+  "question is costing you, `get_velocity_percentiles` for how long a purchase takes, " +
+  "`get_answer_conversion_lift` for which answers predict a sale, `get_referral_chains` " +
+  "for the viral coefficient, and `get_archetype_sparklines` for how the mix moves. " +
+  "Two of them, `get_predictive_insights` and `get_automated_insights`, return ranked " +
+  "findings already written in plain English. Call them with `query_product_data` using " +
+  '`table: "rpc/get_conversion_funnel"`. ' +
+  "They are convenient, NOT audited. One of them published a 30-day revenue forecast " +
+  "overstated 4.3x for six months, because it averaged test payments in and no one had " +
+  "cause to read it; it was deleted on 2026-09-12 rather than repaired. Every branch of " +
+  "those functions is wrapped in a swallow-all exception handler, so a wrong one returns " +
+  "a clean-looking answer rather than an error. So: use them to find WHERE to look, and " +
+  "when a number is going to be repeated or acted on, confirm it against " +
+  "`get_business_numbers`, whose definition is the one that reconciles to Stripe.\n\n" +
   "DECISIONS ARE THE POINT OF THIS SERVER, and they are the thinnest thing in it — " +
   "most of what is recorded is a by-product of somebody happening to hold a call " +
   "that was transcribed. So two habits matter more than any search technique. " +

@@ -192,11 +192,37 @@ export function renderSources(
           ? `SUPERSEDED — this decision was replaced by decision/${defence(supersededBy)}. ` +
             `It is kept as history; read the replacement before acting on this.`
           : null;
+      /**
+       * THE EDGE WAS BEING STORED AND RENDERED BY NOTHING.
+       *
+       * `meta.links` joins a calendar event to the Gemini notes from that same meeting
+       * — the event knows who was INVITED, the notes know what was SAID. It is written
+       * onto 1,316 chunks by `ingest/link.ts` and, until now, read only by a caller who
+       * already knew to pass `{"links": [...]}` back in. That is a filter you can only
+       * use if you already have the id, and the id was nowhere in view.
+       *
+       * Printing it puts the handle on the record the reader is already looking at, for
+       * every linked chunk, at the cost of one line. `forAgent` only, like `id:` above:
+       * without the id lines a linked handle is orphaned, and the Slack answer is prose
+       * for a person who cannot call `fetch_document` anyway.
+       *
+       * Defenced per element, like every other quoted field — these are corpus values.
+       */
+      const rawLinks = (c.meta as { links?: unknown } | null)?.links;
+      const linked =
+        opts.forAgent && Array.isArray(rawLinks) && rawLinks.length
+          ? `linked: ${rawLinks
+              .filter((l): l is string => typeof l === "string" && l.length > 0)
+              .slice(0, 5)
+              .map(defence)
+              .join(", ")} (fetch_document reads any of these)`
+          : null;
       const inner = [
         head,
         handle,
         dated,
         relevance,
+        linked,
         safeUrl ? `url: ${safeUrl}` : null,
         replaced,
         "",
