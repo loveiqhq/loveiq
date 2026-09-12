@@ -151,7 +151,7 @@ describe("/api/mcp", () => {
       expect(body.result.serverInfo.name).toBe("loveiq-brain");
     });
 
-    it("lists exactly the sixteen tools, each with a schema", async () => {
+    it("lists exactly the seventeen tools, each with a schema", async () => {
       // Asserted exactly, not with toContain: a tool that disappears from the list
       // is unreachable to every connected Claude, and nothing else would notice.
       const body = await (await POST(rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }))).json();
@@ -169,6 +169,7 @@ describe("/api/mcp", () => {
         "list_product_tables",
         "query_product_data",
         "query_external_service",
+        "related_context",
         "show_design",
         "show_page",
         "list_sources",

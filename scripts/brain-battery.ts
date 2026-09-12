@@ -2428,6 +2428,41 @@ function mcpProbes(): McpProbe[] {
     },
     {
       /**
+       * Scoped by measurement: of four edge kinds designed, three were already reachable
+       * or empty — links are bidirectional AND rendered on every hit since Phase 1,
+       * supersession has zero edges, and fetch_document already reassembles a document's
+       * parts. Only co-occurrence had material (1,011 chunks name 2+ colleagues) and no
+       * path. So this tool does one thing, and says it is a guess.
+       *
+       * A real anchor, because the failure this guards is the whole path breaking. The
+       * first version used `ov.` — an ARRAY operator against a jsonb column — and
+       * PostgREST answered 404, which stayed invisible until a multi-person anchor was
+       * tried, since a record naming one colleague returns before the query runs.
+       */
+      kind: "mcp-related-is-hedged",
+      tool: "related_context",
+      args: {
+        id: "calendar/event:7hnt4vgf20dveisp6as8vv5jum_R20260908T070000@google.com:2026-09-09",
+      },
+      check: (t: string) =>
+        [
+          /possible — shares \d+/.test(t) || t.includes("Nothing else names")
+            ? null
+            : "no result and no explanation of why there is none",
+          t.includes("POSSIBLE connections, not links") || t.includes("Nothing else names")
+            ? null
+            : "co-occurrence is being presented as a link rather than as a guess",
+        ].filter((x): x is string => x !== null),
+    },
+    {
+      kind: "mcp-related-refuses-a-bare-id",
+      tool: "related_context",
+      args: { id: "not-an-id" },
+      check: (t: string) =>
+        t.includes("source/source_id") ? [] : ["a malformed id is not explained"],
+    },
+    {
+      /**
        * `browse_context` over `notice` IS the "what changed" tool, which is the whole
        * argument for storing notices as chunks rather than in a table of their own: a
        * chunk inherits search, paging, dating and filtering that already exist.

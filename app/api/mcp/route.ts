@@ -4,6 +4,7 @@ import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { googleCredentialShape, readVercelOidcToken } from "@shared/http/google-oauth";
 import { renderSources } from "@features/brain/server/answer";
 import { openNotices, renderOpenNotices } from "@features/brain/server/notice";
+import { relatedContext, renderRelated } from "@features/brain/server/related";
 import {
   bucketLength,
   bucketRows,
@@ -1322,6 +1323,37 @@ export const TOOLS = [
         },
       },
       required: ["service", "path"],
+    },
+  },
+  {
+    name: "related_context",
+    title: "What else was happening around this",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "Records from around the same few days that name the same colleagues — the context a " +
+      "meeting, decision or document sat in. " +
+      'Answers what a person filter cannot: `meta:{people:"X"}` gives everything X is ' +
+      "named in, ever; this gives what else was going on THAT WEEK, with these same people, " +
+      "around THIS record. " +
+      "THESE ARE POSSIBLE CONNECTIONS, NOT LINKS. Two colleagues in a room on the same day " +
+      "is a coincidence often enough to matter, so every result prints how many people " +
+      "overlap and how many days apart it is — read those before relying on one. For a " +
+      "connection that is CERTAIN, use the `linked:` id printed on a search hit: that joins " +
+      "a meeting to its own notes and is built deterministically. " +
+      "ONE HOP. Call it again on a result to go further; a two-hop expansion of a " +
+      "well-connected meeting is hundreds of records truncated into a list that reads like " +
+      "the whole neighbourhood and is not.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: {
+          type: "string",
+          description:
+            "`source/source_id`, exactly as search_company_context and browse_context print " +
+            "it on every hit — for example `drive/doc:1AbC` or `calendar/event:…`.",
+        },
+      },
+      required: ["id"],
     },
   },
   {
@@ -3837,6 +3869,31 @@ async function callTool(
     return textResult(`${UNTRUSTED_DATA_PREAMBLE}${externalNote}\n\n${payload}`);
   }
 
+  if (name === "related_context") {
+    const id = typeof args.id === "string" ? args.id.trim() : "";
+    if (!id) {
+      return textResult(
+        "`id` is required: the `source/source_id` printed on every search and browse hit, " +
+          'e.g. {"id": "drive/doc:1AbC"}.',
+        true
+      );
+    }
+    let out;
+    try {
+      out = await relatedContext(id);
+    } catch (err) {
+      logger.error({ err, id }, "brain: related_context failed");
+      return textResult(
+        "Could not look for related records just now. That is a failed read, not a record " +
+          "with nothing around it.",
+        true
+      );
+    }
+    if ("error" in out) return textResult(out.error, true);
+    stats.sourceCount = out.related.length;
+    return textResult(`${UNTRUSTED_SOURCES_PREAMBLE}\n\n${renderRelated(out)}`);
+  }
+
   if (name === "show_design") {
     const svc = EXTERNAL_SERVICES.figma;
     const token = svc?.envKeys.map((k) => process.env[k]).find(Boolean) ?? null;
@@ -4216,6 +4273,12 @@ export const MCP_INSTRUCTIONS =
   "'all'. Use `count_context` for how many — it groups by source, by month, by who " +
   "is named, or by any indexed field — and `browse_context` to enumerate a " +
   "category newest-first with paging and a true total.\n\n" +
+  "TO PUT A RECORD IN CONTEXT, `related_context` takes the id from any hit and returns " +
+  "what else was happening in the same few days with the same people. That is the question " +
+  "a person filter cannot answer — `meta` gives everything somebody is named in, ever, not " +
+  "what surrounded one meeting. Treat its results as POSSIBLE: it prints the overlap and " +
+  "the day gap because two colleagues in a room on one day is often a coincidence. The " +
+  "`linked:` id on a search hit is the certain kind, joining a meeting to its own notes.\n\n" +
   "THINGS THE BRAIN NOTICED WITHOUT BEING ASKED are kept too. When a guardrail moves, or the " +
   "funnel shifts, or yesterday held something worth reading, the job that spotted it " +
   "writes a `notice` — so it is searchable rather than only announced in a Slack channel " +
