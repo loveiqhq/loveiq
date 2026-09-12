@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { googleCredentialShape, readVercelOidcToken } from "@shared/http/google-oauth";
 import { renderSources } from "@features/brain/server/answer";
+import { openNotices, renderOpenNotices } from "@features/brain/server/notice";
 import {
   bucketLength,
   bucketRows,
@@ -311,6 +312,9 @@ export const SOURCES_FOR_TEST = [
   // One row, rebuilt every 15 minutes from the Notion board: what is open, overdue and
   // untouched. Listed here in the commit that creates it.
   "plan",
+  // Written beside the Slack post by the jobs that watch for moves, so what the brain
+  // noticed unprompted is searchable rather than only announced in a channel.
+  "notice",
   "doc",
   "analytics",
   "ga4",
@@ -467,6 +471,15 @@ const CLIENT_INJECTED_ARGS = new Set(["__unparsedToolInput", "truncated"]);
  * `admin_metric_registry` is deliberately ABSENT from this list — it is the one table
  * here that holds definitions rather than an activity log, and it is seeded.
  */
+/**
+ * Sources WRITTEN by this server rather than ingested from somewhere else.
+ *
+ * For these, empty means "nothing happened", not "a job is broken" — and saying the
+ * second when the first is true is the kind of confident wrong statement this file
+ * exists to avoid.
+ */
+const WRITTEN_SOURCES = new Set(["decision", "notice"]);
+
 /** Tools whose results carry pixels, and so are rate-limited far more tightly. */
 const IMAGE_TOOLS = new Set(["show_design", "show_page"]);
 
@@ -2334,6 +2347,20 @@ async function callTool(
           `written record is thin rather than assembling an answer from adjacent material; ` +
           `if one of them plainly does answer it, use it.\n`
         : "";
+    /**
+     * WHAT THE BRAIN NOTICED WITHOUT BEING ASKED.
+     *
+     * The proactive jobs all post to Slack, which does not reach somebody working in
+     * claude.ai — so the brain noticed things and told a channel. This is the same shape
+     * as the prior-decision block below it: prepended, capped, dated, and explicit that
+     * it was posted on a timer rather than matched to the question, so it can be
+     * dismissed without the reader having to work out why it is there.
+     *
+     * Read AFTER the search has already succeeded, and never allowed to cost it — an
+     * addition to a result that is complete without it.
+     */
+    const notices = renderOpenNotices(await openNotices());
+
     const prior = renderPriorDecisions(
       rankedIn.length > 0
         ? rankedIn.map((c) => ({
@@ -2403,7 +2430,7 @@ async function callTool(
       : "";
 
     return textResult(
-      `${UNTRUSTED_SOURCES_PREAMBLE}\n\n${prior}${RESULT_GUIDE}${weakMatch}${shortOfLimit}${heldBack}\n\n${renderSources(chunks, { forAgent: true })}`,
+      `${UNTRUSTED_SOURCES_PREAMBLE}\n\n${notices}${prior}${RESULT_GUIDE}${weakMatch}${shortOfLimit}${heldBack}\n\n${renderSources(chunks, { forAgent: true })}`,
       false,
       "lower the limit, then fetch_document the ids that matter"
     );
@@ -3993,7 +4020,9 @@ async function callTool(
       // and the staleness guidance below would otherwise apply a rule that cannot hold —
       // no decisions recorded lately means nothing was decided, not that anything broke.
       if (source === "decision")
-        return " · written directly by record_decision, not ingested — a gap here means nothing was recorded, not that a job failed";
+        return " · written directly by record_decision and by the decision miner, not ingested — a gap here means nothing was recorded, not that a job failed";
+      if (source === "notice")
+        return " · written by the jobs that watch for moves, not ingested — a gap here means nothing was worth noticing, not that a job failed";
       const cron = CRON_FOR_SOURCE[source];
       if (!cron) return "";
       const run = lastRun.get(cron);
@@ -4011,7 +4040,23 @@ async function callTool(
       );
       if (!newest.ok) return `${source}: could not be read`;
       const total = newest.headers.get("content-range")?.split("/")[1] ?? "?";
-      if (total === "0") return `${source}: 0 chunks — NEVER INGESTED`;
+      /**
+       * NOTHING RECORDED YET IS NOT A BROKEN JOB.
+       *
+       * `NEVER INGESTED` is the right alarm for a source a cron is supposed to be
+       * filling and is not. It is the WRONG one for a source that is WRITTEN rather than
+       * ingested: `notice` is empty on a week when nothing moved, and `decision` was
+       * empty before anybody recorded one. Reporting either as never ingested tells the
+       * reader a job is broken when the honest answer is that there was nothing to say.
+       *
+       * The distinction already existed in the health clause above; the zero case simply
+       * did not use it, so an event-driven source with no events read as a fault.
+       */
+      if (total === "0") {
+        return WRITTEN_SOURCES.has(source)
+          ? `${source}: 0 chunks — nothing recorded yet${health(source)}`
+          : `${source}: 0 chunks — NEVER INGESTED`;
+      }
 
       const rows = (await newest.json().catch(() => [])) as Array<{ period_end?: string | null }>;
       const period = rows?.[0]?.period_end ?? null;
@@ -4171,6 +4216,13 @@ export const MCP_INSTRUCTIONS =
   "'all'. Use `count_context` for how many — it groups by source, by month, by who " +
   "is named, or by any indexed field — and `browse_context` to enumerate a " +
   "category newest-first with paging and a true total.\n\n" +
+  "THINGS THE BRAIN NOTICED WITHOUT BEING ASKED are kept too. When a guardrail moves, or the " +
+  "funnel shifts, or yesterday held something worth reading, the job that spotted it " +
+  "writes a `notice` — so it is searchable rather than only announced in a Slack channel " +
+  'nobody has open. `browse_context` with `sources:["notice"]` and ' +
+  '`order:"recently_learned"` is how you ask what has happened lately. Recent ones are ' +
+  "also prepended to search results in a block that says it was posted on a timer and " +
+  "not matched to your question — if it does not bear on what you are doing, ignore it.\n\n" +
   "WHAT IS OPEN ON THE BOARD is kept as one record, rebuilt every fifteen minutes from " +
   "Notion: every open task, which are overdue, and which have not been touched in three " +
   "weeks, with who each belongs to. Search it for what is slipping rather than counting " +

@@ -3547,6 +3547,7 @@ describe("/api/mcp", () => {
         // prose did not mention at all. A source id that is a common noun needs a phrase
         // only its own description would contain.
         plan: "what is open on the board",
+        notice: "noticed without being asked",
       };
       const sources = (mod as { SOURCES_FOR_TEST?: string[] }).SOURCES_FOR_TEST ?? [];
       expect(sources.length).toBeGreaterThan(0);

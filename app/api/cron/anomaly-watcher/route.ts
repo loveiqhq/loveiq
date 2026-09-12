@@ -26,6 +26,7 @@ import {
 } from "@shared/observability/slack-alert-dedup";
 import { buildAnomalySnapshot } from "@features/admin/server/alerts";
 import { describeBrainHealth, readBrainHealth } from "@features/brain/server/health";
+import { recordNotice } from "@features/brain/server/notice";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -77,6 +78,22 @@ export async function GET(request: Request) {
         text: `:rotating_light: *Anomaly — ${escapeSlack(item.title)}*\n${escapeSlack(item.detail)}${ruleSuffix}\nValue: ${item.value} | Owner: ${item.ownerEmail ?? "unassigned"}`,
         context: { targetKey: item.targetKey, severity: item.severity },
       });
+      /**
+       * THE SAME FINDING, WRITTEN WHERE THE TEAM ACTUALLY READS.
+       *
+       * This alert has always gone to Slack, which does not reach anyone working in
+       * claude.ai. A second SINK beside the post, never a second computation: two jobs
+       * deciding independently what moved would be two sources of truth about one week.
+       * Never allowed to fail the alert — `recordNotice` swallows its own errors.
+       */
+      await recordNotice({
+        headline: `Anomaly: ${item.title}`,
+        detail: `${item.detail}\nValue: ${item.value}. Owner: ${item.ownerEmail ?? "unassigned"}.`,
+        kind: "anomaly-watcher",
+        evidence: item.matchedRules.length
+          ? `Matched rule: ${item.matchedRules[0]!.label}`
+          : undefined,
+      });
       await markSlackAlertDelivered(`anomaly_realtime:${item.targetKey}`, "day", dayKey);
       fired += 1;
     }
@@ -115,6 +132,11 @@ export async function GET(request: Request) {
           username: "ops_alerts",
           text: `:brain: *Brain* — ${escapeSlack(brain)}`,
           context: { ...health },
+        });
+        await recordNotice({
+          headline: `The brain's own health: ${brain.slice(0, 160)}`,
+          detail: brain,
+          kind: "anomaly-watcher",
         });
         await markSlackAlertDelivered("brain_health", "day", dayKey);
       }

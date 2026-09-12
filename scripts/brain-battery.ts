@@ -2428,6 +2428,26 @@ function mcpProbes(): McpProbe[] {
     },
     {
       /**
+       * `browse_context` over `notice` IS the "what changed" tool, which is the whole
+       * argument for storing notices as chunks rather than in a table of their own: a
+       * chunk inherits search, paging, dating and filtering that already exist.
+       *
+       * Asserts the SOURCE IS REACHABLE, not that anything was noticed. Most days
+       * nothing is, and a probe that needed a notice to exist would be red on exactly
+       * the quiet weeks it is meant to reassure about — and the honest empty answer
+       * ("nothing matches this filter, which is what this request selected") is itself
+       * the behaviour worth guarding.
+       */
+      kind: "mcp-notices-are-browsable",
+      tool: "browse_context",
+      args: { sources: ["notice"], order: "recently_learned", limit: 5 },
+      check: (t: string) =>
+        /records match|Nothing matches/.test(t)
+          ? []
+          : ["the notice source is not reachable through browse_context"],
+    },
+    {
+      /**
        * The Notion board is the team's system of record by recorded decision, and every
        * task already carried `state`, `assignee`, `due` and `edited` in the corpus.
        * Nothing read them together, so "what is slipping" was a question the corpus held
