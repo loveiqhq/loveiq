@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ingestAnalytics } from "@features/brain/server/ingest/analytics";
 import { ingestPeople } from "@features/brain/server/ingest/people";
+import { ingestPlan } from "@features/brain/server/ingest/plan";
 import { BACKFILL_DAYS, ingestGa4 } from "@features/brain/server/ingest/google";
 import { ingestSlack } from "@features/brain/server/ingest/slack";
 import { embedMissing } from "@features/brain/server/embed";
@@ -169,6 +170,8 @@ export async function GET(request: Request) {
     // One row, read straight from the person registry. Cheap enough to rebuild every
     // run, and a role correction is then live within the quarter hour.
     await run("people", () => ingestPeople(stampedAt));
+    // Beside the roster and for the same reason: one row, read straight from the board.
+    await run("plan", () => ingestPlan(stampedAt));
     await run("slack", () => ingestSlack(stampedAt, isOutOfTime));
 
     /**

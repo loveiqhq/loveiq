@@ -2428,6 +2428,32 @@ function mcpProbes(): McpProbe[] {
     },
     {
       /**
+       * The Notion board is the team's system of record by recorded decision, and every
+       * task already carried `state`, `assignee`, `due` and `edited` in the corpus.
+       * Nothing read them together, so "what is slipping" was a question the corpus held
+       * the answer to and could not be asked.
+       *
+       * Asserts the CAVEATS and the shape, not the counts — the board changes daily, and
+       * a probe pinned to "4 stale" would go red for a team closing tasks.
+       */
+      kind: "mcp-board-health",
+      tool: "search_company_context",
+      args: { query: "what is open on the board and what has not moved", limit: 6 },
+      check: (t: string) =>
+        [
+          t.includes("tasks are open on the Notion board")
+            ? null
+            : "the board-health record did not come back",
+          t.includes("Past their due date and still open") ? null : "overdue work is not reported",
+          // The definition is the part that makes the number readable: most cards
+          // carrying a past date are simply finished.
+          t.includes("open AND past its date")
+            ? null
+            : "it does not say what `overdue` means, so the count is not interpretable",
+        ].filter((x): x is string => x !== null),
+    },
+    {
+      /**
        * `get_business_numbers` took only "days back from today", and its own description
        * told the caller that comparing two months meant two calls and arithmetic at the
        * call site — every step of which is a chance to be off by one silently.

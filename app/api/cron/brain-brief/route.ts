@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { buildDailyBrief } from "@features/brain/server/brief";
+import { briefLine, planHealth } from "@features/brain/server/plan";
 import { sourceBlocks, toSlackMrkdwn, type BrainSource } from "@features/brain/server/answer";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { notifySlack } from "@shared/observability/slack";
@@ -83,10 +84,34 @@ export async function GET(request: Request) {
     }
 
     const brief = await buildDailyBrief(day);
+
+    /**
+     * WHAT IS SLIPPING, appended to the brief rather than posted on its own.
+     *
+     * `planHealth` reads the Notion board for open work that has not moved in three
+     * weeks and open work past its due date. It is a second sentence on a message that
+     * already exists, not a second message: a channel gains one more thing to mute for
+     * every job that posts into it, and this one is quiet by design anyway — it returns
+     * nothing at all on a day when nothing is slipping.
+     *
+     * Deliberately NOT a reason to post on its own. If the brief found nothing notable,
+     * four stale cards are not the thing worth breaking the silence for; they are still
+     * searchable, because `ingestPlan` writes them as a chunk every fifteen minutes.
+     */
+    const slipping = await planHealth()
+      .then(briefLine)
+      .catch(() => null);
+
     if (!brief) {
       // Claim stays held: a routine day is decided once, not re-litigated.
       await markSlackAlertDelivered("brain_brief", "day", day);
-      return NextResponse.json({ ok: true, day, sent: false, reason: "nothing-notable" });
+      return NextResponse.json({
+        ok: true,
+        day,
+        sent: false,
+        reason: "nothing-notable",
+        slipping: slipping ?? null,
+      });
     }
 
     const sources: BrainSource[] = brief.chunks.map((c, i) => ({
@@ -95,7 +120,9 @@ export async function GET(request: Request) {
       title: c.title,
       url: c.url,
     }));
-    const body = `*What the brain noticed on ${day}*\n\n${toSlackMrkdwn(brief.text)}`;
+    const body =
+      `*What the brain noticed on ${day}*\n\n${toSlackMrkdwn(brief.text)}` +
+      (slipping ? `\n\n${toSlackMrkdwn(slipping)}` : "");
     const blocks = [
       section(body),
       ...sourceBlocks(sources),

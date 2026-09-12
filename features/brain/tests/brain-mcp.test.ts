@@ -3542,6 +3542,11 @@ describe("/api/mcp", () => {
         // the roster removed from the prose entirely. A source whose id is a common noun
         // needs a distinctive phrase here or this guard is vacuous for it.
         people: "who works here",
+        // Same trap as `people`, and it caught nothing the first time: "plan" already
+        // occurred three times in the tools JSON, so this guard passed for a source the
+        // prose did not mention at all. A source id that is a common noun needs a phrase
+        // only its own description would contain.
+        plan: "what is open on the board",
       };
       const sources = (mod as { SOURCES_FOR_TEST?: string[] }).SOURCES_FOR_TEST ?? [];
       expect(sources.length).toBeGreaterThan(0);

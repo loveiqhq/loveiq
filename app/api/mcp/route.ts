@@ -308,6 +308,9 @@ export const SOURCES_FOR_TEST = [
   // Written by `record_decision`, not ingested from anywhere. Listed here in the commit
   // that creates the first one, per the rule below about `jira`.
   "decision",
+  // One row, rebuilt every 15 minutes from the Notion board: what is open, overdue and
+  // untouched. Listed here in the commit that creates it.
+  "plan",
   "doc",
   "analytics",
   "ga4",
@@ -4168,6 +4171,12 @@ export const MCP_INSTRUCTIONS =
   "'all'. Use `count_context` for how many — it groups by source, by month, by who " +
   "is named, or by any indexed field — and `browse_context` to enumerate a " +
   "category newest-first with paging and a true total.\n\n" +
+  "WHAT IS OPEN ON THE BOARD is kept as one record, rebuilt every fifteen minutes from " +
+  "Notion: every open task, which are overdue, and which have not been touched in three " +
+  "weeks, with who each belongs to. Search it for what is slipping rather than counting " +
+  "tasks yourself — individual cards are indexed too, but they cannot tell you that four " +
+  "of them have not moved since June. `overdue` there means open AND past its date: most " +
+  "cards carrying a past date are simply finished.\n\n" +
   "THIS IS AN ANALYST'S DOOR, NOT ONLY A LIBRARIAN'S. Before writing your own query " +
   "over raw rows, look at what is already computed: `list_product_tables` lists 44 " +
   "read-only `get_*` functions that encode the business logic already — among them " +

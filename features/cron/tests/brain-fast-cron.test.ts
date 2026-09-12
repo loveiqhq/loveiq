@@ -26,6 +26,11 @@ vi.mock("@features/brain/server/ingest/slack", () => ({
 vi.mock("@features/brain/server/ingest/people", () => ({
   ingestPeople: vi.fn(async () => ({ source: "people", rows: 1, swept: 0 })),
 }));
+// Added alongside the roster on 2026-09-12. Unmocked it reached the network, and these
+// tests are about how the lane REPORTS results, not about any one ingester.
+vi.mock("@features/brain/server/ingest/plan", () => ({
+  ingestPlan: vi.fn(async () => ({ source: "plan", rows: 1, swept: 0 })),
+}));
 
 // Embedding runs at the end of this lane. Stubbed here so the tests above stay
 // about ingestion; the tests at the bottom of this file drive it directly.
