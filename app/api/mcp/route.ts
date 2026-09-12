@@ -3,6 +3,14 @@ import { NextResponse } from "next/server";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { googleCredentialShape, readVercelOidcToken } from "@shared/http/google-oauth";
 import { renderSources } from "@features/brain/server/answer";
+import { listPageShots, renderPageShot } from "@features/brain/server/see/pages";
+import {
+  DEFAULT_EDGE_PX,
+  MAX_EDGE_PX,
+  listDesign,
+  renderDesign,
+  type ShowDesignOutcome,
+} from "@features/brain/server/see/figma";
 import { redactUrlSecrets } from "@features/brain/server/ingest/upsert";
 import { recordToolCall } from "@features/brain/server/log";
 import { adCostByDay, adCovers, brainDailyRollup } from "@features/brain/server/ingest/analytics";
@@ -210,9 +218,47 @@ export function parseFiltersForTest(filters: unknown[]): { parts: string[]; reje
   return { parts, rejected };
 }
 
+/**
+ * One entry in a tool result. Text or an image; never both in one block.
+ *
+ * The server returned text only until 2026-09-12, so `content` was typed
+ * `{type: string; text: string}` throughout. It has to widen for `show_design` and
+ * `show_page`, and the widening is where the danger is — see `imageResult`.
+ */
+export type ContentBlock =
+  { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
+
 function textResult(text: string, isError = false, advice?: string) {
   return {
-    content: [{ type: "text", text: capWithNotice(text, advice) }],
+    content: [{ type: "text", text: capWithNotice(text, advice) }] as ContentBlock[],
+    isError,
+  };
+}
+
+/**
+ * A result carrying pixels, with the text block FIRST and the images untouched.
+ *
+ * `capWithNotice` MUST NEVER SEE AN IMAGE. Base64 sliced mid-string is a corrupt PNG
+ * that renders as nothing at all — which is this file's founding failure, "data loss
+ * that looks exactly like complete data", in a medium where the `[TRUNCATED: ...]`
+ * notice cannot even be read because it is not text. So the cap is applied to the text
+ * block only, and the size of an image is decided BEFORE it is encoded, by choosing a
+ * render scale. Nothing downstream may slice `data`.
+ *
+ * TEXT FIRST, deliberately. `recordToolCall` reads `content[0].text` to log a refusal
+ * (see the `error:` field in POST), the caller's eye lands there first, and it keeps the
+ * existing cap applying to exactly the block it was written for.
+ */
+function imageResult(
+  text: string,
+  images: Array<{ data: string; mimeType: string }>,
+  isError = false
+) {
+  return {
+    content: [
+      { type: "text", text: capWithNotice(text, "ask for a smaller frame") },
+      ...images.map((i) => ({ type: "image" as const, data: i.data, mimeType: i.mimeType })),
+    ] as ContentBlock[],
     isError,
   };
 }
@@ -411,6 +457,9 @@ const CLIENT_INJECTED_ARGS = new Set(["__unparsedToolInput", "truncated"]);
  * `admin_metric_registry` is deliberately ABSENT from this list — it is the one table
  * here that holds definitions rather than an activity log, and it is seeded.
  */
+/** Tools whose results carry pixels, and so are rate-limited far more tightly. */
+const IMAGE_TOOLS = new Set(["show_design", "show_page"]);
+
 const NEVER_LIST = new Set([
   "admin_strategy_bet",
   "admin_strategy_initiative",
@@ -1234,6 +1283,75 @@ export const TOOLS = [
     },
   },
   {
+    name: "show_design",
+    title: "See a screen from the design file",
+    annotations: { readOnlyHint: true, openWorldHint: true },
+    description:
+      "LOOK AT THE DESIGN, as pixels. Returns a rendered PNG of one frame from LoveIQ's " +
+      "Figma file — an image you can actually see, not a node tree describing one. " +
+      "Call with NO arguments for the page list, then with a page's id for its frames, " +
+      "then with a frame's id to see it. " +
+      "Use it before critiquing a screen: a critique written from JSON is a critique of a " +
+      "data structure, and cannot tell you that two elements collide or that the eye lands " +
+      "in the wrong place. " +
+      "WHAT IT IS NOT: this is what is in Figma, which may be ahead of the code, behind it, " +
+      "or a direction nobody built — Report_3.0 and Report_4.0 exist here and not in the " +
+      "product. `show_page` is what a visitor actually gets. " +
+      "A frame longer than 3:1 is REFUSED with its children offered instead, because a " +
+      "vision model shrinks anything over ~1568px on its longest edge and a tall frame " +
+      "arrives as an unreadable stripe.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        node_id: {
+          type: "string",
+          description:
+            "A page or frame id from this tool's own listing, e.g. '5445:357'. Omit to list " +
+            "the pages. A page id lists its frames; a frame id renders it.",
+        },
+        file_key: {
+          type: "string",
+          description:
+            "Defaults to the one LoveIQ design file, which list_sources names. Pass this only " +
+            "for a different file.",
+        },
+        max_px: {
+          type: "number",
+          description:
+            "Longest edge in pixels, 200-2000, default 1600. Bigger is clamped rather than " +
+            "obeyed: a vision model downscales past about 1568px, so a larger number spends " +
+            "bytes on detail you will not receive.",
+        },
+      },
+    },
+  },
+  {
+    name: "show_page",
+    title: "See what actually shipped",
+    annotations: { readOnlyHint: true, openWorldHint: true },
+    description:
+      "A SCREENSHOT OF A REAL LoveIQ PAGE as a visitor sees it, returned as an image. " +
+      "Call with no arguments to list what has been photographed. " +
+      "This is the counterpart to `show_design`: Figma is the intention, this is the " +
+      "outcome, and they routinely differ. " +
+      "IT IS A PHOTOGRAPH, NOT A LIVE VIEW — every result says the date it was taken, and " +
+      "anything shipped since is not in the picture. A page that is not on the list has no " +
+      "screenshot, which is a gap in what was captured and not a page that looks like " +
+      "nothing. " +
+      "The landing page appears TWICE, as `landing-white` and `landing-white-prev`: those " +
+      "are the two arms of a live A/B and they are different pages, so name the arm in any " +
+      "critique of 'the landing page'.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        page: {
+          type: "string",
+          description: "A name from this tool's own listing, e.g. 'landing-white'. Omit to list.",
+        },
+      },
+    },
+  },
+  {
     name: "list_sources",
     title: "What the brain can and cannot see",
     annotations: { readOnlyHint: true, openWorldHint: false },
@@ -1406,7 +1524,7 @@ export const EXTERNAL_SERVICES: Record<
       "Start with `/files/<key>?depth=1` (about 9 KB, the page list); a whole page at " +
       "`depth=2` exceeds the 40,000-character result cap and comes back truncated. " +
       "`/images/<key>?ids=<node>` returns a URL to a render, which is a LINK and not a " +
-      "picture — nothing here can look at it.",
+      "picture — use `show_design` when you want to SEE a frame.",
   },
   trustpilot: {
     base: "https://api.trustpilot.com/v1",
@@ -3587,6 +3705,90 @@ async function callTool(
     return textResult(`${UNTRUSTED_DATA_PREAMBLE}${externalNote}\n\n${payload}`);
   }
 
+  if (name === "show_design") {
+    const svc = EXTERNAL_SERVICES.figma;
+    const token = svc?.envKeys.map((k) => process.env[k]).find(Boolean) ?? null;
+    if (!token) {
+      // Same wording as query_external_service's credential branch, deliberately: a
+      // missing key is not an empty design file, and the two doors must not disagree.
+      return textResult(
+        `figma is not configured on this deployment (${svc?.envKeys.join(" / ")} unset), so I ` +
+          `cannot read the design. This is a missing credential, not an absent design.`,
+        true
+      );
+    }
+
+    const fileKey =
+      typeof args.file_key === "string" && args.file_key.trim()
+        ? args.file_key.trim()
+        : figmaFileKey();
+    const nodeId = typeof args.node_id === "string" ? args.node_id.trim() : "";
+    const maxPx = intArg(args.max_px, DEFAULT_EDGE_PX, 200, MAX_EDGE_PX);
+
+    let outcome: ShowDesignOutcome;
+    try {
+      if (!nodeId) {
+        outcome = await listDesign(fileKey, token);
+      } else {
+        // A page has children and no meaningful render; a frame has a size worth
+        // rendering. Rendering decides which it is by measuring first, so the caller
+        // does not have to know — except that a page is always too big, which the
+        // aspect check catches and answers with the frame list.
+        outcome = await renderDesign(fileKey, token, nodeId, maxPx);
+        // A page, or a frame too long to render, answers with what is inside it instead
+        // of with an error. Signalled by a `kind`, not by grepping the prose — the first
+        // version matched on "longer than" and so missed pages entirely, which is the
+        // obvious next call after the page list.
+        if (outcome.kind === "list-instead") {
+          const listed = await listDesign(fileKey, token, nodeId);
+          outcome =
+            listed.kind === "text" && !listed.isError
+              ? { ...listed, text: `${outcome.reason}\n\n${listed.text}` }
+              : listed;
+        }
+      }
+    } catch (err) {
+      logger.error({ err, nodeId }, "brain: show_design failed");
+      return textResult(
+        "Could not reach Figma just now. That is a failure to read the design, not a design " +
+          "that is not there.",
+        true
+      );
+    }
+
+    if (outcome.kind === "image") {
+      stats.sourceCount = 1;
+      return imageResult(outcome.text, [{ data: outcome.data, mimeType: outcome.mimeType }]);
+    }
+    if (outcome.kind === "text") return textResult(outcome.text, outcome.isError);
+    // `list-instead` can only survive the block above when the follow-up listing itself
+    // failed. Answering with the reason is still true and still useful; falling through
+    // to nothing would be the empty result this file exists to avoid.
+    return textResult(
+      `${outcome.reason} The list of what is inside it could not be read just now.`,
+      true
+    );
+  }
+
+  if (name === "show_page") {
+    const page = typeof args.page === "string" ? args.page.trim() : "";
+    if (!page) return textResult(listPageShots());
+    let outcome;
+    try {
+      outcome = await renderPageShot(page);
+    } catch (err) {
+      logger.error({ err, page }, "brain: show_page failed");
+      return textResult(
+        "Could not fetch that screenshot just now. That is a failure to read the image, not " +
+          "a page that renders as nothing.",
+        true
+      );
+    }
+    if (outcome.kind === "text") return textResult(outcome.text, outcome.isError);
+    stats.sourceCount = 1;
+    return imageResult(outcome.text, [{ data: outcome.data, mimeType: outcome.mimeType }]);
+  }
+
   if (name === "list_sources") {
     // A FIXED SOURCE LIST, AND EXACT COUNTS.
     //
@@ -3882,6 +4084,15 @@ export const MCP_INSTRUCTIONS =
   "a clean-looking answer rather than an error. So: use them to find WHERE to look, and " +
   "when a number is going to be repeated or acted on, confirm it against " +
   "`get_business_numbers`, whose definition is the one that reconciles to Stripe.\n\n" +
+  "YOU CAN SEE, NOT JUST READ. `show_design` returns a rendered " +
+  "frame from LoveIQ's Figma file as an image — call it with no arguments for the pages, " +
+  "a page id for its frames, a frame id to look at one. Critique a screen from the " +
+  "picture, never from the node tree: a tree tells you a rectangle exists, not that it " +
+  "collides with the text beside it. And what is in Figma is not what shipped — " +
+  "Report_3.0 and Report_4.0 are designed and unbuilt — so `show_page` is the other " +
+  "half: real screenshots of what a visitor actually gets, each carrying the date it was " +
+  "taken. Say which of the two you looked at, and note that the landing page is a live " +
+  "A/B whose two arms are different pages, listed separately.\n\n" +
   "DECISIONS ARE THE POINT OF THIS SERVER, and they are the thinnest thing in it — " +
   "most of what is recorded is a by-product of somebody happening to hold a call " +
   "that was transcribed. So two habits matter more than any search technique. " +
@@ -3926,6 +4137,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Too many requests." }, { status: 429 });
   }
 
+  /**
+   * A SECOND, TIGHTER BUCKET FOR THE TOOLS THAT RETURN PIXELS.
+   *
+   * A text result is a few kilobytes; a render is close to a megabyte. 120 of those a
+   * minute is ~120 MB of egress and a Figma rate-limit that lands on everyone. Checked
+   * here rather than inside the handler because this is where the request — and so the
+   * client IP — actually is. Applied after the body is read, further down, because the
+   * tool name is in the body.
+   */
+
   const body = (await request.json().catch(() => null)) as JsonRpcRequest | null;
   if (!body || typeof body.method !== "string") {
     return rpcError(body?.id ?? null, -32600, "Invalid Request");
@@ -3950,9 +4171,33 @@ export async function POST(request: Request) {
   if (method === "tools/call") {
     const name = typeof params.name === "string" ? params.name : "";
     const args = (params.arguments ?? {}) as Record<string, unknown>;
+
+    // See the note beside the `mcp` bucket above. A tool result, not a 429, so the model
+    // can say what happened rather than seeing a bare transport failure.
+    if (IMAGE_TOOLS.has(name)) {
+      const imgRate = await checkRateLimit(getClientIp(request), {
+        bucket: "mcp-image",
+        limit: 20,
+        windowMs: 60_000,
+      });
+      if (!imgRate.allowed) {
+        return result(id, {
+          content: [
+            {
+              type: "text",
+              text:
+                "Too many renders in the last minute (20/min on the image tools, separate " +
+                "from the 120/min on everything else). This is a limit on this door, not a " +
+                "problem with the design — wait a moment and ask again.",
+            },
+          ],
+          isError: true,
+        });
+      }
+    }
     const started = Date.now();
     const stats: { sourceCount?: number; topScore?: number } = {};
-    let out: { content: Array<{ type: string; text: string }>; isError: boolean };
+    let out: { content: ContentBlock[]; isError: boolean };
     try {
       out = await callTool(name, args, readVercelOidcToken(request), stats);
     } catch (err) {
@@ -4002,7 +4247,11 @@ export async function POST(request: Request) {
         // The refusal text IS the diagnosis -- "rpc/x writes to the database",
         // "path must be a simple path". Storing it is what makes a bad call
         // reproducible without the caller filing a report.
-        error: out.isError ? (out.content[0]?.text ?? "").slice(0, 500) : null,
+        // content[0] is always the text block — see `imageResult`. Narrowed rather
+        // than cast, so an image-first result would log nothing instead of `undefined`.
+        error: out.isError
+          ? (out.content[0]?.type === "text" ? out.content[0].text : "").slice(0, 500)
+          : null,
       })
     );
     return result(id, out);

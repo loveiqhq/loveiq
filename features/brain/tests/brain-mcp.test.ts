@@ -151,7 +151,7 @@ describe("/api/mcp", () => {
       expect(body.result.serverInfo.name).toBe("loveiq-brain");
     });
 
-    it("lists exactly the fourteen tools, each with a schema", async () => {
+    it("lists exactly the sixteen tools, each with a schema", async () => {
       // Asserted exactly, not with toContain: a tool that disappears from the list
       // is unreachable to every connected Claude, and nothing else would notice.
       const body = await (await POST(rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }))).json();
@@ -169,6 +169,8 @@ describe("/api/mcp", () => {
         "list_product_tables",
         "query_product_data",
         "query_external_service",
+        "show_design",
+        "show_page",
         "list_sources",
       ]);
       for (const t of body.result.tools) expect(t.inputSchema.type).toBe("object");
@@ -230,8 +232,9 @@ describe("/api/mcp", () => {
         "posting twice posts twice"
       ).toBe(false);
       /**
-       * `openWorldHint` means the tool reaches something outside our own corpus, and
-       * exactly two do: one reads nine outside services, the other writes into Slack.
+       * `openWorldHint` means the tool reaches something outside our own corpus. Read
+       * the list below rather than a count in this sentence -- it said "exactly two"
+       * while the list held five, which is the sort of number nothing recomputes.
        * Every other tool touches only `brain_chunk` and our own database, and claiming
        * otherwise would tell a client to treat a local read as a call to the internet.
        */
@@ -244,6 +247,8 @@ describe("/api/mcp", () => {
         "post_to_slack",
         "query_external_service",
         "send_email",
+        "show_design",
+        "show_page",
         "write_to_google_doc",
         "write_to_notion",
       ]);
@@ -3087,6 +3092,204 @@ describe("/api/mcp", () => {
         expect(res.isError).not.toBe(true);
       }
     );
+  });
+
+  describe("show_design — the first tool that returns pixels", () => {
+    async function call(args: Record<string, unknown>) {
+      const res = await POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "show_design", arguments: args },
+        })
+      );
+      return (await res.json()).result as {
+        content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
+        isError?: boolean;
+      };
+    }
+
+    /**
+     * A real 1x1 PNG, so the header assertions check a genuine file.
+     *
+     * `bytes()` rather than `PNG.buffer`: Node pools small Buffers, so `.buffer` hands
+     * back the WHOLE pool rather than these bytes. The first version of this test did
+     * exactly that and the mock served the surrounding module source — the assertion
+     * read `696d706f72742068`, which is "import h". A fixture that quietly supplies the
+     * wrong bytes is worse than no fixture, because everything downstream still passes.
+     */
+    const PNG = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      "base64"
+    );
+    const bytes = (b: Buffer): ArrayBuffer =>
+      b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
+    const nodeBody = (w: number, h: number, extra: Record<string, unknown> = {}) => ({
+      nodes: {
+        "1:2": {
+          document: {
+            id: "1:2",
+            name: "Hero",
+            type: "FRAME",
+            absoluteBoundingBox: { width: w, height: h },
+            ...extra,
+          },
+        },
+      },
+    });
+
+    beforeEach(() => {
+      mockFetch.mockReset();
+      process.env.FIGMA_TOKEN = "figd_test";
+    });
+
+    it("returns a text block FIRST and an image block after it", async () => {
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => nodeBody(800, 600) })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ images: { "1:2": "https://s3/x.png" } }),
+        })
+        .mockResolvedValueOnce({ ok: true, status: 200, arrayBuffer: async () => bytes(PNG) });
+      const r = await call({ node_id: "1:2" });
+      expect(r.content[0].type).toBe("text");
+      expect(r.content[1].type).toBe("image");
+      expect(r.content[1].mimeType).toBe("image/png");
+      // Raw base64: no `data:` prefix, no newlines. Either breaks a client silently.
+      expect(r.content[1].data).not.toContain("data:");
+      expect(r.content[1].data).not.toContain("\n");
+      expect(Buffer.from(r.content[1].data!, "base64").subarray(0, 8).toString("hex")).toBe(
+        "89504e470d0a1a0a"
+      );
+    });
+
+    /**
+     * THE MUTATION THE 1x1 FIXTURE COULD NOT CATCH.
+     *
+     * The rule is that `capWithNotice` must never touch an image block. Routing the
+     * image through it and running the suite passed 226/226 — because the fixture above
+     * is a 1x1 PNG of 96 base64 characters, and the cap is 40,000, so slicing it was a
+     * no-op. The test asserted the rule and measured nothing.
+     *
+     * This one is deliberately sized BETWEEN the two ceilings: big enough that the text
+     * cap would cut it, small enough that the image budget allows it. Exact length, not
+     * a header check — a sliced PNG keeps its first eight bytes, so a header assertion
+     * survives the very corruption it is supposed to find.
+     */
+    it("does not let the text cap slice an image that is larger than the text cap", async () => {
+      const big = Buffer.concat([PNG, Buffer.alloc(100_000, 3)]);
+      const expected = big.toString("base64").length;
+      expect(expected).toBeGreaterThan(40_000); // the text ceiling
+      expect(expected).toBeLessThan(1_400_000); // the image budget
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => nodeBody(900, 700) })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ images: { "1:2": "https://s3/x.png" } }),
+        })
+        .mockResolvedValueOnce({ ok: true, status: 200, arrayBuffer: async () => bytes(big) });
+      const r = await call({ node_id: "1:2" });
+      const img = r.content.find((c) => c.type === "image");
+      expect(img?.data).toHaveLength(expected);
+      expect(img?.data).not.toContain("TRUNCATED");
+    });
+
+    /**
+     * THE ONE THAT MATTERS.
+     *
+     * `capWithNotice` exists because a bare slice drops the tail of a result and leaves
+     * something that reads as complete. Base64 sliced mid-string is that failure in a
+     * medium where the `[TRUNCATED: ...]` notice cannot even be read — it is not text,
+     * it is a corrupt PNG that renders as nothing at all. So an oversized image is
+     * REFUSED, and the budget is applied by choosing a render scale BEFORE encoding.
+     *
+     * Asserted as: either there is no image block, or the one present decodes to a valid
+     * PNG. Never a third state.
+     */
+    it("refuses an oversized image rather than slicing it", async () => {
+      const huge = Buffer.alloc(2_000_000, 7);
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => nodeBody(1500, 1200) })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ images: { "1:2": "https://s3/x.png" } }),
+        })
+        .mockResolvedValueOnce({ ok: true, status: 200, arrayBuffer: async () => bytes(huge) });
+      const r = await call({ node_id: "1:2" });
+      const img = r.content.find((c) => c.type === "image");
+      expect(img).toBeUndefined();
+      expect(r.content[0].text).toContain("ceiling");
+      expect(r.content[0].text).toContain("Ask for a child frame");
+    });
+
+    it("refuses a frame too long to survive the client's downscale, and offers its children", async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () =>
+            nodeBody(1440, 11800, {
+              children: [
+                { id: "1:3", name: "Top", absoluteBoundingBox: { width: 1440, height: 900 } },
+              ],
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            nodes: {
+              "1:2": {
+                document: {
+                  name: "Page",
+                  children: [
+                    { id: "1:3", name: "Top", absoluteBoundingBox: { width: 1440, height: 900 } },
+                  ],
+                },
+              },
+            },
+          }),
+        });
+      const r = await call({ node_id: "1:2" });
+      expect(r.content.find((c) => c.type === "image")).toBeUndefined();
+      expect(r.content[0].text).toContain("longer than");
+      expect(r.content[0].text).toContain("1:3");
+    });
+
+    it("says Figma is still rendering, not that the frame is empty", async () => {
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => nodeBody(800, 600) })
+        // Figma returns the node with a null URL while the render is still being made.
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ images: { "1:2": null } }),
+        });
+      const r = await call({ node_id: "1:2" });
+      expect(r.content[0].text).toContain("not finished rendering");
+      expect(r.content[0].text).toContain("not an empty frame");
+    });
+
+    it("calls a rate limit an outage, not an absence", async () => {
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 429 });
+      const r = await call({ node_id: "1:2" });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toContain("rate-limiting");
+      expect(r.content[0].text).toContain("not a design that does not exist");
+    });
+
+    it("reuses the missing-credential wording, so the two doors cannot disagree", async () => {
+      delete process.env.FIGMA_TOKEN;
+      delete process.env.FIGMA_ACCESS_TOKEN;
+      const r = await call({ node_id: "1:2" });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toContain("missing credential");
+      expect(r.content[0].text).toContain("not an absent design");
+    });
   });
 
   describe("query_external_service — read-only gateway", () => {

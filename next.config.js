@@ -21,6 +21,21 @@ const nextConfig = {
    * demand by devtools and by PostHog's backend, never by a visitor's page
    * load, so there is no effect on what users download.
    */
+  /**
+   * `show_page` reads committed screenshots off disk rather than over HTTP.
+   *
+   * Next only bundles what a route IMPORTS, so `public/` is served to browsers but is not
+   * on the filesystem a serverless function sees. The first version fetched them from the
+   * site's own origin instead, which meant the tool depended on NEXT_PUBLIC_SITE_URL --
+   * and that is `http://localhost:3000` in local env, so every local run threw against a
+   * dead server, while a preview deployment would have read production's copy rather than
+   * its own. Tracing the files in removes the network hop and the ambiguity together: each
+   * deployment reads the screenshots it was built with.
+   */
+  outputFileTracingIncludes: {
+    "/api/mcp": ["./public/page-shots/**"],
+  },
+
   productionBrowserSourceMaps: true,
   // `next dev` appends a managed block with its own H1 to CLAUDE.md whenever it
   // detects an AI coding agent. Two H1s fail markdownlint, so the pre-push hook

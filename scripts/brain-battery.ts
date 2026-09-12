@@ -2428,6 +2428,71 @@ function mcpProbes(): McpProbe[] {
     },
     {
       /**
+       * The first tools that return pixels. Until 2026-09-12 every result was text, so a
+       * request to critique a screen could reach the Figma node tree and never the
+       * picture — and a critique of a node tree cannot see that two elements collide.
+       *
+       * A real node id against the real file, because the failure this guards is the
+       * whole path breaking, not the schema drifting.
+       */
+      kind: "mcp-design-renders-pixels",
+      tool: "show_design",
+      args: { node_id: "8146:60462" },
+      check: (t: string) =>
+        [
+          t.includes("rendered at scale") ? null : "no frame was rendered",
+          t.includes("NOT WHAT SHIPPED")
+            ? null
+            : "the result does not say this is the design rather than the product",
+        ].filter((x): x is string => x !== null),
+    },
+    {
+      /**
+       * A page id is a container, not a picture. The first version signalled that by
+       * putting a phrase in the prose and having the route grep for it, which worked for
+       * the too-tall case and silently missed pages — the obvious next call after the
+       * page list. It is a `kind` now.
+       */
+      kind: "mcp-design-page-lists-frames",
+      tool: "show_design",
+      args: { node_id: "5445:357" },
+      check: (t: string) =>
+        [
+          t.includes("frames") ? null : "a page id did not list its frames",
+          t.includes("CANVAS") || t.includes("holds frames")
+            ? null
+            : "a page was reported as a broken frame rather than as a container",
+        ].filter((x): x is string => x !== null),
+    },
+    {
+      /**
+       * What SHIPPED, as distinct from what was designed. Every result carries the date
+       * it was taken: a critique of a page that has changed since is confidently wrong,
+       * and the landing page is a live A/B whose arms are different pages.
+       */
+      kind: "mcp-page-shot-is-dated",
+      tool: "show_page",
+      args: { page: "landing-white" },
+      check: (t: string) =>
+        [
+          t.includes("PHOTOGRAPHED") ? null : "the screenshot carries no date",
+          t.includes("NOT LIVE")
+            ? null
+            : "it does not say a later change is absent from the picture",
+          t.includes("variant=white") ? null : "it does not name which A/B arm was photographed",
+        ].filter((x): x is string => x !== null),
+    },
+    {
+      kind: "mcp-page-shot-unknown-is-a-gap",
+      tool: "show_page",
+      args: { page: "pricing" },
+      check: (t: string) =>
+        t.includes("no screenshot") && t.includes("not a page that looks like nothing")
+          ? []
+          : ["an uncaptured page is not reported as a gap in coverage"],
+    },
+    {
+      /**
        * `get_predictive_insights` published a 30-day revenue forecast overstated ~4.3x
        * for six months: no `is_test` filter (41 of 46 succeeded payments in the window
        * were test), a payment-ATTEMPT success rate multiplied by SUBMISSIONS, EUR
