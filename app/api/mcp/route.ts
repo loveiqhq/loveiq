@@ -634,8 +634,8 @@ export const TOOLS = [
             "`links` JOINS A MEETING TO ITS OWN NOTES. A calendar event and the Gemini " +
             "notes from that same meeting are separate records: the event knows who was " +
             "INVITED, the notes know what was SAID. Pass the id printed on either one — " +
-            '{"links": ["calendar/event:…"]} — to reach the other side. 83 meetings are ' +
-            "joined; a meeting with no recording has none, which is absence of a " +
+            '{"links": ["calendar/event:…"]} — to reach the other side. ' +
+            "A meeting with no recording has none, which is absence of a " +
             "recording and not absence of the meeting. " +
             "DO NOT USE `attendees` TO FIND A PERSON: calendar attendees are raw email " +
             "addresses and one colleague appears under two of them, so filtering it by a " +
@@ -4248,7 +4248,8 @@ export const MCP_INSTRUCTIONS =
   "and page, not just the task board), the team's Slack conversations day by day, the " +
   "company email thread by thread, the WhatsApp team group day by day, the calendar " +
   "of meetings and who attended them, the " +
-  "notes from every recorded call, dated business numbers, who works here and what " +
+  "notes from every recorded call, dated business numbers, Google Analytics traffic by " +
+  "day and by week (sessions, users and channels), who works here and what " +
   "each person does, and decisions written " +
   "down directly with `record_decision`. A decision record is deliberate rather " +
   "than reconstructed from a transcript, so it is the best evidence about the " +
@@ -4376,7 +4377,19 @@ export async function POST(request: Request) {
     windowMs: 60_000,
   });
   if (!rate.allowed) {
-    return NextResponse.json({ error: "Too many requests." }, { status: 429 });
+    return NextResponse.json(
+      {
+        jsonrpc: "2.0",
+        id: null,
+        error: {
+          code: -32000,
+          message:
+            "Too many requests — this server allows 120 calls a minute per client. This is " +
+            "a limit on the door, not a problem with any tool.",
+        },
+      },
+      { status: 429 }
+    );
   }
 
   /**

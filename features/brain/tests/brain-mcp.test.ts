@@ -3531,13 +3531,22 @@ describe("/api/mcp", () => {
         doc: "documentation",
         commit: "commit",
         analytics: "business numbers",
-        ga4: "ga4",
+        // MEASURED 2026-09-12: every bare id below occurred 5-24 times in the tools
+        // JSON for reasons unrelated to its source — `notion` 23, `slack` 24,
+        // `decision` 24 — so this guard passed for each of them whether or not the
+        // prose named the source at all. That is the trap the `people` note describes,
+        // and it was live for six of the fourteen. Each now uses a phrase only its own
+        // description would contain, verified to occur once or twice.
+        ga4: "google analytics",
         gsc: "search console",
         jira: "jira",
-        notion: "notion",
+        notion: "whole notion workspace",
         drive: "call",
         gmail: "email",
-        slack: "slack",
+        slack: "conversations day by day",
+        calendar: "calendar of meetings",
+        whatsapp: "whatsapp team group",
+        decision: "decisions written down directly",
         // NOT the bare id. "people" occurs all over the tools JSON — in count_context's
         // group_by, in the meta filter description — so checking for it passed even with
         // the roster removed from the prose entirely. A source whose id is a common noun

@@ -3043,11 +3043,53 @@ async function checkEveryDocumentedParamDoesSomething(): Promise<string[]> {
     // Big enough to exceed the 1000-char floor `max_chars` is clamped to; a smaller
     // document is already under it and every value looks identical.
     ["fetch_document", { id: "slack/ch:all-loveiq:2026-08-20#2" }, "max_chars", 1000],
+    /**
+     * THE TOOLS ADDED IN PHASES 3 AND 8 WERE MISSING FROM THIS MATRIX, which is the
+     * check that exists precisely to catch a parameter that is accepted and ignored.
+     * A gap here is the same defect as the one it hunts, one level up.
+     *
+     * The image tools are represented by ONE case each: every case costs two calls, and
+     * those two tools share a 20-per-minute bucket with the probes above them.
+     */
+    ["show_page", { page: "landing-white" }, "page", "about"],
+    ["show_design", { node_id: "5445:357" }, "node_id", "10761:4703"],
+    [
+      "related_context",
+      { id: "calendar/event:7hnt4vgf20dveisp6as8vv5jum_R20260908T070000@google.com:2026-09-09" },
+      "id",
+      "calendar/event:7hnt4vgf20dveisp6as8vv5jum_R20260908T070000@google.com:2026-09-10",
+    ],
+    [
+      "query_external_service",
+      { service: "github", path: "/repos/loveiqhq/loveiq" },
+      "path",
+      "/repos/loveiqhq/loveiq/releases",
+    ],
   ];
 
   const issues: string[] = [];
+  /**
+   * ONE BASELINE PER (tool, base), NOT ONE PER CASE.
+   *
+   * Every case used to cost two calls, and most cases share a base — all seven
+   * `search_company_context` cases start from the same `{query:"pricing",limit:6}`. With
+   * the phase-3 and phase-8 tools added, the doubled count pushed a battery run past the
+   * server's own 120-per-minute limit, and the four probes that happened to run last
+   * came back as rate-limit errors: a harness failing on its own volume, reported as if
+   * the tools were broken.
+   */
+  const baseline = new Map<string, Awaited<ReturnType<typeof call>>>();
+  const baselineOf = async (tool: string, base: Record<string, unknown>) => {
+    const key = `${tool}:${JSON.stringify(base)}`;
+    const hit = baseline.get(key);
+    if (hit) return hit;
+    const fresh = await call(tool, base);
+    baseline.set(key, fresh);
+    return fresh;
+  };
+
   for (const [tool, base, param, value] of cases) {
-    const plain = await call(tool, base);
+    const plain = await baselineOf(tool, base);
     const withParam = await call(tool, { ...base, [param]: value });
     // A refusal on either side means the case itself is wrong, and saying so
     // beats reporting "no effect" for a call that never ran.
