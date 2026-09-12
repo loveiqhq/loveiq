@@ -3,6 +3,13 @@ import { NextResponse } from "next/server";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { googleCredentialShape, readVercelOidcToken } from "@shared/http/google-oauth";
 import { renderSources } from "@features/brain/server/answer";
+import {
+  bucketLength,
+  bucketRows,
+  parseComparePeriod,
+  renderComparison,
+  type DayRow,
+} from "@features/brain/server/compare";
 import { listPageShots, renderPageShot } from "@features/brain/server/see/pages";
 import {
   DEFAULT_EDGE_PX,
@@ -1128,10 +1135,29 @@ export const TOOLS = [
           description:
             "YYYY-MM-DD. The first day to return. Use `since`+`until` for a NAMED " +
             "period — 'August' is since 2026-08-01 until 2026-08-31 — rather than " +
-            "counting days back and doing arithmetic. Comparing two months is two " +
-            "calls with two ranges.",
+            "counting days back and doing arithmetic. To compare two periods, pass " +
+            "`compare_to` rather than making two calls and subtracting.",
         },
         until: { type: "string", description: "YYYY-MM-DD, inclusive. Defaults to today." },
+        compare_to: {
+          type: "string",
+          description:
+            "A second period to compare this one against: a range like " +
+            "`2026-08-01..2026-08-31`, or the word `previous` for the equally-long window " +
+            "immediately before `since`. Returns both totals and the difference. " +
+            "Periods of DIFFERENT lengths are allowed and are reported as such — a 31-day " +
+            "month against a 30-day one is not a like-for-like percentage and the answer " +
+            "says so. Needs `since`, since there must be a period to compare.",
+        },
+        granularity: {
+          type: "string",
+          description:
+            "`day` (default), `week` or `month`. About 165 daily rows fit in one answer, so " +
+            "a two-year question truncates at `day` and fits at `month`. The rows are SUMMED, " +
+            "not sampled. A bucket that is not full — the current week on a Wednesday — is " +
+            "labelled partial, and a bucket containing a day GA4 did not cover reports " +
+            "`ad_spend` as unknown rather than summing the days it does have.",
+        },
         days: {
           type: "number",
           description:
@@ -3151,6 +3177,25 @@ async function callTool(
     if (since && until && until < since) {
       return textResult(`\`until\` (${until}) is before \`since\` (${since}).`, true);
     }
+    const compareTo = typeof args.compare_to === "string" ? args.compare_to.trim() : "";
+    if (compareTo && !since) {
+      return textResult(
+        "`compare_to` needs a `since` — there has to be a period for it to be compared " +
+          "against. Give the range you are asking about first.",
+        true
+      );
+    }
+    const granularity =
+      args.granularity === "week" || args.granularity === "month" ? args.granularity : "day";
+    if (
+      args.granularity !== undefined &&
+      !["day", "week", "month"].includes(String(args.granularity))
+    ) {
+      return textResult(
+        `\`granularity\` is \`day\`, \`week\` or \`month\` — "${String(args.granularity)}" is none of them.`,
+        true
+      );
+    }
 
     const today = new Date().toISOString().slice(0, 10);
     /**
@@ -3170,11 +3215,24 @@ async function callTool(
       );
     }
     // Far enough back to reach `since`, inclusive of both ends.
+    /**
+     * The comparison period is usually EARLIER than the one asked about, so the fetch has
+     * to reach back to whichever starts first. Sizing it to `since` alone would return a
+     * comparison period with no rows in it and report that as a quiet month.
+     */
+    const comparison = compareTo
+      ? parseComparePeriod(compareTo, { since, until: until || today })
+      : null;
+    if (comparison && "error" in comparison) return textResult(comparison.error, true);
+    const earliest =
+      comparison && "period" in comparison && comparison.period.since < since
+        ? comparison.period.since
+        : since;
     const asked = since
       ? Math.max(
           1,
           Math.round(
-            (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${since}T00:00:00Z`)) / 86_400_000
+            (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${earliest}T00:00:00Z`)) / 86_400_000
           ) + 1
         )
       : intArg(args.days, 30, 1, 4000);
@@ -3212,6 +3270,54 @@ async function callTool(
       adCovers(ad, r.day) ? { ...r, ad_spend: ad.byDay.get(r.day) ?? 0 } : r
     );
     const covered = inRange.length;
+
+    const withSpend = (r: { day: string }) =>
+      ({ ...(adCovers(ad, r.day) ? { ...r, ad_spend: ad.byDay.get(r.day) ?? 0 } : r) }) as DayRow;
+    // Built once and shared by all three renderings, so the three cannot drift apart.
+    const spendNote =
+      ad.from && ad.to
+        ? `Ad spend is known for ${ad.from} to ${ad.to}; days outside that carry no ` +
+          `ad_spend field, which means unknown, not zero.`
+        : `No ad-spend data is available, so no day carries an ad_spend field.`;
+
+    if (comparison && "period" in comparison) {
+      const other = rows
+        .filter((r) => r.day >= comparison.period.since && r.day <= comparison.period.until)
+        .map(withSpend);
+      return textResult(
+        `${spendNote}\n\n` +
+          renderComparison(
+            { period: { since, until: until || today }, rows: merged.map(withSpend) },
+            { period: comparison.period, rows: other }
+          )
+      );
+    }
+
+    if (granularity !== "day") {
+      const buckets = bucketRows(merged.map(withSpend), granularity);
+      /**
+       * Summed, not sampled, and every caveat the summing introduces is on the row that
+       * carries it: a bucket that is not full says so, and a bucket containing a day GA4
+       * never covered reports spend as unknown rather than adding up the days it has.
+       */
+      const lines = buckets.map((b) => {
+        const notes = [
+          b.partial ? `PARTIAL (${b.days} of ${bucketLength(b.bucket, granularity)} days)` : null,
+          b.uncoveredSpendDays
+            ? `ad_spend unknown (${b.uncoveredSpendDays} day(s) outside GA4's window)`
+            : null,
+        ].filter(Boolean);
+        return (
+          `${b.bucket}  ${JSON.stringify({ ...b.totals, ...(b.adSpend === null ? {} : { ad_spend: b.adSpend }) })}` +
+          (notes.length ? `  — ${notes.join("; ")}` : "")
+        );
+      });
+      return textResult(
+        `${spendNote}\n\n${buckets.length} ${granularity}s from ${covered} days ` +
+          `(${since || "the last " + asked + " days"} to ${until || today}). Days are SUMMED.\n\n` +
+          lines.join("\n")
+      );
+    }
     /**
      * Compact, and cut on a row boundary. Pretty-printing made 131 days cost the
      * whole 40,000-character ceiling, so asking for the full history returned
@@ -3220,11 +3326,7 @@ async function callTool(
      */
     const { text: bodyText, shown } = renderRowsForTest(merged, MAX_RESULT_CHARS - 600);
     stats.sourceCount = shown;
-    const spendNote =
-      ad.from && ad.to
-        ? `Ad spend is known for ${ad.from} to ${ad.to}; days outside that carry no ` +
-          `ad_spend field, which means unknown, not zero.\n\n`
-        : `No ad-spend data is available, so no day carries an ad_spend field.\n\n`;
+    const spendNoteBlock = `${spendNote}\n\n`;
     /**
      * THE CLAMP AND THE CHARACTER CEILING ARE TWO DIFFERENT CUTS, and both have to be
      * said in the SAME sentence because they compose.

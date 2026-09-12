@@ -2428,6 +2428,86 @@ function mcpProbes(): McpProbe[] {
     },
     {
       /**
+       * `get_business_numbers` took only "days back from today", and its own description
+       * told the caller that comparing two months meant two calls and arithmetic at the
+       * call site — every step of which is a chance to be off by one silently.
+       *
+       * The assertion is on the CAVEATS, not the figures: the figures move daily, and
+       * the caveats are what make a comparison readable rather than misleading.
+       */
+      kind: "mcp-compare-periods",
+      tool: "get_business_numbers",
+      args: { since: "2026-08-01", until: "2026-08-31", compare_to: "previous" },
+      check: (t: string) =>
+        [
+          t.includes("2026-07-01") ? null : "`previous` did not resolve to the preceding window",
+          t.includes("versus") ? null : "no comparison was rendered",
+          /[+-]\d/.test(t) ? null : "no deltas were computed",
+        ].filter((x): x is string => x !== null),
+    },
+    {
+      /**
+       * Unequal periods are ALLOWED and must say so. A 31-day month against a 10-day one
+       * is not a like-for-like percentage, and a reader not told will read it as one.
+       */
+      kind: "mcp-compare-unequal-says-so",
+      tool: "get_business_numbers",
+      args: { since: "2026-08-01", until: "2026-08-31", compare_to: "2026-09-01..2026-09-10" },
+      check: (t: string) =>
+        t.includes("DIFFERENT LENGTHS") && t.includes("not like-for-like")
+          ? []
+          : ["two periods of different lengths were compared without saying so"],
+    },
+    {
+      /**
+       * A month that is only partly elapsed, summed against full ones, reads as a
+       * collapse. The current month must be labelled rather than quietly compared.
+       */
+      kind: "mcp-granularity-marks-partial",
+      tool: "get_business_numbers",
+      args: { since: "2026-06-01", granularity: "month" },
+      check: (t: string) =>
+        [
+          t.includes("Days are SUMMED") ? null : "it does not say the days were summed",
+          t.includes("PARTIAL") ? null : "the current, incomplete month is not marked partial",
+        ].filter((x): x is string => x !== null),
+    },
+    {
+      /**
+       * 128,236 behaviour events are readable a thousand rows at a time and unanswerable
+       * that way: "which question do people abandon" is an average over the whole table.
+       */
+      kind: "mcp-event-stats-aggregates",
+      tool: "query_product_data",
+      args: {
+        table: "rpc/get_event_stats",
+        params: { p_table: "survey_behavior_event", p_group_by: "chapter", p_limit: 5 },
+      },
+      check: (t: string) =>
+        [
+          t.includes("bucket") ? null : "no grouped buckets came back",
+          t.includes("median_ms") ? null : "no timing was aggregated",
+        ].filter((x): x is string => x !== null),
+    },
+    {
+      /**
+       * Grouping by an IP or a session produces one bucket per person — user-level data
+       * reshaped, whatever the label says. REFUSED rather than masked: masking the label
+       * would leave the counts and the shape exactly as they were.
+       */
+      kind: "mcp-event-stats-refuses-private",
+      tool: "query_product_data",
+      args: {
+        table: "rpc/get_event_stats",
+        params: { p_table: "survey_behavior_event", p_group_by: "client_ip" },
+      },
+      check: (t: string) =>
+        t.includes("cannot be grouped by") && t.includes("bucket per person")
+          ? []
+          : ["grouping by a private column was not refused"],
+    },
+    {
+      /**
        * The first tools that return pixels. Until 2026-09-12 every result was text, so a
        * request to critique a screen could reach the Figma node tree and never the
        * picture — and a critique of a node tree cannot see that two elements collide.
@@ -2836,6 +2916,22 @@ async function checkEveryDocumentedParamDoesSomething(): Promise<string[]> {
     ["count_context", {}, "meta", { people: "Mark Oldenburg" }],
     ["get_business_numbers", { days: 30 }, "days", 3],
     ["get_business_numbers", {}, "since", "2026-08-01"],
+    [
+      "get_business_numbers",
+      { since: "2026-08-01", until: "2026-08-31" },
+      "compare_to",
+      "previous",
+    ],
+    ["get_business_numbers", { since: "2026-06-01" }, "granularity", "month"],
+    [
+      "query_product_data",
+      {
+        table: "rpc/get_event_stats",
+        params: { p_table: "survey_behavior_event", p_group_by: "chapter" },
+      },
+      "params",
+      { p_table: "survey_behavior_event", p_group_by: "q_id" },
+    ],
     ["get_business_numbers", { since: "2026-08-01" }, "until", "2026-08-15"],
     ["list_product_tables", {}, "match", "payment"],
     // The live half. `filters` is the one that would hurt most if it were dropped:
