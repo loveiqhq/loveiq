@@ -47,6 +47,11 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   // anyone noticing, which is exactly why it is watched: it records a run every
   // day whether or not it says anything.
   "brain-brief": 26 * 3_600_000,
+  // Daily, and silent like the brief: it posts nothing to Slack at all, so a dead miner
+  // looks exactly like a fortnight of quiet meetings. Watched for the same reason — it
+  // records a run every night whether or not it found a decision, and the thing it is
+  // building, the decision record, is the corpus's thinnest and most valuable material.
+  "brain-mine": 26 * 3_600_000,
 };
 
 /**

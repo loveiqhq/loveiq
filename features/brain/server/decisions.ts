@@ -236,6 +236,9 @@ export interface PriorDecision {
   sourceId: string;
   title: string | null;
   decidedOn: string | null;
+  /** Read out of meeting notes rather than written down by a person. Rendered, because
+   *  the interjection is where a false positive is most expensive. */
+  mined?: boolean;
 }
 
 /**
@@ -278,10 +281,18 @@ export async function priorDecisions(question: string): Promise<PriorDecision[]>
       title: string | null;
       period_end: string | null;
       score: number;
+      // Returned by brain_search and simply not declared here before; retrieve.ts has
+      // always read it off the same rows.
+      meta: Record<string, unknown> | null;
     }>;
     return rows
       .filter((r) => Number(r.score) >= PRIOR_DECISION_FLOOR)
-      .map((r) => ({ sourceId: r.source_id, title: r.title, decidedOn: r.period_end }));
+      .map((r) => ({
+        sourceId: r.source_id,
+        title: r.title,
+        decidedOn: r.period_end,
+        mined: (r.meta as { origin?: unknown } | null)?.origin === "mined",
+      }));
   } catch (err) {
     // Never allowed to cost the answer. This is an addition to a result that is already
     // complete without it.
@@ -300,7 +311,11 @@ export function renderPriorDecisions(found: PriorDecision[]): string {
         // says as much. Stripped here rather than in the lookup, so a decision that
         // ranked into the results and one that had to be looked up render identically.
         `  • ${String(d.title ?? "(untitled)").replace(/^Decision:\s*/, "")}` +
-        `${d.decidedOn ? ` (decided ${d.decidedOn})` : ""}\n    id: decision/${d.sourceId}`
+        `${d.decidedOn ? ` (decided ${d.decidedOn})` : ""}` +
+        // A mined decision is the notes' account of what was settled, not a person
+        // writing it down. Unmarked, this block would assert the stronger of the two.
+        `${d.mined ? " — reconstructed from call notes, not written down by a person" : ""}` +
+        `\n    id: decision/${d.sourceId}`
     )
     .join("\n");
   return (

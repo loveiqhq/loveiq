@@ -61,9 +61,16 @@
     {
       "path": "/api/cron/brain-drive",
       "schedule": "52 * * * *"
+    },
+    {
+      "path": "/api/cron/brain-mine",
+      "schedule": "40 5 * * *"
     }
   ],
   "functions": {
+    "app/api/cron/brain-mine/route.ts": {
+      "maxDuration": 300
+    },
     "app/api/stripe/webhook/route.ts": {
       "maxDuration": 60
     },

@@ -1236,6 +1236,57 @@ the same as "as fast as possible".
 15-minute slots (`7,22,37,52`) are unchanged, so the cadence is the one already
 proven in production.
 
+### Decisions are mined out of meeting notes, and marked as reconstructed
+
+The decision record is the best evidence this corpus holds and was the thinnest thing in
+it: **four records against 22,951 chunks**, because it depended on somebody remembering to
+write one. Meanwhile 121 meeting documents carry 356 passages of explicit decision
+language that nobody promoted to a record.
+
+`/api/cron/brain-mine` reads eight meetings a night and writes what was **settled** in
+them as ordinary decision records. Steady state is about 0.5 meetings a day, so eight is
+roughly 16x headroom and drains a backlog on its own — the initial 121 take about a
+fortnight, because the model runs on a free tier that is rate-limited by request.
+
+**Every mined record says it was reconstructed.** The server's instructions promise that a
+decision record is "deliberate rather than reconstructed from a transcript", so mining
+would break that promise silently. Mined rows carry `meta.origin = "mined"`, render a
+`RECONSTRUCTED —` line in search results, and are marked in the prior-decision
+interjection, which is where a false positive costs most.
+
+**What keeps it honest.** The model must return a `quote`: a verbatim span from the notes.
+It is checked with a string comparison after the call and the candidate is dropped if the
+span is not really there — a fabricated decision cannot produce a real quote, so this
+catches invention completely, and it is not an instruction the model may choose to ignore.
+Three more gates: `settled: false` is discarded rather than recorded as a weaker decision,
+at most three per meeting (a call that settled nine things settled none), and `topic` is
+forced into a closed set so ordering decisions within a topic cannot silently split across
+"pricing" / "price" / "pricing-test".
+
+**The bookkeeping is a table, not a chunk.** `brain_mine_log` records which meetings have
+been read. The first design used a tombstone row in `brain_chunk` under its own source,
+on the reasoning that a new source is invisible to everything already written. It is not:
+`list_sources` can be taught to ignore one, but `brain_search` searches every source by
+default and returned it — 121 rows titled "Scanned for DECISIONS" surfacing on exactly the
+word the decision record exists to answer.
+
+**PRECISION IS GRADED ON n=2, NOT n=20 — finish this before trusting it broadly.** The
+one meeting mined live produced two genuine decisions with valid quotes and dropped
+nothing. That is encouraging and it is not a measurement. Read a night's output and check
+four things per record: is it a decision, is it OURS rather than a vendor's or a
+customer's, is the date right, and is the quote real.
+
+```bash
+# What the miner has written, newest first, with the span it claims to be quoting.
+curl -s "$SUPABASE_URL/rest/v1/brain_chunk?select=title,period_end,meta&source=eq.decision\
+&meta->>origin=eq.mined&order=period_end.desc&limit=20" \
+  -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+  | python3 -m json.tool
+```
+
+Record the score and the date here when it is done. Ship broadly at 18 of 20 or better;
+below that, raise `MINER_VERSION` and change the prompt rather than accepting the rate.
+
 ### A cron that stops firing now alerts
 
 Every alert in the cron routes lives inside the route body, so the one failure

@@ -217,11 +217,34 @@ export function renderSources(
               .map(defence)
               .join(", ")} (fetch_document reads any of these)`
           : null;
+      /**
+       * SAY WHEN A DECISION WAS RECONSTRUCTED RATHER THAN WRITTEN DOWN.
+       *
+       * This server's own instructions promise that "a decision record is deliberate
+       * rather than reconstructed from a transcript, so it is the best evidence about the
+       * thing it actually decides". Mining decisions out of meeting notes — which is how
+       * the record goes from four entries to hundreds — silently breaks that promise for
+       * every consumer unless the difference is on the record itself.
+       *
+       * It matters most in the pressure-tester case, where a false positive is most
+       * expensive. "We decided the opposite in June" is a strong claim; "the call notes
+       * from 12 June record deciding the opposite" is a weaker one, and true.
+       *
+       * Beside `SUPERSEDED` in the head block, above the body, for the same reason: a
+       * reader who stops early must still see it.
+       */
+      const mined = (c.meta as { origin?: unknown } | null)?.origin === "mined";
+      const reconstructed = mined
+        ? `RECONSTRUCTED — this decision was read out of meeting notes, not written down ` +
+          `by a person. It is the notes' account of what was settled, and quotes the line ` +
+          `it came from.`
+        : null;
       const inner = [
         head,
         handle,
         dated,
         relevance,
+        reconstructed,
         linked,
         safeUrl ? `url: ${safeUrl}` : null,
         replaced,
