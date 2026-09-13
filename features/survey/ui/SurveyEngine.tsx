@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef, type FC } from "react";
 import { surveyQuestions } from "@/data/survey-data";
+import { isHidden } from "@features/survey/questionFlags";
 import { useSurveyState, type AnswerValue } from "./hooks/useSurveyState";
 import SurveyHeader from "./SurveyHeader";
 import SurveyNav from "./SurveyNav";
@@ -55,6 +56,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     progress,
     setAnswer,
     getAnswer,
+    getLatestAnswers,
     setCurrentIndex,
   } = useSurveyState();
   const {
@@ -102,7 +104,10 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   // Joined into a string so the memo key is stable across re-renders.
   const prefilledKey = prefilled.join(",");
   const orderedQuestions = useMemo(
-    () => orderEmailLast(surveyQuestions).filter((q) => !prefilledKey.split(",").includes(q.qId)),
+    () =>
+      orderEmailLast(surveyQuestions)
+        .filter((q) => !isHidden(q.qId))
+        .filter((q) => !prefilledKey.split(",").includes(q.qId)),
     [prefilledKey]
   );
   const totalQuestions = orderedQuestions.length;
@@ -288,8 +293,17 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
       hasCompleted.current = true;
       trackNavigation("complete");
       const duration = Date.now() - new Date(startedAt).getTime();
+      /**
+       * Reported here, once. A second emitter used to live in
+       * `useSubmitSurvey` — see the note there — which double-counted every
+       * completion. This path is the one that survives because it reaches GA4
+       * as well as PostHog.
+       */
       trackSurveyComplete(duration, totalQuestions);
-      submitSurvey(answers, startedAt, utmTracker);
+      // `getLatestAnswers()`, never the `answers` closure: on the last question the
+      // answer and this submit are two clicks apart, and the closure can predate the
+      // first of them. See the note in useSurveyState.
+      submitSurvey(getLatestAnswers(), startedAt, utmTracker);
       goTo(totalQuestions); // one past the end → triggers completion
       return;
     }
@@ -307,7 +321,11 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     question,
     goTo,
     submitSurvey,
-    answers,
+    // `answers` is deliberately NOT a dependency. Nothing in this callback reads it any
+    // more, and leaving it out is what makes `goNext` stable across answer changes — so
+    // the auto-advance timer's captured copy is the same function and still reads fresh
+    // answers through getLatestAnswers().
+    getLatestAnswers,
     trackNavigation,
     isEmailValid,
     isSelectionCountValid,

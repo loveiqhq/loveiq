@@ -7,6 +7,14 @@ interface SupabaseFetchOptions {
   method?: string;
   body?: string;
   headers?: Record<string, string>;
+  /**
+   * Override the 8s default. Needed for the few endpoints whose cost is
+   * SERVER-side generation rather than transfer — PostgREST builds its 490 KB
+   * OpenAPI document from the schema on every request, which reliably exceeds 8s
+   * from a Vercel function even though it is fast from a laptop. Keep the default
+   * everywhere else: a slow query should fail, not hang.
+   */
+  timeoutMs?: number;
 }
 
 /**
@@ -36,7 +44,7 @@ export async function supabaseFetch(
         ...headers,
       },
       body,
-      timeoutMs: TIMEOUT_MS,
+      timeoutMs: options.timeoutMs ?? TIMEOUT_MS,
     })
   );
 }

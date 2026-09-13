@@ -1,0 +1,326 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@shared/observability/logger", () => ({
+  default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}));
+
+/**
+ * Points at GA4, not Drive. Drive left this lane on 2026-08-31 — once it started
+ * impersonating a person it walked the whole company Drive and took the job past
+ * its 60s ceiling — so a Drive mock here would simply never be called.
+ */
+const mockIngest = vi.fn();
+vi.mock("@features/brain/server/ingest/google", () => ({
+  ingestGa4: (...a: unknown[]) => mockIngest(...(a as [])),
+}));
+
+let prodHost = true;
+// The other two sources in this lane. They are stubbed to a healthy no-op so each
+// test isolates the behaviour it names; a real call here would alert and mask it.
+vi.mock("@features/brain/server/ingest/analytics", () => ({
+  ingestAnalytics: vi.fn(async () => ({ source: "analytics", rows: 177, swept: 0 })),
+}));
+vi.mock("@features/brain/server/ingest/slack", () => ({
+  ingestSlack: vi.fn(async () => ({ source: "slack", rows: 526, swept: 0 })),
+}));
+vi.mock("@features/brain/server/ingest/people", () => ({
+  ingestPeople: vi.fn(async () => ({ source: "people", rows: 1, swept: 0 })),
+}));
+// Added alongside the roster on 2026-09-12. Unmocked it reached the network, and these
+// tests are about how the lane REPORTS results, not about any one ingester.
+vi.mock("@features/brain/server/ingest/plan", () => ({
+  ingestPlan: vi.fn(async () => ({ source: "plan", rows: 1, swept: 0 })),
+}));
+
+// Embedding runs at the end of this lane. Stubbed here so the tests above stay
+// about ingestion; the tests at the bottom of this file drive it directly.
+let embedResult: { embedded: number; remaining: number; complete: boolean } = {
+  embedded: 0,
+  remaining: 0,
+  complete: true,
+};
+let embedThrows = false;
+const embedCalls: Array<{
+  maxBatches: number | undefined;
+  opts: { attempts?: number; timeoutMs?: number } | undefined;
+}> = [];
+vi.mock("@features/brain/server/embed", () => ({
+  embedMissing: vi.fn(
+    async (
+      _isOutOfTime: unknown,
+      maxBatches?: number,
+      opts?: { attempts?: number; timeoutMs?: number }
+    ) => {
+      embedCalls.push({ maxBatches, opts });
+      if (embedThrows) throw new Error("edge worker refused");
+      return embedResult;
+    }
+  ),
+}));
+
+vi.mock("@shared/http/is-prod-cron-host", () => ({ isProdCronHost: () => prodHost }));
+
+let authOk = true;
+const claims: string[] = [];
+let claimGranted = true;
+const marked: string[] = [];
+const recorded: Array<{ name: string; status: string; error?: string }> = [];
+vi.mock("@shared/observability/slack-alert-dedup", () => ({
+  verifyCronAuth: () => authOk,
+  startCronTimer: () => async () => {},
+  recordCronRun: async (name: string, _s: number, status: string, error?: string) => {
+    recorded.push({ name, status, error });
+  },
+  tryClaimSlackAlert: async (key: string) => {
+    claims.push(key);
+    return claimGranted;
+  },
+  markSlackAlertDelivered: async (key: string) => {
+    marked.push(key);
+  },
+}));
+
+const notified: Array<{ channel: string; text: string }> = [];
+vi.mock("@shared/observability/slack", () => ({
+  notifySlack: async (i: { channel: string; text: string }) => {
+    notified.push(i);
+  },
+  escapeSlack: (s: string) => s,
+}));
+
+import { GET } from "@/app/api/cron/brain-fast/route";
+
+const req = () => new Request("https://www.loveiq.org/api/cron/brain-fast");
+
+describe("/api/cron/brain-fast", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    claims.length = 0;
+    marked.length = 0;
+    notified.length = 0;
+    recorded.length = 0;
+    authOk = true;
+    prodHost = true;
+    claimGranted = true;
+    mockIngest.mockResolvedValue({ source: "ga4", rows: 3, swept: 0 });
+  });
+
+  it("refuses an unauthenticated request", async () => {
+    authOk = false;
+    expect((await GET(req())).status).toBe(401);
+    expect(mockIngest).not.toHaveBeenCalled();
+  });
+
+  it("does nothing on a non-production host, because both share one database", async () => {
+    // Without this the staging deployment would double-write every 15 minutes.
+    prodHost = false;
+    const body = await (await GET(req())).json();
+    expect(body.skipped).toBe(true);
+    expect(mockIngest).not.toHaveBeenCalled();
+  });
+
+  it("does NOT alert for a source that simply is not set up yet", async () => {
+    // The expected state until somebody adds the property id. Alerting would page
+    // 96 times a day for a source nobody has enabled. (`drive-nothing-shared` used
+    // to be the example here; Drive moved to its own hourly job on 2026-08-31.)
+    mockIngest.mockResolvedValue({
+      source: "ga4",
+      rows: 0,
+      swept: 0,
+      skipped: "ga4-no-property-id",
+    });
+    const body = await (await GET(req())).json();
+    expect(body.ok).toBe(true);
+    expect(notified).toHaveLength(0);
+    expect(recorded[0].status).toBe("success");
+  });
+
+  it("does NOT alert when the credential is simply unconfigured", async () => {
+    mockIngest.mockResolvedValue({
+      source: "drive",
+      rows: 0,
+      swept: 0,
+      skipped: "google-not-configured",
+    });
+    await GET(req());
+    expect(notified).toHaveLength(0);
+  });
+
+  it("DOES alert on an unexpected skip, and marks the claim delivered", async () => {
+    // Unmarked claims were a real bug in the sibling cron: the row stayed
+    // delivered=false and the stale-reclaim path re-fired on the next run.
+    mockIngest.mockResolvedValue({
+      source: "drive",
+      rows: 0,
+      swept: 0,
+      skipped: "drive-list-failed",
+    });
+    const body = await (await GET(req())).json();
+    expect(body.ok).toBe(false);
+    expect(notified).toHaveLength(1);
+    expect(notified[0].text).toContain("drive-list-failed");
+    expect(marked).toEqual(claims);
+    expect(recorded[0].status).toBe("error");
+  });
+
+  it("alerts once per day, not once per run", async () => {
+    mockIngest.mockResolvedValue({
+      source: "drive",
+      rows: 0,
+      swept: 0,
+      skipped: "drive-list-failed",
+    });
+    claimGranted = false; // the day's claim is already taken
+    await GET(req());
+    expect(notified).toHaveLength(0);
+    expect(recorded[0].status).toBe("error"); // still recorded, just not re-posted
+  });
+
+  it("returns 200 on a thrown error so Vercel does not retry a job that will fail again", async () => {
+    mockIngest.mockRejectedValue(new Error("ga4 exploded"));
+    const res = await GET(req());
+    expect(res.status).toBe(200);
+    expect((await res.json()).ok).toBe(false);
+    expect(recorded[0].status).toBe("error");
+    expect(notified[0].text).toContain("ga4 exploded");
+  });
+
+  it("records the run even when it throws", async () => {
+    mockIngest.mockRejectedValue(new Error("boom"));
+    await GET(req());
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0].name).toBe("brain-fast");
+  });
+});
+
+describe("the OIDC token goes only where Google is actually called", () => {
+  /**
+   * The token is a REQUEST HEADER, not an env var — reading it from process.env is
+   * what made keyless auth fail silently in production with `oidc=0`. GA4 needs
+   * it; analytics and slack must not be handed a Google credential they have no
+   * use for.
+   */
+  it("hands it to ga4 and to nothing else in this lane", async () => {
+    const { ingestAnalytics } = await import("@features/brain/server/ingest/analytics");
+    const { ingestSlack } = await import("@features/brain/server/ingest/slack");
+    mockIngest.mockResolvedValue({ source: "ga4", rows: 1, swept: 0 });
+    await GET(
+      new Request("https://www.loveiq.org/api/cron/brain-fast", {
+        headers: { "x-vercel-oidc-token": "vercel.oidc.jwt" },
+      })
+    );
+    const ga4Call = mockIngest.mock.calls.at(-1)!;
+    expect(ga4Call).toContain("vercel.oidc.jwt");
+    for (const fn of [ingestAnalytics, ingestSlack]) {
+      for (const call of vi.mocked(fn).mock.calls) {
+        expect(call).not.toContain("vercel.oidc.jwt");
+      }
+    }
+  });
+});
+
+describe("brain-fast embeds the chunks it just ingested", () => {
+  beforeEach(() => {
+    authOk = true;
+    prodHost = true;
+    claimGranted = true;
+    embedThrows = false;
+    embedResult = { embedded: 4, remaining: 0, complete: true };
+    embedCalls.length = 0;
+    notified.length = 0;
+    recorded.length = 0;
+    mockIngest.mockResolvedValue({ source: "drive", rows: 11, swept: 0 });
+  });
+
+  /**
+   * The whole point of the 15-minute lane is that the brain is minutes behind
+   * reality. A chunk with no embedding is invisible to semantic search, so if
+   * nothing embeds on a schedule the corpus silently freezes at whenever the last
+   * manual backfill ran — while still answering, and still looking healthy.
+   */
+  it("embeds after ingesting, on every run", async () => {
+    const res = await GET(req());
+    expect(res.status).toBe(200);
+    expect(embedCalls).toHaveLength(1);
+  });
+
+  it("bounds the work so embedding cannot eat the run's time budget", async () => {
+    await GET(req());
+    expect(embedCalls[0]?.maxBatches).toBe(3);
+  });
+
+  it("still reports success when the embedder fails — lexical search is unaffected", async () => {
+    embedThrows = true;
+    const res = await GET(req());
+    expect(res.status).toBe(200);
+    expect(recorded.at(-1)?.status).toBe("success");
+  });
+
+  it("does not run before the ingesters, or it would embed nothing new", async () => {
+    const order: string[] = [];
+    mockIngest.mockImplementation(async () => {
+      order.push("ingest");
+      return { source: "drive", rows: 11, swept: 0 };
+    });
+    const { embedMissing } = await import("@features/brain/server/embed");
+    vi.mocked(embedMissing).mockImplementation(async () => {
+      order.push("embed");
+      return embedResult;
+    });
+    await GET(req());
+    expect(order.indexOf("ingest")).toBeLessThan(order.indexOf("embed"));
+  });
+
+  it("bounds the embed call so one request cannot outlive this function", async () => {
+    /**
+     * `embedBatch`'s default is the BACKFILL's patience -- 6 attempts at 120s each
+     * inside a function whose `maxDuration` is 60. One cold edge worker then hangs
+     * longer than the function may live, Vercel kills it, and `recordCronRun` sits
+     * in a `finally` that never runs: the run counts as neither success nor
+     * failure and simply does not appear.
+     *
+     * Observed on 2026-09-06 -- the 08:52 run wrote no cron_run row at all while
+     * every neighbouring run recorded 7-10s and success.
+     *
+     * Asserted HERE and not only in embed.ts: forwarding the bound is useless if
+     * this caller stops passing one, and removing it there left the whole suite
+     * green. Found by mutation.
+     */
+    // Self-contained: a sibling test replaces this mock's implementation and the
+    // replacement persists, so relying on the module-level capture would make this
+    // pass or fail on test ORDER rather than on the code.
+    const seen: Array<{ maxBatches?: number; opts?: { attempts?: number; timeoutMs?: number } }> =
+      [];
+    const { embedMissing } = await import("@features/brain/server/embed");
+    vi.mocked(embedMissing).mockImplementation(
+      async (
+        _isOutOfTime?: unknown,
+        maxBatches?: number,
+        opts?: { attempts?: number; timeoutMs?: number }
+      ) => {
+        seen.push({ maxBatches, opts });
+        return embedResult;
+      }
+    );
+
+    await GET(req());
+    const last = seen.at(-1);
+    expect(last?.opts?.timeoutMs).toBeGreaterThan(0);
+    expect(last?.opts?.timeoutMs).toBeLessThanOrEqual(30_000);
+    expect(last?.opts?.attempts).toBeLessThanOrEqual(3);
+    // worst case must fit under the 60s ceiling alongside the ingest that precedes it
+    expect((last?.opts?.timeoutMs ?? 0) * (last?.opts?.attempts ?? 0)).toBeLessThan(45_000);
+  });
+
+  it("raises a backlog too big for this lane to drain, instead of falling behind quietly", async () => {
+    embedResult = { embedded: 24, remaining: 9_000, complete: false };
+    await GET(req());
+    expect(notified.map((n) => n.text).join(" ")).toMatch(/waiting for embeddings/);
+  });
+
+  it("stays quiet for a backlog it will clear on its own", async () => {
+    embedResult = { embedded: 24, remaining: 30, complete: false };
+    await GET(req());
+    expect(notified).toHaveLength(0);
+  });
+});

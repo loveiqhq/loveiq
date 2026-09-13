@@ -40,6 +40,11 @@ export interface ReportData {
   ownerToken?: string | null;
   viewMode?: "owner" | "shared";
   primaryArchetype: string;
+  /**
+   * The archetype the server resolved the Report 2.0 section copy for — the one
+   * requested via `?archetype=`, or the primary when that archetype isn't owned.
+   */
+  contentArchetype?: string;
   percentages: Record<string, number>;
   reportDate: string;
   diagnostics: Record<string, unknown> | null;
@@ -281,6 +286,13 @@ interface ReportIdentifier {
    * on exactly the locked quote the email was built against.
    */
   pricingSessionIdOverride?: string | null;
+  /**
+   * Raw `?archetype=` slug from the URL, forwarded untouched. The server
+   * validates it against the archetypes this reader has bought and resolves the
+   * Report 2.0 copy for that archetype, echoing it back as `contentArchetype`.
+   * Part of the effect's dependencies, so switching archetype refetches.
+   */
+  archetypeSlug?: string | null;
 }
 
 async function parseErrorResponse(res: Response): Promise<ReportRequestError> {
@@ -299,7 +311,7 @@ async function parseErrorResponse(res: Response): Promise<ReportRequestError> {
 }
 
 export function useReportData(identifier: ReportIdentifier) {
-  const { sessionId, token, pricingSessionIdOverride } = identifier;
+  const { sessionId, token, pricingSessionIdOverride, archetypeSlug } = identifier;
   const hasIdentifier = !!(sessionId || token);
 
   const [state, setState] = useState<{
@@ -337,6 +349,9 @@ export function useReportData(identifier: ReportIdentifier) {
           pricingSessionIdOverride ?? getReportPricingSessionId({ sessionId, token });
         if (pricingSessionId) {
           params.set("pricingSessionId", pricingSessionId);
+        }
+        if (archetypeSlug) {
+          params.set("archetype", archetypeSlug);
         }
 
         const res = await fetch(`/api/report?${params.toString()}`, {
@@ -410,7 +425,7 @@ export function useReportData(identifier: ReportIdentifier) {
     return () => {
       cancelled = true;
     };
-  }, [sessionId, token, hasIdentifier, pricingSessionIdOverride, state.refreshKey]);
+  }, [sessionId, token, hasIdentifier, pricingSessionIdOverride, archetypeSlug, state.refreshKey]);
 
   const retry = () => setState((prev) => ({ ...prev, refreshKey: prev.refreshKey + 1 }));
 

@@ -341,12 +341,7 @@ export async function fetchLandingStartFunnel(
 }
 
 export type VerdictState =
-  | "winner"
-  | "regression"
-  | "no-winner"
-  | "too-early"
-  | "insufficient-data"
-  | "single-arm";
+  "winner" | "regression" | "no-winner" | "too-early" | "insufficient-data" | "single-arm";
 
 export interface ArmVerdict {
   axis: ExperimentAxis;

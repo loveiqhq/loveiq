@@ -228,6 +228,15 @@ export async function proxy(request: NextRequest) {
       path === "/api/health" ||
       path === "/api/stripe/webhook" ||
       path === "/api/calendly/webhook" ||
+      // Slack posts events here signed, not cookied, so it can never satisfy the
+      // staging gate — same reason the two webhooks above are exempt. Without
+      // this the staging deployment answers Slack with a redirect to /login and
+      // the brain silently never replies.
+      path === "/api/slack/events" ||
+      // The MCP endpoint authenticates with a bearer token and is called by
+      // Claude, not a browser, so it has no staging session cookie and never
+      // could. Same reason as the webhooks above.
+      path === "/api/mcp" ||
       path.startsWith("/api/cron/") ||
       path.startsWith("/api/staging-") ||
       path.startsWith("/admin") ||

@@ -104,6 +104,45 @@ export interface ScoringResult {
   rawScore: Record<string, number>;
   percent: Record<string, number>;
   primaryArchetype: string;
+  /**
+   * How urgent this person says working on their sexuality is, on the 1-7 scale the
+   * question (16002) was actually asked on — NOT the 0-1 form the engine works in.
+   *
+   * Promoted out of `diagnostics` because it is a product signal rather than a debugging
+   * detail: it splits the audience close to evenly, which is what makes it usable for
+   * deciding what to show someone. The score was already computed on every submission;
+   * only a way to reach it was missing.
+   *
+   * `null` when the question was not answered. Deliberately not 4: an unanswered overlay
+   * defaults to 0.5 internally, which converts back to a perfectly plausible mid-scale
+   * answer nobody gave. Anything keyed on this must be able to tell "middling" from
+   * "unknown", or it will confidently act on a number it invented.
+   */
+  urgency: number | null;
+  /**
+   * The FIRST change this person picked on 16001 — what they most want to work on.
+   *
+   * Promoted out of `diagnostics` for the same reason as `urgency`: it is the answer to a
+   * product question ("what should this report lead with"), not a debugging detail. The
+   * question is capped at two picks and its options are shown in a randomised, recorded
+   * order, so first-picked is a genuine ranking rather than a side effect of which option
+   * happened to sit at the top of the list.
+   *
+   * `null` when 16001 was not answered — never a guessed default, because a consumer
+   * ordering content by focus has to be able to choose its own fallback rather than
+   * silently lead with someone else's priority.
+   */
+  focusPrimary: string | null;
+  /**
+   * What this person says is getting in the way, from 16014 — capped at one pick, so in
+   * practice zero or one tag.
+   *
+   * Empty array when unanswered. Worth knowing before using it: the barrier does NOT
+   * predict which FORMAT someone would buy (cross-tabbed against 16007 it moves only
+   * between 4.8% and 12.3% around a 7.5% baseline). Use it for what an offer is ABOUT;
+   * use help style for what shape it takes.
+   */
+  barrierTags: string[];
   diagnostics: {
     uDimensions: Record<string, number>;
     dimensionWeightsBase: Record<string, number>;

@@ -10,32 +10,21 @@
  * bulk-delete endpoint re-checks every id before deleting.
  */
 
+import { isStaffEmail } from "@shared/env/staff-email";
+
 const TEST_DURATION_THRESHOLD_MS = 60_000;
 const PARTIAL_MIN_ANSWERS_REAL = 5;
 
-let cachedRegex: RegExp | null | undefined;
-
 /**
- * Returns the configured staff email regex, or null when unset/invalid.
- * Source: env ADMIN_TEST_EMAIL_REGEX, default `^.+@loveiq\.org$`.
+ * The staff-email rule moved to `shared/env/staff-email.ts` when payments
+ * started using it too — it decides revenue classification now, not just which
+ * submissions the bulk-delete tool offers to remove. Re-exported here so the
+ * existing admin call sites keep their import.
  */
-export function getTestEmailRegex(): RegExp | null {
-  if (cachedRegex !== undefined) return cachedRegex;
-  const raw = process.env.ADMIN_TEST_EMAIL_REGEX ?? "^.+@loveiq\\.org$";
-  if (!raw.trim()) {
-    cachedRegex = null;
-    return cachedRegex;
-  }
-  try {
-    // The pattern comes from server-side env (ADMIN_TEST_EMAIL_REGEX) and
-    // is only matched against email strings — no untrusted input.
-    // eslint-disable-next-line security/detect-non-literal-regexp
-    cachedRegex = new RegExp(raw, "i");
-  } catch {
-    cachedRegex = null;
-  }
-  return cachedRegex;
-}
+export {
+  getStaffEmailRegex as getTestEmailRegex,
+  __resetStaffEmailRegexForTests as __resetTestEmailRegexForTests,
+} from "@shared/env/staff-email";
 
 export interface TestEvalInput {
   recordType: "submission" | "partial";
@@ -56,8 +45,7 @@ export interface TestEvalResult {
 
 export function evaluateTestSubmission(input: TestEvalInput): TestEvalResult {
   const reasons: string[] = [];
-  const regex = getTestEmailRegex();
-  if (regex && input.email && regex.test(input.email)) {
+  if (isStaffEmail(input.email)) {
     reasons.push("staff_email");
   }
 
@@ -83,9 +71,4 @@ export function evaluateTestSubmission(input: TestEvalInput): TestEvalResult {
     isLikelyTest: reasons.length > 0,
     reasons,
   };
-}
-
-/** Reset the cached regex — for tests only. */
-export function __resetTestEmailRegexForTests(): void {
-  cachedRegex = undefined;
 }

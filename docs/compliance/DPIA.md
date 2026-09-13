@@ -77,7 +77,7 @@ If Q16015 copy changes, we lose proof of what each user consented to.
 
 - **Mitigation**: T-11 `marketing_opt_in_terms_version` column + `MARKETING_OPT_IN_TERMS_VERSION` code constant.
 
-## 4. Data subject rights — implementation status
+## 4. Data subject rights: how we handle a deletion request, a data export, a DSAR, unsubscribe and the right to be forgotten
 
 | Right (GDPR article)              | Status                                                                     | Mechanism                                                    |
 | --------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------ |

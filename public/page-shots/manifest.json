@@ -1,0 +1,87 @@
+{
+  "capturedAt": "2026-09-12T00:18:13.731Z",
+  "origin": "https://www.loveiq.org",
+  "shots": [
+    {
+      "name": "landing-white",
+      "file": "landing-white.png",
+      "url": "https://www.loveiq.org/?variant=white",
+      "what": "the landing page, arm `white`, above the fold",
+      "width": 1280,
+      "height": 900,
+      "consentBannerDismissed": true
+    },
+    {
+      "name": "landing-white-prev",
+      "file": "landing-white-prev.png",
+      "url": "https://www.loveiq.org/?variant=white_prev",
+      "what": "the landing page, arm `white_prev`, above the fold",
+      "width": 1280,
+      "height": 900,
+      "consentBannerDismissed": true
+    },
+    {
+      "name": "landing-white-mobile",
+      "file": "landing-white-mobile.png",
+      "url": "https://www.loveiq.org/?variant=white",
+      "what": "the landing page, arm `white`, on a phone",
+      "width": 390,
+      "height": 844,
+      "consentBannerDismissed": true
+    },
+    {
+      "name": "landing-white-prev-mobile",
+      "file": "landing-white-prev-mobile.png",
+      "url": "https://www.loveiq.org/?variant=white_prev",
+      "what": "the landing page, arm `white_prev`, on a phone",
+      "width": 390,
+      "height": 844,
+      "consentBannerDismissed": true
+    },
+    {
+      "name": "survey-intro",
+      "file": "survey-intro.png",
+      "url": "https://www.loveiq.org/survey",
+      "what": "the first thing a visitor sees when starting the assessment",
+      "width": 1280,
+      "height": 900,
+      "consentBannerDismissed": true
+    },
+    {
+      "name": "survey-intro-mobile",
+      "file": "survey-intro-mobile.png",
+      "url": "https://www.loveiq.org/survey",
+      "what": "the assessment intro on a phone",
+      "width": 390,
+      "height": 844,
+      "consentBannerDismissed": true
+    },
+    {
+      "name": "about",
+      "file": "about.png",
+      "url": "https://www.loveiq.org/about",
+      "what": "the about page, above the fold",
+      "width": 1280,
+      "height": 900,
+      "consentBannerDismissed": true
+    },
+    {
+      "name": "glossary",
+      "file": "glossary.png",
+      "url": "https://www.loveiq.org/glossary",
+      "what": "the glossary index",
+      "width": 1280,
+      "height": 900,
+      "consentBannerDismissed": true
+    },
+    {
+      "name": "trust-zone",
+      "file": "trust-zone.png",
+      "url": "https://www.loveiq.org/trust-zone",
+      "what": "the trust page",
+      "width": 1280,
+      "height": 900,
+      "consentBannerDismissed": true
+    }
+  ]
+}

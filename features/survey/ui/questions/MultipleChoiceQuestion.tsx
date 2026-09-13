@@ -5,6 +5,7 @@ import type { SurveyQuestion } from "@/data/survey-data";
 import ChoiceCard from "./ChoiceCard";
 import QuestionHeading from "./QuestionHeading";
 import { getOptionExplanation } from "./getOptionExplanation";
+import { useOrderedOptions } from "./useOrderedOptions";
 import { useSurveyTheme } from "../SurveyThemeContext";
 
 interface MultipleChoiceQuestionProps {
@@ -51,6 +52,7 @@ const MultipleChoiceQuestion: FC<MultipleChoiceQuestionProps> = ({
   };
 
   const white = useSurveyTheme() === "white";
+  const options = useOrderedOptions(question);
 
   return (
     <div className="flex flex-col gap-5">
@@ -67,7 +69,7 @@ const MultipleChoiceQuestion: FC<MultipleChoiceQuestionProps> = ({
       )}
 
       <div className="flex flex-col gap-3">
-        {question.options.map((option) => {
+        {options.map((option) => {
           const isSelected = selected.includes(option);
 
           return (

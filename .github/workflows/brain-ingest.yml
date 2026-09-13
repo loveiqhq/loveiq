@@ -1,0 +1,78 @@
+name: Company Brain Ingest
+
+# Docs and commit messages only change on push, so ingest-on-push is both simpler
+# and fresher than a nightly crawl -- and in an Action the git history and every
+# markdown file are already on disk, which is not true inside a Vercel function.
+#
+# The other half of the corpus (Jira, Supabase) changes outside git and is handled
+# by the /api/cron/brain-ingest route instead.
+on:
+  push:
+    branches: [main]
+  # Manual trigger for a first backfill, or after changing the chunker.
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  # Never cancel: a half-finished upsert is fine to repeat, but cancelling
+  # mid-sweep could delete rows a later run has not rewritten yet.
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ingest:
+    name: Ingest docs + commits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # REQUIRED. The default shallow clone sees ONE commit. The ingest
+          # script refuses to sweep from a shallow repository for exactly that
+          # reason -- one commit produces ~3 chunks, which would satisfy a
+          # naive write-count guard and delete the other ~1,448 -- so without
+          # this the commit half of the corpus simply never updates.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "20"
+
+      # No `npm ci`: the ingester imports only node:child_process and node:fs, so
+      # there is nothing to install and nothing to keep in sync.
+      - name: Ingest
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+
+          # FAIL, do not skip. This branch used to `exit 0`, so a repo with a
+          # missing or rotated Supabase secret produced a green tick, zero writes
+          # and no alert — `doc` and `commit` would freeze indefinitely while CI
+          # looked perfectly healthy. These two sources have no other refresh path.
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+            echo "::error::Supabase secrets are not set, so the docs and commits half of the company brain cannot be refreshed."
+            exit 1
+          fi
+
+          # Cheap guard on the chunker itself before touching the corpus.
+          node scripts/brain-ingest-repo.mjs --self-check
+
+          node scripts/brain-ingest-repo.mjs
+
+      # Without this the only signal is a red tick nobody is watching for.
+      - name: Tell ops the brain stopped refreshing
+        if: failure()
+        env:
+          SLACK_OPS_WEBHOOK_URL: ${{ secrets.SLACK_OPS_WEBHOOK_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SLACK_OPS_WEBHOOK_URL:-}" ]; then
+            echo "no ops webhook configured; skipping notification"
+            exit 0
+          fi
+          curl -sS -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\":brain: Company-brain repo ingest FAILED on ${GITHUB_SHA:0:7}. The docs and commit history in the brain are now frozen until this is fixed — it will keep answering from stale data without looking broken. ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" \
+            "$SLACK_OPS_WEBHOOK_URL"

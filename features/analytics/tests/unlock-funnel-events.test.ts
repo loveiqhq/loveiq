@@ -241,3 +241,37 @@ describe("unlock_click is one canonical event across every unlock surface", () =
     expect(types).not.toContain("unlock_click");
   });
 });
+
+/**
+ * A `purchase` in the dataLayer becomes a GA4 purchase and then a Google Ads
+ * conversion the bidding algorithm optimises on. Measured 2026-09-09: 34 of
+ * these landed on a single day carrying `value: 0` — device-matrix test
+ * purchases redeemed with a 100%-off code — because nothing excluded them.
+ */
+describe("trackReportPurchase refuses to report a sale that carried no money", () => {
+  const purchases = () =>
+    (window.dataLayer as Array<Record<string, unknown>>).filter((e) => e.event === "purchase");
+
+  const base = {
+    transaction_id: "cs_live_abc",
+    value: 29,
+    currency: "EUR",
+    item_name: "Full Report",
+  };
+
+  it("pushes a real paid purchase", () => {
+    client.trackReportPurchase({ ...base });
+    expect(purchases()).toHaveLength(1);
+    expect(purchases()[0]!.value).toBe(29);
+  });
+
+  it("drops a zero-value purchase — the test and 100%-off comp case", () => {
+    client.trackReportPurchase({ ...base, value: 0 });
+    expect(purchases()).toHaveLength(0);
+  });
+
+  it("drops a negative value rather than reporting it as revenue", () => {
+    client.trackReportPurchase({ ...base, value: -1 });
+    expect(purchases()).toHaveLength(0);
+  });
+});

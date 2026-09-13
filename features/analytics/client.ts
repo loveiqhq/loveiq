@@ -107,6 +107,47 @@ export const setSurveyVariant = (variant: "white" | "dark" | null) => {
   }
 };
 
+/**
+ * Events that were fired before the visitor answered the consent banner, held
+ * until they accept. There is no CookieYes consent-change event wired up here,
+ * so a bounded poll drains the queue instead.
+ *
+ * Why this exists: an event fired pre-consent used to be dropped on the floor,
+ * and callers with a one-shot ref (`locked_card_price_shown`) burned that ref on
+ * the dropped attempt and never tried again. The banner covers the page for the
+ * first seconds of every visit, so a mount-time persisted event essentially
+ * never survived — 331 of them reached PostHog while writing ZERO durable rows
+ * for five weeks, which made the funnel read as though 39% of report readers
+ * never saw a price when 89% did.
+ */
+const consentPendingQueue: Array<{
+  eventType: string;
+  metadata: Record<string, unknown> | undefined;
+  durationMs?: number;
+}> = [];
+let consentPollId: ReturnType<typeof setInterval> | null = null;
+const CONSENT_POLL_MS = 1_500;
+// A visitor who never answers the banner must not leave a timer running for the
+// life of the tab, and an event held longer than this is no longer worth a row.
+const CONSENT_POLL_ATTEMPTS = 80; // ~2 minutes
+
+const drainWhenConsentArrives = () => {
+  if (consentPollId) return;
+  let attempts = 0;
+  consentPollId = setInterval(() => {
+    attempts += 1;
+    const granted = hasCookieYesConsent("analytics");
+    if (!granted && attempts < CONSENT_POLL_ATTEMPTS) return;
+    if (consentPollId) clearInterval(consentPollId);
+    consentPollId = null;
+    const queued = consentPendingQueue.splice(0, consentPendingQueue.length);
+    if (!granted) return; // gave up — dropped, not persisted without consent
+    for (const item of queued) {
+      persistAnalyticsEvent(item.eventType, item.metadata, item.durationMs);
+    }
+  }, CONSENT_POLL_MS);
+};
+
 const persistAnalyticsEvent = (
   eventType: string,
   metadata: Record<string, unknown> | undefined,
@@ -114,7 +155,16 @@ const persistAnalyticsEvent = (
 ) => {
   if (typeof window === "undefined") return;
   if (!PERSISTED_EVENTS.has(eventType)) return;
-  if (!hasCookieYesConsent("analytics")) return;
+  if (!hasCookieYesConsent("analytics")) {
+    // Hold it rather than drop it — the caller may never fire again. Only
+    // events with a submission context are worth queueing; UX signals on the
+    // landing page legitimately have none and would queue forever.
+    if (window.__loveiqReportSubmissionId) {
+      consentPendingQueue.push({ eventType, metadata, durationMs });
+      drainWhenConsentArrives();
+    }
+    return;
+  }
 
   const submissionId = window.__loveiqReportSubmissionId ?? null;
   // No submission context = nothing to persist (the timeline keys off
@@ -218,8 +268,7 @@ const getCookieValue = (name: string) => {
  * only, so it typechecked `set` and rejected every `event` call.
  */
 type GtagCall =
-  | ["event", string, Record<string, unknown>?]
-  | ["set", "user_properties", Record<string, unknown>];
+  ["event", string, Record<string, unknown>?] | ["set", "user_properties", Record<string, unknown>];
 
 /** Applies a queued tuple to gtag. The cast is needed because TypeScript cannot
  *  resolve an overload from a spread of a union tuple; the runtime shim takes
@@ -531,10 +580,7 @@ export const trackPaywallView = (items: PaywallPlanItem[]) => {
  * the founder's "forced" vs "initiated" distinction.
  */
 export type PaywallInitiatedSource =
-  | "lock_click"
-  | "archetype_unlock"
-  | "offer_link"
-  | "archetype_breakdown_footer";
+  "lock_click" | "archetype_unlock" | "offer_link" | "archetype_breakdown_footer";
 
 export interface PaywallInitiatedParams {
   source: PaywallInitiatedSource;
@@ -809,6 +855,18 @@ export const trackReportPurchase = (params: ReportPurchaseParams) => {
   if (typeof window === "undefined") return;
   if (!isProductionSite()) return;
   if (!hasCookieYesConsent("analytics")) return;
+  /**
+   * A `purchase` in the dataLayer becomes a GA4 purchase and then a Google Ads
+   * conversion the bidding algorithm optimises on, so one that carried no money
+   * must never be pushed. Measured 2026-09-09: 34 of these landed on a single
+   * day with `value: 0` — device-matrix test purchases redeemed with a 100%-off
+   * code — telling Ads there were 34 sales worth nothing.
+   *
+   * The browser cannot see `payment.is_test`, but every test and comp purchase
+   * is £0/€0 by construction, so value is the discriminator available here. The
+   * server sibling guards on both (`sendGa4PurchaseEvent`).
+   */
+  if (!(params.value > 0)) return;
 
   window.dataLayer = window.dataLayer || [];
   window.dataLayer.push({
@@ -846,7 +904,12 @@ export const trackGoogleAdsPurchaseConversion = (params: ReportPurchaseParams) =
   gtagSend("event", "conversion", {
     send_to: GOOGLE_ADS_PURCHASE_SEND_TO,
     value: typeof params.value === "number" ? params.value : 1.0,
-    currency: params.currency || "MXN",
+    // `currency` is required and always supplied: getPurchaseAnalytics() in
+    // app/api/stripe/checkout-session-status/route.ts returns null unless Stripe
+    // gave one. The old `|| "MXN"` fallback was unreachable, but it sat in the
+    // path that reports conversion VALUE to Google Ads — where a wrong currency
+    // silently rescales every bid target — so it is not a default worth keeping.
+    currency: params.currency,
     transaction_id: params.transaction_id || "",
   });
 };

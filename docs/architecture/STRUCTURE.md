@@ -118,7 +118,7 @@ loveiq-web/
 **Entry Points:**
 
 - `app/layout.tsx` — root layout with fonts, scripts, metadata
-- `app/page.tsx` — landing page entry (renders `features/landing/ui/LandingPage.tsx`)
+- `app/page.tsx` — landing page entry (renders `features/landing/ui/white/LandingPageWhite.tsx`)
 
 **Configuration:**
 
@@ -147,7 +147,7 @@ loveiq-web/
 
 **Files:**
 
-- `PascalCase.tsx` — React components (e.g., `S01Hero.tsx`, `LandingPage.tsx`)
+- `PascalCase.tsx` — React components (e.g., `WHero.tsx`, `LandingPageWhite.tsx`)
 - `camelCase.ts` — utility/library files (e.g., `client.ts`, `ratelimit.ts`)
 - `kebab-case` — directories (e.g., `app/api/contact/`)
 - `route.ts` — Next.js API route handlers
@@ -163,7 +163,7 @@ loveiq-web/
 - `page.tsx` — Next.js page component (required for routes)
 - `layout.tsx` — Next.js layout component
 - `route.ts` — Next.js API route handler
-- `S##Name.tsx` — numbered landing sections (e.g., `S01Hero.tsx` through `S15Testimonials.tsx`)
+- `W*.tsx` — landing sections, under `features/landing/ui/white/` (e.g., `WHero.tsx`, `WArchetypes.tsx`)
 
 ## Where to Add New Code
 
@@ -174,9 +174,16 @@ loveiq-web/
 
 **New Landing Section:**
 
-- Add component to `features/landing/ui/`
-- Follow naming: `S##Name.tsx`
-- Import and add to `features/landing/ui/LandingPage.tsx`
+- Add component to `features/landing/ui/white/`
+- Follow naming: `W{Name}.tsx` — see `WArchetypes.tsx` or `WReportPreview.tsx`
+- Import and add to `features/landing/ui/white/LandingPageWhite.tsx`, in render order
+
+The `S##Name.tsx` sections and `LandingPage.tsx` this file used to name were the DARK
+landing arm, retired on 2026-06-19 and deleted. Only `S06Archetypes.tsx` survives, as
+shared data. Following the old instructions meant creating a component and importing it
+into a file that does not exist — measured 2026-09-10 as the single worst answer the
+company brain gave, because the correct instructions in `CLAUDE.md` ranked directly
+below the wrong ones here.
 
 **New API Endpoint:**
 

@@ -15,7 +15,10 @@ export function usePartialSave(
   const currentIndexRef = useRef(currentIndex);
   const startedAtRef = useRef(startedAt);
   const utmTrackerRef = useRef(utmTracker);
-  // Initialize session ID eagerly (getSessionId is safe to call during render)
+  // Initialised eagerly during render. `getSessionId` catches storage that
+  // THROWS (Safari private mode, some in-app WebViews) and falls back to an
+  // in-memory id; before that, this line threw inside a render for those
+  // visitors.
   const sessionIdRef = useRef(getSessionId());
   const beaconSentRef = useRef(false);
 

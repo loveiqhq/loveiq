@@ -10,12 +10,34 @@
  * (the default) sends a click id with NO utm_* params, so those clicks would
  * otherwise be recorded as "Direct"; we keep the click id and normalize the
  * session to google/cpc for correct first-party attribution.
+ *
+ * And the ValueTrack detail (`matchtype`, `network`) that a Final URL suffix can
+ * add. Those are not utm_-prefixed, so an allowlist of utm_* keys silently drops
+ * them — which is exactly what happened until it was measured.
  */
 
 const UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"] as const;
 
 /** Google Ads click identifiers appended by auto-tagging (gbraid/wbraid are iOS). */
 const CLICK_ID_KEYS = ["gclid", "gbraid", "wbraid"] as const;
+
+/**
+ * Google Ads ValueTrack detail, when the Final URL suffix supplies it.
+ *
+ * NOT utm_-prefixed, which is why they need naming separately — and why they were
+ * silently dropped for as long as they have been sent. `classifyTraffic` in
+ * features/attribution/server/traffic.ts already reads `matchtype` and `network`
+ * and `trafficLine` already renders them into the Slack survey ping, but the
+ * capture allowlist above never let them through, so that branch could never
+ * fire. Measured after tagging went live: ads arrived with utm_campaign and
+ * utm_term populated and these two null.
+ *
+ * `matchtype` is e/p/b (exact, phrase, broad) and `network` is g/s/d/u — short
+ * enum-ish codes. They are URL-supplied and therefore attacker-controllable, so
+ * they get the same treatment as every utm value: length-capped in
+ * `classifyTraffic` and escaped before reaching Slack.
+ */
+const VALUE_TRACK_KEYS = ["matchtype", "network"] as const;
 
 /** Current global storage key. */
 export const GLOBAL_UTM_KEY = "loveiq-utm";
@@ -59,7 +81,20 @@ export function captureUtmFromUrl(): string | null {
     if (!utm.has("utm_medium")) utm.set("utm_medium", "cpc");
   }
 
+  // ValueTrack detail rides alongside the utm_* params, not inside them — it is
+  // DETAIL about an attribution signal, never a signal on its own. Collected
+  // separately and merged only once something real was found, because writing it
+  // into `utm` directly made `utm.size` non-zero for a URL carrying nothing but
+  // `?matchtype=e&network=g`, which then STORED and overwrote a genuine earlier
+  // first-touch value with two meaningless fields.
+  const valueTrack = new Map<string, string>();
+  for (const key of VALUE_TRACK_KEYS) {
+    const value = params.get(key);
+    if (value) valueTrack.set(key, value);
+  }
+
   if (utm.size === 0) return null;
+  for (const [key, value] of valueTrack) utm.set(key, value);
 
   const json = JSON.stringify(Object.fromEntries(utm));
   try {

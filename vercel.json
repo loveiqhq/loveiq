@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["fra1"],
   "crons": [
     {
       "path": "/api/cron/survey-paused",
@@ -26,39 +27,76 @@
       "schedule": "38 * * * *"
     },
     {
-      "path": "/api/cron/chapter-nudge",
-      "schedule": "28 11 * * *"
-    },
-    {
       "path": "/api/cron/conversion-digest",
       "schedule": "0 9 * * *"
     },
     {
       "path": "/api/cron/journey-backfill",
       "schedule": "0 4 1 1 *"
+    },
+    {
+      "path": "/api/cron/brain-ingest",
+      "schedule": "47 4 * * *"
+    },
+    {
+      "path": "/api/cron/brain-fast",
+      "schedule": "7,22,37,52 * * * *"
+    },
+    {
+      "path": "/api/cron/brain-notion",
+      "schedule": "41 * * * *"
+    },
+    {
+      "path": "/api/cron/brain-gmail",
+      "schedule": "11 * * * *"
+    },
+    {
+      "path": "/api/cron/brain-brief",
+      "schedule": "10 6 * * *"
+    },
+    {
+      "path": "/api/cron/brain-calendar",
+      "schedule": "26 * * * *"
+    },
+    {
+      "path": "/api/cron/brain-drive",
+      "schedule": "52 * * * *"
+    },
+    {
+      "path": "/api/cron/brain-mine",
+      "schedule": "40 5 * * *"
     }
   ],
   "functions": {
+    "app/api/cron/brain-mine/route.ts": {
+      "maxDuration": 300
+    },
     "app/api/stripe/webhook/route.ts": {
       "maxDuration": 60
     },
-    "app/api/cron/survey-paused/route.ts": {
+    "app/api/slack/events/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/cron/brain-ingest/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/cron/survey-paused/route.ts": {
+      "maxDuration": 50
     },
     "app/api/cron/nurture-sequence/route.ts": {
       "maxDuration": 60
     },
     "app/api/cron/invite-reminders/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 50
     },
     "app/api/cron/payment-fulfillment-sweep/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 50
     },
     "app/api/cron/deep-engagement-alert/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 50
     },
     "app/api/cron/security-storm-detector/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 50
     },
     "app/api/cron/funnel-digest/route.ts": {
       "maxDuration": 60
@@ -73,19 +111,34 @@
       "maxDuration": 60
     },
     "app/api/cron/purge-old-data/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 50
     },
     "app/api/cron/table-size-digest/route.ts": {
       "maxDuration": 30
-    },
-    "app/api/cron/chapter-nudge/route.ts": {
-      "maxDuration": 60
     },
     "app/api/cron/conversion-digest/route.ts": {
       "maxDuration": 60
     },
     "app/api/cron/journey-backfill/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/cron/brain-fast/route.ts": {
+      "maxDuration": 120
+    },
+    "app/api/cron/brain-notion/route.ts": {
+      "maxDuration": 120
+    },
+    "app/api/cron/brain-gmail/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/cron/brain-drive/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/cron/brain-calendar/route.ts": {
+      "maxDuration": 120
+    },
+    "app/api/cron/brain-brief/route.ts": {
+      "maxDuration": 120
     }
   }
 }

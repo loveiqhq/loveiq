@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import posthog from "posthog-js";
+import { recoverFromError } from "@shared/ui/chunkLoadError";
 import Link from "next/link";
 import "@/app/globals.css";
 
@@ -78,7 +79,7 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
             <div className="animate-fade-in-up delay-3 mt-10 flex flex-col items-center gap-4 sm:flex-row">
               <button
                 type="button"
-                onClick={reset}
+                onClick={() => recoverFromError(error, reset)}
                 className="group relative inline-flex h-[54px] min-w-[200px] cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-full bg-gradient-brand px-8 text-[15px] font-semibold text-white shadow-pill transition hover:-translate-y-[2px] focus-visible-ring"
               >
                 <span

@@ -120,6 +120,11 @@ interface AnalyticsRow {
   event_time: string;
 }
 
+/** Server-side proof that the report was opened, via report_session. */
+interface ReportSessionRow {
+  started_at: string | null;
+}
+
 /** Local copy of the masking rule so the raw address is never returned to callers. */
 function mask(email: string | null | undefined): string | null {
   if (!email?.trim()) return null;
@@ -169,7 +174,7 @@ export async function buildSubmissionJourney(
 ): Promise<SubmissionJourney | null> {
   // Wave 1: everything keyed directly off the submission id, concurrently. The
   // existing admin timeline route does 13 of these sequentially; don't copy that.
-  const [subs, quotes, events] = await Promise.all([
+  const [subs, quotes, events, reportSessions] = await Promise.all([
     fetchJson<SubmissionRow>(
       `/rest/v1/survey_submission?id=eq.${submissionId}` +
         `&select=id,session_id,start_date_time,created_date_time,status,duration_ms,utm_tracker,` +
@@ -189,6 +194,21 @@ export async function buildSubmissionJourney(
         `&select=event_type,event_time&order=event_time.asc`,
       "analytics_event"
     ),
+    /**
+     * The server-side record of the report being opened. `report_viewed` in
+     * `analytics_event` sits behind the consent gate and misses 45% of real
+     * opens (104 of 189 over 2026-08-25 → 09-05), which left `reportViewedAt`
+     * null — and every timing derived from it blank — for readers who declined
+     * analytics. The report route writes this row itself and its own comment
+     * already calls it "the server-side truth here"; this is that truth reaching
+     * the journey. Embedded filter, so one request rather than a lookup hop.
+     */
+    fetchJson<ReportSessionRow>(
+      `/rest/v1/report_session?select=started_at,personal_report!inner(survey_submission_id)` +
+        `&personal_report.survey_submission_id=eq.${submissionId}` +
+        `&order=started_at.asc&limit=1`,
+      "report_session"
+    ),
   ]);
 
   const sub = subs[0];
@@ -203,6 +223,13 @@ export async function buildSubmissionJourney(
   const anyQuote = purchased ?? quotes[0] ?? null;
 
   const firstOf = (type: string) => events.find((e) => e.event_type === type)?.event_time ?? null;
+  // Earliest of the two: whichever actually recorded the open first. The
+  // consent-gated event is kept as a fallback rather than dropped, so a row
+  // predating report_session still resolves.
+  const reportViewedAt =
+    [reportSessions[0]?.started_at ?? null, firstOf("report_viewed")]
+      .filter((v): v is string => Boolean(v))
+      .sort()[0] ?? null;
   const checkoutStartedAt =
     purchased?.checkout_started_at ??
     quotes.find((q) => q.checkout_started_at)?.checkout_started_at ??
@@ -233,7 +260,7 @@ export async function buildSubmissionJourney(
       msCheckoutHesitation: msBetween(checkoutStartedAt, purchasedAt),
     },
     milestones: {
-      reportViewedAt: firstOf("report_viewed"),
+      reportViewedAt,
       paywallInitiatedAt: firstOf("paywall_initiated"),
       checkoutStartedAt,
       purchasedAt,

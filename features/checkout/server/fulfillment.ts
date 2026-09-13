@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import { isStaffEmail } from "@shared/env/staff-email";
 import { Resend } from "resend";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
@@ -781,6 +782,7 @@ async function fetchExistingPayment({
 
 async function upsertPaymentRecord({
   amount,
+  buyerEmail,
   cardBrand,
   cardExpMonth,
   cardExpYear,
@@ -806,6 +808,8 @@ async function upsertPaymentRecord({
   userId,
 }: {
   amount: number | null;
+  /** The address that actually paid, from the Stripe session. Decides `is_test`. */
+  buyerEmail: string | null;
   cardBrand: string | null;
   cardExpMonth: number | null;
   cardExpYear: number | null;
@@ -842,6 +846,20 @@ async function upsertPaymentRecord({
     failure_code: failureCode,
     failure_message: failureMessage,
     ip_address: ipAddress,
+    /**
+     * `is_test` gates roughly thirty admin revenue, KPI and digest queries
+     * (`is_test=is.false`) — and until now NOTHING wrote it. It was last set by
+     * hand on 2026-05-02, so every internal purchase since has been counted as
+     * real: 48 staff-owned rows, 26 of them succeeded, 24 of those €0 comps,
+     * against ~79 total purchases. That was enough to inflate the reported
+     * iOS-vs-Android conversion gap from 2.0x to 2.4x.
+     *
+     * Deciding it here, from the address that actually paid, means it can never
+     * drift from the payment again. It is a REPORTING flag only: access is
+     * derived from `metadata.plan`, so flagging a payment never revokes a
+     * report the buyer paid for.
+     */
+    is_test: isStaffEmail(buyerEmail),
     metadata,
     payment_date_time: paymentDateTime,
     payment_method_type: paymentMethodType,
@@ -1239,6 +1257,8 @@ async function syncCheckoutSessionPayment({
 
   const paymentId = await upsertPaymentRecord({
     amount,
+    // Stripe's own record of who paid — no extra lookup needed.
+    buyerEmail: settledSession.customer_details?.email ?? settledSession.customer_email ?? null,
     cardBrand: chargeDetails.cardBrand,
     cardExpMonth: chargeDetails.cardExpMonth,
     cardExpYear: chargeDetails.cardExpYear,
@@ -1405,6 +1425,9 @@ async function syncCheckoutSessionPayment({
         consentGranted: settledSession.metadata?.gaAnalyticsConsent === "1",
         transactionId: settledSession.id,
         value: amount ?? 0,
+        isTest: isStaffEmail(
+          settledSession.customer_details?.email ?? settledSession.customer_email ?? null
+        ),
         currency: (settledSession.currency ?? "eur").toUpperCase(),
         itemName: getReportPurchasePlan(plan).title,
         params: {
@@ -1430,6 +1453,9 @@ async function syncCheckoutSessionPayment({
         email: recipient.email,
         transactionId: settledSession.id,
         value: amount ?? 0,
+        isTest: isStaffEmail(
+          settledSession.customer_details?.email ?? settledSession.customer_email ?? null
+        ),
         currency: (settledSession.currency ?? "eur").toUpperCase(),
         plan,
         itemName: getReportPurchasePlan(plan).title,

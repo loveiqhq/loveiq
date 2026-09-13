@@ -14,6 +14,7 @@
 
 import { NextResponse } from "next/server";
 import logger from "@shared/observability/logger";
+import { describeStall, findStalledCrons } from "@features/cron/server/cron-stall";
 import { notifySlack, escapeSlack } from "@shared/observability/slack";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import {
@@ -24,6 +25,8 @@ import {
   verifyCronAuth,
 } from "@shared/observability/slack-alert-dedup";
 import { buildAnomalySnapshot } from "@features/admin/server/alerts";
+import { describeBrainHealth, readBrainHealth } from "@features/brain/server/health";
+import { recordNotice } from "@features/brain/server/notice";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -75,8 +78,70 @@ export async function GET(request: Request) {
         text: `:rotating_light: *Anomaly — ${escapeSlack(item.title)}*\n${escapeSlack(item.detail)}${ruleSuffix}\nValue: ${item.value} | Owner: ${item.ownerEmail ?? "unassigned"}`,
         context: { targetKey: item.targetKey, severity: item.severity },
       });
+      /**
+       * THE SAME FINDING, WRITTEN WHERE THE TEAM ACTUALLY READS.
+       *
+       * This alert has always gone to Slack, which does not reach anyone working in
+       * claude.ai. A second SINK beside the post, never a second computation: two jobs
+       * deciding independently what moved would be two sources of truth about one week.
+       * Never allowed to fail the alert — `recordNotice` swallows its own errors.
+       */
+      await recordNotice({
+        headline: `Anomaly: ${item.title}`,
+        detail: `${item.detail}\nValue: ${item.value}. Owner: ${item.ownerEmail ?? "unassigned"}.`,
+        kind: "anomaly-watcher",
+        evidence: item.matchedRules.length
+          ? `Matched rule: ${item.matchedRules[0]!.label}`
+          : undefined,
+      });
       await markSlackAlertDelivered(`anomaly_realtime:${item.targetKey}`, "day", dayKey);
       fired += 1;
+    }
+
+    /**
+     * Watch the OTHER crons from out here. A cron that is never invoked writes no
+     * `cron_run` row and alerts from inside its own route body, so it cannot
+     * report its own absence — only a job that is definitely running can.
+     */
+    let stalled = 0;
+    try {
+      stalled = await alertOnStalledCrons(dayKey);
+    } catch (err) {
+      // The watchdog is SECONDARY to this cron's real job. If it throws, the
+      // anomaly alerts must still go out — a monitoring add-on that can take down
+      // the thing it was bolted onto is worse than no monitoring.
+      logger.error({ err }, "anomaly-watcher: cron stall check failed");
+    }
+
+    /**
+     * And watch the brain from out here too, for the same reason.
+     *
+     * MCP on claude.ai and in the terminal is the surface people use, and every call
+     * it serves has been recorded in `brain_query` since 2026-09-06 while nothing read
+     * the table. This is that read: an outage, a tool throwing, or searches coming
+     * back empty. Silent otherwise -- see `describeBrainHealth`.
+     */
+    let brain: string | null = null;
+    try {
+      const health = await readBrainHealth();
+      brain = health && describeBrainHealth(health);
+      if (brain && (await tryClaimSlackAlert("brain_health", "day", dayKey))) {
+        await notifySlack({
+          channel: "ops",
+          kind: "brain_health",
+          username: "ops_alerts",
+          text: `:brain: *Brain* — ${escapeSlack(brain)}`,
+          context: { ...health },
+        });
+        await recordNotice({
+          headline: `The brain's own health: ${brain.slice(0, 160)}`,
+          detail: brain,
+          kind: "anomaly-watcher",
+        });
+        await markSlackAlertDelivered("brain_health", "day", dayKey);
+      }
+    } catch (err) {
+      logger.error({ err }, "anomaly-watcher: brain health check failed");
     }
 
     return NextResponse.json({
@@ -86,6 +151,8 @@ export async function GET(request: Request) {
       fired,
       suppressed,
       deferred,
+      stalled,
+      brain,
     });
   } catch (err) {
     logger.error({ err }, "anomaly-watcher cron failed");
@@ -95,4 +162,23 @@ export async function GET(request: Request) {
     await trackDuration();
     await recordCronRun("anomaly-watcher", startMs, cronError ? "error" : "success", cronError);
   }
+}
+
+/** Alerts once per cron per day for anything that has stopped firing. */
+async function alertOnStalledCrons(dayKey: string): Promise<number> {
+  let stalled = 0;
+  for (const s of await findStalledCrons()) {
+    const claimed = await tryClaimSlackAlert(`cron_stalled:${s.cron}`, "day", dayKey);
+    if (!claimed) continue;
+    await notifySlack({
+      channel: "ops",
+      kind: "cron_stalled",
+      username: "ops_alerts",
+      text: `:alarm_clock: *Cron not firing* — ${escapeSlack(describeStall(s))}`,
+      context: { cron: s.cron, lastRunAt: s.lastRunAt, ageMs: s.ageMs },
+    });
+    await markSlackAlertDelivered(`cron_stalled:${s.cron}`, "day", dayKey);
+    stalled += 1;
+  }
+  return stalled;
 }

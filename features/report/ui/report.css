@@ -1508,6 +1508,12 @@
   align-items: center;
   justify-content: center;
   padding: 2rem 1rem;
+  /* The whole overlay opens the paywall, so it should say so. Invisible on
+     touch — which is where all 48 dead taps were — and on a desktop it stops
+     the card lying about being unclickable. It also lets the UX dead-click
+     listener recognise it as interactive, so our own monitoring stops
+     reporting a defect that is fixed. */
+  cursor: pointer;
 }
 
 /* Full dimension / attachment locked cards (Figma 7954-35930) render in normal
@@ -2473,7 +2479,8 @@
   min-height: 100vh;
   min-height: 100svh;
   padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
-    max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+    max(1rem, env(safe-area-inset-bottom), var(--liq-consent-h, 0px))
+    max(1rem, env(safe-area-inset-left));
 }
 
 .report-pricing-modal__dialog {
@@ -7439,7 +7446,10 @@
   position: relative;
 }
 
+/* The whole blurred block opens the paywall (handler is on this wrapper — see
+   FindingsSection), so it must read as tappable. */
 .report-findings__upsell {
+  cursor: pointer;
   /* Centred on the blurred block, per Figma 8988:16141. Anchoring to the group
      rather than the card keeps it centred on the WITHHELD rows at any width,
      without a magic percentage that drifts when the copy rewraps. */
@@ -7465,6 +7475,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-height: 44px;
   padding: 13px 30px;
   border: none;
   border-radius: 9999px;
@@ -13456,6 +13467,10 @@
   border-radius: 27px 27px 0 0;
   background: linear-gradient(180deg, #faf7fe 0%, #ffffff 100%);
   box-shadow: 0 22.5px 56.4px rgba(22, 16, 33, 0.06);
+  /* The whole card activates — matching `.report-map-row` below. This also
+     stops the UX dead-click listener reporting taps on it, which classes a
+     `cursor: pointer` ancestor as interactive. */
+  cursor: pointer;
 }
 
 .report-map-featured__eyebrow {
@@ -13509,6 +13524,10 @@
 }
 
 .report-map-featured__link {
+  /* Renders as an <a> when the section is owned (always, for Arousal), so the
+     underline has to be turned off explicitly — the pill next to it already
+     does this. */
+  text-decoration: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -13566,6 +13585,8 @@
 }
 
 .report-map-row {
+  /* The whole row opens the section / paywall — see InsightMapSection. */
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -16188,7 +16209,8 @@
   justify-content: center;
   align-items: flex-start;
   padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
-    max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+    max(1rem, env(safe-area-inset-bottom), var(--liq-consent-h, 0px))
+    max(1rem, env(safe-area-inset-left));
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
@@ -17245,7 +17267,11 @@
 .report-sticky-unlock--mobile {
   left: 0;
   right: 0;
-  bottom: 0;
+  /* Step above the CookieYes banner while it is up. That banner is fixed at
+     z-index 9999999 and 316px tall on a phone (38-49% of the viewport), so at
+     bottom:0 this bar is both invisible and untappable until consent is
+     answered — measured on production 2026-09-07. See ConsentBannerOffset. */
+  bottom: var(--liq-consent-h, 0px);
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
@@ -17317,6 +17343,13 @@
   flex: 0 0 auto;
   width: auto;
   height: auto;
+  /* The pill painted at 126x34 — under the 44px (Apple HIG) / 48dp (Material)
+     minimum, on the primary revenue CTA. A `::after` hit-area expansion is not
+     an option here: `.rpm-cta` sets `overflow: hidden` for its sheen animation,
+     which clips any pseudo-element back to the button box (measured — the
+     expansion had no effect at all). So the button itself grows to the minimum;
+     the bar gets 10px taller. */
+  min-height: 44px;
   padding: 7px 12px;
   font-size: 12px;
   white-space: nowrap;
@@ -17328,7 +17361,7 @@
 /* Desktop variant — centered rounded banner (Figma 7635:13901). */
 .report-sticky-unlock--desktop {
   left: 50%;
-  bottom: 16px;
+  bottom: calc(16px + var(--liq-consent-h, 0px));
   transform: translateX(-50%);
   width: calc(100vw - 32px);
   padding: 0;
@@ -22551,5 +22584,574 @@
 @media (max-width: 359px) {
   .report-beliefs__preview--locked > .report-premium-overlay {
     min-height: 1860px;
+  }
+}
+
+/* ── Very narrow phones (≤347px): one trait per row ────────────────────────
+   The hero card's trait grid is `1fr 1fr`, and a `1fr` track cannot shrink
+   below its content's min-width — so instead of wrapping, the right column
+   ran past the edge and was clipped by the card. Measured on production at
+   320px: 27px cut off, enough to lose whole words ("Initiation — h…",
+   "Power — wh… leads, who y…", "Submissive/sw…"). The grid needs ~348px for
+   two columns, so below that a single column is the only readable layout.
+
+   Scoped to 347px so nothing at or above the current breakpoint moves; ~2.5%
+   of sessions are on a viewport this narrow. */
+@media (max-width: 347px) {
+  .report-hero-card__traits {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================================
+   V1 — the restored pre-2.0 report
+   ==========================================================================
+   Recovered from app/globals.css @ cbba1800 (2026-08-10), the last commit
+   before Report 2.0.
+
+   WHY THEY HAD TO COME BACK. `5faa2a2c` moved every report style out of
+   globals.css into this file, so this file already carries most of the old
+   report's stylesheet — but `d4a60bf7` and `2c63515b` then deleted the rules
+   Report 2.0 had orphaned. Those are exactly the 36 classes below: the whole
+   Attachment Patterns card grid, the Importance-of-Sexuality bar chart, the
+   paywall card's copy line and tier badges, and the sidebar's "Chapters"
+   grouping. Without them the restored report renders unstyled in those places.
+
+   Every selector here is V1-only or scoped under a V1-only ancestor, so none
+   of it reaches Report 2.0 (?v2=1) or /practice-preview, which share this file.
+   ========================================================================== */
+
+.report-premium-overlay__copy {
+  margin: 0 0 20px;
+  max-width: 380px;
+  color: #4b4658;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.55;
+}
+
+.report-premium-overlay__copy strong {
+  color: rgb(var(--report-accent-ink-rgb, var(--report-accent-rgb)));
+  font-weight: 600;
+}
+
+.report-premium-overlay__copy-cta {
+  color: #161021;
+  font-weight: 800;
+}
+
+/* Included-in label + plan badges */
+.report-premium-overlay__badges-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.report-premium-overlay__badges-label {
+  color: #6b6678;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+
+.report-premium-overlay__badges-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+.report-premium-overlay__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: 0.45px;
+  text-transform: uppercase;
+}
+
+.report-premium-overlay__badge--full {
+  border-color: rgba(85, 101, 247, 0.35);
+  background: rgba(85, 101, 247, 0.12);
+  color: #5565f7;
+}
+
+@media (max-width: 640px) {
+  .report-premium-overlay__copy {
+    font-size: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Cards and rows — soft opacity-only fade, no translate. */
+  .report-welcome-grid > .report-card,
+  .report-prob__list .report-prob__row,
+  .report-attachment-patterns__grid > .report-attachment-patterns__card {
+    transform: none !important;
+  }
+  .report-welcome-grid.is-revealed > .report-card,
+  .report-prob__list.is-revealed .report-prob__row,
+  .report-attachment-patterns__grid.is-revealed > .report-attachment-patterns__card {
+    animation: report-card-fade-in 120ms ease-out both !important;
+    animation-delay: 0ms !important;
+  }
+  /* Motion-by-definition: bar height/width sweeps + tooltip translate — snap. */
+  .report-importance__tooltip {
+    opacity: 1 !important;
+    transform: translate(-50%, -100%) translateY(-8px) !important;
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+  }
+  .report-prob__row-bar > div,
+  .report-practice-table__metric-content,
+  .report-importance__bar-fill,
+  .report-premium-overlay__card,
+  .report-practice-table__popover {
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+  }
+}
+
+/* Chapters section — fills remaining space, scrolls independently */
+.report-sidebar__chapters {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  flex: 1;
+  min-height: 0;
+}
+
+.report-sidebar__chapters-label {
+  margin: 0;
+  padding-left: 12px;
+  flex-shrink: 0;
+  color: #3f3a4d;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  line-height: 16px;
+  text-transform: uppercase;
+}
+
+/* Item meta (badge + lock) */
+.report-sidebar__item-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding-left: 8px;
+}
+
+.report-attachment-patterns {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  width: 100%;
+}
+
+.report-attachment-patterns__header {
+  max-width: 48rem;
+}
+
+.report-attachment-patterns__title {
+  margin: 0;
+  color: #161021;
+  font-family: var(--font-serif);
+  font-size: 32px;
+  font-weight: 500;
+  line-height: 40px;
+  letter-spacing: -0.04em;
+}
+
+.report-attachment-patterns__grid {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+}
+
+.report-attachment-patterns__grid > .report-attachment-patterns__card {
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+.report-attachment-patterns__grid.is-revealed > .report-attachment-patterns__card {
+  animation: report-card-rise 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--stagger-i, 0) * 90ms);
+}
+
+.report-attachment-patterns__card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 31px;
+  width: 100%;
+  padding: 33px;
+  border: 1px solid rgba(22, 16, 33, 0.1);
+  border-radius: 32px;
+  background: #ffffff;
+  backdrop-filter: blur(2px);
+  box-shadow:
+    0px 20px 25px -5px rgba(0, 0, 0, 0.1),
+    0px 8px 10px -6px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.report-attachment-patterns__card-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.report-attachment-patterns__card-title {
+  margin: 0;
+  color: #161021;
+  font-family: var(--font-serif);
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 32px;
+  letter-spacing: -0.025em;
+}
+
+.report-attachment-patterns__card-body {
+  color: var(--report-copy);
+  font-family: var(--font-sans);
+  font-size: 18px;
+  font-weight: 300;
+  line-height: 1.625;
+}
+
+.report-attachment-patterns__card-body p {
+  margin: 0;
+}
+
+.report-attachment-patterns__card-body strong {
+  color: #161021;
+}
+
+.report-attachment-patterns__card-body em {
+  color: #6b6678;
+}
+
+.report-attachment-patterns__examples {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding-top: 25px;
+  border-top: 1px solid rgba(22, 16, 33, 0.1);
+}
+
+.report-attachment-patterns__examples-label {
+  color: #6b6678;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  line-height: 1.33;
+  text-transform: uppercase;
+}
+
+.report-attachment-patterns__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.report-attachment-patterns__chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6.5px 17px 7.5px;
+  border: 1px solid rgba(22, 16, 33, 0.1);
+  border-radius: 9999px;
+  background: #f5f6f8;
+  color: #3f3a4d;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 1.43;
+  white-space: nowrap;
+}
+
+.report-attachment-patterns__outro {
+  max-width: 58rem;
+}
+
+/* Compact card — scales to locked-rows height for the 3 shorter groups */
+.report-practice-table__locked-cover__metrics--compact .report-premium-overlay {
+  padding: 8px;
+  align-items: stretch;
+}
+
+.report-practice-table__locked-cover__metrics--compact .report-premium-overlay__card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  overflow: hidden;
+}
+
+.report-practice-table__locked-cover__metrics--compact .report-premium-overlay__icon {
+  margin: 0;
+  width: 32px;
+  height: 32px;
+}
+
+.report-practice-table__locked-cover__metrics--compact .report-premium-overlay__icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.report-practice-table__locked-cover__metrics--compact .report-premium-overlay__title {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.report-practice-table__locked-cover__metrics--compact .report-premium-overlay__badges-group {
+  margin: 0;
+}
+
+.report-practice-table__locked-cover__metrics--compact .report-premium-overlay__copy {
+  margin: 0;
+  font-size: 13px;
+}
+
+@media (max-width: 720px) {
+  /* Restore standard overlay centering for compact groups on mobile */
+  .report-practice-table__locked-cover__metrics--compact .report-premium-overlay {
+    padding: 2rem 1rem;
+    align-items: center;
+  }
+}
+
+/* Bar chart */
+.report-importance__chart {
+  display: flex;
+  gap: 0;
+}
+
+.report-importance__yaxis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 85px;
+  height: 200px;
+  padding-right: 16px;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #6b6678;
+  text-align: right;
+}
+
+.report-importance__bars {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+  flex: 1;
+  height: 200px;
+  border-left: 1px solid rgba(22, 16, 33, 0.1);
+  border-bottom: 1px solid rgba(22, 16, 33, 0.1);
+  padding-left: 25px;
+}
+
+/* Grid lines */
+.report-importance__grid {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding-left: 25px;
+  pointer-events: none;
+}
+
+.report-importance__gridline {
+  height: 1px;
+  width: 100%;
+}
+
+.report-importance__gridline--dashed {
+  border-top: 1px dashed rgba(22, 16, 33, 0.1);
+}
+
+.report-importance__gridline--faint {
+  border-top: 1px dashed rgba(22, 16, 33, 0.1);
+}
+
+/* Individual bars */
+.report-importance__bar {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+}
+
+.report-importance__bar-fill {
+  position: relative;
+  width: 100%;
+  height: 0%;
+  border-radius: 8px 8px 0 0;
+  border-top: 1px solid rgba(22, 16, 33, 0.1);
+  transition: height 900ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: calc(var(--stagger-i, 0) * 90ms);
+}
+
+.report-importance__chart.is-animated .report-importance__bar-fill {
+  height: var(--bar-fill-h, 0%);
+}
+
+.report-importance__bar-fill--ref {
+  background: linear-gradient(to bottom, #f5f6f8, #f5f6f8);
+  backdrop-filter: blur(2px);
+}
+
+.report-importance__bar-fill--ref::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, #f5f6f8, transparent);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
+  border-radius: inherit;
+}
+
+.report-importance__bar-fill--user {
+  background: rgb(var(--report-accent-rgb));
+  border-top-color: rgba(255, 255, 255, 0.2);
+}
+
+/* YOU tooltip */
+.report-importance__tooltip {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -100%) translateY(-8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 17px;
+  border: 1px solid #fff;
+  border-radius: 9999px;
+  background: rgb(var(--report-accent-rgb));
+  color: #130b17;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  line-height: 16px;
+  white-space: nowrap;
+  box-shadow:
+    0 2px 2px rgba(0, 0, 0, 0.06),
+    0 4px 3px rgba(0, 0, 0, 0.07);
+  z-index: 2;
+  opacity: 0;
+}
+
+.report-importance__chart.is-animated .report-importance__tooltip {
+  animation: report-tooltip-in 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--stagger-i, 0) * 90ms + 600ms);
+}
+
+.report-importance__tooltip::after {
+  content: "";
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 10px;
+  height: 10px;
+  background: rgb(var(--report-accent-rgb));
+  border-right: 1px solid #fff;
+  border-bottom: 1px solid #fff;
+}
+
+@media (max-width: 767px) {
+  .report-importance__yaxis {
+    width: 50px;
+    font-size: 8px;
+  }
+}
+
+@media (max-width: 767px) {
+  .report-attachment-patterns {
+    gap: 16px;
+  }
+  .report-attachment-patterns__title {
+    font-size: 28px;
+    line-height: 32px;
+  }
+  .report-attachment-patterns__grid {
+    gap: 16px;
+  }
+  .report-attachment-patterns__card {
+    gap: 24px;
+    padding: 22px 20px 20px;
+    border-radius: 24px;
+  }
+  .report-attachment-patterns__card-title {
+    font-size: 24px;
+    line-height: 32px;
+  }
+  .report-attachment-patterns__card-body {
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  .report-attachment-patterns__examples {
+    gap: 10px;
+    padding-top: 18px;
+  }
+}
+
+@keyframes report-tooltip-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -100%) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -100%) translateY(-8px);
+  }
+}
+
+@keyframes report-card-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes report-card-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }

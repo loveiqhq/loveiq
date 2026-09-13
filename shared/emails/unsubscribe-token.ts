@@ -187,8 +187,7 @@ export function campaignLabel(campaign: string): string {
  * Pure + escape-free: the caller escapes `label` for Slack; notes are static.
  */
 export type UnsubscribeSource =
-  | { attributed: true; label: string }
-  | { attributed: false; note: string };
+  { attributed: true; label: string } | { attributed: false; note: string };
 
 export function describeUnsubscribeSource(
   campaign: string,

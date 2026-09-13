@@ -242,12 +242,6 @@ export const overlays: OverlayDef[] = [
     transform: "scale_1_7_to_0_1",
   },
   {
-    id: "OVL_ORGASM_EASE",
-    name: "Orgasms easy with a partner (overlay)",
-    qid: "03014",
-    transform: "scale_1_7_to_0_1",
-  },
-  {
     id: "OVL_COUNTRY",
     name: "Country (localization context)",
     qid: "15001",
@@ -342,12 +336,6 @@ export const overlays: OverlayDef[] = [
     name: "Help style",
     qid: "16007",
     transform: "categorical_passthrough",
-  },
-  {
-    id: "OVL_SUPPORT_PREFS",
-    name: "Support preferences",
-    qid: "16008",
-    transform: "multiselect_to_support_tags",
   },
   {
     id: "OVL_TOPIC_IMPORTANCE",

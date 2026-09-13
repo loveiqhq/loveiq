@@ -94,13 +94,14 @@ describe("GET /api/cron/purge-old-data (F-02)", () => {
       .mockResolvedValueOnce(purgeResponse(0)) // resend_webhook_event
       .mockResolvedValueOnce(purgeResponse(5)) // cron_run
       .mockResolvedValueOnce(purgeResponse(20)) // invite_event
-      .mockResolvedValueOnce(purgeResponse(3)); // slack_dead_letter
+      .mockResolvedValueOnce(purgeResponse(3)) // slack_dead_letter
+      .mockResolvedValueOnce(purgeResponse(7)); // brain_query
 
     const res = await GET(makeRequest("test-cron-secret"));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.success).toBe(true);
-    expect(body.totalDeleted).toBe(12 + 345 + 6 + 0 + 5 + 20 + 3);
+    expect(body.totalDeleted).toBe(12 + 345 + 6 + 0 + 5 + 20 + 3 + 7);
     expect(body.summary["survey_partial_save"].deleted).toBe(12);
     expect(body.summary["analytics_event"].deleted).toBe(345);
     expect(body.summary["payment_webhook_event"].deleted).toBe(6);
@@ -108,10 +109,13 @@ describe("GET /api/cron/purge-old-data (F-02)", () => {
     expect(body.summary["cron_run"].deleted).toBe(5);
     expect(body.summary["invite_event"].deleted).toBe(20);
     expect(body.summary["slack_dead_letter"].deleted).toBe(3);
+    // The company-brain question log. Now written on EVERY MCP tool call, where it
+    // was one Slack row a week, so it is the fastest-growing table in the list.
+    expect(body.summary["brain_query"].deleted).toBe(7);
     // Guard against silent drift: every rule must be exercised.
-    expect(Object.keys(body.summary)).toHaveLength(7);
-    expect(mockSupabaseFetch).toHaveBeenCalledTimes(7);
-    // No table errored — the mock covered all 7 calls.
+    expect(Object.keys(body.summary)).toHaveLength(8);
+    expect(mockSupabaseFetch).toHaveBeenCalledTimes(8);
+    // No table errored — the mock covered all 8 calls.
     const rows = Object.values(body.summary) as Array<{ deleted: number; error?: string }>;
     expect(rows.every((r) => !r.error)).toBe(true);
   });

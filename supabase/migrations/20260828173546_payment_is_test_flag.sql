@@ -38,6 +38,20 @@ update payment
    set is_test = true
  where stripe_charge_id like '%EOOls8qn9F%';
 
+-- migration-lint: ignore
+--
+-- The rule is right: this CREATE INDEX has no CONCURRENTLY and takes a lock. It is
+-- suppressed rather than fixed because the migration WAS ALREADY APPLIED to
+-- production (ledger 20260828173546) against a pre-launch `payment` table of a few
+-- dozen rows, so the lock it took was measured in milliseconds and has already
+-- happened. Rewriting the file to say CONCURRENTLY would not re-run anything; it
+-- would just make the file describe something other than what production ran, which
+-- is worse than an honest suppression.
+--
+-- This has been failing CI since 29 August, hidden behind an earlier prettier
+-- failure in the same job. New migrations are still checked -- the opt-out is
+-- per-file.
+--
 -- Revenue queries filter on this, so an index keeps the common
 -- `status = 'succeeded' and not is_test` scan cheap as the table grows.
 create index if not exists payment_is_test_idx on payment (is_test) where not is_test;

@@ -9,7 +9,15 @@ vi.mock("@features/checkout/ui/startReportCheckout", () => ({
   startReportCheckout: (...args: unknown[]) => mockStartReportCheckout(...args),
 }));
 
-const mockSearchParams = vi.fn(() => new URLSearchParams());
+// This suite was written against Report 2.0 and still covers it. V1 became the
+// DEFAULT on 2026-09-13 (see features/report/ui/v1/ReportExperienceV1.tsx), so
+// every case here opts into `?v2=1` explicitly. V1's own coverage lives in
+// ReportPageV1.test.tsx.
+//
+// NOTE: useSearchParams() is called by BOTH the shell and the experience, and
+// the shell calls first — so a `mockReturnValueOnce` override lands on the shell
+// and must carry `v2=1` too, or the page silently renders V1 instead.
+const mockSearchParams = vi.fn(() => new URLSearchParams("v2=1"));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/report",
   useRouter: () => ({ push: mockRouterPush }),
@@ -65,9 +73,12 @@ vi.mock("@features/analytics/client", () => ({
 }));
 
 import ReportPage from "@features/report/ui/ReportPage";
+import * as analytics from "@features/analytics/client";
 import { archetypeContent } from "@/data/report-archetypes";
 import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
 import type { ReportPracticeTendencyContentForUser } from "@features/report/ui/hooks/useReportData";
+import { reportSections } from "@/data/report-general";
+import { resolveReportSections } from "@features/report/ui/reportTitles";
 // The 50/50 was concluded → any non-empty token now buckets to the forced
 // "treatment" arm. The soft "control" (dismissible) experience is now reached
 // only via the email-return escape hatch (from=email / utm_source=email) or the
@@ -409,7 +420,7 @@ describe("ReportPage", () => {
       // ?offer=1 forces the modal open even without quotes — same path the
       // discount-email deep-link uses, and it's the only way the modal can
       // open when there's no quote data to derive a discount step from.
-      mockSearchParams.mockReturnValueOnce(new URLSearchParams("offer=1"));
+      mockSearchParams.mockReturnValueOnce(new URLSearchParams("offer=1&v2=1"));
 
       render(<ReportPage />);
 
@@ -642,7 +653,7 @@ describe("ReportPage", () => {
       response.data.pricingQuotes!.full_report.discountStep = 0;
       response.data.pricingQuotes!.all_reports.discountStep = 0;
       mockUseReportData.mockReturnValue(response);
-      mockSearchParams.mockReturnValueOnce(new URLSearchParams("offer=1"));
+      mockSearchParams.mockReturnValueOnce(new URLSearchParams("offer=1&v2=1"));
 
       const { container } = render(<ReportPage />);
 
@@ -670,7 +681,7 @@ describe("ReportPage", () => {
     const paid = buildSuccessResponse();
     paid.data.accessPlan = "full_report";
     mockUseReportData.mockReturnValue(paid);
-    mockSearchParams.mockReturnValueOnce(new URLSearchParams("offer=1"));
+    mockSearchParams.mockReturnValueOnce(new URLSearchParams("offer=1&v2=1"));
 
     render(<ReportPage />);
 
@@ -700,13 +711,170 @@ describe("ReportPage", () => {
     // With the wall gone there is nothing to soften, so an email return must
     // look exactly like any other visit.
     mockUseReportData.mockReturnValue(buildSuccessResponse());
-    mockSearchParams.mockImplementation(() => new URLSearchParams("from=email"));
+    mockSearchParams.mockImplementation(() => new URLSearchParams("from=email&v2=1"));
     try {
       render(<ReportPage token={TREATMENT_TOKEN} />);
       const dialog = screen.getByRole("dialog");
       expect(within(dialog).getByRole("button", { name: /close/i })).toBeInTheDocument();
     } finally {
-      mockSearchParams.mockImplementation(() => new URLSearchParams());
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
     }
+  });
+
+  /**
+   * `locked_card_price_shown` reached PostHog 331 times across 276 sessions while
+   * writing ZERO rows to `analytics_event` from 2026-08-01 onward. The cause was
+   * effect ORDER: `persistAnalyticsEvent` drops any event fired before
+   * `window.__loveiqReportSubmissionId` is set, and the submission context used
+   * to be published ~1500 lines BELOW this effect. Its one-shot ref is set
+   * before the call, so the dropped attempt was never retried.
+   *
+   * The damage was to what we believed rather than to what readers saw: the
+   * admin funnel read as though 39% of report readers never saw a price, when
+   * the client-side event shows 89% did.
+   */
+  describe("persisted analytics can be attributed", () => {
+    function withSubmission(id: number | null) {
+      const base = buildSuccessResponse();
+      return { ...base, data: { ...base.data, submissionId: id } };
+    }
+
+    it("publishes the submission context BEFORE the locked-card price event", async () => {
+      mockUseReportData.mockReturnValue(withSubmission(1920));
+
+      render(<ReportPage />);
+
+      const setCtx = vi.mocked(analytics.setReportSubmissionContext);
+      const priceShown = vi.mocked(analytics.trackLockedCardPriceShown);
+      await waitFor(() => expect(priceShown).toHaveBeenCalled());
+      expect(setCtx).toHaveBeenCalledWith(1920);
+      // Order IS the defect — both merely firing is not enough.
+      expect(Math.min(...setCtx.mock.invocationCallOrder)).toBeLessThan(
+        Math.min(...priceShown.mock.invocationCallOrder)
+      );
+    });
+
+    it("does not burn the one-shot ref when there is no submission to attribute to", async () => {
+      mockUseReportData.mockReturnValue(withSubmission(null));
+
+      render(<ReportPage />);
+      await waitFor(() => expect(mockTrackReportViewed).toHaveBeenCalled());
+
+      // Firing here would persist nothing AND mark the event done for the whole
+      // pageview, which is exactly how five weeks of rows were lost.
+      expect(vi.mocked(analytics.trackLockedCardPriceShown)).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * V1 is the pre-2.0 report, restored on 2026-09-13 and made the DEFAULT for
+   * every reader (WhatsApp 2026-09-12, Mark: "Revert back fully please").
+   * Report 2.0 is still in the tree behind `?v2=1` — every other case in this
+   * file opts into it — so these guard the half that actually ships.
+   */
+  describe("V1 — the restored pre-2.0 report", () => {
+    beforeEach(() => {
+      // No `v2=1`: this is what a real visitor gets.
+      mockSearchParams.mockImplementation(() => new URLSearchParams());
+    });
+
+    it("is what renders by default, and Report 2.0 only behind ?v2=1", () => {
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      const { container: v1 } = render(<ReportPage />);
+      // `welcome` is the clearest tell: Report 2.0 retires it, V1 opens on it.
+      expect(v1.querySelector("#welcome")).not.toBeNull();
+      cleanup();
+
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      const { container: v2 } = render(<ReportPage />);
+      expect(v2.querySelector("#welcome")).toBeNull();
+    });
+
+    it("renders every chapter of report-general, in sectionNumber order", () => {
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      const { container } = render(<ReportPage />);
+
+      // The exact list and order the old report shipped: no retirement filter
+      // and no Figma re-sort, both of which are Report 2.0 concepts. Comparing
+      // against the resolver rather than a hand-written list means a change to
+      // data/report-general.ts cannot silently drift past this.
+      const expected = resolveReportSections(reportSections, "Emotional Voyeur").map((s) => s.id);
+      const rendered = Array.from(container.querySelectorAll("section[id]")).map((el) => el.id);
+      expect(rendered).toEqual(expected);
+
+      // Guard the count too — `toEqual` on two empty arrays would also pass.
+      expect(expected.length).toBeGreaterThan(25);
+      // And the chapters 2.0 retired are genuinely back, not merely unfiltered.
+      for (const id of [
+        "welcome",
+        "the_loveiq_concept",
+        "core_motivation",
+        "probability_of_other_archetypes",
+        "risk_orientation",
+        "about_living_or_not_living_fantasies",
+      ]) {
+        expect(rendered).toContain(id);
+      }
+    });
+
+    it("goes straight to Stripe from the pricing modal — no /checkout hop", async () => {
+      const user = userEvent.setup();
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      render(<ReportPage />);
+      await user.click(screen.getByRole("button", { name: /^unlock my report$/i }));
+
+      // The pre-2.0 report navigated to a /checkout page that c37514d3 deleted.
+      // Restoring the old UI must not restore that hop.
+      expect(mockRouterPush).not.toHaveBeenCalled();
+      await waitFor(() => expect(mockStartReportCheckout).toHaveBeenCalledTimes(1));
+      expect(mockStartReportCheckout.mock.calls[0][0]).toMatchObject({
+        plan: "full_report",
+        archetype: "Emotional Voyeur",
+      });
+    });
+
+    it("keeps ?v2=1 when the reader opens another archetype", async () => {
+      const user = userEvent.setup();
+      mockRouterPush.mockReset();
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+      const response = buildSuccessResponse();
+      response.data.accessPlan = "all_reports";
+      response.data.unlockedArchetypes = ["Emotional Voyeur", "Explorer of Edges"];
+      mockUseReportData.mockReturnValue(response);
+
+      render(<ReportPage />);
+      const [tile] = screen.getAllByRole("button", { name: /view Explorer of Edges report/i });
+      await user.click(tile);
+
+      await waitFor(() => expect(mockRouterPush).toHaveBeenCalled());
+      const href = String(mockRouterPush.mock.calls[0][0]);
+      expect(href).toContain("archetype=");
+      // The arm has to ride along. Without it, anyone comparing the two reports
+      // is silently dropped back to V1 on the first tile they click.
+      expect(href).toContain("v2=1");
+    });
+
+    it("carries neither the forced paywall nor the EUR 2 urgency countdown", async () => {
+      const user = userEvent.setup();
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      const { container } = render(<ReportPage />);
+
+      // 565f4cac removed the countdown. Its label was the only text on the card
+      // and in the modal, so its absence is the whole assertion.
+      expect(screen.queryByText(/time left to secure this price/i)).not.toBeInTheDocument();
+
+      // 05725c7f removed the forced wall: the modal must always be dismissible.
+      await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+      const closeButton = screen.getByRole("button", { name: /close pricing modal/i });
+      expect(closeButton).toBeInTheDocument();
+      await user.click(closeButton);
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+      // And the report underneath is readable rather than walled off.
+      expect(container.querySelector(".report-page")).not.toBeNull();
+    });
   });
 });

@@ -16,6 +16,7 @@ vi.mock("@shared/observability/logger", () => ({
 vi.mock("@features/pricing/logic/reportPricing", () => ({
   getReportPriceQuoteForContext: vi.fn(),
   getReportPriceQuotesForContext: vi.fn(),
+  markReportPriceQuotePaywallReached: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Run the deferred work inline so the journey ping is observable in the test.
@@ -29,6 +30,8 @@ vi.mock("@shared/http/after-response", () => ({
 vi.mock("@features/report/server/personalReport", () => ({
   resolveSubmissionAccessContext: vi.fn().mockResolvedValue({ submissionId: 4242 }),
 }));
+
+import { markReportPriceQuotePaywallReached } from "@features/pricing/logic/reportPricing";
 
 vi.mock("@features/attribution/server/journey-message", () => ({
   refreshJourneyMessage: vi.fn().mockResolvedValue(undefined),
@@ -295,5 +298,43 @@ describe("POST /api/price", () => {
     const res = await POST(armRequest({ token: "rpt_ABCDEFGHIJKLMNOPQRST" }));
 
     expect(res.status).toBe(200);
+  });
+
+  /**
+   * This POST is the only SERVER-SIDE witness that a reader reached the paywall.
+   * It used to write nothing durable — it just passed a transient `reachedFloor`
+   * to the Slack message — which left `paywall_initiated` in the funnel as the
+   * one stage with no consent-independent signal behind it. That matters now
+   * that `begin_checkout` reads `checkout_started_at`: a consent-gated stage
+   * sitting directly above a consent-independent one can invert.
+   */
+  it("stamps the paywall server-side, not only in the Slack message", async () => {
+    const res = await POST(armRequest({ token: "rpt_ABCDEFGHIJKLMNOPQRST" }));
+
+    expect(res.status).toBe(200);
+    await vi.waitFor(() =>
+      expect(markReportPriceQuotePaywallReached).toHaveBeenCalledWith({ submissionId: 4242 })
+    );
+  });
+
+  it("still advances the Slack message when the durable stamp fails", async () => {
+    // Two independent writes: the funnel reads one, a human reads the other, and
+    // a failure in the first must not cost the second.
+    vi.mocked(markReportPriceQuotePaywallReached).mockRejectedValueOnce(new Error("db down"));
+
+    const res = await POST(armRequest({ token: "rpt_ABCDEFGHIJKLMNOPQRST" }));
+
+    expect(res.status).toBe(200);
+    // Both writes happen after the response, and the rejected stamp costs an
+    // extra microtask turn before the journey call is reached — so wait for it
+    // rather than asserting on the same tick.
+    await vi.waitFor(() => expect(refreshJourneyMessage).toHaveBeenCalledWith(4242, "paywall"));
+  });
+
+  it("stamps nothing when there is no report context", async () => {
+    const res = await POST(armRequest({}));
+
+    expect(res.status).toBe(400);
+    expect(markReportPriceQuotePaywallReached).not.toHaveBeenCalled();
   });
 });

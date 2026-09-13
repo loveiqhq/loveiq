@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type FC, type FormEvent, type MutableRefOb
 import posthog from "posthog-js";
 import { canSharePlan } from "@features/report/server/planAccess";
 import { useReportShares } from "./hooks/useReportShares";
-import { restoreScroll } from "@shared/ui/restore-scroll";
+import { lockBodyScroll, unlockBodyScroll } from "@shared/ui/body-scroll-lock";
 
 interface Props {
   open: boolean;
@@ -83,19 +83,7 @@ const ShareReportModal: FC<Props> = ({
 
   useEffect(() => {
     if (!open) return;
-    const scrollY = window.scrollY;
-    const restore = {
-      htmlOverflow: document.documentElement.style.overflow,
-      bodyOverflow: document.body.style.overflow,
-      bodyPosition: document.body.style.position,
-      bodyTop: document.body.style.top,
-      bodyWidth: document.body.style.width,
-    };
-    document.documentElement.style.overflow = "hidden";
-    document.body.style.position = "fixed";
-    document.body.style.top = `-${scrollY}px`;
-    document.body.style.width = "100%";
-    document.body.style.overflow = "hidden";
+    lockBodyScroll();
 
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -121,12 +109,7 @@ const ShareReportModal: FC<Props> = ({
     document.addEventListener("keydown", handleKey);
 
     return () => {
-      document.documentElement.style.overflow = restore.htmlOverflow;
-      document.body.style.overflow = restore.bodyOverflow;
-      document.body.style.position = restore.bodyPosition;
-      document.body.style.top = restore.bodyTop;
-      document.body.style.width = restore.bodyWidth;
-      restoreScroll(scrollY);
+      unlockBodyScroll();
       document.removeEventListener("keydown", handleKey);
     };
   }, [onClose, open]);

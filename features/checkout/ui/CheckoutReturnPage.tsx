@@ -98,9 +98,7 @@ const CheckoutReturnPage: FC<Props> = ({
           `/api/stripe/checkout-session-status?session_id=${encodeURIComponent(resolvedSessionId)}`
         );
         const json = (await response.json().catch(() => null)) as
-          | StripeCheckoutSessionStatusResponse
-          | { error?: string }
-          | null;
+          StripeCheckoutSessionStatusResponse | { error?: string } | null;
 
         if (cancelled) return;
 

@@ -502,33 +502,6 @@ export const surveyQuestions: SurveyQuestion[] = [
     formatGuidance: "Select one option.",
   },
   {
-    qId: "03014",
-    cId: 3,
-    chapter: "Arousal Styles — Cues, Conditions & Brakes",
-    question: "During sex, I can usually reach orgasm when I want to.",
-    answerType: "scale",
-    options: [],
-    required: true,
-    guide:
-      "Think about typical partnered sex in recent months, in decent conditions. This is about pattern, not pressure.",
-    supportAndGuidance:
-      "Think about typical partnered sex in recent months, in decent conditions. This is about pattern, not pressure.",
-    scaleLabels: { low: "Not true at all", high: "Completely true" },
-    comment:
-      "Used to tailor pacing, expectations, and guidance around orgasm and partnered pleasure. It does not directly define your archetype.",
-    howAnswerIsUsed:
-      "Used to tailor pacing, expectations, and guidance around orgasm and partnered pleasure. It does not directly define your archetype.",
-    hoverStates: {
-      "1": "Not true at all: Orgasm with a partner is very uncommon for you, even when you want it and conditions are reasonably supportive.",
-      "2": "Mostly not true: Orgasm with a partner is possible, but only in rare or unusually favorable situations.",
-      "3": "Slightly not true: Orgasm with a partner happens from time to time, but it is not something you can generally count on.",
-      "4": "Mixed / depends: Orgasm with a partner happens with some consistency, though it still feels variable and not fully dependable.",
-      "5": "Slightly true: Orgasm with a partner is available to you fairly often and feels like a recurring part of partnered sex.",
-      "6": "Mostly true: Orgasm with a partner happens in most supportive situations when you want it.",
-      "7": "Completely true: Orgasm with a partner is highly accessible and reliably available to you when you want it.",
-    },
-  },
-  {
     qId: "08002",
     cId: 8,
     chapter: "Attachment Style & Emotional Safety",
@@ -1234,7 +1207,8 @@ export const surveyQuestions: SurveyQuestion[] = [
       "This sets the main focus of your next-step suggestions, so the report starts with what matters most to you now.",
     howAnswerIsUsed:
       "This sets the main focus of your next-step suggestions, so the report starts with what matters most to you now.",
-    formatGuidance: "Select all that apply.",
+    formatGuidance: "Select up to two options.",
+    maxSelections: 2,
   },
   {
     qId: "16002",
@@ -1338,53 +1312,52 @@ export const surveyQuestions: SurveyQuestion[] = [
     formatGuidance: "Select one option.",
   },
   {
-    qId: "16008",
+    qId: "16009",
     cId: 16,
     chapter: "Next Steps & Preferences",
-    question: "What kind of support would actually help you most with your top focus?",
-    answerType: "multiple",
+    question:
+      "If these existed for what you most want to work on in your sex life, which would you actually buy first?",
+    answerType: "single",
     options: [
-      "Self-guided tools I can use on my own (prompts, exercises, reflections)",
-      "A short, structured program over a few weeks",
-      "A live group, workshop, or circle",
-      "Support I can do together with the person I'm with",
-      "1-on-1 work with a professional",
-      "Not sure yet",
+      "A 15-minute read that tells me what mine looks like — €19",
+      "A 4-week guided program with weekly exercises — €119",
+      "One 60-minute session with a practitioner — €149",
+      "A small live group of six people over four sessions — €229",
+      "None of these right now",
     ],
     required: true,
     guide:
-      "Pick what would actually make your next step easier in real life — not what sounds most impressive.",
+      'Nothing is for sale here and no payment is taken. We are working out what would actually be worth building, so "none of these" is a real answer and just as useful as the others.',
     supportAndGuidance:
-      "Pick what would actually make your next step easier in real life — not what sounds most impressive.",
+      'Nothing is for sale here and no payment is taken. We are working out what would actually be worth building, so "none of these" is a real answer and just as useful as the others.',
     comment:
-      "This shapes the format of your recommendations—more practical, reflective, structured, or supportive.",
+      "Tells us which format people would genuinely pay for so we build that one first instead of guessing.",
     howAnswerIsUsed:
-      "This shapes the format of your recommendations—more practical, reflective, structured, or supportive.",
-    formatGuidance: "Select all that apply.",
+      "Tells us which format people would genuinely pay for so we build that one first instead of guessing.",
+    formatGuidance: "Select one option.",
   },
   {
     qId: "16011",
     cId: 16,
     chapter: "Next Steps & Preferences",
-    question: "Which of these are already part of your life?",
+    question: "Which of these have you actually paid for in the last 12 months?",
     answerType: "multiple",
     options: [
       "Therapy, coaching, or counseling",
-      "Books or other long reads",
-      "Apps for things like meditation, sleep, or breathwork",
-      "Paid subscriptions (streaming, podcasts, lifestyle apps)",
-      "Online courses, programs, or paid communities",
+      "Books, courses, or programs",
+      "An app or subscription",
+      "A retreat, workshop, or group",
       "None of these",
     ],
     required: true,
     guide:
-      "Helps us recommend things that feel familiar and doable — not a whole new world for you to figure out.",
+      "Only count what you actually paid for in the last year — not what you read about or were given for free.",
     supportAndGuidance:
-      "Helps us recommend things that feel familiar and doable — not a whole new world for you to figure out.",
+      "Only count what you actually paid for in the last year — not what you read about or were given for free.",
     comment:
-      "This helps us understand the kinds of support tools and formats you already engage with.",
+      "This tells us what kinds of support you already pay for so your next steps land at a level that fits.",
     howAnswerIsUsed:
-      "This helps us understand the kinds of support tools and formats you already engage with.",
+      "This tells us what kinds of support you already pay for so your next steps land at a level that fits.",
     formatGuidance: "Select all that apply.",
   },
   {
@@ -1459,7 +1432,8 @@ export const surveyQuestions: SurveyQuestion[] = [
       "This tells us which obstacles to prioritize first so the report focuses on what is actually blocking progress.",
     howAnswerIsUsed:
       "This tells us which obstacles to prioritize first so the report focuses on what is actually blocking progress.",
-    formatGuidance: "Select all that apply.",
+    formatGuidance: "Select one option.",
+    maxSelections: 1,
   },
   {
     qId: "16015",

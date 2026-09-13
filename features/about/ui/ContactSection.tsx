@@ -36,7 +36,7 @@ const FormField: FC<FormFieldProps> = ({
         id={id}
         name={id}
         type={type}
-        className="h-[49px] w-full border-b border-black/[0.14] bg-transparent text-sm text-[#161021] transition focus:border-[#161021] focus:outline-none focus:ring-0 disabled:opacity-60"
+        className="h-[49px] w-full border-b border-black/[0.14] bg-transparent text-base sm:text-sm text-[#161021] transition focus:border-[#161021] focus:outline-none focus:ring-0 disabled:opacity-60"
         value={value}
         onChange={onChange}
         required
@@ -350,7 +350,7 @@ const ContactSection: FC = () => {
                       id="message"
                       name="message"
                       rows={4}
-                      className="w-full rounded-xl border border-black/[0.14] bg-white px-4 py-4 text-sm font-light text-[#161021] placeholder:text-[#9a96a6] focus:border-[#161021] focus:outline-none disabled:opacity-60"
+                      className="w-full rounded-xl border border-black/[0.14] bg-white px-4 py-4 text-base sm:text-sm font-light text-[#161021] placeholder:text-[#9a96a6] focus:border-[#161021] focus:outline-none disabled:opacity-60"
                       placeholder="Tell us a bit about yourself and your project goals"
                       value={form.message}
                       onChange={handleChange}

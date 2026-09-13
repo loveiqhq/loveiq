@@ -273,7 +273,21 @@ export function dimensionValue(row: EnrichedRow, dim: DimensionKey, opts: Access
     case "utmCampaign":
       return row.utmCampaign || UNKNOWN_LABEL;
     case "landingVariant":
-      return row.landingVariant || "control";
+      /**
+       * `|| UNKNOWN_LABEL`, NOT `|| "control"`, which is what this was until 2026-09-12
+       * and which every one of the six sibling cases above already got right.
+       *
+       * MEASURED that day: 809 completed submissions carry no arm in their utm_tracker,
+       * against 966 `white`, 141 `white_prev` and 53 `control`. The real control arm ran
+       * for five days, 14-19 June. So this line reported 862 submissions as the retired
+       * dark arm where the truth is 53 -- a 16x overstatement, and every A/B answer this
+       * explorer gave was wrong about it.
+       *
+       * Not recorded is not a variant. `get_landing_variant_funnel` already returns
+       * these as `unknown` and `recordVisit.ts` already stores the raw value; this was
+       * the last of the three helpers to still collapse.
+       */
+      return row.landingVariant || UNKNOWN_LABEL;
     case "device":
       return row.device ?? UNKNOWN_LABEL;
     case "experimentGroup":

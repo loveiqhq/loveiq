@@ -286,6 +286,31 @@ describe("new dimensions", () => {
     expect(dimensionValue(r, "sessionBucket", opts)).toBe("2");
   });
 
+  /**
+   * A MISSING ARM IS NOT AN ARM.
+   *
+   * This case read `row.landingVariant || "control"` until 2026-09-12, alone among the
+   * seven cases in that switch. MEASURED that day: 809 of 1,969 completed submissions
+   * carry no arm in their utm_tracker, while the real `control` arm has 53 and ran for
+   * five days in June. So the explorer reported 862 as the retired dark arm -- a 16x
+   * overstatement of a finished test, and every A/B answer it gave was wrong about it.
+   */
+  it.each([null, undefined, ""])(
+    "a landing arm of %p reads as Unknown, never as the retired control arm",
+    (missing) => {
+      const r = row({ landingVariant: missing as unknown as string });
+      expect(dimensionValue(r, "landingVariant", opts)).toBe("Unknown");
+      expect(dimensionValue(r, "landingVariant", opts)).not.toBe("control");
+    }
+  );
+
+  it("a real arm is still passed through untouched", () => {
+    // The fix must not swallow genuine values -- white_prev is the live round-2 arm.
+    for (const arm of ["white", "white_prev", "control"]) {
+      expect(dimensionValue(row({ landingVariant: arm }), "landingVariant", opts)).toBe(arm);
+    }
+  });
+
   it("missing pricing/engagement reads as Unknown / Not viewed / 0", () => {
     const r = row({ reportViewed: false, sessionCount: 0 });
     expect(dimensionValue(r, "reportViewed", opts)).toBe("Not viewed");

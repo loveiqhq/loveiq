@@ -1,29 +1,13 @@
 export type AdminIntelligenceSurface =
-  | "command-center"
-  | "product"
-  | "growth"
-  | "strategy"
-  | "health"
-  | "experiments"
-  | "research";
+  "command-center" | "product" | "growth" | "strategy" | "health" | "experiments" | "research";
 
 export type AdminIntelligenceTone = "good" | "watch" | "risk" | "neutral";
 export type AdminIntelligenceConfidence = "high" | "medium" | "low";
 export type AdminIntelligenceDraftKind =
-  | "action"
-  | "hypothesis"
-  | "experiment"
-  | "brief"
-  | "investigation"
-  | "segment";
+  "action" | "hypothesis" | "experiment" | "brief" | "investigation" | "segment";
 
 export type AdminIntelligenceDraftActionSource =
-  | "general"
-  | "metric"
-  | "decision"
-  | "experiment"
-  | "release"
-  | "investigation";
+  "general" | "metric" | "decision" | "experiment" | "release" | "investigation";
 
 export interface AdminIntelligenceEvidence {
   label: string;

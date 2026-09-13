@@ -1,8 +1,5 @@
 export type StatisticalSignificance =
-  | "significant-lift"
-  | "significant-regression"
-  | "inconclusive"
-  | "insufficient-data";
+  "significant-lift" | "significant-regression" | "inconclusive" | "insufficient-data";
 
 export interface StatisticalSignal {
   method: "two-proportion" | "count-delta" | "mean-difference";

@@ -95,9 +95,7 @@ export async function startReportCheckout({
     });
 
     const json = (await response.json().catch(() => null)) as
-      | StripeCheckoutSessionResponse
-      | { error?: string }
-      | null;
+      StripeCheckoutSessionResponse | { error?: string } | null;
 
     if (!response.ok) {
       return {

@@ -1,0 +1,249 @@
+# The answers people keep getting wrong
+
+> One page for the handful of facts the company brain has been measured answering
+> incorrectly — not because retrieval failed, but because the correct answer was written
+> down nowhere, or was written down somewhere that ranked below something plausible.
+>
+> Each entry names the wrong answer it exists to displace, so nobody deletes it later
+> wondering why it was ever here. Sourced from a 468-question audit on 2026-09-10.
+
+## How many: every count of real activity is live, and is not on this page
+
+Measured 2026-09-11: this page took rank 1 for "how many people bought", "how many
+refunds have we had", "how many signups do we have" and "how many people are on the
+waitlist" — and it holds none of those numbers. Its headings share words with the
+questions; that is all. The correct source scored a full point lower and was pushed
+down the list.
+
+So, plainly: **if the question counts people, payments, reports, emails, invites,
+shares, refunds or anyone on the waitlist, no written page is the answer.** Those
+numbers change hourly. Read them live with `list_product_tables` then
+`query_product_data`, or `get_business_numbers` for revenue, ad spend and the funnel.
+The `analytics` rows ("LoveIQ numbers — …") carry the same figures already summed by
+day, month and all-time, and each one is dated.
+
+Traffic is the one place where two different numbers are both correct, so say which you
+mean. **Our own** visit count is live in the database like everything else
+(`brain_daily_rollup`, or `get_business_numbers`). **Google's** measurement — GA4
+sessions, Search Console clicks and impressions — is not in our database at all; it
+exists only as dated `ga4` and `gsc` rows in the index.
+
+They disagree, and not slightly: for August 2026 our own tracking recorded **11,147
+visits** while GA4 recorded **3,530 sessions** for the same month — GA4 saw about a
+third. Neither is wrong. They count different things (ours counts a returning person
+once per day; GA4 counts sessions), and GA4 is additionally blocked for a share of
+visitors by ad blockers and by consent — the same roughly-one-third coverage measured
+separately for purchases. Quote one, name which, and never add them together.
+
+A number quoted in any other document — this one included — is only what was true when
+someone typed it. Quote it with its date, or go and read the live one.
+
+## The 14 archetypes: the current names
+
+Sensual Connector · Spark Seeker · Relational Nurturer · Radiant Performer ·
+Explorer of Edges · Curious Apprentice · Spiritual Lover · Minimalist Companion ·
+Emotional Voyeur · Authority Conductor · Loyal Ritualist · Tender Devotee ·
+Analytical Sexualist · Quiet Withdrawer
+
+That list is `KNOWN_ARCHETYPES` in `features/report/server/archetypeSlug.ts`, which is
+what the product actually uses. There are fourteen and there have been fourteen since V9.
+
+**Three were renamed at V9** (see `docs/adr/0002-v9-archetype-renames.md`) — the scoring
+maths did not change, only the display names:
+
+| Old (V8)                | Current (V9)        |
+| ----------------------- | ------------------- |
+| Approval Seeker         | Tender Devotee      |
+| Power Orchestrator      | Authority Conductor |
+| Exhibitionist Performer | Radiant Performer   |
+
+**Names that were never shipped.** "Erotic Adventurer", "Romantic Nurturer" and
+"Logical Sexualist" appear in a Notion ideas page from December 2025 and in no product
+code. Asked "what are the archetypes", the brain returned that page at rank 1 and the
+rename record at rank 9, so the answer mixed retired, never-shipped and current names
+into one list.
+
+## Refunds: what happens to a customer's money and to their report
+
+A refund is issued from the **Stripe dashboard**, not from our admin panel — there is no
+refund button in the product. Stripe then sends a `charge.refunded` webhook to
+`/api/stripe/webhook`, and our handler **re-locks the report**: the reader loses the
+paid sections and the paywall returns. Disputes work the same way (`charge.dispute.created`
+re-locks), and a dispute we win (`charge.dispute.closed` with `status=won`) restores access.
+
+To count refunds, query the `payment` table with `query_product_data` — the analytics
+rows carry revenue but not a refund count.
+
+**The wrong answer this displaces:** a Drive file called "Refund Template", which is an
+**employee expense-reimbursement form** — Employee ID, Department, Business Justification.
+It held ranks 1, 2 and 4 for "how do refunds work", and nothing about customer refunds
+appeared at all, so the honest reading of the brain's answer was that LoveIQ has no
+customer refund path.
+
+## Survey submissions: where the completed-survey count lives
+
+The count of completed surveys is in the `analytics` rows, all-time and per month —
+`Signups (completed surveys)`. It is also `survey_submission` in the live database.
+
+**The wrong answer this displaces:** the figure **5,705** appears inside
+`decision:2026-09-09-3d275f5327`, where it counts _individual free-text answer fields_
+across all submissions — 1,432 ZIP codes, 1,429 countries, 1,401 emails, 1,390 names and
+two actual free-text responses. It is not a count of people and never was. That decision
+record ranked second for "how many survey responses do we have", and decision records are
+the source the runbook tells readers to trust first.
+
+## Investors, funding, valuation, board meetings, the board: we have none of these
+
+"Board" is the name of our **Notion task board**. There is no board of directors, no
+board meetings, no investors, no cap table, no funding round and no term sheet. **There
+is no valuation** — nobody has priced the company, so there is no number to report, and
+the same goes for pre-money, post-money, equity split and ownership percentage. A question
+about any of those has no answer here, and the honest response is to say we have no such
+record — not to return something adjacent.
+
+**The wrong answers this displaces**, all measured 2026-09-10:
+
+- _"who are our investors"_ → a shared spreadsheet titled "Pitchbook Investors Data",
+  which is market research, plus two AQVC fundraising newsletters. Nothing in it names an
+  investor in LoveIQ, because there is none.
+- _"what is our funding situation"_ → LP and VC newsletters from a mailing list
+  ("Not Every Fund Is Ready for LP Introductions"). Reading them as ours implies we are
+  raising, or that AQVC is in a round with us. Neither is recorded anywhere.
+- _"when is our next board meeting"_ → an all-day calendar hold called "Roadmap workshop".
+  It is a working session, not a board meeting.
+- _"what did the board say"_ → whichever task card ranked highest that day.
+
+Task cards are titled `Notion task: …` in the index for exactly this reason; the database
+is still called Board in Notion and `meta.database` still says so.
+
+## What we run on, and what we do not: there is no AWS bill
+
+Everything is rented, and it is a short list. **Vercel** hosts the site and runs every
+API route and cron. **Supabase** is the database. **Resend** sends all email — every
+survey confirmation, nurture email, report link and invite. **Stripe** takes the money.
+**Upstash Redis** backs the rate limiter. Google Cloud is used for APIs only — Analytics,
+Search Console, Drive, Gmail and Calendar, through one service account — never for hosting.
+
+**There is no AWS account and no AWS bill.** No EC2, no S3, no Lambda, no RDS. Nor is
+there a server anyone administers, a Kubernetes cluster, a Docker host or a VPS. A
+question about any of those has no answer because the thing does not exist — which is
+different from the record being missing, and worth saying plainly rather than returning
+the nearest infrastructure-shaped document.
+
+Stripe runs in test mode as well as live. The **test card number is 4242 4242 4242 4242**,
+with any future expiry date and any CVC; a purchase made with it fulfills through the real
+webhook path, so it unlocks a real report against test money.
+
+## We are a website, not an app: there is nothing to download
+
+LoveIQ runs in a browser at loveiq.org. There is **no mobile app** — nothing on the App
+Store or Google Play, no React Native or Expo anywhere, and no separate mobile repository
+(we have six code repositories, all of them web). The assessment, the report and the
+checkout are all pages.
+
+So "do we have an app", "when is the app launching" and "what is our app rating" have no
+answer for the same reason as the AWS question: the thing does not exist. The word "app"
+does appear constantly in the codebase — it is the Next.js `app/` directory — and that is
+not a product.
+
+## Our privacy policy, terms of use and terms and conditions
+
+They are **published pages, not markdown**, so their text is not in the index — only
+`.md` files are ingested. The canonical source of each is the page itself:
+
+| Document               | Page                    | Source                              |
+| ---------------------- | ----------------------- | ----------------------------------- |
+| Privacy Policy         | `/privacy-policy`       | `app/privacy-policy/page.tsx`       |
+| Terms of Use           | `/terms-of-use`         | `app/terms-of-use/page.tsx`         |
+| Terms and Conditions   | `/terms-and-conditions` | `app/terms-and-conditions/page.tsx` |
+| Cookie Policy, Imprint | `/cookies`, `/imprint`  | `app/cookies/`, `app/imprint/`      |
+
+**What each one covers**, taken from its own section headings so this page can be checked
+against the source rather than trusted:
+
+- **Privacy Policy** — Controller · Scope · Categories of Personal Data (account and
+  identity, psychometric and survey, usage and technical, payment) · Purposes of
+  Processing · Automated Processing and AI · Recipients of Data (infrastructure and
+  hosting, payments) · and the rights and retention sections below those.
+- **Terms of Use** — Purpose of LoveIQ · Eligibility · User Account · Acceptable Use ·
+  Data Integrity · Reliance on Results · Content Standards · Monitoring and Enforcement ·
+  Platform Changes · Termination · Liability · Governing Law.
+- **Terms and Conditions** — Scope of Services · Account Registration · Contract
+  Formation · Prices and Payments · Subscription Terms · User Obligations · Intellectual
+  Property · Availability and Changes · Liability · Termination · Governing Law ·
+  Jurisdiction.
+
+For the processing detail behind the Privacy Policy, the indexed compliance documents are
+`docs/compliance/ROPA.md` (records of processing), `LAWFUL_BASIS.md` and `DPIA.md`.
+
+**The wrong answer this displaces:** with no first-party text in the index, "what is our
+privacy policy" and "what is in our terms of service about liability" were answered with
+**Vercel's** and **Google's** own policy-update emails — where the word "we" means the
+vendor, not us. Measured 2026-09-10; the reader's honest conclusion was that our terms
+were being revised.
+
+## What we charge for a report
+
+**The price is computed per visitor, so it is a live question, not a written one.** The
+authoritative answer is always `report_price_quote` via `query_product_data` — one row per
+quote, carrying the plan, the base price and every multiplier that moved it.
+
+As of 2026-09-11 there are four plans, and the price most recently quoted for each:
+
+| Plan          | Recently quoted |
+| ------------- | --------------- |
+| `essentials`  | EUR 9.99        |
+| `full_report` | EUR 29          |
+| `core`        | EUR 39          |
+| `all_reports` | EUR 49          |
+
+Those are starting points, not a price list. The quote is adjusted per visitor by
+`country_multiplier`, `device_multiplier`, `traffic_multiplier`, `behavioral_multiplier`
+and `engagement_multiplier`, and then by `discount_step` as the offer ages — which is why
+**what people actually paid ranges from EUR 3.74 to EUR 129.49**, and why the average
+order value in the analytics rows (EUR 18.27 all-time) is far below any list price.
+
+A discount also arrives from the nurture email. There are **two** stages —
+`72h_no_unlock` and `78h_no_unlock`, and `type Stage` in
+`app/api/cron/nurture-sequence/route.ts` is the source of truth. In practice a reader who
+does not convert receives exactly ONE follow-up: `72h_no_unlock`, which mints a per-user
+50%-off Stripe promotion code from `STRIPE_COUPON_50` with a 24-hour expiry.
+`78h_no_unlock` carries no discount at all — it invites a 20-minute call — and is paused
+by default behind `NURTURE_78H_CALL_ENABLED`. There is a manual 100% post-call grant.
+
+Pricing 2.0 retired the earlier escalating ladder; the 6h reminders and the 30h/54h
+discounts are gone. This paragraph previously described that retired ladder, copied from
+an out-of-date version of `CLAUDE.md` — which is the exact mistake `CLAUDE.md` warns
+against, and it mattered because this page now ranks first on nearly every pricing
+question, so the false claim rode along with the correct price table.
+
+**The wrong answers this displaces:** "what do we charge for the report" returned an Upwork
+weekly billing notification addressed to Marcus, and "what is the pricing model" returned a
+Drive requirements document describing a four-step discount ladder (+24h x0.75, +72h x0.50,
++7d x0.35, +14d x0.25) that pricing 2.0 retired — one 50% code at 72h is the nearest thing
+that still fires. Both measured 2026-09-10.
+
+## What the survey asks about, and how long it takes
+
+**65 questions**, generated from `data/survey-source.csv` into `data/survey-data.ts`.
+They fall into ten categories:
+
+| Questions | Category                                   |
+| --------: | ------------------------------------------ |
+|        14 | Background & Lifestyle                     |
+|        12 | Arousal Styles — Cues, Conditions & Brakes |
+|        12 | Next Steps & Preferences                   |
+|         7 | Attachment Style & Emotional Safety        |
+|         5 | Spontaneous Desire vs Responsive Desire    |
+|         5 | Communication Style                        |
+|         4 | Partner-Related Needs                      |
+|         3 | Current Sexual Wellbeing & Pain Points     |
+|         2 | Identity & Conditioning                    |
+|         1 | Relational Patterns & Boundaries           |
+
+The answers themselves are deliberately NOT indexed — see the decision record on verbatim
+survey answers. The _questions_ are, through the repository CSV.
+
+**The wrong answer this displaces:** "what does the survey ask about" returned a Gmail
+thread titled "Survey - What about turning it into a series", which is a discussion about
+the survey rather than its contents.

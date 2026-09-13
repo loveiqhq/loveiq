@@ -174,10 +174,7 @@ interface DropoutByArmPayload {
 }
 
 type AnyPayload =
-  | LongitudinalPayload
-  | StageConversionPayload
-  | DropoutPayload
-  | DropoutByArmPayload;
+  LongitudinalPayload | StageConversionPayload | DropoutPayload | DropoutByArmPayload;
 
 const LONG_TITLES: Record<LongitudinalPayload["kind"], string> = {
   "cvr-visitor-start": "Visitor → Survey-start CVR",

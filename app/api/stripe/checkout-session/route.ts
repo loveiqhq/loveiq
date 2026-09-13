@@ -26,6 +26,7 @@ import { scheduleAfterResponse } from "@shared/http/after-response";
 import { refreshJourneyMessage } from "@features/attribution/server/journey-message";
 import {
   getReportAccessPlanForSubmission,
+  lookupReportTokenBySubmissionId,
   resolveSubmissionAccessContext,
 } from "@features/report/server/personalReport";
 import { isPlanOwnedForArchetype } from "@features/report/server/access";
@@ -233,6 +234,21 @@ export async function POST(request: Request) {
       logger.warn({ err }, "checkout-session: paid-plan precheck failed; allowing checkout");
     }
 
+    // Both Stripe return URLs must identify the report ON THEIR OWN. A
+    // session-driven checkout (bare `/report`, token only in storage) sends no
+    // URL token, so success/cancel used to fall back to bare `/report` — and if
+    // the browser drops storage across the cross-site Stripe round trip (Safari
+    // ITP, in-app WebViews) the reader lands on a report with no identifier,
+    // whose only button is "Take the survey". That is the reported
+    // "paywall link brought me back to the survey beginning", and on the
+    // success path it strands someone who has just paid. The server already
+    // resolved the submission, so reuse it rather than the session lookup.
+    // Best-effort: a null keeps the previous behaviour, never blocks checkout.
+    let returnToken = parsed.data.reportToken ?? null;
+    if (!returnToken && accessContext) {
+      returnToken = await lookupReportTokenBySubmissionId(accessContext.submissionId);
+    }
+
     const plan = getReportPurchasePlan(parsed.data.plan);
     const archetypeName = parsed.data.archetype ?? null;
     const archetypeSlug = archetypeName ? toArchetypeSlug(archetypeName) : null;
@@ -370,16 +386,27 @@ export async function POST(request: Request) {
           archetypeSlug,
           origin: siteUrl,
           plan: parsed.data.plan,
-          reportToken: parsed.data.reportToken ?? null,
+          reportToken: returnToken,
         }),
         cancel_url: buildCancelUrl({
           archetypeSlug,
           origin: siteUrl,
-          reportToken: parsed.data.reportToken ?? null,
+          reportToken: returnToken,
         }),
       },
       { idempotencyKey }
     );
+
+    // Nothing above this line may record a checkout. A session without a hosted
+    // URL cannot be handed off: the reader gets a 500 and never sees Stripe, so
+    // stamping the quote and telling Slack "checkout" first would report a
+    // checkout that demonstrably did not happen — and `checkout_started_at` is
+    // now the funnel's server-side truth for that stage, so the error would
+    // land in the digest and the journey rail too.
+    if (!session.url) {
+      logger.error({ sessionId: session.id }, "Stripe checkout session missing hosted URL");
+      return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
+    }
 
     await markReportPriceQuoteCheckoutStarted({ quoteId: quote.id });
 
@@ -390,11 +417,6 @@ export async function POST(request: Request) {
       scheduleAfterResponse("journey-message-checkout", async () => {
         await refreshJourneyMessage(submissionIdForJourney, "checkout");
       });
-    }
-
-    if (!session.url) {
-      logger.error({ sessionId: session.id }, "Stripe checkout session missing hosted URL");
-      return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
     }
 
     const successResponse: StripeCheckoutSessionResponse = {

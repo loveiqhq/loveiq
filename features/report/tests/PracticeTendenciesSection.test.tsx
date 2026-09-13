@@ -146,10 +146,22 @@ describe("PracticeTendenciesSection", () => {
       ).not.toBeInTheDocument();
     });
 
+    // This is the INLINE (touch) path — jsdom reports no hover capability, and
+    // the section now honours that: a touch browser synthesises mouseenter after
+    // every tap, so opening on it re-opened the row the tap was toggling shut.
+    // Hover-to-open is unchanged for pointers that really hover; that half is
+    // asserted with matchMedia stubbed in PracticeTendencies.infoToggle.test.tsx.
     await user.hover(infoButton);
+    expect(
+      screen.queryByText(/chemistry, freedom, and playful connection/i)
+    ).not.toBeInTheDocument();
+
+    // What a finger gets instead: the ⓘ toggles, so the popover it opens can
+    // also be dismissed without hunting for empty space to tap.
+    await user.click(infoButton);
     expect(screen.getByText(/chemistry, freedom, and playful connection/i)).toBeInTheDocument();
 
-    await user.unhover(infoButton);
+    await user.click(infoButton);
 
     await waitFor(() => {
       expect(

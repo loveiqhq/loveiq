@@ -36,10 +36,32 @@ const PLAN_LADDERS = {
   ReadonlyArray<{ delayMs: number; multiplier: number; step: number }>
 >;
 
-const PRICING_SIGNAL_QIDS = ["15001", "16012", "03005", "03010", "03012"] as const;
+/**
+ * The survey answers pricing is allowed to read: country (15001) and the behavioural
+ * spend band (16012). Nothing else.
+ *
+ * `03005`, `03010` and `03012` used to be here. They are sexual-preference answers —
+ * Article 9 special-category data — and reading them produced `fantasySignalCount`, which
+ * added 20 points to the engagement score, was written to `report_price_quote`, and was
+ * passed onward to Stripe as checkout metadata and into purchase analytics. The uplift
+ * flag only ever stopped it changing a PRICE; it never stopped the value being derived,
+ * stored against a payment record and shared with a processor.
+ *
+ * They are removed rather than gated, because a gate leaves the derivation running: the
+ * quote row keeps a column populated from those answers whether or not anything reads it.
+ * Do not add a sexual-preference qid back to this list.
+ *
+ * 16009 does not belong here either, for a different reason. It asks which of four priced
+ * formats someone would buy first, and its options carry euro amounts — hypothetical ones,
+ * there to rank the formats against each other, not to charge anyone. Feeding them into
+ * pricing would break in both directions: the reader could be quoted a number they were
+ * shown in a survey, and the measurement would stop being clean, because a preference
+ * stated before the paywall would then be entangled with the price it produced.
+ */
+const PRICING_SIGNAL_QIDS = ["15001", "16012"] as const;
+
 const PRICING_SIGNAL_SELECT = [
   "answer_text",
-  "normalized_value",
   "survey_question!inner(frontend_qid)",
   "answer_option!fk_ssa_answer_option(option_text)",
 ].join(",");
@@ -167,12 +189,7 @@ const PRICING_SESSION_ID_REGEX =
 export type PricingExperimentGroup = "A" | "B";
 export type PricingDeviceType = "iOS" | "Android" | "Desktop";
 export type PricingTrafficSource =
-  | "direct"
-  | "newsletter"
-  | "google"
-  | "instagram"
-  | "tiktok"
-  | "other";
+  "direct" | "newsletter" | "google" | "instagram" | "tiktok" | "other";
 export type PricingBehavioralBucket = "zero" | "light" | "moderate" | "consistent" | "serious";
 
 export interface ReportPriceQuoteSnapshot {
@@ -220,7 +237,6 @@ export interface ReportPriceQuoteSnapshot {
   engagementScore: number;
   engagementMultiplier: number;
   reportPreviewViews: number;
-  fantasySignalCount: number;
   surveyDurationMs: number | null;
   initialPriceTimestamp: string;
   expiresAt: string;
@@ -276,7 +292,6 @@ interface SubmissionAnswerRow {
     option_text?: string | null;
   } | null;
   answer_text: string | null;
-  normalized_value: number | null;
   survey_question: {
     frontend_qid: string;
   } | null;
@@ -398,7 +413,6 @@ interface PricingContext {
   utmTracker: string | null;
   countryCode: string | null;
   behavioralAnswer: string | null;
-  fantasySignalCount: number;
 }
 
 function getSupabaseServiceConfig() {
@@ -753,12 +767,17 @@ export function getBehavioralPricing(answer: string | null | undefined): {
   return { bucket: "light", multiplier: 0.9 };
 }
 
+/**
+ * How engaged this reader looks, from behaviour only: how long they spent on the survey
+ * and how many times they came back to the preview.
+ *
+ * Sexual-fantasy answers used to add a third +20 here. That component is gone — see
+ * `PRICING_SIGNAL_QIDS`. The score is therefore capped at 40 rather than 60.
+ */
 export function getEngagementScore({
-  fantasySignalCount,
   previewViews,
   surveyDurationMs,
 }: {
-  fantasySignalCount: number;
   previewViews: number;
   surveyDurationMs: number | null;
 }) {
@@ -769,10 +788,6 @@ export function getEngagementScore({
   }
 
   if (previewViews >= 2) {
-    score += 20;
-  }
-
-  if (fantasySignalCount > 0) {
     score += 20;
   }
 
@@ -909,7 +924,6 @@ function toSnapshot(
     engagementScore: row.engagement_score,
     engagementMultiplier: row.engagement_multiplier,
     reportPreviewViews: row.report_preview_views,
-    fantasySignalCount: row.fantasy_signal_count,
     surveyDurationMs: row.survey_duration_ms,
     initialPriceTimestamp: row.initial_price_timestamp,
     expiresAt: row.expires_at,
@@ -986,32 +1000,6 @@ async function getPricingContext({
     answerRows.find((row) => row.survey_question?.frontend_qid === "16012")?.answer_text ??
     null;
 
-  const fantasySignalCount = answerRows.reduce((count, row) => {
-    const qid = row.survey_question?.frontend_qid;
-    const optionText =
-      row.answer_option?.option_text?.toLowerCase() ?? row.answer_text?.toLowerCase() ?? "";
-
-    if (qid === "03005" && optionText.includes("fantasy")) {
-      return count + 1;
-    }
-
-    if (
-      qid === "03010" &&
-      (optionText.includes("adventurous") ||
-        optionText.includes("taboo") ||
-        optionText.includes("edge") ||
-        optionText.includes("high-risk"))
-    ) {
-      return count + 1;
-    }
-
-    if (qid === "03012" && (row.normalized_value ?? 0) >= 5) {
-      return count + 1;
-    }
-
-    return count;
-  }, 0);
-
   return {
     personalReportId: personalReport.id,
     reportToken: reportToken ?? null,
@@ -1023,7 +1011,6 @@ async function getPricingContext({
     utmTracker: submissionRow.utm_tracker ?? appUser?.utm_tracker ?? null,
     countryCode: countryAnswer ?? null,
     behavioralAnswer,
-    fantasySignalCount,
   };
 }
 
@@ -1125,7 +1112,6 @@ function buildQuotePayload({
   const engagementScore =
     existingQuote?.engagement_score ??
     getEngagementScore({
-      fantasySignalCount: context.fantasySignalCount,
       previewViews: context.previewViews,
       surveyDurationMs: context.surveyDurationMs,
     });
@@ -1232,7 +1218,10 @@ function buildQuotePayload({
       engagement_multiplier: engagementMultiplier,
       engagement_score: engagementScore,
       expires_at: new Date(now.getTime() + QUOTE_VALIDITY_MS).toISOString(),
-      fantasy_signal_count: context.fantasySignalCount,
+      // Always 0: nothing is derived from sexual-preference answers any more.
+      // The column stays because historical rows reference it; the 2026-09-11 migration
+      // zeroed those. See PRICING_SIGNAL_QIDS.
+      fantasy_signal_count: 0,
       initial_price: toEuroAmount(initialPriceCents),
       initial_price_timestamp: initialPriceTimestamp,
       last_viewed_at: now.toISOString(),
@@ -1522,6 +1511,41 @@ export async function getReportPriceQuotesForContext({
   );
 
   return Object.fromEntries(results) as Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot>;
+}
+
+/**
+ * Record that this reader reached the paywall, server-side.
+ *
+ * The funnel's `paywall_initiated` stage is a consent-gated client event and was
+ * the only stage with no server-side witness behind it — which matters more now
+ * that `begin_checkout` reads `checkout_started_at`, because a consent-gated
+ * stage sitting directly above a consent-independent one can invert in a quiet
+ * window. /api/price POST is that witness; it just never wrote anything down.
+ *
+ * Scoped to the submission, not one quote: the paywall is reached once per
+ * reader, not once per plan, and all four of their quotes get the same stamp so
+ * the funnel can count `DISTINCT survey_submission_id` exactly as it does for
+ * checkout. The `paywall_reached_at=is.null` filter makes it idempotent AND
+ * preserves the FIRST view — reopening the modal cannot move the timestamp
+ * later, which is what makes it usable as a funnel entry time.
+ */
+export async function markReportPriceQuotePaywallReached({
+  submissionId,
+}: {
+  submissionId: number;
+}) {
+  const response = await supabaseServiceFetch(
+    `/rest/v1/report_price_quote?survey_submission_id=eq.${submissionId}&paywall_reached_at=is.null`,
+    {
+      body: JSON.stringify({ paywall_reached_at: new Date().toISOString() }),
+      headers: { Prefer: "return=minimal" },
+      method: "PATCH",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("pricing_quote_paywall_reached_update_failed");
+  }
 }
 
 export async function markReportPriceQuoteCheckoutStarted({ quoteId }: { quoteId: number }) {

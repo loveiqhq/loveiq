@@ -17,7 +17,9 @@ import {
   buildArchetypeContentForUser,
   buildPracticeTendenciesForUser,
   PRACTICE_SECTION_ID,
+  SUMMARY_BLOCK_ID,
 } from "@features/report/server/contentGating";
+import { summaryArchetypeContent } from "@/data/report-summary";
 import { archetypeContent } from "@/data/report-archetypes";
 import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
 import { reportSections } from "@/data/report-general";
@@ -177,5 +179,40 @@ describe("regression — the practice section id constant matches reportSections
   it("PRACTICE_SECTION_ID corresponds to a real section", () => {
     const found = reportSections.find((s) => s.id === PRACTICE_SECTION_ID);
     expect(found).toBeDefined();
+  });
+});
+
+/**
+ * The `summary` chapter is premium but carries no `archetypeBlockId`, so until
+ * 2026-09-13 it sat outside this gate entirely and the CLIENT imported
+ * `data/report-summary.ts` directly — shipping all fourteen archetypes' Core
+ * Essence / Key Strengths / Core Challenges to anyone who opened a report,
+ * paid or not. It now travels under SUMMARY_BLOCK_ID, gated like every other
+ * chapter. `__tests__/security/premium-content-bundle.test.ts` stops the import
+ * coming back; these stop the GATE being widened.
+ */
+describe("buildArchetypeContentForUser — the summary chapter", () => {
+  it("ships the summary only for archetypes the reader holds", () => {
+    const result = buildArchetypeContentForUser(null, [ANY_ARCHETYPE]);
+    const summary = result[SUMMARY_BLOCK_ID];
+
+    expect(summary).toBeDefined();
+    expect(Object.keys(summary!)).toEqual([ANY_ARCHETYPE]);
+    expect(summary![ANY_ARCHETYPE]).toBe(summaryArchetypeContent[ANY_ARCHETYPE]);
+    // The one that matters: an archetype they do not hold must not be in there.
+    expect(summary![OTHER_ARCHETYPE]).toBeUndefined();
+  });
+
+  it("ships no summary at all when the reader holds no archetype", () => {
+    const result = buildArchetypeContentForUser(null, []);
+    expect(result[SUMMARY_BLOCK_ID]).toBeUndefined();
+  });
+
+  it("ships every archetype's summary to an all_reports buyer", () => {
+    const all = Object.keys(summaryArchetypeContent);
+    // Guard the fixture: an empty list would make the assertion below vacuous.
+    expect(all.length).toBeGreaterThan(10);
+    const result = buildArchetypeContentForUser("all_reports", all);
+    expect(Object.keys(result[SUMMARY_BLOCK_ID]!).sort()).toEqual([...all].sort());
   });
 });

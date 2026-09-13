@@ -29,7 +29,16 @@ function listFilesRecursively(rootDir: string, baseDir: string = rootDir): strin
   return results;
 }
 
-const PREMIUM_DATA_MODULES = ["@/data/report-archetypes", "@/data/report-practice-tendencies"];
+const PREMIUM_DATA_MODULES = [
+  "@/data/report-archetypes",
+  "@/data/report-practice-tendencies",
+  // Added 2026-09-13. `summary` is a premium chapter with no archetypeBlockId, so
+  // it sat outside the server gate and the client imported it directly — putting
+  // every archetype's Core Essence / Key Strengths / Core Challenges in the public
+  // bundle for a reader who had bought nothing. It now travels in `archetypeContent`
+  // under SUMMARY_BLOCK_ID like every other chapter.
+  "@/data/report-summary",
+];
 
 const PROJECT_ROOT = join(__dirname, "..", "..");
 

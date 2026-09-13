@@ -226,35 +226,6 @@ export async function lookupReportTokenBySubmissionId(
   }
 }
 
-/**
- * Resolve the canonical report access token used as the forced-paywall A/B
- * key. Token-driven checkouts already carry it (returned as-is). Session-driven
- * checkouts (no URL token) resolve it from the submission so the SERVER computes
- * the SAME arm the user experienced on the report page — which keys on
- * `token ?? data.ownerToken`. The submission fallback mirrors the report page's
- * owner-token query exactly (latest by created_at, revocation-agnostic) so the
- * arm never diverges. Best-effort: any failure returns null and the caller
- * defaults to control; this never throws into the checkout path.
- */
-export async function resolveReportAccessToken({
-  reportSessionId,
-  reportToken,
-}: {
-  reportSessionId?: string | null;
-  reportToken?: string | null;
-}): Promise<string | null> {
-  if (reportToken) return reportToken;
-  if (!reportSessionId) return null;
-  try {
-    const submissionId = await lookupSubmissionIdBySessionId(reportSessionId);
-    if (!submissionId) return null;
-    return await lookupReportTokenBySubmissionId(submissionId);
-  } catch (err) {
-    logger.warn({ err }, "resolveReportAccessToken failed; forced-paywall arm defaults to control");
-    return null;
-  }
-}
-
 async function fetchPersonalReportForSubmission(submissionId: number) {
   const response = await supabaseServiceFetch(
     `/rest/v1/personal_report?survey_submission_id=eq.${submissionId}&select=id,payment_id,payment_status,url,unlocked_archetypes,archetype_tiers&limit=1`
@@ -362,13 +333,27 @@ export async function getPaidPlansForSubmission(
   return Array.from(paid);
 }
 
-export async function getReportAccessPlanForSubmission(submissionId: number): Promise<{
+export async function getReportAccessPlanForSubmission(
+  submissionId: number,
+  /**
+   * An already-fetched `personal_report` row, when the caller has one.
+   *
+   * `ensurePersonalReportForSubmission` reads this exact row and returns it, and
+   * every caller here called that first — so the row was being fetched twice per
+   * report view, one wasted Supabase round trip on the hottest route. Passing it
+   * through removes the second read. Omitted, the behaviour is unchanged.
+   */
+  prefetchedReport?: PersonalReportRow | null
+): Promise<{
   accessPlan: ReportAccessPlan;
   archetypeTiers: ArchetypeTierMap;
   personalReportId: number | null;
   unlockedArchetypeColumn: string[];
 }> {
-  const personalReport = await fetchPersonalReportForSubmission(submissionId);
+  const personalReport =
+    prefetchedReport !== undefined
+      ? prefetchedReport
+      : await fetchPersonalReportForSubmission(submissionId);
 
   if (!personalReport) {
     return {

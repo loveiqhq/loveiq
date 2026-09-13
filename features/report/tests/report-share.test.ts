@@ -337,8 +337,7 @@ describe("POST /api/report/share", () => {
     expect(mockCreateShare).toHaveBeenCalledWith(expect.objectContaining({ personalMessage }));
     await new Promise((r) => setTimeout(r, 0));
     const sentArg = mockResendSend.mock.calls[0]?.[0] as
-      | { html?: string; text?: string }
-      | undefined;
+      { html?: string; text?: string } | undefined;
     expect(sentArg?.html).toContain(personalMessage);
     expect(sentArg?.text).toContain(personalMessage);
   });

@@ -140,4 +140,39 @@ describe("sendGa4PurchaseEvent", () => {
     });
     await expect(sendGa4PurchaseEvent(baseInput)).resolves.toBeUndefined();
   });
+
+  /**
+   * A GA4 purchase becomes a Google Ads conversion the bidding algorithm
+   * optimises on. Measured 2026-09-09: 34 `purchase` events landed on a single
+   * day carrying `value: 0.0` — device-matrix test purchases redeemed with a
+   * 100%-off promo code — because nothing excluded them. Ads was told there
+   * were 34 sales worth nothing, which is the strongest available signal that
+   * conversions are free.
+   */
+  describe("purchases that carried no money never become Ads conversions", () => {
+    it("skips a staff (is_test) purchase even at full price", async () => {
+      await sendGa4PurchaseEvent({ ...baseInput, isTest: true });
+      expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+    });
+
+    it("skips a zero-value purchase — the 100%-off comp case", async () => {
+      await sendGa4PurchaseEvent({ ...baseInput, value: 0 });
+      expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+    });
+
+    it("skips a negative value rather than reporting it as revenue", async () => {
+      await sendGa4PurchaseEvent({ ...baseInput, value: -5 });
+      expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+    });
+
+    it("still sends a real paid purchase", async () => {
+      await sendGa4PurchaseEvent({ ...baseInput, value: 29, isTest: false });
+      expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
+    });
+
+    it("treats a missing isTest as not-test, so real buyers are unaffected", async () => {
+      await sendGa4PurchaseEvent(baseInput);
+      expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
+    });
+  });
 });

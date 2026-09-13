@@ -1,0 +1,562 @@
+import { supabaseFetch } from "@features/admin/server/supabase";
+import logger from "@shared/observability/logger";
+import { expandBusinessVocabulary } from "./vocabulary";
+import { expandRelativePeriods, periodAnchor } from "@features/brain/server/periods";
+
+/**
+ * Retrieval half of the company brain: turn a question into the handful of
+ * corpus chunks most likely to contain the answer.
+ *
+ * Ranking itself lives in the `brain_search` RPC (full-text + trigram, see
+ * 20260825215317_brain_chunk.sql). What lives HERE is the shaping that SQL is a
+ * clumsy place for, and that measurably changes answer quality:
+ *
+ *   1. DEDUPE BY PARENT. Long docs and long commit messages are stored as several
+ *      chunks, and a query that matches one part usually matches its siblings.
+ *      Measured on this corpus, "how do I add a new landing section" returned the
+ *      same commit at ranks 2 AND 3 -- which wastes prompt budget on a duplicate
+ *      and shows the reader the same citation twice.
+ *   2. SOURCE DIVERSITY. There are 1,475 commit chunks against 454 doc chunks, and
+ *      commit titles are short subject lines that score well on word-similarity.
+ *      So commits crowd the top even when the authoritative answer is a doc: for
+ *      "why is the data retention purge turned off" the CLAUDE.md
+ *      "Postponed / TODO" section -- which literally answers it -- placed 4th
+ *      behind three commits. Rather than invent a fudge factor per source, this
+ *      caps how much of the result set any one source may take, so the model sees
+ *      the policy doc AND the history and can pick.
+ */
+
+export interface BrainChunk {
+  source: string;
+  sourceId: string;
+  title: string | null;
+  url: string | null;
+  body: string;
+  meta: Record<string, unknown>;
+  score: number;
+  /**
+   * How much of `score` came from MATCHING the question -- full text, title and body
+   * trigrams, semantic distance -- with recency and the two penalties excluded.
+   *
+   * WHY THE TOTAL IS NOT ENOUGH. Measured 2026-09-09, "which of our customer personas
+   * uses Headspace or Whoop" -- a question the corpus cannot answer -- returned eight
+   * hits scoring 2.309 to 2.097. That band is indistinguishable from a good answer's,
+   * because it was almost entirely the recency term: every hit was either dated this
+   * week or undated. Scores are not comparable between questions, but the share of a
+   * score that is actually about the question is.
+   */
+  contentScore: number;
+  /**
+   * The period this chunk DESCRIBES, not when it was ingested. Null only for
+   * `doc` (repo markdown, which is current by construction).
+   *
+   * Carried through because "the call two days ago beats the commit from March"
+   * is unanswerable if the model cannot see either date. `brain_search` has
+   * always returned it; this mapper used to drop it on the floor.
+   */
+  periodEnd: string | null;
+}
+
+/**
+ * Caller-passed narrowing, all optional and all applied INSIDE `brain_search` --
+ * never here.
+ *
+ * Filtering after `retrieve()` returns would filter after the top-k, so
+ * `sources: ["drive"]` would come back empty on a corpus that is half Drive:
+ * silent loss dressed as absence, which is the one failure this subsystem is
+ * written against.
+ */
+export interface RetrieveOptions {
+  /** Only these sources. */
+  sources?: string[];
+  /** Everything except these. */
+  excludeSources?: string[];
+  /** Earliest period the chunk DESCRIBES, `YYYY-MM-DD`. Excludes undated `doc` rows. */
+  since?: string;
+  /** Latest period the chunk describes, `YYYY-MM-DD`. */
+  until?: string;
+  /**
+   * Skip this many of the ranked results. Relevance decays down a ranked list, so a
+   * deep page is mostly noise — this exists for "show me more like these", not for
+   * walking the corpus, which is what `browse_context` is for.
+   */
+  offset?: number;
+  /** Exact-match metadata, e.g. `{ status: "WIP" }`. Keys a source lacks match nothing. */
+  /**
+   * `string` for a scalar field, `string[]` for one stored as an array.
+   *
+   * `meta @> filter` is containment, so matching a value inside `meta.people` — which is
+   * an array — requires an array on the filter side too. A bare string silently matches
+   * nothing, which is the worst possible failure for a filter: it reads as "this person
+   * did nothing" rather than "that is the wrong shape".
+   */
+  meta?: Record<string, string | string[]>;
+}
+
+/**
+ * Candidates requested per (source, grain) bucket, and the global ceiling on the
+ * candidate set.
+ *
+ * These two must be sized TOGETHER. The SQL ranks within each bucket and then
+ * applies a global LIMIT, so a global limit that is too tight throws away exactly
+ * the rows the bucketing just protected: measured, the August revenue row ranked
+ * 61st globally and a limit of 56 discarded it, after which the model answered
+ * "what did we spend and what did we earn" from partial weeks. With ~11 buckets
+ * and 3 candidates each, 100 comfortably clears the whole set.
+ */
+const PER_BUCKET_CANDIDATES = 3;
+const CANDIDATE_CEILING = 100;
+
+/**
+ * TWO LATENCY NON-ISSUES, MEASURED 2026-09-09, recorded so they are not "fixed" later.
+ *
+ * 1. THE HNSW INDEX RETURNS ~41 ROWS FOR A LIMIT OF 120, because `hnsw.ef_search`
+ *    defaults to 40. That looks like a recall bug in the arm whose entire job is recall,
+ *    and it is not one worth acting on: raising `ef_search` to 120 or 200 produced a
+ *    BYTE-IDENTICAL top-12 on the queries tested, while costing latency. The lexical arms
+ *    supply ~1,700 candidates on a typical question, so the marginal semantic candidates
+ *    rank below the cut either way. Do not raise it without first showing the answers
+ *    change.
+ *
+ * 3. DEMOTING `commit` MAKES SEARCH WORSE, AND IT WAS TRIED. Six of eight questions a
+ *    founder actually asks had a bad top hit, mostly a commit — "how much money have we
+ *    made" returned one titled "the brain could not say what the company has earned in
+ *    total". A -0.25 penalty on `commit` (matching the bulk-mail one) does fix those: the
+ *    last-team-meeting question moves from a commit about calendar code to the meeting
+ *    itself. It also takes the battery from 210/213 to 208/213, because it pushes commits
+ *    out of the TOP FIVE for the questions where commits ARE the answer — "what did we
+ *    change in the code recently" returned no commit at all. Two fixed, two broken, so it
+ *    was reverted. If this is revisited, the thing to fix is question ROUTING (a money
+ *    question belongs to `get_business_numbers`), not source weighting.
+ *
+ * 2. NEITHER THE EMBEDDING EDGE FUNCTION NOR THE DATABASE COLD-STARTS. `brain_query`
+ *    shows searches after a 5-minute idle averaging 2,371ms against 1,219ms warm, which
+ *    reads exactly like one. It is not: after a real six-minute idle, measured directly,
+ *    the embed call came back in 364ms against a 475ms warm baseline and the SQL was
+ *    faster too. The penalty is the VERCEL function cold-starting, it applies to every
+ *    tool on this server at roughly 1.4-2.4x, and search only looks worse because its
+ *    warm baseline is the largest. An earlier reading blamed the embedding because the
+ *    idle gap had been computed per-tool rather than per-function.
+ */
+
+/**
+ * No single BUCKET — a source at one grain — may exceed this share of the
+ * returned set, so long as other buckets have candidates left to fill the gap.
+ *
+ * TUNED BY MEASUREMENT, not taste. With 1,475 commit chunks against 454 doc and
+ * 171 analytics chunks, and commit titles being short subject lines that score
+ * well on word-similarity, commits take every top slot unchecked. Measured on
+ * four representative questions: at 0.6 the answering chunk landed 5th, at 0.4
+ * 4th, at 0.3 3rd. Lowering it costs nothing on a genuinely single-source
+ * question — "what did we change about the daily digest" still returns eight
+ * commits at every setting, because the backfill below refuses to return a short
+ * list when no other source has candidates.
+ */
+const MAX_SOURCE_SHARE = 0.3;
+
+/**
+ * Diversity bucket: source AND grain.
+ *
+ * Source alone is not enough. The daily, weekly and monthly rows of one period
+ * are near-identical text differing only in their numbers — measured, the August
+ * daily, weekly and monthly chunks scored ts_rank 0.0507 / 0.0524 / 0.0507, a
+ * spread of 0.002. No weighting can separate a tie that small, so the monthly
+ * total lost to a weekly on noise and "what did we spend in August" got summed
+ * from partial weeks instead of read from the row that already has the answer.
+ * Reserving a slot per grain is the only tie-break that survives.
+ */
+function bucketKey(row: BrainChunk): string {
+  const grain = typeof row.meta?.grain === "string" ? row.meta.grain : "";
+  return `${row.source}:${grain}`;
+}
+
+/**
+ * The thing a chunk is part of, so several pieces of one document or one commit
+ * collapse to their best-scoring piece.
+ *
+ * ONLY `doc` AND `commit` ARE SPLIT, so only they need collapsing. An earlier
+ * version stripped a trailing `-<digits>` from every id to undo the `<sha>-2`
+ * part suffix, and that silently ate real keys: `monthly:2026-08` became
+ * `monthly:2026`, so EVERY month of a year collapsed into one parent and all but
+ * the best-scoring month was discarded before it could ever be returned. Same for
+ * `daily:2026-08-05`. Date-keyed sources are already unique — they must be passed
+ * through untouched.
+ */
+function parentKey(row: BrainChunk): string {
+  /**
+   * ONE RECURRING MEETING IS ONE THING, however many times it repeats.
+   *
+   * Occurrences are indexed separately on purpose -- `event:<uid>:<day>` -- because
+   * without it nine daily syncs overwrote each other and "what was discussed in the
+   * sync on 22 July" had nothing to return. But 212 of 380 calendar chunks are
+   * occurrences of the single "LoveIQ Sync", and they are near-identical text, so
+   * un-collapsed they flood the result set: measured 2026-09-09, "who is in the
+   * recurring sync" filled all twelve slots with copies of one event.
+   *
+   * Collapsing here rather than at ingest keeps both: every occurrence stays indexed
+   * and reachable by date, and the best-scoring one represents the series in a ranked
+   * list. It also folds the `event:<uid>` rows an older builder wrote into the same
+   * parent as their `event:<uid>:<day>` replacements, which were otherwise exact
+   * duplicates taking two of the top three slots on seventeen measured questions.
+   */
+  if (row.source === "calendar") {
+    return `calendar:${row.sourceId.replace(/:\d{4}-\d{2}-\d{2}$/, "")}`;
+  }
+
+  // Two headings of one document are the same document.
+  if (row.source === "doc") {
+    const path = typeof row.meta?.path === "string" ? row.meta.path : null;
+    return `doc:${path ?? row.sourceId.split("#")[0]}`;
+  }
+
+  // analytics / ga4 / gsc / jira / notion: the id is already the natural key
+  // (notion ids are prefixed task:/page:, so a task and a page never collide).
+  return `${row.source}:${row.sourceId}`;
+}
+
+/**
+ * Thrown when the corpus could not be QUERIED — HTTP 5xx, timeout, an open
+ * circuit breaker, Supabase not configured.
+ *
+ * This exists because returning `[]` for both "asked, found nothing" and "could
+ * not ask" made the brain reply "I couldn't find anything about that" while the
+ * database was down. For a tool whose only product is trustworthiness, asserting
+ * that evidence does not exist when the evidence store is unreachable is the one
+ * failure that destroys it. Callers must tell the two apart.
+ */
+export class CorpusUnavailableError extends Error {
+  constructor(detail: string) {
+    super(`brain corpus unavailable: ${detail}`);
+    this.name = "CorpusUnavailableError";
+  }
+}
+
+/**
+ * TWO CHARACTERS TURN A BAD QUESTION INTO A FAKE OUTAGE.
+ *
+ * A NUL cannot exist inside a Postgres text value, and a LONE SURROGATE is not valid
+ * UTF-8 so the JSON body never survives encoding. Either one makes PostgREST answer
+ * 400, which this file — correctly, for every other 400 — raises as
+ * `CorpusUnavailableError`. The caller is then told "the corpus is unavailable" when
+ * the corpus is perfectly healthy and the QUESTION was malformed.
+ *
+ * That is the same defect this codebase keeps finding in other clothes: never report
+ * the shape of the REQUEST as the state of the world. Found 2026-09-06 by an
+ * adversarial probe pasting control characters into a question — which is not exotic,
+ * it is what happens when someone copies text out of a PDF or a terminal.
+ *
+ * Both are replaced rather than rejected. The rest of the question is still a
+ * perfectly good question, and answering it beats refusing over a byte the person
+ * never knowingly typed. Everything else — bidi overrides, U+FFFD, ordinary control
+ * characters — was measured to pass through Postgres untouched and is left alone.
+ */
+function sanitiseQuery(q: string): string {
+  return q
+    .replace(/\u0000/g, " ")
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD");
+}
+
+/**
+ * What the caps held back, so a reshaped result set does not read as the whole picture.
+ *
+ * The two caps below are deliberate and load-bearing, but they are invisible at the point
+ * of use: a source with twenty good matches can be represented by three, and the reader
+ * has no way to tell that from the source having only three. That looks like an answer
+ * about the whole corpus and is an answer about a deliberately flattened slice of it.
+ *
+ * Filled in as an out-parameter rather than widening the return type, matching the
+ * `stats` idiom already used at the tool boundary — every existing caller keeps working
+ * and simply learns nothing, which is what it did before.
+ */
+export interface RetrieveShaping {
+  /** Source -> how many of its matches were cut to make room for other sources. */
+  heldBack?: Map<string, number>;
+  /**
+   * How many candidates were dropped as another part or occurrence of something already
+   * in the list.
+   *
+   * REPORTED because the caller's "you asked for N and the ranking held fewer" notice
+   * was making a false claim without it. `sources:["calendar"]` at limit 8 returns 12
+   * candidates that collapse to 2-3 parents -- seven occurrences of one recurring
+   * meeting become one row -- and collapsed siblings never reach `deferred`, so
+   * `heldBack` stays empty and the notice said "No cap trimmed this, that is everything
+   * the search found worth returning". Twelve were found and ten discarded. That is the
+   * shape of the request reported as the state of the world, which is the one move this
+   * codebase refuses everywhere else.
+   */
+  collapsed?: number;
+}
+
+/**
+ * The text both arms actually search on: the question, plus the corpus's own words for
+ * the periods and the metrics it names.
+ *
+ * ONE FUNCTION so the lexical query and the embedding cannot drift apart. They were
+ * already meant to see identical text, and two call sites is how that stops being true.
+ */
+function searchText(question: string): string {
+  return expandBusinessVocabulary(expandRelativePeriods(question));
+}
+
+/**
+ * Keys stored as a JSON array, so a bare string on the filter side matches nothing.
+ *
+ * Measured 2026-09-11 over every source: `people` (8 sources), `speakers` (slack,
+ * whatsapp), `participants` (gmail), `covers` (doc) and `attendees` (calendar) are
+ * arrays, and NONE of them ever appears as a scalar — so wrapping is unambiguous.
+ *
+ * WHY WRAP RATHER THAN DOCUMENT. `meta @> filter` is jsonb containment: a filter of
+ * {"speakers": "Eman"} against a stored ["Eman"] is false, so the query succeeds and
+ * returns nothing. That is the worst failure a filter can have — an empty result reads
+ * as "this person said nothing", not "you passed the wrong shape" — and the caller has
+ * no way to tell the two apart. Measured: `speakers` and `participants` both returned
+ * 0 hits as a string and worked as an array. The trap was already written down in this
+ * file, which is not where the model reading the tool schema is looking; I walked into
+ * it myself with the comment on screen.
+ */
+export const ARRAY_META_KEYS = new Set([
+  "people",
+  "speakers",
+  "participants",
+  "attendees",
+  "covers",
+  // Added the same day `links` was introduced — and only after a filter on it
+  // silently returned nothing, which is exactly the failure this set exists to
+  // prevent. ANY new array-valued meta key must be listed here; the MCP battery's
+  // `mcp-array-keys-all-handled` probe reads the live corpus and fails when one is
+  // missing, so this cannot drift again unnoticed.
+  "links",
+]);
+
+export function normaliseMetaFilter(
+  meta: Record<string, string | string[]>
+): Record<string, string | string[]> {
+  const out: Record<string, string | string[]> = {};
+  for (const [k, v] of Object.entries(meta)) {
+    out[k] = typeof v === "string" && ARRAY_META_KEYS.has(k) ? [v] : v;
+  }
+  return out;
+}
+
+export async function retrieve(
+  question: string,
+  limit = 12,
+  opts: RetrieveOptions = {},
+  shaping: RetrieveShaping = {}
+): Promise<BrainChunk[]> {
+  /**
+   * PAGING A RANKED LIST, bounded by the candidate pool rather than pretending to be
+   * endless. `CANDIDATE_CEILING` is how many rows the SQL returns to rank at all, so
+   * there is no page beyond it — and the caps and de-duplication then cut that further.
+   * Asking past the end returns nothing, which the tool reports as the end rather than
+   * as an empty corpus.
+   */
+  const offset = Math.max(0, Math.floor(opts.offset ?? 0));
+  const want = limit + offset;
+  const trimmed = sanitiseQuery(question).trim();
+  if (trimmed.length < 2) return [];
+
+  /**
+   * Embedded BEFORE the try, and never allowed to throw: this sits on the path of
+   * every question, and a failure here must cost recall, not the whole answer.
+   */
+  let queryVector: string | null = null;
+  try {
+    const { embedQuery } = await import("./embed");
+    queryVector = await embedQuery(searchText(trimmed));
+  } catch (err) {
+    logger.warn({ err }, "brain: could not embed the question, falling back to lexical search");
+  }
+
+  let rows: Array<Record<string, unknown>> = [];
+  try {
+    const res = await supabaseFetch("/rest/v1/rpc/brain_search", {
+      method: "POST",
+      // `per_source` is what makes the cap below meaningful. Without it the
+      // over-fetch is not diverse: measured, "how much did we spend on google ads
+      // in august and what did we earn" returned 30 of the top 32 from `ga4`
+      // alone -- every GA4 chunk carries "Google Analytics" in its title -- so the
+      // revenue row was never a candidate and the model could only answer half
+      // the question. Capping candidates PER SOURCE in SQL, before truncation,
+      // is the only place that can be fixed.
+      body: JSON.stringify({
+        // Relative time expressions are rewritten into the absolute period names
+        // the corpus uses. Without this, "how are we doing this month" returned
+        // May, June and July and omitted the current month entirely -- see
+        // `expandRelativePeriods` for the measured scores.
+        query_text: searchText(trimmed),
+        k: CANDIDATE_CEILING,
+        /**
+         * A NARROWED REQUEST MUST NOT BE BOUND BY THE DIVERSITY CAP.
+         *
+         * `PER_BUCKET_CANDIDATES` exists to stop one source taking every slot on an
+         * open question. When the caller has named the source, or filtered on metadata
+         * only one source carries, there is nothing to diversify AGAINST — the cap
+         * stops being a fairness rule and becomes a silent truncation of exactly what
+         * was asked for.
+         *
+         * MEASURED 2026-09-06, `sources:['notion'] meta:{status:'WIP'}`: 3 rows back
+         * at `per_source` 3, 12 at 12, against 49 WIP tasks in the board. The caller
+         * asked for six and got three, with nothing saying it had been cut. It also
+         * capped the decision browse — `{"section":"summary"}` returned three meetings
+         * however many were in range, which quietly undercut the filter documented one
+         * commit earlier as the way to ask what was decided.
+         *
+         * Only `sources` and `meta` collapse the bucket count, so only they raise it.
+         * `since`/`until` and `exclude_sources` leave the buckets spread and their
+         * current behaviour is measured, so they are deliberately left alone.
+         * `CANDIDATE_CEILING` still bounds the total, and the share cap has a backfill
+         * for the single-source case — verified: the same filter at `per_source` 12
+         * returns 12, so nothing downstream re-imposes the limit.
+         */
+        per_source:
+          opts.sources?.length || (opts.meta && Object.keys(opts.meta).length)
+            ? Math.max(PER_BUCKET_CANDIDATES, limit)
+            : PER_BUCKET_CANDIDATES,
+        // SEMANTIC RECALL. Postgres cannot run the model, so the question is
+        // embedded here and the vector passed in. Null when embedding fails, which
+        // the SQL treats as "lexical only" — an embedding outage degrades the
+        // answers rather than breaking search.
+        query_embedding: queryVector,
+        // Only the keys the caller actually set. Every filter defaults to NULL in
+        // the function and NULL means "no filter", so an omitted key and an
+        // explicit null behave identically -- but sending only what was asked for
+        // keeps the arguments recorded in `brain_query` readable as intent.
+        ...(opts.sources?.length ? { sources: opts.sources } : {}),
+        ...(opts.excludeSources?.length ? { exclude_sources: opts.excludeSources } : {}),
+        ...(opts.since ? { since: opts.since } : {}),
+        ...(opts.until ? { until: opts.until } : {}),
+        ...(opts.meta && Object.keys(opts.meta).length
+          ? { meta_filter: normaliseMetaFilter(opts.meta) }
+          : {}),
+        /**
+         * WHERE THE RECENCY TERM MEASURES FROM, when the question names a period.
+         *
+         * The 0.6 recency weight is a prior about what is wanted when the question does
+         * not say. Once it does say, the prior competes with the answer and was measured
+         * winning: "how many sessions did google analytics record in june 2026" returned
+         * SEPTEMBER at rank 1, and "in march 2026" did not return March in the top 3 at
+         * all -- three of nine period questions lost to a more recent period.
+         *
+         * Not a filter. Nothing is excluded, so a question that names a month while
+         * wanting something undated ("what did we decide in June about pricing") still
+         * reaches the decision record; it is only re-weighted. Null when no period is
+         * named, which is the arithmetic the function had before this existed.
+         */
+        ...((): { anchor_date?: string; anchor_grain?: string } => {
+          const anchor = periodAnchor(trimmed);
+          return anchor ? { anchor_date: anchor.date, anchor_grain: anchor.grain } : {};
+        })(),
+      }),
+    });
+    if (!res.ok) {
+      logger.error({ status: res.status }, "brain_search RPC failed");
+      throw new CorpusUnavailableError(`rpc ${res.status}`);
+    }
+    rows = (await res.json()) as Array<Record<string, unknown>>;
+  } catch (err) {
+    if (err instanceof CorpusUnavailableError) throw err;
+    // CircuitOpenError lands here too, which is exactly right: an open breaker
+    // means we did not ask, so we cannot claim there is nothing to find.
+    logger.error({ err }, "brain retrieval failed");
+    throw new CorpusUnavailableError(err instanceof Error ? err.message : "unknown");
+  }
+  // A 200 whose body is not an array means the RPC did not answer — a
+  // proxy-wrapped error page, a scalar, null. That is "could not query", and
+  // returning [] here was a leftover of the behaviour this file now rejects:
+  // the asker was told the corpus contains nothing about their question.
+  if (!Array.isArray(rows)) {
+    logger.error({ got: typeof rows }, "brain_search returned a non-array body");
+    throw new CorpusUnavailableError("rpc returned a non-array body");
+  }
+
+  const candidates: BrainChunk[] = rows.map((r) => ({
+    source: String(r.source ?? ""),
+    sourceId: String(r.source_id ?? ""),
+    title: typeof r.title === "string" ? r.title : null,
+    url: typeof r.url === "string" ? r.url : null,
+    body: String(r.body ?? ""),
+    meta: (r.meta ?? {}) as Record<string, unknown>,
+    score: typeof r.score === "number" ? r.score : 0,
+    // Falls back to the total rather than to 0. A 0 would read as "matched nothing",
+    // which is the assertion this field exists to make -- so an older function that
+    // does not return the column must not be able to make it by accident.
+    contentScore:
+      typeof r.content_score === "number"
+        ? r.content_score
+        : typeof r.score === "number"
+          ? r.score
+          : 0,
+    periodEnd: typeof r.period_end === "string" ? r.period_end : null,
+  }));
+
+  // Rows arrive already ordered by score, so first-seen wins on both passes.
+  const bestPerParent: BrainChunk[] = [];
+  const seenParents = new Set<string>();
+  for (const row of candidates) {
+    const key = parentKey(row);
+    if (seenParents.has(key)) {
+      shaping.collapsed = (shaping.collapsed ?? 0) + 1;
+      continue;
+    }
+    seenParents.add(key);
+    bestPerParent.push(row);
+  }
+
+  // TWO caps, because either alone fails.
+  //   * Source only: the three time grains of one source are near-identical text,
+  //     so the monthly total loses a coin-flip tie to a weekly and the answer gets
+  //     summed from partial weeks instead of read whole.
+  //   * Bucket only: a source with three grains quietly gets three times the
+  //     allowance -- measured, ga4 took 12 of 14 slots that way and squeezed the
+  //     revenue row out entirely.
+  // Capping both keeps every grain reachable AND every source represented.
+  const sourceCap = Math.max(1, Math.floor(want * MAX_SOURCE_SHARE));
+  // ONE per bucket on the first pass, then backfill by score. Anything higher
+  // lets a source spend its whole allowance on the grain that happens to score
+  // marginally best: measured, `analytics` filled all four of its slots with two
+  // weekly and two daily rows (0.850/0.845/0.797/0.793) and never reached the
+  // monthly total at 0.786 — the one row that actually held the answer. The
+  // spread is noise; reserving a slot per grain is what makes it deterministic.
+  const grainCap = 1;
+
+  const picked: BrainChunk[] = [];
+  const perSource = new Map<string, number>();
+  const perBucket = new Map<string, number>();
+  const deferred: BrainChunk[] = [];
+
+  for (const row of bestPerParent) {
+    if (picked.length >= want) break;
+    const bucket = bucketKey(row);
+    if ((perSource.get(row.source) ?? 0) >= sourceCap || (perBucket.get(bucket) ?? 0) >= grainCap) {
+      deferred.push(row);
+      continue;
+    }
+    perSource.set(row.source, (perSource.get(row.source) ?? 0) + 1);
+    perBucket.set(bucket, (perBucket.get(bucket) ?? 0) + 1);
+    picked.push(row);
+  }
+
+  // If the cap left room unused because no other source had candidates, fill it
+  // back in by score rather than returning a short list.
+  let backfilled = 0;
+  for (const row of deferred) {
+    if (picked.length >= want) break;
+    picked.push(row);
+    backfilled++;
+  }
+
+  // Whatever the backfill could not reach was cut by a cap, not by relevance. Counted
+  // per source, because "ga4 had four more matches" is the fact that makes a reader
+  // narrow with `sources` instead of concluding ga4 had nothing else to say.
+  const cut = deferred.slice(backfilled);
+  if (cut.length > 0) {
+    const byySource = new Map<string, number>();
+    for (const row of cut) byySource.set(row.source, (byySource.get(row.source) ?? 0) + 1);
+    shaping.heldBack = byySource;
+  }
+
+  const page = offset > 0 ? picked.slice(offset) : picked;
+  page.sort((a, b) => b.score - a.score);
+  return page;
+}

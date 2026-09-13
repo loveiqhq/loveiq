@@ -21,10 +21,23 @@ async function removeFromResendAudience(email: string): Promise<void> {
   }
 }
 
-export async function isEmailSuppressed(email: string): Promise<boolean> {
+/**
+ * "Not suppressed" and "could not tell" are different answers, and for some callers the
+ * difference decides whether to send.
+ *
+ * `isEmailSuppressed` collapses them to `false` — send anyway — which is the right call
+ * for transactional mail: a confirmation that fails to arrive because a lookup timed out
+ * is a worse outcome than a small compliance risk. It is NOT the right call for mail an
+ * agent composed to an address it chose, where nobody is waiting for the message and
+ * "unknown" should stop it. That caller reads this; everything else keeps the old
+ * behaviour through the wrapper below.
+ */
+export type SuppressionState = "suppressed" | "clear" | "unknown";
+
+export async function suppressionState(email: string): Promise<SuppressionState> {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !serviceKey) return false;
+  if (!supabaseUrl || !serviceKey) return "unknown";
 
   try {
     const url = `${supabaseUrl}/rest/v1/email_suppression?email=eq.${encodeURIComponent(email)}&select=email&limit=1`;
@@ -32,13 +45,19 @@ export async function isEmailSuppressed(email: string): Promise<boolean> {
       headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
       timeoutMs: 3_000,
     });
-    if (!res.ok) return false;
+    if (!res.ok) return "unknown";
     const rows = await res.json();
-    return Array.isArray(rows) && rows.length > 0;
+    return Array.isArray(rows) && rows.length > 0 ? "suppressed" : "clear";
   } catch (err) {
-    logger.warn({ err, email }, "Suppression check failed — sending anyway");
-    return false;
+    logger.warn({ err, email }, "Suppression check failed");
+    return "unknown";
   }
+}
+
+export async function isEmailSuppressed(email: string): Promise<boolean> {
+  // Unknown reads as not-suppressed here, deliberately: a transactional email that fails
+  // to arrive because a lookup timed out is the worse outcome. See `suppressionState`.
+  return (await suppressionState(email)) === "suppressed";
 }
 
 export async function addToSuppression(
