@@ -12,7 +12,6 @@ import {
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { reportSections } from "@/data/report-general";
-import { escapeHtml } from "@shared/format/html-escape";
 import { isNonProdDeploy } from "@shared/env/is-non-prod-deploy";
 import { startReportCheckout } from "@features/checkout/ui/startReportCheckout";
 import { type ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
@@ -92,8 +91,10 @@ import RewardSection, { type RewardCopy, type RewardConfig } from "./sections/Re
 import SexualStageSection, { type StageCopy } from "./sections/SexualStageSection";
 import SnapshotSection, { SnapshotCompare, type SnapshotCopy } from "./sections/SnapshotSection";
 import ReportPartDivider, { type ReportPartDividerProps } from "./sections/ReportPartDivider";
-import { summaryArchetypeContent } from "@/data/report-summary";
+import { SUMMARY_BLOCK_ID } from "@features/report/server/contentGating";
 import { normalizeReportHtml } from "./reportContent";
+import { replacePlaceholders, type SnapshotContent } from "./reportPlaceholders";
+import ReportExperienceV1 from "./v1/ReportExperienceV1";
 import {
   isSectionIncludedInEssentials,
   isSectionUnlockedForPlan,
@@ -119,18 +120,6 @@ import {
 import { shouldAutoOpenOfferModal } from "../logic/paywallModal";
 import { useReportEngagementTimers } from "./hooks/useReportEngagementTimers";
 import "./report.css";
-
-interface SnapshotContent {
-  importanceLabel: string;
-  importancePct: number | null;
-  importanceStatusLabel: string;
-  importanceValue: number | null;
-  satisfactionLabel: string;
-  satisfactionPct: number | null;
-  satisfactionStatusLabel: string;
-  satisfactionValue: number | null;
-  stage: string | null;
-}
 
 interface SnapshotAnswers {
   currentSexualSatisfaction: number | null;
@@ -296,38 +285,6 @@ function getSnapshotContent(
       importanceValue === null ? "" : `${describeBand(importanceValue)} (${importanceValue}/7)`,
     stage,
   };
-}
-
-function replacePlaceholders(
-  html: string,
-  values: {
-    archetype: string;
-    matchScore: number;
-    motto: string;
-    reportDate: string;
-    snapshot: SnapshotContent;
-    userName: string;
-  }
-) {
-  // Every substitution lands in a dangerouslySetInnerHTML; escape every
-  // value (user-controlled or server-derived) so a malicious first name or
-  // a future server-side change can't inject HTML/script. The labels below
-  // are plain text by contract — escaping them is a safe no-op.
-  return normalizeReportHtml(
-    html
-      .replace(/\{\{USER_NAME\}\}/g, escapeHtml(values.userName))
-      .replace(
-        /\{\{CORE_ARCHETYPE\}\}/g,
-        `<span class="report-archetype-name">${escapeHtml(values.archetype)}</span>`
-      )
-      .replace(/\{\{CORE_ARCHETYPE_SCORE\}\}/g, String(Math.round(values.matchScore)))
-      .replace(/\{\{CORE_ARCHETYPE_MOTTO\}\}/g, escapeHtml(values.motto))
-      .replace(/\{\{REPORT_DATE\}\}/g, escapeHtml(values.reportDate))
-      .replace(/\{\{SEXUAL_STAGE\}\}/g, escapeHtml(values.snapshot.stage ?? ""))
-      .replace(/\{\{IMPORTANCE_OF_SEX\}\}/g, escapeHtml(values.snapshot.importanceLabel))
-      .replace(/\{\{SEXUAL_SATISFACTION\}\}/g, escapeHtml(values.snapshot.satisfactionLabel))
-      .replace(/<table>[\s\S]*?<\/table>/g, "")
-  );
 }
 
 interface ReportStatusState {
@@ -1007,8 +964,10 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       : null;
 
                   if (section.id === "summary") {
+                    // Gated by the API, not imported: the direct import shipped
+                    // all fourteen archetypes' premium summaries to every visitor.
                     const summaryHtml = normalizeReportHtml(
-                      summaryArchetypeContent[viewArchetype] ?? null
+                      archetypeContent?.[SUMMARY_BLOCK_ID]?.[viewArchetype] ?? null
                     );
                     const isSummaryUnlocked = isSectionUnlockedForPlan({
                       accessPlan,
@@ -2018,6 +1977,17 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   /* eslint-enable no-restricted-syntax */
   const sessionId = devParam ?? storedSessionId;
 
+  /**
+   * Which report the reader gets. V1 — the pre-2.0 report — is the DEFAULT for
+   * everyone (WhatsApp 2026-09-12, Mark: "Revert back fully please"), and stays
+   * so until Report 3.0 ships. `?v2=1` still reaches Report 2.0, which is kept
+   * in the tree because the in-progress V3 work builds on its sections.
+   *
+   * This is NOT an A/B split: nothing buckets traffic, the arm is only ever
+   * chosen by typing the parameter.
+   */
+  const showReportV2 = searchParams.get("v2") === "1";
+
   // Honour the discount-email CTA deep-link: /report/[token]?offer=1&pricingSessionId=<uuid>
   const isOfferLink = searchParams.get("offer") === "1";
   const pricingSessionIdFromUrl = searchParams.get("pricingSessionId");
@@ -2387,12 +2357,14 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       : (primaryArchetypeFromData ?? "");
 
   const returnToPrimaryHref = useMemo(() => {
-    if (devParam) {
-      const params = new URLSearchParams({ dev_session: devParam });
-      return `${pathname}?${params.toString()}`;
-    }
-    return pathname;
-  }, [devParam, pathname]);
+    const params = new URLSearchParams();
+    if (devParam) params.set("dev_session", devParam);
+    // `?v2=1` has to survive archetype navigation, or anyone comparing the two
+    // reports silently falls back to V1 on the first tile they click.
+    if (showReportV2) params.set("v2", "1");
+    const qs = params.toString();
+    return qs ? `${pathname}?${qs}` : pathname;
+  }, [devParam, pathname, showReportV2]);
 
   const handleUnlockArchetype = useCallback(
     (name: string) => {
@@ -2408,6 +2380,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         const params = new URLSearchParams();
         params.set("archetype", slug);
         if (devParam) params.set("dev_session", devParam);
+        if (showReportV2) params.set("v2", "1");
         router.push(`${pathname}?${params.toString()}`);
       };
 
@@ -2429,6 +2402,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       returnToPrimaryHref,
       router,
       shouldShowOfferVariant,
+      showReportV2,
       unlockedArchetypes,
     ]
   );
@@ -2467,6 +2441,24 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       // Resolves ONLY on failure — on success the browser is already leaving.
       if (failure) setCheckoutHandoff(failure);
     });
+  };
+
+  /**
+   * Footer CTA on the V1 "Other Archetypes" breakdown. For a reader who already
+   * owns full_report on their PRIMARY archetype, "the full report" is theirs —
+   * the only thing still locked here is the OTHER archetypes, which all_reports
+   * unlocks. So route full_report owners to all_reports; everyone else buys
+   * full_report. all_reports is a global unlock, so it carries no archetype.
+   */
+  const handlePurchaseFullReport = () => {
+    const plan: ReportPurchasePlanId = accessPlan === "full_report" ? "all_reports" : "full_report";
+    const archetype = plan === "all_reports" ? null : primaryArchetype;
+    trackPaywallInitiated({
+      source: "archetype_breakdown_footer",
+      archetype,
+      plan_needed: plan,
+    });
+    beginCheckout(plan, archetype);
   };
 
   const closePricingModal = useCallback(() => {
@@ -2583,7 +2575,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   // The redesigned report starts at the Part I divider — pre-2.0 intros and
   // sections the redesign folded into combined ones are filtered out here, at
   // the single point every consumer (render, nav, scroll-spy) reads from.
-  const resolvedSections = resolveReportSections(reportSections, effectiveViewArchetype)
+  const allSections = resolveReportSections(reportSections, effectiveViewArchetype);
+  // V1 renders every chapter in `data/report-general.ts`, in sectionNumber
+  // order — no retirement filter and no Figma re-ordering, both of which are
+  // Report 2.0 concepts.
+  const resolvedSectionsV1 = allSections;
+  const resolvedSections = allSections
     .filter((section) => !RETIRED_REPORT_SECTION_IDS.has(section.id))
     // Order by the Figma part containers, NOT by `sectionNumber` — the two
     // disagree (Beliefs is numbered after Attachment but comes FIRST in Part II,
@@ -2600,83 +2597,128 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
 
   return (
     <>
-      <ReportExperience
-        key={`${token ?? "browser"}:${sessionId ?? "anon"}`}
-        submissionId={data.submissionId ?? null}
-        devParam={devParam}
-        accessPlan={data.accessPlan}
-        archetypeTiers={data.archetypeTiers ?? {}}
-        feedbacks={feedbacks}
-        isPricingModalOpen={isPricingModalOpen}
-        isShareModalOpen={isShareModalOpen}
-        matchScore={matchScore}
-        onBeginCheckout={beginCheckout}
-        onClosePricingModal={closePricingModal}
-        onCloseShareModal={closeShareModal}
-        onOpenShareModal={openShareModal}
-        onOpenPricingModal={openPricingModal}
-        onUnlockArchetype={handleUnlockArchetype}
-        ownerFirstName={ownerFirstName}
-        ownerToken={ownerToken}
-        percentages={percentages}
-        placeholderValues={placeholderValues}
-        primaryArchetype={primaryArchetype}
-        pricingQuotes={pricingQuotes}
-        archetypeContent={data.archetypeContent ?? {}}
-        practiceTendencies={data.practiceTendencies ?? {}}
-        pricingTargetArchetype={pricingTargetArchetype}
-        pricingVariant={pricingVariant}
-        ranking={ranking}
-        reportDate={reportDate}
-        resolvedSections={resolvedSections}
-        snapshot={snapshot}
-        snapshotCopy={data.snapshotCopy ?? null}
-        findingsCopy={data.findingsCopy ?? null}
-        beliefsCopy={data.beliefsCopy ?? null}
-        attachmentCopy={data.attachmentCopy ?? null}
-        attachmentFamily={data.attachmentFamily ?? null}
-        attachmentPlane={data.attachmentPlane ?? null}
-        accelCopy={data.accelCopy ?? null}
-        insecuritiesCopy={data.insecuritiesCopy ?? null}
-        insecurityCueFamily={data.insecurityCueFamily ?? null}
-        insecurityGraph={data.insecurityGraph ?? null}
-        rewardCopy={data.rewardCopy ?? null}
-        rewardConfig={data.rewardConfig ?? null}
-        energyCopy={data.energyCopy ?? null}
-        energyConfig={data.energyConfig ?? null}
-        arousalCopy={data.arousalCopy ?? null}
-        arousalConfig={data.arousalConfig ?? null}
-        initiationCopy={data.initiationCopy ?? null}
-        initiationConfig={data.initiationConfig ?? null}
-        libidoCopy={data.libidoCopy ?? null}
-        libidoConfig={data.libidoConfig ?? null}
-        growthCopy={data.growthCopy ?? null}
-        growthRungs={data.growthRungs ?? null}
-        readingCopy={data.readingCopy ?? null}
-        partnershipCopy={data.partnershipCopy ?? null}
-        partnershipLoop={data.partnershipLoop ?? null}
-        enjoyCopy={data.enjoyCopy ?? null}
-        powerCopy={data.powerCopy ?? null}
-        fantasyCopy={data.fantasyCopy ?? null}
-        fantasyDots={data.fantasyDots ?? null}
-        curiosityCopy={data.curiosityCopy ?? null}
-        relationshipFit={data.relationshipFit ?? null}
-        lovelangCopy={data.lovelangCopy ?? null}
-        loveLanguageOrder={data.loveLanguageOrder ?? null}
-        confidenceCopy={data.confidenceCopy ?? null}
-        confidenceStrip={data.confidenceStrip ?? null}
-        mapCopy={data.mapCopy ?? null}
-        stageCopy={data.stageCopy ?? null}
-        constellationMottos={data.constellationMottos ?? {}}
-        submitFeedback={submitFeedback}
-        submitted={submitted}
-        theme={theme}
-        userEmail={data.userEmail}
-        userName={data.userName}
-        contentArchetype={data.contentArchetype ?? primaryArchetype}
-        viewArchetype={effectiveViewArchetype}
-        viewMode={viewMode}
-      />
+      {showReportV2 ? (
+        <ReportExperience
+          key={`${token ?? "browser"}:${sessionId ?? "anon"}`}
+          submissionId={data.submissionId ?? null}
+          devParam={devParam}
+          accessPlan={data.accessPlan}
+          archetypeTiers={data.archetypeTiers ?? {}}
+          feedbacks={feedbacks}
+          isPricingModalOpen={isPricingModalOpen}
+          isShareModalOpen={isShareModalOpen}
+          matchScore={matchScore}
+          onBeginCheckout={beginCheckout}
+          onClosePricingModal={closePricingModal}
+          onCloseShareModal={closeShareModal}
+          onOpenShareModal={openShareModal}
+          onOpenPricingModal={openPricingModal}
+          onUnlockArchetype={handleUnlockArchetype}
+          ownerFirstName={ownerFirstName}
+          ownerToken={ownerToken}
+          percentages={percentages}
+          placeholderValues={placeholderValues}
+          primaryArchetype={primaryArchetype}
+          pricingQuotes={pricingQuotes}
+          archetypeContent={data.archetypeContent ?? {}}
+          practiceTendencies={data.practiceTendencies ?? {}}
+          pricingTargetArchetype={pricingTargetArchetype}
+          pricingVariant={pricingVariant}
+          ranking={ranking}
+          reportDate={reportDate}
+          resolvedSections={resolvedSections}
+          snapshot={snapshot}
+          snapshotCopy={data.snapshotCopy ?? null}
+          findingsCopy={data.findingsCopy ?? null}
+          beliefsCopy={data.beliefsCopy ?? null}
+          attachmentCopy={data.attachmentCopy ?? null}
+          attachmentFamily={data.attachmentFamily ?? null}
+          attachmentPlane={data.attachmentPlane ?? null}
+          accelCopy={data.accelCopy ?? null}
+          insecuritiesCopy={data.insecuritiesCopy ?? null}
+          insecurityCueFamily={data.insecurityCueFamily ?? null}
+          insecurityGraph={data.insecurityGraph ?? null}
+          rewardCopy={data.rewardCopy ?? null}
+          rewardConfig={data.rewardConfig ?? null}
+          energyCopy={data.energyCopy ?? null}
+          energyConfig={data.energyConfig ?? null}
+          arousalCopy={data.arousalCopy ?? null}
+          arousalConfig={data.arousalConfig ?? null}
+          initiationCopy={data.initiationCopy ?? null}
+          initiationConfig={data.initiationConfig ?? null}
+          libidoCopy={data.libidoCopy ?? null}
+          libidoConfig={data.libidoConfig ?? null}
+          growthCopy={data.growthCopy ?? null}
+          growthRungs={data.growthRungs ?? null}
+          readingCopy={data.readingCopy ?? null}
+          partnershipCopy={data.partnershipCopy ?? null}
+          partnershipLoop={data.partnershipLoop ?? null}
+          enjoyCopy={data.enjoyCopy ?? null}
+          powerCopy={data.powerCopy ?? null}
+          fantasyCopy={data.fantasyCopy ?? null}
+          fantasyDots={data.fantasyDots ?? null}
+          curiosityCopy={data.curiosityCopy ?? null}
+          relationshipFit={data.relationshipFit ?? null}
+          lovelangCopy={data.lovelangCopy ?? null}
+          loveLanguageOrder={data.loveLanguageOrder ?? null}
+          confidenceCopy={data.confidenceCopy ?? null}
+          confidenceStrip={data.confidenceStrip ?? null}
+          mapCopy={data.mapCopy ?? null}
+          stageCopy={data.stageCopy ?? null}
+          constellationMottos={data.constellationMottos ?? {}}
+          submitFeedback={submitFeedback}
+          submitted={submitted}
+          theme={theme}
+          userEmail={data.userEmail}
+          userName={data.userName}
+          contentArchetype={data.contentArchetype ?? primaryArchetype}
+          viewArchetype={effectiveViewArchetype}
+          viewMode={viewMode}
+        />
+      ) : (
+        <ReportExperienceV1
+          key={`${token ?? "browser"}:${sessionId ?? "anon"}`}
+          devParam={devParam}
+          accessPlan={data.accessPlan}
+          archetypeTiers={data.archetypeTiers ?? {}}
+          diagnostics={data.diagnostics ?? null}
+          submissionSeed={data.submissionId ?? token ?? null}
+          submissionId={data.submissionId ?? null}
+          feedbacks={feedbacks}
+          isPricingModalOpen={isPricingModalOpen}
+          isShareModalOpen={isShareModalOpen}
+          matchScore={matchScore}
+          onBeginCheckout={beginCheckout}
+          onClosePricingModal={closePricingModal}
+          onCloseShareModal={closeShareModal}
+          onOpenShareModal={openShareModal}
+          onOpenPricingModal={openPricingModal}
+          onUnlockArchetype={handleUnlockArchetype}
+          onPurchaseFullReport={handlePurchaseFullReport}
+          ownerFirstName={ownerFirstName}
+          ownerToken={ownerToken}
+          percentages={percentages}
+          placeholderValues={placeholderValues}
+          primaryArchetype={primaryArchetype}
+          pricingQuotes={pricingQuotes}
+          archetypeContent={data.archetypeContent ?? {}}
+          practiceTendencies={data.practiceTendencies ?? {}}
+          pricingTargetArchetype={pricingTargetArchetype}
+          pricingVariant={pricingVariant}
+          ranking={ranking}
+          reportDate={reportDate}
+          resolvedSections={resolvedSectionsV1}
+          snapshot={snapshot}
+          submitFeedback={submitFeedback}
+          submitted={submitted}
+          theme={theme}
+          unlockedArchetypes={unlockedArchetypes}
+          userEmail={data.userEmail}
+          userName={data.userName}
+          viewArchetype={effectiveViewArchetype}
+          viewMode={viewMode}
+        />
+      )}
       {checkoutHandoff && (
         <div className="report-checkout-handoff" role="status" aria-live="polite">
           <div className="report-status-card report-card">

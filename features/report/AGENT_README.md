@@ -1,11 +1,26 @@
 # features/report
 
-**Purpose:** Personalized report rendering at `/report` + `/report/[token]`. Section-based reveal gated by purchase plan (`essentials` | `full_report` | `all_reports`).
+**Purpose:** Personalized report rendering at `/report` + `/report/[token]`. Section-based reveal gated by purchase plan (`essentials` | `full_report` | `core` | `all_reports`).
+
+**Two report versions ship side by side.** V1 — the pre-2.0 report — is what every
+reader gets. Report 2.0 stays in the tree behind `?v2=1`, because the in-progress
+Report 3.0 work (`ui/v3/`, staging only) is built on its section components. The
+switch is `showReportV2` in `ui/ReportPage.tsx`; the header comment in
+`ui/v1/ReportExperienceV1.tsx` says why the revert happened and what was
+deliberately left behind (the forced paywall and the urgency countdown).
 
 **Entry:**
 
-- `ui/ReportPage.tsx` — orchestrator.
-- `ui/ReportSection.tsx`, `ui/sections/*` — section components (Welcome, CoreArchetype, Dimension, AttachmentPatterns, PracticeTendencies, etc.).
+- `ui/ReportPage.tsx` — the shell: data fetch, modals, checkout, analytics, paywall
+  trigger. Shared by both versions, and picks which one renders.
+- `ui/v1/` — the restored pre-2.0 report, and the default: `ReportExperienceV1.tsx`,
+  its own sidebar and mobile nav, and `v1/sections/*` for the components whose props
+  Report 2.0 rewrote.
+- `ui/ReportSection.tsx`, `ui/sections/*` — Report 2.0 sections, reached at `?v2=1`.
+  `ui/reportNav.ts` holds its part order and the section ids it retired.
+- `ui/report.css` — the whole report stylesheet, split out of `app/globals.css` by
+  `5faa2a2c`. Carries BOTH versions' rules; also imported by `app/practice-preview`.
+- `ui/reportPlaceholders.ts` — `{{USER_NAME}}`-style substitution, shared by both.
 - `ui/ReportPricingModal.tsx` — paywall modal.
 - `ui/ShareReportModal.tsx`, `ui/SharedViewerBanner.tsx`, `ui/ShareVerifyGate.tsx` — share flow.
 - `ui/hooks/` — `useReportData`, `useSectionFeedback`, `useReportShares`, `useReportEngagementTimers`.
