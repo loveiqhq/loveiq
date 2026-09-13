@@ -106,6 +106,21 @@ async function openReport(browser, viewport, token, query = "") {
   });
   const gate = stagingCookies(ORIGIN);
   if (gate.length) await page.context().addCookies(gate);
+
+  /**
+   * Give each page its own rate-limit identity.
+   *
+   * `/api/report` allows 10 requests per minute per IP, and `getClientIp` keys on
+   * `x-real-ip` — a header nothing sets on localhost, so every request in this
+   * sweep shared the bucket "unknown" and the run spent most of its life in the
+   * 62s rate-limit wait, never reaching the later phases at all.
+   *
+   * Safe: a real deployment sets `x-real-ip` at the edge, so this only ever
+   * takes effect locally, and no product assertion depends on the limiter.
+   */
+  await page.setExtraHTTPHeaders({
+    "x-real-ip": `10.0.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}`,
+  });
   const errors = [];
   attachConsole(page, errors);
 
@@ -465,6 +480,21 @@ async function phaseArchetypes(browser) {
     // sparse the whole section falls back to the primary's numbers. Listed here
     // so a NEW leak stands out; remove once the Part I handoff is settled.
     "snapshot",
+
+    /**
+     * Restored by the V1 revert (2026-09-13) and identical across archetypes BY
+     * CONSTRUCTION: every one of these has `archetypeBlockId: null` in
+     * data/report-general.ts, so there is no per-archetype copy for them to
+     * show. They are absent from this list only because Report 2.0 retired them,
+     * so the sweep never saw them — it then reported all six as a leak on every
+     * one of the thirteen archetypes it switches to.
+     */
+    "the_loveiq_concept",
+    "probability_of_other_archetypes",
+    "the_importance_of_sexuality",
+    "background_know_how_arousal_desire_and_pleasure",
+    "about_fantasies_desire_amp_pleasure_per_context",
+    "about_living_or_not_living_fantasies",
   ]);
 
   for (const viewport of VIEWPORTS) {
