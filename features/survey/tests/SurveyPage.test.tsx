@@ -129,6 +129,40 @@ describe("SurveyPage", () => {
     expect(await screen.findByRole("heading", { name: /before we begin/i })).toBeInTheDocument();
   });
 
+  // Regression, 2026-09-14: "Return to site" was wired `onClick={onReturn}`,
+  // so React handed handleReturn the MouseEvent as its `clearAnswers`
+  // argument. Being truthy, it wiped the saved answers and sent the user to
+  // the token-less /report ("Can't find your report") instead of the site
+  // root. The prop was typed `() => void`, which hid it from the compiler.
+  it("returns to the site root from consent without wiping answers", async () => {
+    sessionStorage.setItem(SURVEY_STEP_KEY, "5");
+    localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify({ answers: { q1: "yes" } }));
+
+    const original = Object.getOwnPropertyDescriptor(window, "location");
+    const navigated: string[] = [];
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        get href() {
+          return "/survey";
+        },
+        set href(value: string) {
+          navigated.push(value);
+        },
+      },
+    });
+
+    try {
+      render(<SurveyPage />);
+      await userEvent.click(await screen.findByRole("button", { name: /return to site/i }));
+
+      expect(navigated).toEqual(["/"]);
+      expect(localStorage.getItem(ANSWERS_STORAGE_KEY)).not.toBeNull();
+    } finally {
+      if (original) Object.defineProperty(window, "location", original);
+    }
+  });
+
   it("restores the survey engine when answers exist in local storage", async () => {
     localStorage.setItem(
       ANSWERS_STORAGE_KEY,

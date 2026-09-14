@@ -1072,7 +1072,7 @@ const ConsentScreen: FC<{
         <div className="mt-6 sm:mt-8 flex gap-4">
           <button
             type="button"
-            onClick={onReturn}
+            onClick={() => onReturn()}
             className="flex-1 rounded-full border border-white/10 py-[15px] text-[14px] font-bold leading-[20px] tracking-[0.7px] text-white/60 transition hover:border-white/20 hover:text-white/80 focus-visible-ring"
           >
             Return to site
@@ -1208,7 +1208,11 @@ const SurveyPage: FC = () => {
     setStep(TOTAL_STEPS + 1); // jump to consent
   }, []);
 
-  const handleReturn = useCallback((clearAnswers?: boolean, reportToken?: string | null) => {
+  const handleReturn = useCallback((clearAnswersArg?: boolean, reportToken?: string | null) => {
+    // Guard against a caller wired straight to onClick: React would pass the
+    // MouseEvent here, which is truthy, wiping answers and sending the user to
+    // the token-less /report ("Can't find your report") screen.
+    const clearAnswers = clearAnswersArg === true;
     try {
       if (clearAnswers) {
         copySurveySessionToReportSession();
