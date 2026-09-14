@@ -51,7 +51,7 @@ async function call(path: string, init: RequestInit = {}): Promise<unknown> {
   return text ? JSON.parse(text) : null;
 }
 
-function body(scanner: UxScanner) {
+function body(scanner: UxScanner, forCreate: boolean) {
   return {
     name: scanner.name,
     description: `Review protocol — see features/ux-review/server/scanners.ts (${scanner.triggerEvent})`,
@@ -66,9 +66,12 @@ function body(scanner: UxScanner) {
     provider: "google",
     model: "gemini-3.5-flash-lite",
     credit_limit: scanner.creditLimit,
-    // Never enabled by this script. Turning on the 5-minute sweep is a
-    // deliberate, separate act once the benchmark passes.
-    enabled: false,
+    // `enabled` is sent ONLY when creating. A new scanner starts off: turning
+    // on the five-minute sweep is a deliberate, separate act. But PATCHing a
+    // live scanner with enabled:false SWITCHES IT OFF, so a routine prompt
+    // edit would have silently stopped all four. Omitting the key leaves
+    // whatever state the scanner is actually in.
+    ...(forCreate ? { enabled: false } : {}),
   };
 }
 
@@ -78,12 +81,21 @@ async function main(): Promise<void> {
   };
   const byName = new Map(existing.results.map((s) => [s.name, s]));
 
-  const quota = (await call("/vision/quota/")) as { remaining: number; credit_limit: number };
+  const quota = (await call("/vision/quota/")) as {
+    remaining: number;
+    credit_limit: number;
+    free_monthly_credits?: number;
+  };
   const projected = UX_SCANNERS.reduce((n, s) => n + s.estimatedMonthlyCredits, 0);
   console.log(
     `quota: ${quota.remaining}/${quota.credit_limit} credits left this period · ` +
       `these scanners project ${projected}/month` +
-      (projected > quota.credit_limit ? "  ⚠ OVER the free allowance — needs a card" : "")
+      // credit_limit is the hard stop (7500), NOT the free allowance (2500).
+      // Comparing against it kept this warning silent while we were already
+      // paying for the overage.
+      (projected > (quota.free_monthly_credits ?? quota.credit_limit)
+        ? `  ⚠ OVER the ${quota.free_monthly_credits ?? quota.credit_limit} free allowance — the excess is billed`
+        : "")
   );
 
   for (const scanner of UX_SCANNERS) {
@@ -95,7 +107,7 @@ async function main(): Promise<void> {
       if (APPLY) {
         const made = (await call("/vision/scanners/", {
           method: "POST",
-          body: JSON.stringify(body(scanner)),
+          body: JSON.stringify(body(scanner, true)),
         })) as { id: string };
         console.log(`   id=${made.id}  ← paste into scanners.ts`);
       }
@@ -109,7 +121,7 @@ async function main(): Promise<void> {
     if (APPLY) {
       await call(`/vision/scanners/${live.id}/`, {
         method: "PATCH",
-        body: JSON.stringify(body(scanner)),
+        body: JSON.stringify(body(scanner, false)),
       });
     }
   }
