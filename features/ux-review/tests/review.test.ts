@@ -4,6 +4,7 @@ import {
   buildReviewMessage,
   detectDrift,
   fetchFindings,
+  findThreadTs,
   firstSentence,
   recordingLink,
   type UxFinding,
@@ -134,5 +135,45 @@ describe("fetchFindings", () => {
   it("returns nothing rather than throwing when PostHog is not configured", async () => {
     vi.stubEnv("POSTHOG_API_KEY", "");
     await expect(fetchFindings()).resolves.toEqual([]);
+  });
+});
+
+describe("findThreadTs", () => {
+  it("resolves a recording to the survey notification it belongs under", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      calls.push(String(url));
+      // Match the TABLE, not a substring: "slack_journey_message?survey_submission_id="
+      // also contains "survey_submission", which made this stub answer the second
+      // call with the first call's payload.
+      const body = String(url).includes("/survey_submission?")
+        ? [{ id: 2063 }]
+        : [{ message_ts: "1789.4242" }];
+      return { ok: true, json: async () => body } as unknown as Response;
+    });
+    vi.stubEnv("SUPABASE_URL", "https://db.example");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "svc");
+    await expect(findThreadTs("sess-1")).resolves.toBe("1789.4242");
+    // It must look the session up by the column that actually links the two.
+    expect(calls[0]).toContain("posthog_session_id=eq.sess-1");
+    expect(calls[1]).toContain("survey_submission_id=eq.2063");
+  });
+
+  it("returns null rather than throwing when there is no thread to use", async () => {
+    vi.stubGlobal("fetch", async () => ({ ok: true, json: async () => [] }));
+    vi.stubEnv("SUPABASE_URL", "https://db.example");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "svc");
+    // A landing-page recording has no submission. The finding still has to be
+    // delivered — to the channel — so this must not throw or block.
+    await expect(findThreadTs("sess-none")).resolves.toBeNull();
+  });
+
+  it("survives Supabase being unreachable", async () => {
+    vi.stubGlobal("fetch", async () => {
+      throw new Error("network down");
+    });
+    vi.stubEnv("SUPABASE_URL", "https://db.example");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "svc");
+    await expect(findThreadTs("sess-1")).resolves.toBeNull();
   });
 });

@@ -149,3 +149,46 @@ export async function fetchFindings(): Promise<UxFinding[]> {
     reasoning: String(row[6] ?? ""),
   }));
 }
+
+/**
+ * The Slack thread a finding belongs under.
+ *
+ * Findings used to stack at the bottom of #incoming-surveys, detached from the
+ * submission they are about, so reading one meant hunting for the matching
+ * survey notification. `survey_submission.posthog_session_id` links a recording
+ * to its submission, and `slack_journey_message.message_ts` is the notification
+ * already posted for it — so a finding can hang under the very message a reader
+ * is looking at.
+ *
+ * Returns null when there is no thread to hang under (a landing-page session, a
+ * submission from before journey messages existed, or a recording with no
+ * submission at all). The caller posts to the channel instead: a finding in the
+ * wrong place still beats a finding nobody sees.
+ */
+export async function findThreadTs(sessionId: string): Promise<string | null> {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key || !sessionId) return null;
+
+  try {
+    const submissions = await fetchWithTimeout(
+      `${url}/rest/v1/survey_submission?posthog_session_id=eq.${encodeURIComponent(sessionId)}&select=id&limit=1`,
+      { headers: { apikey: key, Authorization: `Bearer ${key}` }, timeoutMs: 4000 }
+    );
+    if (!submissions.ok) return null;
+    const rows = (await submissions.json()) as Array<{ id: number }>;
+    const submissionId = rows[0]?.id;
+    if (!submissionId) return null;
+
+    const messages = await fetchWithTimeout(
+      `${url}/rest/v1/slack_journey_message?survey_submission_id=eq.${submissionId}&select=message_ts&limit=1`,
+      { headers: { apikey: key, Authorization: `Bearer ${key}` }, timeoutMs: 4000 }
+    );
+    if (!messages.ok) return null;
+    const found = (await messages.json()) as Array<{ message_ts: string | null }>;
+    return found[0]?.message_ts ?? null;
+  } catch {
+    // Threading is a nicety; never let it stop the finding being delivered.
+    return null;
+  }
+}

@@ -39,6 +39,10 @@ Read the observation: verdict, confidence, and the reasoning with its citations.
    mutation mode means write one, or the fix is unproven.
 6. **Ship** — branch `replay/<criterion>-<session8>`, run `npm run lint`,
    `npm test` and the probe, then `gh pr create --draft`. **Never merge.**
+   Open the PR for every reproduced finding, from day one — the PR review is the
+   human gate, not a rating in Slack. State in the body what was reproduced, on
+   which devices, and what the probe does under `MUTATE=1`, so the reviewer can
+   judge the diagnosis and not just the diff.
 7. **Rate** — thumbs up (reproduced) or down (artifact) on the observation in
    PostHog. That rating is the human-in-the-loop record and becomes the next
    benchmark fixture for free.

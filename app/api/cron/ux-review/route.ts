@@ -37,10 +37,12 @@ import {
   verifyCronAuth,
 } from "@shared/observability/slack-alert-dedup";
 import { recordNotice } from "@features/brain/server/notice";
+import { isSlackBotConfigured, postJourneyMessage } from "@shared/observability/slack-bot";
 import {
   buildReviewMessage,
   detectDrift,
   fetchFindings,
+  findThreadTs,
   MAX_POSTS_PER_RUN,
   recordingLink,
 } from "@features/ux-review/server/review";
@@ -103,13 +105,27 @@ export async function GET(request: Request) {
 
       const { text, blocks } = buildReviewMessage(finding);
       const fitted = fitBlocks(blocks, text);
-      await notifySlack({
-        channel: "survey",
-        kind: "ux_review",
-        username: "ux_review",
-        text,
-        blocks: fitted.blocks,
-      });
+
+      /**
+       * Hang the finding under the survey notification it is about, rather than
+       * stacking it at the bottom of the channel where it reads as unrelated to
+       * anything. Threading needs chat.postMessage — an incoming webhook cannot
+       * reply to a message — so this goes through the bot when one is
+       * configured, and falls back to the webhook otherwise.
+       */
+      const threadTs = isSlackBotConfigured() ? await findThreadTs(finding.sessionId) : null;
+      const threaded = threadTs
+        ? await postJourneyMessage({ text, blocks: fitted.blocks, threadTs })
+        : null;
+      if (!threaded) {
+        await notifySlack({
+          channel: "survey",
+          kind: "ux_review",
+          username: "ux_review",
+          text,
+          blocks: fitted.blocks,
+        });
+      }
       await markSlackAlertDelivered("ux_review", "observation", finding.observationId);
       await markSlackAlertDelivered("ux_review_budget", finding.scannerId, `${dayKey}:${slot}`);
       posted += 1;

@@ -20,8 +20,27 @@ out of `$recording_observed` events and grades them offline.
   is in the loop a missed bug is cheap, but a false alarm is the false confidence
   the requirement names.
 - `inconclusive` counts as a **miss**, never a pass.
-- Until every bar is met, Slack posts are prefixed `[unverified]` and **no PR is
-  opened at all** — the loop stops after step 3.
+
+## The gate is the pull request, not the benchmark
+
+A draft PR opens for every reproduced finding from day one. The PR **is** the
+human-in-the-loop step: it carries the recording link, the reproduction, the fix
+and a probe that fails without it, which is far more reviewable than a thumbs-up
+on a Slack message.
+
+The staging is about trust, not about whether work happens:
+
+1. **Now** — every reproduced finding becomes a draft PR. Eman reads each one and
+   asks why it was raised, to catch false alarms and anything missed.
+2. **Once PRs come back clean consistently** — approve and merge without the
+   interrogation.
+3. **Never** — auto-merge. `gh pr create --draft`, and a human presses merge.
+
+What the benchmark bars govern is the **confidence of the claim**, not whether a
+PR is allowed. Below bar, say so in the PR body: "the scanner's criteria have not
+yet cleared the benchmark (precision X, recall Y), so treat the diagnosis as
+unconfirmed even though the fix is probe-verified." A finding that could not be
+reproduced still never becomes a PR — that rule stands regardless of the bars.
 
 ## The trap: one observation per session, ever
 
