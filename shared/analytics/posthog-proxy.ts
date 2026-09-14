@@ -16,6 +16,13 @@
  * `api_host` and the rewrite rule from drifting apart — a disagreement that would send
  * every event into a 404 and log nothing anywhere.
  *
+ * DELIBERATELY NOT IN robots.txt. Adding `/relay` to the disallow list is the obvious
+ * tidy-up and it is the wrong call: robots.txt is public and blocklist maintainers read
+ * it, so listing the path there advertises the exact thing the proxy exists to keep
+ * unremarkable. The crawl exposure it would prevent is close to nil — nothing on the site
+ * links to /relay, it is only ever fetched by script — and a crawler that did reach it
+ * gets PostHog's public config and nothing else.
+ *
  * WHAT THIS DOES NOT CHANGE: `NEXT_PUBLIC_POSTHOG_HOST` still holds the absolute PostHog
  * origin and must keep doing so. It is read by `features/analytics/server/posthog.ts` for
  * the server-side purchase send — which runs in a Vercel function with no origin to be

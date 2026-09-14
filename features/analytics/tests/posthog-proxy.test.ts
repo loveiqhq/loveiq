@@ -213,3 +213,18 @@ describe("stripTrailingSlash", () => {
     expect(loc.search).toBe("?utm_source=x&utm_campaign=y");
   });
 });
+
+/**
+ * A deliberate omission, recorded so it is not "fixed" by someone tidying robots.txt.
+ *
+ * Disallowing the proxy path looks like hygiene, but robots.txt is public and blocklist
+ * maintainers read it — listing `/relay` there would publish the one detail the proxy
+ * depends on being unremarkable. Nothing links to it (it is only fetched by script), so
+ * there is almost no crawl exposure to prevent.
+ */
+describe("the proxy path stays out of robots.txt on purpose", () => {
+  it("is not disallowed, because robots.txt is a public list of interesting paths", () => {
+    const robots = readFileSync(join(ROOT, "app/robots.ts"), "utf8");
+    expect(robots).not.toContain(POSTHOG_PROXY_PATH);
+  });
+});
