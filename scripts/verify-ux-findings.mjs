@@ -49,7 +49,7 @@ const LOOKBACK_HOURS = Number(process.env.LOOKBACK_HOURS ?? 6);
  *
  * Ordered — first match wins — so the specific patterns sit above the general.
  */
-const CRITERIA = [
+export const CRITERIA = [
   {
     // Marcus's headline criterion. Now covered: the mechanism turned out not to
     // be a misfiring CTA but the report's failure screens, which offer "Take the
@@ -125,7 +125,7 @@ async function posthog(query) {
   return json.results ?? [];
 }
 
-function classify(reasoning) {
+export function classify(reasoning) {
   return CRITERIA.find((c) => c.match.test(reasoning)) ?? null;
 }
 
@@ -246,7 +246,15 @@ if (process.argv.includes("--selftest")) {
   ];
   const claimCases = [
     // The real 2026-09-14 fabrication: an unlock click in a session with none.
-    ["the user clicked 'Unlock full report', which looped them back", [], true],
+    // The event set must be non-empty — an EMPTY set means we could not read
+    // the session at all, which fails open by design (see contradiction()).
+    [
+      "the user clicked 'Unlock full report', which looped them back",
+      ["report_viewed", "locked_card_price_shown"],
+      true,
+    ],
+    // An outage must never look like a refutation.
+    ["the user clicked 'Unlock full report', which looped them back", [], false],
     ["the user clicked 'Unlock full report'", ["unlock_click"], false],
     ["the user reached checkout and saw an error", ["begin_checkout"], false],
     ["the user reached checkout and saw an error", ["report_viewed"], true],
@@ -283,8 +291,13 @@ if (process.argv.includes("--selftest")) {
       console.error(`selftest FAIL: "${text.slice(0, 40)}" → ${got}, wanted ${want}`);
     }
   }
-  console.log(bad ? `selftest FAILED (${bad})` : "selftest ok");
-  process.exit(bad ? 1 : 0);
+  // `bad` counts ONLY classifier failures. The claim and session-id checks
+  // above signal through process.exitCode, and a bare process.exit(0) would
+  // discard them — which it did, silently, until 2026-09-14: the selftest
+  // printed "FAIL (claim)" and exited 0, so CI's gate could not fail.
+  const failed = bad > 0 || process.exitCode === 1;
+  console.log(failed ? `selftest FAILED (${bad} classifier)` : "selftest ok");
+  process.exit(failed ? 1 : 0);
 }
 
 const findings = await posthog(`

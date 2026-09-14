@@ -211,6 +211,20 @@ export async function findThreadTs(sessionId: string): Promise<string | null> {
  * Deliberately narrow. Only actions with an unambiguous event are listed, and a
  * claim matching no rule is "cannot check", never "contradicted".
  */
+/**
+ * Measured 2026-09-14 against the five known-false findings of day one: this
+ * table refutes 1 of 5. Four extra rules were written for the other four claim
+ * shapes (redirect / error-on-screen / dead click / rage) and every one of them
+ * scored ZERO, because those sessions really do contain $pageview, $exception
+ * and dead_click — the claims are wrong in their SPECIFICS, which the presence
+ * of a coarse event cannot discriminate. They were deleted rather than shipped:
+ * a gate that looks like it works and catches nothing is worse than no gate.
+ *
+ * What does discriminate is re-running the defect in a browser. All five are
+ * correctly rejected by their criterion's probe, which is why the probe, not
+ * this table, is the gate that earns a Slack post. See
+ * scripts/verify-ux-findings.mjs.
+ */
 export const CLAIM_EVIDENCE: ReadonlyArray<{
   claim: RegExp;
   requireAny: readonly string[];
@@ -244,6 +258,13 @@ export function isSafeSessionId(sessionId: string): boolean {
 
 /** The reason our telemetry contradicts this claim, or null. */
 export function contradiction(reasoning: string, events: ReadonlySet<string>): string | null {
+  // No events at all means we could not READ them, not that the session had
+  // none: a session only reaches a scanner by emitting the trigger event that
+  // selected it, so >=1 event always exists in reality. Without this guard a
+  // PostHog outage makes `fetchSessionEvents` return an empty set and every
+  // checkable claim gets silently refuted — an outage would look exactly like
+  // a quiet, healthy day. Fail open; the human still sees the finding.
+  if (events.size === 0) return null;
   for (const rule of CLAIM_EVIDENCE) {
     if (!rule.claim.test(reasoning)) continue;
     if (rule.requireAny.some((e) => events.has(e))) continue;
@@ -252,8 +273,9 @@ export function contradiction(reasoning: string, events: ReadonlySet<string>): s
   return null;
 }
 
-/** Distinct events in one session. Empty set when PostHog is unreachable, which
- *  makes `contradiction()` fall silent rather than refuting everything. */
+/** Distinct events in one session. Empty set when PostHog is unreachable; the
+ *  size-0 guard in `contradiction()` is what turns that into "cannot check"
+ *  rather than "contradicted". */
 export async function fetchSessionEvents(sessionId: string): Promise<Set<string>> {
   const key = process.env.POSTHOG_API_KEY;
   if (!key || !isSafeSessionId(sessionId)) return new Set();

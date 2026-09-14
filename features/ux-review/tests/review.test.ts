@@ -200,6 +200,30 @@ describe("contradiction", () => {
     ).toBeNull();
   });
 
+  it("does not refute when the session's events could not be read", () => {
+    // fetchSessionEvents() returns an empty Set on a missing key, an unsafe id,
+    // a non-ok response, a 200-with-error payload, or a throw. Without the
+    // size-0 guard every checkable claim is refuted during a PostHog outage,
+    // so an outage looks exactly like a quiet, healthy day. Fail open.
+    expect(
+      contradiction(
+        "the user clicked 'Unlock full report', which looped them back to the survey",
+        new Set()
+      )
+    ).toBeNull();
+  });
+
+  it("still refutes that claim the moment events ARE readable", () => {
+    // The guard must key on "we read nothing", not on "the event is absent" —
+    // otherwise it would disable refutation altogether.
+    expect(
+      contradiction(
+        "the user clicked 'Unlock full report', which looped them back to the survey",
+        new Set(["report_viewed"])
+      )
+    ).toMatch(/unlock click/);
+  });
+
   it("says nothing about claims it cannot check", () => {
     // A rule that fires on unmatched prose would refute everything, which is
     // just a differently-wrong detector.
