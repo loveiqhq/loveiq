@@ -31,6 +31,7 @@ import {
   contradiction,
   fetchSessionEvents,
   isSafeSessionId,
+  sessionViewport,
 } from "../features/ux-review/server/review.ts";
 
 const DRY_RUN = process.argv.includes("--dry-run");
@@ -64,7 +65,7 @@ const CRITERIA = [
     id: "C1",
     label: "clipped or covered content",
     match: /cover(ed|ing)?|overlap|clipped|cut off|hidden behind|obscur/i,
-    probes: ["verify-nav-heading-clearance.mjs", "audit-visual.mjs"],
+    probes: ["verify-nav-heading-clearance.mjs", "verify-narrow-viewport.mjs"],
   },
   {
     id: "D1",
@@ -128,12 +129,32 @@ function classify(reasoning) {
   return CRITERIA.find((c) => c.match.test(reasoning)) ?? null;
 }
 
-function runProbe(file) {
+/**
+ * Run a probe AT THE SIZE THE READER HAD.
+ *
+ * A defect reproduced on a default phone proves nothing about someone who hit it
+ * at 262px. The citation-URL overflow found on 2026-09-14 was invisible at every
+ * width the device matrix covered, and only appeared once the probe rendered at
+ * the viewport the session actually reported.
+ *
+ * `viewport` is the session's narrowest and widest — narrowest because that is
+ * where layout breaks, widest because a foldable moves mid-session. Probes that
+ * understand WIDTHS use them; the rest ignore the variable and run their own
+ * device list, which is still better than refusing to check.
+ */
+function runProbe(file, viewport) {
+  const widths = viewport
+    ? [...new Set([viewport.min, viewport.max].filter((w) => w >= 200 && w <= 2000))].join(",")
+    : "";
   try {
     const out = execFileSync("node", [`scripts/probes/${file}`], {
       encoding: "utf8",
       timeout: 10 * 60_000,
-      env: { ...process.env, REPORT_ORIGIN: "https://www.loveiq.org" },
+      env: {
+        ...process.env,
+        REPORT_ORIGIN: "https://www.loveiq.org",
+        ...(widths ? { WIDTHS: widths } : {}),
+      },
     });
     return { file, passed: true, tail: out.trim().split("\n").slice(-3).join(" | ") };
   } catch (err) {
@@ -352,17 +373,22 @@ for (const [observationId, sessionId, scannerName, reasoning] of findings) {
     continue;
   }
 
-  const results = criterion.probes.map(runProbe);
+  // The reader's own screen, so "could not reproduce" means something.
+  const viewport = await sessionViewport(sessionId);
+  const results = criterion.probes.map((f) => runProbe(f, viewport));
   const reproduced = results.some((r) => !r.passed);
   if (reproduced) confirmed += 1;
 
+  const at = viewport
+    ? ` at ${viewport.min}px${viewport.max !== viewport.min ? `-${viewport.max}px` : ""}, the size this reader had`
+    : "";
   const verdict = reproduced
-    ? `❗ *Reproduced in production* — ${criterion.label} (${criterion.id}). ` +
+    ? `❗ *Reproduced in production${at}* — ${criterion.label} (${criterion.id}). ` +
       results
         .filter((r) => !r.passed)
         .map((r) => `\`${r.file}\` failed: ${r.tail}`)
         .join(" ")
-    : `✅ *Could not reproduce* — ${criterion.label} (${criterion.id}) passes in production now ` +
+    : `✅ *Could not reproduce${at}* — ${criterion.label} (${criterion.id}) passes in production now ` +
       `(${results.map((r) => `\`${r.file}\``).join(", ")}). The recording may predate a fix, or ` +
       `depend on a device we do not emulate.`;
 

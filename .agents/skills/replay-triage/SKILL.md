@@ -27,10 +27,14 @@ Read the observation: verdict, confidence, and the reasoning with its citations.
 ## The loop
 
 1. **Classify** — which criterion id from `references/review-protocol.md`?
-2. **Reproduce** — run that criterion's named probe from `scripts/probes/`
-   against production, on at least two engines (Chromium and WebKit). If no
-   probe covers it, write one; `scripts/probes/README.md` is the trap list, read
-   it first.
+2. **Reproduce at the reader's own size** — run that criterion's named probe
+   from `scripts/probes/` against production, on at least two engines (Chromium
+   and WebKit), **at the viewport the session actually reported**. The verifier
+   passes it as `WIDTHS`; `sessionViewport()` reads it from the recording.
+   A defect reproduced on a default phone proves nothing about someone who hit
+   it at 262px — the citation-URL overflow found on 2026-09-14 was invisible at
+   every width our device matrix covered. If no probe covers the criterion,
+   write one; `scripts/probes/README.md` is the trap list, read it first.
 3. **Decide** — reproduced / not reproduced / artifact. **Not reproduced goes to
    a human, never to a PR.**
 4. **Fix** — the root cause. Grep every caller before editing; a guard in the

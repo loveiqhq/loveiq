@@ -279,3 +279,55 @@ export async function fetchSessionEvents(sessionId: string): Promise<Set<string>
     return new Set();
   }
 }
+
+/**
+ * The screen the finding actually happened on.
+ *
+ * A defect reproduced at 390px proves nothing about the reader who hit it at
+ * 262px, and the citation-URL overflow found on 2026-09-14 was invisible at
+ * every width our device matrix covered. So a probe should render at the
+ * viewport of the session that produced the claim, not at a default phone.
+ *
+ * Returns the narrowest and widest viewport seen in the session: narrowest
+ * because that is where layout breaks, and both because a foldable moves — the
+ * Galaxy Z Flip in that finding ranged 262px to 715px within one recording.
+ */
+export async function sessionViewport(
+  sessionId: string
+): Promise<{ min: number; max: number; os: string } | null> {
+  const key = process.env.POSTHOG_API_KEY;
+  if (!key || !isSafeSessionId(sessionId)) return null;
+  try {
+    const res = await fetchWithTimeout(`https://eu.posthog.com/api/projects/${PROJECT}/query/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: {
+          kind: "HogQLQuery",
+          query: `SELECT min(toFloat(properties.$viewport_width)),
+                         max(toFloat(properties.$viewport_width)),
+                         any(properties.$os)
+                  FROM events
+                  WHERE timestamp > now() - INTERVAL 30 DAY
+                    AND properties.$session_id = '${sessionId}'
+                    AND properties.$viewport_width IS NOT NULL`,
+        },
+      }),
+      timeoutMs: 8000,
+    });
+    if (!res.ok) return null;
+    const payload = (await res.json()) as { results?: unknown[][]; error?: unknown };
+    if (payload.error) return null;
+    const row = payload.results?.[0];
+    const min = Number(row?.[0]);
+    const max = Number(row?.[1]);
+    if (!Number.isFinite(min) || min <= 0) return null;
+    return {
+      min: Math.round(min),
+      max: Math.round(max) || Math.round(min),
+      os: String(row?.[2] ?? ""),
+    };
+  } catch {
+    return null;
+  }
+}

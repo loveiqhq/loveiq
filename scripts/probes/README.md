@@ -113,3 +113,13 @@ DEVICE="iPhone SE" node scripts/probes/audit-paywall-layout.mjs
   file ran unchanged and looked like a product bug. Assert the anchor, patch by
   LINE NUMBER when the target is inside formatted code, and grep for the new text
   before running anything.
+- **Render at the size the reader had, not at a device you own.** Our matrix
+  started at 320px; 3% of sessions are narrower, the narrowest observed was
+  262px (a Galaxy Z Flip whose viewport moved 262-715px as it folded), and the
+  citation URLs overflowing by 123px had therefore never been rendered by
+  anything we run. `verify-ux-findings.mjs` now passes the session's real
+  `WIDTHS` to the probe.
+- **An inline element's `getBoundingClientRect()` lies when the text wraps.** It
+  returns the union of the line boxes, which spans the whole column, so an
+  overflow check counted 142 false positives. Judge inlines by their individual
+  `getClientRects()`; keep the simple rect for block elements.

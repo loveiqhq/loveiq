@@ -6,6 +6,7 @@ import {
   detectDrift,
   fetchSessionEvents,
   isSafeSessionId,
+  sessionViewport,
   fetchFindings,
   findThreadTs,
   firstSentence,
@@ -228,5 +229,51 @@ describe("contradiction", () => {
       throw new Error("network down");
     });
     await expect(fetchSessionEvents("01a0-sess")).resolves.toEqual(new Set());
+  });
+});
+
+describe("sessionViewport", () => {
+  const stub = (rows: unknown[][]) =>
+    vi.stubGlobal("fetch", async () => ({ ok: true, json: async () => ({ results: rows }) }));
+
+  it("returns the narrowest and widest size the reader actually had", async () => {
+    vi.stubEnv("POSTHOG_API_KEY", "phx_test");
+    // The real Galaxy Z Flip session: the viewport moves as the device folds,
+    // so a probe must cover both ends, not a default phone width.
+    stub([[262, 715, "Linux"]]);
+    await expect(sessionViewport("01a0-sess")).resolves.toEqual({
+      min: 262,
+      max: 715,
+      os: "Linux",
+    });
+  });
+
+  it("collapses a fixed-size session to one width", async () => {
+    vi.stubEnv("POSTHOG_API_KEY", "phx_test");
+    stub([[384, 384, "Android"]]);
+    await expect(sessionViewport("01a0-sess")).resolves.toEqual({
+      min: 384,
+      max: 384,
+      os: "Android",
+    });
+  });
+
+  it("refuses a malformed session id without querying", async () => {
+    vi.stubEnv("POSTHOG_API_KEY", "phx_test");
+    let called = false;
+    vi.stubGlobal("fetch", async () => {
+      called = true;
+      return { ok: true, json: async () => ({ results: [] }) } as unknown as Response;
+    });
+    await expect(sessionViewport("' OR 1=1 --")).resolves.toBeNull();
+    expect(called).toBe(false);
+  });
+
+  it("returns null on a session with no viewport data", async () => {
+    // Falling back to a default device is the caller's choice to make, not
+    // something to fake here with a plausible-looking number.
+    vi.stubEnv("POSTHOG_API_KEY", "phx_test");
+    stub([[null, null, ""]]);
+    await expect(sessionViewport("01a0-sess")).resolves.toBeNull();
   });
 });

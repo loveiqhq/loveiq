@@ -27,6 +27,13 @@
   font-family: var(--font-sans);
   font-size: 1rem;
   line-height: 1.8;
+  /* Reference lists print bare citation URLs, and not all of them are links —
+     several sit in italics as plain text — so anchors alone did not cover it.
+     A URL has no spaces to break at, so it ran past the viewport edge on narrow
+     screens: 123px over on a 262px viewport before this.
+     `break-word` rather than `anywhere` so ordinary prose keeps its intrinsic
+     width and only an over-long word is broken. */
+  overflow-wrap: break-word;
 }
 .report-prose p {
   margin-bottom: 1.25rem;
@@ -75,6 +82,17 @@
   color: var(--accent-orange);
   text-decoration: underline;
   text-underline-offset: 2px;
+  /* The reference lists carry bare citation URLs
+     (simonandschuster.com/books/..., doi.org/10.1080/...), and a URL has no
+     spaces to break at, so it ran straight past the viewport edge: measured 74px
+     over on a 262px-wide screen, 56px at 280, 36px at 300. `anywhere` rather
+     than `break-word` because a doi.org path has no break opportunities at all
+     — `break-word` only helps once the browser finds one.
+
+     3% of sessions in the last 30 days are narrower than 348px, and the
+     narrowest observed was 262px (a Samsung Galaxy Z Flip, viewport moving
+     262-715px as it folds). */
+  overflow-wrap: anywhere;
 }
 .report-prose a:hover {
   opacity: 0.8;

@@ -22,6 +22,20 @@ fails CI if a criterion below disappears from a prompt.
 | `P1` | **Recurring modal**: the same dialog visible again within 30s of a dismiss, twice or more                                                                                      | **visibility-based**: `visibility !== hidden && opacity > 0.05 && height > 20`               | `verify-paywall-closes`, `verify-practice-info`                                                |
 | `A1` | **Illegible overlay**: text readable through a blur meant to hide it, or text under 18px below 4.5:1 contrast                                                                  | `audit-paywall-layout.mjs` already measures legible text under an overlay on three viewports | `audit-paywall-layout.mjs`; contrast notes in `.claude/agents/accessibility-reviewer.md`       |
 
+## Reproduce at the size the reader had
+
+Every row above is checked at the viewport the session reported, not at a
+default device. `sessionViewport()` returns the narrowest and widest width seen
+in the recording — narrowest because that is where layout breaks, both because a
+foldable moves mid-session (one real finding ranged 262px to 715px as a Galaxy Z
+Flip opened).
+
+This is not theoretical. 3% of sessions in the 30 days to 2026-09-14 were under
+348px, the narrowest was 262px, and our device matrix started at 320px — so the
+citation URLs overflowing the viewport by 123px had never been rendered by
+anything we run. A "could not reproduce" from the wrong size is worse than no
+answer, because it closes the question.
+
 ## Two notes that matter more than the table
 
 **Thresholds must match the instrumentation.** `L1`'s "3 activations" is the same
