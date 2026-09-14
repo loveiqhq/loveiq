@@ -89,7 +89,13 @@ const res = await fetch(`https://eu.posthog.com/api/projects/${PROJECT}/query/`,
   }),
 });
 if (!res.ok) throw new Error(`query failed: ${res.status} ${(await res.text()).slice(0, 200)}`);
-const { results } = await res.json();
+const payload = await res.json();
+// PostHog answers a BAD HogQL query with HTTP 200 and an `error` field, so
+// checking res.ok alone turns a broken query into "no rows", which this script
+// would then read as "not scanned yet" — or, if every fixture were a negative,
+// as a clean pass. Fail loudly instead.
+if (payload.error) throw new Error(`HogQL error: ${String(payload.error).slice(0, 300)}`);
+const { results } = payload;
 
 const rows = wanted.map((w) => {
   const hit = (results ?? []).find((r) => r[0] === w.session_id && r[1] === w.scanner);

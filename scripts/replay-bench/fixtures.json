@@ -45,5 +45,27 @@
       "expect": "no",
       "why": "A report read end to end (reached scroll_depth_100) with no rage clicks. THE adversarial case: the report is legitimately ~34,700px tall, so a long scroll is correct behaviour. A scanner that calls this 'excessive scrolling' would flag most of our readers."
     }
+  ],
+  "_status_2026_09_14": [
+    "FIRST RUN: precision 0.50, recall 0.50 — BELOW BAR. Report scanner 2/2.",
+    "Survey scanner 0/2, and BOTH of its fixtures are suspect, mine not the model's:",
+    "",
+    "  known_bad 01a04be1 — I labelled this 'iOS auto-zoom from a 15px input'. The",
+    "  WhatsApp thread it came from says otherwise: Eman diagnosed it as the phone's",
+    "  DISPLAY-ZOOM accessibility setting, on from the first frame. The prompt asks",
+    "  about a page that magnifies AFTER an input is tapped, which is a different",
+    "  event, so a 'no' here may be correct. The real defect Mark named was that our",
+    "  layout does not survive that setting — which is not what the criterion says.",
+    "",
+    "  known_good 01a08680 — I picked it on 'completed and no rage clicks' and never",
+    "  watched it. The scanner says the survey returned to the intro screen after",
+    "  completion, citing t=2022s. The events agree: survey_completed 14:41:36, then",
+    "  a $pageview back to /survey at 14:43:08. That matches a bug Mark reported on",
+    "  2026-08-30 ('users click a CTA ... and it triggers them to start the survey",
+    "  from scratch'). So this may be a TRUE positive against a wrong label.",
+    "",
+    "NEXT: watch both recordings before re-labelling. Do not tune the prompt against",
+    "fixtures whose expected verdict has not been verified — that trains the scanner",
+    "on my assumptions. Re-scanning needs a duplicated scanner either way."
   ]
 }
