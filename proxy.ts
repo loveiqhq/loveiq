@@ -412,7 +412,15 @@ export async function proxy(request: NextRequest) {
     // (www.google.<cc>/ads/ga-audiences, /pagead/1p-user-list) still fail —
     // CSP host-source cannot wildcard a TLD and enumerating ~190 ccTLDs is worse
     // than losing audience pixels. Conversion measurement is unaffected by that.
-    `connect-src 'self'${isDev ? " ws://localhost:* http://localhost:*" : ""} https://www.google-analytics.com https://*.google-analytics.com https://analytics.google.com https://*.analytics.google.com https://www.googletagmanager.com https://googleads.g.doubleclick.net https://stats.g.doubleclick.net https://ad.doubleclick.net https://pagead2.googlesyndication.com https://www.googleadservices.com https://www.google.com https://images.unsplash.com https://www.google.com/recaptcha/ https://cdn-cookieyes.com https://log.cookieyes.com https://cookieyes.com https://www.facebook.com https://analytics.tiktok.com https://*.clarity.ms https://c.bing.com https://widget.trustpilot.com ${posthogCspSources} ${supabaseCspSources} ${stripeConnectSources}`,
+    // `*.cookieyes.com` rather than the two subdomains we happened to know about.
+    // The consent banner calls `directory.cookieyes.com/api/v1/ip` to learn the visitor's
+    // region, and CSP host matching is EXACT — `cookieyes.com` does not cover a subdomain
+    // — so that call was refused on every page load. Measured 2026-09-14 on a production
+    // report: "Refused to connect ... directory.cookieyes.com", then `TypeError: Failed to
+    // fetch` inside banner.js. Without the region the banner cannot tell a GDPR visitor
+    // from a CCPA one, and this site's traffic is overwhelmingly US. The wildcard matches
+    // how `*.clarity.ms` is already handled, and stops the next subdomain repeating it.
+    `connect-src 'self'${isDev ? " ws://localhost:* http://localhost:*" : ""} https://www.google-analytics.com https://*.google-analytics.com https://analytics.google.com https://*.analytics.google.com https://www.googletagmanager.com https://googleads.g.doubleclick.net https://stats.g.doubleclick.net https://ad.doubleclick.net https://pagead2.googlesyndication.com https://www.googleadservices.com https://www.google.com https://images.unsplash.com https://www.google.com/recaptcha/ https://cdn-cookieyes.com https://cookieyes.com https://*.cookieyes.com https://www.facebook.com https://analytics.tiktok.com https://*.clarity.ms https://c.bing.com https://widget.trustpilot.com ${posthogCspSources} ${supabaseCspSources} ${stripeConnectSources}`,
     `frame-src 'self' https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://cdn-cookieyes.com https://widget.trustpilot.com ${stripeFrameSources}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",

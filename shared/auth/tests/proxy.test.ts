@@ -789,3 +789,27 @@ describe("proxy — consent-independent daily unique-visit count", () => {
     expect(mockCookiesSet.mock.calls.find((c) => c[0] === "liq_dv")).toBeUndefined();
   });
 });
+
+/**
+ * The consent banner asks `directory.cookieyes.com/api/v1/ip` which region the visitor is
+ * in, and CSP host matching is EXACT — listing `cookieyes.com` does not cover a subdomain.
+ * That call was refused on every page load, verified on a production report page:
+ * "Refused to connect", then `TypeError: Failed to fetch` inside banner.js. Without a
+ * region the banner cannot distinguish a GDPR visitor from a CCPA one, and this site's
+ * traffic is overwhelmingly US.
+ */
+describe("CSP — the consent banner can reach its own region lookup", () => {
+  it("allows CookieYes subdomains to be connected to, not just the bare domain", () => {
+    proxy(makeNextRequest());
+    const csp = mockResponseHeaders.get("Content-Security-Policy") ?? "";
+    const connect = csp.split(";").find((d) => d.trim().startsWith("connect-src")) ?? "";
+    expect(connect).toContain("cookieyes.com");
+    // The assertion that matters: a SUBDOMAIN must be permitted.
+    const allowsSubdomain =
+      connect.includes("https://*.cookieyes.com") ||
+      connect.includes("https://directory.cookieyes.com");
+    expect(allowsSubdomain, `connect-src does not permit directory.cookieyes.com: ${connect}`).toBe(
+      true
+    );
+  });
+});
