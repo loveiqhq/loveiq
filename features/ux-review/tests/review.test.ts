@@ -7,6 +7,7 @@ import {
   fetchSessionEvents,
   isSafeSessionId,
   sessionViewport,
+  fetchDailyStats,
   fetchFindings,
   recordingLink,
   type UxFinding,
@@ -78,6 +79,47 @@ describe("detectDrift", () => {
     expect(
       detectDrift([{ scannerName: scanner.name, scannerVersion: scanner.scannerVersion }])
     ).toEqual([]);
+  });
+});
+
+describe("fetchDailyStats", () => {
+  it("counts every verdict, not just the flagged ones", async () => {
+    // The ratio is the interesting number: day one was 5 yes / 31 observed and
+    // all five were wrong about why. A digest of only the YES rows hides that.
+    let sentBody = "";
+    vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+      sentBody = String(init.body);
+      return {
+        ok: true,
+        json: async () => ({ results: [["LoveIQ survey UX", 12, 2]] }),
+      } as unknown as Response;
+    });
+    vi.stubEnv("POSTHOG_API_KEY", "phx_test");
+    const stats = await fetchDailyStats();
+    expect(stats).toEqual([{ scanner: "LoveIQ survey UX", observed: 12, yes: 2 }]);
+    expect(sentBody).not.toContain("scanner_output_verdict = 'yes'");
+  });
+
+  it("throws on a HogQL error returned with HTTP 200", async () => {
+    // Same trap as fetchFindings: a broken query would otherwise produce an
+    // empty digest, which reads as a quiet, healthy day.
+    vi.stubGlobal("fetch", async () => ({
+      ok: true,
+      json: async () => ({ error: "Unknown field", results: [] }),
+    }));
+    vi.stubEnv("POSTHOG_API_KEY", "phx_test");
+    await expect(fetchDailyStats()).rejects.toThrow(/posthog daily query error/);
+  });
+
+  it("throws on a non-2xx rather than reporting an empty day", async () => {
+    vi.stubGlobal("fetch", async () => ({ ok: false, status: 503, json: async () => ({}) }));
+    vi.stubEnv("POSTHOG_API_KEY", "phx_test");
+    await expect(fetchDailyStats()).rejects.toThrow(/posthog daily query 503/);
+  });
+
+  it("returns nothing rather than throwing when PostHog is not configured", async () => {
+    vi.stubEnv("POSTHOG_API_KEY", "");
+    await expect(fetchDailyStats()).resolves.toEqual([]);
   });
 });
 

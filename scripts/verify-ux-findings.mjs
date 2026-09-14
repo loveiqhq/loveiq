@@ -205,6 +205,14 @@ function runProbe(file, viewport) {
     // AUTO_PR_CRITERIA, so a report that simply did not load would have opened
     // a draft PR claiming a reproduction. They print INCONCLUSIVE or
     // "exception:" when that happens, so read that too until they all exit 3.
+    //
+    // Known imprecision, chosen deliberately: a probe reports every device in
+    // one stream, so a run where ONE device could not measure and ANOTHER
+    // genuinely reproduced the defect reads as inconclusive overall. That
+    // degrades the finding to "could not check — needs a human", which is still
+    // POSTED, not dropped. Erring this way costs a slower human look; erring
+    // the other way opens a draft PR asserting a defect that was never seen.
+    // The real fix is migrating every probe to exit 3.
     const inconclusive = err.status === 3 || /\bINCONCLUSIVE\b|\bexception:/i.test(out);
     return {
       file,
@@ -346,6 +354,40 @@ function openReproductionPr({ criterion, sessionId, viewport, results }) {
  * the next run; a duplicate one erodes trust in the channel.
  */
 /**
+ * Post a verdict into the submission's thread and say whether the claim may be
+ * finalised.
+ *
+ * postThreadReply throws on an ordinary Slack failure — a rate limit,
+ * not_in_channel, a revoked scope. Uncaught, that killed the whole batch: one
+ * throttled message and findings later in the run never had their claims
+ * attempted, after their probes had already spent real browser minutes.
+ *
+ * A failed post deliberately does NOT finalise the claim. The claim goes stale
+ * after ten minutes and the next run retries, which is the behaviour we want:
+ * the verdict still has to reach a human. Only a post that succeeded — or a
+ * finding with no thread to post into, where retrying changes nothing — is
+ * marked done.
+ */
+async function deliverVerdict(sessionId, verdict) {
+  if (DRY_RUN || CLASSIFY_ONLY) return true;
+  try {
+    const threadTs = await threadFor(sessionId);
+    if (threadTs) {
+      await postThreadReply(threadTs, verdict);
+    } else {
+      console.log(`  (no survey thread for ${sessionId}; not posted)`);
+    }
+    return true;
+  } catch (err) {
+    console.log(
+      `  (slack post failed: ${String(err.message).split("\n")[0].slice(0, 100)} — ` +
+        `leaving the claim open so the next run retries)`
+    );
+    return false;
+  }
+}
+
+/**
  * Finalise the claim taken by claimFinding().
  *
  * claim_slack_alert inserts with delivered = FALSE and hands the claim back to
@@ -401,8 +443,10 @@ async function claimFinding(observationId) {
 }
 
 /** The survey notification this recording belongs under, so the verdict lands
- *  next to the finding rather than at the bottom of the channel. Mirrors
- *  findThreadTs() in features/ux-review/server/review.ts. */
+ *  next to the finding rather than at the bottom of the channel. This is the
+ *  only copy: review.ts's findThreadTs() was deleted once the cron stopped
+ *  posting findings. Unlike that one, this hard-fails on a missing secret
+ *  rather than returning null, which is this script's stated contract. */
 async function threadFor(sessionId) {
   const url = requireEnv("SUPABASE_URL");
   const key = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
@@ -552,17 +596,12 @@ for (const [observationId, sessionId, scannerName, reasoning] of findings) {
     if (why) {
       contradicted += 1;
       console.log(`REFUTED ${sessionId}  ${scannerName} — ${why}`);
-      if (!DRY_RUN && !CLASSIFY_ONLY) {
-        const ts = await threadFor(sessionId);
-        if (ts) {
-          await postThreadReply(
-            ts,
-            `🚫 *Contradicted by our own events* — ${why}. Treat the description as ` +
-              `unreliable; the scanner reports what changed but infers why.`
-          );
-        }
-      }
-      await markVerified(observationId);
+      const delivered = await deliverVerdict(
+        sessionId,
+        `🚫 *Contradicted by our own events* — ${why}. Treat the description as ` +
+          `unreliable; the scanner reports what changed but infers why.`
+      );
+      if (delivered) await markVerified(observationId);
       continue;
     }
   }
@@ -587,17 +626,12 @@ for (const [observationId, sessionId, scannerName, reasoning] of findings) {
     );
     // CLASSIFY_ONLY must never post — it is the offline way to check the
     // classifier, and it ran as far as the Supabase lookup before this guard.
-    if (!DRY_RUN && !CLASSIFY_ONLY) {
-      const ts = await threadFor(sessionId);
-      if (ts) {
-        await postThreadReply(
-          ts,
-          `🔎 *Needs a human* — the scanner reports ${criterion.label} (${criterion.id}). ` +
-            `No probe covers this criterion yet, so it has not been reproduced either way.`
-        );
-      }
-    }
-    await markVerified(observationId);
+    const delivered = await deliverVerdict(
+      sessionId,
+      `🔎 *Needs a human* — the scanner reports ${criterion.label} (${criterion.id}). ` +
+        `No probe covers this criterion yet, so it has not been reproduced either way.`
+    );
+    if (delivered) await markVerified(observationId);
     continue;
   }
 
@@ -659,12 +693,7 @@ for (const [observationId, sessionId, scannerName, reasoning] of findings) {
   console.log(
     `${reproduced ? "CONFIRM" : inconclusive ? "UNKNOWN" : "CLEAR  "} ${sessionId}  ${criterion.id}`
   );
-  if (!DRY_RUN) {
-    const threadTs = await threadFor(sessionId);
-    if (threadTs) await postThreadReply(threadTs, verdict);
-    else console.log(`  (no survey thread for ${sessionId}; not posted)`);
-  }
-  await markVerified(observationId);
+  if (await deliverVerdict(sessionId, verdict)) await markVerified(observationId);
 }
 
 console.log(

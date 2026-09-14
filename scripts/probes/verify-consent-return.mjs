@@ -25,7 +25,11 @@ import { stagingCookies } from "./staging-cookie.mjs";
 const ORIGIN = process.env.ORIGIN ?? "http://localhost:3000";
 const CONSENT_STEP = "5"; // TOTAL_STEPS (4) + 1 — SurveyPage.tsx
 
+// Exit 0 clean, 1 the defect reproduced, 3 could not measure. B1 is in
+// AUTO_PR_CRITERIA, so a run that merely timed out must not come back as 1 and
+// open a draft PR asserting a defect nobody saw.
 let bad = 0;
+let unmeasured = 0;
 for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) {
   const engine = /iphone|ipad/i.test(name) ? webkit : chromium;
   const browser = await engine.launch();
@@ -104,13 +108,23 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) 
       notes.push("ok -> /");
     }
   } catch (err) {
-    bad++;
-    notes.push(`FAIL ${String(err).split("\n")[0]}`);
+    // A timeout or a missing button means the probe never reached the control
+    // it measures — that is "could not check", not "the button is broken".
+    unmeasured++;
+    notes.push(`INCONCLUSIVE ${String(err).split("\n")[0]}`);
   }
 
   console.log(`${name.padEnd(16)} ${notes.join(" | ")}`);
   await browser.close();
 }
 
-console.log(bad === 0 ? "\nPASS" : `\nFAIL (${bad})`);
-process.exit(bad === 0 ? 0 : 1);
+if (bad > 0) {
+  console.log(`\nFAIL (${bad})`);
+  process.exit(1);
+}
+if (unmeasured > 0) {
+  console.log(`\nINCONCLUSIVE (${unmeasured}) — could not measure, not a pass`);
+  process.exit(3);
+}
+console.log("\nPASS");
+process.exit(0);

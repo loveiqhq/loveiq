@@ -25,7 +25,12 @@ import { stagingCookies } from "./staging-cookie.mjs";
 const ORIGIN = process.env.REPORT_ORIGIN ?? "https://www.loveiq.org";
 const TOKEN = process.env.REPORT_TOKEN ?? "rpt_a9LY0Obbla1FVsclJ1nM";
 
+// Exit 0 clean, 1 the defect reproduced, 3 could not measure.
+// verify-ux-findings.mjs reads 1 as "reproduced in production" and opens a
+// draft PR for this criterion, so a page that merely failed to load must NOT
+// come back as 1. See scripts/probes/README.md.
 let bad = 0;
+let unmeasured = 0;
 for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) {
   const engine = /iphone|ipad/i.test(name) ? webkit : chromium;
   const browser = await engine.launch();
@@ -101,7 +106,7 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) 
 
     if (state.onStatusScreen || !state.reportRendered) {
       notes.push("INCONCLUSIVE: the report did not render, so nothing was proven");
-      bad += 1;
+      unmeasured += 1;
     } else if (state.restarts.length > 0) {
       notes.push(`RESTART CTA on a valid report: ${state.restarts.join(", ")}`);
       bad += 1;
@@ -110,7 +115,7 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) 
     }
   } catch (e) {
     notes.push(`exception: ${String(e.message).split("\n")[0].slice(0, 70)}`);
-    bad += 1;
+    unmeasured += 1;
   }
 
   const ok = notes.some((n) => n.startsWith("no way back"));
@@ -120,4 +125,13 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) 
 }
 
 console.log(`\n${2 - bad}/2 devices: a valid report offers no way back to the survey`);
-process.exit(bad ? 1 : 0);
+if (bad > 0) {
+  console.log(`\nFAIL (${bad})`);
+  process.exit(1);
+}
+if (unmeasured > 0) {
+  console.log(`\nINCONCLUSIVE (${unmeasured}) — could not measure, not a pass`);
+  process.exit(3);
+}
+console.log("\nPASS");
+process.exit(0);

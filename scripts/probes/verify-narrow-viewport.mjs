@@ -31,7 +31,12 @@ const TOKEN = process.env.REPORT_TOKEN ?? "rpt_a9LY0Obbla1FVsclJ1nM";
 const WIDTHS = (process.env.WIDTHS ?? "262,300,320").split(",").map(Number);
 
 const browser = await chromium.launch();
+// Exit 0 clean, 1 the defect reproduced, 3 could not measure.
+// verify-ux-findings.mjs reads 1 as "reproduced in production" and opens a
+// draft PR for this criterion, so a page that merely failed to load must NOT
+// come back as 1. See scripts/probes/README.md.
 let bad = 0;
+let unmeasured = 0;
 
 for (const width of WIDTHS) {
   const ctx = await browser.newContext({
@@ -91,7 +96,7 @@ for (const width of WIDTHS) {
   let note;
   if (!result.rendered) {
     note = "INCONCLUSIVE: the report did not render";
-    bad += 1;
+    unmeasured += 1;
   } else if (result.hScroll > 2 || result.offenders.length > 0) {
     note = `overflow: h-scroll ${result.hScroll}px, ${result.offenders.join(" | ")}`;
     bad += 1;
@@ -107,4 +112,13 @@ for (const width of WIDTHS) {
 
 await browser.close();
 console.log(`\n${WIDTHS.length - bad}/${WIDTHS.length} widths: nothing overflows`);
-process.exit(bad ? 1 : 0);
+if (bad > 0) {
+  console.log(`\nFAIL (${bad})`);
+  process.exit(1);
+}
+if (unmeasured > 0) {
+  console.log(`\nINCONCLUSIVE (${unmeasured}) — could not measure, not a pass`);
+  process.exit(3);
+}
+console.log("\nPASS");
+process.exit(0);
