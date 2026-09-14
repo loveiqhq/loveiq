@@ -115,6 +115,62 @@ async function posthog(query) {
   return json.results ?? [];
 }
 
+/**
+ * Claims that name an action we instrument, and the events that must exist if
+ * the action really happened.
+ *
+ * Read a day of findings and the failure mode is consistent: the scanner sees
+ * that something changed and invents why. On 2026-09-14 one said "the user
+ * clicked 'Unlock full report', which looped them back to the survey" for a
+ * session containing no unlock_click, no paywall_initiated and no checkout
+ * event — the navigation was real, the cause was fabricated, at 0.9 confidence.
+ *
+ * This is the cheap deterministic check for that: if the prose names an action,
+ * require its event in the same session. Absent means our own telemetry
+ * contradicts the claim, and no probe should be spent on it.
+ *
+ * Deliberately narrow. Only actions with an unambiguous event are listed; a
+ * missing entry means "cannot check", never "contradicted".
+ */
+const CLAIM_EVIDENCE = [
+  {
+    claim: /clicked? ['"]?unlock|unlock full report|pressed unlock|tapped unlock/i,
+    requireAny: ["unlock_click", "paywall_initiated", "sticky_unlock_clicked", "lock_icon_clicked"],
+    describes: "an unlock click",
+  },
+  {
+    claim: /checkout|payment modal|stripe/i,
+    requireAny: ["checkout_started", "begin_checkout", "paywall_initiated", "unlock_click"],
+    describes: "reaching checkout",
+  },
+  {
+    claim: /completed the survey|finished the survey|after completion/i,
+    requireAny: ["survey_completed"],
+    describes: "completing the survey",
+  },
+];
+
+/** Events present in one session, for contradicting a claim. */
+async function sessionEvents(sessionId) {
+  const rows = await posthog(`
+    SELECT DISTINCT event
+    FROM events
+    WHERE timestamp > now() - INTERVAL 30 DAY
+      AND properties.$session_id = '${sessionId.replace(/'/g, "")}'
+  `);
+  return new Set(rows.map((r) => String(r[0])));
+}
+
+/** Returns a reason string when our telemetry contradicts the claim. */
+function contradiction(reasoning, events) {
+  for (const rule of CLAIM_EVIDENCE) {
+    if (!rule.claim.test(reasoning)) continue;
+    if (rule.requireAny.some((e) => events.has(e))) continue;
+    return `the recording describes ${rule.describes}, but the session has none of ${rule.requireAny.join(", ")}`;
+  }
+  return null;
+}
+
 function classify(reasoning) {
   return CRITERIA.find((c) => c.match.test(reasoning)) ?? null;
 }
@@ -214,6 +270,23 @@ if (process.argv.includes("--selftest")) {
     ["The user was returned to an earlier screen after pressing continue.", "L1"],
     ["The reader simply finished reading the chapter.", null],
   ];
+  const claimCases = [
+    // The real 2026-09-14 fabrication: an unlock click in a session with none.
+    ["the user clicked 'Unlock full report', which looped them back", [], true],
+    ["the user clicked 'Unlock full report'", ["unlock_click"], false],
+    ["the user reached checkout and saw an error", ["begin_checkout"], false],
+    ["the user reached checkout and saw an error", ["report_viewed"], true],
+    // No rule covers this, so it must NOT be reported as contradicted.
+    ["the heading was covered by the chapter bar", [], false],
+  ];
+  for (const [text, events, wantContradiction] of claimCases) {
+    const got = contradiction(text, new Set(events)) !== null;
+    if (got !== wantContradiction) {
+      console.error(`selftest FAIL (claim): "${text.slice(0, 40)}" → ${got}`);
+      process.exitCode = 1;
+    }
+  }
+
   let bad = 0;
   for (const [text, want] of cases) {
     const got = classify(text)?.id ?? null;
@@ -242,12 +315,35 @@ let gaps = 0;
 let confirmed = 0;
 
 let skipped = 0;
+let contradicted = 0;
 for (const [observationId, sessionId, scannerName, reasoning] of findings) {
   // Claim before classifying: probes are minutes of real browser time, and a
   // second run must not spend them again on a finding already answered.
   if (!DRY_RUN && !CLASSIFY_ONLY && !(await claimFinding(observationId))) {
     skipped += 1;
     continue;
+  }
+
+  // Contradicted claims never reach a probe: minutes of real browser time spent
+  // on something our own events say did not happen.
+  {
+    const events = await sessionEvents(sessionId);
+    const why = contradiction(reasoning, events);
+    if (why) {
+      contradicted += 1;
+      console.log(`REFUTED ${sessionId}  ${scannerName} — ${why}`);
+      if (!DRY_RUN && !CLASSIFY_ONLY) {
+        const ts = await threadFor(sessionId);
+        if (ts) {
+          await postThreadReply(
+            ts,
+            `🚫 *Contradicted by our own events* — ${why}. Treat the description as ` +
+              `unreliable; the scanner reports what changed but infers why.`
+          );
+        }
+      }
+      continue;
+    }
   }
 
   const criterion = classify(reasoning);
@@ -313,5 +409,6 @@ for (const [observationId, sessionId, scannerName, reasoning] of findings) {
 
 console.log(
   `\n${confirmed} reproduced · ${gaps} with no probe coverage` +
+    (contradicted ? ` · ${contradicted} contradicted by events` : "") +
     (skipped ? ` · ${skipped} already verified on an earlier run` : "")
 );

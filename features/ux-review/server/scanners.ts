@@ -78,6 +78,11 @@ work; or anything you are inferring rather than seeing on screen.
 const CITE = `
 Your first sentence must name the defect. Then say where on screen it happened.
 Cite the moment in the recording. If you cannot point at it, answer NO.
+
+Describe only what you can SEE. Do not say which control the user pressed unless
+the press and the change it caused are both visible. If the screen changed and
+you cannot see what caused it, say that the screen changed and that the cause is
+not visible — do not name a button you did not watch being pressed.
 `.trim();
 
 export const UX_SCANNERS: readonly UxScanner[] = [
@@ -88,7 +93,7 @@ export const UX_SCANNERS: readonly UxScanner[] = [
     samplingMode: "focused",
     estimatedMonthlyCredits: 2160,
     creditLimit: 2300,
-    scannerVersion: 1,
+    scannerVersion: 2,
     prompt: [
       "You are reviewing a recording of the LoveIQ survey — a one-question-per-screen",
       "assessment on loveiq.org. Most questions advance on their own about a third of a",
@@ -121,7 +126,7 @@ export const UX_SCANNERS: readonly UxScanner[] = [
     samplingMode: "focused",
     estimatedMonthlyCredits: 822,
     creditLimit: 900,
-    scannerVersion: 1,
+    scannerVersion: 2,
     prompt: [
       "You are reviewing a recording of the LoveIQ report — a long, scroll-based",
       "psychology report on loveiq.org, with some chapters locked behind a paywall.",
@@ -155,7 +160,7 @@ export const UX_SCANNERS: readonly UxScanner[] = [
     samplingMode: "comprehensive",
     estimatedMonthlyCredits: 326,
     creditLimit: 400,
-    scannerVersion: 1,
+    scannerVersion: 2,
     prompt: [
       "This recording contains at least one rage click on loveiq.org — three or more",
       "clicks on the same control inside one second. Say what the user was trying to do",
@@ -186,7 +191,7 @@ export const UX_SCANNERS: readonly UxScanner[] = [
     samplingMode: "focused",
     estimatedMonthlyCredits: 1474,
     creditLimit: 1600,
-    scannerVersion: 1,
+    scannerVersion: 2,
     prompt: [
       "This recording contains at least one dead click on loveiq.org — a tap on something",
       "our instrumentation judged non-interactive. Most are readers tapping ordinary text,",
@@ -203,9 +208,10 @@ export const UX_SCANNERS: readonly UxScanner[] = [
       "- The tap was swallowed by something invisible sitting on top of the target.",
       "",
       DO_NOT_FLAG,
-      "Above all, answer NO for taps on plain paragraphs, headings, images and decoration.",
-      "A reader resting a thumb on text is the single most common case here and it is",
-      "not a finding.",
+      "HARD RULE: if the thing tapped is a paragraph, a heading, an image, a badge or",
+      "decoration, the answer is NO. Not 'no, but' — NO. A reader resting a thumb on",
+      "text is the most common case here by a wide margin, and describing it and then",
+      "answering yes anyway is the single failure this rule exists to stop.",
       "",
       CITE,
     ].join("\n"),
