@@ -62,6 +62,24 @@ export interface SubmissionJourney {
     msToPurchase: number | null;
     /** checkoutStartedAt → purchasedAt: how long they hesitated on the Stripe page. */
     msCheckoutHesitation: number | null;
+    /**
+     * A LOWER BOUND on time spent reading the report, from the furthest
+     * `report_engagement_*` milestone the reader crossed (1 / 5 / 10 min).
+     *
+     * Deliberately a floor and not a duration. `report_session.ended_at` exists
+     * and is the obvious place a real duration would live, but nothing has ever
+     * written it — 0 of 10,798 rows are closed — so a true "time on report"
+     * cannot be computed today without new client instrumentation. These three
+     * milestone events, on the other hand, have fired continuously since
+     * 2026-05-06 and carry `survey_submission_id` on every single row, so they
+     * answer the question honestly at the cost of precision.
+     *
+     * Consent-gated, like every other `analytics_event` milestone: null means
+     * "not recorded", never "they left immediately". Callers must render the
+     * difference, because a reader who declined analytics looks identical to one
+     * who bounced.
+     */
+    reportDwellFloorMs: number | null;
   };
   milestones: {
     reportViewedAt: string | null;
@@ -190,7 +208,10 @@ export async function buildSubmissionJourney(
     ),
     fetchJson<AnalyticsRow>(
       `/rest/v1/analytics_event?survey_submission_id=eq.${submissionId}` +
-        `&event_type=in.(report_viewed,paywall_initiated)` +
+        // The three engagement milestones ride along on the query that was
+        // already being made — same row set, same filter, no extra request.
+        `&event_type=in.(report_viewed,paywall_initiated,` +
+        `report_engagement_1min,report_engagement_5min,report_engagement_10min)` +
         `&select=event_type,event_time&order=event_time.asc`,
       "analytics_event"
     ),
@@ -223,6 +244,39 @@ export async function buildSubmissionJourney(
   const anyQuote = purchased ?? quotes[0] ?? null;
 
   const firstOf = (type: string) => events.find((e) => e.event_type === type)?.event_time ?? null;
+
+  /**
+   * Milestone name → the dwell it proves, in ms.
+   *
+   * A switch rather than a lookup object: `event_type` arrives from a database
+   * row, and indexing an object with it is exactly the shape the
+   * security/detect-object-injection rule exists to stop.
+   */
+  const dwellMsOf = (eventType: string): number | null => {
+    switch (eventType) {
+      case "report_engagement_1min":
+        return 60_000;
+      case "report_engagement_5min":
+        return 300_000;
+      case "report_engagement_10min":
+        return 600_000;
+      default:
+        return null;
+    }
+  };
+  /**
+   * The FURTHEST milestone, not the latest.
+   *
+   * These are three independent events rather than a sequence — a reader who
+   * stays ten minutes legitimately has all three rows — so the maximum is what
+   * "how long were they in there" actually means. Taking the last row by time
+   * would give the same answer today only by accident of ordering.
+   */
+  const reportDwellFloorMs = events.reduce<number | null>((furthest, e) => {
+    const ms = dwellMsOf(e.event_type);
+    if (ms === null) return furthest;
+    return furthest === null || ms > furthest ? ms : furthest;
+  }, null);
   // Earliest of the two: whichever actually recorded the open first. The
   // consent-gated event is kept as a fallback rather than dropped, so a row
   // predating report_session still resolves.
@@ -258,6 +312,7 @@ export async function buildSubmissionJourney(
       completedAt: sub.created_date_time,
       msToPurchase: msBetween(sub.created_date_time, purchasedAt),
       msCheckoutHesitation: msBetween(checkoutStartedAt, purchasedAt),
+      reportDwellFloorMs,
     },
     milestones: {
       reportViewedAt,
@@ -331,6 +386,9 @@ export function journeyFromPurchase(input: {
       completedAt: null,
       msToPurchase: null,
       msCheckoutHesitation: null,
+      // This builder never reads the database, so there are no milestone rows
+      // to derive a dwell from. The purchase message does not render it.
+      reportDwellFloorMs: null,
     },
     milestones: {
       reportViewedAt: null,

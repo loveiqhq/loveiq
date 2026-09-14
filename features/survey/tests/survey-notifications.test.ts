@@ -209,11 +209,18 @@ describe("POST /api/survey notifications", () => {
       ]),
     ].join("\n");
 
-    // masked, in a code span so the mask's asterisks are not read as bold markers
-    expect(flat).toContain("`a***@example.com`");
+    /**
+     * The compact layout (2026-09-14) carries NO identity at all — not the first
+     * name, and not even the masked email that used to sit in the context line.
+     * The submission number is what identifies the row now, so the strongest
+     * assertion available is that the address never appears in any form.
+     */
     expect(flat).not.toContain("ada@example.com");
-    // the LIVE arm, in plain English — never the raw code
-    expect(flat).toContain("Landing Page V1 (First Design)");
+    expect(flat).not.toContain("a***@example.com");
+    expect(flat).toContain("Survey submission *#123*");
+    // the LIVE arm, in plain English — never the raw code. The arm NAME is bolded
+    // and its parenthetical is not, so this is asserted as the rendered string.
+    expect(flat).toContain("Landing page design: *Landing Page V1* (First Design)");
     // Concluded experiments are not listed as ones they were in — the paywall,
     // the survey theme since 2026-08-25, and pricing since 2026-08-31. The
     // fixture still carries all three arms, so this proves the axis list excludes

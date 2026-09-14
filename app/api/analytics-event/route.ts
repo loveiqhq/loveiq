@@ -23,6 +23,8 @@ import { z } from "zod";
 import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { refreshJourneyDetail } from "@features/attribution/server/journey-message";
+import { scheduleAfterResponse } from "@shared/http/after-response";
 import logger from "@shared/observability/logger";
 
 const ALLOWED_EVENTS = [
@@ -225,6 +227,23 @@ export async function POST(request: Request) {
     );
     // Don't leak details — return 204 so the client doesn't retry endlessly.
     return new NextResponse(null, { status: 204 });
+  }
+
+  /**
+   * A dwell milestone is the only thing that moves the "Report time" line on the
+   * Slack journey message, and it moves nothing else — the journey state is
+   * unchanged, so the ordinary advance-gated refresh would skip it.
+   *
+   * After the response, because these arrive from a timer in a tab the reader is
+   * still sitting in (and, at 10 minutes, possibly one they are closing). A
+   * Slack round-trip must not be in front of that.
+   */
+  if (
+    event_type === "report_engagement_1min" ||
+    event_type === "report_engagement_5min" ||
+    event_type === "report_engagement_10min"
+  ) {
+    scheduleAfterResponse("journey-dwell-refresh", () => refreshJourneyDetail(submission_id));
   }
 
   return new NextResponse(null, { status: 204 });

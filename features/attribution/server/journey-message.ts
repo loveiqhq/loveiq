@@ -170,6 +170,63 @@ export async function tryPostJourneyViaBot(input: {
 }
 
 /**
+ * Re-render the stored message when a DETAIL changed but the journey state did not.
+ *
+ * `refreshJourneyMessage` below is gated on the state advancing, which is what
+ * stops twenty report opens costing twenty `chat.update` calls. Report dwell has
+ * no state of its own — someone who reads for ten minutes and never reaches the
+ * paywall sits at `report_opened` the entire time — so under that gate the
+ * "Report time" line would stay an em dash for precisely the reader it is most
+ * interesting for: engaged, and not converting.
+ *
+ * Safe to leave ungated because the only caller is a dwell milestone, and those
+ * fire at most three times per report session (1, 5 and 10 minutes). The ceiling
+ * is three extra edits per submission, not one per event.
+ */
+export async function refreshJourneyDetail(submissionId: number): Promise<void> {
+  if (!isSlackBotConfigured()) return;
+  try {
+    const stored = await readStored(submissionId);
+    if (!stored) return;
+
+    const journey = await buildSubmissionJourney(submissionId);
+    if (!journey) return;
+
+    /**
+     * Never let the rail go backwards.
+     *
+     * The stored state is the furthest any caller has witnessed server-side,
+     * which can be ahead of what a rebuild derives: two of the five milestones
+     * come from consent-gated `analytics_event` rows. Passing it as the floor
+     * keeps dots that are already green from turning red on an edit that was
+     * only ever meant to change one line.
+     */
+    const derived = journeyStateOf(journey.milestones);
+    const storedIdx = stored.state ? STATES.indexOf(stored.state as JourneyState) : -1;
+    const floor = storedIdx > STATES.indexOf(derived) ? (stored.state as JourneyState) : derived;
+
+    const message = buildJourneyMessage(journey, {
+      kind: "survey_completed",
+      // Reuse the stored count — it is not derivable here, and rendering 0 would
+      // silently downgrade the notification text on every dwell update.
+      questionCount: stored.question_count ?? 0,
+      reachedFloor: floor,
+    });
+
+    // No `markState`: the state genuinely has not moved, and writing it back
+    // would be a lie the next advance check has to reason about.
+    await updateJourneyMessage({
+      channel: stored.channel,
+      ts: stored.message_ts,
+      text: message.text,
+      blocks: message.blocks,
+    });
+  } catch (err) {
+    logger.warn({ err, submissionId }, "journey-message: detail refresh failed");
+  }
+}
+
+/**
  * Re-render the stored message for a submission whose journey has moved on.
  *
  * No-ops when: the bot is not configured, no message was stored (posted before

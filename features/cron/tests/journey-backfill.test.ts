@@ -40,7 +40,11 @@ function journey(id: number, opts: { viewed?: boolean } = {}) {
     firstName: "Ada",
     emailMasked: "a***@example.com",
     arms: { landing: "white", survey: "dark", pricing: "A", paywall: null },
-    traffic: { source: null, medium: null, campaign: null, clickId: null },
+    // `bucket` is required by TrafficInfo and was missing here, which no type
+    // check caught because this fixture is a plain object handed to a mock. The
+    // old layout rendered the gap as a literal "undefined"; the compact one
+    // escapes the value, so the same gap threw and took the whole run to a 500.
+    traffic: { bucket: "Direct", source: null, medium: null, campaign: null, clickId: null },
     device: "Desktop",
     country: "Germany",
     countryTier: "tier_1",
@@ -49,6 +53,7 @@ function journey(id: number, opts: { viewed?: boolean } = {}) {
       durationMs: 540_000,
       msToPurchase: null,
       msCheckoutHesitation: null,
+      reportDwellFloorMs: null,
     },
     milestones: {
       reportViewedAt: opts.viewed ? "2026-08-20T11:00:00.000Z" : null,

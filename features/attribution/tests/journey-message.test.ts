@@ -27,6 +27,7 @@ import {
 } from "@shared/observability/slack-bot";
 import {
   journeyStateOf,
+  refreshJourneyDetail,
   refreshJourneyMessage,
   tryPostJourneyViaBot,
 } from "@features/attribution/server/journey-message";
@@ -206,6 +207,7 @@ describe("refreshJourneyMessage", () => {
     arms: { landing: "white", survey: "white", pricing: "A", paywall: null },
     traffic: { bucket: "Paid", source: "google", medium: "cpc", campaign: null },
     device: "Desktop",
+    country: null,
     countryTier: "tier_2",
     timings: {
       durationMs: 720_000,
@@ -213,6 +215,7 @@ describe("refreshJourneyMessage", () => {
       completedAt: "2026-08-24T18:39:00.000Z",
       msToPurchase: null,
       msCheckoutHesitation: null,
+      reportDwellFloorMs: null,
     },
     milestones: { ...milestones, ...over },
     money: null,
@@ -245,8 +248,10 @@ describe("refreshJourneyMessage", () => {
     // Same ts = an edit, not a second message.
     expect(body.ts).toBe("1724537.001");
     expect(body.channel).toBe("C0REAL");
-    // The stored question count is carried through, not reset to zero.
-    expect(JSON.stringify(body.blocks)).toContain("59 questions");
+    // The stored question count is carried through, not reset to zero. It lives
+    // in the notification text since the compact layout dropped it from the
+    // message, which is exactly why it is still worth storing.
+    expect(body.text).toContain("59 questions");
     // And the state moves forward so the next identical milestone is a no-op.
     const patch = mockSupabaseFetch.mock.calls.at(-1) as [string, { body: string }];
     expect(JSON.parse(patch[1].body).state).toBe("report_opened");
@@ -341,5 +346,113 @@ describe("refreshJourneyMessage", () => {
     mockSupabaseFetch.mockResolvedValueOnce(storedRow("completed"));
     mockBuildSubmissionJourney.mockRejectedValue(new Error("db down"));
     await expect(refreshJourneyMessage(1756, "report_opened")).resolves.toBeUndefined();
+  });
+});
+
+describe("refreshJourneyDetail", () => {
+  /**
+   * The dwell refresh exists because report reading time has no journey STATE of
+   * its own. A reader who stays ten minutes and never reaches the paywall sits
+   * at `report_opened` the whole time, so the advance-gated refresh above would
+   * skip every one of their milestones and leave "Report time" an em dash for
+   * exactly the reader it is most interesting for.
+   */
+  function storedRow(state: string | null, questionCount: number | null = 59) {
+    return json([
+      { channel: "C0REAL", message_ts: "1724537.001", state, question_count: questionCount },
+    ]);
+  }
+
+  const journeyWithDwell = (ms: number | null) => ({
+    submissionId: 1756,
+    firstName: "Kitten",
+    emailMasked: "a***@gmail.com",
+    arms: { landing: "white", survey: "white", pricing: "A", paywall: null },
+    traffic: { bucket: "Paid", source: "google", medium: "cpc", campaign: null },
+    device: "Desktop",
+    country: null,
+    countryTier: "tier_2",
+    timings: {
+      durationMs: 720_000,
+      startedAt: "2026-08-24T18:27:00.000Z",
+      completedAt: "2026-08-24T18:39:00.000Z",
+      msToPurchase: null,
+      msCheckoutHesitation: null,
+      reportDwellFloorMs: ms,
+    },
+    milestones: { ...milestones, reportViewedAt: "x" },
+    money: null,
+    quoteCount: 1,
+  });
+
+  it("edits the message even though the state has not advanced", async () => {
+    mockSupabaseFetch.mockResolvedValueOnce(storedRow("report_opened"));
+    mockBuildSubmissionJourney.mockResolvedValue(journeyWithDwell(600_000));
+    mockFetchWithTimeout.mockResolvedValue(json({ ok: true }));
+
+    await refreshJourneyDetail(1756);
+
+    const [url, init] = mockFetchWithTimeout.mock.calls[0] as [string, { body: string }];
+    expect(url).toBe("https://slack.com/api/chat.update");
+    const body = JSON.parse(init.body) as Record<string, unknown>;
+    expect(body.ts).toBe("1724537.001");
+    expect(JSON.stringify(body.blocks)).toContain("Report time: *10+ min*");
+  });
+
+  /**
+   * It must not write the state back. The state genuinely has not moved, and
+   * recording one here would be a claim the next advance check has to reason
+   * about — the PATCH is what `refreshJourneyMessage` uses to stay idempotent.
+   */
+  it("does not write the journey state back", async () => {
+    mockSupabaseFetch.mockResolvedValueOnce(storedRow("report_opened"));
+    mockBuildSubmissionJourney.mockResolvedValue(journeyWithDwell(60_000));
+    mockFetchWithTimeout.mockResolvedValue(json({ ok: true }));
+
+    await refreshJourneyDetail(1756);
+
+    const patches = mockSupabaseFetch.mock.calls.filter(
+      (c) => (c[1] as { method?: string } | undefined)?.method === "PATCH"
+    );
+    expect(patches).toHaveLength(0);
+  });
+
+  /**
+   * The rail must never regress. The stored state is the furthest any caller
+   * witnessed server-side and can be ahead of what a rebuild derives, because
+   * two of the five milestones sit behind the analytics consent gate.
+   */
+  it("keeps the rail at the furthest state already recorded", async () => {
+    mockSupabaseFetch.mockResolvedValueOnce(storedRow("checkout"));
+    mockBuildSubmissionJourney.mockResolvedValue(journeyWithDwell(300_000));
+    mockFetchWithTimeout.mockResolvedValue(json({ ok: true }));
+
+    await refreshJourneyDetail(1756);
+
+    const [, init] = mockFetchWithTimeout.mock.calls[0] as [string, { body: string }];
+    const rendered = JSON.stringify(JSON.parse(init.body).blocks);
+    // Everything up to and including checkout stays green.
+    expect(rendered).not.toContain(":red_circle: Paywall hit");
+    expect(rendered).not.toContain(":red_circle: Checkout");
+    // And the step genuinely not reached stays red.
+    expect(rendered).toContain(":red_circle: Paid");
+  });
+
+  it("does nothing when the bot is not configured", async () => {
+    unconfigureBot();
+    await refreshJourneyDetail(1756);
+    expect(mockSupabaseFetch).not.toHaveBeenCalled();
+  });
+
+  it("does nothing for a submission with no stored message", async () => {
+    mockSupabaseFetch.mockResolvedValue(json([]));
+    await refreshJourneyDetail(1756);
+    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+  });
+
+  it("never throws when the journey lookup explodes", async () => {
+    mockSupabaseFetch.mockResolvedValueOnce(storedRow("report_opened"));
+    mockBuildSubmissionJourney.mockRejectedValue(new Error("db down"));
+    await expect(refreshJourneyDetail(1756)).resolves.toBeUndefined();
   });
 });
