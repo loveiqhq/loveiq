@@ -27,7 +27,9 @@ const open = (p) =>
 // A probe that always exits 0 cannot report a defect. verify-ux-findings.mjs
 // treats a non-zero exit as "reproduced in production", so until 2026-09-14
 // this criterion could never produce a finding at all.
+// Exit 0 clean, 1 the defect reproduced, 3 could not measure.
 let bad = 0;
+let unmeasured = 0;
 for (const name of CASES) {
   const engine = /iphone|ipad/i.test(name) ? "webkit" : "chromium";
   const browser = await (engine === "webkit" ? webkit : chromium).launch();
@@ -99,12 +101,27 @@ for (const name of CASES) {
   } catch (e) {
     notes.push(`exception: ${String(e.message).split("\n")[0].slice(0, 60)}`);
   }
+  // "The modal would not stay shut" and "the modal never opened, so there was
+  // nothing to shut" are different answers. This probe reported both as FAIL,
+  // and the verifier reads a failure as "reproduced in production" — so a
+  // paywall that never appeared would have been published as a P1 defect.
+  const couldNotMeasure = notes.some((n) => /^INCONCLUSIVE|^exception:/.test(n));
   const ok = notes.some((n) => n.includes("still closed@2.2s=true"));
-  console.log(`${ok ? "PASS" : "FAIL"} ${name.padEnd(14)} ${notes.join(" | ")}`);
-  if (!ok) bad += 1;
+  const state = couldNotMeasure ? "UNKNOWN" : ok ? "PASS" : "FAIL";
+  console.log(`${state} ${name.padEnd(14)} ${notes.join(" | ")}`);
+  if (couldNotMeasure) unmeasured += 1;
+  else if (!ok) bad += 1;
   await ctx.close();
   await browser.close();
 }
 
-console.log(bad === 0 ? "\nPASS" : `\nFAIL (${bad})`);
-process.exit(bad === 0 ? 0 : 1);
+if (bad > 0) {
+  console.log(`\nFAIL (${bad})`);
+  process.exit(1);
+}
+if (unmeasured > 0) {
+  console.log(`\nINCONCLUSIVE (${unmeasured}) — could not measure, not a pass`);
+  process.exit(3);
+}
+console.log("\nPASS");
+process.exit(0);

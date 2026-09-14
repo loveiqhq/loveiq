@@ -43,7 +43,11 @@ const dismissPaywall = async (page) => {
   return !(await paywallOpen(page));
 };
 
+// Exit 0 clean, 1 the defect reproduced, 3 could not measure. Conflating the
+// last two lets a probe that never reached its subject be reported as a
+// confirmed defect. See scripts/probes/README.md.
 let bad = 0;
+let unmeasured = 0;
 for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro,iPhone SE").split(",")) {
   const engine = /iphone|ipad/i.test(name) ? webkit : chromium;
   const browser = await engine.launch();
@@ -121,7 +125,7 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro,iPhone SE").sp
     }
     if (!pt) {
       notes.push("INCONCLUSIVE: no exposed locked preview found");
-      bad += 1;
+      unmeasured += 1;
     } else {
       /**
        * Assert the CTA FORWARD, not "a modal appeared".
@@ -150,7 +154,7 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro,iPhone SE").sp
       );
       if (!stillThere) {
         notes.push("INCONCLUSIVE: preview no longer under the probe point");
-        bad += 1;
+        unmeasured += 1;
       } else {
         notes.push(`tapped preview, hit=${pt.hitClass}`);
         await page.touchscreen.tap(pt.cx, pt.cy);
@@ -162,7 +166,7 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro,iPhone SE").sp
     }
   } catch (e) {
     notes.push(`exception: ${String(e.message).split("\n")[0].slice(0, 70)}`);
-    bad += 1;
+    unmeasured += 1;
   }
   const ok = notes.includes("forwarded to paywall CTA");
   console.log(`${ok ? "PASS" : "FAIL"} ${name.padEnd(16)} ${notes.join(" | ")}`);
@@ -170,4 +174,13 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro,iPhone SE").sp
   await browser.close();
 }
 console.log(`\n${3 - bad}/3 devices: tapping a locked preview opens pricing`);
-process.exit(bad ? 1 : 0);
+if (bad > 0) {
+  console.log(`\nFAIL (${bad})`);
+  process.exit(1);
+}
+if (unmeasured > 0) {
+  console.log(`\nINCONCLUSIVE (${unmeasured}) — could not measure, not a pass`);
+  process.exit(3);
+}
+console.log("\nPASS");
+process.exit(0);

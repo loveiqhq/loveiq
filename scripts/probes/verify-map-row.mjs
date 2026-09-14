@@ -15,7 +15,11 @@ const ORIGIN = process.env.REPORT_ORIGIN ?? "http://localhost:3123";
 const TOKEN = process.env.QA_TOKEN_LOCKED ?? "rpt_a9LY0Obbla1FVsclJ1nM";
 const CASES = (process.env.DEVICES ?? "Pixel 7,Galaxy S5,iPhone SE,iPhone 15 Pro").split(",");
 
+// Exit 0 clean, 1 the defect reproduced, 3 could not measure. Conflating the
+// last two lets a probe that never reached its subject be reported as a
+// confirmed defect. See scripts/probes/README.md.
 let bad = 0;
+let unmeasured = 0;
 for (const name of CASES) {
   const d = name.toLowerCase();
   const engine = d.includes("iphone") || d.includes("ipad") ? "webkit" : "chromium";
@@ -99,10 +103,10 @@ for (const name of CASES) {
       // Counts as a failure of the RUN, not a pass — an inconclusive probe
       // must never be summarised as a green.
       notes.push("INCONCLUSIVE: could not bring a map row on screen");
-      bad += 1;
+      unmeasured += 1;
     } else if (pt.insidePill) {
       notes.push("INCONCLUSIVE: probe point landed inside the pill");
-      bad += 1;
+      unmeasured += 1;
     } else {
       await page.touchscreen.tap(pt.cx, pt.cy);
       const opened = await page
@@ -119,7 +123,7 @@ for (const name of CASES) {
     }
   } catch (e) {
     notes.push(`exception: ${String(e.message).split("\n")[0].slice(0, 70)}`);
-    bad += 1;
+    unmeasured += 1;
   }
   const ok = notes.some((n) => n.includes("OPENED"));
   console.log(`${ok ? "PASS" : "FAIL"} ${name.padEnd(16)} ${notes.join(" | ")}`);
@@ -129,4 +133,13 @@ for (const name of CASES) {
 console.log(
   `\n${CASES.length - bad}/${CASES.length} devices: tapping the map row TEXT opens the paywall`
 );
-process.exitCode = bad ? 1 : 0;
+if (bad > 0) {
+  console.log(`\nFAIL (${bad})`);
+  process.exit(1);
+}
+if (unmeasured > 0) {
+  console.log(`\nINCONCLUSIVE (${unmeasured}) — could not measure, not a pass`);
+  process.exit(3);
+}
+console.log("\nPASS");
+process.exit(0);

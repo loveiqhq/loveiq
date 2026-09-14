@@ -57,8 +57,15 @@ export const CRITERIA = [
     // asserts a VALID report never shows that door.
     id: "L1",
     label: "loop back to an earlier screen",
+    // Widened 2026-09-14 from REAL claims, not invented ones. A textbook loop —
+    // "the survey unexpectedly resets back to the initial question state,
+    // landing back at the start of the questionnaire" — matched neither L1 nor
+    // B1 and fell through to "no probe covers this claim". Loops are the most
+    // common thing these scanners report (3 of the 5 day-one findings), so the
+    // classifier missing them is the expensive gap. Every alternative below is
+    // taken verbatim from an observation we have actually seen.
     match:
-      /loop(ed|s)? back|back to the (survey )?start|returned to (an )?earlier|start(ed)? (the survey )?(over|from scratch)|re-?initiali[sz]ed/i,
+      /loop(ed|s|ing)? back|a loop where|back (to|at) the (survey |questionnaire )?(start|beginning)|beginning of the survey|(returned|sent|taken|redirected)( \w+){0,2} back to|returned to (an )?earlier|reset(s|ting)? back|start(ed)? (the survey )?(over|from scratch)|re-?initiali[sz]ed|already completed|first (introduction |intro )?screen|initial question/i,
     probes: ["verify-no-survey-restart.mjs"],
   },
   {
@@ -114,22 +121,24 @@ export const CRITERIA = [
     id: "A1",
     label: "text readable through a blur meant to hide it",
     match: /through the blur|readable .*blur|blur(red)? .*(readable|legible)|not fully blurred/i,
-    // audit-paywall-layout.mjs measures the blur but always exits 0, so listing
-    // it would produce "could not reproduce — passes in production now" for
-    // every A1 claim. A false all-clear is worse than no probe, so A1 goes to a
-    // human until that audit becomes a gate.
-    probes: [],
+    // audit-paywall-layout.mjs now exits on its #2 measurement — legible text
+    // under an overlay meant to hide it, which is exactly A1 — so it can gate.
+    // Its #1 white-gap measurement stays printed but ungated: that is a layout
+    // judgement with a chosen threshold, and gating on it would fire on a
+    // deliberate design.
+    probes: ["audit-paywall-layout.mjs"],
   },
   {
     id: "M1",
     label: "content that never rendered",
     match:
       /never render|did not render|missing (section|image|content)|blank (section|area)|image .*(broken|did not load)/i,
-    // No probe asserts this yet: audit-visual.mjs measures images that never
-    // paint but always exits 0. Listed so an M1 claim is RECOGNISED and routed
-    // to a human, rather than falling through as "no criterion" and silently
-    // reaching nobody.
-    probes: [],
+    // audit-visual.mjs now exits on images that are present but never painted,
+    // which is the objective half of M1 — and the half Mark reported twice
+    // ("Images/Icons are broken on paywall", "Same on Landing Page"). The other
+    // half, a REPORT_SECTION_ORDER anchor that is absent, is covered by
+    // reportSectionOrder.test.ts in the unit suite rather than by a probe.
+    probes: ["audit-visual.mjs"],
   },
 ];
 
@@ -491,6 +500,19 @@ if (process.argv.includes("--selftest")) {
     ["The survey looped back to the very first introduction screen.", "L1"],
     ["The user was returned to an earlier screen after pressing continue.", "L1"],
     ["The reader simply finished reading the chapter.", null],
+    // Verbatim from real observations. These are the claims the classifier is
+    // for; inventing test phrasings is how a gap survives its own test suite.
+    [
+      "the survey unexpectedly resets back to the initial question state, landing back at the start of the questionnaire",
+      "L1",
+    ],
+    [
+      "the user clicked 'Unlock full report', which looped them back to the beginning of the survey",
+      "L1",
+    ],
+    ["the survey unexpectedly looped back to the very first introduction screen", "L1"],
+    ["representing a loop where the user is sent back to a screen already completed", "L1"],
+    ["redirected the user back to the 18+ age verification consent screen", "L1"],
     // The four criteria added 2026-09-14. B1 sits BELOW L1, so loop wording
     // must still reach L1 — that ordering is the thing these pin.
     ["The CTA sent the user backwards through the funnel.", "B1"],

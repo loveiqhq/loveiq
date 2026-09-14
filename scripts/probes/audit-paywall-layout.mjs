@@ -178,3 +178,30 @@ if (!any) console.log("  none — every overlay covers only blurred content");
 
 await ctx.close();
 await browser.close();
+
+/**
+ * Exit on the #2 measurement, so this can gate criterion A1.
+ *
+ * It printed both measurements and exited 0 whatever it found, which made it
+ * useless as evidence: verify-ux-findings.mjs reads the exit code, so every A1
+ * claim would have been answered "passes in production now" off an audit that
+ * could not fail. A1 listed no probe at all rather than carry that lie.
+ *
+ * Only #2 gates. "Legible text under an overlay meant to hide it" is exactly
+ * A1 and is objective. #1, the white gap before a paywall, is a layout
+ * judgement with a chosen threshold and is left as printed output — gating on
+ * it would fire on a deliberate design and drown the real signal.
+ *
+ * 0 clean · 1 legible text really is showing through · 3 nothing was measured.
+ */
+if (report.length === 0) {
+  console.log("\nINCONCLUSIVE — no paywall section was reached, so nothing was measured");
+  process.exit(3);
+}
+const intruderCount = report.reduce((n, s) => n + s.intruders.length, 0);
+if (intruderCount > 0) {
+  console.log(`\nFAIL (${intruderCount}) — text is legible under an overlay meant to hide it`);
+  process.exit(1);
+}
+console.log("\nPASS — every overlay covers only blurred content");
+process.exit(0);

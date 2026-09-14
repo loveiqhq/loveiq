@@ -10,7 +10,11 @@ import { touchScroll } from "./touch.mjs";
 const ORIGIN = process.env.REPORT_ORIGIN ?? "https://www.loveiq.org";
 const TOKEN = process.env.QA_TOKEN_LOCKED ?? "rpt_a9LY0Obbla1FVsclJ1nM";
 const CASES = (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro,iPhone SE").split(",");
+// Exit 0 clean, 1 the defect reproduced, 3 could not measure. Conflating the
+// last two lets a probe that never reached its subject be reported as a
+// confirmed defect. See scripts/probes/README.md.
 let bad = 0;
+let unmeasured = 0;
 
 for (const name of CASES) {
   const engine = /iphone|ipad/i.test(name) ? "webkit" : "chromium";
@@ -71,10 +75,10 @@ for (const name of CASES) {
     }
     if (!pt || !pt.onScreen) {
       notes.push("INCONCLUSIVE: featured card never reachable");
-      bad += 1;
+      unmeasured += 1;
     } else if (pt.insideLink) {
       notes.push("INCONCLUSIVE: probe point landed inside the link");
-      bad += 1;
+      unmeasured += 1;
     } else {
       for (let k = 0; k < 3; k += 1) {
         if (!(await page.evaluate(() => !!document.querySelector(".report-pricing-modal__dialog"))))
@@ -108,7 +112,7 @@ for (const name of CASES) {
     }
   } catch (e) {
     notes.push(`exception: ${String(e.message).split("\n")[0].slice(0, 60)}`);
-    bad += 1;
+    unmeasured += 1;
   }
   console.log(
     `${notes.some((n) => n === "ACTED") ? "PASS" : "FAIL"} ${name.padEnd(15)} ${notes.join(" | ")}`
@@ -119,4 +123,13 @@ for (const name of CASES) {
 console.log(
   `\n${CASES.length - bad}/${CASES.length} devices: tapping the featured card BODY does something`
 );
-process.exitCode = bad ? 1 : 0;
+if (bad > 0) {
+  console.log(`\nFAIL (${bad})`);
+  process.exit(1);
+}
+if (unmeasured > 0) {
+  console.log(`\nINCONCLUSIVE (${unmeasured}) — could not measure, not a pass`);
+  process.exit(3);
+}
+console.log("\nPASS");
+process.exit(0);

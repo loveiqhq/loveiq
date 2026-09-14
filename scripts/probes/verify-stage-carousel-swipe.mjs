@@ -63,7 +63,11 @@ const dismissPaywall = async (page) => {
   await page.waitForTimeout(1200);
 };
 
+// Exit 0 clean, 1 the defect reproduced, 3 could not measure. Conflating the
+// last two lets a probe that never reached its subject be reported as a
+// confirmed defect. See scripts/probes/README.md.
 let bad = 0;
+let unmeasured = 0;
 for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) {
   const engine = /iphone|ipad/i.test(name) ? webkit : chromium;
   const browser = await engine.launch();
@@ -114,7 +118,7 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) 
     const found = { found: onScreen };
     if (!found.found) {
       notes.push("INCONCLUSIVE: carousel never reached");
-      bad += 1;
+      unmeasured += 1;
     } else {
       if (process.env.MUTATE === "1") {
         // Remove the scrollability the copy depends on. The gesture must now do nothing.
@@ -151,7 +155,7 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) 
         });
         if (!box) {
           notes.push("INCONCLUSIVE: no point on the carousel is uncovered");
-          bad += 1;
+          unmeasured += 1;
           console.log(`FAIL ${name.padEnd(15)} ${notes.join(" | ")}`);
           await ctx.close();
           await browser.close();
@@ -189,7 +193,7 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) 
     }
   } catch (e) {
     notes.push(`exception: ${String(e.message).split("\n")[0].slice(0, 70)}`);
-    bad += 1;
+    unmeasured += 1;
   }
   const ok = !notes.some(
     (n) => n.includes("NOT") || n.includes("INCONCLUSIVE") || n.includes("exception")
@@ -198,4 +202,13 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) 
   await ctx.close();
   await browser.close();
 }
-process.exit(bad ? 1 : 0);
+if (bad > 0) {
+  console.log(`\nFAIL (${bad})`);
+  process.exit(1);
+}
+if (unmeasured > 0) {
+  console.log(`\nINCONCLUSIVE (${unmeasured}) — could not measure, not a pass`);
+  process.exit(3);
+}
+console.log("\nPASS");
+process.exit(0);

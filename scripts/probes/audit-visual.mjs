@@ -146,3 +146,34 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro,iPhone SE").sp
 }
 console.log(JSON.stringify(problems, null, 2));
 console.log(`\nscreenshots: ${SHOTS}`);
+
+/**
+ * Exit on broken images, so this can gate the image half of criterion M1.
+ *
+ * Mark reported it twice on 2026-08-30 — "Images/Icons are broken on paywall"
+ * and "Same on Landing Page" — and until now nothing could fail on it: this
+ * printed JSON and exited 0, so verify-ux-findings.mjs had no probe for M1 at
+ * all and every such claim went to a human unverified.
+ *
+ * Only unpainted images gate. An `<img>` that reports complete with
+ * naturalWidth 0 genuinely did not load — that is objective. The other things
+ * measured here (horizontal overflow, controls under 16px, scroll lock) have
+ * their own probes with their own thresholds and stay printed, not gated.
+ *
+ * 0 clean · 1 an image really did not load · 3 nothing was measured.
+ */
+if (problems.length === 0) {
+  console.log("\nINCONCLUSIVE — no device was measured");
+  process.exit(3);
+}
+const brokenImages = problems.flatMap((p) => [
+  ...(p.survey?.broken ?? []),
+  ...(p.report?.broken ?? []),
+]);
+if (brokenImages.length > 0) {
+  console.log(`\nFAIL (${brokenImages.length}) — images present but never painted`);
+  for (const b of [...new Set(brokenImages)].slice(0, 10)) console.log(`  ${b}`);
+  process.exit(1);
+}
+console.log("\nPASS — every image painted");
+process.exit(0);
