@@ -12,7 +12,7 @@ import { getReportPriceQuoteForContext } from "@features/pricing/logic/reportPri
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
 import { postCallCouponEmail } from "@features/report/server/emails/nurture/post-call-coupon";
-import { insertBookingEvent } from "@features/booking/server/calendly";
+import { insertBookingEvent } from "@features/booking/server/events";
 
 export const runtime = "nodejs";
 

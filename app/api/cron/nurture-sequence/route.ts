@@ -8,8 +8,6 @@
  *                        per-user discount code (pricing 2.0 — the only nurture
  *                        email; the 6h "report ready"/"unlock" reminders and the
  *                        old 30h/54h discount ladder were retired — no more nudges)
- *   - `78h_no_unlock`  — 77–79h ago, no paid plan; invites a 20-min call (no
- *                        code), CTA → Calendly; logs a `booking_event` row.
  *                        PAUSED by default (NURTURE_78H_CALL_ENABLED gate)
  *
  * Idempotency lives in `report_price_quote.metadata.nurtureEmailsSent` (array
@@ -47,7 +45,6 @@ import { getReportPriceQuoteForContext } from "@features/pricing/logic/reportPri
 // The 50%-off template is timing-agnostic (it references the code's 24h expiry,
 // not the send hour), so the single 72h discount stage reuses it as-is.
 import { nurture30hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-30h-no-unlock";
-import { nurture78hNoUnlockEmail } from "@features/report/server/emails/nurture/nurture-78h-no-unlock";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -102,17 +99,7 @@ function resolveTimeBudgetMs(): number {
   return Number.isFinite(n) && n >= 0 ? n : DEFAULT_TIME_BUDGET_MS;
 }
 
-type Stage = "72h_no_unlock" | "78h_no_unlock";
-
-// Final-stage CTA target. The 78h email links OUT to Calendly (a 20-min call),
-// not to /report. The booking link is operator-specific (whoever takes the
-// calls), so it is read from NURTURE_78H_CALENDLY_URL at send time rather than
-// hardcoded — UTM + invitee prefill are appended per-send. Read at request time
-// (not module scope) so env changes take effect without a redeploy. When unset
-// the 78h stage stays paused (see the gate below) so no dead link is ever sent.
-function getCalendlyCallUrl(): string {
-  return process.env.NURTURE_78H_CALENDLY_URL?.trim() || "";
-}
+type Stage = "72h_no_unlock";
 
 interface AgeWindow {
   minMs: number;
@@ -122,7 +109,6 @@ interface AgeWindow {
 // 2h-wide windows so a missed hourly tick still catches users on the next run.
 const AGE_WINDOWS = {
   seventyTwo: { minMs: 71 * HOUR_MS, maxMs: 73 * HOUR_MS },
-  seventyEight: { minMs: 77 * HOUR_MS, maxMs: 79 * HOUR_MS },
 } as const satisfies Record<string, AgeWindow>;
 
 function safeCompare(a: string, b: string): boolean {
@@ -399,36 +385,6 @@ function buildCtaUrl({
   return `${siteUrl}/report/${encodeURIComponent(reportToken)}?${params.toString()}`;
 }
 
-/**
- * Build the Calendly CTA for the 78h call invite. Carries UTM attribution plus
- * Calendly's name/email prefill so the booking is one tap. `utm_content` is the
- * survey submission id — Calendly echoes UTM params into the `tracking` object
- * on the booking webhook, giving an exact correlation key even if the invitee
- * books under a different email.
- */
-function buildCallCtaUrl({
-  stage,
-  email,
-  firstName,
-  submissionId,
-}: {
-  stage: Stage;
-  email: string;
-  firstName: string | null;
-  submissionId: number;
-}): string {
-  const params = new URLSearchParams({
-    utm_source: "email",
-    utm_medium: "nurture",
-    utm_campaign: stage,
-    utm_content: String(submissionId),
-    email,
-  });
-  const name = firstName?.trim();
-  if (name) params.set("name", name);
-  return `${getCalendlyCallUrl()}?${params.toString()}`;
-}
-
 function renderEmail(input: Omit<SendInput, "resend">): {
   subject: string;
   html: string;
@@ -453,20 +409,6 @@ function renderEmail(input: Omit<SendInput, "resend">): {
         ...common,
         promoCode: input.promo.code,
         percentOff: input.promo.percentOff,
-      });
-    case "78h_no_unlock":
-      // CTA links OUT to Calendly (a call), not /report — so it ignores the
-      // report `ctaUrl` in `common` and builds its own booking URL.
-      return nurture78hNoUnlockEmail({
-        firstName: input.firstName,
-        ctaUrl: buildCallCtaUrl({
-          stage: input.stage,
-          email: input.email,
-          firstName: input.firstName,
-          submissionId: input.submissionId,
-        }),
-        siteUrl: input.siteUrl,
-        unsubscribeUrl: input.unsubscribeUrl,
       });
   }
 }
@@ -511,44 +453,6 @@ async function persistStageSent({
     headers: { Prefer: "return=minimal" },
     method: "PATCH",
   });
-}
-
-/**
- * Best-effort `booking_event` row for the 78h call-invite send. Gives a
- * queryable per-user funnel row (call_invite_sent → call_booked → … filled in
- * later by the Calendly webhook) that surfaces in the admin timeline.
- * Non-fatal: a failed insert is logged and swallowed — the email already went
- * out and `nurtureEmailsSent` is the send idempotency guard.
- */
-async function recordCallInviteSent({
-  submissionId,
-  personalReportId,
-  email,
-  campaign,
-}: {
-  submissionId: number;
-  personalReportId: number;
-  email: string;
-  campaign: Stage;
-}): Promise<void> {
-  try {
-    await supabaseFetch(`/rest/v1/booking_event`, {
-      body: JSON.stringify({
-        survey_submission_id: submissionId,
-        personal_report_id: personalReportId,
-        email,
-        event_type: "call_invite_sent",
-        source_campaign: campaign,
-      }),
-      headers: { Prefer: "return=minimal" },
-      method: "POST",
-    });
-  } catch (err) {
-    logger.warn(
-      { err, submissionId, slack: false },
-      "nurture-sequence: booking_event call_invite_sent insert failed (best-effort)"
-    );
-  }
 }
 
 async function sendOne(input: SendInput): Promise<{ ok: true } | { ok: false; reason: string }> {
@@ -769,14 +673,6 @@ async function processCandidate(
 
     if (outcome.ok) {
       summary.sent++;
-      if (stage === "78h_no_unlock") {
-        await recordCallInviteSent({
-          submissionId: candidate.survey_submission_id,
-          personalReportId: candidate.id,
-          email,
-          campaign: stage,
-        });
-      }
     } else {
       summary.failed++;
       ctx.failureReasons.push(`${stage}: ${outcome.reason}`);
@@ -918,35 +814,15 @@ export async function GET(request: Request) {
 
   const summaries: Record<Stage, StageSummary> = {
     "72h_no_unlock": newStageSummary(),
-    "78h_no_unlock": newStageSummary(),
   };
 
   try {
-    const [seventyTwoCandidates, seventyEightCandidates] = await Promise.all([
-      fetchCandidatesByAge(AGE_WINDOWS.seventyTwo),
-      fetchCandidatesByAge(AGE_WINDOWS.seventyEight),
-    ]);
+    const seventyTwoCandidates = await fetchCandidatesByAge(AGE_WINDOWS.seventyTwo);
 
     // Single discount stage (pricing 2.0): one −50% code at 72h. The prior 6h
     // "report ready"/"unlock" reminders and the 30h(50%)/54h(75%) discount
     // ladder were all retired — this is the only nurture email now.
     await runSingleStage(seventyTwoCandidates, "72h_no_unlock", ctx, summaries["72h_no_unlock"]);
-    // 78h call-invite is PAUSED: no product person is available to take the
-    // 20-minute calls right now, so we don't invite users to book one (the email
-    // + its `call_invite_sent` booking_event are skipped). The other stages keep
-    // running. Re-enable WITHOUT a code change by setting BOTH Vercel env vars
-    // once someone can take the calls: NURTURE_78H_CALL_ENABLED to "true" AND
-    // NURTURE_78H_CALENDLY_URL to that person's Calendly booking link. If the URL
-    // is missing the stage stays paused so no dead booking link is ever sent.
-    if (process.env.NURTURE_78H_CALL_ENABLED === "true" && getCalendlyCallUrl()) {
-      await runSingleStage(
-        seventyEightCandidates,
-        "78h_no_unlock",
-        ctx,
-        summaries["78h_no_unlock"]
-      );
-    }
-
     // Run-level aggregate alert. Per-email failures are logged with `slack:false`
     // (no per-email api_5xx spam); here we surface them once per run WITH the
     // actual failure reason(s) so the alert is self-diagnosing (no log dive).

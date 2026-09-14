@@ -286,7 +286,6 @@ export async function proxy(request: NextRequest) {
       path === "/login" ||
       path === "/api/health" ||
       path === "/api/stripe/webhook" ||
-      path === "/api/calendly/webhook" ||
       // Slack posts events here signed, not cookied, so it can never satisfy the
       // staging gate — same reason the two webhooks above are exempt. Without
       // this the staging deployment answers Slack with a redirect to /login and

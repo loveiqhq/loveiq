@@ -248,6 +248,19 @@ Add it as a custom connector with:
 drops the `Authorization` header, so the apex presents as a confusing 401 with a
 token that is perfectly valid.
 
+**This applies to EVERY inbound endpoint we hand to a third party, not just this
+one, and it has already cost us four months of data.** The Resend webhook was
+registered against `https://loveiq.org/api/resend/webhook` in May 2026 and worked
+for nobody: Resend posted to the apex, the apex answered 308, and the
+`svix-signature` header did not survive the redirect — so every event failed
+verification and `resend_webhook_event` held zero rows until 2026-09-14, while the
+endpoint answered 401 like a healthy one and `RESEND_WEBHOOK_SECRET` was set and
+correct the whole time. Nothing alerts on a webhook that is never delivered.
+
+When registering any callback — Resend, Stripe, Slack — paste the `www`
+host, then confirm rows actually arrive. An endpoint that returns 401 to an
+unsigned probe proves it is deployed, not that it is reachable by the sender.
+
 **Seventeen tools, in three groups.** Twelve read, five write. The write ones act
 immediately and are described at the bottom of this section — a teammate who reads
 only the first table will not know the brain can send an email.
@@ -332,7 +345,7 @@ later `date:` is the current decision.
 | Tool                     | For                                                                                                                                                                                                                                                                    |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `list_product_tables`    | Every table, view and analysis function in our database, with its columns                                                                                                                                                                                              |
-| `query_product_data`     | Read any of them: payments, refunds, Resend delivery, Calendly bookings, submissions, answers, reports, shares, invites, waitlist, marketing spend, admin tables. Prefer an `rpc/get_*` function when one fits — they encode the business logic already                |
+| `query_product_data`     | Read any of them: payments, refunds, Resend delivery, call invitations, submissions, answers, reports, shares, invites, waitlist, marketing spend, admin tables. Prefer an `rpc/get_*` function when one fits — they encode the business logic already                 |
 | `query_external_service` | Read-only GET against nine outside services — Stripe, Resend, Slack, GitHub, PostHog, Vercel, Figma, Trustpilot, Clarity — for what they know and we do not store: dispute detail, payout timing, a Slack thread, an open pull request, a runtime error, a design file |
 
 **Read-only by allowlist — the HTTP method was never the guard.** This section

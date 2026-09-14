@@ -204,12 +204,12 @@ and `engagement_multiplier`, and then by `discount_step` as the offer ages — w
 order value in the analytics rows (EUR 18.27 all-time) is far below any list price.
 
 A discount also arrives from the nurture email. There are **two** stages —
-`72h_no_unlock` and `78h_no_unlock`, and `type Stage` in
+`72h_no_unlock` alone, and `type Stage` in
 `app/api/cron/nurture-sequence/route.ts` is the source of truth. In practice a reader who
 does not convert receives exactly ONE follow-up: `72h_no_unlock`, which mints a per-user
 50%-off Stripe promotion code from `STRIPE_COUPON_50` with a 24-hour expiry.
-`78h_no_unlock` carries no discount at all — it invites a 20-minute call — and is paused
-by default behind `NURTURE_78H_CALL_ENABLED`. There is a manual 100% post-call grant.
+The 78h call invite was removed with the Calendly integration on 2026-09-14, so one
+nurture email goes out per unconverted reader. The manual 100% grant remains.
 
 Pricing 2.0 retired the earlier escalating ladder; the 6h reminders and the 30h/54h
 discounts are gone. This paragraph previously described that retired ladder, copied from

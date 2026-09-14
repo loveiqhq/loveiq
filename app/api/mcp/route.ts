@@ -1221,7 +1221,7 @@ export const TOOLS = [
       "Read any table, view or analysis function in LoveIQ's database, live and with full " +
       "history. This is how you answer questions the indexed corpus cannot: Resend " +
       "deliverability (email_suppression; `resend_webhook_event` is EMPTY — the webhook was never registered, so there is no delivery history), Stripe payments and " +
-      "refunds (payment, payment_item, payment_webhook_event), Calendly bookings " +
+      "refunds (payment, payment_item, payment_webhook_event), call invitations " +
       "(booking_event), survey submissions and answers, reports, shares, invites, the " +
       "waitlist, marketing spend, and the admin tables. WHAT WE CHARGE LIVES HERE TOO " +
       "(report_price_quote: plan, current_price, and the multipliers that produced it) " +
@@ -4309,7 +4309,7 @@ export const MCP_INSTRUCTIONS =
   "search_company_context, and list_sources when you need to know how fresh a source " +
   "is.\n\n" +
   "LIVE STATE, queried straight from the production database with full history and no " +
-  "lag: payments and refunds, Resend email delivery and bounces, Calendly bookings, " +
+  "lag: payments and refunds, Resend email delivery and bounces, call invitations, " +
   "survey submissions and answers, reports, shares, invites, the waitlist, marketing " +
   "spend, the admin tables, and CURRENT PRICING (report_price_quote — prices are " +
   "computed per visitor, so 'what do we charge' is a live question, not a written " +
