@@ -1,0 +1,49 @@
+{
+  "_comment": [
+    "Benchmark fixtures for the Replay Vision scanners. Marcus's requirement on",
+    "2026-09-11 was that the criteria be 'benchmarked against test videos so the",
+    "team does not rely on false confidence'. These are those videos.",
+    "",
+    "SINGLE USE. A scanner can observe a given session only once, ever — re-running",
+    "it after a prompt change is a silent no-op. So each (scanner, session) pair",
+    "below is spent the moment it is scanned. To re-test a changed prompt, duplicate",
+    "the scanner (POST /vision/scanners/:id/duplicate/) and scan the same sessions",
+    "with the copy. Do not re-point these at a tuned scanner and believe the result.",
+    "",
+    "Recordings expire: these were captured 2026-08-29 and expire 2026-09-28.",
+    "When they lapse, replace them from labelled observations (labeled=true), which",
+    "carry a human verdict already."
+  ],
+  "known_bad": [
+    {
+      "session_id": "01a04be1-da48-7cd6-abf5-6bfdecb52a9a",
+      "scanner": "LoveIQ survey UX",
+      "expect": "yes",
+      "criterion": "Z1",
+      "bug": "Whole survey rendered magnified. Mark flagged it 2026-08-30: 'Something is off with the mobile version for some users... Look how the quiz renders for them'. Root cause was a 15px input; iOS magnifies at <16px and never zooms back. 175 of 177 zoomed sessions measured a viewport ratio of exactly 16/15.",
+      "fixed_by": "verify-input-zoom.mjs, input-font-size-ios-zoom.test.ts"
+    },
+    {
+      "session_id": "01a04d64-fc8a-77c1-a6f7-a534858845f7",
+      "scanner": "LoveIQ report UX",
+      "expect": "yes",
+      "criterion": "E1",
+      "bug": "User clicked 'Continue to secure checkout' on a EUR 39.99 purchase and got 'Unable to process request' errors, three times. Mark flagged it 2026-08-30 with this recording, around minute 6. The recording carries 2 console errors.",
+      "fixed_by": "the checkout screen this happened on was removed"
+    }
+  ],
+  "known_good_adversarial": [
+    {
+      "session_id": "01a08680-882b-7465-b59e-014f7afbcc1f",
+      "scanner": "LoveIQ survey UX",
+      "expect": "no",
+      "why": "A survey completed normally with no rage clicks. The scanner must not read ordinary question-by-question progress, or a user pausing to think, as friction."
+    },
+    {
+      "session_id": "01a08e2d-2fc6-7ed1-91a7-81626e8ffdb8",
+      "scanner": "LoveIQ report UX",
+      "expect": "no",
+      "why": "A report read end to end (reached scroll_depth_100) with no rage clicks. THE adversarial case: the report is legitimately ~34,700px tall, so a long scroll is correct behaviour. A scanner that calls this 'excessive scrolling' would flag most of our readers."
+    }
+  ]
+}
