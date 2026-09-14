@@ -1425,11 +1425,20 @@ boundary was drawn by the people in them rather than by the company.
   10.36 GB with 2.11 GB free, platform-managed, and NOT where the corpus lives, so
   do not read its pressure as a corpus problem.
 
-- **Bulk email outranks conversation on broad questions.** Gmail is the largest
-  source, and a subscribed newsletter can still surface for a vague question. Near
-  duplicates are handled (one row per document, and gmail collapses on subject
-  because one broadcast is indexed once per mailbox), but there is no bulk-vs-human
-  signal: the obvious one, "did anyone reply", was measured and REJECTED — JIRA
-  notification threads accumulate messages and it promoted ticket spam over the
-  real commits. Capturing `List-Unsubscribe` at ingest is the honest fix and needs
-  a Gmail builder-version bump.
+- **~~Bulk email outranks conversation on broad questions.~~ FIXED 2026-09-14.**
+  Two halves of this entry were already stale when it was read: `List-Unsubscribe`
+  IS captured at ingest and is the first clause of `machineSent`, alongside
+  `Auto-Submitted` and `Precedence`. The real defect was finer. A flat -0.25 on all
+  bulk mail treats an OpenAI pricing newsletter and our own `[JIRA] (SCRUM-922)`
+  ticket as the same thing, which is exactly why raising it had been measured and
+  rejected. The penalty now splits on whether the message is about US — 0.25 when
+  it is, 0.55 when it is not — measured over 1,493 bulk chunks that name the
+  company against 1,638 that do not. The discriminator deliberately excludes the
+  ADDRESS form, because every newsletter footer carries `ec@loveiq.org`, and a
+  naive match scored 2 of 4 chunks of that OpenAI newsletter as "about us". The
+  aggregate looked fine either way; only checking the single document showed it.
+
+  Guarded by eight `bulk-not-in-top5-*` probes across ordinary work questions
+  rather than the one query the old probe used. That probe had gone green because
+  nothing competed on it any more — zero bulk in its top 14, measured — not
+  because the penalty worked.

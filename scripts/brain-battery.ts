@@ -1664,6 +1664,56 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
       { sources: ["gmail"], meta: { mailbox: "hello@loveiq.org" } },
       5
     ),
+    // Bulk mail must not crowd out first-party answers on ORDINARY work questions.
+    // One query cannot establish that. `bulk-must-not-outrank-first-party` above asks
+    // exactly one, and when it went green on 2026-09-14 the reason turned out to be that
+    // no bulk mail competed on THAT query at all — measured, zero bulk in its top 14 —
+    // rather than the -0.25 penalty doing any work. A probe that passes because its one
+    // question stopped being contested is not measuring the thing it names.
+    //
+    // These ask the question across a spread of real work questions instead. Measured
+    // 2026-09-14: bulk appears in the top 5 of ZERO of ten, and once at rank 8 overall.
+    // Gmail is the largest source and grows hourly, so this is a REGRESSION guard on a
+    // property that currently holds for reasons nobody designed.
+    ...(
+      [
+        "what did we decide about pricing",
+        "what is our conversion rate",
+        "how does the paywall work",
+        "what are our biggest problems right now",
+        "who is working on the design system",
+        "what happened with google ads",
+        "what did we agree in the last meeting",
+        "how do we handle customer data",
+      ] as const
+    ).map((q, i) =>
+      P(
+        `bulk-not-in-top5-${i + 1}`,
+        q,
+        (h) => {
+          // THIRD-PARTY bulk, not all bulk. A [JIRA] ticket about our own paywall and
+          // Google Ads reporting OUR conversions are machine-sent and belong in the top
+          // 5 — they are our own work, delivered by a robot. What must not be there is
+          // someone else's marketing. Same discriminator the ranking uses, and it
+          // deliberately excludes the ADDRESS form: every newsletter footer carries
+          // ec@loveiq.org, and a naive match on "loveiq" scores the footer of an OpenAI
+          // pricing newsletter as being about us.
+          const aboutUs = /(^|[^@\w.-])loveiq/i;
+          const bulk = at(h, 5).filter(
+            (x) =>
+              x.source === "gmail" && x.meta?.bulk === true && !aboutUs.test(`${x.title} ${x.body}`)
+          );
+          return bulk.length
+            ? [
+                `third-party bulk mail in the top 5 of a work question: ${bulk.map(describe).join(", ")}`,
+              ]
+            : [];
+        },
+        undefined,
+        10
+      )
+    ),
+
     P(
       "gm-bulk-flagged",
       "what newsletters do we receive",
