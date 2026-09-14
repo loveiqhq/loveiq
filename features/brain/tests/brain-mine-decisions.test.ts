@@ -10,6 +10,7 @@ import {
   TOPICS,
   buildMinedRows,
   parseMined,
+  titleFor,
 } from "@features/brain/server/ingest/mine-decisions";
 
 /**
@@ -223,5 +224,66 @@ describe("buildMinedRows — provenance, which is not optional", () => {
     // NOT prefixed with "Mined:" — a provenance prefix in the title would dilute the
     // words a searcher actually types, which is the reason the title holds the decision.
     expect(row.title.startsWith("Decision:")).toBe(true);
+  });
+});
+
+describe("titleFor — the figure stays out of the title, the decision stays in", () => {
+  const ROSTER = ["Eman Cickusic", "Mark Oldenburg", "Sanjin Kacevac"];
+
+  /**
+   * MEASURED after the first real mining run: the miner lifted "Eman accepted a starting
+   * compensation rate of 650" straight into a title, and titles are weighted double — so
+   * the single word "compensation" returned a named colleague's pay as the TOP hit in a
+   * 22,951-chunk corpus. Access was never the issue; corpus access is open by a decision
+   * recorded twice. Salience was, and that was an accident of automation rather than
+   * anything anybody decided.
+   */
+  it("keeps a named colleague's pay figure out of the title", () => {
+    const t = titleFor("Eman Cickusic accepted a starting compensation rate of 650.", ROSTER);
+    expect(t).not.toContain("650");
+    // The subject survives: "what did we decide about Eman's rate" must still find it.
+    expect(t).toContain("Eman Cickusic");
+    expect(t).toContain("compensation");
+  });
+
+  it("matches a FIRST name, because transcripts do not use full names", () => {
+    /**
+     * The first version of this guard matched only canonical full names. Run against the
+     * 22 decisions already mined it changed none of them — including the one it was
+     * written for, whose text reads "Eman accepted a starting compensation rate of 650".
+     */
+    const t = titleFor("Eman accepted a starting compensation rate of 650.", ROSTER);
+    expect(t).not.toContain("650");
+    expect(t).toContain("Eman");
+  });
+
+  it("does not mistake the verb 'mark' for the colleague Mark", () => {
+    // Case-sensitive and word-bounded. A lowercase verb must not trigger a name match.
+    const t = titleFor("We will mark the pay band at 500 in the handbook.", ROSTER);
+    expect(t).toContain("500");
+  });
+
+  it("leaves a decision that merely mentions money completely alone", () => {
+    // All three conditions must hold. A price is not somebody's pay.
+    const t = titleFor("Cap the report price at 29 for all plans.", ROSTER);
+    expect(t).toBe("Decision: Cap the report price at 29 for all plans.");
+  });
+
+  it("leaves pay language with no figure alone", () => {
+    const t = titleFor("Tie CTO equity vesting schedules to holding the CTO role.", ROSTER);
+    expect(t).toContain("equity vesting");
+    expect(t).not.toContain("(the figure is in the record)");
+  });
+
+  it("leaves a figure with no named person alone", () => {
+    const t = titleFor("Set the contractor day rate at 500.", ROSTER);
+    expect(t).toContain("500");
+  });
+
+  it("does not fire when the roster could not be read, and says nothing false", () => {
+    // An empty roster means the guard cannot match a name. It must degrade to the plain
+    // title rather than masking every figure it sees.
+    const t = titleFor("Eman Cickusic accepted a starting compensation rate of 650.", []);
+    expect(t).toContain("650");
   });
 });

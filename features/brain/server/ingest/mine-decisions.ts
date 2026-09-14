@@ -200,7 +200,61 @@ async function markMined(sourceId: string, found: number): Promise<void> {
   }
 }
 
-export function buildMinedRows(doc: MeetingDoc, mined: MinedDecision[], now: Date): BrainRow[] {
+/**
+ * Keep the decision; keep the figure out of the TITLE.
+ *
+ * Mining changed how findable a buried fact is, and that is a different thing from who
+ * may read it. Corpus access is open by a decision recorded twice, and nothing here
+ * restricts it — the full text stays in the body. But a person writing a decision by hand
+ * CHOOSES what goes in the title, and the miner does not: it lifted "Eman accepted a
+ * starting compensation rate of 650" straight into one, and titles are weighted double,
+ * so the single word "compensation" returned a named colleague's pay as the top hit in
+ * the whole corpus. That salience is an accident of automation, not a decision anybody
+ * made.
+ *
+ * Deterministic, like the verbatim-quote gate beside it: a prompt instruction is a
+ * request, and this needs to hold on every row. Only fires when all three are true — a
+ * roster name, pay or equity language, and an actual figure — so a decision that merely
+ * mentions money ("cap the report at 29") is untouched.
+ */
+const PAY_CONTEXT =
+  /\b(compensat\w*|salar\w*|\bpay\b|\bpaid\b|\brate\b|equity|vesting|stake|shares?)\b/i;
+const FIGURE = /\b\d[\d.,]{1,}\b|\b\d+\s*%/;
+
+export function titleFor(decision: string, roster: string[]): string {
+  /**
+   * FIRST NAMES TOO. The roster holds canonical full names — "Eman Cickusic" — and a
+   * meeting transcript says "Eman". The first version matched only the full name, so it
+   * ran over 22 mined decisions and changed NONE of them, including the one it was
+   * written for. A guard that cannot match the case that motivated it is the quiet kind
+   * of broken: green, silent, and useless.
+   *
+   * Case-sensitive and word-bounded, so the verb "mark" is not the colleague Mark. A
+   * false positive here costs one masked figure in one title, which is the cheap
+   * direction to be wrong in.
+   */
+  const candidates = roster.flatMap((n) => {
+    const first = n.trim().split(/\s+/)[0] ?? "";
+    return first.length >= 3 ? [n, first] : [n];
+  });
+  const names = candidates.filter(
+    (n) => n && new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(decision)
+  );
+  if (names.length === 0 || !PAY_CONTEXT.test(decision) || !FIGURE.test(decision)) {
+    return `Decision: ${decision.trim()}`.slice(0, 300);
+  }
+  // The figure is replaced, not the name and not the subject: "what did we decide about
+  // Eman's rate" must still find this, and the body still holds the number.
+  const masked = decision.replace(FIGURE, "(the figure is in the record)");
+  return `Decision: ${masked.trim()}`.slice(0, 300);
+}
+
+export function buildMinedRows(
+  doc: MeetingDoc,
+  mined: MinedDecision[],
+  now: Date,
+  roster: string[] = []
+): BrainRow[] {
   return mined.map((m) => {
     const row = buildDecisionRow(
       {
@@ -220,6 +274,7 @@ export function buildMinedRows(doc: MeetingDoc, mined: MinedDecision[], now: Dat
     );
     return {
       ...row,
+      title: titleFor(m.decision, roster),
       // The body says it too, so a reader who sees only the text still knows.
       body: `${row.body}\n\nReconstructed from meeting notes, not written down by a person.\nQuoted from the notes: "${m.quote}"`,
       meta: {
@@ -306,6 +361,23 @@ export async function mineDecisions(limit: number): Promise<MineResult> {
   const docs = await unminedMeetings(limit);
   if (docs.length === 0) return { scanned: 0, written: 0, dropped: 0, skipped: null };
 
+  /**
+   * The person registry, read once per run. `titleFor` needs it to tell "Eman accepted a
+   * rate of 650" from "cap the report at 29" — without it the guard has no name to match
+   * and silently never fires, which is the quiet kind of broken.
+   */
+  const roster = await supabaseFetch("/rest/v1/brain_person?select=canonical&kind=eq.person")
+    .then(async (r) =>
+      r.ok ? ((await r.json()) as Array<{ canonical: string }>).map((p) => p.canonical) : []
+    )
+    .catch(() => [] as string[]);
+  if (roster.length === 0) {
+    logger.warn(
+      {},
+      "brain: mining with an empty roster — pay figures will not be kept out of titles"
+    );
+  }
+
   const now = new Date();
   let read = 0;
   let written = 0;
@@ -344,7 +416,7 @@ export async function mineDecisions(limit: number): Promise<MineResult> {
         "brain: mined decision dropped"
       );
     }
-    const rows = buildMinedRows(doc, kept, now);
+    const rows = buildMinedRows(doc, kept, now, roster);
     if (rows.length) await upsertChunks(rows);
     await markMined(doc.sourceId, rows.length);
     written += rows.length;

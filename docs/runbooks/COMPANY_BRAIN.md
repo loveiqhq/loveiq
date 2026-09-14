@@ -1272,11 +1272,28 @@ on the reasoning that a new source is invisible to everything already written. I
 default and returned it — 121 rows titled "Scanned for DECISIONS" surfacing on exactly the
 word the decision record exists to answer.
 
-**PRECISION IS GRADED ON n=2, NOT n=20 — finish this before trusting it broadly.** The
-one meeting mined live produced two genuine decisions with valid quotes and dropped
-nothing. That is encouraging and it is not a measurement. Read a night's output and check
-four things per record: is it a decision, is it OURS rather than a vendor's or a
-customer's, is the date right, and is the quote real.
+**GRADED 2026-09-13 ON THE FIRST 15: 15 of 15.** Every one was a real decision, ours, on
+the right date, quoting a line that was genuinely in the notes. That clears the 18-of-20
+bar this section used to set as the gate. Re-grade if `MINER_VERSION` changes or the
+prompt is edited — the check is four things per record: is it a decision, is it OURS
+rather than a vendor's or a customer's, is the date right, and is the quote real.
+
+**What grading found that those four questions do not ask.** Two of the fifteen were about
+pay and equity, and the miner had lifted a figure straight into a title — titles are
+weighted double, so the single word "compensation" returned a named colleague's rate as
+the top hit in the whole corpus. Access was never the issue: the corpus is open by a
+decision recorded twice. SALIENCE was, and it was an accident of automation rather than
+anything anybody chose — a person writing a decision by hand picks what goes in the title.
+`titleFor` now keeps a named individual's pay figure out of the title while leaving the
+decision, the subject and the body intact, so "what did we decide about equity" still
+finds it. It fires only when a roster name, pay language and an actual figure are all
+present, so a price is untouched.
+
+**And the drain is slower than planned.** Both of the first runs stopped early on the free
+tier's rate limit: 3.5 meetings a run against the 8 the cron asks for, so 121 meetings is
+about 35 days rather than a fortnight. Accepted deliberately (2026-09-13) — it mines
+newest-first, so the decisions that are still live land in the first week or two and only
+the tail is slow. Revisit by adding a paid key for one backfill run if that tail matters.
 
 ```bash
 # What the miner has written, newest first, with the span it claims to be quoting.

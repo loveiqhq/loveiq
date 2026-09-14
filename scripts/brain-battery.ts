@@ -52,6 +52,11 @@ function monthKey(offset: number, now = new Date()): string {
     .slice(0, 7);
 }
 
+/** A figure read from prose is interpolated into a RegExp; `.` must not mean "any". */
+function escapeRe(v: string): string {
+  return v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /** Pull one figure out of a rendered analytics chunk body. */
 function grab(body: string, re: RegExp): string | undefined {
   return re.exec(body)?.[1];
@@ -801,7 +806,7 @@ const all =
  * about it. A source that cannot be reached by the words a person actually uses is
  * not indexed in any sense that matters.
  */
-function sourceCoverageProbes(): RetrievalProbe[] {
+function sourceCoverageProbes(live: LiveCounts): RetrievalProbe[] {
   const P = (
     kind: string,
     q: string,
@@ -840,12 +845,14 @@ function sourceCoverageProbes(): RetrievalProbe[] {
     P(
       "fact-alltime-revenue",
       "how much revenue have we made in total since launch",
-      bodyHas(/675\.91/)
+      // Read from the corpus at run time. It was the literal 675.91 until one more
+      // purchase landed and turned a working probe red.
+      bodyHas(new RegExp(escapeRe(live.allTimeRevenue ?? "675.91")))
     ),
     P(
       "fact-alltime-customers",
       "how many paying customers have we had in total",
-      bodyHas(/\b37\b/)
+      bodyHas(new RegExp(`\\b${escapeRe(live.allTimeCustomers ?? "37")}\\b`))
     ),
     P("fact-sept-revenue", "what is our revenue this month", bodyHas(/September 2026/)),
     P("fact-visits-aug", "how many people visited the site in august", bodyHas(/11147/)),
@@ -1191,6 +1198,20 @@ function sourceCoverageProbes(): RetrievalProbe[] {
 interface LiveCounts {
   monthSignups: number | null;
   allTimeSubmissions: number | null;
+  /**
+   * Read from the all-time analytics chunk, because `fact-alltime-revenue` and
+   * `fact-alltime-customers` carried 675.91 and 37 as LITERALS. One more purchase landed
+   * and both went red for a reason that had nothing to do with retrieval — the answering
+   * chunk was still rank 1 at score 3.15. This file's header claims the battery "reads
+   * its expected figures out of the corpus at run time, so it does not go stale"; that
+   * was true of the monthly probes and false of these two.
+   *
+   * This asserts RETRIEVAL — that the question returns the chunk holding the figure — not
+   * that the figure is correct. `get_business_numbers` owns that, and the MCP battery
+   * checks it.
+   */
+  allTimeRevenue: string | null;
+  allTimeCustomers: string | null;
 }
 
 async function readLiveCounts(): Promise<LiveCounts> {
@@ -1206,6 +1227,23 @@ async function readLiveCounts(): Promise<LiveCounts> {
   return {
     monthSignups: await count(`created_date_time=gte.${firstOfMonth}`),
     allTimeSubmissions: await count("id=gt.0"),
+    ...(await allTimeTotals()),
+  };
+}
+
+/** The all-time revenue and customer figures, read from the chunk that carries them. */
+async function allTimeTotals(): Promise<{
+  allTimeRevenue: string | null;
+  allTimeCustomers: string | null;
+}> {
+  const res = await supabaseFetch(
+    "/rest/v1/brain_chunk?select=body&source=eq.analytics&source_id=eq.alltime&limit=1"
+  );
+  if (!res.ok) return { allTimeRevenue: null, allTimeCustomers: null };
+  const body = ((await res.json().catch(() => [])) as Array<{ body?: string }>)[0]?.body ?? "";
+  return {
+    allTimeRevenue: /Revenue: EUR ([\d.]+)/.exec(body)?.[1] ?? null,
+    allTimeCustomers: /Paid customers: (\d+)/.exec(body)?.[1] ?? null,
   };
 }
 
@@ -1960,7 +1998,17 @@ function adversarialProbes(): RetrievalProbe[] {
     P(
       "false-many-sales-sept",
       "how many sales did we make in september",
-      bodyHas(/Paid customers: 0|Revenue: EUR 0/)
+      /**
+       * ASSERTS THAT SEPTEMBER'S OWN FIGURES COME BACK, not what they say.
+       *
+       * This read `Paid customers: 0|Revenue: EUR 0`, which was September's real state
+       * when it was written. A single purchase landed on the 14th and the probe went red
+       * — while retrieval was working perfectly and returning the very chunk that now
+       * said "Paid customers: 1". The false premise in the question is "how MANY sales",
+       * and what defends against it is the month's real line being in front of the model,
+       * whatever number it holds. The number itself belongs to `fact-sept-revenue`.
+       */
+      bodyHas(/Period: September 2026[\s\S]{0,400}Paid customers: \d+/)
     ),
 
     // ── CROSS-SOURCE: the answer needs two places at once ────────────────────
@@ -2104,7 +2152,7 @@ async function runRetrievalBattery(only: string | null): Promise<number> {
   );
   const all = [
     ...retrievalProbes(),
-    ...sourceCoverageProbes(),
+    ...sourceCoverageProbes(live),
     ...perSourceDepthProbes(live),
     ...adversarialProbes(),
   ];
