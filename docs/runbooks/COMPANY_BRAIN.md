@@ -1350,9 +1350,26 @@ showed zero runs for exactly that reason on 2026-08-28, and fired normally at
 
 ### Pending: private Slack channels and group DMs
 
-The brain bot holds `channels:*` only, so private channels and group DMs are
-invisible — and their existence cannot even be counted, so the size of the blind
-spot is unknown rather than small. Agreed on 2026-08-29 to do this "in a bit".
+**This section was stale and the thing it warned about happened by default.** As of
+2026-09-14 the bot DOES hold `groups:read` + `groups:history` and `mpim:read` +
+`mpim:history`, it has been invited to two private channels, and both were being
+indexed — `#showup-app` and `#email-inbox`. No decision record was ever written.
+
+`#email-inbox` is now on a hard denylist in `ingest/slack.ts` (`NEVER_INDEX`),
+because it forwards whatever arrives at the company address into Slack and was
+restricted to three people on the grounds that "some messages may be sensitive".
+Two days of it were in the corpus, both benign setup chatter, so nothing leaked —
+but the ingest was live and the next customer email would have been indexed into a
+corpus one shared token reads. That is the line CLAUDE.md says does not move.
+The two chunks were deleted.
+
+`#showup-app` stays indexed: it is an internal project channel and is covered by
+the open-access decision. The original note follows, because its reasoning is still
+the right reasoning for the NEXT private channel somebody invites the bot to.
+
+The brain bot held `channels:*` only, so private channels and group DMs were
+invisible — and their existence could not even be counted, so the size of the blind
+spot was unknown rather than small. Agreed on 2026-08-29 to do this "in a bit".
 
 Turning it on means adding `groups:read` + `groups:history` (and `mpim:read` +
 `mpim:history` for group DMs) to the brain app and reinstalling, then inviting the

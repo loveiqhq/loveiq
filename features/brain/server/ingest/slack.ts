@@ -33,6 +33,30 @@ import {
  * channel is still kept, and a new bot channel needs no configuration.
  */
 
+/**
+ * Channels that are NEVER indexed, whatever the bot has been invited to.
+ *
+ * Membership is normally the whole boundary, and for a team channel that is right. It is
+ * not enough for a channel that receives CUSTOMER mail. `#email-inbox` exists to forward
+ * whatever arrives at the company address into Slack — in the words of the person who
+ * created it, "only to serve as a faster way to receive an email ... since some messages
+ * may be sensitive", restricted to three people on purpose. The brain's corpus is
+ * undifferentiated and readable by anyone holding one shared token, so indexing that
+ * channel turns every inbound customer email into a searchable document.
+ *
+ * That crosses the one line this system does not move (CLAUDE.md, "Who can see what"):
+ * `brain_chunk` must never index user-level rows — survey answers, individual reports,
+ * email addresses. Open access among the team is a choice the company made; publishing
+ * what a customer wrote to us privately is not the same choice.
+ *
+ * Found 2026-09-14: the channel had two days indexed, both benign internal chatter about
+ * setting the channel up. Nothing had leaked — but the ingest was live, so the next
+ * customer email would have.
+ *
+ * Names, not ids, because a channel can be recreated and the intent follows the name.
+ */
+const NEVER_INDEX = new Set(["email-inbox"]);
+
 const SOURCE = "slack";
 const API = "https://slack.com/api";
 const TIMEOUT_MS = 20_000;
@@ -395,7 +419,7 @@ export async function ingestSlack(
   if (!listed) return { source: SOURCE, rows: 0, swept: 0, skipped: "slack-list-failed" };
 
   const channels = ((listed.channels as SlackChannel[]) ?? []).filter(
-    (c) => c.is_member && !c.is_archived && c.id && c.name
+    (c) => c.is_member && !c.is_archived && c.id && c.name && !NEVER_INDEX.has(c.name)
   );
   // Membership is the boundary: the bot reads only channels somebody added it to,
   // and Slack enforces that regardless of scope.
