@@ -133,7 +133,7 @@ export async function GET(request: Request) {
     const fitted = fitBlocks(blocks, body);
 
     await notifySlack({
-      channel: "ops",
+      channel: "brain",
       kind: "brain_brief",
       text: body,
       blocks: fitted.blocks,

@@ -226,11 +226,42 @@ interface DriveFile {
   shortcutDetails?: { targetId?: string; targetMimeType?: string };
 }
 
+/**
+ * Statuses Drive returns transiently under completely normal operation. Google documents
+ * the remedy as retry-with-backoff; the API is explicitly not expected to be 100%.
+ */
+const RETRYABLE = new Set([429, 500, 502, 503, 504]);
+const MAX_ATTEMPTS = 3;
+const BACKOFF_MS = [400, 1200];
+
+/**
+ * One Drive request, retried on a transient refusal.
+ *
+ * WHY THIS MATTERS MORE THAN IT LOOKS. The listing walk gave up permanently on the first
+ * non-ok response, so a single 500 on page 4 of 8 ended the whole walk — and because the
+ * sweep only runs after a COMPLETE walk, no deleted document was ever removed from the
+ * corpus. On 2026-09-13 that was the live state: `stopped=listing-refused@p4:500`, with
+ * nothing in the alert reading as a failure. Retrying here rather than in the listing
+ * loop fixes the export path too, which was failing the same way (`stopped=export-failed`).
+ *
+ * A 4xx that is not 429 is the caller's fault and is returned immediately: retrying a
+ * 403 just spends the time budget arriving at the same answer.
+ */
 async function driveGet(token: string, path: string): Promise<Response> {
-  return fetchWithTimeout(`${API}${path}`, {
-    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-    timeoutMs: TIMEOUT_MS,
-  });
+  let res: Response | undefined;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    if (attempt > 0) {
+      await new Promise((resolve) => setTimeout(resolve, BACKOFF_MS[attempt - 1] ?? 1200));
+      logger.info({ attempt, status: res?.status }, "brain-ingest drive: retrying");
+    }
+    res = await fetchWithTimeout(`${API}${path}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      timeoutMs: TIMEOUT_MS,
+    });
+    if (!RETRYABLE.has(res.status)) return res;
+  }
+  // Out of attempts: hand back the last refusal so the caller names it as it always did.
+  return res as Response;
 }
 
 /** Every Google Doc the service account can see. */

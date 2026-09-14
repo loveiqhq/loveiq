@@ -124,7 +124,7 @@ export async function GET(request: Request) {
   const alertOnce = async (name: string, text: string) => {
     const key = `brain_fast_failed:${name}`;
     if (!(await tryClaimSlackAlert(key, "day", dayKey))) return;
-    await notifySlack({ channel: "ops", kind: "brain_ingest_failed", text });
+    await notifySlack({ channel: "brain", kind: "brain_ingest_failed", text });
     await markSlackAlertDelivered(key, "day", dayKey);
   };
 

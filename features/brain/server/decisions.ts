@@ -188,7 +188,7 @@ export async function recordDecision(
    */
   try {
     await notifySlack({
-      channel: "ops",
+      channel: "brain",
       kind: "brain_decision_recorded",
       username: "ops_alerts",
       text:

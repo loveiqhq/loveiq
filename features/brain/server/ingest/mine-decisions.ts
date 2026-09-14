@@ -354,7 +354,23 @@ export interface MineResult {
   skipped: string | null;
 }
 
-export async function mineDecisions(limit: number): Promise<MineResult> {
+/**
+ * Wall-clock one run may spend. The route's `maxDuration` is 300s; this leaves ~60s for
+ * the last meeting's writes and the cron_run record. A parameter rather than a constant
+ * so a test can shrink it to milliseconds and a manual backfill can raise it.
+ */
+export const DEFAULT_MINE_BUDGET_MS = 240_000;
+
+/** Consecutive quota waits before we conclude the window is not going to clear. */
+const MAX_QUOTA_WAITS = 8;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export async function mineDecisions(
+  limit: number,
+  budgetMs: number = DEFAULT_MINE_BUDGET_MS
+): Promise<MineResult> {
+  const deadline = Date.now() + budgetMs;
   if (!isLlmConfigured()) {
     return { scanned: 0, written: 0, dropped: 0, skipped: "BRAIN_LLM_KEY is not set" };
   }
@@ -383,7 +399,20 @@ export async function mineDecisions(limit: number): Promise<MineResult> {
   let written = 0;
   let dropped = 0;
 
-  for (const doc of docs) {
+  // An INDEX loop, not `for...of`, because a quota wait has to re-read the SAME meeting.
+  // With `for...of` the natural `continue` advances the iterator, silently skipping the
+  // one document we paused for -- it would never be read and never be tombstoned either.
+  let index = 0;
+  let waits = 0;
+  while (index < docs.length) {
+    if (Date.now() >= deadline) {
+      // Out of clock, not out of quota. The remaining meetings keep no tombstone and
+      // are simply first in line tomorrow.
+      logger.info({ read, remaining: docs.length - index }, "brain: mining out of time");
+      return { scanned: read, written, dropped, skipped: "out_of_time" };
+    }
+    const doc = docs[index];
+    if (!doc) break; // unreachable: `index < docs.length`. Satisfies noUncheckedIndexedAccess.
     const summary = doc.text.slice(0, 8000);
     const res = await complete(
       [
@@ -396,6 +425,28 @@ export async function mineDecisions(limit: number): Promise<MineResult> {
       60_000
     );
     if (!res.ok) {
+      // A PER-MINUTE limit is not a per-day one. The free tier allows five requests a
+      // minute per model and says exactly that on the 429, with how long to wait:
+      //   quotaId  GenerateRequestsPerMinutePerProjectPerModel-FreeTier   value 5
+      //   retryDelay "32s"
+      // Treating it as terminal is why this cron mined five meetings a night and closed
+      // every single run with "stopped early: rate_limited" -- draining a 121-meeting
+      // backlog in ~35 days rather than ~6. Half a minute of a 300s budget nobody else
+      // is waiting on buys the next five meetings, so wait and re-read this one.
+      if (
+        res.reason === "rate_limited" &&
+        res.retryAfterMs &&
+        waits < MAX_QUOTA_WAITS &&
+        Date.now() + res.retryAfterMs < deadline
+      ) {
+        logger.info(
+          { waitMs: res.retryAfterMs, read, waits: waits + 1 },
+          "brain: mining paused for the per-minute quota"
+        );
+        await sleep(res.retryAfterMs);
+        waits += 1;
+        continue; // same `index` — this meeting has not been read yet
+      }
       // A rate limit is not an empty meeting. Stop the run rather than tombstone
       // documents as "nothing found" when nothing was actually read.
       //
@@ -407,6 +458,10 @@ export async function mineDecisions(limit: number): Promise<MineResult> {
       logger.warn({ reason: res.reason, read, doc: doc.sourceId }, "brain: mining stopped");
       return { scanned: read, written, dropped, skipped: res.reason };
     }
+    // The window cleared, so the budget of waits starts over. Without this reset a run
+    // long enough to hit the quota eight separate times would stop on the eighth even
+    // though every one of them had cleared.
+    waits = 0;
     read += 1;
     const { kept, dropped: rejected } = parseMined(res.text, summary);
     dropped += rejected.length;
@@ -420,6 +475,7 @@ export async function mineDecisions(limit: number): Promise<MineResult> {
     if (rows.length) await upsertChunks(rows);
     await markMined(doc.sourceId, rows.length);
     written += rows.length;
+    index += 1;
   }
 
   return { scanned: read, written, dropped, skipped: null };

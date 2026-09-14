@@ -151,7 +151,7 @@ export async function sendEmail(input: {
    */
   try {
     await notifySlack({
-      channel: "ops",
+      channel: "brain",
       kind: "brain_email_sent",
       username: "ops_alerts",
       text:

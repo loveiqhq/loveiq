@@ -84,11 +84,17 @@ let listOk = true;
 let targets: Record<string, unknown> = {};
 let alwaysMorePages = false;
 let exportFails = false;
+/** How many times the listing should answer with a transient 5xx before succeeding. */
+let listTransientFailures = 0;
 const httpCalls: string[] = [];
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: vi.fn(async (url: string) => {
     httpCalls.push(url);
     if (url.includes("/files?q=")) {
+      if (listTransientFailures > 0) {
+        listTransientFailures -= 1;
+        return { ok: false, status: 500, text: async () => "backend error" };
+      }
       if (!listOk) return { ok: false, status: 403, text: async () => "denied" };
       // `alwaysMorePages` makes every page claim a successor, so the loop hits
       // MAX_PAGES with items in hand — an INCOMPLETE but non-empty listing, which
@@ -793,5 +799,65 @@ describe("a failed sweep must not retry every hour", () => {
     expect(record).toBeLessThan(firstDelete); // and recorded FIRST
     // And it deleted the orphan ONLY.
     expect(deletedIds()).toEqual(["doc:ZZZ_deleted_from_drive"]);
+  });
+});
+
+/**
+ * Drive answers 500/503 transiently under normal operation. Giving up on the first one
+ * ended the entire walk — and since the sweep only runs after a COMPLETE walk, nothing
+ * deleted was ever removed from the corpus. Observed live on 2026-09-13:
+ * `stopped=listing-refused@p4:500`, in an alert whose own text said "Nothing failed, so
+ * this looks healthy".
+ */
+describe("a transient Drive refusal is retried, not fatal", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    httpCalls.length = 0;
+    files = [FILE];
+    listOk = true;
+    exportFails = false;
+    alwaysMorePages = false;
+    listTransientFailures = 0;
+    targets = {};
+    pdfText = "";
+    process.env.SUPABASE_URL = "https://example.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key-for-tests";
+  });
+
+  const listCalls = () => httpCalls.filter((u) => u.includes("/files?q=")).length;
+
+  it("completes the walk when the listing 500s once", async () => {
+    listTransientFailures = 1;
+
+    const result = await ingestDrive(STAMP);
+
+    // `complete: true` is the whole point — it is what unblocks the sweep.
+    expect(result.complete).toBe(true);
+    expect(result.sweepBlocked).toBe(false);
+    expect(result.detail).not.toMatch(/stopped=/);
+    // Two listing calls for one page: the refusal, then the retry that worked.
+    expect(listCalls()).toBe(2);
+  });
+
+  it("still gives up once the attempts run out, rather than retrying forever", async () => {
+    listTransientFailures = 99;
+
+    const result = await ingestDrive(STAMP);
+
+    expect(result.skipped).toBe("drive-list-failed");
+    expect(listCalls()).toBe(3);
+  });
+
+  /**
+   * A 403 is a permissions answer, not a blip. Retrying it spends the time budget
+   * arriving at the same refusal — and this walk shares that budget with the export pass.
+   */
+  it("does not retry a 403, which would say the same thing three times", async () => {
+    listOk = false;
+
+    const result = await ingestDrive(STAMP);
+
+    expect(result.skipped).toBe("drive-list-failed");
+    expect(listCalls()).toBe(1);
   });
 });

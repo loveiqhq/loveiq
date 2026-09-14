@@ -174,11 +174,14 @@ describe("sending", () => {
   });
 
   /** Act-freely's compensating control is that a write cannot be quiet, and that matters
-   *  most for the write that leaves the company. */
-  it("mirrors every send to the ops channel", async () => {
+   *  most for the write that leaves the company. Since 2026-09-14 the mirror lands in the
+   *  brain's own channel rather than the shared ops one — a move toward the person who
+   *  actually watches the brain, not away from scrutiny. What must never change is that
+   *  it is mirrored SOMEWHERE, which is what the assertion on `kind` holds. */
+  it("mirrors every send to the brain channel", async () => {
     await sendEmail({ ...ok, send: true });
     expect(mockNotify).toHaveBeenCalledWith(
-      expect.objectContaining({ channel: "ops", kind: "brain_email_sent" })
+      expect.objectContaining({ channel: "brain", kind: "brain_email_sent" })
     );
   });
 

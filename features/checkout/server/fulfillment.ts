@@ -1173,6 +1173,22 @@ async function syncCheckoutSessionPayment({
   }
 
   const amount = toAmount(settledSession.amount_total);
+
+  /**
+   * Whether this payment is one of OURS rather than a customer's — the same test that
+   * decides the `is_test` column, so the Slack line and the database never disagree.
+   *
+   * It is computed here rather than at each call site because three of them already
+   * recomputed it independently and the Slack alerts did not compute it at all: in the
+   * fortnight to 2026-09-14, THIRTY-FIVE of thirty-eight ":tag: Promo redeemed (100%
+   * off)" pings in #prod-alerts were internal sandbox runs, indistinguishable from a
+   * real one. A channel that cries wolf 92% of the time is a channel nobody reads.
+   */
+  const isInternalPayment = isStaffEmail(
+    settledSession.customer_details?.email ?? settledSession.customer_email ?? null
+  );
+  /** Prefix for any ops line about this payment. Empty for real money. */
+  const internalTag = isInternalPayment ? ":test_tube: [internal] " : "";
   const pricingQuoteIdRaw = settledSession.metadata?.pricingQuoteId;
   const pricingQuoteId =
     typeof pricingQuoteIdRaw === "string" && /^\d+$/.test(pricingQuoteIdRaw)
@@ -1425,9 +1441,7 @@ async function syncCheckoutSessionPayment({
         consentGranted: settledSession.metadata?.gaAnalyticsConsent === "1",
         transactionId: settledSession.id,
         value: amount ?? 0,
-        isTest: isStaffEmail(
-          settledSession.customer_details?.email ?? settledSession.customer_email ?? null
-        ),
+        isTest: isInternalPayment,
         currency: (settledSession.currency ?? "eur").toUpperCase(),
         itemName: getReportPurchasePlan(plan).title,
         params: {
@@ -1453,9 +1467,7 @@ async function syncCheckoutSessionPayment({
         email: recipient.email,
         transactionId: settledSession.id,
         value: amount ?? 0,
-        isTest: isStaffEmail(
-          settledSession.customer_details?.email ?? settledSession.customer_email ?? null
-        ),
+        isTest: isInternalPayment,
         currency: (settledSession.currency ?? "eur").toUpperCase(),
         plan,
         itemName: getReportPurchasePlan(plan).title,
@@ -1482,7 +1494,7 @@ async function syncCheckoutSessionPayment({
         await notifySlack({
           channel: "ops",
           kind: `stripe_risk_${chargeDetails.riskLevel}`,
-          text: `${urgentIcon} Stripe Radar *${chargeDetails.riskLevel}* risk on payment #${paymentId} (score ${chargeDetails.riskScore ?? "?"}). Fulfilled; review for proactive refund / contact.`,
+          text: `${internalTag}${urgentIcon} Stripe Radar *${chargeDetails.riskLevel}* risk on payment #${paymentId} (score ${chargeDetails.riskScore ?? "?"}). Fulfilled; review for proactive refund / contact.`,
           username: "ops_alerts",
         });
       }
@@ -1503,7 +1515,7 @@ async function syncCheckoutSessionPayment({
         await notifySlack({
           channel: "ops",
           kind: "promo_redeemed",
-          text: `:tag: Promo *${escapeSlack(promotionSummary.promotionCode)}* redeemed (${discountSummary})${stageSuffix} — payment #${paymentId}`,
+          text: `${internalTag}:tag: Promo *${escapeSlack(promotionSummary.promotionCode)}* redeemed (${discountSummary})${stageSuffix} — payment #${paymentId}`,
           username: "ops_alerts",
         });
       }
@@ -1515,7 +1527,7 @@ async function syncCheckoutSessionPayment({
     await notifySlack({
       channel: "ops",
       kind: "stripe_payment_failed",
-      text: `:credit_card: Payment failed — ${escapeSlack(masked)} — ${escapeSlack(reason)} — payment #${paymentId}`,
+      text: `${internalTag}:credit_card: Payment failed — ${escapeSlack(masked)} — ${escapeSlack(reason)} — payment #${paymentId}`,
       username: "ops_alerts",
     });
   }

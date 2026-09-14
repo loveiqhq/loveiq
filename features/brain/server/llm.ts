@@ -57,7 +57,55 @@ export interface LlmMessage {
 
 export type LlmResult =
   | { ok: true; text: string; truncated: boolean }
-  | { ok: false; reason: "unconfigured" | "rate_limited" | "error"; detail?: string };
+  | {
+      ok: false;
+      reason: "unconfigured" | "rate_limited" | "error";
+      detail?: string;
+      /** How long the provider asked us to wait, when it said. Only ever set on
+       *  `rate_limited`. A caller that can afford to wait (a cron) should; one that
+       *  cannot (anything with a person attached) should keep treating 429 as final. */
+      retryAfterMs?: number;
+    };
+
+/** Longest wait the provider is allowed to talk us into. A provider that answers
+ *  "retry in an hour" must not park a cron for an hour; past this we treat the
+ *  limit as final and stop, exactly as before. */
+const MAX_RETRY_AFTER_MS = 120_000;
+
+/**
+ * How long to wait after a 429, from the `retry-after` header or, failing that, the
+ * `RetryInfo.retryDelay` Google puts in the body ("32s"). Returns undefined when
+ * neither is present or parseable -- an absent hint must not become a zero-length
+ * wait, which would spin.
+ */
+/**
+ * Is this 429 the DAILY allowance rather than the per-minute one?
+ *
+ * The free tier enforces both — 5 requests a minute and 20 a day, per model — and sends
+ * the same shape for each, `retryDelay` included. On the daily limit that delay is a lie
+ * of omission: it counts down to the next per-minute window, which will refuse again,
+ * and again, until midnight Pacific. Waiting on it burns the caller's whole budget to
+ * make zero progress. So the daily limit stays terminal, as every 429 used to be.
+ */
+export function isDailyQuota(body: string): boolean {
+  return /PerDayPer|RequestsPerDay/i.test(body);
+}
+
+export function parseRetryAfterMs(header: string | null, body: string): number | undefined {
+  if (isDailyQuota(body)) return undefined;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds) && seconds > 0) return Math.min(seconds * 1000, MAX_RETRY_AFTER_MS);
+  // Two shapes, because Google sends both and the cheaper one comes first:
+  //   message  "...Please retry in 32.652110245s."      (~380 chars in)
+  //   details  {"@type": ...RetryInfo, "retryDelay": "32s"}   (~900 chars in)
+  // Seconds only; Google does not emit other units on either.
+  const match =
+    /"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/.exec(body) ?? /retry in (\d+(?:\.\d+)?)s/i.exec(body);
+  if (!match) return undefined;
+  const parsed = Number(match[1]);
+  if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
+  return Math.min(Math.ceil(parsed * 1000), MAX_RETRY_AFTER_MS);
+}
 
 export function isLlmConfigured(): boolean {
   return Boolean(process.env.BRAIN_LLM_KEY);
@@ -129,8 +177,21 @@ export async function complete(
   // actually hit, and it needs a different answer in Slack: "we are out of
   // questions for today", not "something broke".
   if (res.status === 429) {
-    logger.warn({ retryAfter: res.headers.get("retry-after") }, "brain llm rate limited");
-    return { ok: false, reason: "rate_limited" };
+    // The BODY, not the status, says which limit was hit and for how long. Every other
+    // failure branch below reads it; this one used to throw it away, so
+    // "stopped early: rate_limited" could never distinguish "out for the next 30
+    // seconds" from "out for the day" -- and the miner assumed the worst, nightly.
+    // Free tier is 5 requests per minute per model, and says so here:
+    //   QuotaFailure.quotaId  GenerateRequestsPerMinutePerProjectPerModel-FreeTier
+    //   RetryInfo.retryDelay  "32s"
+    // Parse the WHOLE body, then truncate for logging. `RetryInfo` is the last of three
+    // `details` entries and sits ~900 characters in, so parsing a truncated copy finds
+    // nothing and silently answers "no hint" -- which reads exactly like a provider that
+    // did not send one.
+    const body = await res.text().catch(() => "");
+    const retryAfterMs = parseRetryAfterMs(res.headers.get("retry-after"), body);
+    logger.warn({ retryAfterMs, detail: body.slice(0, 300) }, "brain llm rate limited");
+    return { ok: false, reason: "rate_limited", detail: body.slice(0, 300), retryAfterMs };
   }
 
   if (!res.ok) {

@@ -96,7 +96,7 @@ export async function GET(request: Request) {
   const alertOnce = async (name: string, text: string) => {
     const key = `brain_gmail_failed:${name}`;
     if (!(await tryClaimSlackAlert(key, "day", dayKey))) return;
-    await notifySlack({ channel: "ops", kind: "brain_ingest_failed", text });
+    await notifySlack({ channel: "brain", kind: "brain_ingest_failed", text });
     await markSlackAlertDelivered(key, "day", dayKey);
   };
 
@@ -147,7 +147,10 @@ export async function GET(request: Request) {
   } catch (err) {
     status = "error";
     errorMessage = err instanceof Error ? err.message : String(err);
-    logger.error({ err }, "brain-gmail failed");
+    // A dedicated `:brain: brain-gmail failed` alert is posted just below; without
+    // `slack: false` the generic api_5xx mirror in logger.ts posts a SECOND
+    // message for the same failure, which is how one broken run became two pings.
+    logger.error({ err, slack: false }, "brain-gmail failed");
     await alertOnce(
       "error",
       `:brain: brain-gmail failed: ${escapeSlack(errorMessage.slice(0, 300))}`
