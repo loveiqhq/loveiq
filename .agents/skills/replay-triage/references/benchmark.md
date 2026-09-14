@@ -54,14 +54,40 @@ fixtures with the copy, then delete the loser. Commit each revision's results to
 
 ## Fixtures must be verified, not remembered
 
-The first run (2026-09-14) scored 0.50/0.50. Both survey failures traced to the
-fixtures, not the model: one recording was labelled "iOS auto-zoom from a 15px
-input" when the source thread actually describes the phone's display-zoom
-accessibility setting, and the "known good" control may contain a real bug the
-scanner correctly spotted.
+### Where it stands: precision 0.25, recall 0.50 — below both bars
+
+Measured 2026-09-14 against six fixtures, committed in
+`scripts/replay-bench/results/v2.json` (written by the scorer, never by hand).
+`tp 1 · fp 3 · fn 1`. **This is the number to quote to the team.** It is the
+answer to Marcus's requirement that the criteria be benchmarked "so the team
+does not rely on false confidence", and it says plainly: do not rely on it yet.
+
+The three new false positives are the day-one findings, added as adversarial
+fixtures. Each was checked against its session's own events and refuted — an
+unlock click in a session with no click event; a redirect to the 18+ screen,
+which is a step inside `/survey` and cannot emit a pageview; and the
+self-refuting one, where the scanner described taps on "plain paragraphs and
+non-interactive trust badges" and answered YES anyway, in the scanner whose
+prompt carries a HARD RULE against exactly that.
+
+That last one is the important result: **prompt hardening already failed.** The
+v2 prompts carry both the anti-inference rule and the HARD RULE, and the model
+broke both. Do not answer a precision of 0.25 by writing more prompt.
+
+Confidence was 0.9–1.0 on every row above, correct and incorrect alike, so it
+discriminates nothing and must not be published as if it did.
 
 **Watch a recording before asserting its expected verdict.** Tuning a prompt
-against unverified expectations trains it on your assumptions.
+against unverified expectations trains it on your assumptions. Where a label
+cannot be settled, put the fixture in `unresolved` — the scorer excludes it, so
+a disputed label never drives the headline number. One sits there now
+(`01a08680`): it was labelled "no" without watching, and the events partly
+corroborate the scanner instead — `survey_completed`, then a fresh `/survey`
+pageview 83s later, and no report pageview anywhere in the session.
+
+Labels here are derived from EVENTS, and each fixture records that in
+`labelled_from`. That is weaker than Mark's eyes for a layout question and
+stronger for a causal claim, because an event either fired or it did not.
 
 Free fixtures: every triage ends by rating the observation, so re-reading with
 `labeled=true` yields human-confirmed cases at no curation cost.

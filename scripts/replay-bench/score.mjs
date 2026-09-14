@@ -14,7 +14,7 @@
  * "false confidence" the requirement names. So precision is held higher than
  * recall, and an inconclusive verdict counts as a MISS, never a pass.
  */
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -148,5 +148,48 @@ if (pending) {
   process.exit(2);
 }
 const passed = s.precision >= MIN_PRECISION && s.recall >= MIN_RECALL;
+
+/**
+ * The audit trail benchmark.md mandates ("commit each revision's results so the
+ * iteration is auditable") and which did not exist until 2026-09-14. Written by
+ * the scorer rather than by hand, because a hand-written result is exactly the
+ * fabricated row the anti-self-grading rule exists to stop: every row here
+ * carries the verdict and confidence as PostHog returned them.
+ *
+ * Named by scanner prompt version, since that is what a run measures. Pass
+ * --no-save for a throwaway run.
+ */
+if (!process.argv.includes("--no-save")) {
+  const version = process.env.SCANNER_VERSION ?? "v2";
+  const out = join(HERE, "results", `${version}.json`);
+  mkdirSync(join(HERE, "results"), { recursive: true });
+  writeFileSync(
+    out,
+    `${JSON.stringify(
+      {
+        scanner_version: version,
+        precision: Number(s.precision.toFixed(4)),
+        recall: Number(s.recall.toFixed(4)),
+        bars: { precision: MIN_PRECISION, recall: MIN_RECALL },
+        passed,
+        tp: s.tp,
+        fp: s.fp,
+        fn: s.fn,
+        unresolved: (fixtures.unresolved ?? []).length,
+        rows: rows.map((r) => ({
+          session_id: r.session_id,
+          scanner: r.scanner,
+          expect: r.expect,
+          got: r.verdict,
+          confidence: r.confidence === null ? null : Number(r.confidence),
+        })),
+      },
+      null,
+      2
+    )}\n`
+  );
+  console.log(`results written to ${out}`);
+}
+
 console.log(passed ? "BARS MET" : "BELOW BAR — do not enable unlabelled posting");
 process.exit(passed ? 0 : 1);

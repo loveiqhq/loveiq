@@ -34,39 +34,50 @@
   ],
   "known_good_adversarial": [
     {
-      "session_id": "01a08680-882b-7465-b59e-014f7afbcc1f",
-      "scanner": "LoveIQ survey UX",
-      "expect": "no",
-      "why": "A survey completed normally with no rage clicks. The scanner must not read ordinary question-by-question progress, or a user pausing to think, as friction."
-    },
-    {
       "session_id": "01a08e2d-2fc6-7ed1-91a7-81626e8ffdb8",
       "scanner": "LoveIQ report UX",
       "expect": "no",
       "why": "A report read end to end (reached scroll_depth_100) with no rage clicks. THE adversarial case: the report is legitimately ~34,700px tall, so a long scroll is correct behaviour. A scanner that calls this 'excessive scrolling' would flag most of our readers."
+    },
+    {
+      "session_id": "01a09e04-dfaa-7a3e-9622-0d7ca5285017",
+      "scanner": "LoveIQ report UX",
+      "expect": "no",
+      "criterion": "L1",
+      "why": "Scanner: \"the user clicked 'Unlock full report', which looped them back to the beginning of the survey\". The session contains NO unlock_click, paywall_initiated, sticky_unlock_clicked or lock_icon_clicked, and no autocapture click at all before the navigation. The /report -> /survey move is real but is a browser back-press: $pageleave and $pageview land in the same millisecond, and the only /survey links on the report sit on its error screens, which cannot render when report_viewed fired. No defect established.",
+      "labelled_from": "events, 2026-09-14"
+    },
+    {
+      "session_id": "01a09fe4-71ba-7ea5-afd7-c5da45a71af7",
+      "scanner": "LoveIQ survey UX",
+      "expect": "no",
+      "criterion": "L1",
+      "why": "Scanner: \"redirected the user back to the 18+ age verification consent screen\". The 18+ step is a step INSIDE /survey and cannot emit a pageview; the only navigation at that moment is a $pageview of \"/\". The named destination is not where the user went.",
+      "labelled_from": "events, 2026-09-14"
+    },
+    {
+      "session_id": "01a09e25-3e09-78ed-b87e-21712439d172",
+      "scanner": "LoveIQ dead-click cause",
+      "expect": "no",
+      "criterion": "D1",
+      "why": "THE self-refuting case. The scanner described the taps as landing on \"plain paragraphs and non-interactive trust badges\" and answered YES anyway - while that scanner's prompt carries a HARD RULE: paragraph/heading/image/badge/decoration means NO, \"not 'no, but' - NO\". Proof that prompt hardening alone does not hold.",
+      "labelled_from": "the scanner's own reasoning, 2026-09-14"
     }
   ],
   "_status_2026_09_14": [
-    "FIRST RUN: precision 0.50, recall 0.50 — BELOW BAR. Report scanner 2/2.",
-    "Survey scanner 0/2, and BOTH of its fixtures are suspect, mine not the model's:",
+    "Re-scored 2026-09-14 after adding the three day-one false positives as adversarial fixtures.",
+    "These are the strongest negatives available: the scanner said YES to each, and each claim was",
+    "checked against the session's own events and refuted. They cost nothing to collect and they are",
+    "the exact failure mode the benchmark exists to measure.",
     "",
-    "  known_bad 01a04be1 — I labelled this 'iOS auto-zoom from a 15px input'. The",
-    "  WhatsApp thread it came from says otherwise: Eman diagnosed it as the phone's",
-    "  DISPLAY-ZOOM accessibility setting, on from the first frame. The prompt asks",
-    "  about a page that magnifies AFTER an input is tapped, which is a different",
-    "  event, so a 'no' here may be correct. The real defect Mark named was that our",
-    "  layout does not survive that setting — which is not what the criterion says.",
+    "Labels are derived from EVENTS, not from watching video, and each fixture says so in",
+    "labelled_from. That is weaker evidence than Mark's eyes for a layout question and stronger for a",
+    "causal claim, because an event either fired or it did not. Where events cannot settle it, the",
+    "fixture goes to `unresolved` and is excluded from the score - a disputed label must never drive",
+    "the headline number.",
     "",
-    "  known_good 01a08680 — I picked it on 'completed and no rage clicks' and never",
-    "  watched it. The scanner says the survey returned to the intro screen after",
-    "  completion, citing t=2022s. The events agree: survey_completed 14:41:36, then",
-    "  a $pageview back to /survey at 14:43:08. That matches a bug Mark reported on",
-    "  2026-08-30 ('users click a CTA ... and it triggers them to start the survey",
-    "  from scratch'). So this may be a TRUE positive against a wrong label.",
-    "",
-    "NEXT: watch both recordings before re-labelling. Do not tune the prompt against",
-    "fixtures whose expected verdict has not been verified — that trains the scanner",
-    "on my assumptions. Re-scanning needs a duplicated scanner either way."
+    "A scanner observes a session ONCE, EVER. Every id here is spent; re-running returns the stored",
+    "verdict. Iterate prompts with POST /vision/scanners/:id/duplicate/ on fresh sessions."
   ],
   "_day_one_reading_2026_09_14": [
     "Read all 19 observations from the first day. 5 were YES. NONE was an",
@@ -101,5 +112,14 @@
     "was not seen being pressed, and a hard NO for taps on text/badges; and the",
     "verifier now refutes a claim whose named action has no matching event, which",
     "catches 01a09e04 automatically."
+  ],
+  "unresolved": [
+    {
+      "session_id": "01a08680-882b-7465-b59e-014f7afbcc1f",
+      "scanner": "LoveIQ survey UX",
+      "expect": "no",
+      "why": "DISPUTED, excluded from the score rather than guessed. Labelled \"no\" without watching the recording. Events partly corroborate the scanner instead: survey_completed at 16:41:36 and a fresh $pageview of /survey at 16:43:08, with NO report pageview anywhere in the session - the user finished and never reached a report. That may be a real defect, so it is not scored either way until someone watches it.",
+      "labelled_from": "unresolved - needs a human to watch the recording"
+    }
   ]
 }
