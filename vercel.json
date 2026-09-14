@@ -65,6 +65,10 @@
     {
       "path": "/api/cron/brain-mine",
       "schedule": "40 5 * * *"
+    },
+    {
+      "path": "/api/cron/ux-review",
+      "schedule": "17,47 * * * *"
     }
   ],
   "functions": {
@@ -139,6 +143,9 @@
     },
     "app/api/cron/brain-brief/route.ts": {
       "maxDuration": 120
+    },
+    "app/api/cron/ux-review/route.ts": {
+      "maxDuration": 30
     }
   }
 }

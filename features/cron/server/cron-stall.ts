@@ -32,6 +32,9 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   "payment-fulfillment-sweep": 2 * 3_600_000,
   "security-storm-detector": 3_600_000,
   "anomaly-watcher": 3 * 3_600_000,
+  // Every 30 minutes, so 90 minutes of silence is two missed ticks — the same
+  // window the route itself looks back over.
+  "ux-review": 90 * 60_000,
   "conversion-digest": 26 * 3_600_000,
   "brain-ingest": 26 * 3_600_000,
   // Every 15 minutes, so 45m of silence is two missed ticks.
