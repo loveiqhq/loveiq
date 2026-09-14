@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildReviewMessage,
+  contradiction,
   detectDrift,
+  fetchSessionEvents,
+  isSafeSessionId,
   fetchFindings,
   findThreadTs,
   firstSentence,
@@ -175,5 +178,55 @@ describe("findThreadTs", () => {
     vi.stubEnv("SUPABASE_URL", "https://db.example");
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "svc");
     await expect(findThreadTs("sess-1")).resolves.toBeNull();
+  });
+});
+
+describe("contradiction", () => {
+  it("refutes an unlock claim in a session with no unlock event", () => {
+    // The real 2026-09-14 fabrication: "the user clicked 'Unlock full report',
+    // which looped them back to the survey" — in a session containing none of
+    // the four events that fire when that happens.
+    const why = contradiction(
+      "the user clicked 'Unlock full report', which looped them back to the survey",
+      new Set(["report_viewed", "locked_card_price_shown"])
+    );
+    expect(why).toMatch(/unlock click/);
+  });
+
+  it("accepts the same claim when the event is there", () => {
+    expect(
+      contradiction("the user clicked 'Unlock full report'", new Set(["unlock_click"]))
+    ).toBeNull();
+  });
+
+  it("says nothing about claims it cannot check", () => {
+    // A rule that fires on unmatched prose would refute everything, which is
+    // just a differently-wrong detector.
+    expect(contradiction("the heading was covered by the chapter bar", new Set())).toBeNull();
+  });
+
+  it("refuses a session id that is not UUID-shaped", async () => {
+    expect(isSafeSessionId("01a09e04-dfaa-7a3e-9622-0d7ca5285017")).toBe(true);
+    expect(isSafeSessionId("' OR 1=1 --")).toBe(false);
+    expect(isSafeSessionId("a'; DROP TABLE events; --")).toBe(false);
+    // And the fetch refuses rather than interpolating it.
+    vi.stubEnv("POSTHOG_API_KEY", "phx_test");
+    let called = false;
+    vi.stubGlobal("fetch", async () => {
+      called = true;
+      return { ok: true, json: async () => ({ results: [] }) } as unknown as Response;
+    });
+    await expect(fetchSessionEvents("' OR 1=1 --")).resolves.toEqual(new Set());
+    expect(called, "a malformed id must never reach the query").toBe(false);
+  });
+
+  it("falls silent rather than refuting when PostHog is unreachable", async () => {
+    // An empty event set would otherwise contradict every claim that names an
+    // action, turning an outage into a wave of false refutations.
+    vi.stubEnv("POSTHOG_API_KEY", "phx_test");
+    vi.stubGlobal("fetch", async () => {
+      throw new Error("network down");
+    });
+    await expect(fetchSessionEvents("01a0-sess")).resolves.toEqual(new Set());
   });
 });

@@ -76,7 +76,7 @@ jobs:
           SLACK_JOURNEY_CHANNEL_ID: ${{ secrets.SLACK_JOURNEY_CHANNEL_ID }}
 
       - name: Self-test the finding classifier
-        run: node scripts/verify-ux-findings.mjs --selftest
+        run: npx tsx scripts/verify-ux-findings.mjs --selftest
 
       - name: Verify findings
         # The flag is chosen in SHELL, from an env var, rather than interpolated into the
@@ -87,9 +87,9 @@ jobs:
         # input, and the shape is what a future edit inherits.
         run: |
           if [ "$DRY_RUN" = "true" ]; then
-            node scripts/verify-ux-findings.mjs --dry-run
+            npx tsx scripts/verify-ux-findings.mjs --dry-run
           else
-            node scripts/verify-ux-findings.mjs
+            npx tsx scripts/verify-ux-findings.mjs
           fi
         env:
           DRY_RUN: ${{ inputs.dry_run }}

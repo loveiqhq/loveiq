@@ -193,3 +193,89 @@ export async function findThreadTs(sessionId: string): Promise<string | null> {
     return null;
   }
 }
+
+/**
+ * Claims that name an action we instrument, and the events that must exist if
+ * the action really happened.
+ *
+ * Reading the first day's findings showed one consistent failure: the scanners
+ * see that something changed on screen and invent why. One said "the user
+ * clicked 'Unlock full report', which looped them back to the survey" for a
+ * session containing no unlock_click, no paywall_initiated and no checkout
+ * event — the navigation was real, the cause fabricated, at 0.9 confidence.
+ *
+ * So: if the prose names an action, require its event in the same session.
+ * Absent means our own telemetry contradicts the claim, and it must not be
+ * posted as a finding.
+ *
+ * Deliberately narrow. Only actions with an unambiguous event are listed, and a
+ * claim matching no rule is "cannot check", never "contradicted".
+ */
+export const CLAIM_EVIDENCE: ReadonlyArray<{
+  claim: RegExp;
+  requireAny: readonly string[];
+  describes: string;
+}> = [
+  {
+    claim: /clicked? ['"]?unlock|unlock full report|pressed unlock|tapped unlock/i,
+    requireAny: ["unlock_click", "paywall_initiated", "sticky_unlock_clicked", "lock_icon_clicked"],
+    describes: "an unlock click",
+  },
+  {
+    claim: /checkout|payment modal|stripe/i,
+    requireAny: ["checkout_started", "begin_checkout", "paywall_initiated", "unlock_click"],
+    describes: "reaching checkout",
+  },
+  {
+    claim: /completed the survey|finished the survey|after completion/i,
+    requireAny: ["survey_completed"],
+    describes: "completing the survey",
+  },
+];
+
+/**
+ * Session ids originate in the visitor's browser, so they are
+ * attacker-influenceable text on their way into a query. Only UUID-shaped ids
+ * can be legitimate; anything else is refused rather than escaped.
+ */
+export function isSafeSessionId(sessionId: string): boolean {
+  return /^[A-Za-z0-9-]{1,64}$/.test(sessionId);
+}
+
+/** The reason our telemetry contradicts this claim, or null. */
+export function contradiction(reasoning: string, events: ReadonlySet<string>): string | null {
+  for (const rule of CLAIM_EVIDENCE) {
+    if (!rule.claim.test(reasoning)) continue;
+    if (rule.requireAny.some((e) => events.has(e))) continue;
+    return `the recording describes ${rule.describes}, but the session has none of ${rule.requireAny.join(", ")}`;
+  }
+  return null;
+}
+
+/** Distinct events in one session. Empty set when PostHog is unreachable, which
+ *  makes `contradiction()` fall silent rather than refuting everything. */
+export async function fetchSessionEvents(sessionId: string): Promise<Set<string>> {
+  const key = process.env.POSTHOG_API_KEY;
+  if (!key || !isSafeSessionId(sessionId)) return new Set();
+  try {
+    const res = await fetchWithTimeout(`https://eu.posthog.com/api/projects/${PROJECT}/query/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: {
+          kind: "HogQLQuery",
+          query: `SELECT DISTINCT event FROM events
+                  WHERE timestamp > now() - INTERVAL 30 DAY
+                    AND properties.$session_id = '${sessionId}'`,
+        },
+      }),
+      timeoutMs: 8000,
+    });
+    if (!res.ok) return new Set();
+    const payload = (await res.json()) as { results?: unknown[][]; error?: unknown };
+    if (payload.error) return new Set();
+    return new Set((payload.results ?? []).map((r) => String(r[0])));
+  } catch {
+    return new Set();
+  }
+}

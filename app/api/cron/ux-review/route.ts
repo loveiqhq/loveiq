@@ -40,8 +40,10 @@ import { recordNotice } from "@features/brain/server/notice";
 import { isSlackBotConfigured, postJourneyMessage } from "@shared/observability/slack-bot";
 import {
   buildReviewMessage,
+  contradiction,
   detectDrift,
   fetchFindings,
+  fetchSessionEvents,
   findThreadTs,
   MAX_POSTS_PER_RUN,
   recordingLink,
@@ -77,6 +79,7 @@ export async function GET(request: Request) {
     const findings = await fetchFindings();
     const dayKey = new Date().toISOString().slice(0, 10);
     let posted = 0;
+    let contradicted = 0;
     let suppressed = 0;
 
     for (const finding of findings.slice(0, MAX_POSTS_PER_RUN)) {
@@ -100,6 +103,29 @@ export async function GET(request: Request) {
       }
       if (slot === 0) {
         suppressed += 1;
+        continue;
+      }
+
+      /**
+       * Refuse a claim our own events contradict, BEFORE it reaches Slack.
+       *
+       * The first day posted five findings, and the one that read worst — "the
+       * user clicked 'Unlock full report', which looped them back to the
+       * survey" — came from a session with no unlock event of any kind. The
+       * navigation was real and the cause invented. One query is cheap next to
+       * a fabricated claim sitting in the channel under a reader's submission.
+       *
+       * The observation claim is already taken at this point, so a refuted
+       * finding is not retried on the next run: it stays refuted.
+       */
+      const sessionEvents = await fetchSessionEvents(finding.sessionId);
+      const refuted = contradiction(finding.reasoning, sessionEvents);
+      if (refuted) {
+        logger.info(
+          { session: finding.sessionId, refuted },
+          "ux-review: claim contradicted by events"
+        );
+        contradicted += 1;
         continue;
       }
 
@@ -162,6 +188,7 @@ export async function GET(request: Request) {
       ok: true,
       considered: findings.length,
       posted,
+      contradicted,
       suppressed,
       scanners: UX_SCANNERS.length,
     });

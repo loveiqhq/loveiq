@@ -24,6 +24,15 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
+// Imported, not restated. The cron posts findings and this verifies them; two
+// copies of "does our telemetry contradict this claim" would drift the day one
+// of them was tuned. Run under tsx so this TypeScript module is importable.
+import {
+  contradiction,
+  fetchSessionEvents,
+  isSafeSessionId,
+} from "../features/ux-review/server/review.ts";
+
 const DRY_RUN = process.argv.includes("--dry-run");
 /** Map findings to criteria and stop. Probes drive real browsers against
  *  production and take minutes each, so this is the fast way to see whether the
@@ -113,79 +122,6 @@ async function posthog(query) {
   // findings" would make this verifier look permanently healthy and idle.
   if (json.error) throw new Error(`posthog query error: ${String(json.error).slice(0, 200)}`);
   return json.results ?? [];
-}
-
-/**
- * Claims that name an action we instrument, and the events that must exist if
- * the action really happened.
- *
- * Read a day of findings and the failure mode is consistent: the scanner sees
- * that something changed and invents why. On 2026-09-14 one said "the user
- * clicked 'Unlock full report', which looped them back to the survey" for a
- * session containing no unlock_click, no paywall_initiated and no checkout
- * event — the navigation was real, the cause was fabricated, at 0.9 confidence.
- *
- * This is the cheap deterministic check for that: if the prose names an action,
- * require its event in the same session. Absent means our own telemetry
- * contradicts the claim, and no probe should be spent on it.
- *
- * Deliberately narrow. Only actions with an unambiguous event are listed; a
- * missing entry means "cannot check", never "contradicted".
- */
-const CLAIM_EVIDENCE = [
-  {
-    claim: /clicked? ['"]?unlock|unlock full report|pressed unlock|tapped unlock/i,
-    requireAny: ["unlock_click", "paywall_initiated", "sticky_unlock_clicked", "lock_icon_clicked"],
-    describes: "an unlock click",
-  },
-  {
-    claim: /checkout|payment modal|stripe/i,
-    requireAny: ["checkout_started", "begin_checkout", "paywall_initiated", "unlock_click"],
-    describes: "reaching checkout",
-  },
-  {
-    claim: /completed the survey|finished the survey|after completion/i,
-    requireAny: ["survey_completed"],
-    describes: "completing the survey",
-  },
-];
-
-/**
- * A session id, or nothing.
- *
- * These reach us through PostHog event properties, but they originate in the
- * visitor's own browser — posthog-js generates them client side — so they are
- * attacker-influenceable text on their way into a HogQL string. Stripping
- * quotes was the first version and is the weak form of this: it tries to make
- * hostile input safe instead of refusing it. UUID-shaped ids are the only thing
- * that can be legitimate here, so anything else is rejected outright.
- */
-function safeSessionId(sessionId) {
-  return /^[A-Za-z0-9-]{1,64}$/.test(sessionId) ? sessionId : null;
-}
-
-/** Events present in one session, for contradicting a claim. */
-async function sessionEvents(sessionId) {
-  const safe = safeSessionId(sessionId);
-  if (!safe)
-    throw new Error(`refusing to query a malformed session id: ${String(sessionId).slice(0, 32)}`);
-  const rows = await posthog(`
-    SELECT DISTINCT event
-    FROM events
-    WHERE timestamp > now() - INTERVAL 30 DAY
-      AND properties.$session_id = '${safe}'
-  `);
-  return new Set(rows.map((r) => String(r[0])));
-}
-
-/** Returns a reason string when our telemetry contradicts the claim. */
-function contradiction(reasoning, events) {
-  for (const rule of CLAIM_EVIDENCE) {
-    if (!rule.claim.test(reasoning)) continue;
-    if (rule.requireAny.some((e) => events.has(e))) continue;
-    return `the recording describes ${rule.describes}, but the session has none of ${rule.requireAny.join(", ")}`;
-  }
-  return null;
 }
 
 function classify(reasoning) {
@@ -312,7 +248,7 @@ if (process.argv.includes("--selftest")) {
     ["../../etc/passwd", false],
     ["", false],
   ]) {
-    if ((safeSessionId(id) !== null) !== wantOk) {
+    if (isSafeSessionId(id) !== wantOk) {
       console.error(`selftest FAIL (session id): ${JSON.stringify(id)}`);
       process.exitCode = 1;
     }
@@ -358,7 +294,7 @@ for (const [observationId, sessionId, scannerName, reasoning] of findings) {
   // Contradicted claims never reach a probe: minutes of real browser time spent
   // on something our own events say did not happen.
   {
-    const events = await sessionEvents(sessionId);
+    const events = await fetchSessionEvents(sessionId);
     const why = contradiction(reasoning, events);
     if (why) {
       contradicted += 1;
