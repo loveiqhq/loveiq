@@ -19,7 +19,7 @@ the team is told.
 Measured 2026-09-14 — 31 observations, 5 flagged, and the stated mechanism was
 wrong in all five. Confidence sat at 0.8–1.0 across _both_ verdicts, so it
 discriminates nothing and is never published. The benchmark
-(`scripts/replay-bench/`) scores precision 0.25 against a 0.80 bar, which is the
+(`scripts/replay-bench/`) scores precision 0.20 against a 0.80 bar, which is the
 number to quote.
 
 Prompt hardening does not fix this and must not be the reflex: the v2 prompts

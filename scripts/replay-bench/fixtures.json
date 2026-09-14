@@ -62,6 +62,13 @@
       "criterion": "D1",
       "why": "THE self-refuting case. The scanner described the taps as landing on \"plain paragraphs and non-interactive trust badges\" and answered YES anyway - while that scanner's prompt carries a HARD RULE: paragraph/heading/image/badge/decoration means NO, \"not 'no, but' - NO\". Proof that prompt hardening alone does not hold.",
       "labelled_from": "the scanner's own reasoning, 2026-09-14"
+    },
+    {
+      "session_id": "01a08680-882b-7465-b59e-014f7afbcc1f",
+      "scanner": "LoveIQ survey UX",
+      "expect": "no",
+      "why": "RESOLVED 2026-09-14 from the database, which settles it more firmly than the recording could. The scanner claimed the survey \"unexpectedly looped back to the very first introduction screen ... rather than showing results\". But survey_submission 1978 is status=completed at 14:41 UTC and personal_report 1919 was created in the SAME minute — the results existed. So the stated defect did not happen. The user did navigate to /survey again 83 seconds later, which is what the model saw, but that is a navigation after a successful completion, not a loop instead of results. Same failure mode as the other three: a real screen change with an invented cause.",
+      "labelled_from": "survey_submission + personal_report rows, 2026-09-14"
     }
   ],
   "_status_2026_09_14": [
@@ -112,14 +119,5 @@
     "was not seen being pressed, and a hard NO for taps on text/badges; and the",
     "verifier now refutes a claim whose named action has no matching event, which",
     "catches 01a09e04 automatically."
-  ],
-  "unresolved": [
-    {
-      "session_id": "01a08680-882b-7465-b59e-014f7afbcc1f",
-      "scanner": "LoveIQ survey UX",
-      "expect": "no",
-      "why": "DISPUTED, excluded from the score rather than guessed. Labelled \"no\" without watching the recording. Events partly corroborate the scanner instead: survey_completed at 16:41:36 and a fresh $pageview of /survey at 16:43:08, with NO report pageview anywhere in the session - the user finished and never reached a report. That may be a real defect, so it is not scored either way until someone watches it.",
-      "labelled_from": "unresolved - needs a human to watch the recording"
-    }
   ]
 }

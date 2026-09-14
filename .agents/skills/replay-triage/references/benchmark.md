@@ -57,15 +57,15 @@ fixtures with the copy, then delete the loser. Commit each revision's results to
 
 ## Fixtures must be verified, not remembered
 
-### Where it stands: precision 0.25, recall 0.50 — below both bars
+### Where it stands: precision 0.20, recall 0.50 — below both bars
 
-Measured 2026-09-14 against six fixtures, committed in
+Measured 2026-09-14 against seven fixtures, committed in
 `scripts/replay-bench/results/v2.json` (written by the scorer, never by hand).
-`tp 1 · fp 3 · fn 1`. **This is the number to quote to the team.** It is the
+`tp 1 · fp 4 · fn 1`. **This is the number to quote to the team.** It is the
 answer to Marcus's requirement that the criteria be benchmarked "so the team
 does not rely on false confidence", and it says plainly: do not rely on it yet.
 
-The three new false positives are the day-one findings, added as adversarial
+The four false positives are the day-one findings, added as adversarial
 fixtures. Each was checked against its session's own events and refuted — an
 unlock click in a session with no click event; a redirect to the 18+ screen,
 which is a step inside `/survey` and cannot emit a pageview; and the
@@ -75,7 +75,7 @@ prompt carries a HARD RULE against exactly that.
 
 That last one is the important result: **prompt hardening already failed.** The
 v2 prompts carry both the anti-inference rule and the HARD RULE, and the model
-broke both. Do not answer a precision of 0.25 by writing more prompt.
+broke both. Do not answer a precision of 0.20 by writing more prompt.
 
 Confidence was 0.9–1.0 on every row above, correct and incorrect alike, so it
 discriminates nothing and must not be published as if it did.
@@ -83,10 +83,14 @@ discriminates nothing and must not be published as if it did.
 **Watch a recording before asserting its expected verdict.** Tuning a prompt
 against unverified expectations trains it on your assumptions. Where a label
 cannot be settled, put the fixture in `unresolved` — the scorer excludes it, so
-a disputed label never drives the headline number. One sits there now
-(`01a08680`): it was labelled "no" without watching, and the events partly
-corroborate the scanner instead — `survey_completed`, then a fresh `/survey`
-pageview 83s later, and no report pageview anywhere in the session.
+a disputed label never drives the headline number. `01a08680` sat there until
+2026-09-14 and is now resolved, from the database rather than the video:
+`survey_submission` 1978 is `completed` and `personal_report` 1919 was created
+in the SAME minute, so the scanner's "re-initialized rather than showing
+results" did not happen — the results existed. The user did navigate back to
+`/survey` 83 seconds later, which is what the model saw, but that is a
+navigation after a successful completion. Same failure mode as the other three:
+a real screen change with an invented cause.
 
 Labels here are derived from EVENTS, and each fixture records that in
 `labelled_from`. That is weaker than Mark's eyes for a layout question and
