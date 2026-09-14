@@ -79,9 +79,20 @@ jobs:
         run: node scripts/verify-ux-findings.mjs --selftest
 
       - name: Verify findings
+        # The flag is chosen in SHELL, from an env var, rather than interpolated into the
+        # `run:` string. `${{ }}` inside `run:` splices its value into the script before
+        # bash sees it, so any context that can carry text becomes code execution on the
+        # runner — semgrep's run-shell-injection rule blocks it, and that gate failed main.
+        # `inputs.dry_run` is a boolean today, but the rule is about the shape, not this
+        # input, and the shape is what a future edit inherits.
         run: |
-          node scripts/verify-ux-findings.mjs ${{ inputs.dry_run && '--dry-run' || '' }}
+          if [ "$DRY_RUN" = "true" ]; then
+            node scripts/verify-ux-findings.mjs --dry-run
+          else
+            node scripts/verify-ux-findings.mjs
+          fi
         env:
+          DRY_RUN: ${{ inputs.dry_run }}
           LOOKBACK_HOURS: ${{ inputs.lookback_hours || '6' }}
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
