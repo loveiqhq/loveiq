@@ -63,10 +63,24 @@ if (process.argv.includes("--selftest")) {
 }
 
 const fixtures = JSON.parse(readFileSync(join(HERE, "fixtures.json"), "utf8"));
+
+/**
+ * Session ids are interpolated into HogQL below. This file is committed and so
+ * lower risk than the live verifier, but the ids in it are copied from
+ * recordings by hand and a future one could be pasted from anywhere — so reject
+ * anything that is not UUID-shaped rather than trusting the file.
+ */
+const BAD_ID = /[^A-Za-z0-9-]/;
 const wanted = [
   ...fixtures.known_bad.map((f) => ({ ...f, set: "known_bad" })),
   ...fixtures.known_good_adversarial.map((f) => ({ ...f, set: "adversarial" })),
 ];
+
+for (const w of wanted) {
+  if (!w.session_id || BAD_ID.test(w.session_id)) {
+    throw new Error(`fixtures.json: malformed session_id ${JSON.stringify(w.session_id)}`);
+  }
+}
 
 const res = await fetch(`https://eu.posthog.com/api/projects/${PROJECT}/query/`, {
   method: "POST",

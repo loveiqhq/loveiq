@@ -150,13 +150,30 @@ const CLAIM_EVIDENCE = [
   },
 ];
 
+/**
+ * A session id, or nothing.
+ *
+ * These reach us through PostHog event properties, but they originate in the
+ * visitor's own browser — posthog-js generates them client side — so they are
+ * attacker-influenceable text on their way into a HogQL string. Stripping
+ * quotes was the first version and is the weak form of this: it tries to make
+ * hostile input safe instead of refusing it. UUID-shaped ids are the only thing
+ * that can be legitimate here, so anything else is rejected outright.
+ */
+function safeSessionId(sessionId) {
+  return /^[A-Za-z0-9-]{1,64}$/.test(sessionId) ? sessionId : null;
+}
+
 /** Events present in one session, for contradicting a claim. */
 async function sessionEvents(sessionId) {
+  const safe = safeSessionId(sessionId);
+  if (!safe)
+    throw new Error(`refusing to query a malformed session id: ${String(sessionId).slice(0, 32)}`);
   const rows = await posthog(`
     SELECT DISTINCT event
     FROM events
     WHERE timestamp > now() - INTERVAL 30 DAY
-      AND properties.$session_id = '${sessionId.replace(/'/g, "")}'
+      AND properties.$session_id = '${safe}'
   `);
   return new Set(rows.map((r) => String(r[0])));
 }
@@ -283,6 +300,20 @@ if (process.argv.includes("--selftest")) {
     const got = contradiction(text, new Set(events)) !== null;
     if (got !== wantContradiction) {
       console.error(`selftest FAIL (claim): "${text.slice(0, 40)}" → ${got}`);
+      process.exitCode = 1;
+    }
+  }
+
+  for (const [id, wantOk] of [
+    ["01a09e04-dfaa-7a3e-9622-0d7ca5285017", true],
+    ["abc-123", true],
+    ["' OR 1=1 --", false],
+    ["a'; DROP TABLE events; --", false],
+    ["../../etc/passwd", false],
+    ["", false],
+  ]) {
+    if ((safeSessionId(id) !== null) !== wantOk) {
+      console.error(`selftest FAIL (session id): ${JSON.stringify(id)}`);
       process.exitCode = 1;
     }
   }
