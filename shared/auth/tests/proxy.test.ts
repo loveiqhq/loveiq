@@ -458,6 +458,48 @@ describe("proxy middleware", () => {
     );
   });
 
+  /**
+   * The staging gate must not block static media under `public/`.
+   *
+   * Next's image optimizer fetches the SOURCE file over HTTP before resizing.
+   * That internal request carries no staging cookie, so a gated path answered it
+   * with a 307 to /login and the optimizer returned `received null` — every
+   * `/_next/image` URL for it 400'd. `/images/` was exempt; nothing else under
+   * `public/` was, so the testimonial avatars on the report's paywall and the
+   * blurred locked-chapter previews in `/report-previews/` were broken on any
+   * gated build.
+   */
+  describe("staging gate — static media under public/", () => {
+    const mediaPaths = [
+      "/testimonials/dorian.jpg",
+      "/report-previews/attach-card-desktop.jpg",
+      "/academic/logo.png",
+      "/privacy/badge.svg",
+      "/couple-hero.mp4",
+      "/people-in-relationships.webp",
+    ];
+
+    for (const path of mediaPaths) {
+      it(`lets ${path} through without a session`, async () => {
+        process.env.STAGING_PASSWORD = "test-staging-pw";
+        await proxy(makeNextRequest(`http://localhost:3000${path}`));
+        expect(mockRedirect).not.toHaveBeenCalled();
+      });
+    }
+
+    // The gate still has to do its job: only MEDIA is exempt, not anything
+    // that happens to sit in public/.
+    for (const path of ["/clarity-init.js", "/AGENT_README.md", "/some-page.html", "/survey"]) {
+      it(`still gates ${path}`, async () => {
+        process.env.STAGING_PASSWORD = "test-staging-pw";
+        await proxy(makeNextRequest(`http://localhost:3000${path}`));
+        expect(mockRedirect).toHaveBeenCalledWith(
+          expect.objectContaining({ href: expect.stringContaining("/login?next=") })
+        );
+      });
+    }
+  });
+
   // R-13: admin idle-timeout gate. The admin gate previously had no middleware
   // test coverage at all. These pin the security-critical invariant that the
   // `__admin_activity` cookie must outlive the Supabase session (maxAge 7d) so
