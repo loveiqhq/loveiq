@@ -218,7 +218,14 @@ let stagingPasswordSource: string | null = null;
  * `/_next/image` URL for it then 400s. `/images/` was already exempt; nothing
  * else under `public/` was, so `/testimonials/`, `/academic/`, `/privacy/`,
  * `/about/` and `/report-previews/` (the blurred locked-chapter images on the
- * report) all broke on any gated build.
+ * report) all 400'd.
+ *
+ * SCOPE: this bit LOCALLY BUILT servers only — `npm run build && npm start`
+ * with STAGING_PASSWORD set, which is the normal local setup. Measured
+ * 2026-09-14: staging.loveiq.org and production served the same URLs 200 both
+ * before and after, because Vercel optimizes images at the edge and its source
+ * fetch never passes through this middleware. So this fixes local builds and
+ * the report QA sweep (56 of its 85 failures), not anything a visitor saw.
  *
  * Matched by extension rather than by folder so a new asset directory does not
  * silently reintroduce it. Deliberately NOT matched: `.js`, `.html`, `.json`,
