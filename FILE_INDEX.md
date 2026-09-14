@@ -162,13 +162,19 @@
 
 ## Testing
 
-| Task             | Files                                                                 |
-| ---------------- | --------------------------------------------------------------------- |
-| Unit test config | `vitest.config.ts`                                                    |
-| Unit test setup  | `__tests__/setup.ts`                                                  |
-| Unit tests       | colocated `*/tests/` + `__tests__/` (see `__tests__/AGENT_README.md`) |
-| E2E test config  | `playwright.config.ts`                                                |
-| E2E tests        | `e2e/*.spec.ts`                                                       |
+| Task                                      | Files                                                                                 |
+| ----------------------------------------- | ------------------------------------------------------------------------------------- |
+| Unit test config                          | `vitest.config.ts`                                                                    |
+| Unit test setup                           | `__tests__/setup.ts`                                                                  |
+| Unit tests                                | colocated `*/tests/` + `__tests__/` (see `__tests__/AGENT_README.md`)                 |
+| E2E test config                           | `playwright.config.ts`                                                                |
+| E2E tests                                 | `e2e/*.spec.ts`                                                                       |
+| Device probes (real finger, real browser) | `scripts/probes/` — read its `README.md` first: exit 0/1/3 contract and the trap list |
+| Verify an AI UX finding                   | `scripts/verify-ux-findings.mjs` (maps a finding to a criterion, runs its probe)      |
+| UX review criteria                        | `.agents/skills/replay-triage/references/review-protocol.md`                          |
+| UX review benchmark                       | `scripts/replay-bench/` — fixtures, scorer, committed `results/`                      |
+| UX review triage workflow                 | `.agents/skills/replay-triage/SKILL.md`                                               |
+| PostHog scanner prompts                   | `features/ux-review/server/scanners.ts` (see `features/ux-review/AGENT_README.md`)    |
 
 ## CI/CD & Infrastructure
 
