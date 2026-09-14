@@ -63,19 +63,33 @@ Not a new design doc — these already exist and are machine-readable:
 A criterion the scanner can raise but nobody can verify is a criterion that will
 eventually be believed without evidence. Listed rather than quietly omitted:
 
-- **`E1` has no probe.** `console-audit.mjs` prints console errors and asserts
-  nothing, so it can never fail and therefore can never confirm an `E1`
-  finding. This is the criterion the scanners hallucinate hardest — the literal
-  `"Unable to process request."` was reported in a session whose only error was
-  an invisible React hydration warning — so it is the one most in need of a
-  real check.
-- **`A1` and `M1` are recognised but have no probe.** The verifier now
+- **`E1` is covered where it can actually reach a reader.** The literal
+  `"Unable to process request."` is returned by ~30 routes, but that count is
+  misleading: traced on 2026-09-14, only ONE path ever rendered it to a user.
+  `startReportCheckout` passed `json.error` through into the handoff card, which
+  is what Mark saw on a €39.99 purchase. Everywhere else it is unreachable —
+  the report captures the message but renders status-code copy instead, the
+  survey never parses the body on failure, contact and share-verify write their
+  own reader-facing 5xx strings, and the tracking beacons, cron and admin routes
+  are not read by a customer. `verify-checkout-error-copy.mjs` guards the one
+  path that mattered. `console-audit.mjs` is deliberately NOT listed as an E1
+  probe: it asserts nothing and always exits 0, so it could only ever produce a
+  false all-clear.
+- **`A1` and `M1` now have one** (added 2026-09-14). `audit-paywall-layout.mjs`
+  exits on legible text under an overlay meant to hide it; `audit-visual.mjs`
+  exits on images present but never painted — the half of `M1` Mark reported
+  twice. Both previously printed their measurement and exited 0, which is why
+  they had been listed as covering criteria they could not actually gate. The
+  superseded note read:
+
+  **`A1` and `M1` are recognised but have no probe.** The verifier now
   classifies ten criteria, so a claim of either is named and routed to a human
   instead of falling through to nobody — but neither runs a probe. `A1`'s
   `audit-paywall-layout.mjs` measures the blur and always exits 0, so listing it
   would print "could not reproduce — passes in production now" for every A1
   claim. **A false all-clear is worse than no probe**, which is why the entry is
   deliberately empty until that audit becomes a gate.
+
 - **`B1` is now covered** by `verify-consent-return.mjs` and
   `verify-no-survey-restart.mjs`, after it first fired for real on 2026-09-14.
 

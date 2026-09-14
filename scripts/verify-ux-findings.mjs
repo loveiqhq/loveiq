@@ -567,10 +567,48 @@ if (process.argv.includes("--selftest")) {
       console.error(`selftest FAIL: "${text.slice(0, 40)}" → ${got}, wanted ${want}`);
     }
   }
-  // `bad` counts ONLY classifier failures. The claim and session-id checks
-  // above signal through process.exitCode, and a bare process.exit(0) would
-  // discard them — which it did, silently, until 2026-09-14: the selftest
-  // printed "FAIL (claim)" and exited 0, so CI's gate could not fail.
+  /**
+   * The exit-code contract itself. runProbe() is where "reproduced" is decided,
+   * and it had no test: until 2026-09-14 a probe that merely failed to load a
+   * page was indistinguishable from a confirmed defect, which is how a draft PR
+   * could have been opened asserting something nobody saw.
+   */
+  const exitCases = [
+    // [exit code, text the probe printed, expect passed, expect inconclusive]
+    [0, "", true, false],
+    [1, "FAIL (1)", false, false],
+    // Deliberately says NOTHING the text backstop would match: otherwise this
+    // case passes on the backstop and tests nothing about exit 3 itself. That
+    // mistake survived its first mutation run — collapsing exit 3 into
+    // "reproduced" still went green, because the word INCONCLUSIVE was in the
+    // output either way.
+    [3, "could not reach the control", false, true],
+    // The backstop for probes that have not migrated: exit 1 but say so in
+    // words. Must NOT read as a reproduction.
+    [1, "INCONCLUSIVE: the report did not render", false, true],
+    [1, "exception: TimeoutError", false, true],
+  ];
+  for (const [code, say, wantPassed, wantInconclusive] of exitCases) {
+    process.env.SELFTEST_EXIT = String(code);
+    process.env.SELFTEST_SAY = say;
+    const r = runProbe("_selftest-exit.mjs", null);
+    if (r.passed !== wantPassed || Boolean(r.inconclusive) !== wantInconclusive) {
+      console.error(
+        `selftest FAIL (exit ${code}, "${say}"): passed=${r.passed} ` +
+          `inconclusive=${Boolean(r.inconclusive)}, wanted ${wantPassed}/${wantInconclusive}`
+      );
+      process.exitCode = 1;
+    }
+  }
+  delete process.env.SELFTEST_EXIT;
+  delete process.env.SELFTEST_SAY;
+
+  // Computed LAST, after every check. `bad` counts only classifier failures;
+  // the claim, session-id and exit-code checks signal through process.exitCode,
+  // and a bare process.exit(0) discards them — which it did, silently, until
+  // 2026-09-14: the selftest printed "FAIL (claim)" and exited 0, so CI's gate
+  // could not fail. Reading it before the later checks run reintroduces exactly
+  // that, which is what happened when the exit-code cases were first added.
   const failed = bad > 0 || process.exitCode === 1;
   console.log(failed ? `selftest FAILED (${bad} classifier)` : "selftest ok");
   process.exit(failed ? 1 : 0);
