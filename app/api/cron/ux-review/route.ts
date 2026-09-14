@@ -1,22 +1,33 @@
 /**
  * GET /api/cron/ux-review
  *
- * Relays Replay Vision findings to Slack. PostHog's scanners watch every report,
- * survey, rage-click and dead-click recording and emit a verdict; this posts the
- * ones that clear the confidence bar into #incoming-surveys, where Mark already
- * posts recording findings by hand.
+ * Collects Replay Vision findings, and posts ONE summary a day.
  *
- * THIS IS AN ALERT, NOT A DIGEST. `25a9ca64` deliberately unscheduled the
- * informational digests, and this is not a re-run of that: it only posts a
- * verdict of `yes` above `UX_REVIEW_MIN_CONFIDENCE`, at most twice per scanner
- * per day — a ceiling of eight messages, and on most days zero. If it ever
- * becomes chatty, that cap is the thing to tighten, not the schedule.
+ * It does not post findings. It used to, and on 2026-09-14 that was measured:
+ * of the five it published, the stated mechanism was wrong in all five — an
+ * unlock click in a session with no click event, a redirect to a screen that
+ * cannot emit a pageview, and an "Unable to process request." error where the
+ * only error was an invisible React hydration warning. Confidence sat at
+ * 0.8-1.0 across BOTH verdicts, so the 0.7 bar filtered nothing.
+ *
+ * The reason is structural, not a tuning problem: this runs in a 30-second
+ * function and cannot open a browser, so model prose is the only thing it could
+ * publish. A finding earns a Slack post by being REPRODUCED at the viewport the
+ * session reported — that is scripts/verify-ux-findings.mjs, every three hours
+ * in CI, replying in the submission's own thread. On those same five findings
+ * the probes reject all five.
+ *
+ * So this route now: claims each observation once, refuses the ones our own
+ * events contradict, writes the rest to the notice table so they stay
+ * searchable, and once a day posts the digest the 2026-09-08 sync asked for
+ * ("generate daily summaries of user UX issues"). An empty day is reported as
+ * unusual rather than as all-clear, because a broken scanner and a healthy
+ * product otherwise look identical.
  *
  * THE EXIT. PostHog ships native Replay Vision alerts with Slack delivery built
- * in. They cannot use our webhook, our replay links, the "unreviewed" framing or
- * the kill switch, which is why this route exists — but if that framing ever
- * stops earning its keep, delete this route and make one `vision-alerts-create`
- * call instead.
+ * in. They cannot use our webhook, our replay links or the kill switch, which is
+ * why this route exists — but if that ever stops earning its keep, delete the
+ * route and make one `vision-alerts-create` call instead.
  *
  * Protected by `Authorization: Bearer ${CRON_SECRET}`; skipped on staging, which
  * shares the prod database.
@@ -98,8 +109,8 @@ export async function GET(request: Request) {
        * navigation was real and the cause invented. One query is cheap next to
        * a fabricated claim sitting in the channel under a reader's submission.
        *
-       * The observation claim is already taken at this point, so a refuted
-       * finding is not retried on the next run: it stays refuted.
+       * The claim is finalised on this path too (see below), so a refuted
+       * finding is not re-queried on the next run: it stays refuted.
        */
       const sessionEvents = await fetchSessionEvents(finding.sessionId);
       const refuted = contradiction(finding.reasoning, sessionEvents);
@@ -109,6 +120,13 @@ export async function GET(request: Request) {
           "ux-review: claim contradicted by events"
         );
         contradicted += 1;
+        // Finalise the claim. tryClaimSlackAlert is phase one of a two-phase
+        // commit: a claim never marked delivered goes stale after ten minutes
+        // and is handed to the next caller, so with a 90-minute lookback on a
+        // 30-minute schedule every refuted finding was re-fetched and
+        // re-queried against PostHog on each of the next three runs. The
+        // comment above used to assert the opposite.
+        await markSlackAlertDelivered("ux_review", "observation", finding.observationId);
         continue;
       }
 

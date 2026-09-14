@@ -95,9 +95,10 @@ export const CRITERIA = [
     id: "E1",
     label: "error message on screen",
     match: /unable to process|error message|something went wrong|failed to/i,
-    // console-audit.mjs asserts NOTHING and always exits 0, so it could never
-    // confirm an E1 finding; it stays only as context in the output.
-    probes: ["verify-checkout-error-copy.mjs", "console-audit.mjs"],
+    // console-audit.mjs is deliberately NOT here: it asserts nothing and always
+    // exits 0, so including it only adds a passing result that reads as
+    // evidence of health.
+    probes: ["verify-checkout-error-copy.mjs"],
   },
   {
     // B1 was listed as "no probe at all" until it fired for real on 2026-09-14:
@@ -113,7 +114,11 @@ export const CRITERIA = [
     id: "A1",
     label: "text readable through a blur meant to hide it",
     match: /through the blur|readable .*blur|blur(red)? .*(readable|legible)|not fully blurred/i,
-    probes: ["audit-paywall-layout.mjs"],
+    // audit-paywall-layout.mjs measures the blur but always exits 0, so listing
+    // it would produce "could not reproduce — passes in production now" for
+    // every A1 claim. A false all-clear is worse than no probe, so A1 goes to a
+    // human until that audit becomes a gate.
+    probes: [],
   },
   {
     id: "M1",
@@ -193,7 +198,14 @@ function runProbe(file, viewport) {
     // and conflating them turns a broken probe into a stream of confident false
     // findings — the precise failure this whole gate exists to prevent. An
     // inconclusive run is still never a pass; it goes to a human.
-    const inconclusive = err.status === 3;
+    // Exit 3 is the contract, but most probes predate it and exit 1 for
+    // "could not measure" too: verify-narrow-viewport and
+    // verify-nav-heading-clearance (both C1) and verify-consent-return (B1) all
+    // count an unrendered page as a failure — and all three are in
+    // AUTO_PR_CRITERIA, so a report that simply did not load would have opened
+    // a draft PR claiming a reproduction. They print INCONCLUSIVE or
+    // "exception:" when that happens, so read that too until they all exit 3.
+    const inconclusive = err.status === 3 || /\bINCONCLUSIVE\b|\bexception:/i.test(out);
     return {
       file,
       passed: false,
@@ -333,6 +345,41 @@ function openReproductionPr({ criterion, sessionId, viewport, results }) {
  * finding is skipped rather than verified. A missed verdict is recoverable on
  * the next run; a duplicate one erodes trust in the channel.
  */
+/**
+ * Finalise the claim taken by claimFinding().
+ *
+ * claim_slack_alert inserts with delivered = FALSE and hands the claim back to
+ * ANY caller once claimed_at is older than ten minutes. Without this companion
+ * the claim never becomes permanent, so the three-hourly workflow — whose
+ * lookback deliberately spans two runs — re-claimed every finding, re-ran its
+ * probes (ten minutes of real browser time each) and posted a SECOND, possibly
+ * contradictory, reply into the same reader's thread. The overlap exists to
+ * survive a failed run; the claim is what stops it double-posting, and a claim
+ * that is never delivered does not stop anything.
+ *
+ * Called on every terminal path, including the ones that post nothing: the work
+ * was done either way and must not be repeated.
+ */
+async function markVerified(observationId) {
+  if (DRY_RUN || CLASSIFY_ONLY) return;
+  const url = requireEnv("SUPABASE_URL");
+  const key = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
+  try {
+    await fetch(`${url}/rest/v1/rpc/mark_slack_alert_delivered`, {
+      method: "POST",
+      headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        p_kind: "ux_review_verified",
+        p_entity_type: "observation",
+        p_entity_id: observationId,
+      }),
+    });
+  } catch {
+    // Best effort: a missed finalisation costs a duplicate next run, which is
+    // strictly better than aborting the run that already did the work.
+  }
+}
+
 async function claimFinding(observationId) {
   const url = requireEnv("SUPABASE_URL");
   const key = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
@@ -515,6 +562,7 @@ for (const [observationId, sessionId, scannerName, reasoning] of findings) {
           );
         }
       }
+      await markVerified(observationId);
       continue;
     }
   }
@@ -526,6 +574,7 @@ for (const [observationId, sessionId, scannerName, reasoning] of findings) {
     // up believed because nobody contradicted it.
     gaps += 1;
     console.log(`GAP   ${sessionId}  ${scannerName}  — no probe covers this claim`);
+    await markVerified(observationId);
     continue;
   }
 
@@ -548,6 +597,7 @@ for (const [observationId, sessionId, scannerName, reasoning] of findings) {
         );
       }
     }
+    await markVerified(observationId);
     continue;
   }
 
@@ -614,6 +664,7 @@ for (const [observationId, sessionId, scannerName, reasoning] of findings) {
     if (threadTs) await postThreadReply(threadTs, verdict);
     else console.log(`  (no survey thread for ${sessionId}; not posted)`);
   }
+  await markVerified(observationId);
 }
 
 console.log(

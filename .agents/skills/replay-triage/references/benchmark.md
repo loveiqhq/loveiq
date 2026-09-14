@@ -23,14 +23,17 @@ out of `$recording_observed` events and grades them offline.
 
 ## The gate is the pull request, not the benchmark
 
-A draft PR opens for every reproduced finding from day one. The PR **is** the
+A draft PR opens automatically for a reproduced finding on `C1`, `D1`, `Z1` or
+`B1` — the criteria whose probes fail before a fix and pass after. Everything
+else goes to a human in the thread. The PR **is** the
 human-in-the-loop step: it carries the recording link, the reproduction, the fix
 and a probe that fails without it, which is far more reviewable than a thumbs-up
 on a Slack message.
 
 The staging is about trust, not about whether work happens:
 
-1. **Now** — every reproduced finding becomes a draft PR. Eman reads each one and
+1. **Now** — a reproduced finding on those four criteria becomes a draft PR
+   carrying the evidence but NO generated fix. Eman reads each one and
    asks why it was raised, to catch false alarms and anything missed.
 2. **Once PRs come back clean consistently** — approve and merge without the
    interrogation.

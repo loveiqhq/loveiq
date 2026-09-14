@@ -6,8 +6,10 @@ defined** rather than left to the model's judgement, and **benchmarked** before
 anyone trusts them.
 
 The prompts that encode these live in `features/ux-review/server/scanners.ts`.
-That file is the source of truth; `features/ux-review/tests/scanners.test.ts`
-fails CI if a criterion below disappears from a prompt.
+That file is the source of truth. `features/ux-review/tests/scanners.test.ts`
+pins **three** of the ten rows below (`E1`'s error string, `L1`'s "LOOP",
+`S1`'s "EXCESSIVE SCROLLING"); the other seven could be deleted from a prompt
+with CI green. Nothing in the repo reads this document. See Known gaps.
 
 | id   | Trigger and threshold                                                                                                                                                          | How to verify in the product                                                                 | Already covered by                                                                             |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
@@ -67,10 +69,13 @@ eventually be believed without evidence. Listed rather than quietly omitted:
   `"Unable to process request."` was reported in a session whose only error was
   an invisible React hydration warning — so it is the one most in need of a
   real check.
-- **`A1` and `M1` are not in the verifier.** `scripts/verify-ux-findings.mjs`
-  classifies seven criteria; `A1` (`audit-paywall-layout.mjs` exists but never
-  exits non-zero) and `M1` (unit tests only, not a probe) are absent, so a
-  claim of either reaches no probe.
+- **`A1` and `M1` are recognised but have no probe.** The verifier now
+  classifies ten criteria, so a claim of either is named and routed to a human
+  instead of falling through to nobody — but neither runs a probe. `A1`'s
+  `audit-paywall-layout.mjs` measures the blur and always exits 0, so listing it
+  would print "could not reproduce — passes in production now" for every A1
+  claim. **A false all-clear is worse than no probe**, which is why the entry is
+  deliberately empty until that audit becomes a gate.
 - **`B1` is now covered** by `verify-consent-return.mjs` and
   `verify-no-survey-restart.mjs`, after it first fired for real on 2026-09-14.
 

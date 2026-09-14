@@ -27,9 +27,21 @@ between 1 and 3 matters:
 Two failures this encodes, both found on 2026-09-14:
 
 **A probe that always exits 0 cannot report anything.** Eleven of the probes
-printed `PASS`/`FAIL` to stdout and exited 0 regardless. Four of them back
+printed `PASS`/`FAIL` to stdout and exited 0 regardless. Four of them backed
 criteria in the verifier (`P1`, `Z1`, `S1`, `E1`), so those criteria were
 structurally incapable of producing a finding no matter what the product did.
+`P1`, `Z1` and `S1` now exit on their verdict and `E1` has a real probe;
+**`A1` still has none** — `audit-paywall-layout.mjs` measures the blur and
+always exits 0, so the verifier deliberately lists no probe for `A1` rather
+than print "passes in production now" off an audit that cannot fail.
+
+**Most probes still exit 1 for "could not measure".** Only
+`verify-checkout-error-copy.mjs` and `verify-input-zoom.mjs` use exit 3 so far.
+Until the rest migrate, `verify-ux-findings.mjs` also treats output containing
+`INCONCLUSIVE` or `exception:` as inconclusive, because three of the offenders
+(`verify-narrow-viewport`, `verify-nav-heading-clearance`,
+`verify-consent-return`) back criteria that open a draft PR — a report that
+simply failed to load would otherwise have opened one claiming a reproduction.
 
 **Inconclusive is not reproduced.** Collapsing 3 into 1 lets a broken probe
 manufacture a stream of confident findings — the exact failure the gate exists
@@ -76,7 +88,11 @@ of a defect either.
   test, hit-test instead of tapping.
 - **Hit-test ownership is `el === n || n.contains(el)`.** The reverse counts
   ancestors and inflates a 34px control to "61px tappable".
-- **An inconclusive run is a FAILURE, never a pass.** Every probe here reports
+- **An inconclusive run is a FAILURE, never a pass.** Seven probes here still
+  always exit 0 and so report nothing at all (`audit-paywall-layout`,
+  `audit-visual`, `console-audit`, `verify-country-class-live`,
+  `verify-deadzone-opens`, `verify-inapp-browsers`, `verify-practice-info`);
+  they are audits, and must not be cited as gates. The rest report
   `INCONCLUSIVE` rather than staying silent.
 - **One probe point passes by luck.** Use a lattice: a `::after` hit-area worked
   on Chromium and did nothing on WebKit, and only a 25-point grid caught it.
