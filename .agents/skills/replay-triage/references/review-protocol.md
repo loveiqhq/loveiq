@@ -17,7 +17,7 @@ fails CI if a criterion below disappears from a prompt.
 | `Z1` | **Viewport zoom**: ratio ≠ 1.00 ±0.01 after focusing a control. The iOS signature is 16/15 = 1.067                                                                             | measure `visualViewport.scale` **and** the control's computed `font-size`                    | `input-font-size-ios-zoom.test.ts`, `verify-input-zoom.mjs` — the exemplar row                 |
 | `S1` | **Unproductive scroll**: 3+ direction reversals over one 1.5-viewport band within 20s                                                                                          | replay with real touch via `touch.mjs`, never `window.scrollBy`                              | `verify-reaches-bottom.mjs`                                                                    |
 | `C1` | **Clipped or occluded**: ≥8px of a heading under fixed chrome, or a tap point owned by another element                                                                         | `getBoundingClientRect` against the fixed bar, plus `elementFromPoint`                       | `verify-nav-heading-clearance` (MUTATE), `verify-consent-fix`, `reportLayoutStandards.test.ts` |
-| `B1` | **Backwards navigation**: a CTA lands the user below the highest step they reached, with no back tap. Any single occurrence                                                    | new probe                                                                                    | gap — write `verify-cta-forward-only.mjs` when B1 first fires                                  |
+| `B1` | **Backwards navigation**: a CTA lands the user below the highest step they reached, with no back tap. Any single occurrence                                                    | new probe                                                                                    | `verify-consent-return.mjs`, `verify-no-survey-restart.mjs`                                    |
 | `M1` | **Missing content**: a `REPORT_SECTION_ORDER` id whose anchor is absent, or an `<img>` that never paints                                                                       | assert against `features/report/ui/reportNav.ts`                                             | `reportSectionOrder.test.ts`, `reportVersionParity.test.ts`                                    |
 | `P1` | **Recurring modal**: the same dialog visible again within 30s of a dismiss, twice or more                                                                                      | **visibility-based**: `visibility !== hidden && opacity > 0.05 && height > 20`               | `verify-paywall-closes`, `verify-practice-info`                                                |
 | `A1` | **Illegible overlay**: text readable through a blur meant to hide it, or text under 18px below 4.5:1 contrast                                                                  | `audit-paywall-layout.mjs` already measures legible text under an overlay on three viewports | `audit-paywall-layout.mjs`; contrast notes in `.claude/agents/accessibility-reviewer.md`       |
@@ -58,6 +58,24 @@ Not a new design doc — these already exist and are machine-readable:
 
 ## Known gaps
 
-`E1` has no test, only a console audit. `B1` has no probe at all. Both are listed
-rather than quietly omitted: a criterion the scanner can raise but nobody can
-verify is a criterion that will eventually be believed without evidence.
+A criterion the scanner can raise but nobody can verify is a criterion that will
+eventually be believed without evidence. Listed rather than quietly omitted:
+
+- **`E1` has no probe.** `console-audit.mjs` prints console errors and asserts
+  nothing, so it can never fail and therefore can never confirm an `E1`
+  finding. This is the criterion the scanners hallucinate hardest — the literal
+  `"Unable to process request."` was reported in a session whose only error was
+  an invisible React hydration warning — so it is the one most in need of a
+  real check.
+- **`A1` and `M1` are not in the verifier.** `scripts/verify-ux-findings.mjs`
+  classifies seven criteria; `A1` (`audit-paywall-layout.mjs` exists but never
+  exits non-zero) and `M1` (unit tests only, not a probe) are absent, so a
+  claim of either reaches no probe.
+- **`B1` is now covered** by `verify-consent-return.mjs` and
+  `verify-no-survey-restart.mjs`, after it first fired for real on 2026-09-14.
+
+Corrected 2026-09-14: this file claimed `features/ux-review/tests/scanners.test.ts`
+"fails CI if a criterion below disappears from a prompt". It asserts three of
+the ten rows (`E1`'s literal, `L1`'s "LOOP", `S1`'s "EXCESSIVE SCROLLING") and
+nothing in the repo reads this document, so seven rows could be deleted from a
+prompt with CI green.

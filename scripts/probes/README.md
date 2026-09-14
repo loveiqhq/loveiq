@@ -12,6 +12,34 @@ REPORT_ORIGIN=https://www.loveiq.org node scripts/probes/verify-tap-targets.mjs
 DEVICE="iPhone SE" node scripts/probes/audit-paywall-layout.mjs
 ```
 
+## Exit codes are the contract
+
+`scripts/verify-ux-findings.mjs` decides whether a Slack finding is real by
+running a probe and reading its **exit code**. Three values, and the difference
+between 1 and 3 matters:
+
+| code | meaning                                                 | what the verifier does                  |
+| ---- | ------------------------------------------------------- | --------------------------------------- |
+| `0`  | clean — the defect is not present                       | posts "could not reproduce"             |
+| `1`  | the defect REPRODUCED                                   | posts a finding                         |
+| `3`  | INCONCLUSIVE — the probe never reached what it measures | posts "could not check — needs a human" |
+
+Two failures this encodes, both found on 2026-09-14:
+
+**A probe that always exits 0 cannot report anything.** Eleven of the probes
+printed `PASS`/`FAIL` to stdout and exited 0 regardless. Four of them back
+criteria in the verifier (`P1`, `Z1`, `S1`, `E1`), so those criteria were
+structurally incapable of producing a finding no matter what the product did.
+
+**Inconclusive is not reproduced.** Collapsing 3 into 1 lets a broken probe
+manufacture a stream of confident findings — the exact failure the gate exists
+to prevent. `verify-input-zoom.mjs` had been landing on the consent screen and
+never measuring an input at all; had it exited 1, every `Z1` observation would
+have been "confirmed in production".
+
+An inconclusive run is still never a pass (rule 5 below). It just is not proof
+of a defect either.
+
 ## The harness
 
 | File                 | What it is                                                                                                                                                                                                                        |

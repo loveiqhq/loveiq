@@ -24,6 +24,10 @@ const open = (p) =>
     return r.height > 20 && parseFloat(getComputedStyle(d).opacity) > 0.05;
   });
 
+// A probe that always exits 0 cannot report a defect. verify-ux-findings.mjs
+// treats a non-zero exit as "reproduced in production", so until 2026-09-14
+// this criterion could never produce a finding at all.
+let bad = 0;
 for (const name of CASES) {
   const engine = /iphone|ipad/i.test(name) ? "webkit" : "chromium";
   const browser = await (engine === "webkit" ? webkit : chromium).launch();
@@ -97,6 +101,10 @@ for (const name of CASES) {
   }
   const ok = notes.some((n) => n.includes("still closed@2.2s=true"));
   console.log(`${ok ? "PASS" : "FAIL"} ${name.padEnd(14)} ${notes.join(" | ")}`);
+  if (!ok) bad += 1;
   await ctx.close();
   await browser.close();
 }
+
+console.log(bad === 0 ? "\nPASS" : `\nFAIL (${bad})`);
+process.exit(bad === 0 ? 0 : 1);

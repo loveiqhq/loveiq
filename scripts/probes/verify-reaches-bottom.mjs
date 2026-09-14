@@ -22,6 +22,10 @@ const CASES = (
   "Pixel 7,Galaxy S5,Pixel 9,iPhone SE,iPhone 15 Pro,iPhone 17 Pro Max,iPad Mini"
 ).split(",");
 
+// A probe that always exits 0 cannot report a defect. verify-ux-findings.mjs
+// treats a non-zero exit as "reproduced in production", so until 2026-09-14
+// this criterion could never produce a finding at all.
+let bad = 0;
 for (const name of CASES) {
   const d = name.toLowerCase();
   const engine = d.includes("iphone") || d.includes("ipad") ? "webkit" : "chromium";
@@ -101,6 +105,7 @@ for (const name of CASES) {
   const reached = end.remaining <= 40;
   const ok =
     reached && end.lastSectionTextLen > 20 && end.hOverflow <= 1 && end.bodyPosition !== "fixed";
+  if (!ok) bad += 1;
   console.log(
     `${ok ? "PASS" : "FAIL"} ${name.padEnd(19)} ${engine.padEnd(9)} bottom=${end.scrollY}/${end.docHeight}px remaining=${end.remaining}px ` +
       `sections=${end.sectionCount} lastText=${end.lastSectionTextLen}ch footerFillsLastViewport=${!end.lastSectionVisible} hOverflow=${end.hOverflow} (${iterations} steps)`
@@ -110,3 +115,6 @@ for (const name of CASES) {
   await ctx.close();
   await browser.close();
 }
+
+console.log(bad === 0 ? "\nPASS" : `\nFAIL (${bad})`);
+process.exit(bad === 0 ? 0 : 1);

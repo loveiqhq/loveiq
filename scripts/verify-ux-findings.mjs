@@ -159,7 +159,18 @@ function runProbe(file, viewport) {
     return { file, passed: true, tail: out.trim().split("\n").slice(-3).join(" | ") };
   } catch (err) {
     const out = `${err.stdout ?? ""}${err.stderr ?? ""}`.trim();
-    return { file, passed: false, tail: out.split("\n").slice(-3).join(" | ") };
+    // Exit 3 means the probe could not MEASURE (no such control on screen, the
+    // flow moved, a timeout). That is not the same as reproducing the defect,
+    // and conflating them turns a broken probe into a stream of confident false
+    // findings — the precise failure this whole gate exists to prevent. An
+    // inconclusive run is still never a pass; it goes to a human.
+    const inconclusive = err.status === 3;
+    return {
+      file,
+      passed: false,
+      inconclusive,
+      tail: out.split("\n").slice(-3).join(" | "),
+    };
   }
 }
 
@@ -389,23 +400,43 @@ for (const [observationId, sessionId, scannerName, reasoning] of findings) {
   // The reader's own screen, so "could not reproduce" means something.
   const viewport = await sessionViewport(sessionId);
   const results = criterion.probes.map((f) => runProbe(f, viewport));
-  const reproduced = results.some((r) => !r.passed);
+  const inconclusive = results.some((r) => r.inconclusive);
+  // A probe that could not measure has NOT reproduced anything.
+  const reproduced = results.some((r) => !r.passed && !r.inconclusive);
   if (reproduced) confirmed += 1;
 
   const at = viewport
     ? ` at ${viewport.min}px${viewport.max !== viewport.min ? `-${viewport.max}px` : ""}, the size this reader had`
     : "";
-  const verdict = reproduced
-    ? `❗ *Reproduced in production${at}* — ${criterion.label} (${criterion.id}). ` +
+  let verdict;
+  if (reproduced) {
+    verdict =
+      `❗ *Reproduced in production${at}* — ${criterion.label} (${criterion.id}). ` +
       results
-        .filter((r) => !r.passed)
+        .filter((r) => !r.passed && !r.inconclusive)
         .map((r) => `\`${r.file}\` failed: ${r.tail}`)
-        .join(" ")
-    : `✅ *Could not reproduce${at}* — ${criterion.label} (${criterion.id}) passes in production now ` +
+        .join(" ");
+  } else if (inconclusive) {
+    // Never report this as a clean pass. The probe did not measure the thing,
+    // so we know nothing either way — and saying "passes in production now"
+    // would retire a real defect on the strength of a broken probe.
+    verdict =
+      `🔎 *Could not check${at}* — ${criterion.label} (${criterion.id}). The probe did not reach ` +
+      `what it measures, so this is neither confirmed nor cleared; it needs a human. ` +
+      results
+        .filter((r) => r.inconclusive)
+        .map((r) => `\`${r.file}\`: ${r.tail}`)
+        .join(" ");
+  } else {
+    verdict =
+      `✅ *Could not reproduce${at}* — ${criterion.label} (${criterion.id}) passes in production now ` +
       `(${results.map((r) => `\`${r.file}\``).join(", ")}). The recording may predate a fix, or ` +
       `depend on a device we do not emulate.`;
+  }
 
-  console.log(`${reproduced ? "CONFIRM" : "CLEAR  "} ${sessionId}  ${criterion.id}`);
+  console.log(
+    `${reproduced ? "CONFIRM" : inconclusive ? "UNKNOWN" : "CLEAR  "} ${sessionId}  ${criterion.id}`
+  );
   if (!DRY_RUN) {
     const threadTs = await threadFor(sessionId);
     if (threadTs) await postThreadReply(threadTs, verdict);
