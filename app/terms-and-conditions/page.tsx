@@ -48,7 +48,7 @@ export default function TermsAndConditionsPage() {
                 Email:{" "}
                 <a
                   href="mailto:hello@loveiq.org"
-                  className="text-[#C2410C] hover:text-[#fe6839] transition-colors"
+                  className="text-[#C2410C] underline hover:text-[#fe6839] transition-colors"
                 >
                   hello@loveiq.org
                 </a>
@@ -224,7 +224,7 @@ export default function TermsAndConditionsPage() {
                 Hasenheide 62, 10967 Berlin, Germany,{" "}
                 <a
                   href="mailto:help@loveiq.org"
-                  className="text-[#C2410C] hover:text-[#fe6839] transition-colors"
+                  className="text-[#C2410C] underline hover:text-[#fe6839] transition-colors"
                 >
                   help@loveiq.org
                 </a>

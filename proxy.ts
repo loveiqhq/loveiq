@@ -209,6 +209,30 @@ async function sha256(value: string): Promise<string> {
 let stagingPasswordHash: string | null = null;
 let stagingPasswordSource: string | null = null;
 
+/**
+ * Static media under `public/`, which the staging gate must let through.
+ *
+ * Next's image optimizer fetches the SOURCE file over HTTP before resizing it.
+ * That internal request carries no staging cookie, so a gated path answers it
+ * with a 307 to /login and the optimizer reports `received null` — every
+ * `/_next/image` URL for it then 400s. `/images/` was already exempt; nothing
+ * else under `public/` was, so `/testimonials/`, `/academic/`, `/privacy/`,
+ * `/about/` and `/report-previews/` (the blurred locked-chapter images on the
+ * report) all 400'd.
+ *
+ * SCOPE: this bit LOCALLY BUILT servers only — `npm run build && npm start`
+ * with STAGING_PASSWORD set, which is the normal local setup. Measured
+ * 2026-09-14: staging.loveiq.org and production served the same URLs 200 both
+ * before and after, because Vercel optimizes images at the edge and its source
+ * fetch never passes through this middleware. So this fixes local builds and
+ * the report QA sweep (56 of its 85 failures), not anything a visitor saw.
+ *
+ * Matched by extension rather than by folder so a new asset directory does not
+ * silently reintroduce it. Deliberately NOT matched: `.js`, `.html`, `.json`,
+ * `.md` — `public/clarity-init.js` and friends stay behind the gate.
+ */
+const STATIC_MEDIA_RE = /\.(?:jpe?g|png|gif|webp|avif|svg|ico|mp4|webm|woff2?)$/i;
+
 async function getStagingPasswordHash(password: string): Promise<string> {
   if (stagingPasswordHash && stagingPasswordSource === password) {
     return stagingPasswordHash;
@@ -243,6 +267,7 @@ export async function proxy(request: NextRequest) {
       path.startsWith("/_next/") ||
       path.startsWith("/images/") ||
       path.startsWith("/emails/") ||
+      STATIC_MEDIA_RE.test(path) ||
       path === "/favicon.ico" ||
       path === "/favicon.svg" ||
       path === "/apple-touch-icon.png";

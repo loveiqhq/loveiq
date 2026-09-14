@@ -45,7 +45,7 @@ export default function PrivacyPolicyPage() {
                 Email:{" "}
                 <a
                   href="mailto:hello@loveiq.org"
-                  className="text-[#C2410C] hover:text-[#fe6839] transition-colors"
+                  className="text-[#C2410C] underline hover:text-[#fe6839] transition-colors"
                 >
                   hello@loveiq.org
                 </a>
@@ -232,7 +232,7 @@ export default function PrivacyPolicyPage() {
                 contractual clauses for non-EU processors can be requested from{" "}
                 <a
                   href="mailto:hello@loveiq.org"
-                  className="text-[#C2410C] hover:text-[#fe6839] transition-colors"
+                  className="text-[#C2410C] underline hover:text-[#fe6839] transition-colors"
                 >
                   hello@loveiq.org
                 </a>
@@ -282,7 +282,7 @@ export default function PrivacyPolicyPage() {
                 Requests can be sent to:{" "}
                 <a
                   href="mailto:hello@loveiq.org"
-                  className="text-[#C2410C] hover:text-[#fe6839] transition-colors"
+                  className="text-[#C2410C] underline hover:text-[#fe6839] transition-colors"
                 >
                   hello@loveiq.org
                 </a>
@@ -299,7 +299,7 @@ export default function PrivacyPolicyPage() {
                   href="https://www.datenschutz-berlin.de"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[#C2410C] hover:text-[#fe6839] transition-colors"
+                  className="text-[#C2410C] underline hover:text-[#fe6839] transition-colors"
                 >
                   https://www.datenschutz-berlin.de
                 </a>
