@@ -87,9 +87,18 @@ const TOKEN = "test-token-0123456789";
  * rpc-writer refusal below into an assertion that passes for the wrong reason.
  */
 function toolCalls(): unknown[][] {
-  return mockSupabaseFetch.mock.calls.filter(
-    ([path]) => !String(path).startsWith("/rest/v1/brain_query")
-  );
+  return mockSupabaseFetch.mock.calls.filter(([path, init]) => {
+    if (String(path).startsWith("/rest/v1/brain_query")) return false;
+    // The emptiness probe, for the same reason as the log write above: it runs AFTER an
+    // empty query, so `.at(-1)` would be the probe rather than the query under test —
+    // which silently broke three limit/filter assertions when it was added.
+    const headers = (init as { headers?: Record<string, string> } | undefined)?.headers;
+    const isProbe =
+      headers?.Prefer === "count=exact" &&
+      headers?.Range === "0-0" &&
+      String(path).endsWith("?select=*&limit=1");
+    return !isProbe;
+  });
 }
 
 /** The `brain_query` rows written so far, decoded, oldest first. */
@@ -4172,5 +4181,111 @@ describe("the instructions must name every tool the server offers", () => {
     expect(tools.length).toBeGreaterThanOrEqual(7);
     const missing = tools.map((t) => t.name).filter((n) => !instructions.includes(n));
     expect(missing).toEqual([]);
+  });
+});
+
+/**
+ * AN EMPTY RESULT IS TWO DIFFERENT FACTS, AND THEY USED TO RENDER IDENTICALLY.
+ *
+ * "0 rows returned, 0 match." was what a caller saw whether their filter excluded
+ * everything or the table had never held a single row. The second is the dangerous one:
+ * asked for the email bounce rate, a model reads zero rows and answers "no bounces",
+ * which is the opposite of "we have no record of any".
+ *
+ * Measured on production 2026-09-14: `resend_webhook_event` had NEVER held a row — the
+ * Resend webhook was never registered in their dashboard, though our env var had been set
+ * for 129 days and the route answered 401 like a healthy one. This tool's own description
+ * told the model to PREFER that table for bounce and open rates.
+ */
+describe("query_product_data — an empty table says so, instead of reading as a measured zero", () => {
+  const OPENAPI = {
+    definitions: {
+      resend_webhook_event: { properties: { id: {}, type: {} } },
+      payment: { properties: { id: {}, amount: {} } },
+    },
+    paths: {
+      "/resend_webhook_event": {},
+      "/payment": {},
+      "/rpc/get_report_counts": { post: { parameters: [{ in: "body", schema: {} }] } },
+    },
+  };
+
+  /** `rows` for the main query; `tableTotal` for the follow-up unfiltered count. */
+  function wire(rows: unknown[], tableTotal: number) {
+    const counts: string[] = [];
+    mockSupabaseFetch.mockImplementation(
+      async (path: string, init?: { headers?: Record<string, string> }) => {
+        if (init?.headers?.Accept === "application/openapi+json") {
+          return { ok: true, headers: new Headers(), json: async () => OPENAPI };
+        }
+        // The emptiness probe is the only call that asks for a count with Range 0-0.
+        if (init?.headers?.Prefer === "count=exact" && init?.headers?.Range === "0-0") {
+          counts.push(path);
+          return {
+            ok: true,
+            status: 200,
+            headers: new Headers({ "content-range": `0-0/${tableTotal}` }),
+            json: async () => [],
+            text: async () => "[]",
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-range": `0-0/${rows.length}` }),
+          json: async () => rows,
+          text: async () => JSON.stringify(rows),
+        };
+      }
+    );
+    return counts;
+  }
+
+  const ask = async (args: Record<string, unknown>) => {
+    const res = await POST(
+      rpc({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "query_product_data", arguments: args },
+      })
+    );
+    const body = (await res.json()) as { result: { content: Array<{ text: string }> } };
+    return body.result.content[0]!.text;
+  };
+
+  it("says the table itself is empty, and that this is not a measured zero", async () => {
+    wire([], 0);
+    const text = await ask({ table: "resend_webhook_event", limit: 5 });
+    expect(text).toContain("THE TABLE ITSELF IS EMPTY");
+    expect(text).toContain("resend_webhook_event");
+    // The instruction that stops the wrong answer being written.
+    expect(text).toMatch(/NO DATA|not recorded/i);
+    expect(text).toMatch(/none happened/i);
+  });
+
+  /** The opposite case must NOT be called empty — the filters simply excluded everything. */
+  it("blames the filters, not the table, when the table does hold rows", async () => {
+    wire([], 4210);
+    const text = await ask({ table: "payment", limit: 5, filters: ["amount=gt.999999"] });
+    expect(text).toContain("4210");
+    expect(text).toMatch(/FILTERS that matched nothing/i);
+    expect(text).not.toContain("THE TABLE ITSELF IS EMPTY");
+  });
+
+  it("stays silent when rows came back, and does not spend the extra count", async () => {
+    const counts = wire([{ id: 1, amount: 29 }], 4210);
+    const text = await ask({ table: "payment", limit: 5 });
+    expect(text).not.toContain("THE TABLE ITSELF IS EMPTY");
+    expect(text).not.toMatch(/FILTERS that matched nothing/i);
+    expect(counts).toHaveLength(0);
+  });
+
+  /** An rpc has no table to count, so the probe must not fire on one. */
+  it("does not probe an rpc, which has no table behind it", async () => {
+    const counts = wire([], 0);
+    const text = await ask({ table: "rpc/get_report_counts", params: {} });
+    expect(counts).toHaveLength(0);
+    expect(text).not.toContain("THE TABLE ITSELF IS EMPTY");
   });
 });

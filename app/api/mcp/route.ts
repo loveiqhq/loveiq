@@ -1220,7 +1220,7 @@ export const TOOLS = [
     description:
       "Read any table, view or analysis function in LoveIQ's database, live and with full " +
       "history. This is how you answer questions the indexed corpus cannot: Resend " +
-      "deliverability (resend_webhook_event, email_suppression), Stripe payments and " +
+      "deliverability (email_suppression; `resend_webhook_event` is EMPTY — the webhook was never registered, so there is no delivery history), Stripe payments and " +
       "refunds (payment, payment_item, payment_webhook_event), Calendly bookings " +
       "(booking_event), survey submissions and answers, reports, shares, invites, the " +
       "waitlist, marketing spend, and the admin tables. WHAT WE CHARGE LIVES HERE TOO " +
@@ -1522,7 +1522,13 @@ export const EXTERNAL_SERVICES: Record<
     base: "https://api.resend.com",
     envKeys: ["RESEND_API_KEY"],
     auth: { kind: "bearer" },
-    note: "Domains and their DNS/verification state, audiences and contacts, and a single email by id. Per-message delivery events are already in resend_webhook_event, so prefer query_product_data for bounce and open rates.",
+    note:
+      "Domains and their DNS/verification state, audiences and contacts, and a single " +
+      "email by id. Per-message delivery events are SUPPOSED to land in " +
+      "`resend_webhook_event` via /api/resend/webhook, but that table has never held a " +
+      "row (checked 2026-09-14) because the webhook was never registered in the Resend " +
+      "dashboard. Until it is, we have NO per-message delivery history: treat a zero " +
+      "bounce or open count from that table as 'not recorded', never as 'none happened'.",
   },
   slack: {
     base: "https://slack.com/api",
@@ -1970,6 +1976,43 @@ function redactPrivateColumns(rows: unknown[]): { rows: unknown[]; redacted: str
   };
   const out = rows.map((row) => walk(row, 0));
   return { rows: out, redacted: [...hit].sort() };
+}
+
+/**
+ * What an EMPTY result actually means, which is two different facts that render the same.
+ *
+ * "0 rows returned, 0 match." is what the caller saw whether their filter excluded
+ * everything or the table has never held a single row, and the second is the dangerous
+ * one: asked for the email bounce rate, a model reads zero rows and answers "no bounces",
+ * which is the opposite of "we have no record of any". Measured 2026-09-14:
+ * `resend_webhook_event` has never held a row — the webhook was never registered — while
+ * this tool's own description told the model to PREFER it for bounce and open rates.
+ *
+ * One extra count, only ever on an empty result, and only for a table (an rpc has no
+ * table to count). Best-effort: if the count fails we say nothing rather than guess.
+ */
+async function describeEmptyResult(table: string, hadFilters: boolean): Promise<string> {
+  try {
+    const res = await supabaseFetch(`/rest/v1/${table}?select=*&limit=1`, {
+      headers: { Prefer: "count=exact", Range: "0-0" },
+    });
+    const total = Number(res.headers.get("content-range")?.split("/")[1] ?? NaN);
+    if (!Number.isFinite(total)) return "";
+    if (total === 0) {
+      return (
+        ` THE TABLE ITSELF IS EMPTY — \`${table}\` holds no rows at all, not merely none ` +
+        `matching this query. Report that we have NO DATA on this, which is a different ` +
+        `answer from a measured zero and usually means a feed was never connected. Do not ` +
+        `present it as "none happened".`
+      );
+    }
+    if (hadFilters) {
+      return ` The table itself holds ${total} rows, so it is the FILTERS that matched nothing.`;
+    }
+    return "";
+  } catch {
+    return "";
+  }
 }
 
 /**
@@ -3584,6 +3627,8 @@ async function callTool(
     // that grants a paid report for free. The method is not the guard; the
     // READ_ONLY_RPCS gate above is, and it runs before we get here.
     let path: string;
+    /** Whether the caller narrowed the query. Decides what an empty result MEANS. */
+    let hadFilters = false;
     let init: { method?: string; body?: string; headers?: Record<string, string> };
     if (isRpc) {
       // `select`, `filters`, `order`, `limit` and `offset` were computed here and
@@ -3646,6 +3691,7 @@ async function callTool(
         );
       }
       parts.push(...filterParts);
+      hadFilters = filterParts.length > 0;
       path = `/rest/v1/${table}?${parts.join("&")}`;
       init = { headers: { Prefer: "count=exact" } };
     }
@@ -3705,6 +3751,10 @@ async function callTool(
           `underlying value always shows the same #tag, so rows can still be matched to each ` +
           `other. Filtering and counting on these columns works normally; only reading the ` +
           `value does not.`
+        : "") +
+      // An empty result is two different facts; say which one this is.
+      (shown === 0 && (total === null || Number(total) === 0) && !isRpc
+        ? await describeEmptyResult(table, hadFilters)
         : "") +
       "\n\n";
     return textResult(`${UNTRUSTED_DATA_PREAMBLE}\n\n${head}${bodyText}`);
