@@ -23,7 +23,6 @@ type Rule = { source: string; destination: string };
  * nothing logged. The rules can be perfectly correct and still never run.
  */
 async function rewriteRules(): Promise<Rule[]> {
-   
   const config = require(join(ROOT, "next.config.js")) as {
     rewrites?: () => Promise<{ beforeFiles?: Rule[] } | Rule[]>;
   };
@@ -157,7 +156,6 @@ describe("the trailing-slash redirect survives being turned off globally", () =>
    * is satisfied by the comment describing it measures nothing at all.
    */
   it("turns Next's own redirect off, which is what lets the proxy forward /e/", () => {
-     
     const config = require(join(ROOT, "next.config.js")) as { skipTrailingSlashRedirect?: boolean };
     expect(config.skipTrailingSlashRedirect).toBe(true);
   });
