@@ -248,7 +248,7 @@ Add it as a custom connector with:
 drops the `Authorization` header, so the apex presents as a confusing 401 with a
 token that is perfectly valid.
 
-**Fourteen tools, in three groups.** Nine read, five write. The write ones act
+**Seventeen tools, in three groups.** Twelve read, five write. The write ones act
 immediately and are described at the bottom of this section — a teammate who reads
 only the first table will not know the brain can send an email.
 

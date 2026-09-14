@@ -67,7 +67,9 @@ vi.mock("@shared/http/ratelimit", () => ({
 
 import { flushAfterResponse } from "@shared/http/after-response";
 import { recordToolCall } from "@features/brain/server/log";
-import { POST } from "@/app/api/mcp/route";
+import { POST, TOOLS } from "@/app/api/mcp/route";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { CorpusUnavailableError } from "@features/brain/server/retrieve";
 import { DRIVE_SECTIONS } from "@features/brain/server/ingest/drive";
 import { SlackTargetError } from "@features/brain/server/act/slack";
@@ -4287,5 +4289,61 @@ describe("query_product_data — an empty table says so, instead of reading as a
     const text = await ask({ table: "rpc/get_report_counts", params: {} });
     expect(counts).toHaveLength(0);
     expect(text).not.toContain("THE TABLE ITSELF IS EMPTY");
+  });
+});
+
+/**
+ * A COUNT WRITTEN INTO PROSE GOES STALE SILENTLY, because nothing recomputes it.
+ *
+ * The runbook said "Fourteen tools, in three groups. Nine read, five write" while the
+ * server exposed seventeen — twelve read, five write. Nobody was lying; three tools were
+ * added and the sentence was not. A teammate reading the runbook to learn what the brain
+ * can do would simply not know about three of them, and this is the second such count in
+ * this codebase to be found wrong after the fact.
+ *
+ * Correcting the number without adding this test would only reset the clock.
+ */
+describe("the runbook's tool count is the real one", () => {
+  const WORDS: Record<number, string> = {
+    1: "One",
+    2: "Two",
+    3: "Three",
+    4: "Four",
+    5: "Five",
+    6: "Six",
+    7: "Seven",
+    8: "Eight",
+    9: "Nine",
+    10: "Ten",
+    11: "Eleven",
+    12: "Twelve",
+    13: "Thirteen",
+    14: "Fourteen",
+    15: "Fifteen",
+    16: "Sixteen",
+    17: "Seventeen",
+    18: "Eighteen",
+    19: "Nineteen",
+    20: "Twenty",
+  };
+
+  it("matches what the server actually exposes", () => {
+    const runbook = readFileSync(join(process.cwd(), "docs/runbooks/COMPANY_BRAIN.md"), "utf8");
+    const readOnly = TOOLS.filter((t) => t.annotations?.readOnlyHint).length;
+    const writes = TOOLS.length - readOnly;
+
+    const total = WORDS[TOOLS.length];
+    const reads = WORDS[readOnly];
+    expect(total, `no word for ${TOOLS.length} tools — extend WORDS`).toBeDefined();
+    expect(reads, `no word for ${readOnly} read tools — extend WORDS`).toBeDefined();
+
+    expect(
+      runbook,
+      `COMPANY_BRAIN.md must say "${total} tools" — there are ${TOOLS.length}`
+    ).toContain(`**${total} tools, in three groups.**`);
+    const writeWord = WORDS[writes]?.toLowerCase() ?? String(writes);
+    expect(runbook, `COMPANY_BRAIN.md must say "${reads} read, ${writeWord} write"`).toContain(
+      `${reads} read, ${writeWord} write`
+    );
   });
 });
