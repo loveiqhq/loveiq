@@ -182,6 +182,15 @@ const PracticeRow: FC<{
       return;
     }
 
+    // Touch browsers synthesise a mouseover/mouseenter pair after a tap, and
+    // the desktop-popover check is width-only, so nothing here distinguished a
+    // real hover from a finger. Left ungated it re-opens the row a tap is
+    // trying to toggle shut. Only a pointer that can actually hover opens on
+    // hover; everyone else goes through the click toggle.
+    if (typeof window !== "undefined" && window.matchMedia?.("(hover: hover)").matches === false) {
+      return;
+    }
+
     onOpen(rowId, {
       anchorEl: infoButtonRef.current,
       description: row.description,
@@ -204,8 +213,19 @@ const PracticeRow: FC<{
               aria-controls={popoverId}
               aria-expanded={isOpen}
               onBlur={() => onClose(rowId)}
-              onClick={(event) => handleOpenFromAnchor(event.currentTarget)}
-              onFocus={(event) => handleOpenFromAnchor(event.currentTarget)}
+              // Toggle, not open. Opening twice sets `openRowId` to the value
+              // it already holds — no re-render, no DOM mutation — so on a
+              // phone the ⓘ could not dismiss what it opened: no hover to
+              // leave, no Escape key, the only exit was tapping elsewhere
+              // entirely. `aria-expanded`/`aria-controls` already declare this
+              // a disclosure button, and click-to-toggle is that contract.
+              onClick={(event) =>
+                isOpen ? onClose(rowId) : handleOpenFromAnchor(event.currentTarget)
+              }
+              // No `onFocus` open: a tap focuses the button before it clicks
+              // it, so focus-to-open swallows the very first tap (open, then
+              // the click toggles straight back shut). Keyboard users lose
+              // nothing — Enter and Space fire `click` on a button.
               onMouseEnter={handleDesktopHoverOpen}
               onMouseLeave={() => onClose(rowId)}
             >

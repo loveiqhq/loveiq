@@ -96,7 +96,27 @@ const PremiumOverlay: FC<Props> = ({ archetype, onUnlock, quote = null }) => {
   const pillText = badge ? (saveLabel ? `${badge} · SAVE ${saveLabel}` : badge) : null;
 
   return (
-    <div className="report-premium-overlay">
+    /**
+     * The whole card opens the paywall, not just the CTA.
+     *
+     * This is the v1 copy of the component, which the 2026-09-13 revert put in
+     * front of 100% of readers. The fix had only been made in the 2.0 copy, and
+     * `report.css` — shared by both — gives `.report-premium-overlay` a
+     * `cursor: pointer`, so on v1 the card advertised itself as clickable and
+     * then swallowed the tap. Measured on production: 0/3 devices opened
+     * pricing from the card body.
+     */
+    <div
+      className="report-premium-overlay"
+      onClick={() => {
+        // `.report-page` sets `user-select: none` in production, but
+        // `.report-page--copyable` re-enables it on staging and locally, which
+        // is how the team quotes report copy. A drag that ends inside the card
+        // must not open the paywall.
+        if (typeof window !== "undefined" && window.getSelection()?.toString()) return;
+        onUnlock?.();
+      }}
+    >
       <div className="report-premium-overlay__card">
         <div className="report-premium-overlay__head">
           <div className="report-premium-overlay__icon" aria-hidden="true">
@@ -175,7 +195,10 @@ const PremiumOverlay: FC<Props> = ({ archetype, onUnlock, quote = null }) => {
           </div>
         </div>
 
-        <button type="button" className="report-premium-overlay__cta" onClick={onUnlock}>
+        {/* No own `onClick`: the overlay owns it. Both firing would double-count
+            the unlock event; the button's click simply bubbles up. It keeps its
+            semantics, so keyboard and screen-reader behaviour are unchanged. */}
+        <button type="button" className="report-premium-overlay__cta">
           Unlock your report
         </button>
       </div>
