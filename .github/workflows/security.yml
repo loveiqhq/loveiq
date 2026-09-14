@@ -238,21 +238,20 @@ jobs:
           #    single static literal <style> ("html,body{background:#fff}"),
           #    server-rendered so the dark body bg doesn't flash before the white
           #    glossary hydrates. Constant string, no interpolation/user input.
+          #  - features/report/ui/v1/sections/ — the 2026-09-13 revert (f2f6a149)
+          #    restored the pre-2.0 report to a NEW path. Same components, same
+          #    authored archetype HTML as features/report/ui/sections/ above,
+          #    which this check has always exempted; only the folder changed.
+          #    Checked before widening: those files render server-supplied
+          #    archetype content only, and nothing interpolates a user-supplied
+          #    value into any report HTML (the reader's name is a React text
+          #    child, which React escapes). Without the `v1/` hop this step
+          #    fails on every commit — it did from 8351369c.
           if grep -r "dangerouslySetInnerHTML" app/ features/ shared/ --include="*.tsx" --include="*.jsx" \
               | grep -v "JSON\.stringify" \
               | grep -v "jsonLdString" \
               | grep -vE "white/LandingPageWhite\.tsx|white-v1/LandingPageWhiteV1\.tsx" \
               | grep -vE "app/glossary/(page|\[slug\]/page)\.tsx" \
-              #  - features/report/ui/v1/sections/ — the 2026-09-13 revert (f2f6a149)
-              #    restored the pre-2.0 report to a NEW path. These are the same
-              #    components rendering the same authored archetype HTML as
-              #    features/report/ui/sections/ above, which this check has
-              #    always exempted; only the folder changed. Verified before
-              #    widening: the six files render server-supplied archetype
-              #    content only, and no user-supplied value is interpolated into
-              #    any report HTML string (the reader's name is a React text
-              #    child, which React escapes). Without the `v1/` hop this step
-              #    fails on every commit — it has since 8351369c.
               | grep -vE "(components|features/report/ui)/(v1/)?(sections/|ReportPage\.tsx)"; then
             echo "⚠️  Found dangerouslySetInnerHTML usage - review for XSS risks"
             exit 1
