@@ -612,6 +612,36 @@ When working in this codebase:
 10. **Document unknowns** - If uncertain, note assumptions and which files to check
 11. **Clean up temporary files** - If you create any `.md` files for planning, implementation logs, fix summaries, or debugging notes (e.g., in `docs/plans/` or repo root), **delete them once the task is complete**. Only permanent documentation (like this file, `docs/runbooks/SECURITY.md`, `docs/runbooks/DEVELOPMENT.md`, `docs/architecture/*`) should remain in the repo.
 
+### Verify, then audit, then audit again
+
+**This is a standing requirement, not something to do when asked.** Work is not finished
+when it is written; it is finished when it has been proven against the running system and
+then attacked twice.
+
+1. **Run the real gate.** `npm run check` in full — lint, tests, docs, build, and
+   `prettier --check`. Not a faster subset assembled from its parts: the pre-push hook
+   runs the tests only, so a green push is not a green gate. That gap has put `main` red
+   more than once.
+2. **Verify the artefact, not the intent.** Curl the deployed page, query the live
+   database, read the served JS, send a real request through the real path. Several
+   defects in this repo passed every test: a redirect that answered itself in an infinite
+   loop, a capture endpoint that returned 308 to every POST, a source guard whose
+   `indexOf` matched the wrong occurrence.
+3. **Mutation-test every new guard.** Break what it protects and watch the suite go red,
+   and assert the mutation actually applied — one that silently fails to apply reads
+   exactly like a test that caught nothing. Vacuous guards are routine here: several have
+   matched a _comment_ describing the setting rather than the setting itself.
+4. **Then hunt for half-work** in the diff: leftovers nothing references, tests still
+   pinning the old behaviour, a new job missing from a `needs:` list, a new column absent
+   from the rebuild, a config change that only took effect in one environment.
+5. **Then audit a second time.** The first pass finds the original problem; the second
+   finds what the first pass introduced. This is where the infinite-redirect loop above
+   was caught — in the audit of the fix, not the audit of the bug.
+6. **Report honestly.** Say which claims were verified this session, which are inferred,
+   and what could not be checked and why. **Any statement about how the system behaves is
+   a measurement, not a recollection** — especially a reassuring one ("it falls back", "it
+   is labelled", "it is excluded"), because nobody re-checks a reassurance.
+
 ### When Uncertain
 
 - Check `docs/architecture/` docs for architecture decisions

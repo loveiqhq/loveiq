@@ -133,3 +133,89 @@ describe("isProductionSite", () => {
     expect(isNonProdDeploy()).toBe(false);
   });
 });
+
+/**
+ * THE HOLE THESE CLOSE, measured on production 2026-09-14.
+ *
+ * `NEXT_PUBLIC_SITE_URL` is ONE value shared by this project's Production, Preview and
+ * Development environments — `https://www.loveiq.org`. So every preview deployment
+ * satisfied the production host allowlist and identified as the live site: a preview
+ * served the identical GA4 / GTM / Clarity tags as production, ran the Google Ads
+ * conversion path, and stamped `deploy_env: "production"` on its PostHog events. Nothing
+ * downstream could tell that traffic apart afterwards, because it was labelled as real.
+ *
+ * Both gates now also consult the environment Vercel built the deployment FOR, which it
+ * stamps per deployment. Verified rather than assumed: /api/build-info reports VERCEL_ENV
+ * "production" on www.loveiq.org and "preview" on a preview deployment.
+ */
+describe("the Vercel environment overrides a production-looking site URL", () => {
+  /** The exact production configuration of a preview deployment, before this fix. */
+  const asPreviewDeployment = () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org");
+    vi.stubEnv("NEXT_PUBLIC_VERCEL_ENV", "preview");
+  };
+
+  it("does not treat a preview deployment as the live site", () => {
+    asPreviewDeployment();
+    expect(isProductionSite()).toBe(false);
+  });
+
+  it("treats a preview deployment as non-production", () => {
+    asPreviewDeployment();
+    expect(isNonProdDeploy()).toBe(true);
+  });
+
+  it("does the same for a development deployment", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org");
+    vi.stubEnv("NEXT_PUBLIC_VERCEL_ENV", "development");
+    expect(isProductionSite()).toBe(false);
+    expect(isNonProdDeploy()).toBe(true);
+  });
+
+  /**
+   * THE HALF THAT MUST NOT REGRESS. On the real production deployment Vercel stamps
+   * "production", and everything has to behave exactly as it did before this change —
+   * otherwise the fix silently turns off analytics on the live site, which is a far worse
+   * outcome than the pollution it set out to prevent.
+   */
+  it("leaves the real production deployment completely unchanged", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org");
+    vi.stubEnv("NEXT_PUBLIC_VERCEL_ENV", "production");
+    expect(isProductionSite()).toBe(true);
+    expect(isNonProdDeploy()).toBe(false);
+  });
+
+  /** Off Vercel the variable is absent, and absence must mean "no opinion", not "preview". */
+  it("changes nothing when the variable is absent, as it is off Vercel", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org");
+    vi.stubEnv("NEXT_PUBLIC_VERCEL_ENV", "");
+    expect(isProductionSite()).toBe(true);
+    expect(isNonProdDeploy()).toBe(false);
+  });
+
+  /** Casing and stray whitespace must not turn production into a preview. */
+  it("is not fooled by casing or whitespace on the production value", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org");
+    for (const value of ["Production", "PRODUCTION", " production "]) {
+      vi.stubEnv("NEXT_PUBLIC_VERCEL_ENV", value);
+      expect(isProductionSite(), value).toBe(true);
+      expect(isNonProdDeploy(), value).toBe(false);
+    }
+  });
+
+  /**
+   * An unrecognised value is not production. This gate decides whether real customer
+   * analytics are sent, so an environment nobody has heard of must fail closed.
+   */
+  it("treats an unrecognised environment as not production", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org");
+    vi.stubEnv("NEXT_PUBLIC_VERCEL_ENV", "some-future-environment");
+    expect(isProductionSite()).toBe(false);
+  });
+});
