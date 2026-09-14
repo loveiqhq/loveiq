@@ -101,3 +101,15 @@ DEVICE="iPhone SE" node scripts/probes/audit-paywall-layout.mjs
   ran to the bottom of a 34,725px page, reporting "never reached" for an element
   that was present the whole time. Scroll to the element, or step smaller than
   the viewport.
+- **Narrow "is this element a defect" rules to the shape of the defect.** A
+  restart-CTA probe that matched any `a[href^="/survey"]` flagged the grey
+  footer nav link at the bottom of an 80,000px page and failed on a perfectly
+  healthy report. The real defect is a restart offered as THE way forward — a
+  status card or a `.report-button` — so scope to that and footer navigation is
+  excluded by construction.
+- **A string replacement into a prettier-formatted file fails silently, and it
+  will happen to you more than once.** Three edits in one session matched nothing
+  because Prettier had rewrapped the target across lines; each time the "fixed"
+  file ran unchanged and looked like a product bug. Assert the anchor, patch by
+  LINE NUMBER when the target is inside formatted code, and grep for the new text
+  before running anything.

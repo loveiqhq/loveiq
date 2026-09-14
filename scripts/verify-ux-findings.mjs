@@ -41,16 +41,15 @@ const LOOKBACK_HOURS = Number(process.env.LOOKBACK_HOURS ?? 6);
  */
 const CRITERIA = [
   {
-    // Marcus's headline criterion. Recognised but NOT probe-covered: reproducing
-    // a loop needs a probe that walks the funnel and asserts the step index never
-    // goes backwards, which does not exist yet (B1 in review-protocol.md). An
-    // empty `probes` means "we know what this is and cannot check it", which is a
-    // more useful thing to say than "unrecognised".
+    // Marcus's headline criterion. Now covered: the mechanism turned out not to
+    // be a misfiring CTA but the report's failure screens, which offer "Take the
+    // survey" as the only way forward for a 404 or a missing session. The probe
+    // asserts a VALID report never shows that door.
     id: "L1",
     label: "loop back to an earlier screen",
     match:
       /loop(ed|s)? back|back to the (survey )?start|returned to (an )?earlier|start(ed)? (the survey )?(over|from scratch)|re-?initiali[sz]ed/i,
-    probes: [],
+    probes: ["verify-no-survey-restart.mjs"],
   },
   {
     id: "C1",
@@ -134,6 +133,39 @@ function runProbe(file) {
   }
 }
 
+/**
+ * Claim a finding so it is verified exactly once.
+ *
+ * The schedule (every 3h) and the lookback (6h) overlap deliberately, so a run
+ * that fails or a finding that lands late is still picked up. Without a claim
+ * that same overlap posts every verdict to the thread twice — the reason this
+ * exists. Reuses `slack_alert_sent`, the table the cron already dedupes on, via
+ * the same two-phase RPC.
+ *
+ * Fails CLOSED: if the claim cannot be taken (Supabase down, RPC changed), the
+ * finding is skipped rather than verified. A missed verdict is recoverable on
+ * the next run; a duplicate one erodes trust in the channel.
+ */
+async function claimFinding(observationId) {
+  const url = requireEnv("SUPABASE_URL");
+  const key = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
+  try {
+    const res = await fetch(`${url}/rest/v1/rpc/claim_slack_alert`, {
+      method: "POST",
+      headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        p_kind: "ux_review_verified",
+        p_entity_type: "observation",
+        p_entity_id: observationId,
+      }),
+    });
+    if (!res.ok) return false;
+    return (await res.json()) === true;
+  } catch {
+    return false;
+  }
+}
+
 /** The survey notification this recording belongs under, so the verdict lands
  *  next to the finding rather than at the bottom of the channel. Mirrors
  *  findThreadTs() in features/ux-review/server/review.ts. */
@@ -209,7 +241,15 @@ console.log(`${findings.length} finding(s) in the last ${LOOKBACK_HOURS}h`);
 let gaps = 0;
 let confirmed = 0;
 
-for (const [, sessionId, scannerName, reasoning] of findings) {
+let skipped = 0;
+for (const [observationId, sessionId, scannerName, reasoning] of findings) {
+  // Claim before classifying: probes are minutes of real browser time, and a
+  // second run must not spend them again on a finding already answered.
+  if (!DRY_RUN && !CLASSIFY_ONLY && !(await claimFinding(observationId))) {
+    skipped += 1;
+    continue;
+  }
+
   const criterion = classify(reasoning);
   if (!criterion) {
     // A criterion the scanner can raise but no probe can check is a hole in the
@@ -271,4 +311,7 @@ for (const [, sessionId, scannerName, reasoning] of findings) {
   }
 }
 
-console.log(`\n${confirmed} reproduced · ${gaps} with no probe coverage`);
+console.log(
+  `\n${confirmed} reproduced · ${gaps} with no probe coverage` +
+    (skipped ? ` · ${skipped} already verified on an earlier run` : "")
+);
