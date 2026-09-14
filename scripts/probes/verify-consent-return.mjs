@@ -35,14 +35,11 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) 
   const notes = [];
 
   try {
-    await page.addInitScript(
-      (step) => {
-        try {
-          sessionStorage.setItem("loveiq-survey-step", step);
-        } catch {}
-      },
-      CONSENT_STEP,
-    );
+    await page.addInitScript((step) => {
+      try {
+        sessionStorage.setItem("loveiq-survey-step", step);
+      } catch {}
+    }, CONSENT_STEP);
 
     if (process.env.MUTATE === "1") {
       // Re-create the defect: the button sends the user to the token-less
@@ -53,7 +50,7 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) 
         // nothing, and the probe then passes in both directions.
         const bind = () => {
           const hit = [...document.querySelectorAll("button")].find((b) =>
-            /return to site/i.test(b.textContent ?? ""),
+            /return to site/i.test(b.textContent ?? "")
           );
           if (!hit) return false;
           hit.addEventListener(
@@ -63,7 +60,7 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) 
               e.preventDefault();
               window.location.href = "/report";
             },
-            true,
+            true
           );
           return true;
         };
@@ -88,11 +85,11 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) 
       ([px, py]) => {
         const el = document.elementFromPoint(px, py);
         const target = [...document.querySelectorAll("button")].find((b) =>
-          /return to site/i.test(b.textContent ?? ""),
+          /return to site/i.test(b.textContent ?? "")
         );
         return !!(el && target && (el === target || target.contains(el)));
       },
-      [x, y],
+      [x, y]
     );
     if (!owned) throw new Error(`(${x},${y}) is not owned by the button`);
 
