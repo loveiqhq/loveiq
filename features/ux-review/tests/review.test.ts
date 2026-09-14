@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
-  buildReviewMessage,
+  buildDigestMessage,
   contradiction,
   detectDrift,
   fetchSessionEvents,
@@ -29,56 +29,34 @@ const finding = (over: Partial<UxFinding> = {}): UxFinding => ({
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("buildReviewMessage", () => {
-  it("is four blocks and leads with the finding, not the working out", () => {
-    const { text, blocks } = buildReviewMessage(finding());
-    expect(blocks).toHaveLength(4);
-    expect(blocks[1]).toMatchObject({
-      type: "section",
-      text: { text: expect.stringContaining("The paywall card did not respond to a tap.") },
-    });
-    // The rest of the model's prose must NOT be in the message — "very short
-    // summary" was the actual requirement on the card.
-    expect(JSON.stringify(blocks)).not.toContain("Cited at t=120s");
-    expect(text).toContain("UX review");
+describe("buildDigestMessage", () => {
+  it("reports the ratio, not just the flags", () => {
+    const { text, blocks } = buildDigestMessage([
+      { scanner: "LoveIQ survey UX", observed: 12, yes: 2 },
+      { scanner: "LoveIQ report UX", observed: 8, yes: 2 },
+    ]);
+    expect(text).toContain("20 recordings reviewed, 4 flagged");
+    expect(JSON.stringify(blocks)).toContain("LoveIQ survey UX — 12 reviewed, 2 flagged");
   });
 
-  it("links to the recording by path, which opens it", () => {
-    const { blocks } = buildReviewMessage(finding({ sessionId: "abc-123" }));
-    // /replay/<id> opens the recording; the query-param form lands on a filtered
-    // LIST, which reads as a broken link to whoever clicked it.
-    expect(JSON.stringify(blocks)).toContain("/replay/abc-123");
-    expect(recordingLink("a b")).toContain("a%20b");
+  it("calls out a silent day instead of reporting all-clear", () => {
+    // A broken scanner and a healthy product both produce zero findings. Saying
+    // "no issues" for the first is how a dead detector goes unnoticed.
+    const { text } = buildDigestMessage([]);
+    expect(text).toMatch(/unusual/i);
+    expect(text).not.toMatch(/no issues|all clear/i);
   });
 
-  it("always says the finding is unreviewed", () => {
-    // The human-in-the-loop commitment, expressed where a reader will see it.
-    // Nothing this pipeline posts may read as established fact.
-    const { blocks } = buildReviewMessage(finding());
-    expect(JSON.stringify(blocks)).toContain("unreviewed");
+  it("says a flag is not yet a finding", () => {
+    const { blocks } = buildDigestMessage([{ scanner: "s", observed: 1, yes: 1 }]);
+    expect(JSON.stringify(blocks)).toContain("reproduces it in a real browser");
   });
 
-  it("mentions the unrated backlog only when there is one", () => {
-    expect(JSON.stringify(buildReviewMessage(finding(), 0).blocks)).not.toContain("unrated");
-    expect(JSON.stringify(buildReviewMessage(finding(), 3).blocks)).toContain("3 unrated");
-  });
-
-  it("escapes model prose, which describes a session anyone could have staged", () => {
-    const { blocks } = buildReviewMessage(
-      finding({ reasoning: "A <script> & *bold* thing broke here." })
-    );
-    const json = JSON.stringify(blocks);
-    // Slack markup, not HTML: the repo neutralises <>&*_~` by backslash-escaping,
-    // which stops prose being read as a link or as bold/italic formatting.
-    expect(json).toContain("\\\\<script");
-    expect(json).toContain("\\\\*bold");
-    expect(json).not.toMatch(/[^\\]\*bold/);
-  });
-
-  it("clamps a runaway reasoning so one finding cannot fill the channel", () => {
-    const { blocks } = buildReviewMessage(finding({ reasoning: "x".repeat(5000) }));
-    const body = JSON.stringify(blocks[1]);
-    expect(body.length).toBeLessThan(400);
+  it("escapes a scanner name renamed in the PostHog UI", () => {
+    const { blocks } = buildDigestMessage([
+      { scanner: "<script>alert(1)</script>", observed: 1, yes: 0 },
+    ]);
+    expect(JSON.stringify(blocks)).not.toContain("<script>");
   });
 });
 

@@ -37,14 +37,13 @@ import {
   verifyCronAuth,
 } from "@shared/observability/slack-alert-dedup";
 import { recordNotice } from "@features/brain/server/notice";
-import { isSlackBotConfigured, postJourneyMessage } from "@shared/observability/slack-bot";
 import {
-  buildReviewMessage,
+  buildDigestMessage,
   contradiction,
   detectDrift,
+  fetchDailyStats,
   fetchFindings,
   fetchSessionEvents,
-  findThreadTs,
   MAX_POSTS_PER_RUN,
   recordingLink,
 } from "@features/ux-review/server/review";
@@ -54,9 +53,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-/** Posts per scanner per UTC day. Deliberately small: this competes for
- *  attention with real survey submissions in the same channel. */
-const MAX_POSTS_PER_SCANNER_PER_DAY = 2;
+/** Post the daily summary at or after this UTC hour. Not the first run after
+ *  midnight — a digest of an empty night reports nothing useful. */
+const DIGEST_HOUR_UTC = 7;
 
 export async function GET(request: Request) {
   if (!verifyCronAuth(request)) {
@@ -78,7 +77,7 @@ export async function GET(request: Request) {
   try {
     const findings = await fetchFindings();
     const dayKey = new Date().toISOString().slice(0, 10);
-    let posted = 0;
+    let collected = 0;
     let contradicted = 0;
     let suppressed = 0;
 
@@ -86,22 +85,6 @@ export async function GET(request: Request) {
       // Once per observation, ever.
       const claimed = await tryClaimSlackAlert("ux_review", "observation", finding.observationId);
       if (!claimed) {
-        suppressed += 1;
-        continue;
-      }
-
-      // Per-scanner daily budget, as numbered claim slots on the same table —
-      // the first free slot wins, and when none are free the finding waits for
-      // tomorrow rather than being lost (its observation claim is already taken,
-      // so it will not be re-posted; that is the trade for a hard ceiling).
-      let slot = 0;
-      for (let n = 1; n <= MAX_POSTS_PER_SCANNER_PER_DAY; n += 1) {
-        if (await tryClaimSlackAlert("ux_review_budget", finding.scannerId, `${dayKey}:${n}`)) {
-          slot = n;
-          break;
-        }
-      }
-      if (slot === 0) {
         suppressed += 1;
         continue;
       }
@@ -129,41 +112,53 @@ export async function GET(request: Request) {
         continue;
       }
 
-      const { text, blocks } = buildReviewMessage(finding);
-      const fitted = fitBlocks(blocks, text);
-
       /**
-       * Hang the finding under the survey notification it is about, rather than
-       * stacking it at the bottom of the channel where it reads as unrelated to
-       * anything. Threading needs chat.postMessage — an incoming webhook cannot
-       * reply to a message — so this goes through the bot when one is
-       * configured, and falls back to the webhook otherwise.
+       * Deliberately NOT posted to Slack.
+       *
+       * This cron runs in a 30-second Vercel function; it cannot open a
+       * browser, so the only thing it could publish is the model's prose. On
+       * 2026-09-14 that prose was measured against our own events: five
+       * findings, and the stated mechanism was wrong on all five. An unverified
+       * claim sitting under a reader's submission costs more trust than it buys
+       * attention, which is exactly the "false confidence" the review protocol
+       * exists to prevent.
+       *
+       * A finding earns a Slack post by being REPRODUCED in a real browser at
+       * the viewport the session reported. That is scripts/verify-ux-findings.mjs,
+       * which runs every three hours in CI and posts into the submission's own
+       * thread. Correctness check on the same five: the probes reject all of them.
+       *
+       * What stays here is the searchable record and the daily count below, so
+       * nothing is lost — only the unearned alert is.
        */
-      const threadTs = isSlackBotConfigured() ? await findThreadTs(finding.sessionId) : null;
-      const threaded = threadTs
-        ? await postJourneyMessage({ text, blocks: fitted.blocks, threadTs })
-        : null;
-      if (!threaded) {
-        await notifySlack({
-          channel: "survey",
-          kind: "ux_review",
-          username: "ux_review",
-          text,
-          blocks: fitted.blocks,
-        });
-      }
-      await markSlackAlertDelivered("ux_review", "observation", finding.observationId);
-      await markSlackAlertDelivered("ux_review_budget", finding.scannerId, `${dayKey}:${slot}`);
-      posted += 1;
-
-      // Second sink, so a finding is searchable later even if the Slack message
-      // scrolls away. Swallows its own errors.
       await recordNotice({
         headline: `UX review: ${finding.scannerName}`,
         detail: finding.reasoning.slice(0, 1000),
         kind: "ux-review",
         evidence: recordingLink(finding.sessionId),
       });
+      await markSlackAlertDelivered("ux_review", "observation", finding.observationId);
+      collected += 1;
+    }
+
+    /**
+     * The daily summary the 2026-09-08 sync asked for: "generate daily
+     * summaries of user UX issues". Once a day, not on the first run after
+     * midnight — a digest of an empty night says nothing.
+     */
+    if (new Date().getUTCHours() >= DIGEST_HOUR_UTC) {
+      if (await tryClaimSlackAlert("ux_review_digest", "daily", dayKey)) {
+        const { text, blocks } = buildDigestMessage(await fetchDailyStats());
+        const fitted = fitBlocks(blocks, text);
+        await notifySlack({
+          channel: "survey",
+          kind: "ux_review_digest",
+          username: "ux_review",
+          text,
+          blocks: fitted.blocks,
+        });
+        await markSlackAlertDelivered("ux_review_digest", "daily", dayKey);
+      }
     }
 
     // A prompt edited in the PostHog UI and not brought back to
@@ -187,7 +182,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       ok: true,
       considered: findings.length,
-      posted,
+      collected,
       contradicted,
       suppressed,
       scanners: UX_SCANNERS.length,

@@ -52,30 +52,6 @@ export function firstSentence(text: string): string {
   return end === -1 ? flat : flat.slice(0, end + 1);
 }
 
-/**
- * The Slack message. Four blocks, deliberately short — the card asked for "a
- * very short summary", and a finding nobody reads is worse than no finding.
- *
- * `reasoning` is model prose describing a session that anyone holding the public
- * project token could have staged, so it is escaped and clamped before it
- * reaches a block, and never interpolated into a URL.
- */
-export function buildReviewMessage(finding: UxFinding, unratedCount = 0) {
-  const headline = firstSentence(finding.reasoning).slice(0, 240);
-  const text = `UX review — ${finding.scannerName}: ${headline}`;
-  const blocks: SlackBlock[] = [
-    header(`👁 UX review — ${finding.scannerName}`.slice(0, 150)),
-    section(escapeSlack(headline)),
-    linkButton("▶ Watch session recording", recordingLink(finding.sessionId)),
-    context(
-      `Confidence ${Math.round(finding.confidence * 100)}% · *unreviewed* — one AI judgment on ` +
-        `one recording, not a finding until a human rates it 👍/👎 in PostHog.` +
-        (unratedCount > 0 ? ` · ${unratedCount} unrated` : "")
-    ),
-  ];
-  return { text, blocks };
-}
-
 /** Scanner whose live config has drifted from the version pinned in git. */
 export interface ScannerDrift {
   scannerName: string;
@@ -104,6 +80,84 @@ export function detectDrift(findings: Array<Pick<UxFinding, "scannerName" | "sca
  * PostHog is not configured — a cron that cannot read should log and skip, not
  * page someone at 03:00.
  */
+/** One scanner's last 24 hours, for the daily summary. */
+export interface DailyStat {
+  scanner: string;
+  observed: number;
+  yes: number;
+}
+
+/**
+ * The daily summary the 2026-09-08 sync asked for ("generate daily summaries of
+ * user UX issues"). Counts every verdict, not just the YES ones, because the
+ * ratio is the interesting number: on day one it was 5 yes / 31 observed and
+ * every one of the five was wrong about why.
+ */
+export async function fetchDailyStats(): Promise<DailyStat[]> {
+  const key = process.env.POSTHOG_API_KEY;
+  if (!key) return [];
+
+  const query = `
+    SELECT toString(properties.scanner_name),
+           count(),
+           countIf(toString(properties.scanner_output_verdict) = 'yes')
+    FROM events
+    WHERE event = '$recording_observed'
+      AND timestamp > now() - INTERVAL 24 HOUR
+    GROUP BY toString(properties.scanner_name)
+    ORDER BY count() DESC
+    LIMIT 20
+  `;
+
+  const res = await fetchWithTimeout(`https://eu.posthog.com/api/projects/${PROJECT}/query/`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ query: { kind: "HogQLQuery", query } }),
+    timeoutMs: 12_000,
+  });
+  if (!res.ok) throw new Error(`posthog daily query ${res.status}`);
+  const payload = (await res.json()) as { results?: unknown[][]; error?: unknown };
+  if (payload.error) {
+    throw new Error(`posthog daily query error: ${String(payload.error).slice(0, 200)}`);
+  }
+  return (payload.results ?? []).map((row) => ({
+    scanner: String(row[0] ?? "unknown"),
+    observed: Number(row[1]) || 0,
+    yes: Number(row[2]) || 0,
+  }));
+}
+
+/**
+ * The digest message. Deliberately states the unverified count rather than
+ * hiding it: a quiet day and a broken scanner look identical otherwise, and
+ * that is how a dead detector goes unnoticed.
+ */
+export function buildDigestMessage(stats: readonly DailyStat[]): {
+  text: string;
+  blocks: SlackBlock[];
+} {
+  const observed = stats.reduce((n, s) => n + s.observed, 0);
+  const yes = stats.reduce((n, s) => n + s.yes, 0);
+  const headline =
+    observed === 0
+      ? "No recordings were reviewed in the last 24 hours — that is unusual, check the scanners are still enabled."
+      : `${observed} recordings reviewed, ${yes} flagged for a closer look.`;
+  const lines = stats.map(
+    (s) => `• ${escapeSlack(s.scanner)} — ${s.observed} reviewed, ${s.yes} flagged`
+  );
+
+  const blocks: SlackBlock[] = [
+    header("👁 UX review — last 24 hours"),
+    section(headline),
+    ...(lines.length ? [section(lines.join("\n"))] : []),
+    context(
+      "A flag is one AI judgment on one recording. It becomes a *finding* only when a probe " +
+        "reproduces it in a real browser — those are posted in the thread of the submission they belong to."
+    ),
+  ];
+  return { text: `UX review — last 24 hours. ${headline}`, blocks };
+}
+
 export async function fetchFindings(): Promise<UxFinding[]> {
   const key = process.env.POSTHOG_API_KEY;
   if (!key) return [];
