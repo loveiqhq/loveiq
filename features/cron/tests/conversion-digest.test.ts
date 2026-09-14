@@ -11,6 +11,7 @@ const mockFetchArmCohorts = vi.fn();
 const mockFetchLandingStartFunnel = vi.fn();
 const mockFetchAxisFunnelDaily = vi.fn();
 const mockFetchFunnelCvrSparklines = vi.fn();
+const mockAdCostByDay = vi.fn();
 
 vi.mock("@shared/observability/logger", () => ({
   default: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() },
@@ -45,6 +46,13 @@ vi.mock("@features/admin/server/digest-metrics", async (importActual) => {
     ...actual,
     fetchFunnelCvrSparklines: (...args: unknown[]) => mockFetchFunnelCvrSparklines(...args),
   };
+});
+
+// Partial: only the GA4 read is replaced. `adCovers` is the pure coverage rule and is
+// what keeps an unreported day out of the message, so it must stay the real one.
+vi.mock("@features/brain/server/ingest/analytics", async (importActual) => {
+  const actual = await importActual<typeof import("@features/brain/server/ingest/analytics")>();
+  return { ...actual, adCostByDay: (...args: unknown[]) => mockAdCostByDay(...args) };
 });
 
 vi.mock("@features/admin/server/conversion-digest", async (importActual) => {
@@ -1011,4 +1019,111 @@ describe("conversion-digest chart series", () => {
 
 afterEach(() => {
   vi.clearAllMocks();
+});
+
+/**
+ * SPEND NEXT TO THE PAID COUNT.
+ *
+ * "20 finished, 0 paid yesterday" reads as a slow day. Measured 2026-09-14: EUR 1,196 of
+ * Google Ads over 30 days returned EUR 129 — an 11% return that nobody had to look at,
+ * because the only figure posted daily was the free half of the ledger. The cost belongs
+ * in the one line that reaches a phone notification.
+ */
+describe("conversion-digest — the daily line carries what the day cost", () => {
+  const DAY = "2026-08-23"; // the day the pinned clock reports on
+
+  beforeAll(() => {
+    process.env.CRON_SECRET = "test-cron-secret";
+    process.env.NEXT_PUBLIC_SITE_URL = "https://www.loveiq.org";
+    process.env.STRATEGY_DIGEST_SIGNING_SECRET = "test-digest-signing-secret-value";
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-24T09:05:00.000Z"));
+    mockIsProdCronHost.mockReturnValue(true);
+    mockTryClaim.mockResolvedValue(true);
+    mockFetchLandingArmFunnel.mockResolvedValue(makeFunnel());
+    mockFetchLandingStartFunnel.mockResolvedValue(makeStartFunnel());
+    mockFetchAxisFunnelDaily.mockResolvedValue(makeAxisRows());
+    mockFetchFunnelCvrSparklines.mockResolvedValue(null);
+    mockFetchArmCohorts.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const postedText = () => {
+    const call = mockNotifySlack.mock.calls.find(
+      (c) => (c[0] as { kind?: string })?.kind === "conversion_digest"
+    );
+    return (call?.[0] as { text?: string })?.text ?? "";
+  };
+
+  const run = async () =>
+    GET(
+      new Request("https://www.loveiq.org/api/cron/conversion-digest", {
+        headers: { authorization: "Bearer test-cron-secret" },
+      })
+    );
+
+  it("names what the day cost, beside what it earned", async () => {
+    mockAdCostByDay.mockResolvedValue({
+      byDay: new Map([[DAY, 41.75]]),
+      from: "2026-05-28",
+      to: DAY,
+    });
+
+    await run();
+
+    expect(postedText()).toContain("EUR 41.75 spent");
+  });
+
+  /**
+   * A day GA4 has not reported yet must not read as a free day. This is the same rule the
+   * rollup keeps everywhere else — absence is unknown, never zero — and it matters most
+   * here, because "0 paid, EUR 0.00 spent" is the reassuring falsehood the clause exists
+   * to remove.
+   */
+  it("says nothing rather than EUR 0.00 when the day is outside GA4's window", async () => {
+    mockAdCostByDay.mockResolvedValue({
+      byDay: new Map(),
+      from: "2026-05-28",
+      to: "2026-08-20", // three days before the reported day
+    });
+
+    await run();
+
+    const text = postedText();
+    expect(text).toContain("paid");
+    expect(text).not.toContain("spent");
+    expect(text).not.toContain("EUR 0.00");
+  });
+
+  /** GA4 being unreachable costs the clause, never the digest. */
+  it("still posts the digest when the spend read fails", async () => {
+    mockAdCostByDay.mockRejectedValue(new Error("GA4 unreachable"));
+
+    await run();
+
+    const text = postedText();
+    expect(text).toContain("Conversion");
+    expect(text).toContain("paid");
+    expect(text).not.toContain("spent");
+  });
+
+  /** A covered day with genuinely no spend is a real zero and should say so. */
+  it("reports a covered day with no spend as zero, which is a fact", async () => {
+    mockAdCostByDay.mockResolvedValue({
+      byDay: new Map(),
+      from: "2026-05-28",
+      to: DAY,
+    });
+
+    await run();
+
+    expect(postedText()).toContain("EUR 0.00 spent");
+  });
 });

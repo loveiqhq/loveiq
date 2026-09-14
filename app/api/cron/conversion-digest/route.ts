@@ -73,6 +73,7 @@ import {
   sumVisitors,
 } from "@features/admin/server/conversion-digest";
 import { armLabel, type ExperimentAxis } from "@features/attribution/server/labels";
+import { adCostByDay, adCovers } from "@features/brain/server/ingest/analytics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -328,6 +329,15 @@ interface DigestInput {
   axisRows?: AxisFunnelRow[];
   /** Site-wide visitors + starts per day, for the landing→survey trend line. */
   cvrDays?: Array<{ day: string; visitors: number; starts: number }> | null;
+  /**
+   * What was spent on ads on `dayKey`, or NULL when GA4 does not cover that day.
+   *
+   * Null is "unknown", never zero — the same rule the rest of the analytics layer keeps,
+   * and it matters most here: "0 paid, EUR 0.00 spent" reads as a quiet day, while the
+   * truth may be "0 paid, EUR 42 spent". An absent figure omits the clause entirely
+   * rather than inventing a reassuring one.
+   */
+  adSpend?: number | null;
   now: Date;
 }
 
@@ -784,10 +794,21 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   // When the data could not be read this must NOT say "0 finished, 0 paid" —
   // that is the same falsehood as plotting a missing day as zero, and it is the
   // line that shows up in push notifications and sidebar previews.
+  /**
+   * Spend sits next to the paid count on purpose.
+   *
+   * "20 finished, 0 paid yesterday" reads as a slow day. "20 finished, 0 paid, EUR 41.75
+   * spent" reads as what it is. Measured 2026-09-14: EUR 1,196 of ads over 30 days
+   * returned EUR 129 — an 11% return that nobody had to look at, because the only number
+   * posted daily was the free half of the ledger.
+   *
+   * Omitted entirely when spend is unknown, rather than shown as zero.
+   */
+  const spentClause = typeof input.adSpend === "number" ? `, ${money(input.adSpend)} spent` : "";
   const text =
     funnel === null
       ? `:chart_with_upwards_trend: Conversion ${dayKey} — data unavailable (could not read the funnel)`
-      : `:chart_with_upwards_trend: Conversion ${dayKey} — ${yesterday.completions} finished, ${yesterday.paid} paid yesterday; ${paidTotal} ever paid from ${WINDOW_DAYS} days of finishers`;
+      : `:chart_with_upwards_trend: Conversion ${dayKey} — ${yesterday.completions} finished, ${yesterday.paid} paid${spentClause} yesterday; ${paidTotal} ever paid from ${WINDOW_DAYS} days of finishers`;
 
   const fitted = fitBlocks(blocks, text);
   return { text, blocks: fitted.blocks, trimmed: fitted.trimmed };
@@ -854,6 +875,20 @@ export async function GET(request: Request) {
       fetchFunnelCvrSparklines(windowStart, windowEnd),
     ]);
 
+    /**
+     * Ad spend for the day being reported. Best-effort by design: GA4 being unreachable
+     * must cost the digest its spend clause, never the digest. `adCovers` is what keeps
+     * an uncovered day out — without it a day GA4 has not reported yet reads as EUR 0.00,
+     * which is the reassuring falsehood this whole line exists to remove.
+     */
+    let adSpend: number | null = null;
+    try {
+      const ad = await adCostByDay();
+      adSpend = adCovers(ad, dayKey) ? (ad.byDay.get(dayKey) ?? 0) : null;
+    } catch (err) {
+      logger.warn({ err, day: dayKey }, "conversion-digest: ad spend unavailable");
+    }
+
     const digest = await buildConversionDigest({
       dayKey,
       funnel,
@@ -861,6 +896,7 @@ export async function GET(request: Request) {
       startFunnel,
       axisRows,
       cvrDays: cvrSnap?.days ?? null,
+      adSpend,
       now,
     });
     if (digest.trimmed) {
