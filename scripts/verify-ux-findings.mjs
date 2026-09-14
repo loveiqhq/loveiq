@@ -277,6 +277,22 @@ function openReproductionPr({ criterion, sessionId, viewport, results }) {
     reproduced: true,
   };
 
+  // Where to come back to. `git checkout -` is NOT good enough: it toggles to
+  // the PREVIOUS branch, so on the short-circuit path below — where no branch
+  // was ever created — it switched INTO the replay branch left over from an
+  // earlier finding, and every later finding in the run would have been
+  // committed onto it. Capture the real ref, and only restore if we moved.
+  // CI checks out a detached HEAD, where --abbrev-ref prints "HEAD"; fall back
+  // to the commit sha so the restore is still exact.
+  let original;
+  try {
+    original = git("rev-parse", "--abbrev-ref", "HEAD");
+    if (original === "HEAD") original = git("rev-parse", "HEAD");
+  } catch {
+    return null;
+  }
+  let switched = false;
+
   try {
     // A branch that already exists means this reproduction already has a PR.
     const exists = execFileSync("git", ["ls-remote", "--heads", "origin", branch], {
@@ -290,6 +306,7 @@ function openReproductionPr({ criterion, sessionId, viewport, results }) {
     writeFileSync(file, `${JSON.stringify(record, null, 2)}\n`);
 
     git("checkout", "-b", branch);
+    switched = true;
     git("add", file);
     git(
       "-c",
@@ -341,10 +358,12 @@ function openReproductionPr({ criterion, sessionId, viewport, results }) {
     console.log(`  (could not open a PR: ${String(err.message).split("\n")[0].slice(0, 120)})`);
     return null;
   } finally {
-    try {
-      git("checkout", "-");
-    } catch {
-      /* best effort */
+    if (switched) {
+      try {
+        git("checkout", original);
+      } catch {
+        /* best effort */
+      }
     }
   }
 }
