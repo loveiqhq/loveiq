@@ -305,10 +305,14 @@ function getErrorState(error: ReportRequestError | null): ReportStatusState {
       };
     case 404:
       return {
-        title: "Report not found",
-        copy: "We could not find a saved report for this survey session. Complete the survey again to generate a fresh report.",
+        // Was "Complete the survey again to generate a fresh report", which asked
+        // for all 56 questions back. Everyone who finished was emailed a
+        // "View your report now" link (features/survey/server/emails/), so the
+        // email is the way back in — not the survey.
+        title: "Can't find your report",
+        copy: "We emailed your report link when you finished. Open that email to get back in.",
         actionHref: "/survey",
-        actionLabel: "Take the survey",
+        actionLabel: "Haven't taken the test yet?",
       };
     case 429:
       return {
@@ -2520,13 +2524,17 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       <main className="report-status-screen">
         <div className="report-status-card report-card">
           <p className="report-overline">LoveIQ report</p>
-          <h1 className="report-status-card__title">No saved report session</h1>
+          {/* Was "Complete the survey again to generate a fresh report". Opening
+              the report on a second phone is the common way to land here, and
+              telling someone who already answered 56 questions to redo them is
+              both wrong and the "start the survey from scratch" complaint Mark
+              reported on 2026-08-30. The completion email carries their link. */}
+          <h1 className="report-status-card__title">Can&apos;t find your report</h1>
           <p className="report-status-card__copy">
-            We could not find a saved report session in this browser. Complete the survey again to
-            generate a fresh report.
+            We emailed your report link when you finished. Open that email to get back in.
           </p>
           <a href="/survey" className="report-button mt-3 inline-flex">
-            Take the survey
+            Haven&apos;t taken the test yet?
           </a>
         </div>
       </main>

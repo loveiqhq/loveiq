@@ -347,9 +347,15 @@ describe("ReportPage", () => {
 
     render(<ReportPage />);
 
-    expect(screen.getByRole("heading", { name: /no saved report session/i })).toBeInTheDocument();
-    expect(screen.getByText(/in this browser/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /take the survey/i })).toHaveAttribute(
+    // Copy changed deliberately: this screen used to say "Complete the survey
+    // again to generate a fresh report", which told someone who had already
+    // answered 56 questions to redo them. Opening the report on a second phone
+    // is the ordinary way to land here, and the completion email carries their
+    // link, so the email is the way back in. The survey link stays for people
+    // who genuinely have not taken it, but as an aside rather than the fix.
+    expect(screen.getByRole("heading", { name: /can.t find your report/i })).toBeInTheDocument();
+    expect(screen.getByText(/we emailed your report link/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /taken the test yet/i })).toHaveAttribute(
       "href",
       "/survey"
     );
