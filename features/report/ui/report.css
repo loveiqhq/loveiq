@@ -23155,3 +23155,21 @@
     opacity: 1;
   }
 }
+
+/* ── v1 report: keep the first heading out from under the fixed chapter bar ──
+   On phones and tablets the chapter bar is FIXED at 80–136px. `.report-shell`
+   is meant to clear it — the `max-width: 1279px` block above sets
+   `padding-top: …+160px` for exactly that — but a later unscoped shorthand,
+   `.report-shell { padding: 2rem 1rem 4rem }`, resets it to 32px at every
+   width. `.report-content` then adds 80px, so the first section starts at
+   112px and the bar covers the top 24px of a 40px heading. Measured on
+   production: "Welcome" 60% hidden on Pixel 7, iPhone 15 Pro and iPhone SE.
+
+   Scoped to the welcome section, which only `ReportExperienceV1` renders, so
+   report 2.0 (`?v2=1`) is untouched — it already clears the bar, starting its
+   first heading at 168px. Fixing the shorthand instead would move 2.0 too. */
+@media (max-width: 1279px) {
+  .report-section--welcome {
+    padding-top: 2.5rem;
+  }
+}
