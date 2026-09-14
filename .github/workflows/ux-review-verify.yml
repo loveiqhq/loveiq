@@ -30,7 +30,14 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  # `contents: write` and `pull-requests: write` exist so a REPRODUCED finding
+  # can open a DRAFT pull request carrying its evidence. The script never
+  # merges, never writes to main, and never generates a fix — it pushes one
+  # branch holding a reproduction record. This repository is public, so the
+  # token stays scoped to these two and the workflow is `schedule` +
+  # `workflow_dispatch` only, never `pull_request_target`.
+  contents: write
+  pull-requests: write
 
 jobs:
   verify:
@@ -93,6 +100,9 @@ jobs:
           fi
         env:
           DRY_RUN: ${{ inputs.dry_run }}
+          # Opening a PR is opt-in, so the script cannot do it from a laptop.
+          UX_REVIEW_OPEN_PR: "1"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LOOKBACK_HOURS: ${{ inputs.lookback_hours || '6' }}
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

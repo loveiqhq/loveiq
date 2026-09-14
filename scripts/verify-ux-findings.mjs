@@ -22,7 +22,7 @@
  * this exits non-zero when one is missing instead of reporting success.
  */
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 // Imported, not restated. The cron posts findings and this verifies them; two
 // copies of "does our telemetry contradict this claim" would drift the day one
@@ -204,6 +204,123 @@ function runProbe(file, viewport) {
 }
 
 /**
+ * Criteria a reproduction may open a pull request for.
+ *
+ * Narrow on purpose. Each of these has a probe that fails before a fix and
+ * passes after, so "reproduced" is a fact rather than a reading. The remaining
+ * criteria (E1's wider error class, S1's scroll heuristics, M1) still go to a
+ * human in the thread.
+ */
+const AUTO_PR_CRITERIA = new Set(["C1", "D1", "Z1", "B1"]);
+
+const git = (...args) => execFileSync("git", args, { encoding: "utf8" }).trim();
+
+/**
+ * Open a DRAFT pull request carrying the reproduction.
+ *
+ * What this does NOT do is write the fix. A script can reproduce
+ * deterministically; choosing the change is judgement, and a generated diff
+ * merged on a green probe is how you ship a confident wrong fix. So the PR
+ * carries the evidence — which criterion, which session, which viewport, which
+ * probe failed and its output — and the fix is added on the branch afterwards.
+ * It is never merged automatically.
+ *
+ * Guarded by UX_REVIEW_OPEN_PR so it cannot fire from a laptop by accident.
+ */
+function openReproductionPr({ criterion, sessionId, viewport, results }) {
+  if (process.env.UX_REVIEW_OPEN_PR !== "1") return null;
+  if (!AUTO_PR_CRITERIA.has(criterion.id)) return null;
+  // Belt and braces: this value becomes a git ref.
+  if (!isSafeSessionId(sessionId)) return null;
+
+  const short = sessionId.slice(0, 8);
+  const branch = `replay/${criterion.id.toLowerCase()}-${short}`;
+  const at = viewport ? `${viewport.min}px-${viewport.max}px` : "unknown viewport";
+  const failed = results.filter((r) => !r.passed && !r.inconclusive);
+
+  const record = {
+    criterion: criterion.id,
+    label: criterion.label,
+    session_id: sessionId,
+    recording: `https://eu.posthog.com/project/244778/replay/${sessionId}`,
+    viewport: viewport ?? null,
+    probes: failed.map((r) => ({ file: r.file, output: r.tail })),
+    reproduced: true,
+  };
+
+  try {
+    // A branch that already exists means this reproduction already has a PR.
+    const exists = execFileSync("git", ["ls-remote", "--heads", "origin", branch], {
+      encoding: "utf8",
+    }).trim();
+    if (exists) return null;
+
+    const dir = "scripts/replay-bench/reproductions";
+    mkdirSync(dir, { recursive: true });
+    const file = `${dir}/${criterion.id.toLowerCase()}-${short}.json`;
+    writeFileSync(file, `${JSON.stringify(record, null, 2)}\n`);
+
+    git("checkout", "-b", branch);
+    git("add", file);
+    git(
+      "-c",
+      "user.name=loveiq-ux-review",
+      "-c",
+      "user.email=ec@loveiq.org",
+      "commit",
+      "-m",
+      `test(replay): reproduce ${criterion.id} from session ${short}\n\n` +
+        `${criterion.label}, reproduced at ${at} — the size this reader had.\n` +
+        `${failed.map((r) => `${r.file}: ${r.tail}`).join("\n")}\n\n` +
+        `For Marcus: An automatic check found a real problem in a recording of ` +
+        `someone using the site, and reproduced it. No fix yet - this just records it.`
+    );
+    git("push", "origin", branch);
+
+    const body =
+      `Reproduced **${criterion.label}** (\`${criterion.id}\`) at **${at}**, the viewport this ` +
+      `session reported.\n\n` +
+      `- Recording: ${record.recording}\n` +
+      `- Probe output:\n\n` +
+      failed.map((r) => `\`\`\`\n${r.file}\n${r.tail}\n\`\`\``).join("\n") +
+      `\n\n**No fix is included.** The reproduction is deterministic; the fix is not, and a ` +
+      `generated diff riding a green probe is how a confident wrong fix ships. Add the change on ` +
+      `this branch, then prove it: the probe must FAIL under \`MUTATE=1\` and pass without it.\n\n` +
+      `The scanner's criteria have not cleared the benchmark ` +
+      `(see \`scripts/replay-bench/results/\`), so treat the diagnosis as unconfirmed even though ` +
+      `the reproduction is real.`;
+
+    const url = execFileSync(
+      "gh",
+      [
+        "pr",
+        "create",
+        "--draft",
+        "--base",
+        "main",
+        "--head",
+        branch,
+        "--title",
+        `${criterion.id}: ${criterion.label} (session ${short})`,
+        "--body",
+        body,
+      ],
+      { encoding: "utf8" }
+    ).trim();
+    return url;
+  } catch (err) {
+    console.log(`  (could not open a PR: ${String(err.message).split("\n")[0].slice(0, 120)})`);
+    return null;
+  } finally {
+    try {
+      git("checkout", "-");
+    } catch {
+      /* best effort */
+    }
+  }
+}
+
+/**
  * Claim a finding so it is verified exactly once.
  *
  * The schedule (every 3h) and the lookback (6h) overlap deliberately, so a run
@@ -364,6 +481,15 @@ let confirmed = 0;
 let skipped = 0;
 let contradicted = 0;
 for (const [observationId, sessionId, scannerName, reasoning] of findings) {
+  // The session id comes back from PostHog and is about to become a git branch
+  // name, a Supabase filter and a HogQL literal. isSafeSessionId was imported
+  // and then only ever exercised in the selftest; validate for real, once, so
+  // everything downstream inherits it. Refuse rather than sanitise.
+  if (!isSafeSessionId(sessionId)) {
+    console.log(`SKIP    malformed session id ${JSON.stringify(String(sessionId).slice(0, 40))}`);
+    continue;
+  }
+
   // Claim before classifying: probes are minutes of real browser time, and a
   // second run must not spend them again on a finding already answered.
   if (!DRY_RUN && !CLASSIFY_ONLY && !(await claimFinding(observationId))) {
@@ -440,6 +566,16 @@ for (const [observationId, sessionId, scannerName, reasoning] of findings) {
   const reproduced = results.some((r) => !r.passed && !r.inconclusive);
   if (reproduced) confirmed += 1;
 
+  // A reproduced defect on a narrow criterion becomes a draft PR carrying the
+  // evidence. Never merged, and never containing a generated fix.
+  // --dry-run and --classify-only must have NO side effects. Without this guard
+  // the workflow's own dry_run path would still push a branch and open a PR,
+  // because it sets UX_REVIEW_OPEN_PR=1 for both branches of its if.
+  const prUrl =
+    reproduced && !DRY_RUN && !CLASSIFY_ONLY
+      ? openReproductionPr({ criterion, sessionId, viewport, results })
+      : null;
+
   const at = viewport
     ? ` at ${viewport.min}px${viewport.max !== viewport.min ? `-${viewport.max}px` : ""}, the size this reader had`
     : "";
@@ -450,7 +586,8 @@ for (const [observationId, sessionId, scannerName, reasoning] of findings) {
       results
         .filter((r) => !r.passed && !r.inconclusive)
         .map((r) => `\`${r.file}\` failed: ${r.tail}`)
-        .join(" ");
+        .join(" ") +
+      (prUrl ? ` Draft PR with the reproduction: ${prUrl}` : "");
   } else if (inconclusive) {
     // Never report this as a clean pass. The probe did not measure the thing,
     // so we know nothing either way — and saying "passes in production now"
