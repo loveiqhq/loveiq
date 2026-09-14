@@ -24,7 +24,43 @@ describe("notifySlack", () => {
     delete process.env.SLACK_SURVEY_WEBHOOK_URL;
     delete process.env.SLACK_CONTACT_WEBHOOK_URL;
     delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
+    delete process.env.SLACK_BRAIN_WEBHOOK_URL;
     mockFetchWithTimeout.mockResolvedValue({ ok: true, status: 200 });
+  });
+
+  /**
+   * The company brain got its own channel on 2026-09-14 because it posted more to the
+   * shared ops channel than everything else combined. The whole change turns on the
+   * fallback: with `SLACK_BRAIN_WEBHOOK_URL` unset — which is its state in production
+   * until somebody creates the channel — every brain alert would otherwise go SILENT,
+   * and nobody notices a message that was never sent.
+   */
+  describe("a channel with a fallback", () => {
+    it("uses its own webhook when one is configured", async () => {
+      process.env.SLACK_BRAIN_WEBHOOK_URL = "https://hooks.slack.com/brain-test";
+      process.env.SLACK_OPS_WEBHOOK_URL = "https://hooks.slack.com/ops-test";
+      await notifySlack({ channel: "brain", kind: "brain_ingest_failed", text: "drive" });
+      expect(mockFetchWithTimeout.mock.calls[0]![0]).toBe("https://hooks.slack.com/brain-test");
+    });
+
+    it("falls back to ops when its own webhook is unset, rather than going quiet", async () => {
+      process.env.SLACK_OPS_WEBHOOK_URL = "https://hooks.slack.com/ops-test";
+      await notifySlack({ channel: "brain", kind: "brain_ingest_failed", text: "drive" });
+      expect(mockFetchWithTimeout).toHaveBeenCalledTimes(1);
+      expect(mockFetchWithTimeout.mock.calls[0]![0]).toBe("https://hooks.slack.com/ops-test");
+    });
+
+    it("stays silent only when BOTH are unset", async () => {
+      await notifySlack({ channel: "brain", kind: "brain_ingest_failed", text: "drive" });
+      expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+    });
+
+    /** The fallback is one-way. Ops must never be rerouted into the brain's channel. */
+    it("does not route ops into the brain channel", async () => {
+      process.env.SLACK_BRAIN_WEBHOOK_URL = "https://hooks.slack.com/brain-test";
+      await notifySlack({ channel: "ops", kind: "api_5xx", text: "boom" });
+      expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+    });
   });
 
   it("short-circuits when the channel's env var is unset", async () => {
