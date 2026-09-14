@@ -242,7 +242,42 @@ async function getStagingPasswordHash(password: string): Promise<string> {
   return stagingPasswordHash;
 }
 
+/**
+ * The trailing-slash 308 that Next used to do for us.
+ *
+ * Next's own version of it is switched off in next.config.js, because Next applied that
+ * redirect BEFORE any rewrite — `beforeFiles` included — and the proxy forwards endpoints
+ * that legitimately end in a slash (`/i/v0/e/`, `/e/`, `/s/`). With the automatic redirect
+ * on, every capture POST got a 308 rather than reaching PostHog.
+ *
+ * Doing it here instead restores the exact previous behaviour for pages, because this
+ * middleware does not run on the proxy path at all (see `config.matcher`). `/about/` still
+ * 308s to `/about`; the sitemap, the canonical tags and every existing inbound link keep
+ * working, and search engines are not handed a second URL for every page.
+ *
+ * Root is excluded: "/" is entirely a trailing slash, and stripping it yields "".
+ */
+export function stripTrailingSlash(request: NextRequest): NextResponse | null {
+  const { pathname } = request.nextUrl;
+  if (pathname === "/" || !pathname.endsWith("/")) return null;
+  // A PLAIN `URL` built from `request.url`, not `request.nextUrl.clone()`.
+  //
+  // `nextUrl` is a NextURL, which re-applies Next's own trailing-slash normalisation when
+  // `pathname` is assigned — so the slash came straight back and the response redirected
+  // /about/ to /about/. Verified on a preview deployment: five hops and still 308, an
+  // infinite loop on every page with a trailing slash, and browsers cache a 308.
+  // A plain URL stores exactly what it is given.
+  const url = new URL(request.url);
+  url.pathname = url.pathname.replace(/\/+$/, "");
+  return NextResponse.redirect(url, 308);
+}
+
 export async function proxy(request: NextRequest) {
+  // Restore Next's trailing-slash redirect, which next.config.js disables for the
+  // PostHog proxy's sake. Must run first: everything below assumes a normalised path.
+  const trailingSlashRedirect = stripTrailingSlash(request);
+  if (trailingSlashRedirect) return trailingSlashRedirect;
+
   // Staging gate: when STAGING_PASSWORD is set, require a valid session cookie
   const STAGING_PASSWORD = process.env.STAGING_PASSWORD;
   if (STAGING_PASSWORD) {
@@ -328,6 +363,16 @@ export async function proxy(request: NextRequest) {
     }
   })();
 
+  /**
+   * Still emitted, though the browser no longer talks to PostHog directly.
+   *
+   * Since the /relay proxy every analytics request is same-origin and covered by 'self',
+   * so these entries grant nothing that is currently used. They are kept deliberately
+   * rather than tidied away: posthog-js reaches for an absolute host in paths this proxy
+   * has not been exercised on — a toolbar load, a replay upload retry — and a CSP refusal
+   * is invisible outside the browser console. Removing them is a separate change that
+   * needs its own evidence, not a side effect of adding the proxy.
+   */
   const posthogCspSources = (() => {
     const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
     if (!host) return "";
@@ -704,7 +749,14 @@ export const config = {
   matcher: [
     // Match all paths except static files and API routes that don't need CSP
     {
-      source: "/((?!_next/static|_next/image|favicon.ico|images/).*)",
+      // `relay` is the PostHog reverse proxy (see shared/analytics/posthog-proxy.ts).
+      // Excluded for two reasons: this middleware would otherwise run on EVERY analytics
+      // event and every session-replay chunk — by far the highest-volume path on the site
+      // — and none of what it does (CSP headers, CSRF cookie, staging gate, security
+      // logging) means anything for a request that is forwarded verbatim to PostHog.
+      // The staging gate exclusion is deliberate, not incidental: a gated preview must
+      // still be able to send analytics, which is how this proxy gets verified at all.
+      source: "/((?!_next/static|_next/image|favicon.ico|images/|relay/).*)",
       missing: [
         { type: "header", key: "next-router-prefetch" },
         { type: "header", key: "purpose", value: "prefetch" },

@@ -1,5 +1,6 @@
 import posthog from "posthog-js";
 import { isProductionSite } from "@shared/env/is-non-prod-deploy";
+import { POSTHOG_PROXY_PATH, POSTHOG_UI_HOST } from "@shared/analytics/posthog-proxy";
 
 const projectToken = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
 const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
@@ -31,7 +32,25 @@ if (!projectToken || !host) {
   }
 } else {
   posthog.init(projectToken, {
-    api_host: host,
+    /**
+     * Our own origin, not PostHog's. `next.config.js` rewrites it straight through.
+     *
+     * Ad blockers match analytics on HOSTNAME, so a request to `eu.i.posthog.com` is
+     * dropped before it leaves the browser for every visitor running one — and they are
+     * invisible in the data precisely because the request never happened. A same-origin
+     * path does not match those lists.
+     *
+     * `host` is still required above and still used, for `ui_host` — an empty
+     * NEXT_PUBLIC_POSTHOG_HOST remains a misconfiguration worth shouting about, because
+     * the server-side purchase send reads the same variable.
+     */
+    api_host: POSTHOG_PROXY_PATH,
+    /**
+     * Without this, posthog-js derives the app URL from `api_host` and every "view in
+     * PostHog" link — in toolbar, in session replay, in the browser extension — would
+     * point at loveiq.org/relay and 404.
+     */
+    ui_host: POSTHOG_UI_HOST,
     defaults: "2026-01-30",
     capture_exceptions: true,
     debug: process.env.NODE_ENV === "development",

@@ -199,13 +199,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en" className={`${manrope.variable} ${lora.variable}`}>
       <head>
         <link rel="preconnect" href="https://cdn-cookieyes.com" />
-        {/* PostHog loads on every environment, so this preconnect is NOT gated with
-            the production-only ones below. PageSpeed named it as the single best
-            remaining preconnect candidate on 2026-08-28 — est. 300 ms off LCP —
-            because posthog-js fetches its remote config, recorder and autocapture
-            bundles from this origin on first paint. Four preconnects is the
-            recommended ceiling and this is the fourth. */}
-        <link rel="preconnect" href="https://eu-assets.i.posthog.com" />
+        {/* The PostHog preconnect that used to sit here is GONE, and its 300 ms is
+            still saved — better than before.
+            PageSpeed named `eu-assets.i.posthog.com` the best remaining preconnect
+            candidate on 2026-08-28, because posthog-js fetched its config, recorder
+            and autocapture bundles from that origin on first paint. Those bundles now
+            come from THIS origin via the /relay rewrite, which the browser has already
+            connected to in order to fetch the page — so there is no handshake left to
+            pre-warm, and preconnecting to a host we no longer talk to would just hold a
+            socket open for nothing. It also put a known-blocked hostname in the HTML of
+            every page, which is a signal some blockers read on its own. */}
         {productionAnalyticsEnabled && (
           <>
             <link rel="preconnect" href="https://www.clarity.ms" />

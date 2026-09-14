@@ -149,23 +149,31 @@ describe("production analytics gate", () => {
     expect(client).toMatch(/disable_surveys:\s*true/);
   });
 
-  it("preconnects to PostHog on EVERY environment, and stays within four hints", () => {
+  it("stays within four preconnect hints", () => {
     /**
-     * PostHog runs everywhere, so its preconnect must sit OUTSIDE the
-     * production-only block — inside it, the 300 ms LCP saving PageSpeed measured
-     * would apply only on production, which is the one place it was already fine.
-     *
-     * The count matters too: preconnect hints past about four cost more in
-     * contention than they save, so this fails loudly if a fifth is added rather
-     * than letting them accumulate.
+     * Preconnect hints past about four cost more in contention than they save, so this
+     * fails loudly if a fifth is added rather than letting them accumulate.
      */
     const hints = layout.match(/<link rel="preconnect"/g) ?? [];
     expect(hints.length).toBeLessThanOrEqual(4);
+  });
 
-    const at = layout.indexOf('href="https://eu-assets.i.posthog.com"');
-    expect(at, "PostHog preconnect missing").toBeGreaterThan(-1);
-    const inside = GATED_RANGES.some(([open, close]) => at > open && at < close);
-    expect(inside, "PostHog preconnect must not be production-gated").toBe(false);
+  it("does NOT preconnect to PostHog, now that PostHog is served from our own origin", () => {
+    /**
+     * This assertion used to REQUIRE the preconnect, and was right to: posthog-js fetched
+     * its config, recorder and autocapture bundles from `eu-assets.i.posthog.com` on first
+     * paint, and PageSpeed measured 300 ms for pre-warming that handshake on 2026-08-28.
+     *
+     * Since the /relay reverse proxy those bundles come from THIS origin — already
+     * connected, because it served the page — so the 300 ms is saved outright rather than
+     * hidden, and a preconnect to a host we no longer talk to would hold a socket open for
+     * nothing while burning one of only four useful hints.
+     *
+     * The second reason is the point of the proxy: a preconnect puts the blocked hostname
+     * in the HTML of every page, and that is a signal some blockers act on by itself.
+     */
+    expect(layout).not.toContain('rel="preconnect" href="https://eu-assets.i.posthog.com"');
+    expect(layout).not.toContain('rel="preconnect" href="https://eu.i.posthog.com"');
   });
 
   it("defines the gtag shim EARLY, so events fired on mount are not lost", () => {
