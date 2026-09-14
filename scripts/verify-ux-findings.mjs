@@ -95,7 +95,36 @@ export const CRITERIA = [
     id: "E1",
     label: "error message on screen",
     match: /unable to process|error message|something went wrong|failed to/i,
-    probes: ["console-audit.mjs"],
+    // console-audit.mjs asserts NOTHING and always exits 0, so it could never
+    // confirm an E1 finding; it stays only as context in the output.
+    probes: ["verify-checkout-error-copy.mjs", "console-audit.mjs"],
+  },
+  {
+    // B1 was listed as "no probe at all" until it fired for real on 2026-09-14:
+    // the consent screen's "Return to site" wiped the reader's answers and sent
+    // them to the token-less /report. L1 sits above this and catches most loop
+    // wording; B1 catches the claims that name a direction rather than a loop.
+    id: "B1",
+    label: "sent backwards through the funnel",
+    match: /backwards|earlier step|previous (screen|step)|start over|back to the (site|home)/i,
+    probes: ["verify-consent-return.mjs", "verify-no-survey-restart.mjs"],
+  },
+  {
+    id: "A1",
+    label: "text readable through a blur meant to hide it",
+    match: /through the blur|readable .*blur|blur(red)? .*(readable|legible)|not fully blurred/i,
+    probes: ["audit-paywall-layout.mjs"],
+  },
+  {
+    id: "M1",
+    label: "content that never rendered",
+    match:
+      /never render|did not render|missing (section|image|content)|blank (section|area)|image .*(broken|did not load)/i,
+    // No probe asserts this yet: audit-visual.mjs measures images that never
+    // paint but always exits 0. Listed so an M1 claim is RECOGNISED and routed
+    // to a human, rather than falling through as "no criterion" and silently
+    // reaching nobody.
+    probes: [],
   },
 ];
 
@@ -254,6 +283,12 @@ if (process.argv.includes("--selftest")) {
     ["The survey looped back to the very first introduction screen.", "L1"],
     ["The user was returned to an earlier screen after pressing continue.", "L1"],
     ["The reader simply finished reading the chapter.", null],
+    // The four criteria added 2026-09-14. B1 sits BELOW L1, so loop wording
+    // must still reach L1 — that ordering is the thing these pin.
+    ["The CTA sent the user backwards through the funnel.", "B1"],
+    ["Text was readable through the blur meant to hide it.", "A1"],
+    ["A section never rendered and left a blank area.", "M1"],
+    ["The user was looped back to the survey start.", "L1"],
   ];
   const claimCases = [
     // The real 2026-09-14 fabrication: an unlock click in a session with none.

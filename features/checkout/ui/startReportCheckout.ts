@@ -95,15 +95,31 @@ export async function startReportCheckout({
     });
 
     const json = (await response.json().catch(() => null)) as
-      StripeCheckoutSessionResponse | { error?: string } | null;
+      | StripeCheckoutSessionResponse
+      | { error?: string }
+      | null;
 
     if (!response.ok) {
+      /**
+       * Only 4xx bodies are written for a reader. The 5xx bodies are generic
+       * internal fallbacks — /api/stripe/checkout-session returns the literal
+       * "Unable to process request." on both of its catch-all paths — and this
+       * function used to pass whatever came back straight into the handoff card.
+       * Mark logged the result on 2026-08-30: "'Continue to secure checkout' on
+       * a EUR 39.99 purchase gave 'Unable to process request' three times."
+       * That string tells a reader nothing and reads as a broken product at the
+       * exact moment they were trying to pay.
+       *
+       * Covered by scripts/probes/verify-checkout-error-copy.mjs (criterion E1).
+       */
+      const serverMessage =
+        response.status < 500 && json && "error" in json && typeof json.error === "string"
+          ? json.error
+          : null;
       return {
         status: "error",
         message:
-          json && "error" in json && typeof json.error === "string"
-            ? json.error
-            : "We couldn't prepare secure checkout right now. Please try again.",
+          serverMessage ?? "We couldn't prepare secure checkout right now. Please try again.",
       };
     }
 
