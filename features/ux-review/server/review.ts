@@ -181,6 +181,7 @@ export async function findThreadTs(sessionId: string): Promise<string | null> {
     if (!submissionId) return null;
 
     const messages = await fetchWithTimeout(
+      // eslint-disable-next-line no-secrets/no-secrets -- Supabase REST path, not a credential
       `${url}/rest/v1/slack_journey_message?survey_submission_id=eq.${submissionId}&select=message_ts&limit=1`,
       { headers: { apikey: key, Authorization: `Bearer ${key}` }, timeoutMs: 4000 }
     );
