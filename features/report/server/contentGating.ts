@@ -22,6 +22,7 @@ import { archetypeContent } from "@/data/report-archetypes";
 import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
 import { reportSections } from "@/data/report-general";
 import { isSectionUnlockedForPlan, type ReportAccessPlan } from "@features/report/server/access";
+import { summaryArchetypeContent } from "@/data/report-summary";
 
 export const PRACTICE_SECTION_ID = "typical_sexual_fantasy_amp_practice_tendencies";
 
@@ -127,6 +128,9 @@ export interface PracticeTendencyContentForUser {
   groups: PracticeTendencyGroupForUser[];
 }
 
+/** Key the `summary` chapter's prose travels under inside `archetypeContent`. */
+export const SUMMARY_BLOCK_ID = "summary";
+
 export function buildArchetypeContentForUser(
   accessPlan: ReportAccessPlan,
   unlockedArchetypes: string[]
@@ -152,6 +156,27 @@ export function buildArchetypeContentForUser(
       result[section.archetypeBlockId]![archetype] = html;
     }
   }
+
+  /**
+   * The `summary` chapter is premium but has no `archetypeBlockId`, so it fell
+   * outside the loop above and the client imported `data/report-summary.ts`
+   * directly instead. That put every archetype's premium summary — Core
+   * Essence, Key Strengths, Core Challenges — into the public JS bundle, where
+   * a reader who had bought nothing could read all fourteen. Exactly the leak
+   * `__tests__/security/premium-content-bundle.test.ts` was written to stop,
+   * through a module that test did not list.
+   *
+   * Ship it under the same rule as every other chapter: unlocked archetypes
+   * only. Per-SECTION locking still happens on the client, so an owner still
+   * sees it blurred behind the paywall rather than missing.
+   */
+  for (const archetype of unlockedSet) {
+    const html = summaryArchetypeContent[archetype];
+    if (!html) continue;
+    if (!result[SUMMARY_BLOCK_ID]) result[SUMMARY_BLOCK_ID] = {};
+    result[SUMMARY_BLOCK_ID]![archetype] = html;
+  }
+
   return result;
 }
 

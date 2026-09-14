@@ -20,7 +20,6 @@ const grantAnalyticsConsent = () => {
 
 let track: typeof import("@features/analytics/client").track;
 let setSurveyVariant: typeof import("@features/analytics/client").setSurveyVariant;
-let setForcedPaywallArm: typeof import("@features/analytics/client").setForcedPaywallArm;
 
 beforeEach(async () => {
   vi.clearAllMocks();
@@ -29,7 +28,6 @@ beforeEach(async () => {
   const mod = await import("@features/analytics/client");
   track = mod.track;
   setSurveyVariant = mod.setSurveyVariant;
-  setForcedPaywallArm = mod.setForcedPaywallArm;
   window.gtag = vi.fn() as unknown as typeof window.gtag;
 });
 
