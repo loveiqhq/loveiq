@@ -455,8 +455,29 @@ export async function mineDecisions(
       // decisions reported "scanned 2", and a run that stopped on the first call
       // reported 0 whether it had read nothing or found nothing. Two different states
       // rendering as one number is the failure this file spends its comments on.
-      logger.warn({ reason: res.reason, read, doc: doc.sourceId }, "brain: mining stopped");
-      return { scanned: read, written, dropped, skipped: res.reason };
+      /**
+       * Name WHICH limit stopped the run.
+       *
+       * `res.reason` is `rate_limited` for both the per-minute cap and the daily one, so
+       * `cron_run.error_message` read "stopped early: rate_limited" either way -- and the
+       * two want opposite fixes. A per-minute stop means the wait budget ran out and
+       * should be raised; a daily stop means this cron is scheduled in the wrong part of
+       * the Pacific day and no budget will help. Four runs' worth of that message could
+       * not distinguish them, which is why the drain sat at 19 of 123 documents with no
+       * way to tell why from the outside.
+       *
+       * An ABSENT `dailyQuota` stays the bare `rate_limited`. Calling an unknown limit
+       * "per-minute" would be a claim the provider never made -- the same collapse of two
+       * states into one name that this whole change exists to undo.
+       */
+      const stopped =
+        res.reason !== "rate_limited" || res.dailyQuota === undefined
+          ? res.reason
+          : res.dailyQuota
+            ? "rate_limited_daily"
+            : "rate_limited_minute";
+      logger.warn({ reason: stopped, read, doc: doc.sourceId }, "brain: mining stopped");
+      return { scanned: read, written, dropped, skipped: stopped };
     }
     // The window cleared, so the budget of waits starts over. Without this reset a run
     // long enough to hit the quota eight separate times would stop on the eighth even

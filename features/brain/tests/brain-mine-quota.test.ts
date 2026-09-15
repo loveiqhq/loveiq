@@ -270,6 +270,47 @@ describe("mineDecisions — a per-minute quota is a pause, not the end of the ru
     expect(complete).toHaveBeenCalledTimes(1);
   });
 
+  /**
+   * The whole point of carrying `dailyQuota` out of the LLM layer: `cron_run` has to say
+   * WHICH limit stopped the run, because the two want opposite fixes. A daily stop means
+   * the cron is scheduled in the wrong part of the Pacific day and no budget will help;
+   * a per-minute stop means the wait budget ran out and should be raised.
+   */
+  it("names the DAILY quota when that is what stopped it", async () => {
+    complete.mockResolvedValue({ ok: false, reason: "rate_limited", dailyQuota: true });
+
+    const result = await run(2, 240_000);
+
+    expect(result.skipped).toBe("rate_limited_daily");
+    // Terminal: a daily limit does not clear until midnight Pacific, so no retry.
+    expect(complete).toHaveBeenCalledTimes(1);
+  });
+
+  it("names the PER-MINUTE quota when the wait cannot fit the budget", async () => {
+    complete.mockResolvedValue({
+      ok: false,
+      reason: "rate_limited",
+      dailyQuota: false,
+      retryAfterMs: 90_000,
+    });
+
+    const result = await run(2, 10_000);
+
+    expect(result.skipped).toBe("rate_limited_minute");
+    expect(complete).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves an UNKNOWN limit unnamed rather than guessing per-minute", async () => {
+    // A provider that says nothing about which limit it hit must not be reported as
+    // per-minute. Naming it would be a claim nobody made, and the bare string is what
+    // every existing reader already understands.
+    complete.mockResolvedValue({ ok: false, reason: "rate_limited", retryAfterMs: 90_000 });
+
+    const result = await run(2, 10_000);
+
+    expect(result.skipped).toBe("rate_limited");
+  });
+
   /** Without a hint there is nothing to wait for, so the old behaviour stands. */
   it("still stops dead when the provider gives no retry hint", async () => {
     complete.mockResolvedValue({ ok: false, reason: "rate_limited" });

@@ -53,8 +53,24 @@ export async function GET(request: Request) {
   let result = { scanned: 0, written: 0, dropped: 0, skipped: null as string | null };
 
   try {
-    const limit = Number(new URL(request.url).searchParams.get("limit") ?? 8);
-    result = await mineDecisions(Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 40) : 8);
+    /**
+     * TWELVE, not eight: eight per day could never spend a twenty-a-day allowance.
+     *
+     * One document costs one model call, the free tier allows 20 a day, and this cron is
+     * the only scheduled consumer of any size. At 8 the ceiling was the LIMIT rather than
+     * the quota — measured 2026-09-15, four runs averaged 6.5 documents, 81% of the cap,
+     * while a dozen requests a day went unused. 97 documents remain; 12 a day drains them
+     * in about eight days against fifteen.
+     *
+     * Not 20. `brain-brief` and `/api/slack/events` draw on the same allowance, and the
+     * Slack bot answers on demand — taking the whole quota here would leave the team's
+     * questions unanswerable for the rest of the Pacific day. Twelve leaves roughly eight.
+     *
+     * Time is not the constraint: ~3s per document plus a ~32s per-minute wait every five
+     * puts twelve at ~100s against a 240s budget and a 300s ceiling.
+     */
+    const limit = Number(new URL(request.url).searchParams.get("limit") ?? 12);
+    result = await mineDecisions(Number.isFinite(limit) ? Math.min(Math.max(limit, 1), 40) : 12);
     logger.info(result, "brain: decision mining run");
   } catch (err) {
     status = "error";

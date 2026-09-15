@@ -64,7 +64,7 @@
     },
     {
       "path": "/api/cron/brain-mine",
-      "schedule": "40 5 * * *"
+      "schedule": "10 8 * * *"
     },
     {
       "path": "/api/cron/ux-review",

@@ -65,6 +65,18 @@ export type LlmResult =
        *  `rate_limited`. A caller that can afford to wait (a cron) should; one that
        *  cannot (anything with a person attached) should keep treating 429 as final. */
       retryAfterMs?: number;
+      /**
+       * On `rate_limited`: is the DAILY allowance gone, rather than the per-minute one?
+       *
+       * The two are the same status with the same shape, and the difference decides
+       * everything a caller does: a per-minute limit clears in ~30 seconds, the daily one
+       * not until midnight Pacific. Callers already branch on `retryAfterMs` being
+       * absent, but absent has two meanings -- daily, or a provider that simply sent no
+       * hint -- so a caller that reports which limit it hit cannot get it from that.
+       * `mine-decisions` writes this into `cron_run`, which is the only way to tell from
+       * the outside whether the miner needs a later schedule or a bigger budget.
+       */
+      dailyQuota?: boolean;
     };
 
 /** Longest wait the provider is allowed to talk us into. A provider that answers
@@ -189,9 +201,16 @@ export async function complete(
     // nothing and silently answers "no hint" -- which reads exactly like a provider that
     // did not send one.
     const body = await res.text().catch(() => "");
+    const dailyQuota = isDailyQuota(body);
     const retryAfterMs = parseRetryAfterMs(res.headers.get("retry-after"), body);
-    logger.warn({ retryAfterMs, detail: body.slice(0, 300) }, "brain llm rate limited");
-    return { ok: false, reason: "rate_limited", detail: body.slice(0, 300), retryAfterMs };
+    logger.warn({ dailyQuota, retryAfterMs, detail: body.slice(0, 300) }, "brain llm rate limited");
+    return {
+      ok: false,
+      reason: "rate_limited",
+      detail: body.slice(0, 300),
+      retryAfterMs,
+      dailyQuota,
+    };
   }
 
   if (!res.ok) {

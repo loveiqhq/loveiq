@@ -88,6 +88,69 @@ describe("complete — what a 429 tells the caller", () => {
     expect(res.retryAfterMs).toBe(32_000);
   });
 
+  /**
+   * THE CALL SITE again, for the same reason. `isDailyQuota` can be perfect and `complete`
+   * still never set `dailyQuota`, in which case the miner reports the bare `rate_limited`
+   * forever and `cron_run` still cannot say which limit stopped it — the exact gap this
+   * field exists to close, with every unit test green.
+   */
+  it("says the DAILY allowance is gone, and attaches no delay to it", async () => {
+    const dailyBody = JSON.stringify({
+      error: {
+        code: 429,
+        status: "RESOURCE_EXHAUSTED",
+        message: "You exceeded your current quota.",
+        details: [
+          {
+            "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+            violations: [
+              {
+                quotaId: "GenerateRequestsPerDayPerProjectPerModel-FreeTier",
+                quotaValue: "20",
+              },
+            ],
+          },
+          // Google sends a retryDelay on the DAILY limit too, and it is a lie of
+          // omission: it counts down to the next per-minute window, which refuses again.
+          // The delay must be dropped, or a cron parks 32 seconds to make zero progress.
+          { "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "32s" },
+        ],
+      },
+    });
+    fetchWithTimeout.mockResolvedValue({
+      ok: false,
+      status: 429,
+      headers: { get: () => null },
+      text: async () => dailyBody,
+    });
+
+    const res = await complete([{ role: "user", content: "hi" }], 1000);
+
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.reason).toBe("rate_limited");
+    expect(res.dailyQuota).toBe(true);
+    expect(res.retryAfterMs).toBeUndefined();
+  });
+
+  it("says the daily allowance is NOT gone on a per-minute 429", async () => {
+    // The distinguishing half: the same status, the same shape, opposite answer. Without
+    // this the daily assertion above passes against a field hardcoded to true.
+    fetchWithTimeout.mockResolvedValue({
+      ok: false,
+      status: 429,
+      headers: { get: () => null },
+      text: async () => REAL_429_BODY,
+    });
+
+    const res = await complete([{ role: "user", content: "hi" }], 1000);
+
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.dailyQuota).toBe(false);
+    expect(res.retryAfterMs).toBe(32_000);
+  });
+
   it("prefers an explicit retry-after header", async () => {
     fetchWithTimeout.mockResolvedValue({
       ok: false,
