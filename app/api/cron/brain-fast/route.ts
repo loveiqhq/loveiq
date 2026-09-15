@@ -3,6 +3,7 @@ import { ingestAnalytics } from "@features/brain/server/ingest/analytics";
 import { ingestPeople } from "@features/brain/server/ingest/people";
 import { ingestPlan } from "@features/brain/server/ingest/plan";
 import { ingestReportVoice } from "@features/brain/server/ingest/report-voice";
+import { ingestSkills } from "@features/brain/server/ingest/skills";
 import { BACKFILL_DAYS, ingestGa4 } from "@features/brain/server/ingest/google";
 import { ingestSlack } from "@features/brain/server/ingest/slack";
 import { embedMissing } from "@features/brain/server/embed";
@@ -176,6 +177,9 @@ export async function GET(request: Request) {
     // The shipped report copy — the house voice. Built from files in the repo rather than
     // fetched, so it costs nothing but a rebuild and lands the moment copy changes.
     await run("report", () => ingestReportVoice(stampedAt));
+    // How we do the work, written where the team can reach it: `.agents/skills/` is a
+    // Claude Code directory and they work in claude.ai, where it does not exist.
+    await run("skill", () => ingestSkills(stampedAt));
     await run("slack", () => ingestSlack(stampedAt, isOutOfTime));
 
     /**

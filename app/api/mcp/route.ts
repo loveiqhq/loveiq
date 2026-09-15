@@ -320,6 +320,11 @@ export const SOURCES_FOR_TEST = [
   // commit that creates it. Distinct from the Drive DRAFTS of the same chapters: this is
   // what survived review, which is what "write it the way we write" means.
   "report",
+  // How LoveIQ does its own work — the chapter method, the house voice counted off the
+  // shipped copy, and who accepts a change. Listed here in the commit that creates it.
+  // It lives in the corpus rather than `.agents/skills/` because the team works in
+  // claude.ai, where that directory does not exist.
+  "skill",
   "doc",
   "analytics",
   "ga4",
@@ -4386,6 +4391,16 @@ export const MCP_INSTRUCTIONS =
   "a clean-looking answer rather than an error. So: use them to find WHERE to look, and " +
   "when a number is going to be repeated or acted on, confirm it against " +
   "`get_business_numbers`, whose definition is the one that reconciles to Stripe.\n\n" +
+  "YOU CAN HELP WITH THE WRITING, NOT ONLY THE NUMBERS. LoveIQ writes the report itself, " +
+  "and how it is written is in here. Two sources you will not guess the names of: " +
+  '`sources: ["skill"]` holds how the team does its own work — the chapter method, the ' +
+  "review protocol, and the house voice counted off what shipped rather than described; " +
+  '`sources: ["report"]` holds the COPY THAT SHIPPED, ~680 blocks titled "as shipped", ' +
+  "one per chapter per archetype. Read the shipped block for another archetype before " +
+  "drafting, because the chapter skeleton is identical across all fourteen and only the " +
+  "content changes. Drive holds DRAFTS of the same chapters, which are what someone is " +
+  "working on rather than the standard — the titles tell them apart. A draft you produce " +
+  "belongs in a Google Doc for a person to edit, never anywhere a reader sees.\n\n" +
   "YOU CAN SEE, NOT JUST READ. `show_design` returns a rendered " +
   "frame from LoveIQ's Figma file as an image — call it with no arguments for the pages, " +
   "a page id for its frames, a frame id to look at one. Critique a screen from the " +
