@@ -300,6 +300,28 @@ describe("buildSubmissionJourney", () => {
    * It is interpolated into a Slack section that is clamped from the END, so an
    * uncapped value here silently truncates whatever renders after it.
    */
+  /**
+   * A one-character local part must not come back verbatim.
+   *
+   * `mask()` used `^(.).+(@.+)$`, which needs TWO characters before the `@`, so
+   * `a@x.com` never matched and `.replace` was a no-op — the journey carried the
+   * raw address under a field named `emailMasked`, and the compact survey ping
+   * puts that straight into a Slack channel. 3 of 1,961 live `app_user` rows have
+   * one, and `z.string().email()` accepts the shape on the public form.
+   */
+  it("masks a single-character local part rather than returning it verbatim", async () => {
+    for (const [raw, expected] of [
+      ["a@x.com", "a***@x.com"],
+      ["e@loveiq.org", "e***@loveiq.org"],
+      ["ab@x.com", "a***@x.com"],
+    ]) {
+      route({ sub: [{ ...SUBMISSION, app_user: { ...SUBMISSION.app_user, email: raw } }] });
+      const j = await buildSubmissionJourney(1296);
+      expect(j?.emailMasked).toBe(expected);
+      expect(j?.emailMasked).not.toBe(raw);
+    }
+  });
+
   it("caps the country answer before it reaches a renderer", async () => {
     route({
       sub: [

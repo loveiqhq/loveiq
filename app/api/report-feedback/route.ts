@@ -47,7 +47,15 @@ const RATE_LIMIT_CONFIG = {
 const SECTION_BY_ID = new Map(reportSections.map((section) => [section.id, section]));
 
 function maskEmail(email: string): string {
-  return email.replace(/^(.).+(@.+)$/, "$1***$2");
+  // Index-based, not `^(.).+(@.+)$`: that pattern needs TWO characters before
+  // the `@`, so `a@b.com` never matched and `.replace` handed the address back
+  // verbatim — the helper returning exactly what it exists to withhold. 3 of
+  // 1,961 live users have a one-character local part. Anything with no local
+  // part or no `@` is never echoed at all.
+  const trimmed = email.trim();
+  const at = trimmed.indexOf("@");
+  if (at < 1) return "***";
+  return `${trimmed.slice(0, 1)}***${trimmed.slice(at)}`;
 }
 
 // Slack treats `&<>*_~``` as formatting characters. Escape so user-supplied

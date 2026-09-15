@@ -146,7 +146,15 @@ interface ReportSessionRow {
 /** Local copy of the masking rule so the raw address is never returned to callers. */
 function mask(email: string | null | undefined): string | null {
   if (!email?.trim()) return null;
-  return email.trim().replace(/^(.).+(@.+)$/, "$1***$2");
+  // Index-based, not `^(.).+(@.+)$`: that pattern needs TWO characters before
+  // the `@`, so `a@b.com` never matched and `.replace` handed the address back
+  // verbatim — the helper returning exactly what it exists to withhold. 3 of
+  // 1,961 live users have a one-character local part. Anything with no local
+  // part or no `@` is never echoed at all.
+  const trimmed = email.trim();
+  const at = trimmed.indexOf("@");
+  if (at < 1) return "***";
+  return `${trimmed.slice(0, 1)}***${trimmed.slice(at)}`;
 }
 
 function toNumber(value: number | string | null): number | null {

@@ -9,6 +9,20 @@ This document catalogs the authenticated admin API surface under `/api/admin/*`.
 Admin shell, sidebar, and dashboard composition details live in [admin-dashboard.md](admin-dashboard.md).
 Admin lookup by product domain lives in [docs/admin/AGENT_README.md](admin/AGENT_README.md).
 
+## Displaying Personal Data
+
+Admin responses and UI never render a raw email address. `maskEmail()` in
+[`features/admin/server/format.ts`](../features/admin/server/format.ts) reduces it to
+first character plus domain (`hamza@loveiq.org` → `h***@loveiq.org`), and a value with
+no local part or no `@` renders as `***` rather than being echoed whole. It is one of
+several implementations of the same rule; `shared/observability/tests/slack.test.ts`
+holds them all to it and fails if a divergent copy appears in the tree.
+
+Note that `/api/admin/submissions/[id]` validates a corrected address with a looser
+regex than the public survey form, so a stored address can contain characters Zod
+would reject. Anything rendering one into Slack mrkdwn must escape it —
+`codeSpan()` in `shared/observability/slack-blocks.ts` is the helper that does.
+
 ## Access Model
 
 - Most routes require a valid Supabase Auth admin session checked through `verifyAdminSession()`.

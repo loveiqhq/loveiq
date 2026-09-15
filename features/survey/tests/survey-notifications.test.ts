@@ -210,14 +210,20 @@ describe("POST /api/survey notifications", () => {
     ].join("\n");
 
     /**
-     * The compact layout (2026-09-14) carries NO identity at all — not the first
-     * name, and not even the masked email that used to sit in the context line.
-     * The submission number is what identifies the row now, so the strongest
-     * assertion available is that the address never appears in any form.
+     * Two different guarantees, and only one of them moved.
+     *
+     * The RAW address must never appear in any form. That is the ROPA row for
+     * Slack ("masked email ... never a raw email address") written as a test, and
+     * it does not move for anyone.
+     *
+     * The MASKED address does appear now, on the title line, because Marcus asked
+     * for it back (#incoming-surveys, 15 Sep) — it tells the channel at a glance
+     * whether a submission is internal or a real visitor. Asserted as the rendered
+     * code span, so what actually reaches the channel is pinned rather than merely
+     * permitted.
      */
     expect(flat).not.toContain("ada@example.com");
-    expect(flat).not.toContain("a***@example.com");
-    expect(flat).toContain("Survey submission *#123*");
+    expect(flat).toContain("Survey submission *#123* `a***@example.com`");
     // the LIVE arm, in plain English — never the raw code. The arm NAME is bolded
     // and its parenthetical is not, so this is asserted as the rendered string.
     expect(flat).toContain("Landing page design: *Landing Page V1* (First Design)");
