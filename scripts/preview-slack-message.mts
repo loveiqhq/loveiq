@@ -14,6 +14,8 @@
  *   npm run dev                                    # serves the chart PNGs
  *   npx tsx --env-file=.env.local scripts/preview-slack-message.mts
  *   npx tsx --env-file=.env.local scripts/preview-slack-message.mts --no-open
+ *   npx tsx --env-file=.env.local scripts/preview-slack-message.mts --survey        # latest
+ *   npx tsx --env-file=.env.local scripts/preview-slack-message.mts --survey=2078
  *
  * The image blocks point at NEXT_PUBLIC_SITE_URL, which is localhost in
  * .env.local, so the REAL chart PNGs render in the page — same renderer, same
@@ -28,6 +30,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { buildConversionDigest } from "../app/api/cron/conversion-digest/route";
+import { buildSubmissionJourney } from "../features/attribution/server/journey";
+import { buildJourneyMessage } from "../features/attribution/server/slack-journey";
 import {
   fetchArmCohorts,
   fetchAxisFunnelDaily,
@@ -174,7 +178,85 @@ function page(title: string, fallback: string, blocks: Block[], meta: string): s
 </div>`;
 }
 
+/**
+ * The per-submission hook that lands in #incoming-surveys on every completed
+ * survey — the other message that reaches the team, and the one being iterated
+ * on right now. Same rule: rendered, never sent.
+ */
+async function previewSurvey(arg: string): Promise<void> {
+  const explicit = arg.includes("=") ? Number(arg.split("=")[1]) : NaN;
+  let id = explicit;
+  if (!Number.isFinite(id)) {
+    const url = requireEnv("SUPABASE_URL");
+    const key = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
+    const res = await fetch(
+      `${url}/rest/v1/survey_submission?status=eq.completed&select=id&order=id.desc&limit=1`,
+      { headers: { apikey: key, Authorization: `Bearer ${key}` } }
+    );
+    const rows = (await res.json()) as Array<{ id: number }>;
+    id = rows[0]?.id ?? 0;
+  }
+  if (!id) {
+    console.log("no completed submission found");
+    return;
+  }
+  console.log(`building the incoming-survey hook for submission ${id}...`);
+  const journey = await buildSubmissionJourney(id);
+  if (!journey) {
+    console.log(`submission ${id} not found`);
+    return;
+  }
+  const url = requireEnv("SUPABASE_URL");
+  const key = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
+  const cRes = await fetch(
+    `${url}/rest/v1/survey_submission?id=eq.${id}&select=survey_submission_answer(count)`,
+    { headers: { apikey: key, Authorization: `Bearer ${key}` } }
+  );
+  const cJson = (await cRes.json()) as Array<{
+    survey_submission_answer: Array<{ count: number }>;
+  }>;
+  const questionCount = cJson[0]?.survey_submission_answer?.[0]?.count ?? 0;
+
+  const msg = buildJourneyMessage(journey, { kind: "survey_completed", questionCount });
+  const blocks = (msg.blocks ?? []) as Block[];
+  const shot = await inlineImages(blocks);
+  if (shot.ok || shot.failed) {
+    console.log(`  ${shot.ok} chart(s) embedded${shot.failed ? `, ${shot.failed} FAILED` : ""}`);
+  }
+  const out = join(OUT_DIR, "slack-preview-survey.html");
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(
+    out,
+    page(
+      `Slack preview — incoming survey #${id}`,
+      msg.text ?? "",
+      blocks,
+      `incoming-survey hook &middot; submission ${id} &middot; rendered ${new Date().toISOString()}`
+    )
+  );
+  console.log(`wrote ${out}`);
+  if (!process.argv.includes("--no-open")) {
+    execFile("open", [out], (err) => {
+      if (err) console.log(`(could not open automatically: ${err.message})`);
+    });
+  }
+}
+
+function requireEnv(name: string): string {
+  const v = process.env[name];
+  if (!v) {
+    console.error(`MISSING ${name} — is .env.local loaded?`);
+    process.exit(2);
+  }
+  return v;
+}
+
 async function main(): Promise<void> {
+  const surveyArg = process.argv.find((a) => a.startsWith("--survey"));
+  if (surveyArg) {
+    await previewSurvey(surveyArg);
+    return;
+  }
   const now = new Date();
   const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const yesterdayStart = new Date(dayStart.getTime() - 86_400_000);
