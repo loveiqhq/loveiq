@@ -31,6 +31,12 @@ vi.mock("@features/brain/server/ingest/people", () => ({
 vi.mock("@features/brain/server/ingest/plan", () => ({
   ingestPlan: vi.fn(async () => ({ source: "plan", rows: 1, swept: 0 })),
 }));
+// Added alongside the roster and the board on 2026-09-15, for the same reason: unmocked it
+// reads 1.5 MB of report copy off disk and writes it, and these tests are about how the lane
+// REPORTS results. Its own extraction is covered in brain-report-voice.test.ts.
+vi.mock("@features/brain/server/ingest/report-voice", () => ({
+  ingestReportVoice: vi.fn(async () => ({ source: "report", rows: 682, swept: 0 })),
+}));
 
 // Embedding runs at the end of this lane. Stubbed here so the tests above stay
 // about ingestion; the tests at the bottom of this file drive it directly.

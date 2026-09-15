@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ingestAnalytics } from "@features/brain/server/ingest/analytics";
 import { ingestPeople } from "@features/brain/server/ingest/people";
 import { ingestPlan } from "@features/brain/server/ingest/plan";
+import { ingestReportVoice } from "@features/brain/server/ingest/report-voice";
 import { BACKFILL_DAYS, ingestGa4 } from "@features/brain/server/ingest/google";
 import { ingestSlack } from "@features/brain/server/ingest/slack";
 import { embedMissing } from "@features/brain/server/embed";
@@ -172,6 +173,9 @@ export async function GET(request: Request) {
     await run("people", () => ingestPeople(stampedAt));
     // Beside the roster and for the same reason: one row, read straight from the board.
     await run("plan", () => ingestPlan(stampedAt));
+    // The shipped report copy — the house voice. Built from files in the repo rather than
+    // fetched, so it costs nothing but a rebuild and lands the moment copy changes.
+    await run("report", () => ingestReportVoice(stampedAt));
     await run("slack", () => ingestSlack(stampedAt, isOutOfTime));
 
     /**

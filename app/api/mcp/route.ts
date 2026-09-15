@@ -316,6 +316,10 @@ export const SOURCES_FOR_TEST = [
   // Written beside the Slack post by the jobs that watch for moves, so what the brain
   // noticed unprompted is searchable rather than only announced in a channel.
   "notice",
+  // The report copy that actually ships, built from `data/report-*.ts`. Listed here in the
+  // commit that creates it. Distinct from the Drive DRAFTS of the same chapters: this is
+  // what survived review, which is what "write it the way we write" means.
+  "report",
   "doc",
   "analytics",
   "ga4",
