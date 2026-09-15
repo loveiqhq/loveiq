@@ -368,11 +368,11 @@ describe("the compact incoming-survey layout", () => {
    * text nobody reads in-channel.
    *
    * The masked email was dropped with them and then asked back
-   * (#incoming-surveys, 15 Sep), so it is asserted PRESENT here. Worth knowing
-   * what the old assertion did the moment that landed: the address renders
-   * ESCAPED, so `not.toContain("a***@gmail.com")` kept passing against a message
-   * that now contains the address — green while the opposite of its own name was
-   * true. Asserted off the rendered title line for that reason, not off the JSON.
+   * (#incoming-surveys, 15 Sep), so it is asserted PRESENT here. The negative
+   * assertion this replaced was NOT stale: the address renders literally inside
+   * the code span, so `not.toContain("a***@gmail.com")` went red the moment the
+   * title carried it — it was a live guard doing its job, and it is replaced
+   * because the behaviour changed, not because it had stopped working.
    */
   it("drops name and question count from the message but keeps the count in the text", () => {
     const message = buildJourneyMessage(journey(), {
@@ -383,7 +383,7 @@ describe("the compact incoming-survey layout", () => {
     expect(rendered).not.toContain("Kitten");
     expect(rendered).not.toContain("58 question");
     expect(message.text).toContain("58 questions");
-    expect(soleSection(message.blocks).split("\n")[0]).toContain("@gmail.com");
+    expect(soleSection(message.blocks).split("\n")[0]).toContain("`a***@gmail.com`");
   });
 
   it("says question, not questions, for a single answer", () => {

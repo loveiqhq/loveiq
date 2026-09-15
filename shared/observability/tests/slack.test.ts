@@ -139,10 +139,24 @@ describe("maskEmail", () => {
     expect(maskEmail("ab@x.io")).toBe("a***@x.io");
   });
 
-  it("returns the input unchanged for single-char local parts (existing contract)", () => {
-    // Matches the regex used by survey/contact/payment helpers — kept
-    // intentional for consistency with prior Slack output.
-    expect(maskEmail("a@b.com")).toBe("a@b.com");
+  /**
+   * A single-character local part must still be masked.
+   *
+   * `^(.).+(@.+)$` needs TWO characters before the `@`, so `a@b.com` never
+   * matched and `.replace` returned the address verbatim — the helper silently
+   * handed back exactly what it exists to withhold. This was previously asserted
+   * as an "existing contract … kept intentional for consistency with prior Slack
+   * output", which documented the hole rather than closing it: consistency is not
+   * a reason to publish someone's address.
+   *
+   * Live when it was found: 3 of 1,961 `app_user` rows have a one-character local
+   * part, and the compact survey ping puts the masked address in a channel.
+   */
+  it("masks a single-character local part instead of returning it verbatim", () => {
+    expect(maskEmail("a@b.com")).toBe("a***@b.com");
+    expect(maskEmail("e@loveiq.org")).toBe("e***@loveiq.org");
+    // and the shapes that have no local part at all are still not echoed whole
+    expect(maskEmail("@b.com")).toBe("***");
   });
 });
 

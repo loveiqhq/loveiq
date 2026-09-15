@@ -270,14 +270,18 @@ function compactSurveyLines(journey: SubmissionJourney, reachedFloor?: JourneySt
    * are literal, so nothing has to be escaped and nothing can be re-read as
    * emphasis.
    *
-   * Backticks are stripped from the value first. The mask keeps the address's own
-   * first character and its whole domain, so the one character that could close
-   * the span early is caller-supplied. Dropped entirely when there is no email
-   * rather than padded, so the title never ends in a dangling space.
+   * Through `codeSpan`, which is how this same field rendered before the compact
+   * layout dropped it and how the purchase branch still renders it twenty lines
+   * below. It strips backticks — the mask keeps the address's own first character
+   * and its whole domain, so the one character that could close the span early is
+   * caller-supplied — and also escapes the HTML trio, which a hand-rolled span
+   * does not. Dropped entirely when there is no email rather than padded, so the
+   * title never ends in a dangling space.
    */
   const title = `Survey submission ${bold(`#${journey.submissionId}`)}`;
-  const maskedEmail = journey.emailMasked?.replace(/`/g, "");
-  const lines: string[] = [maskedEmail ? `${title} \`${maskedEmail}\`` : title];
+  const lines: string[] = [
+    journey.emailMasked ? `${title} ${codeSpan(journey.emailMasked)}` : title,
+  ];
 
   /**
    * Both times on one line, and both sides ALWAYS render.
