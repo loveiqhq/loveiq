@@ -1220,7 +1220,9 @@ export const TOOLS = [
     description:
       "Read any table, view or analysis function in LoveIQ's database, live and with full " +
       "history. This is how you answer questions the indexed corpus cannot: Resend " +
-      "deliverability (email_suppression; `resend_webhook_event` is EMPTY — the webhook was never registered, so there is no delivery history), Stripe payments and " +
+      "deliverability (email_suppression, and `resend_webhook_event` for per-message " +
+      "sent/delivered/bounced/complained events — live since 2026-09-14, so it holds NO " +
+      "history before that date), Stripe payments and " +
       "refunds (payment, payment_item, payment_webhook_event), call invitations " +
       "(booking_event), survey submissions and answers, reports, shares, invites, the " +
       "waitlist, marketing spend, and the admin tables. WHAT WE CHARGE LIVES HERE TOO " +
@@ -1524,11 +1526,12 @@ export const EXTERNAL_SERVICES: Record<
     auth: { kind: "bearer" },
     note:
       "Domains and their DNS/verification state, audiences and contacts, and a single " +
-      "email by id. Per-message delivery events are SUPPOSED to land in " +
-      "`resend_webhook_event` via /api/resend/webhook, but that table has never held a " +
-      "row (checked 2026-09-14) because the webhook was never registered in the Resend " +
-      "dashboard. Until it is, we have NO per-message delivery history: treat a zero " +
-      "bounce or open count from that table as 'not recorded', never as 'none happened'.",
+      "email by id. Per-message delivery events land in `resend_webhook_event` via " +
+      "/api/resend/webhook, which started recording on 2026-09-14 — before that the " +
+      "endpoint was registered on the apex domain, which redirects to www, and Svix " +
+      "drops its signature headers across a redirect, so every event was rejected. The " +
+      "table therefore holds NOTHING before 2026-09-14: a zero bounce count for any " +
+      "earlier period is 'not recorded', never 'none happened'.",
   },
   slack: {
     base: "https://slack.com/api",
@@ -1984,9 +1987,11 @@ function redactPrivateColumns(rows: unknown[]): { rows: unknown[]; redacted: str
  * "0 rows returned, 0 match." is what the caller saw whether their filter excluded
  * everything or the table has never held a single row, and the second is the dangerous
  * one: asked for the email bounce rate, a model reads zero rows and answers "no bounces",
- * which is the opposite of "we have no record of any". Measured 2026-09-14:
- * `resend_webhook_event` has never held a row — the webhook was never registered — while
- * this tool's own description told the model to PREFER it for bounce and open rates.
+ * which is the opposite of "we have no record of any". The case that motivated this:
+ * on 2026-09-14 `resend_webhook_event` had never held a row — its webhook was registered
+ * on a redirecting host, so every event was rejected — while this tool's own description
+ * told the model to PREFER that table for bounce and open rates. (Fixed since; the table
+ * records normally now. The failure mode it demonstrates is not fixed and never will be.)
  *
  * One extra count, only ever on an empty result, and only for a table (an rpc has no
  * table to count). Best-effort: if the count fails we say nothing rather than guess.
