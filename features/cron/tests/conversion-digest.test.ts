@@ -503,6 +503,24 @@ describe("conversion-digest handler", () => {
     expect(flat).not.toMatch(/`\s*[1-9]\d*`\s+0%/);
   });
 
+  it("names both spans the funnel covers, instead of implying one", async () => {
+    /**
+     * The chart is not one window and must not read as one. Everything down to
+     * "Finished the survey" is events inside it; the "…of those" rows follow those
+     * finishers forward with no end date. Unstated, a reader takes the "30 days"
+     * heading as covering all six rows.
+     */
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const flat = blockText(arg.blocks);
+    expect(flat).toContain("count the window");
+    expect(flat).toContain("follow those finishers forward with no end date");
+    // The definition has to sit ABOVE the numbers it defines: fitBlocks keeps
+    // blocks from the front, so a footnote is the first thing dropped when the
+    // message runs long — leaving every figure and no statement of what it means.
+    expect(flat.indexOf("with no end date")).toBeLessThan(flat.indexOf("Visits to the site"));
+  });
+
   it("puts the survey-start row in the message, not just in the builder", async () => {
     /**
      * The builder having the row proves nothing about the digest showing it — the
@@ -521,11 +539,23 @@ describe("conversion-digest handler", () => {
     });
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const flat = blockText(arg.blocks);
-    expect(flat).toContain("Started the survey");
+    /**
+     * Scoped to the funnel BLOCK, not the whole message. Searching the flattened
+     * text found "Finished the survey" in the definition line above the numbers and
+     * compared positions across two different blocks.
+     */
+    const funnel = arg.blocks
+      .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
+      .find((t) => t.includes("*The funnel —"));
+    expect(funnel, "the funnel block must be in the message at all").toBeDefined();
+    expect(funnel!).toContain("Started the survey");
     // Between the two rows it was asked to sit between, not appended somewhere.
-    expect(flat.indexOf("Visits to the site")).toBeLessThan(flat.indexOf("Started the survey"));
-    expect(flat.indexOf("Started the survey")).toBeLessThan(flat.indexOf("Finished the survey"));
+    expect(funnel!.indexOf("Visits to the site")).toBeLessThan(
+      funnel!.indexOf("Started the survey")
+    );
+    expect(funnel!.indexOf("Started the survey")).toBeLessThan(
+      funnel!.indexOf("Finished the survey")
+    );
   });
 
   it("draws the same landing arm in the same colour in every chart of one message", async () => {

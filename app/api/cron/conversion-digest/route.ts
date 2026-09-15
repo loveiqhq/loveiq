@@ -382,7 +382,30 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   // so as the last block this was the first thing dropped when a message ran
   // long — leaving every number in place and no statement of what any of them
   // meant.
-  blocks.push(context(`${windowLabel} · "visits" are visitor-days on any page, not people`));
+  /**
+   * The funnel spans TWO spans, and says so rather than implying one.
+   *
+   * Rows down to "Finished the survey" count events inside the window. The
+   * "…of those" rows below follow those finishers FORWARD with no end date, so a
+   * purchase after the window closes still counts.
+   *
+   * WHY NOT BOUND THEM TO THE WINDOW and make it one span. Because that trades a
+   * labelling problem for a measurement one: a person who finished on day 29 has a
+   * day to buy, against thirty for someone who finished on day 1, and the nurture
+   * sequence does not even finish emailing them until 78h in. Truncating would
+   * under-report conversion for every recent cohort and make the funnel appear to
+   * decline whenever traffic grows. Measured 2026-09-15 the unbounded reading costs
+   * exactly one row of difference — 33 reached checkout ever against 32 inside the
+   * window, and 5 paid either way — so the honest fix is to name the two spans,
+   * not to distort the number to force one.
+   */
+  blocks.push(
+    context(
+      `${windowLabel} · "visits" are visitor-days on any page, not people · rows down to ` +
+        `"Finished the survey" count the window; the "…of those" rows follow those finishers ` +
+        `forward with no end date`
+    )
+  );
 
   /**
    * "Where the tests stand" used to sit here: a 30-day, paid-based verdict per
