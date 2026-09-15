@@ -105,13 +105,14 @@ a transcript. Filter on `surface` to tell the two apart.
 
 ### What feeds it
 
-| Source                                 | Where from                                                             | When                    |
-| -------------------------------------- | ---------------------------------------------------------------------- | ----------------------- |
-| Repo docs                              | `.github/workflows/brain-ingest.yml` → `scripts/brain-ingest-repo.mjs` | on every push to `main` |
-| GA4, call notes, funnel numbers, Slack | `/api/cron/brain-fast`                                                 | every 15 min            |
-| Notion (board + pages)                 | `/api/cron/brain-notion`                                               | hourly, at :41          |
-| Gmail (every mailbox on the domain)    | `/api/cron/brain-gmail`                                                | hourly, at :11          |
-| Search Console                         | `/api/cron/brain-ingest`                                               | daily, 04:47 UTC        |
+| Source                                                                          | Where from                                                             | When                    |
+| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------- |
+| Repo docs                                                                       | `.github/workflows/brain-ingest.yml` → `scripts/brain-ingest-repo.mjs` | on every push to `main` |
+| GA4, call notes, funnel numbers, Slack                                          | `/api/cron/brain-fast`                                                 | every 15 min            |
+| Notion (board + pages)                                                          | `/api/cron/brain-notion`                                               | hourly, at :41          |
+| Gmail (every mailbox on the domain)                                             | `/api/cron/brain-gmail`                                                | hourly, at :11          |
+| Search Console                                                                  | `/api/cron/brain-ingest`                                               | daily, 04:47 UTC        |
+| Shipped report copy, the chapter method, the glossary/survey/scoring vocabulary | `/api/cron/brain-fast`                                                 | every 15 min            |
 
 Jira is **not** a source. Notion is the system of record for the team's work
 (decision 2026-08-28), so `ingestJira` is no longer called by the cron and `jira`
@@ -131,6 +132,34 @@ documentation it changed, the call it came out of, or the Slack day it was discu
 Removing them also took contributor names and git email addresses out of an
 open-access corpus, which is a privacy reduction rather than a cost. `scripts/brain-ingest-repo.mjs`
 still runs on every push; it indexes the markdown and nothing else.
+
+### Reference sources, and why they rank lower
+
+Three sources added 2026-09-15 are **reference** rather than record: `report` (682 chunks
+of the report copy that actually ships), `domain` (341 — every glossary term, the survey
+chapter by chapter, and which question feeds which scoring dimension), and `skill` (how we
+write a chapter). All three are built from files in this repo, so they cost a rebuild and
+no network call, and they land within fifteen minutes of the copy changing.
+
+They are **undated on purpose**. A meeting note describes a day; a definition is current
+until it is edited. But that is also why they needed a ranking penalty: an undated chunk
+contends on every question rather than only the ones it answers. Measured when they landed,
+the battery fell to 220/222 on two word collisions — "show me the stages people go through
+before paying" returned the _Sexual Stage_ chapter above the funnel, and "what did we decide
+about micro assessments" returned the _Micro Quiz_ definition above the decision record.
+"Stage" and "quiz" are genuinely our words now; the definitions were not wrong, they were
+the wrong KIND of answer.
+
+`brain_search` therefore subtracts **0.5** from `report` and `domain`. That number is
+measured, not chosen: 0.35 recovered only one of the two, because the decision gap was
+exactly 0.35 and it tied rather than flipped. At 0.5 the battery is back to 222/222 and
+"what does responsive desire mean" still returns the glossary at rank 1 — the penalty costs
+nothing on the questions these sources exist for.
+
+**Drafts and shipped copy are both in the corpus and must be told apart.** Drive holds
+"Typical Beliefs — Chapter Output" and its siblings, which is what someone is working on.
+`report` is what survived review and went to a paying reader; every one of its titles says
+"as shipped" and every row carries `kind: "shipped"`.
 
 ### What can never enter the corpus
 

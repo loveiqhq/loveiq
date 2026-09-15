@@ -15,6 +15,8 @@
  */
 import { NextResponse } from "next/server";
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { buildReportVoiceRows } from "@features/brain/server/ingest/report-voice";
+import { buildDomainRows } from "@features/brain/server/ingest/domain";
 import { reconcile, summarise, type Reading } from "@features/brain/server/reconcile";
 import { recordNotice } from "@features/brain/server/notice";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -40,6 +42,16 @@ async function rpc<T>(name: string, body: Record<string, unknown>): Promise<T | 
   });
   if (!res.ok) return null;
   return (await res.json().catch(() => null)) as T | null;
+}
+
+/** How many chunks a source currently holds. Null when the count cannot be read. */
+async function sourceCount(source: string): Promise<number | null> {
+  const res = await supabaseFetch(`/rest/v1/brain_chunk?select=id&source=eq.${source}&limit=1`, {
+    headers: { Prefer: "count=exact", Range: "0-0" },
+  });
+  if (!res.ok) return null;
+  const n = Number(res.headers.get("content-range")?.split("/")[1]);
+  return Number.isFinite(n) ? n : null;
 }
 
 /** Sum of real money in the ledger: succeeded, not staff testing, actually charged. */
@@ -125,6 +137,34 @@ export async function buildReadings(): Promise<{ readings: Reading[]; unread: st
         value: cvr.days.reduce((t, d) => t + Number(d.visitors || 0), 0),
       },
       tolerance: 0,
+    });
+  }
+
+  /**
+   * The repo-built corpora, counted against what the builders actually produce.
+   *
+   * `report`, `domain` and `skill` are built from files rather than fetched, so the number
+   * of chunks they SHOULD hold is knowable exactly. Their ingesters refuse to sweep on an
+   * empty build — but a build that produced HALF its rows would sweep the other half away
+   * and look like a normal run. A data file renamed, an export changed shape, a parser that
+   * stops matching: all of those are silent, and all of them are caught by counting.
+   */
+  for (const [source, expected] of [
+    ["report", buildReportVoiceRows(new Date().toISOString()).length],
+    ["domain", buildDomainRows(new Date().toISOString()).length],
+  ] as Array<[string, number]>) {
+    const held = await sourceCount(source);
+    if (held === null) {
+      unread.push(`${source} chunk count`);
+      continue;
+    }
+    readings.push({
+      what: `${source} chunks in the corpus`,
+      left: { source: "what the builder produces", value: expected },
+      right: { source: "what the corpus holds", value: held },
+      tolerance: 0,
+      because:
+        "these are built from files in the repo, so the two are the same number or something dropped rows",
     });
   }
 

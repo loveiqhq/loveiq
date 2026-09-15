@@ -34,6 +34,14 @@ function routeFetch(over: Record<string, unknown> = {}) {
       return ok("corpus" in over ? over.corpus : [{ body: "Revenue: EUR 704.91" }]);
     if (path.includes("/payment?"))
       return ok("ledger" in over ? over.ledger : [{ amount: 704.91 }]);
+    // The repo-built corpora are counted through a `count=exact` HEAD-style read, so the
+    // number arrives in the header rather than the body.
+    if (path.includes("source=eq.report") || path.includes("source=eq.domain")) {
+      const held = path.includes("source=eq.report")
+        ? ((over.reportHeld as number | undefined) ?? 682)
+        : ((over.domainHeld as number | undefined) ?? 341);
+      return { ok: true, json: async () => [], headers: { get: () => `0-0/${held}` } };
+    }
     return ok([]);
   };
 }
@@ -46,7 +54,7 @@ describe("brain-reconcile — the readings it actually assembles", () => {
     const { buildReadings } = await import("@/app/api/cron/brain-reconcile/route");
     const { reconcile } = await import("@features/brain/server/reconcile");
     const { readings, unread } = await buildReadings();
-    expect(readings).toHaveLength(4);
+    expect(readings).toHaveLength(6);
     expect(unread).toEqual([]);
     expect(reconcile(readings)).toEqual([]);
   });
@@ -59,7 +67,23 @@ describe("brain-reconcile — the readings it actually assembles", () => {
     const { reconcile, summarise } = await import("@features/brain/server/reconcile");
     const found = reconcile((await buildReadings()).readings);
     expect(found).toHaveLength(1);
-    expect(summarise(found, 4)).toContain("paid, last 30 days");
+    expect(summarise(found, 6)).toContain("paid, last 30 days");
+  });
+
+  it("notices a repo-built corpus that lost rows without anyone noticing", async () => {
+    /**
+     * `report` and `domain` are built from files, so the count they SHOULD hold is knowable
+     * exactly. Their ingesters refuse to sweep on an empty build — but a build producing
+     * HALF its rows sweeps the rest away and looks like a normal run. A renamed data file
+     * or a parser that stops matching is silent otherwise.
+     */
+    supabaseFetch.mockImplementation(routeFetch({ reportHeld: 340 }));
+    const { buildReadings } = await import("@/app/api/cron/brain-reconcile/route");
+    const { reconcile } = await import("@features/brain/server/reconcile");
+    const found = reconcile((await buildReadings()).readings);
+    const hit = found.find((f) => f.what.includes("report chunks"));
+    expect(hit, "a corpus missing half its rows must be reported").toBeDefined();
+    expect(hit!.detail).toContain("340");
   });
 
   it("reports an unreadable source as UNREAD, never as agreement", async () => {
