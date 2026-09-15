@@ -842,17 +842,30 @@ function sourceCoverageProbes(live: LiveCounts): RetrievalProbe[] {
     P("fact-aug-signups", "how many people signed up in august 2026", bodyHas(/\b358\b/)),
     P("fact-aug-revenue", "what was our revenue in august 2026", bodyHas(/196\.98/)),
     P("fact-aug-adspend", "what did we spend on google ads in august 2026", bodyHas(/1252\.99/)),
+    /**
+     * Read from the corpus at run time — it was the literal 675.91 until one more
+     * purchase landed and turned a working probe red.
+     *
+     * And NO hardcoded fallback. `?? "675.91"` meant that when the corpus read failed,
+     * the probe quietly asserted a figure from some earlier week instead of saying it
+     * could not check: by 2026-09-15 the real total was 704.91 across 41 customers, so
+     * both fallbacks were stale and one of them was a false claim about revenue dressed
+     * as a passing test. An unreadable figure is INCONCLUSIVE, and a battery that cannot
+     * say so reports a verified zero it never measured.
+     */
     P(
       "fact-alltime-revenue",
       "how much revenue have we made in total since launch",
-      // Read from the corpus at run time. It was the literal 675.91 until one more
-      // purchase landed and turned a working probe red.
-      bodyHas(new RegExp(escapeRe(live.allTimeRevenue ?? "675.91")))
+      live.allTimeRevenue
+        ? bodyHas(new RegExp(escapeRe(live.allTimeRevenue)))
+        : () => ["could not read all-time revenue from the corpus — this probe verified nothing"]
     ),
     P(
       "fact-alltime-customers",
       "how many paying customers have we had in total",
-      bodyHas(new RegExp(`\\b${escapeRe(live.allTimeCustomers ?? "37")}\\b`))
+      live.allTimeCustomers
+        ? bodyHas(new RegExp(`\\b${escapeRe(live.allTimeCustomers)}\\b`))
+        : () => ["could not read the customer count from the corpus — this probe verified nothing"]
     ),
     P("fact-sept-revenue", "what is our revenue this month", bodyHas(/September 2026/)),
     P("fact-visits-aug", "how many people visited the site in august", bodyHas(/11147/)),

@@ -30,7 +30,7 @@
     "test": "vitest run",
     "brain:ask": "tsx scripts/brain-ask.ts",
     "brain:battery": "tsx scripts/brain-battery.ts",
-    "brain:battery:retrieval": "tsx scripts/brain-battery.ts --retrieval",
+    "brain:battery:retrieval": "tsx --env-file-if-exists=.env.local scripts/brain-battery.ts --retrieval",
     "brain:battery:mcp": "tsx --env-file-if-exists=.env.local scripts/brain-battery.ts --mcp",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
