@@ -260,6 +260,141 @@ export function buildSurveySignals(
   return signals;
 }
 
+/** Report and paywall friction, as `get_report_friction` returns it. */
+export interface ReportFrictionSnapshot {
+  viewers: number;
+  tried_locked: number;
+  read_to_end: number;
+  paywall_opened: number;
+  paywall_closed: number;
+  checkout: number;
+  dwell_median_ms: number;
+  dwell_n: number;
+  escape_routes: Array<{ source: string; n: number }>;
+  top_locked_section: string | null;
+  scrolled_before_paywall: number;
+  reopened_pricing: number;
+  saw_a_price: number;
+  total_rows: number;
+}
+
+async function fetchReportFriction(
+  sinceIso: string,
+  untilIso: string
+): Promise<ReportFrictionSnapshot | null> {
+  try {
+    const res = await supabaseFetch(`/rest/v1/rpc/get_report_friction`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ since_ts: sinceIso, until_ts: untilIso }),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as ReportFrictionSnapshot;
+    return typeof json?.viewers === "number" ? json : null;
+  } catch (err) {
+    logger.warn({ err }, "friction-metrics: get_report_friction unavailable");
+    return null;
+  }
+}
+
+/** Seconds from milliseconds, for a reader rather than a machine. */
+function dwell(ms: number): string {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
+}
+
+export function buildReportSignals(snap: ReportFrictionSnapshot): FrictionSignal[] {
+  const out: FrictionSignal[] = [];
+  const viewers = snap.viewers;
+  if (!viewers) return out;
+
+  // --- Report curiosity ------------------------------------------------------
+  const curious = computeRate(snap.tried_locked, viewers);
+  out.push({
+    label: "Report curiosity",
+    group: "Report",
+    value: `${curious.toFixed(0)}% try a locked section`,
+    where: snap.top_locked_section ? `most tried: ${snap.top_locked_section}` : undefined,
+    n: viewers,
+    status: "quiet",
+  });
+
+  // --- Scroll behaviour ------------------------------------------------------
+  const toEnd = computeRate(snap.read_to_end, viewers);
+  out.push({
+    label: "Scroll behaviour",
+    group: "Report",
+    value: `${toEnd.toFixed(0)}% reach the end`,
+    n: viewers,
+    status: toEnd < 20 ? "watch" : "quiet",
+  });
+
+  // --- Value discovery before paywall ---------------------------------------
+  // Did they see enough of the report to know what they were being asked to buy?
+  if (snap.paywall_opened > 0) {
+    const discovered = computeRate(snap.scrolled_before_paywall, snap.paywall_opened);
+    out.push({
+      label: "Value discovery before paywall",
+      group: "Paywall",
+      value: `${discovered.toFixed(0)}% got halfway first`,
+      n: snap.paywall_opened,
+      status: discovered < 50 ? "watch" : "quiet",
+    });
+  }
+
+  // --- Paywall dwell ---------------------------------------------------------
+  // Marcus's own framing: immediate rejection vs genuine consideration.
+  if (snap.dwell_n > 0) {
+    out.push({
+      label: "Paywall dwell time",
+      group: "Paywall",
+      value: `${dwell(snap.dwell_median_ms)} median`,
+      where: snap.dwell_median_ms < 5000 ? "immediate rejection" : "genuine consideration",
+      n: snap.dwell_n,
+      status: snap.dwell_median_ms < 5000 ? "watch" : "quiet",
+    });
+  }
+
+  // --- Paywall escape --------------------------------------------------------
+  // Deliberately NOT closed/opened. The scroll paywall opens itself without
+  // emitting paywall_initiated, so that ratio comes out over 300% and is
+  // nonsense. How people leave is answerable; how many is not, yet.
+  const top = snap.escape_routes?.[0];
+  if (top) {
+    const total = snap.escape_routes.reduce((n, r) => n + r.n, 0);
+    out.push({
+      label: "Paywall escape",
+      group: "Paywall",
+      value: `${computeRate(top.n, total).toFixed(0)}% via ${top.source.replace(/_/g, " ")}`,
+      n: total,
+      status: "quiet",
+    });
+  }
+
+  // --- Price interaction -----------------------------------------------------
+  if (snap.saw_a_price > 0) {
+    const back = computeRate(snap.reopened_pricing, snap.saw_a_price);
+    out.push({
+      label: "Price interaction",
+      group: "Paywall",
+      value: `${back.toFixed(0)}% open the pricing again`,
+      n: snap.saw_a_price,
+      status: "quiet",
+    });
+  }
+
+  // --- Conversion blockers ---------------------------------------------------
+  // The end of the chain the other signals describe.
+  out.push({
+    label: "Conversion blockers",
+    group: "Paywall",
+    value: `${computeRate(snap.checkout, viewers).toFixed(1)}% of readers reach checkout`,
+    n: viewers,
+    status: "quiet",
+  });
+
+  return out;
+}
+
 /** Everything the scoreboard can say today, plus what it cannot. */
 export interface FrictionReport {
   signals: FrictionSignal[];
@@ -275,11 +410,17 @@ export async function buildFrictionReport(
   untilIso: string,
   questionNames: Map<string, string> = new Map()
 ): Promise<FrictionReport | null> {
-  const snap = await fetchFrictionSnapshot(sinceIso, untilIso);
+  const [snap, report] = await Promise.all([
+    fetchFrictionSnapshot(sinceIso, untilIso),
+    fetchReportFriction(sinceIso, untilIso),
+  ]);
   if (!snap) return null;
   return {
-    signals: buildSurveySignals(snap, questionNames),
-    rowsRead: snap.total_rows,
+    signals: [
+      ...buildSurveySignals(snap, questionNames),
+      ...(report ? buildReportSignals(report) : []),
+    ],
+    rowsRead: snap.total_rows + (report?.total_rows ?? 0),
     // Named, never silently dropped: a scoreboard that omits its blind spots
     // reads as complete.
     blind: ["Dead clicks (PostHog only — writes nothing to Postgres)"],
