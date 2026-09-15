@@ -69,6 +69,17 @@ export const CRITERIA = [
     probes: ["verify-no-survey-restart.mjs"],
   },
   {
+    // CTA visibility is Marcus's bullet 8, and it is a PROBE, not a model
+    // question: in the first viewport, reachable by a tap, big enough. A model
+    // scoring 0.20 on defects it can literally see would be guessing at
+    // "immediately obvious".
+    id: "V1",
+    label: "primary CTA not immediately usable",
+    match:
+      /cta (is )?(not )?(visible|obvious)|call to action.*(hidden|below|off.screen)|had to scroll to (find|reach)|button (was )?(hidden|off.screen)/i,
+    probes: ["verify-cta-visibility.mjs"],
+  },
+  {
     id: "C1",
     label: "clipped or covered content",
     match: /cover(ed|ing)?|overlap|clipped|cut off|hidden behind|obscur/i,
@@ -519,6 +530,8 @@ if (process.argv.includes("--selftest")) {
     ["The survey looped back to the very first introduction screen.", "L1"],
     ["The user was returned to an earlier screen after pressing continue.", "L1"],
     ["The reader simply finished reading the chapter.", null],
+    ["The call to action was hidden below the fold.", "V1"],
+    ["The user had to scroll to find the unlock button.", "V1"],
     // Verbatim from real observations. These are the claims the classifier is
     // for; inventing test phrasings is how a gap survives its own test suite.
     [
