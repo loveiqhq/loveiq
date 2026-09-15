@@ -158,11 +158,16 @@ describe("brain-mine runs on a fresh Gemini quota", () => {
       ["PST", 11],
     ] as const) {
       const utc = new Date(Date.UTC(2026, month, 15, Number(hour), Number(minute)));
+      // hourCycle h23, NOT hour12:false. With en-US the latter selects the h24
+      // cycle, where midnight formats as "24" rather than "0" — and whether it
+      // does depends on the ICU build: Node 24 answers "00", Node 20 answers
+      // "24". This slot IS 00:10 Pacific, correct by intent, and the assertion
+      // still failed on CI's Node 20 while passing on a Node 24 laptop.
       const pacificHour = Number(
         new Intl.DateTimeFormat("en-US", {
           timeZone: "America/Los_Angeles",
-          hour: "numeric",
-          hour12: false,
+          hour: "2-digit",
+          hourCycle: "h23",
         }).format(utc)
       );
       expect(
