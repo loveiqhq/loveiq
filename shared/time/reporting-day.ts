@@ -61,3 +61,51 @@ export function reportingHour(now: Date = new Date()): number {
   // Same ICU-less fallback as reportingDay: a wrong-but-valid hour beats NaN.
   return hour === undefined ? now.getUTCHours() : Number(hour);
 }
+
+/**
+ * The instant a reporting day begins, as a UTC `Date`.
+ *
+ * `new Date("2026-09-14T00:00:00Z")` is 02:00 in Berlin, not midnight, so a
+ * window built that way clips two hours off one end of the day and adds two to
+ * the other. The offset cannot be hardcoded either: Berlin is UTC+1 for part of
+ * the year and UTC+2 for the rest.
+ *
+ * So: guess UTC midnight, ask the zone what local time that instant actually
+ * is, and shift by the difference.
+ *
+ * One pass is enough. A second pass re-evaluating the offset at the corrected
+ * instant was written for the DST changeover days and then measured: across
+ * every day from 2024 to 2030 it never once returned a different answer, so it
+ * was deleted rather than kept as a branch no test could reach. Berlin's
+ * transitions happen at 02:00/03:00 local, never close enough to midnight to
+ * make the guess land on the far side of one.
+ */
+export function reportingDayStart(day: string): Date {
+  const guess = new Date(`${day}T00:00:00Z`);
+  return new Date(guess.getTime() - zoneOffsetMs(guess));
+}
+
+/** How far ahead of UTC the reporting zone is, at a given instant. */
+function zoneOffsetMs(at: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: REPORTING_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    // h23, never hour12:false — with en-US the latter reports midnight as hour
+    // 24, and which you get depends on the ICU build the runtime shipped with.
+    hourCycle: "h23",
+  }).formatToParts(at);
+
+  const n = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((p) => p.type === type)?.value);
+
+  const asUtc = Date.UTC(n("year"), n("month") - 1, n("day"), n("hour"), n("minute"), n("second"));
+  // Without full ICU the zone is ignored and the parts come back as UTC, which
+  // yields 0 — the same answer as "no offset", so the caller degrades to UTC
+  // rather than producing a nonsense instant.
+  return asUtc - Math.floor(at.getTime() / 1000) * 1000;
+}

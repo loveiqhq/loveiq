@@ -1,7 +1,12 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { REPORTING_TIME_ZONE, reportingDay, reportingHour } from "@shared/time/reporting-day";
+import {
+  REPORTING_TIME_ZONE,
+  reportingDay,
+  reportingHour,
+  reportingDayStart,
+} from "@shared/time/reporting-day";
 
 /**
  * Fixed 2026-08-28. Comparing GA4 against our own visitor counter gave ratios of
@@ -73,6 +78,43 @@ describe("reportingDay", () => {
       expect(src, `${file} still buckets by UTC date`).not.toMatch(
         /(day|visitDay)\s*[:=]\s*new Date\(\)\.toISOString\(\)\.slice\(0, 10\)/
       );
+    }
+  });
+});
+
+describe("reportingDayStart", () => {
+  const utcISO = (day: string) => reportingDayStart(day).toISOString();
+
+  it("starts a summer day at 22:00 UTC the evening before (CEST, UTC+2)", () => {
+    expect(utcISO("2026-07-15")).toBe("2026-07-14T22:00:00.000Z");
+  });
+
+  it("starts a winter day at 23:00 UTC the evening before (CET, UTC+1)", () => {
+    expect(utcISO("2026-12-15")).toBe("2026-12-14T23:00:00.000Z");
+  });
+
+  it("is not UTC midnight — the bug this exists to prevent", () => {
+    // `new Date("2026-07-15T00:00:00Z")` is 02:00 in Berlin, so a window built
+    // that way loses two hours off one end of the day and gains two on the other.
+    expect(utcISO("2026-07-15")).not.toBe("2026-07-15T00:00:00.000Z");
+  });
+
+  it("handles the spring changeover, where the offset moves during the day", () => {
+    // Clocks go forward 02:00 -> 03:00 on 2026-03-29. The day still begins at
+    // the CET offset in force at midnight, not the CEST one in force by noon.
+    expect(utcISO("2026-03-29")).toBe("2026-03-28T23:00:00.000Z");
+  });
+
+  it("handles the autumn changeover", () => {
+    // Clocks go back 03:00 -> 02:00 on 2026-10-25; midnight is still CEST.
+    expect(utcISO("2026-10-25")).toBe("2026-10-24T22:00:00.000Z");
+  });
+
+  it("round-trips: the day a day-start belongs to is that same day", () => {
+    for (const day of ["2026-01-01", "2026-03-29", "2026-07-15", "2026-10-25", "2026-12-31"]) {
+      expect(reportingDay(reportingDayStart(day))).toBe(day);
+      // And one millisecond earlier belongs to the day before.
+      expect(reportingDay(new Date(reportingDayStart(day).getTime() - 1))).not.toBe(day);
     }
   });
 });

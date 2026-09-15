@@ -51,11 +51,8 @@ import {
   tryClaimSlackAlert,
   verifyCronAuth,
 } from "@shared/observability/slack-alert-dedup";
-import {
-  computeRate,
-  dayString,
-  fetchFunnelCvrSparklines,
-} from "@features/admin/server/digest-metrics";
+import { computeRate, fetchFunnelCvrSparklines } from "@features/admin/server/digest-metrics";
+import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 import {
   buildFrictionReport,
   buildFrictionSection,
@@ -375,7 +372,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   const { dayKey, funnel, cohorts, now, cvrDays } = input;
   const startFunnel = input.startFunnel ?? null;
   const axisRows = input.axisRows ?? [];
-  const windowLabel = `${WINDOW_DAYS}-day window ending ${dayKey} UTC`;
+  const windowLabel = `${WINDOW_DAYS}-day window ending ${dayKey} Berlin time`;
 
   const verdicts: ArmVerdict[] = [];
   if (cohorts) {
@@ -925,9 +922,22 @@ export async function GET(request: Request) {
 
   try {
     const now = new Date();
-    const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    const yesterdayStart = new Date(dayStart.getTime() - 86_400_000);
-    const dayKey = dayString(yesterdayStart);
+    /**
+     * Berlin, not UTC. GA4 — where the ad spend on this digest comes from — has
+     * its property time zone set to Europe/Berlin, so "spend on the 14th" is a
+     * Berlin day. The funnel used to count a UTC day and print the two against
+     * the same date, which made the cost-per-conversion line a Berlin numerator
+     * over a UTC denominator. Measured on the 30 days to 2026-09-14: the
+     * totals are identical either way, but 24 of 31 individual days differ, by
+     * 1.4 submissions on average against a 13.7/day base.
+     *
+     * `reportingDayStart` rather than a UTC midnight, because midnight in
+     * Berlin is 22:00 or 23:00 UTC depending on the season.
+     */
+    const dayStart = reportingDayStart(reportingDay(now));
+    // One millisecond before today began is yesterday, without assuming a day
+    // is 24 hours — on the two changeover days it is 23 or 25.
+    const dayKey = reportingDay(new Date(dayStart.getTime() - 1));
 
     /**
      * Only the SCHEDULED run consumes the day.
@@ -960,7 +970,11 @@ export async function GET(request: Request) {
       }
     }
 
-    const windowStart = new Date(dayStart.getTime() - WINDOW_DAYS * 86_400_000).toISOString();
+    // Snap back to a real Berlin midnight rather than subtracting 30 fixed
+    // days, which lands an hour out whenever the window crosses a DST change.
+    const windowStart = reportingDayStart(
+      reportingDay(new Date(dayStart.getTime() - WINDOW_DAYS * 86_400_000))
+    ).toISOString();
     const windowEnd = dayStart.toISOString();
     const [funnel, cohorts, startFunnel, axisRows, cvrSnap, friction] = await Promise.all([
       fetchLandingArmFunnel(windowStart, windowEnd),
