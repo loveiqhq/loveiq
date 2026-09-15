@@ -1,7 +1,41 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { getBreaker } from "@shared/http/circuit-breaker";
+import logger from "@shared/observability/logger";
 
 const TIMEOUT_MS = 8000;
+
+/**
+ * PostgREST's `max-rows`. A request for more comes back capped at this with NO
+ * error, NO warning and NO truncation flag — just fewer rows than exist.
+ */
+export const POSTGREST_MAX_ROWS = 1000;
+
+/**
+ * Warn when a response was silently truncated.
+ *
+ * Found 2026-09-15: a friction query asked for 50,000 rows of
+ * survey_behavior_event, 26,109 existed, and 1,000 came back. Nothing failed.
+ * On that 4% slice the worst drop-off question was Q11 at 14%; on the full data
+ * it is Q58, the email question, at 21%. The cap did not slow anything down, it
+ * changed the answer — and the same shape sits in other callers, e.g.
+ * channel-efficiency reads survey_submission with no limit at all and crosses
+ * 1,000 rows at a 90-day window.
+ *
+ * `Content-Range: 0-999/*` says it happened without touching the body, so this
+ * costs nothing. A caller that explicitly asked for exactly 1000 is paginating
+ * on purpose (the brain ingest loops do) and is left alone.
+ */
+function warnIfTruncated(path: string, res: Response): void {
+  const range = res.headers.get("content-range");
+  if (!range) return;
+  const end = Number(range.split("/")[0]?.split("-")[1]);
+  if (end !== POSTGREST_MAX_ROWS - 1) return;
+  if (/[?&]limit=1000(&|$)/.test(path)) return;
+  logger.warn(
+    { path: path.split("?")[0], returned: POSTGREST_MAX_ROWS },
+    "supabase: response hit PostgREST's max-rows cap — rows are MISSING and no error was raised; aggregate in SQL or paginate"
+  );
+}
 
 interface SupabaseFetchOptions {
   method?: string;
@@ -34,7 +68,7 @@ export async function supabaseFetch(
 
   const { method = "GET", body, headers = {} } = options;
 
-  return getBreaker("supabase").fire(() =>
+  const res = await getBreaker("supabase").fire(() =>
     fetchWithTimeout(`${url}${path}`, {
       method,
       headers: {
@@ -47,4 +81,6 @@ export async function supabaseFetch(
       timeoutMs: options.timeoutMs ?? TIMEOUT_MS,
     })
   );
+  warnIfTruncated(path, res);
+  return res;
 }
