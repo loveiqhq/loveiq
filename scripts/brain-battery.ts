@@ -677,6 +677,29 @@ const at = (h: BrainChunk[], n: number) => h.slice(0, n);
  * would pass on a coincidence. Tolerance is generous downward and zero upward: the
  * corpus is written from the table, so it can lag and cannot lead.
  */
+/**
+ * A paid-customer figure that is PRESENT and close, not equal to one read ninety seconds ago.
+ *
+ * Both sides of this comparison come from the same chunk, which `brain-fast` rewrites every
+ * fifteen minutes, so exact equality fails whenever a run straddles a rebuild — and a probe
+ * that flaps teaches its reader to ignore it. Whether the published figure is actually RIGHT
+ * is the reconciler's job, against the payment ledger; it is a comparison this probe
+ * structurally cannot make, because it reads the corpus twice.
+ */
+const customersNear =
+  (liveCount: string | null) =>
+  (h: BrainChunk[]): string[] => {
+    if (liveCount === null)
+      return ["could not read the customer count from the corpus — this probe verified nothing"];
+    const found = at(h, 12)
+      .map((x) => /Paid customers: (\d+)/.exec(x.body)?.[1])
+      .filter((v): v is string => Boolean(v));
+    if (found.length === 0) return ["no paid-customer figure in the results at all"];
+    return found.some((f) => Math.abs(Number(f) - Number(liveCount)) <= 2)
+      ? []
+      : [`corpus says ${found.join("/")}, read ${liveCount} at the start of the run`];
+  };
+
 const signupsNear =
   (liveCount: number | null) =>
   (h: BrainChunk[]): string[] => {
@@ -688,11 +711,22 @@ const signupsNear =
       if (!m) continue;
       const n = Number(m[1]);
       seen.push(n);
-      if (n <= liveCount && n >= liveCount - tolerance) return [];
+      /**
+       * SYMMETRIC, because the corpus can legitimately be AHEAD of the live figure.
+       *
+       * `readLiveCounts()` runs once at the start of the battery; `brain-fast` rebuilds the
+       * analytics chunk every fifteen minutes. A run that straddles a rebuild compares a
+       * count read at t=0 against a chunk written at t+60s, and on a busy afternoon that
+       * chunk is LARGER. The old bound was one-sided (`n <= liveCount`), so the corpus
+       * being fresher than the reading failed the probe — measured 2026-09-15, the live
+       * figure moved from 2025 to 2027 between two runs minutes apart. The tolerance is
+       * for clock skew in both directions, not for the corpus being wrong.
+       */
+      if (Math.abs(n - liveCount) <= tolerance) return [];
     }
     return seen.length === 0
       ? ["no signup figure in the results at all"]
-      : [`corpus says ${seen.join("/")}, live says ${liveCount} (tolerance -${tolerance})`];
+      : [`corpus says ${seen.join("/")}, live says ${liveCount} (tolerance +/-${tolerance})`];
   };
 
 /**
@@ -863,9 +897,7 @@ function sourceCoverageProbes(live: LiveCounts): RetrievalProbe[] {
     P(
       "fact-alltime-customers",
       "how many paying customers have we had in total",
-      live.allTimeCustomers
-        ? bodyHas(new RegExp(`\\b${escapeRe(live.allTimeCustomers)}\\b`))
-        : () => ["could not read the customer count from the corpus — this probe verified nothing"]
+      customersNear(live.allTimeCustomers)
     ),
     P("fact-sept-revenue", "what is our revenue this month", bodyHas(/September 2026/)),
     P("fact-visits-aug", "how many people visited the site in august", bodyHas(/11147/)),
@@ -1886,7 +1918,18 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
       "what turns the data purge on",
       all(topSource("doc", 6), bodyHas(/PURGE_OLD_DATA_ENABLED/))
     ),
-    P("dc-78h", "why is the 78 hour call invite paused", bodyHas(/NURTURE_78H|call invite/i)),
+    /**
+     * "Why is this deliberately off" is a real question the corpus has to answer, and it
+     * used to be asked about the 78-hour call invite. That feature was removed with Calendly
+     * on 2026-09-14 and its env vars read by no code at all, so the probe was asserting that
+     * we still document something we deleted. Repointed at Trustpilot rather than deleted:
+     * the capability under test is the same, and a probe removed is coverage removed.
+     */
+    P(
+      "dc-paused-feature",
+      "why are the trustpilot reviews turned off on the site",
+      bodyHas(/trustpilot/i)
+    ),
     P("dc-gdpr", "what is our lawful basis for processing", topSource("doc", 8)),
     P("dc-admin-api", "what admin api routes exist", topSource("doc", 6)),
 
