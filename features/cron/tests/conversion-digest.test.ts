@@ -510,10 +510,13 @@ describe("conversion-digest handler", () => {
      * parser once shipped behind a call site that never called it.
      */
     mockFetchFunnelCvrSparklines.mockResolvedValue({
+      // Starts must EXCEED the fixture's 510 finishers, or the row is correctly
+      // suppressed as incomplete data and this test would be asserting the guard
+      // rather than the row.
       days: Array.from({ length: 10 }, (_, i) => ({
         day: new Date(Date.UTC(2026, 7, 10) + i * 86_400_000).toISOString().slice(0, 10),
-        visitors: 200,
-        starts: 40,
+        visitors: 400,
+        starts: 90,
       })),
     });
     await GET(request());
@@ -933,6 +936,24 @@ describe("conversion-digest funnel", () => {
     expect(steps[2]!.dropFromPrev).toBe(58.5);
     // Percentages stay relative to the TOP, not to the row above.
     expect(steps[1]!.pctOfTop).toBe(8.3);
+  });
+
+  it("omits the row when starts trail finishers, rather than clamping finishers down", () => {
+    /**
+     * Start tracking began 2026-08-16. Over the whole of recorded history the
+     * source reports 1,038 starts against 1,673 finished surveys — missing data,
+     * not a funnel. Drawn, the clamp would pull the finisher count down to the
+     * start count and publish a smaller, wrong number under a truthful label,
+     * which is the one thing this funnel has always refused to do.
+     */
+    const steps = buildFunnel(
+      [{ arm: "white", completions: 1673, reportOpens: 1615, checkout: 205, paid: 37, revenue: 0 }],
+      29630,
+      1038
+    );
+    expect(steps.map((x) => x.step)).not.toContain("Started the survey");
+    // The finisher count survives intact — that is the whole point.
+    expect(steps[1]!.count).toBe(1673);
   });
 
   it("omits the row entirely when the start source is unreadable, rather than drawing zero", () => {

@@ -541,7 +541,24 @@ export function buildFunnel(
   starts?: number | null
 ): FunnelStep[] {
   const sum = (pick: (row: ArmFunnelRow) => number) => cohort.reduce((t, r) => t + pick(r), 0);
-  const hasStarts = typeof starts === "number" && Number.isFinite(starts) && starts > 0;
+  const completions = sum((r) => r.completions);
+  /**
+   * The row needs starts that are actually COMPLETE for the window, and the test
+   * for that is that they exceed the finishers.
+   *
+   * Start tracking only began 2026-08-16. Over any window reaching back past that,
+   * the source reports fewer starts than finished surveys — 1,038 against 1,673
+   * across the whole of recorded history — which is not a funnel, it is missing
+   * data. Drawing it would have clamped the finisher count DOWN to the number of
+   * starts and published a smaller, wrong 425, silently, under a truthful label.
+   *
+   * The digest's own window is a rolling 30 days and so has sat entirely inside
+   * the tracked period since 2026-09-15; this guard is for every other window
+   * someone might pass, and for the boundary case where a window's finishers
+   * mostly started before it opened.
+   */
+  const hasStarts =
+    typeof starts === "number" && Number.isFinite(starts) && starts > 0 && starts >= completions;
   // Labels say what each number IS. Everything below the first row is cohort:
   // "of the people who finished in this window, how many ever got this far",
   // which is NOT the same as "this many happened during the window" — a purchase
@@ -555,7 +572,7 @@ export function buildFunnel(
     // other across a window boundary; claiming it in the label would be a claim
     // the data does not support.
     ...(hasStarts ? [{ step: "Started the survey", count: starts as number }] : []),
-    { step: "Finished the survey", count: sum((r) => r.completions) },
+    { step: "Finished the survey", count: completions },
     { step: "…of those, opened their report", count: sum((r) => r.reportOpens) },
     { step: "…of those, started checkout", count: sum((r) => r.checkout) },
     { step: "…of those, ever paid", count: sum((r) => r.paid) },
