@@ -457,6 +457,7 @@ npm run brain:battery                             # adversarial questions, Slack
 npm run brain:battery:retrieval                   # ranking and filters, no key, ~2 min
 npm run brain:battery:mcp                         # drives the real MCP handlers, no key, seconds
 npm run brain:drift                               # is the DEPLOYED brain this repo? see below
+npm run brain:claims                              # are the brain's own descriptions still TRUE? see below
 ```
 
 Each arm prints its own total, which is why none is quoted here — a count written
@@ -467,6 +468,30 @@ The battery reads its expected figures out of the corpus at run time, so it does
 not go stale, and it refuses to run without `BRAIN_LLM_KEY` rather than reporting
 25 misleading failures. It is deliberately **not** part of `npm run check`: it
 makes real model and database calls.
+
+### Do the descriptions still tell the truth?
+
+`brain:drift` compares the deployed brief against this repo, so it cannot catch a claim
+the two agree on that is false about the WORLD — and that is the failure that happened.
+On 2026-09-14 three places told every caller `resend_webhook_event` "has never held a row
+— the webhook was never registered" while the table held 39. Repo and deployment matched
+perfectly. Both were wrong, for 129 days.
+
+`npm run brain:claims` reads the claims out of `TOOLS`, `EXTERNAL_SERVICES` and
+`MCP_INSTRUCTIONS` — what the model is actually served, never the source file, because
+grepping `route.ts` finds hundreds of dated measurements inside code comments, which are
+notes to the next editor and are supposed to be dated. It checks four things: a named
+table asserted to be empty that is not, the `get_*` function count, an identifier the
+schema no longer has, and a measurement older than sixty days.
+
+Exit 1 on a contradicted claim, **3 when a check could not run** — "could not check" is
+not "checked and fine", and it found a live one on its first run: the instructions claimed
+44 analysis functions against a real 46.
+
+The extraction logic is unit-tested in CI with fakes; the live check is run by hand, like
+`brain:drift`, because it needs the database. It is deliberately not a CI lane that skips
+on an unset secret — this repo already has three of those, and a lane that never runs is
+worse than no lane because it looks like coverage.
 
 ### Everything above tests the repo, not the deployment
 

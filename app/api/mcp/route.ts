@@ -4365,7 +4365,7 @@ export const MCP_INSTRUCTIONS =
   "of them have not moved since June. `overdue` there means open AND past its date: most " +
   "cards carrying a past date are simply finished.\n\n" +
   "THIS IS AN ANALYST'S DOOR, NOT ONLY A LIBRARIAN'S. Before writing your own query " +
-  "over raw rows, look at what is already computed: `list_product_tables` lists 44 " +
+  "over raw rows, look at what is already computed: `list_product_tables` lists 46 " +
   "read-only `get_*` functions that encode the business logic already — among them " +
   "`get_conversion_funnel` and `get_dropoff_everywhere` for where people leave, " +
   "`get_question_abandonment_top_n` and `get_question_discrimination` for which survey " +
