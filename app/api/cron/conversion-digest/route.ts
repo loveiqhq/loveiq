@@ -31,7 +31,11 @@ import {
 import logger from "@shared/observability/logger";
 import { notifySlack, escapeSlack, type SlackBlock } from "@shared/observability/slack";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
-import { signImagePayload } from "@shared/url/signed-image-url";
+import {
+  fitsSlackImageUrl,
+  signImagePayload,
+  SLACK_IMAGE_URL_MAX,
+} from "@shared/url/signed-image-url";
 import {
   context,
   divider,
@@ -146,7 +150,16 @@ async function signedChartUrl(
     const u = new URL(`/api/admin/digest-image/${kind}`, base);
     u.searchParams.set("d", d);
     u.searchParams.set("s", s);
-    return u.toString();
+    const url = u.toString();
+    // Over Slack's cap the block is rejected and the WHOLE post fails.
+    if (!fitsSlackImageUrl(url)) {
+      logger.warn(
+        { kind, length: url.length, max: SLACK_IMAGE_URL_MAX },
+        "conversion-digest: signed URL over Slack's image_url cap; skipping chart"
+      );
+      return null;
+    }
+    return url;
   } catch (err) {
     logger.warn({ err }, "conversion-digest: chart signing failed; skipping chart");
     return null;

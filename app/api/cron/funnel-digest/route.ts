@@ -20,7 +20,11 @@ import { NextResponse } from "next/server";
 import logger from "@shared/observability/logger";
 import { notifySlack, escapeSlack, type SlackBlock } from "@shared/observability/slack";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
-import { signImagePayload } from "@shared/url/signed-image-url";
+import {
+  fitsSlackImageUrl,
+  signImagePayload,
+  SLACK_IMAGE_URL_MAX,
+} from "@shared/url/signed-image-url";
 import {
   markSlackAlertDelivered,
   recordCronRun,
@@ -133,7 +137,17 @@ async function buildSignedImageUrl(
     const u = new URL(`/api/admin/digest-image/${kind}`, base);
     u.searchParams.set("d", d);
     u.searchParams.set("s", s);
-    return u.toString();
+    const url = u.toString();
+    // Over Slack's cap the block is rejected and the WHOLE post fails. Drop the
+    // one image instead, loudly enough to be noticed.
+    if (!fitsSlackImageUrl(url)) {
+      logger.warn(
+        { kind, length: url.length, max: SLACK_IMAGE_URL_MAX },
+        "digest-image: signed URL over Slack's image_url cap; skipping image block"
+      );
+      return null;
+    }
+    return url;
   } catch (err) {
     logger.warn({ err, kind }, "digest-image: sign failed; skipping image block");
     return null;

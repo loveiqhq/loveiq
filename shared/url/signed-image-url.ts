@@ -113,6 +113,25 @@ function constantTimeEqual(a: string, b: string): boolean {
  * is misconfigured. Caller is responsible for keeping payload small enough
  * to fit in a URL (Slack tolerates ~2k chars).
  */
+/**
+ * Slack's cap on `image_url`. Exceeding it does NOT degrade — Slack rejects the
+ * block server-side with `invalid_blocks` and the whole post fails, so a digest
+ * that grew one chart too wide takes the entire message down with it.
+ *
+ * There was no check anywhere until 2026-09-15. The 59-question drop-off chart
+ * sits at ~2.4 kB, roughly 500 chars of headroom: a longer label than "Qn", or
+ * a survey growing past ~70 questions, silently crosses it.
+ */
+export const SLACK_IMAGE_URL_MAX = 3000;
+
+/**
+ * True when the URL still fits. Callers drop the image block rather than post a
+ * message Slack will refuse outright — one missing chart beats no digest.
+ */
+export function fitsSlackImageUrl(url: string): boolean {
+  return url.length <= SLACK_IMAGE_URL_MAX;
+}
+
 export async function signImagePayload<T>(
   payload: T,
   secret: string = getDigestSigningSecret()

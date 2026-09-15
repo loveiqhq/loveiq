@@ -536,8 +536,14 @@ function renderStageConversion(p: StageConversionPayload): {
 // Drop-out-by-question histogram (where users quit the survey)
 // -----------------------------------------------------------------------------
 
-const DROPOUT_PLOT_H = 320;
+const DROPOUT_PLOT_H = 300;
 const DROPOUT_WORST_N = 3;
+/** Width of the y-axis gutter, matching DROPOUT_ARM_AXIS_W's role below. */
+const DROPOUT_AXIS_W = 46;
+/** Minimum horizontal room an x label needs to render without clipping. */
+const DROPOUT_LABEL_W = 34;
+/** Room for a value label like "15%" at 13px bold, with margin. */
+const DROPOUT_VALUE_W = 46;
 
 function renderDropoutBars(p: DropoutPayload): {
   element: React.ReactElement;
@@ -549,7 +555,7 @@ function renderDropoutBars(p: DropoutPayload): {
       label: b.label,
       dropPct: Math.max(0, Number(b.dropPct) || 0),
     }));
-  const title = "Where users quit — drop-off % by question";
+  const title = "Where people quit the survey";
   if (bars.length === 0) {
     return {
       element: chartShell(
@@ -563,8 +569,8 @@ function renderDropoutBars(p: DropoutPayload): {
     };
   }
 
-  // Worst-N questions by drop-off rate drive the red highlight + the summary
-  // line. Derived here so coloring + summary can never disagree.
+  // Worst-N questions by drop-off rate drive the red highlight + the value
+  // labels. Derived here so colouring and labels can never disagree.
   const worstIdx = new Set(
     bars
       .map((b, i) => ({ i, pct: b.dropPct }))
@@ -573,14 +579,47 @@ function renderDropoutBars(p: DropoutPayload): {
       .filter((x) => x.pct > 0)
       .map((x) => x.i)
   );
-  const maxPct = bars.reduce((m, b) => Math.max(m, b.dropPct), 0) || 1;
 
-  // Sparse x-axis ticks: first, last, and a few evenly spaced between.
-  const tickEvery = Math.max(1, Math.ceil(bars.length / 8));
-  const ticks: Array<{ label: string; flex: number }> = bars.map((b, i) => ({
-    label: i === 0 || i === bars.length - 1 || i % tickEvery === 0 ? b.label : "",
-    flex: 1,
-  }));
+  /**
+   * A REAL y axis, on the same niceAxis()/fmtAxis() helpers renderDropoutByArm
+   * uses. Until 2026-09-15 this chart had none at all: bars were normalised to
+   * an undrawn maximum, so a full-height bar could have been 8% or 80% and the
+   * picture did not say which. Nobody could read it, which is the only thing a
+   * chart has to do.
+   */
+  const rawPeak = bars.reduce((m, b) => Math.max(m, b.dropPct), 0);
+  /**
+   * 18% headroom so the tallest bar never touches the ceiling. Without it the
+   * worst bar reached the top gridline and its value label had nowhere to go —
+   * it was clipped by the plot edge, printing "15%" as "5%". Headroom is the
+   * root fix; positioning tricks were treating the symptom.
+   */
+  const { max: peak, intervals } = niceAxis(rawPeak * 1.18);
+  // 28 = chartShell's padding, both sides.
+  const plotW = WIDTH - 2 * 28 - DROPOUT_AXIS_W;
+  const yFor = (v: number) => DROPOUT_PLOT_H - (v / peak) * DROPOUT_PLOT_H;
+  const slot = plotW / bars.length;
+
+  /**
+   * X labels: only the ones that can be READ. The previous version drew every
+   * 8th label into an ~11.6px flex slot with overflow:hidden, which rendered
+   * "Q17" as "217" and "Q57"/"Q58" as "257)58" — clipped into nonsense. Labels
+   * are now absolutely positioned with room to breathe, and only as many as fit
+   * at DROPOUT_LABEL_W apart.
+   */
+  const labelEvery = Math.max(1, Math.ceil(DROPOUT_LABEL_W / Math.max(slot, 1)));
+  const xTicks = bars
+    .map((b, i) => ({ i, label: b.label }))
+    .filter(({ i }) => i === 0 || i === bars.length - 1 || i % labelEvery === 0)
+    // Drop any tick that would collide with its neighbour OR with the final
+    // tick, which is always kept. Without the second test Q55 and Q58 landed
+    // on top of each other at the right edge.
+    .filter(({ i }, n, arr) => {
+      const last = arr[arr.length - 1]!;
+      if (i !== last.i && (last.i - i) * slot < DROPOUT_LABEL_W) return false;
+      const next = arr[n + 1];
+      return !next || (next.i - i) * slot >= DROPOUT_LABEL_W;
+    });
 
   const worstSummary = [...worstIdx]
     .sort((a, b) => bars[b]!.dropPct - bars[a]!.dropPct)
@@ -592,58 +631,155 @@ function renderDropoutBars(p: DropoutPayload): {
       title,
       p.windowLabel ?? "",
       <div style={{ display: "flex", flexDirection: "column" }}>
-        {/* Bar row */}
         <div
           style={{
             display: "flex",
-            flexDirection: "row",
-            alignItems: "flex-end",
-            height: DROPOUT_PLOT_H,
-            gap: 1,
+            position: "relative",
+            width: DROPOUT_AXIS_W + plotW,
+            height: DROPOUT_PLOT_H + 24,
           }}
         >
+          {/* y-axis labels, each centred on its own gridline */}
+          {Array.from({ length: intervals + 1 }, (_, i) => {
+            const value = (peak * i) / intervals;
+            return (
+              <div
+                key={`y-${i}`}
+                style={{
+                  display: "flex",
+                  position: "absolute",
+                  left: 0,
+                  top: yFor(value) - 7,
+                  width: DROPOUT_AXIS_W - 8,
+                  justifyContent: "flex-end",
+                  fontSize: 12,
+                  color: COLORS.textMuted,
+                }}
+              >
+                {`${fmtAxis(value)}%`}
+              </div>
+            );
+          })}
+
+          {/* gridlines — polyline only, the proven Satori primitive here */}
+          <div style={{ display: "flex", position: "absolute", left: DROPOUT_AXIS_W, top: 0 }}>
+            <svg width={plotW} height={DROPOUT_PLOT_H}>
+              {Array.from({ length: intervals + 1 }, (_, i) => {
+                const y = yFor((peak * i) / intervals);
+                return (
+                  <polyline
+                    key={`grid-${i}`}
+                    points={`0,${y} ${plotW},${y}`}
+                    fill="none"
+                    stroke={i === 0 ? COLORS.baseline : COLORS.gridline}
+                    strokeWidth="1"
+                  />
+                );
+              })}
+            </svg>
+          </div>
+
+          {/* bars, positioned against the same scale as the gridlines */}
           {bars.map((b, i) => {
-            const h = Math.max(2, Math.round((b.dropPct / maxPct) * (DROPOUT_PLOT_H - 4)));
+            const h = Math.max(2, Math.round((b.dropPct / peak) * DROPOUT_PLOT_H));
             const isWorst = worstIdx.has(i);
             return (
               <div
-                key={`${b.label}-${i}`}
+                key={`bar-${b.label}-${i}`}
                 style={{
                   display: "flex",
-                  flex: 1,
+                  position: "absolute",
+                  left: DROPOUT_AXIS_W + i * slot,
+                  top: DROPOUT_PLOT_H - h,
+                  width: Math.max(2, slot - 1),
                   height: h,
                   background: isWorst ? COLORS.danger : COLORS.accentOrange,
-                  opacity: isWorst ? 1 : 0.55,
+                  opacity: isWorst ? 1 : 0.5,
                   borderRadius: 1,
                 }}
               />
             );
           })}
-        </div>
-        {/* X-axis question ticks */}
-        <div style={{ display: "flex", flexDirection: "row", gap: 1, marginTop: 6 }}>
-          {ticks.map((t, i) => (
+
+          {/* the number on the bars that matter, so the eye never has to
+              estimate the ones being pointed at */}
+          {[...worstIdx]
+            .sort((a, b) => a - b)
+            // Two adjacent worst bars (Q57 and Q58 are neighbours, both 15%)
+            // put two 36px labels on two ~11px slots, which overlapped into an
+            // unreadable smudge. Keep the first of any colliding pair — the
+            // summary line underneath names every one of them anyway.
+            .filter((i, n, arr) => n === 0 || (i - arr[n - 1]!) * slot >= DROPOUT_VALUE_W + 2)
+            .map((i) => {
+              const b = bars[i]!;
+              const h = Math.max(2, Math.round((b.dropPct / peak) * DROPOUT_PLOT_H));
+              // A bar at the axis ceiling leaves no room above it, and a label
+              // placed there is clipped by the plot edge — which is what happened
+              // to the two 15% bars on the first render. Tuck it inside instead.
+              const above = DROPOUT_PLOT_H - h - 19;
+              const inside = above < 2;
+              return (
+                <div
+                  key={`val-${i}`}
+                  style={{
+                    display: "flex",
+                    position: "absolute",
+                    // Clamp on the SAME width the box actually is. It was
+                    // clamped to -36 while the text needed more, so the last
+                    // bar's "15%" rendered as "5%" with the 1 cut off.
+                    left: Math.max(
+                      DROPOUT_AXIS_W,
+                      Math.min(
+                        DROPOUT_AXIS_W + i * slot + slot / 2 - DROPOUT_VALUE_W / 2,
+                        DROPOUT_AXIS_W + plotW - DROPOUT_VALUE_W
+                      )
+                    ),
+                    top: inside ? DROPOUT_PLOT_H - h + 4 : above,
+                    width: DROPOUT_VALUE_W,
+                    justifyContent: "center",
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: inside ? COLORS.bg : COLORS.danger,
+                  }}
+                >
+                  {`${Math.round(b.dropPct)}%`}
+                </div>
+              );
+            })}
+
+          {/* x-axis labels, absolutely positioned and centred on their bar */}
+          {xTicks.map(({ i, label }) => (
             <div
-              key={`tick-${i}`}
+              key={`x-${i}`}
               style={{
                 display: "flex",
-                flex: t.flex,
-                fontSize: 10,
-                color: COLORS.textMuted,
+                position: "absolute",
+                left: Math.min(
+                  Math.max(DROPOUT_AXIS_W + i * slot + slot / 2 - DROPOUT_LABEL_W / 2, 0),
+                  DROPOUT_AXIS_W + plotW - DROPOUT_LABEL_W
+                ),
+                top: DROPOUT_PLOT_H + 6,
+                width: DROPOUT_LABEL_W,
                 justifyContent: "center",
-                overflow: "hidden",
-                whiteSpace: "nowrap",
+                fontSize: 12,
+                color: COLORS.textMuted,
               }}
             >
-              {t.label}
+              {label}
             </div>
           ))}
         </div>
-        {/* Worst-offenders summary */}
+
+        {/* What the axes MEAN, in words. A reader who has never seen this chart
+            should not have to infer either one. */}
+        <div style={{ display: "flex", marginTop: 4, fontSize: 12, color: COLORS.textMuted }}>
+          left: % of people who reach a question and do not continue · bottom: question order
+        </div>
+
         <div
           style={{
             display: "flex",
-            marginTop: 16,
+            marginTop: 10,
             fontSize: 15,
             color: COLORS.danger,
             fontWeight: 700,
