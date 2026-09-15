@@ -73,9 +73,19 @@ Survey product-flow details such as step orchestration, storage, autosave, and r
 
 ## POST /api/contact
 
-Submits a contact request. The route verifies reCAPTCHA before sending email.
+Submits a contact request. The route verifies reCAPTCHA before sending email, then
+posts a notification to Slack with the submitter's email **masked**.
 
 **Rate limit:** 5 requests per minute per IP.
+
+**Email masking.** Every surface that shows an address to staff — this route, the
+survey and purchase Slack pings, the report-feedback ping and the admin UI — masks
+it to first character plus domain (`hamza@loveiq.org` → `h***@loveiq.org`), keeping
+the domain so internal and external senders are distinguishable. A value with no
+local part, or no `@` at all, renders as `***` rather than being echoed whole. The
+rule is `maskEmail()` in [`shared/observability/slack.ts`](../shared/observability/slack.ts);
+`shared/observability/tests/slack.test.ts` holds every implementation to it and
+fails if a divergent copy is added anywhere in the tree.
 
 **Request body:**
 
