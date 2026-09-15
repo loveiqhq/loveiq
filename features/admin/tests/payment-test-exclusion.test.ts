@@ -91,6 +91,39 @@ describe("test payments are excluded from revenue", () => {
     expect(access).toContain("status=eq.succeeded");
   });
 
+  it("closes the hole the payment-query guard cannot see: the digest's own RPCs", () => {
+    /**
+     * Every assertion above greps `rest/v1/payment?`. The conversion digest never
+     * queries that table for its PAID COUNT — `get_arm_cohorts`,
+     * `get_axis_funnel_daily` and `get_landing_arm_funnel_daily` read
+     * `report_price_quote.purchased_at`, which fulfilment sets whenever a report
+     * unlocks — so the guard above was silent while a staff sandbox purchase
+     * counted as a sale. Measured on production 2026-09-15: 9 recorded payments in
+     * the digest's 30-day window, 4 of them flagged `is_test`.
+     *
+     * A EUR 0 coupon redemption by a real visitor still counts; only `is_test` is
+     * removed. That is a deliberate decision, not an oversight.
+     */
+    const sql = readFileSync(
+      join(REPO, "supabase/migrations/20260915120000_digest_paid_excludes_test_payments.sql"),
+      "utf8"
+    );
+    for (const fn of [
+      "get_arm_cohorts",
+      "get_axis_funnel_daily",
+      "get_landing_arm_funnel_daily",
+      "quote_purchase_is_test",
+    ]) {
+      expect(sql, `${fn} must be covered by the digest exclusion migration`).toContain(fn);
+    }
+    // The migration patches by substitution, so it MUST fail loudly rather than
+    // silently matching nothing — that is the whole reason it is safe to replay.
+    expect(sql).toContain("RAISE EXCEPTION");
+    expect(sql).toMatch(/expected exactly 1/);
+    // The kept case must be written down where the next reader meets the rule.
+    expect(sql.toLowerCase()).toContain("still counts as paid");
+  });
+
   it("ships the migration that defines and backfills the flag", () => {
     const sql = readFileSync(
       join(REPO, "supabase/migrations/20260828173546_payment_is_test_flag.sql"),
