@@ -160,6 +160,58 @@ describe("maskEmail", () => {
   });
 });
 
+/**
+ * Every masker in the repo, held to the same rule.
+ *
+ * The rule was copy-pasted into five places and four of them shared the same
+ * hole. A behavioural check on the exported ones plus a source scan for the
+ * broken pattern is what stops a sixth copy — the scan is the half that reaches
+ * the module-private ones in the route handlers, which no test can import.
+ */
+describe("masking parity across every implementation", () => {
+  it("every exported masker hides a single-character local part", async () => {
+    const { maskEmail: adminMask } = await import("@features/admin/server/format");
+    const { maskEmail: shareMask } = await import("@features/report/server/shareVerify");
+    for (const fn of [maskEmail, adminMask, shareMask]) {
+      expect(fn("a@b.com")).toBe("a***@b.com");
+      expect(fn("ab@b.com")).toBe("a***@b.com");
+      expect(fn("hamza@loveiq.org")).toBe("h***@loveiq.org");
+      // never echo something that is not an address
+      expect(fn("notanemail")).toBe("***");
+      expect(fn("@b.com")).toBe("***");
+    }
+  });
+
+  it("no source file reintroduces the two-character-minimum pattern", async () => {
+    const { execFileSync } = await import("node:child_process");
+    const path = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    // tests -> observability -> shared -> repo root. Three levels, verified by
+    // watching a sixth copy in features/ turn this red.
+    const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+    // The CALL shape, not the bare pattern — the comments explaining this defect
+    // quote the pattern deliberately, and a guard that trips on its own
+    // documentation is one somebody deletes.
+    // --untracked, because git grep otherwise sees only committed files and a
+    // copy written a minute ago is exactly what this is meant to stop. Verified
+    // by writing a sixth copy and watching this go red.
+    // Assembled, so this guard cannot match its own needle — the failure mode
+    // that makes a source scan look broken the moment it is written.
+    const NEEDLE = "replace(/^(.)" + ".+(@.+)$/";
+    let hits = "";
+    try {
+      hits = execFileSync(
+        "git",
+        ["grep", "--untracked", "-n", "-F", NEEDLE, "--", "*.ts", "*.tsx", ":!*test*"],
+        { cwd: root, encoding: "utf8" }
+      );
+    } catch {
+      hits = ""; // git grep exits 1 when there are no matches
+    }
+    expect(hits.trim()).toBe("");
+  });
+});
+
 describe("escapeSlack", () => {
   it("escapes Slack mrkdwn formatting characters", () => {
     expect(escapeSlack("*bold*")).toBe("\\*bold\\*");

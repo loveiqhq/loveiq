@@ -294,6 +294,31 @@ describe("the compact incoming-survey layout", () => {
     expect(title.split("`").length - 1).toBe(2);
   });
 
+  /**
+   * Through `codeSpan`, not a hand-rolled span.
+   *
+   * Stripping backticks is only half of it — the helper also escapes `&`, `<` and
+   * `>`, which still matter inside a span (see its own comment). A hand-rolled
+   * version rendered `a***@x<y&z.com` raw here while the purchase branch of this
+   * same builder, twenty lines below, escaped it — two renderings of one value in
+   * one file. The survey form cannot produce these, but the admin submission
+   * PATCH validates with a regex that accepts all of them and writes straight to
+   * `app_user.email`.
+   */
+  it("escapes the HTML trio in the address, as the purchase branch does", () => {
+    const line0 = (j: string) =>
+      soleSection(
+        buildJourneyMessage(journey({ emailMasked: j }), {
+          kind: "survey_completed",
+          questionCount: 59,
+        }).blocks
+      ).split("\n")[0];
+    expect(line0("a***@x<y&z.com")).toBe("Survey submission *#1756* `a***@x&lt;y&amp;z.com`");
+    expect(line0("a***@x>y.com")).toBe("Survey submission *#1756* `a***@x&gt;y.com`");
+    // unchanged for an ordinary address
+    expect(line0("a***@gmail.com")).toBe("Survey submission *#1756* `a***@gmail.com`");
+  });
+
   it("leaves no dangling separator when the submission has no email", () => {
     const message = buildJourneyMessage(journey({ emailMasked: null }), {
       kind: "survey_completed",
