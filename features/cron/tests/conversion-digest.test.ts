@@ -472,6 +472,67 @@ describe("conversion-digest handler", () => {
     expect(series.values[7]).toBe(12.9);
   });
 
+  it("draws the same landing arm in the same colour in every chart of one message", async () => {
+    /**
+     * The renderer colours by POSITION, not by name: `first` is purple, `last` is
+     * orange. So two charts about the same two arms must put the same arm in the
+     * same slot, or one message shows V2 purple in one picture and orange two
+     * blocks below it — each chart correctly legended, and the pair unreadable to
+     * anyone who follows a colour from one to the next.
+     *
+     * The checkout chart sorts its arms by label. The landing->survey chart used
+     * to hardcode the opposite order.
+     */
+    /**
+     * Both fixtures are rebuilt here, aligned to a later clock. The shared ones
+     * carry only the survey axis and sit around 24 Aug, and the landing axis is
+     * only valid from 21 Aug (AXIS_VALID_FROM) — so at the default clock the
+     * checkout chart has four eligible days against a seven-day minimum and is
+     * never drawn. Without both charts present this test is vacuous.
+     */
+    vi.setSystemTime(new Date("2026-09-14T09:05:00.000Z"));
+    const days = Array.from({ length: 24 }, (_, d) =>
+      new Date(Date.UTC(2026, 7, 21) + d * 86_400_000).toISOString().slice(0, 10)
+    );
+    mockFetchAxisFunnelDaily.mockResolvedValue(
+      days.flatMap((day) => [
+        { axis: "landing", arm: "white", day, completions: 12, checkouts: 3, paid: 1 },
+        { axis: "landing", arm: "white_prev", day, completions: 10, checkouts: 2, paid: 1 },
+      ])
+    );
+    mockFetchLandingStartFunnel.mockResolvedValue({
+      daily: days.flatMap((day) => [
+        { day, arm: "white", visits: 300, starts: 30 },
+        { day, arm: "white_prev", visits: 280, starts: 26 },
+      ]),
+      totals: [
+        { arm: "white", visits: 300 * days.length, starts: 30 * days.length },
+        { arm: "white_prev", visits: 280 * days.length, starts: 26 * days.length },
+      ],
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const landing = arg.blocks
+      .map((b) => (b as { image_url?: string }).image_url)
+      .filter((u): u is string => typeof u === "string")
+      .map(
+        (u) =>
+          JSON.parse(Buffer.from(new URL(u).searchParams.get("d")!, "base64").toString("utf8")) as {
+            legendFirst?: string;
+            legendLast?: string;
+          }
+      )
+      .filter(
+        (p) => p.legendFirst?.includes("Landing Page") && p.legendLast?.includes("Landing Page")
+      );
+
+    // Both landing charts must be in this message, or the assertion below is
+    // vacuous — one chart trivially agrees with itself.
+    expect(landing.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(landing.map((p) => p.legendFirst)).size).toBe(1);
+    expect(new Set(landing.map((p) => p.legendLast)).size).toBe(1);
+  });
+
   it("draws the site-wide survey-reach trend through the AUDITED renderer", async () => {
     // The picture the digest leads with. Its per-arm sibling cannot be a trend
     // yet, so this one carries "how is it looking".

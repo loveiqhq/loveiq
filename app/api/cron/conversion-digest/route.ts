@@ -560,7 +560,25 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
    */
   const landingStartBlocks: SlackBlock[] = [];
   if (startFunnel) {
-    const liveArms = ["white", "white_prev"] as const;
+    /**
+     * Ordered by LABEL, for the same reason `buildAxisTrends` orders its arms that
+     * way — and this is the call site that rule never reached.
+     *
+     * The chart renderer colours by POSITION: `first` is purple, `last` is orange.
+     * This array was hardcoded `["white", "white_prev"]` (V2 then V1) while the
+     * checkout chart directly below sorts by label (V1 then V2). Both charts were
+     * individually correct and correctly legended, and they drew the same two arms
+     * in OPPOSITE colours, two blocks apart in one message — so a reader following
+     * "the purple line" from one chart to the next was following V2 and then V1.
+     * Sorting both by label makes an arm's colour stable across the whole message
+     * and from one day's message to the next.
+     */
+    const liveArms = (["white", "white_prev"] as const)
+      .slice()
+      .sort((l, r) => armLabel("landing", l).short.localeCompare(armLabel("landing", r).short)) as [
+      string,
+      string,
+    ];
     const series = buildStartSeries(startFunnel, [liveArms[0], liveArms[1]]);
     const totalFor = (arm: string) => startFunnel.totals.find((t) => t.arm === arm);
     const hasVisits = (arm: string) => (totalFor(arm)?.visits ?? 0) > 0;

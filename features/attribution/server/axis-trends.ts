@@ -86,7 +86,7 @@ export const MIN_PAID_TO_DRAW = MIN_CELL_COUNT * 2 * 4;
 export interface AxisChart {
   axis: ChartAxis;
   axisTitle: string;
-  /** Arm codes, higher-volume arm first so colour is stable run to run. */
+  /** Arm codes, ordered by LABEL so colour is stable run to run — see the sort below. */
   arms: [string, string];
   legendFirst: string;
   legendLast: string;
