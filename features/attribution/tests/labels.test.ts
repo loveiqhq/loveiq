@@ -95,6 +95,39 @@ describe("arm labels", () => {
     expect(isKnownArm("landing", null)).toBe(false);
   });
 
+  /**
+   * An arm value is a RAW string off `utm_tracker`, which `readStampedArms`
+   * deliberately does not allowlist and the survey route stores verbatim when no
+   * arm cookie is present. So a visitor can put `constructor` — or any other
+   * `Object.prototype` member — in the arm slot.
+   *
+   * `LABELS[axis]` is an object literal, so it inherits those members, and `??`
+   * does not catch them: they are functions, not nullish. That made `armLabel`
+   * return `Object.prototype.constructor` with an `undefined` `short`, and
+   * `isKnownArm` answer TRUE for a value nobody ever assigned — which matters
+   * twice over, because `isKnownArm` is the whitelist that decides which arms
+   * reach the conversion digest and the axis trends.
+   */
+  it("treats Object.prototype members as unknown arms, not as real ones", () => {
+    for (const poisoned of ["constructor", "__proto__", "toString", "valueOf", "hasOwnProperty"]) {
+      expect(armLabel("landing", poisoned)).toEqual({
+        short: "Not recorded",
+        long: "not recorded",
+      });
+      expect(armLabel("landing", poisoned).short).toBe("Not recorded");
+      expect(isKnownArm("landing", poisoned)).toBe(false);
+      // Every axis, not just landing — they share one lookup.
+      for (const axis of ["landing", "survey", "pricing", "paywall"] as ExperimentAxis[]) {
+        expect(armLabel(axis, poisoned).short).toBe("Not recorded");
+        expect(isKnownArm(axis, poisoned)).toBe(false);
+      }
+    }
+    // The real arms still resolve, so the guard has not over-reached.
+    expect(armLabel("landing", "white").short).toBe("Landing Page V2 (Survey in Hero)");
+    expect(isKnownArm("landing", "white")).toBe(true);
+    expect(isKnownArm("pricing", "C")).toBe(true);
+  });
+
   it("titles every axis", () => {
     expect(Object.keys(AXIS_TITLES).sort()).toEqual(["landing", "paywall", "pricing", "survey"]);
   });

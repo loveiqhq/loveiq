@@ -385,6 +385,54 @@ describe("refreshJourneyDetail", () => {
     quoteCount: 1,
   });
 
+  /**
+   * The advance can land WHILE this function is rebuilding.
+   *
+   * `refreshJourneyMessage` writes its `markState` last, and both refreshes are
+   * unlocked after-response tasks against the same `message_ts`. Taking the floor
+   * from the state read at the top would render a rail one step behind and then
+   * overwrite the advance that had just greened it — and because the stored state
+   * is by then already `paywall`, the advance refresh can never re-green it
+   * (`isAdvance("paywall", "paywall")` is false). Only a later dwell milestone
+   * would heal it, and the 10-minute one is the last there is.
+   *
+   * It only bites when the advancing milestone is invisible to a rebuild, which
+   * is the consent-gated case the `witnessed` floor exists for in the first place.
+   */
+  it("takes the rail floor at write time, so a concurrent advance is not clobbered", async () => {
+    // first read: before the advance. second read: after markState landed.
+    mockSupabaseFetch
+      .mockResolvedValueOnce(storedRow("report_opened"))
+      .mockResolvedValueOnce(storedRow("paywall"));
+    // the rebuild cannot see the paywall milestone — it is consent-gated
+    mockBuildSubmissionJourney.mockResolvedValue(journeyWithDwell(600_000));
+    mockFetchWithTimeout.mockResolvedValue(json({ ok: true }));
+
+    await refreshJourneyDetail(1756);
+
+    const [, init] = mockFetchWithTimeout.mock.calls[0] as [string, { body: string }];
+    const blocks = JSON.stringify(JSON.parse(init.body).blocks);
+    expect(blocks).toContain(":large_green_circle: Paywall hit");
+    expect(blocks).not.toContain(":red_circle: Paywall hit");
+    // and it still did the job it was called for
+    expect(blocks).toContain("Report time: *10+ min*");
+  });
+
+  it("falls back to the first read when the re-read fails", async () => {
+    mockSupabaseFetch
+      .mockResolvedValueOnce(storedRow("paywall"))
+      .mockResolvedValueOnce(json(null, false, 500));
+    mockBuildSubmissionJourney.mockResolvedValue(journeyWithDwell(600_000));
+    mockFetchWithTimeout.mockResolvedValue(json({ ok: true }));
+
+    await refreshJourneyDetail(1756);
+
+    const [, init] = mockFetchWithTimeout.mock.calls[0] as [string, { body: string }];
+    expect(JSON.stringify(JSON.parse(init.body).blocks)).toContain(
+      ":large_green_circle: Paywall hit"
+    );
+  });
+
   it("edits the message even though the state has not advanced", async () => {
     mockSupabaseFetch.mockResolvedValueOnce(storedRow("report_opened"));
     mockBuildSubmissionJourney.mockResolvedValue(journeyWithDwell(600_000));

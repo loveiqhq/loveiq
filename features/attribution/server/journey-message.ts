@@ -179,9 +179,12 @@ export async function tryPostJourneyViaBot(input: {
  * "Report time" line would stay an em dash for precisely the reader it is most
  * interesting for: engaged, and not converting.
  *
- * Safe to leave ungated because the only caller is a dwell milestone, and those
- * fire at most three times per report session (1, 5 and 10 minutes). The ceiling
- * is three extra edits per submission, not one per event.
+ * Safe to leave ungated on the ADVANCE check because the caller dedupes instead:
+ * `/api/analytics-event` allows one refresh per (submission, milestone) per hour.
+ * That is what makes the ceiling three extra edits per submission rather than one
+ * per event — the milestones themselves fire once per PAGE LOAD, not once per
+ * submission (the client's dedupe set is rebuilt on every mount), and production
+ * already has a submission carrying 27 of these rows.
  */
 export async function refreshJourneyDetail(submissionId: number): Promise<void> {
   if (!isSlackBotConfigured()) return;
@@ -202,8 +205,19 @@ export async function refreshJourneyDetail(submissionId: number): Promise<void> 
      * only ever meant to change one line.
      */
     const derived = journeyStateOf(journey.milestones);
-    const storedIdx = stored.state ? STATES.indexOf(stored.state as JourneyState) : -1;
-    const floor = storedIdx > STATES.indexOf(derived) ? (stored.state as JourneyState) : derived;
+    /**
+     * Re-read the state HERE rather than reusing the one fetched above.
+     *
+     * `refreshJourneyMessage` writes its `markState` last, so an advance that
+     * started after our first read can land while we are rebuilding. Using the
+     * stale value would render a rail one step behind and — because our write
+     * goes out afterwards — overwrite the advance that had just greened it, which
+     * that refresh can never undo (`isAdvance` is false once the state matches).
+     * Cheap: one extra read on a path that already makes six.
+     */
+    const latest = (await readStored(submissionId)) ?? stored;
+    const storedIdx = latest.state ? STATES.indexOf(latest.state as JourneyState) : -1;
+    const floor = storedIdx > STATES.indexOf(derived) ? (latest.state as JourneyState) : derived;
 
     const message = buildJourneyMessage(journey, {
       kind: "survey_completed",

@@ -243,7 +243,30 @@ export async function POST(request: Request) {
     event_type === "report_engagement_5min" ||
     event_type === "report_engagement_10min"
   ) {
-    scheduleAfterResponse("journey-dwell-refresh", () => refreshJourneyDetail(submission_id));
+    /**
+     * One refresh per (submission, milestone) per hour, and the key is
+     * deliberately NOT keyed by IP.
+     *
+     * The milestones fire at most three times per PAGE LOAD, not per submission:
+     * the client's dedupe `Set` lives inside the effect body, so a reload starts
+     * over. Production already has a submission carrying 27 of these rows, and
+     * nothing downstream dedupes — no uniqueness on `(submission_id,
+     * event_type)`, and the insert above is a bare INSERT. Without this, every
+     * repeat rewrites the identical string into Slack, and an anonymous caller
+     * holding only a CSRF cookie (which any request mints) could drive
+     * `chat.update` past its Tier 3 budget against guessed sequential ids.
+     *
+     * An IP-keyed bucket would not help — the thing worth protecting is the one
+     * Slack message, so the submission is the key.
+     */
+    const fresh = await checkRateLimit(`${submission_id}:${event_type}`, {
+      bucket: "journey-dwell-refresh",
+      limit: 1,
+      windowMs: 3_600_000,
+    });
+    if (fresh.allowed) {
+      scheduleAfterResponse("journey-dwell-refresh", () => refreshJourneyDetail(submission_id));
+    }
   }
 
   return new NextResponse(null, { status: 204 });

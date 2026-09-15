@@ -28,6 +28,7 @@ import {
   header,
   linkButton,
   section,
+  SECTION_BUDGET,
 } from "@shared/observability/slack-blocks";
 
 /** ms → "45s" / "12 min" / "1h 4m". Returns null so callers can omit the row entirely. */
@@ -89,10 +90,18 @@ function trafficParts(journey: SubmissionJourney): { head: string; detail: strin
   return { head: bucket, detail: parts.length > 0 ? parts.join(" / ") : null };
 }
 
-/** The flat form, unchanged — still what the purchase message renders. */
+/**
+ * The flat form — still what the purchase message renders.
+ *
+ * Same `|| "Not recorded"` as the compact layout: `classifyTraffic` assigns a
+ * bucket on every branch so this is unreachable from real data, but the two
+ * branches of one builder should not disagree about what a malformed journey
+ * looks like. Without it the purchase message rendered a literal "undefined".
+ */
 function trafficLine(journey: SubmissionJourney): string {
   const { head, detail } = trafficParts(journey);
-  return detail ? `${head} — ${detail}` : head;
+  const label = head || "Not recorded";
+  return detail ? `${label} — ${detail}` : label;
 }
 
 /**
@@ -197,7 +206,7 @@ function armFields(journey: SubmissionJourney): SlackBlock {
  *
  * An em dash — not "0 min", and not "< 1 min" — when the floor is null. Those
  * milestones sit behind the analytics consent gate, and `report_viewed` alone
- * already misses 45% of real opens, so absence genuinely means "not recorded".
+ * already misses ~44% of real opens (96 of 216 over 2026-08-25 → 09-05), so absence genuinely means "not recorded".
  * Rendering it as a short visit would put a number in a channel people read to
  * judge the funnel that is wrong in the most flattering-to-nobody direction.
  */
@@ -296,8 +305,22 @@ function compactSurveyLines(journey: SubmissionJourney, reachedFloor?: JourneySt
     lines.push(`Country (self-reported): ${bold(escapeSlack(journey.country))}`);
   }
 
-  lines.push(journeyRail(journey, reachedFloor));
-  return lines;
+  /**
+   * The rail goes last, and `clampBlock` truncates a section from the END at
+   * `SECTION_BUDGET`. So in a one-section layout an oversized line ABOVE the rail
+   * does not shorten itself — it pushes the single most important line in the
+   * message off the end, silently. The old `fields` layout could not do this:
+   * each field was clamped independently and the rail was its own block.
+   *
+   * Every value above is bounded today (utm at 100 by `classifyTraffic`, country
+   * at 100 by `buildSubmissionJourney`, device a closed set, the arm a constant
+   * table). This makes that structural rather than a property four separate call
+   * sites have to keep true: the facts give, the rail never does.
+   */
+  const rail = journeyRail(journey, reachedFloor);
+  const factsBudget = SECTION_BUDGET - rail.length - 2;
+  const facts = lines.join("\n");
+  return [facts.length > factsBudget ? `${facts.slice(0, factsBudget - 1)}\u2026` : facts, rail];
 }
 
 /**

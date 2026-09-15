@@ -68,7 +68,7 @@ export interface SubmissionJourney {
      *
      * Deliberately a floor and not a duration. `report_session.ended_at` exists
      * and is the obvious place a real duration would live, but nothing has ever
-     * written it — 0 of 10,798 rows are closed — so a true "time on report"
+     * written it — 0 of ~10,800 rows are closed — so a true "time on report"
      * cannot be computed today without new client instrumentation. These three
      * milestone events, on the other hand, have fired continuously since
      * 2026-05-06 and carry `survey_submission_id` on every single row, so they
@@ -218,7 +218,7 @@ export async function buildSubmissionJourney(
     /**
      * The server-side record of the report being opened. `report_viewed` in
      * `analytics_event` sits behind the consent gate and misses 45% of real
-     * opens (104 of 189 over 2026-08-25 → 09-05), which left `reportViewedAt`
+     * opens (96 of 216 over 2026-08-25 → 09-05), which left `reportViewedAt`
      * null — and every timing derived from it blank — for readers who declined
      * analytics. The report route writes this row itself and its own comment
      * already calls it "the server-side truth here"; this is that truth reaching
@@ -304,7 +304,20 @@ export async function buildSubmissionJourney(
     },
     traffic: classifyTraffic(sub.utm_tracker),
     device: anyQuote?.device_type ?? null,
-    country: sub.app_user?.user_profile?.location_primary?.trim() || null,
+    /**
+     * Capped for the same reason `classifyTraffic` caps utm values at 100: this
+     * string is interpolated straight into a Slack section, and a section is
+     * clamped from the END at 2,900 characters — so an oversized value here
+     * silently truncates whatever renders after it, which in the compact survey
+     * layout is the progress rail.
+     *
+     * It is not hypothetical. `location_primary` is the visitor's own answer to
+     * Q15001; the column is `text` with no length limit and no check constraint,
+     * and `surveyAnswersSchema` accepts an array of 20 x 500 characters for any
+     * key that has no selection cap — 10,000 characters, which the RPC writes
+     * with a bare `#>> '{}'`. The longest real country name is 56.
+     */
+    country: sub.app_user?.user_profile?.location_primary?.trim().slice(0, 100) || null,
     countryTier: anyQuote?.country_tier ?? null,
     timings: {
       durationMs: toNumber(sub.duration_ms),

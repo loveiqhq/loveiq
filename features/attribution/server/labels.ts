@@ -123,11 +123,35 @@ const LABELS: Record<ExperimentAxis, Record<string, ArmLabel>> = {
   },
 };
 
+/**
+ * Own-property lookup, never an inherited one.
+ *
+ * `LABELS[axis]` is an object literal, so it inherits every `Object.prototype`
+ * member: `LABELS.landing.constructor` is a function, not `undefined`, and
+ * `?? UNKNOWN` cannot catch it because a function is not nullish. That matters
+ * because an arm is a RAW string off `utm_tracker` — `readStampedArms`
+ * deliberately does not allowlist it, and `app/api/survey/route.ts` stores the
+ * client's blob verbatim whenever no arm cookie is present — so `constructor`,
+ * `__proto__` or `toString` reaches here from any crafted client.
+ *
+ * Two things went wrong without this. `armLabel` returned an object whose
+ * `short` was `undefined`, which the compact Slack layout then called
+ * `.indexOf()` on and THREW — and in the backfill cron one throw abandons the
+ * rest of the run. And `isKnownArm`, which is the whitelist deciding what
+ * reaches the conversion digest and the axis trends, answered `true` for an arm
+ * nobody has ever assigned.
+ */
+function ownArm(axis: ExperimentAxis, arm: string): ArmLabel | undefined {
+  // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
+  const table = LABELS[axis];
+  // eslint-disable-next-line security/detect-object-injection -- own-property checked on the line above.
+  return Object.prototype.hasOwnProperty.call(table, arm) ? table[arm] : undefined;
+}
+
 /** Look up an arm's labels. Never throws; unrecognised or absent values read as "not recorded". */
 export function armLabel(axis: ExperimentAxis, arm: string | null | undefined): ArmLabel {
   if (!arm) return UNKNOWN;
-  // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
-  return LABELS[axis][arm] ?? UNKNOWN;
+  return ownArm(axis, arm) ?? UNKNOWN;
 }
 
 /** Every arm we actively assign for an axis, in a stable order for charts. Excludes retired arms. */
@@ -140,8 +164,7 @@ export function activeArms(axis: ExperimentAxis): string[] {
 
 /** True when the value is an arm we know about (retired ones included). */
 export function isKnownArm(axis: ExperimentAxis, arm: string | null | undefined): boolean {
-  // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
-  return Boolean(arm && LABELS[axis][arm]);
+  return Boolean(arm && ownArm(axis, arm));
 }
 
 /** Human name for the experiment itself, for chart titles and Slack section headings. */

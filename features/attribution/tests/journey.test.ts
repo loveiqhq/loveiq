@@ -238,4 +238,80 @@ describe("buildSubmissionJourney", () => {
     // purchase timestamped BEFORE completion — report nothing, not "-72 min"
     expect((await buildSubmissionJourney(1296))?.timings.msToPurchase).toBeNull();
   });
+
+  /**
+   * The dwell floor is the FURTHEST milestone crossed, not the latest row.
+   *
+   * These are three independent events, so a reader who stays ten minutes
+   * legitimately has all three — the maximum is what "how long were they in
+   * there" means. Ordering by time would give the same answer today only by
+   * accident, which is why the rows below arrive deliberately out of order: this
+   * is the only place the headline number is computed, and everything
+   * downstream mocks it.
+   */
+  describe("report dwell floor", () => {
+    const at = (t: string) => `2026-08-24T${t}.000Z`;
+
+    it("takes the furthest milestone even when the rows arrive out of order", async () => {
+      route({
+        events: [
+          { event_type: "report_engagement_10min", event_time: at("10:20:00") },
+          { event_type: "report_engagement_1min", event_time: at("10:30:00") },
+          { event_type: "report_engagement_5min", event_time: at("10:25:00") },
+        ],
+      });
+      expect((await buildSubmissionJourney(1296))?.timings.reportDwellFloorMs).toBe(600_000);
+    });
+
+    it.each([
+      [["report_engagement_1min"], 60_000],
+      [["report_engagement_1min", "report_engagement_5min"], 300_000],
+      [["report_engagement_1min", "report_engagement_5min", "report_engagement_10min"], 600_000],
+    ])("reads %j as %ims", async (types, expected) => {
+      route({ events: types.map((t) => ({ event_type: t, event_time: at("10:20:00") })) });
+      expect((await buildSubmissionJourney(1296))?.timings.reportDwellFloorMs).toBe(expected);
+    });
+
+    it("is null when nothing recorded a milestone, never zero", async () => {
+      route({ events: [{ event_type: "report_viewed", event_time: at("10:20:00") }] });
+      const j = await buildSubmissionJourney(1296);
+      // null means "not recorded" — these events are consent-gated, so a reader
+      // who declined analytics must not be rendered as a short visit.
+      expect(j?.timings.reportDwellFloorMs).toBeNull();
+      // and the widened query must not have disturbed the milestones it shares with
+      expect(j?.milestones.reportViewedAt).toBe(at("10:20:00"));
+    });
+
+    it("ignores event types that are not milestones", async () => {
+      route({
+        events: [
+          { event_type: "paywall_initiated", event_time: at("10:20:00") },
+          { event_type: "rage_click", event_time: at("10:21:00") },
+        ],
+      });
+      expect((await buildSubmissionJourney(1296))?.timings.reportDwellFloorMs).toBeNull();
+    });
+  });
+
+  /**
+   * `location_primary` is the visitor's own answer to Q15001: the column is
+   * `text` with no length limit and no check constraint, and the answers schema
+   * accepts an array of 20 x 500 characters for any key without a selection cap.
+   * It is interpolated into a Slack section that is clamped from the END, so an
+   * uncapped value here silently truncates whatever renders after it.
+   */
+  it("caps the country answer before it reaches a renderer", async () => {
+    route({
+      sub: [
+        {
+          ...SUBMISSION,
+          app_user: {
+            ...SUBMISSION.app_user,
+            user_profile: { location_primary: "a".repeat(9_000) },
+          },
+        },
+      ],
+    });
+    expect((await buildSubmissionJourney(1296))?.country).toHaveLength(100);
+  });
 });

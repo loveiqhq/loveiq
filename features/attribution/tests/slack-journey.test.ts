@@ -181,6 +181,94 @@ describe("the compact incoming-survey layout", () => {
     ]);
   });
 
+  /**
+   * The rail is the LAST line of the one section the compact layout renders, and
+   * `clampBlock` truncates a section from the END at 2,900 characters. So any
+   * unbounded value ABOVE the rail can push it off the message entirely — and the
+   * old `fields` layout could not do this, because each field was clamped
+   * independently at 2,000 and the rail was its own block.
+   *
+   * `country` is the one such value: it is the visitor's own answer to Q15001,
+   * `user_profile.location_primary` is `text` with no length limit and no check
+   * constraint, and `surveyAnswersSchema` accepts an array of 20 x 500 characters
+   * for any key without a selection cap — 10,000 characters into the column.
+   *
+   * Asserted on the RAIL surviving rather than on a character count, because the
+   * budget is the thing that may legitimately change.
+   */
+  it("keeps the progress rail even when the country answer is absurdly long", () => {
+    const message = buildJourneyMessage(journey({ country: "a".repeat(10_000), device: "iOS" }), {
+      kind: "survey_completed",
+      questionCount: 58,
+    });
+    const section = soleSection(message.blocks);
+    expect(section).toContain("Survey done");
+    expect(section).toContain("Paid");
+    // Still inside Slack's cap — the country is what gives, not the message.
+    expect(section.length).toBeLessThanOrEqual(2900);
+  });
+
+  /**
+   * An arm is a RAW string off `utm_tracker` that the survey route stores
+   * verbatim when no arm cookie is present, so `constructor` and every other
+   * `Object.prototype` member is attacker-reachable. `armLabel` used to hand back
+   * that inherited member, whose `short` is `undefined`, and the bolding helper
+   * called `.indexOf()` on it and threw.
+   *
+   * A notification builder must never throw: the survey route builds this inside
+   * a fire-and-forget task (so the ping is lost outright, fallback included), and
+   * the backfill cron wraps its whole loop in one try/catch, so one poisoned row
+   * abandons every remaining submission in the run and re-poisons the next one.
+   */
+  it.each(["constructor", "__proto__", "toString", "valueOf"])(
+    "does not throw on an arm named %s",
+    (poisoned) => {
+      const j = journey({
+        arms: { landing: poisoned, survey: null, pricing: null, paywall: null },
+      });
+      expect(() =>
+        buildJourneyMessage(j, { kind: "survey_completed", questionCount: 58 })
+      ).not.toThrow();
+      expect(() =>
+        buildJourneyMessage(j, {
+          kind: "purchase",
+          planLabel: "Full report",
+          archetype: null,
+          amountText: "EUR 39.00",
+        })
+      ).not.toThrow();
+      const section = soleSection(
+        buildJourneyMessage(j, { kind: "survey_completed", questionCount: 58 }).blocks
+      );
+      expect(section).toContain("Landing page design: *Not recorded*");
+      expect(section).not.toContain("undefined");
+    }
+  );
+
+  /**
+   * The guard is `typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0`, and
+   * the absent-field test above only exercises the FIRST clause. These are the
+   * other two: a journey whose dwell arrives as NaN, Infinity, zero or negative
+   * must read as unrecorded, never as a confident "NaN+ min" or a "0+ min" that
+   * asserts a visit nobody measured.
+   */
+  it.each([
+    ["NaN", Number.NaN],
+    ["Infinity", Number.POSITIVE_INFINITY],
+    ["zero", 0],
+    ["negative", -60_000],
+  ])("says nothing recorded rather than a number for %s", (_label, ms) => {
+    const message = buildJourneyMessage(journey({ timings: { reportDwellFloorMs: ms } }), {
+      kind: "survey_completed",
+      questionCount: 58,
+    });
+    expect(soleSection(message.blocks)).toContain("Report time: *—*");
+    const rendered = JSON.stringify(message.blocks);
+    expect(rendered).not.toContain("NaN");
+    expect(rendered).not.toContain("Infinity");
+    expect(rendered).not.toContain("0+ min");
+  });
+
   it("never renders a header or a fields grid on the survey message", () => {
     const message = buildJourneyMessage(journey(), {
       kind: "survey_completed",
@@ -412,6 +500,46 @@ describe("journey message safety", () => {
     });
     expect(JSON.stringify(message.blocks)).toContain("Came from: *Not recorded*");
     expect(JSON.stringify(message.blocks)).not.toContain("undefined");
+  });
+
+  /**
+   * The PURCHASE branch renders the same traffic through the flat `trafficLine`,
+   * which kept the old unguarded shape and rendered a literal "undefined". Two
+   * branches of one builder must not disagree about what a malformed journey
+   * looks like.
+   */
+  it("renders the same fallback on the purchase message, not a literal undefined", () => {
+    const broken = journey();
+    // @ts-expect-error — deliberately modelling a journey assembled incorrectly.
+    broken.traffic = { source: "google", medium: "cpc", campaign: null };
+    const message = buildJourneyMessage(broken, {
+      kind: "purchase",
+      planLabel: "Full report",
+      archetype: null,
+      amountText: "EUR 39.00",
+    });
+    expect(JSON.stringify(message.blocks)).toContain("Not recorded \u2014 google / cpc");
+    expect(JSON.stringify(message.blocks)).not.toContain("undefined");
+  });
+
+  /**
+   * Restored coverage. The compact survey message renders neither a name nor an
+   * email, so the assertions on these fallbacks were dropped with the header —
+   * but both are still live on the purchase path, where a journey with no
+   * `app_user` row must read as "anonymous" rather than as an empty bold run.
+   */
+  it("still names the nameless on a purchase — anonymous, and no email", () => {
+    const message = buildJourneyMessage(journey({ firstName: null, emailMasked: null }), {
+      kind: "purchase",
+      planLabel: "Full report",
+      archetype: null,
+      amountText: "EUR 39.00",
+    });
+    const rendered = JSON.stringify(message.blocks);
+    expect(rendered).toContain("anonymous");
+    expect(rendered).toContain("no email");
+    expect(message.text).toContain("anonymous");
+    expect(rendered).not.toContain("**");
   });
 
   it("keeps the fallback text standalone — it is the only thing dead-lettered", () => {
