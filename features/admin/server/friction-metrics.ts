@@ -256,6 +256,31 @@ export function buildSurveySignals(
     }
   }
 
+  // --- Expectation mismatch (PROXY) ------------------------------------------
+  /**
+   * Marcus's wording is "user appears surprised by the next step". Nothing here
+   * can see surprise, and a model asked to infer it would be guessing — the
+   * reviewer scores 0.20 on defects it can literally SEE. What is observable is
+   * its footprint: a question people dwell on and then go BACK from, which is
+   * what someone does when a screen was not what they expected.
+   *
+   * Labelled a proxy in the value itself, so nobody reads it as the thing.
+   */
+  const surprising = ranked
+    .filter((q) => q.timed >= FLOOR && q.median_ms > typical * 1.5)
+    .map((q) => ({ q, backPct: computeRate(q.backs, q.visits) }))
+    .sort((a, b) => b.backPct - a.backPct)[0];
+  if (surprising && surprising.backPct > 0) {
+    signals.push({
+      label: "Expectation mismatch (proxy)",
+      group: "Survey",
+      value: `${Math.round(surprising.backPct)}% go back after a long pause`,
+      where: label(surprising.q),
+      n: surprising.q.visits,
+      status: surprising.backPct >= 15 ? "watch" : "quiet",
+    });
+  }
+
   // --- Engagement acceleration / deceleration --------------------------------
   // Median of per-question medians: the row-level medians are all this snapshot
   // carries, and averaging them would let one slow outlier dominate.
@@ -454,6 +479,11 @@ export async function buildFrictionReport(
       // reach a row here, because persisting needs a submission id and during
       // the survey nothing has been submitted yet.
       "form errors (PostHog only — no submission exists mid-survey to key a row to)",
+      // Not a tracking gap: there is nothing to seek. The money-back guarantee
+      // is static text, Trustpilot is deliberately off, and the FAQ is on the
+      // landing page only. Adding a tracker here would be building a sensor for
+      // an interaction the product does not offer.
+      "trust seeking (nothing on the report is clickable — guarantee is static text, Trustpilot off)",
     ],
   };
 }

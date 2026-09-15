@@ -84,6 +84,36 @@ describe("buildSurveySignals", () => {
     expect(buildSurveySignals(snap([q({ question_index: 0 })], { total_rows: 0 }))).toEqual([]);
   });
 
+  it("labels the surprise signal a proxy, in the value itself", () => {
+    // Nothing here can see surprise. What is observable is its footprint: a
+    // question people dwell on and then go back from. A model asked to infer
+    // the feeling would be guessing — it scores 0.20 on defects it can SEE.
+    const sigs = buildSurveySignals(
+      snap(
+        [
+          q({ question_index: 0 }),
+          q({ question_index: 10, median_ms: 30_000, backs: 30, visits: 100 }),
+        ],
+        { median_ms: 9000 }
+      )
+    );
+    const p = find(sigs, "Expectation mismatch (proxy)");
+    expect(p?.label).toContain("(proxy)");
+    expect(p?.value).toBe("30% go back after a long pause");
+    expect(p?.status).toBe("watch");
+  });
+
+  it("does not claim surprise on a question nobody lingered on", () => {
+    // A high back-rate alone is backtracking, which has its own row. The proxy
+    // needs BOTH the pause and the retreat, or it is just a second copy of it.
+    const sigs = buildSurveySignals(
+      snap([q({ question_index: 0 }), q({ question_index: 10, median_ms: 9000, backs: 40 })], {
+        median_ms: 9000,
+      })
+    );
+    expect(find(sigs, "Expectation mismatch (proxy)")).toBeUndefined();
+  });
+
   it("measures progress sensitivity across thirds, not one question", () => {
     const early = [0, 1, 2].map((i) => q({ question_index: i, abandons: 1 }));
     const mid = [3, 4, 5].map((i) => q({ question_index: i, abandons: 1 }));
