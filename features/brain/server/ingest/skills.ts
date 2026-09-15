@@ -1,4 +1,5 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
+import logger from "@shared/observability/logger";
 import { archetypeContent } from "@/data/report-archetypes";
 import { sweepStale, upsertChunks, type BrainRow, type IngestResult } from "./upsert";
 
@@ -27,23 +28,66 @@ interface PromptDoc {
   title: string;
 }
 
-/** The team's live prompt documents, found by title rather than by a hardcoded id. */
-async function promptDocs(): Promise<PromptDoc[]> {
-  const res = await supabaseFetch(
-    `/rest/v1/brain_chunk?select=source_id,title&source=eq.drive` +
-      `&title=ilike.*prompt*&order=title&limit=40`
-  );
-  if (!res.ok) return [];
-  const rows = (await res.json().catch(() => [])) as PromptDoc[];
+/**
+ * The team's live prompt documents, found by title rather than by a hardcoded id.
+ *
+ * DEDUPLICATE BEFORE CAPPING, not after. A long Drive document is stored as many chunks,
+ * each titled "... (part 10 of 29)", so a query ordered by title and capped at 40 rows can
+ * be 34 fragments of the same handful of files: measured 2026-09-15, that cap returned 6
+ * documents when 18 exist. Read a generous page, collapse to base ids in code, then cap —
+ * and strip the part suffix, or the skill points people at "part 10 of 29" as though that
+ * were the document's name.
+ */
+export function collapseToDocuments(rows: PromptDoc[], max = 20): PromptDoc[] {
   const seen = new Set<string>();
   const out: PromptDoc[] = [];
   for (const r of rows) {
-    const base = String(r.source_id).split("#")[0]!;
-    if (seen.has(base)) continue;
+    const base = String(r.source_id ?? "").split("#")[0]!;
+    if (!base || seen.has(base)) continue;
     seen.add(base);
-    out.push({ source_id: `drive/${base}`, title: String(r.title ?? "") });
+    const title = String(r.title ?? "")
+      .replace(/^Drive:\s*/i, "")
+      .replace(/\s*\(part \d+ of \d+\)\s*$/i, "")
+      .trim();
+    out.push({ source_id: `drive/${base}`, title: title || base });
+    if (out.length >= max) break;
   }
   return out;
+}
+
+/**
+ * Rows to read before collapsing. Generous because the unit is a CHUNK, not a document:
+ * one 29-part prompt file is 29 rows, so a page sized for documents silently returns a
+ * fraction of them.
+ */
+const PROMPT_ROW_LIMIT = 600;
+
+/**
+ * A full page back is indistinguishable from a truncated one, so say so.
+ *
+ * The shipped version asked for 40 rows and got 40, every one of them a fragment of the
+ * same six files, and reported six documents as though that were all of them. Silent
+ * truncation reads exactly like a complete answer — the failure this whole file is
+ * careful about elsewhere.
+ */
+export function isTruncated(rowCount: number, limit = PROMPT_ROW_LIMIT): boolean {
+  return rowCount >= limit;
+}
+
+async function promptDocs(): Promise<PromptDoc[]> {
+  const res = await supabaseFetch(
+    `/rest/v1/brain_chunk?select=source_id,title&source=eq.drive` +
+      `&title=ilike.*prompt*&order=title&limit=${PROMPT_ROW_LIMIT}`
+  );
+  if (!res.ok) return [];
+  const rows = (await res.json().catch(() => [])) as PromptDoc[];
+  if (isTruncated(rows.length)) {
+    logger.warn(
+      { rows: rows.length, limit: PROMPT_ROW_LIMIT },
+      "brain: the prompt-document page came back full, so the skill may be listing only some of them"
+    );
+  }
+  return collapseToDocuments(rows);
 }
 
 /** The chapter skeleton, counted off what shipped rather than described from memory. */
