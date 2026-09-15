@@ -68,6 +68,7 @@ vi.mock("@features/analytics/client", () => ({
   trackSurveyProgress: vi.fn(),
   trackSurveyComplete: vi.fn(),
   trackSurveyPause: vi.fn(),
+  trackSurveyFormError: vi.fn(),
   setReportSubmissionContext: vi.fn(),
   setSurveyVariant: vi.fn(),
   trackExperimentExposure: vi.fn(),
@@ -275,6 +276,59 @@ describe("SurveyEngine", () => {
 
     expect(mockSetCurrentIndex).not.toHaveBeenCalled();
     expect(screen.getByText("Q4? (validated)")).toBeInTheDocument();
+  });
+
+  it("records the blocked attempt, naming the question and why", async () => {
+    // `trackSurveyFormError` sat in analytics/client.ts and was never called
+    // once — the event was not even in PostHog's taxonomy — while Marcus was
+    // asking the agents to check against form errors. This is the only kind
+    // this survey can produce: a Next that refuses.
+    const { trackSurveyFormError } = await import("@features/analytics/client");
+    // This suite does not reset mocks between tests, so a call count is
+    // cumulative unless it is cleared here.
+    vi.mocked(trackSurveyFormError).mockClear();
+    mockCurrentIndex = 3;
+    mockGetAnswer.mockImplementation((qId: string) => (qId === "q4" ? ["A", "B", "C", "D"] : null));
+
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    fireEvent.keyDown(window, { key: "Enter" });
+
+    expect(trackSurveyFormError).toHaveBeenCalledWith({
+      question_id: "q4",
+      error_kind: "out_of_range",
+    });
+  });
+
+  it("counts every blocked attempt, not one per question", async () => {
+    // Pressing Next four times against the same rejection is the signal, the
+    // same way a rage click is. Deduping would erase it.
+    const { trackSurveyFormError } = await import("@features/analytics/client");
+    // This suite does not reset mocks between tests, so a call count is
+    // cumulative unless it is cleared here.
+    vi.mocked(trackSurveyFormError).mockClear();
+    mockCurrentIndex = 3;
+    mockGetAnswer.mockImplementation((qId: string) => (qId === "q4" ? ["A", "B", "C", "D"] : null));
+
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    fireEvent.keyDown(window, { key: "Enter" });
+    fireEvent.keyDown(window, { key: "Enter" });
+    fireEvent.keyDown(window, { key: "Enter" });
+
+    expect(trackSurveyFormError).toHaveBeenCalledTimes(3);
+  });
+
+  it("stays silent when the answer is valid", async () => {
+    const { trackSurveyFormError } = await import("@features/analytics/client");
+    // This suite does not reset mocks between tests, so a call count is
+    // cumulative unless it is cleared here.
+    vi.mocked(trackSurveyFormError).mockClear();
+    mockCurrentIndex = 3;
+    mockGetAnswer.mockImplementation((qId: string) => (qId === "q4" ? ["A", "B", "C"] : null));
+
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    fireEvent.keyDown(window, { key: "Enter" });
+
+    expect(trackSurveyFormError).not.toHaveBeenCalled();
   });
 
   it("allows a capped multiselect answer at the limit to proceed normally", () => {

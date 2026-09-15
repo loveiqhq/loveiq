@@ -448,7 +448,13 @@ export async function buildFrictionReport(
     rowsRead: snap.total_rows + (report?.total_rows ?? 0),
     // Named, never silently dropped: a scoreboard that omits its blind spots
     // reads as complete.
-    blind: ["Dead clicks (PostHog only — writes nothing to Postgres)"],
+    blind: [
+      "dead clicks (PostHog only — 3,249 a week, writes nothing to Postgres)",
+      // Wired 2026-09-15 after sitting unused; it reaches PostHog but cannot
+      // reach a row here, because persisting needs a submission id and during
+      // the survey nothing has been submitted yet.
+      "form errors (PostHog only — no submission exists mid-survey to key a row to)",
+    ],
   };
 }
 

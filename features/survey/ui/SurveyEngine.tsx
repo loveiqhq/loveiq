@@ -18,6 +18,7 @@ import {
   trackSurveyProgress,
   trackSurveyComplete,
   trackSurveyPause,
+  trackSurveyFormError,
   setReportSubmissionContext,
   setSurveyVariant,
 } from "@features/analytics/client";
@@ -285,6 +286,29 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
 
   const goNext = useCallback(() => {
     if (!isEmailValid || !isSelectionCountValid) {
+      /**
+       * A blocked Next is the only "form error" this survey can produce, and
+       * until now nothing recorded it: `trackSurveyFormError` was defined in
+       * features/analytics/client.ts and never called once, so the event was
+       * not even in PostHog's taxonomy. Marcus asked the agents to check
+       * against form errors; we were blind to them.
+       *
+       * PostHog only, deliberately. persistAnalyticsEvent needs
+       * `window.__loveiqReportSubmissionId`, and during the survey nothing has
+       * been submitted yet — there is no submission to key a row to. The daily
+       * digest therefore cannot see these, and says so rather than implying it
+       * looked.
+       *
+       * Fired per attempt, not once per question: a reader pressing Next four
+       * times against the same rejection is the signal, the same way a rage
+       * click is.
+       */
+      if (question?.qId) {
+        trackSurveyFormError({
+          question_id: question.qId,
+          error_kind: !isEmailValid ? "invalid_email" : "out_of_range",
+        });
+      }
       setAttemptedNext(true);
       return;
     }
