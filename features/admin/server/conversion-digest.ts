@@ -519,8 +519,29 @@ export interface FunnelStep {
  * from a submission completed last month lands outside its cohort — and a funnel
  * that goes UP reads as a bug in the product rather than in the measurement.
  */
-export function buildFunnel(cohort: ArmFunnelRow[], visitors: number): FunnelStep[] {
+export function buildFunnel(
+  cohort: ArmFunnelRow[],
+  visitors: number,
+  /**
+   * Survey starts for the same window, from `get_funnel_cvr_sparklines`. Optional:
+   * when that source is unreadable the funnel renders exactly as it did before,
+   * rather than showing a row of zero, which would read as "nobody started".
+   *
+   * Asked for by the strategy lead on 2026-09-15 — the visits -> finished drop was
+   * one 96.5% row, so it could not say whether people fail to START or start and
+   * give up. Split, it says both: measured that day, 8.3% of visits start and 58.5%
+   * of starters never finish.
+   *
+   * Sourced from the sparkline RPC rather than the landing-arm one on purpose: it
+   * reports the SAME 12,308 visits and the SAME 425 finishers as the rows either
+   * side of it, so the new row cannot disagree with its own neighbours. The
+   * per-arm start funnel would not — it counts only days the landing cookie was
+   * recorded, a shorter window on a smaller denominator.
+   */
+  starts?: number | null
+): FunnelStep[] {
   const sum = (pick: (row: ArmFunnelRow) => number) => cohort.reduce((t, r) => t + pick(r), 0);
+  const hasStarts = typeof starts === "number" && Number.isFinite(starts) && starts > 0;
   // Labels say what each number IS. Everything below the first row is cohort:
   // "of the people who finished in this window, how many ever got this far",
   // which is NOT the same as "this many happened during the window" — a purchase
@@ -529,6 +550,11 @@ export function buildFunnel(cohort: ArmFunnelRow[], visitors: number): FunnelSte
   // heading invited exactly the wrong reading.
   const raw: Array<{ step: string; count: number }> = [
     { step: "Visits to the site", count: visitors },
+    // Deliberately NOT relabelled "…of those, finished it". Starts are event-day
+    // counts and finishers are a cohort, so one is not strictly a subset of the
+    // other across a window boundary; claiming it in the label would be a claim
+    // the data does not support.
+    ...(hasStarts ? [{ step: "Started the survey", count: starts as number }] : []),
     { step: "Finished the survey", count: sum((r) => r.completions) },
     { step: "…of those, opened their report", count: sum((r) => r.reportOpens) },
     { step: "…of those, started checkout", count: sum((r) => r.checkout) },
@@ -542,7 +568,13 @@ export function buildFunnel(cohort: ArmFunnelRow[], visitors: number): FunnelSte
   // them: a promo one-tap or an admin-granted unlock sets purchased_at without a
   // checkout, so paid can exceed checkout truthfully — and clamping quietly
   // rewrote the number of payers downward under a label that said "Paid".
-  const CLAMPED_STEPS = 3;
+  // Counts steps, so it has to move with the array: without the starts row it is
+  // visits/finished/opened, with it, visits/starts/finished/opened. The added
+  // ceiling is finished-against-starts, which is tighter than the old
+  // finished-against-visits and so can bite where that never did — a window whose
+  // finishers mostly started before it opens. Monotonicity is what a funnel means,
+  // so it stays clamped; today there is 2.4x of headroom (425 against 1025).
+  const CLAMPED_STEPS = hasStarts ? 4 : 3;
   let ceiling = Number.POSITIVE_INFINITY;
   for (let i = 0; i < raw.length; i += 1) {
     // eslint-disable-next-line security/detect-object-injection -- numeric loop index over a local array.

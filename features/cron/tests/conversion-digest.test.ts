@@ -472,6 +472,59 @@ describe("conversion-digest handler", () => {
     expect(series.values[7]).toBe(12.9);
   });
 
+  it("prints a vanishing share as <0.1%, never as a bare 0% beside a real count", async () => {
+    /**
+     * 5 payments in 12,308 visits is 0.04%. Rounded to one decimal that is 0, and a
+     * column reading 100 / 3.5 / 3.4 / 0.3 / 0 says nobody paid while the count
+     * beside it says five. Once the test-payment exclusion landed, the paid count
+     * dropped far enough for this to start happening for real.
+     */
+    const base = makeFunnel();
+    mockFetchLandingArmFunnel.mockResolvedValue({
+      ...base,
+      // A big denominator and a tiny survivor, which is what production looks like.
+      visitors: base.visitors.map((v: { n: number }) => ({ ...v, n: v.n * 40 })),
+      cohort: [
+        {
+          arm: "white",
+          completions: 425,
+          reportOpens: 414,
+          checkout: 33,
+          paid: 5,
+          revenue: 128.99,
+        },
+      ],
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const flat = blockText(arg.blocks);
+    expect(flat).toContain("<0.1%");
+    // And no row anywhere pairs a non-zero count with a bare 0%.
+    expect(flat).not.toMatch(/`\s*[1-9]\d*`\s+0%/);
+  });
+
+  it("puts the survey-start row in the message, not just in the builder", async () => {
+    /**
+     * The builder having the row proves nothing about the digest showing it — the
+     * route has to pass the starts through. That gap is exactly how a correct
+     * parser once shipped behind a call site that never called it.
+     */
+    mockFetchFunnelCvrSparklines.mockResolvedValue({
+      days: Array.from({ length: 10 }, (_, i) => ({
+        day: new Date(Date.UTC(2026, 7, 10) + i * 86_400_000).toISOString().slice(0, 10),
+        visitors: 200,
+        starts: 40,
+      })),
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const flat = blockText(arg.blocks);
+    expect(flat).toContain("Started the survey");
+    // Between the two rows it was asked to sit between, not appended somewhere.
+    expect(flat.indexOf("Visits to the site")).toBeLessThan(flat.indexOf("Started the survey"));
+    expect(flat.indexOf("Started the survey")).toBeLessThan(flat.indexOf("Finished the survey"));
+  });
+
   it("draws the same landing arm in the same colour in every chart of one message", async () => {
     /**
      * The renderer colours by POSITION, not by name: `first` is purple, `last` is
@@ -854,6 +907,48 @@ describe("conversion-digest verdicts", () => {
 });
 
 describe("conversion-digest funnel", () => {
+  it("splits the visits drop with a survey-start row when starts are available", () => {
+    /**
+     * Asked for by the strategy lead 2026-09-15. Without it the top of the funnel
+     * is a single 96.5% drop that cannot distinguish "they never started" from
+     * "they started and gave up" — two problems with completely different fixes.
+     */
+    const steps = buildFunnel(
+      [{ arm: "white", completions: 425, reportOpens: 414, checkout: 33, paid: 5, revenue: 0 }],
+      12308,
+      1025
+    );
+    expect(steps.map((x) => x.step)).toEqual([
+      "Visits to the site",
+      "Started the survey",
+      "Finished the survey",
+      "…of those, opened their report",
+      "…of those, started checkout",
+      "…of those, ever paid",
+    ]);
+    expect(steps.map((x) => x.count)).toEqual([12308, 1025, 425, 414, 33, 5]);
+    // The point of the row: the old single 96.5% becomes 91.7% then 58.5%, and the
+    // second of those is the number nobody could see before.
+    expect(steps[1]!.dropFromPrev).toBe(91.7);
+    expect(steps[2]!.dropFromPrev).toBe(58.5);
+    // Percentages stay relative to the TOP, not to the row above.
+    expect(steps[1]!.pctOfTop).toBe(8.3);
+  });
+
+  it("omits the row entirely when the start source is unreadable, rather than drawing zero", () => {
+    // A zero row would read as "nobody started the survey this month", which is a
+    // far worse falsehood than an absent row. Null and 0 both mean "cannot say".
+    for (const starts of [null, undefined, 0]) {
+      const steps = buildFunnel(
+        [{ arm: "white", completions: 425, reportOpens: 414, checkout: 33, paid: 5, revenue: 0 }],
+        12308,
+        starts
+      );
+      expect(steps.map((x) => x.step)).not.toContain("Started the survey");
+      expect(steps).toHaveLength(5);
+    }
+  });
+
   it("clamps every step to its predecessor so the funnel cannot go up", () => {
     // report_session counts opens on the day they happen, so a cohort can show
     // more opens than completions. A funnel that RISES reads as a product bug.

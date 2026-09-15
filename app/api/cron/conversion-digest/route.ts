@@ -440,7 +440,11 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     // Visits are attributable to an arm only from the recordVisit fix onwards, but
     // the TOTAL is sound either way, so the whole-population funnel uses it.
     const totalVisits = funnel.visitors.reduce((t, v) => t + v.n, 0);
-    steps = buildFunnel(funnel.cohort, totalVisits);
+    // Survey starts come from the sparkline source, which reports the same visit
+    // and finisher totals as the funnel either side of the new row. Null when that
+    // read failed, in which case the row is omitted rather than drawn as zero.
+    const startsTotal = cvrDays?.reduce((t, d) => t + d.starts, 0) ?? null;
+    steps = buildFunnel(funnel.cohort, totalVisits, startsTotal);
     // Skip the visits -> finished step. It is the largest drop by construction
     // (most visitors never start a survey) and would be the headline every single
     // day, which is how a digest becomes wallpaper. The full funnel is printed
@@ -450,7 +454,15 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     blocks.push(divider());
     const rows = steps.map((s) => {
       const drop = s.dropFromPrev > 0 ? `  ▼ ${s.dropFromPrev}%` : "";
-      return `\`${String(s.count).padStart(6)}\`  ${String(s.pctOfTop).padStart(5)}%  ${escapeSlack(s.step)}${drop}`;
+      /**
+       * A non-zero count whose share rounds to nothing prints "<0.1", never "0".
+       * With 5 payments against 12,308 visits the share is 0.04%, and a column
+       * reading 100 / 8.3 / 3.5 / 3.4 / 0.3 / 0 invites exactly one conclusion —
+       * that nobody paid — while the count beside it says five. Same rule the
+       * charts already follow: zero and nearly-zero are different facts.
+       */
+      const share = s.pctOfTop === 0 && s.count > 0 ? "<0.1" : String(s.pctOfTop);
+      return `\`${String(s.count).padStart(6)}\`  ${share.padStart(5)}%  ${escapeSlack(s.step)}${drop}`;
     });
     // Heading, headline and table in ONE block. Split across two, Slack put a
     // paragraph gap between the title and the numbers it titles.
