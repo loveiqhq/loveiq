@@ -25,6 +25,22 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { computeRate } from "@features/admin/server/digest-metrics";
 import logger from "@shared/observability/logger";
+import { surveyQuestions } from "@/data/survey-data";
+
+/**
+ * q_id -> a short human question, so a row can say "Q58 — What is your email?"
+ * instead of "Q58". Without it the most valuable finding on the board is a
+ * number with no subject. Truncated because the scoreboard is a fixed-width
+ * table and one long question would push every other column sideways.
+ */
+export function surveyQuestionNames(maxLen = 30): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const q of surveyQuestions) {
+    if (!q.qId || !q.question) continue;
+    m.set(q.qId, q.question.length > maxLen ? `${q.question.slice(0, maxLen - 1)}…` : q.question);
+  }
+  return m;
+}
 
 /** One row of the scoreboard. */
 export interface FrictionSignal {
@@ -48,7 +64,16 @@ export interface FrictionSignal {
 /** One question's aggregated friction, as `get_survey_friction` returns it. */
 export interface FrictionQuestion {
   question_index: number;
+  /**
+   * The question MOST people saw at this position — the mode, not the minimum.
+   * The survey branches, so one index maps to several questions; labelling by
+   * MIN(q_id) named index 0 "What is your email?" off 7 rows while 723 rows
+   * said "What is your name?". Every label was a plausible-looking lie.
+   */
   q_id: string;
+  /** How many different questions appeared at this position. >1 means the
+   *  label is what most people saw, not what everyone saw. */
+  q_id_variants?: number;
   visits: number;
   abandons: number;
   backs: number;
@@ -425,4 +450,59 @@ export async function buildFrictionReport(
     // reads as complete.
     blind: ["Dead clicks (PostHog only — writes nothing to Postgres)"],
   };
+}
+
+/**
+ * The scoreboard, as ONE Slack section.
+ *
+ * Marcus asked for all 22 signals, and this is a 15-row table rather than 15
+ * charts — which is deliberate. `funnel-digest` was switched off for being a
+ * rail of pictures with no decision attached, and 15 pictures would be the same
+ * mistake with a new name. Numbers read fine as rows; they read badly as
+ * pictures.
+ *
+ * Heading, headline and table go in ONE block because Slack inserts a paragraph
+ * gap between two, which the funnel table above already learned the hard way.
+ * The dot column is first because a non-technical reader scans shape before
+ * digits: ● is worth a look, ○ is normal.
+ */
+export function buildFrictionSection(report: FrictionReport, windowDays: number): string {
+  const watch = report.signals.filter((s) => s.status === "watch");
+  const worst = watch[0];
+
+  const headline = worst
+    ? `  ·  worst: ${worst.where ? `${worst.where} — ` : ""}${worst.value}`
+    : "  ·  nothing above its threshold";
+
+  /**
+   * A fenced block, not mrkdwn rows. Slack renders normal text in a
+   * proportional font, so padded columns do not line up in it — the first
+   * version produced "Value discovery before paywall20%", because that label is
+   * exactly the pad width and proportional spacing hid the rest. Monospace is
+   * the only way 15 rows read as a table.
+   *
+   * Widths come from the data, not from a guess, so the longest label sets the
+   * column and nothing collides.
+   */
+  const labelW = Math.max(...report.signals.map((s) => s.label.length)) + 2;
+  const valueW = Math.max(...report.signals.map((s) => s.value.length)) + 2;
+
+  const rows = report.signals.map((s) => {
+    const dot = s.status === "watch" ? "●" : "·";
+    const where = s.where ? s.where : "";
+    return `${dot} ${s.label.padEnd(labelW)}${s.value.padEnd(valueW)}${where}`.trimEnd();
+  });
+
+  return [
+    `*Inside the funnel — ${windowDays} days*${headline}`,
+    "```",
+    rows.join("\n"),
+    "```",
+    // Blind spots are named. A board that quietly omits what it cannot see
+    // reads as complete, and this one cannot see the largest friction signal
+    // we collect.
+    report.blind.length > 0 ? `_Not measured here: ${report.blind.join("; ")}_` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }

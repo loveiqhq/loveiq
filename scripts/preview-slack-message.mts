@@ -39,6 +39,10 @@ import {
   fetchLandingStartFunnel,
 } from "../features/admin/server/conversion-digest";
 import { dayString, fetchFunnelCvrSparklines } from "../features/admin/server/digest-metrics";
+import {
+  buildFrictionReport,
+  surveyQuestionNames,
+} from "../features/admin/server/friction-metrics";
 
 const OUT_DIR =
   process.env.PREVIEW_OUT_DIR ??
@@ -265,12 +269,13 @@ async function main(): Promise<void> {
   const windowEnd = dayStart.toISOString();
 
   console.log(`reading production data for ${dayKey} (30-day window)...`);
-  const [funnel, cohorts, startFunnel, axisRows, cvrSnap] = await Promise.all([
+  const [funnel, cohorts, startFunnel, axisRows, cvrSnap, friction] = await Promise.all([
     fetchLandingArmFunnel(windowStart, windowEnd),
     fetchArmCohorts(windowStart, windowEnd),
     fetchLandingStartFunnel(windowStart, windowEnd),
     fetchAxisFunnelDaily(windowStart, windowEnd),
     fetchFunnelCvrSparklines(windowStart, windowEnd),
+    buildFrictionReport(windowStart, windowEnd, surveyQuestionNames()),
   ]);
 
   // adSpend deliberately null: GA4 needs a service-account credential this
@@ -283,6 +288,7 @@ async function main(): Promise<void> {
     axisRows,
     cvrDays: cvrSnap?.days ?? null,
     adSpend: null,
+    friction,
     now,
   });
 

@@ -57,6 +57,12 @@ import {
   fetchFunnelCvrSparklines,
 } from "@features/admin/server/digest-metrics";
 import {
+  buildFrictionReport,
+  buildFrictionSection,
+  surveyQuestionNames,
+  type FrictionReport,
+} from "@features/admin/server/friction-metrics";
+import {
   AMBIGUOUS_VISITOR_ARM,
   type ArmVerdict,
   type AxisCohort,
@@ -351,6 +357,11 @@ interface DigestInput {
    * rather than inventing a reassuring one.
    */
   adSpend?: number | null;
+  /**
+   * The friction scoreboard — Marcus's 22 signals. Null when the aggregates are
+   * unavailable, which omits the section rather than printing an empty table.
+   */
+  friction?: FrictionReport | null;
   now: Date;
 }
 
@@ -514,6 +525,19 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
         ].join("\n")
       )
     );
+  }
+
+  /**
+   * The friction scoreboard, directly under the funnel it explains.
+   *
+   * The funnel table says WHERE people are lost between steps; this says what
+   * they were doing when it happened. Kept to one section and one fenced table
+   * on purpose: `funnel-digest` was unscheduled for being a rail of charts with
+   * no decision attached, and fifteen pictures would repeat that with a new
+   * name.
+   */
+  if (input.friction && input.friction.signals.length > 0) {
+    blocks.push(section(buildFrictionSection(input.friction, WINDOW_DAYS)));
   }
 
   /**
@@ -938,12 +962,13 @@ export async function GET(request: Request) {
 
     const windowStart = new Date(dayStart.getTime() - WINDOW_DAYS * 86_400_000).toISOString();
     const windowEnd = dayStart.toISOString();
-    const [funnel, cohorts, startFunnel, axisRows, cvrSnap] = await Promise.all([
+    const [funnel, cohorts, startFunnel, axisRows, cvrSnap, friction] = await Promise.all([
       fetchLandingArmFunnel(windowStart, windowEnd),
       fetchArmCohorts(windowStart, windowEnd),
       fetchLandingStartFunnel(windowStart, windowEnd),
       fetchAxisFunnelDaily(windowStart, windowEnd),
       fetchFunnelCvrSparklines(windowStart, windowEnd),
+      buildFrictionReport(windowStart, windowEnd, surveyQuestionNames()),
     ]);
 
     /**
@@ -968,6 +993,7 @@ export async function GET(request: Request) {
       axisRows,
       cvrDays: cvrSnap?.days ?? null,
       adSpend,
+      friction,
       now,
     });
     if (digest.trimmed) {

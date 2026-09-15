@@ -54,8 +54,20 @@ BEGIN
   per_q AS (
     SELECT
       question_index,
-      -- One q_id per index; MIN is arbitrary but stable across runs.
-      MIN(q_id) AS q_id,
+      -- The question MOST people saw at this position.
+      --
+      -- This was MIN(q_id), which is arbitrary, and arbitrary turned out to be
+      -- actively wrong: the survey branches, so one index maps to several
+      -- questions, and MIN picked the alphabetically smallest regardless of how
+      -- rare it was. Index 0 was labelled "What is your email?" off 7 rows
+      -- while 723 rows said "What is your name?"; index 47 was named by a
+      -- 4-row variant out of 407. Every label on the scoreboard was a
+      -- plausible-looking lie, which is the worst kind -- nothing about
+      -- "Q1 - What is your email?" looks broken.
+      MODE() WITHIN GROUP (ORDER BY q_id) AS q_id,
+      -- Surfaced so a caller can tell how branched a position is. 1 means the
+      -- label is exact; 5 means it is what most people saw.
+      COUNT(DISTINCT q_id)::int AS q_id_variants,
       COUNT(*)::int AS visits,
       COUNT(*) FILTER (WHERE direction = 'abandon')::int AS abandons,
       COUNT(*) FILTER (WHERE direction = 'back')::int AS backs,
@@ -73,6 +85,7 @@ BEGIN
       (SELECT json_agg(json_build_object(
                 'question_index', question_index,
                 'q_id',           q_id,
+                'q_id_variants',  q_id_variants,
                 'visits',         visits,
                 'abandons',       abandons,
                 'backs',          backs,
