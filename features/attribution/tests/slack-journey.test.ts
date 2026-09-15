@@ -27,6 +27,7 @@ function journey(overrides: Partial<SubmissionJourney> = {}): SubmissionJourney 
     arms: { landing: "white", survey: "white", pricing: null, paywall: null },
     traffic: { bucket: "Paid", source: "google", medium: "cpc", campaign: null },
     device: "Desktop",
+    country: null,
     countryTier: "tier_2",
     timings: {
       durationMs: 720_000,
@@ -34,6 +35,7 @@ function journey(overrides: Partial<SubmissionJourney> = {}): SubmissionJourney 
       completedAt: "2026-08-24T18:39:00.000Z",
       msToPurchase: null,
       msCheckoutHesitation: null,
+      reportDwellFloorMs: null,
     },
     milestones: {
       reportViewedAt: null,
@@ -143,52 +145,205 @@ describe("journey rail — filled means reached", () => {
   });
 });
 
-describe("the two numbers the team scans for", () => {
+describe("the compact incoming-survey layout", () => {
   /**
-   * How long it took and how many questions. Both belong in the HEADER, which is
-   * the largest text Block Kit offers — larger than a bolded section, and a
-   * header is plain_text so it cannot be bolded anyway.
+   * Marcus's layout, requested in #all-loveiq on 2026-09-11. Asserted as the
+   * RENDERED STRING and in ORDER, because the point of the request was the shape
+   * of the message, and a shape is exactly what a structural assertion misses.
    *
-   * This is pinned because it silently drifted once already: the question count
-   * ended up in the `context` block, Slack's smallest and greyest text, while the
-   * duration was in the header AND repeated in that same context line — so the
-   * more prominent of the two was the one that was duplicated.
+   * The previous layout put every label on its own line above its value and
+   * reflowed into two ragged columns, because it used a Block Kit `fields` grid.
+   * These tests exist so a well-meaning return to `fields` fails loudly.
    */
-  const headerOf = (blocks: unknown[]) =>
-    (blocks as Array<{ type: string; text?: { text?: string } }>).find((b) => b.type === "header")
+  const soleSection = (blocks: unknown[]) =>
+    (blocks as Array<{ type: string; text?: { text?: string } }>).find((b) => b.type === "section")
       ?.text?.text ?? "";
-  const contextOf = (blocks: unknown[]) =>
-    (blocks as Array<{ type: string; elements?: Array<{ text?: string }> }>)
-      .filter((b) => b.type === "context")
-      .map((b) => (b.elements ?? []).map((e) => e.text ?? "").join(" "))
-      .join(" ");
 
-  it("puts the question count AND the duration in the header", () => {
-    const message = buildJourneyMessage(journey({ timings: { durationMs: 612_000 } }), {
-      kind: "survey_completed",
-      questionCount: 59,
-    });
-    const head = headerOf(message.blocks);
-    expect(head).toContain("59 questions");
-    expect(head).toContain("10 min");
-    // And neither is repeated in the small grey line below it.
-    const ctx = contextOf(message.blocks);
-    expect(ctx).not.toContain("59 questions");
-    expect(ctx).not.toContain("10 min");
-    // which still carries identity.
-    expect(ctx).toContain("submission #");
+  it("renders one section, with Marcus's lines in his order", () => {
+    const message = buildJourneyMessage(
+      journey({
+        country: "United States",
+        device: "iOS",
+        arms: { landing: "white_prev", survey: null, pricing: null, paywall: null },
+        timings: { durationMs: 1_080_000, reportDwellFloorMs: 300_000 },
+      }),
+      { kind: "survey_completed", questionCount: 58 }
+    );
+
+    expect(soleSection(message.blocks).split("\n")).toEqual([
+      "Survey submission *#1756*",
+      "Survey time: *18 min*  |  Report time: *5+ min*",
+      "Came from: *Paid* — google / cpc",
+      "Device: *iOS*",
+      "Landing page design: *Landing Page V1* (First Design)",
+      "Country (self-reported): *United States*",
+      `${NOT_REACHED} Survey done  →  ${NOT_REACHED} Report opened  →  ${NOT_REACHED} Paywall hit  →  ${NOT_REACHED} Checkout  →  ${NOT_REACHED} Paid`,
+    ]);
   });
 
-  it("drops only the duration when it was never recorded", () => {
-    const message = buildJourneyMessage(journey({ timings: { durationMs: null } }), {
+  /**
+   * The rail is the LAST line of the one section the compact layout renders, and
+   * `clampBlock` truncates a section from the END at 2,900 characters. So any
+   * unbounded value ABOVE the rail can push it off the message entirely — and the
+   * old `fields` layout could not do this, because each field was clamped
+   * independently at 2,000 and the rail was its own block.
+   *
+   * `country` is the one such value: it is the visitor's own answer to Q15001,
+   * `user_profile.location_primary` is `text` with no length limit and no check
+   * constraint, and `surveyAnswersSchema` accepts an array of 20 x 500 characters
+   * for any key without a selection cap — 10,000 characters into the column.
+   *
+   * Asserted on the RAIL surviving rather than on a character count, because the
+   * budget is the thing that may legitimately change.
+   */
+  it("keeps the progress rail even when the country answer is absurdly long", () => {
+    const message = buildJourneyMessage(journey({ country: "a".repeat(10_000), device: "iOS" }), {
       kind: "survey_completed",
-      questionCount: 59,
+      questionCount: 58,
     });
-    const head = headerOf(message.blocks);
-    expect(head).toContain("59 questions");
-    // No dangling separator where the time would have been.
-    expect(head).not.toMatch(/·\s*$/);
-    expect(head).not.toContain("· ·");
+    const section = soleSection(message.blocks);
+    expect(section).toContain("Survey done");
+    expect(section).toContain("Paid");
+    // Still inside Slack's cap — the country is what gives, not the message.
+    expect(section.length).toBeLessThanOrEqual(2900);
+  });
+
+  /**
+   * An arm is a RAW string off `utm_tracker` that the survey route stores
+   * verbatim when no arm cookie is present, so `constructor` and every other
+   * `Object.prototype` member is attacker-reachable. `armLabel` used to hand back
+   * that inherited member, whose `short` is `undefined`, and the bolding helper
+   * called `.indexOf()` on it and threw.
+   *
+   * A notification builder must never throw: the survey route builds this inside
+   * a fire-and-forget task (so the ping is lost outright, fallback included), and
+   * the backfill cron wraps its whole loop in one try/catch, so one poisoned row
+   * abandons every remaining submission in the run and re-poisons the next one.
+   */
+  it.each(["constructor", "__proto__", "toString", "valueOf"])(
+    "does not throw on an arm named %s",
+    (poisoned) => {
+      const j = journey({
+        arms: { landing: poisoned, survey: null, pricing: null, paywall: null },
+      });
+      expect(() =>
+        buildJourneyMessage(j, { kind: "survey_completed", questionCount: 58 })
+      ).not.toThrow();
+      expect(() =>
+        buildJourneyMessage(j, {
+          kind: "purchase",
+          planLabel: "Full report",
+          archetype: null,
+          amountText: "EUR 39.00",
+        })
+      ).not.toThrow();
+      const section = soleSection(
+        buildJourneyMessage(j, { kind: "survey_completed", questionCount: 58 }).blocks
+      );
+      expect(section).toContain("Landing page design: *Not recorded*");
+      expect(section).not.toContain("undefined");
+    }
+  );
+
+  /**
+   * The guard is `typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0`, and
+   * the absent-field test above only exercises the FIRST clause. These are the
+   * other two: a journey whose dwell arrives as NaN, Infinity, zero or negative
+   * must read as unrecorded, never as a confident "NaN+ min" or a "0+ min" that
+   * asserts a visit nobody measured.
+   */
+  it.each([
+    ["NaN", Number.NaN],
+    ["Infinity", Number.POSITIVE_INFINITY],
+    ["zero", 0],
+    ["negative", -60_000],
+  ])("says nothing recorded rather than a number for %s", (_label, ms) => {
+    const message = buildJourneyMessage(journey({ timings: { reportDwellFloorMs: ms } }), {
+      kind: "survey_completed",
+      questionCount: 58,
+    });
+    expect(soleSection(message.blocks)).toContain("Report time: *—*");
+    const rendered = JSON.stringify(message.blocks);
+    expect(rendered).not.toContain("NaN");
+    expect(rendered).not.toContain("Infinity");
+    expect(rendered).not.toContain("0+ min");
+  });
+
+  it("never renders a header or a fields grid on the survey message", () => {
+    const message = buildJourneyMessage(journey(), {
+      kind: "survey_completed",
+      questionCount: 58,
+    });
+    const types = (message.blocks as Array<{ type: string }>).map((b) => b.type);
+    expect(types).not.toContain("header");
+    expect(types).not.toContain("context");
+    expect(JSON.stringify(message.blocks)).not.toContain("Experiments they were in");
+  });
+
+  /**
+   * Both time columns always render, even unknown, so the line keeps one shape
+   * down the channel. At post time the report has not been opened yet, so an em
+   * dash on the right is the NORMAL first state of every message.
+   */
+  it("keeps both time columns, with an em dash for whichever is unrecorded", () => {
+    const message = buildJourneyMessage(
+      journey({ timings: { durationMs: null, reportDwellFloorMs: null } }),
+      { kind: "survey_completed", questionCount: 58 }
+    );
+    expect(soleSection(message.blocks)).toContain("Survey time: *—*  |  Report time: *—*");
+  });
+
+  /**
+   * The value is a FLOOR from the furthest milestone crossed, never a measured
+   * duration — `report_session.ended_at` has never been written, so no real
+   * duration exists to print. The plus sign is what keeps that honest.
+   */
+  it.each([
+    [60_000, "1+ min"],
+    [300_000, "5+ min"],
+    [600_000, "10+ min"],
+  ])("renders a dwell floor of %ims as %s", (ms, expected) => {
+    const message = buildJourneyMessage(journey({ timings: { reportDwellFloorMs: ms } }), {
+      kind: "survey_completed",
+      questionCount: 58,
+    });
+    expect(soleSection(message.blocks)).toContain(`Report time: *${expected}*`);
+  });
+
+  /**
+   * Regression guard for the defect these very tests caught during development:
+   * a journey assembled without the new field arrives as `undefined`, and
+   * `Math.round(undefined / 60_000)` is NaN — which rendered a confident
+   * "Report time: *NaN+ min*" in front of the whole team rather than failing.
+   */
+  it("says nothing recorded rather than NaN when the field is absent entirely", () => {
+    const stripped = journey();
+    // @ts-expect-error — deliberately modelling a journey built before this field existed.
+    delete stripped.timings.reportDwellFloorMs;
+    const message = buildJourneyMessage(stripped, {
+      kind: "survey_completed",
+      questionCount: 58,
+    });
+    expect(soleSection(message.blocks)).toContain("Report time: *—*");
+    expect(JSON.stringify(message.blocks)).not.toContain("NaN");
+  });
+
+  /**
+   * The name, the masked email and the question count are gone from the message
+   * by request — the mock shows all three as an absence and promotes the
+   * submission number in their place. The count survives where it still earns
+   * its place: the notification text nobody reads in-channel.
+   */
+  it("drops name, email and question count from the message but keeps the count in the text", () => {
+    const message = buildJourneyMessage(journey(), {
+      kind: "survey_completed",
+      questionCount: 58,
+    });
+    const rendered = JSON.stringify(message.blocks);
+    expect(rendered).not.toContain("Kitten");
+    expect(rendered).not.toContain("a***@gmail.com");
+    expect(rendered).not.toContain("58 question");
+    expect(message.text).toContain("58 questions");
   });
 
   it("says question, not questions, for a single answer", () => {
@@ -196,7 +351,28 @@ describe("the two numbers the team scans for", () => {
       kind: "survey_completed",
       questionCount: 1,
     });
-    expect(headerOf(message.blocks)).toContain("1 question ");
+    expect(message.text).toContain("1 question");
+    expect(message.text).not.toContain("1 questions");
+  });
+
+  /**
+   * Only the incoming-survey hook was asked to be compacted. The purchase ping
+   * is a different job and keeps its fields layout; this fails if someone
+   * compacts it as a side effect.
+   */
+  it("leaves the purchase message on its header + fields layout", () => {
+    const message = buildJourneyMessage(journey({ country: "Germany" }), {
+      kind: "purchase",
+      planLabel: "Full report",
+      archetype: "Tender Devotee",
+      amountText: "EUR 29.00",
+    });
+    const types = (message.blocks as Array<{ type: string }>).map((b) => b.type);
+    expect(types).toContain("header");
+    expect(types).toContain("context");
+    expect(JSON.stringify(message.blocks)).toContain("Experiments they were in");
+    // And no dwell line leaked across.
+    expect(JSON.stringify(message.blocks)).not.toContain("Report time");
   });
 });
 
@@ -255,10 +431,18 @@ describe("journey rail — the glyphs themselves", () => {
 });
 
 describe("journey message safety", () => {
+  /**
+   * Both of these now assert against the PURCHASE message. The survey message no
+   * longer renders a name or an email at all, so the escaping they guard has
+   * moved rather than stopped mattering — a buyer called "Ki*tt*en" can still
+   * break the layout of the one message that still prints a name.
+   */
   it("escapes a name containing Slack markup so the layout cannot break", () => {
     const message = buildJourneyMessage(journey({ firstName: "Ki*tt*en" }), {
-      kind: "survey_completed",
-      questionCount: 59,
+      kind: "purchase",
+      planLabel: "Full report",
+      archetype: null,
+      amountText: "EUR 29.00",
     });
     expect(JSON.stringify(message.blocks)).toContain("Ki\\\\*tt\\\\*en");
   });
@@ -267,12 +451,95 @@ describe("journey message safety", () => {
     // escapeSlack(maskEmail(...)) renders literal backslashes in Slack mrkdwn —
     // "e\\*\\*\\*@example.com" — so the mask has to travel as code.
     const message = buildJourneyMessage(journey(), {
-      kind: "survey_completed",
-      questionCount: 59,
+      kind: "purchase",
+      planLabel: "Full report",
+      archetype: null,
+      amountText: "EUR 29.00",
     });
     const text = JSON.stringify(message.blocks);
     expect(text).toContain("`a***@gmail.com`");
     expect(text).not.toContain("a\\\\*\\\\*\\\\*@gmail.com");
+  });
+
+  /**
+   * utm values are fully attacker-controlled — they arrive on the landing URL —
+   * and the compact layout interpolates the traffic detail straight into a line
+   * it also bolds. Pinned here because the bolding is new.
+   */
+  it("escapes attacker-controlled campaign text in the compact layout", () => {
+    const message = buildJourneyMessage(
+      journey({
+        traffic: { bucket: "Paid", source: "google", medium: "cpc", campaign: "*pwn*" },
+      }),
+      { kind: "survey_completed", questionCount: 59 }
+    );
+    const text = JSON.stringify(message.blocks);
+    expect(text).toContain("\\\\*pwn\\\\*");
+  });
+
+  /**
+   * Building a notification must never throw.
+   *
+   * `classifyTraffic` assigns a bucket on every branch, so this is unreachable
+   * from real data — but it was reachable from a test fixture, and the failure
+   * mode was not cosmetic: the survey route builds this message inside a
+   * fire-and-forget task, and the backfill cron wraps the whole run in one
+   * try/catch, so a single malformed journey turned into a 500 that abandoned
+   * every remaining submission.
+   */
+  it("renders rather than throwing when the traffic bucket is missing", () => {
+    const broken = journey();
+    // @ts-expect-error — deliberately modelling a journey assembled incorrectly.
+    broken.traffic = { source: null, medium: null, campaign: null };
+    expect(() =>
+      buildJourneyMessage(broken, { kind: "survey_completed", questionCount: 59 })
+    ).not.toThrow();
+    const message = buildJourneyMessage(broken, {
+      kind: "survey_completed",
+      questionCount: 59,
+    });
+    expect(JSON.stringify(message.blocks)).toContain("Came from: *Not recorded*");
+    expect(JSON.stringify(message.blocks)).not.toContain("undefined");
+  });
+
+  /**
+   * The PURCHASE branch renders the same traffic through the flat `trafficLine`,
+   * which kept the old unguarded shape and rendered a literal "undefined". Two
+   * branches of one builder must not disagree about what a malformed journey
+   * looks like.
+   */
+  it("renders the same fallback on the purchase message, not a literal undefined", () => {
+    const broken = journey();
+    // @ts-expect-error — deliberately modelling a journey assembled incorrectly.
+    broken.traffic = { source: "google", medium: "cpc", campaign: null };
+    const message = buildJourneyMessage(broken, {
+      kind: "purchase",
+      planLabel: "Full report",
+      archetype: null,
+      amountText: "EUR 39.00",
+    });
+    expect(JSON.stringify(message.blocks)).toContain("Not recorded \u2014 google / cpc");
+    expect(JSON.stringify(message.blocks)).not.toContain("undefined");
+  });
+
+  /**
+   * Restored coverage. The compact survey message renders neither a name nor an
+   * email, so the assertions on these fallbacks were dropped with the header —
+   * but both are still live on the purchase path, where a journey with no
+   * `app_user` row must read as "anonymous" rather than as an empty bold run.
+   */
+  it("still names the nameless on a purchase — anonymous, and no email", () => {
+    const message = buildJourneyMessage(journey({ firstName: null, emailMasked: null }), {
+      kind: "purchase",
+      planLabel: "Full report",
+      archetype: null,
+      amountText: "EUR 39.00",
+    });
+    const rendered = JSON.stringify(message.blocks);
+    expect(rendered).toContain("anonymous");
+    expect(rendered).toContain("no email");
+    expect(message.text).toContain("anonymous");
+    expect(rendered).not.toContain("**");
   });
 
   it("keeps the fallback text standalone — it is the only thing dead-lettered", () => {
@@ -299,14 +566,23 @@ describe("journey message safety", () => {
           completedAt: null,
           msToPurchase: null,
           msCheckoutHesitation: null,
+          reportDwellFloorMs: null,
         },
         traffic: { bucket: "Direct", source: null, medium: null, campaign: null },
       }),
       { kind: "survey_completed", questionCount: 0 }
     );
     expect(message.blocks.length).toBeGreaterThan(0);
-    expect(message.text).toContain("anonymous");
-    expect(JSON.stringify(message.blocks)).toContain("no email");
+    // Every optional row is gone, but the message is still a message: it names
+    // the submission, keeps both time columns and still carries the rail.
+    const rendered = JSON.stringify(message.blocks);
+    expect(rendered).toContain("Survey submission *#1756*");
+    expect(rendered).toContain("Came from: *Direct*");
+    expect(rendered).toContain("Survey time: *—*  |  Report time: *—*");
+    expect(rendered).toContain("Survey done");
+    // No empty label left behind by a dropped value.
+    expect(rendered).not.toContain("Device:");
+    expect(rendered).not.toContain("Country (self-reported):");
   });
 });
 
@@ -387,8 +663,11 @@ describe("session-recording link", () => {
     expect(JSON.stringify(message.blocks)).not.toContain("/admin/");
     expect(buttons(message.blocks)).toHaveLength(0);
     // The message itself still stands on its own — the removal took a button, not
-    // the content.
-    expect(message.blocks.length).toBeGreaterThan(3);
+    // the content. The compact layout is a single section, so this is now a
+    // content assertion rather than a block count.
+    expect(message.blocks).toHaveLength(1);
+    expect(JSON.stringify(message.blocks)).toContain("Survey submission *#1756*");
+    expect(rail(message.blocks)).toContain("Survey done");
   });
 
   /**

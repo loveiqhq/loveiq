@@ -23,6 +23,8 @@ import { z } from "zod";
 import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { supabaseFetch } from "@features/admin/server/supabase";
+import { refreshJourneyDetail } from "@features/attribution/server/journey-message";
+import { scheduleAfterResponse } from "@shared/http/after-response";
 import logger from "@shared/observability/logger";
 
 const ALLOWED_EVENTS = [
@@ -225,6 +227,46 @@ export async function POST(request: Request) {
     );
     // Don't leak details — return 204 so the client doesn't retry endlessly.
     return new NextResponse(null, { status: 204 });
+  }
+
+  /**
+   * A dwell milestone is the only thing that moves the "Report time" line on the
+   * Slack journey message, and it moves nothing else — the journey state is
+   * unchanged, so the ordinary advance-gated refresh would skip it.
+   *
+   * After the response, because these arrive from a timer in a tab the reader is
+   * still sitting in (and, at 10 minutes, possibly one they are closing). A
+   * Slack round-trip must not be in front of that.
+   */
+  if (
+    event_type === "report_engagement_1min" ||
+    event_type === "report_engagement_5min" ||
+    event_type === "report_engagement_10min"
+  ) {
+    /**
+     * One refresh per (submission, milestone) per hour, and the key is
+     * deliberately NOT keyed by IP.
+     *
+     * The milestones fire at most three times per PAGE LOAD, not per submission:
+     * the client's dedupe `Set` lives inside the effect body, so a reload starts
+     * over. Production already has a submission carrying 27 of these rows, and
+     * nothing downstream dedupes — no uniqueness on `(submission_id,
+     * event_type)`, and the insert above is a bare INSERT. Without this, every
+     * repeat rewrites the identical string into Slack, and an anonymous caller
+     * holding only a CSRF cookie (which any request mints) could drive
+     * `chat.update` past its Tier 3 budget against guessed sequential ids.
+     *
+     * An IP-keyed bucket would not help — the thing worth protecting is the one
+     * Slack message, so the submission is the key.
+     */
+    const fresh = await checkRateLimit(`${submission_id}:${event_type}`, {
+      bucket: "journey-dwell-refresh",
+      limit: 1,
+      windowMs: 3_600_000,
+    });
+    if (fresh.allowed) {
+      scheduleAfterResponse("journey-dwell-refresh", () => refreshJourneyDetail(submission_id));
+    }
   }
 
   return new NextResponse(null, { status: 204 });

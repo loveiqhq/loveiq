@@ -170,6 +170,77 @@ export async function tryPostJourneyViaBot(input: {
 }
 
 /**
+ * Re-render the stored message when a DETAIL changed but the journey state did not.
+ *
+ * `refreshJourneyMessage` below is gated on the state advancing, which is what
+ * stops twenty report opens costing twenty `chat.update` calls. Report dwell has
+ * no state of its own — someone who reads for ten minutes and never reaches the
+ * paywall sits at `report_opened` the entire time — so under that gate the
+ * "Report time" line would stay an em dash for precisely the reader it is most
+ * interesting for: engaged, and not converting.
+ *
+ * Safe to leave ungated on the ADVANCE check because the caller dedupes instead:
+ * `/api/analytics-event` allows one refresh per (submission, milestone) per hour.
+ * That is what makes the ceiling three extra edits per submission rather than one
+ * per event — the milestones themselves fire once per PAGE LOAD, not once per
+ * submission (the client's dedupe set is rebuilt on every mount), and production
+ * already has a submission carrying 27 of these rows.
+ */
+export async function refreshJourneyDetail(submissionId: number): Promise<void> {
+  if (!isSlackBotConfigured()) return;
+  try {
+    const stored = await readStored(submissionId);
+    if (!stored) return;
+
+    const journey = await buildSubmissionJourney(submissionId);
+    if (!journey) return;
+
+    /**
+     * Never let the rail go backwards.
+     *
+     * The stored state is the furthest any caller has witnessed server-side,
+     * which can be ahead of what a rebuild derives: two of the five milestones
+     * come from consent-gated `analytics_event` rows. Passing it as the floor
+     * keeps dots that are already green from turning red on an edit that was
+     * only ever meant to change one line.
+     */
+    const derived = journeyStateOf(journey.milestones);
+    /**
+     * Re-read the state HERE rather than reusing the one fetched above.
+     *
+     * `refreshJourneyMessage` writes its `markState` last, so an advance that
+     * started after our first read can land while we are rebuilding. Using the
+     * stale value would render a rail one step behind and — because our write
+     * goes out afterwards — overwrite the advance that had just greened it, which
+     * that refresh can never undo (`isAdvance` is false once the state matches).
+     * Cheap: one extra read on a path that already makes six.
+     */
+    const latest = (await readStored(submissionId)) ?? stored;
+    const storedIdx = latest.state ? STATES.indexOf(latest.state as JourneyState) : -1;
+    const floor = storedIdx > STATES.indexOf(derived) ? (latest.state as JourneyState) : derived;
+
+    const message = buildJourneyMessage(journey, {
+      kind: "survey_completed",
+      // Reuse the stored count — it is not derivable here, and rendering 0 would
+      // silently downgrade the notification text on every dwell update.
+      questionCount: stored.question_count ?? 0,
+      reachedFloor: floor,
+    });
+
+    // No `markState`: the state genuinely has not moved, and writing it back
+    // would be a lie the next advance check has to reason about.
+    await updateJourneyMessage({
+      channel: stored.channel,
+      ts: stored.message_ts,
+      text: message.text,
+      blocks: message.blocks,
+    });
+  } catch (err) {
+    logger.warn({ err, submissionId }, "journey-message: detail refresh failed");
+  }
+}
+
+/**
  * Re-render the stored message for a submission whose journey has moved on.
  *
  * No-ops when: the bot is not configured, no message was stored (posted before
