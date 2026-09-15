@@ -117,10 +117,50 @@ describe("ux-review cron", () => {
     expect(kinds).not.toContain("ux_review_digest");
   });
 
-  it("posts the digest once a day, keyed by UTC date", async () => {
+  it("posts the digest once a day, keyed by the BERLIN date", async () => {
     await GET(req());
     expect(mockTryClaim).toHaveBeenCalledWith("ux_review_digest", "daily", "2026-09-14");
     expect(mockMarkDelivered).toHaveBeenCalledWith("ux_review_digest", "daily", "2026-09-14");
+  });
+
+  it("uses the Berlin day, not the UTC day, after Berlin midnight", async () => {
+    // 23:30 UTC on the 14th is 01:30 Berlin on the 15th. Keyed on UTC the claim
+    // would read "2026-09-14", filing a Berlin-15th event under the 14th.
+    //
+    // Tested through the DRIFT alert rather than the digest, because Berlin is
+    // AHEAD of UTC: the two dates only disagree between 00:00 and 02:00 Berlin,
+    // which is always before the 09:00 digest gate. The digest can therefore
+    // never observe the difference — the drift alert, which has no hour gate,
+    // can.
+    vi.setSystemTime(new Date("2026-09-14T23:30:00Z"));
+    mockFetchFindings.mockResolvedValue([finding({ scannerVersion: 99 })]);
+
+    await GET(req());
+
+    const driftClaim = mockTryClaim.mock.calls.find((c) => c[0] === "ux_review_drift");
+    expect(driftClaim).toBeDefined();
+    expect(driftClaim?.[2]).toBe("2026-09-15");
+  });
+
+  it("gates the digest on the Berlin hour, so it does not drift with the clock change", async () => {
+    // 07:30 UTC is 09:30 Berlin in summer but 08:30 Berlin in winter. A fixed
+    // UTC hour would post an hour earlier from late October without anyone
+    // changing anything; a Berlin hour holds 09:00 all year.
+    vi.setSystemTime(new Date("2026-01-15T07:30:00Z")); // 08:30 Berlin — too early
+    await GET(req());
+    expect(mockNotifySlack.mock.calls.map((c) => (c[0] as { kind: string }).kind)).not.toContain(
+      "ux_review_digest"
+    );
+
+    vi.clearAllMocks();
+    mockTryClaim.mockResolvedValue(true);
+    mockFetchFindings.mockResolvedValue([]);
+    mockFetchDailyStats.mockResolvedValue([]);
+    vi.setSystemTime(new Date("2026-01-15T08:30:00Z")); // 09:30 Berlin — go
+    await GET(req());
+    expect(mockNotifySlack.mock.calls.map((c) => (c[0] as { kind: string }).kind)).toContain(
+      "ux_review_digest"
+    );
   });
 
   it("stays silent when the digest claim is already taken", async () => {

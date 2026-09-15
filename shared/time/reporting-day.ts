@@ -40,3 +40,24 @@ export function reportingDay(now: Date = new Date()): string {
 
   return `${year}-${month}-${day}`;
 }
+
+/**
+ * The hour of day (0-23) in the reporting timezone.
+ *
+ * For "post this once a day, at a time the team is awake". `getUTCHours()` looks
+ * equivalent and is not: Berlin is UTC+1 in winter and UTC+2 in summer, so a
+ * fixed UTC hour drifts by one across the changeover — a 09:00 digest quietly
+ * becomes an 08:00 digest at the end of October. Pair it with `reportingDay()`
+ * so the "once per day" claim and the hour agree about which day it is.
+ */
+export function reportingHour(now: Date = new Date()): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: REPORTING_TIME_ZONE,
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now);
+
+  const hour = parts.find((p) => p.type === "hour")?.value;
+  // Same ICU-less fallback as reportingDay: a wrong-but-valid hour beats NaN.
+  return hour === undefined ? now.getUTCHours() : Number(hour);
+}

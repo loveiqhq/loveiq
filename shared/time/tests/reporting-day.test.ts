@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { REPORTING_TIME_ZONE, reportingDay } from "@shared/time/reporting-day";
+import { REPORTING_TIME_ZONE, reportingDay, reportingHour } from "@shared/time/reporting-day";
 
 /**
  * Fixed 2026-08-28. Comparing GA4 against our own visitor counter gave ratios of
@@ -39,6 +39,24 @@ describe("reportingDay", () => {
     for (const iso of ["2026-01-01T00:00:00Z", "2026-08-28T22:59:59Z", "2026-12-31T23:59:59Z"]) {
       expect(reportingDay(new Date(iso))).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     }
+  });
+
+  it("reports the Berlin hour, not the UTC hour", () => {
+    // Summer: Berlin is UTC+2.
+    expect(reportingHour(new Date("2026-09-15T07:17:00Z"))).toBe(9);
+    // Winter: UTC+1. The same wall-clock intent needs a different UTC hour,
+    // which is the whole reason a fixed getUTCHours() gate drifts.
+    expect(reportingHour(new Date("2026-01-15T08:30:00Z"))).toBe(9);
+    expect(reportingHour(new Date("2026-01-15T07:30:00Z"))).toBe(8);
+  });
+
+  it("rolls the hour past midnight Berlin while UTC is still the day before", () => {
+    // 23:30 UTC on the 14th is 01:30 on the 15th in Berlin. The hour and the
+    // day have to agree about which day it is, or a once-a-day claim and the
+    // gate that guards it disagree.
+    const t = new Date("2026-09-14T23:30:00Z");
+    expect(reportingHour(t)).toBe(1);
+    expect(reportingDay(t)).toBe("2026-09-15");
   });
 
   it("keeps the dedup cookie and the funnel_event row on the SAME clock", () => {

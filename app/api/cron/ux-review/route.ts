@@ -59,14 +59,22 @@ import {
   recordingLink,
 } from "@features/ux-review/server/review";
 import { UX_SCANNERS } from "@features/ux-review/server/scanners";
+import { reportingDay, reportingHour } from "@shared/time/reporting-day";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-/** Post the daily summary at or after this UTC hour. Not the first run after
- *  midnight — a digest of an empty night reports nothing useful. */
-const DIGEST_HOUR_UTC = 7;
+/**
+ * Post the daily summary at or after this hour, BERLIN time — not UTC.
+ *
+ * Not the first run after midnight: a digest of an empty night reports nothing
+ * useful. And not a fixed UTC hour either, which is what this was: Berlin is
+ * UTC+1 in winter and UTC+2 in summer, so `getUTCHours() >= 7` lands at 09:00
+ * Berlin now and 08:00 Berlin from late October — the digest would quietly move
+ * an hour earlier without anyone changing it.
+ */
+const DIGEST_HOUR_BERLIN = 9;
 
 export async function GET(request: Request) {
   if (!verifyCronAuth(request)) {
@@ -87,7 +95,14 @@ export async function GET(request: Request) {
 
   try {
     const findings = await fetchFindings();
-    const dayKey = new Date().toISOString().slice(0, 10);
+    /**
+     * The Berlin calendar day, not the UTC one. `toISOString().slice(0, 10)`
+     * rolls over at 01:00/02:00 Berlin, so a "once a day" claim taken just
+     * after midnight local time belongs to the previous day and the digest can
+     * post twice in one Berlin day. Same reasoning as `funnel_event.day`, which
+     * produced a 135% GA4 ratio before it was fixed — see shared/time.
+     */
+    const dayKey = reportingDay();
     let collected = 0;
     let contradicted = 0;
     let suppressed = 0;
@@ -164,7 +179,7 @@ export async function GET(request: Request) {
      * summaries of user UX issues". Once a day, not on the first run after
      * midnight — a digest of an empty night says nothing.
      */
-    if (new Date().getUTCHours() >= DIGEST_HOUR_UTC) {
+    if (reportingHour() >= DIGEST_HOUR_BERLIN) {
       if (await tryClaimSlackAlert("ux_review_digest", "daily", dayKey)) {
         const { text, blocks } = buildDigestMessage(await fetchDailyStats());
         const fitted = fitBlocks(blocks, text);
