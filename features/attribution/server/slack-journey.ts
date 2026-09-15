@@ -249,15 +249,35 @@ function boldArmName(short: string): string {
  * same line. Newlines inside a single section render tight, which is the whole
  * request.
  *
- * What this deliberately DROPS, all of it visible in the mock as an absence:
- * the first name, the masked email and the question count. The submission number
- * is promoted into the title in their place and still identifies the row for
- * anyone who needs to look it up. The name and email are one line to restore if
- * the channel misses them; the question count survives in the notification text.
+ * What this deliberately DROPS, both visible in the mock as an absence: the
+ * first name and the question count. The submission number carries the title and
+ * still identifies the row for anyone who needs to look it up; the question count
+ * survives in the notification text. The masked email went with them and was then
+ * asked back (#incoming-surveys, 15 Sep) — it rides on the title line, see below.
  */
 function compactSurveyLines(journey: SubmissionJourney, reachedFloor?: JourneyStep): string[] {
   const bold = (v: string) => `*${v}*`;
-  const lines: string[] = [`Survey submission ${bold(`#${journey.submissionId}`)}`];
+
+  /**
+   * The masked email sits beside the submission number at Marcus's request
+   * (#incoming-surveys, 15 Sep): it is the cheapest signal of whether a
+   * submission came from someone internal or from a real visitor.
+   *
+   * A CODE SPAN, which is how Marcus wrote it and how every survey message
+   * rendered it before the compact layout dropped it. It also settles the markup
+   * problem outright: a mask is three literal asterisks landing beside the bold
+   * submission number, and `*` is Slack's bold delimiter — inside backticks they
+   * are literal, so nothing has to be escaped and nothing can be re-read as
+   * emphasis.
+   *
+   * Backticks are stripped from the value first. The mask keeps the address's own
+   * first character and its whole domain, so the one character that could close
+   * the span early is caller-supplied. Dropped entirely when there is no email
+   * rather than padded, so the title never ends in a dangling space.
+   */
+  const title = `Survey submission ${bold(`#${journey.submissionId}`)}`;
+  const maskedEmail = journey.emailMasked?.replace(/`/g, "");
+  const lines: string[] = [maskedEmail ? `${title} \`${maskedEmail}\`` : title];
 
   /**
    * Both times on one line, and both sides ALWAYS render.

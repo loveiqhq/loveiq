@@ -171,7 +171,7 @@ describe("the compact incoming-survey layout", () => {
     );
 
     expect(soleSection(message.blocks).split("\n")).toEqual([
-      "Survey submission *#1756*",
+      "Survey submission *#1756* `a***@gmail.com`",
       "Survey time: *18 min*  |  Report time: *5+ min*",
       "Came from: *Paid* — google / cpc",
       "Device: *iOS*",
@@ -269,6 +269,39 @@ describe("the compact incoming-survey layout", () => {
     expect(rendered).not.toContain("0+ min");
   });
 
+  it("carries the masked email beside the submission number", () => {
+    const message = buildJourneyMessage(journey({ emailMasked: "c***@gmail.com" }), {
+      kind: "survey_completed",
+      questionCount: 59,
+    });
+    // A code span, as Marcus wrote it. Inside backticks the three asterisks of
+    // the mask are literal, so nothing needs escaping and nothing can be re-read
+    // as emphasis beside the bold submission number.
+    expect(soleSection(message.blocks).split("\n")[0]).toBe(
+      "Survey submission *#1756* `c***@gmail.com`"
+    );
+  });
+
+  it("closes the code span even if the address carries a backtick", () => {
+    const message = buildJourneyMessage(journey({ emailMasked: "`x***@`evil.com" }), {
+      kind: "survey_completed",
+      questionCount: 59,
+    });
+    // The mask keeps the address's own first character and its whole domain, so
+    // the one character that could close the span early is caller-supplied.
+    const title = soleSection(message.blocks).split("\n")[0];
+    expect(title).toBe("Survey submission *#1756* `x***@evil.com`");
+    expect(title.split("`").length - 1).toBe(2);
+  });
+
+  it("leaves no dangling separator when the submission has no email", () => {
+    const message = buildJourneyMessage(journey({ emailMasked: null }), {
+      kind: "survey_completed",
+      questionCount: 59,
+    });
+    expect(soleSection(message.blocks).split("\n")[0]).toBe("Survey submission *#1756*");
+  });
+
   it("never renders a header or a fields grid on the survey message", () => {
     const message = buildJourneyMessage(journey(), {
       kind: "survey_completed",
@@ -329,21 +362,28 @@ describe("the compact incoming-survey layout", () => {
   });
 
   /**
-   * The name, the masked email and the question count are gone from the message
-   * by request — the mock shows all three as an absence and promotes the
-   * submission number in their place. The count survives where it still earns
-   * its place: the notification text nobody reads in-channel.
+   * The name and the question count are gone from the message by request — the
+   * mock shows them as an absence and promotes the submission number in their
+   * place. The count survives where it still earns its place: the notification
+   * text nobody reads in-channel.
+   *
+   * The masked email was dropped with them and then asked back
+   * (#incoming-surveys, 15 Sep), so it is asserted PRESENT here. Worth knowing
+   * what the old assertion did the moment that landed: the address renders
+   * ESCAPED, so `not.toContain("a***@gmail.com")` kept passing against a message
+   * that now contains the address — green while the opposite of its own name was
+   * true. Asserted off the rendered title line for that reason, not off the JSON.
    */
-  it("drops name, email and question count from the message but keeps the count in the text", () => {
+  it("drops name and question count from the message but keeps the count in the text", () => {
     const message = buildJourneyMessage(journey(), {
       kind: "survey_completed",
       questionCount: 58,
     });
     const rendered = JSON.stringify(message.blocks);
     expect(rendered).not.toContain("Kitten");
-    expect(rendered).not.toContain("a***@gmail.com");
     expect(rendered).not.toContain("58 question");
     expect(message.text).toContain("58 questions");
+    expect(soleSection(message.blocks).split("\n")[0]).toContain("@gmail.com");
   });
 
   it("says question, not questions, for a single answer", () => {
@@ -523,9 +563,9 @@ describe("journey message safety", () => {
   });
 
   /**
-   * Restored coverage. The compact survey message renders neither a name nor an
-   * email, so the assertions on these fallbacks were dropped with the header —
-   * but both are still live on the purchase path, where a journey with no
+   * Restored coverage. The compact survey message renders no name, and rendered
+   * no email either until Marcus asked for one back onto the title line — but
+   * both fallbacks are still live on the purchase path, where a journey with no
    * `app_user` row must read as "anonymous" rather than as an empty bold run.
    */
   it("still names the nameless on a purchase — anonymous, and no email", () => {
