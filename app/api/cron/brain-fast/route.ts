@@ -4,6 +4,7 @@ import { ingestPeople } from "@features/brain/server/ingest/people";
 import { ingestPlan } from "@features/brain/server/ingest/plan";
 import { ingestReportVoice } from "@features/brain/server/ingest/report-voice";
 import { ingestSkills } from "@features/brain/server/ingest/skills";
+import { ingestDomain } from "@features/brain/server/ingest/domain";
 import { BACKFILL_DAYS, ingestGa4 } from "@features/brain/server/ingest/google";
 import { ingestSlack } from "@features/brain/server/ingest/slack";
 import { embedMissing } from "@features/brain/server/embed";
@@ -180,6 +181,9 @@ export async function GET(request: Request) {
     // How we do the work, written where the team can reach it: `.agents/skills/` is a
     // Claude Code directory and they work in claude.ai, where it does not exist.
     await run("skill", () => ingestSkills(stampedAt));
+    // The vocabulary under the voice: what the words mean, what we ask, how a score is
+    // built. Also built from repo files, so it costs a rebuild and nothing else.
+    await run("domain", () => ingestDomain(stampedAt));
     await run("slack", () => ingestSlack(stampedAt, isOutOfTime));
 
     /**

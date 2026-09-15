@@ -325,6 +325,10 @@ export const SOURCES_FOR_TEST = [
   // It lives in the corpus rather than `.agents/skills/` because the team works in
   // claude.ai, where that directory does not exist.
   "skill",
+  // What the words mean, what the survey asks, and how a score is built — the applied
+  // psychometrics vocabulary under the voice. `meta.kind` is glossary / survey / scoring.
+  // Listed here in the commit that creates it.
+  "domain",
   "doc",
   "analytics",
   "ga4",
@@ -4400,7 +4404,11 @@ export const MCP_INSTRUCTIONS =
   "drafting, because the chapter skeleton is identical across all fourteen and only the " +
   "content changes. Drive holds DRAFTS of the same chapters, which are what someone is " +
   "working on rather than the standard — the titles tell them apart. A draft you produce " +
-  "belongs in a Google Doc for a person to edit, never anywhere a reader sees.\n\n" +
+  "belongs in a Google Doc for a person to edit, never anywhere a reader sees. " +
+  'And `sources: ["domain"]` is the vocabulary underneath: every defined term with what ' +
+  "people commonly mistake it for and what is actually true, what the assessment asks " +
+  "chapter by chapter, and which question feeds which scoring dimension. Reach for a " +
+  "definition there before inferring one from how a word was used in a chapter.\n\n" +
   "YOU CAN SEE, NOT JUST READ. `show_design` returns a rendered " +
   "frame from LoveIQ's Figma file as an image — call it with no arguments for the pages, " +
   "a page id for its frames, a frame id to look at one. Critique a screen from the " +
