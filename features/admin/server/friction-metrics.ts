@@ -171,7 +171,7 @@ export function buildSurveySignals(
     .sort((a, b) => b.pct - a.pct)[0];
   if (worstBack) {
     signals.push({
-      label: "Backtracking",
+      label: "Went back a step",
       group: "Survey",
       value: `${Math.round(worstBack.pct)}%`,
       where: label(worstBack.q),
@@ -190,7 +190,7 @@ export function buildSurveySignals(
     signals.push({
       label: "Answer hesitation",
       group: "Survey",
-      value: `${secs(slowest.median_ms)} (${ratio.toFixed(1)}x typical)`,
+      value: `${secs(slowest.median_ms)} (${ratio.toFixed(1)}x)`,
       where: label(slowest),
       n: slowest.timed,
       status: ratio >= 2 ? "watch" : "quiet",
@@ -198,9 +198,9 @@ export function buildSurveySignals(
   }
   if (typical > 0) {
     signals.push({
-      label: "Step completion time",
+      label: "Typical time per question",
       group: "Survey",
-      value: `${secs(typical)} typical`,
+      value: secs(typical),
       n: snap.total_timed,
       status: "quiet",
     });
@@ -247,9 +247,9 @@ export function buildSurveySignals(
     if (early.v >= FLOOR && late.v >= FLOOR) {
       const diff = late.pct - early.pct;
       signals.push({
-        label: "Progress sensitivity",
+        label: "Drop-off, late vs early",
         group: "Survey",
-        value: `${diff >= 0 ? "+" : ""}${diff.toFixed(1)}pp late vs early`,
+        value: `${diff >= 0 ? "+" : ""}${diff.toFixed(1)}pp`,
         n: early.v + late.v,
         status: diff >= 3 ? "watch" : "quiet",
       });
@@ -272,9 +272,9 @@ export function buildSurveySignals(
     .sort((a, b) => b.backPct - a.backPct)[0];
   if (surprising && surprising.backPct > 0) {
     signals.push({
-      label: "Expectation mismatch (proxy)",
+      label: "Back after a long pause",
       group: "Survey",
-      value: `${Math.round(surprising.backPct)}% go back after a long pause`,
+      value: `${Math.round(surprising.backPct)}%`,
       where: label(surprising.q),
       n: surprising.q.visits,
       status: surprising.backPct >= 15 ? "watch" : "quiet",
@@ -301,7 +301,8 @@ export function buildSurveySignals(
     signals.push({
       label: "Engagement pace",
       group: "Survey",
-      value: `${ratio.toFixed(2)}x (${ratio < 1 ? "speeding up" : "slowing down"})`,
+      value: `${ratio.toFixed(2)}x`,
+      where: ratio < 1 ? "speeding up" : "slowing down",
       n: snap.total_timed,
       status: ratio <= 0.6 || ratio >= 1.6 ? "watch" : "quiet",
     });
@@ -360,9 +361,9 @@ export function buildReportSignals(snap: ReportFrictionSnapshot): FrictionSignal
   // --- Report curiosity ------------------------------------------------------
   const curious = computeRate(snap.tried_locked, viewers);
   out.push({
-    label: "Report curiosity",
+    label: "Tried a locked section",
     group: "Report",
-    value: `${curious.toFixed(0)}% try a locked section`,
+    value: `${curious.toFixed(0)}%`,
     where: snap.top_locked_section ? `most tried: ${snap.top_locked_section}` : undefined,
     n: viewers,
     status: "quiet",
@@ -371,9 +372,9 @@ export function buildReportSignals(snap: ReportFrictionSnapshot): FrictionSignal
   // --- Scroll behaviour ------------------------------------------------------
   const toEnd = computeRate(snap.read_to_end, viewers);
   out.push({
-    label: "Scroll behaviour",
+    label: "Reached the report end",
     group: "Report",
-    value: `${toEnd.toFixed(0)}% reach the end`,
+    value: `${toEnd.toFixed(0)}%`,
     n: viewers,
     status: toEnd < 20 ? "watch" : "quiet",
   });
@@ -383,9 +384,9 @@ export function buildReportSignals(snap: ReportFrictionSnapshot): FrictionSignal
   if (snap.paywall_opened > 0) {
     const discovered = computeRate(snap.scrolled_before_paywall, snap.paywall_opened);
     out.push({
-      label: "Value discovery before paywall",
+      label: "Saw half before paywall",
       group: "Paywall",
-      value: `${discovered.toFixed(0)}% got halfway first`,
+      value: `${discovered.toFixed(0)}%`,
       n: snap.paywall_opened,
       status: discovered < 50 ? "watch" : "quiet",
     });
@@ -395,9 +396,9 @@ export function buildReportSignals(snap: ReportFrictionSnapshot): FrictionSignal
   // Marcus's own framing: immediate rejection vs genuine consideration.
   if (snap.dwell_n > 0) {
     out.push({
-      label: "Paywall dwell time",
+      label: "Paywall dwell (median)",
       group: "Paywall",
-      value: `${dwell(snap.dwell_median_ms)} median`,
+      value: dwell(snap.dwell_median_ms),
       where: snap.dwell_median_ms < 5000 ? "immediate rejection" : "genuine consideration",
       n: snap.dwell_n,
       status: snap.dwell_median_ms < 5000 ? "watch" : "quiet",
@@ -414,7 +415,8 @@ export function buildReportSignals(snap: ReportFrictionSnapshot): FrictionSignal
     out.push({
       label: "Paywall escape",
       group: "Paywall",
-      value: `${computeRate(top.n, total).toFixed(0)}% via ${top.source.replace(/_/g, " ")}`,
+      value: `${computeRate(top.n, total).toFixed(0)}%`,
+      where: `via ${top.source.replace(/_/g, " ")}`,
       n: total,
       status: "quiet",
     });
@@ -424,9 +426,9 @@ export function buildReportSignals(snap: ReportFrictionSnapshot): FrictionSignal
   if (snap.saw_a_price > 0) {
     const back = computeRate(snap.reopened_pricing, snap.saw_a_price);
     out.push({
-      label: "Price interaction",
+      label: "Reopened pricing",
       group: "Paywall",
-      value: `${back.toFixed(0)}% open the pricing again`,
+      value: `${back.toFixed(0)}%`,
       n: snap.saw_a_price,
       status: "quiet",
     });
@@ -435,9 +437,9 @@ export function buildReportSignals(snap: ReportFrictionSnapshot): FrictionSignal
   // --- Conversion blockers ---------------------------------------------------
   // The end of the chain the other signals describe.
   out.push({
-    label: "Conversion blockers",
+    label: "Readers reaching checkout",
     group: "Paywall",
-    value: `${computeRate(snap.checkout, viewers).toFixed(1)}% of readers reach checkout`,
+    value: `${computeRate(snap.checkout, viewers).toFixed(1)}%`,
     n: viewers,
     status: "quiet",
   });
@@ -502,6 +504,12 @@ export async function buildFrictionReport(
  * The dot column is first because a non-technical reader scans shape before
  * digits: ● is worth a look, ○ is normal.
  */
+/**
+ * Widest a scoreboard row may be. Slack's fenced block is monospace but not
+ * scrollable on mobile, so anything wider folds.
+ */
+export const TABLE_W = 78;
+
 export function buildFrictionSection(report: FrictionReport, windowDays: number): string {
   const watch = report.signals.filter((s) => s.status === "watch");
   const worst = watch[0];
@@ -523,9 +531,25 @@ export function buildFrictionSection(report: FrictionReport, windowDays: number)
   const labelW = Math.max(...report.signals.map((s) => s.label.length)) + 2;
   const valueW = Math.max(...report.signals.map((s) => s.value.length)) + 2;
 
+  /**
+   * Slack wraps a fenced block past roughly 80 columns on a phone, and a
+   * wrapped fixed-width table is worse than no table — every row after the
+   * first folds into the next one's column. The first version ran to 102
+   * columns because all three widths were taken from the data with no ceiling.
+   *
+   * The two data-driven columns stay data-driven; the free-text "where" column
+   * absorbs whatever is left. It is the only one that can be shortened without
+   * losing a number.
+   */
+  const whereW = Math.max(0, TABLE_W - 2 - labelW - valueW);
+
   const rows = report.signals.map((s) => {
     const dot = s.status === "watch" ? "●" : "·";
-    const where = s.where ? s.where : "";
+    const where = !s.where
+      ? ""
+      : s.where.length > whereW
+        ? `${s.where.slice(0, Math.max(1, whereW - 1))}…`
+        : s.where;
     return `${dot} ${s.label.padEnd(labelW)}${s.value.padEnd(valueW)}${where}`.trimEnd();
   });
 

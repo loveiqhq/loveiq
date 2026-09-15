@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  TABLE_W,
+  buildFrictionSection,
   buildReportSignals,
   buildSurveySignals,
   type FrictionQuestion,
@@ -68,7 +70,7 @@ describe("buildSurveySignals", () => {
       })
     );
     const hes = find(sigs, "Answer hesitation");
-    expect(hes?.value).toContain("2.9x typical");
+    expect(hes?.value).toContain("2.9x");
     expect(hes?.status).toBe("watch");
   });
 
@@ -97,9 +99,13 @@ describe("buildSurveySignals", () => {
         { median_ms: 9000 }
       )
     );
-    const p = find(sigs, "Expectation mismatch (proxy)");
-    expect(p?.label).toContain("(proxy)");
-    expect(p?.value).toBe("30% go back after a long pause");
+    const p = find(sigs, "Back after a long pause");
+    // The label states what was OBSERVED. It must not name the feeling we would
+    // like to infer from it — we cannot see surprise, only the pause and the
+    // retreat, and a row claiming otherwise would be the model narrating.
+    expect(p?.label).toBe("Back after a long pause");
+    expect(p?.label).not.toMatch(/surpris|mismatch|expectation|confus/i);
+    expect(p?.value).toBe("30%");
     expect(p?.status).toBe("watch");
   });
 
@@ -111,7 +117,7 @@ describe("buildSurveySignals", () => {
         median_ms: 9000,
       })
     );
-    expect(find(sigs, "Expectation mismatch (proxy)")).toBeUndefined();
+    expect(find(sigs, "Back after a long pause")).toBeUndefined();
   });
 
   it("measures progress sensitivity across thirds, not one question", () => {
@@ -119,7 +125,7 @@ describe("buildSurveySignals", () => {
     const mid = [3, 4, 5].map((i) => q({ question_index: i, abandons: 1 }));
     const late = [6, 7, 8].map((i) => q({ question_index: i, abandons: 10 }));
     const sigs = buildSurveySignals(snap([...early, ...mid, ...late]));
-    const ps = find(sigs, "Progress sensitivity");
+    const ps = find(sigs, "Drop-off, late vs early");
     expect(ps?.value).toContain("+9.0pp");
     expect(ps?.status).toBe("watch");
   });
@@ -158,31 +164,32 @@ describe("buildReportSignals", () => {
     // 346% and be nonsense. How people leave is answerable; how many is not.
     const sigs = buildReportSignals(reportSnap());
     const escape = findR(sigs, "Paywall escape");
-    expect(escape?.value).toBe("99% via close button");
+    expect(escape?.value).toBe("99%");
+    expect(escape?.where).toBe("via close button");
     expect(JSON.stringify(sigs)).not.toMatch(/[1-9]\d\d+%/);
   });
 
   it("calls a 2.5s median what it is", () => {
     // Marcus's own framing: immediate rejection vs genuine consideration.
-    expect(findR(buildReportSignals(reportSnap()), "Paywall dwell time")?.where).toBe(
+    expect(findR(buildReportSignals(reportSnap()), "Paywall dwell (median)")?.where).toBe(
       "immediate rejection"
     );
     expect(
-      findR(buildReportSignals(reportSnap({ dwell_median_ms: 20_000 })), "Paywall dwell time")
+      findR(buildReportSignals(reportSnap({ dwell_median_ms: 20_000 })), "Paywall dwell (median)")
         ?.where
     ).toBe("genuine consideration");
   });
 
   it("flags that most people meet the paywall before seeing the report", () => {
-    const v = findR(buildReportSignals(reportSnap()), "Value discovery before paywall");
-    expect(v?.value).toBe("20% got halfway first");
+    const v = findR(buildReportSignals(reportSnap()), "Saw half before paywall");
+    expect(v?.value).toBe("20%");
     expect(v?.status).toBe("watch");
   });
 
   it("names the section people actually try to open", () => {
     // Excluding staff changed this answer from typical_beliefs to map, which is
     // why it is worth printing rather than just the rate.
-    expect(findR(buildReportSignals(reportSnap()), "Report curiosity")?.where).toBe(
+    expect(findR(buildReportSignals(reportSnap()), "Tried a locked section")?.where).toBe(
       "most tried: map"
     );
   });
@@ -195,10 +202,71 @@ describe("buildReportSignals", () => {
     const sigs = buildReportSignals(
       reportSnap({ paywall_opened: 0, dwell_n: 0, escape_routes: [], saw_a_price: 0 })
     );
-    expect(findR(sigs, "Paywall dwell time")).toBeUndefined();
-    expect(findR(sigs, "Value discovery before paywall")).toBeUndefined();
-    expect(findR(sigs, "Price interaction")).toBeUndefined();
+    expect(findR(sigs, "Paywall dwell (median)")).toBeUndefined();
+    expect(findR(sigs, "Saw half before paywall")).toBeUndefined();
+    expect(findR(sigs, "Reopened pricing")).toBeUndefined();
     // The report-side rows still stand on their own.
-    expect(findR(sigs, "Scroll behaviour")).toBeDefined();
+    expect(findR(sigs, "Reached the report end")).toBeDefined();
+  });
+});
+
+describe("buildFrictionSection", () => {
+  /**
+   * Slack does not scroll a fenced block sideways on a phone — it folds it, and
+   * a folded fixed-width table is unreadable in a way the desktop preview never
+   * shows you. The first version of this board ran to 102 columns because all
+   * three widths were taken from the data with no ceiling on the total.
+   */
+  it("never emits a row wider than a phone can show", () => {
+    const section = buildFrictionSection(
+      {
+        signals: [
+          ...buildSurveySignals(
+            snap(
+              [
+                q({ question_index: 0 }),
+                q({ question_index: 47, median_ms: 40_000, backs: 30 }),
+                q({ question_index: 57, abandons: 40 }),
+              ],
+              { median_ms: 9000 }
+            )
+          ),
+          ...buildReportSignals(reportSnap()),
+        ],
+        blind: [],
+      },
+      30
+    );
+    const rows = section.split("\n").filter((l) => l.startsWith("●") || l.startsWith("·"));
+    expect(rows.length).toBeGreaterThan(8);
+    for (const row of rows) {
+      expect(row.length, `too wide for Slack on a phone:\n${row}`).toBeLessThanOrEqual(TABLE_W);
+    }
+  });
+
+  it("shortens the free-text column rather than dropping a number", () => {
+    // Whatever has to give, it is never the measurement.
+    const section = buildFrictionSection(
+      {
+        signals: [
+          {
+            label: "A label",
+            group: "Survey",
+            // Deliberately longer than a bare percentage: a value short enough to
+            // survive being sliced cannot prove the value is never sliced.
+            value: "25.8s (2.8x)",
+            n: 100,
+            status: "watch",
+            where: "Q58 — a question long enough that it cannot possibly fit in the row",
+          },
+        ],
+        blind: [],
+      },
+      30
+    );
+    const row = section.split("\n").find((l) => l.startsWith("●"))!;
+    expect(row.length).toBeLessThanOrEqual(TABLE_W);
+    expect(row).toContain("25.8s (2.8x)");
+    expect(row).toContain("…");
   });
 });
