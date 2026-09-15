@@ -659,23 +659,19 @@ export function buildAlerts(input: {
    * teaches people to skim past its alerts.
    */
 
-  // The landing arms are not comparable populations: proxy.ts returns an existing
-  // white/white_prev cookie unchanged, so everyone who visited between the end of
-  // round 1 and the start of round 2 is pinned to `white` and only genuinely-new
-  // visitors get the coin flip. That biases `white` toward warmer, returning
-  // traffic. Charting it prettily does not make it decidable.
-  const landing = input.verdicts.find((v) => v.axis === "landing");
-  if (landing && landing.arms.length > 1) {
-    alerts.push({
-      // Standing caveat, same reasoning as above: true every day the test runs.
-      severity: "info",
-      // Three sentences cut to one. The fact that changes a decision is that V2's
-      // number is flattered; the mechanism behind it does not need re-explaining
-      // every morning.
-      message:
-        "Landing arms are not a fair split — returning visitors keep the design they first saw, so V2's number is flattered.",
-    });
-  }
+  /**
+   * The "landing arms are not a fair split" caveat used to be an alert here.
+   * It was `info` severity and true every single day the test ran — which this
+   * file already names, twenty lines up, as "how a digest teaches people to
+   * skim past its alerts". It was also the ONLY thing in the Alerts section on
+   * a normal day, so the section trained people to ignore it before a real
+   * alert ever arrived.
+   *
+   * The fact is real and is not stated anywhere else, so it moved rather than
+   * died: it now rides in the *Landing page → survey* line, beside the numbers
+   * it qualifies, where a reader meets it at the moment it changes their
+   * reading. See LANDING_CAVEAT in the conversion-digest route.
+   */
 
   /**
    * The pricing-cutover warning is gone with the pooled 30-day line it warned

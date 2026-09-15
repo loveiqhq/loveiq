@@ -264,6 +264,26 @@ describe("conversion-digest handler", () => {
     expect(mockMarkDelivered).toHaveBeenCalledWith("conversion_digest", "day", expect.any(String));
   });
 
+  it("never prints a percentage change from a base of zero", async () => {
+    // "EUR 29.00 (+∞%)" reads like a spike and states nothing. One sale after a
+    // quiet week is the ordinary case that produced it.
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    expect(JSON.stringify(arg.blocks)).not.toContain("∞");
+  });
+
+  it("carries the fair-split caveat beside the landing numbers, not as an alert", async () => {
+    // It used to be a daily `info` alert, and the only thing in the Alerts
+    // section on a normal day. The fact still has to reach the reader — just at
+    // the moment it changes how they read the number next to it.
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const landing = arg.blocks.find((b) =>
+      JSON.stringify(b).includes("Landing page \u2192 survey")
+    );
+    expect(JSON.stringify(landing)).toContain("keep the design they first saw");
+  });
+
   it("embeds a signed chart URL for the arm comparison", async () => {
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
@@ -1063,13 +1083,16 @@ describe("conversion-digest alerts", () => {
     const message = alerts.map((a) => a.message).join(" ");
     expect(message).not.toContain("retired landing page label");
     expect(message).not.toContain("POOLS both price levels");
-    // The one standing caveat that survives changes a decision, and stays `info`
-    // so it cannot sort above something actionable.
-    const unfair = alerts.find((a) => a.message.includes("not a fair split"));
-    if (unfair) expect(unfair.severity).toBe("info");
+    // No standing daily caveat survives here at all — see the test below.
+    expect(alerts.some((a) => a.message.includes("not a fair split"))).toBe(false);
   });
 
-  it("warns that the homepage arms are not a fair split", () => {
+  it("no longer raises the fair-split caveat as a daily alert", () => {
+    // It was `info` severity and true every single day the test ran, and it was
+    // the only thing in the Alerts section on a normal day — so the section
+    // taught people to skip it before a real alert ever arrived. The fact did
+    // not die: it now rides beside the landing numbers it qualifies, which the
+    // digest test below pins.
     const alerts = buildAlerts({
       ...base,
       verdicts: [
@@ -1079,7 +1102,7 @@ describe("conversion-digest alerts", () => {
         ]),
       ],
     });
-    expect(alerts.some((a) => a.message.includes("not a fair split"))).toBe(true);
+    expect(alerts.some((a) => a.message.includes("not a fair split"))).toBe(false);
   });
 
   it("warns on a traffic collapse but only off a meaningful baseline", () => {

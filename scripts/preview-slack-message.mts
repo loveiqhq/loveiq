@@ -23,6 +23,7 @@
  * uses. Nothing is written anywhere.
  */
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
@@ -76,7 +77,10 @@ function renderBlock(b: Block): string {
     case "divider":
       return `<hr class="divider">`;
     case "image":
-      // The whole point: show the actual picture, at Slack's own display width.
+      // src is already a data: URI by this point — see inlineImages(). The page
+      // has to be self-contained: local dev sits behind the staging password
+      // gate, so a browser opening this file would get a 307 for every chart
+      // and show broken images.
       return `<div class="b img"><img src="${String(b.image_url)}" alt="${String(
         b.alt_text ?? ""
       ).replace(/"/g, "&quot;")}"><div class="alt">alt: ${String(b.alt_text ?? "")}</div></div>`;
@@ -87,6 +91,40 @@ function renderBlock(b: Block): string {
     default:
       return `<div class="b unknown"><b>${b.type}</b><pre>${JSON.stringify(b, null, 2)}</pre></div>`;
   }
+}
+
+/**
+ * Replace every image_url with a data: URI, fetching through the staging gate.
+ *
+ * Local dev is password-gated, and the browser opening this file has no
+ * staging_session cookie — every chart would 307 and render as a broken image.
+ * Inlining also makes the page portable: it can be sent to someone else and
+ * still show the pictures.
+ */
+async function inlineImages(blocks: Block[]): Promise<{ ok: number; failed: number }> {
+  const password = process.env.STAGING_PASSWORD;
+  const cookie = password
+    ? `staging_session=${createHash("sha256").update(password).digest("hex")}`
+    : "";
+  let ok = 0;
+  let failed = 0;
+  for (const b of blocks) {
+    if (b.type !== "image" || typeof b.image_url !== "string") continue;
+    try {
+      const res = await fetch(b.image_url, { headers: cookie ? { cookie } : {} });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const buf = Buffer.from(await res.arrayBuffer());
+      const type = res.headers.get("content-type") ?? "image/png";
+      b.image_url = `data:${type};base64,${buf.toString("base64")}`;
+      ok += 1;
+    } catch (err) {
+      failed += 1;
+      console.log(`  ! chart failed to render: ${(err as Error).message}`);
+      // Leave a visible marker rather than a silently broken <img>.
+      b.alt_text = `COULD NOT RENDER — ${b.alt_text ?? ""}`;
+    }
+  }
+  return { ok, failed };
 }
 
 function page(title: string, fallback: string, blocks: Block[], meta: string): string {
@@ -165,6 +203,10 @@ async function main(): Promise<void> {
     adSpend: null,
     now,
   });
+
+  console.log("rendering charts...");
+  const shot = await inlineImages(digest.blocks as Block[]);
+  console.log(`  ${shot.ok} chart(s) embedded${shot.failed ? `, ${shot.failed} FAILED` : ""}`);
 
   mkdirSync(dirname(OUT), { recursive: true });
   writeFileSync(

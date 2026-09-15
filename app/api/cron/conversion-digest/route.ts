@@ -648,7 +648,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
      * marketing's naming convention exists to retire.
      */
     const caveat =
-      "Not a like-for-like comparison: V2's inline question puts its visitors straight into the survey, and the denominator counts every page rather than landing views — the two pull opposite ways, so treat the gap as unknown.";
+      "Not a like-for-like comparison: V2's inline question puts its visitors straight into the survey, and the denominator counts every page rather than landing views — the two pull opposite ways, so treat the gap as unknown. Returning visitors also keep the design they first saw, which warms V2's traffic further.";
     const hasAny = series.first.some((v) => v != null) || series.last.some((v) => v != null);
 
     if (hasAny && series.labels.length > 1) {
@@ -845,6 +845,11 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     pricingCutoverIso: PRICING_CUTOVER_ISO,
     now,
   });
+  // Unconditional on purpose. buildAlerts never returns empty — it appends
+  // "Nothing crossed a threshold today." — so the heading always has a line
+  // under it, and that line is worth printing: it separates "we checked and it
+  // is fine" from "the alerting stopped running". A guard here would be dead
+  // code implying a case that cannot happen.
   blocks.push(divider());
   blocks.push(
     section(

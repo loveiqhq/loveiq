@@ -458,7 +458,11 @@ export interface WeeklyMetrics extends DailyMetrics {
 
 /** Percentage change with a low-base annotation. */
 export function delta(curr: number, prev: number, lowBaseThreshold = 5): string {
-  if (prev === 0) return curr > 0 ? "+∞%" : "—";
+  // A percentage change from a base of zero is undefined, and "+∞%" is not a
+  // fact about the business — 1 sale after a quiet week rendered as "+∞%" next
+  // to EUR 29.00, which reads like a spike and means nothing. Say what actually
+  // happened instead.
+  if (prev === 0) return curr > 0 ? "vs none" : "—";
   const pct = Math.round(((curr - prev) / prev) * 100);
   const capped = Math.max(-999, Math.min(999, pct));
   const sign = capped > 0 ? "+" : "";
