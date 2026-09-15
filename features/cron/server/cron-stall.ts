@@ -36,6 +36,11 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   // window the route itself looks back over.
   "ux-review": 90 * 60_000,
   "conversion-digest": 26 * 3_600_000,
+  // Daily, twenty minutes after the conversion digest, so it checks the numbers that were
+  // just published. Silent on a normal day like the brief and the miner — a disagreement is
+  // the only thing it posts — so it is watched for exactly that reason: a dead reconciler
+  // and a set of numbers that agree look identical from the outside.
+  "brain-reconcile": 26 * 3_600_000,
   "brain-ingest": 26 * 3_600_000,
   // Every 15 minutes, so 45m of silence is two missed ticks.
   "brain-fast": 45 * 60_000,

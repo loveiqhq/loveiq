@@ -63,6 +63,10 @@
       "schedule": "52 * * * *"
     },
     {
+      "path": "/api/cron/brain-reconcile",
+      "schedule": "20 9 * * *"
+    },
+    {
       "path": "/api/cron/brain-mine",
       "schedule": "10 8 * * *"
     },
@@ -146,6 +150,9 @@
     },
     "app/api/cron/ux-review/route.ts": {
       "maxDuration": 30
+    },
+    "app/api/cron/brain-reconcile/route.ts": {
+      "maxDuration": 60
     }
   }
 }

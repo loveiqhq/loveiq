@@ -8,7 +8,6 @@
  *                        per-user discount code (pricing 2.0 — the only nurture
  *                        email; the 6h "report ready"/"unlock" reminders and the
  *                        old 30h/54h discount ladder were retired — no more nudges)
- *                        PAUSED by default (NURTURE_78H_CALL_ENABLED gate)
  *
  * Idempotency lives in `report_price_quote.metadata.nurtureEmailsSent` (array
  * of stage strings) on the `full_report` quote row for the submission. Per-
