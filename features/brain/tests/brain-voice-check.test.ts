@@ -1,0 +1,164 @@
+import { describe, expect, it } from "vitest";
+import {
+  allChapters,
+  chapterBaseline,
+  checkDraft,
+  registerOutliers,
+} from "@features/brain/server/voice";
+
+const THIRD = "core_archetype";
+const SECOND = "insecurities";
+const MIXED = "beliefs";
+
+const secondPersonDraft =
+  "You often find that your desire builds slowly. Your partner may notice that you need time. " +
+  "You should not read this as a problem, because your system simply works differently from theirs.";
+// Chapter-length rather than a fragment: absence of second person only means something in a
+// draft long enough for the writer to have reached for it.
+const thirdPersonDraft =
+  "The Sensual Connector finds that desire builds slowly. A partner may notice the need for time. " +
+  "This is not a problem, because the system simply works differently from others. " +
+  "Arousal here is emotion-led and depends on a sense of safety rather than novelty. " +
+  "Where that safety is missing, the whole system quietly closes down. " +
+  "Growth for this archetype lies in naming the conditions that help, rather than waiting for them.";
+
+describe("voice baselines are counted, not assumed", () => {
+  it("finds a register per chapter, and they genuinely differ", () => {
+    // The whole point: there is no global rule. A draft correct in one chapter is wrong
+    // in another, which is why this is checked per chapter.
+    expect(chapterBaseline(THIRD)!.register).toBe("third");
+    expect(chapterBaseline(SECOND)!.register).toBe("second");
+  });
+
+  it("records how many shipped versions back the register", () => {
+    const third = chapterBaseline(THIRD)!;
+    expect(third.secondPersonVersions).toBe(0);
+    expect(third.archetypes).toBeGreaterThanOrEqual(14);
+    expect(chapterBaseline(SECOND)!.secondPersonVersions).toBe(chapterBaseline(SECOND)!.archetypes);
+  });
+
+  it("keeps a heading skeleton ONLY when every archetype shares it", () => {
+    // Four chapters have headings that are archetype-specific content. Checking a draft
+    // against one archetype's headings would reject correct work.
+    const withSkeleton = allChapters().filter((c) => chapterBaseline(c)?.headingSequence);
+    expect(withSkeleton).toContain("practices");
+    for (const c of withSkeleton) {
+      expect(chapterBaseline(c)!.headingSequence!.length).toBeGreaterThan(0);
+    }
+    // And most chapters have no skeleton at all — 19 of 24 carry no headings.
+    expect(withSkeleton.length).toBeLessThan(allChapters().length / 2);
+
+    /**
+     * The precise guard, because the loose one above is not enough: these chapters DO have
+     * headings, and a DIFFERENT set in each of the 14 archetypes, because the headings are
+     * content rather than structure. Treating the first archetype's headings as a skeleton
+     * would flag every correct draft for the other thirteen as missing them.
+     */
+    for (const perArchetype of ["challenges_enjoy", "growth", "recommendations"]) {
+      const b = chapterBaseline(perArchetype);
+      expect(b, `${perArchetype} should exist`).not.toBeNull();
+      expect(
+        b!.headingSequence,
+        `${perArchetype} headings differ per archetype, so there is no skeleton to check against`
+      ).toBeNull();
+    }
+    // …while the one chapter that genuinely repeats its headings keeps them.
+    expect(chapterBaseline("practices")!.headingSequence!.length).toBeGreaterThan(5);
+  });
+
+  it("measures sentence length per chapter, not corpus-wide", () => {
+    const lens = allChapters()
+      .map((c) => chapterBaseline(c)?.medianSentenceWords ?? 0)
+      .filter(Boolean);
+    // If these were all the same number the per-chapter check would be pointless.
+    expect(new Set(lens).size).toBeGreaterThan(3);
+  });
+});
+
+describe("registerOutliers — inconsistencies in the SHIPPED copy", () => {
+  it("names the few blocks that break their own chapter, not the ones genuinely split", () => {
+    /**
+     * A chapter split 6/14 is an unresolved decision and nobody should be told it is a
+     * slip. A chapter split 1/14 is one block someone forgot to convert. Naming the
+     * archetype turns "the copy is inconsistent" into a task.
+     */
+    const found = registerOutliers();
+    expect(found.length).toBeGreaterThan(0);
+    for (const o of found) {
+      expect(o.archetypes.length).toBeLessThanOrEqual(2);
+      expect(o.archetypes.length).toBeGreaterThan(0);
+      expect(o.total).toBeGreaterThanOrEqual(14);
+      // The minority must genuinely be the minority.
+      expect(o.archetypes.length).toBeLessThan(o.total / 2);
+    }
+  });
+
+  it("does not report a chapter that is consistent either way", () => {
+    const reported = new Set(registerOutliers().map((o) => o.chapter));
+    // These are 0/14 and 14/14 — nothing to reconcile.
+    expect(reported.has("core_archetype")).toBe(false);
+    expect(reported.has("insecurities")).toBe(false);
+  });
+
+  it("does not report a genuinely split chapter as a slip", () => {
+    // `initiation` sits at 6/14 — that is a decision nobody has made, not a typo.
+    const b = chapterBaseline("initiation");
+    if (b && b.register === "mixed" && b.secondPersonVersions > 2 && b.secondPersonVersions < 12) {
+      expect(registerOutliers().map((o) => o.chapter)).not.toContain("initiation");
+    }
+  });
+});
+
+describe("checkDraft", () => {
+  it("flags second person in a chapter that never uses it", () => {
+    const f = checkDraft(THIRD, secondPersonDraft);
+    const reg = f.find((x) => x.kind === "register");
+    expect(reg?.severity).toBe("error");
+    expect(reg?.message).toMatch(/third person in all 14/);
+    // The offending sentences travel with the finding, so a writer can judge it.
+    expect(reg?.evidence?.length).toBeGreaterThan(0);
+  });
+
+  it("accepts the SAME text in a chapter that always uses it", () => {
+    // This is the test that proves the rule is per-chapter rather than a global preference.
+    expect(checkDraft(SECOND, secondPersonDraft).filter((f) => f.kind === "register")).toEqual([]);
+  });
+
+  it("flags third person in a chapter that always addresses the reader", () => {
+    const f = checkDraft(SECOND, thirdPersonDraft).find((x) => x.kind === "register");
+    expect(f?.severity).toBe("error");
+    expect(f?.message).toMatch(/never does/);
+  });
+
+  it("says when the SHIPPED copy has no consistent register to check against", () => {
+    // `beliefs` is 9 of 14 — half-converted. Inventing a baseline there would be a guess.
+    const f = checkDraft(MIXED, secondPersonDraft).find((x) => x.kind === "register");
+    expect(f?.severity).toBe("warn");
+    expect(f?.message).toMatch(/inconsistent in the SHIPPED copy/);
+  });
+
+  it("flags sentences far outside the chapter's own band, and not inside it", () => {
+    const long = Array.from(
+      { length: 6 },
+      () =>
+        "The archetype experiences a slow and gradual unfolding of desire that depends on " +
+        "context, safety, emotional attunement, and the accumulated history of a relationship " +
+        "over many months and sometimes years of shared life together."
+    ).join(" ");
+    expect(checkDraft(THIRD, long).some((f) => f.kind === "sentence-length")).toBe(true);
+    expect(checkDraft(THIRD, thirdPersonDraft).some((f) => f.kind === "sentence-length")).toBe(
+      false
+    );
+  });
+
+  it("refuses an unknown chapter instead of inventing a baseline", () => {
+    const f = checkDraft("no_such_chapter", thirdPersonDraft);
+    expect(f[0]!.severity).toBe("error");
+    expect(f[0]!.message).toMatch(/nothing to compare against/);
+  });
+
+  it("reads HTML and plain text the same way", () => {
+    const html = `<p>${secondPersonDraft}</p>`;
+    expect(checkDraft(THIRD, html).some((f) => f.kind === "register")).toBe(true);
+  });
+});

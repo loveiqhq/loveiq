@@ -90,13 +90,23 @@ async function promptDocs(): Promise<PromptDoc[]> {
   return collapseToDocuments(rows);
 }
 
-/** The chapter skeleton, counted off what shipped rather than described from memory. */
+/**
+ * The voice, counted off what shipped rather than described from memory.
+ *
+ * Per chapter, deliberately. The corpus-wide figure hides the rule that actually matters:
+ * `insecurities` and `relationship_form` address the reader in all 14 shipped versions
+ * while `core_archetype` and a dozen others never do, so a global "write in third person"
+ * would be wrong for two chapters and a global average would be wrong for all of them.
+ */
 export function measuredVoice(): {
   chapters: number;
   archetypes: number;
   medianSentenceWords: number;
   secondPersonBlocks: number;
   totalBlocks: number;
+  thirdPersonChapters: string[];
+  secondPersonChapters: string[];
+  mixedChapters: string[];
 } {
   const chapters = Object.keys(archetypeContent);
   const lengths: number[] = [];
@@ -116,12 +126,31 @@ export function measuredVoice(): {
     }
   }
   lengths.sort((a, b) => a - b);
+
+  // Group the chapters by what their shipped versions actually do.
+  const third: string[] = [];
+  const second: string[] = [];
+  const mixed: string[] = [];
+  for (const chapter of chapters) {
+    const versions = Object.entries(archetypeContent[chapter] ?? {});
+    if (versions.length === 0) continue;
+    const withYou = versions.filter(([, html]) =>
+      /\byou\b|\byour\b/i.test(String(html).replace(/<[^>]+>/g, " "))
+    ).length;
+    if (withYou === 0) third.push(chapter);
+    else if (withYou === versions.length) second.push(chapter);
+    else mixed.push(chapter);
+  }
+
   return {
     chapters: chapters.length,
     archetypes: archetypes.size,
     medianSentenceWords: lengths[Math.floor(lengths.length / 2)] ?? 0,
     secondPersonBlocks: secondPerson,
     totalBlocks: blocks,
+    thirdPersonChapters: third,
+    secondPersonChapters: second,
+    mixedChapters: mixed,
   };
 }
 
@@ -138,19 +167,28 @@ export function buildSkillRows(stampedAt: string, prompts: PromptDoc[]): BrainRo
     "are live and edited, so read them rather than working from anything remembered:",
     promptLines,
     "",
-    "THE SKELETON IS FIXED, THE CONTENT IS NOT.",
-    `A chapter is one of ${v.chapters} chapters written ${v.archetypes} times, once per archetype.`,
-    "Measured on the shipped copy: every heading appears exactly once per archetype, in the",
-    "same order. So a new chapter is not a blank page — it is the existing skeleton for that",
-    "chapter, filled for a different reader. Read what shipped for another archetype before",
-    'writing: search with sources:["report"], every one of which is titled "as shipped".',
+    "A CHAPTER IS NOT A BLANK PAGE.",
+    `It is one of ${v.chapters} chapters written ${v.archetypes} times, once per archetype. Read what`,
+    'shipped for ANOTHER archetype of the same chapter first: search sources:["report"],',
+    'every one of which is titled "as shipped". Only `practices` has a fixed heading skeleton',
+    "repeated across all archetypes; 19 of the 24 chapters carry no headings at all, and in",
+    "four more the headings are archetype-specific content rather than structure. So match the",
+    "chapter you are extending, and do not assume a skeleton that is not there.",
     "",
-    "REGISTER.",
-    `Median sentence is ${v.medianSentenceWords} words — plain, not academic. Only`,
-    `${v.secondPersonBlocks} of ${v.totalBlocks} shipped blocks address the reader as "you";`,
-    'the dominant mode is third-person description of the archetype ("The Sensual Connector',
-    'experiences sexuality primarily as..."), which lets a reader recognise themselves without',
-    "being told what they feel. Follow the chapter you are extending, not a general preference.",
+    "REGISTER IS A PROPERTY OF THE CHAPTER, NOT A HOUSE PREFERENCE.",
+    "This is the rule most easily got wrong, and the corpus-wide average hides it. Counted",
+    "per chapter across all 14 shipped versions:",
+    `  - third person in EVERY version: ${v.thirdPersonChapters.join(", ")}`,
+    `  - second person in EVERY version: ${v.secondPersonChapters.join(", ")}`,
+    v.mixedChapters.length
+      ? `  - inconsistent in the shipped copy, so there is no baseline: ${v.mixedChapters.join(", ")}`
+      : "",
+    "A draft that is correct in one chapter is wrong in another. The team agreed on 2026-09-08",
+    'to describe the archetype rather than the reader ("The Sensual Connector experiences...",',
+    'not "You experience..."), which is where the third-person chapters come from.',
+    "",
+    "SENTENCE LENGTH also varies by chapter, from about 12 words to about 22. The corpus-wide",
+    "median is not a target; the chapter you are extending is.",
     "",
     "WHAT NOT TO MIX.",
     "Core motivations do not belong in the beliefs chapter. Real-world examples of sexual",

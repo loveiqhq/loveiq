@@ -68,12 +68,32 @@ describe("the chapter skill", () => {
     expect(v.secondPersonBlocks).toBeLessThan(v.totalBlocks);
   });
 
-  it("puts the measured figures in the body, not adjectives", () => {
-    const body = buildSkillRows("2026-09-15T00:00:00Z", prompts)[0]!.body;
+  it("names the register PER CHAPTER, because the corpus-wide average hides the rule", () => {
+    /**
+     * The skill used to say "only 121 of 336 blocks use you, so the dominant mode is third
+     * person". True on average and useless in practice: `insecurities` addresses the reader
+     * in all 14 shipped versions and `core_archetype` in none, so a writer following the
+     * average is wrong in both. Corrected 2026-09-16 to list the chapters.
+     */
+    const body = buildSkillRows("2026-09-16T00:00:00Z", prompts)[0]!.body;
     const v = measuredVoice();
     expect(body).toContain(`${v.chapters} chapters`);
-    expect(body).toContain(`${v.medianSentenceWords} words`);
-    expect(body).toContain(`${v.secondPersonBlocks} of ${v.totalBlocks}`);
+    expect(v.thirdPersonChapters.length).toBeGreaterThan(5);
+    expect(v.secondPersonChapters.length).toBeGreaterThan(0);
+    for (const c of [...v.thirdPersonChapters, ...v.secondPersonChapters]) {
+      expect(body, `${c} must be named in the skill`).toContain(c);
+    }
+  });
+
+  it("does not repeat the heading claim that was only ever true of one chapter", () => {
+    /**
+     * It said "every heading appears exactly once per archetype, in the same order",
+     * generalised from `practices`. Measured: 19 of 24 chapters have no headings at all, and
+     * four more have headings that are archetype-specific content.
+     */
+    const body = buildSkillRows("2026-09-16T00:00:00Z", prompts)[0]!.body;
+    expect(body).not.toMatch(/every heading appears exactly once per archetype/);
+    expect(body).toMatch(/only `?practices`? has a fixed heading skeleton/i);
   });
 
   it("POINTS AT the live prompt documents rather than copying them", () => {
@@ -87,7 +107,7 @@ describe("the chapter skill", () => {
     // An empty prompt list must not produce a skill that reads as though none exist.
     const body = buildSkillRows("2026-09-15T00:00:00Z", [])[0]!.body;
     expect(body).toMatch(/search Drive/i);
-    expect(body).toContain("THE SKELETON IS FIXED");
+    expect(body).toContain("A CHAPTER IS NOT A BLANK PAGE");
   });
 
   it("carries the rules a newcomer would otherwise have to be told twice", () => {
