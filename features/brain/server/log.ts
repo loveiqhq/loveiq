@@ -219,6 +219,15 @@ export async function recordToolCall(input: {
   args?: Record<string, unknown> | null;
   sourceCount?: number | null;
   topScore?: number | null;
+  /**
+   * The best CONTENT match, with recency and every other bonus stripped.
+   *
+   * Distinct from `topScore`, which is what the ranking sorts by. This is the figure the
+   * weak-match warning is judged against, so it is the only one that answers "could the
+   * corpus actually match this question" — and it was not being stored, which left 6,991
+   * logged calls unable to say which questions the corpus struggles with.
+   */
+  contentScore?: number | null;
   latencyMs: number;
   error?: string | null;
   /**
@@ -246,12 +255,22 @@ export async function recordToolCall(input: {
         question: input.question.replace(EMAIL_IN_TEXT, "[email]").slice(0, 4000),
         args: safeArgs(input.args),
         source_count: input.sourceCount ?? null,
-        // A finite check, not `?? null`: NaN and Infinity are not valid JSON and
-        // PostgREST rejects the whole row, which would lose the record entirely.
-        top_score:
-          typeof input.topScore === "number" && Number.isFinite(input.topScore)
-            ? input.topScore
-            : null,
+        /**
+         * Both scores go through `JSON.stringify`, which maps NaN and Infinity to `null`
+         * on its own -- so a non-finite value reaches the column as NULL and the row
+         * survives. This used to carry an explicit `Number.isFinite` check, justified by
+         * a comment claiming PostgREST would otherwise reject the whole insert. That
+         * cannot happen: PostgREST never sees the value, the serializer already replaced
+         * it. Mutation testing found the check could be deleted with the suite still
+         * green, because there was no defect for it to prevent.
+         *
+         * The behaviour it claimed to provide is real and is worth pinning, so the test
+         * that failed to kill the check now asserts the OUTCOME instead: a non-finite
+         * score stores as NULL and does not cost the record.
+         */
+        top_score: input.topScore ?? null,
+        content_score: input.contentScore ?? null,
+
         latency_ms: input.latencyMs,
         error: input.error ? input.error.slice(0, 500) : null,
         // Set on insert: unlike the Slack path there is no later PATCH to fill it.

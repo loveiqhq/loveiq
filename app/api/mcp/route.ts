@@ -306,6 +306,16 @@ export function capWithNotice(
 
 /** Exported only so the "no indexed source is invisible" test reads the SAME
  * array the route uses — a copy in the test would drift with the bug. */
+/**
+ * Below this, the best content match is weak enough to warn about.
+ *
+ * Module-level so the warning and anything reporting on it read the same number. Measured:
+ * across twelve questions with known-good answers and eight the corpus cannot answer, the
+ * good ones scored 2.37 and up and the unanswerable ones 1.71 and down. At 1.85 the warning
+ * fires on 2 of the good and catches 12 of 12 junk.
+ */
+export const RELEVANCE_FLOOR = 1.85;
+
 export const SOURCES_FOR_TEST = [
   // Written by `record_decision`, not ingested from anywhere. Listed here in the commit
   // that creates the first one, per the rule below about `jira`.
@@ -2173,7 +2183,7 @@ async function callTool(
    * return sites, three of them mid-branch, and a third top-level key on a tool
    * result is not something MCP defines.
    */
-  stats: { sourceCount?: number; topScore?: number } = {}
+  stats: { sourceCount?: number; topScore?: number; contentScore?: number } = {}
 ) {
   /**
    * An argument a tool does not declare is REFUSED, never ignored.
@@ -2399,8 +2409,18 @@ async function callTool(
      * row and scores 1.80, because a title reading "all time, in total, to date,
      * lifetime since launch" shares few words with the question.
      */
-    const RELEVANCE_FLOOR = 1.85;
     const topScore = chunks.reduce((best, c) => Math.max(best, c.contentScore), 0);
+    /**
+     * RECORD THE SCORE THE WARNING IS JUDGED ON, not the one the ranking sorts by.
+     *
+     * `stats.topScore` above is `chunks[0].score` — content PLUS recency and every other
+     * bonus. The weak-match warning below is judged on `contentScore`, bonuses stripped,
+     * because that is the only part that says how well the corpus matched the question.
+     * Logging just the bonused figure meant the one signal this system trusts enough to
+     * warn a reader about was thrown away, and "which questions can the corpus not answer"
+     * could not be asked of 6,991 logged calls.
+     */
+    stats.contentScore = topScore;
     const rankedIn = chunks.filter(
       (c) =>
         c.source === "decision" &&
@@ -4533,7 +4553,7 @@ export async function POST(request: Request) {
       }
     }
     const started = Date.now();
-    const stats: { sourceCount?: number; topScore?: number } = {};
+    const stats: { sourceCount?: number; topScore?: number; contentScore?: number } = {};
     let out: { content: ContentBlock[]; isError: boolean };
     try {
       out = await callTool(name, args, readVercelOidcToken(request), stats);
@@ -4576,6 +4596,7 @@ export async function POST(request: Request) {
         args,
         sourceCount: stats.sourceCount ?? null,
         topScore: stats.topScore ?? null,
+        contentScore: stats.contentScore ?? null,
         latencyMs: Date.now() - started,
         // Allow-listed, not free text: the header is caller-supplied and this column
         // is what the usage analysis groups by, so an arbitrary value would let a

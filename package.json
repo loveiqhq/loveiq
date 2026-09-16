@@ -62,7 +62,8 @@
     "voice:check": "tsx --env-file-if-exists=.env.local scripts/voice-check.ts",
     "brain:claims": "tsx --env-file-if-exists=.env.local scripts/check-mcp-claims.ts",
     "brain:drift": "tsx --env-file-if-exists=.env.local scripts/brain-mcp-drift.ts",
-    "replay:bench": "node scripts/replay-bench/score.mjs"
+    "replay:bench": "node scripts/replay-bench/score.mjs",
+    "brain:gaps": "tsx --env-file-if-exists=.env.local scripts/brain-gaps.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

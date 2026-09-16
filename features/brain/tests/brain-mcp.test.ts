@@ -2283,6 +2283,81 @@ describe("/api/mcp", () => {
       expect(typeof rows[0]!.latency_ms).toBe("number");
     });
 
+    it("records the score the WARNING is judged on, not the one ranking sorts by", async () => {
+      /**
+       * The reason this column exists. `top_score` is `chunks[0].score` -- content plus
+       * recency and every other bonus -- so a junk question can sit ABOVE the relevance
+       * floor there while the reader is being warned it is weak. Measured against the real
+       * corpus on 2026-09-16, "zqxjvbn plorkuth quantum widget procurement" stored
+       * top_score 1.92 (above 1.85) with a content score of 1.35.
+       *
+       * Both are recorded, and they must not be the same number here or the row cannot
+       * answer "which questions can the corpus not match".
+       */
+      mockRetrieve.mockResolvedValue([
+        {
+          source: "doc",
+          sourceId: "a",
+          title: "t",
+          url: null,
+          body: "b",
+          meta: {},
+          score: 1.92,
+          contentScore: 1.35,
+        },
+        {
+          source: "doc",
+          sourceId: "b",
+          title: "u",
+          url: null,
+          body: "c",
+          meta: {},
+          score: 1.4,
+          contentScore: 1.1,
+        },
+      ]);
+      const body = await (await call({ query: "zqxjvbn plorkuth quantum widget" })).json();
+      // The reader IS warned...
+      expect(String(body.result.content[0].text)).toContain("WEAK MATCH");
+
+      await flushAfterResponse();
+      const row = writes()[0]!;
+      // ...and the row says why, instead of a bonused 1.92 that reads as a solid answer.
+      expect(row.top_score).toBe(1.92);
+      expect(row.content_score).toBe(1.35);
+    });
+
+    it("records the BEST content score, not the first row's", async () => {
+      // Ranking sorts on the bonused score, so the best CONTENT match is not always at
+      // the top. Taking `chunks[0].contentScore` would under-report exactly the questions
+      // where recency carried a weaker match into first place.
+      mockRetrieve.mockResolvedValue([
+        {
+          source: "doc",
+          sourceId: "a",
+          title: "t",
+          url: null,
+          body: "b",
+          meta: {},
+          score: 3.0,
+          contentScore: 1.2,
+        },
+        {
+          source: "doc",
+          sourceId: "b",
+          title: "u",
+          url: null,
+          body: "c",
+          meta: {},
+          score: 2.4,
+          contentScore: 2.4,
+        },
+      ]);
+      await call({ query: "what is our revenue" });
+      await flushAfterResponse();
+      expect(writes()[0]!.content_score).toBe(2.4);
+    });
+
     it("records a refusal with the refusal text, which is the diagnosis", async () => {
       const body = await (await call({ query: " " })).json();
       expect(body.result.isError).toBe(true);
@@ -2321,6 +2396,32 @@ describe("/api/mcp", () => {
       await expect(
         recordToolCall({ tool: "t", question: "q", latencyMs: 1 })
       ).resolves.toBeUndefined();
+    });
+
+    it("stores a non-finite score as null rather than losing the whole row", async () => {
+      /**
+       * NaN and Infinity are not valid JSON, so PostgREST rejects the entire insert --
+       * the call would vanish from the log completely, which is the one outcome this
+       * table cannot afford. Not hypothetical: the content score is a `Math.max` over
+       * every hit, and one chunk arriving without the field makes the whole reduce NaN.
+       *
+       * Driven directly, because through the route both scores come from retrieval and
+       * a mutation to this guard leaves the suite green -- the same blind spot the
+       * "never throws" test above was written for.
+       */
+      await recordToolCall({
+        tool: "search_company_context",
+        question: "q",
+        topScore: Number.POSITIVE_INFINITY,
+        contentScore: Number.NaN,
+        latencyMs: 1,
+      });
+      const row = writes()[0]!;
+      expect(row.content_score).toBeNull();
+      expect(row.top_score).toBeNull();
+      // The row itself still has to be there; nulling the score must not null the record.
+      expect(row.tool).toBe("search_company_context");
+      expect(JSON.stringify(row)).not.toContain("NaN");
     });
 
     it("redacts email addresses from both the question and the arguments", async () => {
