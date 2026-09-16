@@ -30,9 +30,12 @@ import {
   type RetrieveShaping,
 } from "@features/brain/server/retrieve";
 import {
+  looksLikeDecisionBrowse,
   priorDecisions,
+  recentDecisions,
   recordDecision,
   renderPriorDecisions,
+  renderRecentDecisions,
 } from "@features/brain/server/decisions";
 import { postToSlack, SlackTargetError } from "@features/brain/server/act/slack";
 import { createNotionPage, NotionTargetError } from "@features/brain/server/act/notion";
@@ -2490,6 +2493,19 @@ async function callTool(
      */
     const notices = renderOpenNotices(await noticesPromise);
 
+    /**
+     * A QUESTION WITH NO TOPIC IS A BROWSE, and ranking cannot serve it.
+     *
+     * Sits beside the prior-decision block because it is the same shape -- prepended,
+     * dated, capped -- but fires on the opposite condition: that one interjects when a
+     * question PROPOSES something, this one when a question asks for a LIST. Only the
+     * untargeted form qualifies; "what did we decide about pricing" has a topic and goes
+     * down the ranked path untouched.
+     */
+    const browse = looksLikeDecisionBrowse(query)
+      ? renderRecentDecisions(await recentDecisions())
+      : "";
+
     const prior = renderPriorDecisions(
       rankedIn.length > 0
         ? rankedIn.map((c) => ({
@@ -2559,7 +2575,7 @@ async function callTool(
       : "";
 
     return textResult(
-      `${UNTRUSTED_SOURCES_PREAMBLE}\n\n${notices}${prior}${RESULT_GUIDE}${weakMatch}${shortOfLimit}${heldBack}\n\n${renderSources(chunks, { forAgent: true })}`,
+      `${UNTRUSTED_SOURCES_PREAMBLE}\n\n${notices}${browse}${prior}${RESULT_GUIDE}${weakMatch}${shortOfLimit}${heldBack}\n\n${renderSources(chunks, { forAgent: true })}`,
       false,
       "lower the limit, then fetch_document the ids that matter"
     );

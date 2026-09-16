@@ -301,6 +301,94 @@ export async function priorDecisions(question: string): Promise<PriorDecision[]>
   }
 }
 
+/**
+ * IS THIS QUESTION A BROWSE WEARING A SEARCH'S CLOTHES?
+ *
+ * "What did we decide recently" names no topic, so there is nothing for ranking to match
+ * on and the words themselves do the matching -- any record that happens to contain
+ * "decision" competes with the decisions. Measured 2026-09-16, that question returned
+ * three real decisions out of twelve hits, and the rest were a runbook, a marketing email,
+ * an August article plan and a June Slack day. "Recently" was not honoured at all: nothing
+ * in the ranking knows the word means anything.
+ *
+ * The honest answer to that question is a date-ordered list, which is a browse. Detected
+ * here rather than in the tool description, because a person asking in their own words
+ * never reads the tool description.
+ *
+ * TIGHT BY DESIGN. A decision word is necessary but not sufficient: the moment the question
+ * carries a TOPIC -- "what did we decide about pricing" -- ranking is the right tool and
+ * this must stay out of the way. Everything a bare decision question is made of is
+ * enumerated below, and anything left over after removing it is a topic.
+ */
+const DECISION_WORD = /\b(decide|decided|decision|decisions|agreed|agree|settled)\b/i;
+const BROWSE_FILLER =
+  /\b(what|whats|which|any|are|is|was|were|there|here|did|do|does|have|has|had|we|us|our|i|you|the|a|an|on|about|so|far|lately|recent|recently|latest|new|newly|newest|this|last|past|few|week|weeks|month|months|day|days|today|yesterday|since|then|already|just|been|be|get|got|anything|something|stuff|things?)\b/gi;
+
+export function looksLikeDecisionBrowse(question: string): boolean {
+  if (!DECISION_WORD.test(question)) return false;
+  const leftover = question
+    .replace(DECISION_WORD, " ")
+    .replace(BROWSE_FILLER, " ")
+    // Punctuation is not a topic. Without this a trailing "?" would read as one.
+    .replace(/[^a-z0-9]+/gi, " ")
+    .trim();
+  return leftover.length === 0;
+}
+
+/**
+ * The most recent decisions, by the date they were decided.
+ *
+ * Deliberately NOT a search: no query text, no embedding, no ranking. The question had no
+ * topic, so applying one would be inventing it.
+ */
+export async function recentDecisions(limit = 8): Promise<PriorDecision[]> {
+  try {
+    const res = await supabaseFetch(
+      `/rest/v1/brain_chunk?select=source_id,title,period_end,meta&source=eq.decision` +
+        `&order=period_end.desc&limit=${limit}`
+    );
+    if (!res.ok) return [];
+    const rows = (await res.json()) as Array<{
+      source_id: string;
+      title: string | null;
+      period_end: string | null;
+      meta: Record<string, unknown> | null;
+    }>;
+    return rows.map((r) => ({
+      sourceId: r.source_id,
+      title: r.title,
+      decidedOn: r.period_end,
+      mined: (r.meta as { origin?: unknown } | null)?.origin === "mined",
+    }));
+  } catch (err) {
+    // Same rule as the prior-decision lookup: an addition to a result that is already
+    // complete without it, so it is never allowed to cost the answer.
+    logger.warn({ err }, "brain: could not list recent decisions");
+    return [];
+  }
+}
+
+/** The browse block, prepended when the question asked for a list rather than a match. */
+export function renderRecentDecisions(found: PriorDecision[]): string {
+  if (found.length === 0) return "";
+  const lines = found
+    .map(
+      (d) =>
+        `  • ${d.decidedOn ?? "undated"}  ${String(d.title ?? "(untitled)").replace(/^Decision:\s*/, "")}` +
+        `${d.mined ? " — reconstructed from call notes, not written down by a person" : ""}` +
+        `\n    id: decision/${d.sourceId}`
+    )
+    .join("\n");
+  return (
+    `THE ${found.length} MOST RECENT DECISIONS, newest first — this question names no topic, ` +
+    `so it is a browse and not a search, and these are listed by date rather than matched ` +
+    `to wording:\n\n${lines}\n\nThese are the decisions WRITTEN DOWN as decisions; things ` +
+    `settled in a thread and never recorded will not be here. To go further back or narrow ` +
+    `by topic, use \`browse_context\` with sources=["decision"], or ask about the topic ` +
+    `itself. Ranked results for the wording follow.\n\n${"─".repeat(70)}\n\n`
+  );
+}
+
 /** The block prepended to a search result. Empty string when there is nothing to say. */
 export function renderPriorDecisions(found: PriorDecision[]): string {
   if (found.length === 0) return "";

@@ -404,6 +404,82 @@ describe("/api/mcp", () => {
         })
       );
 
+    /**
+     * A QUESTION WITH NO TOPIC IS A BROWSE. Measured 2026-09-16: "what did we decide
+     * recently" put three decisions in twelve hits and filled the rest with a runbook, a
+     * marketing email and a June Slack day, because the word did all the matching and
+     * "recently" was honoured by nothing. The unit test covers the detector; these cover
+     * the WIRING, which is the half that was missing from the route.
+     */
+    describe("the decision browse", () => {
+      const decisionRows = [
+        { source_id: "d1", title: "Decision: Ship the thing", period_end: "2026-09-15", meta: {} },
+        {
+          source_id: "d2",
+          title: "Decision: Do not ship the other",
+          period_end: "2026-09-14",
+          meta: {},
+        },
+      ];
+      const withDecisions = () =>
+        mockSupabaseFetch.mockImplementation(async (url: string) => ({
+          ok: true,
+          headers: new Headers(),
+          json: async () => (String(url).includes("source=eq.decision") ? decisionRows : []),
+        }));
+
+      it("prepends the recent decisions when the question names no topic", async () => {
+        withDecisions();
+        mockRetrieve.mockResolvedValue([chunk({})]);
+        const text = String(
+          (await (await call({ query: "what did we decide recently" })).json()).result.content[0]
+            .text
+        );
+        expect(text).toContain("MOST RECENT DECISIONS");
+        expect(text).toContain("Ship the thing");
+        // Dated and ordered, because "recently" is the part ranking could not honour.
+        expect(text).toContain("2026-09-15");
+        // And it must not pass itself off as complete.
+        expect(text).toContain("settled in a thread and never recorded");
+      });
+
+      it("leaves a question with a topic to the ranked search", async () => {
+        withDecisions();
+        mockRetrieve.mockResolvedValue([chunk({})]);
+        const text = String(
+          (await (await call({ query: "what did we decide about pricing" })).json()).result
+            .content[0].text
+        );
+        expect(text).not.toContain("MOST RECENT DECISIONS");
+      });
+
+      it("still answers when there are no decisions on record", async () => {
+        mockSupabaseFetch.mockResolvedValue({
+          ok: true,
+          headers: new Headers(),
+          json: async () => [],
+        });
+        mockRetrieve.mockResolvedValue([chunk({})]);
+        const text = String(
+          (await (await call({ query: "what did we decide recently" })).json()).result.content[0]
+            .text
+        );
+        // No empty heading over an empty list, and the search result survives.
+        expect(text).not.toContain("MOST RECENT DECISIONS");
+        expect(text).toContain("Board: something");
+      });
+
+      it("never lets the lookup cost the answer", async () => {
+        // Same rule as the prior-decision block: an addition to a result that is already
+        // complete without it. A dead read here must not turn a good search into an error.
+        mockSupabaseFetch.mockRejectedValue(new Error("brain_chunk is down"));
+        mockRetrieve.mockResolvedValue([chunk({})]);
+        const body = await (await call({ query: "what did we decide recently" })).json();
+        expect(body.result.isError).toBe(false);
+        expect(String(body.result.content[0].text)).toContain("Board: something");
+      });
+    });
+
     it("renders cited chunks", async () => {
       mockRetrieve.mockResolvedValue([
         {

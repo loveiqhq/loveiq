@@ -15,9 +15,10 @@ vi.mock("@shared/observability/slack", () => ({ notifySlack: vi.fn(async () => u
 
 import {
   buildDecisionRow,
+  looksLikeDecisionBrowse,
   priorDecisions,
-  recordDecision,
   proposesSomething,
+  recordDecision,
   renderPriorDecisions,
 } from "@features/brain/server/decisions";
 import { peopleIn, type Person } from "@features/brain/server/people";
@@ -350,5 +351,49 @@ describe("superseding is history a reader can see, not just metadata", () => {
     await expect(
       recordDecision({ decision: "still recorded", actor: "A Person", supersedes: "decision:x" })
     ).resolves.toMatchObject({ id: expect.stringContaining("decision:") });
+  });
+});
+
+describe("looksLikeDecisionBrowse", () => {
+  /**
+   * The measurement this exists for: on 2026-09-16 "what did we decide recently" returned
+   * three decisions out of twelve hits -- the rest a runbook, a marketing email, an August
+   * article plan and a June Slack day -- because the question names no topic, so the WORD
+   * "decision" did all the matching. "Recently" was not honoured at all.
+   */
+  it.each([
+    "what did we decide recently",
+    "what have we decided lately",
+    "recent decisions",
+    "what did we agree on this week",
+    "any decisions?",
+    "what did we decide",
+    "what was settled last month",
+    "latest decisions",
+  ])("treats %j as a browse", (q) => {
+    expect(looksLikeDecisionBrowse(q)).toBe(true);
+  });
+
+  /**
+   * The expensive direction. A question WITH a topic must go down the ranked path
+   * untouched -- ranking is the right tool the moment there is something to rank against,
+   * and hijacking it would answer a narrow question with a generic list.
+   */
+  it.each([
+    "what did we decide about pricing",
+    "what did we decide about the landing page",
+    "did we agree to index private slack channels",
+    "decisions about the report paywall",
+    "what did we decide on the chapter sequence",
+  ])("leaves %j to the ranked search", (q) => {
+    expect(looksLikeDecisionBrowse(q)).toBe(false);
+  });
+
+  it.each([
+    "what are our recent numbers",
+    "how many people signed up this month",
+    "what did we ship last week",
+  ])("does not fire on %j, which is not about decisions at all", (q) => {
+    expect(looksLikeDecisionBrowse(q)).toBe(false);
   });
 });
