@@ -3770,8 +3770,7 @@ input.autofill-dark:-internal-autofill-previewed {
 
 /* CookieYes consent banner — stop it trapping the page's primary CTA.
    The banner is position:fixed, pinned to the bottom, and 316px tall on every
-   phone measured (iPhone 15 Pro, iPhone SE, Pixel 7, Galaxy S9+ — the height
-   does not vary with viewport). On a 568-660px screen that is half the display.
+   phone measured. On a 568-660px screen that is half the display.
 
    On /survey that made the Continue button UNREACHABLE, not merely covered:
    the intro screen is one viewport tall, so it offered 12-236px of scroll while
@@ -3786,13 +3785,15 @@ input.autofill-dark:-internal-autofill-previewed {
    is to demand attention, and covering content on arrival is normal for a
    consent banner. Only the trap is the defect.
 
-   Applies solely while the banner is on screen — CookieYes adds `cky-hide`
-   (and display:none) once a choice is made, so this reverts to nothing for
-   every subsequent page view. 340px is the measured 316 plus headroom for a
-   banner that wraps to another line in a longer translation.
+   `--liq-consent-h` is published by shared/ui/ConsentBannerOffset.tsx, which is
+   already mounted globally and already measures this banner for the report's
+   sticky unlock bar. Reused rather than re-derived: it reads the REAL height
+   (292px on an iPhone 17 Pro Max, not the usual 316), it is 0 whenever no
+   banner covers the bottom edge, and it updates on dismiss — so this reverts to
+   nothing for every page view after the first.
 
    Guarded by scripts/probes/verify-consent-banner-clearance.mjs, which fails
    when this rule is removed. */
-body:has(.cky-consent-container:not(.cky-hide)) {
-  padding-bottom: 340px;
+body {
+  padding-bottom: var(--liq-consent-h, 0px);
 }
