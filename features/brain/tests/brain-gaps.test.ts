@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { rankGaps, type Gap } from "@/scripts/brain-gaps";
+import { canaryVerdict, rankGaps, type Gap } from "@/scripts/brain-gaps";
 
 /**
  * The gaps report's only real logic. It decides what counts as a question the corpus
@@ -43,5 +43,31 @@ describe("rankGaps", () => {
       1.85
     );
     expect(out.map((x) => x.question)).toEqual(["worse", "closer"]);
+  });
+});
+
+describe("canaryVerdict", () => {
+  it("passes a still corpus", () => {
+    expect(canaryVerdict(4.172, 4.172, 3.0)).toBeNull();
+  });
+
+  it("catches the corpus being rewritten mid-sweep", () => {
+    // The real failure: the 10:22 run scored every question low because `brain-fast` was
+    // writing. A canary checked only at the start would have passed and printed the lies.
+    expect(canaryVerdict(4.172, 2.1, 3.0)).toMatch(/below 3/);
+  });
+
+  it("catches a sweep that started inside a write", () => {
+    expect(canaryVerdict(2.05, 4.172, 3.0)).toMatch(/below 3/);
+  });
+
+  it("catches movement even when both ends clear the bar", () => {
+    // Retrieval is deterministic against a still corpus, so drift at all means it moved --
+    // and a write that only shifts scores a little still shifts the gap list.
+    expect(canaryVerdict(4.172, 3.9, 3.0)).toMatch(/moved from/);
+  });
+
+  it("tolerates float noise, which is not movement", () => {
+    expect(canaryVerdict(4.172, 4.1721, 3.0)).toBeNull();
   });
 });
