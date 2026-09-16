@@ -534,6 +534,9 @@ let confirmed = 0;
 
 let skipped = 0;
 let contradicted = 0;
+/** (session, criterion) pairs already probed in THIS run. */
+const probedThisRun = new Set();
+
 for (const [observationId, sessionId, scannerName, reasoning] of findings) {
   // The session id comes back from PostHog and is about to become a git branch
   // name, a Supabase filter and a HogQL literal. isSafeSessionId was imported
@@ -597,6 +600,29 @@ for (const [observationId, sessionId, scannerName, reasoning] of findings) {
     if (delivered) await markVerified(observationId);
     continue;
   }
+
+  /**
+   * One session, one criterion, one set of probe runs.
+   *
+   * The scanners emit an observation per CLAIM, not per session, so two claims
+   * about the same recording that both classify to the same criterion each
+   * spent the full probe budget. That happened on 2026-09-15: session
+   * 01a0a59b was probed twice for L1 in a single run. Probes drive real
+   * browsers on two engines and take minutes each, so this is wasted wall clock
+   * for an answer already computed — and it posts the same verdict twice into
+   * the same thread.
+   *
+   * The claim above is keyed by OBSERVATION id, deliberately: it exists to stop
+   * a later run re-answering a finding. It cannot collapse these, because the
+   * criterion is only known after classification.
+   */
+  const pairKey = `${sessionId}:${criterion.id}`;
+  if (probedThisRun.has(pairKey)) {
+    console.log(`DUP   ${sessionId}  ${criterion.id} — same criterion already probed this run`);
+    await markVerified(observationId);
+    continue;
+  }
+  probedThisRun.add(pairKey);
 
   if (CLASSIFY_ONLY) {
     console.log(
