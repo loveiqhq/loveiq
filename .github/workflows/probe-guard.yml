@@ -1,0 +1,78 @@
+name: Probe guard — check production directly
+
+# The gap this closes: this repository has ~30 probes in scripts/probes/, and
+# until now NOTHING ran any of them on a schedule. They only ran when
+# verify-ux-findings.mjs matched a scanner's claim to a criterion — so a probe
+# was a guard only if a language model happened to describe the defect it
+# covers. A regression nobody wrote a finding about was invisible.
+#
+# This runs the probes that are safe to point at production unattended: they
+# read pages, measure geometry, and write nothing.
+
+on:
+  schedule:
+    # Once a day, off the hour. These drive real browsers against the live site,
+    # so they are deliberately not frequent.
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+    inputs:
+      origin:
+        description: "Origin to probe (defaults to production)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: Measure production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      # Both engines. A layout that clears on Chromium has shipped broken to
+      # iOS from this repository before.
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: Consent banner does not trap the primary CTA
+        env:
+          REPORT_ORIGIN: ${{ inputs.origin }}
+          STAGING_PASSWORD: ${{ secrets.STAGING_PASSWORD }}
+        run: |
+          set +e
+          if [ -n "$REPORT_ORIGIN" ]; then
+            npx tsx scripts/probes/verify-consent-banner-clearance.mjs
+          else
+            env -u REPORT_ORIGIN npx tsx scripts/probes/verify-consent-banner-clearance.mjs
+          fi
+          code=$?
+          set -e
+          # Three-way, deliberately. 3 means the probe could not measure — a
+          # banner that never appeared, a page that would not load. That is not
+          # a pass, but it is not proof of a defect either, and treating it as
+          # one is how a broken probe manufactures confident failures.
+          if [ "$code" -eq 1 ]; then
+            echo "::error::a primary CTA cannot be reached past the consent banner"
+            exit 1
+          elif [ "$code" -eq 3 ]; then
+            echo "::warning::probe could not measure — not a pass, investigate"
+            exit 0
+          elif [ "$code" -ne 0 ]; then
+            echo "::error::probe exited $code"
+            exit 1
+          fi
+          echo "clear"

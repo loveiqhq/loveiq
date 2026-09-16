@@ -80,13 +80,17 @@ export const CRITERIA = [
     label: "primary CTA not immediately usable",
     match:
       /cta (is )?(not )?(visible|obvious)|call to action.*(hidden|below|off.screen)|had to scroll to (find|reach)|button (was )?(hidden|off.screen)/i,
-    probes: ["verify-cta-visibility.mjs"],
+    probes: ["verify-cta-visibility.mjs", "verify-consent-banner-clearance.mjs"],
   },
   {
     id: "C1",
     label: "clipped or covered content",
     match: /cover(ed|ing)?|overlap|clipped|cut off|hidden behind|obscur/i,
-    probes: ["verify-nav-heading-clearance.mjs", "verify-narrow-viewport.mjs"],
+    probes: [
+      "verify-nav-heading-clearance.mjs",
+      "verify-narrow-viewport.mjs",
+      "verify-consent-banner-clearance.mjs",
+    ],
   },
   {
     id: "D1",

@@ -3767,3 +3767,32 @@ input.autofill-dark:-internal-autofill-previewed {
   background-color: #1472eb !important;
   border-color: #1472eb !important;
 }
+
+/* CookieYes consent banner — stop it trapping the page's primary CTA.
+   The banner is position:fixed, pinned to the bottom, and 316px tall on every
+   phone measured (iPhone 15 Pro, iPhone SE, Pixel 7, Galaxy S9+ — the height
+   does not vary with viewport). On a 568-660px screen that is half the display.
+
+   On /survey that made the Continue button UNREACHABLE, not merely covered:
+   the intro screen is one viewport tall, so it offered 12-236px of scroll while
+   clearing the banner needed 57-281px. Three of four emulated phones could not
+   reach it at any scroll position; only Pixel 7, with an 839px viewport, could.
+   A first-time visitor could not start the survey without first noticing and
+   dismissing the banner — and a tap on the button did nothing at all.
+
+   Reserving the banner's height at the end of the document gives the page
+   enough scroll to bring the button out from under it. Deliberately NOT an
+   attempt to move or shrink the banner: it is a third-party element whose job
+   is to demand attention, and covering content on arrival is normal for a
+   consent banner. Only the trap is the defect.
+
+   Applies solely while the banner is on screen — CookieYes adds `cky-hide`
+   (and display:none) once a choice is made, so this reverts to nothing for
+   every subsequent page view. 340px is the measured 316 plus headroom for a
+   banner that wraps to another line in a longer translation.
+
+   Guarded by scripts/probes/verify-consent-banner-clearance.mjs, which fails
+   when this rule is removed. */
+body:has(.cky-consent-container:not(.cky-hide)) {
+  padding-bottom: 340px;
+}
