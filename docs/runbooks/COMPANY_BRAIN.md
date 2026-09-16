@@ -498,6 +498,25 @@ not go stale, and it refuses to run without `BRAIN_LLM_KEY` rather than reportin
 25 misleading failures. It is deliberately **not** part of `npm run check`: it
 makes real model and database calls.
 
+### Tools that answer a question rather than pass or fail
+
+```bash
+npm run brain:gaps                                # which real questions can the corpus NOT match?
+npm run voice:check -- --chapters                 # the house voice, per report chapter
+npm run voice:check -- <chapter> <file>           # does this draft match that chapter's voice?
+```
+
+`brain:gaps` re-scores the questions people have actually asked — read from the query
+log, so it reflects real use rather than imagination — and lists the ones the corpus
+cannot match. Read the list, not the percentage: gibberish and questions about things
+that never happened belong in it, and a low score on those is the relevance floor
+working. It exits 3 without a list if an ingest cron was writing while it ran, because
+a corpus mid-rewrite scores everything low and would otherwise produce a page of
+convincing gaps that are not gaps.
+
+If you probe the brain by hand, send `x-loveiq-mcp-client: battery` on the request.
+Without it your test queries log as somebody's real question and turn up here.
+
 ### Do the descriptions still tell the truth?
 
 `brain:drift` compares the deployed brief against this repo, so it cannot catch a claim
