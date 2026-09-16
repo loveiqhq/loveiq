@@ -4,7 +4,7 @@ import { supabaseFetch } from "@features/admin/server/supabase";
  * Is the brain answering, and are its answers empty?
  *
  * `brain_query` records every MCP tool call -- surface, tool, args, top_score,
- * source_count, latency, error -- and until now NOTHING READ IT. The columns were
+ * content_score, source_count, latency, error -- and until now NOTHING READ IT. The columns were
  * added so that "what does the team ask, which answers were empty, did a ranking
  * change help" could be answered, and that was solved on the write side only.
  *
@@ -23,7 +23,10 @@ import { supabaseFetch } from "@features/admin/server/supabase";
  *    the tool guidance says so in as many words, and measured on this corpus an
  *    unanswerable question outscored six of eight answerable ones. A fixed cutoff
  *    would report confident nonsense as healthy and hard-but-answered questions as
- *    broken.
+ *    broken. `content_score` is the better of the two -- it is what the weak-match
+ *    warning is judged against -- but it is not comparable across questions either,
+ *    so it is read by `npm run brain:gaps`, which compares a question against ITSELF
+ *    over time, and still not thresholded hourly here.
  *
  * What IS unambiguous: the corpus being unreachable, a tool throwing, and a search
  * that returned nothing at all.

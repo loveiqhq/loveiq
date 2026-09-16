@@ -345,7 +345,9 @@ export async function recentDecisions(limit = 8): Promise<PriorDecision[]> {
   try {
     const res = await supabaseFetch(
       `/rest/v1/brain_chunk?select=source_id,title,period_end,meta&source=eq.decision` +
-        `&order=period_end.desc&limit=${limit}`
+        // `source_id` breaks the tie so a day with three decisions lists them in a stable
+        // order; without it the same question can return the same three shuffled.
+        `&order=period_end.desc,source_id.desc&limit=${limit}`
     );
     if (!res.ok) return [];
     const rows = (await res.json()) as Array<{
