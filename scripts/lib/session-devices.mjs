@@ -36,9 +36,23 @@ function widthOf(name) {
   return devices[name]?.viewport?.width ?? null;
 }
 
+/**
+ * The OS decides first, then the width.
+ *
+ * Caught by running this over real sessions: one reported 747px on "Mac OS X",
+ * which is a desktop browser someone had narrowed, and an earlier version put it
+ * on an iPhone 17 Pro Max because the regex counted "mac" as iOS. A narrow
+ * desktop window is still a mouse with no touch events, and emulating a phone
+ * for it would reproduce a journey nobody had. iOS devices report "iOS" in
+ * `$os`, so nothing is lost by dropping "mac" from that test.
+ */
 function familyFor(os, width) {
+  const name = String(os ?? "");
+  if (/mac|windows|linux|cros|chrome os/i.test(name) && !/iphone|ipad/i.test(name)) {
+    return "desktop";
+  }
   if (width >= DESKTOP_MIN_WIDTH) return "desktop";
-  return /ios|iphone|ipad|mac/i.test(String(os ?? "")) ? "ios" : "android";
+  return /ios|iphone|ipad/i.test(name) ? "ios" : "android";
 }
 
 /** The known device closest in width to `width`, within `family`. */

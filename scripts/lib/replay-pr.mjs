@@ -24,27 +24,32 @@ import { isSafeSessionId } from "../../features/ux-review/server/review.ts";
  * criteria (E1's wider error class, S1's scroll heuristics, M1) still go to a
  * human in the thread.
  */
-export const AUTO_PR_CRITERIA = new Set(["C1", "D1", "B1"]);
+export const AUTO_PR_CRITERIA = new Set(["C1", "D1", "Z1", "B1"]);
 
 /**
- * Z1 WAS ON THIS LIST AND SHOULD NOT HAVE BEEN. Its only probe,
- * verify-input-zoom.mjs, has never measured anything: it returns exit 3,
- * "could not measure", on every device on every run since it was written, and
- * there is no MUTATE mode proving it could ever fail.
+ * Z1 IS BACK, AND THE REASON IT LEFT WAS WRONG.
  *
- * Nothing bad happened, because the three-way exit contract holds — only exit 1
- * opens a pull request, and the probe has never produced one. But a criterion
- * that cannot confirm anything has no business on the list that files PRs: the
- * day someone "fixes" that probe by collapsing 3 into 1, every Z1 observation
- * becomes a confident pull request against a measurement that never happened.
+ * It was removed on 2026-09-16 because `verify-input-zoom.mjs` returned exit 3,
+ * "could not measure", on every device on every run since it was written. That
+ * removal was right — a probe that has never measured anything must not file
+ * pull requests — but the diagnosis recorded here was not. It said the survey
+ * engine "derives its position from the ANSWERS, not from that index".
  *
- * Why it cannot measure, so the next person does not rediscover it: the probe
- * restores `currentIndex: 37` into localStorage to land on the country search,
- * but the engine derives its position from the ANSWERS, not from that index, so
- * an empty answer set puts it back at question one — where there is no text
- * input. Walking there instead takes 153 seconds per device and still did not
- * reach one in 44 questions. Reaching the country field needs answers
- * synthesised for the questions before it, which nobody has built yet.
+ * It does not. `useSurveyState.loadState()` reads `parsed.currentIndex || 0`
+ * with no clamp, and `SurveyEngine` renders a plain
+ * `orderedQuestions[currentIndex]`. Seeding the index has always worked.
+ *
+ * Two real causes, both now fixed:
+ *   1. The probe set only the localStorage answers blob. `loadInitialStep()`
+ *      also needs the sessionStorage STEP, or the engine never mounts and you
+ *      sit on the intro. Both halves already existed in the corpus, in two
+ *      different probes; scripts/lib/survey-nav.mjs puts them together.
+ *   2. It asked for question 37, which is "Which age range are you in?" — a
+ *      question with no text input. The country search is index 35.
+ *
+ * Verified 2026-09-17 against production: clean gives exit 0 with a real
+ * reading (16px, safe), MUTATE=1 gives exit 1, and a question with no input
+ * still gives 3. Membership is re-earned by measuring, never by argument.
  */
 
 const gitIn = (cwd, ...args) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();

@@ -317,6 +317,62 @@ export async function fetchSessionEvents(sessionId: string): Promise<Set<string>
  * because that is where layout breaks, and both because a foldable moves — the
  * Galaxy Z Flip in that finding ranged 262px to 715px within one recording.
  */
+/**
+ * What this reader actually tapped, from OUR events rather than the model's prose.
+ *
+ * `dead_click` and `rage_click` are captured by shared/observability/uxSignals.ts
+ * and carry `pathname` plus a real CSS `target_selector`. Two of the four
+ * scanners trigger on exactly these events, and until now nothing downstream
+ * read them: the verifier asked a language model what the reader touched, and
+ * the model's stated mechanism has been wrong in 5 of 5 measured findings at
+ * 0.8-1.0 confidence. A narration can be wrong about which control was pressed.
+ * An event that names the element either fired or it did not.
+ *
+ * The most-clicked pair in the session, because a reader hammering one dead
+ * control is the signal; a single stray tap on a paragraph is not.
+ */
+export async function sessionClickTarget(
+  sessionId: string
+): Promise<{ pathname: string; selector: string; clicks: number } | null> {
+  const key = process.env.POSTHOG_API_KEY;
+  if (!key || !isSafeSessionId(sessionId)) return null;
+  try {
+    const res = await fetchWithTimeout(`https://eu.posthog.com/api/projects/${PROJECT}/query/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: {
+          kind: "HogQLQuery",
+          query: `SELECT toString(properties.pathname),
+                         toString(properties.target_selector),
+                         count()
+                  FROM events
+                  WHERE timestamp > now() - INTERVAL 30 DAY
+                    AND properties.$session_id = '${sessionId}'
+                    AND event IN ('dead_click', 'rage_click')
+                    AND properties.target_selector IS NOT NULL
+                  GROUP BY 1, 2
+                  ORDER BY 3 DESC
+                  LIMIT 1`,
+        },
+      }),
+      timeoutMs: 8000,
+    });
+    if (!res.ok) return null;
+    const payload = (await res.json()) as { results?: unknown[][]; error?: unknown };
+    if (payload.error) return null;
+    const row = payload.results?.[0];
+    const pathname = String(row?.[0] ?? "");
+    const selector = String(row?.[1] ?? "");
+    // "unknown" is what selectorFor() emits when it cannot describe the target.
+    // Passing it to a probe would be passing a guess.
+    if (!pathname.startsWith("/") || !selector || selector === "unknown") return null;
+    return { pathname, selector, clicks: Number(row?.[2] ?? 0) };
+  } catch {
+    return null;
+  }
+}
+
 export async function sessionViewport(
   sessionId: string
 ): Promise<{ min: number; max: number; os: string } | null> {

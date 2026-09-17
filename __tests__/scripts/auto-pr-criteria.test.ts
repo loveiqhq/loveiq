@@ -93,9 +93,38 @@ describe("auto-PR criteria", () => {
     }
   });
 
-  it("keeps Z1 off the list until its probe can measure", () => {
-    // Guarding the specific regression, not just the general rule: verify-input-zoom
-    // returns exit 3 on every device because it never reaches a text input.
-    expect(AUTO_PR_CRITERIA.has("Z1")).toBe(false);
+  it("holds the session-appended probe to the same rules", () => {
+    // verify-dead-click-target.mjs is added by the SESSION, not listed under a
+    // criterion, so criteriaProbes() cannot see it — but it runs for D1, which
+    // may open a pull request. An ungoverned probe on a governed criterion is
+    // exactly the hole the two rules above exist to close.
+    const verifier = readFileSync(VERIFIER, "utf8");
+    const set = /CLICK_TARGET_CRITERIA = new Set\(\[([^\]]*)\]\)/.exec(verifier);
+    expect(set, "CLICK_TARGET_CRITERIA is gone or renamed").toBeTruthy();
+    const ids = set![1]
+      .split(",")
+      .map((x) => x.trim().replace(/^"|"$/g, ""))
+      .filter(Boolean);
+    expect(ids.length).toBeGreaterThan(0);
+
+    const appended = /probeFiles\.push\("([^"]+)"\)/.exec(verifier);
+    expect(appended, "nothing is appended any more").toBeTruthy();
+    const file = appended![1];
+
+    // Only enforced when it can actually reach a PR-opening criterion.
+    if (!ids.some((id) => AUTO_PR_CRITERIA.has(id))) return;
+    const src = readFileSync(resolve(process.cwd(), "scripts/probes", file), "utf8");
+    expect(src.includes("process.exit(3)"), `${file} has no exit 3`).toBe(true);
+    expect(src.includes("MUTATE"), `${file} has no MUTATE mode`).toBe(true);
+  });
+
+  it("lets Z1 back only because its probe now measures", () => {
+    // Z1 was removed on 2026-09-16 when verify-input-zoom returned exit 3 on
+    // every run, and restored on 2026-09-17 once it produced a real reading and
+    // a MUTATE failure. The two rules above are what actually police this — the
+    // point of naming it here is that membership is re-earned by measuring.
+    expect(AUTO_PR_CRITERIA.has("Z1")).toBe(true);
+    const zProbes = probes.get("Z1") ?? [];
+    expect(zProbes).toContain("verify-input-zoom.mjs");
   });
 });

@@ -1,8 +1,17 @@
 /**
  * iOS Safari zooms the page in when a focused <input> has font-size < 16px, and
- * it does NOT zoom back out. On the survey that means tapping the country
- * search at question 38 leaves the remaining 21 questions — including the email
- * step — magnified for the rest of the visit.
+ * it does NOT zoom back out. On the survey that would mean tapping the country
+ * search leaves every later question — including the email step — magnified for
+ * the rest of the visit.
+ *
+ * THE COUNTRY QUESTION IS INDEX 35, NOT 37. This defaulted to 37 from the day it
+ * was written, which is "Which age range are you in?" — a question with no text
+ * input at all. So the probe reported "no text input" on every run and exit 3
+ * forever, and Z1 was read as uncoverable. It was pointed at the wrong screen.
+ * Scanned every index 0-59 against production on 2026-09-17: exactly four
+ * questions have a text input — 0 name (22px), 35 country (16px), 36 postcode
+ * (22px), 55 email (22px). None is under 16px, so Z1 is genuinely clean today,
+ * and this probe can now say so instead of shrugging.
  *
  * Playwright's WebKit is not iOS Safari and may not implement the auto-zoom, so
  * a scale of 1.0 here is NOT proof the bug is absent. The font size is measured
@@ -10,9 +19,10 @@
  */
 import { webkit, chromium, devices } from "playwright";
 import { stagingCookies } from "./staging-cookie.mjs";
+import { seedQuestion } from "../lib/survey-nav.mjs";
 
 const ORIGIN = process.env.REPORT_ORIGIN ?? "https://www.loveiq.org";
-const IDX = Number(process.env.QUESTION_INDEX ?? 37);
+const IDX = Number(process.env.QUESTION_INDEX ?? 35);
 
 // A probe that always exits 0 cannot report a defect. verify-ux-findings.mjs
 // reads a non-zero exit as "reproduced in production", so until 2026-09-14 the
@@ -29,88 +39,33 @@ for (const name of (process.env.DEVICES ?? "iPhone 15 Pro,iPhone SE,Pixel 7").sp
   const ctx = await browser.newContext({ ...devices[name], locale: "en-US" });
   await ctx.addCookies(stagingCookies(ORIGIN)).catch(() => {});
   const page = await ctx.newPage();
-  // Restore straight to the country question rather than clicking 37 times.
-  await page.addInitScript((idx) => {
-    localStorage.setItem(
-      "loveiq-survey-answers",
-      JSON.stringify({
-        answers: {},
-        currentIndex: idx,
-        startedAt: new Date().toISOString(),
-        prefilled: [],
-      })
-    );
-  }, IDX);
+  /**
+   * The two-key jump, now in scripts/lib/survey-nav.mjs. This probe set only the
+   * localStorage answers blob, so `loadInitialStep()` returned 0, the engine
+   * never mounted, and sixty lines of "skip intro" and ARIA-consent clicking
+   * tried to compensate. The sessionStorage STEP is the half that was missing.
+   */
+  await seedQuestion(page, IDX);
 
   const notes = [];
   try {
     await page.goto(`${ORIGIN}/survey`, { waitUntil: "domcontentloaded", timeout: 90_000 });
-    await page.waitForTimeout(3000);
+    await page.waitForTimeout(2500);
     await page
       .locator(".cky-btn-accept")
       .first()
       .click({ timeout: 8000 })
       .catch(() => {});
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(800);
 
-    // Get past the multi-slide intro and the terms gate; only then does the
-    // engine mount and restore `currentIndex`.
-    for (let i = 0; i < 10; i += 1) {
-      const skip = page
-        .locator("button, a")
-        .filter({ hasText: /skip intro/i })
-        .first();
-      if (await skip.count()) {
-        await skip.click({ timeout: 6000 }).catch(() => {});
-        await page.waitForTimeout(1200);
-        continue;
-      }
-      // Tick every consent checkbox before trying to agree.
-      //
-      // The consent controls are role="checkbox" elements, NOT real inputs, so
-      // an 'input[type="checkbox"]' locator matched ZERO of them: nothing was
-      // ticked, "I agree" stayed disabled, and this probe sat on the consent
-      // screen until it gave up — reporting "no text input" on every run since
-      // it was written, while the review protocol called Z1 fully covered.
-      // .check() only works on real inputs; an ARIA checkbox needs a click and
-      // reports its state through aria-checked.
-      const boxes = page.locator('input[type="checkbox"], [role="checkbox"]');
-      const n = await boxes.count();
-      for (let b = 0; b < n; b += 1) {
-        const box = boxes.nth(b);
-        const isInput = await box.evaluate((el) => el.tagName === "INPUT").catch(() => false);
-        const checked = isInput
-          ? await box.isChecked().catch(() => true)
-          : (await box.getAttribute("aria-checked").catch(() => "true")) === "true";
-        if (checked) continue;
-        if (isInput) await box.check({ timeout: 4000 }).catch(() => {});
-        else await box.click({ timeout: 4000 }).catch(() => {});
-      }
-      const agree = page
-        .locator("button")
-        .filter({ hasText: /^i agree$/i })
-        .first();
-      if (await agree.count()) {
-        const on = await agree.isEnabled().catch(() => false);
-        if (on) {
-          await agree.click({ timeout: 6000 }).catch(() => {});
-          await page.waitForTimeout(1500);
-          continue;
-        }
-      }
-      const cont = page
-        .locator("button, a")
-        .filter({ hasText: /continue|start|begin|let.s go/i })
-        .filter({ hasNotText: /cookie|accept|reject|customise/i })
-        .first();
-      if (await cont.count()) {
-        await cont.click({ timeout: 6000 }).catch(() => {});
-        await page.waitForTimeout(1200);
-        continue;
-      }
-      break;
+    if (process.env.MUTATE === "1") {
+      // Shrink the input below the threshold iOS keys on. A clean page must
+      // FAIL here, or a pass from this probe means nothing.
+      await page.addStyleTag({
+        content: 'input[type="text"],input[type="search"]{font-size:13px !important}',
+      });
+      await page.waitForTimeout(200);
     }
-    await page.waitForTimeout(1200);
 
     const found = await page.evaluate(() => {
       const heading = document.querySelector("h1,h2,h3")?.textContent?.trim().slice(0, 40) ?? "";

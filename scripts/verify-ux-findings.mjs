@@ -30,6 +30,7 @@ import {
   contradiction,
   fetchSessionEvents,
   isSafeSessionId,
+  sessionClickTarget,
   sessionViewport,
 } from "../features/ux-review/server/review.ts";
 
@@ -37,6 +38,14 @@ import {
 // it can be tested without running everything else. See scripts/lib/replay-pr.mjs.
 import { AUTO_PR_CRITERIA, openReproductionPr } from "./lib/replay-pr.mjs";
 import { devicesForSession } from "./lib/session-devices.mjs";
+
+/**
+ * Criteria where "what did this reader tap" is the relevant evidence. Narrow on
+ * purpose: a dead control is exactly a D1, and an unusable call to action is
+ * exactly a V1. Adding it to a scroll or a layout criterion would be running a
+ * check that cannot speak to the claim.
+ */
+const CLICK_TARGET_CRITERIA = new Set(["D1", "V1"]);
 
 const DRY_RUN = process.argv.includes("--dry-run");
 /** Map findings to criteria and stop. Probes drive real browsers against
@@ -204,7 +213,7 @@ export function classify(reasoning) {
  * understand WIDTHS use them; the rest ignore the variable and run their own
  * device list, which is still better than refusing to check.
  */
-function runProbe(file, viewport) {
+function runProbe(file, viewport, clickTarget) {
   const widths = viewport
     ? [...new Set([viewport.min, viewport.max].filter((w) => w >= 200 && w <= 2000))].join(",")
     : "";
@@ -225,6 +234,12 @@ function runProbe(file, viewport) {
         REPORT_ORIGIN: "https://www.loveiq.org",
         ...(widths ? { WIDTHS: widths } : {}),
         ...(deviceList ? { DEVICES: deviceList } : {}),
+        // The page this reader was on and the element they hit, straight from
+        // our own dead_click/rage_click events. Absent for sessions that emitted
+        // neither, and a probe that needs them then exits 3 rather than guessing.
+        ...(clickTarget
+          ? { URL_PATH: clickTarget.pathname, TARGET_SELECTOR: clickTarget.selector }
+          : {}),
       },
     });
     return { file, passed: true, tail: out.trim().split("\n").slice(-3).join(" | ") };
@@ -643,7 +658,24 @@ for (const [observationId, sessionId, scannerName, reasoning] of findings) {
 
   // The reader's own screen, so "could not reproduce" means something.
   const viewport = await sessionViewport(sessionId);
-  const results = criterion.probes.map((f) => runProbe(f, viewport));
+  const clickTarget = await sessionClickTarget(sessionId);
+
+  /**
+   * One probe is added by the SESSION rather than by the criterion.
+   *
+   * `verify-dead-click-target.mjs` checks the element this reader actually
+   * tapped, so it is only meaningful when our own telemetry recorded one. It is
+   * appended rather than listed in CRITERIA because a criterion-level entry
+   * would run it for every finding, and for the sessions with no click event it
+   * would return "could not measure" — which would drag an otherwise clean
+   * verdict down to inconclusive on findings it has nothing to say about.
+   */
+  const probeFiles = [...criterion.probes];
+  if (clickTarget && CLICK_TARGET_CRITERIA.has(criterion.id)) {
+    probeFiles.push("verify-dead-click-target.mjs");
+  }
+
+  const results = probeFiles.map((f) => runProbe(f, viewport, clickTarget));
   const inconclusive = results.some((r) => r.inconclusive);
   // A probe that could not measure has NOT reproduced anything.
   const reproduced = results.some((r) => !r.passed && !r.inconclusive);

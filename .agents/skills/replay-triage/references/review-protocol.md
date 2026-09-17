@@ -91,6 +91,18 @@ eventually be believed without evidence. Listed rather than quietly omitted:
   claim. **A false all-clear is worse than no probe**, which is why the entry is
   deliberately empty until that audit becomes a gate.
 
+- **`Z1` is covered for real as of 2026-09-17**, having been named "the exemplar
+  row" while its probe had never measured anything. `verify-input-zoom.mjs`
+  returned exit 3 on every device on every run because it asked for question
+  **37** — "Which age range are you in?", which has no text input — and because
+  it set only the localStorage answers blob, so `loadInitialStep()` returned 0
+  and the engine never mounted. The country search is index **35**. Scanned
+  every index 0-59 against production: exactly four questions carry a text
+  input, at 22px (name), **16px** (country), 22px (postcode) and 22px (email).
+  None is under 16px, so **Z1 is genuinely clean today** — which is a result,
+  not an absence of one. The probe now proves it can fail: `MUTATE=1` drops the
+  input to 13px and it exits 1.
+
 - **`B1` is now covered** by `verify-consent-return.mjs` and
   `verify-no-survey-restart.mjs`, after it first fired for real on 2026-09-14.
 

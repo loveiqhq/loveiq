@@ -71,6 +71,17 @@ describe("devicesForSession", () => {
     expect(pick({ min: 99999, max: 99999, os: "iOS" })).toBeNull();
   });
 
+  it("keeps a narrowed desktop window on a desktop", () => {
+    // A real session reported 747px on "Mac OS X" — a browser someone had
+    // dragged narrow, not a phone. An earlier version sent it to an iPhone 17
+    // Pro Max, which would have reproduced a journey with touch events that
+    // reader never generated.
+    expect(pick({ min: 747, max: 1408, os: "Mac OS X" })).toBe("Desktop Chrome");
+    expect(pick({ min: 800, max: 800, os: "Windows" })).toBe("Desktop Chrome");
+    // ...but a genuine iOS device at the same width is still a phone.
+    expect(pick({ min: 430, max: 430, os: "iOS" })).toBe("iPhone 14 Pro Max");
+  });
+
   it("treats a wide viewport as a desktop whatever the OS says", () => {
     expect(pick({ min: 1440, max: 1440, os: "Mac OS X" })).toBe("Desktop Chrome");
     expect(pick({ min: 1440, max: 1440, os: "Android" })).toBe("Desktop Chrome");
