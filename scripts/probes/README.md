@@ -30,24 +30,31 @@ Two failures this encodes, both found on 2026-09-14:
 printed `PASS`/`FAIL` to stdout and exited 0 regardless. Four of them backed
 criteria in the verifier (`P1`, `Z1`, `S1`, `E1`), so those criteria were
 structurally incapable of producing a finding no matter what the product did.
-`P1`, `Z1` and `S1` now exit on their verdict and `E1` has a real probe;
-**`A1` still has none** — `audit-paywall-layout.mjs` measures the blur and
-always exits 0, so the verifier deliberately lists no probe for `A1` rather
-than print "passes in production now" off an audit that cannot fail.
+`P1`, `Z1` and `S1` now exit on their verdict, and every criterion has a probe —
+including `A1`, which `audit-paywall-layout.mjs` gained when it started exiting
+on legible text under an overlay rather than only printing the blur.
 
-**Most probes still exit 1 for "could not measure".** Only
-`verify-checkout-error-copy.mjs` and `verify-input-zoom.mjs` use exit 3 so far.
-Until the rest migrate, `verify-ux-findings.mjs` also treats output containing
-`INCONCLUSIVE` or `exception:` as inconclusive, because three of the offenders
-(`verify-narrow-viewport`, `verify-nav-heading-clearance`,
-`verify-consent-return`) back criteria that open a draft PR — a report that
-simply failed to load would otherwise have opened one claiming a reproduction.
+**All fifteen gate probes use the three-way contract** (verified 2026-09-17; it
+was two). Six of them exited `1` when they could not reach the site at all,
+which `verify-ux-findings.mjs` reads as "the defect reproduced" — so a timeout
+or a refused connection produced a finding about a page that never loaded, and
+two of the six backed criteria that open a draft PR. The stdout backstop does
+not cover it: a Playwright failure says `net::ERR_CONNECTION_REFUSED`, matching
+neither `INCONCLUSIVE` nor `exception:`.
+
+`scripts/verify-probe-falsifiability.mjs --contract-only` points every gate
+probe at `http://localhost:1` and requires exit 3 from each. A refused
+connection is instant, so the whole corpus checks in about five seconds, and
+`probe-guard.yml` runs it daily.
 
 **Inconclusive is not reproduced.** Collapsing 3 into 1 lets a broken probe
 manufacture a stream of confident findings — the exact failure the gate exists
-to prevent. `verify-input-zoom.mjs` had been landing on the consent screen and
-never measuring an input at all; had it exited 1, every `Z1` observation would
-have been "confirmed in production".
+to prevent. `verify-input-zoom.mjs` returned exit 3 on every device for its
+whole life: it asked for question **37**, the age question, which has no text
+input, and it set only the localStorage answers blob while `loadInitialStep()`
+also needs the sessionStorage step, so the engine never mounted. The country
+search is index **35**. Had it exited 1 instead, every `Z1` observation would
+have read "confirmed in production".
 
 An inconclusive run is still never a pass (rule 5 below). It just is not proof
 of a defect either.
@@ -62,35 +69,36 @@ of a defect either.
 
 ## What each probe pins
 
-| File                               | The defect it caught                                                                                                                          |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `verify-consent-fix.mjs`           | The cookie banner (316px, z-index 9999999) covered the bottom-pinned unlock CTA. 0/6 devices could tap it.                                    |
-| `verify-tap-targets.mjs`           | A 34px CTA, below the 44px minimum.                                                                                                           |
-| `verify-deadzone-opens.mjs`        | Locked blocks that swallowed taps instead of opening the paywall.                                                                             |
-| `verify-map-row.mjs`               | Tapping the Insight Map row's TEXT did nothing — 97 dead clicks. Taps the text well clear of the pill and requires the modal.                 |
-| `verify-practice-info.mjs`         | The practice-table ⓘ opened a note that could not be closed.                                                                                  |
-| `verify-paywall-closes.mjs`        | Whether ONE tap on ✕ dismisses the paywall and it stays dismissed.                                                                            |
-| `audit-paywall-layout.mjs`         | Measures the white gap before each paywall and any legible text under an overlay, on three viewports.                                         |
-| `verify-price-exposure-row.mjs`    | Asserts the durable `analytics_event` row, not the client event — the client half was never broken, so asserting on it would pass either way. |
-| `verify-survey-no-storage.mjs`     | Safari private mode / in-app WebViews that THROW on every storage access.                                                                     |
-| `verify-inapp-browsers.mjs`        | Instagram / Facebook WebViews.                                                                                                                |
-| `verify-reaches-bottom.mjs`        | Whether a finger can actually reach the end of the report.                                                                                    |
-| `device-matrix.mjs`                | The full locked-report → paywall → checkout walk across every phone.                                                                          |
-| `verify-checkout-error-copy.mjs`   | Whether a raw internal error string ever reaches a reader mid-checkout (E1).                                                                  |
-| `verify-consent-return.mjs`        | "Return to site" on the 18+ screen goes to the site, and keeps the answers (B1).                                                              |
-| `verify-narrow-viewport.mjs`       | Nothing overflows at 262–320px — the widths real foldables reported (C1).                                                                     |
-| `verify-nav-heading-clearance.mjs` | The fixed chapter bar never covers the report's first heading (C1).                                                                           |
-| `verify-no-survey-restart.mjs`     | A VALID report token never offers "take the survey" as the way forward (L1/B1).                                                               |
-| `verify-paywall-card-tap.mjs`      | Tapping the paywall card body — not just its button — opens pricing (D1).                                                                     |
-| `verify-locked-preview-tap.mjs`    | Tapping a blurred locked preview opens that chapter's paywall (D1).                                                                           |
-| `verify-input-zoom.mjs`            | iOS auto-zoom from an input under 16px (Z1).                                                                                                  |
-| `verify-featured-card.mjs`         | The featured card's body taps do something, clear of its inner link.                                                                          |
-| `verify-stage-carousel-swipe.mjs`  | A real finger drag moves the stage carousel.                                                                                                  |
-| `verify-country-class-live.mjs`    | The country input computes ≥16px under the real production stylesheet.                                                                        |
-| `audit-visual.mjs`                 | Overflow, unpainted images, scroll-locked overflow — an AUDIT, exits 0 always.                                                                |
-| `audit-paywall-layout.mjs`         | White gap before each paywall and legible text under the overlay — an AUDIT, exits 0 always.                                                  |
-| `console-audit.mjs`                | Console errors and failed requests, verbatim — an AUDIT, exits 0 always.                                                                      |
-| `console-audit.mjs`                | Every console error and failed request, unfiltered.                                                                                           |
+| File                                  | The defect it caught                                                                                                                          |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `verify-consent-fix.mjs`              | The cookie banner (316px, z-index 9999999) covered the bottom-pinned unlock CTA. 0/6 devices could tap it.                                    |
+| `verify-tap-targets.mjs`              | A 34px CTA, below the 44px minimum.                                                                                                           |
+| `verify-deadzone-opens.mjs`           | Locked blocks that swallowed taps instead of opening the paywall.                                                                             |
+| `verify-map-row.mjs`                  | Tapping the Insight Map row's TEXT did nothing — 97 dead clicks. Taps the text well clear of the pill and requires the modal.                 |
+| `verify-practice-info.mjs`            | The practice-table ⓘ opened a note that could not be closed.                                                                                  |
+| `verify-paywall-closes.mjs`           | Whether ONE tap on ✕ dismisses the paywall and it stays dismissed.                                                                            |
+| `audit-paywall-layout.mjs`            | White gap before each paywall, and legible text under an overlay meant to hide it (A1). Exits 0/1/3.                                          |
+| `verify-price-exposure-row.mjs`       | Asserts the durable `analytics_event` row, not the client event — the client half was never broken, so asserting on it would pass either way. |
+| `verify-survey-no-storage.mjs`        | Safari private mode / in-app WebViews that THROW on every storage access.                                                                     |
+| `verify-inapp-browsers.mjs`           | Instagram / Facebook WebViews.                                                                                                                |
+| `verify-reaches-bottom.mjs`           | Whether a finger can actually reach the end of the report.                                                                                    |
+| `device-matrix.mjs`                   | The full locked-report → paywall → checkout walk across every phone.                                                                          |
+| `verify-checkout-error-copy.mjs`      | Whether a raw internal error string ever reaches a reader mid-checkout (E1).                                                                  |
+| `verify-consent-return.mjs`           | "Return to site" on the 18+ screen goes to the site, and keeps the answers (B1).                                                              |
+| `verify-narrow-viewport.mjs`          | Nothing overflows at 262–320px — the widths real foldables reported (C1).                                                                     |
+| `verify-nav-heading-clearance.mjs`    | The fixed chapter bar never covers the report's first heading (C1).                                                                           |
+| `verify-no-survey-restart.mjs`        | A VALID report token never offers "take the survey" as the way forward (L1/B1).                                                               |
+| `verify-paywall-card-tap.mjs`         | Tapping the paywall card body — not just its button — opens pricing (D1).                                                                     |
+| `verify-locked-preview-tap.mjs`       | Tapping a blurred locked preview opens that chapter's paywall (D1).                                                                           |
+| `verify-input-zoom.mjs`               | iOS auto-zoom from an input under 16px (Z1).                                                                                                  |
+| `verify-featured-card.mjs`            | The featured card's body taps do something, clear of its inner link.                                                                          |
+| `verify-stage-carousel-swipe.mjs`     | A real finger drag moves the stage carousel.                                                                                                  |
+| `verify-country-class-live.mjs`       | The country input computes ≥16px under the real production stylesheet.                                                                        |
+| `audit-visual.mjs`                    | Overflow, unpainted images, scroll-locked overflow (M1). Exits 0/1/3 — no longer a print-only audit.                                          |
+| `console-audit.mjs`                   | Every console error and failed request, unfiltered. The one that really does always exit 0, which is why no criterion lists it.               |
+| `verify-consent-banner-clearance.mjs` | The 316px consent banner made the survey's Continue button unreachable at ANY scroll on 3 of 4 phones (V1/C1).                                |
+| `verify-dead-click-target.mjs`        | Whether the element this reader actually tapped is a dead control, read from the session's own `dead_click` event (D1/V1).                    |
+| `verify-cta-visibility.mjs`           | The primary CTA is in the first viewport, reachable by a real tap, and at least 44px (V1).                                                    |
 
 ## Lessons paid for already — don't relearn them
 

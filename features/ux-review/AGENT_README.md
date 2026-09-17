@@ -10,9 +10,11 @@ the team is told.
 - `server/scanners.ts` — the four scanner prompts, verbatim and in git, plus each
   scanner's id, trigger event, credit cap and pinned version. Pure data.
 - `server/review.ts` — reads observations (`fetchFindings`), refuses claims our
-  own events contradict (`contradiction`), builds the daily summary
-  (`fetchDailyStats`, `buildDigestMessage`), and reports prompt drift
-  (`detectDrift`).
+  own events contradict (`contradiction`), reads the reader's own screen and the
+  element they tapped (`sessionViewport`, `sessionClickTarget`), builds the daily
+  summary (`fetchDailyStats`, `buildDigestMessage`), and compares the live
+  scanners against the ones pinned in git (`fetchScannerDrift`,
+  `compareScanners`).
 
 **The one rule that shapes everything: a verdict is not a finding.**
 
