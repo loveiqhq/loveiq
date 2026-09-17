@@ -29,12 +29,59 @@ const finding = (over: Partial<UxFinding> = {}): UxFinding => ({
 
 afterEach(() => vi.unstubAllGlobals());
 
+const verified = (over: Record<string, number> = {}) => ({
+  reproduced: 0,
+  clear: 0,
+  inconclusive: 0,
+  gap: 0,
+  contradicted: 0,
+  duplicate: 0,
+  undelivered: 0,
+  total: 0,
+  ...over,
+});
+
 describe("buildDigestMessage", () => {
+  it("reports what the PROBES concluded, not only what the model flagged", () => {
+    // Until 2026-09-17 this message carried scanner flag counts and nothing
+    // else, so a reader could not tell a reproduced defect from a refuted
+    // guess — and the flags are the half we have measured to be unreliable.
+    const { blocks } = buildDigestMessage(
+      [{ scanner: "LoveIQ report UX", observed: 9, yes: 4 }],
+      verified({ reproduced: 1, clear: 2, inconclusive: 1, total: 4 })
+    );
+    const json = JSON.stringify(blocks);
+    expect(json).toContain("1 reproduced");
+    expect(json).toContain("2 could not be reproduced");
+    expect(json).toContain("1 could not be measured");
+  });
+
+  it("names the verdicts that reached nobody", () => {
+    // Two of eight verdicts were printed to a CI log and discarded because the
+    // session had no submission thread. Silence made that invisible.
+    const { blocks } = buildDigestMessage([], verified({ clear: 3, undelivered: 2, total: 3 }));
+    expect(JSON.stringify(blocks)).toContain("2 of those could not be delivered");
+  });
+
+  it("says the record could not be read rather than printing a quiet day", () => {
+    // A missing line and a clean day must not look the same.
+    const { blocks } = buildDigestMessage([], null);
+    expect(JSON.stringify(blocks)).toContain("could not read the verification record");
+  });
+
+  it("distinguishes an unreadable ledger from an empty one", () => {
+    const { blocks } = buildDigestMessage([], verified());
+    expect(JSON.stringify(blocks)).toContain("nothing reached the verifier");
+  });
+
   it("reports the ratio, not just the flags", () => {
-    const { text, blocks } = buildDigestMessage([
-      { scanner: "LoveIQ survey UX", observed: 12, yes: 2 },
-      { scanner: "LoveIQ report UX", observed: 8, yes: 2 },
-    ]);
+    const { text, blocks } = buildDigestMessage(
+      [
+        { scanner: "LoveIQ survey UX", observed: 12, yes: 2 },
+        { scanner: "LoveIQ report UX", observed: 8, yes: 2 },
+      ],
+      verified()
+    );
     expect(text).toContain("20 recordings reviewed, 4 flagged");
     expect(JSON.stringify(blocks)).toContain("LoveIQ survey UX — 12 reviewed, 2 flagged");
   });
@@ -42,20 +89,21 @@ describe("buildDigestMessage", () => {
   it("calls out a silent day instead of reporting all-clear", () => {
     // A broken scanner and a healthy product both produce zero findings. Saying
     // "no issues" for the first is how a dead detector goes unnoticed.
-    const { text } = buildDigestMessage([]);
+    const { text } = buildDigestMessage([], verified());
     expect(text).toMatch(/unusual/i);
     expect(text).not.toMatch(/no issues|all clear/i);
   });
 
   it("says a flag is not yet a finding", () => {
-    const { blocks } = buildDigestMessage([{ scanner: "s", observed: 1, yes: 1 }]);
+    const { blocks } = buildDigestMessage([{ scanner: "s", observed: 1, yes: 1 }], verified());
     expect(JSON.stringify(blocks)).toContain("reproduces it in a real browser");
   });
 
   it("escapes a scanner name renamed in the PostHog UI", () => {
-    const { blocks } = buildDigestMessage([
-      { scanner: "<script>alert(1)</script>", observed: 1, yes: 0 },
-    ]);
+    const { blocks } = buildDigestMessage(
+      [{ scanner: "<script>alert(1)</script>", observed: 1, yes: 0 }],
+      verified()
+    );
     expect(JSON.stringify(blocks)).not.toContain("<script>");
   });
 });

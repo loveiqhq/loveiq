@@ -224,12 +224,117 @@ export async function fetchDailyStats(): Promise<DailyStat[]> {
   }));
 }
 
+/** The six outcomes `ux_finding.outcome` may hold — mirrors the table's CHECK. */
+const OUTCOMES = [
+  "reproduced",
+  "clear",
+  "inconclusive",
+  "gap",
+  "contradicted",
+  "duplicate",
+] as const;
+type Outcome = (typeof OUTCOMES)[number];
+
+/** What the verifier concluded, over the same 24 hours the digest covers. */
+export interface VerificationStat {
+  reproduced: number;
+  clear: number;
+  inconclusive: number;
+  gap: number;
+  contradicted: number;
+  duplicate: number;
+  /** Verdicts that reached no human: the session had no submission thread. */
+  undelivered: number;
+  total: number;
+}
+
 /**
- * The digest message. Deliberately states the unverified count rather than
- * hiding it: a quiet day and a broken scanner look identical otherwise, and
- * that is how a dead detector goes unnoticed.
+ * Read the verification ledger for the digest.
+ *
+ * Counted in JS from at most a few dozen rows a day rather than through a
+ * PostgREST aggregate, because the row count is tiny and the aggregate syntax
+ * is version-dependent — not worth a dependency on the deployed PostgREST
+ * version for a number this small.
+ *
+ * Returns null when the ledger cannot be read, and the digest SAYS so. A
+ * missing line would be indistinguishable from a quiet day, which is the
+ * failure this whole feature exists to avoid.
  */
-export function buildDigestMessage(stats: readonly DailyStat[]): {
+export async function fetchVerificationStats(): Promise<VerificationStat | null> {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  try {
+    const res = await fetchWithTimeout(
+      `${url}/rest/v1/ux_finding?select=outcome,delivered&created_at=gte.${since}&limit=500`,
+      {
+        headers: { apikey: key, Authorization: `Bearer ${key}` },
+        timeoutMs: 8_000,
+      }
+    );
+    if (!res.ok) return null;
+    const rows = (await res.json()) as Array<{ outcome?: string; delivered?: boolean }>;
+    const tally: VerificationStat = {
+      reproduced: 0,
+      clear: 0,
+      inconclusive: 0,
+      gap: 0,
+      contradicted: 0,
+      duplicate: 0,
+      undelivered: 0,
+      total: rows.length,
+    };
+    for (const row of rows) {
+      // An explicit list, not `outcome in tally`: `in` walks the prototype
+      // chain, so an outcome of "constructor" or "toString" would pass the
+      // guard and turn a counter into NaN. The CHECK constraint makes that
+      // unreachable from our own writes, which is exactly why it would survive
+      // review — the list costs nothing and does not depend on that staying true.
+      if (OUTCOMES.includes(row.outcome as Outcome)) tally[row.outcome as Outcome] += 1;
+      if (row.delivered === false) tally.undelivered += 1;
+    }
+    return tally;
+  } catch {
+    return null;
+  }
+}
+
+/** One plain line of what the probes concluded — the digest's only non-model number. */
+function verificationLine(v: VerificationStat | null): string {
+  if (!v) return "*Checked by a probe:* could not read the verification record.";
+  if (v.total === 0) {
+    return "*Checked by a probe:* nothing reached the verifier in the last 24 hours.";
+  }
+  const parts = [
+    v.reproduced && `${v.reproduced} reproduced`,
+    v.clear && `${v.clear} could not be reproduced`,
+    v.inconclusive && `${v.inconclusive} could not be measured`,
+    v.gap && `${v.gap} with no probe yet`,
+    v.contradicted && `${v.contradicted} refused by our own events`,
+    v.duplicate && `${v.duplicate} already answered`,
+  ].filter(Boolean);
+  const undelivered = v.undelivered
+    ? `\n${v.undelivered} of those could not be delivered — no submission thread for that session.`
+    : "";
+  return `*Checked by a probe:* ${parts.join(" \u00b7 ")}.${undelivered}`;
+}
+
+/**
+ * The digest message.
+ *
+ * Two things it deliberately does NOT hide. An empty day is reported as
+ * unusual rather than as all-clear, because a broken scanner and a healthy
+ * product otherwise look identical. And it states what the VERIFIER concluded,
+ * not just how many recordings a model flagged — a flag is one AI judgement,
+ * and until 2026-09-17 this message reported only those, so a reader could not
+ * tell a reproduced defect from a refuted guess.
+ */
+export function buildDigestMessage(
+  stats: readonly DailyStat[],
+  verification: VerificationStat | null
+): {
   text: string;
   blocks: SlackBlock[];
 } {
@@ -247,9 +352,11 @@ export function buildDigestMessage(stats: readonly DailyStat[]): {
     header("👁 UX review — last 24 hours"),
     section(headline),
     ...(lines.length ? [section(lines.join("\n"))] : []),
+    section(verificationLine(verification)),
     context(
       "A flag is one AI judgment on one recording. It becomes a *finding* only when a probe " +
-        "reproduces it in a real browser — those are posted in the thread of the submission they belong to."
+        "reproduces it in a real browser. Those verdicts are posted in the thread of the submission " +
+        "they belong to when the session has one, and every verdict is recorded either way."
     ),
   ];
   return { text: `UX review — last 24 hours. ${headline}`, blocks };

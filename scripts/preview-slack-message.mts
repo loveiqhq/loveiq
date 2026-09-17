@@ -16,6 +16,7 @@
  *   npx tsx --env-file=.env.local scripts/preview-slack-message.mts --no-open
  *   npx tsx --env-file=.env.local scripts/preview-slack-message.mts --survey        # latest
  *   npx tsx --env-file=.env.local scripts/preview-slack-message.mts --survey=2078
+ *   npx tsx --env-file=.env.local scripts/preview-slack-message.mts --ux-review
  *
  * The image blocks point at NEXT_PUBLIC_SITE_URL, which is localhost in
  * .env.local, so the REAL chart PNGs render in the page — same renderer, same
@@ -39,6 +40,11 @@ import {
   fetchLandingStartFunnel,
 } from "../features/admin/server/conversion-digest";
 import { dayString, fetchFunnelCvrSparklines } from "../features/admin/server/digest-metrics";
+import {
+  buildDigestMessage as buildUxReviewDigest,
+  fetchDailyStats as fetchUxDailyStats,
+  fetchVerificationStats,
+} from "../features/ux-review/server/review";
 import {
   buildFrictionReport,
   surveyQuestionNames,
@@ -246,6 +252,47 @@ async function previewSurvey(arg: string): Promise<void> {
   }
 }
 
+/**
+ * The UX-review daily digest, against real production data.
+ *
+ * Two independent reads: PostHog for what the scanners flagged, and the
+ * `ux_finding` ledger for what the probes actually concluded. The second is
+ * the half that matters — the flags have been measured wrong about the
+ * mechanism in 5 of 5 cases, so a digest carrying only those is a confident
+ * number about nothing.
+ */
+async function previewUxReview(): Promise<void> {
+  console.log("reading scanner flags (PostHog) and probe outcomes (ux_finding)...");
+  const [stats, verification] = await Promise.all([fetchUxDailyStats(), fetchVerificationStats()]);
+  if (!verification) {
+    console.log(
+      "  NOTE: the ledger could not be read — the digest will say so, which is the point"
+    );
+  } else {
+    console.log(`  ${verification.total} verified finding(s) in the last 24h`);
+  }
+
+  const msg = buildUxReviewDigest(stats, verification);
+  const blocks = msg.blocks as Block[];
+  const out = join(OUT_DIR, "slack-preview-ux-review.html");
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(
+    out,
+    page(
+      "Slack preview — UX review daily digest",
+      msg.text,
+      blocks,
+      `ux-review digest &middot; rendered ${new Date().toISOString()}`
+    )
+  );
+  console.log(`wrote ${out}`);
+  if (!process.argv.includes("--no-open")) {
+    execFile("open", [out], (err) => {
+      if (err) console.log(`(could not open automatically: ${err.message})`);
+    });
+  }
+}
+
 function requireEnv(name: string): string {
   const v = process.env[name];
   if (!v) {
@@ -256,6 +303,10 @@ function requireEnv(name: string): string {
 }
 
 async function main(): Promise<void> {
+  if (process.argv.includes("--ux-review")) {
+    await previewUxReview();
+    return;
+  }
   const surveyArg = process.argv.find((a) => a.startsWith("--survey"));
   if (surveyArg) {
     await previewSurvey(surveyArg);
