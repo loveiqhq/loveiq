@@ -758,7 +758,21 @@ export async function ingestSlack(
     sweeping
   );
   // Only sweep a complete walk; a truncated one makes past days look deleted.
-  const swept = sweeping ? await sweepStale(SOURCE, stampedAt, written + touched) : 0;
+  const swept = sweeping
+    ? await sweepStale(SOURCE, stampedAt, written + touched, {
+        scopeKey: "channel",
+        /**
+         * Only the channels this run walked. `sweepStale` deletes everything
+         * older than the run stamp, and every slack row is re-touched every
+         * run, so a channel the bot is removed from goes stale and is deleted
+         * whole — 9 of the 10 channels here sit under the majority guard, which
+         * was the only thing standing in the way. Losing access is not the same
+         * as the history being deleted; removing a channel deliberately is what
+         * `purgeDenylistedChannels()` above is for.
+         */
+        walkedScopes: new Set(channels.map((c) => c.name).filter((n): n is string => Boolean(n))),
+      })
+    : 0;
 
   logger.info(
     { channels: channels.length, namesResolved: names.size, written, touched, complete },

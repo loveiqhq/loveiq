@@ -731,11 +731,43 @@ export async function sweepMissing(
   return deleted;
 }
 
+/**
+ * Build the PostgREST predicate that confines a sweep to the scopes a run
+ * walked. Verified against the live API: `meta->>channel=in.("hr","payments")`
+ * returns exactly those channels' rows.
+ */
+function scopeFilter(scopeKey: string, walked: ReadonlySet<string>): string {
+  const list = [...walked].map((v) => `"${v.replace(/"/g, '""')}"`).join(",");
+  return `&meta->>${encodeURIComponent(scopeKey)}=in.(${encodeURIComponent(list)})`;
+}
+
 export async function sweepStale(
   source: string,
   stampedAt: string,
-  wroteRows: number
+  wroteRows: number,
+  opts: { scopeKey?: string; walkedScopes?: ReadonlySet<string> } = {}
 ): Promise<number> {
+  /**
+   * Confine the whole sweep — counts AND delete — to the scopes this run
+   * walked.
+   *
+   * `sweepStale` deletes everything older than the run stamp, so a scope that
+   * stops being walked goes stale and is removed. Slack re-touches every row
+   * every run (all 562 carry the same `updated_at`), which means leaving a
+   * channel deletes it: 9 of its 10 channels sit under the majority guard, the
+   * only thing that was protecting them. Same failure as the Gmail mailbox
+   * sweep, reached through a timestamp instead of an id set.
+   *
+   * The counts take the same predicate as the DELETE on purpose. Filtering only
+   * the delete would leave the majority guard comparing a scoped deletion
+   * against an unscoped total, which reads as "a small minority" and waves
+   * through exactly the case it exists to refuse.
+   */
+  const scoped =
+    opts.scopeKey && opts.walkedScopes && opts.walkedScopes.size > 0
+      ? scopeFilter(opts.scopeKey, opts.walkedScopes)
+      : "";
+
   if (wroteRows <= 0) {
     logger.warn(
       { source },
@@ -749,8 +781,8 @@ export async function sweepStale(
   // A `wroteRows > 0` check closes only the empty case, and the partial case is
   // both likelier and nearly as damaging: a GA4 report truncated to 5 of 90 days
   // writes 5 chunks, clears the zero check, and the sweep removes the other 85.
-  const wouldDelete = await countChunks(source, stampedAt);
-  const total = await countChunks(source, null);
+  const wouldDelete = await countChunks(source, stampedAt, scoped);
+  const total = await countChunks(source, null, scoped);
   if (wouldDelete === null || total === null) {
     logger.warn(
       { source },
@@ -774,7 +806,7 @@ export async function sweepStale(
 
   try {
     const res = await supabaseFetch(
-      `/rest/v1/brain_chunk?source=eq.${encodeURIComponent(source)}&updated_at=lt.${encodeURIComponent(stampedAt)}`,
+      `/rest/v1/brain_chunk?source=eq.${encodeURIComponent(source)}&updated_at=lt.${encodeURIComponent(stampedAt)}${scoped}`,
       { method: "DELETE", headers: { Prefer: "return=representation" } }
     );
     if (!res.ok) {
@@ -800,11 +832,15 @@ export async function sweepStale(
  * with no warning and a healthy-looking exit 0. A failed DELETE is fatal here; a
  * failed safety check must not be "proceed".
  */
-async function countChunks(source: string, before: string | null): Promise<number | null> {
+async function countChunks(
+  source: string,
+  before: string | null,
+  extra = ""
+): Promise<number | null> {
   const filter = before ? `&updated_at=lt.${encodeURIComponent(before)}` : "";
   try {
     const res = await supabaseFetch(
-      `/rest/v1/brain_chunk?select=id&source=eq.${encodeURIComponent(source)}${filter}`,
+      `/rest/v1/brain_chunk?select=id&source=eq.${encodeURIComponent(source)}${filter}${extra}`,
       { headers: { Prefer: "count=exact", Range: "0-0" } }
     );
     if (!res.ok) return null;

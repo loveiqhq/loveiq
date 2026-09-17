@@ -103,3 +103,66 @@ describe("sweepStale — the guards that decide whether a source survives a bad 
     expect(deletes()).toHaveLength(0);
   });
 });
+
+/**
+ * A SCOPE THE RUN DID NOT WALK IS HISTORY HERE TOO.
+ *
+ * `sweepStale` reaches the same failure as the Gmail mailbox sweep by a
+ * different route: it deletes everything older than the run stamp, and slack
+ * re-touches every row every run, so a channel the bot is removed from goes
+ * stale and is deleted whole. Measured 2026-09-17: 9 of slack's 10 channels sit
+ * under the majority guard, which was the only thing standing in the way.
+ */
+describe("sweepStale — confined to the scopes a run walked", () => {
+  beforeEach(() => {
+    calls.length = 0;
+    rows = { stale: 0, total: 0 };
+    countable = true;
+  });
+
+  it("confines the DELETE to the walked scopes", async () => {
+    rows = { stale: 5, total: 100 };
+    await sweepStale("slack", STAMP, 20, {
+      scopeKey: "channel",
+      walkedScopes: new Set(["hr", "payments"]),
+    });
+
+    const del = deletes()[0]!.path;
+    expect(del).toContain("meta->>channel=in.");
+    expect(decodeURIComponent(del)).toContain('"hr"');
+    expect(decodeURIComponent(del)).toContain('"payments"');
+  });
+
+  it("asks the COUNTS the same scoped question as the delete", async () => {
+    // The trap: scope only the DELETE and the majority guard compares a scoped
+    // deletion against an unscoped total, reads it as a small minority, and
+    // waves through the exact case it exists to refuse.
+    rows = { stale: 5, total: 100 };
+    await sweepStale("slack", STAMP, 20, {
+      scopeKey: "channel",
+      walkedScopes: new Set(["hr"]),
+    });
+
+    const counts = calls.filter((c) => c.method === "GET");
+    expect(counts).toHaveLength(2);
+    for (const c of counts) expect(c.path).toContain("meta->>channel=in.");
+  });
+
+  it("changes nothing when the caller names no scopes", async () => {
+    rows = { stale: 5, total: 100 };
+    const swept = await sweepStale("slack", STAMP, 20);
+    expect(swept).toBe(5);
+    expect(deletes()[0]!.path).not.toContain("meta->>");
+  });
+
+  it("ignores an empty scope set rather than deleting nothing forever", async () => {
+    // `in.()` matches no row, so an empty set would silently disable the sweep.
+    rows = { stale: 5, total: 100 };
+    const swept = await sweepStale("slack", STAMP, 20, {
+      scopeKey: "channel",
+      walkedScopes: new Set(),
+    });
+    expect(swept).toBe(5);
+    expect(deletes()[0]!.path).not.toContain("meta->>");
+  });
+});
