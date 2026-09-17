@@ -146,8 +146,16 @@ describe("isProductionSite", () => {
    * one a fresh browser profile viewing a single page for ten seconds — an automated run,
    * recording into the project real customers are recorded in.
    *
-   * Only Clarity was affected, because it is the one tag deliberately not consent-gated;
-   * GA4 and Google Ads load their libraries only after consent, which CI never gives.
+   * GA4 WAS AFFECTED TOO, and an earlier version of this comment said it was not.
+   * Reasoning from the layout's own note — the analytics library loads only after consent,
+   * and CI never consents — gave a confident wrong answer. Measured instead, once the
+   * Google credential was working again: 587 `localhost` sessions in GA4 over fourteen
+   * days against 3,401 real ones, about 15% of the property. Consent defaults vary by
+   * region and a US-hosted runner is not the same as a refusing browser.
+   *
+   * The same measurement shows this fix closing it. On 2026-09-17 localhost sessions ran
+   * at 13:00, 14:00 and 15:00 and then stopped entirely, while production traffic carried
+   * on at 161, 66, 96, 59 and 46 an hour — and the corrected gate went live at 14:31.
    */
   it("is false for a CI build that bakes the production URL", () => {
     vi.stubEnv("NODE_ENV", "production");

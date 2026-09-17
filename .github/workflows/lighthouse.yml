@@ -35,16 +35,11 @@ jobs:
           # otherwise claims. `isProductionSite()` matches on the host allowlist, and off
           # Vercel there is no environment to contradict it — so this build served on
           # localhost loaded the real analytics tags. Only Microsoft Clarity actually
-          # recorded, because it is the one tag deliberately not consent-gated and CI never
-          # accepts the banner: 177 of 711 sessions over three days on 2026-09-17 were
-          # localhost, each a fresh browser viewing one page for ten seconds.
-          #
-          # The site URL is deliberately KEPT so canonical tags and OG images still look
-          # like production for the audit. Any value other than "production" works; the
-          # existing environment check does the rest, so no new flag was needed.
-          #
-          # Only this workflow needs it: it is the one CI job that serves the build in a
-          # browser. The others build and stop, so they cannot record anything.
+          # localhost. Microsoft Clarity recorded 177 of 711 sessions over three days that
+          # way, and GA4 recorded 587 over fourteen — measured after the fact, because
+          # reasoning that "CI never accepts the banner" produced a confident wrong answer
+          # about GA4. Consent defaults vary by region; a US-hosted runner is not a
+          # refusing browser.
           NEXT_PUBLIC_VERCEL_ENV: ci
           NEXT_PUBLIC_RECAPTCHA_SITE_KEY: dummy
 
