@@ -2265,31 +2265,70 @@ async function runRetrievalBattery(only: string | null): Promise<number> {
   const probes = only ? all.filter((p) => p.kind.includes(only) || p.q.includes(only)) : all;
   let failures = 0;
 
-  for (const p of probes) {
+  /**
+   * ONE RETRY ON FAILURE, AFTER A PAUSE — and it is not leniency, it is measurement.
+   *
+   * This battery runs against the LIVE corpus, which the ingest crons rewrite every
+   * fifteen minutes; a full run takes about two minutes, so overlapping a write is
+   * ordinary rather than rare. Measured across eight runs on 2026-09-17, EIGHT DIFFERENT
+   * probes failed, one at a time, never the same one twice, and every one of them passed
+   * when its query was run again seconds later. Three consecutive full runs gave 221, 222,
+   * 222. A number that moves like that is a sample, not a gate — and the danger is not the
+   * noise itself, it is that a reader learns to shrug at a red line.
+   *
+   * So a failure is re-run once, and the outcome is reported as one of THREE states rather
+   * than two. A probe that fails twice is FAIL. A probe that fails then passes is FLAKY —
+   * printed, counted separately, and never folded into the clean total, because a probe
+   * that only sometimes works is a real finding about either the corpus or the probe.
+   */
+  const run = async (
+    p: RetrievalProbe
+  ): Promise<{ hits: BrainChunk[]; issues: string[]; ms: number }> => {
     const started = Date.now();
-    let hits: BrainChunk[] = [];
-    let issues: string[] = [];
     try {
-      hits = await retrieve(p.q, p.limit ?? 12, p.opts ?? {});
-      issues = p.check(hits);
+      const hits = await retrieve(p.q, p.limit ?? 12, p.opts ?? {});
+      return { hits, issues: p.check(hits), ms: Date.now() - started };
     } catch (err) {
       // An outage must read as an outage, never as "the corpus has no such thing" —
       // the same distinction the MCP tool draws for callers.
-      issues = [`retrieval threw: ${err instanceof Error ? err.message : String(err)}`];
+      return {
+        hits: [],
+        issues: [`retrieval threw: ${err instanceof Error ? err.message : String(err)}`],
+        ms: Date.now() - started,
+      };
     }
-    const ms = Date.now() - started;
+  };
+
+  let flaky = 0;
+  for (const p of probes) {
+    let { hits, issues, ms } = await run(p);
+    let firstIssues: string[] = [];
+    if (issues.length) {
+      firstIssues = issues;
+      // Long enough to clear a chunk being rewritten, short enough that a fully broken
+      // battery does not take an extra four minutes to say so.
+      await new Promise((r) => setTimeout(r, 2_000));
+      ({ hits, issues, ms } = await run(p));
+    }
+
+    const state = issues.length ? "FAIL" : firstIssues.length ? "flaky" : "ok  ";
     if (issues.length) failures++;
+    else if (firstIssues.length) flaky++;
+
     console.log(
-      `\n${issues.length ? "FAIL" : "ok  "} [${p.kind}] ${JSON.stringify(p.q.slice(0, 62))}` +
+      `\n${state} [${p.kind}] ${JSON.stringify(p.q.slice(0, 62))}` +
         `${p.opts ? ` ${JSON.stringify(p.opts)}` : ""}`
     );
     console.log(`      ${hits.length} hits in ${ms}ms`);
     if (issues.length) for (const i of issues) console.log(`      ISSUE: ${i}`);
+    else if (firstIssues.length)
+      console.log(`      PASSED ON RETRY — first attempt said: ${firstIssues.join(" | ")}`);
     console.log("      " + (hits.slice(0, 3).map(describe).join("\n      ") || "(nothing)"));
   }
 
   console.log(
-    `\n=== retrieval: ${probes.length - failures}/${probes.length} clean, ${failures} flagged ===`
+    `\n=== retrieval: ${probes.length - failures - flaky}/${probes.length} clean, ${failures} flagged` +
+      `${flaky ? `, ${flaky} FLAKY (passed only on retry — not counted clean)` : ""} ===`
   );
   return failures;
 }
