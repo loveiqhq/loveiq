@@ -190,7 +190,9 @@ const V3Methodology: FC = () => {
         <p>
           This report is a <strong>psychometric approximation.</strong> It does not describe you in
           a fixed or absolute way, but highlights{" "}
-          <strong>tendencies, patterns, and possible directions of your personality and sexual identity.</strong>
+          <strong>
+            tendencies, patterns, and possible directions of your personality and sexual identity.
+          </strong>
         </p>
         <p>
           With that in mind, it&rsquo;s time to dive into your{" "}

@@ -238,12 +238,34 @@ jobs:
           #    single static literal <style> ("html,body{background:#fff}"),
           #    server-rendered so the dark body bg doesn't flash before the white
           #    glossary hydrates. Constant string, no interpolation/user input.
+          #  - features/report/ui/v1/sections/ — the 2026-09-13 revert (f2f6a149)
+          #    restored the pre-2.0 report to a NEW path. Same components, same
+          #    authored archetype HTML as features/report/ui/sections/ above,
+          #    which this check has always exempted; only the folder changed.
+          #    Checked before widening: those files render server-supplied
+          #    archetype content only, and nothing interpolates a user-supplied
+          #    value into any report HTML (the reader's name is a React text
+          #    child, which React escapes). Without the `v1/` hop this step
+          #    fails on every commit — it did from 8351369c.
+          #  - features/report/ui/v3/V3EndSummary.tsx — the ONE V3 component that
+          #    renders report prose. Named as a single file rather than exempting
+          #    features/report/ui/v3/, so the next V3 component that reaches for
+          #    dangerouslySetInnerHTML gets reviewed instead of inheriting this.
+          #    Checked, not assumed: the html is archetypeContent.core_archetype
+          #    (build-time prose generated from the source .docx), keyed by
+          #    `viewArchetype`, which ReportPage derives as either a member of the
+          #    server-built `unlockedArchetypes` Set or the server's primary
+          #    archetype — so the key can never be reader-supplied, and a Set
+          #    membership test cannot be walked onto Object.prototype the way a
+          #    bare object index can. The archetype name itself is rendered as a
+          #    React text child, which React escapes.
           if grep -r "dangerouslySetInnerHTML" app/ features/ shared/ --include="*.tsx" --include="*.jsx" \
               | grep -v "JSON\.stringify" \
               | grep -v "jsonLdString" \
               | grep -vE "white/LandingPageWhite\.tsx|white-v1/LandingPageWhiteV1\.tsx" \
               | grep -vE "app/glossary/(page|\[slug\]/page)\.tsx" \
-              | grep -vE "(components|features/report/ui)/(sections/|ReportPage\.tsx)"; then
+              | grep -vE "(components|features/report/ui)/(v1/)?(sections/|ReportPage\.tsx)" \
+              | grep -vE "features/report/ui/v3/V3EndSummary\.tsx"; then
             echo "⚠️  Found dangerouslySetInnerHTML usage - review for XSS risks"
             exit 1
           fi

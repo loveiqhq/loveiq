@@ -100,9 +100,7 @@ const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget }) 
         <div>
           <div className="rv3-chapter__body-inner">
             {children}
-            {feedbackWidget ? (
-              <div className="rv3-chapter__feedback">{feedbackWidget}</div>
-            ) : null}
+            {feedbackWidget ? <div className="rv3-chapter__feedback">{feedbackWidget}</div> : null}
           </div>
         </div>
       </div>

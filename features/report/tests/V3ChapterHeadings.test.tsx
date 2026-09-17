@@ -9,7 +9,6 @@ import AcceleratorsSection, {
 import V3Chapter from "@features/report/ui/v3/V3Chapter";
 import { REPORT_V3_CHAPTERS } from "@features/report/ui/v3/reportV3Nav";
 
-
 /**
  * V3 hides each section's own title heading with a depth-based CSS selector,
  * because the chapter button already carries the title and Figma's chapter body

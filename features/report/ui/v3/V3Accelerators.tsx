@@ -20,14 +20,28 @@ import { useRevealOnView } from "../hooks/useRevealOnView";
  */
 
 const CirclePlus: FC = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    aria-hidden="true"
+  >
     <circle cx="12" cy="12" r="10" />
     <path d="M8 12h8M12 8v8" />
   </svg>
 );
 
 const CircleMinus: FC = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    aria-hidden="true"
+  >
     <circle cx="12" cy="12" r="10" />
     <path d="M8 12h8" />
   </svg>

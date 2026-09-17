@@ -711,8 +711,6 @@
   }
 }
 
-
-
 /* ── Methodology + science deck — 10392:18465 / 10360:9879 ──────── */
 .rv3-method {
   padding-top: 29px;
@@ -1513,8 +1511,7 @@
 /* card/keeps — 10392:20020 */
 .rv3-keeps {
   background:
-    linear-gradient(180deg, rgba(46, 125, 91, 0.11) 0%, rgba(46, 125, 91, 0.03) 100%),
-    #fff;
+    linear-gradient(180deg, rgba(46, 125, 91, 0.11) 0%, rgba(46, 125, 91, 0.03) 100%), #fff;
   border: 1px solid rgba(46, 125, 91, 0.26);
   border-radius: 20px;
   box-shadow: 0 6px 14px -8px rgba(46, 125, 91, 0.34);

@@ -18,13 +18,29 @@ import { useEffect, useRef, useState, type FC } from "react";
  */
 
 const Tick: FC = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="3.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
     <path d="M20 6 9 17l-5-5" />
   </svg>
 );
 
 const ChevronUp: FC = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
     <path d="m18 15-6-6-6 6" />
   </svg>
 );
@@ -83,9 +99,7 @@ const V3Beliefs: FC<Props> = ({ loosen, keep }) => {
           <header className="rv3-beliefs__head">
             <div>
               <p className="rv3-beliefs__eyebrow">Beliefs that shut down desire</p>
-              <p className="rv3-beliefs__sub">
-                Keep scrolling to see what to replace these with.
-              </p>
+              <p className="rv3-beliefs__sub">Keep scrolling to see what to replace these with.</p>
             </div>
             <span className="rv3-beliefs__count">{rows.length}</span>
           </header>

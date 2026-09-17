@@ -60,8 +60,7 @@ describe("splitFinding", () => {
     let checked = 0;
     for (const key of archetypes) {
       const findings = (report2Copy as Record<string, Record<string, unknown>>)[key]?.findings as
-        | Record<string, string>
-        | undefined;
+        Record<string, string> | undefined;
       expect(findings, `${key} has no findings block`).toBeTruthy();
 
       for (const n of [1, 2, 3, 4, 5]) {

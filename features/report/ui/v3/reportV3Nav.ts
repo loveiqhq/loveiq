@@ -105,9 +105,7 @@ export interface ReportV3PartDivider {
  * `lead` renders upright, `accent` italic violet — the split is the designer's
  * and is NOT simply the last word ("Your " + "erotic engine").
  */
-export const REPORT_V3_PART_DIVIDER_BY_SECTION: Readonly<
-  Record<string, ReportV3PartDivider>
-> = {
+export const REPORT_V3_PART_DIVIDER_BY_SECTION: Readonly<Record<string, ReportV3PartDivider>> = {
   core_archetype: { part: "Part I", lead: "Your ", accent: "Constellation" },
   typical_arousal_accelerators_turn_ons_of_the_core_archetype: {
     part: "Part II",

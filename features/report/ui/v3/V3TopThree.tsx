@@ -43,11 +43,7 @@ const V3TopThree: FC<Props> = ({ percentages }) => {
           } as CSSProperties;
 
           return (
-            <li
-              key={name}
-              className={`rv3-top3__row ${idx === 0 ? "is-lead" : ""}`}
-              style={style}
-            >
+            <li key={name} className={`rv3-top3__row ${idx === 0 ? "is-lead" : ""}`} style={style}>
               <span className="rv3-top3__rank">{String(idx + 1).padStart(2, "0")}</span>
               <span className="rv3-top3__icon" aria-hidden="true">
                 <Icon />
