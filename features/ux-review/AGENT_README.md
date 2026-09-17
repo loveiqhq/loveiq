@@ -31,6 +31,34 @@ the viewport the session reported** — `scripts/verify-ux-findings.mjs`, every
 three hours in CI. `app/api/cron/ux-review/route.ts` collects and posts one
 summary a day; it cannot open a browser, so it publishes no findings.
 
+**What it concluded is written down.** `public.ux_finding`, one row per
+observation, written by the verifier at every terminal path — contradicted, gap,
+duplicate, reproduced, clear, inconclusive. It carries the probe's own words, the
+devices actually driven, and the page and element from the session's own
+`dead_click` event. Before it, a verdict existed only as a Slack thread reply,
+and a session with no thread (2 of 8 measured) had its verdict printed to a CI
+log and discarded — those being the readers who never submitted the survey.
+
+It is what makes the questions answerable from our own data:
+
+```sql
+-- how often does a claim actually reproduce, by criterion?
+SELECT criterion, outcome, count(*) FROM ux_finding GROUP BY 1, 2 ORDER BY 1, 3 DESC;
+
+-- does confidence predict anything? (0.8-1.0 on both verdicts so far, but that
+-- is seven fixtures, not a population)
+SELECT outcome, round(avg(confidence)::numeric, 3), count(*) FROM ux_finding
+WHERE confidence IS NOT NULL GROUP BY 1;
+
+-- verdicts that reached nobody, and which criteria keep arriving uncheckable
+SELECT count(*) FILTER (WHERE NOT delivered) AS undelivered,
+       count(*) FILTER (WHERE outcome = 'gap') AS no_probe FROM ux_finding;
+```
+
+`human_label` is deliberately null until someone says: a merged reproduction PR
+means the claim was real, a closed one means it was not, and that is ground truth
+nobody has to curate.
+
 **Belongs:** scanner prompts and their pinned versions, reading observations,
 refuting them against our telemetry, the digest.
 
