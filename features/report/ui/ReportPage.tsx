@@ -2466,6 +2466,26 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   };
 
   const closePricingModal = useCallback(() => {
+    /**
+     * Cancel the scroll teaser as well, or dismissing the modal does not stick.
+     *
+     * The teaser schedules a 1.6s timer and, when it fires, opens the modal if
+     * one is not already open. A reader who arrives with a ladder discount has
+     * the modal auto-opened on mount, scrolling then reaches the paywall and
+     * arms that timer underneath it, and closing the modal inside the window
+     * leaves the timer to throw it straight back — the reader dismisses it and
+     * it reappears a second and a half later.
+     *
+     * 05725c7f removed the forced paywall precisely so the modal is always
+     * dismissible; a pending timer quietly restored it for one case. Found via
+     * an intermittently failing test, which had been treated as a flake: it
+     * only failed when the run was slow enough for the timer to land inside the
+     * assertion, so the test was right and the diagnosis was wrong.
+     */
+    if (scrollTeaserTimerRef.current) {
+      clearTimeout(scrollTeaserTimerRef.current);
+      scrollTeaserTimerRef.current = null;
+    }
     setIsPricingModalOpen(false);
     setPricingTargetArchetype(null);
     setPricingVariant("default");

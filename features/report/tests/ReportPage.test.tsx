@@ -882,5 +882,40 @@ describe("ReportPage", () => {
       // And the report underneath is readable rather than walled off.
       expect(container.querySelector(".report-page")).not.toBeNull();
     });
+
+    it("stays dismissed once closed, even after the scroll teaser's timer lands", async () => {
+      /**
+       * This is the assertion the test above was making by accident.
+       *
+       * The scroll teaser arms a 1.6s timer and, when it fires, opens the modal
+       * if one is not already open. A reader arriving with a ladder discount
+       * has the modal auto-opened on mount, scrolling arms that timer
+       * underneath it, and closing inside the window let the timer throw the
+       * modal straight back — dismissed, then back a second and a half later.
+       *
+       * The test above only caught it when the run was slow enough for the
+       * timer to land inside its `waitFor`, which is why it read as a flake for
+       * days. Waiting PAST the timer makes it deterministic in both directions:
+       * it fails on the unfixed component every time, and it cannot pass by
+       * being quick.
+       */
+      const user = userEvent.setup();
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      render(<ReportPage />);
+
+      await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+      await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+      // Real time, not fake: the component owns the timer and the point is that
+      // it never fires. 1.6s is the delay; 2.2s clears it with margin.
+      await new Promise((resolve) => setTimeout(resolve, 2200));
+
+      expect(
+        screen.queryByRole("dialog"),
+        "the pricing modal reopened itself after the reader dismissed it"
+      ).toBeNull();
+    });
   });
 });
