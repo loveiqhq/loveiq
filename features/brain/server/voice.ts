@@ -50,6 +50,38 @@ export interface VoiceFinding {
 
 const SECOND_PERSON = /\b(you|your|yours|yourself)\b/i;
 
+/**
+ * QUOTED "YOU" IS NOT SECOND PERSON, and counting it made three of this checker's seven
+ * findings wrong.
+ *
+ * The shipped copy quotes the things people say to each other, and those quotes contain
+ * "you" while the prose around them is firmly third person:
+ *
+ *   playful pursuit and "catch me if you can" energy
+ *   they avoid explicit "tell me what you want" pressure
+ *   hints, passive signals, or "you should just know"
+ *
+ * Every one was reported as a register break. Anyone acting on them would have rewritten
+ * correct writing — which is worse than not flagging it, because the tool spends its
+ * credibility to make the copy wrong.
+ *
+ * Handles both straight and curly pairs; an unterminated quote is left alone rather than
+ * swallowing the rest of the block.
+ *
+ * WHAT IT STILL CANNOT SEE: an idiom used WITHOUT quotes. The Spark Seeker power block
+ * reads "playful pursuit and catch me if you can energy" with no quotation marks in the
+ * source, and nothing short of knowing the idiom separates that from addressing the
+ * reader. It is left flagged on purpose — an idiom list would be arbitrary and would rot,
+ * and the sentence is a genuine copy nit anyway: unquoted and unhyphenated, it reads
+ * wrong. A reader spends two seconds dismissing it, which is the right price.
+ */
+export function withoutQuotedSpans(text: string): string {
+  return text
+    .replace(/\u201C[^\u201D]*\u201D/g, " ")
+    .replace(/"[^"]*"/g, " ")
+    .replace(/\u2018[^\u2019]*\u2019/g, " ");
+}
+
 function sentences(text: string): string[] {
   return text
     .split(/(?<=[.!?])\s+/)
@@ -90,7 +122,7 @@ export function chapterBaseline(chapter: string): VoiceBaseline | null {
   for (const a of archetypes) {
     const html = String(byArchetype[a] ?? "");
     const text = htmlToText(html);
-    if (SECOND_PERSON.test(text)) secondPersonVersions += 1;
+    if (SECOND_PERSON.test(withoutQuotedSpans(text))) secondPersonVersions += 1;
     for (const s of sentences(text)) lengths.push(s.split(/\s+/).filter(Boolean).length);
     const hs = headings(html);
     if (hs.length) {
@@ -124,6 +156,31 @@ export interface RegisterOutlier {
   archetypes: string[];
   majority: Register;
   total: number;
+  /**
+   * The actual sentences that break the register, per archetype.
+   *
+   * Naming the BLOCK turned "the copy is inconsistent" into a task; naming the SENTENCE
+   * turns the task into an edit. Without this, acting on a finding means reading a
+   * four-hundred-word block looking for one stray "you" — which is why all seven findings
+   * from 2026-09-16 were still sitting there untouched a day later.
+   */
+  offendingSentences: Record<string, string[]>;
+}
+
+/**
+ * The sentences responsible for a block being on the minority side.
+ *
+ * For a third-person majority these are the sentences containing second person. For a
+ * SECOND-person majority the minority blocks are the ones with no second person at all, so
+ * there is no offending sentence to point at — the whole block is the finding, and an empty
+ * list says that honestly rather than inventing one.
+ */
+export function offendingSentences(text: string, majority: Register): string[] {
+  if (majority !== "third") return [];
+  return htmlToText(text)
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && SECOND_PERSON.test(withoutQuotedSpans(s)));
 }
 
 /**
@@ -140,17 +197,21 @@ export function registerOutliers(maxOutliers = 2): RegisterOutlier[] {
     if (!byArchetype) continue;
     const archetypes = Object.keys(byArchetype);
     const withYou = archetypes.filter((a) =>
-      SECOND_PERSON.test(htmlToText(String(byArchetype[a])))
+      SECOND_PERSON.test(withoutQuotedSpans(htmlToText(String(byArchetype[a]))))
     );
     if (withYou.length === 0 || withYou.length === archetypes.length) continue;
     const minorityIsSecond = withYou.length <= archetypes.length / 2;
     const minority = minorityIsSecond ? withYou : archetypes.filter((a) => !withYou.includes(a));
     if (minority.length > maxOutliers) continue;
+    const majority: Register = minorityIsSecond ? "third" : "second";
     out.push({
       chapter,
       archetypes: minority,
-      majority: minorityIsSecond ? "third" : "second",
+      majority,
       total: archetypes.length,
+      offendingSentences: Object.fromEntries(
+        minority.map((a) => [a, offendingSentences(String(byArchetype[a]), majority)])
+      ),
     });
   }
   return out;

@@ -66,7 +66,17 @@ async function main() {
       console.log(
         `${o.chapter}: ${o.archetypes.length} of ${o.total} break the chapter's ${o.majority}-person register`
       );
-      for (const arch of o.archetypes) console.log(`    ${arch}`);
+      for (const arch of o.archetypes) {
+        console.log(`    ${arch}`);
+        // The sentence, not just the block: this is the difference between a finding and
+        // an edit somebody can make in a minute.
+        for (const sentence of o.offendingSentences[arch] ?? [])
+          console.log(
+            `        "${sentence.length > 150 ? sentence.slice(0, 150) + "…" : sentence}"`
+          );
+        if ((o.offendingSentences[arch] ?? []).length === 0 && o.majority === "second")
+          console.log(`        (no second person anywhere — the whole block is third person)`);
+      }
     }
     console.log(
       found.length === 0

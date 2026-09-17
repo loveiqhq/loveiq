@@ -4,11 +4,24 @@ import {
   chapterBaseline,
   checkDraft,
   registerOutliers,
+  withoutQuotedSpans,
 } from "@features/brain/server/voice";
+// The regex is private; re-declared here so the test asserts the same shape the module uses.
+const SECOND_PERSON_FOR_TEST = /\b(you|your|yours|yourself)\b/i;
 
 const THIRD = "core_archetype";
 const SECOND = "insecurities";
-const MIXED = "beliefs";
+/**
+ * A chapter the shipped copy genuinely has not settled: `love_language` is 11 of 14
+ * second person.
+ *
+ * This was `beliefs` — "9 of 14, half-converted" — until the checker stopped counting
+ * quoted "you" on 2026-09-17. All nine of its breaks were reported speech, and the chapter
+ * turned out to be 0 of 14: cleanly third person all along. Worth keeping in the comment,
+ * because it is the same trap this fixture exists to guard: a baseline inferred from a
+ * miscount is a guess dressed as a measurement.
+ */
+const MIXED = "love_language";
 
 const secondPersonDraft =
   "You often find that your desire builds slowly. Your partner may notice that you need time. " +
@@ -131,7 +144,7 @@ describe("checkDraft", () => {
   });
 
   it("says when the SHIPPED copy has no consistent register to check against", () => {
-    // `beliefs` is 9 of 14 — half-converted. Inventing a baseline there would be a guess.
+    // 11 of 14 is a real unresolved split. Inventing a baseline there would be a guess.
     const f = checkDraft(MIXED, secondPersonDraft).find((x) => x.kind === "register");
     expect(f?.severity).toBe("warn");
     expect(f?.message).toMatch(/inconsistent in the SHIPPED copy/);
@@ -160,5 +173,40 @@ describe("checkDraft", () => {
   it("reads HTML and plain text the same way", () => {
     const html = `<p>${secondPersonDraft}</p>`;
     expect(checkDraft(THIRD, html).some((f) => f.kind === "register")).toBe(true);
+  });
+});
+
+describe("withoutQuotedSpans", () => {
+  /**
+   * Three of this checker's seven findings on 2026-09-16 were quoted "you" — reported
+   * speech, not address. Anyone acting on them would have rewritten correct copy, which is
+   * worse than no finding: the tool spends its credibility to make the writing wrong.
+   */
+  it.each([
+    ['they avoid explicit "tell me what you want" pressure', "straight quotes"],
+    ["hints, or “you should just know” signals", "curly quotes"],
+  ])("drops second person inside %j (%s)", (text) => {
+    expect(SECOND_PERSON_FOR_TEST.test(withoutQuotedSpans(text))).toBe(false);
+  });
+
+  it("keeps second person that is actually addressing the reader", () => {
+    expect(
+      SECOND_PERSON_FOR_TEST.test(
+        withoutQuotedSpans(
+          "That means building internal safety: you can be close and still have choice."
+        )
+      )
+    ).toBe(true);
+  });
+
+  it("keeps the prose around a quote, so a real break beside a quote still counts", () => {
+    const t = 'they say "tell me what you want" and you decide what happens next';
+    expect(SECOND_PERSON_FOR_TEST.test(withoutQuotedSpans(t))).toBe(true);
+  });
+
+  it("leaves an unterminated quote alone rather than swallowing the rest", () => {
+    // Greedily eating to end-of-block would hide every later sentence from the check.
+    const t = 'she said "tell me what you want and then you decide';
+    expect(withoutQuotedSpans(t)).toContain("you decide");
   });
 });
