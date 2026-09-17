@@ -56,31 +56,32 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) 
     }, CONSENT_STEP);
 
     if (process.env.MUTATE === "1") {
-      // Re-create the defect: the button sends the user to the token-less
-      // /report instead of the site root.
+      /**
+       * Re-create the defect: the button sends the reader to the token-less
+       * /report instead of the site root.
+       *
+       * ONE LISTENER ON THE DOCUMENT, NOT A POLL ON THE BUTTON. The previous
+       * version polled every 100ms for the button and bound to it, which is a
+       * race against the tap — measured 2026-09-17, it lost 1 run in 3, so
+       * MUTATE=1 exited 0 and the probe silently claimed to be falsifiable when
+       * it was not. B1 is one of the criteria allowed to open a pull request.
+       *
+       * A capture listener on the document is bound before any markup exists,
+       * needs no polling, and runs before React's root-container listener, so
+       * stopImmediatePropagation still beats the app's own handler.
+       */
       await page.addInitScript(() => {
-        // The button is rendered by React after load, so poll for it rather
-        // than binding once — an init script that binds nothing mutates
-        // nothing, and the probe then passes in both directions.
-        const bind = () => {
-          const hit = [...document.querySelectorAll("button")].find((b) =>
-            /return to site/i.test(b.textContent ?? "")
-          );
-          if (!hit) return false;
-          hit.addEventListener(
-            "click",
-            (e) => {
-              e.stopImmediatePropagation();
-              e.preventDefault();
-              window.location.href = "/report";
-            },
-            true
-          );
-          return true;
-        };
-        const t = setInterval(() => {
-          if (bind()) clearInterval(t);
-        }, 100);
+        document.addEventListener(
+          "click",
+          (e) => {
+            const btn = e.target instanceof Element ? e.target.closest("button") : null;
+            if (!btn || !/return to site/i.test(btn.textContent ?? "")) return;
+            e.stopImmediatePropagation();
+            e.preventDefault();
+            window.location.href = "/report";
+          },
+          true
+        );
       });
     }
 

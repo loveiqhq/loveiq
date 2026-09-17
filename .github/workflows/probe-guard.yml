@@ -14,6 +14,9 @@ on:
     # Once a day, off the hour. These drive real browsers against the live site,
     # so they are deliberately not frequent.
     - cron: "23 5 * * *"
+    # Weekly, and much heavier: every auto-PR probe is run with its own defect
+    # injected, across its full device list.
+    - cron: "41 4 * * 1"
   workflow_dispatch:
     inputs:
       origin:
@@ -31,6 +34,9 @@ concurrency:
 jobs:
   probe:
     name: Measure production
+    # Daily cron or a manual run only. Without this it would also fire on the
+    # weekly falsifiability schedule below, running twice every Monday.
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '23 5 * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -76,3 +82,48 @@ jobs:
             exit 1
           fi
           echo "clear"
+
+  falsifiability:
+    name: Auto-PR probes can still fail
+    # Weekly only, or on a manual run. Seven probes across their full device
+    # lists against production is minutes of real browser time.
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '41 4 * * 1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium webkit
+
+      # The unit test asserts an auto-PR probe's SOURCE contains "MUTATE". That
+      # proxy was wrong on 2026-09-17: verify-consent-return carried a MUTATE
+      # block that polled to bind a listener, lost the race 1 run in 3, and so
+      # exited 0 with its own defect injected — claiming to be falsifiable while
+      # B1 sat in AUTO_PR_CRITERIA. Only running it settles the question.
+      - name: Every auto-PR probe reports its own defect
+        env:
+          STAGING_PASSWORD: ${{ secrets.STAGING_PASSWORD }}
+          RUNS: "2"
+        run: |
+          set +e
+          npx tsx scripts/verify-probe-falsifiability.mjs
+          code=$?
+          set -e
+          if [ "$code" -eq 1 ]; then
+            echo "::error::a probe allowed to open a pull request passed with its own defect injected"
+            exit 1
+          elif [ "$code" -eq 3 ]; then
+            echo "::warning::nothing to check — no auto-PR probe declares a MUTATE mode"
+            exit 0
+          elif [ "$code" -ne 0 ]; then
+            echo "::error::falsifiability check exited $code"
+            exit 1
+          fi
