@@ -124,6 +124,34 @@ jobs:
       # block that polled to bind a listener, lost the race 1 run in 3, and so
       # exited 0 with its own defect injected — claiming to be falsifiable while
       # B1 sat in AUTO_PR_CRITERIA. Only running it settles the question.
+      # One HogQL query, no browsers. It scores the scanners against the
+      # labelled fixtures in scripts/replay-bench/.
+      #
+      # Below bar does NOT fail: precision has been 0.20 since it was first
+      # measured, that is a documented state rather than a regression, and a
+      # job that is permanently red is a job nobody reads. What DOES fail is
+      # exit 2 — "incomplete", meaning the fixtures could not be scored at all.
+      # That is the failure worth waking up for: on 2026-09-17 the scorer's
+      # 7-day window was four days from making every fixture unreadable, and
+      # nothing would have said so.
+      - name: Score the scanners against the labelled fixtures
+        env:
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+        run: |
+          set +e
+          npm run replay:bench
+          code=$?
+          set -e
+          if [ "$code" -eq 2 ]; then
+            echo "::error::the benchmark could not be scored — fixtures unreadable or unscanned"
+            exit 1
+          elif [ "$code" -eq 1 ]; then
+            echo "::warning::scanners are below the precision/recall bars (a known state, not a regression)"
+          elif [ "$code" -ne 0 ]; then
+            echo "::error::replay:bench exited $code"
+            exit 1
+          fi
+
       - name: Every auto-PR probe reports its own defect
         env:
           STAGING_PASSWORD: ${{ secrets.STAGING_PASSWORD }}

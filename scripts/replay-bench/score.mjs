@@ -41,13 +41,31 @@ export function score(rows) {
   const tp = rows.filter((r) => r.expect === "yes" && said(r) === "yes").length;
   const fp = rows.filter((r) => r.expect === "no" && said(r) === "yes").length;
   const fn = rows.filter((r) => r.expect === "yes" && said(r) === "no").length;
+  /**
+   * NULL, not 1, when there is nothing to divide by.
+   *
+   * `tp + fp === 0 ? 1` reads "nothing was predicted positive, so nothing was
+   * wrong, so precision is perfect". It prints `precision 1.00 (bar 0.8)` from
+   * zero measurements, and it fed `passed` — so a fixture set that had gone
+   * unscanned, or one containing only negatives, could clear the bar without
+   * measuring anything. This file's own comment warns about that exact shape
+   * for the query-error path; the 0/0 convention re-created it two lines later.
+   *
+   * Observed for real on 2026-09-17 while simulating the expiry: every fixture
+   * read "(not scanned yet)" and the output still said precision 1.00.
+   */
   return {
     tp,
     fp,
     fn,
-    precision: tp + fp === 0 ? 1 : tp / (tp + fp),
-    recall: tp + fn === 0 ? 1 : tp / (tp + fn),
+    precision: tp + fp === 0 ? null : tp / (tp + fp),
+    recall: tp + fn === 0 ? null : tp / (tp + fn),
   };
+}
+
+/** "0.20", or "n/a" when the figure is undefined rather than perfect. */
+export function fmtScore(v) {
+  return v === null ? "n/a" : v.toFixed(2);
 }
 
 if (process.argv.includes("--selftest")) {
@@ -57,8 +75,24 @@ if (process.argv.includes("--selftest")) {
     { expect: "no", verdict: "no" },
     { expect: "no", verdict: "yes" },
   ]);
-  const ok = s.tp === 1 && s.fp === 1 && s.fn === 1 && s.precision === 0.5 && s.recall === 0.5;
-  console.log(ok ? "selftest ok" : `selftest FAILED: ${JSON.stringify(s)}`);
+  // And the case that used to read as a perfect score: nothing predicted
+  // positive, nothing expected positive. Both figures are undefined, and
+  // undefined must not be 1.
+  const empty = score([
+    { expect: "no", verdict: "no" },
+    { expect: "no", verdict: "(not scanned yet)" },
+  ]);
+  const ok =
+    s.tp === 1 &&
+    s.fp === 1 &&
+    s.fn === 1 &&
+    s.precision === 0.5 &&
+    s.recall === 0.5 &&
+    empty.precision === null &&
+    empty.recall === null &&
+    fmtScore(empty.precision) === "n/a" &&
+    fmtScore(0.2) === "0.20";
+  console.log(ok ? "selftest ok" : `selftest FAILED: ${JSON.stringify({ s, empty })}`);
   process.exit(ok ? 0 : 1);
 }
 
@@ -96,7 +130,19 @@ const res = await fetch(`https://eu.posthog.com/api/projects/${PROJECT}/query/`,
                substring(toString(properties.scanner_output_reasoning), 1, 300)
         FROM events
         WHERE event = '$recording_observed'
-          AND timestamp > now() - INTERVAL 7 DAY
+          -- 180 days, not 7. A scanner observes a session ONCE, EVER, so the
+          -- verdict for a fixture is written on the day it is first scanned and
+          -- never again. With a 7-day window that made the whole benchmark go
+          -- blind a week later: every fixture read "(not scanned yet)", the
+          -- script printed dots and exited 2, and no score could be produced
+          -- from work that had already been done.
+          --
+          -- Measured 2026-09-17: all eight fixture observations were written on
+          -- 2026-09-14, so this benchmark had four days left. The recordings
+          -- themselves expire 2026-09-28 — that limit is real and bounds
+          -- re-labelling and re-scanning, but it is not a reason to discard a
+          -- verdict that is already recorded.
+          AND timestamp > now() - INTERVAL 180 DAY
           AND properties.session_id IN (${wanted.map((w) => `'${w.session_id}'`).join(",")})
       `,
     },
@@ -138,16 +184,24 @@ for (const r of rows) {
 const s = score(rows);
 const pending = rows.filter((r) => r.verdict === "(not scanned yet)").length;
 console.log(
-  `\nprecision ${s.precision.toFixed(2)} (bar ${MIN_PRECISION}) · ` +
-    `recall ${s.recall.toFixed(2)} (bar ${MIN_RECALL}) · ` +
+  `\nprecision ${fmtScore(s.precision)} (bar ${MIN_PRECISION}) · ` +
+    `recall ${fmtScore(s.recall)} (bar ${MIN_RECALL}) · ` +
     `tp ${s.tp} fp ${s.fp} fn ${s.fn}` +
-    (pending ? ` · ${pending} still scanning` : "")
+    (pending ? ` · ${pending} still scanning` : "") +
+    (s.precision === null ? " · nothing was predicted positive" : "") +
+    (s.recall === null ? " · no fixture expected a defect" : "")
 );
 if (pending) {
   console.log("incomplete — re-run when the scans finish");
   process.exit(2);
 }
-const passed = s.precision >= MIN_PRECISION && s.recall >= MIN_RECALL;
+// An undefined figure is not a pass. A benchmark that measured nothing has not
+// cleared a bar, whatever the arithmetic says.
+const passed =
+  s.precision !== null &&
+  s.recall !== null &&
+  s.precision >= MIN_PRECISION &&
+  s.recall >= MIN_RECALL;
 
 /**
  * The audit trail benchmark.md mandates ("commit each revision's results so the
@@ -168,8 +222,8 @@ if (!process.argv.includes("--no-save")) {
     `${JSON.stringify(
       {
         scanner_version: version,
-        precision: Number(s.precision.toFixed(4)),
-        recall: Number(s.recall.toFixed(4)),
+        precision: s.precision === null ? null : Number(s.precision.toFixed(4)),
+        recall: s.recall === null ? null : Number(s.recall.toFixed(4)),
         bars: { precision: MIN_PRECISION, recall: MIN_RECALL },
         passed,
         tp: s.tp,
