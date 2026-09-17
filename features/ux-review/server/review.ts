@@ -435,19 +435,53 @@ export async function fetchSessionEvents(sessionId: string): Promise<Set<string>
  * The most-clicked pair in the session, because a reader hammering one dead
  * control is the signal; a single stray tap on a paragraph is not.
  */
+/**
+ * One HogQL row, retried once, for the two per-session lookups.
+ *
+ * These two failed intermittently in a way that looked random and was not.
+ * Session 01a0aea6 carries 330 events — the most of any recent session — and
+ * timing it ten times gave 526, 82, 71, 3433, 72, 1577, 80, 84, 79, 77 ms. The
+ * median is 80ms and the tail is seconds, so against an 8s budget from a CI
+ * runner the biggest sessions were the ones that lost, twice for that same id.
+ *
+ * A miss is not harmless: no viewport means the probes fall back to their own
+ * device lists and the run silently stops being session-specific, which is the
+ * whole point of it. A retry costs 80ms in the normal case.
+ *
+ * Only the verifier calls these — a CI script with a 25-minute budget that then
+ * drives browsers for minutes — so the longer budget is free. Returns null on
+ * every failure, because a caller that cannot tell "no data" from "query
+ * failed" must not act as though it can.
+ */
+async function sessionRow(query: string): Promise<unknown[] | null> {
+  const key = process.env.POSTHOG_API_KEY;
+  if (!key) return null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const res = await fetchWithTimeout(`https://eu.posthog.com/api/projects/${PROJECT}/query/`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ query: { kind: "HogQLQuery", query } }),
+        timeoutMs: 15_000,
+      });
+      if (!res.ok) continue;
+      const payload = (await res.json()) as { results?: unknown[][]; error?: unknown };
+      // A bad query will fail identically on the retry; only a timeout or a
+      // transport error is worth a second attempt.
+      if (payload.error) return null;
+      return payload.results?.[0] ?? null;
+    } catch {
+      /* timeout or transport — try once more */
+    }
+  }
+  return null;
+}
+
 export async function sessionClickTarget(
   sessionId: string
 ): Promise<{ pathname: string; selector: string; clicks: number } | null> {
-  const key = process.env.POSTHOG_API_KEY;
-  if (!key || !isSafeSessionId(sessionId)) return null;
-  try {
-    const res = await fetchWithTimeout(`https://eu.posthog.com/api/projects/${PROJECT}/query/`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: {
-          kind: "HogQLQuery",
-          query: `SELECT toString(properties.pathname),
+  if (!isSafeSessionId(sessionId)) return null;
+  const row = await sessionRow(`SELECT toString(properties.pathname),
                          toString(properties.target_selector),
                          count()
                   FROM events
@@ -457,62 +491,32 @@ export async function sessionClickTarget(
                     AND properties.target_selector IS NOT NULL
                   GROUP BY 1, 2
                   ORDER BY 3 DESC
-                  LIMIT 1`,
-        },
-      }),
-      timeoutMs: 8000,
-    });
-    if (!res.ok) return null;
-    const payload = (await res.json()) as { results?: unknown[][]; error?: unknown };
-    if (payload.error) return null;
-    const row = payload.results?.[0];
-    const pathname = String(row?.[0] ?? "");
-    const selector = String(row?.[1] ?? "");
-    // "unknown" is what selectorFor() emits when it cannot describe the target.
-    // Passing it to a probe would be passing a guess.
-    if (!pathname.startsWith("/") || !selector || selector === "unknown") return null;
-    return { pathname, selector, clicks: Number(row?.[2] ?? 0) };
-  } catch {
-    return null;
-  }
+                  LIMIT 1`);
+  const pathname = String(row?.[0] ?? "");
+  const selector = String(row?.[1] ?? "");
+  // "unknown" is what selectorFor() emits when it cannot describe the target.
+  // Passing it to a probe would be passing a guess.
+  if (!pathname.startsWith("/") || !selector || selector === "unknown") return null;
+  return { pathname, selector, clicks: Number(row?.[2] ?? 0) };
 }
 
 export async function sessionViewport(
   sessionId: string
 ): Promise<{ min: number; max: number; os: string } | null> {
-  const key = process.env.POSTHOG_API_KEY;
-  if (!key || !isSafeSessionId(sessionId)) return null;
-  try {
-    const res = await fetchWithTimeout(`https://eu.posthog.com/api/projects/${PROJECT}/query/`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: {
-          kind: "HogQLQuery",
-          query: `SELECT min(toFloat(properties.$viewport_width)),
+  if (!isSafeSessionId(sessionId)) return null;
+  const row = await sessionRow(`SELECT min(toFloat(properties.$viewport_width)),
                          max(toFloat(properties.$viewport_width)),
                          any(properties.$os)
                   FROM events
                   WHERE timestamp > now() - INTERVAL 30 DAY
                     AND properties.$session_id = '${sessionId}'
-                    AND properties.$viewport_width IS NOT NULL`,
-        },
-      }),
-      timeoutMs: 8000,
-    });
-    if (!res.ok) return null;
-    const payload = (await res.json()) as { results?: unknown[][]; error?: unknown };
-    if (payload.error) return null;
-    const row = payload.results?.[0];
-    const min = Number(row?.[0]);
-    const max = Number(row?.[1]);
-    if (!Number.isFinite(min) || min <= 0) return null;
-    return {
-      min: Math.round(min),
-      max: Math.round(max) || Math.round(min),
-      os: String(row?.[2] ?? ""),
-    };
-  } catch {
-    return null;
-  }
+                    AND properties.$viewport_width IS NOT NULL`);
+  const min = Number(row?.[0]);
+  const max = Number(row?.[1]);
+  if (!Number.isFinite(min) || min <= 0) return null;
+  return {
+    min: Math.round(min),
+    max: Math.round(max) || Math.round(min),
+    os: String(row?.[2] ?? ""),
+  };
 }

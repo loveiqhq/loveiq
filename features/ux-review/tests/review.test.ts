@@ -6,6 +6,7 @@ import {
   compareScanners,
   fetchSessionEvents,
   isSafeSessionId,
+  sessionClickTarget,
   sessionViewport,
   fetchDailyStats,
   fetchFindings,
@@ -56,6 +57,25 @@ describe("buildDigestMessage", () => {
       { scanner: "<script>alert(1)</script>", observed: 1, yes: 0 },
     ]);
     expect(JSON.stringify(blocks)).not.toContain("<script>");
+  });
+});
+
+describe("the per-session lookups refuse an unsafe id before it reaches HogQL", () => {
+  // Both interpolate the session id straight into a HogQL string. The guard is
+  // the only thing between PostHog's data and a query someone else wrote, and
+  // both functions were rewritten on 2026-09-17 to share a retrying helper —
+  // exactly the kind of refactor that drops a check nobody asserts.
+  it("does not even make the request", async () => {
+    process.env.POSTHOG_API_KEY = "test-key";
+    const fetchSpy = vi.fn(async () => ({ ok: true, json: async () => ({ results: [] }) }));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    for (const bad of ["../../evil", "a' OR '1'='1", "x".repeat(200), "has spaces"]) {
+      expect(await sessionViewport(bad)).toBeNull();
+      expect(await sessionClickTarget(bad)).toBeNull();
+    }
+    expect(fetchSpy, "an unsafe id reached the network").not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });
 
