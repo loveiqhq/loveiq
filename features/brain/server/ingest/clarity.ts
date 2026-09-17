@@ -69,6 +69,13 @@ export function redactUrl(raw: string): string {
  */
 const ROW_CAP = 1000;
 
+/**
+ * Below this many sessions a page is not evidence: one session with one dead click reads
+ * as 100%. Named rather than written twice — it was the parameter default AND a literal
+ * at the call site, which is two places to change and one to forget.
+ */
+export const MIN_SESSIONS = 10;
+
 /** One frustration signal on one page. */
 export interface PageSignal {
   path: string;
@@ -194,7 +201,7 @@ export function buildClarityRows(
   pages: PageSignal[],
   day: string,
   stampedAt: string,
-  minSessions = 10,
+  minSessions = MIN_SESSIONS,
   truncated: string[] = []
 ): BrainRow[] {
   const worthReading = pages.filter((p) => p.sessions >= minSessions && worst(p) > 0);
@@ -293,7 +300,7 @@ export async function ingestClarity(day: string, stampedAt: string): Promise<Cla
     const pages = collapseByPage(metrics);
     const cut = truncatedMetrics(metrics);
     if (cut.length > 0) logger.warn({ cut }, "clarity: export hit the row cap and was truncated");
-    const rows = buildClarityRows(pages, day, stampedAt, 10, cut);
+    const rows = buildClarityRows(pages, day, stampedAt, MIN_SESSIONS, cut);
     const written = rows.length === 0 ? 0 : await upsertChunks(rows);
     return { ok: true, rows: written, pages: pages.length };
   } catch (err) {
