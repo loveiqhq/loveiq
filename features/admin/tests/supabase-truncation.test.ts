@@ -190,10 +190,10 @@ describe("fetchAllRows — for callers that need the rows", () => {
 describe("the large-Range backlog only shrinks", () => {
   it("does not grow", async () => {
     // `Range: "0-49999"` reads as "up to fifty thousand rows" and returns a
-    // thousand, silently. 152 such reads remain, and 15 of them are wholly
-    // unfiltered reads of tables already past the cap — survey_behavior_event
-    // at 133,753 rows returns 0.7% of itself. (An earlier count said 23; four
-    // of those interpolate a filter at runtime and four are now fixed.) They are being migrated to countRows (for a
+    // thousand, silently. 139 such reads remain. NONE of them is now a wholly
+    // unfiltered read of a table already past the cap — all fifteen of those are
+    // fixed. What is left is filtered or windowed, so each one is only latent:
+    // it becomes wrong on the day its window first exceeds 1,000 rows. They are being migrated to countRows (for a
     // number) and fetchAllRows (for the rows).
     //
     // This number may only go DOWN. If a change makes it go up, that change is
@@ -207,6 +207,6 @@ describe("the large-Range backlog only shrinks", () => {
       ],
       { encoding: "utf8", cwd: process.cwd() }
     ).trim();
-    expect(Number(out)).toBeLessThanOrEqual(152);
+    expect(Number(out)).toBeLessThanOrEqual(139);
   });
 });

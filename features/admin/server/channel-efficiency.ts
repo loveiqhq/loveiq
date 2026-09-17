@@ -171,9 +171,11 @@ export async function buildChannelEfficiencySnapshot(
         `/rest/v1/survey_partial_save?select=session_id,utm_tracker&saved_at=gte.${since}`,
         { headers: { Range: "0-49999" } }
       ),
-      supabaseFetch("/rest/v1/personal_report?select=id,survey_submission_id", {
-        headers: { Range: "0-49999" },
-      }),
+      // Paged: 2,051 reports, past the cap, so half the report->submission
+      // mapping was missing from the per-channel join.
+      fetchAllRows<ReportRow>(
+        "/rest/v1/personal_report?select=id,survey_submission_id&order=id.asc"
+      ),
       // Paged, not capped. This read 1,000 of 11,224 sessions and the Set below
       // decided which reports counted as viewed, so every channel's view rate
       // was computed from a 9% slice.
@@ -191,7 +193,7 @@ export async function buildChannelEfficiencySnapshot(
       !submissionsRes.ok ||
       !scoringRes.ok ||
       !partialsRes.ok ||
-      !reportsRes.ok ||
+      reportsRes === null ||
       reportSessionsRes === null ||
       !paymentsRes.ok
     ) {
@@ -202,7 +204,7 @@ export async function buildChannelEfficiencySnapshot(
     const submissions = (await submissionsRes.json()) as SubmissionRow[];
     const scoringRows = (await scoringRes.json()) as ScoringRow[];
     const partials = (await partialsRes.json()) as PartialSaveRow[];
-    const reports = (await reportsRes.json()) as ReportRow[];
+    const reports = reportsRes;
     const reportSessions = reportSessionsRes;
     const payments = (await paymentsRes.json()) as PaymentRow[];
 

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { verifyAdminSession } from "@features/admin/server/auth";
 import { hasRole } from "@features/admin/server/roles";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
-import { supabaseFetch } from "@features/admin/server/supabase";
+import { fetchAllRows } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 
 interface ScoringRow {
@@ -43,17 +43,21 @@ export async function GET(request: Request) {
   }
 
   try {
-    const res = await supabaseFetch(
-      `/rest/v1/scoring_result?select=primary_archetype,v5_primary_archetype,scored_at&order=scored_at.desc`,
-      { headers: { Range: "0-49999" } }
+    // Paged: 1,987 scoring results, past the 1,000-row cap a Range header does
+    // not lift, so the archetype distribution was drawn on the newest half.
+    const rows = await fetchAllRows<{
+      primary_archetype: string | null;
+      v5_primary_archetype: string | null;
+      scored_at: string;
+    }>(
+      `/rest/v1/scoring_result?select=primary_archetype,v5_primary_archetype,scored_at&order=scored_at.desc`
     );
 
-    if (!res.ok) {
-      logger.error({ status: res.status }, "Archetypes query failed");
+    if (rows === null) {
+      logger.error("Archetypes query failed");
       return NextResponse.json({ error: "Unable to load data." }, { status: 500 });
     }
 
-    const rows = (await res.json()) as ScoringRow[];
     const totalScored = rows.length;
 
     // Count per archetype

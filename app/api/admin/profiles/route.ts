@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { verifyAdminSession } from "@features/admin/server/auth";
 import { hasRole } from "@features/admin/server/roles";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
-import { supabaseFetch } from "@features/admin/server/supabase";
+import { fetchAllRows, supabaseFetch } from "@features/admin/server/supabase";
 import { maskEmail } from "@features/admin/server/format";
 import logger from "@shared/observability/logger";
 
@@ -107,11 +107,14 @@ export async function GET(request: Request) {
       supabaseFetch(`/rest/v1/waitlist_user?select=email,source,created_date_time,utm_tracker`, {
         headers: { Range: "0-9999" },
       }),
-      supabaseFetch(
-        `/rest/v1/personal_report?select=id,survey_submission_id,created_date_time,payment_status`,
-        {
-          headers: { Range: "0-9999" },
-        }
+      // Paged: 2,051 reports, past the 1,000-row cap a Range header does not lift.
+      fetchAllRows<{
+        id: number;
+        survey_submission_id: number;
+        created_date_time: string;
+        payment_status: string | null;
+      }>(
+        `/rest/v1/personal_report?select=id,survey_submission_id,created_date_time,payment_status&order=id.asc`
       ),
       supabaseFetch(
         `/rest/v1/payment?is_test=is.false&select=personal_report_id,status,payment_date_time,amount`,
@@ -138,14 +141,7 @@ export async function GET(request: Request) {
           utm_tracker: string | null;
         }>)
       : [];
-    const reports = reportsRes.ok
-      ? ((await reportsRes.json()) as Array<{
-          id: number;
-          survey_submission_id: number;
-          created_date_time: string;
-          payment_status: string | null;
-        }>)
-      : [];
+    const reports = reportsRes ?? [];
     const payments = paymentsRes.ok
       ? ((await paymentsRes.json()) as Array<{
           personal_report_id: number;

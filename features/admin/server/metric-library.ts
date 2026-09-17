@@ -1,5 +1,5 @@
 import { ADMIN_BENCHMARKS, type AdminBenchmarkDefinition } from "@/data/admin-benchmarks";
-import { countRows, supabaseFetch } from "@features/admin/server/supabase";
+import { countRows, fetchAllRows, supabaseFetch } from "@features/admin/server/supabase";
 import { WORKFLOW_TAGS } from "@features/admin/server/workflow-tags";
 import logger from "@shared/observability/logger";
 
@@ -173,11 +173,12 @@ async function fetchScoringAgreement(): Promise<number | null> {
 }
 
 async function fetchAverageDurationMinutes(): Promise<number | null> {
-  const res = await supabaseFetch("/rest/v1/survey_submission?select=duration_ms", {
-    headers: { Range: "0-49999" },
-  });
-  if (!res.ok) return null;
-  const rows = (await res.json()) as Array<{ duration_ms: number | null }>;
+  // Paged: 2,061 submissions, past the 1,000-row cap, so this average was
+  // taken over an arbitrary half of them.
+  const rows = await fetchAllRows<{ duration_ms: number | null }>(
+    "/rest/v1/survey_submission?select=duration_ms&order=id.asc"
+  );
+  if (rows === null) return null;
   const durations = rows
     .map((row) => row.duration_ms)
     .filter((value): value is number => value != null && value > 0);
