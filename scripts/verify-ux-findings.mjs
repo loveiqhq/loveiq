@@ -79,7 +79,27 @@ export const CRITERIA = [
     // taken verbatim from an observation we have actually seen.
     match:
       /loop(ed|s|ing)? back|a loop where|back (to|at) the (survey |questionnaire )?(start|beginning)|beginning of the survey|(returned|sent|taken|redirected)( \w+){0,2} back to|returned to (an )?earlier|reset(s|ting)? back|start(ed)? (the survey )?(over|from scratch)|re-?initiali[sz]ed|already completed|first (introduction |intro )?screen|initial question/i,
-    probes: ["verify-no-survey-restart.mjs"],
+    /**
+     * TWO SURFACES, and until 2026-09-17 only one had a probe.
+     *
+     * `verify-no-survey-restart.mjs` loads `/report/<token>` and asks whether a
+     * VALID report offers a way back to the start of the funnel. That answers
+     * the report-side claim ("clicking Unlock reset their session back to the
+     * survey start page") and nothing else.
+     *
+     * The regex above deliberately also matches survey-side loops — "back to
+     * the survey start", "beginning of the survey", "initial question" — and
+     * those were handed to the report probe, which cannot see the survey. It
+     * returned clean every time, so six findings in twelve hours were answered
+     * with "loop back to an earlier screen (L1) passes in production now" in
+     * six readers' Slack threads. `verify-survey-loop.mjs` is the probe for
+     * that half; it reproduces on production today.
+     *
+     * The verifier treats a finding as reproduced if ANY probe reports the
+     * defect, so pairing them costs a second browser run and buys an answer
+     * about the surface the reader was actually on.
+     */
+    probes: ["verify-no-survey-restart.mjs", "verify-survey-loop.mjs"],
   },
   {
     // CTA visibility is Marcus's bullet 8, and it is a PROBE, not a model
@@ -670,6 +690,13 @@ for (const [
   // on something our own events say did not happen.
   {
     const events = await fetchSessionEvents(sessionId);
+    // Say so when the gate could not run. It fails open by design, but a silent
+    // fail-open is how the same finding came back refuted on one run and
+    // "Reproduced in production" on the next — the difference was a timeout
+    // nobody could see.
+    if (events === null) {
+      console.log(`  (session events unreadable for ${sessionId}; refusal check did not run)`);
+    }
     const why = contradiction(reasoning, events);
     if (why) {
       contradicted += 1;
