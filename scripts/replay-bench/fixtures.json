@@ -15,8 +15,12 @@
     "scores the same scanners against the ux_finding ledger, which the probes write",
     "themselves and which never expires. RECALL is not — the ledger holds only",
     "findings a scanner flagged, so a session it wrongly passed can never appear in",
-    "it. Recall needs fresh fixtures, or observations labelled independently of the",
-    "scanner (labeled=true, which carry a human verdict already)."
+    "it. RECALL is covered too now, by score.mjs --recall: our own dead_click event",
+    "is mechanical evidence that a control was dead, recorded independently of any",
+    "model and never expiring, so every session a click-cause scanner OBSERVED that",
+    "also dead-clicked is one it should have flagged. Measured 2026-09-17: 5 of 79,",
+    "a recall of 0.06 against a bar of 0.60. Fresh fixtures would still add the",
+    "defect classes dead clicks cannot speak for."
   ],
   "known_bad": [
     {

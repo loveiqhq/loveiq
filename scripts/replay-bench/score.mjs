@@ -244,6 +244,96 @@ if (process.argv.includes("--ledger")) {
   process.exit(lPassed ? 0 : 1);
 }
 
+/** One HogQL query, returning its result rows. Fails loudly, like the fixture
+ *  query below: PostHog answers a BAD query with HTTP 200 and an `error` field. */
+async function hog(query) {
+  const res = await fetch(`https://eu.posthog.com/api/projects/${PROJECT}/query/`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey()}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ query: { kind: "HogQLQuery", query } }),
+  });
+  if (!res.ok) throw new Error(`posthog ${res.status}`);
+  const payload = await res.json();
+  if (payload.error) throw new Error(`posthog query error: ${String(payload.error).slice(0, 200)}`);
+  return payload.results ?? [];
+}
+
+/**
+ * `--recall`: the half the ledger cannot measure, from evidence the scanner
+ * never sees.
+ *
+ * The ledger only ever holds findings a scanner already flagged, so a session
+ * it wrongly passed can never appear in it — recall is unobservable there by
+ * construction, which is why --ledger refuses to report one. The fixtures could
+ * measure recall, and they expire 2026-09-28 and cannot be re-scanned.
+ *
+ * Our own `dead_click` event is the way out. It is emitted by
+ * `shared/observability/uxSignals.ts` when a reader taps something that does
+ * nothing — a mechanical fact, recorded independently of any model, and it
+ * never expires. So for a scanner whose JOB is dead controls: every session it
+ * OBSERVED that also emitted a dead_click is a session it should have flagged.
+ * Restricting to sessions it observed is what makes this a fair denominator —
+ * a scanner cannot be blamed for a recording it never watched.
+ *
+ * ONLY THE CLICK-CAUSE SCANNERS ARE SCORED. A dead_click is not evidence that
+ * the survey-UX scanner should have fired; its criteria are different. The
+ * others are printed as context and excluded from the verdict, because scoring
+ * them against this signal would be measuring the wrong thing precisely.
+ */
+if (process.argv.includes("--recall")) {
+  const days = Number(process.env.RECALL_DAYS ?? 30);
+  /** Scanners whose stated subject IS the dead/rage click. */
+  const CLICK_SCANNERS = /dead-click|rage-click/i;
+
+  const rows = await hog(`
+    SELECT o.scanner, count(DISTINCT o.sid) AS observed, countIf(o.verdict = 'yes') AS flagged
+    FROM (
+      SELECT toString(properties.session_id) AS sid,
+             toString(properties.scanner_name) AS scanner,
+             toString(properties.scanner_output_verdict) AS verdict
+      FROM events
+      WHERE event = '$recording_observed' AND timestamp > now() - INTERVAL ${days} DAY
+    ) o
+    INNER JOIN (
+      SELECT DISTINCT toString(properties.$session_id) AS sid
+      FROM events
+      WHERE event = 'dead_click' AND timestamp > now() - INTERVAL ${days} DAY
+    ) d ON d.sid = o.sid
+    GROUP BY o.scanner
+    ORDER BY observed DESC
+  `);
+
+  console.log(`recall against our own dead_click events, last ${days} days\n`);
+  let scoredObserved = 0;
+  let scoredFlagged = 0;
+  for (const [scanner, observed, flagged] of rows) {
+    const scored = CLICK_SCANNERS.test(String(scanner));
+    if (scored) {
+      scoredObserved += Number(observed);
+      scoredFlagged += Number(flagged);
+    }
+    const r = Number(observed) === 0 ? null : Number(flagged) / Number(observed);
+    console.log(
+      `  ${String(scanner).padEnd(26)} ${String(observed).padStart(4)} observed ` +
+        `${String(flagged).padStart(4)} flagged  recall ${fmtScore(r)}` +
+        (scored ? "" : "   (context only — dead clicks are not this scanner's subject)")
+    );
+  }
+
+  const recall = scoredObserved === 0 ? null : scoredFlagged / scoredObserved;
+  console.log(
+    `\nrecall ${fmtScore(recall)} (bar ${MIN_RECALL}) · ` +
+      `${scoredFlagged} flagged of ${scoredObserved} observed sessions that dead-clicked`
+  );
+  if (scoredObserved < 10) {
+    console.log(`not enough observed sessions yet (${scoredObserved}/10) — no verdict claimed`);
+    process.exit(2);
+  }
+  const passed = recall !== null && recall >= MIN_RECALL;
+  console.log(passed ? "RECALL BAR MET" : "BELOW RECALL BAR");
+  process.exit(passed ? 0 : 1);
+}
+
 const fixtures = JSON.parse(readFileSync(join(HERE, "fixtures.json"), "utf8"));
 
 /**
