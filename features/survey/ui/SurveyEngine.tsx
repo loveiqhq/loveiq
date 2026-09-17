@@ -23,7 +23,13 @@ import {
   setSurveyVariant,
 } from "@features/analytics/client";
 import { assignSurveyVariant, type SurveyVariant } from "@shared/experiments/surveyVariant";
-import { orderDemandBlockBeforeEmail, orderEmailLast } from "./questionOrder";
+import { orderC13Opening, orderDemandBlockBeforeEmail, orderEmailLast } from "./questionOrder";
+import {
+  assignQuestionOrderArm,
+  resolveQuestionOrderOverride,
+  type QuestionOrderArm,
+} from "@shared/experiments/questionOrderArm";
+import { getSessionId } from "./hooks/surveySession";
 import { SurveyThemeProvider } from "./SurveyThemeContext";
 import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
 import { useSurveyTracking } from "./hooks/useSurveyTracking";
@@ -102,15 +108,32 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   // `orderEmailLast` moves the email question from its generated index 0 to just
   // before the marketing opt-in, for everyone (the email-position A/B that used
   // to pick this per visitor was retired 2026-08-16 in favour of "last").
+  // C13 — the opening-order experiment. Resolved once, on first render, from the
+  // session id: the order must not change under a respondent who reloads or goes
+  // back, and the session id is the one value that already survives both. No
+  // session id (storage blocked) means control, because the submit path would
+  // have nothing to slice that respondent by. `?order=control|variant` previews
+  // either arm on dev and staging, never on production.
+  const [orderArm] = useState<QuestionOrderArm>(() => {
+    const devParam =
+      typeof window === "undefined"
+        ? null
+        : new URLSearchParams(window.location.search).get("order");
+    return resolveQuestionOrderOverride(devParam) ?? assignQuestionOrderArm(getSessionId());
+  });
+
   // Joined into a string so the memo key is stable across re-renders.
   const prefilledKey = prefilled.join(",");
-  const orderedQuestions = useMemo(
-    () =>
-      orderDemandBlockBeforeEmail(orderEmailLast(surveyQuestions))
-        .filter((q) => !isHidden(q.qId))
-        .filter((q) => !prefilledKey.split(",").includes(q.qId)),
-    [prefilledKey]
-  );
+  const orderedQuestions = useMemo(() => {
+    const base = orderDemandBlockBeforeEmail(orderEmailLast(surveyQuestions));
+    // The C13 reorder runs BEFORE the filters, so it always sees the full set it
+    // was specified against. Applying it after would let one prefilled question
+    // turn the reorder into a no-op via its own completeness guard.
+    const ordered = orderArm === "variant" ? orderC13Opening(base) : base;
+    return ordered
+      .filter((q) => !isHidden(q.qId))
+      .filter((q) => !prefilledKey.split(",").includes(q.qId));
+  }, [prefilledKey, orderArm]);
   const totalQuestions = orderedQuestions.length;
   const question = orderedQuestions[currentIndex];
 

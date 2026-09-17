@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { Resend } from "resend";
 import { z } from "zod";
 import { LANDING_VARIANT_COOKIE, isLandingVariant } from "@shared/experiments/landingVariant";
+import { assignQuestionOrderArm } from "@shared/experiments/questionOrderArm";
 import { checkRateLimit, checkCooldown, getClientIp } from "@shared/http/ratelimit";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
@@ -268,12 +269,29 @@ export async function POST(request: Request) {
    * writer. Past submissions keep theirs; new ones legitimately have no survey
    * arm, which also makes the final 453/411 split permanently reproducible.
    */
+  /**
+   * The C13 opening-order arm is DERIVED here rather than sent by the client.
+   * `assignQuestionOrderArm` is pure and deterministic over the session id, and
+   * the session id is already in this payload — so recomputing it server-side
+   * cannot disagree with what the respondent actually saw, and a client cannot
+   * misreport its arm.
+   *
+   * Only stamped when a session id is present, which preserves the
+   * "no session, no stamp" rule the landing arm follows: a crawler or a direct
+   * hit still produces no utm_tracker at all rather than a bare {} .
+   */
+  const questionOrderArm = sessionId ? assignQuestionOrderArm(sessionId) : null;
+
   let mergedUtmTracker = utmTracker ?? null;
   try {
-    if (isLandingVariant(landingVariantRaw)) {
+    if (isLandingVariant(landingVariantRaw) || questionOrderArm) {
       const base = utmTracker ? JSON.parse(utmTracker) : {};
       if (base && typeof base === "object" && !Array.isArray(base)) {
-        base.landing_variant = landingVariantRaw;
+        if (isLandingVariant(landingVariantRaw)) base.landing_variant = landingVariantRaw;
+        // Static property, not base[KEY]: a computed write trips
+        // security/detect-object-injection, and the constant is exported for the
+        // queries and the test that pins the two together.
+        if (questionOrderArm) base.question_order_arm = questionOrderArm;
         const candidate = JSON.stringify(base);
         if (candidate.length <= 1000) mergedUtmTracker = candidate;
       }

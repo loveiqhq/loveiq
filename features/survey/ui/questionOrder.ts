@@ -75,6 +75,82 @@ export function orderDemandBlockBeforeEmail(questions: SurveyQuestion[]): Survey
 }
 
 /**
+ * C13 variant — the opening order the teardown proposes, exactly as specified.
+ *
+ * Slots 1-8. `00001` (name) and `01002` (satisfaction baseline) are unchanged;
+ * the five promoted questions are high-signal trait items, and `02002` sits at
+ * slot 7 as a deliberate spacer so no two Communication Style questions
+ * (`10003`, `10004`, `10005`) end up adjacent.
+ */
+export const C13_OPENING: readonly string[] = [
+  "00001",
+  "01002",
+  "03011",
+  "10005",
+  "11004",
+  "10004",
+  "02002",
+  "10003",
+];
+
+/**
+ * The four questions the variant removes from the opening. `02002` is NOT here:
+ * it stays, moved to slot 7.
+ *
+ * `01006` ("Sex often hurts or feels physically bad for me") is the reason the
+ * experiment exists — it ends 5.1% of the sessions that reach it at slot 4 — and
+ * the spec requires it land after position 20.
+ */
+export const C13_DEMOTED: readonly string[] = ["01005", "01006", "02001", "02003"];
+
+/**
+ * Where the demoted four are re-inserted: immediately after this question, in
+ * their original relative order.
+ *
+ * OPEN DECISION. The specification leaves the exact landing slots to be confirmed
+ * with Mark, saying only "vacated slot around 16-34" and, for `01006`, "after
+ * question 20". `10002` puts all four in the region the promoted questions came
+ * from and satisfies the one hard constraint. It is a single constant precisely
+ * so the answer costs one line — and `c13OpeningOrder.test.ts` asserts the
+ * constraint holds whatever it is changed to.
+ */
+export const C13_DEMOTED_AFTER = "10002";
+
+/**
+ * Reorder the survey into the C13 variant opening.
+ *
+ * Keyed entirely on qIds, never indices: the specification's own position numbers
+ * were already one out by the time it was built, because `03014` was retired on
+ * 11 September and every question after it shifted up. Anything index-based would
+ * have silently reordered the wrong questions.
+ *
+ * Pure and total. Returns a permutation — same length, same members, no
+ * duplicates — and returns the input untouched if any question it needs is
+ * absent, so a prefilled or hidden question can never produce a partial reorder.
+ */
+export function orderC13Opening(questions: SurveyQuestion[]): SurveyQuestion[] {
+  const byId = new Map(questions.map((entry) => [entry.qId, entry]));
+  const needed = [...C13_OPENING, ...C13_DEMOTED, C13_DEMOTED_AFTER];
+  if (!needed.every((qId) => byId.has(qId))) return questions;
+
+  const opening = C13_OPENING.map((qId) => byId.get(qId)!);
+  const demoted = C13_DEMOTED.map((qId) => byId.get(qId)!);
+
+  const placed = new Set<string>([...C13_OPENING, ...C13_DEMOTED]);
+  const remainder = questions.filter((entry) => !placed.has(entry.qId));
+
+  const anchorIdx = remainder.findIndex((entry) => entry.qId === C13_DEMOTED_AFTER);
+  if (anchorIdx === -1) return questions; // defensive: anchor was itself promoted
+
+  return [
+    ...opening,
+    ...remainder.slice(0, anchorIdx + 1),
+    ...demoted,
+    ...remainder.slice(anchorIdx + 1),
+  ];
+}
+
+/**
  * FNV-1a, 32-bit. Turns a seed string into an integer for `mulberry32`.
  *
  * Not a security primitive and not used as one — it only needs to spread similar
