@@ -88,11 +88,22 @@ describe("ux-review cron", () => {
     expect(kinds).toContain("ux_review_digest");
   });
 
-  it("records a finding to the notice table and finalises its claim", async () => {
+  it("finalises a finding's claim without writing the claim to the brain", async () => {
+    // It used to call recordNotice here, and that was two bugs at once.
+    // `noticeId()` hashes the headline and the day, and the headline is
+    // `UX review: <scanner>` — four possible values — so every finding from one
+    // scanner on one day overwrote the previous one. And `brain_search` has no
+    // notice filter, so what survived was retrievable as company knowledge:
+    // 11 of the 13 notices in the corpus were unverified model prose, including
+    // one asserting a survey loop that the verifier probed the same day and
+    // cleared on 2/2 devices.
+    //
+    // The record is `ux_finding` now, written by the verifier after a probe has
+    // actually answered.
     mockFetchFindings.mockResolvedValue([finding()]);
     const res = await GET(req());
 
-    expect(mockRecordNotice).toHaveBeenCalledTimes(1);
+    expect(mockRecordNotice).not.toHaveBeenCalled();
     expect(mockMarkDelivered).toHaveBeenCalledWith("ux_review", "observation", "obs-1");
     expect(await res.json()).toMatchObject({ ok: true, collected: 1, contradicted: 0 });
   });

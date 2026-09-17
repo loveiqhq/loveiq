@@ -47,7 +47,6 @@ import {
   tryClaimSlackAlert,
   verifyCronAuth,
 } from "@shared/observability/slack-alert-dedup";
-import { recordNotice } from "@features/brain/server/notice";
 import {
   buildDigestMessage,
   contradiction,
@@ -56,7 +55,6 @@ import {
   fetchFindings,
   fetchSessionEvents,
   MAX_POSTS_PER_RUN,
-  recordingLink,
 } from "@features/ux-review/server/review";
 import { UX_SCANNERS } from "@features/ux-review/server/scanners";
 import { reportingDay, reportingHour } from "@shared/time/reporting-day";
@@ -161,15 +159,35 @@ export async function GET(request: Request) {
        * which runs every three hours in CI and posts into the submission's own
        * thread. Correctness check on the same five: the probes reject all of them.
        *
-       * What stays here is the searchable record and the daily count below, so
-       * nothing is lost — only the unearned alert is.
+       * AND IT IS NOT WRITTEN TO THE BRAIN EITHER, for the same reason.
+       *
+       * This used to call `recordNotice`, on the argument that the prose was
+       * "the searchable record ... so nothing is lost". Both halves were false,
+       * measured 2026-09-17:
+       *
+       *   * Nothing is lost -> everything but the last one was. `noticeId()`
+       *     hashes the headline and the day, and the headline is
+       *     `UX review: ${scannerName}` — four possible values. Every finding
+       *     from one scanner on one day overwrote the previous one. The live
+       *     rows prove it: the same hash suffix 56c0167db8 on the 15th, 16th
+       *     and 17th, one row per scanner per day.
+       *
+       *   * A searchable record -> a searchable CLAIM. `brain_search` has no
+       *     notice filter, so these are retrievable as company knowledge, and
+       *     11 of the 13 notices in the corpus were this. A search for "survey
+       *     loops back to the start" returned four of them. The most recent
+       *     asserts a reader "is unexpectedly looped back to the survey start
+       *     screen" — and the verifier probed that same session the same day
+       *     and returned CLEAR on 2/2 devices. Unverified model prose presented
+       *     as something the company knows is the exact "false confidence" the
+       *     review protocol exists to prevent.
+       *
+       * The record is `public.ux_finding` now, written by the verifier AFTER a
+       * probe has answered, carrying the verdict rather than the claim. A
+       * notice for a REPRODUCED finding would be defensible and is worth adding
+       * when one exists to test it against; today nothing has reproduced, so
+       * writing that path now would ship an untested branch.
        */
-      await recordNotice({
-        headline: `UX review: ${finding.scannerName}`,
-        detail: finding.reasoning.slice(0, 1000),
-        kind: "ux-review",
-        evidence: recordingLink(finding.sessionId),
-      });
       await markSlackAlertDelivered("ux_review", "observation", finding.observationId);
       collected += 1;
     }
