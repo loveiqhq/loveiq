@@ -83,8 +83,15 @@ COMMENT ON TABLE public.ux_finding IS
 
 -- The two questions this table is for: "what happened lately" and "how does
 -- this criterion do".
-CREATE INDEX IF NOT EXISTS ux_finding_created_idx ON public.ux_finding (created_at DESC);
-CREATE INDEX IF NOT EXISTS ux_finding_criterion_outcome_idx
+--
+-- CONCURRENTLY because `npm run check:migrations` requires it, and the rule is
+-- right in general even though this particular table is created eleven lines
+-- above and is therefore empty. Verified against this database that the
+-- migration path does NOT wrap statements in a transaction, which CONCURRENTLY
+-- cannot run inside.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ux_finding_created_idx
+  ON public.ux_finding (created_at DESC);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ux_finding_criterion_outcome_idx
   ON public.ux_finding (criterion, outcome);
 
 ALTER TABLE public.ux_finding ENABLE ROW LEVEL SECURITY;
