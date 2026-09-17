@@ -1,0 +1,46 @@
+# ONE-OFF, manual only. Delete this file and scripts/post-l1-correction.mjs
+# once it has run.
+#
+# Eight submission threads carry a verdict saying the survey-loop defect
+# "passes in production now". It does not: the probe that answered never opened
+# the survey. This posts the correction. The Slack token is a CI secret and is
+# deliberately absent from .env.local, so a laptop cannot post to Slack — which
+# is why this needs a workflow at all.
+name: One-off — correct the false L1 verdicts
+
+on:
+  workflow_dispatch:
+    inputs:
+      post:
+        description: "Actually post (unchecked = dry run)"
+        required: false
+        type: boolean
+        default: false
+
+permissions: {}
+
+jobs:
+  correct:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "20"
+      # The flag is chosen in SHELL from an env var, never interpolated into the
+      # run: string — semgrep's run-shell-injection rule blocks that and it has
+      # failed main before.
+      - name: Post the correction
+        run: |
+          if [ "$POST" = "true" ]; then
+            node scripts/post-l1-correction.mjs --post
+          else
+            node scripts/post-l1-correction.mjs
+          fi
+        env:
+          POST: ${{ inputs.post }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_JOURNEY_CHANNEL_ID: ${{ secrets.SLACK_JOURNEY_CHANNEL_ID }}
