@@ -119,10 +119,35 @@ export function maskEmail(email: string): string {
   return `${trimmed.slice(0, 1)}***${trimmed.slice(at)}`;
 }
 
-// Slack mrkdwn treats `&<>*_~``` as formatting characters. Escape so
-// user-supplied strings render literally and can't break the message layout.
+/**
+ * Make a user-supplied string safe to interpolate into Slack mrkdwn.
+ *
+ * HTML ENTITIES, NOT BACKSLASHES. Slack documents exactly one escape mechanism
+ * and it covers exactly three characters: `&` → `&amp;`, `<` → `&lt;`,
+ * `>` → `&gt;`. There is no backslash escape in mrkdwn at all.
+ *
+ * This used to backslash-escape `&<>*_~\``, which failed in both directions and
+ * `codeSpan` in slack-blocks.ts has said so in its own comment the whole time —
+ * it refuses to call this function for precisely this reason:
+ *
+ *   - It SHOWED the backslash. Every Google Ads notification carried
+ *     "performance\_max" in front of the team, 146 times in 30 days.
+ *   - It did not actually neutralise `<`, so a first name or a utm value could
+ *     still open a `<https://…|link>` in an internal channel. Those values are
+ *     user-supplied and utm values arrive on the landing URL, so they are fully
+ *     attacker-controlled.
+ *   - It did not even prevent the layout break it was written for. Slack reads
+ *     `*Kit\*ten*` as bold "Kit\" and then loose text — the same break as the
+ *     unescaped string, plus a visible backslash.
+ *
+ * So `*_~\`` are left alone: nothing can escape them, and pretending otherwise
+ * cost every message a backslash while protecting nothing. Anything that must be
+ * inert — an id, a token, a masked address — belongs in `codeSpan`, where the
+ * formatting characters genuinely stop meaning anything.
+ */
 export function escapeSlack(value: string): string {
-  return value.replace(/[&<>*_~`]/g, (c) => `\\${c}`);
+  // `&` first, or `&lt;` would itself become `&amp;lt;`.
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 /**

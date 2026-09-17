@@ -149,10 +149,18 @@ export async function GET(request: Request) {
         }
       }
     }
+    /**
+     * NULL, not 0, when no session was ever closed.
+     *
+     * Nothing writes `report_session.ended_at` — 0 of 11,230 rows carry one — so
+     * `durations` is always empty and this card has shown a confident
+     * "Avg Session Duration: 0m" on /admin/reports since it shipped. A zero is a
+     * measurement; the truth is that there is no measurement.
+     */
     const avgSessionDurationSec =
       durations.length > 0
         ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
-        : 0;
+        : null;
 
     // --- Section Ratings (graceful degradation) ---
     let sectionRatings: Array<{

@@ -213,11 +213,43 @@ describe("masking parity across every implementation", () => {
 });
 
 describe("escapeSlack", () => {
-  it("escapes Slack mrkdwn formatting characters", () => {
-    expect(escapeSlack("*bold*")).toBe("\\*bold\\*");
-    expect(escapeSlack("a&b<c>")).toBe("a\\&b\\<c\\>");
-    expect(escapeSlack("`code`")).toBe("\\`code\\`");
-    expect(escapeSlack("_italic_~strike~")).toBe("\\_italic\\_\\~strike\\~");
+  /**
+   * Slack documents ONE escape mechanism and it covers three characters. These
+   * tests used to assert the backslash form, which is why the defect they were
+   * meant to catch shipped: "performance\\_max" went out 146 times in 30 days,
+   * with the backslash visible to the whole team.
+   */
+  it("converts the three characters Slack can escape into entities", () => {
+    expect(escapeSlack("a&b<c>")).toBe("a&amp;b&lt;c&gt;");
+  });
+
+  it("encodes the ampersand first, so an entity is never double-encoded", () => {
+    expect(escapeSlack("<tag>")).toBe("&lt;tag&gt;");
+    expect(escapeSlack("&lt;")).toBe("&amp;lt;");
+  });
+
+  /**
+   * The link form is the one that matters: utm values ride in on the landing URL
+   * and a first name is user-supplied, so both are attacker-controlled, and the
+   * backslash form left `<…|…>` fully live in an internal channel.
+   */
+  it("defuses a link injection", () => {
+    expect(escapeSlack("<https://evil.example|Click here>")).toBe(
+      "&lt;https://evil.example|Click here&gt;"
+    );
+    expect(escapeSlack("<https://evil.example|x>")).not.toContain("<");
+  });
+
+  /**
+   * Nothing escapes mrkdwn's emphasis characters — a backslash renders AS a
+   * backslash and does not stop the pairing, so `*Kit\\*ten*` broke the layout
+   * exactly as the unescaped string did. Values that must be inert go through
+   * `codeSpan` instead.
+   */
+  it("leaves the emphasis characters alone rather than printing a backslash", () => {
+    expect(escapeSlack("performance_max")).toBe("performance_max");
+    expect(escapeSlack("*bold* `code` ~strike~")).toBe("*bold* `code` ~strike~");
+    expect(escapeSlack("performance_max")).not.toContain("\\");
   });
 
   it("leaves plain text untouched", () => {

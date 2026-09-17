@@ -63,23 +63,20 @@ export interface SubmissionJourney {
     /** checkoutStartedAt → purchasedAt: how long they hesitated on the Stripe page. */
     msCheckoutHesitation: number | null;
     /**
-     * A LOWER BOUND on time spent reading the report, from the furthest
-     * `report_engagement_*` milestone the reader crossed (1 / 5 / 10 min).
+     * Measured time spent reading the report — see {@link measureReportDwellMs}.
      *
-     * Deliberately a floor and not a duration. `report_session.ended_at` exists
-     * and is the obvious place a real duration would live, but nothing has ever
-     * written it — 0 of ~10,800 rows are closed — so a true "time on report"
-     * cannot be computed today without new client instrumentation. These three
-     * milestone events, on the other hand, have fired continuously since
-     * 2026-05-06 and carry `survey_submission_id` on every single row, so they
-     * answer the question honestly at the cost of precision.
+     * Was a floor off the furthest `report_engagement_*` milestone (1/5/10 min)
+     * until 2026-09-18, which is why every message said "1+ min": 79% of readers
+     * who record any milestone record only that first one. `report_session.ended_at`
+     * is the obvious home for a real duration and is still never written (0 of
+     * 11,230 rows), so this is measured from the event stream instead.
      *
-     * Consent-gated, like every other `analytics_event` milestone: null means
-     * "not recorded", never "they left immediately". Callers must render the
+     * Consent-gated, like every other `analytics_event` row: null means "not
+     * recorded", never "they left immediately". Callers must render the
      * difference, because a reader who declined analytics looks identical to one
      * who bounced.
      */
-    reportDwellFloorMs: number | null;
+    reportDwellMs: number | null;
   };
   milestones: {
     reportViewedAt: string | null;
@@ -174,6 +171,117 @@ function msBetween(from: string | null, to: string | null): number | null {
   return diff >= 0 ? diff : null;
 }
 
+/**
+ * A gap this long ends a sitting. Someone who opens the report at lunch and comes
+ * back in the evening read it twice — summing the two sittings answers "how long
+ * did they spend in there", where a bare last-minus-first would answer "8h".
+ */
+export const REPORT_IDLE_GAP_MS = 30 * 60_000;
+
+/**
+ * Below this, report nothing.
+ *
+ * Opening the report fires a burst of events inside a second or two — the
+ * server-side `report_session` row, `locked_card_price_shown`, `report_viewed`.
+ * Submission #2112 is the whole of one real reader's stream: opened at
+ * 15:26:04.6, two events by 15:26:06.2, then silence. Measuring that span gives
+ * "2s", which reads in #incoming-surveys as "bounced instantly" when all it
+ * actually says is "the page loaded".
+ *
+ * One minute because that is where the instrumentation's own first heartbeat is:
+ * anyone who stays a minute leaves a `report_engagement_1min` row, so at or above
+ * a minute there is always purpose-built evidence, and below it there is only the
+ * load burst. Those readers render an em dash, exactly as they do today.
+ */
+export const MIN_MEASURABLE_DWELL_MS = 60_000;
+
+/**
+ * The active time a milestone PROVES, in ms.
+ *
+ * A switch rather than a lookup object: `event_type` arrives from a database
+ * row, and indexing an object with it is exactly the shape the
+ * security/detect-object-injection rule exists to stop.
+ */
+function milestoneDwellMs(eventType: string): number | null {
+  switch (eventType) {
+    case "report_engagement_1min":
+      return 60_000;
+    case "report_engagement_5min":
+      return 300_000;
+    case "report_engagement_10min":
+      return 600_000;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Measured time in the report: the open, plus every later event the reader
+ * produced, split into sittings on {@link REPORT_IDLE_GAP_MS} and summed — or
+ * the furthest engagement milestone they crossed, whichever is larger.
+ *
+ * BOTH, because each sees something the other cannot. The stream sees a reader
+ * who scrolls and clicks; the milestones see one who does neither, and they
+ * carry a duration of their own rather than a timestamp — a `report_engagement_1min`
+ * row asserts sixty seconds of ACTIVE time, which is not the same as sixty
+ * seconds of wall clock. Submission #2108 is why: opened at 10:21:47, two events
+ * by 10:21:49, then the one-minute milestone at 11:10:42, because the tab sat in
+ * the background for 49 minutes and the timer only counts visible seconds. The
+ * span alone calls that a two-second visit; the milestone calls it a minute, and
+ * the milestone is right.
+ *
+ * Still a LOWER BOUND, and deliberately so — we see the last thing they did, not
+ * the moment they closed the tab, so a reader who spends four quiet minutes on
+ * the final chapter is credited only up to their last scroll.
+ *
+ * Replaces the milestone floor ALONE, which is what made 79% of live messages
+ * (160 of 202 carrying any milestone) read "1+ min" whatever the reader did.
+ * Taking the larger of the two can never print less than the old line did.
+ *
+ * Anything under {@link MIN_MEASURABLE_DWELL_MS} becomes null, never "0s" or
+ * "2s". One lone timestamp is evidence that they opened it and no evidence at
+ * all about how long they stayed, and these events are consent-gated — so
+ * absence has to keep meaning "not recorded".
+ */
+export function measureReportDwellMs(
+  openedAt: string | null,
+  events: Array<{ event_type: string; event_time: string | null | undefined }>
+): number | null {
+  const milestoneFloor = events.reduce<number>((furthest, e) => {
+    const ms = milestoneDwellMs(e.event_type);
+    return ms !== null && ms > furthest ? ms : furthest;
+  }, 0);
+
+  const open = openedAt ? new Date(openedAt).getTime() : Number.NaN;
+  let span = 0;
+  if (Number.isFinite(open)) {
+    // Anything stamped before the report opened belongs to the survey, not to
+    // reading — including a clock-skewed row, which would otherwise start the
+    // first sitting in the past and inflate every sitting after it.
+    const points = [open];
+    for (const event of events) {
+      if (!event.event_time) continue;
+      const ms = new Date(event.event_time).getTime();
+      if (Number.isFinite(ms) && ms >= open) points.push(ms);
+    }
+    points.sort((a, b) => a - b);
+
+    let sittingStart = points[0]!;
+    let previous = points[0]!;
+    for (const point of points.slice(1)) {
+      if (point - previous > REPORT_IDLE_GAP_MS) {
+        span += previous - sittingStart;
+        sittingStart = point;
+      }
+      previous = point;
+    }
+    span += previous - sittingStart;
+  }
+
+  const dwell = Math.max(span, milestoneFloor);
+  return dwell >= MIN_MEASURABLE_DWELL_MS ? dwell : null;
+}
+
 async function fetchJson<T>(path: string, what: string): Promise<T[]> {
   try {
     const res = await supabaseFetch(path);
@@ -200,7 +308,7 @@ export async function buildSubmissionJourney(
 ): Promise<SubmissionJourney | null> {
   // Wave 1: everything keyed directly off the submission id, concurrently. The
   // existing admin timeline route does 13 of these sequentially; don't copy that.
-  const [subs, quotes, events, reportSessions] = await Promise.all([
+  const [subs, quotes, eventsDesc, reportSessions] = await Promise.all([
     fetchJson<SubmissionRow>(
       `/rest/v1/survey_submission?id=eq.${submissionId}` +
         `&select=id,session_id,start_date_time,created_date_time,status,duration_ms,utm_tracker,` +
@@ -214,13 +322,27 @@ export async function buildSubmissionJourney(
         `current_price,currency,purchased_at,checkout_started_at&order=created_date_time.asc`,
       "report_price_quote"
     ),
+    /**
+     * Every event this reader produced AFTER the survey, newest first.
+     *
+     * Widened from the five named types it used to fetch, because the dwell is
+     * now MEASURED from this stream rather than read off three milestone rows —
+     * a scroll, a chapter open or a dismissed paywall all prove the reader was
+     * still in there. `entity_type=neq.survey` drops the wizard events, which
+     * fire before the report exists and can only ever sit before the anchor.
+     *
+     * NEWEST FIRST, then reversed below. PostgREST caps a response at 1,000 rows
+     * and a Range header does not lift it, so an ascending order would silently
+     * drop the TAIL on the one submission that carries 1,962 rows — and the tail
+     * is the entire point: it is what says how long they stayed. Descending puts
+     * any truncation on the oldest end, where the worst case is understating a
+     * dwell we already document as a lower bound. 500 is ~44x the average
+     * submission (11.4 non-survey rows) and well inside the cap.
+     */
     fetchJson<AnalyticsRow>(
       `/rest/v1/analytics_event?survey_submission_id=eq.${submissionId}` +
-        // The three engagement milestones ride along on the query that was
-        // already being made — same row set, same filter, no extra request.
-        `&event_type=in.(report_viewed,paywall_initiated,` +
-        `report_engagement_1min,report_engagement_5min,report_engagement_10min)` +
-        `&select=event_type,event_time&order=event_time.asc`,
+        `&entity_type=neq.survey` +
+        `&select=event_type,event_time&order=event_time.desc&limit=500`,
       "analytics_event"
     ),
     /**
@@ -243,6 +365,12 @@ export async function buildSubmissionJourney(
   const sub = subs[0];
   if (!sub) return null;
 
+  // Back to ascending. The query asks for newest-first only so that truncation
+  // lands on the oldest end; everything below reads this as a timeline. Sorted
+  // rather than reversed, so `firstOf` cannot be silently re-pointed at the last
+  // row by a change to the query's `order`.
+  const events = [...eventsDesc].sort((a, b) => a.event_time.localeCompare(b.event_time));
+
   const stamped = readStampedArms(sub.utm_tracker);
 
   // Any quote carries the person's pricing arm and their resolved device/country —
@@ -253,38 +381,6 @@ export async function buildSubmissionJourney(
 
   const firstOf = (type: string) => events.find((e) => e.event_type === type)?.event_time ?? null;
 
-  /**
-   * Milestone name → the dwell it proves, in ms.
-   *
-   * A switch rather than a lookup object: `event_type` arrives from a database
-   * row, and indexing an object with it is exactly the shape the
-   * security/detect-object-injection rule exists to stop.
-   */
-  const dwellMsOf = (eventType: string): number | null => {
-    switch (eventType) {
-      case "report_engagement_1min":
-        return 60_000;
-      case "report_engagement_5min":
-        return 300_000;
-      case "report_engagement_10min":
-        return 600_000;
-      default:
-        return null;
-    }
-  };
-  /**
-   * The FURTHEST milestone, not the latest.
-   *
-   * These are three independent events rather than a sequence — a reader who
-   * stays ten minutes legitimately has all three rows — so the maximum is what
-   * "how long were they in there" actually means. Taking the last row by time
-   * would give the same answer today only by accident of ordering.
-   */
-  const reportDwellFloorMs = events.reduce<number | null>((furthest, e) => {
-    const ms = dwellMsOf(e.event_type);
-    if (ms === null) return furthest;
-    return furthest === null || ms > furthest ? ms : furthest;
-  }, null);
   // Earliest of the two: whichever actually recorded the open first. The
   // consent-gated event is kept as a fallback rather than dropped, so a row
   // predating report_session still resolves.
@@ -292,6 +388,7 @@ export async function buildSubmissionJourney(
     [reportSessions[0]?.started_at ?? null, firstOf("report_viewed")]
       .filter((v): v is string => Boolean(v))
       .sort()[0] ?? null;
+  const reportDwellMs = measureReportDwellMs(reportViewedAt, events);
   const checkoutStartedAt =
     purchased?.checkout_started_at ??
     quotes.find((q) => q.checkout_started_at)?.checkout_started_at ??
@@ -333,7 +430,7 @@ export async function buildSubmissionJourney(
       completedAt: sub.created_date_time,
       msToPurchase: msBetween(sub.created_date_time, purchasedAt),
       msCheckoutHesitation: msBetween(checkoutStartedAt, purchasedAt),
-      reportDwellFloorMs,
+      reportDwellMs,
     },
     milestones: {
       reportViewedAt,
@@ -407,9 +504,9 @@ export function journeyFromPurchase(input: {
       completedAt: null,
       msToPurchase: null,
       msCheckoutHesitation: null,
-      // This builder never reads the database, so there are no milestone rows
-      // to derive a dwell from. The purchase message does not render it.
-      reportDwellFloorMs: null,
+      // This builder never reads the database, so there is no event stream to
+      // measure a dwell from. The purchase message does not render it.
+      reportDwellMs: null,
     },
     milestones: {
       reportViewedAt: null,

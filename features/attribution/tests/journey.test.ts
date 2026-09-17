@@ -240,56 +240,154 @@ describe("buildSubmissionJourney", () => {
   });
 
   /**
-   * The dwell floor is the FURTHEST milestone crossed, not the latest row.
+   * The dwell is MEASURED from the reader's own event stream, anchored on the
+   * report open — not read off the furthest milestone crossed, which is what
+   * made 79% of live Slack messages say "1+ min" whatever the reader did.
    *
-   * These are three independent events, so a reader who stays ten minutes
-   * legitimately has all three — the maximum is what "how long were they in
-   * there" means. Ordering by time would give the same answer today only by
-   * accident, which is why the rows below arrive deliberately out of order: this
-   * is the only place the headline number is computed, and everything
-   * downstream mocks it.
+   * Rows arrive deliberately out of order in the first test: the query asks for
+   * newest-first so that PostgREST's 1,000-row cap truncates the OLDEST end
+   * rather than the tail, and this is the only place the headline number is
+   * computed — everything downstream mocks it.
    */
-  describe("report dwell floor", () => {
+  describe("measured report dwell", () => {
     const at = (t: string) => `2026-08-24T${t}.000Z`;
 
-    it("takes the furthest milestone even when the rows arrive out of order", async () => {
+    it("spans the open to the last thing they did, whatever order the rows arrive in", async () => {
       route({
         events: [
-          { event_type: "report_engagement_10min", event_time: at("10:20:00") },
-          { event_type: "report_engagement_1min", event_time: at("10:30:00") },
-          { event_type: "report_engagement_5min", event_time: at("10:25:00") },
+          { event_type: "scroll_depth_75", event_time: at("10:25:00") },
+          { event_type: "report_viewed", event_time: at("10:20:00") },
+          { event_type: "paywall_dismissed", event_time: at("10:29:26") },
+          { event_type: "report_engagement_1min", event_time: at("10:21:00") },
         ],
       });
-      expect((await buildSubmissionJourney(1296))?.timings.reportDwellFloorMs).toBe(600_000);
+      // 10:20:00 → 10:29:26 — the shape of submission #2113, which read "1+ min"
+      expect((await buildSubmissionJourney(1296))?.timings.reportDwellMs).toBe(566_000);
     });
 
-    it.each([
-      [["report_engagement_1min"], 60_000],
-      [["report_engagement_1min", "report_engagement_5min"], 300_000],
-      [["report_engagement_1min", "report_engagement_5min", "report_engagement_10min"], 600_000],
-    ])("reads %j as %ims", async (types, expected) => {
-      route({ events: types.map((t) => ({ event_type: t, event_time: at("10:20:00") })) });
-      expect((await buildSubmissionJourney(1296))?.timings.reportDwellFloorMs).toBe(expected);
+    it("counts a quiet reader by their heartbeats alone", async () => {
+      // No scrolls, no clicks: the 1/5/10-minute milestones are the only
+      // evidence that time passed, which is why they stay in the stream.
+      route({
+        events: [
+          { event_type: "report_viewed", event_time: at("10:20:00") },
+          { event_type: "report_engagement_1min", event_time: at("10:21:00") },
+          { event_type: "report_engagement_5min", event_time: at("10:25:00") },
+          { event_type: "report_engagement_10min", event_time: at("10:30:00") },
+        ],
+      });
+      expect((await buildSubmissionJourney(1296))?.timings.reportDwellMs).toBe(600_000);
     });
 
-    it("is null when nothing recorded a milestone, never zero", async () => {
+    it("anchors on report_session when consent withheld report_viewed", async () => {
+      // The server-side open is not consent-gated; the events are. A reader who
+      // granted consent late still gets measured from the real open.
+      route({
+        reportSessions: [{ started_at: at("10:20:00") }],
+        events: [{ event_type: "scroll_depth_50", event_time: at("10:23:00") }],
+      });
+      expect((await buildSubmissionJourney(1296))?.timings.reportDwellMs).toBe(180_000);
+    });
+
+    it("is null when only the open was recorded, never zero", async () => {
       route({ events: [{ event_type: "report_viewed", event_time: at("10:20:00") }] });
       const j = await buildSubmissionJourney(1296);
-      // null means "not recorded" — these events are consent-gated, so a reader
-      // who declined analytics must not be rendered as a short visit.
-      expect(j?.timings.reportDwellFloorMs).toBeNull();
+      // One timestamp proves they opened it and says nothing about how long they
+      // stayed. These events are consent-gated, so a reader who declined
+      // analytics must not be rendered as a zero-second visit.
+      expect(j?.timings.reportDwellMs).toBeNull();
       // and the widened query must not have disturbed the milestones it shares with
       expect(j?.milestones.reportViewedAt).toBe(at("10:20:00"));
     });
 
-    it("ignores event types that are not milestones", async () => {
+    it("is null when nothing recorded the open at all", async () => {
+      route({ events: [{ event_type: "rage_click", event_time: at("10:21:00") }] });
+      expect((await buildSubmissionJourney(1296))?.timings.reportDwellMs).toBeNull();
+    });
+
+    /**
+     * A milestone carries a DURATION, not a timestamp: a `report_engagement_1min`
+     * row asserts sixty seconds of ACTIVE time, which is not sixty seconds of
+     * wall clock. This is submission #2108 — opened 10:21:47, two events by
+     * 10:21:49, then the one-minute milestone 49 minutes later because the tab
+     * sat in the background and the timer only counts visible seconds.
+     *
+     * Measuring the span alone calls that a two-second visit and prints an em
+     * dash, which is strictly WORSE than the "1+ min" it replaced. Taking the
+     * larger of the two is what makes the new line unable to print less than the
+     * old one did.
+     */
+    it("credits a backgrounded tab with the minute its milestone proves", async () => {
       route({
         events: [
-          { event_type: "paywall_initiated", event_time: at("10:20:00") },
-          { event_type: "rage_click", event_time: at("10:21:00") },
+          { event_type: "report_viewed", event_time: at("10:21:47") },
+          { event_type: "locked_card_price_shown", event_time: at("10:21:49") },
+          { event_type: "report_engagement_1min", event_time: at("11:10:42") },
         ],
       });
-      expect((await buildSubmissionJourney(1296))?.timings.reportDwellFloorMs).toBeNull();
+      expect((await buildSubmissionJourney(1296))?.timings.reportDwellMs).toBe(60_000);
+    });
+
+    it("still counts a milestone when the open itself was never recorded", async () => {
+      route({ events: [{ event_type: "report_engagement_5min", event_time: at("10:25:00") }] });
+      expect((await buildSubmissionJourney(1296))?.timings.reportDwellMs).toBe(300_000);
+    });
+
+    /**
+     * The load burst is not a visit. Submission #2112's entire stream: the report
+     * opened at 15:26:04.6 and two events landed by 15:26:06.2, then silence.
+     * Printing "2s" reads in the channel as "bounced instantly" when all it says
+     * is that the page loaded.
+     */
+    it("says nothing recorded rather than a two-second visit for the load burst", async () => {
+      route({
+        reportSessions: [{ started_at: "2026-08-24T10:20:04.600Z" }],
+        events: [
+          { event_type: "locked_card_price_shown", event_time: "2026-08-24T10:20:06.000Z" },
+          { event_type: "report_viewed", event_time: "2026-08-24T10:20:06.200Z" },
+        ],
+      });
+      expect((await buildSubmissionJourney(1296))?.timings.reportDwellMs).toBeNull();
+    });
+
+    it("sums two sittings instead of billing the gap between them", async () => {
+      route({
+        events: [
+          { event_type: "report_viewed", event_time: at("10:00:00") },
+          { event_type: "scroll_depth_50", event_time: at("10:05:00") },
+          // came back after lunch — 2h later, a second sitting, not 2h05 of reading
+          { event_type: "report_viewed", event_time: at("12:05:00") },
+          { event_type: "scroll_depth_100", event_time: at("12:08:00") },
+        ],
+      });
+      expect((await buildSubmissionJourney(1296))?.timings.reportDwellMs).toBe(480_000);
+    });
+
+    it("ignores anything stamped before the report opened", async () => {
+      route({
+        events: [
+          // clock skew or a stray pre-report row would otherwise start the first
+          // sitting in the past and inflate everything after it
+          { event_type: "rage_click", event_time: at("09:00:00") },
+          { event_type: "report_viewed", event_time: at("10:20:00") },
+          { event_type: "scroll_depth_25", event_time: at("10:22:00") },
+        ],
+      });
+      expect((await buildSubmissionJourney(1296))?.timings.reportDwellMs).toBe(120_000);
+    });
+
+    it("asks the database for the newest rows, so a cap cannot eat the tail", async () => {
+      route({ events: [] });
+      await buildSubmissionJourney(1296);
+      const eventQuery = mockSupabaseFetch.mock.calls
+        .map((c) => String(c[0]))
+        .find((p: string) => p.includes("/analytics_event?"));
+      // Ascending would truncate the LAST rows at PostgREST's 1,000-row cap —
+      // and the last rows are the entire measurement.
+      expect(eventQuery).toContain("order=event_time.desc");
+      expect(eventQuery).toContain("limit=500");
+      // the wizard fires before the report exists; nothing it writes can count
+      expect(eventQuery).toContain("entity_type=neq.survey");
     });
   });
 

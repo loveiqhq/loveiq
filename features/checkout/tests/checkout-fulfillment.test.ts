@@ -1001,8 +1001,10 @@ describe("checkout fulfillment", () => {
       expect(slackCalls).toHaveLength(1);
       const all = rendered(slackCalls[0]!.body);
       expect(all).toContain("Referral");
-      // utm values are escaped for Slack (underscore → \_ so it isn't italicised).
-      expect(all).toContain("referral / email / survey\\_invite");
+      // utm values travel literally: Slack has no backslash escape, so the old
+      // "survey\_invite" put a visible backslash in front of the whole team.
+      expect(all).toContain("referral / email / survey_invite");
+      expect(all).not.toContain("survey\\_invite");
       // The paywall arm is no longer listed: that experiment concluded, so
       // presenting it as one the buyer "was in" was wrong. It is still stored
       // and still shown in /admin's concluded section.

@@ -252,7 +252,25 @@ describe("journey dwell refresh", () => {
     }
   );
 
+  /**
+   * Any report-page event moves the line, not just the three milestones.
+   *
+   * This is the half of the "always 1+ min" bug that the measurement alone does
+   * not fix: gated on milestones only, a reader who crossed one minute and then
+   * read for eight more was frozen at their first minute, because nothing they
+   * did afterwards was allowed to re-render the message.
+   */
   it.each(["report_viewed", "paywall_initiated", "scroll_depth_50", "rage_click"])(
+    "refreshes on %s, so the last thing they do is what lands in Slack",
+    async (event_type) => {
+      await POST(makeRequest({ event_type, submission_id: 2013 }));
+      expect(mockRefreshJourneyDetail).toHaveBeenCalledWith(2013);
+    }
+  );
+
+  // The wizard fires these before the report exists, so they can only ever
+  // produce the same em dash — not worth a Supabase read and a Slack call.
+  it.each(["wizard_slide_advanced", "survey_confirmation_cta_clicked"])(
     "does not refresh on %s",
     async (event_type) => {
       await POST(makeRequest({ event_type, submission_id: 2013 }));
@@ -308,5 +326,38 @@ describe("journey dwell refresh", () => {
       "2013:report_engagement_5min",
       expect.objectContaining({ bucket: "journey-dwell-refresh", limit: 1 })
     );
+  });
+
+  /**
+   * Ordinary activity shares ONE slot every five minutes, so a chatty page
+   * (scroll depth alone fires four times) cannot rewrite the message on every
+   * row. A milestone keeps its own hourly slot: a quiet reader produces no
+   * scrolls and no clicks, so their heartbeats are the only evidence that time
+   * is passing, and a shared bucket would let chatter swallow them.
+   */
+  it("gives ordinary activity its own five-minute slot, keyed by submission alone", async () => {
+    const { checkRateLimit } = await import("@shared/http/ratelimit");
+    await POST(makeRequest({ event_type: "scroll_depth_75", submission_id: 2013 }));
+    expect(checkRateLimit).toHaveBeenCalledWith(
+      "2013",
+      expect.objectContaining({
+        bucket: "journey-activity-refresh",
+        limit: 1,
+        windowMs: 300_000,
+      })
+    );
+  });
+
+  it("skips the refresh when ordinary activity is still within its cooldown", async () => {
+    const { checkRateLimit } = await import("@shared/http/ratelimit");
+    vi.mocked(checkRateLimit).mockImplementation(async (_key, opts) => ({
+      allowed: opts?.bucket !== "journey-activity-refresh",
+      remaining: 0,
+      resetAt: new Date(),
+    }));
+    const res = await POST(makeRequest({ event_type: "scroll_depth_75", submission_id: 2013 }));
+    // still stored — only the Slack edit is suppressed
+    expect(res.status).toBe(204);
+    expect(mockRefreshJourneyDetail).not.toHaveBeenCalled();
   });
 });

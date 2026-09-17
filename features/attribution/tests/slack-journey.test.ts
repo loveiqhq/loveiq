@@ -35,7 +35,7 @@ function journey(overrides: Partial<SubmissionJourney> = {}): SubmissionJourney 
       completedAt: "2026-08-24T18:39:00.000Z",
       msToPurchase: null,
       msCheckoutHesitation: null,
-      reportDwellFloorMs: null,
+      reportDwellMs: null,
     },
     milestones: {
       reportViewedAt: null,
@@ -165,14 +165,14 @@ describe("the compact incoming-survey layout", () => {
         country: "United States",
         device: "iOS",
         arms: { landing: "white_prev", survey: null, pricing: null, paywall: null },
-        timings: { durationMs: 1_080_000, reportDwellFloorMs: 300_000 },
+        timings: { durationMs: 1_080_000, reportDwellMs: 300_000 },
       }),
       { kind: "survey_completed", questionCount: 58 }
     );
 
     expect(soleSection(message.blocks).split("\n")).toEqual([
       "Survey submission *#1756* `a***@gmail.com`",
-      "Survey time: *18 min*  |  Report time: *5+ min*",
+      "Survey time: *18 min*  |  Report time: *5 min*",
       "Came from: *Paid* — google / cpc",
       "Device: *iOS*",
       "Landing page design: *Landing Page V1* (First Design)",
@@ -249,7 +249,7 @@ describe("the compact incoming-survey layout", () => {
    * The guard is `typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0`, and
    * the absent-field test above only exercises the FIRST clause. These are the
    * other two: a journey whose dwell arrives as NaN, Infinity, zero or negative
-   * must read as unrecorded, never as a confident "NaN+ min" or a "0+ min" that
+   * must read as unrecorded, never as a confident "NaN min" or a "0s" that
    * asserts a visit nobody measured.
    */
   it.each([
@@ -258,7 +258,7 @@ describe("the compact incoming-survey layout", () => {
     ["zero", 0],
     ["negative", -60_000],
   ])("says nothing recorded rather than a number for %s", (_label, ms) => {
-    const message = buildJourneyMessage(journey({ timings: { reportDwellFloorMs: ms } }), {
+    const message = buildJourneyMessage(journey({ timings: { reportDwellMs: ms } }), {
       kind: "survey_completed",
       questionCount: 58,
     });
@@ -266,7 +266,80 @@ describe("the compact incoming-survey layout", () => {
     const rendered = JSON.stringify(message.blocks);
     expect(rendered).not.toContain("NaN");
     expect(rendered).not.toContain("Infinity");
-    expect(rendered).not.toContain("0+ min");
+    expect(rendered).not.toContain("Report time: *0");
+  });
+
+  /**
+   * The Google Ads branch renders ~150 messages a month and had no test at all.
+   *
+   * Its qualifiers used to print Google's ValueTrack codes verbatim — "(x)",
+   * "(p, g)" — in a message whose stated audience is a non-technical reader. Over
+   * 30 days the channel got "x" 146 times, "p" 70 and "e" 41.
+   */
+  describe("Google Ads detail", () => {
+    const ads = (over: Record<string, unknown>) =>
+      journey({
+        traffic: {
+          bucket: "Paid",
+          source: "google",
+          medium: "cpc",
+          campaign: "performance_max",
+          isGoogleAds: true,
+          keyword: null,
+          matchType: null,
+          network: null,
+          ...over,
+        } as SubmissionJourney["traffic"],
+      });
+
+    const cameFrom = (j: SubmissionJourney) =>
+      soleSection(buildJourneyMessage(j, { kind: "survey_completed", questionCount: 58 }).blocks)
+        .split("\n")
+        .find((l) => l.startsWith("Came from:")) ?? "";
+
+    it.each([
+      ["x", "cross-network"],
+      ["g", "Google search"],
+      ["s", "search partner"],
+      ["d", "Display"],
+      ["ytv", "YouTube"],
+      ["vp", "video partner"],
+    ])("says %s in words: %s", (code, words) => {
+      expect(cameFrom(ads({ network: code }))).toBe(
+        `Came from: *Google Ads* — performance_max (${words})`
+      );
+    });
+
+    it.each([
+      ["e", "exact match"],
+      ["p", "phrase match"],
+      ["b", "broad match"],
+    ])("says match type %s in words: %s", (code, words) => {
+      expect(cameFrom(ads({ matchType: code }))).toBe(
+        `Came from: *Google Ads* — performance_max (${words})`
+      );
+    });
+
+    it("keeps the keyword and both qualifiers together, in order", () => {
+      expect(cameFrom(ads({ keyword: "couples therapy", matchType: "p", network: "g" }))).toBe(
+        'Came from: *Google Ads* — performance_max / "couples therapy" (phrase match, Google search)'
+      );
+    });
+
+    /**
+     * A code we do not recognise falls through to itself rather than to a guess —
+     * and is still escaped, because these arrive as URL parameters and are fully
+     * attacker-controlled.
+     */
+    it("passes an unknown code through, escaped", () => {
+      expect(cameFrom(ads({ network: "<b>zz</b>" }))).toContain("(&lt;b&gt;zz&lt;/b&gt;)");
+    });
+
+    it("names the gap when auto-tagging sent no campaign", () => {
+      expect(cameFrom(ads({ campaign: null }))).toBe(
+        "Came from: *Google Ads* — campaign not tagged (auto-tagging sends only the click id)"
+      );
+    });
   });
 
   it("carries the masked email beside the submission number", () => {
@@ -345,23 +418,30 @@ describe("the compact incoming-survey layout", () => {
    */
   it("keeps both time columns, with an em dash for whichever is unrecorded", () => {
     const message = buildJourneyMessage(
-      journey({ timings: { durationMs: null, reportDwellFloorMs: null } }),
+      journey({ timings: { durationMs: null, reportDwellMs: null } }),
       { kind: "survey_completed", questionCount: 58 }
     );
     expect(soleSection(message.blocks)).toContain("Survey time: *—*  |  Report time: *—*");
   });
 
   /**
-   * The value is a FLOOR from the furthest milestone crossed, never a measured
-   * duration — `report_session.ended_at` has never been written, so no real
-   * duration exists to print. The plus sign is what keeps that honest.
+   * A MEASURED duration, rendered by the same `formatDuration` as the survey
+   * time beside it — no plus sign, because it is no longer a bucket.
+   *
+   * The old behaviour is the bug this replaced: three milestone events at
+   * 1/5/10 minutes meant 79% of live messages read "1+ min" whatever the reader
+   * did, so a nine-minute read and a seventy-second one were indistinguishable
+   * in the channel. 566_000 is the real submission (#2113) that was reported.
    */
   it.each([
-    [60_000, "1+ min"],
-    [300_000, "5+ min"],
-    [600_000, "10+ min"],
-  ])("renders a dwell floor of %ims as %s", (ms, expected) => {
-    const message = buildJourneyMessage(journey({ timings: { reportDwellFloorMs: ms } }), {
+    [45_000, "45s"],
+    [60_000, "1 min"],
+    [300_000, "5 min"],
+    [566_000, "9 min"],
+    [600_000, "10 min"],
+    [4_260_000, "1h 11m"],
+  ])("renders a measured dwell of %ims as %s", (ms, expected) => {
+    const message = buildJourneyMessage(journey({ timings: { reportDwellMs: ms } }), {
       kind: "survey_completed",
       questionCount: 58,
     });
@@ -371,13 +451,13 @@ describe("the compact incoming-survey layout", () => {
   /**
    * Regression guard for the defect these very tests caught during development:
    * a journey assembled without the new field arrives as `undefined`, and
-   * `Math.round(undefined / 60_000)` is NaN — which rendered a confident
+   * arithmetic on it is NaN — which rendered a confident
    * "Report time: *NaN+ min*" in front of the whole team rather than failing.
    */
   it("says nothing recorded rather than NaN when the field is absent entirely", () => {
     const stripped = journey();
     // @ts-expect-error — deliberately modelling a journey built before this field existed.
-    delete stripped.timings.reportDwellFloorMs;
+    delete stripped.timings.reportDwellMs;
     const message = buildJourneyMessage(stripped, {
       kind: "survey_completed",
       questionCount: 58,
@@ -499,17 +579,33 @@ describe("journey message safety", () => {
   /**
    * Both of these now assert against the PURCHASE message. The survey message no
    * longer renders a name or an email at all, so the escaping they guard has
-   * moved rather than stopped mattering — a buyer called "Ki*tt*en" can still
-   * break the layout of the one message that still prints a name.
+   * moved rather than stopped mattering.
+   *
+   * A NAME IS ESCAPED FOR LINKS, NOT FOR EMPHASIS. Slack has no escape for `*`,
+   * and the backslash form this used to assert did not produce one: Slack read
+   * `*Ki\*tt\*en*` as bold "Ki\" and then loose text — the same break as the raw
+   * string, with a visible backslash added to every ordinary name that happened
+   * to contain an underscore. What IS defusable is the dangerous form, and that
+   * is what this pins.
    */
-  it("escapes a name containing Slack markup so the layout cannot break", () => {
-    const message = buildJourneyMessage(journey({ firstName: "Ki*tt*en" }), {
+  it("defuses a link injection in a name, and adds no backslash to an ordinary one", () => {
+    const attack = buildJourneyMessage(journey({ firstName: "<https://evil.example|Support>" }), {
       kind: "purchase",
       planLabel: "Full report",
       archetype: null,
       amountText: "EUR 29.00",
     });
-    expect(JSON.stringify(message.blocks)).toContain("Ki\\\\*tt\\\\*en");
+    const attackText = JSON.stringify(attack.blocks);
+    expect(attackText).toContain("&lt;https://evil.example|Support&gt;");
+    expect(attackText).not.toContain("<https://evil.example");
+
+    const ordinary = buildJourneyMessage(journey({ firstName: "Jean_Luc" }), {
+      kind: "purchase",
+      planLabel: "Full report",
+      archetype: null,
+      amountText: "EUR 29.00",
+    });
+    expect(JSON.stringify(ordinary.blocks)).toContain("Jean_Luc");
   });
 
   it("puts the masked email in a code span, not through the markup escaper", () => {
@@ -529,17 +625,28 @@ describe("journey message safety", () => {
   /**
    * utm values are fully attacker-controlled — they arrive on the landing URL —
    * and the compact layout interpolates the traffic detail straight into a line
-   * it also bolds. Pinned here because the bolding is new.
+   * it also bolds.
+   *
+   * The link form is the one that can do harm in an internal channel, and the
+   * old backslash escaping left it completely live: `\<https://…|…\>` is still a
+   * Slack link. The underscore case is the one that was hurting every day —
+   * "performance_max" went out as "performance\_max" 146 times in 30 days.
    */
-  it("escapes attacker-controlled campaign text in the compact layout", () => {
-    const message = buildJourneyMessage(
-      journey({
-        traffic: { bucket: "Paid", source: "google", medium: "cpc", campaign: "*pwn*" },
-      }),
-      { kind: "survey_completed", questionCount: 59 }
+  it("defuses a link in a campaign name, and leaves an ordinary one alone", () => {
+    const render = (campaign: string) =>
+      JSON.stringify(
+        buildJourneyMessage(
+          journey({ traffic: { bucket: "Paid", source: "google", medium: "cpc", campaign } }),
+          { kind: "survey_completed", questionCount: 59 }
+        ).blocks
+      );
+
+    expect(render("<https://evil.example|Click here>")).toContain(
+      "&lt;https://evil.example|Click here&gt;"
     );
-    const text = JSON.stringify(message.blocks);
-    expect(text).toContain("\\\\*pwn\\\\*");
+    expect(render("<https://evil.example|Click here>")).not.toContain("<https://");
+    expect(render("performance_max")).toContain("performance_max");
+    expect(render("performance_max")).not.toContain("performance\\\\_max");
   });
 
   /**
@@ -631,7 +738,7 @@ describe("journey message safety", () => {
           completedAt: null,
           msToPurchase: null,
           msCheckoutHesitation: null,
-          reportDwellFloorMs: null,
+          reportDwellMs: null,
         },
         traffic: { bucket: "Direct", source: null, medium: null, campaign: null },
       }),

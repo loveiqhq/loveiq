@@ -64,6 +64,53 @@ function money(amount: number | null, currency: string): string | null {
  * names. `head` is a classification we produce ("Google Ads", "Paid",
  * "Direct"); `detail` is assembled from utm values and is already escaped.
  */
+/**
+ * Google's ValueTrack codes, in words.
+ *
+ * This file's whole premise is that nobody reading Slack meets a raw value, and
+ * these were the last ones that slipped through: over 30 days the live messages
+ * printed "(x)" 146 times, "(p)" 70 and "(e)" 41 — Google's codes for
+ * cross-network, phrase match and exact match, which mean nothing to the person
+ * this message is written for.
+ *
+ * An unrecognised code falls through to itself rather than to a guess, and is
+ * escaped by the caller either way: these arrive as URL parameters and are fully
+ * attacker-controlled.
+ */
+function valueTrackLabel(kind: "network" | "matchtype", code: string): string {
+  const key = code.trim().toLowerCase();
+  if (kind === "network") {
+    switch (key) {
+      case "g":
+        return "Google search";
+      case "s":
+        return "search partner";
+      case "d":
+        return "Display";
+      case "ytv":
+        return "YouTube";
+      case "vp":
+        return "video partner";
+      case "x":
+        // What Performance Max and Demand Gen report — the campaign type that
+        // produced most of the 146.
+        return "cross-network";
+      default:
+        return code;
+    }
+  }
+  switch (key) {
+    case "e":
+      return "exact match";
+    case "p":
+      return "phrase match";
+    case "b":
+      return "broad match";
+    default:
+      return code;
+  }
+}
+
 function trafficParts(journey: SubmissionJourney): { head: string; detail: string | null } {
   const { bucket, source, medium, campaign, isGoogleAds, keyword, matchType, network } =
     journey.traffic;
@@ -73,7 +120,12 @@ function trafficParts(journey: SubmissionJourney): { head: string; detail: strin
     const detail: string[] = [];
     if (campaign) detail.push(esc(campaign));
     if (keyword) detail.push(`"${esc(keyword)}"`);
-    const qualifiers = [matchType, network].filter(Boolean).map((v) => esc(v!));
+    const qualifiers = [
+      matchType ? valueTrackLabel("matchtype", matchType) : null,
+      network ? valueTrackLabel("network", network) : null,
+    ]
+      .filter(Boolean)
+      .map((v) => esc(v!));
     const tail = qualifiers.length > 0 ? ` (${qualifiers.join(", ")})` : "";
     if (detail.length === 0) {
       // The gap is named, with its cause, because a missing campaign here is a
@@ -197,27 +249,37 @@ function armFields(journey: SubmissionJourney): SlackBlock {
 }
 
 /**
- * "5+ min", or an em dash when nothing recorded it.
+ * "9 min", or an em dash when nothing recorded it.
  *
- * The plus sign is load-bearing. The value is a FLOOR taken from the furthest
- * `report_engagement_*` milestone crossed, so a reader who stayed eleven minutes
- * and one who stayed fifty both read "10+ min". Printing a bare "10 min" would
- * state a duration we have not measured.
+ * Rendered with the same `formatDuration` as the survey time beside it, so the
+ * two halves of the line are the same kind of number rather than one duration
+ * and one bucket.
  *
- * An em dash — not "0 min", and not "< 1 min" — when the floor is null. Those
- * milestones sit behind the analytics consent gate, and `report_viewed` alone
- * already misses ~44% of real opens (96 of 216 over 2026-08-25 → 09-05), so absence genuinely means "not recorded".
- * Rendering it as a short visit would put a number in a channel people read to
- * judge the funnel that is wrong in the most flattering-to-nobody direction.
+ * THE PLUS IS GONE, with the thing that made it necessary. This used to be a
+ * floor off three milestone events at 1/5/10 minutes, so a reader who stayed
+ * eleven minutes and one who stayed fifty both read "10+ min" — and because 79%
+ * of readers who record any milestone record only the first, very nearly every
+ * message in #incoming-surveys read "1+ min" whatever happened. The value is now
+ * measured from the reader's own event stream, so it can be stated plainly.
+ *
+ * It remains a lower bound (we see their last action, not the moment they
+ * closed the tab), which is why the underlying measurement keeps the milestones
+ * in the stream: a quiet reader still leaves a heartbeat at 1, 5 and 10 minutes.
+ *
+ * An em dash — not "0 min", and not "< 1 min" — when nothing was recorded. The
+ * stream sits behind the analytics consent gate, and `report_viewed` alone
+ * already misses ~44% of real opens (96 of 216 over 2026-08-25 → 09-05), so
+ * absence genuinely means "not recorded". Rendering it as a short visit would
+ * put a number in a channel people read to judge the funnel that is wrong in the
+ * most flattering-to-nobody direction.
  */
 function formatReportDwell(ms: number | null | undefined): string {
-  // Guarded the same way formatDuration is, not just against null: a journey
-  // assembled by any path that predates this field arrives with `undefined`
-  // here, and `Math.round(undefined / 60_000)` is NaN — which renders as a
-  // confident "NaN+ min" rather than failing. Non-finite and non-positive are
-  // folded into the same honest answer.
+  // Guarded against more than null: a journey assembled by any path that
+  // predates this field arrives with `undefined` here, and arithmetic on it is
+  // NaN — which used to render as a confident "NaN+ min" rather than failing.
+  // Non-finite and non-positive fold into the same honest answer.
   if (typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0) return "—";
-  return `${Math.round(ms / 60_000)}+ min`;
+  return formatDuration(ms) ?? "—";
 }
 
 /**
@@ -295,7 +357,7 @@ function compactSurveyLines(journey: SubmissionJourney, reachedFloor?: JourneySt
    */
   lines.push(
     `Survey time: ${bold(formatDuration(journey.timings.durationMs) ?? "—")}` +
-      `  |  Report time: ${bold(formatReportDwell(journey.timings.reportDwellFloorMs))}`
+      `  |  Report time: ${bold(formatReportDwell(journey.timings.reportDwellMs))}`
   );
 
   const traffic = trafficParts(journey);

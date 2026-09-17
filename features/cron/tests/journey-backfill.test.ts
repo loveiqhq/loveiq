@@ -53,7 +53,7 @@ function journey(id: number, opts: { viewed?: boolean } = {}) {
       durationMs: 540_000,
       msToPurchase: null,
       msCheckoutHesitation: null,
-      reportDwellFloorMs: null,
+      reportDwellMs: null,
     },
     milestones: {
       reportViewedAt: opts.viewed ? "2026-08-20T11:00:00.000Z" : null,

@@ -215,7 +215,7 @@ describe("refreshJourneyMessage", () => {
       completedAt: "2026-08-24T18:39:00.000Z",
       msToPurchase: null,
       msCheckoutHesitation: null,
-      reportDwellFloorMs: null,
+      reportDwellMs: null,
     },
     milestones: { ...milestones, ...over },
     money: null,
@@ -378,7 +378,7 @@ describe("refreshJourneyDetail", () => {
       completedAt: "2026-08-24T18:39:00.000Z",
       msToPurchase: null,
       msCheckoutHesitation: null,
-      reportDwellFloorMs: ms,
+      reportDwellMs: ms,
     },
     milestones: { ...milestones, reportViewedAt: "x" },
     money: null,
@@ -415,7 +415,7 @@ describe("refreshJourneyDetail", () => {
     expect(blocks).toContain(":large_green_circle: Paywall hit");
     expect(blocks).not.toContain(":red_circle: Paywall hit");
     // and it still did the job it was called for
-    expect(blocks).toContain("Report time: *10+ min*");
+    expect(blocks).toContain("Report time: *10 min*");
   });
 
   it("falls back to the first read when the re-read fails", async () => {
@@ -444,7 +444,7 @@ describe("refreshJourneyDetail", () => {
     expect(url).toBe("https://slack.com/api/chat.update");
     const body = JSON.parse(init.body) as Record<string, unknown>;
     expect(body.ts).toBe("1724537.001");
-    expect(JSON.stringify(body.blocks)).toContain("Report time: *10+ min*");
+    expect(JSON.stringify(body.blocks)).toContain("Report time: *10 min*");
   });
 
   /**
