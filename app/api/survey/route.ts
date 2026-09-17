@@ -284,16 +284,39 @@ export async function POST(request: Request) {
 
   let mergedUtmTracker = utmTracker ?? null;
   try {
-    if (isLandingVariant(landingVariantRaw) || questionOrderArm) {
-      const base = utmTracker ? JSON.parse(utmTracker) : {};
+    const stampingLanding = isLandingVariant(landingVariantRaw);
+    /**
+     * NEVER CREATE A TRACKER JUST FOR THE ARM.
+     *
+     * `utm_tracker IS NOT NULL` is used as "this respondent has attribution data"
+     * by get_dropout_funnel and three other analytics queries, which then classify
+     * the source and fall back to 'direct'. 36.3% of submissions (748 of 2,058)
+     * have no tracker and all of them have a session id — so stamping the arm
+     * unconditionally would pull every one of them into those charts as 'direct',
+     * inflating that bucket by more than half.
+     *
+     * The arm is a pure function of the session id, which is stored on the
+     * submission, so nothing is lost: an unstamped respondent's arm is recomputed
+     * rather than read. The stamp is a convenience for grouping, never the record.
+     */
+    if (utmTracker || stampingLanding) {
+      const base: unknown = utmTracker ? JSON.parse(utmTracker) : {};
       if (base && typeof base === "object" && !Array.isArray(base)) {
-        if (isLandingVariant(landingVariantRaw)) base.landing_variant = landingVariantRaw;
-        // Static property, not base[KEY]: a computed write trips
-        // security/detect-object-injection, and the constant is exported for the
-        // queries and the test that pins the two together.
-        if (questionOrderArm) base.question_order_arm = questionOrderArm;
-        const candidate = JSON.stringify(base);
-        if (candidate.length <= 1000) mergedUtmTracker = candidate;
+        /**
+         * Each stamp commits only if it still fits the 1000-char budget. Adding
+         * both and testing the total would mean a tracker near the limit loses the
+         * LANDING arm too — a stamp that fit perfectly well before this experiment
+         * existed. They degrade independently, in the order they were introduced.
+         */
+        let acc = base as Record<string, unknown>;
+        const commit = (next: Record<string, unknown>) => {
+          const candidate = JSON.stringify(next);
+          if (candidate.length > 1000) return;
+          acc = next;
+          mergedUtmTracker = candidate;
+        };
+        if (stampingLanding) commit({ ...acc, landing_variant: landingVariantRaw });
+        if (questionOrderArm) commit({ ...acc, question_order_arm: questionOrderArm });
       }
     }
   } catch {
