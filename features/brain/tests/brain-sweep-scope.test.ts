@@ -112,3 +112,67 @@ describe("sweepMissing — vanishing scope", () => {
     expect(deleted).toHaveLength(30);
   });
 });
+
+/**
+ * THE SCOPES A RUN DID NOT WALK ARE HISTORY, NOT ORPHANS.
+ *
+ * The vanishing-scope heuristic above is deliberately partial: it needs a scope
+ * to lose every row AND clear a 20-row floor AND a 5% share. Gmail therefore
+ * carries the strong rule in its own keep-set. Drive and Notion never got it,
+ * and measured 2026-09-17 that left 11 of 15 drive owners (775 rows, every
+ * external collaborator) and 30 of 33 notion databases under the floor — each
+ * deletable whole the day a folder is unshared or an account suspended.
+ */
+describe("sweepMissing — scopes this run did not walk", () => {
+  beforeEach(() => {
+    stored = [];
+    deleted.length = 0;
+  });
+
+  it("keeps a small scope that dropped out of the walk entirely", async () => {
+    // 8 rows is philipp.leonhard@'s real drive footprint: past neither floor.
+    stored = [...rows(8, "gone@loveiq.org", "g"), ...rows(200, "here@loveiq.org", "h")];
+    const swept = await sweepMissing("drive", seen(ids(rows(200, "here@loveiq.org", "h"))), {
+      scopeKey: "owner",
+      walkedScopes: new Set(["here@loveiq.org"]),
+    });
+    expect(swept).toBe(0);
+    expect(deleted).toEqual([]);
+  });
+
+  it("STILL deletes a stale row from a scope it did walk", async () => {
+    // The positive control, and it is load-bearing: a blanket "keep everything
+    // missing" passes the test above while silently undoing the stale-version
+    // cleanup the sweep exists for.
+    stored = [...rows(8, "gone@loveiq.org", "g"), ...rows(200, "here@loveiq.org", "h")];
+    const keep = ids(rows(200, "here@loveiq.org", "h")).slice(0, 199);
+    const swept = await sweepMissing("drive", seen(keep), {
+      scopeKey: "owner",
+      walkedScopes: new Set(["here@loveiq.org"]),
+    });
+    expect(swept).toBe(1);
+    expect(deleted).toEqual(["h199"]);
+  });
+
+  it("leaves an unscoped row sweepable, which is today's behaviour", async () => {
+    // Deliberately NOT treated as history: a notion standalone page carries no
+    // database and is walked every run, so keeping all of them would make 348
+    // of 1,484 rows immortal.
+    stored = [{ source_id: "u0", meta: {} }, ...rows(200, "here@loveiq.org", "h")];
+    const swept = await sweepMissing("drive", seen(ids(rows(200, "here@loveiq.org", "h"))), {
+      scopeKey: "owner",
+      walkedScopes: new Set(["here@loveiq.org"]),
+    });
+    expect(swept).toBe(1);
+    expect(deleted).toEqual(["u0"]);
+  });
+
+  it("changes nothing when the caller names no walked scopes", async () => {
+    // Backwards compatible: every existing caller keeps its exact behaviour.
+    stored = [...rows(8, "gone@loveiq.org", "g"), ...rows(200, "here@loveiq.org", "h")];
+    const swept = await sweepMissing("drive", seen(ids(rows(200, "here@loveiq.org", "h"))), {
+      scopeKey: "owner",
+    });
+    expect(swept).toBe(8);
+  });
+});

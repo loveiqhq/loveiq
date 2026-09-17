@@ -598,7 +598,7 @@ const SCOPE_VANISH_MIN_ROWS = 20;
 export async function sweepMissing(
   source: string,
   seenIds: Set<string>,
-  opts: { scopeKey?: string } = {}
+  opts: { scopeKey?: string; walkedScopes?: ReadonlySet<string> } = {}
 ): Promise<number> {
   const stored: string[] = [];
   /** source_id -> the scope it belongs to, when this source names one. */
@@ -630,7 +630,46 @@ export async function sweepMissing(
   }
   if (stored.length === 0) return 0;
 
-  const orphans = stored.filter((id) => !seenIds.has(id));
+  /**
+   * A row from a scope this run DID NOT WALK is history, not an orphan.
+   *
+   * The vanishing-scope heuristic below is the second line of defence and only
+   * the second: it needs a scope to lose every row it holds AND to clear both a
+   * 20-row floor and a 5% share, which is deliberate (see brain-sweep-scope
+   * tests) and by design lets small scopes through. Gmail therefore carries the
+   * strong rule in its own keep-set, and drive and notion never got it — so
+   * every drive owner under 5% of the source and thirty of notion's
+   * thirty-three databases could be deleted whole the day their access
+   * changed. Measured 2026-09-17: 11 of 15 drive owners (775 rows, including
+   * every external collaborator) and 30 of 33 notion databases sat under that
+   * bar.
+   *
+   * Rows from scopes that WERE walked still sweep, which is what keeps the
+   * stale-version cleanup working.
+   *
+   * A row with NO readable scope keeps today's behaviour and stays sweepable.
+   * Gmail treats unattributable rows as history, but it does that in its own
+   * keep-set and its unscoped set is tiny; here the same rule would make 348 of
+   * notion's 1,484 rows immortal, because a standalone page carries no database
+   * and is walked on every run. So this guard only protects what it can prove is
+   * at risk — a scope that exists and was not walked — and leaves the rest
+   * exactly as it was, which is why it cannot regress any current behaviour.
+   * The residual gap is an unscoped row whose source silently stops listing it.
+   */
+  const missing = stored.filter((id) => !seenIds.has(id));
+  const walked = opts.walkedScopes;
+  const orphans = walked
+    ? missing.filter((id) => {
+        const sc = scopeOf.get(id);
+        return sc === undefined || walked.has(sc);
+      })
+    : missing;
+  if (walked && orphans.length < missing.length) {
+    logger.info(
+      { source, kept: missing.length - orphans.length, scopes: walked.size },
+      "brain sweep: kept rows from scopes this run did not walk"
+    );
+  }
 
   if (opts.scopeKey && orphans.length > 0) {
     const held = new Map<string, number>();

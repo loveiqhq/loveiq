@@ -778,6 +778,24 @@ export async function ingestDrive(
   const swept = sweeping
     ? await sweepMissing(SOURCE, new Set([...writtenIds, ...confirmed]), {
         scopeKey: "owner",
+        /**
+         * Only the owners this run actually saw. The service account sees what
+         * people share with it, so an owner leaves the listing when a folder is
+         * unshared or an account is suspended — lost access, not deleted
+         * documents. Without this their rows are swept whole, and 11 of the 15
+         * owners here (775 rows, every external collaborator among them) sit
+         * under the vanishing-scope heuristic's 5% floor, so nothing else
+         * catches it.
+         *
+         * Built from `resolved.docs`, BEFORE the SKIP_FILE_IDS filter above: a
+         * skipped document must still look absent to the sweep, and protecting
+         * its owner would be the one way to undo that on purpose.
+         */
+        walkedScopes: new Set(
+          resolved.docs
+            .map((f) => f.owners?.[0]?.emailAddress)
+            .filter((o): o is string => Boolean(o))
+        ),
       })
     : 0;
 

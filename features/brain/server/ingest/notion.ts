@@ -796,6 +796,19 @@ export async function ingestNotion(
   const swept = sweeping
     ? await sweepMissing(SOURCE, new Set([...writtenIds, ...confirmed]), {
         scopeKey: "database",
+        /**
+         * Only the databases this run actually crawled. Unshare a database from
+         * the integration and its pages stop being listed, which is lost access
+         * rather than deleted pages — without this they are swept whole, and 30
+         * of the 33 databases here sit under the vanishing-scope heuristic's 5%
+         * floor, so nothing else would catch it.
+         *
+         * `label` falls back to "Board" for a standalone page, and "Board" is a
+         * real database title, so those stay sweepable as long as it is crawled.
+         */
+        walkedScopes: new Set(
+          [...databases.values()].map((t) => t?.trim() || "Board").filter(Boolean)
+        ),
       })
     : 0;
 
