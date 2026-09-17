@@ -314,10 +314,12 @@ test.describe("Survey — Full happy path", () => {
 
     // --- Q1: "What is your name?" (00001, open/text, required) ---
     // NOT email. The email question moved to second-from-last on 2026-08-16 when the
-    // "email last" arm of `survey-email-position-ab` shipped to everyone; `orderEmailLast`
-    // now renders it at Q56 of 57, immediately before the marketing opt-in. This spec
-    // still expected it first, so it had been failing silently ever since — E2E is not a
-    // CI gate, so nothing reported it.
+    // "email last" arm of `survey-email-position-ab` shipped to everyone; it is now
+    // rendered immediately before the marketing opt-in, at the tail of the survey. This
+    // spec still expected it first, so it had been failing silently ever since — E2E is
+    // not a CI gate, so nothing reported it. The position is deliberately not written as
+    // a number here: `orderAskedQuestions` gained the demand block on 2026-09-17 and the
+    // count moved again, which is exactly how the stale "Q1 is email" claim survived.
     await expect(page.getByRole("heading", { name: /what is your name/i })).toBeVisible({
       timeout: 5000,
     });

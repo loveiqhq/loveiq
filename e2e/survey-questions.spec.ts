@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 
 import { surveyQuestions, type SurveyQuestion } from "../data/survey-data";
 import { isHidden, RANDOMISE_QIDS } from "../features/survey/questionFlags";
-import { orderEmailLast, orderedOptions } from "../features/survey/ui/questionOrder";
+import { orderAskedQuestions, orderedOptions } from "../features/survey/ui/questionOrder";
 
 /**
  * Walks the whole survey in a real browser and checks the three behaviours the survey
@@ -21,7 +21,9 @@ import { orderEmailLast, orderedOptions } from "../features/survey/ui/questionOr
  * endpoint is intercepted below and answered locally; the run never reaches a submission.
  */
 
-const ASKED: SurveyQuestion[] = orderEmailLast(surveyQuestions).filter((q) => !isHidden(q.qId));
+const ASKED: SurveyQuestion[] = orderAskedQuestions(surveyQuestions, "control").filter(
+  (q) => !isHidden(q.qId)
+);
 
 /**
  * The caps the work order specifies, written out rather than read from `maxSelections`.

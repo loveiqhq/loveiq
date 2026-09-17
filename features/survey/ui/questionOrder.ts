@@ -1,4 +1,5 @@
 import { isRandomised } from "@features/survey/questionFlags";
+import type { QuestionOrderArm } from "@shared/experiments/questionOrderArm";
 
 import type { SurveyQuestion } from "@/data/survey-data";
 
@@ -148,6 +149,38 @@ export function orderC13Opening(questions: SurveyQuestion[]): SurveyQuestion[] {
     ...demoted,
     ...remainder.slice(anchorIdx + 1),
   ];
+}
+
+/**
+ * The order the survey is actually ASKED in — the whole render-time pipeline, in one
+ * place, for one respondent's arm.
+ *
+ * Every reorder here is render-time rather than a row move in `data/survey-source.csv`,
+ * because `scripts/update-survey.js` sorts by qId and would undo any authored ordering on
+ * the next regeneration. That means the asked order exists ONLY as this composition, and
+ * anything that needs to know it — the engine, an end-to-end walk — has to reproduce it.
+ *
+ * WHY THIS IS A FUNCTION AND NOT THREE CALLS AT EACH SITE. Reproducing it by hand has
+ * already failed silently twice. `e2e/survey.spec.ts` kept expecting email first for the
+ * three weeks after `orderEmailLast` shipped (see the note at its Q1 assertion), and the
+ * demand block broke the two specs that rebuild the order from `orderEmailLast` alone.
+ * Neither was reported, because E2E is not a CI gate. One exported composer is the only
+ * version of this that cannot drift: a new stage is added here and every caller gets it.
+ *
+ * `arm` is REQUIRED, not defaulted. A default would let a caller forget the experiment
+ * exists and silently describe every respondent as control — which is the same class of
+ * bug as rebuilding the pipeline by hand, just quieter.
+ *
+ * The C13 reorder runs LAST but still before any filtering, so it always sees the full
+ * set it was specified against; applying it after a filter would let one prefilled or
+ * hidden question turn the whole reorder into a no-op via its completeness guard.
+ */
+export function orderAskedQuestions(
+  questions: SurveyQuestion[],
+  arm: QuestionOrderArm
+): SurveyQuestion[] {
+  const base = orderDemandBlockBeforeEmail(orderEmailLast(questions));
+  return arm === "variant" ? orderC13Opening(base) : base;
 }
 
 /**
