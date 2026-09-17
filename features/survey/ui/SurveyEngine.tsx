@@ -23,7 +23,7 @@ import {
   setSurveyVariant,
 } from "@features/analytics/client";
 import { assignSurveyVariant, type SurveyVariant } from "@shared/experiments/surveyVariant";
-import { orderC13Opening, orderDemandBlockBeforeEmail, orderEmailLast } from "./questionOrder";
+import { orderAskedQuestions } from "./questionOrder";
 import {
   assignQuestionOrderArm,
   resolveQuestionOrderOverride,
@@ -124,16 +124,13 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
 
   // Joined into a string so the memo key is stable across re-renders.
   const prefilledKey = prefilled.join(",");
-  const orderedQuestions = useMemo(() => {
-    const base = orderDemandBlockBeforeEmail(orderEmailLast(surveyQuestions));
-    // The C13 reorder runs BEFORE the filters, so it always sees the full set it
-    // was specified against. Applying it after would let one prefilled question
-    // turn the reorder into a no-op via its own completeness guard.
-    const ordered = orderArm === "variant" ? orderC13Opening(base) : base;
-    return ordered
-      .filter((q) => !isHidden(q.qId))
-      .filter((q) => !prefilledKey.split(",").includes(q.qId));
-  }, [prefilledKey, orderArm]);
+  const orderedQuestions = useMemo(
+    () =>
+      orderAskedQuestions(surveyQuestions, orderArm)
+        .filter((q) => !isHidden(q.qId))
+        .filter((q) => !prefilledKey.split(",").includes(q.qId)),
+    [prefilledKey, orderArm]
+  );
   const totalQuestions = orderedQuestions.length;
   const question = orderedQuestions[currentIndex];
 
