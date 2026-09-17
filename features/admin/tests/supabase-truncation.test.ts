@@ -190,9 +190,10 @@ describe("fetchAllRows — for callers that need the rows", () => {
 describe("the large-Range backlog only shrinks", () => {
   it("does not grow", async () => {
     // `Range: "0-49999"` reads as "up to fifty thousand rows" and returns a
-    // thousand, silently. 152 such reads remain, and 23 of them are unfiltered
-    // reads of tables already past the cap — survey_behavior_event at 133,753
-    // rows returns 0.7% of itself. They are being migrated to countRows (for a
+    // thousand, silently. 152 such reads remain, and 15 of them are wholly
+    // unfiltered reads of tables already past the cap — survey_behavior_event
+    // at 133,753 rows returns 0.7% of itself. (An earlier count said 23; four
+    // of those interpolate a filter at runtime and four are now fixed.) They are being migrated to countRows (for a
     // number) and fetchAllRows (for the rows).
     //
     // This number may only go DOWN. If a change makes it go up, that change is
