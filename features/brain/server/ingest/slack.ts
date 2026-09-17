@@ -27,8 +27,11 @@ import {
  * one-line chunks from crowding out every other source.
  *
  * BOT MESSAGES ARE EXCLUDED, which is why joining every public channel is safe.
- * `#commits-prod-staging` and `#prod-alerts` are almost entirely machine output,
- * and the commits are already indexed from git — 1,537 of them. Filtering on
+ * `#commits-prod-staging` and `#prod-alerts` are almost entirely machine output.
+ * (This once read "the commits are already indexed from git — 1,537 of them"; they
+ * are not, and have not been since 2026-09-09, when they were measured to drown
+ * retrieval and removed — see `scripts/brain-ingest-repo.mjs`. The exclusion stands
+ * on its own: a commit bot posting into Slack is machine output either way.) Filtering on
  * authorship rather than on a channel allow-list means a human comment in an alerts
  * channel is still kept, and a new bot channel needs no configuration.
  */
