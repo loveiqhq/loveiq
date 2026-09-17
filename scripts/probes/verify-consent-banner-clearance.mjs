@@ -169,10 +169,44 @@ for (const deviceName of deviceNames) {
         continue;
       }
 
-      // Computed reachable — now go there and hit-test, in case the arithmetic
-      // describes a page the browser does not actually produce.
-      await page.evaluate((s) => window.scrollTo(0, s), plan.needScroll);
-      await page.waitForTimeout(450);
+      /**
+       * CONVERGE, do not scroll to a precomputed offset.
+       *
+       * The first version measured the CTA, computed a scroll offset, scrolled
+       * there and hit-tested. That assumes the layout does not move between the
+       * measurement and the scroll — and the landing page is 17,000px of lazily
+       * loaded content, so it does. Three consecutive local runs wanted 172,
+       * 172 and 197px for the same device and page, and CI failed with "still
+       * covered after scrolling to 172px": the offset was stale by the time it
+       * was used, not wrong when it was computed.
+       *
+       * Re-reading the position each step converges whatever reflows. Bounded,
+       * because a page that never settles is a result in itself rather than a
+       * loop to spin in.
+       */
+      const settled = await page.evaluate(async () => {
+        const wait = () => new Promise((r) => setTimeout(r, 350));
+        const cta = document.querySelector('[data-probe-cta="1"]');
+        const banner = document.querySelector(
+          ".cky-consent-container, .cky-modal, [class*='cky-consent']"
+        );
+        if (!cta || !banner) return { lost: true };
+        for (let i = 0; i < 5; i += 1) {
+          const c = cta.getBoundingClientRect();
+          const top = banner.getBoundingClientRect().top;
+          if (c.top >= 0 && c.bottom <= top) return { at: Math.round(window.scrollY) };
+          // Move it just clear of the banner's top edge, or back into view.
+          window.scrollBy(0, c.top < 0 ? c.top - 8 : c.bottom - top + 8);
+          await wait();
+        }
+        return { at: Math.round(window.scrollY), unsettled: true };
+      });
+      if (settled.lost) {
+        unmeasured += 1;
+        console.log(`INCONCLUSIVE ${where} the CTA or the banner left the page while scrolling`);
+        continue;
+      }
+      await page.waitForTimeout(250);
       const hit = await page.evaluate(() => {
         const cta = document.querySelector('[data-probe-cta="1"]');
         if (!cta) return { gone: true };
@@ -199,10 +233,11 @@ for (const deviceName of deviceNames) {
       } else if (hit.blocked > 0) {
         trapped += 1;
         console.log(
-          `FAIL  ${where} still covered at ${hit.blocked}/5 points after scrolling to ${plan.needScroll}px`
+          `FAIL  ${where} still covered at ${hit.blocked}/5 points at ${settled.at}px` +
+            (settled.unsettled ? " (the page never settled)" : "")
         );
       } else {
-        console.log(`PASS  ${where} reachable — clear after ${plan.needScroll}px of scroll`);
+        console.log(`PASS  ${where} reachable — clear at ${settled.at}px of scroll`);
       }
     } catch (err) {
       unmeasured += 1;
