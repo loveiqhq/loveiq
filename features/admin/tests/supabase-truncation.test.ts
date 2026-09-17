@@ -187,10 +187,45 @@ describe("fetchAllRows — for callers that need the rows", () => {
   });
 });
 
+describe("deliberate pagination is not a truncation", () => {
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "service-key";
+
+  afterEach(() => vi.clearAllMocks());
+
+  it("stays quiet for every page fetchAllRows asks for", async () => {
+    // A FULL page is exactly what deliberate pagination looks like: 1,000 rows
+    // with a `0-999/…` content-range. The guard already exempts an explicit
+    // `limit=1000`, but fetchAllRows pages with Range headers instead, so
+    // without the flag every page of every paginated read fires the warning —
+    // and the one signal this whole family of bugs depends on starts crying
+    // wolf on correct code.
+    const full = Array.from({ length: POSTGREST_MAX_ROWS }, (_, i) => ({ id: i }));
+    let i = 0;
+    mockFetch.mockImplementation(async () => ({
+      ok: true,
+      headers: { get: (k: string) => (k === "content-range" ? "0-999/5000" : null) },
+      json: async () => (i++ === 0 ? full : []),
+    }));
+
+    await fetchAllRows("/rest/v1/report_session?select=id&order=id.asc");
+
+    expect(mockWarn).not.toHaveBeenCalled();
+  });
+
+  it("still warns for an ordinary read that came back capped", async () => {
+    // The positive control: suppressing the warning for pagination must not
+    // suppress it for everyone.
+    respond(`0-${POSTGREST_MAX_ROWS - 1}/*`);
+    await supabaseFetch("/rest/v1/survey_behavior_event?select=id");
+    expect(mockWarn).toHaveBeenCalled();
+  });
+});
+
 describe("the large-Range backlog only shrinks", () => {
   it("does not grow", async () => {
     // `Range: "0-49999"` reads as "up to fifty thousand rows" and returns a
-    // thousand, silently. 139 such reads remain. NONE of them is now a wholly
+    // thousand, silently. 136 such reads remain. NONE of them is now a wholly
     // unfiltered read of a table already past the cap — all fifteen of those are
     // fixed. What is left is filtered or windowed, so each one is only latent:
     // it becomes wrong on the day its window first exceeds 1,000 rows. They are being migrated to countRows (for a
@@ -207,6 +242,6 @@ describe("the large-Range backlog only shrinks", () => {
       ],
       { encoding: "utf8", cwd: process.cwd() }
     ).trim();
-    expect(Number(out)).toBeLessThanOrEqual(139);
+    expect(Number(out)).toBeLessThanOrEqual(136);
   });
 });

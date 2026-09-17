@@ -167,9 +167,11 @@ export async function buildChannelEfficiencySnapshot(
       supabaseFetch(`/rest/v1/scoring_result?select=survey_submission_id&scored_at=gte.${since}`, {
         headers: { Range: "0-49999" },
       }),
-      supabaseFetch(
-        `/rest/v1/survey_partial_save?select=session_id,utm_tracker&saved_at=gte.${since}`,
-        { headers: { Range: "0-49999" } }
+      // Paged: measured 2026-09-17 at 1,050 rows over this window, so the read
+      // stopped 50 short and the per-channel partial-save counts were drawn on
+      // 95% of the data.
+      fetchAllRows<PartialSaveRow>(
+        `/rest/v1/survey_partial_save?select=session_id,utm_tracker&saved_at=gte.${since}&order=session_id.asc`
       ),
       // Paged: 2,051 reports, past the cap, so half the report->submission
       // mapping was missing from the per-channel join.
@@ -192,7 +194,7 @@ export async function buildChannelEfficiencySnapshot(
       !waitlistRes.ok ||
       !submissionsRes.ok ||
       !scoringRes.ok ||
-      !partialsRes.ok ||
+      partialsRes === null ||
       reportsRes === null ||
       reportSessionsRes === null ||
       !paymentsRes.ok
@@ -203,7 +205,7 @@ export async function buildChannelEfficiencySnapshot(
     const waitlist = (await waitlistRes.json()) as WaitlistRow[];
     const submissions = (await submissionsRes.json()) as SubmissionRow[];
     const scoringRows = (await scoringRes.json()) as ScoringRow[];
-    const partials = (await partialsRes.json()) as PartialSaveRow[];
+    const partials = partialsRes;
     const reports = reportsRes;
     const reportSessions = reportSessionsRes;
     const payments = (await paymentsRes.json()) as PaymentRow[];

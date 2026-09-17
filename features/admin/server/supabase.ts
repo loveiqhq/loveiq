@@ -25,7 +25,8 @@ export const POSTGREST_MAX_ROWS = 1000;
  * costs nothing. A caller that explicitly asked for exactly 1000 is paginating
  * on purpose (the brain ingest loops do) and is left alone.
  */
-function warnIfTruncated(path: string, res: Response): void {
+function warnIfTruncated(path: string, res: Response, paginated = false): void {
+  if (paginated) return;
   const range = res.headers.get("content-range");
   if (!range) return;
   const end = Number(range.split("/")[0]?.split("-")[1]);
@@ -41,6 +42,13 @@ interface SupabaseFetchOptions {
   method?: string;
   body?: string;
   headers?: Record<string, string>;
+  /**
+   * Set by `fetchAllRows` for each page it asks for. A full page is what
+   * deliberate pagination LOOKS like, so without this every page of every
+   * paginated read fires the truncation warning and the one signal this whole
+   * family of bugs depends on starts crying wolf on correct code.
+   */
+  paginated?: boolean;
   /**
    * Override the 8s default. Needed for the few endpoints whose cost is
    * SERVER-side generation rather than transfer — PostgREST builds its 490 KB
@@ -81,7 +89,7 @@ export async function supabaseFetch(
       timeoutMs: options.timeoutMs ?? TIMEOUT_MS,
     })
   );
-  warnIfTruncated(path, res);
+  warnIfTruncated(path, res, options.paginated);
   return res;
 }
 
@@ -145,7 +153,10 @@ export async function fetchAllRows<T>(
   const out: T[] = [];
   for (let offset = 0; offset < maxRows; offset += POSTGREST_MAX_ROWS) {
     const end = Math.min(offset + POSTGREST_MAX_ROWS, maxRows) - 1;
-    const res = await supabaseFetch(path, { headers: { Range: `${offset}-${end}` } });
+    const res = await supabaseFetch(path, {
+      headers: { Range: `${offset}-${end}` },
+      paginated: true,
+    });
     if (!res.ok) return null;
     const page = (await res.json()) as T[];
     out.push(...page);

@@ -165,9 +165,11 @@ export async function buildCreativeIntelligenceSnapshot(inputDays: number) {
           `/rest/v1/survey_submission?select=id,status,utm_tracker,session_id&created_date_time=gte.${since}`,
           { headers: { Range: "0-49999" } }
         ),
-        supabaseFetch(
-          `/rest/v1/survey_partial_save?select=session_id,utm_tracker&saved_at=gte.${since}`,
-          { headers: { Range: "0-49999" } }
+        // Paged: measured 2026-09-17 at 1,050 rows over this window, so the
+        // read stopped 50 short and every creative's partial-save count was
+        // drawn on 95% of the data.
+        fetchAllRows<PartialSaveRow>(
+          `/rest/v1/survey_partial_save?select=session_id,utm_tracker&saved_at=gte.${since}&order=session_id.asc`
         ),
         // Paged: 1,000 of 2,051 reports, so half the report->submission
         // mapping was missing from the attribution join.
@@ -193,7 +195,7 @@ export async function buildCreativeIntelligenceSnapshot(inputDays: number) {
 
     if (
       !submissionsRes.ok ||
-      !partialsRes.ok ||
+      partialsRes === null ||
       reportsRes === null ||
       reportSessionsRes === null ||
       !paymentsRes.ok ||
@@ -204,7 +206,7 @@ export async function buildCreativeIntelligenceSnapshot(inputDays: number) {
     }
 
     const submissions = (await submissionsRes.json()) as SubmissionRow[];
-    const partials = (await partialsRes.json()) as PartialSaveRow[];
+    const partials = partialsRes;
     const reports = reportsRes;
     const reportSessions = reportSessionsRes;
     const payments = (await paymentsRes.json()) as PaymentRow[];
