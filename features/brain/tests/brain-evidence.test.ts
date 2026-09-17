@@ -60,6 +60,21 @@ describe("buildQuery", () => {
     expect(q).toContain('"intimate partner"');
   });
 
+  it("excludes the organism literature our vocabulary cannot exclude on its own", () => {
+    /**
+     * `TITLE:"Sexual Stage" AND TITLE_ABS:(sexual OR ...)` constrains NOTHING: the word
+     * the clause needs is supplied by the construct itself. That card was 158 papers of
+     * feline toxoplasmosis. The organism clause is what removes it, and it is measured
+     * to cost nothing: Attachment Style 145 -> 145, Orgasm 564 -> 564.
+     */
+    const q = buildQuery("Sexual Stage");
+    expect(q).toMatch(/NOT TITLE_ABS:\(/);
+    for (const organism of ["toxoplasma", "plasmodium", "songbird", "parasite"])
+      expect(q, organism).toContain(organism);
+    // The exclusion must not be folded into the positive clause, which would invert it.
+    expect(q.indexOf("NOT TITLE_ABS:")).toBeGreaterThan(q.indexOf("AND TITLE_ABS:"));
+  });
+
   it("strips quotes rather than escaping them, so the phrase cannot end early", () => {
     // A stray quote would close the phrase and silently widen the search to the remainder.
     // Trimmed after stripping, so no trailing space leaks into the phrase.
@@ -219,5 +234,29 @@ describe("the excluded domains", () => {
       "Data, Privacy & Measurement",
       "Product & Assessment",
     ]);
+  });
+});
+
+describe("researchableConstructs — terms whose literature is about something else", () => {
+  const glossary = [
+    { term: "Sexual Stage", domain: "Desire & Arousal" },
+    { term: "Sexual Readiness", domain: "Desire & Arousal" },
+    { term: "Responsive Desire", domain: "Desire & Arousal" },
+    { term: "Attachment Style", domain: "Bonding" },
+  ];
+
+  it("drops the two terms measured to belong to another discipline", () => {
+    // Not a rule, a measured list: no rule survived measurement (see evidence.ts).
+    // "Sexual stage" is a Toxoplasma life-cycle phase; "sexual readiness" is a songbird.
+    const out = researchableConstructs(glossary);
+    expect(out).not.toContain("Sexual Stage");
+    expect(out).not.toContain("Sexual Readiness");
+  });
+
+  it("keeps everything else, so the exclusion cannot quietly widen", () => {
+    const out = researchableConstructs(glossary);
+    expect(out).toContain("Responsive Desire");
+    expect(out).toContain("Attachment Style");
+    expect(out).toHaveLength(2);
   });
 });

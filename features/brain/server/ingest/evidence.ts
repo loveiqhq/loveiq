@@ -67,6 +67,30 @@ export const SUBJECT =
   '"romantic relationship" OR "intimate partner")';
 
 /**
+ * Literature about ORGANISMS, which our vocabulary cannot exclude on its own.
+ *
+ * "Sexual stage" is a phase of the Toxoplasma life cycle and "sexual readiness" is a
+ * thing songbirds have. Both satisfy the subject clause above, because the clause is
+ * satisfied by the word "sexual" that the construct itself supplies -- so for any
+ * construct carrying a subject word the AND is decorative. Measured 2026-09-18: of 72
+ * cards, 16 constructs carry such a word and two had left the field entirely.
+ *
+ * Excluding the organisms costs nothing measurable: Attachment Style 145 -> 145,
+ * Orgasm 564 -> 564, Dual Control Model 3 -> 3, Importance of Sexuality 8 -> 8.
+ */
+const NOT_ORGANISM =
+  "(toxoplasma OR plasmodium OR malaria OR parasite OR parasites OR gametocyte OR " +
+  "oocyst OR songbird OR insect OR insects OR fungal OR fungus OR algae OR plant OR " +
+  "plants OR mosquito OR helminth OR nematode OR yeast OR livestock OR poultry)";
+
+/**
+ * Terms whose literature is about something else entirely, kept as a MEASURED list
+ * rather than a rule, because no rule survived measurement (see the rejected signals
+ * below). Both were checked by reading the papers they actually returned.
+ */
+export const AMBIGUOUS_TERMS = new Set(["sexual stage", "sexual readiness"]);
+
+/**
  * Glossary domains that describe HOW WE MEASURE rather than WHAT WE MEASURE.
  *
  * There is no literature on our own apparatus, and asking for it returns papers that merely
@@ -80,8 +104,8 @@ export const EXCLUDED_DOMAINS = new Set(["Data, Privacy & Measurement", "Product
  * WHAT THE GATES STILL LET THROUGH, measured and written down rather than hoped away.
  *
  * Nothing separates "a construct the literature studies" from "a phrase that occurs in our
- * field" cheaply. Two candidate signals were built and REJECTED on measurement, which is
- * worth recording so neither is rebuilt:
+ * field" cheaply. Four candidate signals were built and REJECTED on measurement, which is
+ * worth recording so none is rebuilt:
  *
  *  - The glossary `type` field. `Privacy` and `Attachment Style` are both "Framework &
  *    Model"; `Process-Focused` and `Avoidant Attachment` are both "Trait & Disposition".
@@ -90,6 +114,17 @@ export const EXCLUDED_DOMAINS = new Set(["Data, Privacy & Measurement", "Product
  *    The distributions overlap outright: the drop set measured 0, 2, 3, 8, 445, 3812 and
  *    the keep set 0, 1, 14, 25, 47, 118, 217, 713, 1051, 1955. Any cut that removes
  *    "Process-Focused" also removes "Responsive Desire" and "Casual Dating".
+ *  - Dropping the construct's OWN words from the subject clause, so the clause stops
+ *    being satisfied by the construct echoing itself. Correct in principle and net
+ *    NEGATIVE in fact: it fixed `Sexual Stage` (158 -> 1 hit, below the floor, card
+ *    gone) but pushed three legitimate cards under the floor too -- `Sexual Confidence`
+ *    7 -> 1, `Importance of Sexuality` 8 -> 2, and `Dual Control Model of Sexual
+ *    Response` 3 -> 2, which is the single construct this corpus most needs. It also
+ *    failed to fix `Sexual Readiness`, which kept its songbird at 3 hits.
+ *  - `MESH:"Humans"`, on the theory that the contaminant is non-human research. Europe
+ *    PMC's MeSH indexing is far too sparse: it took `Attachment Style` 145 -> 0,
+ *    `Asexuality` 131 -> 0 and `Dual Control Model` 3 -> 0. It removes the corpus, not
+ *    the contamination.
  *
  * MEASURED RESIDUE, from reading all 72 cards the first full pass produced rather than
  * from guessing. The title gate removed more than expected — `Process-Focused`,
@@ -184,7 +219,7 @@ export function buildQuery(construct: string): string {
   // Quotes stripped rather than escaped: a stray quote would end the phrase early and
   // silently widen the search to whatever followed it.
   const phrase = construct.replace(/["\\]/g, " ").trim();
-  return `TITLE:"${phrase}" AND TITLE_ABS:${SUBJECT}`;
+  return `TITLE:"${phrase}" AND TITLE_ABS:${SUBJECT} NOT TITLE_ABS:${NOT_ORGANISM}`;
 }
 
 /** Shapes one Europe PMC result. Pure, so the mapping is testable without the network. */
@@ -332,6 +367,7 @@ export function researchableConstructs(
     const term = typeof t.term === "string" ? t.term.trim() : "";
     if (!term) continue;
     if (EXCLUDED_DOMAINS.has(String(t.domain))) continue;
+    if (AMBIGUOUS_TERMS.has(term.toLowerCase())) continue;
     // Deterministic order matters: the daily slice is taken by index, so a wobble in
     // ordering would re-check some constructs and starve others.
     const key = term.toLowerCase();
