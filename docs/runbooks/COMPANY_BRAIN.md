@@ -806,12 +806,37 @@ Production never sees this, which is why its crons keep working while a laptop's
 stop: prod holds no Google credential at all and federates a Vercel OIDC token
 instead. There is no user session to expire.
 
-To clear it now:
+To clear it now — both, because they are separate credentials:
 
 ```bash
-gcloud auth application-default login   # client libraries, the GA4 MCP
-gcloud auth login                       # gcloud itself, incl. impersonation
+gcloud auth login                       # gcloud itself, and impersonation acts from this
+gcloud auth application-default login   # client libraries
 ```
+
+**Plain ADC is not enough for GA4 or Search Console, and no `--scopes` flag fixes
+it.** gcloud's ADC carries `cloud-platform`, which those APIs reject with
+"Request had insufficient authentication scopes" — verified 2026-09-17 against the
+Data API — and Google refuses gcloud's shared OAuth client the sensitive
+`analytics.readonly` scope outright, so asking for it just fails differently.
+Analytics access has to arrive through `ga4-reader`, either by impersonating it
+from the gcloud credential:
+
+```bash
+gcloud auth print-access-token \
+  --impersonate-service-account=ga4-reader@loveiq-brain.iam.gserviceaccount.com \
+  --scopes=https://www.googleapis.com/auth/analytics.readonly
+```
+
+or, for a client library or MCP server that reads ADC, by baking the impersonation
+into ADC itself:
+
+```bash
+gcloud auth application-default login \
+  --impersonate-service-account=ga4-reader@loveiq-brain.iam.gserviceaccount.com
+```
+
+An MCP server started before any of this keeps the credential it loaded at boot, so
+it will still report a reauth error while the CLI works. Restart it.
 
 **To stop it recurring** — Google Admin console → Security → Access and data
 control → **Google Cloud session control** → set _Never require
