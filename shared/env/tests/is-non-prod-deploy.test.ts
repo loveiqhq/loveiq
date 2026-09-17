@@ -74,6 +74,9 @@ describe("isNonProdDeploy", () => {
 describe("isProductionSite", () => {
   it("is true only on the live site", () => {
     vi.stubEnv("NODE_ENV", "production");
+    // The live site is a Vercel production deployment. A production-looking URL is no
+    // longer enough on its own — see "an absent environment" below for why.
+    vi.stubEnv("NEXT_PUBLIC_VERCEL_ENV", "production");
     for (const url of [
       "https://www.loveiq.org",
       "https://loveiq.org",
@@ -146,9 +149,30 @@ describe("isProductionSite", () => {
    * Only Clarity was affected, because it is the one tag deliberately not consent-gated;
    * GA4 and Google Ads load their libraries only after consent, which CI never gives.
    */
-  it("is true for a CI build that bakes the production URL — the defect", () => {
+  it("is false for a CI build that bakes the production URL", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("NEXT_PUBLIC_VERCEL_ENV", undefined);
+    vi.stubEnv("VERCEL_ENV", undefined);
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org");
+
+    // Was TRUE until 2026-09-17, which is how CI ended up in the customer analytics.
+    expect(isProductionSite()).toBe(false);
+    // The other gate is unchanged: it protects rather than publishes, so an unknown
+    // environment must still read as production and keep the protection ON.
+    expect(isNonProdDeploy()).toBe(false);
+  });
+
+  it("falls back to the runtime environment when the build-time one is missing", () => {
+    /**
+     * The safety net that makes demanding an environment affordable. The build-time
+     * variable exists only while Vercel's "expose system environment variables" setting is
+     * on; the runtime one is always there. Without this, turning that setting off would
+     * silently stop client analytics, server-side GA4 purchase events and PostHog server
+     * events all at once — far worse than the pollution the change was made to stop.
+     */
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_VERCEL_ENV", undefined);
+    vi.stubEnv("VERCEL_ENV", "production");
     vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org");
 
     expect(isProductionSite()).toBe(true);
@@ -225,18 +249,32 @@ describe("the Vercel environment overrides a production-looking site URL", () =>
     expect(isNonProdDeploy()).toBe(false);
   });
 
-  /** Off Vercel the variable is absent, and absence must mean "no opinion", not "preview". */
-  it("changes nothing when the variable is absent, as it is off Vercel", () => {
+  /**
+   * AN ABSENT ENVIRONMENT MAKES THE TWO GATES DIVERGE, which is the whole reason they are
+   * separate functions rather than one and its negation.
+   *
+   * `isNonProdDeploy()` RELAXES a protection, so an unknown environment has to read as
+   * production and keep the protection on. `isProductionSite()` PUBLISHES — analytics
+   * tags, GA4 purchase events, PostHog — so an unknown environment has to read as "not the
+   * live site" and send nothing. Both used to answer this case the same way, and that
+   * agreement was the defect: it is what let a CI build publish into customer analytics.
+   */
+  it("makes the two gates disagree when the environment is absent, on purpose", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org");
     vi.stubEnv("NEXT_PUBLIC_VERCEL_ENV", "");
-    expect(isProductionSite()).toBe(true);
+    vi.stubEnv("VERCEL_ENV", "");
+
+    // Publishes nothing without being told it is production.
+    expect(isProductionSite()).toBe(false);
+    // Still protects, because it cannot prove it is NOT production.
     expect(isNonProdDeploy()).toBe(false);
   });
 
   /** Casing and stray whitespace must not turn production into a preview. */
   it("is not fooled by casing or whitespace on the production value", () => {
     vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VERCEL_ENV", undefined);
     vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org");
     for (const value of ["Production", "PRODUCTION", " production "]) {
       vi.stubEnv("NEXT_PUBLIC_VERCEL_ENV", value);

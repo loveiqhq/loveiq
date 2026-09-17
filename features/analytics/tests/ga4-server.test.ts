@@ -32,6 +32,11 @@ describe("sendGa4PurchaseEvent", () => {
     // environment guard would short-circuit before their condition was ever read.
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org");
+    // A production deployment is one Vercel STAMPED as production, not merely one
+    // with a production-looking URL — `isProductionSite()` requires it since
+    // 2026-09-17, because a CI build bakes that URL too. Without this the guard
+    // short-circuits and every assertion below passes on an early return.
+    vi.stubEnv("NEXT_PUBLIC_VERCEL_ENV", "production");
     mockFetchWithTimeout.mockResolvedValue({ ok: true, status: 204 });
   });
 

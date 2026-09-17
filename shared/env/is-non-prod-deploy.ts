@@ -41,7 +41,27 @@
  * "production" on www.loveiq.org and "preview" on a preview deployment.
  */
 function vercelEnvironment(): string | undefined {
-  return process.env.NEXT_PUBLIC_VERCEL_ENV?.trim().toLowerCase() || undefined;
+  return (
+    process.env.NEXT_PUBLIC_VERCEL_ENV?.trim().toLowerCase() ||
+    /**
+     * SERVER-SIDE SAFETY NET, and the reason `isProductionSite()` below can afford to
+     * REQUIRE an environment rather than merely reject a contradicting one.
+     *
+     * `NEXT_PUBLIC_VERCEL_ENV` is inlined only when the project has "Automatically expose
+     * System Environment Variables" enabled. That is the default and it is on today —
+     * verified 2026-09-17, `/api/build-info` returns `publicEnv: "production"` from the
+     * live deployment — but it is a setting, and if it were ever turned off, a gate that
+     * demands that variable would silently take down client analytics, server-side GA4
+     * purchase tracking and PostHog server events at once.
+     *
+     * `VERCEL_ENV` is the runtime twin. Vercel always sets it and no project setting
+     * removes it. It is NOT a `NEXT_PUBLIC_` name, so it is undefined in the browser and
+     * this changes nothing on the client — the build-time value still decides there. The
+     * net only catches the server, which is where the expensive callers live.
+     */
+    process.env.VERCEL_ENV?.trim().toLowerCase() ||
+    undefined
+  );
 }
 
 export function isNonProdDeploy(): boolean {
@@ -96,8 +116,24 @@ export function isProductionSite(): boolean {
   // looks. This is the half that stopped preview traffic reporting into the production
   // GA4 property, the Google Ads conversion path and Clarity. Checked BEFORE the host
   // allowlist because the allowlist is exactly what a preview build passes.
+  /**
+   * REQUIRED, not merely "must not contradict".
+   *
+   * This used to read `if (environment && environment !== "production")`, which let an
+   * ABSENT environment through — and absent is exactly what a build off Vercel has. CI
+   * builds bake the production site URL and then serve on localhost, so the host
+   * allowlist below matched and a CI run identified as the live site. Measured in
+   * Microsoft Clarity on 2026-09-17: 177 of 711 sessions over three days were
+   * `localhost:3000`, recorded into the project real customers are recorded in. Only
+   * Clarity was affected, because it is the one tag not consent-gated, but the same gate
+   * also controls server-side GA4 purchase events and PostHog server events.
+   *
+   * Nothing serves this site except Vercel, so "no environment" means "not the live
+   * site". Safe to demand because `vercelEnvironment()` falls back to the runtime
+   * `VERCEL_ENV`, which a project setting cannot remove.
+   */
   const environment = vercelEnvironment();
-  if (environment && environment !== "production") return false;
+  if (environment !== "production") return false;
   const raw = (process.env.NEXT_PUBLIC_SITE_URL ?? "").trim();
   if (!raw) return false;
   try {
