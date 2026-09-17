@@ -24,7 +24,30 @@ import { isSafeSessionId } from "../../features/ux-review/server/review.ts";
  * criteria (E1's wider error class, S1's scroll heuristics, M1) still go to a
  * human in the thread.
  */
-export const AUTO_PR_CRITERIA = new Set(["C1", "D1", "Z1", "B1"]);
+export const AUTO_PR_CRITERIA = new Set(["C1", "D1", "Z1", "B1", "L1"]);
+
+/**
+ * L1 JOINED 2026-09-18, BY MEASURING.
+ *
+ * It is the only criterion that has ever reproduced: 24 of 35 findings over
+ * thirty days, and the two reproductions the ledger holds are both L1. It was
+ * excluded because its only probe, `verify-no-survey-restart.mjs`, loads
+ * /report/<token> and never opens the survey — it returned clean on every
+ * device and the verifier posted "passes in production now" into eight
+ * readers' threads about a defect that was real.
+ *
+ * `verify-survey-loop.mjs` now covers that half and has been shown to report
+ * both answers against PRODUCTION, which is the standard this set is supposed
+ * to hold: exit 1 on six devices before the fix, exit 0 on the same six after
+ * it, exit 3 on an unreachable origin, and now exit 1 again under MUTATE=1,
+ * which withholds the completed-report key the fix added. The MUTATE mode
+ * exists precisely because the defect is fixed — a probe that can only pass is
+ * as useless as one that can only fail.
+ *
+ * What this changes: if the survey loop regresses, the pipeline opens a DRAFT
+ * pull request carrying the reproduction instead of only replying in a thread.
+ * It still never merges and never generates a fix.
+ */
 
 /**
  * Z1 IS BACK, AND THE REASON IT LEFT WAS WRONG.

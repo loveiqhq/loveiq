@@ -85,19 +85,28 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) 
     // 2. Exactly what handleReturn(true, token) leaves behind. Not invented:
     //    every key here is one that function touches, with the survey session
     //    kept because it passes clearSurveySession: false.
-    await page.evaluate((token) => {
-      localStorage.removeItem("loveiq-survey-answers");
-      localStorage.removeItem("loveiq-survey-index");
-      localStorage.removeItem("loveiq-survey-pending-completion");
-      sessionStorage.removeItem("loveiq-survey-step");
-      sessionStorage.setItem("loveiq-survey-session", "probe-completed-session");
-      sessionStorage.setItem("loveiq-report-session", "probe-completed-session");
-      // What a finished tab carries: useSubmitSurvey records the token the
-      // moment the submit response returns it. Production ignored this key
-      // entirely before 2026-09-17, which is why seeding it still reproduces
-      // there — and why this probe is the regression guard for the fix.
-      sessionStorage.setItem("loveiq-completed-report", token);
-    }, TOKEN);
+    const mutate = process.env.MUTATE === "1";
+    await page.evaluate(
+      ([token, mutate]) => {
+        localStorage.removeItem("loveiq-survey-answers");
+        localStorage.removeItem("loveiq-survey-index");
+        localStorage.removeItem("loveiq-survey-pending-completion");
+        sessionStorage.removeItem("loveiq-survey-step");
+        sessionStorage.setItem("loveiq-survey-session", "probe-completed-session");
+        sessionStorage.setItem("loveiq-report-session", "probe-completed-session");
+        // What a finished tab carries: useSubmitSurvey records the token the
+        // moment the submit response returns it. Production ignored this key
+        // entirely before 2026-09-17, which is why seeding it still reproduces
+        // there — and why this probe is the regression guard for the fix.
+        // MUTATE=1 withholds exactly this key, which is the regression: before
+        // 2026-09-17 nothing recorded which report a finished tab belonged to, so
+        // loadInitialStep() found no step and no answers and fell through to the
+        // intro. A probe that only ever passes is as useless as one that only
+        // ever fails, and production is fixed now — this is what keeps it honest.
+        if (!mutate) sessionStorage.setItem("loveiq-completed-report", token);
+      },
+      [TOKEN, mutate]
+    );
 
     // The inverse of MUTATE: a probe that can only ever FAIL is as useless as
     // one that can only pass, and this one fails on production today. Keeping
