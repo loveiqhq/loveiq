@@ -2387,7 +2387,47 @@ const both =
   (t: string) =>
     cs.flatMap((c) => c(t));
 
-function mcpProbes(): McpProbe[] {
+/**
+ * A service with no credential set, or null when every one of them has one.
+ *
+ * Read from the same map the route reads, so it cannot drift from what is actually
+ * configured — and it guarantees the probe below never reaches a real API, because the
+ * handler refuses an unconfigured service before it makes any call.
+ */
+async function firstUnconfiguredService(): Promise<string | null> {
+  // Imported here, not at the top: every other use of the route module in this script is
+  // a lazy import, so the module initialises after the env file has been read.
+  const { EXTERNAL_SERVICES } = await import("@/app/api/mcp/route");
+  for (const [name, svc] of Object.entries(
+    EXTERNAL_SERVICES as Record<string, { envKeys: string[] }>
+  )) {
+    if (!svc.envKeys.some((k) => process.env[k])) return name;
+  }
+  return null;
+}
+
+async function unconfiguredServiceProbe(): Promise<McpProbe[]> {
+  const service = await firstUnconfiguredService();
+  if (!service) {
+    console.log(
+      "note  [mcp-external-unconfigured] omitted: every external service has a credential " +
+        "set, so there is no unconfigured path to exercise. Not a pass."
+    );
+    return [];
+  }
+  return [
+    {
+      kind: "mcp-external-unconfigured",
+      tool: "query_external_service",
+      // A path that cannot exist anywhere, so that if the refusal ever regresses into a
+      // real request, it fails loudly rather than fetching something.
+      args: { service, path: "/__battery_probe_no_such_path" },
+      check: contains("not configured", "not an empty result"),
+    },
+  ];
+}
+
+async function mcpProbes(): Promise<McpProbe[]> {
   /**
    * FIFTEEN OF THE SEVENTEEN TOOLS ARE DRIVEN HERE, AND THE TWO THAT ARE NOT ARE
    * DELIBERATE.
@@ -2577,12 +2617,18 @@ function mcpProbes(): McpProbe[] {
     },
     // An unconfigured service must not read as an empty result. This is the
     // difference between "we have no Stripe data" and "nobody set the key".
-    {
-      kind: "mcp-external-unconfigured",
-      tool: "query_external_service",
-      args: { service: "clarity", path: "/project-live-insights" },
-      check: contains("not configured", "not an empty result"),
-    },
+    //
+    // THE SERVICE IS CHOSEN AT RUNTIME, and it used to be hardcoded to `clarity`. When
+    // CLARITY_API_TOKEN was finally set, this probe did two bad things at once: it failed,
+    // because a configured service correctly does NOT say "not configured" -- and it made
+    // a REAL CALL to Clarity's export API, which allows ten requests per project per day.
+    // Every battery run would have quietly spent one of the ten, including the one the
+    // daily ingest needs. A probe about the unconfigured path must never reach a vendor.
+    //
+    // Omitted entirely rather than failing when every service happens to be configured:
+    // there is then nothing to test, which is not the same as a defect. `mcpProbes`
+    // reports the omission so it cannot pass as coverage it did not have.
+    ...(await unconfiguredServiceProbe()),
     {
       kind: "mcp-external-unknown",
       tool: "query_external_service",
@@ -3273,7 +3319,7 @@ async function runMcpBattery(only: string | null): Promise<number> {
     return 1;
   }
 
-  const all = mcpProbes();
+  const all = await mcpProbes();
   const probes = only ? all.filter((p) => p.kind.includes(only) || p.tool.includes(only)) : all;
   let failures = 0;
 

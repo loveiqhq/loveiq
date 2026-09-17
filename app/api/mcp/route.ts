@@ -307,8 +307,6 @@ export function capWithNotice(
   return text.slice(0, MAX_RESULT_CHARS - notice.length) + notice;
 }
 
-/** Exported only so the "no indexed source is invisible" test reads the SAME
- * array the route uses — a copy in the test would drift with the bug. */
 /**
  * Below this, the best content match is weak enough to warn about.
  *
@@ -319,6 +317,8 @@ export function capWithNotice(
  */
 export const RELEVANCE_FLOOR = 1.85;
 
+/** Exported only so the "no indexed source is invisible" test reads the SAME
+ * array the route uses — a copy in the test would drift with the bug. */
 export const SOURCES_FOR_TEST = [
   // Written by `record_decision`, not ingested from anywhere. Listed here in the commit
   // that creates the first one, per the rule below about `jira`.
@@ -355,6 +355,12 @@ export const SOURCES_FOR_TEST = [
   // Built from `brain_person` by the fast cron, not ingested from an outside system.
   // Listed here in the commit that creates the first chunk, per the `jira` rule below.
   "people",
+  // Where the site frustrates people -- dead clicks, rage clicks, quick-backs, script
+  // errors -- summarised per page once a day from Microsoft Clarity. The only source that
+  // measures frustration rather than volume, which is why it answers "why did they leave"
+  // when ga4 and analytics can only answer "where". Listed here in the commit that creates
+  // the first chunk, per the `jira` rule below.
+  "clarity",
 ];
 // `jira` is deliberately absent. The 1,037 issues in loveiq.atlassian.net are real
 // and actively updated, but `JIRA_API_TOKEN` has never been set, so the corpus holds
@@ -1658,7 +1664,13 @@ export const EXTERNAL_SERVICES: Record<
       "signal and an empty result for last month is the API's limit, not an absence of " +
       "sessions. Optional dimension1/dimension2/dimension3, each one of: Browser, Device, " +
       "Country, OS, Source, Medium, Campaign, URL. Example: " +
-      "{numOfDays: 3, dimension1: 'Device'}.",
+      "{numOfDays: 3, dimension1: 'Device'}. " +
+      "BUDGET: Microsoft allows TEN requests per project per day and it cannot be raised by " +
+      "paying, because Clarity has no paid tier. The daily brain-clarity cron spends one of " +
+      "them and writes a per-page frustration summary into the corpus, so SEARCH THE CORPUS " +
+      "FIRST (source 'clarity') and call this only for a breakdown the summary does not carry " +
+      "— by Device or Country, say. Several exploratory calls will exhaust the day for " +
+      "everyone, including tomorrow morning's ingest, and the API then returns 429.",
   },
   posthog: {
     base: "https://eu.posthog.com/api",

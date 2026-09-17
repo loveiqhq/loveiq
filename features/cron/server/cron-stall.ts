@@ -60,6 +60,11 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   // records a run every night whether or not it found a decision, and the thing it is
   // building, the decision record, is the corpus's thinnest and most valuable material.
   "brain-mine": 26 * 3_600_000,
+  // Daily, and silent like the brief and the miner. Watched for an extra reason: its
+  // budget is TEN REQUESTS A DAY and it spends one, so a run that starts failing is not
+  // self-healing noise -- it is the only automatic read of the one tool that measures
+  // frustration, and the dashboard keeps looking fine while the corpus goes stale.
+  "brain-clarity": 26 * 3_600_000,
 };
 
 /**
