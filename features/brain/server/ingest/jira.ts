@@ -207,8 +207,26 @@ export async function ingestJira(
     if (page.isLast === true || !nextPageToken) completed = true;
   } while (nextPageToken && pages < MAX_PAGES);
 
-  // Only sweep after walking the whole result set. Sweeping a run cut short by
-  // the time budget would delete every issue the run never reached.
+  /**
+   * Only sweep after walking the whole result set. Sweeping a run cut short by
+   * the time budget would delete every issue the run never reached.
+   *
+   * NOT SCOPED, and deliberately left that way for now. Every other sweep in
+   * this directory now passes `scopeKey` + `walkedScopes` so that a scope the
+   * run could not see reads as history rather than as deleted rows — gmail by
+   * mailbox, drive by owner, notion by database, slack by channel, calendar by
+   * mailbox. Jira has the same shape and already writes `project` into meta, so
+   * the guard is four lines.
+   *
+   * It is not wired because this source is dormant: `JIRA_BASE_URL` is unset,
+   * the run exits `jira-not-configured`, and there are zero jira rows to test a
+   * change against. Wiring a guard that cannot be verified is worse than
+   * naming the gap. WHOEVER ENABLES JIRA: pass
+   * `{ scopeKey: "project", walkedScopes: new Set(PROJECTS) }` here, and note
+   * that PROJECTS is a hardcoded list — removing a project from it will delete
+   * that project's issues, which may well be what you want, but should be a
+   * decision rather than a surprise.
+   */
   const swept = completed ? await sweepStale(SOURCE, stampedAt, written) : 0;
 
   // A run cut short by the time budget returned `{rows: 0, swept: 0}` with no
