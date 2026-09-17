@@ -14,7 +14,8 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-import WQuestionCard from "@features/landing/ui/white/WQuestionCard";
+import WQuestionCard, { TOTAL_QUESTIONS } from "@features/landing/ui/white/WQuestionCard";
+import { SURVEY_TOTAL_QUESTIONS } from "@features/survey/server/utils";
 import { SURVEY_STATE_KEY, LANDING_PREFILL_QID } from "@features/survey/ui/hooks/surveyStorage";
 
 function answer(value: number) {
@@ -28,6 +29,30 @@ function answer(value: number) {
 const cta = () => screen.getByRole("link", { name: /continue to the survey/i });
 const draft = () => JSON.parse(localStorage.getItem(SURVEY_STATE_KEY) ?? "{}");
 
+describe("WQuestionCard — the count shown to the reader", () => {
+  /**
+   * "QUESTION 1 OF n" and "n-1 questions left" are hardcoded, because importing the
+   * 80 KB `data/survey-data.ts` into the landing bundle for one integer is not worth
+   * it. The cost of that decision is drift, and the comment telling the next person
+   * to keep it in sync had already failed: it read 59 while the survey asked 57, and
+   * the demand block's three questions would have made it a third miss.
+   *
+   * `SURVEY_TOTAL_QUESTIONS` is derived from the data, so this comparison is the
+   * comment turned into a check. It is not a tautology — the two sides are computed
+   * in completely different ways, one by hand and one from the source of truth.
+   */
+  it("matches the number of questions the survey actually asks", () => {
+    expect(TOTAL_QUESTIONS).toBe(SURVEY_TOTAL_QUESTIONS);
+  });
+
+  it("counts the landing question itself, which is question 1 of that total", () => {
+    // The landing card asks LANDING_PREFILL_QID and SurveyEngine then drops it, so the
+    // total spans both surfaces. If this ever became "questions inside /survey only",
+    // the reader would be promised one fewer question than they are asked.
+    expect(TOTAL_QUESTIONS).toBeGreaterThan(1);
+  });
+});
+
 describe("WQuestionCard — landing question hand-off", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -37,7 +62,7 @@ describe("WQuestionCard — landing question hand-off", () => {
 
   it("asks exactly one question", () => {
     render(<WQuestionCard location="hero" />);
-    expect(screen.getByText("QUESTION 1 OF 59")).toBeInTheDocument();
+    expect(screen.getByText(`QUESTION 1 OF ${SURVEY_TOTAL_QUESTIONS}`)).toBeInTheDocument();
     expect(screen.getByText("Right now, I feel satisfied with my sex life.")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /of 7/ })).toHaveLength(7);
   });
