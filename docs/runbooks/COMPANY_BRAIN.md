@@ -792,6 +792,29 @@ attribute condition rejects; the log names all three. A 403 from
 federation fails the code falls back to the refresh token and still impersonates, so
 a stale pool config degrades to the previous path rather than to no access.
 
+### The two jobs that run on a laptop, not on Vercel
+
+WhatsApp and the embedding backfill are driven by launchd agents on Eman's machine,
+from a SEPARATE checkout at `~/.loveiq-brain` — `org.loveiq.whatsapp-sync` hourly and
+`org.loveiq.reembed` every fifteen minutes. Neither appears in `vercel.json`, neither
+writes a `cron_run` row, and both stop when the laptop is off.
+
+**That checkout silently went 365 commits behind**, which is how it was found on
+2026-09-17: the corpus redaction had shipped a week earlier, and every hour this copy
+wrote unredacted `report_access_token` values back into production. A cleanup was undone
+within the hour, twice, before the cause was located — the code in `~/loveiq` was correct
+the whole time, so nothing in the repo could reveal it.
+
+The runner now fetches and hard-resets to `origin/main` before each run, reinstalls only
+when `package-lock.json` actually moved, and says so loudly if it cannot fetch rather than
+quietly running stale. Verified by rewinding the checkout three commits and watching a run
+recover it. It stays on a detached HEAD because the main worktree holds the `main` branch;
+nothing tracked is ever edited there, so the reset is safe.
+
+**If a credential ever reappears in the corpus, look here first.** `brain-reconcile`
+now scans the whole corpus daily and posts on any non-zero count, which is the alarm this
+would have tripped a week earlier.
+
 ### Why gcloud asks you to log in again, roughly daily
 
 The error is `Reauthentication failed … cannot prompt during non-interactive

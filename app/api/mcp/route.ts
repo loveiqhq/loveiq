@@ -4209,7 +4209,11 @@ async function callTool(
        * `scripts/whatsapp-sync.ts`. Saying so beats an empty slot that reads like a
        * job nobody wired up.
        */
-      if (source === "whatsapp") return " · pushed from WhatsApp Desktop, not a scheduled job";
+      // It IS scheduled — hourly, by a launchd agent on a laptop rather than by Vercel.
+      // The distinction that matters to a reader is that it stops when that machine is
+      // off, which "not a scheduled job" obscured.
+      if (source === "whatsapp")
+        return " · synced hourly from WhatsApp Desktop on a laptop, not by a server cron — so it stops when that machine is off";
       // Written by `record_decision`, so there is no job to be behind. Said explicitly:
       // an empty clause here reads as an ingester whose state could not be determined,
       // and the staleness guidance below would otherwise apply a rule that cannot hold —
