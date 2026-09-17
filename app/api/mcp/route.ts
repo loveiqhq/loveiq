@@ -355,6 +355,12 @@ export const SOURCES_FOR_TEST = [
   // Built from `brain_person` by the fast cron, not ingested from an outside system.
   // Listed here in the commit that creates the first chunk, per the `jira` rule below.
   "people",
+  // The published literature behind the constructs we sell: one citation card per glossary
+  // construct whose name appears in paper TITLES in our field, from Europe PMC. THIRD-PARTY
+  // work -- every card says so in its body -- and only about a quarter of our vocabulary has
+  // one, which is deliberate: the silence is how "we claim this and nobody has published on
+  // it" becomes findable. Listed here in the commit that creates the first chunk.
+  "evidence",
   // Where the site frustrates people -- dead clicks, rage clicks, quick-backs, script
   // errors -- summarised per page once a day from Microsoft Clarity. The only source that
   // measures frustration rather than volume, which is why it answers "why did they leave"

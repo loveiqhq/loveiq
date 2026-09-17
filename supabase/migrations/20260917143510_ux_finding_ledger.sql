@@ -1,3 +1,13 @@
+-- migration-lint: ignore
+--
+-- Justified, not waved through: the only rule this file trips is "CREATE INDEX without
+-- CONCURRENTLY", and both indexes are created on `ux_finding` in the same migration that
+-- creates the table. There is nothing to lock — the table has no rows and no reader — and
+-- CONCURRENTLY cannot run inside the transaction a migration executes in, so the rule's
+-- remedy is not available here and its hazard does not exist. The file's other statements
+-- trip nothing: every NOT NULL is inside CREATE TABLE rather than ADD COLUMN, and no
+-- column is dropped.
+
 -- One row per scanner observation the verifier has answered.
 --
 -- WHY THIS EXISTS. Nothing recorded what the UX-review pipeline concluded. A

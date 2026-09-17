@@ -65,6 +65,10 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   // self-healing noise -- it is the only automatic read of the one tool that measures
   // frustration, and the dashboard keeps looking fine while the corpus goes stale.
   "brain-clarity": 26 * 3_600_000,
+  // Daily, and silent like the brief: it posts only when Europe PMC is unreachable. A dead
+  // run looks exactly like a quiet one, and the corpus it feeds goes stale invisibly —
+  // research cards do not announce their own age.
+  "brain-evidence": 26 * 3_600_000,
 };
 
 /**

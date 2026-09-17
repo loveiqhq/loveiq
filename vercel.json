@@ -67,6 +67,10 @@
       "schedule": "40 5 * * *"
     },
     {
+      "path": "/api/cron/brain-evidence",
+      "schedule": "20 4 * * *"
+    },
+    {
       "path": "/api/cron/brain-reconcile",
       "schedule": "20 9 * * *"
     },
@@ -154,6 +158,9 @@
     },
     "app/api/cron/brain-clarity/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/cron/brain-evidence/route.ts": {
+      "maxDuration": 120
     },
     "app/api/cron/ux-review/route.ts": {
       "maxDuration": 30
