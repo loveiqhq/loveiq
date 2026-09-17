@@ -189,6 +189,19 @@ const BARE_SECRET_RE = new RegExp(
     "calendly\\.com/cancellations/[A-Za-z0-9-]{8,}",
     "track\\.customer\\.io/(?:\\S*?/)?unsubscribe/[A-Za-z0-9_-]{8,}",
     "pay\\.stripe\\.com/receipts/[A-Za-z0-9_/-]{12,}",
+    /**
+     * Any JSON Web Token, whoever issued it.
+     *
+     * `eyJ` is base64url for `{"`, so this shape is a base64 JSON object followed by at
+     * least one more base64 segment — a token by construction, never prose. That makes it
+     * safe to mask generically, unlike the "long opaque string in a path" rule this file
+     * refuses to write: nobody loses meaning when a JWT becomes `[redacted]`.
+     *
+     * Found by audit 2026-09-17: 60 live, unexpired tokens issued by `pub-0` sat in
+     * newsletter mail the mailbox receives. Those carried no customer identity and were
+     * low severity — but they were live, and the next one might be ours.
+     */
+    "eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}(?:\\.[A-Za-z0-9_-]+)?",
   ].join("|"),
   "g"
 );

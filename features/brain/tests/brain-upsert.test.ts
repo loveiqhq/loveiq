@@ -594,3 +594,28 @@ describe("redactUrlSecrets is idempotent", () => {
     expect(redactUrlSecrets(out)).toBe(out);
   });
 });
+
+describe("JSON Web Tokens are redacted whoever issued them", () => {
+  it("masks a token and keeps the prose around it", () => {
+    // `eyJ` is base64url for `{"`, so this shape is a token by construction — masking it
+    // loses no meaning, which is why a generic rule is safe here and not elsewhere.
+    const out = redactUrlSecrets(
+      "click https://x.com/r?t=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.sig to read"
+    );
+    expect(out).not.toContain("eyJzdWIiOiIxMjM0NTY3ODkw");
+    expect(out).toContain("click");
+    expect(out).toContain("to read");
+  });
+
+  it("is stable on a second pass", () => {
+    const once = redactUrlSecrets("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0");
+    expect(redactUrlSecrets(once)).toBe(once);
+  });
+
+  it("leaves ordinary words that merely start with the same letters", () => {
+    // A guard that eats real content is worse than no guard — the rule needs the dot and
+    // the second base64 run, not just the prefix.
+    const text = "eyjafjallajokull erupted and eyJ alone is not a token";
+    expect(redactUrlSecrets(text)).toBe(text);
+  });
+});
