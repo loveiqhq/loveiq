@@ -5,13 +5,6 @@ import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 
-interface AnswerRow {
-  survey_question_id: number;
-  time_spent_seconds: number | null;
-  revision_count: number | null;
-  was_skipped: boolean | null;
-}
-
 interface QuestionRow {
   id: number;
   frontend_qid: string;
@@ -38,20 +31,41 @@ export async function GET(request: Request) {
   }
 
   try {
-    const [answersRes, questionsRes] = await Promise.all([
-      supabaseFetch(
-        `/rest/v1/survey_submission_answer?select=survey_question_id,time_spent_seconds,revision_count,was_skipped`,
-        { headers: { Range: "0-49999" } }
-      ),
+    /**
+     * Aggregated in SQL, because the table is far past the response cap.
+     *
+     * This read survey_submission_answer with no filter and no ORDER BY behind
+     * `Range: "0-49999"`. PostgREST caps a response at 1,000 rows with no
+     * error, so the scorecard was built from an arbitrary 1,000 of 121,987
+     * answers — 0.8%, and at about 59 questions per submission that is roughly
+     * seventeen people out of 2,061. Skip rate, average time and revision count
+     * were every one of them computed on that slice.
+     *
+     * Paging it would be 122 requests. get_question_scorecard() returns the
+     * TOTALS and the scoring below is unchanged, so this fixes what the numbers
+     * are computed from without touching how they are scored.
+     */
+    const [totalsRes, questionsRes] = await Promise.all([
+      supabaseFetch(`/rest/v1/rpc/get_question_scorecard`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
       supabaseFetch(`/rest/v1/survey_question?select=id,frontend_qid,question_text`),
     ]);
 
-    if (!answersRes.ok || !questionsRes.ok) {
+    if (!totalsRes.ok || !questionsRes.ok) {
       logger.error("Scorecard: query failed");
       return NextResponse.json({ error: "Unable to load data." }, { status: 500 });
     }
 
-    const answers = (await answersRes.json()) as AnswerRow[];
+    const totals = (await totalsRes.json()) as Array<{
+      survey_question_id: number;
+      total_answers: number;
+      skipped: number;
+      total_time: number;
+      time_count: number;
+      total_revisions: number;
+    }>;
     const questions = (await questionsRes.json()) as QuestionRow[];
 
     const questionMap = new Map(questions.map((q) => [q.id, q]));
@@ -68,25 +82,14 @@ export async function GET(request: Request) {
       }
     > = {};
 
-    for (const a of answers) {
-      if (!stats[a.survey_question_id]) {
-        stats[a.survey_question_id] = {
-          totalAnswers: 0,
-          skipped: 0,
-          totalTime: 0,
-          timeCount: 0,
-          totalRevisions: 0,
-        };
-      }
-      // stats[a.survey_question_id] is initialised in the if-block above; safe.
-      const s = stats[a.survey_question_id]!;
-      s.totalAnswers++;
-      if (a.was_skipped) s.skipped++;
-      if (a.time_spent_seconds != null && a.time_spent_seconds > 0) {
-        s.totalTime += a.time_spent_seconds;
-        s.timeCount++;
-      }
-      s.totalRevisions += a.revision_count || 0;
+    for (const row of totals) {
+      stats[row.survey_question_id] = {
+        totalAnswers: Number(row.total_answers) || 0,
+        skipped: Number(row.skipped) || 0,
+        totalTime: Number(row.total_time) || 0,
+        timeCount: Number(row.time_count) || 0,
+        totalRevisions: Number(row.total_revisions) || 0,
+      };
     }
 
     const scorecard = Object.entries(stats)
