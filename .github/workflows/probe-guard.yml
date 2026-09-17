@@ -206,6 +206,30 @@ jobs:
             exit 1
           fi
 
+      # Which finished readers no scanner ever opened. The digest says how many;
+      # this names which, and only counts one as missed if it HAD a recording and
+      # a trigger event — a reader who declined recording is not a miss.
+      #
+      # Exit 1 is reported, not failed: misses are a PostHog-side sweep gap we
+      # cannot re-queue without the 'replay_scanner:write' scope, so failing on
+      # it would be a permanently red job. Exit 2 and above is a real error.
+      - name: Name the finished readers no scanner opened
+        env:
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set +e
+          node scripts/ux-review-coverage.mjs
+          code=$?
+          set -e
+          if [ "$code" -eq 1 ]; then
+            echo "::warning::some finished readers had a recording and a trigger but were never observed"
+          elif [ "$code" -ne 0 ]; then
+            echo "::error::coverage could not be measured (exit $code)"
+            exit 1
+          fi
+
       - name: Every auto-PR probe reports its own defect
         env:
           STAGING_PASSWORD: ${{ secrets.STAGING_PASSWORD }}
