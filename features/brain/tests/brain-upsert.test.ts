@@ -22,7 +22,12 @@ vi.mock("@features/admin/server/supabase", () => ({
   }),
 }));
 
-import { chunkPage, upsertChunks, type BrainRow } from "@features/brain/server/ingest/upsert";
+import {
+  chunkPage,
+  redactUrlSecrets,
+  type BrainRow,
+  upsertChunks,
+} from "@features/brain/server/ingest/upsert";
 
 function row(over: Partial<BrainRow> = {}): BrainRow {
   return {
@@ -539,5 +544,53 @@ describe("every section heading stays findable after packing", () => {
       }
     }
     expect(lost, `headings searchable nowhere: ${lost.slice(0, 5).join(", ")}`).toHaveLength(0);
+  });
+});
+
+describe("redactUrlSecrets is idempotent", () => {
+  /**
+   * THE BUG THIS EXISTS FOR, found by audit on 2026-09-17.
+   *
+   * The value class excludes `]` so a URL inside brackets is not swallowed whole. That
+   * means `&token=abc]` masks to `&token=[redacted]]` — and the same rule then matched
+   * `[redacted` on the next pass, stopping at that first `]`, and masked it AGAIN. Four
+   * passes over one calendar chunk added four brackets. Bodies are capped, so a chunk
+   * re-ingested often would have real text pushed off the end one character per run,
+   * invisibly and permanently.
+   */
+  it("does not grow a bracket every time it runs", () => {
+    const once = redactUrlSecrets('a "https://x.de/b?id=1&token=SECRETVALUE123]&lang=de" b');
+    expect(redactUrlSecrets(once)).toBe(once);
+    expect(redactUrlSecrets(redactUrlSecrets(once))).toBe(once);
+    // And the secret really is gone, not merely stable.
+    expect(once).not.toContain("SECRETVALUE123");
+  });
+
+  it.each([
+    "?token=abc123456789",
+    "?access_token=abcdef&next=1",
+    "https://www.loveiq.org/report/rpt_ABCDEFGHIJKLMNOPQRST",
+    "https://calendly.com/cancellations/abcdefgh12345678",
+    "plain text with no secret at all",
+  ])("is stable across repeated passes for %j", (input) => {
+    const once = redactUrlSecrets(input);
+    expect(redactUrlSecrets(once)).toBe(once);
+  });
+
+  it("still masks a real value that merely starts like the mask", () => {
+    /**
+     * The lookahead refuses only the exact mask. A value that merely begins with "[" is a
+     * real value and must still be masked — otherwise anyone could evade redaction by
+     * prefixing a bracket.
+     *
+     * `morevalue` survives, and that is the value class rather than the lookahead: it
+     * stops at `]` on purpose, so a URL written inside brackets or markdown is not
+     * swallowed whole along with the prose after it.
+     */
+    const out = redactUrlSecrets("?token=[notthemask]morevalue");
+    expect(out).toContain("[redacted]");
+    expect(out).not.toContain("notthemask");
+    // And still stable on a second pass.
+    expect(redactUrlSecrets(out)).toBe(out);
   });
 });

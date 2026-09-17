@@ -142,6 +142,20 @@ const SECRET_PARAMS = [
  */
 const SECRET_PARAM_RE = new RegExp(
   `([?&#][a-z0-9_.-]*(?:${[...SECRET_PARAMS].sort((a, b) => b.length - a.length).join("|")})=)` +
+    /**
+     * REFUSE A VALUE THAT IS ALREADY THE MASK, or this rule eats itself.
+     *
+     * The value class below excludes `]` so a URL inside brackets or markdown is not
+     * swallowed whole. That means `&token=abc]` redacts to `&token=[redacted]]` — and on
+     * the NEXT pass the same rule matches `[redacted` (stopping at that first `]`) and
+     * masks it again, producing `[redacted]]]`. Every subsequent run appends one more.
+     *
+     * Not theoretical: found on 2026-09-17 in a calendar chunk holding a Deutsche Bahn
+     * booking link, where four passes added four brackets. Bodies are capped at
+     * MAX_BODY_CHARS, so a chunk that is re-ingested often would have real text pushed
+     * off the end one character at a time, invisibly.
+     */
+    `(?!\\[redacted\\])` +
     `[^\\s&"'<>)\\]]+`,
   "gi"
 );

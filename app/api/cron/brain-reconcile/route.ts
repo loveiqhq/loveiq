@@ -143,8 +143,19 @@ export async function buildReadings(): Promise<{ readings: Reading[]; unread: st
   /**
    * The repo-built corpora, counted against what the builders actually produce.
    *
-   * `report`, `domain` and `skill` are built from files rather than fetched, so the number
-   * of chunks they SHOULD hold is knowable exactly. Their ingesters refuse to sweep on an
+   * `report` and `domain` are built from files rather than fetched, so the number of chunks
+   * they SHOULD hold is knowable exactly.
+   *
+   * `skill` is deliberately NOT here, though this comment used to claim it was. It reads
+   * its prompt list back out of the `drive` corpus, so its expected count depends on remote
+   * data and cannot be derived from the repo — there is no second way to count it, which is
+   * the only thing this check can do.
+   *
+   * NOTHING WATCHES THE OTHER SOURCES FOR ROW LOSS, and that is a real gap rather than an
+   * oversight to fix casually: detecting a shrink needs yesterday's number, and this
+   * reconciler is stateless on purpose — every check derives one quantity two ways from
+   * what is true right now. `drive`, `gmail` and `notion` have their own majority guard in
+   * the sweep; the append-only sources (`decision`, `notice`) have nothing. Their ingesters refuse to sweep on an
    * empty build — but a build that produced HALF its rows would sweep the other half away
    * and look like a normal run. A data file renamed, an export changed shape, a parser that
    * stops matching: all of those are silent, and all of them are caught by counting.

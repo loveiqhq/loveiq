@@ -57,6 +57,52 @@ import {
  */
 const NEVER_INDEX = new Set(["email-inbox"]);
 
+/**
+ * Remove anything already indexed from a channel that is now on the denylist.
+ *
+ * FILTERING THE WALK IS ONLY HALF THE FIX, and the other half was missing for three days.
+ * When `#email-inbox` was denylisted on 2026-09-14 the two days already in the corpus were
+ * noticed, written down in the comment above, and then left there. Slack is one of the
+ * sources that never sweeps, so nothing would ever have removed them — and `touchChunks`
+ * re-stamps `updated_at` daily, so they read as freshly maintained rather than as orphans.
+ * Audited 2026-09-17: both were still present and still searchable.
+ *
+ * Runs every ingest rather than once, so adding a channel to the list is all anyone has to
+ * do — the corpus catches up by itself instead of needing a manual delete nobody
+ * remembers. Returns the number removed; failure is logged and never aborts the run,
+ * because a purge that cannot reach the database must not also stop the indexing.
+ */
+export async function purgeDenylistedChannels(
+  names: Iterable<string> = NEVER_INDEX
+): Promise<number> {
+  let removed = 0;
+  for (const name of names) {
+    try {
+      const res = await supabaseFetch(
+        `/rest/v1/brain_chunk?source=eq.${SOURCE}&meta->>channel=eq.${encodeURIComponent(name)}`,
+        { method: "DELETE", headers: { Prefer: "return=headers-only,count=exact" } }
+      );
+      if (!res.ok) {
+        logger.warn(
+          { status: res.status, channel: name },
+          "slack: could not purge a denylisted channel"
+        );
+        continue;
+      }
+      const range = res.headers.get("content-range");
+      const n = range ? Number(range.split("/")[0]?.split("-")[1]) : NaN;
+      // `count=exact` puts the total after the slash; the prefix is the range. Either way a
+      // non-numeric header must not be reported as rows removed.
+      const total = range ? Number(range.split("/")[1]) : NaN;
+      removed += Number.isFinite(total) ? total : Number.isFinite(n) ? n : 0;
+    } catch (err) {
+      logger.warn({ err, channel: name }, "slack: purge of a denylisted channel threw");
+    }
+  }
+  if (removed > 0) logger.warn({ removed }, "slack: removed chunks from denylisted channels");
+  return removed;
+}
+
 const SOURCE = "slack";
 const API = "https://slack.com/api";
 const TIMEOUT_MS = 20_000;
@@ -417,6 +463,10 @@ export async function ingestSlack(
     }
   }
   if (!listed) return { source: SOURCE, rows: 0, swept: 0, skipped: "slack-list-failed" };
+
+  // Before anything is written: a channel that should never have been indexed must not
+  // survive in the corpus just because the denylist arrived after it did.
+  await purgeDenylistedChannels();
 
   const channels = ((listed.channels as SlackChannel[]) ?? []).filter(
     (c) => c.is_member && !c.is_archived && c.id && c.name && !NEVER_INDEX.has(c.name)
