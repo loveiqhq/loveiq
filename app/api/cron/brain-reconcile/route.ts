@@ -17,6 +17,7 @@ import { NextResponse } from "next/server";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { buildReportVoiceRows } from "@features/brain/server/ingest/report-voice";
 import { buildDomainRows } from "@features/brain/server/ingest/domain";
+import { redactUrlSecrets } from "@features/brain/server/ingest/upsert";
 import { reconcile, summarise, type Reading } from "@features/brain/server/reconcile";
 import { recordNotice } from "@features/brain/server/notice";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -30,7 +31,14 @@ import logger from "@shared/observability/logger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+/**
+ * 120, not 60. The corpus-wide secret scan reads every chunk — 12.5s over 25,000 of them,
+ * measured — and that number grows with the corpus. A kill writes NO `cron_run` row, so
+ * the worst runs would be the invisible ones. The scan also gives up and reports itself
+ * UNREAD rather than returning a false zero; both guards are needed, because a budget
+ * without the honest report is how a partial scan becomes a clean bill of health.
+ */
+export const maxDuration = 120;
 
 const WINDOW_DAYS = 30;
 
@@ -176,6 +184,71 @@ export async function buildReadings(): Promise<{ readings: Reading[]; unread: st
       tolerance: 0,
       because:
         "these are built from files in the repo, so the two are the same number or something dropped rows",
+    });
+  }
+
+  /**
+   * NO CHUNK ANYWHERE SHOULD STILL CARRY A SECRET.
+   *
+   * `upsertChunks` redacts on the way in, so the expected number is exactly zero and any
+   * other answer means something wrote around it. Not hypothetical: on 2026-09-17 a full
+   * WhatsApp re-sync, run by hand from a checkout that predated the redaction, put six
+   * live report-access tokens back into the corpus forty minutes after they had been
+   * cleaned out. Hand-run scripts are the hole, and nothing noticed.
+   *
+   * SCANS EVERYTHING, and the first version of this check did not — it read one page of
+   * 5,000 and reported zero while a planted token sat outside it. The daily touch moves
+   * `updated_at` on most of the corpus, so "recently written" selects almost everything
+   * and a single page is a fifth of it. A bounded scan that reports zero is worse than no
+   * check: it answers the question wrongly and confidently.
+   */
+  let leaking = 0;
+  let scanned = 0;
+  let scanFailed = false;
+  // Well inside the ceiling, and the tail after this still has to run.
+  const scanDeadline = Date.now() + 70_000;
+  for (let offset = 0; ; offset += 1000) {
+    if (Date.now() > scanDeadline) {
+      scanFailed = true;
+      break;
+    }
+    const page = await supabaseFetch(
+      `/rest/v1/brain_chunk?select=body,title,url&order=id&limit=1000&offset=${offset}`
+    );
+    if (!page.ok) {
+      scanFailed = true;
+      break;
+    }
+    const rows = (await page.json().catch(() => [])) as Array<{
+      body: string;
+      title: string;
+      url: string | null;
+    }>;
+    if (rows.length === 0) break;
+    scanned += rows.length;
+    for (const r of rows) {
+      if (
+        redactUrlSecrets(r.body) !== r.body ||
+        redactUrlSecrets(r.title) !== r.title ||
+        (r.url !== null && redactUrlSecrets(r.url) !== r.url)
+      ) {
+        leaking += 1;
+      }
+    }
+    if (rows.length < 1000) break;
+  }
+  if (scanFailed) {
+    // NOT a reading of zero. A scan that stopped early knows nothing about what it did not
+    // read, and saying so is the difference between "clean" and "did not look".
+    unread.push(`corpus secret scan (stopped after ${scanned} chunks)`);
+  } else {
+    readings.push({
+      what: `chunks holding a secret (all ${scanned} scanned)`,
+      left: { source: "what the redaction rule allows", value: 0 },
+      right: { source: "what the corpus holds", value: leaking },
+      tolerance: 0,
+      because:
+        "every write goes through the redaction, so anything above zero means something wrote around it — usually a hand-run script from a checkout that predates the rule. Fix with `npm run brain:redact -- --apply`",
     });
   }
 

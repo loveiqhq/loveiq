@@ -166,7 +166,7 @@
       "maxDuration": 30
     },
     "app/api/cron/brain-reconcile/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 120
     }
   }
 }

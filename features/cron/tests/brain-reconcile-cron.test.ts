@@ -42,6 +42,21 @@ function routeFetch(over: Record<string, unknown> = {}) {
         : ((over.domainHeld as number | undefined) ?? 341);
       return { ok: true, json: async () => [], headers: { get: () => `0-0/${held}` } };
     }
+    // The corpus secret scan pages `select=body,title,url`. Default: one clean page, which
+    // ends the loop. `leakyChunks` plants rows that still carry a secret.
+    if (path.includes("select=body,title,url")) {
+      if (over.scanFails) return fail();
+      // `pages` lets a test put a leak on the SECOND page, which is the only way to prove
+      // the scan does not stop after one — the defect the first version of it shipped with.
+      const pages = (over.pages as unknown[][] | undefined) ?? [
+        (over.leakyChunks as unknown[]) ?? [
+          { body: "an ordinary chunk with no secret", title: "fine", url: null },
+        ],
+      ];
+      const m = /offset=(\d+)/.exec(path);
+      const index = m ? Number(m[1]) / 1000 : 0;
+      return ok(pages[index] ?? []);
+    }
     return ok([]);
   };
 }
@@ -54,9 +69,79 @@ describe("brain-reconcile — the readings it actually assembles", () => {
     const { buildReadings } = await import("@/app/api/cron/brain-reconcile/route");
     const { reconcile } = await import("@features/brain/server/reconcile");
     const { readings, unread } = await buildReadings();
-    expect(readings).toHaveLength(6);
+    expect(readings).toHaveLength(7);
     expect(unread).toEqual([]);
     expect(reconcile(readings)).toEqual([]);
+  });
+
+  it("notices a chunk that still holds a secret", async () => {
+    /**
+     * The regression this exists for: on 2026-09-17 a hand-run WhatsApp sync from a stale
+     * checkout put six live report-access tokens back into the corpus forty minutes after
+     * they had been cleaned out, and nothing noticed.
+     */
+    supabaseFetch.mockImplementation(
+      routeFetch({
+        leakyChunks: [
+          {
+            body: "see https://www.loveiq.org/report/rpt_AAAAAAAAAAAAAAAAAAAA",
+            title: "t",
+            url: null,
+          },
+          { body: "clean", title: "t", url: null },
+        ],
+      })
+    );
+    const { buildReadings } = await import("@/app/api/cron/brain-reconcile/route");
+    const { reconcile } = await import("@features/brain/server/reconcile");
+    const { readings } = await buildReadings();
+    const found = reconcile(readings).find((d) => d.what.includes("holding a secret"));
+    expect(found).toBeDefined();
+    expect(found!.gap).toBe(1);
+  });
+
+  it("keeps scanning past the first page", async () => {
+    /**
+     * THE DEFECT THIS CHECK ITSELF SHIPPED WITH. The first version read one page of 5,000
+     * and reported zero while a planted token sat outside it — a bounded scan that says
+     * "clean" is worse than no scan, because it answers confidently and wrongly.
+     *
+     * The leak is placed on the SECOND page, so a scan that stops after one cannot find it.
+     */
+    const fullPage = Array.from({ length: 1000 }, () => ({ body: "clean", title: "t", url: null }));
+    supabaseFetch.mockImplementation(
+      routeFetch({
+        pages: [
+          fullPage,
+          [
+            {
+              body: "https://www.loveiq.org/report/rpt_AAAAAAAAAAAAAAAAAAAA",
+              title: "t",
+              url: null,
+            },
+          ],
+        ],
+      })
+    );
+    const { buildReadings } = await import("@/app/api/cron/brain-reconcile/route");
+    const { reconcile } = await import("@features/brain/server/reconcile");
+    const { readings } = await buildReadings();
+    const found = reconcile(readings).find((d) => d.what.includes("holding a secret"));
+    expect(found, "a leak on page two must still be found").toBeDefined();
+    expect(found!.gap).toBe(1);
+  });
+
+  it("reports a failed scan as unread, never as a clean zero", async () => {
+    /**
+     * A scan that could not finish knows nothing about what it did not read. Pushing a
+     * reading of zero there would publish "no secrets in the corpus" on the strength of
+     * having looked at none of it.
+     */
+    supabaseFetch.mockImplementation(routeFetch({ scanFails: true }));
+    const { buildReadings } = await import("@/app/api/cron/brain-reconcile/route");
+    const { readings, unread } = await buildReadings();
+    expect(unread.some((u) => u.includes("secret scan"))).toBe(true);
+    expect(readings.some((r) => r.what.includes("holding a secret"))).toBe(false);
   });
 
   it("catches the shape of the defect that shipped: paid derived two ways", async () => {
