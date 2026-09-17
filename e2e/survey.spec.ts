@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 
+import { pinSurveySession } from "./surveyArm";
+
 test.describe("Survey — Intro screen", () => {
   test.beforeEach(async ({ page }) => {
     page.on("pageerror", (err) => {
@@ -265,6 +267,11 @@ test.describe("Survey — Consent screen", () => {
 
 test.describe("Survey — Full happy path", () => {
   test("intro → slides 1-4 → consent → agree → questions", async ({ page }) => {
+    // Pin the C13 arm. The two questions this test asserts happen to open both arms, so
+    // it passes either way TODAY — but that is a coincidence of the current variant, not
+    // a property, and an unpinned arm turns any future change to C13's opening into a
+    // 50%-flaky failure in a spec that has nothing to do with the experiment.
+    await pinSurveySession(page, "control");
     page.on("pageerror", (err) => {
       if (err.message.toLowerCase().includes("cookieyes")) return;
     });

@@ -3,6 +3,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { surveyQuestions, type SurveyQuestion } from "../data/survey-data";
 import { isHidden } from "../features/survey/questionFlags";
 import { OPT_IN_QID, orderAskedQuestions } from "../features/survey/ui/questionOrder";
+import { pinSurveySession } from "./surveyArm";
 
 /**
  * The last question's answer must survive into the submit payload.
@@ -28,7 +29,15 @@ import { OPT_IN_QID, orderAskedQuestions } from "../features/survey/ui/questionO
  * Nothing is written: the submit POST is intercepted and inspected, never forwarded.
  */
 
-const ASKED: SurveyQuestion[] = orderAskedQuestions(surveyQuestions, "control").filter(
+/**
+ * Control. The tail this spec is about is identical in both C13 arms — the experiment
+ * only reorders the opening — but the arm is derived from a freshly minted session id, so
+ * leaving it unpinned would give the variant OPENING in half the runs and desynchronise
+ * the index walk long before it reaches the last question.
+ */
+const ARM = "control" as const;
+
+const ASKED: SurveyQuestion[] = orderAskedQuestions(surveyQuestions, ARM).filter(
   (q) => !isHidden(q.qId)
 );
 const LAST = ASKED[ASKED.length - 1]!;
@@ -53,6 +62,7 @@ test("the final answer reaches the submit payload even when Next is clicked inst
   page: Page;
 }) => {
   test.setTimeout(240_000);
+  await pinSurveySession(page, ARM);
 
   let payload: { answers?: Record<string, unknown> } | null = null;
   for (const p of ["**/api/survey-partial", "**/api/survey-tracking", "**/api/analytics-event"]) {
