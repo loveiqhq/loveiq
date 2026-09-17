@@ -11,8 +11,12 @@
     "with the copy. Do not re-point these at a tuned scanner and believe the result.",
     "",
     "Recordings expire: these were captured 2026-08-29 and expire 2026-09-28.",
-    "When they lapse, replace them from labelled observations (labeled=true), which",
-    "carry a human verdict already."
+    "When they lapse, PRECISION is already covered without them: score.mjs --ledger",
+    "scores the same scanners against the ux_finding ledger, which the probes write",
+    "themselves and which never expires. RECALL is not — the ledger holds only",
+    "findings a scanner flagged, so a session it wrongly passed can never appear in",
+    "it. Recall needs fresh fixtures, or observations labelled independently of the",
+    "scanner (labeled=true, which carry a human verdict already)."
   ],
   "known_bad": [
     {

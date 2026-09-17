@@ -152,6 +152,34 @@ jobs:
             exit 1
           fi
 
+      # The fixture bench above dies on a known date: the recordings were
+      # captured 2026-08-29 and expire 2026-09-28, and a scanner observes a
+      # given session once ever, so they cannot be refreshed. This scores the
+      # same scanners against the `ux_finding` ledger instead, which is written
+      # by the probes themselves and never expires.
+      #
+      # Exit 2 here means "not enough labelled findings yet", which is the
+      # expected state until the ledger fills. It is reported, never failed —
+      # a permanently red job is a job nobody reads. Exit 3 and above is a real
+      # error (the ledger could not be read at all).
+      - name: Score the scanners against the probe ledger
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set +e
+          node scripts/replay-bench/score.mjs --ledger --no-save
+          code=$?
+          set -e
+          if [ "$code" -eq 2 ]; then
+            echo "::notice::not enough labelled findings in the ledger yet — expected while it fills"
+          elif [ "$code" -eq 1 ]; then
+            echo "::warning::scanner precision is below the bar on ledger-labelled findings"
+          elif [ "$code" -ne 0 ]; then
+            echo "::error::the ledger could not be scored (exit $code)"
+            exit 1
+          fi
+
       - name: Every auto-PR probe reports its own defect
         env:
           STAGING_PASSWORD: ${{ secrets.STAGING_PASSWORD }}
