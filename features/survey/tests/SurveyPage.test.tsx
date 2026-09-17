@@ -8,6 +8,7 @@ import {
   PENDING_COMPLETION_KEY,
   SURVEY_STEP_KEY,
 } from "@features/survey/ui/hooks/surveyStorage";
+import { COMPLETED_REPORT_KEY } from "@features/survey/ui/hooks/surveySession";
 
 vi.mock("next/image", () => ({
   default: ({
@@ -69,6 +70,61 @@ describe("SurveyPage", () => {
       await screen.findByRole("button", { name: /continue to survey introduction/i })
     ).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { name: /sexual archetypes/i })).toHaveLength(2);
+  });
+
+  describe("a reader who already finished in this tab", () => {
+    // Submission clears the answers and the step key, and loadInitialStep()
+    // reads only those two — so Back from the report landed on the intro, which
+    // says "Let's prepare you well to discover your sexual archetypes". To
+    // someone who had just answered every question that reads as losing all of
+    // it. Four scanners reported it 24 times in 30 days; it was 69% of every
+    // finding the pipeline produced, and the probe covering it never visited
+    // the survey, so all of it was reported as passing.
+    it("is not shown the intro", async () => {
+      sessionStorage.setItem(COMPLETED_REPORT_KEY, "rpt_abc123");
+
+      render(<SurveyPage />);
+
+      expect(await screen.findByRole("heading", { name: /already finished/i })).toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: /continue to survey introduction/i })
+      ).not.toBeInTheDocument();
+    });
+
+    it("is offered their own report, not a restart", async () => {
+      sessionStorage.setItem(COMPLETED_REPORT_KEY, "rpt_abc123");
+
+      render(<SurveyPage />);
+
+      const cta = await screen.findByRole("link", { name: /open my report/i });
+      expect(cta).toHaveAttribute("href", "/report/rpt_abc123");
+    });
+
+    it("can still choose to start a new one", async () => {
+      // A screen with no way out is its own trap.
+      const user = userEvent.setup();
+      sessionStorage.setItem(COMPLETED_REPORT_KEY, "rpt_abc123");
+      render(<SurveyPage />);
+
+      await user.click(await screen.findByRole("button", { name: /start a new one/i }));
+
+      expect(
+        await screen.findByRole("button", { name: /continue to survey introduction/i })
+      ).toBeInTheDocument();
+      expect(sessionStorage.getItem(COMPLETED_REPORT_KEY)).toBeNull();
+    });
+
+    it("does not hijack a reader who still has answers", async () => {
+      // Someone mid-survey belongs in the engine. The finished screen is only
+      // for the case where the step logic would otherwise show the intro.
+      sessionStorage.setItem(COMPLETED_REPORT_KEY, "rpt_abc123");
+      localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify({ answers: { q1: "a" } }));
+
+      render(<SurveyPage />);
+
+      expect(await screen.findByTestId("survey-engine")).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: /already finished/i })).not.toBeInTheDocument();
+    });
   });
 
   it("transitions from the intro screen to the first slide", async () => {

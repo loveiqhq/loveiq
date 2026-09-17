@@ -1,7 +1,14 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  COMPLETED_REPORT_KEY,
+  completedReportToken,
   finalizeReportSession,
+  forgetCompletedReport,
+  rememberCompletedReport,
   getReportPricingSessionId,
   REPORT_SESSION_KEY,
   REPORT_PRICING_SESSION_PREFIX,
@@ -143,5 +150,36 @@ describe("surveySession", () => {
     setReportPricingSessionId({ pricingSessionId: "orphan" });
     // No storage key can be formed; nothing should be written.
     expect(sessionStorage.length).toBe(0);
+  });
+});
+
+describe("the completed-report marker", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
+
+  it("round-trips and can be forgotten", () => {
+    expect(completedReportToken()).toBeNull();
+    rememberCompletedReport("rpt_abc123");
+    expect(completedReportToken()).toBe("rpt_abc123");
+    forgetCompletedReport();
+    expect(completedReportToken()).toBeNull();
+  });
+
+  it("ignores an empty token rather than marking the tab finished", () => {
+    rememberCompletedReport("");
+    expect(completedReportToken()).toBeNull();
+  });
+
+  it("is the same key scripts/probes/verify-survey-loop.mjs seeds", () => {
+    // The probe reproduces the loop by putting the browser in the state a
+    // finished tab is in, and it writes this key as a string literal. Rename
+    // the constant alone and the probe keeps passing while testing nothing —
+    // the same shape as a guard that matches a bare word.
+    const probe = readFileSync(
+      resolve(process.cwd(), "scripts/probes/verify-survey-loop.mjs"),
+      "utf8"
+    );
+    expect(probe).toContain(`sessionStorage.setItem("${COMPLETED_REPORT_KEY}"`);
   });
 });

@@ -9,7 +9,7 @@ import { getSurveyContactInfo } from "@features/survey/server/utils";
 import type { AnswerValue } from "./useSurveyState";
 import { isRandomised } from "@features/survey/questionFlags";
 import { orderedOptions } from "../questionOrder";
-import { getSessionId, setReportSessionId } from "./surveySession";
+import { getSessionId, rememberCompletedReport, setReportSessionId } from "./surveySession";
 import {
   clearPendingCompletion,
   loadPendingCompletion,
@@ -148,6 +148,12 @@ export function useSubmitSurvey() {
             };
             if (json.reportToken) {
               setReportTokenState(json.reportToken);
+              // Recorded HERE rather than on the way out, because submission
+              // already clears the answers and the step key (SurveyEngine does
+              // it on success), so every route off this screen — finishing the
+              // wizard, a refresh, the back button — otherwise leaves the tab
+              // looking like a first-time visitor.
+              rememberCompletedReport(json.reportToken);
             }
             // submissionId is required for wizard-slide analytics persistence;
             // type-guard against legacy / unexpected response shapes.

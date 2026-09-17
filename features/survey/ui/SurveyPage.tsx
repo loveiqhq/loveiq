@@ -10,7 +10,11 @@ import {
   clearPersistedSurveyState,
   loadPendingCompletion,
 } from "./hooks/surveyStorage";
-import { copySurveySessionToReportSession } from "./hooks/surveySession";
+import {
+  completedReportToken,
+  copySurveySessionToReportSession,
+  forgetCompletedReport,
+} from "./hooks/surveySession";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { readCookie } from "@shared/observability/cookie";
 
@@ -453,6 +457,76 @@ const slides: Slide[] = [
 /* ------------------------------------------------------------------ */
 /*  Screen 0 — Light intro                                             */
 /* ------------------------------------------------------------------ */
+/**
+ * What a reader sees on /survey when THIS TAB has already finished it.
+ *
+ * Submission clears the answers and the step key, and `loadInitialStep()` reads
+ * only those two — so pressing Back from the report used to land on the intro
+ * screen, which says "Let's prepare you well to discover your sexual
+ * archetypes". To someone who had just answered every question that reads as
+ * losing all of it. Four scanners reported it 24 times in 30 days and
+ * `scripts/probes/verify-survey-loop.mjs` reproduces it on every device.
+ *
+ * Deliberately a screen and not a redirect: bouncing Back straight to the
+ * report traps the reader, who then cannot leave at all.
+ */
+const AlreadyFinishedScreen: FC<{
+  token: string;
+  onStartOver: () => void;
+}> = ({ token, onStartOver }) => (
+  <main
+    className="relative flex min-h-dvh flex-col items-center justify-center overflow-x-hidden px-7 py-8 sm:px-8 sm:py-10 md:py-16"
+    style={{
+      backgroundImage: "linear-gradient(180deg, #fff 0%, rgba(250,245,255,0.3) 50%, #fff 100%)",
+      paddingLeft: "max(1.75rem, env(safe-area-inset-left, 0px))",
+      paddingRight: "max(1.75rem, env(safe-area-inset-right, 0px))",
+    }}
+  >
+    <div className="relative z-10 flex w-full max-w-[700px] flex-col items-center text-center">
+      <h1
+        className="font-serif text-[36px] font-normal leading-[1.18] tracking-[-0.8px] text-[#1a1a2e] sm:text-[52px] sm:tracking-[-1.2px] md:text-[64px] md:tracking-[-1.5px]"
+        style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 0ms both" }}
+      >
+        You&rsquo;ve already finished
+        <br />
+        <span
+          className="bg-clip-text text-transparent"
+          style={{
+            backgroundImage: "linear-gradient(90deg, #FE6839 27.4%, #A78BFA 76.92%, #E9D5FF 100%)",
+          }}
+        >
+          your assessment
+        </span>
+      </h1>
+
+      <p
+        className="mt-8 max-w-[540px] font-sans text-[16px] font-light leading-[1.5] text-[#6a7282] sm:text-[18px] sm:leading-[29px] md:max-w-[640px] md:text-[20px]"
+        style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 150ms both" }}
+      >
+        Your answers are saved and your report is ready. You do not need to answer anything again.
+      </p>
+
+      <a
+        href={`/report/${token}`}
+        className="focus-visible-ring mt-10 inline-flex h-[54px] items-center justify-center gap-3 rounded-full bg-[#fe6839] px-8 text-[16px] font-bold uppercase tracking-[0.1em] text-white shadow-[0_15px_22px_rgba(254,104,57,0.2),0_6px_9px_rgba(254,104,57,0.2)] transition hover:-translate-y-[2px] hover:shadow-[0_18px_28px_rgba(254,104,57,0.28),0_8px_12px_rgba(254,104,57,0.24)] sm:h-[60px] sm:gap-4 sm:px-9 sm:text-[18px]"
+        style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 300ms both" }}
+      >
+        Open my report
+        <ArrowRight className="h-5 w-5 sm:h-6 sm:w-6" />
+      </a>
+
+      <button
+        type="button"
+        onClick={onStartOver}
+        className="focus-visible-ring mt-6 rounded-full px-4 py-2 font-sans text-[15px] font-light text-[#6a7282] underline underline-offset-4 transition hover:text-[#1a1a2e] sm:text-[16px]"
+        style={{ animation: "survey-fade-up 700ms cubic-bezier(0.16,1,0.3,1) 450ms both" }}
+      >
+        Start a new one
+      </button>
+    </div>
+  </main>
+);
+
 const IntroScreen: FC<{
   onContinue: () => void;
   transitioning: boolean;
@@ -1141,6 +1215,8 @@ const SurveyPage: FC = () => {
   // 0 = intro, 1–4 = slides, 5 = consent, 6 = engine
   const [step, setStep] = useState(0);
   const [hydrated, setHydrated] = useState(false);
+  /** Set only when THIS TAB already finished the survey. See AlreadyFinishedScreen. */
+  const [finishedToken, setFinishedToken] = useState<string | null>(null);
   const [transitioning, setTransitioning] = useState(false);
   const isPopStateNav = useRef(false);
 
@@ -1151,6 +1227,7 @@ const SurveyPage: FC = () => {
   useEffect(() => {
     const restored = loadInitialStep();
     if (restored !== 0) setStep(restored);
+    setFinishedToken(completedReportToken());
     setHydrated(true);
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -1241,8 +1318,24 @@ const SurveyPage: FC = () => {
 
   let content: ReactNode;
 
-  // Intro screen
-  if (step === 0) {
+  // Already finished in this tab — never the intro, which reads as "your
+  // answers are gone" to someone who just spent twenty minutes on them.
+  //
+  // `step === 0` is the whole condition, and it is what keeps this screen out
+  // of everyone else's way: a reader who still has answers is restored to the
+  // engine (step 6) and one mid-wizard to their slide, so neither can land
+  // here. Guarding the token read as well only looked safer.
+  if (step === 0 && finishedToken) {
+    content = (
+      <AlreadyFinishedScreen
+        token={finishedToken}
+        onStartOver={() => {
+          forgetCompletedReport();
+          setFinishedToken(null);
+        }}
+      />
+    );
+  } else if (step === 0) {
     content = <IntroScreen onContinue={handleIntroContinue} transitioning={transitioning} />;
   } else if (step - 1 < TOTAL_STEPS) {
     // Wizard slides

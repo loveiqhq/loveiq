@@ -47,8 +47,13 @@ const TOKEN = process.env.REPORT_TOKEN ?? "rpt_a9LY0Obbla1FVsclJ1nM";
  */
 const INTRO_HEADING = /prepare you/i;
 
-/** Below this much text the page did not really render, whatever it returned. */
-const MIN_RENDERED_CHARS = 200;
+/**
+ * A page with no heading AND almost no text did not render, whatever it
+ * returned. Both halves matter: a bare character floor called the FIXED
+ * survey unrendered, because the "already finished" screen is deliberately
+ * short (182 characters) — shorter than the intro it replaced.
+ */
+const MIN_RENDERED_CHARS = 60;
 
 let bad = 0;
 let unmeasured = 0;
@@ -80,14 +85,19 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) 
     // 2. Exactly what handleReturn(true, token) leaves behind. Not invented:
     //    every key here is one that function touches, with the survey session
     //    kept because it passes clearSurveySession: false.
-    await page.evaluate(() => {
+    await page.evaluate((token) => {
       localStorage.removeItem("loveiq-survey-answers");
       localStorage.removeItem("loveiq-survey-index");
       localStorage.removeItem("loveiq-survey-pending-completion");
       sessionStorage.removeItem("loveiq-survey-step");
       sessionStorage.setItem("loveiq-survey-session", "probe-completed-session");
       sessionStorage.setItem("loveiq-report-session", "probe-completed-session");
-    });
+      // What a finished tab carries: useSubmitSurvey records the token the
+      // moment the submit response returns it. Production ignored this key
+      // entirely before 2026-09-17, which is why seeding it still reproduces
+      // there — and why this probe is the regression guard for the fix.
+      sessionStorage.setItem("loveiq-completed-report", token);
+    }, TOKEN);
 
     // The inverse of MUTATE: a probe that can only ever FAIL is as useless as
     // one that can only pass, and this one fails on production today. Keeping
@@ -131,7 +141,7 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) 
       // the claim either way.
       console.log(`${name}: back went to ${state.path}, not the survey — INCONCLUSIVE`);
       unmeasured += 1;
-    } else if (state.chars < MIN_RENDERED_CHARS) {
+    } else if (state.headings.length === 0 && state.chars < MIN_RENDERED_CHARS) {
       console.log(`${name}: ${state.path} rendered ${state.chars} chars — INCONCLUSIVE`);
       unmeasured += 1;
     } else if (intro) {

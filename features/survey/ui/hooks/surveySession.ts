@@ -1,6 +1,20 @@
 export const SURVEY_SESSION_KEY = "loveiq-survey-session";
 export const REPORT_SESSION_KEY = "loveiq-report-session";
 export const REPORT_PRICING_SESSION_PREFIX = "loveiq-report-pricing-session";
+/**
+ * The report a reader in THIS tab has already finished.
+ *
+ * Written when the submit response returns the token. `loadInitialStep()` reads
+ * only the step key and the answers, and submission deliberately clears both —
+ * so a reader who finished and then pressed Back landed on the intro screen
+ * with their progress apparently gone, as if they had never taken it. Four
+ * scanners reported that 24 times in 30 days, and `verify-survey-loop.mjs`
+ * reproduces it on every device.
+ *
+ * sessionStorage, not localStorage: the loop is a same-tab back-navigation, and
+ * a report token is an access credential that should not outlive the tab.
+ */
+export const COMPLETED_REPORT_KEY = "loveiq-completed-report";
 export const REPORT_NURTURE_PROMO_PREFIX = "loveiq-report-nurture-promo";
 
 function canUseStorage() {
@@ -240,5 +254,35 @@ export function getReportNurturePromo({
     return sessionStorage.getItem(storageKey);
   } catch {
     return null;
+  }
+}
+
+/** Remember that this tab finished the survey, and which report it produced. */
+export function rememberCompletedReport(token: string): void {
+  if (!canUseStorage() || !token) return;
+  try {
+    sessionStorage.setItem(COMPLETED_REPORT_KEY, token);
+  } catch {
+    /* storage THROWS in Safari private mode and several in-app WebViews */
+  }
+}
+
+/** The report this tab already finished, or null. */
+export function completedReportToken(): string | null {
+  if (!canUseStorage()) return null;
+  try {
+    return sessionStorage.getItem(COMPLETED_REPORT_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Forget it, so "start a new one" really does start a new one. */
+export function forgetCompletedReport(): void {
+  if (!canUseStorage()) return;
+  try {
+    sessionStorage.removeItem(COMPLETED_REPORT_KEY);
+  } catch {
+    /* ignore */
   }
 }
