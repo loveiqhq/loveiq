@@ -304,7 +304,15 @@ function runProbe(file, viewport, clickTarget) {
  * marked done.
  */
 async function deliverVerdict(sessionId, verdict) {
-  if (DRY_RUN || CLASSIFY_ONLY) return true;
+  if (CLASSIFY_ONLY) return true;
+  if (DRY_RUN) {
+    // --dry-run is documented as "verify and print", and it printed the verdict
+    // CLASSIFICATION but never the message. The text is the part worth reading
+    // before it reaches a thread: it is where the probe's own words, the devices
+    // it drove and any PR link end up.
+    console.log(`  would post to ${sessionId}:\n    ${verdict.replace(/\n/g, "\n    ")}`);
+    return true;
+  }
   try {
     const threadTs = await threadFor(sessionId);
     if (threadTs) {
