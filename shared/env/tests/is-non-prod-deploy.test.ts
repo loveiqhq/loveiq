@@ -132,6 +132,43 @@ describe("isProductionSite", () => {
     // Deliberately NOT the inverse — both false, for opposite reasons.
     expect(isNonProdDeploy()).toBe(false);
   });
+
+  /**
+   * THE CASE THE TEST ABOVE DOES NOT COVER, and the one that actually bit.
+   *
+   * The test above uses a LOCALHOST site url. CI builds bake the PRODUCTION one — so the
+   * host allowlist matches, `NEXT_PUBLIC_VERCEL_ENV` is absent off Vercel, and the gate
+   * says "live site" for a bundle that is then served on localhost. Measured in Microsoft
+   * Clarity on 2026-09-17: 177 of 711 sessions over three days were `localhost:3000`, each
+   * one a fresh browser profile viewing a single page for ten seconds — an automated run,
+   * recording into the project real customers are recorded in.
+   *
+   * Only Clarity was affected, because it is the one tag deliberately not consent-gated;
+   * GA4 and Google Ads load their libraries only after consent, which CI never gives.
+   */
+  it("is true for a CI build that bakes the production URL — the defect", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_VERCEL_ENV", undefined);
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org");
+
+    expect(isProductionSite()).toBe(true);
+  });
+
+  it("is false once that build declares a non-production environment", () => {
+    /**
+     * The fix, using the mechanism already here rather than a new flag: a CI workflow that
+     * serves the build sets `NEXT_PUBLIC_VERCEL_ENV` to anything that is not "production",
+     * and the existing environment check refuses it. The production URL is kept, so
+     * canonical tags and OG images still resemble the live site for auditing.
+     */
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://www.loveiq.org");
+
+    for (const env of ["ci", "preview", "development"]) {
+      vi.stubEnv("NEXT_PUBLIC_VERCEL_ENV", env);
+      expect(isProductionSite(), env).toBe(false);
+    }
+  });
 });
 
 /**
