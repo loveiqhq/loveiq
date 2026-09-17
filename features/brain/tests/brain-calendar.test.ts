@@ -4,7 +4,12 @@ vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-import { eventDay, eventToRows, isWorthIndexing } from "@features/brain/server/ingest/calendar";
+import {
+  CALENDAR_BUILDER_VERSION,
+  eventDay,
+  eventToRows,
+  isWorthIndexing,
+} from "@features/brain/server/ingest/calendar";
 
 const STAMP = "2026-08-31T00:00:00.000Z";
 
@@ -74,8 +79,8 @@ describe("eventToRows", () => {
    * upsert collapses them and whoever is read last simply confirms it.
    */
   it("keys across guests, so one meeting is stored once no matter how many calendars hold it", () => {
-    const fromEman = eventToRows(meeting({ id: "copy-eman" }), STAMP)[0]!;
-    const fromMarcus = eventToRows(meeting({ id: "copy-marcus" }), STAMP)[0]!;
+    const fromEman = eventToRows(meeting({ id: "copy-eman" }), STAMP, null)[0]!;
+    const fromMarcus = eventToRows(meeting({ id: "copy-marcus" }), STAMP, null)[0]!;
     expect(fromMarcus.source_id).toBe(fromEman.source_id);
   });
 
@@ -151,5 +156,43 @@ describe("eventToRows", () => {
   it("reads the day off either shape, and null when there is neither", () => {
     expect(eventDay(meeting())).toBe("2026-08-28");
     expect(eventDay(meeting({ start: {} }))).toBeNull();
+  });
+});
+
+/**
+ * AN OFFBOARDED COLLEAGUE'S MEETINGS ARE NOT DELETED MEETINGS.
+ *
+ * `domainMailboxes()` lists `isSuspended=false` users, so a departing colleague
+ * drops off the walk the day their account is suspended — no token failure, so
+ * nothing sets `complete = false` and the walk finishes cleanly over everyone
+ * else. Their events then go stale and `sweepStale` removes them. Same root
+ * cause, same function, as the Gmail mailbox sweep fixed on 2026-09-06.
+ */
+describe("calendar rows carry the calendar they were walked from", () => {
+  it("records the mailbox in meta", () => {
+    const row = eventToRows(meeting({ id: "e1" }), STAMP, "sk@loveiq.org")[0]!;
+    expect((row.meta as Record<string, unknown>).mailbox).toBe("sk@loveiq.org");
+  });
+
+  it("is null rather than absent when the calendar is unknown", () => {
+    // A row with no scope stays sweepable, which is what the pre-bump rows are.
+    const row = eventToRows(meeting({ id: "e2" }), STAMP, null)[0]!;
+    expect((row.meta as Record<string, unknown>).mailbox).toBeNull();
+  });
+
+  it("ships a builder version that rewrites the rows written without it", () => {
+    // Without the bump, existing rows keep v=2, carry no mailbox, and the
+    // scoped sweep would never match them — immortal rather than protected.
+    const row = eventToRows(meeting({ id: "e3" }), STAMP, "ec@loveiq.org")[0]!;
+    expect((row.meta as Record<string, unknown>).v).toBe(CALENDAR_BUILDER_VERSION);
+    expect(CALENDAR_BUILDER_VERSION).toBeGreaterThan(2);
+  });
+
+  it("still stores one row for a meeting seen on two calendars", () => {
+    // The scope must not become part of the key: one meeting exists on every
+    // guest's calendar and is deliberately stored once, keyed on iCalUID+day.
+    const a = eventToRows(meeting({ id: "copy-a" }), STAMP, "ec@loveiq.org")[0]!;
+    const b = eventToRows(meeting({ id: "copy-b" }), STAMP, "sk@loveiq.org")[0]!;
+    expect(a.source_id).toBe(b.source_id);
   });
 });

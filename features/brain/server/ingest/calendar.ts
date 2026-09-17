@@ -50,7 +50,12 @@ const MAX_PAGES = 12;
  * corrected key produces is nowhere near a majority. Until the first sweep runs, both
  * shapes are present and one occurrence per series appears twice.
  */
-export const CALENDAR_BUILDER_VERSION = 2;
+/**
+ * 3: events carry the `mailbox` they were walked from, so the sweep can tell a
+ * calendar it did not walk from one whose meetings were deleted. Rows written
+ * under 2 have no mailbox and are simply rewritten on the next walk.
+ */
+export const CALENDAR_BUILDER_VERSION = 3;
 
 /**
  * How far back and forward to read.
@@ -111,7 +116,13 @@ export function isWorthIndexing(e: CalEvent): boolean {
   return humans.length > 1 || hasAgenda;
 }
 
-export function eventToRows(e: CalEvent, stampedAt: string): BrainRow[] {
+/**
+ * `mailbox` is REQUIRED, not optional. It was optional first, and a mutation
+ * that dropped it at the only call site compiled and passed every test — the
+ * rows would simply have carried `mailbox: null` and the sweep would have had
+ * nothing to scope by. Making it required turns that into a compile error.
+ */
+export function eventToRows(e: CalEvent, stampedAt: string, mailbox: string | null): BrainRow[] {
   if (!isWorthIndexing(e)) return [];
   /**
    * Keyed on `iCalUID` PLUS THE DAY, and the day is not optional.
@@ -179,6 +190,14 @@ export function eventToRows(e: CalEvent, stampedAt: string): BrainRow[] {
       v: CALENDAR_BUILDER_VERSION,
       attendees: attending.slice(0, 12),
       organizer: e.organizer ? who(e.organizer) : null,
+      /**
+       * The calendar this row was walked from. One meeting is stored ONCE
+       * (keyed on iCalUID plus the day), so this is whichever attendee's
+       * calendar last wrote it — which is exactly what the sweep needs: if that
+       * person is still walked the row is touched, and if they are not, the row
+       * belongs to a calendar this run could not see.
+       */
+      mailbox,
     },
     updated_at: stampedAt,
     period_end: day,
@@ -308,7 +327,7 @@ export async function ingestCalendar(
       }
       const items = (listed.items as CalEvent[]) ?? [];
       seenEvents += items.length;
-      for (const e of items) rows.push(...eventToRows(e, stampedAt));
+      for (const e of items) rows.push(...eventToRows(e, stampedAt, mailbox));
 
       pageToken = (listed.nextPageToken as string) ?? "";
       if (!pageToken) break;
@@ -351,7 +370,21 @@ export async function ingestCalendar(
     stampedAt,
     sweeping
   );
-  const swept = sweeping ? await sweepStale(SOURCE, stampedAt, written + touched) : 0;
+  const swept = sweeping
+    ? await sweepStale(SOURCE, stampedAt, written + touched, {
+        scopeKey: "mailbox",
+        /**
+         * `domainMailboxes()` lists `isSuspended=false` users, so an offboarded
+         * colleague DROPS OFF this list — no token failure, nothing to set
+         * `complete = false`, and the walk finishes cleanly over everyone else.
+         * Their meetings then go stale and are deleted. It is the same root
+         * cause as the Gmail mailbox sweep, through the same function, and the
+         * unreachable-calendar guard above does not reach it: that one only
+         * fires when a token is refused.
+         */
+        walkedScopes: new Set(boxes),
+      })
+    : 0;
 
   logger.info(
     {
