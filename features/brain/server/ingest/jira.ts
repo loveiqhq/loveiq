@@ -66,6 +66,20 @@ export function adfToText(node: unknown, depth = 0): string {
   return inner;
 }
 
+/**
+ * A Jira project's KEY ("GROW"), not its display name ("Growth").
+ *
+ * `named()` below returns `.name`, and `PROJECTS` is a list of keys — so
+ * scoping the sweep on `meta.project` would compare names against keys, match
+ * nothing, and silently disable the sweep. That is exactly what the comment
+ * next to the sweep used to recommend.
+ */
+function projectKeyOf(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as { key?: unknown };
+  return typeof v.key === "string" ? v.key : null;
+}
+
 function named(value: unknown): string | null {
   if (!value || typeof value !== "object") return null;
   const v = value as { name?: unknown; displayName?: unknown };
@@ -126,6 +140,9 @@ export function toRow(issue: JiraIssue, baseUrl: string, stampedAt: string): Bra
       reporter: named(f.reporter),
       labels,
       project: named(f.project),
+      // The key as well as the name: the sweep scopes on this, and PROJECTS is
+      // a list of keys. See projectKeyOf.
+      projectKey: projectKeyOf(f.project),
       created: typeof f.created === "string" ? f.created : null,
       updated: typeof f.updated === "string" ? f.updated : null,
       resolution: named(f.resolution),
@@ -218,16 +235,28 @@ export async function ingestJira(
    * mailbox. Jira has the same shape and already writes `project` into meta, so
    * the guard is four lines.
    *
-   * It is not wired because this source is dormant: `JIRA_BASE_URL` is unset,
-   * the run exits `jira-not-configured`, and there are zero jira rows to test a
-   * change against. Wiring a guard that cannot be verified is worse than
-   * naming the gap. WHOEVER ENABLES JIRA: pass
-   * `{ scopeKey: "project", walkedScopes: new Set(PROJECTS) }` here, and note
-   * that PROJECTS is a hardcoded list — removing a project from it will delete
-   * that project's issues, which may well be what you want, but should be a
-   * decision rather than a surprise.
+   * Scoped on the project KEY, and the distinction is the whole point: an
+   * earlier note here recommended `scopeKey: "project"` with
+   * `walkedScopes: new Set(PROJECTS)`, which would have been wrong.
+   * `meta.project` holds the display NAME ("Growth") while PROJECTS holds keys
+   * ("GROW"), so that filter would have matched nothing and silently disabled
+   * the sweep — the failure mode is a sweep that never deletes, which looks
+   * exactly like a sweep with nothing to do.
+   *
+   * Wired now rather than left as a note because the source is EMPTY: zero jira
+   * rows, so adding `projectKey` to meta costs no rewrite and needs no builder
+   * bump. Doing it later would.
+   *
+   * PROJECTS is a hardcoded list, so removing a project from it deletes that
+   * project's issues. That may well be what you want; it should be a decision
+   * rather than a surprise.
    */
-  const swept = completed ? await sweepStale(SOURCE, stampedAt, written) : 0;
+  const swept = completed
+    ? await sweepStale(SOURCE, stampedAt, written, {
+        scopeKey: "projectKey",
+        walkedScopes: new Set(PROJECTS),
+      })
+    : 0;
 
   // A run cut short by the time budget returned `{rows: 0, swept: 0}` with no
   // `skipped` and no `error` — indistinguishable from a clean no-op, and Jira is
