@@ -55,6 +55,40 @@ function newId(): string {
   return `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/**
+ * The mirror is read and written through these two, each with its OWN try/catch, so a
+ * browser that allows sessionStorage but throws on localStorage cannot take the primary
+ * path down with it.
+ *
+ * That is not hypothetical bookkeeping: `getSessionId` already had to catch, because
+ * storage THROWS rather than going missing in Safari private mode and several in-app
+ * WebViews. Putting the mirror inside that same try meant one localStorage failure fell
+ * through to the in-memory fallback and discarded a perfectly good, reload-surviving
+ * sessionStorage id — degrading precisely the visitors the catch was written for.
+ *
+ * The mirror is an enhancement. It must never cost more than it adds.
+ */
+function readSessionMirror(): string | null {
+  try {
+    return localStorage.getItem(SURVEY_SESSION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeSessionMirror(id: string): void {
+  try {
+    // Written only when it differs, so reading an established id stays a pure read — and
+    // so a respondent already mid-survey when this deploys gets the mirror backfilled
+    // rather than being handed a new id.
+    if (localStorage.getItem(SURVEY_SESSION_KEY) !== id) {
+      localStorage.setItem(SURVEY_SESSION_KEY, id);
+    }
+  } catch {
+    /* localStorage refused — the survey still works, it just will not survive the tab */
+  }
+}
+
 export function getSessionId(): string {
   if (!canUseStorage()) return "";
   try {
@@ -86,15 +120,10 @@ export function getSessionId(): string {
      * already falls back to localStorage for exactly this reason.
      */
     if (!id) {
-      id = localStorage.getItem(SURVEY_SESSION_KEY) ?? newId();
+      id = readSessionMirror() ?? newId();
       sessionStorage.setItem(SURVEY_SESSION_KEY, id);
     }
-    // Written only when it differs, so reading an established id stays a pure read — and
-    // so a respondent already mid-survey when this deploys gets the mirror backfilled
-    // rather than being handed a new id.
-    if (localStorage.getItem(SURVEY_SESSION_KEY) !== id) {
-      localStorage.setItem(SURVEY_SESSION_KEY, id);
-    }
+    writeSessionMirror(id);
     return id;
   } catch {
     /**
