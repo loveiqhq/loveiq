@@ -128,6 +128,50 @@ describe("ux-review cron", () => {
     expect(await res.json()).toMatchObject({ contradicted: 1, collected: 0 });
   });
 
+  it("spends its per-run budget on unclaimed findings, not on ones already handled", async () => {
+    // The budget existed to bound a 30-second function, but it was applied to
+    // the LOOKBACK rather than to the work: `findings.slice(0, 6)` took the six
+    // newest of up to 25 and then skipped the already-claimed ones among them.
+    //
+    // The lookback is 90 minutes on a 30-minute schedule, so the six newest are
+    // re-examined on three consecutive runs. Once six findings arrive inside one
+    // gap, every older finding ranks below them (ORDER BY timestamp DESC) and can
+    // never be reached — it ages out of the window unclaimed, unverified, and
+    // uncounted. The failure mode arrives exactly when the scanners are busiest.
+    const findings = Array.from({ length: 8 }, (_, i) =>
+      finding({
+        observationId: `obs-${i + 1}`,
+        sessionId: `01a09e04-dfaa-7a3e-9622-0d7ca528501${i}`,
+      })
+    );
+    mockFetchFindings.mockResolvedValue(findings);
+    // The six newest were handled on an earlier run; only the last two are new.
+    mockTryClaim.mockImplementation(async (kind: string, _type: string, id: string) =>
+      kind === "ux_review" ? id === "obs-7" || id === "obs-8" : true
+    );
+
+    const res = await GET(req());
+
+    expect(await res.json()).toMatchObject({ considered: 8, collected: 2, suppressed: 6 });
+    const handled = mockMarkDelivered.mock.calls
+      .filter((c) => c[0] === "ux_review")
+      .map((c) => c[2]);
+    expect(handled).toEqual(["obs-7", "obs-8"]);
+  });
+
+  it("stops at the budget once that many findings have actually been worked", async () => {
+    // The other half of the same rule: the bound must still hold. Eight new
+    // findings, none claimed, must cost six units of work and no more.
+    mockFetchFindings.mockResolvedValue(
+      Array.from({ length: 8 }, (_, i) => finding({ observationId: `new-${i + 1}` }))
+    );
+
+    const res = await GET(req());
+
+    expect(await res.json()).toMatchObject({ considered: 8, collected: 6 });
+    expect(mockFetchSessionEvents).toHaveBeenCalledTimes(6);
+  });
+
   it("does not post the digest before the digest hour", async () => {
     vi.setSystemTime(new Date("2026-09-14T03:00:00Z"));
     await GET(req());

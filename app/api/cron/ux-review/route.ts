@@ -18,8 +18,8 @@
  * the probes reject all five.
  *
  * So this route now: claims each observation once, refuses the ones our own
- * events contradict, writes the rest to the notice table so they stay
- * searchable, and once a day posts the digest the 2026-09-08 sync asked for
+ * events contradict, finalises the rest so they are not re-queried, and once a
+ * day posts the digest the 2026-09-08 sync asked for
  * ("generate daily summaries of user UX issues"). An empty day is reported as
  * unusual rather than as all-clear, because a broken scanner and a healthy
  * product otherwise look identical.
@@ -53,6 +53,7 @@ import {
   fetchScannerDrift,
   fetchDailyStats,
   fetchFindings,
+  fetchVerificationStats,
   fetchSessionEvents,
   MAX_POSTS_PER_RUN,
 } from "@features/ux-review/server/review";
@@ -105,7 +106,27 @@ export async function GET(request: Request) {
     let contradicted = 0;
     let suppressed = 0;
 
-    for (const finding of findings.slice(0, MAX_POSTS_PER_RUN)) {
+    for (const finding of findings) {
+      /**
+       * Budget the WORK, not the lookback.
+       *
+       * This was `findings.slice(0, MAX_POSTS_PER_RUN)`, which took the six
+       * newest of up to 25 and then skipped the already-claimed ones among
+       * them — so a run could spend its whole budget re-checking findings it
+       * had already handled. With a 90-minute lookback on a 30-minute
+       * schedule the six newest come back on three consecutive runs, and once
+       * six findings arrive inside one gap every older one ranks below them
+       * (ORDER BY timestamp DESC) and is never reached: it ages out of the
+       * window unclaimed, unverified and uncounted. The drop arrived exactly
+       * when the scanners were busiest, and nothing reported it.
+       *
+       * The bound exists to keep a 30-second function inside its ceiling, and
+       * the cost is the session query below, which only an unclaimed finding
+       * pays. A claim check is one cheap round-trip, so counting worked
+       * findings holds the same ceiling while letting the tail drain.
+       */
+      if (collected + contradicted >= MAX_POSTS_PER_RUN) break;
+
       // Once per observation, ever.
       const claimed = await tryClaimSlackAlert("ux_review", "observation", finding.observationId);
       if (!claimed) {
@@ -199,7 +220,10 @@ export async function GET(request: Request) {
      */
     if (reportingHour() >= DIGEST_HOUR_BERLIN) {
       if (await tryClaimSlackAlert("ux_review_digest", "daily", dayKey)) {
-        const { text, blocks } = buildDigestMessage(await fetchDailyStats());
+        const { text, blocks } = buildDigestMessage(
+          await fetchDailyStats(),
+          await fetchVerificationStats()
+        );
         const fitted = fitBlocks(blocks, text);
         await notifySlack({
           channel: "survey",
