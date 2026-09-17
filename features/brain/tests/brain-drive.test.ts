@@ -137,7 +137,7 @@ vi.mock("unpdf", () => ({
   extractText: vi.fn(async () => ({ totalPages: 1, text: pdfText })),
 }));
 
-import { docToRows, ingestDrive } from "@features/brain/server/ingest/drive";
+import { docToRows, ingestDrive, isPersonalDataExport } from "@features/brain/server/ingest/drive";
 
 const STAMP = "2026-08-28T04:47:00.000Z";
 const FILE = {
@@ -859,5 +859,54 @@ describe("a transient Drive refusal is retried, not fatal", () => {
 
     expect(result.skipped).toBe("drive-list-failed");
     expect(listCalls()).toBe(1);
+  });
+});
+
+describe("personal-data exports are refused", () => {
+  const addresses = (n: number, domain = "example.org") =>
+    Array.from({ length: n }, (_, i) => `person${i}@${domain}`).join("\n");
+
+  it("refuses a file that is a list of people", () => {
+    /**
+     * Found by audit 2026-09-17: three marketing audience exports were sitting in Drive
+     * and fully indexed, putting 2,083 real people's email addresses into a corpus any
+     * team member can search with one shared token. The rule against indexing user-level
+     * rows existed; nothing enforced it.
+     */
+    expect(isPersonalDataExport(addresses(200))).toBe(true);
+    expect(isPersonalDataExport(`email,name\n${addresses(1429)}`)).toBe(true);
+  });
+
+  it("leaves an ordinary document alone", () => {
+    // The largest legitimate Drive document measured carries six addresses — a team page.
+    expect(isPersonalDataExport(`Team:\n${addresses(6)}\n\nNotes about the project.`)).toBe(false);
+    expect(isPersonalDataExport("A document with no addresses at all.")).toBe(false);
+  });
+
+  it("counts DISTINCT addresses, not mentions", () => {
+    // One person cc'd on a long thread is not a list. Counting raw matches would refuse
+    // real correspondence.
+    const repeated = Array.from({ length: 200 }, () => "same.person@example.org").join(" ");
+    expect(isPersonalDataExport(repeated)).toBe(false);
+  });
+
+  it("does not index a refused file, so the sweep can remove what is already stored", () => {
+    // Returning zero rows keeps the file out of the walk's written-id set, which is what
+    // lets `sweepMissing` clear the chunks indexed before this guard existed.
+    const rows = docToRows(
+      { id: "f1", name: "loveiq_audience1_completers_all.csv" } as never,
+      addresses(500),
+      "2026-09-17T00:00:00Z"
+    );
+    expect(rows).toEqual([]);
+  });
+
+  it("still indexes a normal file", () => {
+    const rows = docToRows(
+      { id: "f2", name: "Strategy notes" } as never,
+      "We decided to focus on mobile. Contact anna@example.org for detail.",
+      "2026-09-17T00:00:00Z"
+    );
+    expect(rows.length).toBeGreaterThan(0);
   });
 });

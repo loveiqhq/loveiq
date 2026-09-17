@@ -439,9 +439,60 @@ async function docText(token: string, fileId: string, mimeType?: string): Promis
   return clean(await res.text());
 }
 
+/**
+ * How many distinct email addresses make a document a LIST OF PEOPLE rather than a
+ * document that happens to mention some.
+ *
+ * Measured across every Drive document in the corpus on 2026-09-17, and the two groups do
+ * not overlap remotely. The largest ordinary document — a "Team Members" page — carries
+ * SIX. Everything above that is an export: 1,429 addresses in
+ * `loveiq_audience1_completers_all.csv`, 533 in its opt-in twin, 121 in
+ * `loveiq_audience2_abandoners.csv`, and 100 apiece in four `.json` fixtures. Twenty sits
+ * in the gap with a wide margin on both sides.
+ */
+export const MAX_ADDRESSES_PER_DOC = 20;
+
+const EMAIL_IN_TEXT = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+
+/**
+ * Is this file a personal-data export?
+ *
+ * `brain_chunk` must never index user-level rows — survey answers, individual reports,
+ * email addresses. That rule was written for the ingesters and then not enforced anywhere:
+ * an audit on 2026-09-17 found three marketing audience exports sitting in Drive and fully
+ * indexed, putting 2,083 real people's addresses into a corpus any team member can search
+ * with one shared token.
+ *
+ * Counted on DISTINCT addresses across the whole document, not per chunk, because that is
+ * the only level where the signal exists. A 2,400-character chunk of a CSV holds five to
+ * nine addresses — indistinguishable from a calendar invite with nine guests.
+ */
+export function isPersonalDataExport(text: string): boolean {
+  const seen = new Set<string>();
+  for (const m of text.match(EMAIL_IN_TEXT) ?? []) {
+    seen.add(m.toLowerCase());
+    // Stop early: a 1,429-address CSV need not be fully de-duplicated to be recognised.
+    if (seen.size > MAX_ADDRESSES_PER_DOC) return true;
+  }
+  return false;
+}
+
 export function docToRows(file: DriveFile, text: string, stampedAt: string): BrainRow[] {
   const name = (file.name ?? "").trim();
   if (!file.id || !name) return [];
+
+  /**
+   * REFUSED BEFORE ANYTHING IS BUILT. Returning no rows also means the file never enters
+   * the walk's written-id set, so `sweepMissing` removes whatever was indexed before this
+   * guard existed — the corpus repairs itself rather than needing a one-off delete.
+   */
+  if (isPersonalDataExport(text)) {
+    logger.warn(
+      { file: name },
+      "brain-ingest drive: refusing a file that is a list of people, not a document"
+    );
+    return [];
+  }
   const edited = file.modifiedTime ?? file.createdTime ?? null;
   const owner = file.owners?.[0]?.emailAddress ?? null;
 
