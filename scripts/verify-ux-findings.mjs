@@ -303,30 +303,47 @@ function runProbe(file, viewport, clickTarget) {
  * finding with no thread to post into, where retrying changes nothing — is
  * marked done.
  */
+/**
+ * Returns HOW it went, not merely whether to finalise the claim.
+ *
+ * This returned a bare boolean, and `true` for both "posted into the thread" and
+ * "there was no thread, so nothing was posted" — deliberately, because both
+ * should finalise the claim and only a genuine failure should be retried. But it
+ * meant the ledger's `delivered` column was true whenever the verdict had been
+ * thrown away, which is the single thing that column exists to record. Sessions
+ * with no thread are readers who never submitted the survey: the ones who did
+ * not convert, and the most interesting findings we have.
+ *
+ *   "posted"    it reached the thread
+ *   "no_thread" nothing to post into; the claim is still finalised
+ *   "failed"    Slack refused; leave the claim open so the next run retries
+ */
 async function deliverVerdict(sessionId, verdict) {
-  if (CLASSIFY_ONLY) return true;
+  if (CLASSIFY_ONLY) return "no_thread";
   if (DRY_RUN) {
     // --dry-run is documented as "verify and print", and it printed the verdict
     // CLASSIFICATION but never the message. The text is the part worth reading
     // before it reaches a thread: it is where the probe's own words, the devices
     // it drove and any PR link end up.
     console.log(`  would post to ${sessionId}:\n    ${verdict.replace(/\n/g, "\n    ")}`);
-    return true;
+    // Not "posted": a dry run posts nothing, and saying otherwise would be the
+    // same untruth this function was just fixed for.
+    return "no_thread";
   }
   try {
     const threadTs = await threadFor(sessionId);
-    if (threadTs) {
-      await postThreadReply(threadTs, verdict);
-    } else {
-      console.log(`  (no survey thread for ${sessionId}; not posted)`);
+    if (!threadTs) {
+      console.log(`  (no survey thread for ${sessionId}; not posted — recorded in ux_finding)`);
+      return "no_thread";
     }
-    return true;
+    await postThreadReply(threadTs, verdict);
+    return "posted";
   } catch (err) {
     console.log(
       `  (slack post failed: ${String(err.message).split("\n")[0].slice(0, 100)} — ` +
         `leaving the claim open so the next run retries)`
     );
-    return false;
+    return "failed";
   }
 }
 
@@ -345,6 +362,50 @@ async function deliverVerdict(sessionId, verdict) {
  * Called on every terminal path, including the ones that post nothing: the work
  * was done either way and must not be repeated.
  */
+/**
+ * Record what this pipeline concluded, in a table rather than a Slack message.
+ *
+ * Before this, a verdict survived only as a thread reply — and when a session
+ * had no thread (2 of 8 on the runs measured) it was printed to a CI log and
+ * thrown away. `slack_alert_sent` stores DELIVERY only, so a contradicted
+ * finding and a reproduced one wrote identical rows, and nobody could ask how
+ * often a scanner's claim actually holds up.
+ *
+ * Upsert on the primary key: the verifier claims each observation once, but a
+ * re-run after a failed Slack post must correct the row rather than collide.
+ *
+ * Best effort, and deliberately so. The ledger is bookkeeping; it must never
+ * take down the verification it is recording. A failure is logged and the run
+ * continues.
+ */
+async function recordFinding(row) {
+  // Same discipline as markVerified: the offline modes have no side effects.
+  if (DRY_RUN || CLASSIFY_ONLY) return;
+  try {
+    // Inside the try on purpose. requireEnv throws, and a bookkeeping table has
+    // no business taking down the verification it exists to record.
+    const url = requireEnv("SUPABASE_URL");
+    const key = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
+    const res = await fetch(`${url}/rest/v1/ux_finding?on_conflict=observation_id`, {
+      method: "POST",
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        Prefer: "resolution=merge-duplicates,return=minimal",
+      },
+      body: JSON.stringify(row),
+    });
+    if (!res.ok) {
+      // PostgREST answers a rejected row with a body worth reading — a CHECK
+      // violation here means an outcome this table does not know about.
+      console.log(`  (ledger write failed ${res.status}: ${(await res.text()).slice(0, 160)})`);
+    }
+  } catch (err) {
+    console.log(`  (ledger write failed: ${String(err.message).split("\n")[0].slice(0, 100)})`);
+  }
+}
+
 async function markVerified(observationId) {
   if (DRY_RUN || CLASSIFY_ONLY) return;
   const url = requireEnv("SUPABASE_URL");
@@ -552,7 +613,8 @@ if (process.argv.includes("--selftest")) {
 
 const findings = await posthog(`
   SELECT toString(uuid), toString(properties.session_id),
-         toString(properties.scanner_name), toString(properties.scanner_output_reasoning)
+         toString(properties.scanner_name), toString(properties.scanner_output_reasoning),
+         toFloat(properties.scanner_output_confidence), toFloat(properties.scanner_version)
   FROM events
   WHERE event = '$recording_observed'
     AND timestamp > now() - INTERVAL ${LOOKBACK_HOURS} HOUR
@@ -570,7 +632,24 @@ let contradicted = 0;
 /** (session, criterion) pairs already probed in THIS run. */
 const probedThisRun = new Set();
 
-for (const [observationId, sessionId, scannerName, reasoning] of findings) {
+for (const [
+  observationId,
+  sessionId,
+  scannerName,
+  reasoning,
+  confidence,
+  scannerVersion,
+] of findings) {
+  /** What every outcome records, so no exit point can quietly drop a column. */
+  const base = {
+    observation_id: observationId,
+    session_id: sessionId,
+    scanner_name: scannerName,
+    scanner_version: Number.isFinite(scannerVersion) ? scannerVersion : null,
+    confidence: Number.isFinite(confidence) ? confidence : null,
+    reasoning: String(reasoning ?? "").slice(0, 4000),
+  };
+
   // The session id comes back from PostHog and is about to become a git branch
   // name, a Supabase filter and a HogQL literal. isSafeSessionId was imported
   // and then only ever exercised in the selftest; validate for real, once, so
@@ -595,12 +674,20 @@ for (const [observationId, sessionId, scannerName, reasoning] of findings) {
     if (why) {
       contradicted += 1;
       console.log(`REFUTED ${sessionId}  ${scannerName} — ${why}`);
-      const delivered = await deliverVerdict(
+      const sent = await deliverVerdict(
         sessionId,
         `🚫 *Contradicted by our own events* — ${why}. Treat the description as ` +
           `unreliable; the scanner reports what changed but infers why.`
       );
-      if (delivered) await markVerified(observationId);
+      // `sent` is a string now, so a bare truthiness test would finalise the
+      // claim even on "failed" and the next run would never retry it.
+      if (sent !== "failed") await markVerified(observationId);
+      await recordFinding({
+        ...base,
+        outcome: "contradicted",
+        contradiction_reason: why,
+        delivered: sent === "posted",
+      });
       continue;
     }
   }
@@ -613,6 +700,9 @@ for (const [observationId, sessionId, scannerName, reasoning] of findings) {
     gaps += 1;
     console.log(`GAP   ${sessionId}  ${scannerName}  — no probe covers this claim`);
     await markVerified(observationId);
+    // criterion stays null, which is the finding: a claim the scanners keep
+    // raising that nothing can check.
+    await recordFinding({ ...base, outcome: "gap" });
     continue;
   }
 
@@ -625,12 +715,18 @@ for (const [observationId, sessionId, scannerName, reasoning] of findings) {
     );
     // CLASSIFY_ONLY must never post — it is the offline way to check the
     // classifier, and it ran as far as the Supabase lookup before this guard.
-    const delivered = await deliverVerdict(
+    const sent = await deliverVerdict(
       sessionId,
       `🔎 *Needs a human* — the scanner reports ${criterion.label} (${criterion.id}). ` +
         `No probe covers this criterion yet, so it has not been reproduced either way.`
     );
-    if (delivered) await markVerified(observationId);
+    if (sent !== "failed") await markVerified(observationId);
+    await recordFinding({
+      ...base,
+      outcome: "gap",
+      criterion: criterion.id,
+      delivered: sent === "posted",
+    });
     continue;
   }
 
@@ -653,6 +749,7 @@ for (const [observationId, sessionId, scannerName, reasoning] of findings) {
   if (probedThisRun.has(pairKey)) {
     console.log(`DUP   ${sessionId}  ${criterion.id} — same criterion already probed this run`);
     await markVerified(observationId);
+    await recordFinding({ ...base, outcome: "duplicate", criterion: criterion.id });
     continue;
   }
   probedThisRun.add(pairKey);
@@ -666,7 +763,24 @@ for (const [observationId, sessionId, scannerName, reasoning] of findings) {
 
   // The reader's own screen, so "could not reproduce" means something.
   const viewport = await sessionViewport(sessionId);
+  if (!viewport) {
+    // Silent degradation otherwise: the probes fall back to their own device
+    // lists and the verdict quietly stops claiming a device. Observed once on
+    // 2026-09-17 for a session whose viewport resolves fine on every retry, so
+    // this is a transient PostHog read, not missing data — and it is worth
+    // seeing a pattern of it in the log. `ux_finding.devices` is null for these.
+    console.log(`  (no viewport for ${sessionId}; probes run on their own defaults)`);
+  }
   const clickTarget = await sessionClickTarget(sessionId);
+  if (!clickTarget && CLICK_TARGET_CRITERIA.has(criterion.id)) {
+    // Same silent-degradation risk as the viewport above: without it the
+    // dead-click probe is simply not appended, and the run is quietly weaker
+    // rather than wrong. `ux_finding.target_selector` is null for these, so the
+    // rate is queryable rather than a matter of opinion. Both lookups were
+    // measured deterministic in isolation (6/6) and 36 back-to-back PostHog
+    // queries all returned 200, so this is a rare transient, not rate limiting.
+    console.log(`  (no dead_click/rage_click target for ${sessionId}; that probe is skipped)`);
+  }
 
   /**
    * One probe is added by the SESSION rather than by the criterion.
@@ -742,7 +856,32 @@ for (const [observationId, sessionId, scannerName, reasoning] of findings) {
   console.log(
     `${reproduced ? "CONFIRM" : inconclusive ? "UNKNOWN" : "CLEAR  "} ${sessionId}  ${criterion.id}`
   );
-  if (await deliverVerdict(sessionId, verdict)) await markVerified(observationId);
+  const sent = await deliverVerdict(sessionId, verdict);
+  if (sent !== "failed") await markVerified(observationId);
+
+  // The row is written whether or not a thread existed to post into. That gap
+  // is the reason this table exists: a session with no survey submission has no
+  // Slack thread, and those are the readers who did NOT convert — the most
+  // interesting findings we have, and the ones that used to vanish.
+  await recordFinding({
+    ...base,
+    outcome: reproduced ? "reproduced" : inconclusive ? "inconclusive" : "clear",
+    criterion: criterion.id,
+    probe_runs: results.map((r) => ({
+      file: r.file,
+      passed: r.passed,
+      inconclusive: Boolean(r.inconclusive),
+      tail: String(r.tail ?? "").slice(0, 600),
+    })),
+    devices: ranOn,
+    viewport_min: viewport?.min ?? null,
+    viewport_max: viewport?.max ?? null,
+    os: viewport?.os || null,
+    url_path: clickTarget?.pathname ?? null,
+    target_selector: clickTarget?.selector ?? null,
+    pr_url: prUrl,
+    delivered: sent === "posted",
+  });
 }
 
 console.log(
