@@ -46,9 +46,31 @@ const PAGES = {
   // reported "no primary CTA found" on half the matrix.
   landing: { path: "/", selector: 'a[href*="/survey"]', skipTop: 80 },
   survey: { path: "/survey", selector: "button", text: /^continue$/i },
+  /**
+   * The consent gate, where a reachable CTA is not enough.
+   *
+   * "I agree" is `disabled={!canProceed}` and `canProceed = ageConfirmed &&
+   * termsAccepted`, so the two checkboxes ABOVE it are what make it work. This
+   * probe used to check the button alone and passed every row — while on a
+   * first visit the banner covered the second checkbox on a Pixel 7 and BOTH
+   * checkboxes on an iPhone SE, where it owns 252-568 of a 568px screen.
+   *
+   * A reader can scroll the button clear without the checkbox ever being clear,
+   * press it, and get nothing: 15 of them did, and `dead_click` recorded every
+   * one on `button.flex-1` at /survey. Checking the CTA and not its
+   * precondition is how a green probe sat on top of that for the whole time.
+   *
+   * `pick: "last"` because the lower checkbox is the one the banner reaches.
+   */
+  consent: {
+    path: "/survey",
+    step: 5,
+    selector: "[role=checkbox]",
+    pick: "last",
+  },
 };
 
-const wanted = (process.env.PAGES ?? "landing,survey").split(",").map((s) => s.trim());
+const wanted = (process.env.PAGES ?? "landing,survey,consent").split(",").map((s) => s.trim());
 const deviceNames = (process.env.DEVICES ?? "iPhone 15 Pro,iPhone SE,Pixel 7,Galaxy S9+")
   .split(",")
   .map((s) => s.trim());
@@ -75,6 +97,21 @@ for (const deviceName of deviceNames) {
       await page.goto(`${ORIGIN}${spec.path}`, { waitUntil: "domcontentloaded", timeout: 30_000 });
       await page.waitForTimeout(3000);
 
+      // `loadInitialStep()` honours SURVEY_STEP_KEY for 0..TOTAL_STEPS+2, so a
+      // set-and-reload lands on the step deterministically. The consent cookie
+      // is untouched, so the banner is still the first-visit one.
+      if (spec.step !== undefined) {
+        await page.evaluate((v) => {
+          try {
+            sessionStorage.setItem("loveiq-survey-step", v);
+          } catch {
+            /* blocked — the reload lands on step 0 and the row reads as a miss */
+          }
+        }, String(spec.step));
+        await page.reload({ waitUntil: "domcontentloaded", timeout: 30_000 });
+        await page.waitForTimeout(3000);
+      }
+
       if (process.env.SIMULATE === "1") {
         await page.evaluate(() => {
           if (document.querySelector(".cky-consent-container:not(.cky-hide)")) return;
@@ -97,7 +134,7 @@ for (const deviceName of deviceNames) {
       }
 
       const plan = await page.evaluate(
-        ({ sel, textSource, skipTop }) => {
+        ({ sel, textSource, skipTop, pick }) => {
           const re = textSource ? new RegExp(textSource.source, textSource.flags) : null;
 
           // NOT offsetParent: it is null for any position:fixed element, and the
@@ -120,11 +157,12 @@ for (const deviceName of deviceNames) {
 
           // Skip the sticky header's copy of the CTA: it sits where the banner
           // never reaches, so counting it would mask the hero CTA readers press.
-          const cta = [...document.querySelectorAll(sel)].find((e) => {
+          const matches = [...document.querySelectorAll(sel)].filter((e) => {
             if (!onScreen(e)) return false;
             if (skipTop && e.getBoundingClientRect().top + window.scrollY < skipTop) return false;
             return re ? re.test((e.innerText || "").trim()) : true;
           });
+          const cta = pick === "last" ? matches[matches.length - 1] : matches[0];
           if (!cta) return { reason: "no primary CTA found" };
 
           // Tag it. A long page can match a DIFFERENT link once it scrolls — the
@@ -151,6 +189,7 @@ for (const deviceName of deviceNames) {
           sel: spec.selector,
           textSource: spec.text ? { source: spec.text.source, flags: spec.text.flags } : null,
           skipTop: spec.skipTop ?? 0,
+          pick: spec.pick ?? "first",
         }
       );
 

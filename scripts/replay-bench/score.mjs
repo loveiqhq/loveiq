@@ -279,11 +279,39 @@ async function hog(query) {
  * the survey-UX scanner should have fired; its criteria are different. The
  * others are printed as context and excluded from the verdict, because scoring
  * them against this signal would be measuring the wrong thing precisely.
+ *
+ * AND ONLY DEAD CLICKS THAT HIT A REAL CONTROL COUNT. This started out as a
+ * bare `event = 'dead_click'` join and reported recall 0.06, which was wrong in
+ * the scanners' favour to correct: on 30 days of production, 807 of the 827
+ * sessions that emitted a dead_click had tapped DECORATION — `div.flex`,
+ * `p.font-sans`, `h2.font-serif`. The dead-click scanner's own prompt carries a
+ * HARD RULE that a tap on a paragraph is not a defect, so a clear on those
+ * sessions is the scanner being RIGHT, and counting it as a miss measures
+ * obedience as failure. `verify-dead-click-target.mjs` already draws this line
+ * for exactly the same reason; this join now draws it identically.
+ *
+ * What survives the filter is unambiguous: a reader pressed a button or a link
+ * and nothing happened. It is a far smaller set — which is itself the finding,
+ * since it means a single miss moves the number a lot, and the verdict is
+ * withheld below ten sessions for that reason.
  */
 if (process.argv.includes("--recall")) {
   const days = Number(process.env.RECALL_DAYS ?? 30);
   /** Scanners whose stated subject IS the dead/rage click. */
   const CLICK_SCANNERS = /dead-click|rage-click/i;
+
+  /**
+   * A real control, in the same terms `selectorFor()` emits them. Kept as one
+   * string so the scored set and the named misses below can never drift apart.
+   */
+  const HIT_A_CONTROL = `(
+    startsWith(toString(properties.target_selector), 'button')
+    OR startsWith(toString(properties.target_selector), 'a.')
+    OR startsWith(toString(properties.target_selector), 'a#')
+    OR toString(properties.target_selector) = 'a'
+    OR startsWith(toString(properties.target_selector), '[data-track-id')
+    OR startsWith(toString(properties.target_selector), '[role=button')
+  )`;
 
   const rows = await hog(`
     SELECT o.scanner, count(DISTINCT o.sid) AS observed, countIf(o.verdict = 'yes') AS flagged
@@ -298,12 +326,13 @@ if (process.argv.includes("--recall")) {
       SELECT DISTINCT toString(properties.$session_id) AS sid
       FROM events
       WHERE event = 'dead_click' AND timestamp > now() - INTERVAL ${days} DAY
+        AND ${HIT_A_CONTROL}
     ) d ON d.sid = o.sid
     GROUP BY o.scanner
     ORDER BY observed DESC
   `);
 
-  console.log(`recall against our own dead_click events, last ${days} days\n`);
+  console.log(`recall against dead clicks that hit a real control, last ${days} days\n`);
   let scoredObserved = 0;
   let scoredFlagged = 0;
   for (const [scanner, observed, flagged] of rows) {
@@ -320,10 +349,60 @@ if (process.argv.includes("--recall")) {
     );
   }
 
+  /**
+   * Name the misses, because a rate alone is not actionable — and name the
+   * SELECTOR, because that is what turns a miss into a reproduction:
+   * `verify-dead-click-target.mjs` takes a URL_PATH and a TARGET_SELECTOR and
+   * re-presses the thing the reader pressed. A row here is a ready-made probe
+   * invocation, printed underneath it.
+   *
+   * Same control filter as the scored set above. An earlier version thresholded
+   * on raw dead-click COUNT, which sorted the list by whoever tapped the most
+   * paragraphs and buried the real misses — the session at the top had 117 dead
+   * clicks and every one of them was decoration.
+   */
+  const worst = await hog(`
+    SELECT o.sid, o.scanner, d.path, d.sel, d.n
+    FROM (
+      SELECT toString(properties.session_id) AS sid, toString(properties.scanner_name) AS scanner
+      FROM events
+      WHERE event='$recording_observed' AND timestamp > now() - INTERVAL ${days} DAY
+        AND properties.scanner_output_verdict = 'no'
+    ) o
+    INNER JOIN (
+      SELECT toString($session_id) AS sid,
+             toString(properties.pathname) AS path,
+             toString(properties.target_selector) AS sel,
+             count() AS n
+      FROM events
+      WHERE event IN ('dead_click','rage_click')
+        AND timestamp > now() - INTERVAL ${days} DAY
+        AND ${HIT_A_CONTROL}
+      GROUP BY sid, path, sel
+    ) d ON d.sid = o.sid
+    ORDER BY d.n DESC
+    LIMIT 10
+  `);
+
+  if (worst.length > 0) {
+    console.log(`\nmissed — a scanner watched these and cleared them:\n`);
+    for (const [sid, scanner, path, sel, n] of worst) {
+      console.log(
+        `  ${String(sid).slice(0, 13)}  ${String(scanner).padEnd(26)}` +
+          `${String(n).padStart(3)}x  ${path} ${sel}`
+      );
+      console.log(
+        `      URL_PATH='${path}' TARGET_SELECTOR='${sel}' \\\n` +
+          `        node scripts/probes/verify-dead-click-target.mjs`
+      );
+    }
+  }
+
   const recall = scoredObserved === 0 ? null : scoredFlagged / scoredObserved;
   console.log(
     `\nrecall ${fmtScore(recall)} (bar ${MIN_RECALL}) · ` +
-      `${scoredFlagged} flagged of ${scoredObserved} observed sessions that dead-clicked`
+      `${scoredFlagged} flagged of ${scoredObserved} observed sessions where a reader ` +
+      `pressed a real control and nothing happened`
   );
   if (scoredObserved < 10) {
     console.log(`not enough observed sessions yet (${scoredObserved}/10) — no verdict claimed`);

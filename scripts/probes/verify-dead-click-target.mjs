@@ -68,6 +68,58 @@ for (const name of DEVICE_NAMES) {
       .catch(() => {});
     await page.waitForTimeout(600);
 
+    /**
+     * Walk to the step the element actually lives on.
+     *
+     * /survey opens on the intro screen, and almost nothing a reader taps is
+     * there: on 30 days of production EVERY missed control the bench names is
+     * on /survey, and not one of them — `button.flex`, `button.relative`,
+     * `button.flex-1`, `button.hidden` — exists on step 0. So this probe
+     * answered "no element matches it on this page any more" for all of them
+     * and exited 3, which is honest but unmeasurable, and is a large part of
+     * why no finding has ever been reproduced.
+     *
+     * `loadInitialStep()` (features/survey/ui/SurveyPage.tsx) reads
+     * SURVEY_STEP_KEY verbatim for any value in 0..TOTAL_STEPS+2, so setting it
+     * and reloading lands on that step deterministically. Walking beats clicking
+     * CONTINUE: the survey's entry animation keeps Playwright's stability check
+     * from settling, so `.click()` on it times out rather than advancing.
+     *
+     * Only the step moves. If the element is still absent at every step it is
+     * genuinely gone, and exit 3 is then the true answer.
+     */
+    const seesTarget = () =>
+      page.evaluate((sel) => {
+        try {
+          return [...document.querySelectorAll(sel)].some((n) => {
+            const r = n.getBoundingClientRect();
+            return r.width > 0 && r.height > 0;
+          });
+        } catch {
+          return false; // unparseable selector — reported by the measurement
+        }
+      }, SELECTOR);
+
+    let foundAtStep = (await seesTarget()) ? 0 : null;
+    if (foundAtStep === null && URL_PATH.startsWith("/survey")) {
+      for (let step = 1; step <= 6; step += 1) {
+        await page.evaluate((v) => {
+          try {
+            sessionStorage.setItem("loveiq-survey-step", v);
+          } catch {
+            /* blocked — the reload just lands on step 0 again */
+          }
+        }, String(step));
+        await page.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
+        await page.waitForTimeout(1500);
+        if (await seesTarget()) {
+          foundAtStep = step;
+          break;
+        }
+      }
+    }
+    const at = foundAtStep === null ? "" : ` (step ${foundAtStep})`;
+
     if (process.env.MUTATE === "1") {
       /**
        * role=button AND aria-disabled, not aria-disabled alone.
@@ -110,56 +162,76 @@ for (const name of DEVICE_NAMES) {
       if (all.length === 0) return { missing: true };
 
       /**
-       * The first VISIBLE match, not the first match.
+       * Every VISIBLE match, and the DEAD one wins.
        *
-       * `selectorFor()` emits things like `button.flex` and `p.font-sans`, which
-       * match many elements on a page. `querySelector` returns the first in
-       * document order, and on /survey that is a zero-size one — so the probe
-       * reported "the element has no box" and gave up, on a page full of
-       * perfectly good candidates. The reader tapped something they could see.
+       * `selectorFor()` keeps only the tag and the first class, so one selector
+       * routinely names several controls. Taking the first visible match is a
+       * coin flip, and on the consent gate it lands the wrong way every time:
+       * `button.flex-1` matches "Return to site" (live) and "I agree"
+       * (`disabled={!canProceed}`) at the SAME y, in that order. The probe read
+       * the live one and cleared the finding — the exact control 15 readers
+       * pressed to no effect, reported as a pass.
+       *
+       * The event has already established that a reader tapped something dead
+       * under this selector. The question left for the probe is only whether
+       * such a control is still on the page, so if ANY visible match is dead,
+       * the finding stands. The trade-off is deliberate: a page where one
+       * legitimately-disabled sibling shares a selector will now report FAIL.
+       * That is the safe direction — the alternative silently clears real ones.
+       *
+       * (Zero-size matches are still skipped: on /survey the first match in
+       * document order has no box, and the reader tapped something they saw.)
        */
-      const el = all.find((n) => {
+      const measure = (el) => {
+        const rect = el.getBoundingClientRect();
+
+        // Same definition as isInteractive() in uxSignals, deliberately.
+        const control = el.closest(
+          "a,button,input,select,textarea,[role=button],[role=link],[role=checkbox],[role=radio],[role=tab],[contenteditable=true]"
+        );
+        const disabled =
+          !!control &&
+          (control.disabled === true || control.getAttribute("aria-disabled") === "true");
+
+        let pointer = false;
+        let node = el;
+        for (let i = 0; node && i < 3; i += 1, node = node.parentElement) {
+          if (getComputedStyle(node).cursor === "pointer") {
+            pointer = true;
+            break;
+          }
+        }
+
+        // Does a tap at its own centre actually land on it?
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const inViewport = cy >= 0 && cy <= window.innerHeight;
+        const top = inViewport ? document.elementFromPoint(cx, cy) : null;
+        const covered = inViewport && !!top && top !== el && !el.contains(top) && !top.contains(el);
+
+        return {
+          looksPressable: !!control || pointer,
+          disabled,
+          covered,
+          inViewport,
+          coveredBy: covered
+            ? `${top.tagName.toLowerCase()}.${String(top.className).split(" ")[0]}`
+            : null,
+          tag: el.tagName.toLowerCase(),
+          label: (el.innerText || "").trim().slice(0, 30),
+        };
+      };
+
+      const visible = all.filter((n) => {
         const r = n.getBoundingClientRect();
         return r.width > 0 && r.height > 0;
       });
-      if (!el) return { notRendered: true, matches: all.length };
+      if (visible.length === 0) return { notRendered: true, matches: all.length };
 
-      const rect = el.getBoundingClientRect();
-
-      // Same definition as isInteractive() in uxSignals, deliberately.
-      const control = el.closest(
-        "a,button,input,select,textarea,[role=button],[role=link],[role=checkbox],[role=radio],[role=tab],[contenteditable=true]"
-      );
-      const disabled =
-        !!control &&
-        (control.disabled === true || control.getAttribute("aria-disabled") === "true");
-
-      let pointer = false;
-      let node = el;
-      for (let i = 0; node && i < 3; i += 1, node = node.parentElement) {
-        if (getComputedStyle(node).cursor === "pointer") {
-          pointer = true;
-          break;
-        }
-      }
-
-      // Does a tap at its own centre actually land on it?
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
-      const inViewport = cy >= 0 && cy <= window.innerHeight;
-      const top = inViewport ? document.elementFromPoint(cx, cy) : null;
-      const covered = inViewport && !!top && top !== el && !el.contains(top) && !top.contains(el);
-
-      return {
-        looksPressable: !!control || pointer,
-        disabled,
-        covered,
-        inViewport,
-        coveredBy: covered
-          ? `${top.tagName.toLowerCase()}.${String(top.className).split(" ")[0]}`
-          : null,
-        tag: el.tagName.toLowerCase(),
-      };
+      const measured = visible.map(measure);
+      const worst =
+        measured.find((m) => m.looksPressable && (m.disabled || m.covered)) ?? measured[0];
+      return { ...worst, matches: visible.length };
     }, SELECTOR);
 
     const where = `${name.padEnd(14)}`;
@@ -174,17 +246,20 @@ for (const name of DEVICE_NAMES) {
     } else if (r.disabled) {
       dead += 1;
       console.log(
-        `FAIL  ${where} <${r.tag}> is a DISABLED control — it looks live and does nothing`
+        `FAIL  ${where}${at} <${r.tag}> "${r.label}" is a DISABLED control — ` +
+          `it looks live and does nothing (${r.matches} matched this selector)`
       );
     } else if (r.looksPressable && r.covered) {
       dead += 1;
-      console.log(`FAIL  ${where} <${r.tag}> looks pressable but the tap lands on ${r.coveredBy}`);
+      console.log(
+        `FAIL  ${where}${at} <${r.tag}> "${r.label}" looks pressable but the tap lands on ${r.coveredBy}`
+      );
     } else if (!r.looksPressable) {
       console.log(
         `PASS  ${where} <${r.tag}> is ordinary content, not a control — a tap on it is not a defect`
       );
     } else {
-      console.log(`PASS  ${where} <${r.tag}> is a live control and reachable`);
+      console.log(`PASS  ${where}${at} <${r.tag}> is a live control and reachable`);
     }
   } catch (err) {
     unmeasured += 1;
