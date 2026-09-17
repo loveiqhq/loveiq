@@ -5,7 +5,7 @@ import {
   median,
   sourceLabel,
 } from "@features/admin/server/next-level";
-import { supabaseFetch } from "@features/admin/server/supabase";
+import { fetchAllRows, supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 
 interface RpcQuestion {
@@ -188,16 +188,16 @@ async function fetchQuestionKpis(sinceTs: string | null) {
 }
 
 async function fetchAnswerMetrics(sinceTs: string | null) {
-  let query =
-    "/rest/v1/survey_submission_answer?select=was_skipped,revision_count,survey_question(frontend_qid)";
-  if (sinceTs) {
-    query =
-      `/rest/v1/survey_submission_answer?select=was_skipped,revision_count,survey_question!inner(frontend_qid),survey_submission!inner(created_date_time)` +
-      `&survey_submission.created_date_time=gte.${sinceTs}`;
-  }
-
-  const res = await supabaseFetch(query, {
-    headers: { Range: "0-99999" },
+  /**
+   * Aggregated in SQL. Measured 2026-09-17: the 30-day window joins to 24,814
+   * answers and the capped read returned 1,000 — four per cent. Skip rate and
+   * revision count per question, which is the whole output of this page, were
+   * computed on that slice. get_question_answer_metrics returns 58 rows, one
+   * per question, in one request.
+   */
+  const res = await supabaseFetch("/rest/v1/rpc/get_question_answer_metrics", {
+    method: "POST",
+    body: JSON.stringify({ since_ts: sinceTs }),
   });
 
   if (!res.ok) {
@@ -206,20 +206,21 @@ async function fetchAnswerMetrics(sinceTs: string | null) {
   }
 
   const rows = (await res.json()) as Array<{
-    was_skipped: boolean;
-    revision_count: number | null;
-    survey_question: { frontend_qid: string } | null;
+    frontend_qid: string;
+    total: number;
+    skipped: number;
+    revision_total: number;
   }>;
 
   const metrics = new Map<string, { total: number; skipped: number; revisionTotal: number }>();
   for (const row of rows) {
-    const qId = row.survey_question?.frontend_qid;
-    if (!qId || qId.startsWith("00")) continue;
-    const current = metrics.get(qId) ?? { total: 0, skipped: 0, revisionTotal: 0 };
-    current.total += 1;
-    if (row.was_skipped) current.skipped += 1;
-    current.revisionTotal += row.revision_count ?? 0;
-    metrics.set(qId, current);
+    // The `00`-prefixed intro questions are filtered in SQL now, as is the
+    // null frontend_qid; both were dropped by this loop before.
+    metrics.set(row.frontend_qid, {
+      total: Number(row.total) || 0,
+      skipped: Number(row.skipped) || 0,
+      revisionTotal: Number(row.revision_total) || 0,
+    });
   }
 
   const result = new Map<string, QuestionMetricSnapshot>();
@@ -259,20 +260,24 @@ async function fetchBehaviorContext(sinceTs: string | null) {
   const eventFilter = sinceTs ? `&event_time=gte.${sinceTs}` : "";
   const submissionFilter = sinceTs ? `&created_date_time=gte.${sinceTs}` : "";
 
-  const [eventsRes, submissionsRes] = await Promise.all([
-    supabaseFetch(
-      `/rest/v1/survey_behavior_event?select=session_id,q_id,chapter,time_spent_ms,direction${eventFilter}&order=event_time.desc`,
-      { headers: { Range: "0-99999" } }
+  /**
+   * Both paged. Measured 2026-09-17: the 30-day window holds 26,564 behaviour
+   * events and the capped read returned 1,000 — under four per cent, and
+   * ordered `event_time.desc`, so the dwell times and source attribution on
+   * this page described the most recent few hours while claiming the window.
+   */
+  const [events, submissions] = await Promise.all([
+    fetchAllRows<BehaviorContextRow>(
+      `/rest/v1/survey_behavior_event?select=session_id,q_id,chapter,time_spent_ms,direction${eventFilter}&order=event_time.desc`
     ),
-    supabaseFetch(
-      `/rest/v1/survey_submission?select=session_id,utm_tracker${submissionFilter}&order=created_date_time.desc`,
-      { headers: { Range: "0-49999" } }
+    fetchAllRows<{ session_id: string | null; utm_tracker: string | null }>(
+      `/rest/v1/survey_submission?select=session_id,utm_tracker${submissionFilter}&order=created_date_time.desc`
     ),
   ]);
 
-  if (!eventsRes?.ok || !submissionsRes?.ok) {
+  if (events === null || submissions === null) {
     logger.warn(
-      { eventStatus: eventsRes?.status, submissionStatus: submissionsRes?.status },
+      { events: events === null, submissions: submissions === null },
       "Question effectiveness: context query failed"
     );
     return {
@@ -288,11 +293,6 @@ async function fetchBehaviorContext(sinceTs: string | null) {
     };
   }
 
-  const events = (await eventsRes.json()) as BehaviorContextRow[];
-  const submissions = (await submissionsRes.json()) as Array<{
-    session_id: string | null;
-    utm_tracker: string | null;
-  }>;
   const sessionContext = new Map<string, { source: string; placement: string }>();
   for (const submission of submissions) {
     if (!submission.session_id) continue;

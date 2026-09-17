@@ -225,7 +225,7 @@ describe("deliberate pagination is not a truncation", () => {
 describe("the large-Range backlog only shrinks", () => {
   it("does not grow", async () => {
     // `Range: "0-49999"` reads as "up to fifty thousand rows" and returns a
-    // thousand, silently. 136 such reads remain. NONE of them is now a wholly
+    // thousand, silently. 131 such reads remain. NONE of them is now a wholly
     // unfiltered read of a table already past the cap — all fifteen of those are
     // fixed. What is left is filtered or windowed, so each one is only latent:
     // it becomes wrong on the day its window first exceeds 1,000 rows. They are being migrated to countRows (for a
@@ -242,6 +242,6 @@ describe("the large-Range backlog only shrinks", () => {
       ],
       { encoding: "utf8", cwd: process.cwd() }
     ).trim();
-    expect(Number(out)).toBeLessThanOrEqual(136);
+    expect(Number(out)).toBeLessThanOrEqual(131);
   });
 });
