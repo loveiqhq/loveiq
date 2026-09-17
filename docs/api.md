@@ -140,8 +140,8 @@ Submits a completed survey and schedules downstream scoring/notification work af
 | `firstName`   | string | Yes      | Max 80 chars.                                                     |
 | `answers`     | object | Yes      | Record of question ID to string, string array, or integer 1 to 7. |
 | `startedAt`   | string | Yes      | ISO 8601 datetime.                                                |
-| `durationMs`  | number | Yes      | Integer from `0` to `86,400,000`.                                 |
-| `utmTracker`  | string | No       | Max 500 chars.                                                    |
+| `durationMs`  | number | Yes      | Integer from `0` to `86,400,000`. Client clamps; see below.       |
+| `utmTracker`  | string | No       | Max 1000 chars. Server may append A/B stamps; see below.          |
 | `sessionId`   | string | No       | UUID-like submission/session identifier.                          |
 | `optionOrder` | object | No       | Order options were shown in, per question ID. See below.          |
 | `website`     | string | No       | Honeypot field and must stay empty.                               |
@@ -154,6 +154,36 @@ from multi-select questions can be corrected for primacy bias. Keys are question
 blocks storage, since no stable order can be established. Stored on
 `survey_submission.option_order`; it never affects how an answer is resolved, because
 `submit_survey` matches picks by exact option text.
+
+**A/B stamps on `utmTracker`.** The server may add fields to the JSON object before
+storing it on `survey_submission.utm_tracker`:
+
+| Key                  | Values                 | Source                                                         |
+| -------------------- | ---------------------- | -------------------------------------------------------------- |
+| `landing_variant`    | the landing arm        | The sticky landing cookie, when present.                       |
+| `question_order_arm` | `control` \| `variant` | Derived server-side from `sessionId` (C13 opening-order test). |
+
+Both are additive and neither is read from the request body, so a client cannot
+misreport its arm. Two rules matter for anyone querying this column:
+
+- **A tracker is never created just to hold a stamp.** When the request sends no
+  `utmTracker` and no landing cookie is present, the column stays `NULL`. Several
+  analytics queries treat `utm_tracker IS NOT NULL` as "has attribution data" and fall
+  back to `direct`, and roughly a third of submissions legitimately have no tracker —
+  stamping them would pull all of them into those charts.
+- **Stamps are dropped, not truncated, past 1000 characters.** Each is committed only if
+  the serialised object still fits, independently and in the order above, so a tracker
+  near the limit loses the newer stamp rather than the older one.
+
+`question_order_arm` is a convenience for grouping, never the record: it is a pure
+function of `survey_submission.session_id`, so an unstamped respondent's arm is
+recomputed rather than read.
+
+**`durationMs` is clamped by the client.** `startedAt` is restored from the browser's
+saved draft, so a respondent who begins the survey, leaves, and returns days later would
+otherwise produce a value past the `86,400,000` ceiling and have their completed
+submission rejected outright. The client clamps into range before sending. `startedAt` and
+the row's `created_date_time` are both stored, so true elapsed time stays recoverable.
 
 **Selection caps.** Some multi-select questions limit how many options may be chosen. The
 limit is authored as the guidance sentence the respondent reads ("Select up to two
