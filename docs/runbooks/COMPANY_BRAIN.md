@@ -306,9 +306,14 @@ only the first table will not know the brain can send an email.
 | `browse_context`         | Everything matching a filter, in date order and without ranking: every meeting note, every open task, everything learned since Tuesday. Use when you want a list, not an answer |
 
 **You can narrow, and it is usually better than rewording.** `search_company_context`
-takes `sources` and `exclude_sources` (any of doc, decision, analytics, ga4, gsc, notion,
-drive, slack, gmail, calendar, whatsapp), `since` / `until`, and `meta` for indexed
+takes `sources` and `exclude_sources`, `since` / `until`, and `meta` for indexed
 fields — a Notion task's `status` or `assignee`, a Slack `channel`, a Gmail `mailbox`.
+The source names are deliberately NOT written out here. This page listed eleven of them
+and the corpus had grown to seventeen — `report`, `skill`, `domain`, `people`, `clarity`
+and `evidence` were all missing, so anyone trusting the list would have filtered them out
+without ever knowing they existed. `list_sources` computes the set and its freshness, and
+is the only place that cannot go stale.
+
 Two things to know. Matching on `meta` is EXACT, and the values in use change as people
 edit the board, so **ask rather than guess**: `count_context` with `group_by:"status"`
 lists every status with its count. A list written down here was wrong within days — it
@@ -656,7 +661,8 @@ shapes.
 **How this list was arrived at:** every external hostname the application talks to
 was enumerated from the source and checked against coverage, rather than recalled.
 That sweep is what found Microsoft Clarity — live on the site via
-`public/clarity-init.js` and completely invisible to the brain — and confirmed
+`public/clarity-init.js` and, until `brain-clarity` shipped on 2026-09-17, completely
+invisible to the brain — and confirmed
 Google Ads needs no separate integration, because GA4 exposes `advertiserAdCost`
 once the accounts are linked. Re-run that sweep when a new dependency is added.
 

@@ -91,10 +91,24 @@ export const EXCLUDED_DOMAINS = new Set(["Data, Privacy & Measurement", "Product
  *    the keep set 0, 1, 14, 25, 47, 118, 217, 713, 1051, 1955. Any cut that removes
  *    "Process-Focused" also removes "Responsive Desire" and "Casual Dating".
  *
- * So `Genital`, `Process-Focused`, `Partner-Focused` and `Identity & Orientation` still
- * produce a card. Every paper on them is real and in our field; the card is merely of
- * little use. That residue is carried by the disclaimer in the body, which says a paper
- * appearing here means only that it uses the term — never that it supports our use of it.
+ * MEASURED RESIDUE, from reading all 72 cards the first full pass produced rather than
+ * from guessing. The title gate removed more than expected — `Process-Focused`,
+ * `Partner-Focused` and `Identity & Orientation` get no card at all — and what survives is
+ * a handful of generic single words: `Subjective`, `Validation`, `Ethics`, `Genital`,
+ * `Orientation`. Roughly five of seventy-two.
+ *
+ * They cannot be filtered on length or hit count, because `Intimacy`, `Desire`, `Arousal`,
+ * `Orgasm` and `Libido` are also single words with thousands of hits and are exactly the
+ * constructs this exists for. Every paper on the weak ones is real and in our field; the
+ * card is merely of little use. That residue is carried by the disclaimer in the body,
+ * which says a paper appearing here means only that it is titled with the term — never
+ * that it supports our use of it.
+ *
+ * NOTHING DELETES A CARD, deliberately. A construct renamed or removed from the glossary
+ * keeps its card until someone clears it by hand. The alternative — sweeping anything not
+ * in the current construct list — would need to tell "no longer a construct" apart from
+ * "not in today's slice", and at seventy-two rows the stale card costs less than the sweep
+ * that gets that distinction wrong.
  */
 
 /**
