@@ -62,87 +62,101 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro,iPhone SE").sp
   const slug = name.replace(/\s+/g, "-");
 
   // ── SURVEY ────────────────────────────────────────────────────────────
-  await page.goto(`${ORIGIN}/survey`, { waitUntil: "domcontentloaded", timeout: 120_000 });
-  await page.waitForTimeout(3500);
-  await page
-    .locator(".cky-btn-accept")
-    .first()
-    .click({ timeout: 8000 })
-    .catch(() => {});
-  await page.waitForTimeout(1200);
-  // Past the intro wizard into the questions themselves.
-  for (let i = 0; i < 6; i += 1) {
-    const skipped = await page
-      .getByRole("button", { name: /skip intro|start|begin|continue|next/i })
+  /**
+   * The network work is inside the try. An uncaught throw exits 1, which the
+   * verifier reads as "the defect reproduced" — a defect nobody measured.
+   * Verified before the fix: REPORT_ORIGIN=http://localhost:1 exited 1.
+   */
+  try {
+    await page.goto(`${ORIGIN}/survey`, { waitUntil: "domcontentloaded", timeout: 120_000 });
+    await page.waitForTimeout(3500);
+    await page
+      .locator(".cky-btn-accept")
       .first()
-      .click({ timeout: 2500 })
-      .then(() => true)
-      .catch(() => false);
-    if (!skipped) break;
-    await page.waitForTimeout(700);
-  }
-  await page.waitForTimeout(1500);
-  const surveyA = await page.evaluate(audit);
-  await page.screenshot({ path: `${SHOTS}/${slug}-survey.png` });
-
-  // Answer a few questions to reach a multi-select and a text input.
-  for (let i = 0; i < 12; i += 1) {
-    const opts = page.locator("main button, main label").filter({ hasText: /\S/ });
-    const n = await opts.count().catch(() => 0);
-    if (!n) break;
-    await opts
-      .nth(Math.min(1, n - 1))
-      .click({ timeout: 2500 })
+      .click({ timeout: 8000 })
       .catch(() => {});
-    await page.waitForTimeout(650);
+    await page.waitForTimeout(1200);
+    // Past the intro wizard into the questions themselves.
+    for (let i = 0; i < 6; i += 1) {
+      const skipped = await page
+        .getByRole("button", { name: /skip intro|start|begin|continue|next/i })
+        .first()
+        .click({ timeout: 2500 })
+        .then(() => true)
+        .catch(() => false);
+      if (!skipped) break;
+      await page.waitForTimeout(700);
+    }
+    await page.waitForTimeout(1500);
+    const surveyA = await page.evaluate(audit);
+    await page.screenshot({ path: `${SHOTS}/${slug}-survey.png` });
+
+    // Answer a few questions to reach a multi-select and a text input.
+    for (let i = 0; i < 12; i += 1) {
+      const opts = page.locator("main button, main label").filter({ hasText: /\S/ });
+      const n = await opts.count().catch(() => 0);
+      if (!n) break;
+      await opts
+        .nth(Math.min(1, n - 1))
+        .click({ timeout: 2500 })
+        .catch(() => {});
+      await page.waitForTimeout(650);
+    }
+    const surveyB = await page.evaluate(audit);
+    await page.screenshot({ path: `${SHOTS}/${slug}-survey-deep.png` });
+
+    // ── REPORT ────────────────────────────────────────────────────────────
+    await page.goto(`${ORIGIN}/report/${TOKEN}`, {
+      waitUntil: "domcontentloaded",
+      timeout: 120_000,
+    });
+    await page
+      .waitForSelector(".report-status-card__spinner", { state: "detached", timeout: 120_000 })
+      .catch(() => {});
+    await page.waitForTimeout(3000);
+    const reportTop = await page.evaluate(audit);
+    await page.screenshot({ path: `${SHOTS}/${slug}-report-top.png` });
+
+    // Scroll through the whole report, auditing as we go.
+    const deep = [];
+    for (let i = 0; i < 22; i += 1) {
+      await touchScroll(cdp, page, 700, { settle: 120 });
+      deep.push(await page.evaluate(audit));
+    }
+    await page.screenshot({ path: `${SHOTS}/${slug}-report-deep.png` });
+
+    const worst = (key) => Math.max(...deep.map((d) => d[key]), 0);
+    const allBroken = [...new Set(deep.flatMap((d) => d.brokenImages))];
+    const allOffscreen = [...new Set(deep.flatMap((d) => d.offscreenX))];
+
+    problems.push({
+      device: name,
+      survey: {
+        hOverflow: surveyA.horizontalOverflow,
+        hOverflowDeep: surveyB.horizontalOverflow,
+        scrollLocked: surveyA.bodyOverflowHidden,
+        overflowPx: surveyA.contentTallerThanViewport,
+        overflowPxDeep: surveyB.contentTallerThanViewport,
+        smallControls: [...new Set([...surveyA.smallControls, ...surveyB.smallControls])],
+        broken: [...new Set([...surveyA.brokenImages, ...surveyB.brokenImages])],
+      },
+      report: {
+        hOverflow: Math.max(reportTop.horizontalOverflow, worst("horizontalOverflow")),
+        broken: [...new Set([...reportTop.brokenImages, ...allBroken])],
+        offscreen: [...new Set([...reportTop.offscreenX, ...allOffscreen])],
+        smallControls: reportTop.smallControls,
+      },
+    });
+  } catch (err) {
+    // No `problems` entry is pushed for this device, so the existing
+    // "no device was measured" guard below turns this into exit 3.
+    console.log(
+      `INCONCLUSIVE ${name.padEnd(15)} ${String(err.message).split("\n")[0].slice(0, 70)}`
+    );
+  } finally {
+    await ctx.close().catch(() => {});
+    await browser.close().catch(() => {});
   }
-  const surveyB = await page.evaluate(audit);
-  await page.screenshot({ path: `${SHOTS}/${slug}-survey-deep.png` });
-
-  // ── REPORT ────────────────────────────────────────────────────────────
-  await page.goto(`${ORIGIN}/report/${TOKEN}`, {
-    waitUntil: "domcontentloaded",
-    timeout: 120_000,
-  });
-  await page
-    .waitForSelector(".report-status-card__spinner", { state: "detached", timeout: 120_000 })
-    .catch(() => {});
-  await page.waitForTimeout(3000);
-  const reportTop = await page.evaluate(audit);
-  await page.screenshot({ path: `${SHOTS}/${slug}-report-top.png` });
-
-  // Scroll through the whole report, auditing as we go.
-  const deep = [];
-  for (let i = 0; i < 22; i += 1) {
-    await touchScroll(cdp, page, 700, { settle: 120 });
-    deep.push(await page.evaluate(audit));
-  }
-  await page.screenshot({ path: `${SHOTS}/${slug}-report-deep.png` });
-
-  const worst = (key) => Math.max(...deep.map((d) => d[key]), 0);
-  const allBroken = [...new Set(deep.flatMap((d) => d.brokenImages))];
-  const allOffscreen = [...new Set(deep.flatMap((d) => d.offscreenX))];
-
-  problems.push({
-    device: name,
-    survey: {
-      hOverflow: surveyA.horizontalOverflow,
-      hOverflowDeep: surveyB.horizontalOverflow,
-      scrollLocked: surveyA.bodyOverflowHidden,
-      overflowPx: surveyA.contentTallerThanViewport,
-      overflowPxDeep: surveyB.contentTallerThanViewport,
-      smallControls: [...new Set([...surveyA.smallControls, ...surveyB.smallControls])],
-      broken: [...new Set([...surveyA.brokenImages, ...surveyB.brokenImages])],
-    },
-    report: {
-      hOverflow: Math.max(reportTop.horizontalOverflow, worst("horizontalOverflow")),
-      broken: [...new Set([...reportTop.brokenImages, ...allBroken])],
-      offscreen: [...new Set([...reportTop.offscreenX, ...allOffscreen])],
-      smallControls: reportTop.smallControls,
-    },
-  });
-  await ctx.close();
-  await browser.close();
 }
 console.log(JSON.stringify(problems, null, 2));
 console.log(`\nscreenshots: ${SHOTS}`);

@@ -54,6 +54,22 @@ jobs:
       - name: Install Playwright
         run: npx playwright install --with-deps chromium webkit
 
+      # Five seconds, because a refused connection fails instantly. It asks
+      # every gate probe the one question the exit codes exist for: when you
+      # cannot reach the site at all, do you say "inconclusive" or do you say
+      # "reproduced"? Six probes said "reproduced" on 2026-09-17, two of them on
+      # criteria allowed to open a pull request.
+      - name: No probe reports a defect it could not measure
+        run: |
+          set +e
+          npx tsx scripts/verify-probe-falsifiability.mjs --contract-only
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ]; then
+            echo "::error::a probe reports a defect when the site is unreachable"
+            exit 1
+          fi
+
       - name: Consent banner does not trap the primary CTA
         env:
           REPORT_ORIGIN: ${{ inputs.origin }}

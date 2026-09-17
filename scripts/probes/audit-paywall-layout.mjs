@@ -29,7 +29,21 @@ await page.route("**/api/stripe/checkout-session", (r) =>
   r.fulfill({ status: 200, contentType: "application/json", body: '{"enabled":false}' })
 );
 
-await page.goto(`${ORIGIN}/report/${TOKEN}`, { waitUntil: "domcontentloaded", timeout: 90_000 });
+/**
+ * A navigation failure means nothing was measured, not that the layout is
+ * broken. Without this the throw exits 1, and the verifier reads 1 as "the
+ * defect reproduced" — verified before the fix: REPORT_ORIGIN=http://localhost:1
+ * exited 1. The waits that follow already swallow their own timeouts.
+ */
+try {
+  await page.goto(`${ORIGIN}/report/${TOKEN}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 90_000,
+  });
+} catch (err) {
+  console.log(`INCONCLUSIVE — ${String(err.message).split("\n")[0].slice(0, 80)}`);
+  process.exit(3);
+}
 await page
   .waitForSelector(".report-status-card__spinner", { state: "detached", timeout: 90_000 })
   .catch(() => {});

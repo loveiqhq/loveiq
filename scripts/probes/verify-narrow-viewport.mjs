@@ -50,64 +50,80 @@ for (const width of WIDTHS) {
   await ctx.addCookies(stagingCookies(ORIGIN)).catch(() => {});
   const page = await ctx.newPage();
 
-  await page.goto(`${ORIGIN}/report/${TOKEN}`, {
-    waitUntil: "domcontentloaded",
-    timeout: 120_000,
-  });
-  await page
-    .waitForSelector(".report-status-card__spinner", { state: "detached", timeout: 120_000 })
-    .catch(() => {});
-  await page.waitForTimeout(2500);
-
-  if (process.env.MUTATE === "1") {
-    await page.addStyleTag({
-      content: ".report-prose, .report-prose a { overflow-wrap: normal !important; }",
+  /**
+   * Everything that touches the network is inside the try. An uncaught throw
+   * exits 1, and 1 means "the defect reproduced" — so a timeout or a refused
+   * connection reported a defect nobody measured, on a criterion allowed to
+   * open a pull request. Verified before the fix: REPORT_ORIGIN=http://localhost:1
+   * exited 1. The stdout backstop in verify-ux-findings.mjs does not save it
+   * either — a Playwright stack says "net::ERR_CONNECTION_REFUSED", which
+   * matches neither "INCONCLUSIVE" nor "exception:".
+   */
+  try {
+    await page.goto(`${ORIGIN}/report/${TOKEN}`, {
+      waitUntil: "domcontentloaded",
+      timeout: 120_000,
     });
-    await page.waitForTimeout(400);
-  }
+    await page
+      .waitForSelector(".report-status-card__spinner", { state: "detached", timeout: 120_000 })
+      .catch(() => {});
+    await page.waitForTimeout(2500);
 
-  const result = await page.evaluate(() => {
-    const vw = window.innerWidth;
-    const offenders = [...document.querySelectorAll("body *")]
-      .filter((el) => {
-        const box = el.getBoundingClientRect();
-        if (box.width < 2 || box.height < 2) return false;
-        const cs = getComputedStyle(el);
-        if (cs.position === "fixed") return false;
-        // Horizontal scrollers and the decorative bleed are outside the
-        // viewport by design.
-        if (el.closest(".stage-explorer__carousel, .rpm-tm__track")) return false;
-        if (/orb|carousel|stage-card|marquee/.test(String(el.className))) return false;
-        if (cs.display === "inline") {
-          return [...el.getClientRects()].some((r) => r.right > vw + 2 || r.left < -2);
-        }
-        return box.right > vw + 2 || box.left < -2;
-      })
-      .slice(0, 5)
-      .map((el) => `${el.tagName.toLowerCase()}:${(el.textContent ?? "").trim().slice(0, 34)}`);
+    if (process.env.MUTATE === "1") {
+      await page.addStyleTag({
+        content: ".report-prose, .report-prose a { overflow-wrap: normal !important; }",
+      });
+      await page.waitForTimeout(400);
+    }
 
-    return {
-      hScroll: Math.round(document.documentElement.scrollWidth - vw),
-      offenders,
-      rendered: document.querySelectorAll("[class^='report-'], [class*=' report-']").length > 50,
-    };
-  });
+    const result = await page.evaluate(() => {
+      const vw = window.innerWidth;
+      const offenders = [...document.querySelectorAll("body *")]
+        .filter((el) => {
+          const box = el.getBoundingClientRect();
+          if (box.width < 2 || box.height < 2) return false;
+          const cs = getComputedStyle(el);
+          if (cs.position === "fixed") return false;
+          // Horizontal scrollers and the decorative bleed are outside the
+          // viewport by design.
+          if (el.closest(".stage-explorer__carousel, .rpm-tm__track")) return false;
+          if (/orb|carousel|stage-card|marquee/.test(String(el.className))) return false;
+          if (cs.display === "inline") {
+            return [...el.getClientRects()].some((r) => r.right > vw + 2 || r.left < -2);
+          }
+          return box.right > vw + 2 || box.left < -2;
+        })
+        .slice(0, 5)
+        .map((el) => `${el.tagName.toLowerCase()}:${(el.textContent ?? "").trim().slice(0, 34)}`);
 
-  let note;
-  if (!result.rendered) {
-    note = "INCONCLUSIVE: the report did not render";
+      return {
+        hScroll: Math.round(document.documentElement.scrollWidth - vw),
+        offenders,
+        rendered: document.querySelectorAll("[class^='report-'], [class*=' report-']").length > 50,
+      };
+    });
+
+    let note;
+    if (!result.rendered) {
+      note = "INCONCLUSIVE: the report did not render";
+      unmeasured += 1;
+    } else if (result.hScroll > 2 || result.offenders.length > 0) {
+      note = `overflow: h-scroll ${result.hScroll}px, ${result.offenders.join(" | ")}`;
+      bad += 1;
+    } else {
+      note = "nothing overflows the viewport";
+    }
+    console.log(
+      `${note.startsWith("nothing") ? "PASS" : "FAIL"} ${String(width).padStart(4)}px  ${note}`
+    );
+  } catch (err) {
     unmeasured += 1;
-  } else if (result.hScroll > 2 || result.offenders.length > 0) {
-    note = `overflow: h-scroll ${result.hScroll}px, ${result.offenders.join(" | ")}`;
-    bad += 1;
-  } else {
-    note = "nothing overflows the viewport";
+    console.log(
+      `INCONCLUSIVE ${String(width).padStart(4)}px  ${String(err.message).split("\n")[0].slice(0, 70)}`
+    );
+  } finally {
+    await ctx.close().catch(() => {});
   }
-  console.log(
-    `${note.startsWith("nothing") ? "PASS" : "FAIL"} ${String(width).padStart(4)}px  ${note}`
-  );
-
-  await ctx.close();
 }
 
 await browser.close();

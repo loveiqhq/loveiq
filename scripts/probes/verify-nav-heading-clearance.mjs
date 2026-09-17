@@ -36,73 +36,90 @@ for (const name of DEVICE_NAMES) {
   const c = await b.newContext({ ...devices[name], locale: "en-US" });
   await c.addCookies(stagingCookies(O)).catch(() => {});
   const p = await c.newPage();
-  await p.goto(`${O}/report/${T}${process.env.V2 ? "?v2=1" : ""}`, {
-    waitUntil: "domcontentloaded",
-    timeout: 120000,
-  });
-  await p
-    .waitForSelector(".report-status-card__spinner", { state: "detached", timeout: 120000 })
-    .catch(() => {});
-  await p.waitForTimeout(3000);
-  if (process.env.MUTATE === "1") {
-    await p.addStyleTag({ content: ".report-section--welcome { padding-top: 0 !important; }" });
-    await p.waitForTimeout(300);
-  }
-  const r = await p.evaluate(() => {
-    const rect = (el) => {
-      const b = el.getBoundingClientRect();
-      return {
-        t: Math.round(b.top),
-        b: Math.round(b.bottom),
-        l: Math.round(b.left),
-        r: Math.round(b.right),
+  /**
+   * Everything that touches the network is inside the try. An uncaught throw
+   * exits 1, and 1 means "the defect reproduced" — so a timeout or a refused
+   * connection reported a defect nobody measured, on a criterion allowed to
+   * open a pull request. Verified before the fix: REPORT_ORIGIN=http://localhost:1
+   * exited 1. The stdout backstop in verify-ux-findings.mjs does not save it
+   * either — a Playwright stack says "net::ERR_CONNECTION_REFUSED", which
+   * matches neither "INCONCLUSIVE" nor "exception:".
+   */
+  try {
+    await p.goto(`${O}/report/${T}${process.env.V2 ? "?v2=1" : ""}`, {
+      waitUntil: "domcontentloaded",
+      timeout: 120000,
+    });
+    await p
+      .waitForSelector(".report-status-card__spinner", { state: "detached", timeout: 120000 })
+      .catch(() => {});
+    await p.waitForTimeout(3000);
+    if (process.env.MUTATE === "1") {
+      await p.addStyleTag({ content: ".report-section--welcome { padding-top: 0 !important; }" });
+      await p.waitForTimeout(300);
+    }
+    const r = await p.evaluate(() => {
+      const rect = (el) => {
+        const b = el.getBoundingClientRect();
+        return {
+          t: Math.round(b.top),
+          b: Math.round(b.bottom),
+          l: Math.round(b.left),
+          r: Math.round(b.right),
+        };
       };
-    };
-    // the sticky chapter selector and the first visible heading
-    const nav = [...document.querySelectorAll("button,div,nav")].find(
-      (e) =>
-        /^\s*Chapter:/.test(e.textContent || "") &&
-        e.getBoundingClientRect().height > 20 &&
-        e.getBoundingClientRect().height < 120
-    );
-    const h = [...document.querySelectorAll("h1,h2")].find(
-      (e) => e.getBoundingClientRect().height > 10
-    );
-    if (!nav || !h) return { found: false, nav: !!nav, h: !!h };
-    const n = rect(nav),
-      hh = rect(h);
-    const overlapY = Math.min(n.b, hh.b) - Math.max(n.t, hh.t);
-    const overlapX = Math.min(n.r, hh.r) - Math.max(n.l, hh.l);
-    return {
-      found: true,
-      navRect: n,
-      headingRect: hh,
-      headingText: (h.textContent || "").trim().slice(0, 24),
-      overlapPx: overlapY > 0 && overlapX > 0 ? overlapY : 0,
-      navZ: getComputedStyle(nav).zIndex,
-      navPos: getComputedStyle(nav).position,
-      scrollY: Math.round(scrollY),
-    };
-  });
-  if (!r.found) {
+      // the sticky chapter selector and the first visible heading
+      const nav = [...document.querySelectorAll("button,div,nav")].find(
+        (e) =>
+          /^\s*Chapter:/.test(e.textContent || "") &&
+          e.getBoundingClientRect().height > 20 &&
+          e.getBoundingClientRect().height < 120
+      );
+      const h = [...document.querySelectorAll("h1,h2")].find(
+        (e) => e.getBoundingClientRect().height > 10
+      );
+      if (!nav || !h) return { found: false, nav: !!nav, h: !!h };
+      const n = rect(nav),
+        hh = rect(h);
+      const overlapY = Math.min(n.b, hh.b) - Math.max(n.t, hh.t);
+      const overlapX = Math.min(n.r, hh.r) - Math.max(n.l, hh.l);
+      return {
+        found: true,
+        navRect: n,
+        headingRect: hh,
+        headingText: (h.textContent || "").trim().slice(0, 24),
+        overlapPx: overlapY > 0 && overlapX > 0 ? overlapY : 0,
+        navZ: getComputedStyle(nav).zIndex,
+        navPos: getComputedStyle(nav).position,
+        scrollY: Math.round(scrollY),
+      };
+    });
+    if (!r.found) {
+      unmeasured += 1;
+      console.log(
+        `INCONCLUSIVE ${name.padEnd(15)} ${r.nav ? "no heading" : "no chapter bar"} on screen — ` +
+          `the report did not render, so nothing was measured`
+      );
+    } else if (r.overlapPx > 0) {
+      bad += 1;
+      console.log(
+        `FAIL ${name.padEnd(15)} heading "${r.headingText}" top=${r.headingRect.t} ` +
+          `| bar ends ${r.navRect.b} | covered by ${r.overlapPx}px`
+      );
+    } else {
+      console.log(
+        `PASS ${name.padEnd(15)} heading "${r.headingText}" top=${r.headingRect.t} ` +
+          `| bar ends ${r.navRect.b} | covered by 0px`
+      );
+    }
+  } catch (err) {
     unmeasured += 1;
     console.log(
-      `INCONCLUSIVE ${name.padEnd(15)} ${r.nav ? "no heading" : "no chapter bar"} on screen — ` +
-        `the report did not render, so nothing was measured`
+      `INCONCLUSIVE ${name.padEnd(15)} ${String(err.message).split("\n")[0].slice(0, 70)}`
     );
-  } else if (r.overlapPx > 0) {
-    bad += 1;
-    console.log(
-      `FAIL ${name.padEnd(15)} heading "${r.headingText}" top=${r.headingRect.t} ` +
-        `| bar ends ${r.navRect.b} | covered by ${r.overlapPx}px`
-    );
-  } else {
-    console.log(
-      `PASS ${name.padEnd(15)} heading "${r.headingText}" top=${r.headingRect.t} ` +
-        `| bar ends ${r.navRect.b} | covered by 0px`
-    );
+  } finally {
+    await b.close().catch(() => {});
   }
-  await b.close();
 }
 
 const measured = DEVICE_NAMES.length - unmeasured;

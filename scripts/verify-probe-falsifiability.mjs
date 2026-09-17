@@ -13,7 +13,22 @@
  * defect injected is measuring nothing, and a clean result from it means
  * nothing either.
  *
+ * TWO CHECKS, TWO COSTS.
+ *
+ *   --contract-only   every GATE probe, pointed at a refused connection, must
+ *                     exit 3. Seconds, because the connection fails instantly.
+ *   (default)         the above, then every AUTO-PR probe run with its own
+ *                     defect injected across its real device list. Minutes.
+ *
+ * The contract check exists because an uncaught throw exits 1, and the verifier
+ * reads 1 as "the defect reproduced". Six gate probes did exactly that on
+ * 2026-09-17, two of them on criteria allowed to open a pull request, and the
+ * stdout backstop does not catch it: a Playwright stack says
+ * "net::ERR_CONNECTION_REFUSED", which matches neither "INCONCLUSIVE" nor
+ * "exception:".
+ *
  *   node scripts/verify-probe-falsifiability.mjs
+ *   node scripts/verify-probe-falsifiability.mjs --contract-only
  *   RUNS=3 ...      # repeat each probe, to catch a flaky mutation like the above
  *   DEVICES=…       # narrow the device list for speed
  *
@@ -56,7 +71,66 @@ function criteriaProbes() {
   return out;
 }
 
+const CONTRACT_ONLY = process.argv.includes("--contract-only");
+
 const probes = criteriaProbes();
+
+/**
+ * Every probe a criterion points at, deduplicated. Wider than the auto-PR set
+ * on purpose: a false "reproduced" is wrong wherever it lands, it is only
+ * costlier when it can open a pull request.
+ */
+function appendedProbes() {
+  // verify-dead-click-target.mjs is added by the SESSION rather than listed
+  // under a criterion, so criteriaProbes() cannot see it — and it runs for D1,
+  // which may open a pull request.
+  const src = readFileSync(VERIFIER, "utf8");
+  return [...src.matchAll(/probeFiles\.push\("([^"]+)"\)/g)].map((m) => m[1]);
+}
+
+const gateProbes = [...new Set([...[...probes.values()].flat(), ...appendedProbes()])].sort();
+
+let contractBreaches = 0;
+for (const file of gateProbes) {
+  let code = 0;
+  try {
+    execFileSync("node", [`scripts/probes/${file}`], {
+      encoding: "utf8",
+      timeout: 120_000,
+      env: {
+        ...process.env,
+        // Refused instantly, so this costs about a second per probe.
+        REPORT_ORIGIN: "http://localhost:1",
+        DEVICES: "Pixel 7",
+        DEVICE: "Pixel 7",
+        WIDTHS: "320",
+        URL_PATH: "/survey",
+        TARGET_SELECTOR: "p.probe-contract-check",
+      },
+    });
+  } catch (err) {
+    code = typeof err.status === "number" ? err.status : -1;
+  }
+  const ok = code === 3;
+  if (!ok) contractBreaches += 1;
+  console.log(
+    `${ok ? "PASS" : "FAIL"} contract ${file.padEnd(38)} unreachable origin -> exit ${code}` +
+      (ok ? "" : "  <- must be 3; 1 means a defect nobody measured")
+  );
+}
+console.log("");
+if (contractBreaches > 0) {
+  console.log(
+    `FAIL (${contractBreaches}) — a probe reports a defect when it cannot reach the site at all`
+  );
+  process.exit(1);
+}
+console.log(
+  `PASS — all ${gateProbes.length} gate probes stay inconclusive when the site is unreachable`
+);
+
+if (CONTRACT_ONLY) process.exit(0);
+console.log("");
 const targets = [];
 for (const id of AUTO_PR_CRITERIA) {
   for (const file of probes.get(id) ?? []) {

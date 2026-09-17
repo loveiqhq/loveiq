@@ -26,6 +26,7 @@ const CASES = (
 // treats a non-zero exit as "reproduced in production", so until 2026-09-14
 // this criterion could never produce a finding at all.
 let bad = 0;
+let unmeasured = 0;
 for (const name of CASES) {
   const d = name.toLowerCase();
   const engine = d.includes("iphone") || d.includes("ipad") ? "webkit" : "chromium";
@@ -35,86 +36,110 @@ for (const name of CASES) {
   const errs = [];
   page.on("pageerror", (e) => errs.push(String(e.message).slice(0, 60)));
 
-  await page.goto(`${ORIGIN}/report/${TOKEN}`, { waitUntil: "domcontentloaded", timeout: 90_000 });
-  await page
-    .waitForSelector(".report-status-card__spinner", { state: "detached", timeout: 90_000 })
-    .catch(() => {});
-  await page
-    .waitForFunction(
-      () =>
-        !document.querySelector(".report-status-screen") &&
-        document.documentElement.scrollHeight > window.innerHeight * 1.5,
-      undefined,
-      { timeout: 90_000 }
-    )
-    .catch(() => {});
-  await page.waitForTimeout(2200);
-  await page
-    .locator(".cky-btn-accept")
-    .first()
-    .click({ timeout: 8000 })
-    .catch(() => {});
-  await page.waitForTimeout(1000);
-
-  // Smooth scrolling makes rapid programmatic scrolls cancel each other; this
-  // question is about whether the END is reachable, not about animation.
-  await page.evaluate(() => {
-    document.documentElement.style.scrollBehavior = "auto";
-    document.body.style.scrollBehavior = "auto";
-  });
-
-  let last = -1;
-  let stable = 0;
-  let iterations = 0;
-  while (stable < 3 && iterations < 60) {
-    iterations += 1;
-    const y = await page.evaluate(() => {
-      window.scrollTo(0, document.documentElement.scrollHeight);
-      return Math.round(window.scrollY);
+  /**
+   * The network work is inside the try. An uncaught throw exits 1, and the
+   * verifier reads 1 as "the defect reproduced" — so a timeout or a refused
+   * connection reported a defect nobody measured. Verified before the fix:
+   * REPORT_ORIGIN=http://localhost:1 exited 1 on this probe.
+   */
+  try {
+    await page.goto(`${ORIGIN}/report/${TOKEN}`, {
+      waitUntil: "domcontentloaded",
+      timeout: 90_000,
     });
-    await page.waitForTimeout(400);
-    if (Math.abs(y - last) < 8) stable += 1;
-    else stable = 0;
-    last = y;
+    await page
+      .waitForSelector(".report-status-card__spinner", { state: "detached", timeout: 90_000 })
+      .catch(() => {});
+    await page
+      .waitForFunction(
+        () =>
+          !document.querySelector(".report-status-screen") &&
+          document.documentElement.scrollHeight > window.innerHeight * 1.5,
+        undefined,
+        { timeout: 90_000 }
+      )
+      .catch(() => {});
+    await page.waitForTimeout(2200);
+    await page
+      .locator(".cky-btn-accept")
+      .first()
+      .click({ timeout: 8000 })
+      .catch(() => {});
+    await page.waitForTimeout(1000);
+
+    // Smooth scrolling makes rapid programmatic scrolls cancel each other; this
+    // question is about whether the END is reachable, not about animation.
+    await page.evaluate(() => {
+      document.documentElement.style.scrollBehavior = "auto";
+      document.body.style.scrollBehavior = "auto";
+    });
+
+    let last = -1;
+    let stable = 0;
+    let iterations = 0;
+    while (stable < 3 && iterations < 60) {
+      iterations += 1;
+      const y = await page.evaluate(() => {
+        window.scrollTo(0, document.documentElement.scrollHeight);
+        return Math.round(window.scrollY);
+      });
+      await page.waitForTimeout(400);
+      if (Math.abs(y - last) < 8) stable += 1;
+      else stable = 0;
+      last = y;
+    }
+
+    const end = await page.evaluate(() => {
+      const de = document.documentElement;
+      const sections = [...document.querySelectorAll(".report-section")];
+      const lastSection = sections[sections.length - 1];
+      const lastRect = lastSection?.getBoundingClientRect();
+      const footerish = lastSection ? (lastSection.innerText || "").trim().length : 0;
+      return {
+        scrollY: Math.round(window.scrollY),
+        viewportBottom: Math.round(window.scrollY + window.innerHeight),
+        docHeight: de.scrollHeight,
+        remaining: Math.round(de.scrollHeight - (window.scrollY + window.innerHeight)),
+        sectionCount: sections.length,
+        lastSectionVisible: !!lastRect && lastRect.top < window.innerHeight && lastRect.bottom > 0,
+        lastSectionTextLen: footerish,
+        hOverflow: de.scrollWidth - de.clientWidth,
+        bodyPosition: getComputedStyle(document.body).position,
+      };
+    });
+
+    // `lastSectionVisible` is NOT a criterion: at maximum scroll the site footer
+    // legitimately fills the final viewport, so the last report section sits just
+    // above it. Verified by screenshot — the footer renders in full. What matters
+    // is that the document end is reachable, the last section carries real copy,
+    // nothing overflows sideways and the body was not left scroll-locked.
+    const reached = end.remaining <= 40;
+    const ok =
+      reached && end.lastSectionTextLen > 20 && end.hOverflow <= 1 && end.bodyPosition !== "fixed";
+    if (!ok) bad += 1;
+    console.log(
+      `${ok ? "PASS" : "FAIL"} ${name.padEnd(19)} ${engine.padEnd(9)} bottom=${end.scrollY}/${end.docHeight}px remaining=${end.remaining}px ` +
+        `sections=${end.sectionCount} lastText=${end.lastSectionTextLen}ch footerFillsLastViewport=${!end.lastSectionVisible} hOverflow=${end.hOverflow} (${iterations} steps)`
+    );
+    if (errs.length) console.log(`     pageErrors: ${errs.slice(0, 2).join(" | ")}`);
+    await page.screenshot({ path: `/tmp/bottom-${name.replace(/\W+/g, "_")}.png` }).catch(() => {});
+  } catch (err) {
+    unmeasured += 1;
+    console.log(
+      `INCONCLUSIVE ${name.padEnd(19)} ${String(err.message).split("\n")[0].slice(0, 70)}`
+    );
+  } finally {
+    await ctx.close().catch(() => {});
+    await browser.close().catch(() => {});
   }
-
-  const end = await page.evaluate(() => {
-    const de = document.documentElement;
-    const sections = [...document.querySelectorAll(".report-section")];
-    const lastSection = sections[sections.length - 1];
-    const lastRect = lastSection?.getBoundingClientRect();
-    const footerish = lastSection ? (lastSection.innerText || "").trim().length : 0;
-    return {
-      scrollY: Math.round(window.scrollY),
-      viewportBottom: Math.round(window.scrollY + window.innerHeight),
-      docHeight: de.scrollHeight,
-      remaining: Math.round(de.scrollHeight - (window.scrollY + window.innerHeight)),
-      sectionCount: sections.length,
-      lastSectionVisible: !!lastRect && lastRect.top < window.innerHeight && lastRect.bottom > 0,
-      lastSectionTextLen: footerish,
-      hOverflow: de.scrollWidth - de.clientWidth,
-      bodyPosition: getComputedStyle(document.body).position,
-    };
-  });
-
-  // `lastSectionVisible` is NOT a criterion: at maximum scroll the site footer
-  // legitimately fills the final viewport, so the last report section sits just
-  // above it. Verified by screenshot — the footer renders in full. What matters
-  // is that the document end is reachable, the last section carries real copy,
-  // nothing overflows sideways and the body was not left scroll-locked.
-  const reached = end.remaining <= 40;
-  const ok =
-    reached && end.lastSectionTextLen > 20 && end.hOverflow <= 1 && end.bodyPosition !== "fixed";
-  if (!ok) bad += 1;
-  console.log(
-    `${ok ? "PASS" : "FAIL"} ${name.padEnd(19)} ${engine.padEnd(9)} bottom=${end.scrollY}/${end.docHeight}px remaining=${end.remaining}px ` +
-      `sections=${end.sectionCount} lastText=${end.lastSectionTextLen}ch footerFillsLastViewport=${!end.lastSectionVisible} hOverflow=${end.hOverflow} (${iterations} steps)`
-  );
-  if (errs.length) console.log(`     pageErrors: ${errs.slice(0, 2).join(" | ")}`);
-  await page.screenshot({ path: `/tmp/bottom-${name.replace(/\W+/g, "_")}.png` }).catch(() => {});
-  await ctx.close();
-  await browser.close();
 }
 
-console.log(bad === 0 ? "\nPASS" : `\nFAIL (${bad})`);
-process.exit(bad === 0 ? 0 : 1);
+if (bad > 0) {
+  console.log(`\nFAIL (${bad})`);
+  process.exit(1);
+}
+if (unmeasured > 0) {
+  console.log(`\nINCONCLUSIVE (${unmeasured}) — could not measure, not a pass`);
+  process.exit(3);
+}
+console.log("\nPASS");
