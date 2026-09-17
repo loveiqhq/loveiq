@@ -68,6 +68,32 @@ function posthogSessionId(): string | null {
   }
 }
 
+/**
+ * The API rejects `durationMs` outside [0, 86_400_000], and `startedAt` is restored from
+ * the localStorage draft — so a respondent who came back to a survey they began more than
+ * a day ago produced a value the schema refused, and their COMPLETED submission was lost
+ * to a 400 with nothing recorded.
+ *
+ * Not hypothetical: 20 of 1,074 drafts in the last 120 days were still being saved more
+ * than 24 hours after their start (the longest spanned 97 days), 7 of them past question
+ * 40. And of 1,754 completed submissions, exactly ZERO have a duration over 24 hours —
+ * the ceiling is visible in the data as an absence.
+ *
+ * Clamping rather than raising the cap: the bound is an anti-abuse limit worth keeping,
+ * and nothing is lost by capping. `survey_submission.start_date_time` stores the real
+ * start and `created_date_time` the real finish, so true elapsed time stays recoverable;
+ * a 97-day "duration" was never usable as a completion-time measure anyway.
+ *
+ * The lower bound catches the other direction — a clock that moved backwards mid-survey
+ * makes this negative, which `min(0)` refuses just as hard.
+ */
+const MAX_DURATION_MS = 86_400_000;
+
+function clampDuration(ms: number): number {
+  if (!Number.isFinite(ms)) return 0;
+  return Math.min(Math.max(Math.round(ms), 0), MAX_DURATION_MS);
+}
+
 export function useSubmitSurvey() {
   const [status, setStatus] = useState<SubmitStatus>("idle");
   const [reportToken, setReportTokenState] = useState<string | null>(null);
@@ -215,7 +241,7 @@ export function useSubmitSurvey() {
         firstName,
         answers: answers as SurveyAnswers,
         startedAt,
-        durationMs: Date.now() - new Date(startedAt).getTime(),
+        durationMs: clampDuration(Date.now() - new Date(startedAt).getTime()),
         utmTracker: utmTracker ?? null,
         currentIndex: surveyQuestions.length,
         savedAt: new Date().toISOString(),

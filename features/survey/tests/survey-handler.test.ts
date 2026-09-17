@@ -603,6 +603,32 @@ describe("POST /api/survey", () => {
     expect(mockResendContactsCreate).not.toHaveBeenCalled();
   });
 
+  /**
+   * The client clamps `durationMs` to 86_400_000 because this route refuses anything
+   * larger, and a resumed draft (whose `startedAt` comes from localStorage) routinely
+   * exceeds it. These two pin the BOUND ITSELF from the server side, so the clamp in
+   * `useSubmitSurvey` and the schema here cannot quietly drift apart — if either moves
+   * without the other, one of these fails.
+   */
+  describe("the durationMs ceiling the client clamps to", () => {
+    beforeEach(() => {
+      allowCsrf();
+      allowRateLimit();
+      allowCooldown();
+      mockSupabaseRpcOk();
+    });
+
+    it("accepts exactly 86_400_000", async () => {
+      const res = await POST(makeRequest({ ...validBody(), durationMs: 86_400_000 }));
+      expect(res.status).toBe(200);
+    });
+
+    it("rejects one millisecond more — which is what the clamp exists to prevent", async () => {
+      const res = await POST(makeRequest({ ...validBody(), durationMs: 86_400_001 }));
+      expect(res.status).toBe(400);
+    });
+  });
+
   describe("C13 arm stamping on utm_tracker", () => {
     const SESSION = "6f1c2a44-8e21-4d0b-9a77-2b3c4d5e6f70";
 
