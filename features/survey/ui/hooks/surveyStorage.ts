@@ -119,6 +119,9 @@ export function clearPersistedSurveyState(options?: {
     sessionStorage.removeItem(SURVEY_STEP_KEY);
     if (options?.clearSurveySession !== false) {
       sessionStorage.removeItem(SURVEY_SESSION_KEY);
+      // ...and its localStorage mirror, which exists so the id outlives a closed tab for
+      // as long as the draft does. Clearing the draft without it would resume a dead id.
+      localStorage.removeItem(SURVEY_SESSION_KEY);
     }
   } catch {
     /* storage unavailable */
