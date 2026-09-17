@@ -13,7 +13,12 @@ vi.mock("@shared/http/circuit-breaker", () => ({
   getBreaker: () => ({ fire: (fn: () => Promise<Response>) => fn() }),
 }));
 
-import { countRows, POSTGREST_MAX_ROWS, supabaseFetch } from "@features/admin/server/supabase";
+import {
+  countRows,
+  fetchAllRows,
+  POSTGREST_MAX_ROWS,
+  supabaseFetch,
+} from "@features/admin/server/supabase";
 
 function respond(contentRange: string | null): void {
   mockFetch.mockResolvedValue({
@@ -117,5 +122,90 @@ describe("countRows — the answer to the cap", () => {
 
     counted("0-0/2061", false);
     await expect(countRows("/rest/v1/payment?select=id")).resolves.toBeNull();
+  });
+});
+
+describe("fetchAllRows — for callers that need the rows", () => {
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "service-key";
+
+  afterEach(() => vi.clearAllMocks());
+
+  function pages(...bodies: unknown[][]): void {
+    let i = 0;
+    mockFetch.mockImplementation(async () => {
+      const body = bodies[i++] ?? [];
+      return {
+        ok: true,
+        headers: { get: () => null },
+        json: async () => body,
+      } as unknown as Response;
+    });
+  }
+
+  it("keeps asking until a short page, so the cap stops being the answer", async () => {
+    const full = Array.from({ length: POSTGREST_MAX_ROWS }, (_, i) => ({ id: i }));
+    pages(full, full, [{ id: 9999 }]);
+
+    const rows = await fetchAllRows<{ id: number }>(
+      "/rest/v1/report_session?select=id&order=id.asc"
+    );
+
+    expect(rows).toHaveLength(POSTGREST_MAX_ROWS * 2 + 1);
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("asks for each page by range", async () => {
+    const full = Array.from({ length: POSTGREST_MAX_ROWS }, (_, i) => ({ id: i }));
+    pages(full, []);
+    await fetchAllRows("/rest/v1/report_session?select=id&order=id.asc");
+    const ranges = mockFetch.mock.calls.map(
+      (c) => (c[1] as { headers: Record<string, string> }).headers.Range
+    );
+    expect(ranges).toEqual(["0-999", "1000-1999"]);
+  });
+
+  it("refuses a path with no deterministic order", async () => {
+    // Without ORDER BY, Postgres may return rows in a different physical order
+    // between requests, so pages overlap or skip and the result is quietly
+    // wrong in a way that looks like flaky data.
+    await expect(fetchAllRows("/rest/v1/report_session?select=id")).rejects.toThrow(/order=/);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("returns null on a failed page rather than a partial array", async () => {
+    // A partial array is exactly the bug this family is made of.
+    const full = Array.from({ length: POSTGREST_MAX_ROWS }, (_, i) => ({ id: i }));
+    let i = 0;
+    mockFetch.mockImplementation(async () => {
+      const ok = i++ === 0;
+      return { ok, headers: { get: () => null }, json: async () => full } as unknown as Response;
+    });
+    await expect(
+      fetchAllRows("/rest/v1/report_session?select=id&order=id.asc")
+    ).resolves.toBeNull();
+  });
+});
+
+describe("the large-Range backlog only shrinks", () => {
+  it("does not grow", async () => {
+    // `Range: "0-49999"` reads as "up to fifty thousand rows" and returns a
+    // thousand, silently. 152 such reads remain, and 23 of them are unfiltered
+    // reads of tables already past the cap — survey_behavior_event at 133,753
+    // rows returns 0.7% of itself. They are being migrated to countRows (for a
+    // number) and fetchAllRows (for the rows).
+    //
+    // This number may only go DOWN. If a change makes it go up, that change is
+    // adding a query that is wrong the day it ships.
+    const { execFileSync } = await import("node:child_process");
+    const out = execFileSync(
+      "bash",
+      [
+        "-c",
+        `grep -rn 'Range: "0-[0-9]\\{4,\\}"' features app scripts 2>/dev/null | grep -v node_modules | grep -vc '/tests/'`,
+      ],
+      { encoding: "utf8", cwd: process.cwd() }
+    ).trim();
+    expect(Number(out)).toBeLessThanOrEqual(152);
   });
 });

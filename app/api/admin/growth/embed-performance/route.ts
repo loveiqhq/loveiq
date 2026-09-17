@@ -7,7 +7,7 @@ import {
   clampDays,
 } from "@features/admin/server/next-level";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
-import { supabaseFetch } from "@features/admin/server/supabase";
+import { fetchAllRows, supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 
 export async function GET(request: Request) {
@@ -46,9 +46,11 @@ export async function GET(request: Request) {
       supabaseFetch(`/rest/v1/personal_report?select=id,survey_submission_id,created_date_time`, {
         headers: { Range: "0-49999" },
       }),
-      supabaseFetch(`/rest/v1/report_session?select=personal_report_id`, {
-        headers: { Range: "0-49999" },
-      }),
+      // Paged: this read 1,000 of 11,224 sessions, so `viewed` per embed was
+      // computed from a 9% slice of the sessions it tests membership against.
+      fetchAllRows<{ personal_report_id: number }>(
+        "/rest/v1/report_session?select=personal_report_id&order=personal_report_id.asc"
+      ),
       supabaseFetch(
         `/rest/v1/payment?is_test=is.false&select=personal_report_id,status&payment_date_time=gte.${since}`,
         {
@@ -61,7 +63,7 @@ export async function GET(request: Request) {
       !submissionsRes.ok ||
       !partialsRes.ok ||
       !reportsRes.ok ||
-      !sessionsRes.ok ||
+      sessionsRes === null ||
       !paymentsRes.ok
     ) {
       logger.error("Embed performance: query failed");
@@ -82,11 +84,7 @@ export async function GET(request: Request) {
       id: number;
       survey_submission_id: number;
     }>;
-    const viewedReportIds = new Set(
-      ((await sessionsRes.json()) as Array<{ personal_report_id: number }>).map(
-        (row) => row.personal_report_id
-      )
-    );
+    const viewedReportIds = new Set(sessionsRes.map((row) => row.personal_report_id));
     const paidReportIds = new Set(
       ((await paymentsRes.json()) as Array<{ personal_report_id: number; status: string }>)
         .filter((row) => row.status === "succeeded")

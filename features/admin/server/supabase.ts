@@ -118,3 +118,40 @@ export async function countRows(path: string): Promise<number | null> {
   const n = Number(total);
   return Number.isFinite(n) ? n : null;
 }
+
+/**
+ * Every matching row, by paging past PostgREST's cap.
+ *
+ * For callers that genuinely need the ROWS, not a count. `Range: 0-49999` does
+ * not get you fifty thousand rows — it gets you a thousand, silently — so a
+ * caller that wants them all has to ask repeatedly.
+ *
+ * ORDER IS REQUIRED, and not as a style preference: without a deterministic
+ * `order=`, PostgreSQL may return rows in a different physical order between
+ * requests, so pages can overlap or skip and the result is quietly wrong in a
+ * way that looks like flaky data. A path with no `order=` is refused.
+ *
+ * Returns null if any page fails. A partial array is the failure this whole
+ * family of bugs is made of, so it is never returned.
+ */
+export async function fetchAllRows<T>(
+  path: string,
+  options: { maxRows?: number } = {}
+): Promise<T[] | null> {
+  if (!/[?&]order=/.test(path)) {
+    throw new Error(`fetchAllRows needs a deterministic order=: ${path.split("?")[0]}`);
+  }
+  const maxRows = options.maxRows ?? 100_000;
+  const out: T[] = [];
+  for (let offset = 0; offset < maxRows; offset += POSTGREST_MAX_ROWS) {
+    const end = Math.min(offset + POSTGREST_MAX_ROWS, maxRows) - 1;
+    const res = await supabaseFetch(path, { headers: { Range: `${offset}-${end}` } });
+    if (!res.ok) return null;
+    const page = (await res.json()) as T[];
+    out.push(...page);
+    // A short page is the last page. Asking again would cost a round trip to
+    // learn nothing.
+    if (page.length < end - offset + 1) break;
+  }
+  return out;
+}

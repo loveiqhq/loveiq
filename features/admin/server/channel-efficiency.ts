@@ -4,7 +4,7 @@ import {
   round1,
   sourceLabel,
 } from "@features/admin/server/next-level";
-import { supabaseFetch } from "@features/admin/server/supabase";
+import { fetchAllRows, supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 
 interface WaitlistRow {
@@ -174,9 +174,12 @@ export async function buildChannelEfficiencySnapshot(
       supabaseFetch("/rest/v1/personal_report?select=id,survey_submission_id", {
         headers: { Range: "0-49999" },
       }),
-      supabaseFetch("/rest/v1/report_session?select=personal_report_id", {
-        headers: { Range: "0-49999" },
-      }),
+      // Paged, not capped. This read 1,000 of 11,224 sessions and the Set below
+      // decided which reports counted as viewed, so every channel's view rate
+      // was computed from a 9% slice.
+      fetchAllRows<ReportSessionRow>(
+        "/rest/v1/report_session?select=personal_report_id&order=personal_report_id.asc"
+      ),
       supabaseFetch(
         `/rest/v1/payment?is_test=is.false&select=personal_report_id,status,amount&payment_date_time=gte.${since}`,
         { headers: { Range: "0-49999" } }
@@ -189,7 +192,7 @@ export async function buildChannelEfficiencySnapshot(
       !scoringRes.ok ||
       !partialsRes.ok ||
       !reportsRes.ok ||
-      !reportSessionsRes.ok ||
+      reportSessionsRes === null ||
       !paymentsRes.ok
     ) {
       throw new Error("Unable to load channel efficiency data.");
@@ -200,7 +203,7 @@ export async function buildChannelEfficiencySnapshot(
     const scoringRows = (await scoringRes.json()) as ScoringRow[];
     const partials = (await partialsRes.json()) as PartialSaveRow[];
     const reports = (await reportsRes.json()) as ReportRow[];
-    const reportSessions = (await reportSessionsRes.json()) as ReportSessionRow[];
+    const reportSessions = reportSessionsRes;
     const payments = (await paymentsRes.json()) as PaymentRow[];
 
     const scoredIds = new Set(scoringRows.map((row) => row.survey_submission_id));
