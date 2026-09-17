@@ -248,6 +248,71 @@ export interface VerificationStat {
   total: number;
 }
 
+/** How many of the readers who finished the survey were actually watched. */
+export interface CoverageStat {
+  /** Submissions in the window that carry a PostHog session id. */
+  submissions: number;
+  /** Of those, how many any scanner opened a recording for. */
+  observed: number;
+}
+
+/**
+ * Coverage: the question "did anyone look at this reader at all".
+ *
+ * Everything else in this digest counts what the scanners SAID. None of it can
+ * show what they never opened, and that turned out to be most of it — measured
+ * 2026-09-18 over seven days, 39 of 118 submissions were observed by any
+ * scanner, so 67% of the people who finished the survey were never watched by
+ * anything.
+ *
+ * Neither credits nor triggers explain it: the four scanners used 4% of their
+ * 5,200-credit allowance over thirty days, and the trigger events fired for
+ * roughly 710 sessions in the week against 105 observed. The throttle is
+ * `samplingMode: "focused"` in the PostHog scanner config, which is a spend
+ * decision rather than a bug — but one nobody could see from here, because
+ * a digest that only counts findings looks identical whether coverage is 33%
+ * or 100%.
+ *
+ * Returns null when it cannot be read, and the digest says so, for the same
+ * reason the verification line does: a missing number must not read as a
+ * healthy one.
+ */
+export async function fetchCoverageStats(): Promise<CoverageStat | null> {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const posthogKey = process.env.POSTHOG_API_KEY;
+  if (!url || !key || !posthogKey) return null;
+
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  try {
+    const res = await fetchWithTimeout(
+      `${url}/rest/v1/survey_submission?select=posthog_session_id` +
+        `&created_date_time=gte.${since}&posthog_session_id=not.is.null&limit=500`,
+      { headers: { apikey: key, Authorization: `Bearer ${key}` }, timeoutMs: 8_000 }
+    );
+    if (!res.ok) return null;
+    const rows = (await res.json()) as Array<{ posthog_session_id: string | null }>;
+    const ids = rows
+      .map((r) => r.posthog_session_id)
+      .filter((id): id is string => id !== null && isSafeSessionId(id));
+    if (ids.length === 0) return { submissions: 0, observed: 0 };
+
+    // Same id guard as every other per-session lookup here: these are
+    // interpolated into HogQL.
+    const inList = ids.map((id) => `'${id}'`).join(",");
+    const observed = await sessionQuery(
+      `SELECT count(DISTINCT properties.session_id) FROM events
+       WHERE event = '$recording_observed'
+         AND timestamp > now() - INTERVAL 10 DAY
+         AND properties.session_id IN (${inList})`
+    );
+    if (observed === null) return null;
+    return { submissions: ids.length, observed: Number(observed[0]?.[0]) || 0 };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Read the verification ledger for the digest.
  *
@@ -301,6 +366,21 @@ export async function fetchVerificationStats(): Promise<VerificationStat | null>
   }
 }
 
+/** Who was actually watched. The number every other line here is silent about. */
+function coverageLine(c: CoverageStat | null): string {
+  if (!c) return "*Recordings watched:* could not read the coverage figures.";
+  if (c.submissions === 0)
+    return "*Recordings watched:* nobody finished the survey in the last 24 hours.";
+  const pct = Math.round((c.observed / c.submissions) * 100);
+  const missed = c.submissions - c.observed;
+  return (
+    `*Recordings watched:* ${c.observed} of ${c.submissions} people who finished the survey (${pct}%).` +
+    (missed > 0
+      ? `\n${missed} were never opened by any scanner, so nothing below can speak for them.`
+      : "")
+  );
+}
+
 /** One plain line of what the probes concluded — the digest's only non-model number. */
 function verificationLine(v: VerificationStat | null): string {
   if (!v) return "*Checked by a probe:* could not read the verification record.";
@@ -333,7 +413,8 @@ function verificationLine(v: VerificationStat | null): string {
  */
 export function buildDigestMessage(
   stats: readonly DailyStat[],
-  verification: VerificationStat | null
+  verification: VerificationStat | null,
+  coverage: CoverageStat | null
 ): {
   text: string;
   blocks: SlackBlock[];
@@ -352,6 +433,7 @@ export function buildDigestMessage(
     header("👁 UX review — last 24 hours"),
     section(headline),
     ...(lines.length ? [section(lines.join("\n"))] : []),
+    section(coverageLine(coverage)),
     section(verificationLine(verification)),
     context(
       "A flag is one AI judgment on one recording. It becomes a *finding* only when a probe " +

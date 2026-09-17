@@ -29,6 +29,12 @@ const finding = (over: Partial<UxFinding> = {}): UxFinding => ({
 
 afterEach(() => vi.unstubAllGlobals());
 
+const covered = (over: Partial<{ submissions: number; observed: number }> = {}) => ({
+  submissions: 10,
+  observed: 10,
+  ...over,
+});
+
 const verified = (over: Record<string, number> = {}) => ({
   reproduced: 0,
   clear: 0,
@@ -48,7 +54,8 @@ describe("buildDigestMessage", () => {
     // guess — and the flags are the half we have measured to be unreliable.
     const { blocks } = buildDigestMessage(
       [{ scanner: "LoveIQ report UX", observed: 9, yes: 4 }],
-      verified({ reproduced: 1, clear: 2, inconclusive: 1, total: 4 })
+      verified({ reproduced: 1, clear: 2, inconclusive: 1, total: 4 }),
+      covered()
     );
     const json = JSON.stringify(blocks);
     expect(json).toContain("1 reproduced");
@@ -63,14 +70,46 @@ describe("buildDigestMessage", () => {
     expect(JSON.stringify(blocks)).toContain("2 of those could not be delivered");
   });
 
+  it("says how many readers were actually watched", () => {
+    // Every other line in this digest counts what the scanners SAID, and none
+    // of them can show what was never opened. Measured 2026-09-18: 39 of 118
+    // submissions over seven days, so 67% of finishers were watched by nothing
+    // — and the digest looked identical either way.
+    const { blocks } = buildDigestMessage(
+      [],
+      verified(),
+      covered({ submissions: 118, observed: 39 })
+    );
+    const json = JSON.stringify(blocks);
+    expect(json).toContain("39 of 118");
+    expect(json).toContain("33%");
+    expect(json).toContain("79 were never opened");
+  });
+
+  it("says nothing was missed when coverage is complete", () => {
+    const { blocks } = buildDigestMessage(
+      [],
+      verified(),
+      covered({ submissions: 12, observed: 12 })
+    );
+    const json = JSON.stringify(blocks);
+    expect(json).toContain("12 of 12");
+    expect(json).not.toContain("never opened");
+  });
+
+  it("reports unreadable coverage rather than printing full coverage", () => {
+    const { blocks } = buildDigestMessage([], verified(), null);
+    expect(JSON.stringify(blocks)).toContain("could not read the coverage");
+  });
+
   it("says the record could not be read rather than printing a quiet day", () => {
     // A missing line and a clean day must not look the same.
-    const { blocks } = buildDigestMessage([], null);
+    const { blocks } = buildDigestMessage([], null, covered());
     expect(JSON.stringify(blocks)).toContain("could not read the verification record");
   });
 
   it("distinguishes an unreadable ledger from an empty one", () => {
-    const { blocks } = buildDigestMessage([], verified());
+    const { blocks } = buildDigestMessage([], verified(), covered());
     expect(JSON.stringify(blocks)).toContain("nothing reached the verifier");
   });
 
@@ -89,13 +128,17 @@ describe("buildDigestMessage", () => {
   it("calls out a silent day instead of reporting all-clear", () => {
     // A broken scanner and a healthy product both produce zero findings. Saying
     // "no issues" for the first is how a dead detector goes unnoticed.
-    const { text } = buildDigestMessage([], verified());
+    const { text } = buildDigestMessage([], verified(), covered());
     expect(text).toMatch(/unusual/i);
     expect(text).not.toMatch(/no issues|all clear/i);
   });
 
   it("says a flag is not yet a finding", () => {
-    const { blocks } = buildDigestMessage([{ scanner: "s", observed: 1, yes: 1 }], verified());
+    const { blocks } = buildDigestMessage(
+      [{ scanner: "s", observed: 1, yes: 1 }],
+      verified(),
+      covered()
+    );
     expect(JSON.stringify(blocks)).toContain("reproduces it in a real browser");
   });
 

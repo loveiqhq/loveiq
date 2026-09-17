@@ -53,6 +53,7 @@ import {
   fetchScannerDrift,
   fetchDailyStats,
   fetchFindings,
+  fetchCoverageStats,
   fetchVerificationStats,
   fetchSessionEvents,
   MAX_POSTS_PER_RUN,
@@ -230,7 +231,8 @@ export async function GET(request: Request) {
       if (await tryClaimSlackAlert("ux_review_digest", "daily", dayKey)) {
         const { text, blocks } = buildDigestMessage(
           await fetchDailyStats(),
-          await fetchVerificationStats()
+          await fetchVerificationStats(),
+          await fetchCoverageStats()
         );
         const fitted = fitBlocks(blocks, text);
         await notifySlack({

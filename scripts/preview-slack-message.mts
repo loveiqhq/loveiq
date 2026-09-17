@@ -42,6 +42,7 @@ import {
 import { dayString, fetchFunnelCvrSparklines } from "../features/admin/server/digest-metrics";
 import {
   buildDigestMessage as buildUxReviewDigest,
+  fetchCoverageStats,
   fetchDailyStats as fetchUxDailyStats,
   fetchVerificationStats,
 } from "../features/ux-review/server/review";
@@ -263,7 +264,16 @@ async function previewSurvey(arg: string): Promise<void> {
  */
 async function previewUxReview(): Promise<void> {
   console.log("reading scanner flags (PostHog) and probe outcomes (ux_finding)...");
-  const [stats, verification] = await Promise.all([fetchUxDailyStats(), fetchVerificationStats()]);
+  const [stats, verification, coverage] = await Promise.all([
+    fetchUxDailyStats(),
+    fetchVerificationStats(),
+    fetchCoverageStats(),
+  ]);
+  console.log(
+    coverage
+      ? `  ${coverage.observed} of ${coverage.submissions} finishers were watched`
+      : "  NOTE: coverage could not be read — the digest will say so"
+  );
   if (!verification) {
     console.log(
       "  NOTE: the ledger could not be read — the digest will say so, which is the point"
@@ -272,7 +282,7 @@ async function previewUxReview(): Promise<void> {
     console.log(`  ${verification.total} verified finding(s) in the last 24h`);
   }
 
-  const msg = buildUxReviewDigest(stats, verification);
+  const msg = buildUxReviewDigest(stats, verification, coverage);
   const blocks = msg.blocks as Block[];
   const out = join(OUT_DIR, "slack-preview-ux-review.html");
   mkdirSync(dirname(out), { recursive: true });
