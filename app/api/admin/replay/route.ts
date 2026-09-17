@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { verifyAdminSession } from "@features/admin/server/auth";
 import { hasRole } from "@features/admin/server/roles";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
-import { supabaseFetch } from "@features/admin/server/supabase";
+import { fetchAllRows, supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 
 interface BehaviorEvent {
@@ -64,16 +64,28 @@ export async function GET(request: Request) {
       });
     }
 
-    // List mode: all sessions with summary stats
-    const res = await supabaseFetch(
-      `/rest/v1/survey_behavior_event?select=session_id,q_id,direction,time_spent_ms,answered,event_time,question_index&order=event_time.asc`,
-      { headers: { Range: "0-49999" } }
+    /**
+     * List mode: recent sessions with summary stats.
+     *
+     * This read the table with no filter and `order=event_time.asc` behind
+     * `Range: "0-49999"`. PostgREST caps a response at 1,000 rows with no
+     * error, so the list was built from the OLDEST thousand events of
+     * 133,753 — a fixed nine-day slice from the product's launch. Every
+     * session an admin could open here was from that window, and no session
+     * recorded since has ever appeared.
+     *
+     * Newest first and paged, bounded by a window instead of by an invisible
+     * cap. Fourteen days by default, `?days=` clamped to 90.
+     */
+    const days = Math.min(Math.max(Number(url.searchParams.get("days")) || 14, 1), 90);
+    const since = new Date(Date.now() - days * 86_400_000).toISOString();
+    const allEvents = await fetchAllRows<BehaviorEvent>(
+      `/rest/v1/survey_behavior_event?select=session_id,q_id,direction,time_spent_ms,answered,event_time,question_index&event_time=gte.${since}&order=event_time.desc`
     );
-    if (!res.ok) {
+    if (allEvents === null) {
       logger.error("Replay: session list query failed");
       return NextResponse.json({ error: "Unable to load data." }, { status: 500 });
     }
-    const allEvents = (await res.json()) as BehaviorEvent[];
 
     // Group by session_id
     const sessionMap = new Map<string, BehaviorEvent[]>();
@@ -89,12 +101,17 @@ export async function GET(request: Request) {
       const completed = events.some((e) => e.direction === "complete");
       const abandoned = events.some((e) => e.direction === "abandon");
       const backtracks = events.filter((e) => e.direction === "back").length;
+      // Computed by min/max rather than by position. The query used to be
+      // `event_time.asc`, so events[0] was genuinely the first — reading them
+      // positionally silently swaps them the moment the order changes, which
+      // it just did. min/max is right under either order.
+      const times = events.map((e) => e.event_time).sort();
       return {
         sessionId: sid,
         eventCount: events.length,
         // events.length is verified non-zero by the caller's filter; first/last defined.
-        firstEvent: events[0]!.event_time,
-        lastEvent: events[events.length - 1]!.event_time,
+        firstEvent: times[0]!,
+        lastEvent: times[times.length - 1]!,
         totalTimeMs,
         maxQuestionReached: maxQ,
         backtracks,
