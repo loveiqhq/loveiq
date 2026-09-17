@@ -23,6 +23,20 @@ export async function GET() {
       sha: SHA,
       builtAt: process.env.VERCEL_DEPLOYMENT_ID ?? null,
       env: process.env.VERCEL_ENV ?? null,
+      /**
+       * The BUILD-TIME twin of `env`, and not the same variable.
+       *
+       * `isProductionSite()` and `isNonProdDeploy()` both discriminate on
+       * `NEXT_PUBLIC_VERCEL_ENV`, which Vercel inlines at build time only when the
+       * project has "Automatically expose System Environment Variables" enabled. `env`
+       * above is the RUNTIME `VERCEL_ENV`, which is always present — so it being
+       * "production" proves nothing about the one the gates actually read.
+       *
+       * That distinction is load-bearing. If this comes back null on a deployment, the
+       * 2026-09-14 fix that stops preview builds identifying as the live site is silently
+       * doing nothing, and every preview is loading the real analytics tags again.
+       */
+      publicEnv: process.env.NEXT_PUBLIC_VERCEL_ENV ?? null,
     },
     {
       headers: {
