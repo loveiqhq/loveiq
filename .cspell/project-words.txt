@@ -86,6 +86,8 @@ randomisation
 randomise
 randomised
 randomising
+reauthenticates
+Reauthentication
 recaptcha
 recognisable
 Resend

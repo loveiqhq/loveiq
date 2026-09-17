@@ -792,6 +792,38 @@ attribute condition rejects; the log names all three. A 403 from
 federation fails the code falls back to the refresh token and still impersonates, so
 a stale pool config degrades to the previous path rather than to no access.
 
+### Why gcloud asks you to log in again, roughly daily
+
+The error is `Reauthentication failed … cannot prompt during non-interactive
+execution` — and it is NOT an expired token. The refresh token is fine; Google is
+refusing to mint an access token from it until a human reauthenticates, because
+Workspace applies a **session length to Google Cloud** for `@loveiq.org` accounts.
+It bites both credentials independently: `gcloud auth login` (what impersonation
+uses) and `gcloud auth application-default login` (what client libraries and the
+GA4 MCP use).
+
+Production never sees this, which is why its crons keep working while a laptop's
+stop: prod holds no Google credential at all and federates a Vercel OIDC token
+instead. There is no user session to expire.
+
+To clear it now:
+
+```bash
+gcloud auth application-default login   # client libraries, the GA4 MCP
+gcloud auth login                       # gcloud itself, incl. impersonation
+```
+
+**To stop it recurring** — Google Admin console → Security → Access and data
+control → **Google Cloud session control** → set _Never require
+reauthentication_. It is one setting, it needs a Workspace super-admin, and it
+governs only Cloud Console and the gcloud CLI: Gmail, Drive and Calendar session
+security are a separate policy and are unaffected.
+
+The two alternatives both dead-end, which is why the policy is the answer: a
+downloadable service-account key is refused by
+`constraints/iam.disableServiceAccountKeyCreation`, and impersonation still needs
+a live user credential to act from, so it expires with the same policy.
+
 ### Backfilling Google without a working refresh token
 
 The `GOOGLE_OAUTH_*` refresh token dies periodically to a Workspace reauth policy
