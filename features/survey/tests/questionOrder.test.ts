@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  orderAskedQuestions,
   orderDemandBlockBeforeEmail,
   orderEmailLast,
   EMAIL_QID,
@@ -68,5 +69,53 @@ describe("orderEmailLast", () => {
   it("returns the input unchanged when there is no email question to move", () => {
     const input = [q("00001"), q(OPT_IN_QID)];
     expect(orderEmailLast(input)).toBe(input);
+  });
+});
+
+/**
+ * The composer SurveyEngine and the end-to-end walks both call. Asserted on the exported
+ * function rather than on a hand-written composition, because hand-written compositions
+ * are the defect: two E2E specs rebuilt the asked order from `orderEmailLast` alone and
+ * silently stopped matching what the engine renders when the demand block landed. E2E is
+ * not a CI gate, so nothing caught it — these run in CI and do.
+ */
+describe("orderAskedQuestions", () => {
+  const asked = orderAskedQuestions(surveyQuestions);
+
+  it("ends on the marketing opt-in, with email immediately before it", () => {
+    expect(asked[asked.length - 1]!.qId).toBe(OPT_IN_QID);
+    expect(asked[asked.length - 2]!.qId).toBe(EMAIL_QID);
+  });
+
+  it("asks the demand block immediately before email, in its authored order", () => {
+    // Written out rather than read from DEMAND_BLOCK_QIDS. Reading the constant makes the
+    // assertion a tautology — reorder it and both sides move together and this still
+    // passes (verified: that mutation survived until these ids were inlined). The
+    // authored order IS the requirement, because C10 ("what you just picked") refers back
+    // to C9, so it belongs in the test.
+    const emailIdx = asked.findIndex((entry) => entry.qId === EMAIL_QID);
+    expect(asked.slice(emailIdx - 3, emailIdx).map((e) => e.qId)).toEqual([
+      "16016",
+      "16017",
+      "16018",
+    ]);
+  });
+
+  it("applies EVERY stage — not a subset", () => {
+    // The failure mode is a caller (or a future edit) applying only some of the pipeline.
+    // Each stage below moves at least one question, so a composer missing any one of them
+    // produces a different array than the full composition.
+    expect(asked.map((e) => e.qId)).toEqual(
+      orderDemandBlockBeforeEmail(orderEmailLast(surveyQuestions)).map((e) => e.qId)
+    );
+    expect(asked.map((e) => e.qId)).not.toEqual(orderEmailLast(surveyQuestions).map((e) => e.qId));
+    expect(asked.map((e) => e.qId)).not.toEqual(surveyQuestions.map((e) => e.qId));
+  });
+
+  it("is a strict permutation of the generated set", () => {
+    expect([...asked.map((e) => e.qId)].sort()).toEqual(
+      [...surveyQuestions.map((e) => e.qId)].sort()
+    );
+    expect(new Set(asked.map((e) => e.qId)).size).toBe(surveyQuestions.length);
   });
 });
