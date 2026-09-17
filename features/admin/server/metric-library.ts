@@ -1,5 +1,5 @@
 import { ADMIN_BENCHMARKS, type AdminBenchmarkDefinition } from "@/data/admin-benchmarks";
-import { supabaseFetch } from "@features/admin/server/supabase";
+import { countRows, supabaseFetch } from "@features/admin/server/supabase";
 import { WORKFLOW_TAGS } from "@features/admin/server/workflow-tags";
 import logger from "@shared/observability/logger";
 
@@ -201,24 +201,29 @@ async function fetchWaitlistToStartRate(): Promise<number | null> {
   return waitlist === 0 ? 0 : Math.round((started / waitlist) * 1000) / 10;
 }
 
+/**
+ * COUNTED, not fetched — this is the canonical definition of the metric.
+ *
+ * It used to read both tables with `Range: 0-49999` and take `.length` and a
+ * Set size. PostgREST caps a response at 1,000 rows with no error, and
+ * report_session holds 11,224 against personal_report's 2,051 — so the
+ * numerator was a distinct count over an arbitrary 9% slice while the
+ * denominator was capped at 1,000. It reported **16%**. The real figure is
+ * **96%**, and this metric's own healthy threshold is 50%, so the number was
+ * not merely wrong, it was on the other side of the bar.
+ *
+ * The inner embed counts reports having at least one session, which is exactly
+ * `count(DISTINCT personal_report_id)` over sessions whose report still exists,
+ * and transfers no rows.
+ */
 async function fetchReportViewRate(): Promise<number | null> {
-  const [reportsRes, sessionsRes] = await Promise.all([
-    supabaseFetch("/rest/v1/personal_report?select=id", {
-      headers: { Range: "0-49999" },
-    }),
-    supabaseFetch("/rest/v1/report_session?select=personal_report_id", {
-      headers: { Range: "0-49999" },
-    }),
+  const [reports, viewed] = await Promise.all([
+    countRows("/rest/v1/personal_report?select=id"),
+    countRows("/rest/v1/personal_report?select=id,report_session!inner(id)"),
   ]);
-  if (!reportsRes.ok || !sessionsRes.ok) return null;
-  const reports = (await reportsRes.json()) as Array<{ id: number }>;
-  const sessions = (await sessionsRes.json()) as Array<{ personal_report_id: number }>;
-  if (reports.length === 0) return 0;
-  return (
-    Math.round(
-      (new Set(sessions.map((row) => row.personal_report_id)).size / reports.length) * 1000
-    ) / 10
-  );
+  if (reports === null || viewed === null) return null;
+  if (reports === 0) return 0;
+  return Math.round((viewed / reports) * 1000) / 10;
 }
 
 async function fetchRevenueTotal(): Promise<number | null> {

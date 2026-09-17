@@ -13,7 +13,7 @@ vi.mock("@shared/http/circuit-breaker", () => ({
   getBreaker: () => ({ fire: (fn: () => Promise<Response>) => fn() }),
 }));
 
-import { POSTGREST_MAX_ROWS, supabaseFetch } from "@features/admin/server/supabase";
+import { countRows, POSTGREST_MAX_ROWS, supabaseFetch } from "@features/admin/server/supabase";
 
 function respond(contentRange: string | null): void {
   mockFetch.mockResolvedValue({
@@ -66,5 +66,56 @@ describe("PostgREST max-rows truncation", () => {
     respond(null);
     await supabaseFetch("/rest/v1/rpc/get_survey_friction", { method: "POST", body: "{}" });
     expect(mockWarn).not.toHaveBeenCalled();
+  });
+});
+
+describe("countRows — the answer to the cap", () => {
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "service-key";
+
+  afterEach(() => vi.clearAllMocks());
+
+  /** A count response: one row, true total after the slash. */
+  function counted(contentRange: string | null, ok = true): void {
+    mockFetch.mockResolvedValue({
+      ok,
+      headers: { get: (k: string) => (k === "content-range" ? contentRange : null) },
+    } as unknown as Response);
+  }
+
+  it("reads the true total, not the number of rows returned", async () => {
+    // This is the whole point: 21,328 analytics events existed and the health
+    // check reported 1,000, because it measured a response body instead of
+    // asking for a count.
+    counted("0-0/21328");
+    await expect(countRows("/rest/v1/analytics_event?select=id")).resolves.toBe(21328);
+  });
+
+  it("asks for a count and for no rows", async () => {
+    counted("0-0/2061");
+    await countRows("/rest/v1/survey_submission?select=id");
+    const headers = (mockFetch.mock.calls[0]?.[1] as { headers: Record<string, string> }).headers;
+    expect(headers.Prefer).toBe("count=exact");
+    // Without this the body is still up to 1,000 rows of payload for a number.
+    expect(headers.Range).toBe("0-0");
+  });
+
+  it("never fires the truncation warning it exists to prevent", async () => {
+    counted("0-0/21328");
+    await countRows("/rest/v1/analytics_event?select=id");
+    expect(mockWarn).not.toHaveBeenCalled();
+  });
+
+  it("returns null rather than 0 when the count cannot be read", async () => {
+    // A failed count and an empty table must not look the same: 0 would read as
+    // a dead funnel and trip every degraded check at once.
+    counted(null);
+    await expect(countRows("/rest/v1/payment?select=id")).resolves.toBeNull();
+
+    counted("0-0/*");
+    await expect(countRows("/rest/v1/payment?select=id")).resolves.toBeNull();
+
+    counted("0-0/2061", false);
+    await expect(countRows("/rest/v1/payment?select=id")).resolves.toBeNull();
   });
 });

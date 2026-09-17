@@ -84,3 +84,37 @@ export async function supabaseFetch(
   warnIfTruncated(path, res);
   return res;
 }
+
+/**
+ * How many rows match, without transferring any.
+ *
+ * `Prefer: count=exact` puts the true total after the slash in `Content-Range`,
+ * and `Range: 0-0` asks for a single row, so the count is exact however large
+ * the table is. This is the answer to `warnIfTruncated` above: a caller that
+ * wants a NUMBER should never fetch rows to measure their length, because
+ * PostgREST caps the body at 1,000 with no error and the number then freezes
+ * there forever.
+ *
+ * Found on 2026-09-17 in the admin health check, which asked for `Range:
+ * 0-49999` on five whole tables and believed it. Every count it reported was
+ * exactly 1,000: submissions 1,000 of a real 2,061, reports 1,000 of 2,051,
+ * analytics events 1,000 of 21,328.
+ *
+ * A DISTINCT count has no equivalent header, but an inner embed gets one for
+ * free: `personal_report?select=id,report_session!inner(id)` counts the reports
+ * that have at least one session, which is `count(DISTINCT personal_report_id)`
+ * over rows that still exist. Verified against the SQL: both say 1,968.
+ *
+ * Returns null when the count cannot be read, never 0 — a failed count and an
+ * empty table must not look the same.
+ */
+export async function countRows(path: string): Promise<number | null> {
+  const res = await supabaseFetch(path, {
+    headers: { Prefer: "count=exact", Range: "0-0" },
+  });
+  if (!res.ok) return null;
+  const total = res.headers.get("content-range")?.split("/")[1];
+  if (!total || total === "*") return null;
+  const n = Number(total);
+  return Number.isFinite(n) ? n : null;
+}

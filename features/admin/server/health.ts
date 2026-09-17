@@ -1,5 +1,5 @@
 import { buildTrustDescriptor } from "@features/admin/server/next-level";
-import { supabaseFetch } from "@features/admin/server/supabase";
+import { countRows, supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 
 export interface AdminHealthServiceStatus {
@@ -219,30 +219,46 @@ export async function buildHealthStatusSnapshot(): Promise<AdminHealthSnapshot> 
 
   try {
     const since24h = new Date(Date.now() - 86_400_000).toISOString();
+    /**
+     * COUNTED, not fetched.
+     *
+     * These five asked for `Range: 0-49999` on whole tables, which reads as
+     * "give me up to fifty thousand rows" and is how the code was written — but
+     * PostgREST caps a response at 1,000 with no error, no warning and no
+     * truncation flag. So every number here was exactly 1,000 and had been
+     * since the tables passed that size, and would have stayed 1,000 no matter
+     * how much the business grew: submissions 1,000 against a real 2,061,
+     * reports 1,000 against 2,051, analytics events 1,000 against 21,328.
+     *
+     * `countRows` reads the true total out of `Content-Range` and transfers no
+     * rows at all, so this is both correct and cheaper than what it replaces.
+     * Report VIEWS are a distinct count, which has no such header — the inner
+     * embed counts reports having at least one session instead, which is the
+     * same number and one request.
+     */
     const [
-      submissionsRes,
-      reportsRes,
-      sessionsRes,
-      paymentsRes,
-      analyticsRes,
+      submissions,
+      completed,
+      reports,
+      reportViews,
+      succeededPayments,
+      analyticsEvents,
+      latestReportRes,
       rateLimitRes,
       webhookRes,
     ] = await Promise.all([
-      supabaseFetch("/rest/v1/survey_submission?select=id,status,created_date_time", {
-        headers: { Range: "0-49999" },
-      }),
-      supabaseFetch("/rest/v1/personal_report?select=id,created_date_time", {
-        headers: { Range: "0-49999" },
-      }),
-      supabaseFetch("/rest/v1/report_session?select=personal_report_id", {
-        headers: { Range: "0-49999" },
-      }),
-      supabaseFetch("/rest/v1/payment?select=id,status,payment_date_time", {
-        headers: { Range: "0-49999" },
-      }),
-      supabaseFetch("/rest/v1/analytics_event?select=id,event_time,event_type", {
-        headers: { Range: "0-49999" },
-      }),
+      countRows("/rest/v1/survey_submission?select=id"),
+      countRows("/rest/v1/survey_submission?select=id&status=eq.completed"),
+      countRows("/rest/v1/personal_report?select=id"),
+      countRows("/rest/v1/personal_report?select=id,report_session!inner(id)"),
+      countRows("/rest/v1/payment?select=id&status=eq.succeeded"),
+      countRows("/rest/v1/analytics_event?select=id"),
+      // The trust descriptor wants the newest report's timestamp. It used to
+      // take `reports[0]`, off a query with no ORDER BY — an arbitrary row in
+      // table order, not the latest.
+      supabaseFetch(
+        "/rest/v1/personal_report?select=created_date_time&order=created_date_time.desc&limit=1"
+      ),
       supabaseFetch(`/rest/v1/rate_limits?select=key,hits,updated_at&updated_at=gte.${since24h}`, {
         headers: { Range: "0-999" },
       }),
@@ -251,40 +267,33 @@ export async function buildHealthStatusSnapshot(): Promise<AdminHealthSnapshot> 
       ),
     ]);
 
-    if (submissionsRes.ok) {
-      const submissions = (await submissionsRes.json()) as Array<{
-        id: number;
-        status: string;
-        created_date_time: string;
-      }>;
-      submissionsCount = submissions.length;
-      completedCount = submissions.filter((row) => row.status === "completed").length;
-    }
+    // A failed count returns null, never 0, so a Supabase outage does not read
+    // as an empty funnel and trip every degraded check at once.
+    submissionsCount = submissions ?? 0;
+    completedCount = completed ?? 0;
+    reportCount = reports ?? 0;
+    reportViewedCount = reportViews ?? 0;
 
-    if (reportsRes.ok) {
-      const reports = (await reportsRes.json()) as Array<{ id: number; created_date_time: string }>;
-      reportCount = reports.length;
+    if (reports !== null) {
+      const latest = latestReportRes.ok
+        ? ((await latestReportRes.json()) as Array<{ created_date_time: string }>)[0]
+            ?.created_date_time
+        : undefined;
       const trust = buildTrustDescriptor({
         source: "personal_report",
         mode: "live",
-        sampleSize: reports.length,
-        lastUpdated: reports[0]?.created_date_time ?? null,
+        sampleSize: reports,
+        lastUpdated: latest ?? null,
       });
       integrations.push({
         name: "Report Generation",
         status: trust.warning ? "degraded" : "healthy",
-        detail: trust.warning ?? `${reports.length} reports generated`,
+        detail: trust.warning ?? `${reports} reports generated`,
       });
     }
 
-    if (sessionsRes.ok) {
-      const sessions = (await sessionsRes.json()) as Array<{ personal_report_id: number }>;
-      reportViewedCount = new Set(sessions.map((row) => row.personal_report_id)).size;
-    }
-
-    if (paymentsRes.ok) {
-      const payments = (await paymentsRes.json()) as Array<{ id: number; status: string }>;
-      paymentCount = payments.filter((row) => row.status === "succeeded").length;
+    if (succeededPayments !== null) {
+      paymentCount = succeededPayments;
       integrations.push({
         name: "Payments",
         status: paymentCount > 0 ? "healthy" : "degraded",
@@ -295,9 +304,8 @@ export async function buildHealthStatusSnapshot(): Promise<AdminHealthSnapshot> 
       });
     }
 
-    if (analyticsRes.ok) {
-      const analyticsEvents = (await analyticsRes.json()) as Array<{ id: number }>;
-      analyticsEventCount = analyticsEvents.length;
+    if (analyticsEvents !== null) {
+      analyticsEventCount = analyticsEvents;
       integrations.push({
         name: "Analytics Events",
         status: analyticsEventCount > 0 ? "healthy" : "degraded",
