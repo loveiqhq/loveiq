@@ -640,10 +640,38 @@ const findings = await posthog(`
     AND timestamp > now() - INTERVAL ${LOOKBACK_HOURS} HOUR
     AND properties.scanner_output_verdict = 'yes'
   ORDER BY timestamp DESC
-  LIMIT 10
+  LIMIT 50
 `);
 
 console.log(`${findings.length} finding(s) in the last ${LOOKBACK_HOURS}h`);
+
+/**
+ * How many findings may actually DRIVE A BROWSER in one run.
+ *
+ * This was `LIMIT 10` in the query above, which bounded the LOOKBACK rather
+ * than the work — the same shape as the cron's `slice(0, MAX_POSTS_PER_RUN)`,
+ * fixed earlier today. Newest-first with a 6-hour window on a 3-hour schedule
+ * means findings come back on two consecutive runs, and an already-verified one
+ * still consumed a slot (it is skipped AFTER the limit, not before). Once ten
+ * arrived inside one window every older finding ranked below them and was never
+ * fetched at all: not claimed, not verified, not counted, simply absent. The
+ * drop arrived exactly when the scanners were busiest.
+ *
+ * The cost this bounds is a probe run — real browsers on two engines, minutes
+ * each — against the workflow's 25-minute timeout. Refutations, gaps and
+ * duplicates are cheap and do not count.
+ *
+ * A deferred finding IS already claimed by this point, and what returns it is
+ * the two-phase commit: `claim_slack_alert` writes `delivered = FALSE` and
+ * hands the claim to the next caller once it is more than ten minutes old. This
+ * workflow runs every three hours, so the claim is always stale by then and the
+ * finding comes back. That ten-minute window is load-bearing — raise it above
+ * the schedule interval and every deferred finding is skipped forever instead.
+ * The count is printed rather than swallowed, so a standing backlog is visible.
+ */
+const PROBE_BUDGET = Number(process.env.PROBE_BUDGET ?? 10);
+let probeRuns = 0;
+let deferred = 0;
 let gaps = 0;
 let confirmed = 0;
 
@@ -779,7 +807,14 @@ for (const [
     await recordFinding({ ...base, outcome: "duplicate", criterion: criterion.id });
     continue;
   }
+  if (!CLASSIFY_ONLY && probeRuns >= PROBE_BUDGET) {
+    // Deliberately NOT marked verified: the claim goes stale in ten minutes and
+    // the next run re-claims it. Marking it here would lose the finding.
+    deferred += 1;
+    continue;
+  }
   probedThisRun.add(pairKey);
+  if (!CLASSIFY_ONLY) probeRuns += 1;
 
   if (CLASSIFY_ONLY) {
     console.log(
@@ -914,5 +949,7 @@ for (const [
 console.log(
   `\n${confirmed} reproduced · ${gaps} with no probe coverage` +
     (contradicted ? ` · ${contradicted} contradicted by events` : "") +
-    (skipped ? ` · ${skipped} already verified on an earlier run` : "")
+    (skipped ? ` · ${skipped} already verified on an earlier run` : "") +
+    // Never silent: a deferred finding is the thing that used to disappear.
+    (deferred ? ` · ${deferred} left for the next run (probe budget ${PROBE_BUDGET})` : "")
 );
