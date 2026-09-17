@@ -300,6 +300,29 @@ describe("mineDecisions — a per-minute quota is a pause, not the end of the ru
     expect(complete).toHaveBeenCalledTimes(1);
   });
 
+  /**
+   * Same argument one bucket over. `reason: "error"` covers an HTTP 500, a dead socket
+   * and an unparseable body; on 2026-09-17 a run reported the bare word and nothing
+   * outside could tell which. The LLM layer already builds `detail` ("HTTP 500") and
+   * threw it away at this boundary.
+   */
+  it("names WHAT failed when the generic error bucket stops the run", async () => {
+    complete.mockResolvedValue({ ok: false, reason: "error", detail: "HTTP 500" });
+
+    const result = await run(2, 240_000);
+
+    expect(result.skipped).toBe("error:HTTP 500");
+  });
+
+  it("leaves a detail-less error bare rather than inventing a cause", async () => {
+    // The same discipline as the unknown rate limit below: no detail, no claim.
+    complete.mockResolvedValue({ ok: false, reason: "error" });
+
+    const result = await run(2, 240_000);
+
+    expect(result.skipped).toBe("error");
+  });
+
   it("leaves an UNKNOWN limit unnamed rather than guessing per-minute", async () => {
     // A provider that says nothing about which limit it hit must not be reported as
     // per-minute. Naming it would be a claim nobody made, and the bare string is what
@@ -327,7 +350,7 @@ describe("mineDecisions — a per-minute quota is a pause, not the end of the ru
 
     const result = await run(2, 240_000);
 
-    expect(result.skipped).toBe("error");
+    expect(result.skipped).toBe("error:HTTP 500");
     expect(complete).toHaveBeenCalledTimes(1);
   });
 
@@ -347,7 +370,7 @@ describe("mineDecisions — a per-minute quota is a pause, not the end of the ru
 
     const result = await run(2, 240_000);
 
-    expect(result.skipped).toBe("error");
+    expect(result.skipped).toBe("error:HTTP 503");
     expect(complete).toHaveBeenCalledTimes(1);
   });
 

@@ -761,7 +761,12 @@ export async function ingestDrive(
       // One unreadable document must not cost the rest of the run -- and it must
       // not cost the run's STATUS either, which is what calling stop() here did.
       logger.warn({ err, file: file.id }, "brain-ingest drive: export failed");
-      exportFailures.push(String(file.id));
+      // WHY it failed, not just which file. `docText` throws `export <status>` /
+      // `download <status>`, and without that status the summary names three opaque
+      // ids and the log line holding the reason has rolled off hours before anyone
+      // reads them -- which is the same reasoning that put the ids here at all.
+      const why = err instanceof Error ? err.message : String(err);
+      exportFailures.push(`${file.id}(${why.slice(0, 40)})`);
     }
   }
 

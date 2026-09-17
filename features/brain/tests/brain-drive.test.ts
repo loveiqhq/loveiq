@@ -360,6 +360,10 @@ describe("ingestDrive", () => {
     // that holds hours while this cron runs hourly, so by the time anyone looks
     // it has rolled off; the note in `cron_run` is what lasts.
     expect(res.detail).toMatch(/exportFailed=1:1AbCdEf/);
+    // ...and WHY it failed, by the same argument. Three opaque ids and no status
+    // is a note nobody can act on without the logs that have already rolled off:
+    // an unexportable TYPE, a 404 and a permission error need different fixes.
+    expect(res.detail).toMatch(/exportFailed=1:1AbCdEf\(export 500\)/);
     // The listing was fine, so deletion is still safe.
     expect(res.sweepBlocked).toBe(false);
   });

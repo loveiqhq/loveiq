@@ -472,7 +472,16 @@ export async function mineDecisions(
        */
       const stopped =
         res.reason !== "rate_limited" || res.dailyQuota === undefined
-          ? res.reason
+          ? /**
+             * ...and the same argument for the `error` bucket, which collapses an HTTP
+             * 500, a network failure and an unparseable response into one word. On
+             * 2026-09-17 this run reported the bare "error" and there was no way to tell
+             * which from the outside — the exact complaint above, one bucket over.
+             * `detail` already carries "HTTP 500"; nothing read it.
+             */
+            res.reason === "error" && res.detail
+            ? `error:${res.detail.slice(0, 60)}`
+            : res.reason
           : res.dailyQuota
             ? "rate_limited_daily"
             : "rate_limited_minute";
