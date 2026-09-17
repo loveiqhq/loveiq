@@ -95,8 +95,10 @@ describe("registerOutliers — inconsistencies in the SHIPPED copy", () => {
      * slip. A chapter split 1/14 is one block someone forgot to convert. Naming the
      * archetype turns "the copy is inconsistent" into a task.
      */
+    // NOTE: deliberately NOT asserting found.length > 0. The shipped copy is clean as of
+    // 2026-09-18, and a test that requires a defect to exist is a test that punishes fixing
+    // it. The detector's arithmetic is proven on the synthetic corpus below instead.
     const found = registerOutliers();
-    expect(found.length).toBeGreaterThan(0);
     for (const o of found) {
       expect(o.archetypes.length).toBeLessThanOrEqual(2);
       expect(o.archetypes.length).toBeGreaterThan(0);
@@ -111,6 +113,43 @@ describe("registerOutliers — inconsistencies in the SHIPPED copy", () => {
     // These are 0/14 and 14/14 — nothing to reconcile.
     expect(reported.has("core_archetype")).toBe(false);
     expect(reported.has("insecurities")).toBe(false);
+  });
+
+  /** 14 archetypes, `second` of them written in second person. */
+  const corpus = (second: number) =>
+    Object.fromEntries([
+      [
+        "ch",
+        Object.fromEntries(
+          Array.from({ length: 14 }, (_, i) => [
+            `A${i}`,
+            i < second ? "<p>you should know this.</p>" : "<p>they tend to know this.</p>",
+          ])
+        ),
+      ],
+    ]);
+
+  it("reports a 1-of-14 slip and names the archetype", () => {
+    const found = registerOutliers(2, corpus(1));
+    expect(found).toHaveLength(1);
+    expect(found[0].archetypes).toEqual(["A0"]);
+    expect(found[0].majority).toBe("third");
+    expect(found[0].total).toBe(14);
+    expect(found[0].offendingSentences["A0"].join(" ")).toContain("you should know");
+  });
+
+  it("reports the inverse: 1-of-14 stuck in THIRD person among a second-person chapter", () => {
+    const found = registerOutliers(2, corpus(13));
+    expect(found).toHaveLength(1);
+    expect(found[0].archetypes).toEqual(["A13"]);
+    expect(found[0].majority).toBe("second");
+  });
+
+  it("stays silent on a genuine split and on unanimity", () => {
+    expect(registerOutliers(2, corpus(6))).toHaveLength(0); // a decision, not a slip
+    expect(registerOutliers(2, corpus(0))).toHaveLength(0); // 0/14
+    expect(registerOutliers(2, corpus(14))).toHaveLength(0); // 14/14
+    expect(registerOutliers(2, corpus(3))).toHaveLength(0); // 3 > maxOutliers
   });
 
   it("does not report a genuinely split chapter as a slip", () => {

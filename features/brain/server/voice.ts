@@ -190,10 +190,17 @@ export function offendingSentences(text: string, majority: Register): string[] {
  * and naming the one block that differs turns "the copy is inconsistent" into a task. Found
  * on the shipped copy 2026-09-16: seven blocks across five chapters.
  */
-export function registerOutliers(maxOutliers = 2): RegisterOutlier[] {
+export function registerOutliers(
+  maxOutliers = 2,
+  /** Injectable so the minority arithmetic stays testable once the shipped copy is clean. */
+  content: Record<string, Record<string, string>> = archetypeContent as Record<
+    string,
+    Record<string, string>
+  >
+): RegisterOutlier[] {
   const out: RegisterOutlier[] = [];
-  for (const chapter of allChapters()) {
-    const byArchetype = (archetypeContent as Record<string, Record<string, string>>)[chapter];
+  for (const chapter of Object.keys(content)) {
+    const byArchetype = content[chapter];
     if (!byArchetype) continue;
     const archetypes = Object.keys(byArchetype);
     const withYou = archetypes.filter((a) =>
