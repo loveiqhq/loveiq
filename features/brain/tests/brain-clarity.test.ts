@@ -3,6 +3,7 @@ import {
   buildClarityRows,
   collapseByPage,
   redactUrl,
+  truncatedMetrics,
   worst,
 } from "@features/brain/server/ingest/clarity";
 
@@ -187,5 +188,42 @@ describe("buildClarityRows", () => {
     // every search about the pages it would have named.
     expect(buildClarityRows([], "2026-09-16", "2026-09-17T05:40:00Z")).toEqual([]);
     expect(buildClarityRows([pages[1]!], "2026-09-16", "2026-09-17T05:40:00Z")).toEqual([]);
+  });
+});
+
+describe("truncatedMetrics", () => {
+  /**
+   * The export caps at 1,000 rows and does NOT paginate past it. A page with a real
+   * problem can therefore be absent, and a summary that silently omits it reads exactly
+   * like a summary that found nothing — the "no silent caps" rule.
+   */
+  const bulk = (name: string, n: number) => ({
+    metricName: name,
+    information: Array.from({ length: n }, (_, i) => row(`${P}/p${i}`, 5, 20)),
+  });
+
+  it("names a metric that came back at the cap", () => {
+    expect(truncatedMetrics([bulk("DeadClickCount", 1000)])).toEqual(["DeadClickCount"]);
+  });
+
+  it("says nothing when every metric is comfortably under it", () => {
+    // The first real pull returned 214-277 rows per metric.
+    expect(truncatedMetrics([bulk("DeadClickCount", 277)])).toEqual([]);
+  });
+
+  it("puts the warning in the body, where the reader of the summary will see it", () => {
+    const pages = [{ path: "/survey", sessions: 133, signals: { DeadClickCount: 22.6 } }];
+    const body = buildClarityRows(pages, "2026-09-16", "2026-09-17T05:40:00Z", 10, [
+      "RageClickCount",
+    ])[0]!.body;
+    expect(body).toContain("INCOMPLETE");
+    expect(body).toContain("RageClickCount");
+    expect(body).toContain("not because nothing happened");
+  });
+
+  it("does not cry truncation when there was none", () => {
+    const pages = [{ path: "/survey", sessions: 133, signals: { DeadClickCount: 22.6 } }];
+    const body = buildClarityRows(pages, "2026-09-16", "2026-09-17T05:40:00Z")[0]!.body;
+    expect(body).not.toContain("INCOMPLETE");
   });
 });

@@ -58,6 +58,17 @@ export function redactUrl(raw: string): string {
   return h >= 0 ? out.slice(0, h) : out;
 }
 
+/**
+ * The API's row cap, which it does NOT paginate past.
+ *
+ * At that many rows the feed is truncated and there is no second page to ask for, so a
+ * page with a real problem can simply be absent — and a summary that silently omits it
+ * reads exactly like a summary that found nothing. Measured on the first pull the metrics
+ * returned 214-277 rows each, well clear of it, but the site grows and query strings
+ * multiply rows fast.
+ */
+const ROW_CAP = 1000;
+
 /** One frustration signal on one page. */
 export interface PageSignal {
   path: string;
@@ -90,6 +101,14 @@ const num = (v: unknown): number => {
  * Pure, so the shaping is testable without spending one of the ten daily requests -- and
  * it has to be, because a bug here cannot be found by re-running against the API.
  */
+/** Which metrics came back at the API's row cap, and are therefore incomplete. */
+export function truncatedMetrics(metrics: RawMetric[]): string[] {
+  return metrics
+    .filter((m) => (Array.isArray(m.information) ? m.information.length : 0) >= ROW_CAP)
+    .map((m) => String(m.metricName ?? "unknown"))
+    .sort();
+}
+
 export function collapseByPage(metrics: RawMetric[]): PageSignal[] {
   /**
    * RATES ARE RECOMBINED AS COUNTS, never as a maximum.
@@ -175,7 +194,8 @@ export function buildClarityRows(
   pages: PageSignal[],
   day: string,
   stampedAt: string,
-  minSessions = 10
+  minSessions = 10,
+  truncated: string[] = []
 ): BrainRow[] {
   const worthReading = pages.filter((p) => p.sessions >= minSessions && worst(p) > 0);
   if (worthReading.length === 0) return [];
@@ -209,6 +229,14 @@ export function buildClarityRows(
     "",
     ...lines,
     "",
+    ...(truncated.length > 0
+      ? [
+          `INCOMPLETE: ${truncated.join(", ")} came back at the export API's ${ROW_CAP}-row`,
+          "cap, which it does not paginate past. Pages missing from the list below may be",
+          "missing because they were cut off, not because nothing happened on them.",
+          "",
+        ]
+      : []),
     "Session replays for any of these are in the Microsoft Clarity dashboard, which is the",
     "only place the actual recording can be watched — this is the summary, not the footage.",
     "Bot sessions are excluded by Clarity itself. Report tokens are redacted to /report/<token>,",
@@ -261,8 +289,11 @@ export async function ingestClarity(day: string, stampedAt: string): Promise<Cla
     const json = (await res.json()) as unknown;
     if (!Array.isArray(json)) return { ok: false, rows: 0, pages: 0, reason: "unexpected_shape" };
 
-    const pages = collapseByPage(json as RawMetric[]);
-    const rows = buildClarityRows(pages, day, stampedAt);
+    const metrics = json as RawMetric[];
+    const pages = collapseByPage(metrics);
+    const cut = truncatedMetrics(metrics);
+    if (cut.length > 0) logger.warn({ cut }, "clarity: export hit the row cap and was truncated");
+    const rows = buildClarityRows(pages, day, stampedAt, 10, cut);
     const written = rows.length === 0 ? 0 : await upsertChunks(rows);
     return { ok: true, rows: written, pages: pages.length };
   } catch (err) {
