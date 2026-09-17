@@ -67,6 +67,7 @@ process.env.RESEND_AUDIENCE_ID = "aud_test_id";
 
 import { POST } from "@/app/api/survey/route";
 import { __resetSurveyStatusCacheForTests } from "@features/survey/server/server";
+import { assignQuestionOrderArm } from "@shared/experiments/questionOrderArm";
 
 // --- Helpers ---
 
@@ -605,6 +606,24 @@ describe("POST /api/survey", () => {
   describe("C13 arm stamping on utm_tracker", () => {
     const SESSION = "6f1c2a44-8e21-4d0b-9a77-2b3c4d5e6f70";
 
+    /**
+     * Two sessions whose arms are WRITTEN OUT, one per arm.
+     *
+     * `expect(["control", "variant"]).toContain(arm)` is true of any string the route
+     * could possibly emit. Verified: replacing the derivation with a hardcoded
+     * `"control"` left the whole suite green — the experiment would have reported 100%
+     * control, which reads as "no difference" rather than as a bug.
+     *
+     * The expected values are literals rather than a second call to
+     * `assignQuestionOrderArm`, so this also fails if the hash or the salt ever changes.
+     * That is the intent: an arm assignment that shifts mid-experiment resplits everyone
+     * and invalidates the comparison, so it must not pass quietly.
+     */
+    const ARM_FIXTURES = [
+      { sessionId: "00000000-0000-4000-8000-000000000002", arm: "control" },
+      { sessionId: "00000000-0000-4000-8000-000000000001", arm: "variant" },
+    ] as const;
+
     // Located by URL, not by index. An earlier draft of this block sat outside the
     // parent describe, so it missed that describe's `vi.resetAllMocks()` and read
     // call 0 of a much earlier test: three false failures and one false pass.
@@ -621,6 +640,36 @@ describe("POST /api/survey", () => {
       allowRateLimit();
       allowCooldown();
       mockSupabaseRpcOk();
+    });
+
+    it.each(ARM_FIXTURES)(
+      "stamps the arm the respondent actually saw ($arm)",
+      async ({ sessionId, arm }) => {
+        // The premise of deriving server-side is that the stamp cannot disagree with what
+        // was rendered. That only holds if the derivation is real — assert the VALUE.
+        await POST(
+          makeRequest({
+            ...validBody(),
+            sessionId,
+            utmTracker: JSON.stringify({ utm_source: "google" }),
+          })
+        );
+        expect(JSON.parse(rpcTracker()).question_order_arm).toBe(arm);
+      }
+    );
+
+    it("agrees with the pure function the client bucketed with", async () => {
+      // Same check from the other side: whatever the route stamps must equal what
+      // SurveyEngine computed from the same session id. A change to either that does not
+      // move the other is a silent desync between what was shown and what was recorded.
+      await POST(
+        makeRequest({
+          ...validBody(),
+          sessionId: SESSION,
+          utmTracker: JSON.stringify({ utm_source: "google" }),
+        })
+      );
+      expect(JSON.parse(rpcTracker()).question_order_arm).toBe(assignQuestionOrderArm(SESSION));
     });
 
     it("adds the arm to a tracker that already exists", async () => {
