@@ -48,24 +48,128 @@ export function recordingLink(sessionId: string): string {
 /** Scanner whose live config has drifted from the version pinned in git. */
 export interface ScannerDrift {
   scannerName: string;
-  pinnedVersion: number;
-  liveVersion: number;
+  /** What is wrong, so the alert can say it rather than imply it. */
+  reason: "missing" | "disabled" | "version" | "prompt" | "limit";
+  detail: string;
 }
 
-export function detectDrift(findings: Array<Pick<UxFinding, "scannerName" | "scannerVersion">>) {
+/** The subset of PostHog's scanner record this comparison needs. */
+export interface LiveScanner {
+  name: string;
+  enabled?: boolean;
+  scanner_version?: number;
+  scanner_config?: { prompt?: string } | null;
+  limit_reached?: boolean;
+}
+
+/**
+ * Compare what PostHog is actually running against what git pins.
+ *
+ * THE OLD VERSION INFERRED DRIFT FROM OBSERVATIONS and could not see the cases
+ * that matter. It took the findings list — already filtered to verdict=yes above
+ * 0.7 confidence in the last 90 minutes — and did
+ * `Math.max(0, ...seen.map(f => f.scannerVersion)) > pinned`. Three holes:
+ *
+ *   * a scanner that produced no high-confidence YES in 90 minutes yields
+ *     `Math.max(0)` = 0, which never exceeds the pinned version. So a QUIET or
+ *     DISABLED scanner could have its prompt rewritten in the PostHog UI
+ *     indefinitely and nothing would ever fire.
+ *   * only `live > pinned` fired, so a rollback was invisible.
+ *   * a prompt edited WITHOUT bumping the version — the likeliest way a UI edit
+ *     happens — was invisible by construction, and the prompt is the thing the
+ *     comment said it was protecting.
+ *
+ * The scanner list is readable (`GET /vision/scanners/`), carries the prompt in
+ * `scanner_config`, and `scripts/sync-vision-scanners.ts` already writes through
+ * it. Comparing the real thing is both simpler and actually capable of failing.
+ *
+ * Pure, so it can be tested without the network; `fetchScannerDrift` is the
+ * thin wrapper that fetches.
+ */
+export function compareScanners(live: readonly LiveScanner[]): ScannerDrift[] {
   const drift: ScannerDrift[] = [];
-  for (const scanner of UX_SCANNERS) {
-    const seen = findings.filter((f) => f.scannerName === scanner.name);
-    const live = Math.max(0, ...seen.map((f) => f.scannerVersion));
-    if (live > scanner.scannerVersion) {
+  for (const pinned of UX_SCANNERS) {
+    const found = live.find((s) => s.name === pinned.name);
+    if (!found) {
       drift.push({
-        scannerName: scanner.name,
-        pinnedVersion: scanner.scannerVersion,
-        liveVersion: live,
+        scannerName: pinned.name,
+        reason: "missing",
+        detail:
+          "it is pinned in git but PostHog has no scanner by that name, so nothing observes it",
+      });
+      continue;
+    }
+    if (found.enabled === false) {
+      drift.push({
+        scannerName: pinned.name,
+        reason: "disabled",
+        detail: "it is disabled in PostHog, so it observes nothing — silent, not noisy",
+      });
+    }
+    if (
+      typeof found.scanner_version === "number" &&
+      found.scanner_version !== pinned.scannerVersion
+    ) {
+      drift.push({
+        scannerName: pinned.name,
+        reason: "version",
+        detail: `PostHog is at version ${found.scanner_version}, git pins ${pinned.scannerVersion}`,
+      });
+    }
+    /**
+     * Both sides trimmed, for symmetry. The pinned side is a no-op today — all
+     * four prompts in scanners.ts have `len === trim().length` — so a mutation
+     * test that removes `pinned.prompt.trim()` survives. That is an equivalent
+     * mutant, not a missing test: the day someone reformats scanners.ts with a
+     * template literal that opens on a newline, an asymmetric comparison would
+     * report drift on every scanner, every day, forever.
+     */
+    const livePrompt = (found.scanner_config?.prompt ?? "").trim();
+    // Only when PostHog actually returned one: an empty field is a response
+    // shape we do not understand, and reporting drift from it would be noise.
+    if (livePrompt && livePrompt !== pinned.prompt.trim()) {
+      drift.push({
+        scannerName: pinned.name,
+        reason: "prompt",
+        detail:
+          `the prompt in PostHog differs from the one in git ` +
+          `(${livePrompt.length} chars live, ${pinned.prompt.trim().length} pinned) — ` +
+          `the criteria being applied are not the criteria in the repo`,
+      });
+    }
+    if (found.limit_reached) {
+      drift.push({
+        scannerName: pinned.name,
+        reason: "limit",
+        detail: "it has hit its credit limit, so it has stopped observing",
       });
     }
   }
   return drift;
+}
+
+/** Read the live scanners and compare. Empty on any failure — never a false alarm. */
+export async function fetchScannerDrift(): Promise<ScannerDrift[]> {
+  const key = process.env.POSTHOG_API_KEY;
+  if (!key) return [];
+  try {
+    const res = await fetchWithTimeout(
+      `https://eu.posthog.com/api/projects/${PROJECT}/vision/scanners/`,
+      {
+        headers: { Authorization: `Bearer ${key}` },
+        timeoutMs: 8000,
+      }
+    );
+    if (!res.ok) return [];
+    const payload = (await res.json()) as { results?: LiveScanner[] };
+    // A missing list is an unreadable response, not "no scanners exist" — and
+    // reporting all four as missing on a bad read would be the false alarm this
+    // alert exists to avoid.
+    if (!Array.isArray(payload.results)) return [];
+    return compareScanners(payload.results);
+  } catch {
+    return [];
+  }
 }
 
 /**

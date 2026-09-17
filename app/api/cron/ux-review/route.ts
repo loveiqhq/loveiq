@@ -50,7 +50,7 @@ import {
 import {
   buildDigestMessage,
   contradiction,
-  detectDrift,
+  fetchScannerDrift,
   fetchDailyStats,
   fetchFindings,
   fetchSessionEvents,
@@ -215,18 +215,21 @@ export async function GET(request: Request) {
     // A prompt edited in the PostHog UI and not brought back to
     // `features/ux-review/server/scanners.ts` means the criteria in git are no
     // longer the criteria being applied. One ops ping a day is enough to notice.
-    for (const drift of detectDrift(findings)) {
-      if (await tryClaimSlackAlert("ux_review_drift", drift.scannerName, dayKey)) {
+    for (const drift of await fetchScannerDrift()) {
+      // Keyed by scanner AND reason: a scanner can be both disabled and running
+      // a rewritten prompt, and claiming on the name alone would report the
+      // first and swallow the second for the rest of the day.
+      const key = `${drift.scannerName}:${drift.reason}`;
+      if (await tryClaimSlackAlert("ux_review_drift", key, dayKey)) {
         await notifySlack({
           channel: "ops",
           kind: "ux_review_drift",
           username: "ops_alerts",
           text:
-            `:warning: Scanner ${escapeSlack(drift.scannerName)} is at version ${drift.liveVersion} ` +
-            `in PostHog, the repo pins ${drift.pinnedVersion} — ` +
-            `features/ux-review/server/scanners.ts is stale.`,
+            `:warning: Scanner ${escapeSlack(drift.scannerName)} — ${escapeSlack(drift.detail)}. ` +
+            `features/ux-review/server/scanners.ts is the source of truth.`,
         });
-        await markSlackAlertDelivered("ux_review_drift", drift.scannerName, dayKey);
+        await markSlackAlertDelivered("ux_review_drift", key, dayKey);
       }
     }
 

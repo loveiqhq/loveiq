@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildDigestMessage,
   contradiction,
-  detectDrift,
+  compareScanners,
   fetchSessionEvents,
   isSafeSessionId,
   sessionViewport,
@@ -59,25 +59,74 @@ describe("buildDigestMessage", () => {
   });
 });
 
-describe("detectDrift", () => {
-  it("fires when PostHog's live version is ahead of the version pinned in git", () => {
-    const scanner = UX_SCANNERS[0]!;
-    const drift = detectDrift([
-      { scannerName: scanner.name, scannerVersion: scanner.scannerVersion + 1 },
-    ]);
-    expect(drift).toEqual([
-      {
-        scannerName: scanner.name,
-        pinnedVersion: scanner.scannerVersion,
-        liveVersion: scanner.scannerVersion + 1,
-      },
-    ]);
+describe("compareScanners", () => {
+  const pinned = UX_SCANNERS[0]!;
+  const live = (over: Record<string, unknown> = {}) => [
+    {
+      name: pinned.name,
+      enabled: true,
+      scanner_version: pinned.scannerVersion,
+      scanner_config: { prompt: pinned.prompt },
+      limit_reached: false,
+      ...over,
+    },
+    // The other three, matching git, so only the first can produce drift.
+    ...UX_SCANNERS.slice(1).map((s) => ({
+      name: s.name,
+      enabled: true,
+      scanner_version: s.scannerVersion,
+      scanner_config: { prompt: s.prompt },
+      limit_reached: false,
+    })),
+  ];
+
+  it("is quiet when PostHog matches git", () => {
+    expect(compareScanners(live())).toEqual([]);
   });
 
-  it("stays quiet when they agree", () => {
-    const scanner = UX_SCANNERS[0]!;
+  it("catches a prompt edited in the UI without a version bump", () => {
+    // The case the old observation-based check could not see at all, and the
+    // one its own comment claimed to be protecting: the criteria being applied
+    // stop being the criteria in the repo, and the version never moves.
+    const drift = compareScanners(
+      live({ scanner_config: { prompt: `${pinned.prompt} and also flag blue buttons` } })
+    );
+    expect(drift).toHaveLength(1);
+    expect(drift[0]).toMatchObject({ scannerName: pinned.name, reason: "prompt" });
+  });
+
+  it("catches a version that moved in either direction", () => {
+    expect(compareScanners(live({ scanner_version: pinned.scannerVersion + 1 }))[0]).toMatchObject({
+      reason: "version",
+    });
+    // A rollback was invisible before: the old check only fired on live > pinned.
+    expect(compareScanners(live({ scanner_version: pinned.scannerVersion - 1 }))[0]).toMatchObject({
+      reason: "version",
+    });
+  });
+
+  it("catches a scanner that is disabled or gone", () => {
+    expect(compareScanners(live({ enabled: false }))[0]).toMatchObject({ reason: "disabled" });
+    expect(compareScanners(live().slice(1))[0]).toMatchObject({
+      scannerName: pinned.name,
+      reason: "missing",
+    });
+  });
+
+  it("catches a scanner that has stopped for want of credits", () => {
+    expect(compareScanners(live({ limit_reached: true }))[0]).toMatchObject({ reason: "limit" });
+  });
+
+  it("does not invent prompt drift from a response it cannot read", () => {
+    // An absent prompt is a response shape we do not understand. Reporting
+    // drift from it would make every unreadable read look like an edit.
+    expect(compareScanners(live({ scanner_config: {} }))).toEqual([]);
+    expect(compareScanners(live({ scanner_config: null }))).toEqual([]);
+  });
+
+  it("ignores whitespace at the ends, which is not an edit to the criteria", () => {
     expect(
-      detectDrift([{ scannerName: scanner.name, scannerVersion: scanner.scannerVersion }])
+      compareScanners(live({ scanner_config: { prompt: `\n  ${pinned.prompt}  \n` } }))
     ).toEqual([]);
   });
 });

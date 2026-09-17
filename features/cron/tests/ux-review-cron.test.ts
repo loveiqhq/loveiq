@@ -32,6 +32,9 @@ const mockFetchFindings = vi.fn();
 const mockFetchDailyStats = vi.fn();
 const mockContradiction = vi.fn();
 const mockFetchSessionEvents = vi.fn();
+/** Drift is read from PostHog's scanner config now, not inferred from findings. */
+const mockFetchScannerDrift = vi.fn(async () => [] as Array<Record<string, unknown>>);
+
 vi.mock("@features/ux-review/server/review", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@features/ux-review/server/review")>();
   return {
@@ -40,6 +43,7 @@ vi.mock("@features/ux-review/server/review", async (importOriginal) => {
     fetchDailyStats: (...a: unknown[]) => mockFetchDailyStats(...a),
     contradiction: (...a: unknown[]) => mockContradiction(...a),
     fetchSessionEvents: (...a: unknown[]) => mockFetchSessionEvents(...a),
+    fetchScannerDrift: (...a: unknown[]) => mockFetchScannerDrift(...a),
   };
 });
 
@@ -73,6 +77,9 @@ describe("ux-review cron", () => {
     mockFetchDailyStats.mockResolvedValue([{ scanner: "LoveIQ report UX", observed: 8, yes: 2 }]);
     mockContradiction.mockReturnValue(null);
     mockFetchSessionEvents.mockResolvedValue(new Set(["report_viewed"]));
+    // clearAllMocks wipes call history but KEEPS implementations, so a drift
+    // value set by one test would leak into every test after it.
+    mockFetchScannerDrift.mockResolvedValue([]);
   });
 
   afterEach(() => vi.useRealTimers());
@@ -144,12 +151,21 @@ describe("ux-review cron", () => {
     // never observe the difference — the drift alert, which has no hour gate,
     // can.
     vi.setSystemTime(new Date("2026-09-14T23:30:00Z"));
-    mockFetchFindings.mockResolvedValue([finding({ scannerVersion: 99 })]);
+    mockFetchScannerDrift.mockResolvedValue([
+      {
+        scannerName: "LoveIQ survey UX",
+        reason: "prompt",
+        detail: "the prompt in PostHog differs from the one in git",
+      },
+    ]);
 
     await GET(req());
 
     const driftClaim = mockTryClaim.mock.calls.find((c) => c[0] === "ux_review_drift");
     expect(driftClaim).toBeDefined();
+    // Keyed by scanner AND reason, so two different problems with one scanner
+    // do not collapse into a single alert for the day.
+    expect(driftClaim?.[1]).toBe("LoveIQ survey UX:prompt");
     expect(driftClaim?.[2]).toBe("2026-09-15");
   });
 
