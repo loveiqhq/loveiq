@@ -5,7 +5,11 @@ import { describe, expect, it } from "vitest";
 
 import { surveyQuestions } from "@/data/survey-data";
 import { RANDOMISE_QIDS } from "@features/survey/questionFlags";
-import { OPT_IN_QID, orderEmailLast } from "@features/survey/ui/questionOrder";
+import {
+  OPT_IN_QID,
+  orderDemandBlockBeforeEmail,
+  orderEmailLast,
+} from "@features/survey/ui/questionOrder";
 
 const MIGRATION = "supabase/migrations/20260911152724_survey_question_16009_priced_choice.sql";
 const NONE_OF_THESE = "None of these right now";
@@ -36,9 +40,18 @@ describe("16009 — the priced choice", () => {
   });
 
   it("does not displace the marketing opt-in from last position", () => {
-    // Questions render in qId order, so an id above 16015 would push the opt-in off the
-    // end of the survey. This is why the question is 16009 and not 16016.
-    const ordered = orderEmailLast(surveyQuestions.filter((q) => q.qId !== "00000"));
+    // Questions render in qId order, so an id above 16015 pushes the opt-in off the end
+    // of the survey. That is why THIS question is 16009: at the time, ids below the
+    // opt-in were still available.
+    //
+    // They no longer are. The demand block (16016-16018) had to go above 16015 because
+    // every remaining id below it is either live or retired-but-still-holding-answers
+    // (16003 and 16004 carry 322 each). `orderDemandBlockBeforeEmail` is what keeps the
+    // opt-in last in that case, so the guarantee is now a property of the composed
+    // pipeline rather than of `orderEmailLast` alone — assert it that way.
+    const ordered = orderDemandBlockBeforeEmail(
+      orderEmailLast(surveyQuestions.filter((q) => q.qId !== "00000"))
+    );
     expect(ordered.at(-1)!.qId).toBe(OPT_IN_QID);
     expect(question!.qId < OPT_IN_QID).toBe(true);
   });

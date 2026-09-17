@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { orderEmailLast, EMAIL_QID, OPT_IN_QID } from "@features/survey/ui/questionOrder";
+import {
+  orderDemandBlockBeforeEmail,
+  orderEmailLast,
+  EMAIL_QID,
+  OPT_IN_QID,
+} from "@features/survey/ui/questionOrder";
 import { surveyQuestions, type SurveyQuestion } from "@/data/survey-data";
 
 /** Minimal SurveyQuestion stub — orderEmailLast only reads `qId`. */
@@ -19,9 +24,19 @@ describe("orderEmailLast", () => {
     expect(ordered[optInIdx - 1]!.qId).toBe(EMAIL_QID);
   });
 
-  it("leaves the opt-in as the very last question", () => {
+  it("keeps email before the opt-in, and the full pipeline still ends on the opt-in", () => {
+    // `orderEmailLast` ALONE no longer ends on the opt-in. The demand block
+    // (16016-16018) was allocated qIds above 16015 because every id below it is either
+    // live or retired-but-still-holding-answers, and `data/survey-data.ts` is generated
+    // in qId order — so the block sorts after the opt-in. `orderDemandBlockBeforeEmail`
+    // is what restores "opt-in last", and SurveyEngine composes the two. Asserting the
+    // composition here keeps the guarantee this test was written to protect.
     const ordered = orderEmailLast(surveyQuestions);
-    expect(ordered[ordered.length - 1]!.qId).toBe(OPT_IN_QID);
+    const optInIdx = ordered.findIndex((entry) => entry.qId === OPT_IN_QID);
+    expect(ordered[optInIdx - 1]!.qId).toBe(EMAIL_QID);
+
+    const full = orderDemandBlockBeforeEmail(ordered);
+    expect(full[full.length - 1]!.qId).toBe(OPT_IN_QID);
   });
 
   it("preserves length, keeps email exactly once, and never leaves it first", () => {

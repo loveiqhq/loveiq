@@ -22,7 +22,7 @@ import {
   setSurveyVariant,
 } from "@features/analytics/client";
 import { assignSurveyVariant, type SurveyVariant } from "@shared/experiments/surveyVariant";
-import { orderEmailLast } from "./questionOrder";
+import { orderDemandBlockBeforeEmail, orderEmailLast } from "./questionOrder";
 import { SurveyThemeProvider } from "./SurveyThemeContext";
 import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
 import { useSurveyTracking } from "./hooks/useSurveyTracking";
@@ -105,7 +105,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   const prefilledKey = prefilled.join(",");
   const orderedQuestions = useMemo(
     () =>
-      orderEmailLast(surveyQuestions)
+      orderDemandBlockBeforeEmail(orderEmailLast(surveyQuestions))
         .filter((q) => !isHidden(q.qId))
         .filter((q) => !prefilledKey.split(",").includes(q.qId)),
     [prefilledKey]
