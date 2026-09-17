@@ -131,7 +131,30 @@ console.log(
 
 if (CONTRACT_ONLY) process.exit(0);
 console.log("");
+/**
+ * Probes that need an input before they can do anything.
+ *
+ * `verify-dead-click-target.mjs` is handed the page and element from the
+ * session's own dead_click event, and exits 3 without them — correctly, but
+ * that made it untestable here. `main` rather than a real dead-click target
+ * like `p.font-sans`: the question is whether the probe can report a defect at
+ * all, and `main` survives a markup change that would turn this check red for
+ * the wrong reason.
+ */
+const PROBE_ENV = {
+  "verify-dead-click-target.mjs": { URL_PATH: "/survey", TARGET_SELECTOR: "main" },
+};
+
 const targets = [];
+// Appended probes count. verify-dead-click-target runs for D1, which may open a
+// pull request, and it is not listed under a criterion — so the loop below
+// could not see it, and its MUTATE had never been run once. It was broken:
+// setting aria-disabled on the decoration these targets usually are does
+// nothing, so it exited 0 with its own defect injected.
+for (const file of appendedProbes()) {
+  const src = readFileSync(`scripts/probes/${file}`, "utf8");
+  if (src.includes("MUTATE")) targets.push({ id: "appended", file });
+}
 for (const id of AUTO_PR_CRITERIA) {
   for (const file of probes.get(id) ?? []) {
     const src = readFileSync(`scripts/probes/${file}`, "utf8");
@@ -161,6 +184,7 @@ for (const { id, file } of targets) {
           ...process.env,
           MUTATE: "1",
           ...(DEVICES ? { DEVICES } : {}),
+          ...(PROBE_ENV[file] ?? {}),
           REPORT_ORIGIN: process.env.REPORT_ORIGIN ?? "https://www.loveiq.org",
         },
       });

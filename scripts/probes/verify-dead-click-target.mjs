@@ -69,26 +69,62 @@ for (const name of DEVICE_NAMES) {
     await page.waitForTimeout(600);
 
     if (process.env.MUTATE === "1") {
+      /**
+       * role=button AND aria-disabled, not aria-disabled alone.
+       *
+       * The first version set only aria-disabled, which does nothing unless the
+       * element already matches the interactive selector. Most real dead-click
+       * targets are decoration — the top three on production are `div.flex`,
+       * `p.font-sans` and `div.relative` — so the mutation was a no-op on
+       * exactly the inputs this probe is usually given, and MUTATE=1 exited 0.
+       * A probe that passes with its own defect injected is measuring nothing.
+       *
+       * Making the target a disabled control works whatever it started as, so
+       * the mutation is deterministic for any selector.
+       */
       await page.evaluate((sel) => {
-        const el = document.querySelector(sel);
-        if (el) el.setAttribute("aria-disabled", "true");
+        // The SAME element the measurement will pick: the first VISIBLE match.
+        // Mutating `querySelector`'s first match while the measurement reads the
+        // first visible one targets two different elements, and MUTATE=1 then
+        // exits 0 on any page where the first match is hidden.
+        const el = [...document.querySelectorAll(sel)].find((n) => {
+          const r = n.getBoundingClientRect();
+          return r.width > 0 && r.height > 0;
+        });
+        if (!el) return;
+        el.setAttribute("role", "button");
+        el.setAttribute("aria-disabled", "true");
       }, SELECTOR);
       await page.waitForTimeout(200);
     }
 
     const r = await page.evaluate((sel) => {
-      let el;
+      let all;
       try {
-        el = document.querySelector(sel);
+        all = [...document.querySelectorAll(sel)];
       } catch {
         // selectorFor caps at 120 chars and can emit something querySelector
         // refuses. That is a probe limitation, never a product defect.
         return { badSelector: true };
       }
-      if (!el) return { missing: true };
+      if (all.length === 0) return { missing: true };
+
+      /**
+       * The first VISIBLE match, not the first match.
+       *
+       * `selectorFor()` emits things like `button.flex` and `p.font-sans`, which
+       * match many elements on a page. `querySelector` returns the first in
+       * document order, and on /survey that is a zero-size one — so the probe
+       * reported "the element has no box" and gave up, on a page full of
+       * perfectly good candidates. The reader tapped something they could see.
+       */
+      const el = all.find((n) => {
+        const r = n.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      });
+      if (!el) return { notRendered: true, matches: all.length };
 
       const rect = el.getBoundingClientRect();
-      if (rect.width === 0 || rect.height === 0) return { notRendered: true };
 
       // Same definition as isInteractive() in uxSignals, deliberately.
       const control = el.closest(
@@ -133,7 +169,7 @@ for (const name of DEVICE_NAMES) {
         ? "the recorded selector is not valid CSS"
         : r.missing
           ? "no element matches it on this page any more"
-          : "the element has no box";
+          : `${r.matches} matches, none of them visible`;
       console.log(`INCONCLUSIVE ${where} ${why}`);
     } else if (r.disabled) {
       dead += 1;

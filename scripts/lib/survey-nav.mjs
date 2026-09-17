@@ -57,24 +57,3 @@ export async function seedQuestion(page, index) {
     { idx: index, step: ENGINE_STEP }
   );
 }
-
-/**
- * What actually rendered, so a probe can say "I asked for 35 and got the
- * country question" instead of asserting against a screen it never checked.
- */
-export async function currentQuestion(page) {
-  return page.evaluate(() => {
-    const h = document.querySelector("h1,h2,h3");
-    let storedIndex = null;
-    try {
-      storedIndex = JSON.parse(localStorage.getItem("loveiq-survey-answers") || "{}").currentIndex;
-    } catch {
-      /* ignore */
-    }
-    return {
-      heading: (h?.innerText || "").replace(/\s+/g, " ").trim().slice(0, 60),
-      storedIndex,
-      onEngine: !!document.querySelector("button.flex, [role=radio]"),
-    };
-  });
-}
