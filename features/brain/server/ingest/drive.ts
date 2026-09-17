@@ -46,6 +46,22 @@ const SOURCE = "drive";
 const API = "https://www.googleapis.com/drive/v3";
 const TIMEOUT_MS = 20_000;
 const PAGE_SIZE = 100;
+/**
+ * How many documents may fail to export before the WALK is called incomplete.
+ *
+ * Drive was the only source that gave up on the first one: calendar tolerates
+ * 10 unreachable calendars and gmail 10 unreadable threads, both counting
+ * failures and comparing at the end. Drive called `stop()` inside the catch, so
+ * a single permanently-unexportable file marked every run incomplete forever.
+ *
+ * Measured 2026-09-17: document 1bunyq5jy7fbERkhDGswQlQPE-v090F88 has failed on
+ * 224 consecutive runs since 2026-09-08, and drive has not reported a complete
+ * walk once in that time — 0 of ~240. The sweep was never affected (it gates on
+ * the LISTING, not the fetch), but the source has been reporting degraded for
+ * ten days over one file, which is exactly the alert nobody reads any more.
+ */
+const MAX_TOLERATED_EXPORT_FAILURES = 10;
+
 const MAX_PAGES = 20;
 
 /** Bump when the row SHAPE changes; a mismatch counts as stale. See notion.ts. */
@@ -707,6 +723,8 @@ export async function ingestDrive(
   const rows: BrainRow[] = [];
   const touch: string[] = [];
   const toFetch: DriveFile[] = [];
+  /** Documents this run could not export. Tolerated up to a limit; see above. */
+  const exportFailures: string[] = [];
   let complete = listed.complete;
   let stopped: string | undefined = listed.stopped;
   const stop = (why: string) => {
@@ -739,15 +757,24 @@ export async function ingestDrive(
       if (!text.trim()) continue;
       rows.push(...docToRows(file, text, stampedAt));
     } catch (err) {
-      // One unreadable document must not cost the rest of the run.
+      // One unreadable document must not cost the rest of the run -- and it must
+      // not cost the run's STATUS either, which is what calling stop() here did.
       logger.warn({ err, file: file.id }, "brain-ingest drive: export failed");
-      // WHICH document, not just that one failed. The id lands in
-      // `cron_run.error_message` via the note, so the answer survives in a table
-      // anyone can query -- the log line above is in a buffer that holds hours, and
-      // this cron runs hourly, so by the time anyone looks it has rolled off. Drive
-      // file ids are opaque and already public in every chunk's url.
-      stop(`export-failed:${file.id}`);
+      exportFailures.push(String(file.id));
     }
+  }
+
+  /**
+   * Judged in aggregate, like calendar and gmail already do.
+   *
+   * WHICH documents, not just that some failed: the ids land in
+   * `cron_run.error_message` via the detail below whether or not the run is
+   * called incomplete, because the log line above sits in a buffer that holds
+   * hours and this cron runs hourly, so by the time anyone looks it has rolled
+   * off. Drive file ids are opaque and already public in every chunk's url.
+   */
+  if (exportFailures.length > MAX_TOLERATED_EXPORT_FAILURES) {
+    stop(`export-failed=${exportFailures.length}:${exportFailures[0]}`);
   }
 
   const written = await upsertChunks(rows);
@@ -821,6 +848,9 @@ export async function ingestDrive(
     sweepBlocked: !listed.complete,
     detail:
       `docs=${listed.items.length} written=${written} touched=${touched} swept=${swept} ` +
-      `complete=${complete}${stopped ? ` stopped=${stopped}` : ""}`,
+      `complete=${complete}${stopped ? ` stopped=${stopped}` : ""}` +
+      (exportFailures.length > 0
+        ? ` exportFailed=${exportFailures.length}:${exportFailures.slice(0, 3).join(",")}`
+        : ""),
   };
 }

@@ -84,6 +84,8 @@ let listOk = true;
 let targets: Record<string, unknown> = {};
 let alwaysMorePages = false;
 let exportFails = false;
+/** 500 is retried with backoff; a 4xx is returned immediately. See driveGet. */
+let exportFailStatus = 500;
 /** How many times the listing should answer with a transient 5xx before succeeding. */
 let listTransientFailures = 0;
 const httpCalls: string[] = [];
@@ -107,7 +109,7 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
       };
     }
     if (url.includes("/export?")) {
-      if (exportFails) return { ok: false, status: 500, text: async () => "boom" };
+      if (exportFails) return { ok: false, status: exportFailStatus, text: async () => "boom" };
       return { ok: true, status: 200, text: async () => "﻿" + exportBody.replace(/\n/g, "\r\n") };
     }
     // single-file metadata GET, which is how a shortcut's TARGET is resolved
@@ -248,6 +250,7 @@ describe("ingestDrive", () => {
     listOk = true;
     alwaysMorePages = false;
     exportFails = false;
+    exportFailStatus = 500;
     targets = {};
   });
 
@@ -341,15 +344,41 @@ describe("ingestDrive", () => {
    * which recorded a drive sweep at the very run that reported `complete=false
    * stopped=export-failed`.
    */
-  it("does not call the sweep blocked when only an export failed", async () => {
+  it("tolerates a few failed exports instead of calling the whole walk incomplete", async () => {
+    // It used to `stop()` inside the catch, so ONE unexportable file marked
+    // every run incomplete forever. Measured 2026-09-17: document
+    // 1bunyq5jy7fbERkhDGswQlQPE-v090F88 had failed on 224 consecutive runs since
+    // 2026-09-08, and drive had not reported a complete walk once in that time.
+    // Calendar tolerates 10 unreachable calendars and gmail 10 unreadable
+    // threads; drive was the only one that gave up on the first.
     exportFails = true;
     const res = await ingestDrive(STAMP);
-    expect(res.complete).toBe(false);
-    // The FILE ID, not just the failure class. The log line naming it sits in a
-    // buffer that holds hours while this cron runs hourly, so by the time anyone
-    // looks it has rolled off; the note in `cron_run` is what survives.
-    expect(res.detail).toMatch(/stopped=export-failed:1AbCdEf/);
+
+    expect(res.complete).toBe(true);
+    expect(res.detail).not.toMatch(/stopped=/);
+    // The FILE ID survives regardless. The log line naming it sits in a buffer
+    // that holds hours while this cron runs hourly, so by the time anyone looks
+    // it has rolled off; the note in `cron_run` is what lasts.
+    expect(res.detail).toMatch(/exportFailed=1:1AbCdEf/);
     // The listing was fine, so deletion is still safe.
+    expect(res.sweepBlocked).toBe(false);
+  });
+
+  it("DOES call the walk incomplete once the failures pass the tolerance", async () => {
+    // The positive control: a genuine export outage must still be reported, or
+    // the tolerance is just a way of never noticing.
+    exportFails = true;
+    // 403, not 500: a 4xx is returned immediately while a 500 is retried with
+    // backoff, and eleven files through the backoff path takes longer than the
+    // test timeout.
+    exportFailStatus = 403;
+    files = Array.from({ length: 11 }, (_, i) => ({ ...FILE, id: `dead-${i}` }));
+
+    const res = await ingestDrive(STAMP);
+
+    expect(res.complete).toBe(false);
+    expect(res.detail).toMatch(/stopped=export-failed=11:dead-0/);
+    // Still the LISTING that gates deletion, not the fetch.
     expect(res.sweepBlocked).toBe(false);
   });
 
@@ -468,6 +497,7 @@ describe("Google Meet shortcuts", () => {
     listOk = true;
     alwaysMorePages = false;
     exportFails = false;
+    exportFailStatus = 500;
     targets = {};
     process.env.NOTION_TOKEN = "ntn_test";
   });
@@ -585,6 +615,7 @@ describe("PDFs — the 213 files that used to be invisible", () => {
     listOk = true;
     alwaysMorePages = false;
     exportFails = false;
+    exportFailStatus = 500;
     targets = {};
   });
 
@@ -646,6 +677,7 @@ describe("Drive reads as a PERSON, not as the service account", () => {
     listOk = true;
     alwaysMorePages = false;
     exportFails = false;
+    exportFailStatus = 500;
     targets = {};
     exportBody = "Summary\n\nWe agreed to ship the paywall.";
     delete process.env.GOOGLE_WORKSPACE_ADMIN;
@@ -732,6 +764,7 @@ describe("a failed sweep must not retry every hour", () => {
     listOk = true;
     alwaysMorePages = false;
     exportFails = false;
+    exportFailStatus = 500;
     targets = {};
     existing = [];
   });
@@ -816,6 +849,7 @@ describe("a transient Drive refusal is retried, not fatal", () => {
     files = [FILE];
     listOk = true;
     exportFails = false;
+    exportFailStatus = 500;
     alwaysMorePages = false;
     listTransientFailures = 0;
     targets = {};
