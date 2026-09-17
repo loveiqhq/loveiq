@@ -471,14 +471,23 @@ export function isSafeSessionId(sessionId: string): boolean {
 }
 
 /** The reason our telemetry contradicts this claim, or null. */
-export function contradiction(reasoning: string, events: ReadonlySet<string>): string | null {
-  // No events at all means we could not READ them, not that the session had
-  // none: a session only reaches a scanner by emitting the trigger event that
-  // selected it, so >=1 event always exists in reality. Without this guard a
-  // PostHog outage makes `fetchSessionEvents` return an empty set and every
-  // checkable claim gets silently refuted — an outage would look exactly like
-  // a quiet, healthy day. Fail open; the human still sees the finding.
-  if (events.size === 0) return null;
+export function contradiction(
+  reasoning: string,
+  events: ReadonlySet<string> | null
+): string | null {
+  // NULL means the lookup failed; an EMPTY SET means it succeeded and found
+  // nothing, which cannot happen in reality — a session only reaches a scanner
+  // by emitting the trigger event that selected it, so >=1 event always exists.
+  // Both fail OPEN: an outage must not refute every checkable claim, because
+  // then an outage looks exactly like a quiet, healthy day.
+  //
+  // They were the same value until 2026-09-17, and that was the bug. Any
+  // failure — an 8s timeout, a non-2xx, a throw — became an empty set, so the
+  // refusal gate switched itself off with no trace, and the SAME finding got
+  // opposite verdicts on consecutive runs: refuted at 16:20 ("the recording
+  // describes an unlock click, but the session has none"), then "Reproduced in
+  // production" at 17:40. The caller now knows which happened and says so.
+  if (events === null || events.size === 0) return null;
   for (const rule of CLAIM_EVIDENCE) {
     if (!rule.claim.test(reasoning)) continue;
     if (rule.requireAny.some((e) => events.has(e))) continue;
@@ -487,33 +496,23 @@ export function contradiction(reasoning: string, events: ReadonlySet<string>): s
   return null;
 }
 
-/** Distinct events in one session. Empty set when PostHog is unreachable; the
- *  size-0 guard in `contradiction()` is what turns that into "cannot check"
- *  rather than "contradicted". */
-export async function fetchSessionEvents(sessionId: string): Promise<Set<string>> {
-  const key = process.env.POSTHOG_API_KEY;
-  if (!key || !isSafeSessionId(sessionId)) return new Set();
-  try {
-    const res = await fetchWithTimeout(`https://eu.posthog.com/api/projects/${PROJECT}/query/`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: {
-          kind: "HogQLQuery",
-          query: `SELECT DISTINCT event FROM events
+/**
+ * Distinct events in one session, or NULL when they could not be read.
+ *
+ * This is the input to the refusal gate, and it used to have its own 8-second
+ * budget with no retry while its two sibling lookups shared a retried 15s one —
+ * even though the measurement that justified the retry was taken on this very
+ * query: session 01a0aea6 carries 330 events and timed at 526, 82, 71, 3433,
+ * 72, 1577, 80, 84, 79, 77 ms. The tail is seconds, so from a CI runner the
+ * biggest sessions were the ones that lost, and losing meant the gate silently
+ * stopped running.
+ */
+export async function fetchSessionEvents(sessionId: string): Promise<Set<string> | null> {
+  if (!isSafeSessionId(sessionId)) return null;
+  const rows = await sessionQuery(`SELECT DISTINCT event FROM events
                   WHERE timestamp > now() - INTERVAL 30 DAY
-                    AND properties.$session_id = '${sessionId}'`,
-        },
-      }),
-      timeoutMs: 8000,
-    });
-    if (!res.ok) return new Set();
-    const payload = (await res.json()) as { results?: unknown[][]; error?: unknown };
-    if (payload.error) return new Set();
-    return new Set((payload.results ?? []).map((r) => String(r[0])));
-  } catch {
-    return new Set();
-  }
+                    AND properties.$session_id = '${sessionId}'`);
+  return rows === null ? null : new Set(rows.map((r) => String(r[0])));
 }
 
 /**
@@ -560,7 +559,7 @@ export async function fetchSessionEvents(sessionId: string): Promise<Set<string>
  * every failure, because a caller that cannot tell "no data" from "query
  * failed" must not act as though it can.
  */
-async function sessionRow(query: string): Promise<unknown[] | null> {
+async function sessionQuery(query: string): Promise<unknown[][] | null> {
   const key = process.env.POSTHOG_API_KEY;
   if (!key) return null;
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -576,12 +575,18 @@ async function sessionRow(query: string): Promise<unknown[] | null> {
       // A bad query will fail identically on the retry; only a timeout or a
       // transport error is worth a second attempt.
       if (payload.error) return null;
-      return payload.results?.[0] ?? null;
+      return payload.results ?? [];
     } catch {
       /* timeout or transport — try once more */
     }
   }
   return null;
+}
+
+/** The first row, or null. */
+async function sessionRow(query: string): Promise<unknown[] | null> {
+  const rows = await sessionQuery(query);
+  return rows === null ? null : (rows[0] ?? null);
 }
 
 export async function sessionClickTarget(

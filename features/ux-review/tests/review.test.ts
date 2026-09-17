@@ -318,6 +318,26 @@ describe("contradiction", () => {
     expect(contradiction("the heading was covered by the chapter bar", new Set())).toBeNull();
   });
 
+  it("does not run at all when the events could not be read", () => {
+    // A claim our events WOULD refute, with the lookup failed. It must fail
+    // open — an outage that refuted everything would look like a quiet, healthy
+    // day — but the caller has to be able to tell that apart from a clean check.
+    const refutable = "the user clicked 'Unlock full report', which looped them back";
+    expect(contradiction(refutable, new Set(["pageview", "$autocapture"]))).toMatch(/unlock click/);
+    expect(contradiction(refutable, null)).toBeNull();
+  });
+
+  it("keeps null and the empty set as different answers", () => {
+    // They were the same value until 2026-09-17: every failure became an empty
+    // set, so the refusal gate switched itself off with no trace and the SAME
+    // finding came back refuted on one run and reproduced on the next.
+    expect(contradiction("anything at all", null)).toBeNull();
+    expect(contradiction("anything at all", new Set())).toBeNull();
+    // The distinction is only useful if the TYPE admits it, which is what a
+    // caller branches on.
+    expect(new Set().size === 0 && null === null).toBe(true);
+  });
+
   it("refuses a session id that is not UUID-shaped", async () => {
     expect(isSafeSessionId("01a09e04-dfaa-7a3e-9622-0d7ca5285017")).toBe(true);
     expect(isSafeSessionId("' OR 1=1 --")).toBe(false);
@@ -329,18 +349,42 @@ describe("contradiction", () => {
       called = true;
       return { ok: true, json: async () => ({ results: [] }) } as unknown as Response;
     });
-    await expect(fetchSessionEvents("' OR 1=1 --")).resolves.toEqual(new Set());
+    // null, not an empty set: nothing was read, and the caller must not be
+    // able to mistake that for "this session has no events".
+    await expect(fetchSessionEvents("' OR 1=1 --")).resolves.toBeNull();
     expect(called, "a malformed id must never reach the query").toBe(false);
   });
 
-  it("falls silent rather than refuting when PostHog is unreachable", async () => {
-    // An empty event set would otherwise contradict every claim that names an
-    // action, turning an outage into a wave of false refutations.
+  it("reports that it could not read, rather than reporting no events", async () => {
+    // It used to return an empty set here, which contradiction() then treated
+    // as "cannot check" — the right behaviour reached by a route that erased
+    // the reason. A caller could not tell an outage from a clean check, so the
+    // refusal gate could switch itself off for a run and say nothing.
     vi.stubEnv("POSTHOG_API_KEY", "phx_test");
     vi.stubGlobal("fetch", async () => {
       throw new Error("network down");
     });
-    await expect(fetchSessionEvents("01a0-sess")).resolves.toEqual(new Set());
+    await expect(fetchSessionEvents("01a09e04-dfaa-7a3e-9622-0d7ca5285017")).resolves.toBeNull();
+  });
+
+  it("retries once before giving up, like its sibling lookups", async () => {
+    // The measurement that justified the retry was taken on THIS query: the
+    // 330-event session timed at 526, 82, 71, 3433, 72, 1577, 80, 84, 79, 77 ms.
+    // It was the only one of the three left on a single 8s attempt.
+    vi.stubEnv("POSTHOG_API_KEY", "phx_test");
+    let calls = 0;
+    vi.stubGlobal("fetch", async () => {
+      calls += 1;
+      if (calls === 1) throw new Error("timeout");
+      return {
+        ok: true,
+        json: async () => ({ results: [["unlock_click"]] }),
+      } as unknown as Response;
+    });
+    await expect(fetchSessionEvents("01a09e04-dfaa-7a3e-9622-0d7ca5285017")).resolves.toEqual(
+      new Set(["unlock_click"])
+    );
+    expect(calls, "one retry, so a single timeout does not disable the gate").toBe(2);
   });
 });
 

@@ -147,6 +147,14 @@ export async function GET(request: Request) {
        * finding is not re-queried on the next run: it stays refuted.
        */
       const sessionEvents = await fetchSessionEvents(finding.sessionId);
+      if (sessionEvents === null) {
+        // Fails open on purpose, but not silently: this is the only thing
+        // standing between unverified model prose and a reader's thread.
+        logger.warn(
+          { session: finding.sessionId },
+          "ux-review: session events unreadable, refusal check skipped"
+        );
+      }
       const refuted = contradiction(finding.reasoning, sessionEvents);
       if (refuted) {
         logger.info(
