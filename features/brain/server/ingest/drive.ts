@@ -54,7 +54,8 @@ const PAGE_SIZE = 100;
  * failures and comparing at the end. Drive called `stop()` inside the catch, so
  * a single permanently-unexportable file marked every run incomplete forever.
  *
- * Measured 2026-09-17: document 1bunyq5jy7fbERkhDGswQlQPE-v090F88 has failed on
+ * Measured 2026-09-17: one document — id begins `1bunyq5j`, and the full id is in the
+ * ingest logs rather than here because this repository is public — has failed on
  * 224 consecutive runs since 2026-09-08, and drive has not reported a complete
  * walk once in that time — 0 of ~240. The sweep was never affected (it gates on
  * the LISTING, not the fetch), but the source has been reporting degraded for
