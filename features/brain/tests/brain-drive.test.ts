@@ -251,7 +251,34 @@ describe("ingestDrive", () => {
     alwaysMorePages = false;
     exportFails = false;
     exportFailStatus = 500;
+    exportBody = "Summary\n\nWe agreed to ship the paywall.";
     targets = {};
+  });
+
+  /**
+   * `docs=745` against 727 indexed documents could not be reconciled from outside the
+   * run: an empty file and a refused people-list both vanish silently. A NEW gap would
+   * therefore look exactly like the known one, which is what this summary exists to stop.
+   */
+  it("counts the files it skipped for having no text", async () => {
+    exportBody = "   ";
+    const res = await ingestDrive(STAMP);
+    expect(res.detail).toMatch(/empty=1/);
+  });
+
+  it("counts the files it refused as a list of people, separately from empty ones", async () => {
+    // Over MAX_ADDRESSES_PER_DOC, which is what makes it an export rather than a document.
+    exportBody = Array.from({ length: 25 }, (_, i) => `person${i}@example.com`).join("\n");
+    const res = await ingestDrive(STAMP);
+    expect(res.detail).toMatch(/refusedAsPeopleList=1/);
+    // The two must not be conflated: an empty file is a dud, a people list is a refusal.
+    expect(res.detail).not.toMatch(/empty=/);
+  });
+
+  it("says nothing when there is nothing to say, so the summary stays readable", async () => {
+    const res = await ingestDrive(STAMP);
+    expect(res.detail).not.toMatch(/empty=/);
+    expect(res.detail).not.toMatch(/refusedAsPeopleList=/);
   });
 
   it("strips the BOM and CRLFs that Google's text export adds", async () => {

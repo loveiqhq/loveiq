@@ -726,6 +726,10 @@ export async function ingestDrive(
   const toFetch: DriveFile[] = [];
   /** Documents this run could not export. Tolerated up to a limit; see above. */
   const exportFailures: string[] = [];
+  /** Files that yielded no text at all, and files refused as a list of people. Counted
+   *  so `docs=` minus the chunks it produced is an arithmetic identity, not a mystery. */
+  let emptyDocs = 0;
+  let refusedDocs = 0;
   let complete = listed.complete;
   let stopped: string | undefined = listed.stopped;
   const stop = (why: string) => {
@@ -755,8 +759,17 @@ export async function ingestDrive(
       // doc -- would otherwise be indexed as a chunk whose only content is its own
       // title, which then matches questions it cannot answer. Skipping lets the
       // sweep remove it if it was indexed before.
-      if (!text.trim()) continue;
-      rows.push(...docToRows(file, text, stampedAt));
+      if (!text.trim()) {
+        emptyDocs += 1;
+        continue;
+      }
+      const produced = docToRows(file, text, stampedAt);
+      // `docToRows` returns NOTHING for a file it refuses as a list of people. That
+      // refusal is deliberate and silent, which is the problem: `docs=745` against 727
+      // indexed documents could not be reconciled from outside, so a NEW gap would look
+      // exactly like this known one.
+      if (produced.length === 0) refusedDocs += 1;
+      rows.push(...produced);
     } catch (err) {
       // One unreadable document must not cost the rest of the run -- and it must
       // not cost the run's STATUS either, which is what calling stop() here did.
@@ -855,6 +868,8 @@ export async function ingestDrive(
     detail:
       `docs=${listed.items.length} written=${written} touched=${touched} swept=${swept} ` +
       `complete=${complete}${stopped ? ` stopped=${stopped}` : ""}` +
+      (emptyDocs > 0 ? ` empty=${emptyDocs}` : "") +
+      (refusedDocs > 0 ? ` refusedAsPeopleList=${refusedDocs}` : "") +
       (exportFailures.length > 0
         ? ` exportFailed=${exportFailures.length}:${exportFailures.slice(0, 3).join(",")}`
         : ""),
