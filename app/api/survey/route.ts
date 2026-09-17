@@ -273,8 +273,17 @@ export async function POST(request: Request) {
    * The C13 opening-order arm is DERIVED here rather than sent by the client.
    * `assignQuestionOrderArm` is pure and deterministic over the session id, and
    * the session id is already in this payload — so recomputing it server-side
-   * cannot disagree with what the respondent actually saw, and a client cannot
-   * misreport its arm.
+   * agrees with what the respondent actually saw, and a client cannot misreport
+   * its arm.
+   *
+   * ONE EXCEPTION, and it is not production. `?order=control|variant` previews
+   * either arm on dev and staging; a previewer whose session hashes the other way
+   * sees one arm and is stamped with the other. `resolveQuestionOrderOverride`
+   * returns null on production, so no real respondent can land in that state — but
+   * staging shares this database, so such a row does exist in the same table. It is
+   * internal traffic and `is_likely_test` already marks the @loveiq.org ones; noted
+   * here rather than fixed, because the alternative is letting the client tell the
+   * server its arm, which is the property this derivation exists to remove.
    *
    * Only stamped when a session id is present, which preserves the
    * "no session, no stamp" rule the landing arm follows: a crawler or a direct
