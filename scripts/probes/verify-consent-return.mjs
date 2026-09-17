@@ -22,7 +22,17 @@
 import { chromium, webkit, devices } from "playwright";
 import { stagingCookies } from "./staging-cookie.mjs";
 
-const ORIGIN = process.env.ORIGIN ?? "http://localhost:3000";
+/**
+ * REPORT_ORIGIN, not ORIGIN, and production by default.
+ *
+ * This read `process.env.ORIGIN ?? "http://localhost:3000"` from the day it was
+ * written. `verify-ux-findings.mjs` passes REPORT_ORIGIN and nothing anywhere
+ * sets ORIGIN, so in CI this probe loaded a dead localhost, found no "Return to
+ * site" button and reported inconclusive on every single run — while B1 sat in
+ * AUTO_PR_CRITERIA, one of only three criteria allowed to open a pull request.
+ * B1 has therefore never once been checked against production.
+ */
+const ORIGIN = process.env.REPORT_ORIGIN ?? process.env.ORIGIN ?? "https://www.loveiq.org";
 const CONSENT_STEP = "5"; // TOTAL_STEPS (4) + 1 — SurveyPage.tsx
 
 // Exit 0 clean, 1 the defect reproduced, 3 could not measure. B1 is in

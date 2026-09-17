@@ -9,13 +9,28 @@
  *   REPORT_ORIGIN=https://www.loveiq.org node scripts/probes/verify-nav-heading-clearance.mjs
  *   V2=1 ...        # check report 2.0 (?v2=1) instead
  *   MUTATE=1 ...    # removes the clearance — every device must FAIL
+ *
+ * Exit 0 clean · 1 the bar covers the heading · 3 could not measure.
+ *
+ * The third code matters here more than anywhere. This probe finds the bar and
+ * the heading by walking the DOM for text starting "Chapter:" and the first
+ * visible h1/h2. When the report does not render — a slow build, an expired
+ * token, a 500 — neither is found. That used to count as a FAILURE, so a report
+ * that never loaded reported "the chapter bar covers the first heading", and
+ * C1 is one of the three criteria allowed to open a pull request. Not finding
+ * the thing you are measuring is not evidence that it is broken.
  */
 import { chromium, webkit, devices } from "playwright";
 import { stagingCookies } from "./staging-cookie.mjs";
 const O = process.env.REPORT_ORIGIN ?? "https://www.loveiq.org",
   T = "rpt_a9LY0Obbla1FVsclJ1nM";
 let bad = 0;
-for (const name of ["Pixel 7", "iPhone 15 Pro", "iPhone SE"]) {
+let unmeasured = 0;
+const DEVICE_NAMES = (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro,iPhone SE")
+  .split(",")
+  .map((d) => d.trim())
+  .filter(Boolean);
+for (const name of DEVICE_NAMES) {
   const engine = /iphone/i.test(name) ? webkit : chromium;
   const b = await engine.launch();
   const c = await b.newContext({ ...devices[name], locale: "en-US" });
@@ -69,13 +84,35 @@ for (const name of ["Pixel 7", "iPhone 15 Pro", "iPhone SE"]) {
       scrollY: Math.round(scrollY),
     };
   });
-  const ok = r.found && r.overlapPx === 0;
-  if (!ok) bad += 1;
-  console.log(
-    `${ok ? "PASS" : "FAIL"} ${name.padEnd(15)} heading "${r.headingText}" top=${r.headingRect?.t} ` +
-      `| bar ends ${r.navRect?.b} | covered by ${r.overlapPx}px`
-  );
+  if (!r.found) {
+    unmeasured += 1;
+    console.log(
+      `INCONCLUSIVE ${name.padEnd(15)} ${r.nav ? "no heading" : "no chapter bar"} on screen — ` +
+        `the report did not render, so nothing was measured`
+    );
+  } else if (r.overlapPx > 0) {
+    bad += 1;
+    console.log(
+      `FAIL ${name.padEnd(15)} heading "${r.headingText}" top=${r.headingRect.t} ` +
+        `| bar ends ${r.navRect.b} | covered by ${r.overlapPx}px`
+    );
+  } else {
+    console.log(
+      `PASS ${name.padEnd(15)} heading "${r.headingText}" top=${r.headingRect.t} ` +
+        `| bar ends ${r.navRect.b} | covered by 0px`
+    );
+  }
   await b.close();
 }
-console.log(`\n${3 - bad}/3 devices: the first heading clears the fixed chapter bar`);
-process.exit(bad ? 1 : 0);
+
+const measured = DEVICE_NAMES.length - unmeasured;
+console.log(
+  `\n${measured - bad}/${measured} measured devices: the first heading clears the fixed chapter bar`
+);
+
+if (bad > 0) process.exit(1);
+if (unmeasured > 0) {
+  console.log(`INCONCLUSIVE (${unmeasured}) — could not measure, not a pass`);
+  process.exit(3);
+}
+process.exit(0);

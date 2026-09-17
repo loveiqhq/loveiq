@@ -74,6 +74,25 @@ describe("auto-PR criteria", () => {
     }
   });
 
+  it("requires EVERY probe to tell could-not-measure apart from reproduced", () => {
+    // Not "at least one", unlike the MUTATE rule above. verify-ux-findings.mjs
+    // decides with `results.some((r) => !r.passed && !r.inconclusive)`, so ANY
+    // single probe exiting 1 opens the pull request. One probe that answers 1
+    // for "the page did not render" is therefore enough to file a PR about a
+    // measurement that never happened — which is exactly what
+    // verify-nav-heading-clearance and verify-tap-targets did until 2026-09-17.
+    for (const id of AUTO_PR_CRITERIA) {
+      for (const f of probes.get(id) ?? []) {
+        const src = readFileSync(resolve(process.cwd(), "scripts/probes", f), "utf8");
+        expect(
+          src.includes("process.exit(3)"),
+          `${id} may open a pull request and ${f} has no exit 3 — it cannot say ` +
+            `"could not measure", so a page that failed to load reads as a reproduction`
+        ).toBe(true);
+      }
+    }
+  });
+
   it("keeps Z1 off the list until its probe can measure", () => {
     // Guarding the specific regression, not just the general rule: verify-input-zoom
     // returns exit 3 on every device because it never reaches a text input.

@@ -117,11 +117,30 @@ for (const name of CASES) {
   await browser.close();
 }
 
-const bad = rows.filter(
-  (r) => !(r.sticky && r.sticky.hit >= 44) || (r.upsell && !r.upsell.reachesButton)
-);
+/**
+ * Exit 0 clean · 1 the target is too small · 3 could not measure.
+ *
+ * A device with NO sticky bar has not told us the CTA is too small — it has
+ * told us the report did not render. That used to count as a failure, and D1 is
+ * one of the three criteria allowed to open a pull request, so a slow build
+ * could have filed one claiming an untappable button nobody ever measured.
+ */
+const unmeasured = rows.filter((r) => !r.sticky);
+const measured = rows.filter((r) => r.sticky);
+const bad = measured.filter((r) => r.sticky.hit < 44 || (r.upsell && !r.upsell.reachesButton));
+
 console.log(
-  `\n${rows.length - bad.length}/${rows.length} devices: unlock CTA tappable over >=44px AND the locked block routes taps to unlock`
+  `\n${measured.length - bad.length}/${measured.length} measured devices: unlock CTA tappable over >=44px AND the locked block routes taps to unlock`
 );
 if (bad.length) console.log("still short:", bad.map((r) => r.name).join(", "));
-process.exitCode = bad.length ? 1 : 0;
+
+if (bad.length) process.exit(1);
+if (unmeasured.length) {
+  console.log(
+    `INCONCLUSIVE (${unmeasured.length}) — no sticky unlock bar on ${unmeasured
+      .map((r) => r.name)
+      .join(", ")}; the report did not render, so nothing was measured`
+  );
+  process.exit(3);
+}
+process.exit(0);

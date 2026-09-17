@@ -36,6 +36,7 @@ import {
 // The only part of this script that writes to GitHub, kept in its own module so
 // it can be tested without running everything else. See scripts/lib/replay-pr.mjs.
 import { AUTO_PR_CRITERIA, openReproductionPr } from "./lib/replay-pr.mjs";
+import { devicesForSession } from "./lib/session-devices.mjs";
 
 const DRY_RUN = process.argv.includes("--dry-run");
 /** Map findings to criteria and stop. Probes drive real browsers against
@@ -207,6 +208,14 @@ function runProbe(file, viewport) {
   const widths = viewport
     ? [...new Set([viewport.min, viewport.max].filter((w) => w >= 200 && w <= 2000))].join(",")
     : "";
+  /**
+   * DEVICES is what actually makes a run session-specific. WIDTHS is read by
+   * ONE gate probe; twelve of the rest read DEVICES and were never given it, so
+   * they ran a hardcoded list while the verdict claimed otherwise. Null when
+   * the viewport is unknown — then the probe keeps its own defaults rather than
+   * being handed a guess.
+   */
+  const deviceList = devicesForSession(viewport);
   try {
     const out = execFileSync("node", [`scripts/probes/${file}`], {
       encoding: "utf8",
@@ -215,6 +224,7 @@ function runProbe(file, viewport) {
         ...process.env,
         REPORT_ORIGIN: "https://www.loveiq.org",
         ...(widths ? { WIDTHS: widths } : {}),
+        ...(deviceList ? { DEVICES: deviceList } : {}),
       },
     });
     return { file, passed: true, tail: out.trim().split("\n").slice(-3).join(" | ") };
@@ -649,8 +659,18 @@ for (const [observationId, sessionId, scannerName, reasoning] of findings) {
       ? openReproductionPr({ criterion, sessionId, viewport, results })
       : null;
 
-  const at = viewport
-    ? ` at ${viewport.min}px${viewport.max !== viewport.min ? `-${viewport.max}px` : ""}, the size this reader had`
+  /**
+   * Say what was actually driven. This read "at 262px-715px, the size this
+   * reader had" on EVERY verdict, including the thirteen probes that never
+   * received the width and ran a hardcoded device list — a claim about the
+   * evidence that the evidence did not support. Now the devices are real,
+   * naming them is both honest and more useful than a pixel range.
+   */
+  const ranOn = devicesForSession(viewport);
+  const at = ranOn
+    ? ` on ${ranOn}, matched to this reader's ${viewport.min}px${
+        viewport.max !== viewport.min ? `-${viewport.max}px` : ""
+      } screen`
     : "";
   let verdict;
   if (reproduced) {
