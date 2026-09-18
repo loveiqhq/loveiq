@@ -137,7 +137,16 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
 let pdfBytes: Uint8Array = new Uint8Array([37, 80, 68, 70]);
 let pdfText = "";
 vi.mock("unpdf", () => ({
-  getDocumentProxy: vi.fn(async () => ({})),
+  // FAITHFUL TO pdfjs: it throws on a zero-byte buffer rather than returning no text.
+  // A mock that quietly returned "" here made the zero-byte test pass with the guard
+  // REMOVED — the doc reached `empty=` either way — so the test proved nothing. Caught
+  // by mutation, which is the only thing that can catch it.
+  getDocumentProxy: vi.fn(async (buf: Uint8Array) => {
+    if (!buf || buf.byteLength === 0) {
+      throw new Error("The PDF file is empty, i.e. its size is zero bytes.");
+    }
+    return {};
+  }),
   extractText: vi.fn(async () => ({ totalPages: 1, text: pdfText })),
 }));
 
