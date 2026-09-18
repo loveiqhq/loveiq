@@ -730,6 +730,8 @@ export async function ingestDrive(
    *  so `docs=` minus the chunks it produced is an arithmetic identity, not a mystery. */
   let emptyDocs = 0;
   let refusedDocs = 0;
+  /** Produced no rows for a reason that is NOT the people-list refusal (no id, no name). */
+  let unusableDocs = 0;
   let complete = listed.complete;
   let stopped: string | undefined = listed.stopped;
   const stop = (why: string) => {
@@ -768,7 +770,14 @@ export async function ingestDrive(
       // refusal is deliberate and silent, which is the problem: `docs=745` against 727
       // indexed documents could not be reconciled from outside, so a NEW gap would look
       // exactly like this known one.
-      if (produced.length === 0) refusedDocs += 1;
+      //
+      // It also returns nothing for a file with no id or name, which is a DIFFERENT
+      // thing and must not be counted under the same word -- one label for two states
+      // is the exact complaint these counters exist to answer.
+      if (produced.length === 0) {
+        if (isPersonalDataExport(text)) refusedDocs += 1;
+        else unusableDocs += 1;
+      }
       rows.push(...produced);
     } catch (err) {
       // One unreadable document must not cost the rest of the run -- and it must
@@ -870,6 +879,7 @@ export async function ingestDrive(
       `complete=${complete}${stopped ? ` stopped=${stopped}` : ""}` +
       (emptyDocs > 0 ? ` empty=${emptyDocs}` : "") +
       (refusedDocs > 0 ? ` refusedAsPeopleList=${refusedDocs}` : "") +
+      (unusableDocs > 0 ? ` unusable=${unusableDocs}` : "") +
       (exportFailures.length > 0
         ? ` exportFailed=${exportFailures.length}:${exportFailures.slice(0, 3).join(",")}`
         : ""),

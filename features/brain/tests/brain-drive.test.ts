@@ -273,6 +273,17 @@ describe("ingestDrive", () => {
     expect(res.detail).toMatch(/refusedAsPeopleList=1/);
     // The two must not be conflated: an empty file is a dud, a people list is a refusal.
     expect(res.detail).not.toMatch(/empty=/);
+    expect(res.detail).not.toMatch(/unusable=/);
+  });
+
+  it("does not file a nameless file under the people-list refusal", async () => {
+    // `docToRows` returns [] for a people list AND for a file with no name. Counting
+    // both as "refusedAsPeopleList" would be one label for two states — the exact
+    // defect these counters exist to answer.
+    files = [{ ...FILE, name: "" }];
+    const res = await ingestDrive(STAMP);
+    expect(res.detail).toMatch(/unusable=1/);
+    expect(res.detail).not.toMatch(/refusedAsPeopleList=/);
   });
 
   it("says nothing when there is nothing to say, so the summary stays readable", async () => {
