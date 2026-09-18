@@ -76,7 +76,14 @@ export async function hogQuery(query, { projectId, apiKey, cap = HOG_ROW_CAP, la
           .match(/(\d+)\s*$/)?.[1]
       )
     : cap;
-  if (Number.isFinite(limit) && rows.length >= limit) {
+  /**
+   * `limit > 1` because a deliberate `LIMIT 1` returning one row is the normal
+   * case, not a truncation — single-row reads do it constantly. The first
+   * version warned on every one of them, and a guard that cries wolf on its
+   * most common input is one people learn to scroll past, which is worse than
+   * not having it at all.
+   */
+  if (Number.isFinite(limit) && limit > 1 && rows.length >= limit) {
     console.warn(
       `WARNING: hogql${label ? ` (${label})` : ""} returned exactly ${rows.length} rows — ` +
         `at the limit, so the result is probably truncated.`

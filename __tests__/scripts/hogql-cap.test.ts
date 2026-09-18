@@ -75,6 +75,25 @@ describe("HogQL queries state a row limit", () => {
     expect(calls).toBe(1);
   });
 
+  it("does not cry wolf when a deliberate LIMIT 1 returns one row", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.stubGlobal("fetch", async () => ({ ok: true, json: async () => ({ results: [["x"]] }) }));
+    await hogQuery("SELECT a FROM b LIMIT 1", { projectId: "p", apiKey: "k" });
+    expect(warn, "a single-row read is not a truncation").not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("still warns when a real limit is hit exactly", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.stubGlobal("fetch", async () => ({
+      ok: true,
+      json: async () => ({ results: [["a"], ["b"], ["c"]] }),
+    }));
+    await hogQuery("SELECT a FROM b LIMIT 3", { projectId: "p", apiKey: "k" });
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
+  });
+
   /**
    * The ratchet. Three near-identical uncapped helpers existed before this, each
    * written by someone who did not know about the other two. A fourth must not
