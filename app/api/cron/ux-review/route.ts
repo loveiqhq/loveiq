@@ -66,6 +66,12 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 /**
+ * Stop STARTING findings past this, leaving the rest of the 30s ceiling for the
+ * daily digest below and for recordCronRun to write the row at all.
+ */
+const LOOP_BUDGET_MS = 18_000;
+
+/**
  * Post the daily summary at or after this hour, BERLIN time — not UTC.
  *
  * Not the first run after midnight: a digest of an empty night reports nothing
@@ -106,8 +112,39 @@ export async function GET(request: Request) {
     let collected = 0;
     let contradicted = 0;
     let suppressed = 0;
+    let deferred = 0;
 
     for (const finding of findings) {
+      /**
+       * Budget the WALL CLOCK too, not just the count.
+       *
+       * The count bound alone assumes each finding is cheap, and one of them is
+       * not: `fetchSessionEvents` is a HogQL call with a 15s timeout and one
+       * retry, so a single slow finding can spend the whole 30s ceiling by
+       * itself. PostHog sheds load with 503 under exactly the conditions that
+       * produce a busy run — on 2026-09-18, re-queueing 157 observations took
+       * this cron from a 0.5-7s baseline to 15.6s and then 20.9s in the two
+       * runs that followed, while PostHog answered 503 to other callers.
+       *
+       * A function killed at maxDuration writes NO cron_run row, so the failure
+       * here is not a slow run but an INVISIBLE one: the findings stay
+       * unclaimed, the next run inherits them plus its own, and nothing reports
+       * that anything went wrong.
+       *
+       * Checked BEFORE the claim, so a deferred finding is untouched rather
+       * than claimed-but-unhandled, and the next run takes it immediately
+       * instead of waiting out the ten-minute stale-claim window. Same idiom as
+       * NURTURE_TIME_BUDGET_MS in the nurture cron.
+       */
+      if (Date.now() - startMs > LOOP_BUDGET_MS) {
+        deferred = findings.length - (collected + contradicted + suppressed);
+        logger.warn(
+          { deferred, collected, contradicted, elapsedMs: Date.now() - startMs },
+          "ux-review: loop budget spent, deferring the rest to the next run"
+        );
+        break;
+      }
+
       /**
        * Budget the WORK, not the lookback.
        *
@@ -214,9 +251,11 @@ export async function GET(request: Request) {
        *
        * The record is `public.ux_finding` now, written by the verifier AFTER a
        * probe has answered, carrying the verdict rather than the claim. A
-       * notice for a REPRODUCED finding would be defensible and is worth adding
-       * when one exists to test it against; today nothing has reproduced, so
-       * writing that path now would ship an untested branch.
+       * notice for a REPRODUCED finding would be defensible. It stopped being
+       * hypothetical on 2026-09-18 — the verifier reproduced a disabled "I
+       * agree" on the survey consent gate (D1) on the reader's own device — so
+       * that path now has something to be tested against, and is worth adding
+       * deliberately rather than as a branch nothing has ever exercised.
        */
       await markSlackAlertDelivered("ux_review", "observation", finding.observationId);
       collected += 1;
@@ -273,6 +312,7 @@ export async function GET(request: Request) {
       collected,
       contradicted,
       suppressed,
+      deferred,
       scanners: UX_SCANNERS.length,
     });
   } catch (err) {

@@ -84,6 +84,48 @@ describe("ux-review cron", () => {
 
   afterEach(() => vi.useRealTimers());
 
+  /**
+   * A function killed at maxDuration writes NO cron_run row, so an over-budget
+   * run is invisible rather than merely slow. `fetchSessionEvents` is a HogQL
+   * call with a 15s timeout and a retry, and PostHog sheds load with 503 under
+   * exactly the conditions that make a run busy — so ONE finding can spend the
+   * whole 30s ceiling while the count bound sees only "1 of 6 used".
+   */
+  it("defers the rest of the findings when the loop budget is spent", async () => {
+    mockFetchFindings.mockResolvedValue([
+      finding({ observationId: "a" }),
+      finding({ observationId: "b" }),
+      finding({ observationId: "c" }),
+    ]);
+    // Each session lookup burns 10s of the 18s loop budget.
+    mockFetchSessionEvents.mockImplementation(async () => {
+      vi.advanceTimersByTime(10_000);
+      return new Set(["report_viewed"]);
+    });
+
+    const body = await (await GET(req())).json();
+
+    expect(body.collected, "two findings fit inside the budget").toBe(2);
+    expect(body.deferred, "the third was left for the next run").toBe(1);
+    // Untouched, not claimed-and-dropped: the next run must take it straight
+    // away rather than waiting out the ten-minute stale-claim window.
+    // Only the OBSERVATION claims — the daily digest takes one of its own,
+    // keyed by the day, and counting it here would make this assertion drift
+    // with an unrelated feature.
+    const claimed = mockTryClaim.mock.calls.filter((c) => c[1] === "observation").map((c) => c[2]);
+    expect(claimed, "the deferred finding must be left unclaimed").toEqual(["a", "b"]);
+  });
+
+  it("does not defer when every finding is fast", async () => {
+    mockFetchFindings.mockResolvedValue([
+      finding({ observationId: "a" }),
+      finding({ observationId: "b" }),
+    ]);
+    const body = await (await GET(req())).json();
+    expect(body.deferred).toBe(0);
+    expect(body.collected).toBe(2);
+  });
+
   it("never posts an individual finding to Slack", async () => {
     // The whole reason the route changed: on 2026-09-14 the five findings it
     // posted were each wrong about the mechanism. Only the digest may post.
