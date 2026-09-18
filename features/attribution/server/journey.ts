@@ -251,11 +251,18 @@ export function measureReportDwellMs(
   openedAt: string | null,
   events: Array<{ event_type: string; event_time: string | null | undefined }>,
   /**
-   * `report_session` boundaries — every `started_at` and `ended_at` for this
-   * report. Server-written and NOT consent-gated, so these are the only points
-   * a reader who declined analytics contributes at all.
+   * This report's `report_session` rows. Server-written and NOT consent-gated,
+   * so a CLOSED one is the only thing a reader who declined analytics
+   * contributes at all.
+   *
+   * Only closed ones count, and they count as an INTERVAL rather than as two
+   * loose points. An open session says a page was requested and nothing more:
+   * submission #1921 carries 82 of them from one afternoon of QA, none closed,
+   * chained 0–13 minutes apart, and treating each start as presence billed the
+   * whole two hours as reading. The anchor already carries the first open,
+   * which is the only thing those rows actually prove.
    */
-  sessionTimes: Array<string | null | undefined> = []
+  sessions: Array<{ started_at: string | null; ended_at: string | null }> = []
 ): number | null {
   const milestoneFloor = events.reduce<number>((furthest, e) => {
     const ms = milestoneDwellMs(e.event_type);
@@ -268,24 +275,42 @@ export function measureReportDwellMs(
     // Anything stamped before the report opened belongs to the survey, not to
     // reading — including a clock-skewed row, which would otherwise start the
     // first sitting in the past and inflate every sitting after it.
-    const points = [open];
-    for (const time of [...events.map((e) => e.event_time), ...sessionTimes]) {
-      if (!time) continue;
+    const points: Array<{ at: number; isClose: boolean }> = [{ at: open, isClose: false }];
+    const push = (time: string | null | undefined, isClose: boolean) => {
+      if (!time) return;
       const ms = new Date(time).getTime();
-      if (Number.isFinite(ms) && ms >= open) points.push(ms);
+      if (Number.isFinite(ms) && ms >= open) points.push({ at: ms, isClose });
+    };
+    for (const event of events) push(event.event_time, false);
+    for (const session of sessions) {
+      if (!session.started_at || !session.ended_at) continue;
+      if (new Date(session.ended_at).getTime() < new Date(session.started_at).getTime()) continue;
+      push(session.started_at, false);
+      push(session.ended_at, true);
     }
-    points.sort((a, b) => a - b);
+    // Ties: the close sorts last, so a session that opens and closes in the same
+    // millisecond still ends its own sitting rather than the previous one.
+    points.sort((a, b) => a.at - b.at || Number(a.isClose) - Number(b.isClose));
 
-    let sittingStart = points[0]!;
+    let sittingStart = points[0]!.at;
     let previous = points[0]!;
     for (const point of points.slice(1)) {
-      if (point - previous > REPORT_IDLE_GAP_MS) {
-        span += previous - sittingStart;
-        sittingStart = point;
+      /**
+       * A close ends the sitting outright, whatever the gap.
+       *
+       * This is the whole reason `ended_at` is worth writing. Without it the only
+       * evidence of absence was a long silence, so someone who read for two
+       * minutes, left, and came back ten minutes later was billed for all
+       * fourteen — the 30-minute threshold never fired. We now KNOW they left,
+       * so the gap after a close is never reading time.
+       */
+      if (previous.isClose || point.at - previous.at > REPORT_IDLE_GAP_MS) {
+        span += previous.at - sittingStart;
+        sittingStart = point.at;
       }
       previous = point;
     }
-    span += previous - sittingStart;
+    span += previous.at - sittingStart;
   }
 
   const dwell = Math.max(span, milestoneFloor);
@@ -406,11 +431,7 @@ export async function buildSubmissionJourney(
     [reportSessions[0]?.started_at ?? null, firstOf("report_viewed")]
       .filter((v): v is string => Boolean(v))
       .sort()[0] ?? null;
-  const reportDwellMs = measureReportDwellMs(
-    reportViewedAt,
-    events,
-    reportSessions.flatMap((s) => [s.started_at, s.ended_at])
-  );
+  const reportDwellMs = measureReportDwellMs(reportViewedAt, events, reportSessions);
   const checkoutStartedAt =
     purchased?.checkout_started_at ??
     quotes.find((q) => q.checkout_started_at)?.checkout_started_at ??

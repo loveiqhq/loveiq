@@ -418,6 +418,52 @@ describe("buildSubmissionJourney", () => {
       expect((await buildSubmissionJourney(1296))?.timings.reportDwellMs).toBe(600_000);
     });
 
+    /**
+     * A close is positive evidence of ABSENCE, so the gap after it is never
+     * reading time — whatever the 30-minute idle rule would have said.
+     *
+     * This is the whole reason `ended_at` is worth writing. Without it the only
+     * evidence of absence was a long silence, so a reader who read for two
+     * minutes, left, and came back ten minutes later was billed for all
+     * fourteen.
+     */
+    it("does not bill the ten minutes a reader spent away between two visits", async () => {
+      route({
+        reportSessions: [
+          { started_at: at("10:00:00"), ended_at: at("10:02:00") },
+          { started_at: at("10:12:00"), ended_at: at("10:15:00") },
+        ],
+        events: [],
+      });
+      // 2 + 3, not the 15 the idle threshold alone would have allowed.
+      expect((await buildSubmissionJourney(1296))?.timings.reportDwellMs).toBe(300_000);
+    });
+
+    /**
+     * An OPEN session says a page was requested and nothing more.
+     *
+     * Submission #1921 carries 82 of them from one afternoon of QA, none closed,
+     * chained 0–13 minutes apart across two hours. Counting each `started_at` as
+     * presence chained them into a single sitting and reported "2h 2m" for a
+     * reader whose own events say thirteen minutes — caught on production data
+     * before this shipped, not by a test.
+     */
+    it("does not chain a reload storm of unclosed sessions into one long sitting", async () => {
+      const reloads = Array.from({ length: 12 }, (_, i) => ({
+        started_at: `2026-08-24T${String(10 + Math.floor(i / 6)).padStart(2, "0")}:${String((i * 9) % 60).padStart(2, "0")}:00.000Z`,
+        ended_at: null,
+      }));
+      route({
+        reportSessions: reloads,
+        events: [
+          { event_type: "report_viewed", event_time: at("10:00:00") },
+          { event_type: "scroll_depth_50", event_time: at("10:04:00") },
+        ],
+      });
+      // The reader's own events say four minutes; the reloads say nothing.
+      expect((await buildSubmissionJourney(1296))?.timings.reportDwellMs).toBe(240_000);
+    });
+
     it("still reports nothing when a session was opened and never closed", async () => {
       // The beacon can be lost — a killed tab, a crashed browser, a blocked
       // request — and an unclosed session must not become a zero-second visit.
