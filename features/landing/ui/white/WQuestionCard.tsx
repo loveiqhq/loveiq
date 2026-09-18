@@ -15,8 +15,8 @@ import {
  *
  * This is the real thing, not a demo: answering stores the answer against
  * `LANDING_PREFILL_QID` and marks it prefilled, so SurveyEngine drops it from
- * the flow. 59 questions in total — 1 here, 58 inside /survey — and the answer
- * submits and scores exactly like any other.
+ * the flow — 1 here, the rest inside /survey — and the answer submits and scores
+ * exactly like any other.
  *
  * Answering deliberately does NOT navigate. The answer is saved straight away
  * (so it survives even if the visitor wanders off) and a "Continue" CTA reveals
@@ -25,13 +25,23 @@ import {
  *
  * Copy is duplicated from `data/survey-data.ts` on purpose; importing that 80 KB
  * module into the landing bundle for three strings is not worth it. Keep it in
- * sync if Q01002 is reworded (and TOTAL_QUESTIONS if items are added/removed).
+ * sync if Q01002 is reworded.
  */
 
 const QUESTION_TEXT = "Right now, I feel satisfied with my sex life.";
 const GUIDE_SHORT = "Think about the last one to two months overall, not your best or worst day.";
 const GUIDE_LONG = `${GUIDE_SHORT} If you are not having sex right now, rate how you feel about that.`;
-const TOTAL_QUESTIONS = 59;
+/**
+ * Shown to the visitor as "QUESTION 1 OF n". Hardcoded for the bundle reason above,
+ * and therefore drift-prone: the instruction to keep it in sync had already been
+ * missed twice — it read 59 while the survey asked 57 — and the demand block would
+ * have made it a third. `WQuestionCard.test.tsx` now asserts it against
+ * `SURVEY_TOTAL_QUESTIONS`, which is derived, so the next change fails in CI
+ * instead of quietly showing the reader a wrong number.
+ *
+ * Exported for that test only.
+ */
+export const TOTAL_QUESTIONS = 60;
 
 /** Ring / dot diameters per scale point (Figma "scale" asset, 1→7). */
 const SCALE = [

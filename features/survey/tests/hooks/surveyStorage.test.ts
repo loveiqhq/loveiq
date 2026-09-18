@@ -65,6 +65,7 @@ describe("surveyStorage", () => {
     localStorage.setItem(PENDING_COMPLETION_KEY, JSON.stringify(payload));
     sessionStorage.setItem(SURVEY_STEP_KEY, "5");
     sessionStorage.setItem("loveiq-survey-session", "session-123");
+    localStorage.setItem("loveiq-survey-session", "session-123");
 
     clearPersistedSurveyState();
 
@@ -75,6 +76,10 @@ describe("surveyStorage", () => {
     expect(localStorage.getItem(PENDING_COMPLETION_KEY)).not.toBeNull();
     expect(sessionStorage.getItem(SURVEY_STEP_KEY)).toBeNull();
     expect(sessionStorage.getItem("loveiq-survey-session")).toBeNull();
+    // The session id is mirrored into localStorage so it outlives a closed tab for as
+    // long as the draft does. Clearing the draft must take the mirror, or the next
+    // survey on this browser resumes a dead id.
+    expect(localStorage.getItem("loveiq-survey-session")).toBeNull();
   });
 
   it("optionally clears the pending completion record too", () => {
@@ -88,11 +93,15 @@ describe("surveyStorage", () => {
   it("can preserve the survey session for report handoff cleanup", () => {
     sessionStorage.setItem(SURVEY_STEP_KEY, "5");
     sessionStorage.setItem("loveiq-survey-session", "session-123");
+    localStorage.setItem("loveiq-survey-session", "session-123");
 
     clearPersistedSurveyState({ clearSurveySession: false });
 
     expect(sessionStorage.getItem(SURVEY_STEP_KEY)).toBeNull();
     expect(sessionStorage.getItem("loveiq-survey-session")).toBe("session-123");
+    // Preserved on BOTH sides — the handoff needs the id, and a half-cleared pair would
+    // hand the next getSessionId() a mirror it would happily resume.
+    expect(localStorage.getItem("loveiq-survey-session")).toBe("session-123");
   });
 });
 

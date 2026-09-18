@@ -37,6 +37,36 @@ function breakStorage(kind: "throws" | "works") {
   return () => Object.defineProperty(window, "sessionStorage", { configurable: true, value: real });
 }
 
+/**
+ * Break ONLY localStorage. `sessionStorage` keeps working.
+ *
+ * `Object.defineProperty` on window, not `vi.spyOn(Storage.prototype, ...)`: in this
+ * jsdom, `getItem` is an OWN property of the storage object and its prototype is not
+ * `Storage.prototype`, so a prototype spy never fires and the test passes while
+ * exercising nothing. Verified — the first version of these two tests was written that
+ * way and survived the mutation it was meant to catch.
+ */
+function breakLocalStorage() {
+  const real = window.localStorage;
+  const boom = () => {
+    throw new DOMException("The operation is insecure.", "SecurityError");
+  };
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    get: () => ({
+      getItem: boom,
+      setItem: boom,
+      removeItem: boom,
+      clear: boom,
+      key: boom,
+      get length() {
+        return boom();
+      },
+    }),
+  });
+  return () => Object.defineProperty(window, "localStorage", { configurable: true, value: real });
+}
+
 const UUID_ISH = /^[0-9a-f-]{20,}$|^s-[a-z0-9]+-[a-z0-9]+$/i;
 
 describe("getSessionId under hostile storage", () => {
@@ -54,6 +84,45 @@ describe("getSessionId under hostile storage", () => {
     expect(a).toMatch(UUID_ISH);
     expect(b).toBe(a);
     expect(window.sessionStorage.getItem("loveiq-survey-session")).toBe(a);
+  });
+
+  /**
+   * The session id is mirrored into localStorage so it outlives a closed tab for as long
+   * as the draft does. That mirror must never cost anything when localStorage is the half
+   * that is refused — which is a real configuration, not only the all-or-nothing case
+   * above.
+   *
+   * The regression: the mirror was first written inside the SAME try as the sessionStorage
+   * reads, so one localStorage throw fell through to the per-page-load in-memory fallback
+   * and discarded a good, reload-surviving id.
+   */
+  it("keeps the sessionStorage id when ONLY localStorage throws", () => {
+    const first = getSessionId();
+    expect(first).toMatch(UUID_ISH);
+
+    const restore = breakLocalStorage();
+    try {
+      expect(getSessionId(), "a localStorage failure must not cost the session id").toBe(first);
+      expect(
+        window.sessionStorage.getItem("loveiq-survey-session"),
+        "and must not replace what sessionStorage already holds"
+      ).toBe(first);
+    } finally {
+      restore();
+    }
+  });
+
+  it("still mints and keeps an id when localStorage throws and there is none yet", () => {
+    const restore = breakLocalStorage();
+    try {
+      const a = getSessionId();
+      expect(a).toMatch(UUID_ISH);
+      // Stable across calls: it landed in sessionStorage even though the mirror failed.
+      expect(getSessionId()).toBe(a);
+      expect(window.sessionStorage.getItem("loveiq-survey-session")).toBe(a);
+    } finally {
+      restore();
+    }
   });
 
   it("does not throw when every storage access throws", () => {

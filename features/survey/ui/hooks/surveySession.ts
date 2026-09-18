@@ -55,14 +55,75 @@ function newId(): string {
   return `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/**
+ * The mirror is read and written through these two, each with its OWN try/catch, so a
+ * browser that allows sessionStorage but throws on localStorage cannot take the primary
+ * path down with it.
+ *
+ * That is not hypothetical bookkeeping: `getSessionId` already had to catch, because
+ * storage THROWS rather than going missing in Safari private mode and several in-app
+ * WebViews. Putting the mirror inside that same try meant one localStorage failure fell
+ * through to the in-memory fallback and discarded a perfectly good, reload-surviving
+ * sessionStorage id — degrading precisely the visitors the catch was written for.
+ *
+ * The mirror is an enhancement. It must never cost more than it adds.
+ */
+function readSessionMirror(): string | null {
+  try {
+    return localStorage.getItem(SURVEY_SESSION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeSessionMirror(id: string): void {
+  try {
+    // Written only when it differs, so reading an established id stays a pure read — and
+    // so a respondent already mid-survey when this deploys gets the mirror backfilled
+    // rather than being handed a new id.
+    if (localStorage.getItem(SURVEY_SESSION_KEY) !== id) {
+      localStorage.setItem(SURVEY_SESSION_KEY, id);
+    }
+  } catch {
+    /* localStorage refused — the survey still works, it just will not survive the tab */
+  }
+}
+
 export function getSessionId(): string {
   if (!canUseStorage()) return "";
   try {
     let id = sessionStorage.getItem(SURVEY_SESSION_KEY);
+    /**
+     * THE MIRROR EXISTS BECAUSE THE DRAFT OUTLIVES THE TAB.
+     *
+     * The in-progress survey lives in localStorage (`SURVEY_STATE_KEY`) and survives the
+     * browser closing. This id lived only in sessionStorage, which does not. A respondent
+     * who closed the tab and came back therefore resumed their answers under a BRAND NEW
+     * id — measured: 191 of 3,014 sessions (6.3%) have their first behaviour event partway
+     * through the survey, which is exactly that population.
+     *
+     * Three things were wrong for them, all silent:
+     *
+     *  - C13's arm is a hash of this id, so half of them had the QUESTION ORDER change
+     *    under them mid-survey, and were recorded under the arm they finished in rather
+     *    than the one they mostly saw. That is unrecoverable after the fact and biases the
+     *    experiment toward "no difference".
+     *  - `optionOrder` is recomputed from this id at submit, so the recorded option order
+     *    was not the order they were shown — the recorded order becomes a fiction, which
+     *    is the one thing that feature exists to prevent.
+     *  - Their server-side partial save is keyed by the old id and is simply orphaned.
+     *
+     * Mirroring into localStorage ties the id's lifetime to the draft's, which is what it
+     * always should have been. `clearPersistedSurveyState` and `finalizeReportSession`
+     * clear the mirror wherever they clear the session, so a finished or reset survey
+     * still starts the next one fresh. Precedent is one function down: `getReportSessionId`
+     * already falls back to localStorage for exactly this reason.
+     */
     if (!id) {
-      id = newId();
+      id = readSessionMirror() ?? newId();
       sessionStorage.setItem(SURVEY_SESSION_KEY, id);
     }
+    writeSessionMirror(id);
     return id;
   } catch {
     /**
@@ -126,6 +187,11 @@ export function finalizeReportSession(sessionId: string): void {
 
     if (sessionStorage.getItem(SURVEY_SESSION_KEY) === sessionId) {
       sessionStorage.removeItem(SURVEY_SESSION_KEY);
+    }
+    // The localStorage mirror has to go with it, or the NEXT survey from this browser
+    // resumes a finished submission's id — see the note on `getSessionId`.
+    if (localStorage.getItem(SURVEY_SESSION_KEY) === sessionId) {
+      localStorage.removeItem(SURVEY_SESSION_KEY);
     }
   } catch {
     /* storage unavailable */

@@ -5,6 +5,8 @@
 *.ts text eol=lf
 *.tsx text eol=lf
 *.js text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
 *.jsx text eol=lf
 *.json text eol=lf
 *.css text eol=lf
@@ -14,6 +16,10 @@
 *.yaml text eol=lf
 *.svg text eol=lf
 *.sh text eol=lf
+
+# Vitest writes snapshots with LF; without this they check out CRLF and every
+# local test run leaves the working tree dirty (same trap as *.mjs above).
+*.snap text eol=lf
 
 # Binary files
 *.png binary
