@@ -1027,6 +1027,25 @@ describe("/api/mcp", () => {
       expect(JSON.stringify(r)).toContain("no argument named");
     });
 
+    it("does not leak the alias to other tools", async () => {
+      // The map is keyed by tool ON PURPOSE. `search_company_context` has no `id` at
+      // all, so `document_id` there is a caller confusing two tools, not naming an
+      // argument — and must die exactly as it did before.
+      const r = await POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 41,
+          method: "tools/call",
+          params: {
+            name: "search_company_context",
+            arguments: { query: "pricing", document_id: "drive/doc:1AbC" },
+          },
+        })
+      ).then((x) => x.json().then((b) => b.result));
+      expect(r.isError).toBe(true);
+      expect(JSON.stringify(r)).toContain("document_id");
+    });
+
     it("refuses when document_id and id disagree, rather than picking one", async () => {
       const r = await call({ id: "drive/doc:1AbC", document_id: "drive/doc:9ZZZ" });
       expect(r.isError).toBe(true);
