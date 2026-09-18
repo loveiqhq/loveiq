@@ -15,16 +15,24 @@
  * SEVEN had dead clicks (one with 31, another with 27). They matched every
  * scanner's query and were never looked at.
  *
- * REQUEUEING IS NOT DONE HERE, deliberately. PostHog exposes
- * `POST /api/projects/<id>/vision/scanners/<scanner>/observe/`, which answers
- * 403 `API key missing required scope 'replay_scanner:write'` with the token
- * this repo holds — the endpoint is real and our key is read-only for it. An
- * API call that cannot be executed cannot be tested, so this reports the gap
- * and names the scope instead of shipping an untried request. Grant
- * `replay_scanner:write` and the enqueue is a short follow-up.
+ * `--enqueue` sends each miss back to the scanners that should have seen it,
+ * via `POST /api/projects/<id>/vision/scanners/<scanner>/observe/`. This needs
+ * the `replay_scanner:write` scope on POSTHOG_API_KEY — granted 2026-09-18;
+ * before that the endpoint answered 403 and this script only reported the gap.
+ *
+ * ROUTING IS READ FROM THE SCANNERS, NOT GUESSED FROM THEIR NAMES. Each one
+ * queries exactly one trigger event and those map 1:1 onto TRIGGERS below, so a
+ * session is offered only to the scanners whose own query it actually matched.
+ * Sending every session to all four would quadruple the credit spend and hand
+ * each scanner recordings outside its subject, which is how a precision number
+ * gets ruined by the harness rather than by the model.
+ *
+ * DRY BY DEFAULT. Enqueuing spends credits and creates observations that land
+ * in the digest, so it never happens as a side effect of asking what is missing.
  *
  *   npx tsx --env-file=.env.local scripts/ux-review-coverage.mjs
  *   DAYS=7 npx tsx scripts/ux-review-coverage.mjs
+ *   npx tsx --env-file=.env.local scripts/ux-review-coverage.mjs --enqueue
  *
  * Exit 0 clean, 1 misses found, 2 could not measure.
  */
@@ -131,9 +139,61 @@ for (const m of misses) {
 
 if (misses.length > 0) {
   console.log(
-    `\n${misses.length} finished reader(s) had a recording and a trigger and were never opened.` +
-      `\nRe-queue needs the 'replay_scanner:write' scope on POSTHOG_API_KEY; see the header.`
+    `\n${misses.length} finished reader(s) had a recording and a trigger and were never opened.`
   );
+
+  if (!process.argv.includes("--enqueue")) {
+    console.log(`Re-run with --enqueue to send them back to the scanners that match.`);
+    process.exit(1);
+  }
+
+  const scannerRes = await fetch(
+    `https://eu.posthog.com/api/projects/${PROJECT}/vision/scanners/`,
+    { headers: { Authorization: `Bearer ${need("POSTHOG_API_KEY")}` } }
+  );
+  if (!scannerRes.ok) {
+    console.error(`could not list scanners: ${scannerRes.status}`);
+    process.exit(2);
+  }
+  const scannerList = (await scannerRes.json()).results ?? [];
+
+  /** trigger event -> scanner. Taken from each scanner's own query. */
+  const byTrigger = new Map();
+  for (const sc of scannerList) {
+    for (const ev of sc.query?.events ?? []) {
+      if (ev?.id) byTrigger.set(String(ev.id), sc);
+    }
+  }
+
+  let queued = 0;
+  let failed = 0;
+  for (const m of misses) {
+    for (const [i, trigger] of TRIGGERS.entries()) {
+      if ((m.counts[i] ?? 0) === 0) continue;
+      const sc = byTrigger.get(trigger);
+      if (!sc) continue;
+      const res = await fetch(
+        `https://eu.posthog.com/api/projects/${PROJECT}/vision/scanners/${sc.id}/observe/`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${need("POSTHOG_API_KEY")}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ session_id: m.sid }),
+        }
+      );
+      const ok = res.ok;
+      if (ok) queued += 1;
+      else failed += 1;
+      const detail = ok ? "" : ` — ${(await res.text()).slice(0, 120)}`;
+      console.log(
+        `  ${ok ? "queued " : "FAILED "} ${m.sid.slice(0, 13)} -> ${sc.name} (${trigger})${detail}`
+      );
+    }
+  }
+  console.log(`\n${queued} observation(s) queued, ${failed} failed.`);
+  if (failed > 0) process.exit(2);
   process.exit(1);
 }
 console.log("every finished reader with a recording was opened by a scanner.");
