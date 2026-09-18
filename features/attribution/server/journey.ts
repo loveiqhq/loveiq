@@ -138,6 +138,7 @@ interface AnalyticsRow {
 /** Server-side proof that the report was opened, via report_session. */
 interface ReportSessionRow {
   started_at: string | null;
+  ended_at: string | null;
 }
 
 /** Local copy of the masking rule so the raw address is never returned to callers. */
@@ -230,9 +231,12 @@ function milestoneDwellMs(eventType: string): number | null {
  * span alone calls that a two-second visit; the milestone calls it a minute, and
  * the milestone is right.
  *
- * Still a LOWER BOUND, and deliberately so — we see the last thing they did, not
- * the moment they closed the tab, so a reader who spends four quiet minutes on
- * the final chapter is credited only up to their last scroll.
+ * `report_session.ended_at` is what stops this being a pure lower bound: it is
+ * the moment they actually left, beaconed on the way out, so a reader who spends
+ * four quiet minutes on the final chapter is no longer credited only up to their
+ * last scroll. It still degrades to a lower bound whenever the beacon does not
+ * arrive — a killed tab, a crashed browser, a blocked request — which is why
+ * every other signal stays in the calculation rather than being replaced by it.
  *
  * Replaces the milestone floor ALONE, which is what made 79% of live messages
  * (160 of 202 carrying any milestone) read "1+ min" whatever the reader did.
@@ -245,7 +249,13 @@ function milestoneDwellMs(eventType: string): number | null {
  */
 export function measureReportDwellMs(
   openedAt: string | null,
-  events: Array<{ event_type: string; event_time: string | null | undefined }>
+  events: Array<{ event_type: string; event_time: string | null | undefined }>,
+  /**
+   * `report_session` boundaries — every `started_at` and `ended_at` for this
+   * report. Server-written and NOT consent-gated, so these are the only points
+   * a reader who declined analytics contributes at all.
+   */
+  sessionTimes: Array<string | null | undefined> = []
 ): number | null {
   const milestoneFloor = events.reduce<number>((furthest, e) => {
     const ms = milestoneDwellMs(e.event_type);
@@ -259,9 +269,9 @@ export function measureReportDwellMs(
     // reading — including a clock-skewed row, which would otherwise start the
     // first sitting in the past and inflate every sitting after it.
     const points = [open];
-    for (const event of events) {
-      if (!event.event_time) continue;
-      const ms = new Date(event.event_time).getTime();
+    for (const time of [...events.map((e) => e.event_time), ...sessionTimes]) {
+      if (!time) continue;
+      const ms = new Date(time).getTime();
       if (Number.isFinite(ms) && ms >= open) points.push(ms);
     }
     points.sort((a, b) => a - b);
@@ -346,18 +356,26 @@ export async function buildSubmissionJourney(
       "analytics_event"
     ),
     /**
-     * The server-side record of the report being opened. `report_viewed` in
-     * `analytics_event` sits behind the consent gate and misses 45% of real
+     * The server-side record of the report being opened AND closed. `report_viewed`
+     * in `analytics_event` sits behind the consent gate and misses 45% of real
      * opens (96 of 216 over 2026-08-25 → 09-05), which left `reportViewedAt`
      * null — and every timing derived from it blank — for readers who declined
      * analytics. The report route writes this row itself and its own comment
      * already calls it "the server-side truth here"; this is that truth reaching
      * the journey. Embedded filter, so one request rather than a lookup hop.
+     *
+     * ALL the sessions now, not just the first. `ended_at` is written by
+     * /api/report-session-end on the way out, and it is the only record of when
+     * a reader actually LEFT — every other signal is the last thing they
+     * happened to click. Both boundaries feed the dwell below, which is also
+     * what finally gives a consent-declining reader a measured time instead of
+     * an em dash. Fifty rows is ~9x the busiest report (11,230 sessions across
+     * 2,051 reports) and the earliest is still [0], so the anchor is unchanged.
      */
     fetchJson<ReportSessionRow>(
-      `/rest/v1/report_session?select=started_at,personal_report!inner(survey_submission_id)` +
+      `/rest/v1/report_session?select=started_at,ended_at,personal_report!inner(survey_submission_id)` +
         `&personal_report.survey_submission_id=eq.${submissionId}` +
-        `&order=started_at.asc&limit=1`,
+        `&order=started_at.asc&limit=50`,
       "report_session"
     ),
   ]);
@@ -388,7 +406,11 @@ export async function buildSubmissionJourney(
     [reportSessions[0]?.started_at ?? null, firstOf("report_viewed")]
       .filter((v): v is string => Boolean(v))
       .sort()[0] ?? null;
-  const reportDwellMs = measureReportDwellMs(reportViewedAt, events);
+  const reportDwellMs = measureReportDwellMs(
+    reportViewedAt,
+    events,
+    reportSessions.flatMap((s) => [s.started_at, s.ended_at])
+  );
   const checkoutStartedAt =
     purchased?.checkout_started_at ??
     quotes.find((q) => q.checkout_started_at)?.checkout_started_at ??

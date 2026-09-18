@@ -376,6 +376,68 @@ describe("buildSubmissionJourney", () => {
       expect((await buildSubmissionJourney(1296))?.timings.reportDwellMs).toBe(120_000);
     });
 
+    /**
+     * `report_session.ended_at` is the only record of the moment the reader
+     * actually LEFT. Everything else is the last thing they happened to click,
+     * so without this a reader who spends four quiet minutes on the final
+     * chapter is credited up to their last scroll and no further.
+     */
+    it("counts the quiet minutes between the last click and the close", async () => {
+      route({
+        reportSessions: [{ started_at: at("10:20:00"), ended_at: at("10:34:00") }],
+        events: [
+          { event_type: "report_viewed", event_time: at("10:20:00") },
+          { event_type: "scroll_depth_100", event_time: at("10:30:00") },
+        ],
+      });
+      // 14 min, not the 10 the last scroll would have claimed.
+      expect((await buildSubmissionJourney(1296))?.timings.reportDwellMs).toBe(840_000);
+    });
+
+    /**
+     * The session boundaries are written server-side and are NOT consent-gated,
+     * unlike every `analytics_event` row. A reader who declined analytics used
+     * to be an em dash forever; now they are measured.
+     */
+    it("measures a reader who declined analytics entirely", async () => {
+      route({
+        reportSessions: [{ started_at: at("10:20:00"), ended_at: at("10:27:30") }],
+        events: [],
+      });
+      expect((await buildSubmissionJourney(1296))?.timings.reportDwellMs).toBe(450_000);
+    });
+
+    it("sums two visits from their sessions without billing the gap", async () => {
+      route({
+        reportSessions: [
+          { started_at: at("10:00:00"), ended_at: at("10:06:00") },
+          { started_at: at("14:00:00"), ended_at: at("14:04:00") },
+        ],
+        events: [],
+      });
+      expect((await buildSubmissionJourney(1296))?.timings.reportDwellMs).toBe(600_000);
+    });
+
+    it("still reports nothing when a session was opened and never closed", async () => {
+      // The beacon can be lost — a killed tab, a crashed browser, a blocked
+      // request — and an unclosed session must not become a zero-second visit.
+      route({ reportSessions: [{ started_at: at("10:20:00"), ended_at: null }], events: [] });
+      expect((await buildSubmissionJourney(1296))?.timings.reportDwellMs).toBeNull();
+    });
+
+    it("asks for every session and its close, not just the first open", async () => {
+      route({ events: [] });
+      await buildSubmissionJourney(1296);
+      const sessionQuery = mockSupabaseFetch.mock.calls
+        .map((c) => String(c[0]))
+        .find((p: string) => p.includes("/report_session?"));
+      expect(sessionQuery).toContain("ended_at");
+      // `limit=1` would keep the anchor and throw away every close but the
+      // first reader's — the value this whole feature exists to record.
+      expect(sessionQuery).not.toContain("limit=1&");
+      expect(sessionQuery).toContain("limit=50");
+    });
+
     it("asks the database for the newest rows, so a cap cannot eat the tail", async () => {
       route({ events: [] });
       await buildSubmissionJourney(1296);
