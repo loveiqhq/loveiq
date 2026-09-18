@@ -35,8 +35,13 @@ const covered = (over: Partial<{ submissions: number; observed: number }> = {}) 
   ...over,
 });
 
-const verified = (over: Record<string, number> = {}) => ({
+const verified = (over: Record<string, unknown> = {}) => ({
   reproduced: 0,
+  reproducedItems: [] as Array<{
+    criterion: string | null;
+    urlPath: string | null;
+    delivered: boolean;
+  }>,
   clear: 0,
   inconclusive: 0,
   gap: 0,
@@ -58,16 +63,18 @@ describe("buildDigestMessage", () => {
       covered()
     );
     const json = JSON.stringify(blocks);
-    expect(json).toContain("1 reproduced");
-    expect(json).toContain("2 could not be reproduced");
-    expect(json).toContain("1 could not be measured");
+    // Says WHAT was confirmed, not just how many. A count alone told the
+    // reader that something real happened and nothing about what.
+    expect(json).toContain("1 problem confirmed on a real phone");
+    expect(json).toContain("2 did not happen again when we re-tested");
+    expect(json).toContain("1 could not be tested");
   });
 
   it("names the verdicts that reached nobody", () => {
     // Two of eight verdicts were printed to a CI log and discarded because the
     // session had no submission thread. Silence made that invisible.
     const { blocks } = buildDigestMessage([], verified({ clear: 3, undelivered: 2, total: 3 }));
-    expect(JSON.stringify(blocks)).toContain("2 of those could not be delivered");
+    expect(JSON.stringify(blocks)).toContain("2 of these had no survey entry to post under");
   });
 
   it("says how many readers were actually watched", () => {
@@ -81,9 +88,9 @@ describe("buildDigestMessage", () => {
       covered({ submissions: 118, observed: 39 })
     );
     const json = JSON.stringify(blocks);
-    expect(json).toContain("39 of 118");
+    expect(json).toContain("39 of the 118 people");
     expect(json).toContain("33%");
-    expect(json).toContain("79 were never opened");
+    expect(json).toContain("other 79 were never watched");
   });
 
   it("says nothing was missed when coverage is complete", () => {
@@ -93,8 +100,9 @@ describe("buildDigestMessage", () => {
       covered({ submissions: 12, observed: 12 })
     );
     const json = JSON.stringify(blocks);
-    expect(json).toContain("12 of 12");
-    expect(json).not.toContain("never opened");
+    expect(json).toContain("12 of the 12 people");
+    expect(json).toContain("Everyone was watched");
+    expect(json).not.toContain("never watched");
   });
 
   it("reports unreadable coverage rather than printing full coverage", () => {
@@ -110,7 +118,7 @@ describe("buildDigestMessage", () => {
 
   it("distinguishes an unreadable ledger from an empty one", () => {
     const { blocks } = buildDigestMessage([], verified(), covered());
-    expect(JSON.stringify(blocks)).toContain("nothing reached the verifier");
+    expect(JSON.stringify(blocks)).toContain("nothing reached the re-testing step");
   });
 
   it("reports the ratio, not just the flags", () => {
@@ -121,8 +129,83 @@ describe("buildDigestMessage", () => {
       ],
       verified()
     );
-    expect(text).toContain("20 recordings reviewed, 4 flagged");
-    expect(JSON.stringify(blocks)).toContain("LoveIQ survey UX — 12 reviewed, 2 flagged");
+    expect(text).toContain("4 suspected of 20 watched");
+    // Named for what it watches, not for how it is configured in PostHog.
+    // "LoveIQ dead-click cause" reads like an error code to the one person
+    // this message is written for.
+    const json2 = JSON.stringify(blocks);
+    expect(json2).toContain("The survey — watched 12, suspected 2");
+    expect(json2).not.toContain("LoveIQ");
+  });
+
+  it("says plainly that nothing needs attention when nothing was confirmed", () => {
+    // The old message ended on a list of counts, which reads like a to-do list
+    // even on a day when every suspicion was refuted.
+    const { blocks } = buildDigestMessage(
+      [{ scanner: "LoveIQ survey UX", observed: 9, yes: 3 }],
+      verified({ clear: 3, total: 3 }),
+      covered()
+    );
+    expect(JSON.stringify(blocks)).toContain("Nothing needs your attention today");
+  });
+
+  it("groups two people hitting the same problem into one line", () => {
+    // Ungrouped, an identical pair printed the same sentence twice and read
+    // like a copy-paste mistake rather than two affected people.
+    const { blocks } = buildDigestMessage(
+      [],
+      verified({
+        reproduced: 2,
+        total: 2,
+        reproducedItems: [
+          { criterion: "L1", urlPath: "/survey", delivered: true },
+          { criterion: "L1", urlPath: "/survey", delivered: true },
+        ],
+      }),
+      covered()
+    );
+    const json = JSON.stringify(blocks);
+    expect(json).toContain("(2 people)");
+    // One bullet, not two.
+    expect(json.match(/On the survey, people were sent back/g)).toHaveLength(1);
+  });
+
+  it("agrees singular and plural, because '1 were' costs the reader trust", () => {
+    const { blocks } = buildDigestMessage(
+      [],
+      verified({
+        reproduced: 1,
+        contradicted: 1,
+        duplicate: 1,
+        total: 3,
+        reproducedItems: [{ criterion: "D1", urlPath: "/checkout", delivered: false }],
+      }),
+      covered()
+    );
+    const json = JSON.stringify(blocks);
+    expect(json).toContain("1 problem confirmed");
+    expect(json).toContain("we re-tested it at");
+    expect(json).toContain("1 was contradicted");
+    expect(json).toContain("1 was already answered");
+    expect(json).not.toContain("1 were");
+    expect(json).toContain("the checkout page");
+  });
+
+  it("never leaks a criterion id into the message", () => {
+    // "L1" means nothing to the reader; an unmapped one must fall back to a
+    // sentence rather than printing the code.
+    const { blocks } = buildDigestMessage(
+      [],
+      verified({
+        reproduced: 1,
+        total: 1,
+        reproducedItems: [{ criterion: "Q9", urlPath: "/survey", delivered: true }],
+      }),
+      covered()
+    );
+    const json = JSON.stringify(blocks);
+    expect(json).toContain("something did not work");
+    expect(json).not.toContain("Q9");
   });
 
   it("calls out a silent day instead of reporting all-clear", () => {
@@ -139,7 +222,7 @@ describe("buildDigestMessage", () => {
       verified(),
       covered()
     );
-    expect(JSON.stringify(blocks)).toContain("reproduces it in a real browser");
+    expect(JSON.stringify(blocks)).toContain("reproduce it in a real browser");
   });
 
   it("escapes a scanner name renamed in the PostHog UI", () => {

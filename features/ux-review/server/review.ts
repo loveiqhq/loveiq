@@ -236,8 +236,17 @@ const OUTCOMES = [
 type Outcome = (typeof OUTCOMES)[number];
 
 /** What the verifier concluded, over the same 24 hours the digest covers. */
+/** A confirmed problem, named so the digest can say what it was. */
+export interface ReproducedFinding {
+  criterion: string | null;
+  urlPath: string | null;
+  delivered: boolean;
+}
+
 export interface VerificationStat {
   reproduced: number;
+  /** The confirmed ones themselves. A count alone is not actionable. */
+  reproducedItems: ReproducedFinding[];
   clear: number;
   inconclusive: number;
   gap: number;
@@ -333,16 +342,23 @@ export async function fetchVerificationStats(): Promise<VerificationStat | null>
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   try {
     const res = await fetchWithTimeout(
-      `${url}/rest/v1/ux_finding?select=outcome,delivered&created_at=gte.${since}&limit=500`,
+      `${url}/rest/v1/ux_finding?select=outcome,delivered,criterion,url_path` +
+        `&created_at=gte.${since}&limit=500`,
       {
         headers: { apikey: key, Authorization: `Bearer ${key}` },
         timeoutMs: 8_000,
       }
     );
     if (!res.ok) return null;
-    const rows = (await res.json()) as Array<{ outcome?: string; delivered?: boolean }>;
+    const rows = (await res.json()) as Array<{
+      outcome?: string;
+      delivered?: boolean;
+      criterion?: string | null;
+      url_path?: string | null;
+    }>;
     const tally: VerificationStat = {
       reproduced: 0,
+      reproducedItems: [],
       clear: 0,
       inconclusive: 0,
       gap: 0,
@@ -358,6 +374,13 @@ export async function fetchVerificationStats(): Promise<VerificationStat | null>
       // unreachable from our own writes, which is exactly why it would survive
       // review — the list costs nothing and does not depend on that staying true.
       if (OUTCOMES.includes(row.outcome as Outcome)) tally[row.outcome as Outcome] += 1;
+      if (row.outcome === "reproduced") {
+        tally.reproducedItems.push({
+          criterion: row.criterion ?? null,
+          urlPath: row.url_path ?? null,
+          delivered: row.delivered !== false,
+        });
+      }
       if (row.delivered === false) tally.undelivered += 1;
     }
     return tally;
@@ -367,49 +390,155 @@ export async function fetchVerificationStats(): Promise<VerificationStat | null>
 }
 
 /** Who was actually watched. The number every other line here is silent about. */
+/**
+ * Plain English for a criterion id, for the one reader this message is written
+ * for: a non-technical strategy lead reading it in Slack without context.
+ *
+ * Deliberately says what a VISITOR experienced, not what the code did. "L1" and
+ * "a dead control" are both meaningless to him; "a button that looks live and
+ * does nothing" is not. A criterion with no entry falls back to a neutral
+ * sentence rather than leaking the id.
+ */
+const PLAIN_CRITERION: Record<string, string> = {
+  L1: "people were sent back to an earlier screen instead of forwards",
+  D1: "a button or link looked live but did nothing when tapped",
+  B1: "people lost their place after dealing with the cookie banner",
+  C1: "a heading or button was hidden behind something else",
+  V1: "the main button was unusable at that screen size",
+  Z1: "the survey jumped to the wrong question",
+};
+
+/** Where it happened, in words rather than a URL path. */
+function placeOf(urlPath: string | null): string {
+  if (!urlPath) return "the site";
+  if (urlPath.startsWith("/survey")) return "the survey";
+  if (urlPath.startsWith("/report")) return "someone's report";
+  if (urlPath.startsWith("/checkout")) return "the checkout page";
+  if (urlPath === "/" || urlPath.startsWith("/?")) return "the home page";
+  return `the ${urlPath.replace(/^\//, "").split("/")[0]} page`;
+}
+
+/**
+ * What each AI reviewer is actually watching for.
+ *
+ * The scanners are named for how they are configured in PostHog — "LoveIQ
+ * dead-click cause" — which tells a reader nothing and reads like an error
+ * code. An unknown name falls through unchanged rather than being dropped, so
+ * adding a scanner cannot silently remove a line from this message.
+ */
+function plainScanner(name: string): string {
+  const n = name.toLowerCase();
+  if (n.includes("survey")) return "The survey";
+  if (n.includes("report")) return "The report";
+  if (n.includes("dead-click")) return "Taps that did nothing";
+  if (n.includes("rage-click")) return "Repeated frustrated tapping";
+  return name;
+}
+
 function coverageLine(c: CoverageStat | null): string {
-  if (!c) return "*Recordings watched:* could not read the coverage figures.";
+  if (!c) return "*How much we watched:* could not read the coverage figures.";
   if (c.submissions === 0)
-    return "*Recordings watched:* nobody finished the survey in the last 24 hours.";
+    return "*How much we watched:* nobody finished the survey in the last 24 hours.";
   const pct = Math.round((c.observed / c.submissions) * 100);
   const missed = c.submissions - c.observed;
   return (
-    `*Recordings watched:* ${c.observed} of ${c.submissions} people who finished the survey (${pct}%).` +
+    `*How much we watched:* ${c.observed} of the ${c.submissions} people who finished ` +
+    `the survey (${pct}%).` +
     (missed > 0
-      ? `\n${missed} were never opened by any scanner, so nothing below can speak for them.`
-      : "")
+      ? ` The other ${missed} were never watched, so nothing here can speak for them.`
+      : " Everyone was watched.")
   );
 }
 
-/** One plain line of what the probes concluded — the digest's only non-model number. */
-function verificationLine(v: VerificationStat | null): string {
-  if (!v) return "*Checked by a probe:* could not read the verification record.";
-  if (v.total === 0) {
-    return "*Checked by a probe:* nothing reached the verifier in the last 24 hours.";
+/**
+ * The confirmed problems, by name — the only part of this message anyone can
+ * act on.
+ *
+ * It used to report `2 reproduced` and stop, so the one number that means "this
+ * is real, a visitor hit it, and we hit it again ourselves" arrived with no
+ * indication of WHAT was real. Marcus asked for the message to be more
+ * specific and actionable on 2026-09-18; this is that.
+ */
+function confirmedBlock(v: VerificationStat | null): string {
+  if (!v || v.reproduced === 0) return "";
+  /**
+   * Grouped by what-and-where, because two people hitting the SAME problem is
+   * one thing to fix, not two lines. Ungrouped, a day with two identical L1s
+   * printed the same sentence twice and read like a copy-paste mistake.
+   */
+  const groups = new Map<string, { what: string; where: string; n: number; undelivered: number }>();
+  for (const f of v.reproducedItems) {
+    const what = (f.criterion && PLAIN_CRITERION[f.criterion]) ?? "something did not work";
+    const where = placeOf(f.urlPath);
+    const k = `${where}|${what}`;
+    const g = groups.get(k) ?? { what, where, n: 0, undelivered: 0 };
+    g.n += 1;
+    if (!f.delivered) g.undelivered += 1;
+    groups.set(k, g);
   }
+  const all = [...groups.values()].sort((a, b) => b.n - a.n);
+  const lines = all.slice(0, 5).map((g) => {
+    const who = g.n === 1 ? "" : ` (${g.n} people)`;
+    const posted =
+      g.undelivered === 0
+        ? g.n === 1
+          ? "Posted in that person's thread."
+          : "Posted in their threads."
+        : g.undelivered === g.n
+          ? "No survey entry to post it under."
+          : `${g.undelivered} of them had no survey entry to post under.`;
+    return `• On ${escapeSlack(g.where)}, ${escapeSlack(g.what)}${who}. ${posted}`;
+  });
+  const more = all.length > 5 ? `\n…and ${all.length - 5} more.` : "";
+  const one = v.reproduced === 1;
+  const noun = one ? "problem" : "problems";
+  return (
+    `*⚠️ ${v.reproduced} ${noun} confirmed on a real phone* — we re-tested ` +
+    `${one ? "it" : "each one"} at the screen size that visitor used and hit the same ` +
+    `thing they did.\n` +
+    lines.join("\n") +
+    more
+  );
+}
+
+/** Everything that did NOT turn into a confirmed problem, in one short sentence. */
+function dismissedLine(v: VerificationStat | null): string {
+  if (!v) return "*Everything else:* could not read the verification record.";
+  if (v.total === 0) return "*Everything else:* nothing reached the re-testing step today.";
+  // `was/were` and `has/have` agree with the count, because "1 were already
+  // answered" is the kind of thing that makes a reader trust the rest less.
+  const were = (n: number) => (n === 1 ? "was" : "were");
   const parts = [
-    v.reproduced && `${v.reproduced} reproduced`,
-    v.clear && `${v.clear} could not be reproduced`,
-    v.inconclusive && `${v.inconclusive} could not be measured`,
-    v.gap && `${v.gap} with no probe yet`,
-    v.contradicted && `${v.contradicted} refused by our own events`,
-    v.duplicate && `${v.duplicate} already answered`,
+    v.clear && `${v.clear} did not happen again when we re-tested`,
+    v.contradicted && `${v.contradicted} ${were(v.contradicted)} contradicted by our own records`,
+    v.inconclusive && `${v.inconclusive} could not be tested`,
+    v.gap && `${v.gap} ${v.gap === 1 ? "has" : "have"} no test for that kind of problem yet`,
+    v.duplicate && `${v.duplicate} ${were(v.duplicate)} already answered`,
   ].filter(Boolean);
-  const undelivered = v.undelivered
-    ? `\n${v.undelivered} of those could not be delivered — no submission thread for that session.`
+  if (parts.length === 0) return "";
+  /**
+   * Undelivered verdicts still get a mention, even though the confirmed ones
+   * already say so line by line. Dropping it entirely was tempting — a verdict
+   * of "we could not reproduce it" that reaches nobody costs nothing — but it
+   * is also the only signal that sessions are arriving with no survey entry
+   * attached, and that is worth someone noticing.
+   */
+  const nowhere = v.undelivered
+    ? ` ${v.undelivered} of these had no survey entry to post under.`
     : "";
-  return `*Checked by a probe:* ${parts.join(" \u00b7 ")}.${undelivered}`;
+  return `*Everything else:* ${parts.join(", ")}.${nowhere}`;
 }
 
 /**
  * The digest message.
  *
- * Two things it deliberately does NOT hide. An empty day is reported as
+ * Three things it deliberately does NOT hide. An empty day is reported as
  * unusual rather than as all-clear, because a broken scanner and a healthy
- * product otherwise look identical. And it states what the VERIFIER concluded,
- * not just how many recordings a model flagged — a flag is one AI judgement,
+ * product otherwise look identical. It leads with what was CONFIRMED rather
+ * than with how many recordings a model flagged — a flag is one AI judgement,
  * and until 2026-09-17 this message reported only those, so a reader could not
- * tell a reproduced defect from a refuted guess.
+ * tell a reproduced defect from a refuted guess. And it says plainly when
+ * nothing was confirmed, rather than letting a list of counts imply work.
  */
 export function buildDigestMessage(
   stats: readonly DailyStat[],
@@ -421,27 +550,43 @@ export function buildDigestMessage(
 } {
   const observed = stats.reduce((n, s) => n + s.observed, 0);
   const yes = stats.reduce((n, s) => n + s.yes, 0);
+  const confirmed = confirmedBlock(verification);
+
   const headline =
     observed === 0
       ? "No recordings were reviewed in the last 24 hours — that is unusual, check the scanners are still enabled."
-      : `${observed} recordings reviewed, ${yes} flagged for a closer look.`;
+      : confirmed
+        ? ""
+        : "*Nothing needs your attention today.* Nothing we suspected held up when we re-tested it.";
+
   const lines = stats.map(
-    (s) => `• ${escapeSlack(s.scanner)} — ${s.observed} reviewed, ${s.yes} flagged`
+    (s) => `• ${escapeSlack(plainScanner(s.scanner))} — watched ${s.observed}, suspected ${s.yes}`
   );
 
   const blocks: SlackBlock[] = [
     header("👁 UX review — last 24 hours"),
-    section(headline),
-    ...(lines.length ? [section(lines.join("\n"))] : []),
+    ...(confirmed ? [section(confirmed)] : []),
+    ...(headline ? [section(headline)] : []),
+    section(dismissedLine(verification)),
     section(coverageLine(coverage)),
-    section(verificationLine(verification)),
+    ...(lines.length ? [section(`*What the AI watched for:*\n${lines.join("\n")}`)] : []),
     context(
-      "A flag is one AI judgment on one recording. It becomes a *finding* only when a probe " +
-        "reproduces it in a real browser. Those verdicts are posted in the thread of the submission " +
-        "they belong to when the session has one, and every verdict is recorded either way."
+      "The AI suspects a problem from watching a recording; it is often wrong about why. " +
+        "It only counts as confirmed once we reproduce it in a real browser at that person's " +
+        "screen size. Confirmed problems are posted in the thread of the survey entry they " +
+        "belong to, and every verdict is recorded either way."
     ),
   ];
-  return { text: `UX review — last 24 hours. ${headline}`, blocks };
+  // "unusual" survives into the NOTIFICATION text, not just the blocks. That
+  // one line is the Slack push preview and the channel list entry, so a silent
+  // detector must be legible as a problem before anyone opens the message.
+  const summary =
+    observed === 0
+      ? "no recordings reviewed at all — that is unusual"
+      : verification?.reproduced
+        ? `${verification.reproduced} confirmed on a real phone`
+        : `nothing confirmed, ${yes} suspected of ${observed} watched`;
+  return { text: `UX review — last 24 hours. ${summary}.`, blocks };
 }
 
 export async function fetchFindings(): Promise<UxFinding[]> {
