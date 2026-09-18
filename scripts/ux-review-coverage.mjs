@@ -42,6 +42,8 @@
  *
  * Exit 0 clean, 1 misses found, 2 could not measure.
  */
+import { hogQuery } from "./lib/hogql.mjs";
+
 const PROJECT = "244778";
 const DAYS = Number(process.env.DAYS ?? 4);
 
@@ -58,20 +60,8 @@ function need(name) {
   return v;
 }
 
-async function hog(query) {
-  const res = await fetch(`https://eu.posthog.com/api/projects/${PROJECT}/query/`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${need("POSTHOG_API_KEY")}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ query: { kind: "HogQLQuery", query } }),
-  });
-  if (!res.ok) throw new Error(`posthog ${res.status}`);
-  const payload = await res.json();
-  if (payload.error) throw new Error(`posthog query error: ${String(payload.error).slice(0, 160)}`);
-  return payload.results ?? [];
-}
+const hog = (query) =>
+  hogQuery(query, { projectId: PROJECT, apiKey: need("POSTHOG_API_KEY"), label: "coverage" });
 
 /** UUID-shaped only: these are interpolated into HogQL. */
 const SAFE_ID = /^[0-9a-f-]{36}$/i;

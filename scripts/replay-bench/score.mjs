@@ -19,6 +19,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+import { hogQuery } from "../lib/hogql.mjs";
+
 const PROJECT = "244778";
 const MIN_PRECISION = 0.8;
 const MIN_RECALL = 0.6;
@@ -246,17 +248,8 @@ if (process.argv.includes("--ledger")) {
 
 /** One HogQL query, returning its result rows. Fails loudly, like the fixture
  *  query below: PostHog answers a BAD query with HTTP 200 and an `error` field. */
-async function hog(query) {
-  const res = await fetch(`https://eu.posthog.com/api/projects/${PROJECT}/query/`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey()}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ query: { kind: "HogQLQuery", query } }),
-  });
-  if (!res.ok) throw new Error(`posthog ${res.status}`);
-  const payload = await res.json();
-  if (payload.error) throw new Error(`posthog query error: ${String(payload.error).slice(0, 200)}`);
-  return payload.results ?? [];
-}
+const hog = (query) =>
+  hogQuery(query, { projectId: PROJECT, apiKey: apiKey(), label: "replay-bench" });
 
 /**
  * `--recall`: the half the ledger cannot measure, from evidence the scanner
@@ -433,13 +426,11 @@ for (const w of wanted) {
   }
 }
 
-const res = await fetch(`https://eu.posthog.com/api/projects/${PROJECT}/query/`, {
-  method: "POST",
-  headers: { Authorization: `Bearer ${apiKey()}`, "Content-Type": "application/json" },
-  body: JSON.stringify({
-    query: {
-      kind: "HogQLQuery",
-      query: `
+// Through the shared client: it states the row limit PostHog otherwise
+// applies silently at 100, and throws on the 200-with-error reply that would
+// otherwise read as "not scanned yet". Bounded to the fixture list, which is
+// eight rows today — stated anyway, because the next query might not be.
+const results = await hog(`
         SELECT properties.session_id,
                properties.scanner_name,
                properties.scanner_output_verdict,
@@ -461,18 +452,7 @@ const res = await fetch(`https://eu.posthog.com/api/projects/${PROJECT}/query/`,
           -- verdict that is already recorded.
           AND timestamp > now() - INTERVAL 180 DAY
           AND properties.session_id IN (${wanted.map((w) => `'${w.session_id}'`).join(",")})
-      `,
-    },
-  }),
-});
-if (!res.ok) throw new Error(`query failed: ${res.status} ${(await res.text()).slice(0, 200)}`);
-const payload = await res.json();
-// PostHog answers a BAD HogQL query with HTTP 200 and an `error` field, so
-// checking res.ok alone turns a broken query into "no rows", which this script
-// would then read as "not scanned yet" — or, if every fixture were a negative,
-// as a clean pass. Fail loudly instead.
-if (payload.error) throw new Error(`HogQL error: ${String(payload.error).slice(0, 300)}`);
-const { results } = payload;
+      `);
 
 const rows = wanted.map((w) => {
   const hit = (results ?? []).find((r) => r[0] === w.session_id && r[1] === w.scanner);

@@ -641,15 +641,32 @@ export async function fetchSessionEvents(sessionId: string): Promise<Set<string>
  * every failure, because a caller that cannot tell "no data" from "query
  * failed" must not act as though it can.
  */
+/**
+ * PostHog applies a DEFAULT LIMIT OF 100 to any HogQL query that does not state
+ * one, silently — no error, no flag, no count. Every query in this file is
+ * bounded to a single session and the widest of them returns at most 36 rows
+ * today, so none is truncated; the cap is stated anyway because "it happens to
+ * fit" is not a property anyone re-checks when adding the next query. The same
+ * guard lives in scripts/lib/hogql.mjs for the scripts, and
+ * __tests__/scripts/hogql-cap.test.ts fails if a third construction site
+ * appears without one.
+ */
+const HOG_ROW_CAP = 50_000;
+
 async function sessionQuery(query: string): Promise<unknown[][] | null> {
   const key = process.env.POSTHOG_API_KEY;
   if (!key) return null;
+  // Anchored at the end: a LIMIT inside a subquery says nothing about the outer
+  // result, and reading it as "already capped" would leave the silent 100.
+  const capped = /\bLIMIT\s+\d+\s*$/i.test(query.trim())
+    ? query
+    : `${query.trimEnd()}\nLIMIT ${HOG_ROW_CAP}`;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       const res = await fetchWithTimeout(`https://eu.posthog.com/api/projects/${PROJECT}/query/`, {
         method: "POST",
         headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ query: { kind: "HogQLQuery", query } }),
+        body: JSON.stringify({ query: { kind: "HogQLQuery", query: capped } }),
         timeoutMs: 15_000,
       });
       if (!res.ok) continue;

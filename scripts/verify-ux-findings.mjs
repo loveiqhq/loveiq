@@ -38,6 +38,7 @@ import {
 // it can be tested without running everything else. See scripts/lib/replay-pr.mjs.
 import { AUTO_PR_CRITERIA, openReproductionPr } from "./lib/replay-pr.mjs";
 import { devicesForSession } from "./lib/session-devices.mjs";
+import { hogQuery } from "./lib/hogql.mjs";
 
 /**
  * Criteria where "what did this reader tap" is the relevant evidence. Narrow on
@@ -199,22 +200,8 @@ function requireEnv(name) {
   return v;
 }
 
-async function posthog(query) {
-  const res = await fetch(`https://eu.posthog.com/api/projects/${PROJECT}/query/`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${requireEnv("POSTHOG_API_KEY")}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ query: { kind: "HogQLQuery", query } }),
-  });
-  if (!res.ok) throw new Error(`posthog ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  const json = await res.json();
-  // 200-with-error is how PostHog reports a bad query. Treating that as "no
-  // findings" would make this verifier look permanently healthy and idle.
-  if (json.error) throw new Error(`posthog query error: ${String(json.error).slice(0, 200)}`);
-  return json.results ?? [];
-}
+const posthog = (query) =>
+  hogQuery(query, { projectId: PROJECT, apiKey: requireEnv("POSTHOG_API_KEY"), label: "verifier" });
 
 export function classify(reasoning) {
   return CRITERIA.find((c) => c.match.test(reasoning)) ?? null;
