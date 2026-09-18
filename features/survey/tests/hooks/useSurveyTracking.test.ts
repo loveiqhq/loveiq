@@ -3,11 +3,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act, cleanup } from "@testing-library/react";
 import { makeSurveyQuestion } from "@/__tests__/__fixtures__/survey";
 
-// Stub the analytics client so the consent gate inside useSurveyTracking
-// returns true. The real gate reads document.cookie which is empty under
-// jsdom; mocking keeps these unit tests focused on flush behavior.
+// DECLINED on purpose. `survey_behavior_event` is our own table, and since
+// 2026-09-18 it is written whatever the visitor told the cookie banner — so
+// every flush assertion below now doubles as proof that a declining visitor is
+// still measured. Flip this to `true` and nothing here would notice a
+// reintroduced gate.
 vi.mock("@features/analytics/client", () => ({
-  hasCookieYesConsent: () => true,
+  hasCookieYesConsent: () => false,
 }));
 
 import { useSurveyTracking } from "@features/survey/ui/hooks/useSurveyTracking";

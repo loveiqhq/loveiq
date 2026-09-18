@@ -25,7 +25,6 @@
  */
 
 import {
-  hasCookieYesConsent,
   trackDeadClick,
   trackRageClick,
   trackScrollDepth,
@@ -161,7 +160,6 @@ export function installUxSignals(): void {
     scrollRafScheduled = true;
     requestAnimationFrame(() => {
       scrollRafScheduled = false;
-      if (!hasCookieYesConsent("analytics")) return;
       const state = ensureState();
       const doc = document.documentElement;
       const total = Math.max(1, doc.scrollHeight - window.innerHeight);
@@ -184,7 +182,6 @@ export function installUxSignals(): void {
   // ── Click signals (rage + dead) ─────────────────────────────────────────
   const clickTimestampsByNode = new WeakMap<Element, number[]>();
   const onPointerDown = (event: PointerEvent) => {
-    if (!hasCookieYesConsent("analytics")) return;
     const target = event.target;
     if (!(target instanceof Element)) return;
     const state = ensureState();
@@ -222,7 +219,6 @@ export function installUxSignals(): void {
 
   // ── Tab visibility ──────────────────────────────────────────────────────
   const onVisibilityChange = () => {
-    if (!hasCookieYesConsent("analytics")) return;
     const state = ensureState();
     const now = Date.now();
     if (document.visibilityState === "hidden") {

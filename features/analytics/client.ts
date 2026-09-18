@@ -108,46 +108,29 @@ export const setSurveyVariant = (variant: "white" | "dark" | null) => {
 };
 
 /**
- * Events that were fired before the visitor answered the consent banner, held
- * until they accept. There is no CookieYes consent-change event wired up here,
- * so a bounded poll drains the queue instead.
+ * Writes the event to OUR OWN `analytics_event` table, and nowhere else.
  *
- * Why this exists: an event fired pre-consent used to be dropped on the floor,
- * and callers with a one-shot ref (`locked_card_price_shown`) burned that ref on
- * the dropped attempt and never tried again. The banner covers the page for the
- * first seconds of every visit, so a mount-time persisted event essentially
- * never survived — 331 of them reached PostHog while writing ZERO durable rows
- * for five weeks, which made the funnel read as though 39% of report readers
- * never saw a price when 89% did.
+ * NOT CONSENT-GATED since 2026-09-18, on Marcus and Mark's call. This is a
+ * first-party POST to our own server: it sets no cookie, reads nothing off the
+ * device, and sends nothing to a third party, so it is not the category the
+ * cookie banner governs. The banner's answer still decides GA4, Google Ads,
+ * Meta and TikTok — every one of those gates is untouched, and `track()` above
+ * holds the dataLayer push behind its own check, so nothing here can reach
+ * Google. It is the same posture the site already takes for Microsoft Clarity
+ * ("loaded on all visits", disclosed in the privacy policy) and PostHog.
+ *
+ * What the gate was costing: 107 of the 406 people who opened a report over 30
+ * days — 26.4% — produced no durable row at all, so the funnel could not see
+ * them past the server-side open. An earlier note on the queue this replaced
+ * measured the same wound from the other side: 331 events reached PostHog while
+ * writing ZERO rows for five weeks, which made the funnel read as though 39% of
+ * readers never saw a price when 89% did.
+ *
+ * The pre-consent holding queue went with the gate. It existed to replay events
+ * fired while the banner was still covering the page; with nothing to wait for,
+ * a two-minute poll that dropped whatever the visitor never answered is strictly
+ * worse than writing the row when it happens.
  */
-const consentPendingQueue: Array<{
-  eventType: string;
-  metadata: Record<string, unknown> | undefined;
-  durationMs?: number;
-}> = [];
-let consentPollId: ReturnType<typeof setInterval> | null = null;
-const CONSENT_POLL_MS = 1_500;
-// A visitor who never answers the banner must not leave a timer running for the
-// life of the tab, and an event held longer than this is no longer worth a row.
-const CONSENT_POLL_ATTEMPTS = 80; // ~2 minutes
-
-const drainWhenConsentArrives = () => {
-  if (consentPollId) return;
-  let attempts = 0;
-  consentPollId = setInterval(() => {
-    attempts += 1;
-    const granted = hasCookieYesConsent("analytics");
-    if (!granted && attempts < CONSENT_POLL_ATTEMPTS) return;
-    if (consentPollId) clearInterval(consentPollId);
-    consentPollId = null;
-    const queued = consentPendingQueue.splice(0, consentPendingQueue.length);
-    if (!granted) return; // gave up — dropped, not persisted without consent
-    for (const item of queued) {
-      persistAnalyticsEvent(item.eventType, item.metadata, item.durationMs);
-    }
-  }, CONSENT_POLL_MS);
-};
-
 const persistAnalyticsEvent = (
   eventType: string,
   metadata: Record<string, unknown> | undefined,
@@ -155,16 +138,6 @@ const persistAnalyticsEvent = (
 ) => {
   if (typeof window === "undefined") return;
   if (!PERSISTED_EVENTS.has(eventType)) return;
-  if (!hasCookieYesConsent("analytics")) {
-    // Hold it rather than drop it — the caller may never fire again. Only
-    // events with a submission context are worth queueing; UX signals on the
-    // landing page legitimately have none and would queue forever.
-    if (window.__loveiqReportSubmissionId) {
-      consentPendingQueue.push({ eventType, metadata, durationMs });
-      drainWhenConsentArrives();
-    }
-    return;
-  }
 
   const submissionId = window.__loveiqReportSubmissionId ?? null;
   // No submission context = nothing to persist (the timeline keys off
