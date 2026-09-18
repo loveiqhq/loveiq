@@ -30,6 +30,12 @@
  * DRY BY DEFAULT. Enqueuing spends credits and creates observations that land
  * in the digest, so it never happens as a side effect of asking what is missing.
  *
+ * The endpoint answers 202 with a `workflow_id` of the form
+ * `replay-vision-apply-scanner-<scanner>-<session>` — the work is queued, not
+ * done, so an observation appears minutes later and `res.ok` is an
+ * acknowledgement rather than a result. The id is derived from the pair, so
+ * re-running is idempotent and cannot double-charge a session.
+ *
  *   npx tsx --env-file=.env.local scripts/ux-review-coverage.mjs
  *   DAYS=7 npx tsx scripts/ux-review-coverage.mjs
  *   npx tsx --env-file=.env.local scripts/ux-review-coverage.mjs --enqueue
@@ -186,9 +192,13 @@ if (misses.length > 0) {
       const ok = res.ok;
       if (ok) queued += 1;
       else failed += 1;
-      const detail = ok ? "" : ` — ${(await res.text()).slice(0, 120)}`;
+      const body = await res.text();
+      // The workflow id is the only handle on queued work, so print it.
+      const detail = ok
+        ? ` ${String(JSON.parse(body || "{}").workflow_id ?? "").slice(-13)}`
+        : ` — ${body.slice(0, 120)}`;
       console.log(
-        `  ${ok ? "queued " : "FAILED "} ${m.sid.slice(0, 13)} -> ${sc.name} (${trigger})${detail}`
+        `  ${ok ? "queued " : "FAILED "} ${m.sid.slice(0, 13)} -> ${sc.name.padEnd(24)} (${trigger})${detail}`
       );
     }
   }

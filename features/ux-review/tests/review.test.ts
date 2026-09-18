@@ -170,6 +170,49 @@ describe("the per-session lookups refuse an unsafe id before it reaches HogQL", 
   });
 });
 
+describe("sessionClickTarget picks the control, not the loudest paragraph", () => {
+  /**
+   * The tiebreak is the whole point. One production session emitted 22 dead
+   * clicks — 21 on decoration and exactly one on the survey consent gate's
+   * `button.flex-1` — every count 1, so `ORDER BY count() DESC` alone returned
+   * an arbitrary paragraph. The probe then said "not a control, not a defect"
+   * and the finding was reported CLEAR with the dead button never looked at.
+   *
+   * Asserted on the emitted query because the ranking IS the query; a revert to
+   * `ORDER BY 3 DESC` has to fail here.
+   */
+  it("ranks a control above frequency", async () => {
+    process.env.POSTHOG_API_KEY = "test-key";
+    let sent = "";
+    vi.stubGlobal("fetch", async (_url: string, init: { body: string }) => {
+      sent = JSON.parse(init.body).query.query;
+      return { ok: true, json: async () => ({ results: [["/survey", "button.flex-1", 1, 1]] }) };
+    });
+
+    const got = await sessionClickTarget("01a0a73f-0713-70e6-afb2-5a30f84f63c2");
+    expect(got).toEqual({ pathname: "/survey", selector: "button.flex-1", clicks: 1 });
+
+    // Control flag (4) ahead of frequency (3), not the other way round.
+    expect(sent.replace(/\s+/g, " ")).toContain("ORDER BY 4 DESC, 3 DESC");
+    expect(sent).toContain("startsWith(toString(properties.target_selector), 'button')");
+    vi.unstubAllGlobals();
+  });
+
+  it("still returns decoration when that is all the session has", async () => {
+    process.env.POSTHOG_API_KEY = "test-key";
+    vi.stubGlobal("fetch", async () => ({
+      ok: true,
+      json: async () => ({ results: [["/survey", "p.font-sans", 3, 0]] }),
+    }));
+    expect(await sessionClickTarget("01a0b2f9-14fd-7c4e-b273-cf43948c608f")).toEqual({
+      pathname: "/survey",
+      selector: "p.font-sans",
+      clicks: 3,
+    });
+    vi.unstubAllGlobals();
+  });
+});
+
 describe("compareScanners", () => {
   const pinned = UX_SCANNERS[0]!;
   const live = (over: Record<string, unknown> = {}) => [

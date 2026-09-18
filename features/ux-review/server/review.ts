@@ -675,16 +675,41 @@ export async function sessionClickTarget(
   sessionId: string
 ): Promise<{ pathname: string; selector: string; clicks: number } | null> {
   if (!isSafeSessionId(sessionId)) return null;
+  /**
+   * A CONTROL first, then the most-clicked.
+   *
+   * This was `ORDER BY count() DESC` alone, which is the wrong tiebreak on the
+   * shape these sessions actually have. One measured session emitted 22 dead
+   * clicks: twenty-one on decoration — `p`, `span`, `strong`, `article`,
+   * `section`, `svg` — and exactly one on a real control, the survey consent
+   * gate's `button.flex-1`. Every count was 1, so the winner was arbitrary and
+   * almost certainly a paragraph. `verify-dead-click-target.mjs` then answered,
+   * correctly, "ordinary content, not a control — a tap on it is not a defect",
+   * and the finding was reported CLEAR while the dead button was never looked
+   * at. The scanner had flagged that session at 0.9 confidence.
+   *
+   * Decoration taps are the overwhelming majority — 807 of 827 sessions over 30
+   * days — so picking by frequency picks noise nearly every time. The control is
+   * the evidence worth probing, and the same rule already governs the recall
+   * denominator in scripts/replay-bench/score.mjs.
+   */
   const row = await sessionRow(`SELECT toString(properties.pathname),
                          toString(properties.target_selector),
-                         count()
+                         count(),
+                         max(if(startsWith(toString(properties.target_selector), 'button')
+                             OR startsWith(toString(properties.target_selector), 'a.')
+                             OR startsWith(toString(properties.target_selector), 'a#')
+                             OR toString(properties.target_selector) = 'a'
+                             OR startsWith(toString(properties.target_selector), '[data-track-id')
+                             OR startsWith(toString(properties.target_selector), '[role=button'),
+                             1, 0))
                   FROM events
                   WHERE timestamp > now() - INTERVAL 30 DAY
                     AND properties.$session_id = '${sessionId}'
                     AND event IN ('dead_click', 'rage_click')
                     AND properties.target_selector IS NOT NULL
                   GROUP BY 1, 2
-                  ORDER BY 3 DESC
+                  ORDER BY 4 DESC, 3 DESC
                   LIMIT 1`);
   const pathname = String(row?.[0] ?? "");
   const selector = String(row?.[1] ?? "");
