@@ -57,11 +57,7 @@ describe("landing A/B — the two arms", () => {
     expect(analytics).toContain("landing_variant: landingVariant");
 
     const survey = readFileSync(join(process.cwd(), "app/api/survey/route.ts"), "utf8");
-    // Shape-agnostic on purpose. C13 made the stamp go through a `commit()` helper
-    // so each experiment's stamp fits the 1000-char budget on its own, which turned
-    // the old mutation `base.landing_variant = ...` into a spread. The guard still
-    // proves the landing arm is stamped here; it no longer pins how.
-    expect(survey).toContain("landing_variant: landingVariantRaw");
+    expect(survey).toContain("base.landing_variant = landingVariantRaw");
 
     const checkout = readFileSync(
       join(process.cwd(), "app/api/stripe/checkout-session/route.ts"),

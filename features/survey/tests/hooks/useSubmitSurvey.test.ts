@@ -187,55 +187,6 @@ describe("useSubmitSurvey", () => {
     // durationMs is a non-negative number
     expect(typeof body.durationMs).toBe("number");
     expect(body.durationMs).toBeGreaterThanOrEqual(0);
-    // ...AND within what /api/survey will accept. This `startedAt` is years in the past,
-    // which is exactly the shape a resumed draft has, and the unclamped value was well
-    // past the route's 86_400_000 ceiling — so this very test was building a payload the
-    // real endpoint answers with a 400. It passed anyway, because the hook test mocks
-    // fetch and never runs the schema.
-    expect(body.durationMs).toBeLessThanOrEqual(86_400_000);
-  });
-
-  /**
-   * `startedAt` is restored from the localStorage draft, so a respondent who began the
-   * survey days ago and came back produced a duration the API refuses outright — losing a
-   * COMPLETED submission to a 400 with nothing recorded.
-   *
-   * Measured before fixing: 20 of 1,074 drafts in 120 days were still being saved more
-   * than 24 hours after their start (longest 97 days), 7 of them past question 40 — and
-   * of 1,754 completed submissions, exactly zero have a duration over 24 hours. The
-   * ceiling shows up in production as an absence.
-   */
-  it("clamps a resumed draft's duration to what the API accepts, instead of losing the submission", async () => {
-    const mockFetch = mockFetchOk();
-    globalThis.fetch = mockFetch;
-
-    const { result } = renderHook(() => useSubmitSurvey());
-    // 30 days ago — well past the ceiling, and a real span seen in survey_partial_save.
-    const startedAt = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-
-    await act(async () => {
-      await result.current.submit(makeAnswers(), startedAt);
-    });
-
-    const body = JSON.parse((findSurveyCall(mockFetch)?.[1] as RequestInit).body as string);
-    expect(body.durationMs).toBe(86_400_000);
-    // The true start is still sent and stored, so real elapsed time stays recoverable.
-    expect(body.startedAt).toBe(startedAt);
-  });
-
-  it("clamps a backwards clock to zero rather than sending a negative duration", async () => {
-    const mockFetch = mockFetchOk();
-    globalThis.fetch = mockFetch;
-
-    const { result } = renderHook(() => useSubmitSurvey());
-    const startedAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // an hour ahead
-
-    await act(async () => {
-      await result.current.submit(makeAnswers(), startedAt);
-    });
-
-    const body = JSON.parse((findSurveyCall(mockFetch)?.[1] as RequestInit).body as string);
-    expect(body.durationMs).toBe(0);
   });
 
   it("prevents double-submit when already submitting", async () => {

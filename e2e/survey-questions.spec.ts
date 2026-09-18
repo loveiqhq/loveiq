@@ -2,8 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 
 import { surveyQuestions, type SurveyQuestion } from "../data/survey-data";
 import { isHidden, RANDOMISE_QIDS } from "../features/survey/questionFlags";
-import { orderAskedQuestions, orderedOptions } from "../features/survey/ui/questionOrder";
-import { pinSurveySession } from "./surveyArm";
+import { orderEmailLast, orderedOptions } from "../features/survey/ui/questionOrder";
 
 /**
  * Walks the whole survey in a real browser and checks the three behaviours the survey
@@ -22,18 +21,7 @@ import { pinSurveySession } from "./surveyArm";
  * endpoint is intercepted below and answered locally; the run never reaches a submission.
  */
 
-/**
- * The arm this walk runs in. C13 picks the question order from the session id, so without
- * pinning it this spec would get the variant opening in about half its runs and fail at
- * question three with a failure that does not reproduce. Control is the right arm here:
- * what this spec covers (option randomisation, selection caps, the priced question) is
- * identical in both, and `survey-c13-opening.spec.ts` walks the variant opening.
- */
-const ARM = "control" as const;
-
-const ASKED: SurveyQuestion[] = orderAskedQuestions(surveyQuestions, ARM).filter(
-  (q) => !isHidden(q.qId)
-);
+const ASKED: SurveyQuestion[] = orderEmailLast(surveyQuestions).filter((q) => !isHidden(q.qId));
 
 /**
  * The caps the work order specifies, written out rather than read from `maxSelections`.
@@ -143,7 +131,6 @@ test.describe("Survey — the questions the work order changed", () => {
   }) => {
     test.setTimeout(180_000);
     await blockWrites(page);
-    const pinnedSessionId = await pinSurveySession(page, ARM);
     await enterEngine(page);
 
     // Read after the engine has mounted: the id is created lazily on first use.
@@ -154,10 +141,6 @@ test.describe("Survey — the questions the work order changed", () => {
       window.sessionStorage.getItem("loveiq-survey-session")
     );
     expect(sessionId, "survey session id must exist — the shuffle is seeded from it").toBeTruthy();
-    // The pin is what makes both the arm and the option shuffle deterministic. If it
-    // silently did not take, the engine minted its own id and this walk is back to a coin
-    // flip — assert it rather than discover it as an intermittent failure later.
-    expect(sessionId, "pinSurveySession must be the id the engine used").toBe(pinnedSessionId);
 
     const shuffledSomewhere: string[] = [];
     let checkedCaps = 0;

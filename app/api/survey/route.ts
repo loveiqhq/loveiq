@@ -4,7 +4,6 @@ import { cookies } from "next/headers";
 import { Resend } from "resend";
 import { z } from "zod";
 import { LANDING_VARIANT_COOKIE, isLandingVariant } from "@shared/experiments/landingVariant";
-import { assignQuestionOrderArm } from "@shared/experiments/questionOrderArm";
 import { checkRateLimit, checkCooldown, getClientIp } from "@shared/http/ratelimit";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
@@ -269,63 +268,14 @@ export async function POST(request: Request) {
    * writer. Past submissions keep theirs; new ones legitimately have no survey
    * arm, which also makes the final 453/411 split permanently reproducible.
    */
-  /**
-   * The C13 opening-order arm is DERIVED here rather than sent by the client.
-   * `assignQuestionOrderArm` is pure and deterministic over the session id, and
-   * the session id is already in this payload — so recomputing it server-side
-   * agrees with what the respondent actually saw, and a client cannot misreport
-   * its arm.
-   *
-   * ONE EXCEPTION, and it is not production. `?order=control|variant` previews
-   * either arm on dev and staging; a previewer whose session hashes the other way
-   * sees one arm and is stamped with the other. `resolveQuestionOrderOverride`
-   * returns null on production, so no real respondent can land in that state — but
-   * staging shares this database, so such a row does exist in the same table. It is
-   * internal traffic and `is_likely_test` already marks the @loveiq.org ones; noted
-   * here rather than fixed, because the alternative is letting the client tell the
-   * server its arm, which is the property this derivation exists to remove.
-   *
-   * Only stamped when a session id is present, which preserves the
-   * "no session, no stamp" rule the landing arm follows: a crawler or a direct
-   * hit still produces no utm_tracker at all rather than a bare {} .
-   */
-  const questionOrderArm = sessionId ? assignQuestionOrderArm(sessionId) : null;
-
   let mergedUtmTracker = utmTracker ?? null;
   try {
-    const stampingLanding = isLandingVariant(landingVariantRaw);
-    /**
-     * NEVER CREATE A TRACKER JUST FOR THE ARM.
-     *
-     * `utm_tracker IS NOT NULL` is used as "this respondent has attribution data"
-     * by get_dropout_funnel and three other analytics queries, which then classify
-     * the source and fall back to 'direct'. 36.3% of submissions (748 of 2,058)
-     * have no tracker and all of them have a session id — so stamping the arm
-     * unconditionally would pull every one of them into those charts as 'direct',
-     * inflating that bucket by more than half.
-     *
-     * The arm is a pure function of the session id, which is stored on the
-     * submission, so nothing is lost: an unstamped respondent's arm is recomputed
-     * rather than read. The stamp is a convenience for grouping, never the record.
-     */
-    if (utmTracker || stampingLanding) {
-      const base: unknown = utmTracker ? JSON.parse(utmTracker) : {};
+    if (isLandingVariant(landingVariantRaw)) {
+      const base = utmTracker ? JSON.parse(utmTracker) : {};
       if (base && typeof base === "object" && !Array.isArray(base)) {
-        /**
-         * Each stamp commits only if it still fits the 1000-char budget. Adding
-         * both and testing the total would mean a tracker near the limit loses the
-         * LANDING arm too — a stamp that fit perfectly well before this experiment
-         * existed. They degrade independently, in the order they were introduced.
-         */
-        let acc = base as Record<string, unknown>;
-        const commit = (next: Record<string, unknown>) => {
-          const candidate = JSON.stringify(next);
-          if (candidate.length > 1000) return;
-          acc = next;
-          mergedUtmTracker = candidate;
-        };
-        if (stampingLanding) commit({ ...acc, landing_variant: landingVariantRaw });
-        if (questionOrderArm) commit({ ...acc, question_order_arm: questionOrderArm });
+        base.landing_variant = landingVariantRaw;
+        const candidate = JSON.stringify(base);
+        if (candidate.length <= 1000) mergedUtmTracker = candidate;
       }
     }
   } catch {
