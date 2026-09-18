@@ -9,6 +9,8 @@ const slackCalls: string[] = [];
 /** Conversation types Slack will accept; anything else answers missing_scope. */
 let supportedTypes = new Set(["public_channel", "private_channel", "mpim"]);
 let listHttpFails = false;
+/** Opt-in: puts `page-two-only` behind a cursor so pagination can be asserted. */
+let withSecondPage = false;
 /** Opt-in, so every other test keeps the call sequence it asserts on. */
 let withThreadReply = false;
 
@@ -37,7 +39,14 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
         // The bot IS a member of this one. Membership is deliberately not enough.
         { id: "C4", name: "email-inbox", is_member: true, is_private: true },
       ];
-      return ok({ ok: true, channels: all.filter((c) => asked.some((t) => typeOf(c) === t)) });
+      const visible = all.filter((c) => asked.some((t) => typeOf(c) === t));
+      if (withSecondPage) {
+        const cursor = u.searchParams.get("cursor") ?? "";
+        return cursor === ""
+          ? ok({ ok: true, channels: visible, response_metadata: { next_cursor: "pg2" } })
+          : ok({ ok: true, channels: [{ id: "C9", name: "page-two-only", is_member: true }] });
+      }
+      return ok({ ok: true, channels: visible });
     }
     if (u.pathname.endsWith("/users.list")) {
       return ok({
@@ -117,6 +126,7 @@ beforeEach(() => {
   slackCalls.length = 0;
   supportedTypes = new Set(["public_channel", "private_channel", "mpim"]);
   listHttpFails = false;
+  withSecondPage = false;
   process.env.SLACK_BRAIN_BOT_TOKEN = "xoxb-test";
 });
 
@@ -126,6 +136,34 @@ function listedTypes(): string[] {
     .filter((u) => u.includes("/conversations.list"))
     .map((u) => new URL(u).searchParams.get("types") ?? "");
 }
+
+describe("Slack discovery follows the conversations.list cursor", () => {
+  /**
+   * `conversations.list` was a single `limit: 200` call while `users.list` and
+   * `conversations.history` in the same file both looped. The workspace has 11
+   * conversations so it fitted — but `is_member` is applied to the RESULT, so
+   * past 200 the bot's own channels fall off the end and stop being ingested
+   * with no error anywhere.
+   */
+  it("ingests a channel that only appears on the second page", async () => {
+    withSecondPage = true;
+    await ingestSlack(STAMP);
+    const channels = new Set(upserted.map((r) => (r as Record<string, never>).meta?.channel));
+    expect(channels, "a second-page channel was never walked").toContain("page-two-only");
+  });
+
+  /**
+   * The distinction the sweep depends on. A REFUSED call must not look like an
+   * empty workspace: `sweepStale` deletes everything older than the run stamp,
+   * so "the bot is in no channels" would take the corpus with it.
+   */
+  it("a refused first page is a failure, not an empty workspace", async () => {
+    listHttpFails = true;
+    const res = await ingestSlack(STAMP);
+    expect(res.skipped).toBe("slack-list-failed");
+    expect(res.swept).toBe(0);
+  });
+});
 
 describe("Slack discovery reaches private channels and group DMs", () => {
   it("asks for private channels and group DMs, not just public ones", async () => {

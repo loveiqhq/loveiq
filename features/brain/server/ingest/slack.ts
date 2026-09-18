@@ -226,6 +226,39 @@ async function slackGet(
   return json;
 }
 
+/**
+ * Every conversation, not the first page of them.
+ *
+ * This was a single `limit: 200` call. The workspace shows 11 conversations
+ * today so it fits, but the `is_member` filter runs on the RESULT — so past 200
+ * the bot's own channels could fall off the end and simply stop being ingested,
+ * with no error and nothing in the corpus to notice. `users.list` and
+ * `conversations.history` in this same file already loop on `next_cursor`;
+ * this was the odd one out, which is exactly how the next reader assumes it is
+ * handled everywhere.
+ *
+ * Returns null on failure so the caller can keep its scope-fallback: an empty
+ * page and a refused call must not look the same, or a missing scope would read
+ * as "the bot is in no channels" and sweep the corpus.
+ */
+async function listConversations(token: string, types: string): Promise<SlackChannel[] | null> {
+  const out: SlackChannel[] = [];
+  let cursor = "";
+  for (let page = 0; page < 20; page++) {
+    const json = await slackGet(token, "conversations.list", {
+      types,
+      limit: 200,
+      exclude_archived: "true",
+      ...(cursor ? { cursor } : {}),
+    });
+    if (!json) return page === 0 ? null : out;
+    out.push(...((json.channels as SlackChannel[]) ?? []));
+    cursor = ((json.response_metadata as Record<string, string>) ?? {}).next_cursor ?? "";
+    if (!cursor) break;
+  }
+  return out;
+}
+
 /** display name per user id, so a chunk reads "Marcus: …" not "<@U0B…>: …". */
 async function userNames(token: string): Promise<Map<string, string>> {
   const out = new Map<string, string>();
@@ -445,18 +478,10 @@ export async function ingestSlack(
    * bot has been added to, whatever the scopes say. Adding scopes grants nothing on
    * its own -- somebody has to invite the bot.
    */
-  let listed = await slackGet(token, "conversations.list", {
-    types: "public_channel,private_channel,mpim",
-    limit: 200,
-    exclude_archived: "true",
-  });
+  let listed = await listConversations(token, "public_channel,private_channel,mpim");
   let privateScopesMissing = false;
   if (!listed) {
-    listed = await slackGet(token, "conversations.list", {
-      types: "public_channel",
-      limit: 200,
-      exclude_archived: "true",
-    });
+    listed = await listConversations(token, "public_channel");
     privateScopesMissing = Boolean(listed);
     if (privateScopesMissing) {
       logger.warn(
@@ -471,7 +496,7 @@ export async function ingestSlack(
   // survive in the corpus just because the denylist arrived after it did.
   await purgeDenylistedChannels();
 
-  const channels = ((listed.channels as SlackChannel[]) ?? []).filter(
+  const channels = (listed ?? []).filter(
     (c) => c.is_member && !c.is_archived && c.id && c.name && !NEVER_INDEX.has(c.name)
   );
   // Membership is the boundary: the bot reads only channels somebody added it to,
