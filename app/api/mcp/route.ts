@@ -2226,6 +2226,36 @@ async function callTool(
    * CLIENT_INJECTED_ARGS and fail the call it was trying to rescue. The server
    * is the only place that can tell the model's mistakes from the client's.
    */
+  /**
+   * ONE argument name that means exactly one declared argument, and nothing else.
+   *
+   * This is NOT a softening of the rule above — it is the other half of it. The rule
+   * says never to swallow a key whose meaning we are guessing at, because a dropped
+   * filter returns a wider answer that reads like a narrow one. `document_id` on
+   * `fetch_document` is not a guess: there is one id, the tool takes one id, and the
+   * caller has typed the longer name for it. Measured over the 14 days to 2026-09-18,
+   * on REAL calls only (`surface = 'mcp'`, which excludes the 7,628 battery probes
+   * that otherwise dominate this table): 27 of `fetch_document`'s 92 calls died on it.
+   *
+   * Every other refusal in that measurement stays a refusal, and should. `sql` and
+   * `question` on `query_product_data` are a caller asking for a tool this is not,
+   * `people` on `search_company_context` and `match` on `get_business_numbers` are
+   * filters nobody declared — accepting any of those would return the wider answer
+   * the comment above is about. An alias earns its place by being a second NAME for
+   * a declared argument, never a second MEANING.
+   */
+  const ARG_ALIASES: Record<string, Record<string, string>> = {
+    fetch_document: { document_id: "id" },
+  };
+  for (const [alias, real] of Object.entries(ARG_ALIASES[name] ?? {})) {
+    if (!(alias in args)) continue;
+    // Both present and disagreeing is ambiguous, so it stays a refusal: the unknown-key
+    // check below sees `document_id` still there and says so.
+    if (real in args && args[real] !== args[alias]) continue;
+    args[real] = args[alias];
+    delete args[alias];
+  }
+
   const declared = TOOLS.find((t) => t.name === name)?.inputSchema.properties as
     Record<string, unknown> | undefined;
   if (declared) {

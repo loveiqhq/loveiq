@@ -995,6 +995,44 @@ describe("/api/mcp", () => {
         })
       ).then((r) => r.json().then((b) => b.result));
 
+    /**
+     * MEASURED on real calls only (`surface = 'mcp'`; the battery's 7,628 probes
+     * otherwise drown the table): 27 of fetch_document's 92 calls in the 14 days to
+     * 2026-09-18 died on `document_id`. It is a second NAME for `id`, not a second
+     * meaning, which is the only kind of alias that may exist here.
+     */
+    it("accepts document_id as the name it is: a second word for id", async () => {
+      mockSupabaseFetch.mockImplementation(async (path: string) => {
+        if (String(path).startsWith("/rest/v1/brain_query")) {
+          return { ok: true, headers: new Headers(), json: async () => [] };
+        }
+        return {
+          ok: true,
+          headers: new Headers(),
+          json: async () => [
+            { source: "drive", source_id: "doc:1AbC", title: "T", url: null, body: "hello" },
+          ],
+        };
+      });
+      const r = await call({ document_id: "drive/doc:1AbC" });
+      expect(r.isError).toBeFalsy();
+      expect(JSON.stringify(r)).toContain("hello");
+    });
+
+    it("still refuses an argument that is a different MEANING, not a different name", async () => {
+      // The control. If this ever passes, the alias has become a hole: a filter
+      // accepted and dropped returns a wider answer that reads like a narrow one.
+      const r = await call({ id: "drive/doc:1AbC", sql: "select 1" });
+      expect(r.isError).toBe(true);
+      expect(JSON.stringify(r)).toContain("no argument named");
+    });
+
+    it("refuses when document_id and id disagree, rather than picking one", async () => {
+      const r = await call({ id: "drive/doc:1AbC", document_id: "drive/doc:9ZZZ" });
+      expect(r.isError).toBe(true);
+      expect(JSON.stringify(r)).toContain("document_id");
+    });
+
     /** Rows a `source_id=like.<base>*` read would return, in the order Postgres gives. */
     function wireParts(rows: Array<Record<string, unknown>>) {
       mockSupabaseFetch.mockImplementation(async (path: string) => {
