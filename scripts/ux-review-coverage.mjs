@@ -116,9 +116,17 @@ const triggers = new Map(triggerRows.map((r) => [String(r[0]), r.slice(1).map(Nu
 const misses = [];
 let noRecording = 0;
 let noTrigger = 0;
+// Counted over `subs`, not `observed.size`. The observed SET covers every
+// session a scanner opened, including visitors who never finished a survey, so
+// printing its size next to the per-submission tallies made the four rows fail
+// to add up to the total and invited the reader to hunt for a missing case.
+let seen = 0;
 for (const s of subs) {
   const sid = s.posthog_session_id;
-  if (observed.has(sid)) continue;
+  if (observed.has(sid)) {
+    seen += 1;
+    continue;
+  }
   if (!recorded.has(sid)) {
     noRecording += 1;
     continue;
@@ -132,7 +140,7 @@ for (const s of subs) {
 }
 
 console.log(`submissions in the last ${DAYS} days : ${subs.length}`);
-console.log(`  observed by a scanner            : ${observed.size}`);
+console.log(`  observed by a scanner            : ${seen}`);
 console.log(`  no recording (not a miss)        : ${noRecording}`);
 console.log(`  recording but no trigger event   : ${noTrigger}`);
 console.log(`  MISSED — could have been seen    : ${misses.length}\n`);
