@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -127,8 +127,23 @@ describe("completion accounting", () => {
 });
 
 describe("database rows exist for every option", () => {
-  const MIGRATION = "supabase/migrations/20260917151500_survey_demand_block_c9_c10_c12.sql";
-  const sql = readFileSync(join(process.cwd(), MIGRATION), "utf8");
+  /**
+   * Found by SUFFIX, not by full filename. A migration applied through the Supabase
+   * MCP gets its ledger version stamped from the wall clock, so the file has to be
+   * RENAMED afterwards to match — `check-migration-drift` fails otherwise, and its
+   * own header documents that rename as the fix. Pinning the timestamp here made a
+   * required, expected operation break this test with an ENOENT that says nothing
+   * about what it guards.
+   */
+  const dir = join(process.cwd(), "supabase/migrations");
+  const file = readdirSync(dir).find((f) => f.endsWith("_survey_demand_block_c9_c10_c12.sql"));
+  if (!file) {
+    throw new Error(
+      "no *_survey_demand_block_c9_c10_c12.sql in supabase/migrations — this test asserts " +
+        "the migration's option_text matches the client, and cannot run without it"
+    );
+  }
+  const sql = readFileSync(join(dir, file), "utf8");
 
   it("declares all three questions", () => {
     for (const qId of DEMAND_BLOCK_QIDS) {
