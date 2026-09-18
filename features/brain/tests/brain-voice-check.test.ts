@@ -21,7 +21,6 @@ const SECOND = "insecurities";
  * because it is the same trap this fixture exists to guard: a baseline inferred from a
  * miscount is a guess dressed as a measurement.
  */
-const MIXED = "love_language";
 
 const secondPersonDraft =
   "You often find that your desire builds slowly. Your partner may notice that you need time. " +
@@ -183,10 +182,42 @@ describe("checkDraft", () => {
   });
 
   it("says when the SHIPPED copy has no consistent register to check against", () => {
-    // 11 of 14 is a real unresolved split. Inventing a baseline there would be a guess.
-    const f = checkDraft(MIXED, secondPersonDraft).find((x) => x.kind === "register");
+    /**
+     * A genuine split is not a baseline, and inventing one would be a guess.
+     *
+     * This used to point at `love_language`, which was 11 of 14 until 2026-09-18 — when
+     * quoting its inner questions revealed all 14 had been third person all along, no
+     * chapter was mixed any more, and this test failed. A test that needs the shipped
+     * copy to stay inconsistent is a test that punishes fixing it, so the split is now
+     * built here instead.
+     */
+    const split = {
+      ch: Object.fromEntries(
+        Array.from({ length: 14 }, (_, i) => [
+          `A${i}`,
+          i < 6 ? "<p>you already know this.</p>" : "<p>they already know this.</p>",
+        ])
+      ),
+    };
+    const f = checkDraft("ch", secondPersonDraft, split).find((x) => x.kind === "register");
     expect(f?.severity).toBe("warn");
     expect(f?.message).toMatch(/inconsistent in the SHIPPED copy/);
+  });
+
+  it("does NOT warn when the chapter has a register to check against", () => {
+    // The control: without it the warn above would pass for a checker that warns on
+    // everything. Note the baseline is strict — `register` is "third" only when ALL
+    // 14 are, so a single stray version is already "mixed". That strictness is why
+    // eleven unquoted questions were enough to cost love_language its baseline.
+    const nearlyAllThird = {
+      ch: Object.fromEntries(
+        Array.from({ length: 14 }, (_, i) => [`A${i}`, "<p>they already know this.</p>"])
+      ),
+    };
+    const f = checkDraft("ch", secondPersonDraft, nearlyAllThird).find(
+      (x) => x.kind === "register"
+    );
+    expect(f?.severity).toBe("error");
   });
 
   it("flags sentences far outside the chapter's own band, and not inside it", () => {

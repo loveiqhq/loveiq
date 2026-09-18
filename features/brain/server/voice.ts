@@ -108,8 +108,17 @@ function headings(html: string): string[] {
 }
 
 /** What the shipped copy for one chapter actually does, across all its archetypes. */
-export function chapterBaseline(chapter: string): VoiceBaseline | null {
-  const byArchetype = (archetypeContent as Record<string, Record<string, string>>)[chapter];
+export function chapterBaseline(
+  chapter: string,
+  /** Injectable for the same reason as `registerOutliers`: a test about a MIXED chapter
+   *  must not depend on the shipped copy still having one. It stopped having one on
+   *  2026-09-18 and took a test with it. */
+  content: Record<string, Record<string, string>> = archetypeContent as Record<
+    string,
+    Record<string, string>
+  >
+): VoiceBaseline | null {
+  const byArchetype = content[chapter];
   if (!byArchetype) return null;
   const archetypes = Object.keys(byArchetype);
   if (archetypes.length === 0) return null;
@@ -235,8 +244,15 @@ export function allChapters(): string[] {
  * the number instead of reading the sentence it came from, which is why each finding
  * carries the text that triggered it.
  */
-export function checkDraft(chapter: string, draft: string): VoiceFinding[] {
-  const base = chapterBaseline(chapter);
+export function checkDraft(
+  chapter: string,
+  draft: string,
+  content: Record<string, Record<string, string>> = archetypeContent as Record<
+    string,
+    Record<string, string>
+  >
+): VoiceFinding[] {
+  const base = chapterBaseline(chapter, content);
   if (!base) {
     return [
       {
