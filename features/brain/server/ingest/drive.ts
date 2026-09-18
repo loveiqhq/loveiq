@@ -435,6 +435,18 @@ async function docText(token: string, fileId: string, mimeType?: string): Promis
 
   if (mimeType === PDF_MIME) {
     const buf = new Uint8Array(await res.arrayBuffer());
+    /**
+     * A ZERO-BYTE PDF IS NOT AN EXPORT FAILURE.
+     *
+     * pdfjs throws `The PDF file is empty, i.e. its size is zero bytes` for one, which
+     * lands in the catch and is reported as a failed export — for ever, because nothing
+     * about the file will change. Measured 2026-09-18: two such files had been failing
+     * on every hourly run since at least 2026-09-08, and one of them used to abort the
+     * whole walk. A file with no bytes is the case `!text.trim()` already handles, and
+     * belongs in `empty=` with the other duds rather than in the failure list, which
+     * should only ever hold things somebody can act on.
+     */
+    if (buf.byteLength === 0) return "";
     const { extractText, getDocumentProxy } = await import("unpdf");
     const doc = await getDocumentProxy(buf);
     const { text } = await extractText(doc, { mergePages: true });
@@ -788,7 +800,7 @@ export async function ingestDrive(
       // ids and the log line holding the reason has rolled off hours before anyone
       // reads them -- which is the same reasoning that put the ids here at all.
       const why = err instanceof Error ? err.message : String(err);
-      exportFailures.push(`${file.id}(${why.slice(0, 40)})`);
+      exportFailures.push(`${file.id}(${why.slice(0, 60)})`);
     }
   }
 

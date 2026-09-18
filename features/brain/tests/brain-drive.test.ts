@@ -126,13 +126,15 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
       status: 200,
       json: async () => ({}),
       text: async () => "",
-      arrayBuffer: async () => new Uint8Array([37, 80, 68, 70]).buffer,
+      arrayBuffer: async () => pdfBytes.slice().buffer,
     };
   }),
 }));
 
 // unpdf is stubbed rather than fed a real pdf: this test is about what the
 // ingester DOES with extracted text, not about whether pdfjs can parse.
+/** Raw bytes the alt=media download hands back. A zero-length one is a real Drive file. */
+let pdfBytes: Uint8Array = new Uint8Array([37, 80, 68, 70]);
 let pdfText = "";
 vi.mock("unpdf", () => ({
   getDocumentProxy: vi.fn(async () => ({})),
@@ -651,6 +653,7 @@ describe("PDFs — the 213 files that used to be invisible", () => {
 
   beforeEach(() => {
     files = [PDF];
+    pdfBytes = new Uint8Array([37, 80, 68, 70]);
     existing = [];
     dbCalls.length = 0;
     httpCalls.length = 0;
@@ -695,6 +698,21 @@ describe("PDFs — the 213 files that used to be invisible", () => {
       .map((c) => c.body)
       .join(" ");
     expect(written).not.toContain("Term Sheet 2026");
+  });
+
+  /**
+   * MEASURED IN PRODUCTION 2026-09-18. Two Drive files are zero-byte PDFs; pdfjs throws
+   * `The PDF file is empty, i.e. its size is zero bytes`, which landed in the catch and
+   * was reported as a failed export on EVERY hourly run since at least 2026-09-08 — and
+   * one of them used to abort the whole walk. Nothing about the file will ever change,
+   * so a failure list containing it is a list nobody can act on.
+   */
+  it("treats a zero-byte pdf as an empty document, not as an export failure", async () => {
+    pdfBytes = new Uint8Array(0);
+    const res = await ingestDrive(STAMP, () => false, null);
+    expect(res.detail).toMatch(/empty=1/);
+    expect(res.detail).not.toMatch(/exportFailed/);
+    expect(res.complete).toBe(true);
   });
 
   it("caps one pdf, and says so in the text rather than truncating silently", async () => {
