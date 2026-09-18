@@ -2,7 +2,8 @@ import { test, expect, type Page } from "@playwright/test";
 
 import { surveyQuestions, type SurveyQuestion } from "../data/survey-data";
 import { isHidden } from "../features/survey/questionFlags";
-import { orderEmailLast } from "../features/survey/ui/questionOrder";
+import { OPT_IN_QID, orderAskedQuestions } from "../features/survey/ui/questionOrder";
+import { pinSurveySession } from "./surveyArm";
 
 /**
  * The last question's answer must survive into the submit payload.
@@ -28,8 +29,32 @@ import { orderEmailLast } from "../features/survey/ui/questionOrder";
  * Nothing is written: the submit POST is intercepted and inspected, never forwarded.
  */
 
-const ASKED: SurveyQuestion[] = orderEmailLast(surveyQuestions).filter((q) => !isHidden(q.qId));
+/**
+ * Control. The tail this spec is about is identical in both C13 arms — the experiment
+ * only reorders the opening — but the arm is derived from a freshly minted session id, so
+ * leaving it unpinned would give the variant OPENING in half the runs and desynchronise
+ * the index walk long before it reaches the last question.
+ */
+const ARM = "control" as const;
+
+const ASKED: SurveyQuestion[] = orderAskedQuestions(surveyQuestions, ARM).filter(
+  (q) => !isHidden(q.qId)
+);
 const LAST = ASKED[ASKED.length - 1]!;
+
+/**
+ * The guard is about the MARKETING OPT-IN specifically — that is the question the
+ * production loss was measured on, and it is last only because `orderAskedQuestions`
+ * puts it there. Built from `orderEmailLast` alone this constant silently became the
+ * demand block's last question instead, which still passes and tests nothing. Assert
+ * the identity so a future reorder fails here rather than quietly moving the target.
+ */
+if (LAST.qId !== OPT_IN_QID) {
+  throw new Error(
+    `the last asked question is ${LAST.qId}, not the marketing opt-in (${OPT_IN_QID}) — ` +
+      "this spec guards the opt-in's answer reaching the payload; retarget it deliberately"
+  );
+}
 
 test("the final answer reaches the submit payload even when Next is clicked instantly", async ({
   page,
@@ -37,6 +62,7 @@ test("the final answer reaches the submit payload even when Next is clicked inst
   page: Page;
 }) => {
   test.setTimeout(240_000);
+  await pinSurveySession(page, ARM);
 
   let payload: { answers?: Record<string, unknown> } | null = null;
   for (const p of ["**/api/survey-partial", "**/api/survey-tracking", "**/api/analytics-event"]) {

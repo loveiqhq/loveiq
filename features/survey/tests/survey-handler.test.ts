@@ -67,6 +67,7 @@ process.env.RESEND_AUDIENCE_ID = "aud_test_id";
 
 import { POST } from "@/app/api/survey/route";
 import { __resetSurveyStatusCacheForTests } from "@features/survey/server/server";
+import { assignQuestionOrderArm } from "@shared/experiments/questionOrderArm";
 
 // --- Helpers ---
 
@@ -600,5 +601,127 @@ describe("POST /api/survey", () => {
 
     await new Promise((r) => setTimeout(r, 10));
     expect(mockResendContactsCreate).not.toHaveBeenCalled();
+  });
+
+  describe("C13 arm stamping on utm_tracker", () => {
+    const SESSION = "6f1c2a44-8e21-4d0b-9a77-2b3c4d5e6f70";
+
+    /**
+     * Two sessions whose arms are WRITTEN OUT, one per arm.
+     *
+     * `expect(["control", "variant"]).toContain(arm)` is true of any string the route
+     * could possibly emit. Verified: replacing the derivation with a hardcoded
+     * `"control"` left the whole suite green — the experiment would have reported 100%
+     * control, which reads as "no difference" rather than as a bug.
+     *
+     * The expected values are literals rather than a second call to
+     * `assignQuestionOrderArm`, so this also fails if the hash or the salt ever changes.
+     * That is the intent: an arm assignment that shifts mid-experiment resplits everyone
+     * and invalidates the comparison, so it must not pass quietly.
+     */
+    const ARM_FIXTURES = [
+      { sessionId: "00000000-0000-4000-8000-000000000002", arm: "control" },
+      { sessionId: "00000000-0000-4000-8000-000000000001", arm: "variant" },
+    ] as const;
+
+    // Located by URL, not by index. An earlier draft of this block sat outside the
+    // parent describe, so it missed that describe's `vi.resetAllMocks()` and read
+    // call 0 of a much earlier test: three false failures and one false pass.
+    const rpcTracker = () => {
+      const call = mockFetchWithTimeout.mock.calls.find((c) =>
+        String(c[0]).includes("/rpc/submit_survey")
+      );
+      if (!call) throw new Error("submit_survey RPC was never called");
+      return JSON.parse(call[1].body).p_utm_tracker;
+    };
+
+    beforeEach(() => {
+      allowCsrf();
+      allowRateLimit();
+      allowCooldown();
+      mockSupabaseRpcOk();
+    });
+
+    it.each(ARM_FIXTURES)(
+      "stamps the arm the respondent actually saw ($arm)",
+      async ({ sessionId, arm }) => {
+        // The premise of deriving server-side is that the stamp cannot disagree with what
+        // was rendered. That only holds if the derivation is real — assert the VALUE.
+        await POST(
+          makeRequest({
+            ...validBody(),
+            sessionId,
+            utmTracker: JSON.stringify({ utm_source: "google" }),
+          })
+        );
+        expect(JSON.parse(rpcTracker()).question_order_arm).toBe(arm);
+      }
+    );
+
+    it("agrees with the pure function the client bucketed with", async () => {
+      // Same check from the other side: whatever the route stamps must equal what
+      // SurveyEngine computed from the same session id. A change to either that does not
+      // move the other is a silent desync between what was shown and what was recorded.
+      await POST(
+        makeRequest({
+          ...validBody(),
+          sessionId: SESSION,
+          utmTracker: JSON.stringify({ utm_source: "google" }),
+        })
+      );
+      expect(JSON.parse(rpcTracker()).question_order_arm).toBe(assignQuestionOrderArm(SESSION));
+    });
+
+    it("adds the arm to a tracker that already exists", async () => {
+      const utmJson = JSON.stringify({ utm_source: "google" });
+      await POST(makeRequest({ ...validBody(), sessionId: SESSION, utmTracker: utmJson }));
+
+      const stamped = JSON.parse(rpcTracker());
+      expect(stamped.utm_source).toBe("google");
+      expect(["control", "variant"]).toContain(stamped.question_order_arm);
+    });
+
+    it("NEVER creates a tracker just to hold the arm", async () => {
+      // get_dropout_funnel and three other queries treat `utm_tracker IS NOT NULL`
+      // as "has attribution data". 36.3% of submissions have no tracker and every
+      // one has a session id, so stamping unconditionally would pull all of them
+      // into those charts as 'direct'. The arm is recomputable from session_id, so
+      // leaving it unstamped costs nothing.
+      await POST(makeRequest({ ...validBody(), sessionId: SESSION }));
+      expect(rpcTracker()).toBeNull();
+    });
+
+    it("leaves a tracker untouched when there is no session to derive an arm from", async () => {
+      const utmJson = JSON.stringify({ utm_source: "google" });
+      await POST(makeRequest({ ...validBody(), utmTracker: utmJson }));
+      expect(rpcTracker()).toBe(utmJson);
+    });
+
+    it("drops the arm rather than the tracker when the 1000-char budget is tight", async () => {
+      // Each stamp commits only if it still fits. Adding both and testing the total
+      // would lose whatever else was being stamped alongside it.
+      //
+      // The arm always adds exactly 31 chars (`,"question_order_arm":"control"` —
+      // both arm values serialise to 9, so this holds whichever way the session
+      // hashes). 951 x's makes the tracker 970, and 970 + 31 = 1001: one past.
+      const fat = JSON.stringify({ utm_campaign: "x".repeat(951) });
+      expect(fat.length).toBe(970);
+      await POST(makeRequest({ ...validBody(), sessionId: SESSION, utmTracker: fat }));
+
+      const out = rpcTracker();
+      expect(out).toBe(fat); // unchanged — the arm did not fit and nothing was lost
+      expect(JSON.parse(out).utm_campaign).toHaveLength(951);
+    });
+
+    it("still stamps at exactly the 1000-char limit", async () => {
+      // Pins `> 1000` rather than `>= 1000`. 950 x's -> 969 + 31 = 1000 exactly.
+      const snug = JSON.stringify({ utm_campaign: "x".repeat(950) });
+      expect(snug.length).toBe(969);
+      await POST(makeRequest({ ...validBody(), sessionId: SESSION, utmTracker: snug }));
+
+      const out = rpcTracker();
+      expect(out).toHaveLength(1000);
+      expect(["control", "variant"]).toContain(JSON.parse(out).question_order_arm);
+    });
   });
 });

@@ -39,6 +39,58 @@ describe("surveySession", () => {
     expect(randomUuid).not.toHaveBeenCalled();
   });
 
+  /**
+   * sessionStorage dies with the tab; the draft in localStorage does not. Before the
+   * mirror, a respondent who closed the tab and came back resumed their answers under a
+   * new id — 6.3% of production sessions (191 of 3,014) show that footprint. Under C13
+   * half of them had the question order change mid-survey and were recorded under the
+   * wrong arm, and their `optionOrder` recorded an order they were never shown.
+   */
+  describe("the localStorage mirror", () => {
+    it("resumes the id from localStorage when the tab closed and sessionStorage is gone", () => {
+      const randomUuid = vi.spyOn(globalThis.crypto, "randomUUID");
+      localStorage.setItem(SURVEY_SESSION_KEY, "survived-the-tab");
+
+      expect(getSessionId()).toBe("survived-the-tab");
+      expect(randomUuid, "a mirrored id must be resumed, never re-minted").not.toHaveBeenCalled();
+      expect(sessionStorage.getItem(SURVEY_SESSION_KEY)).toBe("survived-the-tab");
+    });
+
+    it("mirrors a freshly minted id so the next tab can resume it", () => {
+      vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue("fresh-id");
+
+      expect(getSessionId()).toBe("fresh-id");
+      expect(localStorage.getItem(SURVEY_SESSION_KEY)).toBe("fresh-id");
+    });
+
+    it("backfills the mirror for a respondent already mid-survey when this ships", () => {
+      sessionStorage.setItem(SURVEY_SESSION_KEY, "in-flight");
+
+      expect(getSessionId()).toBe("in-flight");
+      expect(localStorage.getItem(SURVEY_SESSION_KEY)).toBe("in-flight");
+    });
+
+    it("finalizeReportSession clears the mirror, so the NEXT survey starts fresh", () => {
+      // Without this the next respondent on this browser resumes a finished submission's
+      // id, and their behaviour events land against someone else's session.
+      sessionStorage.setItem(SURVEY_SESSION_KEY, "done-with-this");
+      localStorage.setItem(SURVEY_SESSION_KEY, "done-with-this");
+
+      finalizeReportSession("done-with-this");
+
+      expect(sessionStorage.getItem(SURVEY_SESSION_KEY)).toBeNull();
+      expect(localStorage.getItem(SURVEY_SESSION_KEY)).toBeNull();
+    });
+
+    it("finalizeReportSession leaves a DIFFERENT session's mirror alone", () => {
+      localStorage.setItem(SURVEY_SESSION_KEY, "someone-elses");
+
+      finalizeReportSession("not-that-one");
+
+      expect(localStorage.getItem(SURVEY_SESSION_KEY)).toBe("someone-elses");
+    });
+  });
+
   it("copies the survey session into report storage", () => {
     sessionStorage.setItem(SURVEY_SESSION_KEY, "existing-session");
 

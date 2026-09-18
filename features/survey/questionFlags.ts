@@ -18,10 +18,16 @@
  * Questions whose answer options are shown in a randomised order, with that order
  * recorded against the submission (`survey_submission.option_order`).
  *
- * Why these three: each is a multi-select whose ANSWER IS A RANKING — which changes
- * matter most, what is already part of your life, what is getting in the way. A fixed
- * render order makes the share an option receives inseparable from its position, so the
- * ranking cannot be published. Scale and open questions are excluded because they have
+ * Why these four: each is a multi-select whose ANSWER IS A RANKING — which changes
+ * matter most, what is already part of your life, what is getting in the way, and which
+ * topics beyond sex people want to understand. A fixed render order makes the share an
+ * option receives inseparable from its position, so the ranking cannot be published.
+ *
+ * `16016` needs this more than the other three, not less: it offers 53 options against
+ * their handful, and position bias grows with list length. It is also the only one the
+ * engine cannot group — the teardown specified thirteen collapsible category headers,
+ * and `SurveyQuestion.options` is a flat string array with no grouping concept — so
+ * randomisation is the only defence its ranking has. Scale and open questions are excluded because they have
  * no option order to bias, and single-choice questions whose options are an ordered
  * scale must keep their sequence.
  *
@@ -29,7 +35,7 @@
  * price ladders, for instance, where a "none of these" opt-out has to stay last for the
  * answer to mean anything.
  */
-export const RANDOMISE_QIDS: ReadonlySet<string> = new Set(["16001", "16011", "16014"]);
+export const RANDOMISE_QIDS: ReadonlySet<string> = new Set(["16001", "16011", "16014", "16016"]);
 
 /** Whether this question's options should be shown in a randomised order. */
 export function isRandomised(qId: string): boolean {
