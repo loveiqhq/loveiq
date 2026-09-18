@@ -394,13 +394,19 @@ export async function buildSubmissionJourney(
      * a reader actually LEFT — every other signal is the last thing they
      * happened to click. Both boundaries feed the dwell below, which is also
      * what finally gives a consent-declining reader a measured time instead of
-     * an em dash. Fifty rows is ~9x the busiest report (11,230 sessions across
-     * 2,051 reports) and the earliest is still [0], so the anchor is unchanged.
+     * an em dash.
+     *
+     * ASCENDING, because [0] is the anchor and the anchor must be the reader's
+     * FIRST open — every timing hangs off it. That puts any truncation on the
+     * newest end, the opposite of the events query above, so the limit has to be
+     * generous rather than tight: 500 leaves 5 of 1,974 reports truncated, and
+     * all five are QA reload storms (the worst carries 2,356 sessions), where
+     * understating a dwell costs nothing.
      */
     fetchJson<ReportSessionRow>(
       `/rest/v1/report_session?select=started_at,ended_at,personal_report!inner(survey_submission_id)` +
         `&personal_report.survey_submission_id=eq.${submissionId}` +
-        `&order=started_at.asc&limit=50`,
+        `&order=started_at.asc&limit=500`,
       "report_session"
     ),
   ]);

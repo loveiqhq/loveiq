@@ -481,7 +481,11 @@ describe("buildSubmissionJourney", () => {
       // `limit=1` would keep the anchor and throw away every close but the
       // first reader's — the value this whole feature exists to record.
       expect(sessionQuery).not.toContain("limit=1&");
-      expect(sessionQuery).toContain("limit=50");
+      // Ascending, so truncation lands on the NEWEST rows — the opposite end
+      // from the events query, and the reason the limit is generous. 24 of
+      // 1,974 reports carry more than 50 sessions.
+      expect(sessionQuery).toContain("order=started_at.asc");
+      expect(sessionQuery).toContain("limit=500");
     });
 
     it("asks the database for the newest rows, so a cap cannot eat the tail", async () => {
