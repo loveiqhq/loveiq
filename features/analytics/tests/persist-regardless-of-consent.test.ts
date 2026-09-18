@@ -12,10 +12,15 @@ vi.mock("posthog-js", () => ({ default: ph }));
 type Client = typeof import("@features/analytics/client");
 let client: Client;
 let beacon: ReturnType<typeof vi.fn>;
+let gtag: ReturnType<typeof vi.fn>;
 
 const grantConsent = () => {
   document.cookie =
     "cookieyes-consent=consent:yes,action:yes,necessary:yes,analytics:yes,advertisement:no; path=/";
+};
+const grantAllConsent = () => {
+  document.cookie =
+    "cookieyes-consent=consent:yes,action:yes,necessary:yes,analytics:yes,advertisement:yes; path=/";
 };
 const declineConsent = () => {
   document.cookie =
@@ -46,6 +51,20 @@ beforeEach(async () => {
   // accepts the __csrf fallback.
   document.cookie = "__csrf=tok123; path=/";
   delete (window as unknown as Record<string, unknown>).dataLayer;
+  /**
+   * `gtagSend` reaches Google through `window.gtag`, NOT through
+   * `dataLayer.push` — and it only drains its queue once the GA4 container
+   * reports itself live. Without both of these the Google Ads assertion below
+   * cannot fail for any reason, which is how its first version passed while the
+   * advertisement gate was deleted.
+   */
+  gtag = vi.fn();
+  Object.defineProperty(window, "gtag", { configurable: true, writable: true, value: gtag });
+  Object.defineProperty(window, "google_tag_manager", {
+    configurable: true,
+    writable: true,
+    value: { "G-QTYY69L46N": {} },
+  });
   beacon = vi.fn().mockReturnValue(true);
   Object.defineProperty(navigator, "sendBeacon", { configurable: true, value: beacon });
   client = await import("@features/analytics/client");
@@ -140,6 +159,9 @@ describe("first-party events are written whatever the banner says", () => {
     expect(dataLayer().length).toBeGreaterThan(0);
   });
 
+  const conversionCalls = () =>
+    gtag.mock.calls.filter((c) => c[0] === "event" && c[1] === "conversion");
+
   it("keeps Google Ads behind the separate advertisement category", () => {
     // analytics:yes but advertisement:no — the conversion must still not fire.
     grantConsent();
@@ -148,9 +170,22 @@ describe("first-party events are written whatever the banner says", () => {
       currency: "EUR",
       transaction_id: "cs_test_1",
     });
-    expect(
-      dataLayer().filter((e) => (e as { event?: string }).event === "conversion")
-    ).toHaveLength(0);
+    expect(conversionCalls()).toHaveLength(0);
+  });
+
+  /**
+   * The positive control, and the only reason the assertion above means
+   * anything: without it the test passes just as happily when the gate is
+   * deleted, because nothing would have fired either way.
+   */
+  it("fires the Google Ads conversion once the advertisement category is granted", () => {
+    grantAllConsent();
+    client.trackGoogleAdsPurchaseConversion({
+      value: 29,
+      currency: "EUR",
+      transaction_id: "cs_test_1",
+    });
+    expect(conversionCalls()).toHaveLength(1);
   });
 
   it("reaches PostHog either way, which was already the case", () => {
