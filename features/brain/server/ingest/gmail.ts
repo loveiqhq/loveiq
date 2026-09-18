@@ -31,6 +31,22 @@ import {
  * ONE CHUNK PER THREAD, not per message — the same reasoning as Slack days. A reply
  * saying "yes, agreed, let's do the 39.99" is meaningless without the message above
  * it, and a thread is the unit somebody actually asks about.
+ *
+ * CUSTOMER MAIL IS IN, DELIBERATELY, AND THAT IS NOT A CONTRADICTION OF THE SLACK
+ * DENYLIST. Decided 2026-09-18, after an audit noticed the two look alike and asked.
+ *
+ * `#email-inbox` is denylisted in `slack.ts` because that channel was created to
+ * forward the company address into Slack and was restricted to three people ON
+ * PURPOSE — indexing it would have handed an undifferentiated corpus something its
+ * owner had deliberately fenced off. A shared mailbox the team already reads is not
+ * that: nobody fenced it, and the threads in it are where real answers live.
+ * Measured the same day: 69 chunks from `hello@`, 188 from `teamwork@`, including
+ * contract disputes and cancellations — which is exactly the material somebody asking
+ * "what do customers complain about" needs.
+ *
+ * So the boundary is the ACCESS RESTRICTION somebody set, not the word "customer".
+ * If a mailbox is ever locked down the way that channel was, it belongs on a denylist
+ * here, and this comment is the reason why.
  */
 
 const SOURCE = "gmail";
