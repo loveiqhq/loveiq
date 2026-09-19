@@ -23,9 +23,14 @@ passing when they cannot read it — a check that skips silently is how the drif
 lane stayed green for months while reading nothing.
 
 ```bash
-npm run check:migration-drift    # repo migrations vs live schema + ledger
+npm run check:migration-drift    # repo migrations vs live schema + ledger, BOTH directions
 npm run check:postgrest-columns  # every literal select=/filter/order= names a real column
 ```
+
+Staging has its own free Supabase database, separate from production — see
+[`docs/runbooks/STAGING_DATABASE.md`](docs/runbooks/STAGING_DATABASE.md).
+`node scripts/setup-staging-db.mjs` applies the migrations and verifies parity;
+it refuses to run if pointed at production.
 
 ---
 
