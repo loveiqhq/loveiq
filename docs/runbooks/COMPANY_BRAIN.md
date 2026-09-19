@@ -29,6 +29,29 @@ message. It replies in a thread, and every answer lists the sources it used.
   `query_product_data` for `report_price_quote`, not the written record.
 - **Money outside the product.** No payroll, no bank balance, no runway — those
   live in systems nothing here reads.
+- **Pictures.** Screenshots and photos are named but never read — there is no OCR
+  here. Of the 184 files shared in Slack, 148 are images, so for most of them the
+  file name is all there will ever be.
+
+### Attachments and files, and where the edges are
+
+Added 2026-09-19, after a spreadsheet that was indexed, counted and reconciled
+turned out to hold one tab of two. Counting documents cannot see inside them.
+
+| Read                                                    | Not read                                       |
+| ------------------------------------------------------- | ---------------------------------------------- |
+| Every tab of a Google Sheet, each under its own heading | Images and video — no OCR                      |
+| PDF, Word and text attachments on email threads         | Anything over 4 MB — that is data, not prose   |
+| PDF, Word and text files shared in Slack channels       | `.xlsx` and `.pptx` uploads — no parser here   |
+| Google Docs, including documents with several tabs      | Files in channels the bot was never invited to |
+
+Bounded on purpose: at most five attachments per email thread and about ten
+chunks' worth of text per thread, because five 20,000-character attachments is a
+third again of the whole corpus and would drown every other source.
+
+A part of a document that contains a credential is refused and replaced with a
+short note saying so, rather than vanishing — the surrounding parts still say
+"part 2 of 2", and a hole with no explanation reads exactly like a bug.
 
 ### Business metrics we have: revenue, AOV, LTV, CAC, conversion rate, ad spend
 
