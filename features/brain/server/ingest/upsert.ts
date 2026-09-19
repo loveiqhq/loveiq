@@ -324,7 +324,10 @@ export async function upsertChunks(rows: BrainRow[]): Promise<number> {
     const people = peopleIn(row.meta ?? {}, byAlias);
     byKey.set(
       `${row.source} ${row.source_id}`,
-      clean(people ? { ...redacted, meta: { ...(row.meta ?? {}), people } } : redacted)
+      // `row`, not `redacted`: `clean()` redacts on the way out regardless, so passing
+      // the pre-redacted copy here changes nothing. Mutation proved it — swapping them
+      // broke no test, because the two produce identical bytes.
+      clean(people ? { ...row, meta: { ...(row.meta ?? {}), people } } : row)
     );
   }
   const unique = [...byKey.values()];
