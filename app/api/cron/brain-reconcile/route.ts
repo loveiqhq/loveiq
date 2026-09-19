@@ -295,6 +295,23 @@ export async function buildReadings(): Promise<{ readings: Reading[]; unread: st
  * which is what the reader writes; matching the bare title would pass on a sheet that
  * merely mentions the word.
  */
+/**
+ * Which few documents today's run checks.
+ *
+ * `sort().slice(0, 3)` checked the SAME three spreadsheets every day and left the
+ * other thirty-seven never verified — a check that cannot see most of what it is
+ * meant to guard. Rotating by day walks the whole set in about a fortnight, the
+ * same shape `constructsForDay` uses for the evidence cycle.
+ *
+ * Stable order in, stable order out: the walk is by index, so a document is only
+ * reordered when the corpus itself gains or loses spreadsheets.
+ */
+export function sampleForDay<T>(all: T[], dayIndex: number, size: number): T[] {
+  if (all.length <= size) return all;
+  const start = (((dayIndex * size) % all.length) + all.length) % all.length;
+  return Array.from({ length: size }, (_, i) => all[(start + i) % all.length]!);
+}
+
 export function tabsPresentInText(text: string, titles: string[]): number {
   return titles.filter((t) => text.includes(`## ${t}`)).length;
 }
@@ -319,7 +336,8 @@ async function sheetTabReading(request: Request): Promise<Reading | null> {
     const base = r.source_id.split("#")[0]!;
     byDoc.set(base, `${byDoc.get(base) ?? ""}\n${r.body ?? ""}`);
   }
-  const sample = [...byDoc.keys()].sort().slice(0, 3);
+  const dayIndex = Math.floor(Date.now() / 86_400_000);
+  const sample = sampleForDay([...byDoc.keys()].sort(), dayIndex, 3);
   if (sample.length === 0) return null;
 
   let expected = 0;
