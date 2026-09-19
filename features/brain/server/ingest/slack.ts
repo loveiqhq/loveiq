@@ -650,10 +650,25 @@ export async function ingestSlack(
     .toISOString()
     .slice(0, 10);
   let complete = true;
+  /**
+   * WHY the walk did not finish, first cause winning — the shape gmail already uses.
+   *
+   * Four different things set `complete = false`: the clock running out, an API call
+   * failing, a channel hitting the page cap, and a thread whose replies were
+   * rate-limited away. Collapsing them into one word made a version-bump backfill —
+   * which is expected to run out of clock for hours — indistinguishable from Slack
+   * being down. Measured 2026-09-19: the v9 bump put brain-fast into `status=error`
+   * on every run, which is how a real outage gets ignored.
+   */
+  let incomplete: string | null = null;
+  const stopped = (why: string) => {
+    complete = false;
+    incomplete ??= why;
+  };
 
   for (const ch of channels) {
     if (isOutOfTime()) {
-      complete = false;
+      stopped("time-budget");
       break;
     }
     /**
@@ -738,7 +753,7 @@ export async function ingestSlack(
         isOutOfTime
       );
       if (!json) {
-        complete = false;
+        stopped("api-refused");
         break;
       }
       const messages = (json.messages as SlackMessage[]) ?? [];
@@ -838,7 +853,7 @@ export async function ingestSlack(
       }
       cursor = ((json.response_metadata as Record<string, string>) ?? {}).next_cursor ?? "";
       if (!cursor) break;
-      if (page === MAX_PAGES - 1) complete = false;
+      if (page === MAX_PAGES - 1) stopped("page-cap");
     }
 
     for (const [day, entries] of byDay) {
@@ -847,7 +862,7 @@ export async function ingestSlack(
       // day recorded with a thread gap is rebuilt until it is whole.
       if (day < yesterday && known.get(`ch:${ch.name}:${day}`) === true) continue;
       const whole = !threadGaps.has(day);
-      if (!whole) complete = false;
+      if (!whole) stopped("thread-replies-rate-limited");
       // Reverse the top-level sequence only, then flatten each thread back in
       // order, so replies follow their parent and read oldest-first.
       const lines = [...entries]
@@ -939,7 +954,16 @@ export async function ingestSlack(
    * `slack-walk-incomplete` is not in the cron's DELIBERATE_SKIPS, so it alerts.
    */
   if (!complete) {
-    return { source: SOURCE, rows: written + touched, swept, skipped: "slack-walk-incomplete" };
+    /**
+     * A clock-bound walk is a backfill in progress and must not alert; anything else
+     * is a fault and must. `slack-time-budget` is in the cron's DELIBERATE_SKIPS for
+     * the same reason `ga4-time-budget` already is.
+     */
+    const skipped =
+      incomplete === "time-budget"
+        ? "slack-time-budget"
+        : `slack-walk-incomplete:${incomplete ?? "unknown"}`;
+    return { source: SOURCE, rows: written + touched, swept, skipped };
   }
   return { source: SOURCE, rows: written + touched, swept };
 }

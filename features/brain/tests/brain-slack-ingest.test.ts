@@ -509,3 +509,41 @@ describe("uploads — a file-only message used to vanish entirely", () => {
     expect(readableFiles({ files: [file({ url_private: undefined })] })).toHaveLength(0);
   });
 });
+
+describe("an unfinished walk must say WHY", () => {
+  /**
+   * Four different things stop the walk: the clock, a refused API call, a channel
+   * hitting the page cap, and thread replies lost to a rate limit. They all used to
+   * return the single word `slack-walk-incomplete`, which alerts.
+   *
+   * Measured 2026-09-19: bumping SLACK_BUILDER_VERSION to 9 made every indexed day
+   * stale at once, so the walk legitimately ran out of clock every run — and put
+   * brain-fast into `status=error` on each one. Hours of that is exactly how a real
+   * outage stops being noticed.
+   */
+  const fs = require("fs") as typeof import("fs");
+  const src = fs.readFileSync("features/brain/server/ingest/slack.ts", "utf8");
+  const cron = fs.readFileSync("app/api/cron/brain-fast/route.ts", "utf8");
+
+  it("names each of the four causes separately", () => {
+    for (const why of ["time-budget", "api-refused", "page-cap", "thread-replies-rate-limited"])
+      expect(src, why).toContain(`stopped("${why}")`);
+  });
+
+  it("reports the clock as a DIFFERENT skip from a fault", () => {
+    // The clock is a backfill in progress; a refused API call is a fault.
+    expect(src).toMatch(/=== "time-budget"\s*\?\s*"slack-time-budget"/);
+    expect(src).toContain('`slack-walk-incomplete:${incomplete ?? "unknown"}`');
+  });
+
+  it("whitelists ONLY the clock in the cron, so a fault still alerts", () => {
+    expect(cron).toContain('"slack-time-budget"');
+    // The control: if this ever appears, every slack fault goes silent.
+    expect(cron).not.toContain('"slack-walk-incomplete"');
+  });
+
+  it("keeps the first cause, not the last", () => {
+    // An API refusal followed by the clock running out must still read as the fault.
+    expect(src).toContain("incomplete ??= why");
+  });
+});
