@@ -332,6 +332,17 @@ export const RELEVANCE_FLOOR = 1.85;
  * so a date that does not survive the trip was never real.
  */
 export function isRealDate(value: string): boolean {
+  /**
+   * Redundant on purpose, and mutation testing says so: removing this line breaks no
+   * test, because the round-trip below already rejects everything it would — the only
+   * string that round-trips to itself IS `YYYY-MM-DD`. Verified against "2026-9-15",
+   * "26-09-15", "2026/09/15", "+2026-09-15" and a trailing-space variant.
+   *
+   * Kept anyway. The other two survivors found today were pointless duplication and
+   * were deleted; this one is belt-and-braces on INPUT VALIDATION, where the house
+   * rule is to refuse rather than guess, and dropping it would leave the contract
+   * resting entirely on `Date.parse` semantics for non-ISO input.
+   */
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const ms = Date.parse(`${value}T00:00:00Z`);
   if (!Number.isFinite(ms)) return false;
