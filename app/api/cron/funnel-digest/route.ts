@@ -40,7 +40,6 @@ import {
   type FunnelCvrSnapshot,
   type BucketPerfSnapshot,
   type DropoutFunnelSnapshot,
-  type NurturePerfSnapshot,
   computeRate,
   delta,
   dayString,
@@ -50,7 +49,6 @@ import {
   fetchFunnelCvrSparklines,
   fetchBucketPerformance,
   fetchDropoutFunnel,
-  fetchNurturePerformance,
 } from "@features/admin/server/digest-metrics";
 
 export const runtime = "nodejs";
@@ -66,24 +64,11 @@ const BUCKET_TOP_N = 5;
 type DigestImageKind =
   | "cvr-visitor-start"
   | "cvr-start-completion"
-  | "cvr-completion-engagement"
   | "cvr-completion-paygate"
   | "cvr-paygate-purchase"
   | "bucket-performance"
   | "dropout-funnel"
   | "reactivation-email";
-
-// Human labels for the reactivation-email nurture stages.
-const NURTURE_STAGE_LABELS: Record<string, string> = {
-  "6h_no_view": "6h · no view",
-  "6h_no_unlock": "6h · no unlock",
-  "72h_no_unlock": "72h · 50% off",
-  // Retired stages (pre pricing 2.0) — retained so historical digests still label
-  // the old ladder correctly.
-  "30h_no_unlock": "30h · 50% off",
-  "54h_no_unlock": "54h · 75% off",
-  "78h_no_unlock": "78h · call invite",
-};
 
 // -----------------------------------------------------------------------------
 // Shared Slack-text helper (consumed by the tech-digest + product-digest crons)
@@ -172,8 +157,6 @@ const CHART_CAPTIONS: Partial<Record<DigestImageKind, string>> = {
     "Of everyone who lands on the site, the share who answer the first survey question.",
   "cvr-start-completion":
     "Of everyone who answers the first question, the share who reach the last one.",
-  "cvr-completion-engagement":
-    "Of everyone who finishes the survey, the share who have opened their report within 1, 5 and 10 minutes. Three lines, one per waiting time — so the top line is always the highest.",
   "cvr-completion-paygate":
     "Of everyone who finishes the survey, the share who reach the point where the report asks for payment.",
   "cvr-paygate-purchase": "Of everyone who reaches that point, the share who pay.",
@@ -319,28 +302,14 @@ async function buildCvrChartBlocks(
     "starts"
   );
 
-  // Chart 3 — completion -> report-view at 1m / 5m / 10m (3 lines, one chart).
-  // Gate on the denominator (completions), so a real 0% engagement still shows.
-  if (days.some((d) => d.completions > 0)) {
-    const eng1 = days.map((d) => computeRate(d.eng_1m, d.completions));
-    const eng5 = days.map((d) => computeRate(d.eng_5m, d.completions));
-    const eng10 = days.map((d) => computeRate(d.eng_10m, d.completions));
-    out.push(
-      ...(await lineChartBlock(
-        "cvr-completion-engagement",
-        "Share of survey finishers who opened their report within 1, 5 and 10 minutes",
-        {
-          windowLabel,
-          // "Within", not a bare duration: the rows are cumulative shares, and
-          // "5 min" alone reads as the share who opened at exactly five minutes.
-          labels: ["Within 1 min", "Within 5 min", "Within 10 min"],
-          series: [eng1, eng5, eng10],
-          rate: true,
-          xAxis,
-        }
-      ))
-    );
-  }
+  /**
+   * DELETED 2026-09-19: "How soon finishers open their report" (1m / 5m / 10m).
+   *
+   * Removed at the team's request. Three cumulative lines on one axis read as
+   * three competing series rather than one thing measured at three delays, and
+   * it was reliably the chart people asked about instead of acting on. The
+   * `eng_1m/5m/10m` columns and their RPC are untouched.
+   */
 
   await single(
     "cvr-completion-paygate",
@@ -505,32 +474,17 @@ async function buildDropoutChartBlock(
  */
 
 /**
- * Chart 8: reactivation-email performance — per nurture stage sent + purchased
- * with CVR%. purchased may read 0 until checkout stamps payment.metadata.
- * promoStage (documented gap); the chart still shows send volume.
+ * DELETED 2026-09-19: "Reactivation email performance".
+ *
+ * Removed at the team's request while trimming the weekly message to the charts
+ * people act on. Its `purchased` half was never trustworthy anyway — checkout
+ * does not stamp `payment.metadata.promoStage`, so that column read 0 whatever
+ * the emails did, which is a documented gap rather than a result.
+ *
+ * `fetchNurturePerformance` and `get_nurture_performance` stay: the data is
+ * correct and worth having when someone looks at the sequence deliberately.
+ * This removes the weekly picture, not the source.
  */
-async function buildReactivationChartBlock(
-  snap: NurturePerfSnapshot | null,
-  windowLabel: string
-): Promise<SlackBlock | null> {
-  if (!snap || snap.stages.length === 0) return null;
-  const stages = snap.stages
-    .filter((s) => s.sent > 0 || s.purchased > 0)
-    .map((s) => ({
-      label: NURTURE_STAGE_LABELS[s.stage] ?? s.stage,
-      sent: s.sent,
-      purchased: s.purchased,
-    }));
-  if (stages.length === 0) return null;
-  const url = await buildSignedImageUrl("reactivation-email", { windowLabel, stages });
-  if (!url) return null;
-  return {
-    type: "image",
-    image_url: url,
-    alt_text:
-      "How each follow-up email performed — how many were sent and how many led to a purchase",
-  };
-}
 
 // -----------------------------------------------------------------------------
 // Revenue + Alerts text footer (the only text we keep)
@@ -612,7 +566,6 @@ export async function buildFunnelDigestBlocks(opts: {
   cvr: FunnelCvrSnapshot | null;
   bucket: BucketPerfSnapshot | null;
   dropout: DropoutFunnelSnapshot | null;
-  nurture: NurturePerfSnapshot | null;
   curr: DailyMetrics;
   prev: DailyMetrics;
   cadence: "DoD" | "WoW";
@@ -627,12 +580,6 @@ export async function buildFunnelDigestBlocks(opts: {
   blocks.push(...(await buildBucketChartBlock(opts.bucket, opts.windowLabel)));
   blocks.push(
     ...withCaption("dropout-funnel", await buildDropoutChartBlock(opts.dropout, opts.windowLabel))
-  );
-  blocks.push(
-    ...withCaption(
-      "reactivation-email",
-      await buildReactivationChartBlock(opts.nurture, opts.windowLabel)
-    )
   );
 
   // Text footer: Revenue (always) + Alerts (when breaches exist).
@@ -660,13 +607,12 @@ async function fetchChartSnapshots(untilIso: string) {
   const sinceIso = new Date(
     new Date(untilIso).getTime() - CHART_WINDOW_DAYS * 86_400_000
   ).toISOString();
-  const [cvr, bucket, dropout, nurture] = await Promise.all([
+  const [cvr, bucket, dropout] = await Promise.all([
     fetchFunnelCvrSparklines(sinceIso, untilIso),
     fetchBucketPerformance(sinceIso, untilIso),
     fetchDropoutFunnel(sinceIso, untilIso),
-    fetchNurturePerformance(sinceIso, untilIso),
   ]);
-  return { cvr, bucket, dropout, nurture };
+  return { cvr, bucket, dropout };
 }
 
 export async function GET(request: Request) {
@@ -724,7 +670,6 @@ export async function GET(request: Request) {
         cvr: snaps.cvr,
         bucket: snaps.bucket,
         dropout: snaps.dropout,
-        nurture: snaps.nurture,
         curr,
         prev,
         cadence: "DoD",
@@ -759,7 +704,6 @@ export async function GET(request: Request) {
           cvr: snaps.cvr,
           bucket: snaps.bucket,
           dropout: snaps.dropout,
-          nurture: snaps.nurture,
           curr: currW,
           prev: prevW,
           cadence: "WoW",

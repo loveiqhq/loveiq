@@ -86,48 +86,41 @@ describe("buildSurveySignals", () => {
     expect(buildSurveySignals(snap([q({ question_index: 0 })], { total_rows: 0 }))).toEqual([]);
   });
 
-  it("labels the surprise signal a proxy, in the value itself", () => {
-    // Nothing here can see surprise. What is observable is its footprint: a
-    // question people dwell on and then go back from. A model asked to infer
-    // the feeling would be guessing — it scores 0.20 on defects it can SEE.
-    const sigs = buildSurveySignals(
-      snap(
-        [
-          q({ question_index: 0 }),
-          q({ question_index: 10, median_ms: 30_000, backs: 30, visits: 100 }),
-        ],
-        { median_ms: 9000 }
-      )
-    );
-    const p = find(sigs, "Back after a long pause");
-    // The label states what was OBSERVED. It must not name the feeling we would
-    // like to infer from it — we cannot see surprise, only the pause and the
-    // retreat, and a row claiming otherwise would be the model narrating.
-    expect(p?.label).toBe("Back after a long pause");
-    expect(p?.label).not.toMatch(/surpris|mismatch|expectation|confus/i);
-    expect(p?.value).toBe("30%");
-    expect(p?.status).toBe("watch");
-  });
-
-  it("does not claim surprise on a question nobody lingered on", () => {
-    // A high back-rate alone is backtracking, which has its own row. The proxy
-    // needs BOTH the pause and the retreat, or it is just a second copy of it.
-    const sigs = buildSurveySignals(
-      snap([q({ question_index: 0 }), q({ question_index: 10, median_ms: 9000, backs: 40 })], {
-        median_ms: 9000,
-      })
-    );
-    expect(find(sigs, "Back after a long pause")).toBeUndefined();
-  });
-
-  it("measures progress sensitivity across thirds, not one question", () => {
+  it("no longer emits the rows removed on 2026-09-19", () => {
+    /**
+     * Four survey rows were removed because each was wrong, duplicated or
+     * un-actionable. This is the guard that they stay removed — asserted on a
+     * fixture built to TRIGGER every one of them, so it cannot pass by having
+     * nothing to find:
+     *
+     *   Skipped questions        printed 0.0% every day while the behaviour
+     *                            table carried 3.85% unanswered rows — the
+     *                            column is not counting what the label said.
+     *   Drop-off, late vs early  a pp difference whose sign flips on noise.
+     *   Back after a long pause  ranked on the same `backs` column as "Went
+     *                            back a step", so both named the same question
+     *                            with the same percentage.
+     *   Engagement pace          people answer later questions faster in every
+     *                            survey ever run.
+     */
     const early = [0, 1, 2].map((i) => q({ question_index: i, abandons: 1 }));
-    const mid = [3, 4, 5].map((i) => q({ question_index: i, abandons: 1 }));
-    const late = [6, 7, 8].map((i) => q({ question_index: i, abandons: 10 }));
-    const sigs = buildSurveySignals(snap([...early, ...mid, ...late]));
-    const ps = find(sigs, "Drop-off, late vs early");
-    expect(ps?.value).toContain("+9.0pp");
-    expect(ps?.status).toBe("watch");
+    const late = [6, 7, 8].map((i) =>
+      // Slow AND with people going back: what the surprise proxy ranked on.
+      q({ question_index: i, abandons: 10, median_ms: 90_000, backs: 30, skipped: 5 })
+    );
+    const sigs = buildSurveySignals(snap([...early, ...late]));
+
+    for (const gone of [
+      "Skipped questions",
+      "Drop-off, late vs early",
+      "Back after a long pause",
+      "Engagement pace",
+    ]) {
+      expect(find(sigs, gone), `${gone} was removed`).toBeUndefined();
+    }
+    // And the rows that earn their place are still there.
+    expect(find(sigs, "Drop-off point")).toBeDefined();
+    expect(find(sigs, "Went back a step")).toBeDefined();
   });
 });
 

@@ -153,7 +153,7 @@ function imageKinds(blocks: Array<{ type: string; image_url?: string }>): string
 }
 
 describe("buildFunnelDigestBlocks", () => {
-  it("emits all 9 chart kinds when every snapshot has data", async () => {
+  it("emits the six chart kinds that survived the 2026-09-19 trim", async () => {
     const curr = mkDaily();
     const { blocks } = await buildFunnelDigestBlocks({
       title: "Test",
@@ -161,22 +161,32 @@ describe("buildFunnelDigestBlocks", () => {
       cvr: fullSnaps.cvr,
       bucket: fullSnaps.bucket,
       dropout: fullSnaps.dropout,
-      nurture: fullSnaps.nurture,
       curr,
       prev: curr,
       cadence: "DoD",
     });
     const kinds = imageKinds(blocks as Array<{ type: string; image_url?: string }>);
+    /**
+     * Two were removed on 2026-09-19 at the team's request:
+     *
+     *   cvr-completion-engagement — three cumulative lines on one axis read as
+     *     three competing series rather than one thing measured at three delays;
+     *   reactivation-email        — and its `purchased` half was never
+     *     trustworthy, because checkout does not stamp promoStage.
+     *
+     * Asserted as an exact list, in order, so a re-added chart has to be a
+     * decision rather than an accident.
+     */
     expect(kinds).toEqual([
       "cvr-visitor-start",
       "cvr-start-completion",
-      "cvr-completion-engagement",
       "cvr-completion-paygate",
       "cvr-paygate-purchase",
       "bucket-performance",
       "dropout-funnel",
-      "reactivation-email",
     ]);
+    expect(kinds).not.toContain("cvr-completion-engagement");
+    expect(kinds).not.toContain("reactivation-email");
   });
 
   it("omits chart images when snapshots are null but keeps the Revenue footer", async () => {

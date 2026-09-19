@@ -461,11 +461,27 @@ export function delta(curr: number, prev: number, lowBaseThreshold = 5): string 
   // to EUR 29.00, which reads like a spike and means nothing. Say what actually
   // happened instead.
   if (prev === 0) return curr > 0 ? "vs none" : "—";
+  /**
+   * Below the threshold, say NOTHING rather than a percentage with a warning
+   * glued to it.
+   *
+   * It used to return e.g. "-100% (low base)". On the daily message that is what
+   * "Paid" showed almost every day: yesterday 0 against a baseline of one sale a
+   * week, which the average turns into 0.14 — so the arithmetic is -100% and the
+   * statement is noise. Raised on the 2026-09-19 review as confusing, and it is:
+   * a reader cannot tell "-100% (low base)" meaning "we sell about one a week and
+   * yesterday was not the day" from a real collapse, and "(low base)" is jargon
+   * that explains the caveat without removing it.
+   *
+   * The count itself is right there next to it. An empty string lets the caller
+   * drop the parenthetical entirely, which is the honest presentation of "too
+   * few to compare".
+   */
+  if (prev < lowBaseThreshold) return "";
   const pct = Math.round(((curr - prev) / prev) * 100);
   const capped = Math.max(-999, Math.min(999, pct));
   const sign = capped > 0 ? "+" : "";
-  const suffix = prev < lowBaseThreshold ? " (low base)" : "";
-  return `${sign}${capped}%${suffix}`;
+  return `${sign}${capped}%`;
 }
 
 /** ISO 8601 week string like "2026-W20" (Mon-Sun). */

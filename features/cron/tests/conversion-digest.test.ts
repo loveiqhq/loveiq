@@ -583,22 +583,28 @@ describe("conversion-digest handler", () => {
 
   it("prints a vanishing share as <0.1%, never as a bare 0% beside a real count", async () => {
     /**
-     * 5 payments in 12,308 visits is 0.04%. Rounded to one decimal that is 0, and a
-     * column reading 100 / 3.5 / 3.4 / 0.3 / 0 says nobody paid while the count
-     * beside it says five. Once the test-payment exclusion landed, the paid count
-     * dropped far enough for this to start happening for real.
+     * A step that converts 5 of 12,000 is 0.04%. Rounded to one decimal that is
+     * 0, and a row reading "5  0%" says nobody carried on while the count beside
+     * it says five did.
+     *
+     * The fixture drives it through the STEP column, which is the only
+     * percentage the table now carries — this used to be exercised through
+     * "% of all visits", which was removed on 2026-09-19 for being the second
+     * percentage people kept misreading.
      */
     const base = makeFunnel();
     mockFetchLandingArmFunnel.mockResolvedValue({
       ...base,
-      // A big denominator and a tiny survivor, which is what production looks like.
+      // The visitor row is the ceiling every row below is clamped to, so it has
+      // to be big enough for the cohort numbers to survive intact.
       visitors: base.visitors.map((v: { n: number }) => ({ ...v, n: v.n * 40 })),
       cohort: [
         {
           arm: "white",
-          completions: 425,
-          reportOpens: 414,
-          checkout: 33,
+          completions: 12_400,
+          reportOpens: 12_000,
+          // 5 of 12,000 = 0.04%, which rounds to 0.0 at one decimal.
+          checkout: 5,
           paid: 5,
           revenue: 128.99,
         },
@@ -606,20 +612,17 @@ describe("conversion-digest handler", () => {
     });
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const flat = blockText(arg.blocks);
-    expect(flat).toContain("<0.1%");
-    /**
-     * And no row anywhere pairs a non-zero count with a bare 0%, in EITHER
-     * percentage column.
-     *
-     * This regex is rewritten for the two-column row. The previous one was
-     * `/`\s*[1-9]\d*`\s+0%/` — it matched a count in a backtick span of its own,
-     * followed by the share. When the row became a single span holding the count
-     * and both percentages, that shape stopped existing and the assertion could
-     * never fire again: it would have passed against the exact bug it was written
-     * to catch.
-     */
-    expect(flat).not.toMatch(/`\s*[1-9]\d*(?:\s+[\d.<%—]+)*\s+0%\s*`/);
+    const funnelBlock = arg.blocks.find((b) => JSON.stringify(b).includes("Visits to the site")) as
+      { text: { text: string } } | undefined;
+    expect(funnelBlock).toBeDefined();
+    const text = funnelBlock!.text.text;
+
+    expect(text).toContain("<0.1%");
+    // And never a bare 0% on a row whose count is not zero.
+    for (const row of text.split("\n").filter((l) => l.startsWith("`"))) {
+      const count = Number(row.replace(/`/g, "").trim().split(/\s+/)[0]);
+      if (count > 0) expect(row, `bare 0% beside ${count}`).not.toMatch(/\s0%/);
+    }
   });
 
   it("names both spans the funnel covers, instead of implying one", async () => {
@@ -1260,39 +1263,36 @@ describe("conversion-digest handler", () => {
     expect(blockText(arg.blocks)).not.toContain("Break-even");
   });
 
-  it("names both percentages on every funnel row, and states which is which", async () => {
+  it("carries ONE percentage per funnel row, and names it", async () => {
     /**
-     * The 2026-09-16 sync spent real time on a "96.5%" nobody could source, because
-     * the table printed one percentage bare and the other as a "▼ 45%" suffix and
-     * named neither — so a reader could not tell which figure was measured against
-     * the step above and which against all visits.
+     * It used to carry two — % of the step before AND % of all visits — because
+     * the KPI doc asked for both to be stated and named. In practice two
+     * percentage columns on one row is what people kept reading wrong, which is
+     * the same complaint that produced the unsourceable "96.5%" in the first
+     * place. The survivor is % OF THE STEP BEFORE, because it answers the
+     * question the table is read for: where are we losing people.
      */
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const funnel = arg.blocks
-      .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
-      .find((t) => t.includes("*The funnel —"));
-    expect(funnel, "the funnel block must be in the message at all").toBeDefined();
+    const funnelBlock = arg.blocks.find((b) => JSON.stringify(b).includes("Visits to the site")) as
+      { text: { text: string } } | undefined;
+    expect(funnelBlock, "the funnel block").toBeDefined();
+    const text = funnelBlock!.text.text;
 
-    // The columns are named, in the order they appear.
-    expect(funnel!).toContain("% of the step before");
-    expect(funnel!).toContain("% of all visits");
-    expect(funnel!.indexOf("% of the step before")).toBeLessThan(
-      funnel!.indexOf("% of all visits")
-    );
+    expect(text).toContain("% of the step above them");
+    expect(text, "the second convention is gone").not.toContain("% of all visits");
 
-    // A row below the first carries TWO percentages, not one. Anchored on a real
-    // row so the assertion cannot be satisfied by the legend line alone.
-    const rows = funnel!.split("\n").filter((l) => /^`\s*\d/.test(l));
-    expect(rows.length).toBeGreaterThan(1);
-    for (const row of rows.slice(1)) {
-      expect(row.match(/%/g) ?? [], `row should carry both percentages: ${row}`).toHaveLength(2);
+    // Every data row carries exactly one percentage in its number columns.
+    const dataRows = text.split("\n").filter((l) => l.startsWith("`"));
+    expect(dataRows.length, "the funnel rows").toBeGreaterThan(2);
+    for (const row of dataRows) {
+      const numbers = row.slice(0, row.lastIndexOf("`") + 1);
+      expect((numbers.match(/%/g) ?? []).length, `one percentage in: ${row}`).toBeLessThanOrEqual(
+        1
+      );
     }
-    // The first row is the base: no step-conversion exists above it, so it says so
-    // rather than claiming 100%.
-    expect(rows[0]!).toContain("—");
-    // And the old drop-suffix is gone, not merely joined by the new columns.
-    expect(funnel!).not.toContain("▼");
+    // The top row has no predecessor, so it shows a dash rather than 100%.
+    expect(dataRows[0]).toContain("—");
   });
 
   it("draws the site-wide survey-reach trend through the AUDITED renderer", async () => {

@@ -573,6 +573,9 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     );
   }
 
+  /** "914  _(+136%)_", or just "914" when there is nothing worth comparing to. */
+  const withDelta = (value: string, d: string) => (d ? `${value}  _(${d})_` : value);
+
   // ---- Yesterday vs the usual ----
   let yesterday = { visitors: 0, completions: 0, paid: 0 };
   let baseline = { visitors: 0, completions: 0, paid: 0 };
@@ -613,15 +616,22 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     blocks.push(section("*Yesterday vs a normal day*"));
     blocks.push(
       fields([
-        { label: "Visits", value: `${yVisitors}  _(${delta(yVisitors, pVisitors / 7)})_` },
+        /**
+         * `delta` returns "" when the baseline is too small for a percentage to
+         * mean anything, and the parenthetical is dropped rather than printed
+         * empty. "Paid 0 _(-100% (low base))_" was on this message most days:
+         * one sale a week averages to 0.14, so the arithmetic said -100% and the
+         * statement said nothing.
+         */
+        { label: "Visits", value: withDelta(String(yVisitors), delta(yVisitors, pVisitors / 7)) },
         {
           label: "Finished survey",
-          value: `${y.completions}  _(${delta(y.completions, p.completions / 7)})_`,
+          value: withDelta(String(y.completions), delta(y.completions, p.completions / 7)),
         },
-        { label: "Paid", value: `${y.charges}  _(${delta(y.charges, p.charges / 7)})_` },
+        { label: "Paid", value: withDelta(String(y.charges), delta(y.charges, p.charges / 7)) },
         {
           label: "Revenue",
-          value: `${money(y.revenue)}  _(${delta(y.revenue, p.revenue / 7)})_`,
+          value: withDelta(money(y.revenue), delta(y.revenue, p.revenue / 7)),
         },
       ])
     );
@@ -723,12 +733,27 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       return `_The paywall row covers ${days} days, not ${WINDOW_DAYS} — that signal only started on ${escapeSlack(paywall.firstRowDay)}._`;
     })();
 
-    const top = steps[0]?.count ?? 0;
+    /**
+     * ONE percentage, not two.
+     *
+     * The table used to carry both conventions side by side — % of the step
+     * before AND % of all visits — because the KPI doc asked for both to be
+     * stated and named. In practice two percentage columns on one row is what
+     * people kept reading wrong: the 2026-09-19 review said plainly that it was
+     * causing the confusion it was meant to remove, which is the same complaint
+     * that produced the unsourceable "96.5%" in the first place.
+     *
+     * The one that survives is % OF THE STEP BEFORE, because it answers the
+     * question the table is read for — where are we losing people — and because
+     * the header line already names the single biggest drop from it. The
+     * overall conversion is not lost: the last row's count against the first
+     * row's count is the whole funnel, both are on screen, and the break-even
+     * block below states revenue per visit in money.
+     */
     const rows = steps.map((s, i) => {
       const prev = i === 0 ? null : steps[i - 1]!;
       const stepPct = prev ? share(s.count, prev.count) : "—";
-      const allPct = share(s.count, top);
-      return `\`${String(s.count).padStart(6)}  ${stepPct.padStart(6)}  ${allPct.padStart(6)}\`  ${escapeSlack(s.step)}`;
+      return `\`${String(s.count).padStart(6)}  ${stepPct.padStart(6)}\`  ${escapeSlack(s.step)}`;
     });
     // Heading, headline and table in ONE block. Split across two, Slack put a
     // paragraph gap between the title and the numbers it titles.
@@ -741,7 +766,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
               : ""
           }`,
           rows.join("\n"),
-          "_people  ·  % of the step before  ·  % of all visits_",
+          "_people  ·  % of the step above them_",
           /**
            * The paywall step's instrument is younger than the window, and a row
            * measured over 14 days sitting in a table headed "30 days" is the

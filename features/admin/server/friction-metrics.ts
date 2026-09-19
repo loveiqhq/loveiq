@@ -219,94 +219,44 @@ export function buildSurveySignals(
     });
   }
 
-  // --- Skipped / abandoned questions -----------------------------------------
-  const skipped = qs.reduce((n, q) => n + q.skipped, 0);
-  const skipPct = computeRate(skipped, snap.total_rows);
-  signals.push({
-    label: "Skipped questions",
-    group: "Survey",
-    value: `${skipPct.toFixed(1)}%`,
-    n: snap.total_rows,
-    status: skipPct >= 5 ? "watch" : "quiet",
-  });
-
-  // --- Progress sensitivity --------------------------------------------------
-  // Do people leave more as the end gets closer? Across thirds, so the answer
-  // does not hinge on one question.
-  const maxIdx = Math.max(...qs.map((q) => q.question_index));
-  if (maxIdx >= 6) {
-    const third = Math.ceil((maxIdx + 1) / 3);
-    const band = (lo: number, hi: number) => {
-      const inBand = qs.filter((q) => q.question_index >= lo && q.question_index < hi);
-      const v = inBand.reduce((n, q) => n + q.visits, 0);
-      const a = inBand.reduce((n, q) => n + q.abandons, 0);
-      return { v, pct: computeRate(a, v) };
-    };
-    const early = band(0, third);
-    const late = band(2 * third, maxIdx + 1);
-    if (early.v >= FLOOR && late.v >= FLOOR) {
-      const diff = late.pct - early.pct;
-      signals.push({
-        label: "Drop-off, late vs early",
-        group: "Survey",
-        value: `${diff >= 0 ? "+" : ""}${diff.toFixed(1)}pp`,
-        n: early.v + late.v,
-        status: diff >= 3 ? "watch" : "quiet",
-      });
-    }
-  }
-
-  // --- Expectation mismatch (PROXY) ------------------------------------------
   /**
-   * Marcus's wording is "user appears surprised by the next step". Nothing here
-   * can see surprise, and a model asked to infer it would be guessing — the
-   * reviewer scores 0.20 on defects it can literally SEE. What is observable is
-   * its footprint: a question people dwell on and then go BACK from, which is
-   * what someone does when a screen was not what they expected.
+   * REMOVED 2026-09-19: "Skipped questions".
    *
-   * Labelled a proxy in the value itself, so nobody reads it as the thing.
+   * It printed 0.0% every day while `survey_behavior_event` carried 2,801 rows
+   * with `answered IS FALSE` out of 72,779 over 90 days — 3.85%. So the row was
+   * not merely uninformative, it contradicted the data it claimed to summarise:
+   * `get_survey_friction`'s `skipped` column is not counting what the label
+   * says. Publishing a confident 0.0% is worse than publishing nothing, so the
+   * row goes until the column is understood.
    */
-  const surprising = ranked
-    .filter((q) => q.timed >= FLOOR && q.median_ms > typical * 1.5)
-    .map((q) => ({ q, backPct: computeRate(q.backs, q.visits) }))
-    .sort((a, b) => b.backPct - a.backPct)[0];
-  if (surprising && surprising.backPct > 0) {
-    signals.push({
-      label: "Back after a long pause",
-      group: "Survey",
-      value: `${Math.round(surprising.backPct)}%`,
-      where: label(surprising.q),
-      n: surprising.q.visits,
-      status: surprising.backPct >= 15 ? "watch" : "quiet",
-    });
-  }
 
-  // --- Engagement acceleration / deceleration --------------------------------
-  // Median of per-question medians: the row-level medians are all this snapshot
-  // carries, and averaging them would let one slow outlier dominate.
-  const medOf = (xs: number[]) => {
-    if (xs.length === 0) return 0;
-    const s2 = [...xs].sort((a, b) => a - b);
-    return s2[Math.floor(s2.length / 2)]!;
-  };
-  const half = maxIdx / 2;
-  const earlyMed = medOf(
-    qs.filter((q) => q.question_index <= half && q.timed > 0).map((q) => q.median_ms)
-  );
-  const lateMed = medOf(
-    qs.filter((q) => q.question_index > half && q.timed > 0).map((q) => q.median_ms)
-  );
-  if (earlyMed > 0 && lateMed > 0) {
-    const ratio = lateMed / earlyMed;
-    signals.push({
-      label: "Engagement pace",
-      group: "Survey",
-      value: `${ratio.toFixed(2)}x`,
-      where: ratio < 1 ? "speeding up" : "slowing down",
-      n: snap.total_timed,
-      status: ratio <= 0.6 || ratio >= 1.6 ? "watch" : "quiet",
-    });
-  }
+  /**
+   * REMOVED 2026-09-19: "Drop-off, late vs early".
+   *
+   * A percentage-point difference between the first and last third of the
+   * survey, which read "-1.0pp" — a number whose sign flips on ordinary noise
+   * and which nobody could act on either way. The drop-off chart shows the same
+   * shape per question, and does it better.
+   */
+
+  /**
+   * REMOVED 2026-09-19: "Back after a long pause" (the expectation-mismatch
+   * proxy).
+   *
+   * It ranked questions by the same `backs` column as "Went back a step" above,
+   * so on a normal day both rows named the SAME question with the SAME
+   * percentage — 6% on Q11 in the message that prompted this. Two rows saying
+   * one thing reads as two findings.
+   */
+
+  /**
+   * REMOVED 2026-09-19: "Engagement pace".
+   *
+   * A ratio of the late-half median to the early-half median, rendered as
+   * "0.87x · speeding up". People answer later questions faster in every survey
+   * ever run, so it said the same thing every day and there is no action behind
+   * either direction.
+   */
 
   return signals;
 }
@@ -434,15 +384,16 @@ export function buildReportSignals(snap: ReportFrictionSnapshot): FrictionSignal
     });
   }
 
-  // --- Conversion blockers ---------------------------------------------------
-  // The end of the chain the other signals describe.
-  out.push({
-    label: "Readers reaching checkout",
-    group: "Paywall",
-    value: `${computeRate(snap.checkout, viewers).toFixed(1)}%`,
-    n: viewers,
-    status: "quiet",
-  });
+  /**
+   * REMOVED 2026-09-19: "Readers reaching checkout".
+   *
+   * The funnel table four lines above this block already carries "…of those,
+   * started checkout" with its own count and percentage, against the same
+   * population. Repeating it here as a friction signal made one number look
+   * like two measurements, and the two were computed from different fetchers so
+   * they could disagree by a rounding step and start an argument about which
+   * was right.
+   */
 
   return out;
 }

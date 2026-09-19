@@ -324,6 +324,14 @@ const X_AXIS_H = 28;
 // ticks sit exactly under the plot). label | plot(+gutters) | readout.
 const LABEL_W = 150;
 /**
+ * The y-axis gutter. These charts shipped with NO vertical axis at all — a bare
+ * sparkline with a "now x% · max y%" readout beside it — so a reader could see
+ * a shape but could not read a value off it, and two stacked rows could not be
+ * compared because each was scaled to its own peak. Raised on the 2026-09-19
+ * review: "some of the axis are missing, they wouldn't understand".
+ */
+const Y_AXIS_W = 42;
+/**
  * 120 was sized for the `Math.round` readout it used to carry ("now 13% · max
  * 45%"). `computeRate` rounds to ONE DECIMAL and `fmtAxis` prints it, so the
  * common string is now "now 66.7% · max 86.7%" — about 140px. With
@@ -332,8 +340,8 @@ const LABEL_W = 150;
  * Widened to hold the longest producible string, "now 100.0% · max 100.0%".
  */
 const READOUT_W = 152;
-// 150 + 440 + 152 = 742, inside the 744 the shell's 28px padding leaves of WIDTH.
-const PLOT_W = 440; // svgPoints width == <svg> width == area-close x (clip-safe)
+// 150 + 42 + 398 + 152 = 742, inside the 744 the shell's 28px padding leaves.
+const PLOT_W = 398; // svgPoints width == <svg> width == area-close x (clip-safe)
 
 /** Up to 5 evenly-spaced ticks from an x-axis label array (all if <=5). */
 /**
@@ -422,6 +430,20 @@ export function renderLongitudinal(p: LongitudinalPayload): {
   // denominator, so a row here means "this stage had traffic". Count charts
   // keep the old behaviour: hide all-zero rows (no-data noise).
   const liveRows = isRate ? allRows : allRows.filter((r) => r.peak > 0);
+  /**
+   * ONE scale for every row, not one per row.
+   *
+   * Per-row scaling made each row fill its own band, so a row peaking at 3% and
+   * a row peaking at 100% drew the same height — and these rows are stacked
+   * precisely so they can be compared (price bucket A against B, one arm
+   * against another). It also meant a reader had no way to know which was
+   * which, because there was no axis to read either.
+   *
+   * A row with a small range now correctly reads as a small range. `axisMax`
+   * gives the flat-zero case a usable axis instead of dividing by zero.
+   */
+  const sharedPeak = liveRows.reduce((m, r) => Math.max(m, r.peak), 0);
+  const axisMax = sharedPeak > 0 ? sharedPeak : 1;
   const emptyCount = isRate ? 0 : allRows.length - liveRows.length;
   const title = LONG_TITLES[p.kind] ?? "Trend";
 
@@ -443,7 +465,8 @@ export function renderLongitudinal(p: LongitudinalPayload): {
   const xAxisLabels = Array.isArray(p.xAxis) ? p.xAxis : [];
   const xTickIdx = sampleTickIdx(xAxisLabels.length);
   const hasXAxis = xTickIdx.length > 0;
-  const height = longitudinalHeight(rowCount, rowH) + (hasXAxis ? X_AXIS_H : 0);
+  // +22 for the axis caption row added at the bottom of the body.
+  const height = longitudinalHeight(rowCount, rowH) + (hasXAxis ? X_AXIS_H : 0) + 22;
   const chartH = Math.max(4, rowH - 14);
   const chartW = PLOT_W;
   // Readout shows TODAY's value + the window peak, so the reader sees the
@@ -476,7 +499,7 @@ export function renderLongitudinal(p: LongitudinalPayload): {
          * the wrong colour" Mark raised on the 2026-09-16 sync.
          */
         const color = COLORS.neutral;
-        const linePts = svgPoints(row.values, row.peak, chartW, chartH);
+        const linePts = svgPoints(row.values, axisMax, chartW, chartH);
         /**
          * The area closes under the LINE's own span, not the full plot width.
          * With a single reading the line is a short stub near x=0 while this
@@ -505,6 +528,30 @@ export function renderLongitudinal(p: LongitudinalPayload): {
             >
               {row.label}
             </div>
+            {/*
+              The y axis. Repeated on every row because the rows are separate
+              flex children and Satori has no row-spanning element — and because
+              the scale is now SHARED, so each row shows the same two numbers and
+              stays readable on its own.
+            */}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                alignItems: "flex-end",
+                width: Y_AXIS_W,
+                height: chartH,
+                paddingRight: 6,
+                fontSize: 11,
+                color: COLORS.textMuted,
+              }}
+            >
+              <div style={{ display: "flex" }}>
+                {isRate ? `${fmtAxis(axisMax)}%` : fmtAxis(axisMax)}
+              </div>
+              <div style={{ display: "flex" }}>0</div>
+            </div>
             <div
               style={{
                 display: "flex",
@@ -516,6 +563,14 @@ export function renderLongitudinal(p: LongitudinalPayload): {
               }}
             >
               <svg width={chartW} height={chartH}>
+                {/* Gridline at the top of the shared scale, so the axis number
+                    has a line to belong to rather than floating beside a shape. */}
+                <polyline
+                  points={`0,1 ${chartW},1`}
+                  fill="none"
+                  stroke={COLORS.gridline}
+                  strokeWidth="1"
+                />
                 {/* faint 0% baseline (polyline — the proven Satori primitive in
                     this file — instead of <line>) so the floor is visible */}
                 <polyline
@@ -565,6 +620,7 @@ export function renderLongitudinal(p: LongitudinalPayload): {
       {hasXAxis && (
         <div style={{ display: "flex", alignItems: "center", height: X_AXIS_H }}>
           <div style={{ width: LABEL_W }} />
+          <div style={{ width: Y_AXIS_W }} />
           {/* each tick centred on the data point it names, not spaced evenly */}
           <div
             style={{
@@ -613,6 +669,15 @@ export function renderLongitudinal(p: LongitudinalPayload): {
           {`+ ${emptyCount} ${emptyCount === 1 ? "series" : "series"} awaiting first data`}
         </div>
       )}
+      {/* What the axes MEAN, in words — the same courtesy the drop-off chart
+          already extends. A reader seeing this for the first time should not
+          have to infer that the left edge is a percentage and that every row
+          shares it. */}
+      <div style={{ display: "flex", marginTop: 6, fontSize: 12, color: COLORS.textMuted }}>
+        {isRate
+          ? `left: % ${liveRows.length > 1 ? "— one scale for every row, so the rows compare" : "of the group named on the left"}${hasXAxis ? " · bottom: date" : ""}`
+          : `left: people${hasXAxis ? " · bottom: date" : ""}`}
+      </div>
     </div>,
     height
   );
