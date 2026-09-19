@@ -319,6 +319,25 @@ export const RELEVANCE_FLOOR = 1.85;
 
 /** Exported only so the "no indexed source is invisible" test reads the SAME
  * array the route uses — a copy in the test would drift with the bug. */
+/**
+ * A date that EXISTS, not merely one shaped like a date.
+ *
+ * `/^\d{4}-\d{2}-\d{2}$/` accepts 2026-09-31 and 2026-02-30. Both then run as
+ * queries and come back empty, so an impossible input is indistinguishable from
+ * "nothing happened in that period" — found in the real call log on 2026-09-09,
+ * `get_business_numbers` with `since: "2026-09-31"`, which returned zero rows and
+ * no error. September has thirty days.
+ *
+ * Round-tripping is the check: JavaScript rolls 2026-09-31 forward to 2026-10-01,
+ * so a date that does not survive the trip was never real.
+ */
+export function isRealDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const ms = Date.parse(`${value}T00:00:00Z`);
+  if (!Number.isFinite(ms)) return false;
+  return new Date(ms).toISOString().slice(0, 10) === value;
+}
+
 export const SOURCES_FOR_TEST = [
   // Written by `record_decision`, not ingested from anywhere. Listed here in the commit
   // that creates the first one, per the rule below about `jira`.
@@ -2244,6 +2263,7 @@ async function callTool(
    * the comment above is about. An alias earns its place by being a second NAME for
    * a declared argument, never a second MEANING.
    */
+
   const ARG_ALIASES: Record<string, Record<string, string>> = {
     fetch_document: { document_id: "id" },
   };
@@ -3320,7 +3340,7 @@ async function callTool(
     // A malformed date silently became today, which back-dates nothing and mis-dates the
     // record without telling anyone. `buildDecisionRow` also defaults, so this is the
     // difference between "not given" and "given wrong".
-    if (decidedOn !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(decidedOn)) {
+    if (decidedOn !== undefined && !isRealDate(decidedOn)) {
       return textResult("`decided_on` must look like 2026-09-09.", true);
     }
     const str = (v: unknown): string | undefined =>
@@ -3392,6 +3412,15 @@ async function callTool(
     ] as const) {
       if (val && !DAYISH.test(val)) {
         return textResult(`\`${key}\` must be a date like 2026-08-01 — "${val}" is not one.`, true);
+      }
+      // Shape is not existence: 2026-09-31 passes the pattern and is not a day.
+      if (val && !isRealDate(val)) {
+        return textResult(
+          `\`${key}\` is "${val}", which is not a real date — that day does not exist. ` +
+            `Refused rather than queried, because an impossible date returns nothing and ` +
+            `reads exactly like "nothing happened".`,
+          true
+        );
       }
     }
     if (until && !since) {
