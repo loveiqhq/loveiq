@@ -332,6 +332,69 @@ function decode(data: string): string {
  * good share of real mail — anything sent from a phone or a marketing tool — has no
  * plain part at all, and skipping those would silently lose whole conversations.
  */
+/**
+ * The named entities worth spelling out; every numeric form is handled generically.
+ *
+ * WHY A SINGLE PASS. The previous version ran `&amp;` -> `&` and then `&lt;` -> `<`
+ * in sequence, so the literal text `&amp;lt;` decoded twice and came out as `<` —
+ * a tag where the sender wrote an escaped one. Matching every entity in ONE regex
+ * makes that impossible: each match is replaced from the original string.
+ *
+ * Measured 2026-09-19: 262 gmail chunks carried a raw entity, `&bull;` most often,
+ * because only five were listed and marketing mail uses far more than five.
+ */
+const HTML_ENTITIES: Record<string, string> = {
+  nbsp: " ",
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  bull: "\u2022",
+  middot: "\u00b7",
+  hellip: "\u2026",
+  mdash: "\u2014",
+  ndash: "\u2013",
+  minus: "\u2212",
+  lsquo: "\u2018",
+  rsquo: "\u2019",
+  ldquo: "\u201c",
+  rdquo: "\u201d",
+  trade: "\u2122",
+  reg: "\u00ae",
+  copy: "\u00a9",
+  deg: "\u00b0",
+  euro: "\u20ac",
+  rarr: "\u2192",
+  larr: "\u2190",
+  harr: "\u2194",
+  zwnj: "",
+  zwj: "",
+  shy: "",
+  ensp: " ",
+  emsp: " ",
+  thinsp: " ",
+};
+
+/** A code point that is not text — a lone surrogate or out of range — is dropped. */
+function fromCodePoint(n: number): string {
+  if (!Number.isFinite(n) || n < 0x20 || n > 0x10ffff) return "";
+  if (n >= 0xd800 && n <= 0xdfff) return "";
+  return String.fromCodePoint(n);
+}
+
+export function decodeEntities(text: string): string {
+  return text.replace(
+    /&(#\d{1,7}|#[xX][0-9a-fA-F]{1,6}|[a-zA-Z][a-zA-Z0-9]{1,31});/g,
+    (whole, body: string) => {
+      if (body.startsWith("#x") || body.startsWith("#X"))
+        return fromCodePoint(parseInt(body.slice(2), 16));
+      if (body.startsWith("#")) return fromCodePoint(Number(body.slice(1)));
+      return HTML_ENTITIES[body.toLowerCase()] ?? whole;
+    }
+  );
+}
+
 export function messageText(part?: GmailPart): string {
   if (!part) return "";
   if (part.mimeType === "text/plain" && part.body?.data) return decode(part.body.data);
@@ -343,15 +406,17 @@ export function messageText(part?: GmailPart): string {
     }
   }
   if (part.mimeType === "text/html" && part.body?.data) {
-    return decode(part.body.data)
-      .replace(/<style[\s\S]*?<\/style>/gi, " ")
-      .replace(/<script[\s\S]*?<\/script>/gi, " ")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&nbsp;/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"');
+    return decodeEntities(
+      decode(part.body.data)
+        // <head> before <style>: a marketing email's stylesheet is often inside a
+        // conditional comment or left unclosed by a truncated part, and then the
+        // <style> rule below cannot match it. Measured 2026-09-19: 115 gmail chunks
+        // held CSS like `line-height: 2em; color:#000; }` as if it were prose.
+        .replace(/<head[\s\S]*?<\/head>/gi, " ")
+        .replace(/<style[\s\S]*?<\/style>/gi, " ")
+        .replace(/<script[\s\S]*?<\/script>/gi, " ")
+        .replace(/<[^>]+>/g, " ")
+    );
   }
   return "";
 }
