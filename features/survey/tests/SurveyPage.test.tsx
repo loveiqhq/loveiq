@@ -208,10 +208,29 @@ describe("SurveyPage", () => {
   });
 
   it("announces the reason to a screen reader, not just sighted readers", async () => {
+    const user = userEvent.setup();
     sessionStorage.setItem(SURVEY_STEP_KEY, "5");
     render(<SurveyPage />);
     const hint = await screen.findByText(/tick both boxes above to continue/i);
     expect(hint).toHaveAttribute("aria-live", "polite");
+
+    /**
+     * The button must POINT AT the reason, not merely sit above it. This is
+     * what a screen reader reads when the disabled button takes focus, and it
+     * is also how verify-dead-click-target.mjs tells a dead end apart from a
+     * control that is blocked but explains itself — without it that probe
+     * reports this correct behaviour as a defect on every run, and D1 is in
+     * AUTO_PR_CRITERIA, so it would open a draft PR against it.
+     */
+    const agreeButton = screen.getByRole("button", { name: /i agree/i });
+    expect(agreeButton).toHaveAttribute("aria-describedby", hint.id);
+    expect(hint.id).toBeTruthy();
+
+    // ...and stops pointing once there is nothing to explain.
+    const checkboxes = screen.getAllByRole("checkbox");
+    await user.click(checkboxes[0]);
+    await user.click(checkboxes[1]);
+    expect(agreeButton).not.toHaveAttribute("aria-describedby");
   });
 
   it("restores the consent screen from session storage", async () => {

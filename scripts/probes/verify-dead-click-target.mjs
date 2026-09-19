@@ -193,6 +193,34 @@ for (const name of DEVICE_NAMES) {
           !!control &&
           (control.disabled === true || control.getAttribute("aria-disabled") === "true");
 
+        /**
+         * A disabled control that EXPLAINS ITSELF is not a dead end.
+         *
+         * "Disabled" alone was too blunt a rule. The survey consent gate keeps
+         * "I agree" disabled until both boxes are ticked, which is correct and
+         * must not change — so once the missing explanation was added, this
+         * probe still reported the defect and, D1 being in AUTO_PR_CRITERIA,
+         * would have opened a draft pull request against correct behaviour on
+         * every run, forever.
+         *
+         * `aria-describedby` is the right signal rather than a heuristic: it is
+         * exactly what a screen reader announces when the control takes focus,
+         * so a control that satisfies this check has genuinely told the reader
+         * why. Required to resolve to VISIBLE, non-empty text — an id pointing
+         * at nothing, or at a hidden node, is the same dead end wearing an
+         * attribute.
+         */
+        const describedBy = control?.getAttribute("aria-describedby") ?? "";
+        const explained = describedBy
+          .split(/\s+/)
+          .filter(Boolean)
+          .some((id) => {
+            const node = document.getElementById(id);
+            if (!node) return false;
+            const r = node.getBoundingClientRect();
+            return r.width > 0 && r.height > 0 && (node.textContent ?? "").trim().length > 0;
+          });
+
         let pointer = false;
         let node = el;
         for (let i = 0; node && i < 3; i += 1, node = node.parentElement) {
@@ -211,7 +239,8 @@ for (const name of DEVICE_NAMES) {
 
         return {
           looksPressable: !!control || pointer,
-          disabled,
+          disabled: disabled && !explained,
+          explained: disabled && explained,
           covered,
           inViewport,
           coveredBy: covered
@@ -230,7 +259,9 @@ for (const name of DEVICE_NAMES) {
 
       const measured = visible.map(measure);
       const worst =
-        measured.find((m) => m.looksPressable && (m.disabled || m.covered)) ?? measured[0];
+        measured.find((m) => m.looksPressable && (m.disabled || m.covered)) ??
+        measured.find((m) => m.explained) ??
+        measured[0];
       return { ...worst, matches: visible.length };
     }, SELECTOR);
 
@@ -257,6 +288,11 @@ for (const name of DEVICE_NAMES) {
     } else if (!r.looksPressable) {
       console.log(
         `PASS  ${where} <${r.tag}> is ordinary content, not a control — a tap on it is not a defect`
+      );
+    } else if (r.explained) {
+      console.log(
+        `PASS  ${where}${at} <${r.tag}> "${r.label}" is disabled but SAYS WHY — ` +
+          `blocked with an explanation is not a dead end`
       );
     } else {
       console.log(`PASS  ${where}${at} <${r.tag}> is a live control and reachable`);

@@ -1155,6 +1155,13 @@ const ConsentScreen: FC<{
             type="button"
             onClick={handleAgreeClick}
             disabled={!canProceed || isLeaving}
+            // Points at the line below that explains the disabled state. This
+            // is what a screen reader reads out when the button takes focus,
+            // and it is also the machine-readable form of "this control
+            // explains itself" — scripts/probes/verify-dead-click-target.mjs
+            // reads it to tell a dead end apart from a blocked-but-explained
+            // control, which otherwise look identical from the outside.
+            aria-describedby={canProceed ? undefined : "consent-blocked-reason"}
             className="flex-1 rounded-full border border-white/10 bg-white/5 py-[15px] text-[14px] font-bold leading-[20px] tracking-[0.7px] shadow-[0_10px_15px_rgba(0,0,0,0.1),0_4px_6px_rgba(0,0,0,0.1)] transition focus-visible-ring disabled:text-white/40 enabled:bg-[#fe6839] enabled:text-white enabled:hover:-translate-y-[1px]"
           >
             I agree
@@ -1183,6 +1190,7 @@ const ConsentScreen: FC<{
         */}
         {!canProceed && (
           <p
+            id="consent-blocked-reason"
             aria-live="polite"
             className="mt-4 text-center text-[13px] font-light leading-[20px] text-white/50"
           >
