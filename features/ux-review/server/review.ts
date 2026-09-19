@@ -441,11 +441,27 @@ function coverageLine(c: CoverageStat | null): string {
     return "*How much we watched:* nobody finished the survey in the last 24 hours.";
   const pct = Math.round((c.observed / c.submissions) * 100);
   const missed = c.submissions - c.observed;
+  /**
+   * "not watched yet", not "never watched".
+   *
+   * Marcus read this line and reasonably asked why we still are not watching
+   * everyone. Two different things were being reported as one. PostHog opens a
+   * recording about 38 minutes after it ends, so the most recent hour of any
+   * 24-hour window is always still pending — and separately, it genuinely
+   * skips roughly half the recordings that match a scanner's query (measured
+   * 2026-09-19: 103 of 211 eligible sessions watched by nothing). "Never"
+   * claimed the second for cases that were only the first, and implied nothing
+   * was being done about either.
+   *
+   * Both are now handled the same way: anything unwatched is re-queued every
+   * three hours by the verify workflow, so the honest word is "yet".
+   */
   return (
     `*How much we watched:* ${c.observed} of the ${c.submissions} people who finished ` +
     `the survey (${pct}%).` +
     (missed > 0
-      ? ` The other ${missed} were never watched, so nothing here can speak for them.`
+      ? ` The other ${missed} had not been watched when this was written — ` +
+        `they are queued automatically for another look, so they are not lost.`
       : " Everyone was watched.")
   );
 }

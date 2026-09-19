@@ -82,6 +82,26 @@ jobs:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_JOURNEY_CHANNEL_ID: ${{ secrets.SLACK_JOURNEY_CHANNEL_ID }}
 
+      # Roughly half of eligible recordings are never opened by the scanner
+      # whose query they matched — measured 2026-09-19 over the period since
+      # they went live: 103 of 211 sessions watched by nothing, and only 225 of
+      # 392 (session, scanner) pairs looked at. It is not credits (all four are
+      # far under their limit), not sampling (rate 1), and not lag (the normal
+      # cadence is ~38 minutes). PostHog simply does not pick up every matching
+      # recording.
+      #
+      # So the gap is closed here rather than by hand. The enqueue is idempotent
+      # — the workflow id is derived from (scanner, session) — so re-running
+      # cannot double-charge, and a two-day window catches stragglers without
+      # reaching back over recordings that have already expired.
+      - name: Re-queue recordings no scanner opened
+        run: npx tsx scripts/ux-review-coverage.mjs --enqueue
+        env:
+          DAYS: "2"
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
       - name: Self-test the finding classifier
         run: npx tsx scripts/verify-ux-findings.mjs --selftest
 
