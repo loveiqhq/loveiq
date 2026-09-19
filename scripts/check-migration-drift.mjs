@@ -80,6 +80,18 @@ const INDEX_RE =
  * indexes became visible at all.
  */
 const DROP_TABLE_RE = /DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:public\.)?(\w+)/gi;
+/**
+ * Anchored to the start of a line, unlike the others: "CREATE TABLE" appears in
+ * prose often enough that the loose form picks up a table called `rather` from
+ * "every NOT NULL is inside CREATE TABLE rather than ADD COLUMN".
+ *
+ * Tables were the last thing this check could not see. 10 of the repo's 83 —
+ * admin_users, survey_question, system_flags, user_profile among them — carry no
+ * index, ADD CONSTRAINT or ADD COLUMN of their own, so their absence from live
+ * produced no drift of any other kind. calendly_webhook_event was only ever
+ * caught through one index it happened to have.
+ */
+const TABLE_RE = /^[ \t]*CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?(\w+)/gim;
 const CONSTRAINT_RE = /ALTER\s+TABLE\s+(?:public\.)?(\w+)\s+ADD\s+CONSTRAINT\s+(\w+)/gi;
 const DROP_FUNCTION_RE = /DROP\s+FUNCTION\s+(?:IF\s+EXISTS\s+)?(?:public\.)?(\w+)/gi;
 const DROP_INDEX_RE = /DROP\s+INDEX\s+(?:CONCURRENTLY\s+)?(?:IF\s+EXISTS\s+)?(?:public\.)?(\w+)/gi;
@@ -97,6 +109,7 @@ const ADD_COLUMN_RE =
 export function extractArtifacts(files) {
   const artifacts = {
     functions: new Set(),
+    tables: new Set(),
     indexes: new Map(),
     constraints: new Map(),
     columns: new Map(),
@@ -133,6 +146,7 @@ export function extractArtifacts(files) {
       for (const m of sql.matchAll(re)) ops.push({ at: m.index ?? 0, apply: () => apply(m) });
     };
     collect(FUNCTION_RE, (m) => artifacts.functions.add(m[1]));
+    collect(TABLE_RE, (m) => artifacts.tables.add(m[1].toLowerCase()));
     collect(INDEX_RE, (m) => artifacts.indexes.set(m[1], m[2].toLowerCase()));
     collect(CONSTRAINT_RE, (m) => artifacts.constraints.set(m[2], m[1]));
     collect(ADD_COLUMN_RE, (m) =>
@@ -144,6 +158,7 @@ export function extractArtifacts(files) {
     collect(DROP_COLUMN_RE, (m) => artifacts.columns.delete(`${m[1]}.${m[2]}`));
     collect(DROP_TABLE_RE, (m) => {
       const table = m[1].toLowerCase();
+      artifacts.tables.delete(table);
       for (const [name, onTable] of artifacts.indexes) {
         if (onTable === table) artifacts.indexes.delete(name);
       }
@@ -184,6 +199,7 @@ async function fetchLiveState(client) {
     indexes: new Set(indexes.rows.map((r) => r.indexname)),
     constraints: new Set(constraints.rows.map((r) => r.conname)),
     columns: new Set(columns.rows.map((r) => `${r.table_name}.${r.column_name}`)),
+    tables: new Set(columns.rows.map((r) => r.table_name.toLowerCase())),
   };
 }
 
@@ -271,6 +287,7 @@ async function fetchViaRpc(supabaseUrl, serviceKey) {
       indexes: new Set(a.indexes),
       constraints: new Set(a.constraints),
       columns: new Set(a.columns),
+      tables: new Set(a.columns.map((c) => c.split(".")[0].toLowerCase())),
     },
     ledgerRows: a.ledger,
   };
@@ -340,6 +357,7 @@ async function main() {
 
     const drift = {
       functions: [...repo.functions].filter((n) => !live.functions.has(n)),
+      tables: [...repo.tables].filter((n) => !live.tables.has(n)),
       indexes: [...repo.indexes.keys()].filter((n) => !live.indexes.has(n)),
       constraints: [...repo.constraints.keys()].filter((n) => !live.constraints.has(n)),
       columns: [...repo.columns.keys()].filter((n) => !live.columns.has(n)),
@@ -388,6 +406,7 @@ async function main() {
 
     const total =
       drift.functions.length +
+      drift.tables.length +
       drift.indexes.length +
       drift.constraints.length +
       drift.columns.length;
@@ -414,6 +433,7 @@ async function main() {
 
     console.error("❌ Migration drift detected — these artifacts exist in repo but NOT live:\n");
     if (drift.functions.length) console.error("  Functions:", drift.functions.join(", "));
+    if (drift.tables.length) console.error("  Tables:", drift.tables.join(", "));
     if (drift.indexes.length) console.error("  Indexes:", drift.indexes.join(", "));
     if (drift.constraints.length) console.error("  Constraints:", drift.constraints.join(", "));
     if (drift.columns.length) console.error("  Columns:", drift.columns.join(", "));

@@ -4,6 +4,7 @@ import { extractArtifacts } from "../check-migration-drift.mjs";
 
 type Artifacts = {
   functions: Set<string>;
+  tables: Set<string>;
   indexes: Map<string, string>;
   constraints: Map<string, string>;
   columns: Map<string, { table: string; column: string }>;
@@ -38,6 +39,37 @@ describe("migration drift — repo artifact extraction", () => {
   });
 
   /**
+   * Tables were the last thing the check could not see at all. 10 of the repo's
+   * 83 carry no index, ADD CONSTRAINT or ADD COLUMN of their own, so if one went
+   * missing from live NOTHING else would drift — admin_users and survey_question
+   * among them.
+   */
+  it("sees a table that has no index, column or constraint of its own", () => {
+    const { tables } = run([
+      { file: "1.sql", sql: `CREATE TABLE IF NOT EXISTS system_flags (key text PRIMARY KEY);` },
+    ]);
+    expect([...tables]).toEqual(["system_flags"]);
+  });
+
+  /**
+   * "CREATE TABLE" turns up in prose often enough that an unanchored pattern
+   * registers a table called `rather`, from a real comment in the repo:
+   * "every NOT NULL is inside CREATE TABLE rather than ADD COLUMN".
+   */
+  it("ignores CREATE TABLE inside a comment", () => {
+    const { tables } = run([
+      {
+        file: "1.sql",
+        sql: [
+          "-- every NOT NULL is inside CREATE TABLE rather than ADD COLUMN, and no",
+          "CREATE TABLE real_one (id bigint);",
+        ].join("\n"),
+      },
+    ]);
+    expect([...tables]).toEqual(["real_one"]);
+  });
+
+  /**
    * A dropped table takes its indexes with it. Without this the checker reports
    * a deliberate removal as drift for ever — the cry-wolf failure that kept the
    * job switched off. calendly_webhook_event is the real case.
@@ -56,6 +88,7 @@ describe("migration drift — repo artifact extraction", () => {
       },
       { file: "2_drop.sql", sql: `DROP TABLE IF EXISTS calendly_webhook_event;` },
     ]);
+    expect([...a.tables]).toEqual([]);
     expect([...a.indexes.keys()]).toEqual(["idx_keep"]);
     expect([...a.columns.keys()]).toEqual([]);
     expect([...a.constraints.keys()]).toEqual([]);
