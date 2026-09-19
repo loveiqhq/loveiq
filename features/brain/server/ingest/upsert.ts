@@ -333,7 +333,22 @@ export async function upsertChunks(rows: BrainRow[]): Promise<number> {
     }
     written += batch.length;
   }
-  return written;
+  /**
+   * A MARKER IS NOT AN INDEXED CHUNK, and the count callers act on must say so.
+   *
+   * `record_decision` reports success from this number. When the decision it was
+   * asked to record contained a credential, the marker made the row count 1 and the
+   * caller was told the decision had been recorded — while what is actually stored
+   * says the content was withheld. A guard that reports success is worse than the
+   * hole it replaced; the existing test caught this the moment markers were added.
+   *
+   * Counted off the deduped set rather than incremented at the refusal, so a marker
+   * later overwritten by a clean row with the same key is not subtracted twice.
+   */
+  const withheld = unique.filter(
+    (r) => (r.meta as { withheld?: unknown } | undefined)?.withheld
+  ).length;
+  return written - withheld;
 }
 
 /**

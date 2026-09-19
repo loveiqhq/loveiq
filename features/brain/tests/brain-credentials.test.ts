@@ -162,6 +162,30 @@ describe("a refused part leaves a marker, not a hole", () => {
     expect(JSON.stringify(marker)).not.toContain(secret);
   });
 
+  it("does not count a marker as an indexed chunk", async () => {
+    /**
+     * `record_decision` reports success from this return value. When markers were
+     * first added it counted them, so a decision whose content was refused came back
+     * as "recorded" while the stored row said the opposite. A guard that reports
+     * success is worse than the hole it replaced.
+     */
+    supabaseFetch.mockClear();
+    const onlyWithheld = await upsertChunks([
+      row("decision:x", "Decision: rotate the key", `use ${fake("sk-ant-", 40)}`),
+    ]);
+    expect(onlyWithheld).toBe(0);
+  });
+
+  it("still counts the parts that were genuinely indexed", async () => {
+    // The control: subtracting markers must not subtract real rows too.
+    supabaseFetch.mockClear();
+    const mixed = await upsertChunks([
+      row("thread:m", "Email: trial", `key ${fake("sk-ant-", 40)}`),
+      row("thread:m#2", "Email: trial (part 2 of 2)", "Thanks for signing up."),
+    ]);
+    expect(mixed).toBe(1);
+  });
+
   it("leaves an ordinary row completely alone", async () => {
     supabaseFetch.mockClear();
     await upsertChunks([row("thread:ok", "Email: lunch", "See you at one.")]);
