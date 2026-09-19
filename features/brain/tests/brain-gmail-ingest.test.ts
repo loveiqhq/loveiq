@@ -137,8 +137,8 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
   }),
 }));
 
+import { decodeEntities } from "@shared/format/html-escape";
 import {
-  decodeEntities,
   GMAIL_BUILDER_VERSION,
   ingestGmail,
   messageText,
