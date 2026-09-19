@@ -10,6 +10,8 @@ import {
   SLACK_BUILDER_VERSION,
   slackPermalink,
   tsDate,
+  readableFiles,
+  MAX_SLACK_FILE_BYTES,
 } from "@features/brain/server/ingest/slack";
 
 /**
@@ -452,5 +454,58 @@ describe("reactions, the cheapest agreement signal there is", () => {
     );
     expect(line).toContain("↳");
     expect(line).toContain("[reactions: +1 x1]");
+  });
+});
+
+describe("uploads — a file-only message used to vanish entirely", () => {
+  /**
+   * `renderMessage` returned null for anything without text, so a deck posted with
+   * no caption left NO trace: not the file, not even the fact that one was shared.
+   * The name costs no extra scope — `files` is already on every history message —
+   * and 25 of the 36 files shared since June 2026 are screenshots that will never
+   * be readable, so the name is all there will ever be for most of them.
+   */
+  const names = new Map([["U1", "Marcus"]]);
+  const file = (over: Record<string, unknown> = {}) => ({
+    id: "F1",
+    name: "Refactor_Deck.pdf",
+    filetype: "pdf",
+    size: 1000,
+    url_private: "https://files.slack.com/x.pdf",
+    ...over,
+  });
+
+  it("keeps a message that is nothing but an upload", () => {
+    const line = renderMessage({ user: "U1", ts: "1", files: [file()] }, names);
+    expect(line).toContain("Marcus:");
+    expect(line).toContain("Refactor_Deck.pdf");
+  });
+
+  it("names the file alongside the words when there are both", () => {
+    const line = renderMessage({ user: "U1", ts: "1", text: "see this", files: [file()] }, names);
+    expect(line).toContain("see this");
+    expect(line).toContain("[shared: Refactor_Deck.pdf]");
+  });
+
+  it("still drops a message that is genuinely empty", () => {
+    // The control: without it the fix would keep every tombstone and join notice.
+    expect(renderMessage({ user: "U1", ts: "1" }, names)).toBeNull();
+    expect(renderMessage({ user: "U1", ts: "1", text: "  ", files: [] }, names)).toBeNull();
+  });
+
+  it("would read a pdf but not a screenshot", () => {
+    expect(readableFiles({ files: [file()] })).toHaveLength(1);
+    expect(readableFiles({ files: [file({ filetype: "png", name: "image.png" })] })).toHaveLength(
+      0
+    );
+  });
+
+  it("would not read a file too big to be prose", () => {
+    const huge = file({ size: MAX_SLACK_FILE_BYTES + 1 });
+    expect(readableFiles({ files: [huge] })).toHaveLength(0);
+  });
+
+  it("would not try to read a file Slack gave no url for", () => {
+    expect(readableFiles({ files: [file({ url_private: undefined })] })).toHaveLength(0);
   });
 });
