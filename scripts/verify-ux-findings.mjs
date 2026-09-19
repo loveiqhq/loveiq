@@ -630,7 +630,76 @@ const findings = await posthog(`
   LIMIT 50
 `);
 
-console.log(`${findings.length} finding(s) in the last ${LOOKBACK_HOURS}h`);
+/**
+ * Findings we do not need a model for.
+ *
+ * The scanners measure precision 0.20 and recall 0.50 against bars of 0.80 and
+ * 0.60, and the repo has already established that prompt hardening does not fix
+ * it — the v2 prompts carry both an anti-inference rule and a HARD RULE and the
+ * model broke both. Low precision is survivable, because every claim is gated by
+ * a probe and a false one costs CI minutes rather than a reader's trust. Low
+ * RECALL is not: a defect the scanner never flags is never looked at by anything.
+ *
+ * But for one whole class we are not guessing. `dead_click` is our own event,
+ * emitted by shared/observability/uxSignals.ts when a reader taps a control that
+ * cannot respond, and it carries the pathname and the CSS selector. Measured
+ * 2026-09-19: of four sessions where a reader pressed a real, dead control, the
+ * dead-click scanner flagged ZERO. Asking a language model to notice what we
+ * already recorded is the expensive way to be wrong.
+ *
+ * So these are synthesised directly from the events. They are not a second
+ * opinion on the scanner's output; they are the mechanical half of the detector,
+ * and they carry `scannerName` saying so, because a verdict in a reader's thread
+ * should not imply a model saw something it did not.
+ *
+ * Deliberately narrow: only dead clicks on a REAL control. A tap on a paragraph
+ * is not a defect — the scanner prompt's HARD RULE says so, the probe agrees,
+ * and 807 of 827 sessions with a dead_click are exactly that.
+ */
+const OWN_EVENT_FINDINGS = await posthog(`
+  SELECT toString($session_id) AS sid,
+         toString(properties.pathname) AS path,
+         toString(properties.target_selector) AS sel,
+         count() AS n
+  FROM events
+  WHERE event = 'dead_click'
+    AND timestamp > now() - INTERVAL ${LOOKBACK_HOURS} HOUR
+    AND $session_id IS NOT NULL
+    AND (
+      startsWith(toString(properties.target_selector), 'button')
+      OR startsWith(toString(properties.target_selector), 'a.')
+      OR startsWith(toString(properties.target_selector), 'a#')
+      OR toString(properties.target_selector) = 'a'
+      OR startsWith(toString(properties.target_selector), '[data-track-id')
+      OR startsWith(toString(properties.target_selector), '[role=button')
+    )
+  GROUP BY sid, path, sel
+  ORDER BY n DESC
+  LIMIT 25
+`);
+
+/** Only one per session: the same reader tapping the same dead thing is one defect. */
+const seenSessions = new Set(findings.map((f) => String(f[1])));
+for (const [sid, path, sel, n] of OWN_EVENT_FINDINGS) {
+  if (seenSessions.has(String(sid))) continue;
+  seenSessions.add(String(sid));
+  findings.push([
+    // Stable id, so the once-ever claim holds across runs. Not a PostHog uuid:
+    // nothing else keys on this and a collision with a real one is impossible.
+    `own-dead-click:${sid}`,
+    String(sid),
+    "our own dead_click events",
+    `A reader tapped ${sel} on ${path} ${n} time(s) and it did not respond. ` +
+      `Recorded by our own instrumentation, not inferred from a recording.`,
+    1,
+    0,
+  ]);
+}
+
+console.log(
+  `${findings.length} finding(s) in the last ${LOOKBACK_HOURS}h ` +
+    `(${OWN_EVENT_FINDINGS.length} from our own dead_click events)`
+);
 
 /**
  * How many findings may actually DRIVE A BROWSER in one run.
