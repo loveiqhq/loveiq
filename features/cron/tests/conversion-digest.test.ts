@@ -16,6 +16,7 @@ const mockAdCostByDay = vi.fn();
 const mockFetchMidwayProgress = vi.fn();
 const mockFetchPaywallHits = vi.fn();
 const mockFetchEmailExperiments = vi.fn();
+const mockFetchUnitEconomics = vi.fn();
 
 vi.mock("@shared/observability/logger", () => ({
   default: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() },
@@ -70,6 +71,7 @@ vi.mock("@features/admin/server/conversion-digest", async (importActual) => {
     fetchMidwayProgress: (...args: unknown[]) => mockFetchMidwayProgress(...args),
     fetchPaywallHits: (...args: unknown[]) => mockFetchPaywallHits(...args),
     fetchEmailExperimentResults: (...args: unknown[]) => mockFetchEmailExperiments(...args),
+    fetchUnitEconomics: (...args: unknown[]) => mockFetchUnitEconomics(...args),
   };
 });
 
@@ -87,6 +89,7 @@ import {
   biggestLeak,
   TINY_ARM,
   buildEmailExperimentLines,
+  buildUnitEconomicsLines,
 } from "@features/admin/server/conversion-digest";
 import type { SlackBlock } from "@shared/observability/slack";
 
@@ -246,6 +249,7 @@ describe("conversion-digest handler", () => {
     // row existed keep the funnel they were written against.
     mockFetchPaywallHits.mockResolvedValue(null);
     mockFetchEmailExperiments.mockResolvedValue(null);
+    mockFetchUnitEconomics.mockResolvedValue(null);
     mockFetchArmCohorts.mockResolvedValue([
       { axis: "landing", arm: "white", n: 300, conversions: 10 },
       { axis: "landing", arm: "white_prev", n: 240, conversions: 6 },
@@ -1178,6 +1182,37 @@ describe("conversion-digest handler", () => {
     }
   });
 
+  it("puts the section in the message, above the friction detail", async () => {
+    mockFetchUnitEconomics.mockResolvedValue({
+      adSpend: 1187.6,
+      revenue: 70,
+      paidReports: 3,
+      coveredDays: 30,
+      windowDays: 30,
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const flat = blockText(arg.blocks);
+    expect(flat).toContain("Break-even");
+    /**
+     * Directly under the funnel that produces it: it is the number a decision
+     * gets made on, so it precedes the friction detail that explains the shape.
+     * Anchored on the funnel rather than on the friction block, which is absent
+     * from this fixture — an indexOf of -1 would have made the comparison pass
+     * or fail for the wrong reason.
+     */
+    expect(flat.indexOf("The funnel —")).toBeGreaterThan(-1);
+    expect(flat.indexOf("The funnel —")).toBeLessThan(flat.indexOf("Break-even"));
+  });
+
+  it("omits the section entirely when the figures are unavailable", async () => {
+    // Not zeros. "EUR 0.00 spent, EUR 0.00 earned" reads as a quiet month.
+    mockFetchUnitEconomics.mockResolvedValue(null);
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    expect(blockText(arg.blocks)).not.toContain("Break-even");
+  });
+
   it("names both percentages on every funnel row, and states which is which", async () => {
     /**
      * The 2026-09-16 sync spent real time on a "96.5%" nobody could source, because
@@ -1777,6 +1812,95 @@ describe("email A/B tests in the digest", () => {
     expect(lines).toHaveLength(2);
     expect(lines[0]!).toContain("invite");
     expect(lines[1]!).toContain("survey-complete");
+  });
+});
+
+describe("break-even: what we spent against what came back", () => {
+  /**
+   * Marcus, 2026-09-18: "Our core mission is to turn the survey to report journey
+   * break even." Nothing in the digest said how far off that is. Measured over
+   * the 30 days to 2026-09-18: EUR 1,187.60 of ad spend against EUR 70.00 from 3
+   * paid reports.
+   *
+   * The KPI framework marked this whole layer NO DATA because `marketing_spend`
+   * is empty. It is — but the spend is not missing, it is in GA4 and already
+   * ingested; nothing had joined the two halves.
+   */
+  it("states the spend, the return and the gap", () => {
+    const lines = buildUnitEconomicsLines({
+      adSpend: 1187.6,
+      revenue: 70,
+      paidReports: 3,
+      coveredDays: 30,
+      windowDays: 30,
+    });
+    const all = lines.join("\n");
+    expect(all).toContain("EUR 1,187.60");
+    expect(all).toContain("EUR 70.00");
+    expect(all).toContain("3 paid reports");
+    // EUR 395.87 to acquire each one, against EUR 23.33 earned.
+    expect(all).toContain("EUR 395.87");
+    expect(all).toContain("EUR 23.33");
+    // And the gap, named as a gap.
+    expect(all).toContain("EUR -1,117.60");
+    expect(all).toContain("short of break-even");
+  });
+
+  it("says what the figure does NOT include", () => {
+    /**
+     * The framework's own formula for CB I is "revenue − MARKETING". Salaries,
+     * software and freelancers live in the Business Case spreadsheet and in no
+     * database this reads — roughly EUR 3,000 a month. A reader who takes this
+     * line for profit is out by that much.
+     */
+    const lines = buildUnitEconomicsLines({
+      adSpend: 1000,
+      revenue: 100,
+      paidReports: 5,
+      coveredDays: 30,
+      windowDays: 30,
+    });
+    expect(lines.join("\n")).toContain("Advertising only");
+  });
+
+  it("refuses to divide by no paid reports", () => {
+    // "EUR 0.00 per report" would read as free acquisition. Dividing by nothing
+    // is not a cost of nothing.
+    const lines = buildUnitEconomicsLines({
+      adSpend: 900,
+      revenue: 0,
+      paidReports: 0,
+      coveredDays: 30,
+      windowDays: 30,
+    });
+    const all = lines.join("\n");
+    expect(all).toContain("no paid reports in this window");
+    expect(all).not.toMatch(/EUR 0\.00 to acquire/);
+  });
+
+  it("calls out partial GA4 coverage, so the spend reads as a floor", () => {
+    // Understating spend OVERSTATES profit, which is the direction that matters.
+    const lines = buildUnitEconomicsLines({
+      adSpend: 400,
+      revenue: 50,
+      paidReports: 2,
+      coveredDays: 11,
+      windowDays: 30,
+    });
+    expect(lines.join("\n")).toContain("11 of 30 days");
+    expect(lines.join("\n")).toContain("floor");
+  });
+
+  it("says so plainly when we are above break-even", () => {
+    const lines = buildUnitEconomicsLines({
+      adSpend: 100,
+      revenue: 250,
+      paidReports: 10,
+      coveredDays: 30,
+      windowDays: 30,
+    });
+    expect(lines.join("\n")).toContain("above break-even");
+    expect(lines.join("\n")).not.toContain("short of break-even");
   });
 });
 

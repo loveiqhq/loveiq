@@ -1182,3 +1182,153 @@ export function buildEmailExperimentLines(rows: EmailExperimentRow[]): string[] 
   }
   return lines;
 }
+
+/**
+ * Unit economics for the window: what we spent, what came back.
+ *
+ * WHY THIS EXISTS. Marcus, 2026-09-18: "Our core mission is to turn the survey
+ * to report journey break even." Nothing in the digest said how far from break
+ * even we are. Measured over the 30 days to 2026-09-18: EUR 1,187.60 of ad spend
+ * against EUR 70.00 of revenue from 3 paid reports — EUR 395.87 per paid report,
+ * and six cents back per euro. That single line is the business case.
+ *
+ * The KPI framework's "Unit Economics" layer — cost per paid report, gross
+ * contribution CB I, ROAS/payback — was marked NO DATA because `marketing_spend`
+ * is empty. It is, but the spend is not missing: GA4 has it, day by day, already
+ * ingested into `brain_chunk` and already read by this same cron for its
+ * yesterday-vs-normal line. The KPIs were unreachable only because nothing had
+ * joined the two halves.
+ *
+ * COSTS BEYOND ADVERTISING ARE NOT HERE. Salaries, software and freelancers live
+ * in the Business Case spreadsheet and in no database we can read, so CB I here
+ * is contribution after MARKETING only — which is what the framework's own
+ * formula says ("Total revenue − Marketing budget"). Naming it precisely matters:
+ * a reader who takes it for profit is off by roughly EUR 3,000 a month.
+ */
+export interface UnitEconomics {
+  adSpend: number;
+  revenue: number;
+  paidReports: number;
+  /** Days in the window GA4 actually reported spend for. */
+  coveredDays: number;
+  windowDays: number;
+}
+
+export async function fetchUnitEconomics(
+  sinceIso: string,
+  untilIso: string,
+  windowDays: number
+): Promise<UnitEconomics | null> {
+  try {
+    const since = sinceIso.slice(0, 10);
+    const until = untilIso.slice(0, 10);
+
+    // Ad spend: GA4 day-chunks, the same source the spend clause already uses.
+    const spendRes = await supabaseFetch(
+      // eslint-disable-next-line no-secrets/no-secrets -- a PostgREST query path, not a secret
+      "/rest/v1/brain_chunk?source=eq.ga4&select=period_end,meta&meta->>grain=eq.day" +
+        `&period_end=gte.${since}&period_end=lt.${until}&order=period_end.asc&limit=1000`
+    );
+    if (!spendRes.ok) {
+      logger.warn({ status: spendRes.status }, "conversion-digest: ad-spend read non-2xx");
+      return null;
+    }
+    const spendRows = (await spendRes.json()) as Array<{ meta?: Record<string, unknown> }>;
+    let adSpend = 0;
+    let coveredDays = 0;
+    for (const row of Array.isArray(spendRows) ? spendRows : []) {
+      const raw = row?.meta?.ad_cost;
+      const n = typeof raw === "number" ? raw : Number(raw);
+      if (Number.isFinite(n)) {
+        adSpend += n;
+        coveredDays += 1;
+      }
+    }
+
+    /**
+     * Revenue and paid reports: SUCCEEDED, NON-TEST payments. Four definitions of
+     * "paid report" are defensible (391 / 278 / 79 / 53 all-time) and this is the
+     * one recommended for sign-off — the others count test rows, cancellations,
+     * or quotes rather than money that arrived.
+     */
+    const payRes = await supabaseFetch(
+      "/rest/v1/payment?select=amount&status=eq.succeeded&is_test=is.false" +
+        `&created_date_time=gte.${encodeURIComponent(sinceIso)}` +
+        `&created_date_time=lt.${encodeURIComponent(untilIso)}&limit=1000`
+    );
+    if (!payRes.ok) {
+      logger.warn({ status: payRes.status }, "conversion-digest: revenue read non-2xx");
+      return null;
+    }
+    const payRows = (await payRes.json()) as Array<{ amount?: unknown }>;
+    let revenue = 0;
+    let paidReports = 0;
+    for (const row of Array.isArray(payRows) ? payRows : []) {
+      const n = typeof row?.amount === "number" ? row.amount : Number(row?.amount);
+      if (Number.isFinite(n)) {
+        revenue += n;
+        paidReports += 1;
+      }
+    }
+
+    return { adSpend, revenue, paidReports, coveredDays, windowDays };
+  } catch (err) {
+    logger.warn({ err }, "conversion-digest: unit economics threw");
+    return null;
+  }
+}
+
+/** Two decimals, thousands separated — the sheet's own presentation. */
+function eur(n: number): string {
+  return `EUR ${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/**
+ * The break-even line, in the order someone reads it: what went out, what came
+ * back, and the gap.
+ */
+export function buildUnitEconomicsLines(u: UnitEconomics): string[] {
+  const lines: string[] = [
+    `• *Spent* ${eur(u.adSpend)} on ads · *earned* ${eur(u.revenue)} from ${u.paidReports} paid report${u.paidReports === 1 ? "" : "s"}`,
+  ];
+
+  if (u.paidReports > 0) {
+    const cppr = u.adSpend / u.paidReports;
+    const arpp = u.revenue / u.paidReports;
+    lines.push(
+      `• *Per paid report* — ${eur(cppr)} to acquire, ${eur(arpp)} earned; each one costs us ${eur(cppr - arpp)}`
+    );
+  } else {
+    // Not "EUR 0.00 per report" — dividing by nothing is not a cost of nothing.
+    lines.push(`• *Per paid report* — no paid reports in this window, so there is no cost per one`);
+  }
+
+  const contribution = u.revenue - u.adSpend;
+  const roas = u.adSpend > 0 ? u.revenue / u.adSpend : null;
+  lines.push(
+    `• *After marketing* ${eur(contribution)}` +
+      (roas === null
+        ? ""
+        : ` · ${eur(roas)} back per EUR 1 spent` +
+          (roas >= 1
+            ? " — above break-even"
+            : `, so ${Math.round(1 / Math.max(roas, 0.0001))}x short of break-even`))
+  );
+
+  /**
+   * Says what it does NOT include. The framework's formula for CB I is revenue
+   * minus MARKETING, and a reader who takes this for profit is out by the team,
+   * the software and the freelancers — roughly EUR 3,000 a month that lives in a
+   * spreadsheet and in no database we can read.
+   */
+  lines.push(
+    "_Advertising only — team, software and freelance costs are in the Business Case sheet, not in any system this reads._"
+  );
+
+  if (u.coveredDays < u.windowDays) {
+    lines.push(
+      `_GA4 reported spend for ${u.coveredDays} of ${u.windowDays} days, so the spend figure is a floor._`
+    );
+  }
+  return lines;
+}

@@ -79,6 +79,9 @@ import {
   fetchMidwayProgress,
   fetchPaywallHits,
   fetchEmailExperimentResults,
+  fetchUnitEconomics,
+  buildUnitEconomicsLines,
+  type UnitEconomics,
   buildEmailExperimentLines,
   type EmailExperimentRow,
   type MidwayProgress,
@@ -414,6 +417,12 @@ interface DigestInput {
    */
   paywall: PaywallHits | null;
   /**
+   * What we spent on ads against what came back. Required, same reason as the
+   * others: an optional field lets the preview render a message the real one
+   * does not have.
+   */
+  unitEconomics: UnitEconomics | null;
+  /**
    * Per-arm results for the email A/B tests. Required, same reason as the two
    * above: an optional field lets the preview render a message the real one
    * does not have.
@@ -451,6 +460,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   const startFunnel = input.startFunnel ?? null;
   const midway = input.midway;
   const paywall = input.paywall;
+  const unitEconomics = input.unitEconomics;
   const emailExperiments = input.emailExperiments;
   const axisRows = input.axisRows ?? [];
   const windowLabel = `${WINDOW_DAYS}-day window ending ${dayKey} Berlin time`;
@@ -682,6 +692,22 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
            */
           ...(paywallNote ? [paywallNote] : []),
         ].join("\n")
+      )
+    );
+  }
+
+  /**
+   * Break-even, directly under the funnel that produces it.
+   *
+   * Marcus, 2026-09-18: "Our core mission is to turn the survey to report journey
+   * break even." Nothing in this message said how far off that is. It is the
+   * business case in three lines, and it goes above the friction detail because
+   * it is the number a decision gets made on.
+   */
+  if (unitEconomics) {
+    blocks.push(
+      section(
+        [`*Break-even — ${WINDOW_DAYS} days*`, ...buildUnitEconomicsLines(unitEconomics)].join("\n")
       )
     );
   }
@@ -1273,6 +1299,7 @@ export async function GET(request: Request) {
       midway,
       paywall,
       emailExperiments,
+      unitEconomics,
     ] = await Promise.all([
       fetchLandingArmFunnel(windowStart, windowEnd),
       fetchArmCohorts(windowStart, windowEnd),
@@ -1283,6 +1310,7 @@ export async function GET(request: Request) {
       fetchMidwayProgress(windowStart, windowEnd, MIDWAY_QUESTION_INDEX),
       fetchPaywallHits(windowStart, windowEnd),
       fetchEmailExperimentResults(windowStart, windowEnd),
+      fetchUnitEconomics(windowStart, windowEnd, WINDOW_DAYS),
     ]);
 
     /**
@@ -1307,6 +1335,7 @@ export async function GET(request: Request) {
       midway,
       paywall,
       emailExperiments,
+      unitEconomics,
       axisRows,
       cvrDays: cvrSnap?.days ?? null,
       adSpend,

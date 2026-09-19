@@ -44,6 +44,7 @@ import {
   fetchMidwayProgress,
   fetchPaywallHits,
   fetchEmailExperimentResults,
+  fetchUnitEconomics,
 } from "../features/admin/server/conversion-digest";
 import { dayString, fetchFunnelCvrSparklines } from "../features/admin/server/digest-metrics";
 import {
@@ -346,6 +347,7 @@ async function main(): Promise<void> {
     midway,
     paywall,
     emailExperiments,
+    unitEconomics,
   ] = await Promise.all([
     fetchLandingArmFunnel(windowStart, windowEnd),
     fetchArmCohorts(windowStart, windowEnd),
@@ -358,6 +360,8 @@ async function main(): Promise<void> {
     fetchMidwayProgress(windowStart, windowEnd, MIDWAY_QUESTION_INDEX),
     fetchPaywallHits(windowStart, windowEnd),
     fetchEmailExperimentResults(windowStart, windowEnd),
+    // WINDOW_DAYS is not exported; the preview mirrors the cron's 30-day window.
+    fetchUnitEconomics(windowStart, windowEnd, 30),
   ]);
 
   // adSpend deliberately null: GA4 needs a service-account credential this
@@ -374,6 +378,7 @@ async function main(): Promise<void> {
     midway,
     paywall,
     emailExperiments,
+    unitEconomics,
     now,
   });
 
