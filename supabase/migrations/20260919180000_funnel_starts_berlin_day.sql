@@ -78,6 +78,17 @@
 --    security advisor output under `function_search_path_mutable`.
 --
 -- ─────────────────────────────────────────────────────────────────────────────
+-- 5. `purchased` COUNTED OUR OWN TEST PURCHASES (cvr only).
+--
+--    `COUNT(*) FROM payment WHERE status = 'succeeded'` — no `is_test` filter,
+--    no `amount > 0`, and COUNT of ROWS against a denominator of distinct
+--    submissions. So the paygate-to-purchase line took the 2026-09-07 device
+--    matrix run — 34 test unlocks in a day — and drew it as a 100% conversion
+--    rate. The same three mistakes as `get_bucket_performance` (fixed in
+--    20260919220000) and the same rule as the definition recorded 2026-09-19:
+--    succeeded, non-test, money actually moved, counted per person.
+--
+-- ─────────────────────────────────────────────────────────────────────────────
 -- NOT FIXED, DELIBERATELY: in `get_funnel_cvr_sparklines` the numerator and
 -- denominator live in different id spaces. `visitors` counts DISTINCT
 -- visitor_id from funnel_event, which is a VISITOR-DAY — the cookie behind it
@@ -114,6 +125,22 @@ DECLARE
     '  -- bounds landed a full day early while still spanning the right width.' || E'\n' ||
     '  since_day DATE := (since_ts AT TIME ZONE ''Europe/Berlin'')::date;' || E'\n' ||
     '  until_day DATE := (until_ts AT TIME ZONE ''Europe/Berlin'')::date;';
+
+  old_purch CONSTANT TEXT :=
+    '    SELECT created_date_time::date AS day, COUNT(*)::int AS n' || E'\n' ||
+    '    FROM payment' || E'\n' ||
+    '    WHERE status = ''succeeded'' AND created_date_time >= since_ts AND created_date_time < until_ts';
+  new_purch CONSTANT TEXT :=
+    '    -- Succeeded, NON-TEST, and money actually moved — and counted per' || E'\n' ||
+    '    -- PERSON, because the denominators beside it are distinct submissions.' || E'\n' ||
+    '    -- Without these the 2026-09-07 device-matrix run (34 test unlocks in a' || E'\n' ||
+    '    -- day) drew a 100% conversion rate.' || E'\n' ||
+    '    SELECT (p.created_date_time AT TIME ZONE ''Europe/Berlin'')::date AS day,' || E'\n' ||
+    '           COUNT(DISTINCT pr.survey_submission_id)::int AS n' || E'\n' ||
+    '    FROM payment p' || E'\n' ||
+    '    JOIN personal_report pr ON pr.id = p.personal_report_id' || E'\n' ||
+    '    WHERE p.status = ''succeeded'' AND NOT p.is_test AND p.amount > 0' || E'\n' ||
+    '      AND p.created_date_time >= since_ts AND p.created_date_time < until_ts';
 
   old_starts CONSTANT TEXT :=
     '    SELECT started_at::date AS day, COUNT(DISTINCT session_id)::int AS n' || E'\n' ||
@@ -158,6 +185,15 @@ BEGIN
       END IF;
       next := replace(next, old_bounds, new_bounds);
       changed := changed + 1;
+    END IF;
+
+    -- (5) the purchased CTE, which only get_funnel_cvr_sparklines has.
+    IF position(old_purch IN next) > 0 THEN
+      next := replace(next, old_purch, new_purch);
+      changed := changed + 1;
+    ELSIF fn = 'get_funnel_cvr_sparklines' AND position(new_purch IN next) = 0 THEN
+      RAISE EXCEPTION
+        'the purchased CTE in % does not match the expected text and is not already fixed — re-read it before re-running', fn;
     END IF;
 
     -- (2) + (3) the starts CTE, which only get_funnel_cvr_sparklines has.
