@@ -37,11 +37,20 @@ const CHAT_NAME = process.env.WHATSAPP_GROUP_NAME ?? "LoveIQ";
  * Oldest day worth indexing.
  *
  * A linked desktop keeps back-filling in the background — 53 days of history when
- * first linked, 306 a few hours later — and older chat is not worth the storage or
- * the embedding cost. Anything before this is skipped, and the sweep removes it if
- * an earlier run already indexed it.
+ * first linked, 306 a few hours later. Anything before this is skipped, and the
+ * sweep removes it if an earlier run already indexed it — so this default is what
+ * decides the corpus, and an env override alone would be UNDONE by the next
+ * ordinary run.
+ *
+ * WAS 2026-05-01, on the grounds that older chat was "not worth the storage or the
+ * embedding cost". Measured 2026-09-19 against the desktop database, that was wrong
+ * by orders of magnitude: the cutoff excluded 1,006 of the group's 2,373 messages —
+ * 42%, across 116 days — for 59,586 characters of text, about twenty-five chunks.
+ * The Postgres volume is 8.35 GB with 82% free. What it actually cost was the
+ * company's first six months, which is the period most dense with founding
+ * decisions and the one nobody can reconstruct from memory.
  */
-const SINCE_DAY = process.env.WHATSAPP_SINCE ?? "2026-05-01";
+const SINCE_DAY = process.env.WHATSAPP_SINCE ?? "2025-10-01";
 
 const DB = join(
   homedir(),
