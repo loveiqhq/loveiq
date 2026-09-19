@@ -28,6 +28,10 @@ on:
       defect:
         description: "What a visitor experiences. Plain English, no solution."
         required: true
+      base_ref:
+        description: "Commit to fix from. Defaults to main; set it to replay a past defect."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -43,9 +47,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      # `ref` so a PAST commit can be targeted, which is the only way to test
+      # this machine before trusting it: a healthy production has nothing to fix,
+      # and "we will find out when a customer hits something" is not verification.
+      # Empty means main, which is the normal case.
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
+          ref: ${{ inputs.base_ref || github.ref }}
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
@@ -136,7 +145,10 @@ jobs:
         if: steps.token.outputs.ready == 'true'
         env:
           FIX_REF: ${{ steps.commit.outputs.branch }}
-          BASE_REF: origin/main
+          # The same base the model was given. Proving against main while the
+          # model worked from an older commit would compare two unrelated things
+          # and could certify a fix for a defect that is already gone.
+          BASE_REF: ${{ inputs.base_ref || 'origin/main' }}
           PROBE: ${{ inputs.probe }}
           PROBE_ENV: ${{ inputs.probe_env }}
         run: node scripts/prove-fix.mjs

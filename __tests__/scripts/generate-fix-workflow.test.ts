@@ -92,6 +92,30 @@ describe("the generate-and-prove workflow", () => {
     expect(envs.some((v) => /\$\{\{\s*inputs\.defect/.test(String(v)))).toBe(true);
   });
 
+  /**
+   * Provable before it is trusted. A healthy production has nothing to fix, so
+   * without this the only way to find out whether the machine works is to wait
+   * for a customer to hit something — which is not verification, it is hope.
+   */
+  it("can be pointed at a past commit so it is testable at all", () => {
+    const doc = parse(WF) as {
+      on: { workflow_dispatch: { inputs: Record<string, unknown> } };
+    };
+    expect(Object.keys(doc.on.workflow_dispatch.inputs)).toContain("base_ref");
+  });
+
+  it("proves against the SAME commit the model was given", () => {
+    // Proving against main while the model worked from an older commit compares
+    // two unrelated things, and would certify a fix for a defect already gone.
+    const doc = parse(WF) as {
+      jobs: Record<string, { steps: Array<{ name?: string; env?: Record<string, string> }> }>;
+    };
+    const proveStep = Object.values(doc.jobs)
+      .flatMap((j) => j.steps)
+      .find((s) => s.name === "Prove it");
+    expect(String(proveStep?.env?.BASE_REF)).toContain("inputs.base_ref");
+  });
+
   it("tells the model what is wrong, not how to fix it", () => {
     expect(WF).toContain("What the visitor experiences");
     expect(WF).toContain("Do NOT edit the probe");
