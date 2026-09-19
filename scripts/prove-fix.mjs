@@ -86,6 +86,10 @@ const DENY = [
 ];
 const MAX_CHANGED_LINES = Number(process.env.MAX_CHANGED_LINES ?? 40);
 
+/** A test file changes no runtime behaviour, so it does not count against the cap. */
+export const isTest = (f) =>
+  /(^|\/)__tests__\//.test(f) || /\/tests\//.test(f) || /\.test\./.test(f);
+
 /** Pure, so --selftest can check it without git. */
 export function judgeDiff(
   files,
@@ -100,8 +104,31 @@ export function judgeDiff(
     return { ok: false, why: `touches paths a probe cannot vouch for: ${denied.join(", ")}` };
   const outside = files.filter((f) => !allow.some((re) => re.test(f)));
   if (outside.length > 0) return { ok: false, why: `outside the allowlist: ${outside.join(", ")}` };
-  if (changedLines > cap) return { ok: false, why: `${changedLines} changed lines, cap is ${cap}` };
-  return { ok: true, why: `${files.length} file(s), ${changedLines} line(s), all presentation` };
+  /**
+   * TESTS DO NOT COUNT AGAINST THE CAP.
+   *
+   * The cap exists to keep a change small enough that a probe's green light
+   * plausibly covers it. A test file changes no runtime behaviour, so it cannot
+   * widen what the probe failed to check — and counting it punishes exactly the
+   * thing worth encouraging.
+   *
+   * Not theoretical: the consent-gate fix written on 2026-09-19 was 37 lines of
+   * product code and 56 of test. Under a flat count it would have been refused
+   * for bringing its own regression test.
+   *
+   * A caller that passes a plain number gets the old, stricter behaviour rather
+   * than a silently larger allowance.
+   */
+  const product = typeof changedLines === "object" ? changedLines.product : changedLines;
+  const total = typeof changedLines === "object" ? changedLines.total : changedLines;
+  if (product > cap) {
+    return { ok: false, why: `${product} changed lines of product code, cap is ${cap}` };
+  }
+  const testNote = total > product ? `, plus ${total - product} line(s) of tests` : "";
+  return {
+    ok: true,
+    why: `${files.length} file(s), ${product} line(s) of product code${testNote}, all presentation`,
+  };
 }
 
 if (process.argv.includes("--selftest")) {
@@ -117,6 +144,23 @@ if (process.argv.includes("--selftest")) {
   eq(judgeDiff(["supabase/migrations/x.sql"], 2).ok, false, "migration refused");
   eq(judgeDiff(["features/checkout/ui/Pay.tsx"], 2).ok, false, "deny beats allow");
   eq(judgeDiff(["features/survey/ui/SurveyPage.tsx"], 999).ok, false, "line cap enforced");
+  // Tests ride along free. The real consent-gate fix was 37 product + 56 test.
+  eq(
+    judgeDiff(["features/survey/ui/SurveyPage.tsx", "features/survey/tests/SurveyPage.test.tsx"], {
+      total: 93,
+      product: 37,
+    }).ok,
+    true,
+    "a fix that brings its own test is not punished for it"
+  );
+  eq(
+    judgeDiff(["features/survey/ui/SurveyPage.tsx"], { total: 200, product: 200 }).ok,
+    false,
+    "product code is still capped"
+  );
+  eq(isTest("features/survey/tests/x.test.tsx"), true, "feature tests recognised");
+  eq(isTest("__tests__/scripts/x.test.ts"), true, "root tests recognised");
+  eq(isTest("features/survey/ui/SurveyPage.tsx"), false, "product code is not a test");
   eq(judgeDiff(["README.md"], 2).ok, false, "unlisted path refused");
   eq(judgeDiff(["features/survey/tests/SurveyPage.test.tsx"], 20).ok, true, "tests allowed");
   // The hole that mattered: a fix must not be able to edit its own judge.
@@ -174,11 +218,18 @@ async function main() {
   step(2, "diff is inside the allowlist and under the cap");
   const files = git("diff", "--name-only", `${baseSha}..${fixSha}`).split("\n").filter(Boolean);
   const numstat = git("diff", "--numstat", `${baseSha}..${fixSha}`).split("\n").filter(Boolean);
-  const changedLines = numstat.reduce((n, l) => {
-    const [add, del] = l.split("\t");
-    return n + (Number(add) || 0) + (Number(del) || 0);
-  }, 0);
-  const verdict = judgeDiff(files, changedLines);
+  // Split so the cap can judge product code alone; see judgeDiff.
+  const counted = numstat.reduce(
+    (acc, l) => {
+      const [add, del, file] = l.split("\t");
+      const n = (Number(add) || 0) + (Number(del) || 0);
+      acc.total += n;
+      if (!isTest(file ?? "")) acc.product += n;
+      return acc;
+    },
+    { total: 0, product: 0 }
+  );
+  const verdict = judgeDiff(files, counted);
   console.log(`    ${verdict.ok ? "ok" : "REFUSED"} — ${verdict.why}`);
   if (!verdict.ok) {
     console.log("\nNOT PROVEN — the diff was refused before anything was run.");

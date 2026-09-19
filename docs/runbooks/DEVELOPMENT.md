@@ -149,6 +149,12 @@ Two things it will not do, both enforced mechanically rather than by the prompt:
   themselves, and refuses a change over the line cap. A green probe says the UI
   behaves; it says nothing about whether a payment still settles.
 
+**What it is allowed to change.** Presentation code and tests only — and the
+size cap counts PRODUCT lines, not test lines. A test changes no runtime
+behaviour, so it cannot widen what the probe failed to check, and a fix that
+brings its own regression test should not be penalised for it. (Measured: this
+morning's consent-gate fix was 37 lines of product code and 56 of test.)
+
 **When it fails.** The proof refusing a fix is a normal outcome, not a
 malfunction — the first live run produced a plausible twelve-line change that
 simply did not work, and was refused. The run then leaves two things behind so

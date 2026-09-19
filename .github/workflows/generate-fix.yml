@@ -153,10 +153,15 @@ jobs:
             "Make the change. Do not commit; the workflow does that.")" \
             --allowedTools "Read,Edit,Write,Grep,Glob,Bash(npm run lint),Bash(npx vitest run:*)" \
             --permission-mode acceptEdits \
-            --max-turns 40
+            --max-turns 120
 
+      # `always()`, so partial work survives a model that errored or ran out of
+      # turns. The first attempt at a substantial defect hit 'Reached max turns'
+      # and left nothing at all behind — the run reported a failure and every
+      # later step skipped, including the ones whose entire job is preserving
+      # what was tried.
       - name: Commit whatever it changed
-        if: steps.token.outputs.ready == 'true'
+        if: always() && steps.token.outputs.ready == 'true'
         working-directory: /tmp/fixtree
         id: commit
         env:
@@ -178,7 +183,7 @@ jobs:
       # wrong thing, or was given a task no 40-line change could satisfy. That
       # difference decides whether to retry, reword, or do it by hand.
       - name: Show what it proposed
-        if: steps.token.outputs.ready == 'true'
+        if: always() && steps.commit.outputs.branch != ''
         working-directory: /tmp/fixtree
         run: |
           echo "### Proposed change" >> "$GITHUB_STEP_SUMMARY"

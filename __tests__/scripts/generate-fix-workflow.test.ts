@@ -197,6 +197,30 @@ describe("the generate-and-prove workflow", () => {
     expect(keep?.run ?? "").not.toMatch(/gh pr create/);
   });
 
+  /**
+   * A model that errors or exhausts its turns must still leave its work. The
+   * first attempt at a substantial defect hit "Reached max turns (40)" and every
+   * later step skipped — including the two whose only job is preserving what was
+   * tried, so the run produced a bare failure and nothing to read.
+   */
+  it("commits partial work even when the model itself failed", () => {
+    const doc = parse(WF) as {
+      jobs: Record<string, { steps: Array<{ name?: string; if?: string }> }>;
+    };
+    const steps = Object.values(doc.jobs).flatMap((j) => j.steps);
+    for (const name of ["Commit whatever it changed", "Show what it proposed"]) {
+      const step = steps.find((st) => st.name === name);
+      expect(String(step?.if), `"${name}" is skipped by the failure it exists for`).toContain(
+        "always()"
+      );
+    }
+  });
+
+  it("gives the model enough turns for a real defect", () => {
+    const turns = Number(/--max-turns (\d+)/.exec(WF)?.[1]);
+    expect(turns, "40 was not enough for the first real defect tried").toBeGreaterThanOrEqual(80);
+  });
+
   it("prints the proposed diff, so a failed run is not opaque", () => {
     const doc = parse(WF) as {
       jobs: Record<string, { steps: Array<{ name?: string; run?: string }> }>;
