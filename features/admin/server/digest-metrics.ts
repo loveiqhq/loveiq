@@ -561,6 +561,32 @@ async function fetchAnalyticsEventCount(
  * funnel_event.day is a DATE column (UTC day-stamp), not a timestamp, so we
  * slice the ISO timestamps to YYYY-MM-DD. The window is half-open
  * [sinceDay, untilDay) which matches every other fetcher's convention.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * THE TWO EVENT TYPES ARE NOT COMPARABLE. Do not divide one by the other and
+ * present the result as a conversion rate.
+ *
+ * `unique_visitor` is written by `recordUniqueVisit` on the SERVER with a
+ * throwaway per-day UUID that is never persisted client-side. It is therefore
+ * complete and consent-independent — which is the whole point of it, and the
+ * reason it replaced an earlier consent-gated pinger that "massively
+ * under-counted".
+ *
+ * `survey_engine_mount` is posted by the BROWSER, keyed on the `__liq_vid`
+ * cookie, and proxy.ts mints that cookie only after the visitor clicks Accept.
+ * So it is consent-gated. Measured 2026-09-19 over 30 days: 637 distinct
+ * visitors reached it against 977 server-written survey drafts past question
+ * one — roughly two thirds of the people.
+ *
+ * And the identifiers are unrelated: of 3,172 mount ids all time, only 632
+ * (20%) appear as a `unique_visitor` id at all. One is a per-day random UUID,
+ * the other a persistent cookie value, so they cannot be matched person to
+ * person even in principle.
+ *
+ * The complete server-side alternative for "started the survey" is
+ * `survey_partial_save` with `current_index >= 1` — different id space again
+ * (a survey session), but at least complete. That is the source the funnel
+ * table uses, labelled as starts per VISIT-DAY rather than per person.
  */
 async function fetchFunnelEventCount(
   eventType: "unique_visitor" | "survey_engine_mount",

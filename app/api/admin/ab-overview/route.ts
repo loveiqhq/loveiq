@@ -644,9 +644,31 @@ export async function GET(request: Request) {
       .sort((a, b) => b.dropPct - a.dropPct)
       .slice(0, WORST_N);
 
+    /*
+     * The first line here USED TO SAY "every step is counted on our own
+     * servers, so declining analytics cookies does not remove anyone from these
+     * numbers". That is false for five of the steps and it is the most
+     * reassuring sentence on the page.
+     *
+     * "Opened the survey page" and the four intro screens come from
+     * `funnel_event.survey_engine_mount` / `intro_slide_*`, which the BROWSER
+     * posts using the `__liq_vid` cookie — and proxy.ts mints that cookie only
+     * after the visitor clicks Accept. So declining analytics removes you from
+     * exactly those rows. Measured 2026-09-19 over 30 days: 637 visitors reached
+     * the consent-gated mount step against 977 server-written survey drafts, so
+     * the client path sees roughly two thirds of the people.
+     *
+     * "Visits" is the opposite: `recordUniqueVisit` writes it server-side with a
+     * throwaway per-day UUID precisely so it does NOT depend on consent — which
+     * is also why the two cannot be joined, and why the rate between them is a
+     * ratio of two different id spaces rather than a conversion of one
+     * population.
+     */
     const funnelCaveats = [
-      "Every step is counted on our own servers, so declining analytics cookies does not remove anyone from these numbers.",
+      "Visits, survey drafts, submissions, report opens, checkouts and payments are counted on our own servers, so declining analytics cookies does not remove anyone from those.",
+      "“Opened the survey page” and the four intro screens are the exception: the browser reports those, and only after someone accepts cookies. Roughly a third of people are missing from those five rows, so the drop between “Visits” and “Opened the survey page” is mostly consent, not people leaving.",
       '"Visits" counts visitor-days: somebody returning on three days counts three times.',
+      "“Visits” and the survey steps are counted with different identifiers and cannot be matched person to person, so a percentage between them is a ratio of two measurements, not a conversion rate of one group.",
     ];
 
     const dropoffCaveats = [

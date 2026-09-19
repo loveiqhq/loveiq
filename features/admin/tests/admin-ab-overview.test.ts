@@ -320,6 +320,32 @@ describe("GET /api/admin/ab-overview", () => {
     expect(body.funnelCaveats.join(" ")).toContain("our own servers");
   });
 
+  it("does not claim consent-gated steps are counted server-side", async () => {
+    /**
+     * The caveat used to read "Every step is counted on our own servers, so
+     * declining analytics cookies does not remove anyone from these numbers."
+     * It is the most reassuring sentence on the page and it was false for five
+     * of the steps: "Opened the survey page" and the four intro screens come
+     * from `funnel_event.survey_engine_mount` / `intro_slide_*`, which the
+     * BROWSER posts using the `__liq_vid` cookie — and proxy.ts mints that
+     * cookie only after someone clicks Accept.
+     */
+    routeData([submission(1, "white", null)], []);
+    const body = await (await GET(req(44))).json();
+    const caveats = (body.funnelCaveats as string[]).join(" ");
+
+    expect(caveats, "the blanket claim must not come back").not.toContain(
+      "Every step is counted on our own servers"
+    );
+    // It must name WHICH steps are server-side rather than claiming all of them.
+    expect(caveats).toContain("declining analytics cookies does not remove anyone from those");
+    // And it must say the intro steps are the exception, and why.
+    expect(caveats.toLowerCase()).toContain("accepts cookies");
+    expect(caveats).toContain("intro screens");
+    // And that a percentage between two id spaces is not a conversion rate.
+    expect(caveats.toLowerCase()).toContain("cannot be matched person to person");
+  });
+
   it("does not present a concluded experiment as a live A/B test", async () => {
     // Three axes have finished. The paywall concluded in favour of forced and was
     // then removed from the product entirely. The survey theme concluded
