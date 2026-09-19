@@ -386,3 +386,82 @@ describe("the paywall instrumentation boundary", () => {
     expect(kinds).toContain("cvr-start-completion");
   });
 });
+
+/**
+ * Slack rejects the WHOLE post when any image_url exceeds ~3000 characters, so
+ * an over-long chart does not cost you a chart, it costs you the message.
+ *
+ * The drop-off chart is the one that can get there: it carries one label and one
+ * integer per survey question, and at 59 questions its URL is already 2,411 of
+ * the 3,000 (~40 bytes per bar). Roughly fifteen more questions breaches it.
+ *
+ * The guard existed with no test over it, and the thing most likely to break is
+ * not the drop itself but the CAPTION — a context block that survived its image
+ * would have the message describing a chart it never sent.
+ */
+describe("Slack's image_url cap", () => {
+  it("drops an over-long chart AND its caption, keeping the rest of the message", async () => {
+    const curr = mkDaily();
+    // Far past the cap; sessions stay above DROPOUT_REACH_FLOOR so every
+    // question produces a bar rather than being skipped as tiny-sample noise.
+    const manyQuestions = Array.from({ length: 200 }, (_, i) => ({
+      question_index: i,
+      q_id: String(10000 + i),
+      sessions: 500 - i,
+    }));
+    const { blocks } = await buildFunnelDigestBlocks({
+      title: "Test",
+      windowLabel: "30d",
+      cvr: { days: cvrDays() },
+      bucket: null,
+      dropout: { questions: manyQuestions },
+      nurture: null,
+      curr,
+      prev: curr,
+      cadence: "WoW",
+    });
+
+    const typed = blocks as Array<{ type: string; image_url?: string; elements?: unknown[] }>;
+    expect(imageKinds(typed)).not.toContain("dropout-funnel");
+
+    // The caption must go with it. Matched on a distinctive phrase from the
+    // drop-off caption rather than the word "drop", which appears elsewhere.
+    const captions = typed
+      .filter((b) => b.type === "context")
+      .map((b) => JSON.stringify(b.elements ?? []));
+    expect(captions.some((c) => c.includes("Where people quit the survey"))).toBe(false);
+
+    // And the message still went out with its other charts and its footer.
+    expect(imageKinds(typed)).toContain("cvr-visitor-start");
+    const footer = (blocks as Array<{ type: string; text?: { text?: string } }>).find(
+      (b) => b.type === "section" && (b.text?.text ?? "").includes("*Revenue*")
+    );
+    expect(footer).toBeDefined();
+  });
+
+  it("keeps the drop-off chart at a realistic question count", async () => {
+    // The counterpart to the test above: if the cap check were simply always
+    // dropping this chart, that test would pass for the wrong reason.
+    const curr = mkDaily();
+    const { blocks } = await buildFunnelDigestBlocks({
+      title: "Test",
+      windowLabel: "30d",
+      cvr: { days: cvrDays() },
+      bucket: null,
+      dropout: {
+        questions: Array.from({ length: 59 }, (_, i) => ({
+          question_index: i,
+          q_id: String(16000 + i),
+          sessions: 500 - i * 5,
+        })),
+      },
+      nurture: null,
+      curr,
+      prev: curr,
+      cadence: "WoW",
+    });
+    expect(imageKinds(blocks as Array<{ type: string; image_url?: string }>)).toContain(
+      "dropout-funnel"
+    );
+  });
+});
