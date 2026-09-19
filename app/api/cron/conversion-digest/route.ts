@@ -579,6 +579,8 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   // ---- Yesterday vs the usual ----
   let yesterday = { visitors: 0, completions: 0, paid: 0 };
   let baseline = { visitors: 0, completions: 0, paid: 0 };
+  // Was yesterday in the data at all? See `yesterdayObserved` in buildAlerts.
+  let yesterdayObserved = true;
   if (funnel) {
     const y = sumDays(funnel.daily, (d) => d === dayKey);
     const yVisitors = sumVisitors(funnel.visitors, (d) => d === dayKey);
@@ -605,6 +607,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
      * question. Matches the definition recorded 2026-09-19 and the break-even
      * block below; the funnel's own unlock count is labelled "unlocked".
      */
+    yesterdayObserved = funnel.visitors.some((row) => row.day === dayKey);
     yesterday = { visitors: yVisitors, completions: y.completions, paid: y.charges };
     baseline = {
       visitors: pVisitors / 7,
@@ -1293,6 +1296,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     visitorArms,
     yesterday,
     baseline,
+    yesterdayObserved,
     pricingCutoverIso: PRICING_CUTOVER_ISO,
     now,
   });

@@ -1109,6 +1109,45 @@ describe("conversion-digest handler", () => {
   });
 
   /**
+   * The route's half of the missing-day guard.
+   *
+   * buildAlerts is unit-tested above, but nothing checked that the ROUTE
+   * actually works out whether yesterday is in the data — hardcoding
+   * `yesterdayObserved = true` there left every one of those unit tests green.
+   * This is the test that fails when it does.
+   *
+   * The pinned clock reports on 2026-08-23, which is makeFunnel's last day.
+   */
+  it("works out from the data whether yesterday is missing, not just whether it is zero", async () => {
+    const DAY_REPORTED = "2026-08-23";
+    // 60 visitors a day, so the baseline clears the >= 20 floor the alert needs.
+    const full = makeFunnel({ visitorArms: { white: 1200, white_prev: 600 } });
+    const collapsed = (a: { blocks: SlackBlock[] }) =>
+      a.blocks
+        .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
+        .join("\n")
+        .includes("below the usual daily average");
+
+    const postFor = async (visitors: typeof full.visitors) => {
+      mockNotifySlack.mockClear();
+      mockFetchLandingArmFunnel.mockResolvedValue({ ...full, visitors });
+      await GET(request());
+      return mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    };
+
+    // Present and genuinely zero -> a real collapse, and it must be reported.
+    const zeroed = await postFor(
+      full.visitors.map((v) => (v.day === DAY_REPORTED ? { ...v, n: 0 } : v))
+    );
+    expect(collapsed(zeroed), "a real zero-traffic day must still alert").toBe(true);
+
+    // Absent from the series -> nothing is known, so nothing is claimed. This is
+    // the shape the day-series bug produced on 2026-09-19.
+    const missing = await postFor(full.visitors.filter((v) => v.day !== DAY_REPORTED));
+    expect(collapsed(missing), "a missing day must not be called a collapse").toBe(false);
+  });
+
+  /**
    * The caveat under the funnel had NEVER fired in production.
    *
    * get_paywall_hits returns `firstRowDay` so this line can say how much of the
@@ -2490,6 +2529,36 @@ describe("conversion-digest alerts", () => {
     baseline: { visitors: 100, completions: 10, paid: 1 },
     now: new Date("2026-08-24T09:00:00Z"),
   };
+
+  /**
+   * A day that is MISSING from the data is not a day with no traffic.
+   *
+   * This alert published "Visits yesterday were 100% below the usual daily
+   * average (0 vs ~515)" on 2026-09-19 — a day with 543 visits — because the
+   * day series stopped one day short. A bare `::date` on a Berlin-midnight
+   * bound resolved in the pooler's UTC zone, so `until_day - 1` landed on the
+   * day before yesterday and yesterday's bucket was never generated.
+   * `sumVisitors` cannot tell an absent day from an empty one, so it returned 0
+   * and the threshold fired on an absence of data.
+   *
+   * The bound is fixed (20260919180000). This is the second guard, because the
+   * failure mode is a confident false alarm about the headline number.
+   */
+  it("does not call a missing day a traffic collapse", () => {
+    const collapsed = { ...base, yesterday: { visitors: 0, completions: 0, paid: 0 } };
+
+    // Observed and genuinely zero: that IS a collapse and must still be said.
+    const real = buildAlerts({ ...collapsed, yesterdayObserved: true });
+    expect(real.some((a) => a.message.includes("below the usual daily average"))).toBe(true);
+
+    // Not in the data at all: nothing is known about yesterday, so nothing is claimed.
+    const absent = buildAlerts({ ...collapsed, yesterdayObserved: false });
+    expect(absent.some((a) => a.message.includes("below the usual daily average"))).toBe(false);
+
+    // Omitted defaults to observed, so an un-plumbed caller cannot mute a real alert.
+    const defaulted = buildAlerts(collapsed);
+    expect(defaulted.some((a) => a.message.includes("below the usual daily average"))).toBe(true);
+  });
 
   it("says nothing happened rather than listing green ticks", () => {
     const alerts = buildAlerts(base);

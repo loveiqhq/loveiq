@@ -857,6 +857,22 @@ export function buildAlerts(input: {
   visitorArms: Array<{ arm: string; n: number }>;
   yesterday: { visitors: number; completions: number; paid: number };
   baseline: { visitors: number; completions: number; paid: number };
+  /**
+   * Whether yesterday is actually IN the visitor series.
+   *
+   * `sumVisitors` returns 0 both for a day with no traffic and for a day that
+   * was never generated, and those must not read the same. On 2026-09-19 the
+   * day series ended a day short (a bare `::date` on a Berlin-midnight bound
+   * resolved in the pooler's UTC, so `until_day - 1` landed on the day before
+   * yesterday), yesterday's bucket did not exist, the sum was 0, and this file
+   * published "Visits yesterday were 100% below the usual daily average
+   * (0 vs ~515)" on a day with 543 visits.
+   *
+   * The bound is fixed, but a missing day must never be reportable as a
+   * collapse — that is a claim about traffic made from an absence of data.
+   * Defaults to true so an omitted flag cannot silently mute a real alert.
+   */
+  yesterdayObserved?: boolean;
   pricingCutoverIso?: string | null;
   now: Date;
 }): DigestAlert[] {
@@ -902,7 +918,7 @@ export function buildAlerts(input: {
 
   // Traffic collapse: only when the baseline is big enough for a percentage to
   // mean anything, mirroring `delta`'s own low-base annotation.
-  if (input.baseline.visitors >= 20) {
+  if (input.baseline.visitors >= 20 && input.yesterdayObserved !== false) {
     const change = computeRate(
       Math.max(0, input.baseline.visitors - input.yesterday.visitors),
       input.baseline.visitors
