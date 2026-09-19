@@ -168,15 +168,20 @@ async function buildSignedImageUrl(
  * question a reader has before they have any question about the trend.
  */
 const CHART_CAPTIONS: Partial<Record<DigestImageKind, string>> = {
-  "cvr-visitor-start": "Of everyone who lands on the site, the share who answer the first survey question.",
-  "cvr-start-completion": "Of everyone who answers the first question, the share who reach the last one.",
+  "cvr-visitor-start":
+    "Of everyone who lands on the site, the share who answer the first survey question.",
+  "cvr-start-completion":
+    "Of everyone who answers the first question, the share who reach the last one.",
   "cvr-completion-engagement":
     "Of everyone who finishes the survey, the share who have opened their report within 1, 5 and 10 minutes. Three lines, one per waiting time — so the top line is always the highest.",
-  "cvr-completion-paygate": "Of everyone who finishes the survey, the share who reach the point where the report asks for payment.",
+  "cvr-completion-paygate":
+    "Of everyone who finishes the survey, the share who reach the point where the report asks for payment.",
   "cvr-paygate-purchase": "Of everyone who reaches that point, the share who pay.",
-  "bucket-performance": "Each line is one price we showed. The share of people who bought at that price.",
+  "bucket-performance":
+    "Each line is one price we showed. The share of people who bought at that price.",
   "dropout-funnel": "Where people quit the survey. Taller means more people left on that question.",
-  "reactivation-email": "The follow-up emails we send to people who never opened or never bought. How each one performed.",
+  "reactivation-email":
+    "The follow-up emails we send to people who never opened or never bought. How each one performed.",
 };
 
 /** The caption for a chart, then the chart. Nothing when there is no chart. */

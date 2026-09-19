@@ -193,7 +193,10 @@ export interface AbOverviewResponse {
   dropoffCaveats: string[];
   /** Caveats about the main funnel's measurement. */
   funnelCaveats: string[];
+  /** Tests being randomised right now. Empty as of 2026-09-19. */
   experiments: ExperimentReadout[];
+  /** Final per-arm numbers for tests that have ended, retired arms included. */
+  concludedReadouts: ExperimentReadout[];
   /** Finished experiments, listed without rates so nobody reads a winner into them. */
   concluded: ConcludedExperiment[];
   totals: {
@@ -287,7 +290,17 @@ function buildReadout(
   arms: ArmStat[],
   unattributed: number
 ): ExperimentReadout {
-  const contenders = arms.filter((a) => !a.retired && a.n > 0);
+  /**
+   * The CALLER decides which arms belong in the comparison; this only drops the
+   * ones with nobody in them.
+   *
+   * It used to re-filter on `retired` as well, which was redundant on the live
+   * path (`tally` has already removed them) and wrong on the concluded one,
+   * where it silently collapsed a finished two-arm result down to "only V2 has
+   * data, so there is nothing to compare against" — of a test we had just
+   * compared.
+   */
+  const contenders = arms.filter((a) => a.n > 0);
   let verdict = "No data yet.";
   let significance = "insufficient-data";
 
@@ -444,7 +457,21 @@ export async function GET(request: Request) {
     /** Tally purchases and revenue per arm for one axis. */
     function tally(
       axis: ExperimentAxis,
-      armOf: (id: number, tracker: string | null) => string | null
+      armOf: (id: number, tracker: string | null) => string | null,
+      /**
+       * The exact arms this readout compares, retired ones included.
+       *
+       * For a LIVE readout, leave it out: the arms are whatever is being
+       * assigned, and a retired arm is noise at best and an invitation to
+       * compare against a dead arm at worst.
+       *
+       * For a CONCLUDED one, name them. Dropping the losing arm leaves a
+       * one-sided record of a two-sided result — "V2: 9.9%" with nothing to read
+       * it against — but simply keeping every retired arm is worse: `control` is
+       * the round-1 DARK landing, and putting it beside V1 and V2 compares three
+       * arms drawn from two different experiments.
+       */
+      opts?: { arms?: string[] }
     ) {
       const counts = new Map<string, { n: number; purchases: number; revenue: number }>();
       let unattributed = 0;
@@ -466,7 +493,7 @@ export async function GET(request: Request) {
 
       // Always render the arms we actively assign, even at zero, so an empty arm is
       // visible rather than missing. Retired arms appear only if they have data.
-      const armKeys = [...new Set([...activeArms(axis), ...counts.keys()])];
+      const armKeys = [...new Set([...(opts?.arms ?? activeArms(axis)), ...counts.keys()])];
       const arms: ArmStat[] = armKeys.map((arm) => {
         const c = counts.get(arm) ?? { n: 0, purchases: 0, revenue: 0 };
         const label = armLabel(axis, arm);
@@ -484,6 +511,12 @@ export async function GET(request: Request) {
       // assigned to anyone, so a row for them is noise at best and an invitation
       // to compare against a dead arm at worst. Their traffic still shows up in
       // `unattributed` so no one is silently uncounted.
+      if (opts?.arms) {
+        const wanted = new Set(opts.arms);
+        const chosen = arms.filter((a) => wanted.has(a.arm));
+        const othersCount = arms.filter((a) => !wanted.has(a.arm)).reduce((sum, a) => sum + a.n, 0);
+        return buildReadout(axis, chosen, unattributed + othersCount);
+      }
       const live = arms.filter((a) => !a.retired);
       const retiredCount = arms.filter((a) => a.retired).reduce((sum, a) => sum + a.n, 0);
       return buildReadout(axis, live, unattributed + retiredCount);
@@ -492,16 +525,36 @@ export async function GET(request: Request) {
     /*
      * Only genuinely randomised, currently-running splits belong here.
      *
-     * Two axes left on 2026-08-31 and both are in `concluded` below rather than
-     * here, so a finished test cannot be mistaken for a live one. The forced
+     * EMPTY as of 2026-09-19. The landing test was the last one and it moved to
+     * `concluded` below: V2 now serves 100% of traffic, so there is one design
+     * and nothing to compare. Every other axis left on 2026-08-31. The forced
      * paywall was REMOVED from the product, so nothing stamps an arm at all. The
      * price test was settled by dropping the higher-priced arm, so every new quote
      * is stamped with the surviving group — which is not the same thing as a
      * randomised arm, and comparing it against the retired one would be comparing
      * two time periods.
+     *
+     * `tally` is kept and still exported-by-use through the concluded readouts;
+     * add an axis back here the day it starts being randomised.
      */
-    const experiments: ExperimentReadout[] = [
-      tally("landing", (_id, tracker) => readStampedArms(tracker).landing),
+    const experiments: ExperimentReadout[] = [];
+
+    /**
+     * The final numbers of a test that has ended.
+     *
+     * Separate from `experiments` so a finished test can never be read as a live
+     * one, and separate from `concluded` (which is prose) so the arithmetic
+     * behind the prose is still on the page. Deleting the landing readout
+     * outright would have taken the V1-vs-V2 numbers off /admin on the same day
+     * we decided using them.
+     */
+    const concludedReadouts: ExperimentReadout[] = [
+      // V1 and V2 by name. NOT "every arm with data": `control` is the round-1
+      // dark landing, and a three-arm row drawn from two experiments is not a
+      // record of either.
+      tally("landing", (_id, tracker) => readStampedArms(tracker).landing, {
+        arms: ["white_prev", "white"],
+      }),
     ];
 
     /*
@@ -619,7 +672,16 @@ export async function GET(request: Request) {
       dropoffCaveats,
       funnelCaveats,
       experiments,
+      concludedReadouts,
       concluded: [
+        {
+          title: "Landing page design (V1 vs V2)",
+          outcome:
+            // No rates in the prose, by the same rule as the entries below — a
+            // finished test must not read as a live one. The numbers are above,
+            // in the readout, where they are labelled as final.
+            "Finished on 19 September 2026 and settled on V2, the version with the first survey question in the hero. Everyone now sees it. V2 reached checkout more often over the 30 days to 19 September, but that gap is not one this many people can prove: the range the true difference could sit in still runs from V1 being slightly ahead to V2 being well ahead. Separating a gap that size would need roughly six times as many readers per design, which at our traffic is about six more months. V1 was nominally ahead on payments, two against one, and three payments is not a result. It was called on the checkout rate, and on not spending six more months running a design we already believed was worse.",
+        },
         {
           title: "Report pricing (A vs B)",
           outcome:

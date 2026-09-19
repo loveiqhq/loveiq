@@ -453,7 +453,20 @@ export interface ArmVerdict {
  */
 export function buildArmVerdict(
   axis: ExperimentAxis,
-  rawArms: Array<{ arm: string; n: number; conversions: number }>
+  rawArms: Array<{ arm: string; n: number; conversions: number }>,
+  /**
+   * Include arms marked `retired` in labels.ts — same option, same meaning and
+   * same default as `rowsForAxis` in axis-trends.ts.
+   *
+   * Off in production: a verdict is about what is running. On for a historical
+   * read of a concluded comparison, and on in the tests of the wording below,
+   * which would otherwise collapse to one arm — every axis is concluded as of
+   * 2026-09-19, so with the filter on there is no two-arm fixture left anywhere
+   * and every test of "genuinely ahead", the confidence interval, the TINY_ARM
+   * refusal and the insufficient-data counts would pass without reaching the
+   * code it names.
+   */
+  opts?: { includeRetired?: boolean }
 ): ArmVerdict {
   // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
   const axisTitle = AXIS_TITLES[axis];
@@ -467,7 +480,12 @@ export function buildArmVerdict(
     // pricing bucket id would have produced "Report pricing: Not recorded is
     // genuinely ahead — 6.1% vs 3.2%", and two unmapped values would have
     // compared two identically-named things against each other.
-    .filter((a) => a.n > 0 && isKnownArm(axis, a.arm) && !armLabel(axis, a.arm).retired)
+    .filter(
+      (a) =>
+        a.n > 0 &&
+        isKnownArm(axis, a.arm) &&
+        (opts?.includeRetired || !armLabel(axis, a.arm).retired)
+    )
     .map((a) => ({
       label: armLabel(axis, a.arm).short,
       n: a.n,

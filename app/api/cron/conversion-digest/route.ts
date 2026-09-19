@@ -104,6 +104,18 @@ export const maxDuration = 60;
 export const WINDOW_DAYS = 30;
 
 /**
+ * The day the landing A/B was switched off, and the last day its result is
+ * worth repeating.
+ *
+ * The notice expires by ITSELF once this day falls out of the reporting window
+ * — no second constant, no "remember to delete this". A result is news for as
+ * long as the window still contains days when the test was running; after that
+ * it is a line everyone has read thirty times, which is how a daily message
+ * teaches people to skim it.
+ */
+const LANDING_CONCLUDED_ON = "2026-09-19";
+
+/**
  * Where "Midway Progress" sits, as a question index.
  *
  * A DEFINITION, not a constant of nature, and Mark owns it. 30 is the literal
@@ -125,7 +137,12 @@ export const MIDWAY_QUESTION_INDEX = 30;
  * nothing randomises any of them any more, so presenting one as a live test is
  * exactly the mistake the /admin dashboard made before it was corrected.
  */
-const VERDICT_AXES: ExperimentAxis[] = ["landing"];
+/**
+ * EMPTY as of 2026-09-19 — `landing` was the last live axis and it concluded in
+ * favour of V2. A verdict on a test nobody is running is not a verdict.
+ * Re-add an axis here the same day it starts being randomised.
+ */
+const VERDICT_AXES: ExperimentAxis[] = [];
 
 /**
  * When report prices last changed. `buildAlerts` uses it to suppress the
@@ -396,6 +413,28 @@ export function buildStartSeries(
 
 interface DigestInput {
   dayKey: string;
+  /**
+   * Treat these axes as live, retired arms included.
+   *
+   * Production omits it and gets VERDICT_AXES, which is EMPTY — `landing`
+   * concluded 2026-09-19 and it was the last one running.
+   *
+   * ONE field, not an axis list plus a retired-arms flag, because those two can
+   * disagree and a message has to have a single answer to "what is running". An
+   * axis that is live has live arms; saying "landing is live" and then filtering
+   * out the arm it is being compared against produces a one-armed test, which is
+   * the shape every guard here exists to refuse.
+   *
+   * It also decides whether the landing→survey per-arm block is drawn, so the
+   * whole message agrees with itself.
+   *
+   * It exists so the per-axis machinery — the verdict wording, the confidence
+   * interval, the per-arm colours, the too-young and too-thin refusals — stays
+   * under test while nothing is running, and so a historical read of a concluded
+   * comparison is possible. Without it every one of those tests would pass by
+   * iterating an empty list, which is a suite that cannot fail.
+   */
+  liveAxesOverride?: ExperimentAxis[];
   funnel: LandingArmFunnel | null;
   cohorts: AxisCohort[] | null;
   /** Landing -> survey-start. Null until its migration is applied. */
@@ -467,16 +506,19 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   const unitEconomics = input.unitEconomics;
   const emailExperiments = input.emailExperiments;
   const axisRows = input.axisRows ?? [];
+  const verdictAxes = input.liveAxesOverride ?? VERDICT_AXES;
+  // An overridden axis is being declared live, so its arms are live too.
+  const includeRetired = input.liveAxesOverride !== undefined;
   const windowLabel = `${WINDOW_DAYS}-day window ending ${dayKey} Berlin time`;
 
   const verdicts: ArmVerdict[] = [];
   if (cohorts) {
-    for (const axis of VERDICT_AXES) {
+    for (const axis of verdictAxes) {
       const rows = cohorts
         .filter((c) => c.axis === axis && c.arm !== "unknown")
         .map((c) => ({ arm: c.arm, n: c.n, conversions: c.conversions }));
       if (rows.length === 0) continue;
-      verdicts.push(buildArmVerdict(axis, rows));
+      verdicts.push(buildArmVerdict(axis, rows, { includeRetired }));
     }
   }
 
@@ -938,6 +980,20 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
      * ONLY READING ORDER and changing it cannot repaint anything.
      */
     const liveArms: [string, string] = ["white_prev", "white"];
+    /**
+     * The comparison only exists while the axis is live.
+     *
+     * Gated on the AXIS LIST, which is the one place that says what is being
+     * randomised — not on `liveArms` (a literal, so retiring an arm never
+     * reaches it) and not on `armLabel(...).retired` (a second source of truth
+     * that can disagree with the list). Without this the block went on drawing
+     * a two-arm chart of a test that had ended, which is the exact failure the
+     * axis-level retirement idiom exists to avoid.
+     *
+     * The site-wide "Visits that reach the survey" chart above is unaffected —
+     * it never split by arm, and it is the one that still measures something.
+     */
+    const landingIsLive = verdictAxes.includes("landing");
     const series = buildStartSeries(startFunnel, [liveArms[0], liveArms[1]]);
     const totalFor = (arm: string) => startFunnel.totals.find((t) => t.arm === arm);
     const hasVisits = (arm: string) => (totalFor(arm)?.visits ?? 0) > 0;
@@ -962,7 +1018,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       "Not a like-for-like comparison: V2's inline question puts its visitors straight into the survey, and the denominator counts every page rather than landing views — the two pull opposite ways, so treat the gap as unknown. Returning visitors also keep the design they first saw, which warms V2's traffic further.";
     const hasAny = series.first.some((v) => v != null) || series.last.some((v) => v != null);
 
-    if (hasAny && series.labels.length > 1) {
+    if (landingIsLive && hasAny && series.labels.length > 1) {
       const url = await signedChartUrl({
         windowLabel,
         labels: series.labels,
@@ -1003,6 +1059,26 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
           alt_text:
             "Started-the-survey rate per landing page arm over the reporting window. A trend, not a verdict — the two arms measure different funnel steps.",
         });
+      }
+    } else if (!landingIsLive) {
+      /**
+       * The test is over, so there is no comparison to draw — but for as long as
+       * the window still covers days when it ran, say what happened rather than
+       * letting the chart vanish without explanation.
+       *
+       * ONE line, and it removes itself. Without this the branch below would
+       * have gone on reporting "30 days of per-arm data" under two arm bullets,
+       * which is a concluded experiment presented as a running one.
+       */
+      const stillInWindow =
+        Date.parse(`${dayKey}T00:00:00Z`) - Date.parse(`${LANDING_CONCLUDED_ON}T00:00:00Z`) <
+        WINDOW_DAYS * 86_400_000;
+      if (stillInWindow) {
+        landingStartBlocks.push(
+          context(
+            `_Landing page test concluded ${LANDING_CONCLUDED_ON} — ${armLabel("landing", "white").short} now serves all traffic, so there is no per-arm split to chart. The site-wide rate above still applies._`
+          )
+        );
       }
     } else if (!hasVisits(liveArms[0]) && !hasVisits(liveArms[1])) {
       /**
@@ -1088,7 +1164,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   // from the tail, so a cut can only ever lose the picture and keep the caveat,
   // never the reverse.
   {
-    const trends = buildAxisTrends(axisRows, dayKey);
+    const trends = buildAxisTrends(axisRows, dayKey, verdictAxes, { includeRetired });
     if (
       trends.charted.length > 0 ||
       trends.counts.length > 0 ||

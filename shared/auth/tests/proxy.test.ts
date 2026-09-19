@@ -601,18 +601,19 @@ describe("proxy middleware — landing A/B (__liq_lv)", () => {
     );
   });
 
-  it("maps the coin flip to both arms", async () => {
-    // `crypto.getRandomValues` is stubbed deterministically at the top of this file
-    // (byte 0 = 0), so a plain loop would only ever exercise one side. Drive the
-    // byte directly instead: even -> the current arm, odd -> the previous one.
+  it("no longer flips a coin — every visitor gets the winner", async () => {
+    /**
+     * The round-2 split ENDED 2026-09-19 in favour of V2. This used to drive
+     * `crypto.getRandomValues` directly to prove both sides of the flip were
+     * reachable; the flip is gone, so the thing worth proving is that no source
+     * of randomness can produce the losing arm any more.
+     *
+     * Driven through the same byte values the old test used, so a reinstated
+     * coin flip fails here rather than passing by never being exercised.
+     */
     const original = globalThis.crypto.getRandomValues;
     try {
-      for (const [byte, expected] of [
-        [0, "white"],
-        [2, "white"],
-        [1, "white_prev"],
-        [255, "white_prev"],
-      ] as const) {
+      for (const byte of [0, 1, 2, 255]) {
         (globalThis.crypto as { getRandomValues: (a: Uint8Array) => Uint8Array }).getRandomValues =
           (arr: Uint8Array) => {
             arr[0] = byte;
@@ -621,8 +622,8 @@ describe("proxy middleware — landing A/B (__liq_lv)", () => {
         mockNextOpts.value = null;
         mockCookiesSet.mockClear();
         await proxy(makeNextRequest("http://localhost:3000/"));
-        expect(variantHeader()).toBe(expected);
-        expect(landingCookieCalls()[0]![1]).toBe(expected);
+        expect(variantHeader()).toBe("white");
+        expect(landingCookieCalls()[0]![1]).toBe("white");
       }
     } finally {
       (globalThis.crypto as { getRandomValues: typeof original }).getRandomValues = original;
@@ -642,16 +643,37 @@ describe("proxy middleware — landing A/B (__liq_lv)", () => {
     expect(["white", "white_prev"]).toContain(variantHeader());
   });
 
-  it("keeps an existing arm cookie and does not re-set it", async () => {
-    for (const arm of ["white", "white_prev"]) {
-      mockNextOpts.value = null;
-      mockCookiesSet.mockClear();
-      await proxy(
-        makeNextRequest("http://localhost:3000/", undefined, undefined, undefined, undefined, arm)
-      );
-      expect(variantHeader()).toBe(arm);
-      expect(landingCookieCalls()).toHaveLength(0);
-    }
+  it("keeps a winner cookie as-is and does not re-set it", async () => {
+    mockNextOpts.value = null;
+    mockCookiesSet.mockClear();
+    await proxy(
+      makeNextRequest("http://localhost:3000/", undefined, undefined, undefined, undefined, "white")
+    );
+    expect(variantHeader()).toBe("white");
+    expect(landingCookieCalls()).toHaveLength(0);
+  });
+
+  it("moves a returning visitor off the retired arm", async () => {
+    /**
+     * `white_prev` used to be sticky, and it must not stay so. A concluded arm
+     * that keeps being served to everyone who ever saw it leaves a slice of real
+     * traffic on the losing design indefinitely — and keeps feeding it into
+     * every per-arm number, so the test we just ended never actually stops.
+     */
+    mockNextOpts.value = null;
+    mockCookiesSet.mockClear();
+    await proxy(
+      makeNextRequest(
+        "http://localhost:3000/",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        "white_prev"
+      )
+    );
+    expect(variantHeader()).toBe("white");
+    expect(landingCookieCalls()[0]![1]).toBe("white");
   });
 
   it("re-assigns a visitor still carrying the retired control cookie", async () => {

@@ -171,13 +171,13 @@ describe("GET /api/admin/ab-overview", () => {
     // arm, so it must not appear as a live experiment however many quotes carry
     // an arm — the stored arms are historical, and comparing them now compares
     // two time periods rather than two randomly-assigned groups.
-    expect(body.experiments.map((e: { axis: string }) => e.axis)).not.toContain("pricing");
+    expect(body.concludedReadouts.map((e: { axis: string }) => e.axis)).not.toContain("pricing");
     expect(
       body.concluded.map((c: { title: string }) => c.title),
       "a finished price test must still be listed, or it silently vanishes"
     ).toContain("Report pricing (A vs B)");
     // The one live axis is still attributed and rated from the same fixture.
-    const landing = body.experiments.find((e: { axis: string }) => e.axis === "landing");
+    const landing = body.concludedReadouts.find((e: { axis: string }) => e.axis === "landing");
     expect(landing.arms.find((x: { arm: string }) => x.arm === "white")).toMatchObject({ n: 100 });
     expect(landing.arms.find((x: { arm: string }) => x.arm === "white_prev")).toMatchObject({
       n: 100,
@@ -194,7 +194,7 @@ describe("GET /api/admin/ab-overview", () => {
     expect(text).not.toContain("Dark survey");
     // the raw code may appear as the `arm` key, but never inside a human label
     const body = JSON.parse(text);
-    for (const exp of body.experiments) {
+    for (const exp of body.concludedReadouts) {
       for (const arm of exp.arms) expect(arm.label).not.toContain("white_prev");
       expect(exp.verdict).not.toContain("white_prev");
     }
@@ -209,7 +209,7 @@ describe("GET /api/admin/ab-overview", () => {
     ];
     routeData(subs, []);
     const body = await (await GET(req())).json();
-    const landing = body.experiments.find((e: { axis: string }) => e.axis === "landing");
+    const landing = body.concludedReadouts.find((e: { axis: string }) => e.axis === "landing");
     expect(landing.verdict).toContain("Too early to compare");
     expect(landing.verdict).toContain("9 people");
   });
@@ -217,14 +217,14 @@ describe("GET /api/admin/ab-overview", () => {
   it("says so when there is not enough data at all", async () => {
     routeData([submission(1, "white", null), submission(2, "white_prev", null)], []);
     const body = await (await GET(req())).json();
-    const landing = body.experiments.find((e: { axis: string }) => e.axis === "landing");
+    const landing = body.concludedReadouts.find((e: { axis: string }) => e.axis === "landing");
     expect(landing.verdict).toMatch(/Not enough data|Too early/);
   });
 
   it("counts submissions with no stamped arm as unattributed rather than guessing one", async () => {
     routeData([submission(1, null, null), submission(2, "white", "dark")], []);
     const body = await (await GET(req())).json();
-    const landing = body.experiments.find((e: { axis: string }) => e.axis === "landing");
+    const landing = body.concludedReadouts.find((e: { axis: string }) => e.axis === "landing");
     expect(landing.unattributed).toBe(1);
     expect(landing.verdict).toContain("not attributable");
   });
@@ -232,7 +232,7 @@ describe("GET /api/admin/ab-overview", () => {
   it("shows an actively-assigned arm at zero rather than omitting it", async () => {
     routeData([submission(1, "white", null)], []);
     const body = await (await GET(req())).json();
-    const landing = body.experiments.find((e: { axis: string }) => e.axis === "landing");
+    const landing = body.concludedReadouts.find((e: { axis: string }) => e.axis === "landing");
     // white_prev has no data but is still assigned, so it must be visible
     expect(landing.arms.map((a: { arm: string }) => a.arm)).toContain("white_prev");
     expect(landing.arms.find((a: { arm: string }) => a.arm === "white_prev").n).toBe(0);
@@ -243,7 +243,7 @@ describe("GET /api/admin/ab-overview", () => {
     // comparison against a dead arm. Its people still have to be accounted for.
     routeData([submission(1, "white", null), submission(2, "control", null)], []);
     const body = await (await GET(req(32))).json();
-    const landing = body.experiments.find((e: { axis: string }) => e.axis === "landing");
+    const landing = body.concludedReadouts.find((e: { axis: string }) => e.axis === "landing");
     expect(landing.arms.map((a: { arm: string }) => a.arm)).not.toContain("control");
     expect(landing.unattributed).toBe(1); // the retired-arm person, still counted
   });
@@ -332,7 +332,7 @@ describe("GET /api/admin/ab-overview", () => {
     // this asserts the axis list is what removes them, not absent values.
     routeData([submission(1, "white", "dark")], [quote(1, "A", false)]);
     const body = await (await GET(req(36))).json();
-    expect(body.experiments.map((e: { axis: string }) => e.axis)).toEqual(["landing"]);
+    expect(body.concludedReadouts.map((e: { axis: string }) => e.axis)).toEqual(["landing"]);
     const titles = body.concluded.map((c: { title: string }) => c.title);
     expect(titles).toContain("Paywall style");
     expect(titles.join(" ")).toContain("Survey design");

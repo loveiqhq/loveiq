@@ -27,18 +27,48 @@ function rows(
 }
 
 describe("axis trend charts — which experiments may be drawn", () => {
-  it("never charts a concluded experiment — paywall, survey theme or pricing", () => {
-    // Three independent layers, because the way this bug actually happens is a
-    // developer writing `Object.keys(AXIS_TITLES)` — which contains all of them.
-    expect([...CHART_AXES]).not.toContain("paywall");
-    expect([...CHART_AXES]).not.toContain("survey");
-    expect([...CHART_AXES]).not.toContain("pricing");
-    expect([...CHART_AXES]).toEqual(["landing"]);
+  it("charts no experiment at all, because none is running", () => {
+    /**
+     * CHART_AXES is EMPTY as of 2026-09-19: `landing` was the last live axis and
+     * it concluded in favour of V2. This is the live-list assertion, and it is
+     * the one thing in this file that must track production rather than a
+     * fixture — an axis quietly re-added here without being randomised is a
+     * chart of a test nobody is running.
+     */
+    expect([...CHART_AXES]).toEqual([]);
+    const trends = buildAxisTrends(
+      [
+        ...rows("landing", "white", {
+          days: 30,
+          lastDay: "2026-09-30",
+          completions: 20,
+          checkouts: 4,
+        }),
+        ...rows("landing", "white_prev", {
+          days: 30,
+          lastDay: "2026-09-30",
+          completions: 20,
+          checkouts: 4,
+        }),
+      ],
+      "2026-09-30"
+    );
+    expect(trends.charted).toHaveLength(0);
+    expect(trends.counts).toHaveLength(0);
+    expect(trends.skipped).toHaveLength(0);
+  });
 
-    // Even if the RPC regressed and started emitting rows for any of them, nothing
-    // reaches Slack — not a chart, not a counts block, not a skip caption. The RPC
-    // DOES still emit `pricing` and `survey`, so this is a live guard, not a
-    // hypothetical one.
+  it("drops rows for an axis that is not in the list it was given", () => {
+    /**
+     * The gate is the AXIS LIST, not the data. The way this bug actually happens
+     * is a developer writing `Object.keys(AXIS_TITLES)`, which contains the
+     * concluded paywall, survey-theme and pricing axes — and the RPC still emits
+     * `pricing` and `survey` rows today, so this is a live guard.
+     *
+     * Asserted against a NON-empty list on purpose. Against the empty production
+     * list every one of these would pass by iterating nothing, which is a guard
+     * that cannot fail.
+     */
     for (const [axis, a, b] of [
       ["paywall", "treatment", "control"],
       ["survey", "white", "dark"],
@@ -49,7 +79,9 @@ describe("axis trend charts — which experiments may be drawn", () => {
           ...rows(axis, a, { days: 30, lastDay: "2026-09-30", completions: 20, checkouts: 4 }),
           ...rows(axis, b, { days: 30, lastDay: "2026-09-30", completions: 20, checkouts: 4 }),
         ],
-        "2026-09-30"
+        "2026-09-30",
+        ["landing"],
+        { includeRetired: true }
       );
       expect(trends.charted).toHaveLength(0);
       expect(trends.counts.map((c) => c.axis)).not.toContain(axis);
@@ -74,7 +106,9 @@ describe("axis trend charts — which experiments may be drawn", () => {
           checkouts: 1,
         }),
       ],
-      "2026-09-30"
+      "2026-09-30",
+      ["landing"],
+      { includeRetired: true }
     );
     const chart = trends.charted.find((c) => c.axis === "landing");
     expect(chart).toBeDefined();
@@ -112,7 +146,9 @@ describe("axis trend charts — which experiments may be drawn", () => {
           paid: 2,
         }),
       ],
-      "2026-09-30"
+      "2026-09-30",
+      ["landing"],
+      { includeRetired: true }
     );
     const chart = many.charted.find((c) => c.axis === "landing")!;
     expect(chart.caption).toContain("90 paid");
@@ -140,7 +176,9 @@ describe("axis trend charts — which experiments may be drawn", () => {
           checkouts: 5,
         }),
       ],
-      "2026-08-23"
+      "2026-08-23",
+      ["landing"],
+      { includeRetired: true }
     );
     expect(trends.charted.map((c) => c.axis)).not.toContain("landing");
     expect(trends.skipped.map((s) => s.axis)).not.toContain("landing");
@@ -173,7 +211,9 @@ describe("axis trend charts — which experiments may be drawn", () => {
           checkouts: 5,
         }),
       ],
-      "2026-08-21"
+      "2026-08-21",
+      ["landing"],
+      { includeRetired: true }
     );
     expect(trends.counts.find((c) => c.axis === "landing")!.text).toContain("chart from 28 Aug");
   });
@@ -195,7 +235,9 @@ describe("axis trend charts — which experiments may be drawn", () => {
           checkouts: 0,
         }),
       ],
-      "2026-09-30"
+      "2026-09-30",
+      ["landing"],
+      { includeRetired: true }
     );
     expect(trends.charted.map((c) => c.axis)).not.toContain("survey");
     const young = trends.counts.find((c) => c.axis === "landing")!;
@@ -225,7 +267,9 @@ describe("axis trend charts — which experiments may be drawn", () => {
           checkouts: 12,
         }),
       ],
-      "2026-09-30"
+      "2026-09-30",
+      ["landing"],
+      { includeRetired: true }
     );
     const chart = trends.charted.find((c) => c.axis === "landing")!;
     expect(chart.arms[0]).toBe("white_prev");
@@ -238,7 +282,9 @@ describe("axis trend charts — which experiments may be drawn", () => {
   it("says so plainly when only one arm has data", () => {
     const trends = buildAxisTrends(
       rows("landing", "white", { days: 30, lastDay: "2026-09-30", completions: 10, checkouts: 2 }),
-      "2026-09-30"
+      "2026-09-30",
+      ["landing"],
+      { includeRetired: true }
     );
     const gap = trends.skipped.find((s) => s.axis === "landing")!;
     expect(gap.caption).toContain("nothing to compare");
@@ -250,7 +296,7 @@ describe("axis trend charts — which experiments may be drawn", () => {
     // zero-arm caption read "no chart yet: only no arms have data". Two calls
     // rather than one: with `landing` the sole charted axis, a single fixture
     // can no longer supply one arm to one axis and none to another.
-    const empty = buildAxisTrends([], "2026-09-30");
+    const empty = buildAxisTrends([], "2026-09-30", ["landing"], { includeRetired: true });
     for (const gap of empty.skipped) {
       expect(gap.caption).not.toContain("only no");
       expect(gap.caption).not.toMatch(/only no arms? have/);
@@ -259,7 +305,9 @@ describe("axis trend charts — which experiments may be drawn", () => {
 
     const oneArmTrends = buildAxisTrends(
       rows("landing", "white", { days: 30, lastDay: "2026-09-30", completions: 10, checkouts: 2 }),
-      "2026-09-30"
+      "2026-09-30",
+      ["landing"],
+      { includeRetired: true }
     );
     expect(oneArmTrends.skipped.find((s) => s.axis === "landing")!.caption).toContain(
       "only Landing Page V2 (Survey in Hero) has data"
@@ -337,7 +385,9 @@ describe("axis trend charts — which experiments may be drawn", () => {
           checkouts: 0,
         }),
       ],
-      "2026-09-30"
+      "2026-09-30",
+      ["landing"],
+      { includeRetired: true }
     );
     const chart = trends.charted.find((c) => c.axis === "landing")!;
     expect(chart.caption).toContain("Not enough to compare yet");

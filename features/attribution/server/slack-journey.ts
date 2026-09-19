@@ -233,7 +233,10 @@ function journeyRail(journey: SubmissionJourney, reachedFloor?: JourneyStep): st
  * axis rather than the arm.
  */
 function armFields(journey: SubmissionJourney): SlackBlock {
-  const axes: ExperimentAxis[] = ["landing"];
+  // EMPTY as of 2026-09-19: `landing` concluded in favour of V2, so nothing is
+  // randomised any more. An arm nothing assigns is a permanent constant on every
+  // message — the class of blank row this list exists to keep out.
+  const axes: ExperimentAxis[] = [];
   return fields(
     axes.map((axis) => {
       // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
@@ -513,8 +516,19 @@ export function buildJourneyMessage(
     if (hesitation) whereRows.push({ label: "Time on checkout page", value: hesitation });
 
     blocks.push(fields(whereRows));
-    blocks.push(section("*Experiments they were in*"));
-    blocks.push(armFields(journey));
+    /**
+     * Header AND fields, or neither.
+     *
+     * With no axis being randomised (`armFields` returns an empty field list as
+     * of 2026-09-19) this pushed a heading over a `section` with `fields: []`,
+     * which Slack rejects outright — the whole message fails, not just the
+     * block. A heading with nothing under it would be wrong even if it posted.
+     */
+    const armBlock = armFields(journey);
+    if ((armBlock as { fields?: unknown[] }).fields?.length) {
+      blocks.push(section("*Experiments they were in*"));
+      blocks.push(armBlock);
+    }
   } else {
     /**
      * The notification text, which is NOT the message.

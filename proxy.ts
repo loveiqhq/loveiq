@@ -94,33 +94,36 @@ const LANDING_BOT_UA_REGEX =
   /bot|crawl|spider|slurp|bingpreview|facebookexternalhit|embedly|quora link preview|outbrain|pinterest|vkshare|w3c_validator|whatsapp|telegrambot|applebot|gptbot|chatgpt|ccbot|claudebot|claude-web|perplexity|google-extended|amazonbot|bytespider/i;
 
 /**
- * Landing variant for a `/` request — a 50/50 split between the current white
- * landing ("white") and the one that preceded the 2026-08-10 rebuild
- * ("white_prev"). See shared/experiments/landingVariant.ts for the history.
+ * Landing variant for a `/` request. **The round-2 split is over: 100% "white".**
+ *
+ * CONCLUDED 2026-09-19, on Marcus's 2026-09-16 instruction to shut down the
+ * loser. The honest reading of the evidence is that the test could not resolve
+ * at our traffic. Over the 30 days to 2026-09-19, of the people who opened a
+ * report, V2 reached checkout at 9.90% (20/202) and V1 at 6.63% (12/181): a
+ * +3.3pp gap with a 95% CI of -2.2 to +8.8pp, which still straddles zero.
+ * Separating a gap that size needs roughly 1,150 report-opens PER ARM; a month
+ * produced ~200, so resolving it would take about six more months of running a
+ * design we already believe is worse.
+ *
+ * V1 is nominally ahead on payments (2 vs 1), and that is three payments in
+ * total — noise, not a result. V2 leads every upstream metric that has enough
+ * events to mean anything, so V2 ships.
  *
  * Order matters:
- *   - bots always get "white", so crawlers index one canonical landing and never
- *     dilute the split;
- *   - `?variant=` is a QA override (it also re-stamps the cookie below, so the
- *     arm sticks for the rest of the session);
- *   - an existing cookie wins, so a returning visitor keeps their arm;
- *   - otherwise a coin flip from crypto, not Math.random.
+ *   - `?variant=` is still a QA override, so the retired design can be opened
+ *     deliberately (it also re-stamps the cookie, so it sticks for the session);
+ *   - everyone else, INCLUDING a returning visitor holding a "white_prev"
+ *     cookie, gets "white". A concluded arm is not a thing to keep serving:
+ *     leaving the cookie sticky would keep a slice of real traffic on the losing
+ *     design indefinitely and keep feeding it into every per-arm number.
+ *
+ * The bot rule is gone with the split — with one landing there is nothing for a
+ * crawler to dilute.
  */
 function resolveLandingVariant(request: NextRequest): LandingVariant {
-  const ua = request.headers.get("user-agent") || "";
-  if (LANDING_BOT_UA_REGEX.test(ua)) return "white";
-
   const override = request.nextUrl.searchParams.get("variant");
   if (isLandingVariant(override)) return override;
-
-  const existing = request.cookies.get(LANDING_VARIANT_COOKIE)?.value;
-  // "control" is a retired round-1 arm: a visitor still carrying that cookie is
-  // re-assigned rather than served a landing that no longer exists.
-  if (existing === "white" || existing === "white_prev") return existing;
-
-  const buf = new Uint8Array(1);
-  crypto.getRandomValues(buf);
-  return (buf[0]! & 1) === 0 ? "white" : "white_prev";
+  return "white";
 }
 
 // Daily dedup flag for the consent-independent unique-visit count (the

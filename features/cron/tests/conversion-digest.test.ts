@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { armColor, armLabel } from "@features/attribution/server/labels";
+import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 
 const mockNotifySlack = vi.fn();
 const mockTryClaim = vi.fn();
@@ -205,15 +206,14 @@ function blockText(blocks: SlackBlock[]): string {
   return JSON.stringify(blocks);
 }
 
-/** Every signed chart payload in the last message whose two legends name landing arms. */
-function landingChartPayloads(): Array<{
+/** Every signed chart payload in a message whose two legends name landing arms. */
+function landingChartPayloads(blocks: SlackBlock[]): Array<{
   legendFirst?: string;
   legendLast?: string;
   colorFirst?: string;
   colorLast?: string;
 }> {
-  const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-  return arg.blocks
+  return blocks
     .map((b) => (b as { image_url?: string }).image_url)
     .filter((u): u is string => typeof u === "string")
     .map(
@@ -228,6 +228,47 @@ function landingChartPayloads(): Array<{
     .filter(
       (p) => p.legendFirst?.includes("Landing Page") || p.legendLast?.includes("Landing Page")
     );
+}
+
+/**
+ * The same message the handler builds, but with the landing axis LIVE.
+ *
+ * VERDICT_AXES is empty in production as of 2026-09-19 — `landing` concluded in
+ * favour of V2 — so the handler no longer emits a per-arm landing chart or a
+ * landing verdict, and it should not. The block-building code behind those is
+ * still there and still correct, and it is what the next experiment will run
+ * through, so it stays under test rather than being deleted with the test that
+ * ran it. These tests therefore go through `buildConversionDigest` with the axis
+ * switched on, and the separate handler test below asserts that the LIVE message
+ * carries none of it.
+ *
+ * Reads the mocks rather than restating their fixtures, so a change to the
+ * shared `beforeEach` reaches these tests the same way it reaches the handler.
+ */
+async function landingLiveBlocks(): Promise<SlackBlock[]> {
+  // Yesterday in Berlin, derived from the (faked) clock exactly as the handler
+  // derives it. Hardcoding a day made every test that moves the clock — and
+  // several do, because the landing axis is only valid from 21 Aug — silently
+  // measure a window its fixtures do not cover.
+  const now = new Date();
+  const dayKey = reportingDay(new Date(reportingDayStart(reportingDay(now)).getTime() - 1));
+  const digest = await buildConversionDigest({
+    dayKey,
+    liveAxesOverride: ["landing"],
+    funnel: (await mockFetchLandingArmFunnel()) ?? null,
+    cohorts: (await mockFetchArmCohorts()) ?? null,
+    startFunnel: (await mockFetchLandingStartFunnel()) ?? null,
+    axisRows: (await mockFetchAxisFunnelDaily()) ?? [],
+    cvrDays: (await mockFetchFunnelCvrSparklines())?.days ?? null,
+    midway: (await mockFetchMidwayProgress()) ?? null,
+    paywall: (await mockFetchPaywallHits()) ?? null,
+    emailExperiments: (await mockFetchEmailExperiments()) ?? null,
+    unitEconomics: (await mockFetchUnitEconomics()) ?? null,
+    adSpend: null,
+    friction: null,
+    now,
+  });
+  return digest.blocks;
 }
 
 describe("conversion-digest handler", () => {
@@ -330,18 +371,14 @@ describe("conversion-digest handler", () => {
     // It used to be a daily `info` alert, and the only thing in the Alerts
     // section on a normal day. The fact still has to reach the reader — just at
     // the moment it changes how they read the number next to it.
-    await GET(request());
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const landing = arg.blocks.find((b) =>
-      JSON.stringify(b).includes("Landing page \u2192 survey")
-    );
+    const blocks = await landingLiveBlocks();
+    const landing = blocks.find((b) => JSON.stringify(b).includes("Landing page \u2192 survey"));
     expect(JSON.stringify(landing)).toContain("keep the design they first saw");
   });
 
   it("embeds a signed chart URL for the arm comparison", async () => {
-    await GET(request());
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const image = arg.blocks.find((b) => (b as { type?: string }).type === "image") as
+    const blocks = await landingLiveBlocks();
+    const image = blocks.find((b) => (b as { type?: string }).type === "image") as
       { image_url?: string } | undefined;
     expect(image?.image_url).toMatch(
       /^https:\/\/www\.loveiq\.org\/api\/admin\/digest-image\/conversion-by-arm\?d=[\w-]+&s=[\w-]+$/
@@ -438,9 +475,8 @@ describe("conversion-digest handler", () => {
     // `survey_engine_mount` means "tapped the homepage question" for one arm and
     // "survived four wizard slides plus consent" for the other. Until the
     // instrumentation is symmetric the chart must not read as a verdict.
-    await GET(request());
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const images = arg.blocks.filter((b) => (b as { type?: string }).type === "image");
+    const blocks = await landingLiveBlocks();
+    const images = blocks.filter((b) => (b as { type?: string }).type === "image");
     // One: reached-survey. The survey-theme chart went with the concluded
     // experiment (2026-08-25), and the landing axis's own purchases chart was
     // removed earlier — the per-axis section is the only place landing is charted.
@@ -453,7 +489,7 @@ describe("conversion-digest handler", () => {
     expect(alt).not.toContain("survey%20started%2C%20by%20homepage");
     // And the caption beside it carries the counts AND the caveat, because Slack
     // can fail to load an image and the caption is the accessible text.
-    const flat = blockText(arg.blocks);
+    const flat = blockText(blocks);
     expect(flat).toContain("*Landing page → survey*");
     expect(flat).toContain("Not a like-for-like comparison");
     expect(flat).toMatch(/\d+\/\d+ started/);
@@ -463,19 +499,18 @@ describe("conversion-digest handler", () => {
     // The denominator is server-side and consent-free; the numerator needs
     // __liq_vid, which is minted only under analytics consent. The definitions
     // line used to assert "no analytics-consent gap" over both.
-    await GET(request());
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const flat = blockText(arg.blocks);
+    const blocks = await landingLiveBlocks();
+    const flat = blockText(blocks);
     expect(flat).not.toMatch(/counted server-side, no analytics-consent gap/);
     // The caveat rides on the chart itself — headline, footnote and alt text —
     // so it cannot outlive the chart. The header must not carry it: the chart is
     // absent for whole days at a time and the sentence would point at nothing.
-    const alt = JSON.stringify(arg.blocks.filter((b) => (b as { type?: string }).type === "image"));
+    const alt = JSON.stringify(blocks.filter((b) => (b as { type?: string }).type === "image"));
     // Wording trimmed with the promotion into *The tests*: the alt text now says
     // "A trend, not a verdict" and names the reason, in place of five clauses.
     expect(alt).toContain("A trend, not a verdict");
     expect(alt).toContain("different funnel steps");
-    const definitions = blockText(arg.blocks.slice(0, 2));
+    const definitions = blockText(blocks.slice(0, 2));
     expect(definitions).not.toContain("arm-comparable");
   });
 
@@ -681,8 +716,8 @@ describe("conversion-digest handler", () => {
         { arm: "white_prev", visits: 280 * days.length, starts: 26 * days.length },
       ],
     });
-    await GET(request());
-    const landing = landingChartPayloads();
+    const blocks = await landingLiveBlocks();
+    const landing = landingChartPayloads(blocks);
 
     // Both landing charts must be in this message, or the assertion below is
     // vacuous — one chart trivially agrees with itself.
@@ -735,8 +770,8 @@ describe("conversion-digest handler", () => {
         { arm: "white", visits: 0, starts: 0 },
       ],
     });
-    await GET(request());
-    const landing = landingChartPayloads();
+    const blocks = await landingLiveBlocks();
+    const landing = landingChartPayloads(blocks);
     expect(landing.length).toBeGreaterThanOrEqual(1);
 
     const v1 = armLabel("landing", "white_prev").short;
@@ -1328,9 +1363,8 @@ describe("conversion-digest handler", () => {
     // visits recorded yet" every morning is the filler that teaches people to
     // skim the whole message.
     mockFetchLandingStartFunnel.mockResolvedValue({ daily: [], totals: [] });
-    await GET(request());
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const block = arg.blocks.find((b) =>
+    const blocks = await landingLiveBlocks();
+    const block = blocks.find((b) =>
       (b as { text?: { text?: string } }).text?.text?.startsWith("*Landing page → survey*")
     ) as { text: { text: string } } | undefined;
     expect(block).toBeDefined();
@@ -1354,9 +1388,8 @@ describe("conversion-digest handler", () => {
         { arm: "white_prev", visits: 64, starts: 10 },
       ],
     });
-    await GET(request());
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const text = blockText(arg.blocks);
+    const blocks = await landingLiveBlocks();
+    const text = blockText(blocks);
     expect(text).toContain("*Landing page → survey* — one day of per-arm data");
     // first day + 7, not +6: 20 Aug -> 27 Aug.
     expect(text).toContain("chart from 27 Aug");
@@ -1364,7 +1397,7 @@ describe("conversion-digest handler", () => {
     expect(text).toContain("64 visit-days → 10 started the survey");
     expect(text).toContain("Not a like-for-like comparison");
     // No image while it cannot honestly draw one.
-    expect(arg.blocks.filter((b) => (b as { type?: string }).type === "image")).toHaveLength(0);
+    expect(blocks.filter((b) => (b as { type?: string }).type === "image")).toHaveLength(0);
   });
 
   it("puts a too-young test's numbers in a full-size section, not a footnote", async () => {
@@ -1377,9 +1410,8 @@ describe("conversion-digest handler", () => {
       rows.push({ axis: "landing", arm: "white_prev", day, completions: 6, checkouts: 2, paid: 0 });
     }
     mockFetchAxisFunnelDaily.mockResolvedValue(rows);
-    await GET(request());
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const section = arg.blocks.find(
+    const blocks = await landingLiveBlocks();
+    const section = blocks.find(
       (b) =>
         (b as { type?: string }).type === "section" &&
         (b as { text?: { text?: string } }).text?.text?.startsWith("*Landing page design*")
@@ -1391,7 +1423,7 @@ describe("conversion-digest handler", () => {
     expect(text).toContain("18 finished → 6 checkout → 0 paid");
     expect(text).toMatch(/chart (from|once)/);
     // And no image was emitted for it — the whole point of the counts path.
-    const imgs = arg.blocks.filter((b) =>
+    const imgs = blocks.filter((b) =>
       (b as { alt_text?: string }).alt_text?.startsWith("Landing page")
     );
     expect(imgs).toHaveLength(0);
@@ -1417,9 +1449,8 @@ describe("conversion-digest handler", () => {
     // Only one arm has data, so nothing can be compared. The digest must say so
     // rather than leave the reader wondering where the test went.
     mockFetchAxisFunnelDaily.mockResolvedValue(makeAxisRows().filter((r) => r.arm === "white"));
-    await GET(request());
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const flat = blockText(arg.blocks);
+    const blocks = await landingLiveBlocks();
+    const flat = blockText(blocks);
     expect(flat).toContain("nothing to compare");
     expect(flat).toContain("*The tests*");
   });
@@ -2074,10 +2105,14 @@ describe("conversion-digest verdicts", () => {
     // 60/500 vs 20/500 — a wide, unambiguous gap. On the LANDING axis: the survey
     // axis used to host this fixture, and its `dark` arm is retired now, so
     // buildArmVerdict correctly filters it and the pair collapses to one arm.
-    const verdict = buildArmVerdict("landing", [
-      { arm: "white", n: 500, conversions: 60 },
-      { arm: "white_prev", n: 500, conversions: 20 },
-    ]);
+    const verdict = buildArmVerdict(
+      "landing",
+      [
+        { arm: "white", n: 500, conversions: 60 },
+        { arm: "white_prev", n: 500, conversions: 20 },
+      ],
+      { includeRetired: true }
+    );
     expect(verdict.state).toBe("winner");
     expect(verdict.sentence).toContain("genuinely ahead");
     expect(verdict.sentence).toContain("95% CI");
@@ -2089,10 +2124,14 @@ describe("conversion-digest verdicts", () => {
   it("refuses to call the real 308-vs-13 landing split, however tempting the rates", () => {
     // The live shape as measured in production: one arm is 24x the other, and the
     // big arm alone satisfies twoProportionSignal's combined n>=50 rule.
-    const verdict = buildArmVerdict("landing", [
-      { arm: "white", n: 308, conversions: 10 },
-      { arm: "white_prev", n: 13, conversions: 0 },
-    ]);
+    const verdict = buildArmVerdict(
+      "landing",
+      [
+        { arm: "white", n: 308, conversions: 10 },
+        { arm: "white_prev", n: 13, conversions: 0 },
+      ],
+      { includeRetired: true }
+    );
     expect(verdict.state).toBe("too-early");
     expect(verdict.sentence).toContain("too early");
     expect(verdict.sentence).toContain("13");
@@ -2102,10 +2141,14 @@ describe("conversion-digest verdicts", () => {
   });
 
   it("says insufficient data below a combined 50, and how many more are needed", () => {
-    const verdict = buildArmVerdict("landing", [
-      { arm: "white", n: 12, conversions: 1 },
-      { arm: "white_prev", n: 10, conversions: 0 },
-    ]);
+    const verdict = buildArmVerdict(
+      "landing",
+      [
+        { arm: "white", n: 12, conversions: 1 },
+        { arm: "white_prev", n: 10, conversions: 0 },
+      ],
+      { includeRetired: true }
+    );
     expect(verdict.state).toBe("insufficient-data");
     expect(verdict.sentence).toContain("not enough data");
     expect(verdict.sentence).toContain("28 more");
@@ -2120,10 +2163,14 @@ describe("conversion-digest verdicts", () => {
     // the pricing axis, moved to landing when the price test was concluded on
     // 2026-08-31 — `buildArmVerdict` drops retired arms, so a retired axis can no
     // longer exercise the two-arm branches.)
-    const verdict = buildArmVerdict("landing", [
-      { arm: "white", n: 165, conversions: 3 },
-      { arm: "white_prev", n: 163, conversions: 7 },
-    ]);
+    const verdict = buildArmVerdict(
+      "landing",
+      [
+        { arm: "white", n: 165, conversions: 3 },
+        { arm: "white_prev", n: 163, conversions: 7 },
+      ],
+      { includeRetired: true }
+    );
     expect(verdict.state).toBe("insufficient-data");
     expect(verdict.sentence).toContain("not enough purchases");
     expect(verdict.sentence).toContain("10");
@@ -2139,30 +2186,42 @@ describe("conversion-digest verdicts", () => {
     // Same shape, but with conversions above the validity floor on both sides —
     // so the comparison genuinely runs and genuinely finds no winner. Keeps the
     // no-winner branch covered now that thin data no longer reaches it.
-    const verdict = buildArmVerdict("landing", [
-      { arm: "white", n: 165, conversions: 20 },
-      { arm: "white_prev", n: 163, conversions: 24 },
-    ]);
+    const verdict = buildArmVerdict(
+      "landing",
+      [
+        { arm: "white", n: 165, conversions: 20 },
+        { arm: "white_prev", n: 163, conversions: 24 },
+      ],
+      { includeRetired: true }
+    );
     expect(verdict.state).toBe("no-winner");
     expect(verdict.sentence).toContain("no clear winner");
   });
 
   it("drops a retired arm instead of comparing a live design against a dead one", () => {
-    const verdict = buildArmVerdict("landing", [
-      { arm: "white", n: 300, conversions: 10 },
-      // `control` is the retired dark landing — nobody has been served it for months.
-      { arm: "control", n: 800, conversions: 40 },
-    ]);
+    const verdict = buildArmVerdict(
+      "landing",
+      [
+        { arm: "white", n: 300, conversions: 10 },
+        // `control` is the retired dark landing — nobody has been served it for months.
+        { arm: "control", n: 800, conversions: 40 },
+      ]
+      // No `includeRetired` here, deliberately: this is the test OF that filter.
+    );
     expect(verdict.arms.map((a) => a.label)).toEqual(["Landing Page V2 (Survey in Hero)"]);
     expect(verdict.state).toBe("single-arm");
     expect(verdict.sentence).toContain("nothing to compare");
   });
 
   it("never lets conversions exceed the denominator", () => {
-    const verdict = buildArmVerdict("survey", [
-      { arm: "white", n: 10, conversions: 999 },
-      { arm: "dark", n: 10, conversions: 0 },
-    ]);
+    const verdict = buildArmVerdict(
+      "survey",
+      [
+        { arm: "white", n: 10, conversions: 999 },
+        { arm: "dark", n: 10, conversions: 0 },
+      ],
+      { includeRetired: true }
+    );
     expect(verdict.arms[0]!.rate).toBeLessThanOrEqual(100);
   });
 });
@@ -2304,10 +2363,14 @@ describe("conversion-digest alerts", () => {
     const alerts = buildAlerts({
       ...base,
       verdicts: [
-        buildArmVerdict("landing", [
-          { arm: "white", n: 300, conversions: 10 },
-          { arm: "white_prev", n: 240, conversions: 6 },
-        ]),
+        buildArmVerdict(
+          "landing",
+          [
+            { arm: "white", n: 300, conversions: 10 },
+            { arm: "white_prev", n: 240, conversions: 6 },
+          ],
+          { includeRetired: true }
+        ),
       ],
     });
     expect(alerts.some((a) => a.message.includes("not a fair split"))).toBe(false);
@@ -2442,13 +2505,10 @@ describe("conversion-digest chart series", () => {
     mockFetchLandingArmFunnel.mockResolvedValue(makeFunnel());
     mockIsProdCronHost.mockReturnValue(true);
     mockTryClaim.mockResolvedValue(true);
-    await GET(
-      new Request("https://www.loveiq.org/api/cron/conversion-digest", {
-        headers: { authorization: "Bearer test-cron-secret" },
-      })
-    );
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const image = arg.blocks.find((b) => (b as { type?: string }).type === "image") as
+    mockFetchLandingStartFunnel.mockResolvedValue(makeStartFunnel());
+    mockFetchAxisFunnelDaily.mockResolvedValue(makeAxisRows());
+    const blocks = await landingLiveBlocks();
+    const image = blocks.find((b) => (b as { type?: string }).type === "image") as
       { image_url?: string } | undefined;
     expect(image?.image_url).toBeDefined();
     expect(image!.image_url!.length).toBeLessThan(2800);

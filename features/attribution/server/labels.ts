@@ -92,10 +92,20 @@ const LABELS: Record<ExperimentAxis, Record<string, ArmLabel>> = {
       long: "Landing Page V2: survey in the hero",
       color: SERIES.ORANGE,
     },
+    // CONCLUDED 2026-09-19 in favour of white (V2). proxy.ts no longer assigns
+    // it and serves "white" even to a returning visitor holding this cookie.
+    //
+    // Keeps SERIES.BLUE rather than taking SERIES.RETIRED. The colour rule Mark
+    // asked for is that V1 is blue and V2 is orange PERMANENTLY; repainting V1
+    // grey the day it retires would change the colour of every historical chart
+    // and /admin screen that still shows the comparison — which is the exact
+    // swap the fixed-colour rule exists to prevent. SERIES.RETIRED is for arms
+    // with no V-number identity to protect, like the round-1 dark landing below.
     white_prev: {
       short: "Landing Page V1 (First Design)",
       long: "Landing Page V1: the first design",
       color: SERIES.BLUE,
+      retired: true,
     },
     // Round-1 dark landing page. Never assigned since 2026-08-21, but ~5% of stored
     // submissions still carry it, so it needs a truthful label of its own.

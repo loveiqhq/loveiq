@@ -148,7 +148,12 @@ describe("fetchUnitEconomics", () => {
   it("counts no days when the ad report's window is unknown", async () => {
     // `to: null` means the ad report was truncated or failed. Coverage then
     // reads as zero and the caveat fires, rather than spend reading as EUR 0.00.
-    const u = await fetchUnitEconomics(ad({ [FIRST_DAY]: 40 }, null as never, null as never), SINCE, UNTIL, 30);
+    const u = await fetchUnitEconomics(
+      ad({ [FIRST_DAY]: 40 }, null as never, null as never),
+      SINCE,
+      UNTIL,
+      30
+    );
     expect(u!.adSpend).toBe(0);
     expect(u!.coveredDays).toBe(0);
   });

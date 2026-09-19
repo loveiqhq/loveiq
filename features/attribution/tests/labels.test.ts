@@ -74,7 +74,14 @@ describe("arm labels", () => {
   });
 
   it("excludes retired arms from the active set used for charts", () => {
-    expect(activeArms("landing")).toEqual(["white", "white_prev"]);
+    // V1 retired 2026-09-19 when the landing test concluded in favour of V2, so
+    // V2 is the only design still being served.
+    expect(activeArms("landing")).toEqual(["white"]);
+    expect(armLabel("landing", "white_prev").retired).toBe(true);
+    // …but still KNOWN, so the ~180 stored submissions that carry it keep a
+    // plain-English label instead of reading as "Not recorded".
+    expect(isKnownArm("landing", "white_prev")).toBe(true);
+    expect(armLabel("landing", "white_prev").short).toBe("Landing Page V1 (First Design)");
     // Arm A retired 2026-08-31 when the higher-priced arm was dropped, so B is
     // the only group still stamped on a new quote.
     expect(activeArms("pricing")).toEqual(["B"]);

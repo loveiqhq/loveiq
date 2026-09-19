@@ -26,7 +26,12 @@
  */
 
 import { computeRate } from "@features/admin/server/digest-metrics";
-import { armLabel, AXIS_TITLES, isKnownArm } from "@features/attribution/server/labels";
+import {
+  armLabel,
+  AXIS_TITLES,
+  type ExperimentAxis,
+  isKnownArm,
+} from "@features/attribution/server/labels";
 import {
   formatSignalSummary,
   type StatisticalSignal,
@@ -34,11 +39,27 @@ import {
   twoProportionSignal,
 } from "@features/admin/server/statistics";
 
-/** The axes that are actively randomised. Deliberately NOT derived from
- *  AXIS_TITLES, which also contains the CONCLUDED paywall and survey-theme axes —
- *  a keys() loop over that is exactly how a dead experiment gets charted. */
-export const CHART_AXES = ["landing"] as const;
-export type ChartAxis = (typeof CHART_AXES)[number];
+/**
+ * The axes that are actively randomised. Deliberately NOT derived from
+ * AXIS_TITLES, which also contains the CONCLUDED paywall, survey-theme and
+ * landing axes — a keys() loop over that is exactly how a dead experiment gets
+ * charted.
+ *
+ * EMPTY as of 2026-09-19: `landing` was the last live axis and it concluded in
+ * favour of V2. This is the axis-level retirement idiom, not the arm-level one,
+ * and the difference matters — retiring only `white_prev` would leave a
+ * one-armed "test" still being charted and still being given a verdict, which
+ * is a dead experiment reported as a live one.
+ *
+ * Nothing else needs changing to bring an axis back: add it here, give its arms
+ * labels + colours in labels.ts, and set its AXIS_VALID_FROM below.
+ *
+ * Typed as `readonly ExperimentAxis[]` rather than a const tuple so that an
+ * empty list is expressible — `[] as const` would make ChartAxis `never` and
+ * every signature below unusable.
+ */
+export const CHART_AXES: readonly ExperimentAxis[] = [];
+export type ChartAxis = ExperimentAxis;
 
 export interface AxisFunnelRow {
   axis: string;
@@ -55,7 +76,10 @@ export interface AxisFunnelRow {
  * are a different experiment wearing the same arm names, so they are cut rather
  * than caveated — a caveat under a misleading line is still a misleading line.
  */
-export const AXIS_VALID_FROM: Record<ChartAxis, { day: string; why: string } | null> = {
+// Partial: an axis only needs an entry when its CURRENT comparison starts later
+// than its data does. Entries are kept for concluded axes too — historical
+// per-arm reads still have to cut the same day.
+export const AXIS_VALID_FROM: Partial<Record<ChartAxis, { day: string; why: string } | null>> = {
   // Round 2 of the landing test: the current white design vs the pre-rebuild
   // one. Round 1 (dark vs white) reused the same "white" arm name, so days
   // before this belong to a different experiment.
@@ -145,7 +169,20 @@ function human(day: string): string {
 /** Rows for one axis, clipped to that axis's like-for-like window. */
 export function rowsForAxis(
   rows: AxisFunnelRow[],
-  axis: ChartAxis
+  axis: ChartAxis,
+  /**
+   * Include arms marked `retired` in labels.ts.
+   *
+   * Off by default, because the digest compares what is RUNNING and a retired
+   * arm in a live comparison is a dead experiment reported as a live one.
+   *
+   * On for a HISTORICAL read — "what did the landing test say before we
+   * concluded it" — where excluding the losing arm would leave a one-sided
+   * record of a two-sided result. It is also the only way to exercise the gates
+   * below now that every axis is concluded: with the filter on, no axis has two
+   * eligible arms, so every gate test would pass by never reaching a gate.
+   */
+  opts?: { includeRetired?: boolean }
 ): { rows: AxisFunnelRow[]; validFrom: string | null } {
   // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
   const valid = AXIS_VALID_FROM[axis];
@@ -154,7 +191,7 @@ export function rowsForAxis(
     (r) =>
       r.axis === axis &&
       isKnownArm(axis, r.arm) &&
-      !armLabel(axis, r.arm).retired &&
+      (opts?.includeRetired || !armLabel(axis, r.arm).retired) &&
       (!validFrom || r.day >= validFrom)
   );
   return { rows: scoped, validFrom };
@@ -272,15 +309,32 @@ export interface AxisTrends {
  * `today` is passed in rather than read from the clock so the gate is testable
  * and so a single digest run cannot straddle midnight between axes.
  */
-export function buildAxisTrends(rows: AxisFunnelRow[], today: string): AxisTrends {
+export function buildAxisTrends(
+  rows: AxisFunnelRow[],
+  today: string,
+  /**
+   * Which axes to consider. Defaults to the LIVE list, which is what production
+   * wants and what the "never charts a concluded experiment" guard checks.
+   *
+   * Overridable because the charting logic and the live list are two different
+   * things to test. CHART_AXES is empty today, and without this every test of
+   * the gates below — history length, arm thinness, one-armed axes, the
+   * significance wording — would have had nothing to iterate and would have
+   * passed by iterating nothing. Ten tests going green by measuring nothing is
+   * worse than ten failing ones.
+   */
+  axes: readonly ExperimentAxis[] = CHART_AXES,
+  /** Passed through to `rowsForAxis` — see the note on `includeRetired` there. */
+  opts?: { includeRetired?: boolean }
+): AxisTrends {
   const charted: AxisChart[] = [];
   const counts: AxisCounts[] = [];
   const skipped: SkippedAxis[] = [];
 
-  for (const axis of CHART_AXES) {
+  for (const axis of axes) {
     // eslint-disable-next-line security/detect-object-injection -- closed union.
     const axisTitle = AXIS_TITLES[axis];
-    const { rows: scoped, validFrom } = rowsForAxis(rows, axis);
+    const { rows: scoped, validFrom } = rowsForAxis(rows, axis, opts);
 
     // Totals per arm, over the like-for-like window only.
     const byArm = new Map<string, { completions: number; checkouts: number; paid: number }>();

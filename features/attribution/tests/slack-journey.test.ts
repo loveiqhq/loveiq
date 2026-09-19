@@ -175,7 +175,10 @@ describe("the compact incoming-survey layout", () => {
       "Survey time: *18 min*  |  Report time: *5 min*",
       "Came from: *Paid* — google / cpc",
       "Device: *iOS*",
-      "Landing page design: *Landing Page V1* (First Design)",
+      // The arm is retired as of 2026-09-19 — the landing test concluded in favour
+      // of V2 — and a historical submission that came in on V1 should say so
+      // rather than read as if the design were still being served.
+      "Landing page design: *Landing Page V1* (First Design) _(retired arm)_",
       "Country (self-reported): *United States*",
       `${NOT_REACHED} Survey done  →  ${NOT_REACHED} Report opened  →  ${NOT_REACHED} Paywall hit  →  ${NOT_REACHED} Checkout  →  ${NOT_REACHED} Paid`,
     ]);
@@ -515,7 +518,13 @@ describe("the compact incoming-survey layout", () => {
     const types = (message.blocks as Array<{ type: string }>).map((b) => b.type);
     expect(types).toContain("header");
     expect(types).toContain("context");
-    expect(JSON.stringify(message.blocks)).toContain("Experiments they were in");
+    /**
+     * No "Experiments they were in" section, because there is no experiment.
+     * The landing axis concluded 2026-09-19 and was the last one randomised, so
+     * this heading would sit over a `section` with `fields: []` — which Slack
+     * rejects outright, failing the whole message rather than the block.
+     */
+    expect(JSON.stringify(message.blocks)).not.toContain("Experiments they were in");
     // And no dwell line leaked across.
     expect(JSON.stringify(message.blocks)).not.toContain("Report time");
   });
