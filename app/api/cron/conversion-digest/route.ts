@@ -76,6 +76,8 @@ import {
   fetchAxisFunnelDaily,
   fetchLandingArmFunnel,
   fetchLandingStartFunnel,
+  fetchMidwayProgress,
+  type MidwayProgress,
   sumDays,
   sumVisitors,
 } from "@features/admin/server/conversion-digest";
@@ -88,6 +90,20 @@ export const maxDuration = 60;
 
 /** Trends need history to read as trends; matches funnel-digest's window. */
 const WINDOW_DAYS = 30;
+
+/**
+ * Where "Midway Progress" sits, as a question index.
+ *
+ * A DEFINITION, not a constant of nature, and Mark owns it. 30 is the literal
+ * midpoint of the ~59-question survey as it stood on 2026-09-19. Measured that
+ * day: 579 of 1,033 sessions reached question 30, against 697 at question 10 —
+ * so the choice moves the number by a lot and should be made against those
+ * figures rather than inherited from this line.
+ *
+ * Named here and echoed onto the funnel row's own label, so the threshold is
+ * visible in Slack instead of being a number only the code knows.
+ */
+const MIDWAY_QUESTION_INDEX = 30;
 
 /**
  * The axes worth a verdict. `paywall`, `survey` and `pricing` are deliberately
@@ -341,6 +357,11 @@ interface DigestInput {
   cohorts: AxisCohort[] | null;
   /** Landing -> survey-start. Null until its migration is applied. */
   startFunnel?: LandingStartFunnel | null;
+  /**
+   * Midway Progress. Null until its migration is applied, which omits the funnel
+   * row rather than printing a zero for a step that is measured.
+   */
+  midway?: MidwayProgress | null;
   /** Per-day, per-arm rows for every live axis. [] when the RPC is unavailable. */
   axisRows?: AxisFunnelRow[];
   /** Site-wide visitors + starts per day, for the landing→survey trend line. */
@@ -371,6 +392,7 @@ export interface BuiltDigest {
 export async function buildConversionDigest(input: DigestInput): Promise<BuiltDigest> {
   const { dayKey, funnel, cohorts, now, cvrDays } = input;
   const startFunnel = input.startFunnel ?? null;
+  const midway = input.midway ?? null;
   const axisRows = input.axisRows ?? [];
   const windowLabel = `${WINDOW_DAYS}-day window ending ${dayKey} Berlin time`;
 
@@ -488,7 +510,12 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     // and finisher totals as the funnel either side of the new row. Null when that
     // read failed, in which case the row is omitted rather than drawn as zero.
     const startsTotal = cvrDays?.reduce((t, d) => t + d.starts, 0) ?? null;
-    steps = buildFunnel(funnel.cohort, totalVisits, startsTotal);
+    steps = buildFunnel(
+      funnel.cohort,
+      totalVisits,
+      startsTotal,
+      midway ? { reached: midway.overall.reached, index: midway.midwayIndex } : null
+    );
     // Skip the visits -> finished step. It is the largest drop by construction
     // (most visitors never start a survey) and would be the headline every single
     // day, which is how a digest becomes wallpaper. The full funnel is printed
@@ -1003,14 +1030,16 @@ export async function GET(request: Request) {
       reportingDay(new Date(dayStart.getTime() - WINDOW_DAYS * 86_400_000))
     ).toISOString();
     const windowEnd = dayStart.toISOString();
-    const [funnel, cohorts, startFunnel, axisRows, cvrSnap, friction] = await Promise.all([
-      fetchLandingArmFunnel(windowStart, windowEnd),
-      fetchArmCohorts(windowStart, windowEnd),
-      fetchLandingStartFunnel(windowStart, windowEnd),
-      fetchAxisFunnelDaily(windowStart, windowEnd),
-      fetchFunnelCvrSparklines(windowStart, windowEnd),
-      buildFrictionReport(windowStart, windowEnd, surveyQuestionNames()),
-    ]);
+    const [funnel, cohorts, startFunnel, axisRows, cvrSnap, friction, midway] =
+      await Promise.all([
+        fetchLandingArmFunnel(windowStart, windowEnd),
+        fetchArmCohorts(windowStart, windowEnd),
+        fetchLandingStartFunnel(windowStart, windowEnd),
+        fetchAxisFunnelDaily(windowStart, windowEnd),
+        fetchFunnelCvrSparklines(windowStart, windowEnd),
+        buildFrictionReport(windowStart, windowEnd, surveyQuestionNames()),
+        fetchMidwayProgress(windowStart, windowEnd, MIDWAY_QUESTION_INDEX),
+      ]);
 
     /**
      * Ad spend for the day being reported. Best-effort by design: GA4 being unreachable
@@ -1031,6 +1060,7 @@ export async function GET(request: Request) {
       funnel,
       cohorts,
       startFunnel,
+      midway,
       axisRows,
       cvrDays: cvrSnap?.days ?? null,
       adSpend,

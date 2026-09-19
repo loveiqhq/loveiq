@@ -13,6 +13,7 @@ const mockFetchLandingStartFunnel = vi.fn();
 const mockFetchAxisFunnelDaily = vi.fn();
 const mockFetchFunnelCvrSparklines = vi.fn();
 const mockAdCostByDay = vi.fn();
+const mockFetchMidwayProgress = vi.fn();
 
 vi.mock("@shared/observability/logger", () => ({
   default: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() },
@@ -64,6 +65,7 @@ vi.mock("@features/admin/server/conversion-digest", async (importActual) => {
     fetchArmCohorts: (...args: unknown[]) => mockFetchArmCohorts(...args),
     fetchLandingStartFunnel: (...args: unknown[]) => mockFetchLandingStartFunnel(...args),
     fetchAxisFunnelDaily: (...args: unknown[]) => mockFetchAxisFunnelDaily(...args),
+    fetchMidwayProgress: (...args: unknown[]) => mockFetchMidwayProgress(...args),
   };
 });
 
@@ -230,6 +232,9 @@ describe("conversion-digest handler", () => {
     // Default: no site-wide CVR source, so the existing expectations about which
     // images a digest contains stay exactly as they were.
     mockFetchFunnelCvrSparklines.mockResolvedValue(null);
+    // Default: midway RPC unavailable, so every expectation written before the
+    // row existed keeps the funnel it was written against.
+    mockFetchMidwayProgress.mockResolvedValue(null);
     mockFetchArmCohorts.mockResolvedValue([
       { axis: "landing", arm: "white", n: 300, conversions: 10 },
       { axis: "landing", arm: "white_prev", n: 240, conversions: 6 },
@@ -718,6 +723,77 @@ describe("conversion-digest handler", () => {
     }
   });
 
+  it("puts Midway Progress between started and finished, and names its threshold", async () => {
+    /**
+     * The step Mark named on 2026-09-16, which the KPI framework called the only
+     * funnel step with no instrument at all. It had one — `current_index` on the
+     * draft save — it just had no reader and no arm.
+     *
+     * The label carries the question number rather than the word "midway",
+     * because the number is the fact and "midway" is the definition. An unnamed
+     * figure in this table is exactly what produced a 96.5% nobody could source.
+     */
+    mockFetchFunnelCvrSparklines.mockResolvedValue({
+      days: Array.from({ length: 10 }, (_, i) => ({
+        day: new Date(Date.UTC(2026, 7, 10) + i * 86_400_000).toISOString().slice(0, 10),
+        visitors: 400,
+        starts: 90,
+      })),
+    });
+    mockFetchMidwayProgress.mockResolvedValue({
+      overall: { sessions: 1033, reached: 579 },
+      daily: [],
+      totals: [],
+      midwayIndex: 30,
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const funnel = arg.blocks
+      .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
+      .find((t) => t.includes("*The funnel —"));
+    expect(funnel, "the funnel block must be in the message at all").toBeDefined();
+    expect(funnel!).toContain("Reached question 30");
+    // Between the two rows it belongs between, not appended somewhere.
+    expect(funnel!.indexOf("Started the survey")).toBeLessThan(
+      funnel!.indexOf("Reached question 30")
+    );
+    expect(funnel!.indexOf("Reached question 30")).toBeLessThan(
+      funnel!.indexOf("Finished the survey")
+    );
+  });
+
+  it("omits the midway row entirely when the RPC is unavailable", async () => {
+    // Not a zero. "0 reached the halfway point" above 411 finishers says
+    // something false about the product rather than about the measurement.
+    mockFetchMidwayProgress.mockResolvedValue(null);
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    expect(blockText(arg.blocks)).not.toContain("Reached question");
+  });
+
+  it("omits the midway row when it reads below the finisher count", async () => {
+    /**
+     * The sources disagree — midway comes from draft saves, finishers from the
+     * submission cohort, different id spaces and different windows. Drawing it
+     * anyway would clamp the finisher count DOWN to it and publish a smaller,
+     * wrong number of completions under a truthful label. Same guard, same
+     * reason, as the starts row.
+     */
+    mockFetchMidwayProgress.mockResolvedValue({
+      overall: { sessions: 12, reached: 3 },
+      daily: [],
+      totals: [],
+      midwayIndex: 30,
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const flat = blockText(arg.blocks);
+    expect(flat).not.toContain("Reached question");
+    // And the finisher count was NOT dragged down to 3 by a clamp.
+    expect(flat).toContain("Finished the survey");
+    expect(flat).not.toMatch(/`\s*3\s+[\d.<%—]+\s+[\d.<%—]+`\s+Finished the survey/);
+  });
+
   it("names both percentages on every funnel row, and states which is which", async () => {
     /**
      * The 2026-09-16 sync spent real time on a "96.5%" nobody could source, because
@@ -972,6 +1048,71 @@ describe("conversion-digest handler", () => {
     const idx = arg.blocks.findIndex((b) => JSON.stringify(b).includes("visitor-days"));
     expect(idx).toBeGreaterThanOrEqual(0);
     expect(idx).toBeLessThan(3);
+  });
+});
+
+describe("buildFunnel: the midway row and the clamp that moves with it", () => {
+  const cohort = [
+    // reportOpens ABOVE completions on purpose — the live shape. report_session
+    // counts an open on the day it happens, so a report opened today from a
+    // survey completed last month lands outside its cohort; production read 506
+    // opens against 430 completions on 2026-09-16.
+    { arm: "white", completions: 425, reportOpens: 500, checkout: 33, paid: 5, revenue: 0 },
+  ];
+
+  it("slots the row in and names the threshold on it", () => {
+    const steps = buildFunnel(cohort, 12308, 1025, { reached: 700, index: 30 });
+    expect(steps.map((x) => x.step)).toEqual([
+      "Visits to the site",
+      "Started the survey",
+      "Reached question 30",
+      "Finished the survey",
+      "…of those, opened their report",
+      "…of those, started checkout",
+      "…of those, ever paid",
+    ]);
+    expect(steps.map((x) => x.count)).toEqual([12308, 1025, 700, 425, 425, 33, 5]);
+  });
+
+  it("keeps the funnel monotonic once the extra row shifts the clamp", () => {
+    /**
+     * THE REGRESSION THIS FILE EXISTS FOR. `CLAMPED_STEPS` counts array positions,
+     * and it was hardcoded `hasStarts ? 4 : 3`. Adding the midway row pushes
+     * "opened their report" from index 3 to index 4, so with the old constant it
+     * falls OUTSIDE the clamp — and report opens legitimately exceed completions,
+     * so the funnel starts going UP. That is the 117.7% the 2026-09-16 sync could
+     * not explain, drawn as though it were a real step.
+     *
+     * A mutation run confirmed nothing else catches it: reverting the constant
+     * left all 68 tests green.
+     */
+    const steps = buildFunnel(cohort, 12308, 1025, { reached: 700, index: 30 });
+    for (let i = 1; i < 5; i += 1) {
+      expect(
+        steps[i]!.count,
+        `${steps[i]!.step} must not exceed ${steps[i - 1]!.step}`
+      ).toBeLessThanOrEqual(steps[i - 1]!.count);
+    }
+    // Specifically: opens clamped down to the 425 finishers, not left at 500.
+    expect(steps.find((x) => x.step.includes("opened their report"))!.count).toBe(425);
+  });
+
+  it("still clamps correctly with no midway row, and with no starts row either", () => {
+    // The constant has to be right in all four combinations, not just the new one.
+    for (const [starts, midway] of [
+      [1025, { reached: 700, index: 30 }],
+      [1025, null],
+      [null, { reached: 700, index: 30 }],
+      [null, null],
+    ] as const) {
+      const steps = buildFunnel(cohort, 12308, starts, midway);
+      const opened = steps.findIndex((x) => x.step.includes("opened their report"));
+      expect(opened).toBeGreaterThan(0);
+      expect(
+        steps[opened]!.count,
+        `opens must be clamped with starts=${starts} midway=${midway ? "yes" : "no"}`
+      ).toBeLessThanOrEqual(steps[opened - 1]!.count);
+    }
   });
 });
 

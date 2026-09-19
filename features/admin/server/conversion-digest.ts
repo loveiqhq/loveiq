@@ -340,6 +340,88 @@ export async function fetchLandingStartFunnel(
   }
 }
 
+/**
+ * Midway Progress — the funnel step agreed on 2026-09-16 that had no reader.
+ *
+ * `overall` works from today and is what the funnel TABLE row uses. `daily` and
+ * `totals` are per landing arm and are floored at the day the arm stamp reached
+ * `survey_partial_save`, so they are legitimately EMPTY until that data
+ * accumulates — an empty per-arm list here is "not yet", never "nobody".
+ *
+ * The threshold is passed in rather than defaulted: where "midway" sits is a
+ * definition somebody chose, and a default would let it be chosen by accident.
+ *
+ * Returns null on any failure INCLUDING the function not existing yet, so the
+ * digest omits the row until the migration is applied rather than failing the
+ * whole send.
+ */
+export interface MidwayProgress {
+  overall: { sessions: number; reached: number };
+  daily: Array<{ day: string; arm: string; sessions: number; reached: number }>;
+  totals: Array<{ arm: string; sessions: number; reached: number }>;
+  midwayIndex: number;
+}
+
+export async function fetchMidwayProgress(
+  sinceIso: string,
+  untilIso: string,
+  midwayIndex: number
+): Promise<MidwayProgress | null> {
+  try {
+    const res = await supabaseFetch("/rest/v1/rpc/get_midway_progress_daily", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        since_ts: sinceIso,
+        until_ts: untilIso,
+        midway_index: midwayIndex,
+      }),
+    });
+    if (!res.ok) {
+      logger.warn({ status: res.status }, "conversion-digest: midway RPC non-2xx");
+      return null;
+    }
+    const raw = (await res.json()) as {
+      overall?: unknown;
+      daily?: unknown;
+      totals?: unknown;
+      midwayIndex?: unknown;
+    } | null;
+    if (!raw) return null;
+
+    const o = (raw.overall ?? {}) as Record<string, unknown>;
+    const daily: MidwayProgress["daily"] = [];
+    for (const row of Array.isArray(raw.daily) ? raw.daily : []) {
+      if (!row || typeof row !== "object") continue;
+      const r = row as Record<string, unknown>;
+      const day = str(r.day);
+      const arm = str(r.arm);
+      if (!day || !arm) continue;
+      daily.push({ day, arm, sessions: int(r.sessions), reached: int(r.reached) });
+    }
+    const totals: MidwayProgress["totals"] = [];
+    for (const row of Array.isArray(raw.totals) ? raw.totals : []) {
+      if (!row || typeof row !== "object") continue;
+      const r = row as Record<string, unknown>;
+      const arm = str(r.arm);
+      if (!arm) continue;
+      totals.push({ arm, sessions: int(r.sessions), reached: int(r.reached) });
+    }
+
+    return {
+      overall: { sessions: int(o.sessions), reached: int(o.reached) },
+      daily,
+      totals,
+      // Echoed back by the RPC. Trusting the REQUEST's number here would let the
+      // caption name a threshold the numbers were not computed at.
+      midwayIndex: int(raw.midwayIndex) || midwayIndex,
+    };
+  } catch (err) {
+    logger.warn({ err }, "conversion-digest: midway RPC threw");
+    return null;
+  }
+}
+
 export type VerdictState =
   "winner" | "regression" | "no-winner" | "too-early" | "insufficient-data" | "single-arm";
 
@@ -538,7 +620,16 @@ export function buildFunnel(
    * per-arm start funnel would not — it counts only days the landing cookie was
    * recorded, a shorter window on a smaller denominator.
    */
-  starts?: number | null
+  starts?: number | null,
+  /**
+   * Midway Progress: how many sessions got at least `midway.index` questions in.
+   *
+   * Optional, and omitted rather than zeroed when absent — the row only appeared
+   * on 2026-09-19 and a funnel that prints "0 reached the halfway point" above
+   * 411 finishers says something false about the product rather than about the
+   * measurement.
+   */
+  midway?: { reached: number; index: number } | null
 ): FunnelStep[] {
   const sum = (pick: (row: ArmFunnelRow) => number) => cohort.reduce((t, r) => t + pick(r), 0);
   const completions = sum((r) => r.completions);
@@ -559,6 +650,23 @@ export function buildFunnel(
    */
   const hasStarts =
     typeof starts === "number" && Number.isFinite(starts) && starts > 0 && starts >= completions;
+  /**
+   * Same shape of guard as `hasStarts`, and for the same reason.
+   *
+   * Midway comes from `survey_partial_save` while finishers come from the
+   * submission cohort — different id spaces, different windows. If midway reads
+   * BELOW finishers the sources disagree, and drawing it anyway would clamp the
+   * finisher count down to it and publish a smaller, wrong number of completions
+   * under a truthful label. That exact failure is what the starts guard was
+   * written for. Measured 2026-09-19: 579 reached question 30 against 411
+   * finishers, so there is real headroom — this is for the windows where there
+   * is not.
+   */
+  const hasMidway =
+    !!midway &&
+    Number.isFinite(midway.reached) &&
+    midway.reached > 0 &&
+    midway.reached >= completions;
   // Labels say what each number IS. Everything below the first row is cohort:
   // "of the people who finished in this window, how many ever got this far",
   // which is NOT the same as "this many happened during the window" — a purchase
@@ -572,6 +680,16 @@ export function buildFunnel(
     // other across a window boundary; claiming it in the label would be a claim
     // the data does not support.
     ...(hasStarts ? [{ step: "Started the survey", count: starts as number }] : []),
+    /**
+     * The step Mark named on 2026-09-16 and the framework called "needs
+     * building". The label carries the THRESHOLD rather than saying "midway",
+     * because "midway" is the definition and the question number is the fact —
+     * and an unnamed percentage in this table is precisely what put a 96.5%
+     * nobody could source into a meeting.
+     */
+    ...(hasMidway
+      ? [{ step: `Reached question ${midway!.index}`, count: midway!.reached }]
+      : []),
     { step: "Finished the survey", count: completions },
     { step: "…of those, opened their report", count: sum((r) => r.reportOpens) },
     { step: "…of those, started checkout", count: sum((r) => r.checkout) },
@@ -591,7 +709,10 @@ export function buildFunnel(
   // finished-against-visits and so can bite where that never did — a window whose
   // finishers mostly started before it opens. Monotonicity is what a funnel means,
   // so it stays clamped; today there is 2.4x of headroom (425 against 1025).
-  const CLAMPED_STEPS = hasStarts ? 4 : 3;
+  // Counts steps, so it moves with the array: visits, [starts], [midway],
+  // finished, opened. Hardcoding 4 was already a latent trap and a third optional
+  // row would have made it wrong — derived now so adding another cannot desync it.
+  const CLAMPED_STEPS = 3 + (hasStarts ? 1 : 0) + (hasMidway ? 1 : 0);
   let ceiling = Number.POSITIVE_INFINITY;
   for (let i = 0; i < raw.length; i += 1) {
     // eslint-disable-next-line security/detect-object-injection -- numeric loop index over a local array.

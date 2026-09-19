@@ -56,8 +56,25 @@ describe("landing A/B — the two arms", () => {
     expect(analytics).toMatch(/isLandingVariant\(v\)/);
     expect(analytics).toContain("landing_variant: landingVariant");
 
-    const survey = readFileSync(join(process.cwd(), "app/api/survey/route.ts"), "utf8");
-    expect(survey).toContain("base.landing_variant = landingVariantRaw");
+    /**
+     * Both write paths go through the one shared stamp.
+     *
+     * This used to grep for the literal `base.landing_variant = landingVariantRaw`
+     * inside the submit route, which had two problems. It broke when the stamp
+     * moved into a helper, despite the behaviour being identical — and, worse, it
+     * only ever covered SUBMIT. The partial-save route had no stamp at all until
+     * 2026-09-19, so the arm was recorded for everyone who finished the survey and
+     * nobody who dropped out, and this test was green throughout.
+     *
+     * Behaviour is covered properly in shared/experiments/tests/stampArm.test.ts,
+     * features/survey/tests/survey-arm-stamp.test.ts and the partial-save suite.
+     * What is asserted HERE is only that both routes are wired to it, which is the
+     * thing a future refactor can silently drop.
+     */
+    for (const route of ["app/api/survey/route.ts", "app/api/survey-partial/route.ts"]) {
+      const src = readFileSync(join(process.cwd(), route), "utf8");
+      expect(src, `${route} must stamp the landing arm`).toContain("stampLandingArm(");
+    }
 
     const checkout = readFileSync(
       join(process.cwd(), "app/api/stripe/checkout-session/route.ts"),

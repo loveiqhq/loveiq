@@ -7,6 +7,7 @@ import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
 import logger from "@shared/observability/logger";
 import { isSurveyClosed } from "@features/survey/server/server";
 import { isFeatureEnabled } from "@shared/flags/system-flags";
+import { stampLandingArm } from "@shared/experiments/stampArm";
 
 const partialSchema = z.object({
   sessionId: z.string().uuid(),
@@ -94,7 +95,13 @@ export async function POST(request: Request) {
     answers: parsed.data.answers,
     current_index: parsed.data.currentIndex,
     started_at: parsed.data.startedAt,
-    utm_tracker: parsed.data.utmTracker || null,
+    /**
+     * The arm comes from the COOKIE, not from the body. A draft save is the only
+     * record that exists for someone who never finishes, so without this the
+     * mid-funnel cannot be split by experiment at all — which is exactly what
+     * "Midway Progress has no source" turned out to mean.
+     */
+    utm_tracker: await stampLandingArm(parsed.data.utmTracker),
     client_ip: ip,
     saved_at: new Date().toISOString(),
   };
