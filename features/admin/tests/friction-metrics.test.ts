@@ -44,7 +44,7 @@ describe("buildSurveySignals", () => {
       snap([q({ question_index: 0, abandons: 2 }), q({ question_index: 57, abandons: 21 })]),
       new Map([["q57", "What is your email?"]])
     );
-    const drop = find(sigs, "Drop-off point");
+    const drop = find(sigs, "Where sessions end");
     expect(drop?.value).toBe("21%");
     expect(drop?.where).toBe("Q58 — What is your email?");
     expect(drop?.status).toBe("watch");
@@ -59,7 +59,7 @@ describe("buildSurveySignals", () => {
         q({ question_index: 1, visits: 200, abandons: 10, timed: 200 }),
       ])
     );
-    expect(find(sigs, "Drop-off point")?.where).toBe("Q2");
+    expect(find(sigs, "Where sessions end")?.where).toBe("Q2");
   });
 
   it("reports hesitation relative to a typical question, not in raw seconds", () => {
@@ -119,7 +119,7 @@ describe("buildSurveySignals", () => {
       expect(find(sigs, gone), `${gone} was removed`).toBeUndefined();
     }
     // And the rows that earn their place are still there.
-    expect(find(sigs, "Drop-off point")).toBeDefined();
+    expect(find(sigs, "Where sessions end")).toBeDefined();
     expect(find(sigs, "Went back a step")).toBeDefined();
   });
 });

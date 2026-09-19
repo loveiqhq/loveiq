@@ -156,7 +156,20 @@ export function buildSurveySignals(
     .sort((a, b) => b.pct - a.pct)[0];
   if (worstDrop) {
     signals.push({
-      label: "Drop-off point",
+      /**
+       * "Where sessions end", not "Drop-off point".
+       *
+       * This counts sessions whose LAST event is this question. The weekly
+       * funnel chart also says "drop-off" but measures something else — the
+       * share who reach a question and never reach the NEXT one. Someone who
+       * reaches Q58, goes back, and abandons at Q30 is in one and not the other,
+       * so the two legitimately disagree: on the 30 days to 2026-09-18 this read
+       * 22% at Q58 while the chart read 16% at Q58 and 25% at Q57.
+       *
+       * Both are right. Publishing both into #ops under the same word is what
+       * was wrong, so this one now names its own definition.
+       */
+      label: "Where sessions end",
       group: "Survey",
       value: `${Math.round(worstDrop.pct)}%`,
       where: label(worstDrop.q),
