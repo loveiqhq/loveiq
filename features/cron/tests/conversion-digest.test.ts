@@ -1108,6 +1108,52 @@ describe("conversion-digest handler", () => {
     expect(paidRow).not.toContain("<0.1%");
   });
 
+  /**
+   * The caveat under the funnel had NEVER fired in production.
+   *
+   * get_paywall_hits returns `firstRowDay` so this line can say how much of the
+   * window the paywall row really covers. The RPC computed it as MIN across both
+   * signals, which is the day the LOSSY client event started (2026-05-24), not
+   * the day the step became meaningfully measured (2026-09-05, the server
+   * column). MIN is always outside the window, so the guard always returned null.
+   *
+   * These tests could not have caught that on their own — they mock the RPC, and
+   * the mock already carried the intended "2026-09-05". That is exactly how the
+   * defect survived: the fixture encoded the intent and production did not match
+   * it. Fixed in 20260919260000 by taking MAX of the two per-signal minimums.
+   *
+   * What IS coverable here is the caller's half, which was asserted nowhere.
+   */
+  it("says how much of the window the paywall row covers, and stops once it covers all of it", async () => {
+    vi.setSystemTime(new Date("2026-09-14T09:05:00.000Z"));
+    const noteFrom = async (firstRowDay: string | null) => {
+      mockNotifySlack.mockClear();
+      mockFetchPaywallHits.mockResolvedValue({ hits: 106, firstRowDay });
+      await GET(request());
+      const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+      return arg.blocks
+        .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
+        .join("\n");
+    };
+
+    // Window is 30 Berlin days ending 2026-09-14, so a signal that started on
+    // the 5th covers 9 of them.
+    const fired = await noteFrom("2026-09-05");
+    expect(fired).toContain("The paywall row covers 9 days, not 30");
+    expect(fired).toContain("that signal only started on 2026-09-05");
+
+    // Self-expiring: once the instrument predates the window there is nothing to
+    // caveat, and the line must disappear rather than become furniture. This is
+    // the value the RPC used to return, so before the fix EVERY day looked
+    // like this one.
+    const silent = await noteFrom("2026-05-24");
+    expect(silent).not.toContain("The paywall row covers");
+
+    // And it is absent, not blank, when the instrument has never written.
+    const never = await noteFrom(null);
+    expect(never).not.toContain("The paywall row covers");
+  });
+
   it("puts Paywall Hits between the report and checkout, as Mark named it", async () => {
     /**
      * The sixth step of the funnel language agreed on 2026-09-16. The digest
