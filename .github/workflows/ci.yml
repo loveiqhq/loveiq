@@ -110,24 +110,44 @@ jobs:
           node-version: "20"
           cache: "npm"
       - run: npm ci
-      - name: Skip if test secrets unset
+      # This job reported success for months while running nothing, because it
+      # gated on a Supabase TEST BRANCH that was never provisioned. Only ONE of
+      # the two suites actually needs a branch:
+      #
+      #   rls-boundary     read-only. Asserts the anon role cannot read 15 locked
+      #                    tables. The anon key is public (it ships in the browser
+      #                    bundle) and nothing is written, so this is safe against
+      #                    production and is what now runs on every push.
+      #   payment-webhook  INSERTS rows. Reads only SUPABASE_TEST_* with no
+      #                    fallback, so it stays skipped until a branch exists.
+      #
+      # Gate on what each suite actually needs, so the lane stops being theatre.
+      - name: Decide what can run
         id: gate
         run: |
-          if [ -z "${SUPABASE_TEST_URL}" ] || [ -z "${SUPABASE_TEST_SERVICE_ROLE_KEY}" ]; then
-            echo "Integration test secrets unset — skipping."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          else
+          if [ -n "${SUPABASE_TEST_URL}" ] && [ -n "${SUPABASE_TEST_SERVICE_ROLE_KEY}" ]; then
+            echo "Test branch configured — running the full integration suite."
             echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [ -n "${SUPABASE_URL}" ] && [ -n "${SUPABASE_ANON_KEY}" ]; then
+            echo "No test branch; running the read-only RLS boundary suite against production."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Neither a test branch nor SUPABASE_URL + anon key is set — this job would test nothing."
+            exit 1
           fi
         env:
           SUPABASE_TEST_URL: ${{ secrets.SUPABASE_TEST_URL }}
           SUPABASE_TEST_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_TEST_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
       - name: Run integration tests
         if: steps.gate.outputs.run == 'true'
         run: npm run test:integration
         env:
           SUPABASE_TEST_URL: ${{ secrets.SUPABASE_TEST_URL }}
           SUPABASE_TEST_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_TEST_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
   migration-drift:
     name: Migration drift (repo vs live DB)
@@ -155,22 +175,24 @@ jobs:
           node-version: "20"
           cache: "npm"
       - run: npm ci
-      - name: Skip if SUPABASE_DB_URL unset
-        id: gate
-        run: |
-          if [ -z "${SUPABASE_DB_URL}" ]; then
-            echo "SUPABASE_DB_URL unset — skipping drift check."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          fi
-        env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      # No skip. This job gated itself on SUPABASE_DB_URL, which was never set,
+      # and a job whose only step is skipped still reports SUCCESS — so it was
+      # green and blind on every commit since it was written.
+      #
+      # It no longer needs that secret. The five queries it runs are read-only
+      # catalogue reads, and `get_schema_artifacts()` serves them through
+      # PostgREST with the service-role key that is already a repository secret,
+      # so CI never holds a Postgres password. SUPABASE_DB_URL still works and
+      # takes precedence if anyone sets it.
+      #
+      # Exit codes: 0 clean, 1 new drift, 2 could not check. There is no longer
+      # a path where this passes without having read the database.
       - name: Check migration drift
-        if: steps.gate.outputs.run == 'true'
         run: npm run check:migration-drift
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
   build:
     name: Build

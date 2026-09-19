@@ -65,6 +65,30 @@ async function anonFetch(path: string): Promise<Response> {
 }
 
 describeMaybe("RLS boundary — anon key cannot read locked tables", () => {
+  /**
+   * THE GUARD ON THE GUARD. Without this, a wrong key makes the whole suite pass.
+   *
+   * Every assertion below accepts 401/403 as "more restrictive than expected —
+   * still a pass", which is right when the anon role genuinely has no grants. But
+   * a WRONG, EMPTY or ROTATED key also returns 401 for every table, so all fifteen
+   * checks go green while testing nothing. Measured 2026-09-19: against the real
+   * host with the key replaced by "not-a-real-key", 15 passed, 0 failed.
+   *
+   * `survey_question` is deliberately NOT in LOCKED_TABLES: anon holds grants on
+   * it (the public survey reads it), so a working key reaches PostgREST and gets
+   * 200 with RLS filtering the rows. A broken key gets 401 here and fails loudly,
+   * which is the only thing that tells the two apart.
+   */
+  it("the anon key reaches PostgREST at all", async () => {
+    const res = await anonFetch("/rest/v1/survey_question?select=id&limit=1");
+    expect(
+      res.status,
+      `anon got ${res.status} on a table it should have grants on. The key is wrong, ` +
+        `empty or rotated — every "cannot read" assertion below would pass for that ` +
+        `reason rather than because the tables are locked down.`
+    ).toBe(200);
+  });
+
   for (const table of LOCKED_TABLES) {
     it(`anon client cannot read ${table}`, async () => {
       const res = await anonFetch(`/rest/v1/${table}?select=*&limit=1`);
