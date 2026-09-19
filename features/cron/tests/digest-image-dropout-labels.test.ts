@@ -166,11 +166,13 @@ describe("digest-image: which drop-offs the summary names", () => {
     // round to 5 — with an EARLIER index deliberately made the shallowest, which
     // is the case integer rounding got wrong.
     const bars = spread({ 56: 24.6, 57: 15.7, 55: 5.1, 2: 4.9, 3: 4.8, 1: 4.5 });
-    const summary = summaryIn(renderDropoutBars({
-      kind: "dropout-funnel",
-      bars,
-      windowLabel: "30 days",
-    }).element);
+    const summary = summaryIn(
+      renderDropoutBars({
+        kind: "dropout-funnel",
+        bars,
+        windowLabel: "30 days",
+      }).element
+    );
 
     expect(summary, "the summary line must be found at all").toBeTruthy();
     expect(summary).toContain("Q57 25%");
@@ -188,11 +190,13 @@ describe("digest-image: which drop-offs the summary names", () => {
      * old producer sent them — and the summary then names Q2.
      */
     const bars = spread({ 56: 25, 57: 16, 55: 5, 2: 5, 3: 5, 1: 5 });
-    const summary = summaryIn(renderDropoutBars({
-      kind: "dropout-funnel",
-      bars,
-      windowLabel: "30 days",
-    }).element);
+    const summary = summaryIn(
+      renderDropoutBars({
+        kind: "dropout-funnel",
+        bars,
+        windowLabel: "30 days",
+      }).element
+    );
     expect(summary).toContain("Q2 5%");
   });
 });

@@ -1191,9 +1191,7 @@ describe("conversion-digest handler", () => {
       mockFetchPaywallHits.mockResolvedValue({ hits: 106, firstRowDay });
       await GET(request());
       const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-      return arg.blocks
-        .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
-        .join("\n");
+      return arg.blocks.map((b) => (b as { text?: { text?: string } }).text?.text ?? "").join("\n");
     };
 
     // Window is 30 Berlin days ending 2026-09-14, so a signal that started on

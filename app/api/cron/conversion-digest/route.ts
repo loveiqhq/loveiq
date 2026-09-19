@@ -626,8 +626,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
      * "Visits 0 _(-100%)_" on a day with 543 visits. A number we do not have is
      * not a zero, and the funnel above already uses "—" for exactly that.
      */
-    const yField = (value: string, d: string) =>
-      yesterdayObserved ? withDelta(value, d) : "—";
+    const yField = (value: string, d: string) => (yesterdayObserved ? withDelta(value, d) : "—");
     blocks.push(
       fields([
         /**

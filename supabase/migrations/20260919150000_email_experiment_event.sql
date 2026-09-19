@@ -61,6 +61,17 @@ COMMENT ON TABLE email_experiment_event IS
 -- The digest reads a 30-day window across ALL experiments and groups them, so
 -- the index is on `day` alone. An earlier version added `experiment` as a second
 -- column under a comment claiming the query filtered on it; it never did.
+-- migration-lint: ignore
+--
+-- The rule is "CREATE INDEX without CONCURRENTLY", which exists because building
+-- an index on a live table takes an ACCESS EXCLUSIVE lock and blocks writes.
+-- `email_experiment_event` is created 25 lines above this, in the same file, so
+-- the table is empty and nothing can be reading or writing it yet — there is no
+-- lock to avoid. CREATE INDEX CONCURRENTLY also cannot run inside a transaction
+-- block, which is what a migration is.
+--
+-- The directive disables every rule for this file, which is blunt; checked that
+-- this is the file's only finding before adding it.
 CREATE INDEX IF NOT EXISTS email_experiment_event_day_idx
   ON email_experiment_event (day DESC);
 

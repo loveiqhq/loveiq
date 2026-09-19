@@ -263,9 +263,7 @@ async function buildCvrChartBlocks(
       days.map((d) => Number(d[numKey])),
       days.map((d) => Number(d[denKey]))
     );
-    const series = measuredFrom
-      ? maskBeforeMeasured(rawSeries, days, measuredFrom)
-      : rawSeries;
+    const series = measuredFrom ? maskBeforeMeasured(rawSeries, days, measuredFrom) : rawSeries;
     // A fully masked series is not a chart, it is an empty frame with a title.
     if (!series.some((v) => v !== null)) return;
     out.push(
@@ -770,9 +768,7 @@ export async function GET(request: Request) {
     // 24 hours — on the two changeover days it is 23 or 25.
     const dayKey = reportingDay(new Date(dayStart.getTime() - 1));
     const yesterdayStart = reportingDayStart(dayKey);
-    const dayBeforeStart = reportingDayStart(
-      reportingDay(new Date(yesterdayStart.getTime() - 1))
-    );
+    const dayBeforeStart = reportingDayStart(reportingDay(new Date(yesterdayStart.getTime() - 1)));
 
     let dailySent = false;
     let weeklySent = false;
