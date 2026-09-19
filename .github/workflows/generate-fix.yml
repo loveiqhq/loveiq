@@ -104,6 +104,17 @@ jobs:
           git worktree add --detach /tmp/fixtree "$base"
           echo "dir=/tmp/fixtree" >> "$GITHUB_OUTPUT"
 
+      # A worktree starts with no node_modules, and the model is allowed to run
+      # lint and the test suite to check its own work. Without this those tools
+      # fail on every invocation — it would still produce a diff, but blind,
+      # and the first thing it learns about its change would be the proof
+      # refusing it. Installed from the BASE commit's lockfile, not main's,
+      # because that is the tree being edited.
+      - name: Install dependencies for the code under test
+        if: steps.token.outputs.ready == 'true'
+        working-directory: /tmp/fixtree
+        run: npm ci
+
       # The prompt says WHAT IS WRONG and never how to fix it. A prompt that
       # dictates the change turns this into a slow way of typing, and the
       # interesting failures are the ones where the obvious fix is wrong.

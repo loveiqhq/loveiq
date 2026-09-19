@@ -138,6 +138,20 @@ describe("the generate-and-prove workflow", () => {
     expect(propose?.["working-directory"]).toBeTruthy();
   });
 
+  it("gives the model a worktree it can actually run tools in", () => {
+    // A fresh worktree has no node_modules. The model is allowed `npm run lint`
+    // and vitest to check its own work; without an install those fail on every
+    // call and it edits blind, learning about its change only when the proof
+    // refuses it.
+    const doc = parse(WF) as {
+      jobs: Record<string, { steps: Array<{ "working-directory"?: string; run?: string }> }>;
+    };
+    const installed = Object.values(doc.jobs)
+      .flatMap((j) => j.steps)
+      .some((st) => st["working-directory"] === "/tmp/fixtree" && /npm ci/.test(st.run ?? ""));
+    expect(installed, "the worktree never gets its dependencies").toBe(true);
+  });
+
   it("proves against the SAME commit the model was given", () => {
     // Proving against main while the model worked from an older commit compares
     // two unrelated things, and would certify a fix for a defect already gone.
