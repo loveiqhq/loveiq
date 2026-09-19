@@ -10,7 +10,7 @@ import {
   clearPersistedSurveyState,
   loadPendingCompletion,
 } from "./hooks/surveyStorage";
-import { copySurveySessionToReportSession } from "./hooks/surveySession";
+import { copySurveySessionToReportSession, SURVEY_SESSION_KEY } from "./hooks/surveySession";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { readCookie } from "@shared/observability/cookie";
 
@@ -304,6 +304,7 @@ const slideIcons: Record<string, FC> = {
 /*  Slide data                                                         */
 /* ------------------------------------------------------------------ */
 const TOTAL_STEPS = 4;
+const ALREADY_COMPLETE_STEP = -1; // survives only when SURVEY_SESSION_KEY outlives step/answers
 interface Slide {
   icon: string;
   heading: string;
@@ -449,6 +450,24 @@ const slides: Slide[] = [
     ),
   },
 ];
+
+// Reached only via Back from the report — tells a finisher they are done instead of restarting them.
+const AlreadyCompleteScreen: FC<{ onViewReport: () => void }> = ({ onViewReport }) => (
+  <main className="flex min-h-dvh flex-col items-center justify-center bg-page px-7 text-center">
+    <h1 className="font-serif text-3xl text-[#1a1a2e]">Your assessment is already complete</h1>
+    <p className="mt-4 max-w-[480px] font-sans text-[#6a7282]">
+      You already submitted your answers, so this can&rsquo;t restart your assessment. Your
+      personalized report is ready and waiting — use the button below to go back and see it.
+    </p>
+    <button
+      type="button"
+      onClick={onViewReport}
+      className="mt-8 rounded-full bg-[#fe6839] px-8 py-4 font-bold uppercase text-white focus-visible-ring"
+    >
+      View your report
+    </button>
+  </main>
+);
 
 /* ------------------------------------------------------------------ */
 /*  Screen 0 — Light intro                                             */
@@ -1131,6 +1150,15 @@ function loadInitialStep(): number {
     /* corrupted or unavailable */
   }
 
+  // 3. No step, no answers, but a survey session survives — only handleReturn() leaves that.
+  try {
+    if (sessionStorage.getItem(SURVEY_SESSION_KEY)) {
+      return ALREADY_COMPLETE_STEP;
+    }
+  } catch {
+    /* blocked or unavailable */
+  }
+
   return 0;
 }
 
@@ -1241,8 +1269,10 @@ const SurveyPage: FC = () => {
 
   let content: ReactNode;
 
-  // Intro screen
-  if (step === 0) {
+  // Already-complete screen
+  if (step === ALREADY_COMPLETE_STEP) {
+    content = <AlreadyCompleteScreen onViewReport={() => window.history.forward()} />;
+  } else if (step === 0) {
     content = <IntroScreen onContinue={handleIntroContinue} transitioning={transitioning} />;
   } else if (step - 1 < TOTAL_STEPS) {
     // Wizard slides
