@@ -634,8 +634,24 @@ export async function GET(request: Request) {
     let dailySent = false;
     let weeklySent = false;
 
-    // ---- Daily (single message) ----
-    const dailyClaimed = await tryClaimSlackAlert("daily_digest", "day", dayKey);
+    /**
+     * ---- Daily: WEEKLY ONLY, deliberately ----
+     *
+     * This digest was unscheduled on 2026-07-26 "per the strategy lead" for being
+     * a rail of pictures with no decision attached, and the daily and weekly
+     * messages post the SAME 30-day chart rail — only the revenue cadence differs
+     * (DoD vs WoW). Re-enabling it daily would put a second nine-chart message in
+     * #ops every morning, beside `conversion-digest`, which already leads with a
+     * decision and carries the per-experiment charts Marcus asked for. Two of the
+     * charts would be the same metric twice.
+     *
+     * So it comes back weekly, where a broad picture earns its place and cannot
+     * become wallpaper. The daily branch stays in the code, gated, rather than
+     * deleted: the weekly path reuses every builder it calls, and flipping this
+     * constant is how you would turn it back on.
+     */
+    const DAILY_ENABLED = false;
+    const dailyClaimed = DAILY_ENABLED && (await tryClaimSlackAlert("daily_digest", "day", dayKey));
     if (dailyClaimed) {
       const yesterdayIso = yesterdayStart.toISOString();
       const [curr, prev, snaps] = await Promise.all([

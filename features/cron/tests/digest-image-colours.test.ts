@@ -145,3 +145,133 @@ describe("digest-image: only experiment arms get the arm colours", () => {
     }
   });
 });
+
+describe("digest-image: renderLongitudinal, the renderer left behind", () => {
+  /**
+   * Six of the ten chart kinds go through this renderer, and it never received
+   * the fixes its siblings did — the tick alignment, the lone-point guard and
+   * the non-rounding formatter were all applied to renderDropoutByArm and
+   * documented there, while this one kept the original behaviour.
+   */
+  function textIn(node: unknown, out: string[] = []): string[] {
+    if (Array.isArray(node)) {
+      for (const c of node) textIn(c, out);
+      return out;
+    }
+    if (typeof node === "string") {
+      out.push(node);
+      return out;
+    }
+    if (!node || typeof node !== "object") return out;
+    const props = ((node as ReactElement<Record<string, unknown>>).props ?? {}) as Record<
+      string,
+      unknown
+    >;
+    if (props.children) textIn(props.children, out);
+    return out;
+  }
+  /**
+   * DATA marks only — points drawn in the series ink. Collecting every `points`
+   * attribute also swept up the faint 0% baseline rule, which spans the full plot
+   * width by design, so the lone-point assertion below failed against a shape
+   * that was never the data.
+   */
+  const SERIES_INK = "#334155";
+  function pointsIn(node: unknown, out: string[] = []): string[] {
+    if (Array.isArray(node)) {
+      for (const c of node) pointsIn(c, out);
+      return out;
+    }
+    if (!node || typeof node !== "object") return out;
+    const props = ((node as ReactElement<Record<string, unknown>>).props ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const ink = String(props.stroke ?? props.fill ?? "").toLowerCase();
+    if (typeof props.points === "string" && ink === SERIES_INK) out.push(props.points);
+    if (props.children) pointsIn(props.children, out);
+    return out;
+  }
+
+  it("does not round a sub-1% rate away to zero", () => {
+    /**
+     * `fmtAxis` was written because "a 12.7% rate was published as 13%", and this
+     * readout kept `Math.round`. A 0.4% paygate-to-purchase rate printed
+     * "now 0% · max 1%" next to a visibly non-zero line — on the chart that
+     * routinely runs sub-1%.
+     */
+    const { element } = renderLongitudinal({
+      kind: "cvr-paygate-purchase",
+      rate: true,
+      labels: ["Paygate → purchase"],
+      series: [[0.4, 0.35, 0.42, 0.38, 0.41, 0.39, 0.4]],
+    });
+    const text = textIn(element).join(" ");
+    expect(text).toContain("0.4");
+    expect(text).not.toMatch(/now 0% /);
+  });
+
+  it("draws a stub for a single reading, not a full-width wedge", () => {
+    /**
+     * With one value every point mapped to x=0: the line rendered nothing and the
+     * area became a triangle spanning the entire plot — a full-width shape from
+     * one data point. Reachable whenever the sparkline source returns one day.
+     */
+    const { element } = renderLongitudinal({
+      kind: "cvr-visitor-start",
+      rate: true,
+      labels: ["Visitor → start"],
+      series: [[5]],
+    });
+    const marks = pointsIn(element);
+    expect(marks.length, "no data marks found — the assertion would be vacuous").toBeGreaterThan(0);
+    for (const pts of marks) {
+      const xs = pts.split(" ").map((p) => Number(p.split(",")[0]));
+      const span = Math.max(...xs) - Math.min(...xs);
+      // Not a full-width wedge…
+      expect(Math.max(...xs), `a lone point spanned the plot: ${pts}`).toBeLessThan(50);
+      // …and not invisible either. Without the stub the line is a ONE-POINT
+      // polyline, which renders nothing at all: the row goes blank rather than
+      // showing the single reading it has. Bounding the area fixed the wedge and
+      // would have hidden this half of the bug.
+      expect(span, `a lone reading drew nothing visible: ${pts}`).toBeGreaterThan(0);
+    }
+  });
+
+  it("places x ticks by position, not spread evenly", () => {
+    // 29 points: index 7 belongs at 25% of the width, index 14 at 50%. Laid out
+    // with space-between, five boxes are spaced evenly regardless of where their
+    // points sit, and the first and last align by box edge rather than centre.
+    const days = Array.from({ length: 29 }, (_, i) => `d${i}`);
+    const { element } = renderLongitudinal({
+      kind: "cvr-visitor-start",
+      rate: true,
+      labels: ["Visitor → start"],
+      series: [days.map((_, i) => 5 + (i % 3))],
+      xAxis: days,
+    });
+    const lefts: number[] = [];
+    const walk = (node: unknown) => {
+      if (Array.isArray(node)) return node.forEach(walk);
+      if (!node || typeof node !== "object") return;
+      const props = ((node as ReactElement<Record<string, unknown>>).props ?? {}) as Record<
+        string,
+        unknown
+      >;
+      const style = (props.style ?? {}) as Record<string, unknown>;
+      if (style.position === "absolute" && typeof style.left === "number" && style.width === 52) {
+        lefts.push(style.left as number);
+      }
+      if (props.children) walk(props.children);
+    };
+    walk(element);
+    expect(lefts.length, "ticks must be absolutely positioned").toBeGreaterThanOrEqual(5);
+    // Gaps between consecutive ticks are not all identical, because the sampled
+    // indices are not evenly spaced (0, 7, 15, 22, 28).
+    const gaps = lefts.slice(1).map((l, i) => l - lefts[i]!);
+    expect(
+      new Set(gaps).size,
+      `evenly spaced means positional layout was lost: ${gaps}`
+    ).toBeGreaterThan(1);
+  });
+});

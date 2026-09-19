@@ -36,6 +36,17 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   // window the route itself looks back over.
   "ux-review": 90 * 60_000,
   "conversion-digest": 26 * 3_600_000,
+  /**
+   * WEEKLY, so eight days of silence is one missed run. Re-enabled 2026-09-19
+   * after 2026-07-26's pause, and weekly rather than daily on purpose: the daily
+   * and weekly messages carry the same 30-day chart rail, and `conversion-digest`
+   * already posts a decision plus the per-experiment charts every morning.
+   *
+   * A generous window matters more here than elsewhere — a weekly cron that dies
+   * is invisible for a week by definition, which is exactly the failure this
+   * watch list exists to catch.
+   */
+  "funnel-digest": 8 * 24 * 3_600_000,
   // Daily, twenty minutes after the conversion digest, so it checks the numbers that were
   // just published. Silent on a normal day like the brief and the miner — a disagreement is
   // the only thing it posts — so it is watched for exactly that reason: a dead reconciler

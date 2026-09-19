@@ -81,6 +81,10 @@
     {
       "path": "/api/cron/ux-review",
       "schedule": "17,47 * * * *"
+    },
+    {
+      "path": "/api/cron/funnel-digest",
+      "schedule": "40 8 * * 1"
     }
   ],
   "functions": {

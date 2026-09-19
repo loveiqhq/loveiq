@@ -229,13 +229,32 @@ describe("funnel-digest cron handler — Phase 3 wiring", () => {
     expect(mockNotifySlack).not.toHaveBeenCalled();
   });
 
-  it("daily path sends ONE daily_digest message with chart images + Revenue footer", async () => {
-    vi.setSystemTime(new Date("2026-05-26T09:00:00Z")); // Tuesday → no weekly
+  it("sends NOTHING on a weekday — this digest is weekly now", async () => {
+    /**
+     * Re-enabled 2026-09-19 as a WEEKLY message, not the daily it used to be.
+     * It was unscheduled on 2026-07-26 for being a rail of pictures with no
+     * decision attached, and the daily and weekly paths post the SAME 30-day
+     * chart rail — only the revenue cadence differs. Daily would put a second
+     * nine-chart message in #ops every morning beside `conversion-digest`, which
+     * already leads with a decision and carries the per-experiment charts, with
+     * two of the charts being the same metric twice.
+     */
+    vi.setSystemTime(new Date("2026-05-26T09:00:00Z")); // Tuesday
+    try {
+      await GET(newRequest());
+      expect(mockNotifySlack).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("on Monday sends ONE weekly_digest with chart images + Revenue footer", async () => {
+    vi.setSystemTime(new Date("2026-05-25T09:00:00Z")); // Monday
     try {
       await GET(newRequest());
       expect(mockNotifySlack).toHaveBeenCalledOnce();
       const call = mockNotifySlack.mock.calls[0][0];
-      expect(call.kind).toBe("daily_digest");
+      expect(call.kind).toBe("weekly_digest");
       expect(call.channel).toBe("ops");
 
       const imageBlocks = call.blocks.filter((b: { type: string }) => b.type === "image");
@@ -256,20 +275,40 @@ describe("funnel-digest cron handler — Phase 3 wiring", () => {
     }
   });
 
-  it("monday path sends TWO messages: daily_digest + weekly_digest", async () => {
+  it("sends exactly one message on Monday, never a daily beside it", async () => {
+    // It used to send two — daily_digest AND weekly_digest — carrying the same
+    // chart rail twice in one morning.
     vi.setSystemTime(new Date("2026-05-25T09:00:00Z")); // Monday
     try {
       await GET(newRequest());
-      expect(mockNotifySlack).toHaveBeenCalledTimes(2);
-      const kinds = mockNotifySlack.mock.calls.map((c) => c[0].kind);
-      expect(kinds).toEqual(["daily_digest", "weekly_digest"]);
+      expect(mockNotifySlack).toHaveBeenCalledTimes(1);
+      expect(mockNotifySlack.mock.calls.map((c) => c[0].kind)).toEqual(["weekly_digest"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("no longer charts the retired email-position experiment", async () => {
+    /**
+     * `survey-email-position-ab` was retired 2026-08-16 and `email_position` has
+     * not been written since — all 1,055 survey_partial_save rows carry NULL. The
+     * chart could only draw two empty curves under a title naming a live test.
+     */
+    vi.setSystemTime(new Date("2026-05-25T09:00:00Z"));
+    try {
+      await GET(newRequest());
+      const call = mockNotifySlack.mock.calls[0][0];
+      const urls = call.blocks
+        .filter((b: { type: string }) => b.type === "image")
+        .map((b: { image_url: string }) => b.image_url);
+      expect(urls.some((u: string) => u.includes("/dropout-by-arm"))).toBe(false);
     } finally {
       vi.useRealTimers();
     }
   });
 
   it("emits the cvr-paygate-purchase chart even though paygate→purchase is low", async () => {
-    vi.setSystemTime(new Date("2026-05-26T09:00:00Z"));
+    vi.setSystemTime(new Date("2026-05-25T09:00:00Z")); // Monday — the only send day
     try {
       await GET(newRequest());
       const call = mockNotifySlack.mock.calls[0][0];
@@ -283,7 +322,7 @@ describe("funnel-digest cron handler — Phase 3 wiring", () => {
   });
 
   it("still sends (revenue footer only) when every chart snapshot is null", async () => {
-    vi.setSystemTime(new Date("2026-05-26T09:00:00Z"));
+    vi.setSystemTime(new Date("2026-05-25T09:00:00Z")); // Monday — the only send day
     try {
       mockFetchCvr.mockResolvedValue(null);
       mockFetchBucket.mockResolvedValue(null);

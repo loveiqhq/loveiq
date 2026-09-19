@@ -314,12 +314,22 @@ const READOUT_W = 120;
 const PLOT_W = 450; // svgPoints width == <svg> width == area-close x (clip-safe)
 
 /** Up to 5 evenly-spaced ticks from an x-axis label array (all if <=5). */
-function sampleTicks(xAxis: string[]): string[] {
-  const n = xAxis.length;
+/**
+ * The INDICES of the ticks to draw, not their labels.
+ *
+ * It used to return labels, which the caller laid out with
+ * `justifyContent: space-between` — spacing five boxes evenly regardless of where
+ * their points actually sit. Index 8 of 29 belongs at 27.6% and was drawn at 25%,
+ * and the first and last were aligned by box edge rather than by centre. The arm
+ * renderer documents this exact bug and fixes it by absolute position; this one
+ * was left behind. Same fix, one source of indices.
+ */
+function sampleTickIdx(n: number): number[] {
   if (n === 0) return [];
-  if (n <= 5) return xAxis.slice();
-  const idxs = [0, Math.round(n / 4), Math.round(n / 2), Math.round((3 * n) / 4), n - 1];
-  return idxs.map((i) => xAxis[Math.min(i, n - 1)] ?? "");
+  if (n <= 5) return Array.from({ length: n }, (_, i) => i);
+  return [
+    ...new Set([0, Math.round(n / 4), Math.round(n / 2), Math.round((3 * n) / 4), n - 1]),
+  ].map((i) => Math.min(i, n - 1));
 }
 
 function rowHeightFor(rowCount: number): number {
@@ -339,7 +349,21 @@ function longitudinalHeight(rowCount: number, rowH: number): number {
  */
 function svgPoints(values: number[], peak: number, width: number, chartH: number): string {
   if (values.length === 0) return "";
-  const step = values.length > 1 ? width / (values.length - 1) : 0;
+  /**
+   * A LONE POINT gets a short horizontal stub, not a zero step.
+   *
+   * With `step = 0` every point mapped to x=0: the line was a one-point polyline
+   * (which renders nothing) and the area became a triangle spanning the whole
+   * plot — a full-width wedge from a single reading. The arm renderer widens a
+   * lone point for exactly this reason; this one never got the fix. Reachable
+   * whenever the sparkline source returns one day.
+   */
+  if (values.length === 1) {
+    const v = values[0] ?? 0;
+    const y = Math.round(chartH - (v / (peak > 0 ? peak : 1)) * chartH);
+    return `0,${y} ${Math.min(width, 6)},${y}`;
+  }
+  const step = width / (values.length - 1);
   // peak<=0 (an all-zero series) draws a flat line along the bottom (y=chartH)
   // instead of nothing — so a genuine 0% rate row still shows a visible
   // baseline rather than a blank band.
@@ -394,8 +418,9 @@ export function renderLongitudinal(p: LongitudinalPayload): {
 
   const rowCount = liveRows.length + (emptyCount > 0 ? 1 : 0);
   const rowH = rowHeightFor(rowCount);
-  const xTicks = Array.isArray(p.xAxis) ? sampleTicks(p.xAxis) : [];
-  const hasXAxis = xTicks.length > 0;
+  const xAxisLabels = Array.isArray(p.xAxis) ? p.xAxis : [];
+  const xTickIdx = sampleTickIdx(xAxisLabels.length);
+  const hasXAxis = xTickIdx.length > 0;
   const height = longitudinalHeight(rowCount, rowH) + (hasXAxis ? X_AXIS_H : 0);
   const chartH = Math.max(4, rowH - 14);
   const chartW = PLOT_W;
@@ -403,7 +428,12 @@ export function renderLongitudinal(p: LongitudinalPayload): {
   // current rate not just the high-water mark.
   const readout = (peak: number, last: number): string =>
     isRate
-      ? `now ${Math.round(last)}% · max ${Math.round(peak)}%`
+      ? // fmtAxis, not Math.round. The axis formatter was rewritten precisely
+        // because "a 12.7% rate was published as 13%", and this readout kept the
+        // rounding — a 0.4% paygate-to-purchase rate printed "now 0% · max 1%"
+        // beside a visibly non-zero line, on the chart that routinely runs
+        // sub-1%.
+        `now ${fmtAxis(last)}% · max ${fmtAxis(peak)}%`
       : `peak ${peak.toLocaleString()}`;
 
   const element = chartShell(
@@ -425,7 +455,17 @@ export function renderLongitudinal(p: LongitudinalPayload): {
          */
         const color = COLORS.neutral;
         const linePts = svgPoints(row.values, row.peak, chartW, chartH);
-        const areaPts = linePts ? `0,${chartH} ${linePts} ${chartW},${chartH}` : "";
+        /**
+         * The area closes under the LINE's own span, not the full plot width.
+         * With a single reading the line is a short stub near x=0 while this
+         * closed at chartW — a full-width wedge from one data point. svgPoints
+         * gained a lone-point guard; the polygon that wraps it needs the same
+         * bound or it reintroduces the shape on its own.
+         */
+        const lineEndX = linePts
+          ? Number(linePts.split(" ").at(-1)?.split(",")[0] ?? chartW)
+          : chartW;
+        const areaPts = linePts ? `0,${chartH} ${linePts} ${lineEndX},${chartH}` : "";
         const last = row.values.length > 0 ? row.values[row.values.length - 1]! : 0;
         return (
           <div
@@ -503,20 +543,34 @@ export function renderLongitudinal(p: LongitudinalPayload): {
       {hasXAxis && (
         <div style={{ display: "flex", alignItems: "center", height: X_AXIS_H }}>
           <div style={{ width: LABEL_W }} />
+          {/* each tick centred on the data point it names, not spaced evenly */}
           <div
             style={{
               display: "flex",
+              position: "relative",
               width: chartW + 20,
-              paddingLeft: 10,
-              paddingRight: 10,
-              justifyContent: "space-between",
+              height: 14,
               fontSize: 11,
               color: COLORS.textMuted,
             }}
           >
-            {xTicks.map((t, i) => (
-              <div key={`${t}-${i}`} style={{ display: "flex" }}>
-                {t}
+            {xTickIdx.map((idx) => (
+              <div
+                key={`x-${idx}`}
+                style={{
+                  display: "flex",
+                  position: "absolute",
+                  left:
+                    10 +
+                    (xAxisLabels.length <= 1
+                      ? 0
+                      : Math.round((idx * chartW) / (xAxisLabels.length - 1))) -
+                    26,
+                  width: 52,
+                  justifyContent: "center",
+                }}
+              >
+                {xAxisLabels[idx] ?? ""}
               </div>
             ))}
           </div>
