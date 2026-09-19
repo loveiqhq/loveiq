@@ -179,7 +179,12 @@ vi.mock("unpdf", () => ({
   extractText: vi.fn(async () => ({ totalPages: 1, text: pdfText })),
 }));
 
-import { docToRows, ingestDrive, isPersonalDataExport } from "@features/brain/server/ingest/drive";
+import {
+  docToRows,
+  ingestDrive,
+  isPersonalDataExport,
+  isVendorBilling,
+} from "@features/brain/server/ingest/drive";
 
 const STAMP = "2026-08-28T04:47:00.000Z";
 const FILE = {
@@ -1138,5 +1143,65 @@ describe("personal-data exports are refused", () => {
       "2026-09-17T00:00:00Z"
     );
     expect(rows.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Vendor billing is filtered by a RULE, where every other exclusion here is an id
+ * list — so the rule has to be proven against the real names on both sides.
+ *
+ * Measured 2026-09-19: 93 billing files were in the corpus, and a drive-only search
+ * for what was agreed about pricing in our calls returned five Slack billing
+ * statements and NO meeting note.
+ */
+describe("isVendorBilling", () => {
+  const PDF = "application/pdf";
+
+  // Every distinct naming shape actually present in the corpus.
+  const BILLING = [
+    "Atlassian_Invoice_IN-EU-002-332-278.pdf",
+    "CookieYes_invoice_5256BCEE-848972_www.loveiq.org_Jun_2026.pdf",
+    "github-loveiqhq-receipt-2026-03-20.pdf",
+    "Invoice-MKWVRQXU-0008.pdf",
+    "Invoice-2026-01-EmaDjedovic-AppliedPsychometrics-Feb2026.pdf",
+    "Receipt-2124-3214-5234.pdf",
+    "slack_fair_billing_statement_SBIE-11862133.pdf",
+    "slack_invoice_11511445020947.pdf",
+    "Invoice January 2026.pdf",
+  ];
+
+  it.each(BILLING)("drops %s", (name) => {
+    expect(isVendorBilling(name, PDF)).toBe(true);
+  });
+
+  // Real documents from the same corpus that must NEVER be dropped.
+  const KEEP: Array<[string, string]> = [
+    ["Freelancer Agreement Sanjin _SIGNED_mb_signed.pdf", PDF],
+    ["LoveIQ_Explorer_of_Edges_Preview.pdf", PDF],
+    ["C-BRAIN UAT Milestone 2", "application/vnd.google-apps.document"],
+    ["Business Case", "application/vnd.google-apps.spreadsheet"],
+    ["Cost sheet audit — software & tooling, 19 Sep 2026", "application/vnd.google-apps.document"],
+    ["LoveIQ Dynamic Pricing Engine — MVP Requirements", "application/vnd.google-apps.document"],
+    ["Data_Acquisition_Automation.docx", PDF],
+  ];
+
+  it.each(KEEP)("keeps %s", (name, mime) => {
+    expect(isVendorBilling(name, mime)).toBe(false);
+  });
+
+  it("keeps a document ABOUT invoicing, which has no vendor reference", () => {
+    expect(isVendorBilling("Invoice process redesign.pdf", PDF)).toBe(false);
+    expect(isVendorBilling("How our invoicing works.pdf", PDF)).toBe(false);
+  });
+
+  it("never drops a non-pdf, whatever it is called", () => {
+    // A spreadsheet named like an invoice is a ledger someone maintains, not a receipt.
+    expect(
+      isVendorBilling("Invoice-MKWVRQXU-0008", "application/vnd.google-apps.spreadsheet")
+    ).toBe(false);
+  });
+
+  it("is not fooled by the word appearing mid-word", () => {
+    expect(isVendorBilling("invoicing-2026-guide.pdf", PDF)).toBe(false);
   });
 });
