@@ -8,7 +8,7 @@ import logger from "@shared/observability/logger";
 interface QuestionRow {
   id: number;
   frontend_qid: string;
-  question_text: string;
+  question: string;
 }
 
 export async function GET(request: Request) {
@@ -50,7 +50,7 @@ export async function GET(request: Request) {
         method: "POST",
         body: JSON.stringify({}),
       }),
-      supabaseFetch(`/rest/v1/survey_question?select=id,frontend_qid,question_text`),
+      supabaseFetch(`/rest/v1/survey_question?select=id,frontend_qid,question`),
     ]);
 
     if (!totalsRes.ok || !questionsRes.ok) {
@@ -110,7 +110,7 @@ export async function GET(request: Request) {
         return {
           questionId: qid,
           frontendQid: question?.frontend_qid || `Q${qid}`,
-          questionText: question?.question_text?.slice(0, 80) || `Question ${qid}`,
+          questionText: question?.question?.slice(0, 80) || `Question ${qid}`,
           totalAnswers: s.totalAnswers,
           skipRate: Math.round(skipRate * 10) / 10,
           avgTimeSec: Math.round(avgTime * 10) / 10,

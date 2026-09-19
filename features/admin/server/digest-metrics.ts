@@ -822,7 +822,7 @@ async function fetchSuppressionByReason(
   untilIso: string
 ): Promise<number> {
   return fetchExactCount(
-    `/rest/v1/email_suppression?select=id&reason=eq.${reason}&${dateRange("created_at", sinceIso, untilIso)}`
+    `/rest/v1/email_suppression?select=email&reason=eq.${reason}&${dateRange("created_at", sinceIso, untilIso)}`
   );
 }
 
@@ -927,15 +927,28 @@ async function fetchMedianTimeToPurchaseHours(
   sinceIso: string,
   untilIso: string
 ): Promise<number | null> {
+  /**
+   * `payment` has no survey_submission_id — it reaches a submission through
+   * personal_report. Selecting the column directly made PostgREST 400 on every
+   * call ("column payment.survey_submission_id does not exist"), and a failed
+   * fetch returns null here, so this metric silently reported "no data" rather
+   * than a median. The FK hint is required: there are two foreign keys between
+   * payment and personal_report (payment_id and personal_report_id), so an
+   * unqualified embed is ambiguous (PGRST201).
+   */
   const paymentsRes = await supabaseFetch(
-    `/rest/v1/payment?is_test=is.false&select=survey_submission_id,created_date_time&status=eq.succeeded&${dateRange("created_date_time", sinceIso, untilIso)}`,
+    `/rest/v1/payment?is_test=is.false&select=created_date_time,personal_report!fk_payment_personal_report(survey_submission_id)&status=eq.succeeded&${dateRange("created_date_time", sinceIso, untilIso)}`,
     { headers: { Range: "0-999" } }
   );
   if (!paymentsRes.ok) return null;
-  const payments = (await paymentsRes.json()) as Array<{
-    survey_submission_id: number | null;
+  const paymentRows = (await paymentsRes.json()) as Array<{
     created_date_time: string;
+    personal_report: { survey_submission_id: number | null } | null;
   }>;
+  const payments = paymentRows.map((row) => ({
+    created_date_time: row.created_date_time,
+    survey_submission_id: row.personal_report?.survey_submission_id ?? null,
+  }));
   if (payments.length === 0) return null;
 
   const submissionIds = [

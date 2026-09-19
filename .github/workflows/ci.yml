@@ -165,8 +165,8 @@ jobs:
     #     applying through the Supabase MCP produces if the file is not renamed after.
     # Nine of these had accumulated silently because this only ran when remembered.
     #
-    # Skips itself until SUPABASE_DB_URL is set, exactly like the integration job
-    # above, so adding the secret is the only step needed to switch it on.
+    # It does NOT skip. It reads the live schema through get_schema_artifacts()
+    # with the service-role key, which is already a repository secret.
     if: ${{ github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'push' }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -191,6 +191,20 @@ jobs:
         run: npm run check:migration-drift
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+      # Same lane because it needs the same thing: the live schema. PostgREST
+      # answers a `select=` naming an unknown column with 400, and nearly every
+      # caller turns a failed fetch into 0/null/[], so the metric reads "no data"
+      # instead of "broken". Three were live in production on 2026-09-19 —
+      # email_suppression.id (digest reported 0 unsubscribes; real answer 94),
+      # survey_question.question_text (admin scorecard 500'd), and
+      # payment.survey_submission_id (median time-to-purchase always null).
+      # Exit codes: 0 clean, 1 bad column, 2 could not check.
+      - name: Check PostgREST columns exist
+        run: npm run check:postgrest-columns
+        env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
