@@ -17,7 +17,7 @@ import { surveyCompleteEmail } from "@features/survey/server/emails/survey-compl
 import { surveyCompleteBEmail } from "@features/survey/server/emails/survey-complete-b";
 import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
-import { pickEmailVariant } from "@shared/emails/ab-variant";
+import { emailExperimentTags, pickEmailVariant } from "@shared/emails/ab-variant";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { ensurePersonalReportForSubmission } from "@features/report/server/personalReport";
 import type { SurveyAnswers } from "@features/survey/server/types";
@@ -514,7 +514,8 @@ export async function POST(request: Request) {
           )
         : undefined;
 
-      const variant = pickEmailVariant(normalizedEmail, "survey-complete");
+      const experiment = "survey-complete";
+      const variant = pickEmailVariant(normalizedEmail, experiment);
       const tpl =
         variant === "b"
           ? surveyCompleteBEmail({
@@ -539,6 +540,8 @@ export async function POST(request: Request) {
             subject: tpl.subject,
             html: tpl.html,
             text: tpl.text,
+            // Echoed back on every Resend webhook, which is how the A/B result is read.
+            tags: emailExperimentTags(experiment, variant),
             headers: {
               "X-LoveIQ-Variant": variant,
               ...(unsubscribeUrl && {

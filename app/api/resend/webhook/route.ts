@@ -52,6 +52,69 @@ function getEngagementRedis(): Redis | null {
   return _engagementRedis;
 }
 
+/**
+ * Record one event against the A/B arm the email was sent with.
+ *
+ * The arm rides on the Resend `tags` set at send time (`emailExperimentTags`),
+ * and Resend echoes them back on every webhook — which is the whole reason the
+ * five email experiments are readable at all. Before this they picked a
+ * template and forgot, so their results existed nowhere.
+ *
+ * Best-effort and silent: an experiment counter is not worth failing a webhook
+ * whose real job is suppressing bounces and complaints. An untagged email — every
+ * transactional send, and every A/B email sent before this shipped — has no tags
+ * and is skipped rather than bucketed into a fake arm.
+ */
+async function recordExperimentEvent(
+  payload: { data?: { tags?: unknown } },
+  eventType: string
+): Promise<void> {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return;
+
+  // Resend sends tags either as [{name,value}] or as a plain object, depending
+  // on the API version that created the send. Accept both rather than silently
+  // recording nothing the day they change it.
+  const raw = payload.data?.tags;
+  const tags = new Map<string, string>();
+  if (Array.isArray(raw)) {
+    for (const t of raw) {
+      const o = t as { name?: unknown; value?: unknown };
+      if (typeof o?.name === "string" && typeof o?.value === "string") tags.set(o.name, o.value);
+    }
+  } else if (raw && typeof raw === "object") {
+    for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+      if (typeof v === "string") tags.set(k, v);
+    }
+  }
+  const experiment = tags.get("exp");
+  const arm = tags.get("arm");
+  if (!experiment || !arm) return;
+
+  try {
+    await fetchWithTimeout(`${url}/rest/v1/rpc/bump_email_experiment_event`, {
+      method: "POST",
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({
+        // Berlin, like every other daily bucket in the reporting layer.
+        p_day: new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" }),
+        p_experiment: experiment,
+        p_arm: arm,
+        p_event_type: eventType,
+      }),
+      timeoutMs: 3000,
+    });
+  } catch (err) {
+    logger.warn({ err, experiment, eventType }, "email experiment counter failed");
+  }
+}
+
 async function bumpEmailEngagement(kind: "opened" | "clicked"): Promise<void> {
   const redis = getEngagementRedis();
   if (!redis) return;
@@ -83,7 +146,8 @@ export async function POST(request: Request) {
     "svix-signature": request.headers.get("svix-signature") ?? "",
   };
 
-  let payload: { type: string; data: { to?: string[] } };
+  // `tags` carries the A/B arm back from the send; see recordExperimentEvent.
+  let payload: { type: string; data: { to?: string[]; tags?: unknown } };
   try {
     const wh = new Webhook(secret);
     payload = wh.verify(rawBody, svixHeaders) as typeof payload;
@@ -112,6 +176,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, deduped: true });
     }
   }
+
+  /**
+   * Before the recipient check, and for EVERY event type.
+   *
+   * `delivered` is the denominator — an email that never arrived cannot be
+   * opened, so counting sends instead would penalise whichever arm happened to
+   * draw more dead addresses. Bounces and complaints are worth having per arm
+   * too: a variant that gets marked as spam more often is a result, not noise.
+   */
+  await recordExperimentEvent(payload, payload.type.replace(/^email\./, ""));
 
   const email = payload.data?.to?.[0]?.toLowerCase().trim();
   if (!email) {

@@ -4,7 +4,7 @@ import { inviteEmail } from "@features/invite/emails/invite";
 import { inviteBEmail } from "@features/invite/emails/invite-b";
 import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
-import { pickEmailVariant } from "@shared/emails/ab-variant";
+import { emailExperimentTags, pickEmailVariant } from "@shared/emails/ab-variant";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { z } from "zod";
 import { checkRateLimit, checkCooldown, getClientIp } from "@shared/http/ratelimit";
@@ -88,7 +88,8 @@ export async function POST(request: Request) {
   }
 
   // 4. Build UTM-tagged CTA URL (deterministic A/B variant per recipient)
-  const variant = pickEmailVariant(normalizedRecipient, "invite");
+  const experiment = "invite";
+  const variant = pickEmailVariant(normalizedRecipient, experiment);
   const siteUrl = getEmailSiteUrl();
   // eslint-disable-next-line no-secrets/no-secrets
   const ctaUrl = `${siteUrl}?utm_source=loveiq_email&utm_medium=email&utm_campaign=refer_a_friend&utm_content=version_${variant}&utm_term=report_purchaser`;
@@ -133,6 +134,8 @@ export async function POST(request: Request) {
             subject: tpl.subject,
             html: tpl.html,
             text: tpl.text,
+            // Echoed back on every Resend webhook, which is how the A/B result is read.
+            tags: emailExperimentTags(experiment, variant),
             headers: {
               "X-LoveIQ-Variant": variant,
               ...(unsubscribeUrl && {

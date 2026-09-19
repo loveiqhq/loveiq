@@ -14,6 +14,8 @@ const mockFetchAxisFunnelDaily = vi.fn();
 const mockFetchFunnelCvrSparklines = vi.fn();
 const mockAdCostByDay = vi.fn();
 const mockFetchMidwayProgress = vi.fn();
+const mockFetchPaywallHits = vi.fn();
+const mockFetchEmailExperiments = vi.fn();
 
 vi.mock("@shared/observability/logger", () => ({
   default: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() },
@@ -66,6 +68,8 @@ vi.mock("@features/admin/server/conversion-digest", async (importActual) => {
     fetchLandingStartFunnel: (...args: unknown[]) => mockFetchLandingStartFunnel(...args),
     fetchAxisFunnelDaily: (...args: unknown[]) => mockFetchAxisFunnelDaily(...args),
     fetchMidwayProgress: (...args: unknown[]) => mockFetchMidwayProgress(...args),
+    fetchPaywallHits: (...args: unknown[]) => mockFetchPaywallHits(...args),
+    fetchEmailExperimentResults: (...args: unknown[]) => mockFetchEmailExperiments(...args),
   };
 });
 
@@ -82,6 +86,7 @@ import {
   buildFunnel,
   biggestLeak,
   TINY_ARM,
+  buildEmailExperimentLines,
 } from "@features/admin/server/conversion-digest";
 import type { SlackBlock } from "@shared/observability/slack";
 
@@ -237,6 +242,10 @@ describe("conversion-digest handler", () => {
     // Default: midway RPC unavailable, so every expectation written before the
     // row existed keeps the funnel it was written against.
     mockFetchMidwayProgress.mockResolvedValue(null);
+    // Default: paywall count unavailable, so expectations written before the
+    // row existed keep the funnel they were written against.
+    mockFetchPaywallHits.mockResolvedValue(null);
+    mockFetchEmailExperiments.mockResolvedValue(null);
     mockFetchArmCohorts.mockResolvedValue([
       { axis: "landing", arm: "white", n: 300, conversions: 10 },
       { axis: "landing", arm: "white_prev", n: 240, conversions: 6 },
@@ -1047,6 +1056,84 @@ describe("conversion-digest handler", () => {
     expect(paidRow).not.toContain("<0.1%");
   });
 
+  it("puts Paywall Hits between the report and checkout, as Mark named it", async () => {
+    /**
+     * The sixth step of the funnel language agreed on 2026-09-16. The digest
+     * printed "started checkout" in that slot, which is a different decision —
+     * hitting the wall is not deciding to buy, and the drop between them is the
+     * most actionable number in the bottom half of the funnel.
+     */
+    mockFetchPaywallHits.mockResolvedValue({ hits: 300, firstRowDay: "2026-09-05" });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const funnel = arg.blocks
+      .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
+      .find((t) => t.includes("*The funnel —"));
+    expect(funnel, "the funnel block must be in the message").toBeDefined();
+    /**
+     * Positions compared among the ROWS, not across the whole block.
+     * `indexOf` on the block finds these step names in the HEADLINE first —
+     * "biggest drop hit the paywall → started checkout" — and compares two
+     * offsets that are not rows at all. The sibling test above this file already
+     * documents the same trap one level up, where a step name in the definition
+     * line was compared against one in the table.
+     */
+    const rowNames = funnel!
+      .split("\n")
+      .filter((l) => l.startsWith("`"))
+      .map((l) => l.replace(/^`[^`]*`\s*/, ""));
+    expect(rowNames.length).toBeGreaterThan(3);
+    const at = (name: string) => rowNames.findIndex((r) => r.includes(name));
+    expect(at("hit the paywall"), "the paywall row must exist").toBeGreaterThan(-1);
+    expect(at("opened their report")).toBeLessThan(at("hit the paywall"));
+    expect(at("hit the paywall")).toBeLessThan(at("started checkout"));
+  });
+
+  it("omits the paywall row rather than printing a zero", async () => {
+    // The instrument only began on 2026-09-05. A 0 under a 30-day heading says
+    // the paywall was never reached, which is a statement about the product.
+    mockFetchPaywallHits.mockResolvedValue({ hits: 0, firstRowDay: null });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    expect(blockText(arg.blocks)).not.toContain("hit the paywall");
+  });
+
+  it("keeps the funnel monotonic when paywall hits exceed report opens", async () => {
+    /**
+     * Measured on production 2026-09-19: 500 paywall hits against 412 report
+     * opens. Every row below "Finished the survey" is labelled "…of those" — a
+     * cohort — and a cohort row cannot exceed the one above it. The excess is the
+     * same period-vs-cohort mismatch that produces the 117.7% on report opens.
+     * Drawn unclamped, the funnel visibly goes UP, which reads as a bug in the
+     * product rather than in the measurement.
+     */
+    const base = makeFunnel();
+    mockFetchLandingArmFunnel.mockResolvedValue({
+      ...base,
+      cohort: [
+        { arm: "white", completions: 420, reportOpens: 412, checkout: 34, paid: 4, revenue: 60 },
+      ],
+    });
+    mockFetchPaywallHits.mockResolvedValue({ hits: 500, firstRowDay: "2026-09-05" });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const funnel = arg.blocks
+      .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
+      .find((t) => t.includes("*The funnel —"))!;
+    const counts = funnel
+      .split("\n")
+      .filter((l) => /^`\s*\d/.test(l))
+      .map((l) => parseInt(l.replace(/^`\s*/, ""), 10));
+    expect(counts.length).toBeGreaterThan(3);
+    for (let i = 1; i < counts.length; i += 1) {
+      expect(counts[i]!, `row ${i} must not exceed row ${i - 1}`).toBeLessThanOrEqual(
+        counts[i - 1]!
+      );
+    }
+    // Specifically: clamped down to the 412 opens, not left at 500.
+    expect(funnel).toMatch(/`\s*412\s+[^`]*`\s+…of those, hit the paywall/);
+  });
+
   it("names both percentages on every funnel row, and states which is which", async () => {
     /**
      * The 2026-09-16 sync spent real time on a "96.5%" nobody could source, because
@@ -1366,6 +1453,92 @@ describe("buildFunnel: the midway row and the clamp that moves with it", () => {
         `opens must be clamped with starts=${starts} midway=${midway ? "yes" : "no"}`
       ).toBeLessThanOrEqual(steps[opened - 1]!.count);
     }
+  });
+});
+
+describe("email A/B tests in the digest", () => {
+  /**
+   * Marcus asked on 2026-08-24 for CVR per EXPERIMENT. Five of ours are emails,
+   * and until the arm started riding on the Resend tags they could not appear
+   * here at all — pickEmailVariant chose a template and forgot.
+   */
+  it("reports click rate per arm, with a verdict, per experiment", () => {
+    const lines = buildEmailExperimentLines([
+      { experiment: "survey-complete", arm: "a", delivered: 900, opened: 400, clicked: 90 },
+      { experiment: "survey-complete", arm: "b", delivered: 900, opened: 410, clicked: 140 },
+    ]);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!).toContain("survey-complete");
+    expect(lines[0]!).toContain("A 10% (90/900)");
+    expect(lines[0]!).toContain("B 15.6% (140/900)");
+    expect(lines[0]!).toContain("genuinely ahead");
+    expect(lines[0]!).toContain("95% CI");
+  });
+
+  it("measures clicks, not opens", () => {
+    /**
+     * Open tracking fires on a pixel load, and Apple Mail Privacy Protection
+     * pre-fetches it for every message whether or not a human looked — so an
+     * open rate measures which mail clients each arm drew, and both arms draw
+     * the same clients. A click is a person deciding.
+     */
+    const lines = buildEmailExperimentLines([
+      // B wins overwhelmingly on OPENS and loses on clicks. If the readout used
+      // opens, it would call B the winner.
+      { experiment: "invite", arm: "a", delivered: 500, opened: 50, clicked: 100 },
+      { experiment: "invite", arm: "b", delivered: 500, opened: 450, clicked: 20 },
+    ]);
+    expect(lines[0]!).toContain("A 20% (100/500)");
+    expect(lines[0]!).toContain("B 4% (20/500)");
+    // The leader named is A, the click winner.
+    expect(lines[0]!).toMatch(/A is genuinely ahead/);
+  });
+
+  it("says the measurement cannot run, rather than calling it a tie", () => {
+    // "No clear winner" claims we measured and found the arms equal. With four
+    // clicks the z-test cannot run at all, and collapsing the two is how a test
+    // gets concluded on nothing.
+    const lines = buildEmailExperimentLines([
+      { experiment: "report-share", arm: "a", delivered: 40, opened: 10, clicked: 2 },
+      { experiment: "report-share", arm: "b", delivered: 40, opened: 11, clicked: 2 },
+    ]);
+    expect(lines[0]!).toContain("not enough clicks yet");
+    expect(lines[0]!).not.toContain("no clear winner");
+  });
+
+  it("does not present a single arm as a result", () => {
+    // One arm with traffic is not a comparison; a lone rate reads as a finding.
+    const lines = buildEmailExperimentLines([
+      { experiment: "survey-paused", arm: "a", delivered: 300, opened: 90, clicked: 30 },
+      { experiment: "survey-paused", arm: "b", delivered: 0, opened: 0, clicked: 0 },
+    ]);
+    expect(lines[0]!).toContain("only one arm has data yet");
+    expect(lines[0]!).not.toContain("ahead");
+  });
+
+  it("handles a three-way test by comparing the top two", () => {
+    const lines = buildEmailExperimentLines([
+      { experiment: "report-share", arm: "a", delivered: 600, opened: 200, clicked: 30 },
+      { experiment: "report-share", arm: "b", delivered: 600, opened: 210, clicked: 90 },
+      { experiment: "report-share", arm: "c", delivered: 600, opened: 205, clicked: 60 },
+    ]);
+    expect(lines).toHaveLength(1);
+    // All three arms are shown…
+    for (const arm of ["A ", "B ", "C "]) expect(lines[0]!).toContain(arm);
+    // …and the verdict is about the leader.
+    expect(lines[0]!).toMatch(/B is genuinely ahead/);
+  });
+
+  it("puts each experiment on its own line", () => {
+    const lines = buildEmailExperimentLines([
+      { experiment: "invite", arm: "a", delivered: 400, opened: 90, clicked: 40 },
+      { experiment: "invite", arm: "b", delivered: 400, opened: 95, clicked: 44 },
+      { experiment: "survey-complete", arm: "a", delivered: 800, opened: 300, clicked: 80 },
+      { experiment: "survey-complete", arm: "b", delivered: 800, opened: 310, clicked: 130 },
+    ]);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]!).toContain("invite");
+    expect(lines[1]!).toContain("survey-complete");
   });
 });
 

@@ -77,7 +77,12 @@ import {
   fetchLandingArmFunnel,
   fetchLandingStartFunnel,
   fetchMidwayProgress,
+  fetchPaywallHits,
+  fetchEmailExperimentResults,
+  buildEmailExperimentLines,
+  type EmailExperimentRow,
   type MidwayProgress,
+  type PaywallHits,
   sumDays,
   sumVisitors,
 } from "@features/admin/server/conversion-digest";
@@ -401,6 +406,19 @@ interface DigestInput {
    * checked. Passing `null` explicitly is fine; forgetting it is not.
    */
   midway: MidwayProgress | null;
+  /**
+   * Paywall Hits — Mark's sixth funnel step. REQUIRED for the same reason
+   * `midway` is: the preview script builds this same input from its own fetch
+   * list, and an optional field lets it silently render a funnel the real message
+   * does not have. Passing null explicitly is fine; forgetting it is not.
+   */
+  paywall: PaywallHits | null;
+  /**
+   * Per-arm results for the email A/B tests. Required, same reason as the two
+   * above: an optional field lets the preview render a message the real one
+   * does not have.
+   */
+  emailExperiments: EmailExperimentRow[] | null;
   /** Per-day, per-arm rows for every live axis. [] when the RPC is unavailable. */
   axisRows?: AxisFunnelRow[];
   /** Site-wide visitors + starts per day, for the landing→survey trend line. */
@@ -432,6 +450,8 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   const { dayKey, funnel, cohorts, now, cvrDays } = input;
   const startFunnel = input.startFunnel ?? null;
   const midway = input.midway;
+  const paywall = input.paywall;
+  const emailExperiments = input.emailExperiments;
   const axisRows = input.axisRows ?? [];
   const windowLabel = `${WINDOW_DAYS}-day window ending ${dayKey} Berlin time`;
 
@@ -553,7 +573,8 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       funnel.cohort,
       totalVisits,
       startsTotal,
-      midway ? { reached: midway.overall.reached, index: midway.midwayIndex } : null
+      midway ? { reached: midway.overall.reached, index: midway.midwayIndex } : null,
+      paywall?.hits ?? null
     );
     // Skip the visits -> finished step. It is the largest drop by construction
     // (most visitors never start a survey) and would be the headline every single
@@ -1066,6 +1087,28 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     for (const gap of trends.skipped) {
       blocks.push(context(gap.caption));
     }
+
+    /**
+     * The email A/B tests, in the same section as the on-site ones.
+     *
+     * Marcus asked for CVR per EXPERIMENT. Five of ours are emails, and until
+     * the arm started riding on the Resend tags they could not appear here at
+     * all — `pickEmailVariant` chose a template and forgot. A section that shows
+     * the landing test and silently omits five others is the quiet omission this
+     * whole exercise exists to remove.
+     */
+    const emailLines = emailExperiments ? buildEmailExperimentLines(emailExperiments) : [];
+    if (emailLines.length > 0) {
+      blocks.push(section(`*Email tests — click rate per arm*\n${emailLines.join("\n")}`));
+    } else if (emailExperiments && emailExperiments.length === 0) {
+      // Counting starts when the tags ship. Saying so is not the same as saying
+      // the emails got no clicks.
+      blocks.push(
+        context(
+          "Email A/B results start accumulating from this deploy — before it, the arm an email was sent with was never recorded anywhere."
+        )
+      );
+    }
   }
 
   // ---- Alerts ----
@@ -1195,7 +1238,17 @@ export async function GET(request: Request) {
       reportingDay(new Date(dayStart.getTime() - WINDOW_DAYS * 86_400_000))
     ).toISOString();
     const windowEnd = dayStart.toISOString();
-    const [funnel, cohorts, startFunnel, axisRows, cvrSnap, friction, midway] = await Promise.all([
+    const [
+      funnel,
+      cohorts,
+      startFunnel,
+      axisRows,
+      cvrSnap,
+      friction,
+      midway,
+      paywall,
+      emailExperiments,
+    ] = await Promise.all([
       fetchLandingArmFunnel(windowStart, windowEnd),
       fetchArmCohorts(windowStart, windowEnd),
       fetchLandingStartFunnel(windowStart, windowEnd),
@@ -1203,6 +1256,8 @@ export async function GET(request: Request) {
       fetchFunnelCvrSparklines(windowStart, windowEnd),
       buildFrictionReport(windowStart, windowEnd, surveyQuestionNames()),
       fetchMidwayProgress(windowStart, windowEnd, MIDWAY_QUESTION_INDEX),
+      fetchPaywallHits(windowStart, windowEnd),
+      fetchEmailExperimentResults(windowStart, windowEnd),
     ]);
 
     /**
@@ -1225,6 +1280,8 @@ export async function GET(request: Request) {
       cohorts,
       startFunnel,
       midway,
+      paywall,
+      emailExperiments,
       axisRows,
       cvrDays: cvrSnap?.days ?? null,
       adSpend,

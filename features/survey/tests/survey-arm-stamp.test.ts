@@ -113,8 +113,7 @@ const validBody = () => ({
 /** The utm_tracker as it reached submitSurveyOnce, parsed. */
 function trackerOnPayload(): Record<string, unknown> | null {
   const payload = mockSubmitSurveyOnce.mock.calls[0]?.[0] as
-    | { utmTracker?: string | null }
-    | undefined;
+    { utmTracker?: string | null } | undefined;
   const raw = payload?.utmTracker;
   return typeof raw === "string" ? (JSON.parse(raw) as Record<string, unknown>) : null;
 }

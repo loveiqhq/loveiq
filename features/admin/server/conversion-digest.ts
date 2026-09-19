@@ -39,6 +39,7 @@ import {
 } from "@features/attribution/server/labels";
 import type { AxisFunnelRow } from "@features/attribution/server/axis-trends";
 import logger from "@shared/observability/logger";
+import { escapeSlack } from "@shared/observability/slack";
 
 /**
  * Below this an arm is "too early to compare" whatever the z-test says. Same
@@ -633,7 +634,14 @@ export function buildFunnel(
    * 411 finishers says something false about the product rather than about the
    * measurement.
    */
-  midway?: { reached: number; index: number } | null
+  midway?: { reached: number; index: number } | null,
+  /**
+   * Paywall Hits — Mark's sixth step, which the table used to skip straight past
+   * to "started checkout". Optional and omitted rather than zeroed: the
+   * instrument only started on 2026-09-05, and a 0 printed under a 30-day
+   * heading says the paywall was never reached.
+   */
+  paywallHits?: number | null
 ): FunnelStep[] {
   const sum = (pick: (row: ArmFunnelRow) => number) => cohort.reduce((t, r) => t + pick(r), 0);
   const completions = sum((r) => r.completions);
@@ -666,6 +674,21 @@ export function buildFunnel(
    * finishers, so there is real headroom — this is for the windows where there
    * is not.
    */
+  /**
+   * Same guard, third time: a step sourced from a different table over a
+   * different instrumented period must not be drawn below the step it precedes,
+   * because the clamp would then drag THAT step down and publish a smaller,
+   * wrong number under a truthful label.
+   *
+   * Paywall hits come from report_price_quote; report opens come from the
+   * submission cohort. Measured 2026-09-19: 500 hits against 412 opens, so the
+   * paywall row sits above checkout comfortably — this is for the windows where
+   * it does not.
+   */
+  const paywallCount =
+    typeof paywallHits === "number" && Number.isFinite(paywallHits) ? paywallHits : null;
+  const hasPaywall = paywallCount !== null && paywallCount > 0;
+
   const hasMidway =
     !!midway &&
     Number.isFinite(midway.reached) &&
@@ -691,11 +714,15 @@ export function buildFunnel(
      * and an unnamed percentage in this table is precisely what put a 96.5%
      * nobody could source into a meeting.
      */
-    ...(hasMidway
-      ? [{ step: `Reached question ${midway!.index}`, count: midway!.reached }]
-      : []),
+    ...(hasMidway ? [{ step: `Reached question ${midway!.index}`, count: midway!.reached }] : []),
     { step: "Finished the survey", count: completions },
     { step: "…of those, opened their report", count: sum((r) => r.reportOpens) },
+    /**
+     * Between the report and checkout, which is where Mark put it. "Hit the
+     * paywall" and "started checkout" are different decisions and the drop
+     * between them is the one worth acting on.
+     */
+    ...(hasPaywall ? [{ step: "…of those, hit the paywall", count: paywallCount }] : []),
     { step: "…of those, started checkout", count: sum((r) => r.checkout) },
     { step: "…of those, ever paid", count: sum((r) => r.paid) },
   ];
@@ -713,10 +740,29 @@ export function buildFunnel(
   // finished-against-visits and so can bite where that never did — a window whose
   // finishers mostly started before it opens. Monotonicity is what a funnel means,
   // so it stays clamped; today there is 2.4x of headroom (425 against 1025).
-  // Counts steps, so it moves with the array: visits, [starts], [midway],
-  // finished, opened. Hardcoding 4 was already a latent trap and a third optional
-  // row would have made it wrong — derived now so adding another cannot desync it.
-  const CLAMPED_STEPS = 3 + (hasStarts ? 1 : 0) + (hasMidway ? 1 : 0);
+  /**
+   * Counts steps, so it moves with the array: visits, [starts], [midway],
+   * finished, opened, [paywall]. Hardcoding it was already a latent trap, and it
+   * has since had to absorb two new optional rows.
+   *
+   * PAYWALL IS CLAMPED, and that is a judgement worth stating. Measured
+   * 2026-09-19 it reads 500 against 412 report opens — but every row below
+   * "Finished the survey" is labelled "…of those", a cohort, and a cohort row
+   * cannot exceed the one above it. The excess is the period-vs-cohort mismatch
+   * that also produces the 117.7% on report opens: paywall hits are counted when
+   * they happen, so somebody who finished the survey last month and hit the wall
+   * this month lands outside the cohort they belong to.
+   *
+   * `ever paid` stays unclamped for the opposite reason: a promo one-tap or an
+   * admin-granted unlock sets purchased_at with no checkout, so paid can exceed
+   * checkout TRUTHFULLY.
+   *
+   * ponytail: clamping is the honest-but-lossy answer — it shows the funnel
+   * monotonic and hides how much larger the period count is. The real fix is to
+   * cohort-scope the paywall count by joining it to the submission set, which
+   * needs an RPC; worth doing if the gap ever matters on its own.
+   */
+  const CLAMPED_STEPS = 3 + (hasStarts ? 1 : 0) + (hasMidway ? 1 : 0) + (hasPaywall ? 1 : 0);
   let ceiling = Number.POSITIVE_INFINITY;
   for (let i = 0; i < raw.length; i += 1) {
     // eslint-disable-next-line security/detect-object-injection -- numeric loop index over a local array.
@@ -862,3 +908,178 @@ export function sumVisitors(rows: VisitorRow[], predicate: (day: string) => bool
 
 /** `delta` re-exported so the route formats trends identically to the other digests. */
 export { delta };
+
+/**
+ * Paywall Hits — the sixth step of the funnel Mark named on 2026-09-16.
+ *
+ * The agreed language is visits, started, midway, completed, report opened,
+ * PAYWALL HITS, purchase. The digest printed "started checkout" in that slot,
+ * which is a different moment: hitting the wall is not the same as deciding to
+ * buy, and the gap between them is the single most actionable number in the
+ * bottom half of the funnel. Measured 2026-09-19: 500 hits, 35 checkouts.
+ *
+ * `report_price_quote.paywall_reached_at` only began being written on
+ * 2026-09-05, so `firstRowDay` comes back with it — over a 30-day window the
+ * step covers far less than 30 days, and a step-conversion computed across that
+ * mismatch would be quietly wrong in the direction that flatters us.
+ *
+ * A HEAD count rather than a new RPC: one number, and PostgREST already returns
+ * it in the content-range header.
+ */
+export interface PaywallHits {
+  hits: number;
+  /** First day the instrument wrote anything, or null when it never has. */
+  firstRowDay: string | null;
+}
+
+export async function fetchPaywallHits(
+  sinceIso: string,
+  untilIso: string
+): Promise<PaywallHits | null> {
+  try {
+    const range = `paywall_reached_at=gte.${encodeURIComponent(sinceIso)}&paywall_reached_at=lt.${encodeURIComponent(untilIso)}`;
+    const res = await supabaseFetch(`/rest/v1/report_price_quote?select=id&${range}`, {
+      method: "HEAD",
+      headers: { Prefer: "count=exact" },
+    });
+    if (!res.ok) {
+      logger.warn({ status: res.status }, "conversion-digest: paywall count non-2xx");
+      return null;
+    }
+    const total = res.headers.get("content-range")?.split("/")[1];
+    const hits = total && total !== "*" ? parseInt(total, 10) : 0;
+
+    // The earliest row the instrument ever wrote, so the caller can say how much
+    // of its window the step actually covers instead of implying all of it.
+    const firstRes = await supabaseFetch(
+      "/rest/v1/report_price_quote?select=paywall_reached_at&paywall_reached_at=not.is.null&order=paywall_reached_at.asc&limit=1"
+    );
+    let firstRowDay: string | null = null;
+    if (firstRes.ok) {
+      const rows = (await firstRes.json()) as Array<{ paywall_reached_at?: string }> | null;
+      const raw = Array.isArray(rows) ? rows[0]?.paywall_reached_at : undefined;
+      firstRowDay = typeof raw === "string" ? raw.slice(0, 10) : null;
+    }
+    return { hits: Number.isFinite(hits) ? hits : 0, firstRowDay };
+  } catch (err) {
+    logger.warn({ err }, "conversion-digest: paywall count threw");
+    return null;
+  }
+}
+
+/**
+ * Per-arm results for the email A/B tests.
+ *
+ * Marcus asked on 2026-08-24 for "a daily chart with CVR per experiment, Slack
+ * pushed, winner confidence". Per EXPERIMENT — and until 2026-09-19 only the
+ * landing test could be read at all, so that chart could show one experiment and
+ * silently omit five. These come from counters the Resend webhook writes off the
+ * tags echoed back with each send.
+ *
+ * Returns null on any failure INCLUDING the function not existing yet, which
+ * omits the section rather than failing the send.
+ */
+export interface EmailExperimentRow {
+  experiment: string;
+  arm: string;
+  delivered: number;
+  opened: number;
+  clicked: number;
+}
+
+export async function fetchEmailExperimentResults(
+  sinceIso: string,
+  untilIso: string
+): Promise<EmailExperimentRow[] | null> {
+  try {
+    const res = await supabaseFetch("/rest/v1/rpc/get_email_experiment_results", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ since_ts: sinceIso, until_ts: untilIso }),
+    });
+    if (!res.ok) {
+      logger.warn({ status: res.status }, "conversion-digest: email-experiment RPC non-2xx");
+      return null;
+    }
+    const raw = (await res.json()) as unknown;
+    if (!Array.isArray(raw)) return null;
+    const rows: EmailExperimentRow[] = [];
+    for (const row of raw) {
+      if (!row || typeof row !== "object") continue;
+      const r = row as Record<string, unknown>;
+      const experiment = str(r.experiment);
+      const arm = str(r.arm);
+      if (!experiment || !arm) continue;
+      rows.push({
+        experiment,
+        arm,
+        delivered: int(r.delivered),
+        opened: int(r.opened),
+        clicked: int(r.clicked),
+      });
+    }
+    return rows;
+  } catch (err) {
+    logger.warn({ err }, "conversion-digest: email-experiment RPC threw");
+    return null;
+  }
+}
+
+/**
+ * One plain sentence per email experiment: the arms, their click rates, and
+ * whether the gap means anything yet.
+ *
+ * CLICKS over DELIVERED, not opens. Open tracking fires on a pixel load, which
+ * Apple Mail Privacy Protection pre-fetches for every message whether or not a
+ * human looked — so an open rate measures which mail clients the arms drew, and
+ * the two arms draw the same clients. A click is a person deciding.
+ *
+ * Significance is computed, never narrated: `twoProportionSignal` plus the same
+ * minimum-cell rule the landing verdicts use. An arm pair too small to say
+ * anything says exactly that.
+ */
+export function buildEmailExperimentLines(rows: EmailExperimentRow[]): string[] {
+  const byExperiment = new Map<string, EmailExperimentRow[]>();
+  for (const r of rows) {
+    if (!byExperiment.has(r.experiment)) byExperiment.set(r.experiment, []);
+    byExperiment.get(r.experiment)!.push(r);
+  }
+
+  const lines: string[] = [];
+  for (const [experiment, arms] of [...byExperiment.entries()].sort()) {
+    const live = arms.filter((a) => a.delivered > 0).sort((a, b) => a.arm.localeCompare(b.arm));
+    if (live.length === 0) continue;
+
+    const rate = (a: EmailExperimentRow) => computeRate(a.clicked, a.delivered);
+    const parts = live.map(
+      (a) => `${a.arm.toUpperCase()} ${rate(a)}% (${a.clicked}/${a.delivered})`
+    );
+
+    if (live.length === 1) {
+      // One arm with traffic is not a comparison. Say so rather than printing a
+      // lone rate that reads as a result.
+      lines.push(`• *${escapeSlack(experiment)}* — ${parts[0]}, only one arm has data yet`);
+      continue;
+    }
+
+    // Best against second-best, which is the only pair worth a verdict in a
+    // three-way test.
+    const ranked = [...live].sort((a, b) => rate(b) - rate(a));
+    const [lead, next] = [ranked[0]!, ranked[1]!];
+    const signal = twoProportionSignal(next.delivered, next.clicked, lead.delivered, lead.clicked);
+    /**
+     * Three outcomes, not two. "No clear winner" claims we measured and found
+     * the arms equal; "not enough clicks yet" says the measurement cannot run.
+     * Collapsing them is how a test with nine clicks gets read as a tie and
+     * quietly concluded.
+     */
+    const verdict =
+      signal.significance === "insufficient-data"
+        ? `not enough clicks yet to compare — each arm needs at least ${MIN_CELL_COUNT}`
+        : signal.significance === "inconclusive"
+          ? `no clear winner yet — ${lead.arm.toUpperCase()} is ahead but the gap could still be chance (${formatSignalSummary(signal)})`
+          : `${lead.arm.toUpperCase()} is genuinely ahead (${formatSignalSummary(signal)})`;
+    lines.push(`• *${escapeSlack(experiment)}* — ${parts.join(" · ")} — ${verdict}`);
+  }
+  return lines;
+}

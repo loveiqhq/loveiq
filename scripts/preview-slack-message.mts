@@ -42,6 +42,8 @@ import {
   fetchLandingArmFunnel,
   fetchLandingStartFunnel,
   fetchMidwayProgress,
+  fetchPaywallHits,
+  fetchEmailExperimentResults,
 } from "../features/admin/server/conversion-digest";
 import { dayString, fetchFunnelCvrSparklines } from "../features/admin/server/digest-metrics";
 import {
@@ -334,7 +336,17 @@ async function main(): Promise<void> {
   const windowEnd = dayStart.toISOString();
 
   console.log(`reading production data for ${dayKey} (30-day window)...`);
-  const [funnel, cohorts, startFunnel, axisRows, cvrSnap, friction, midway] = await Promise.all([
+  const [
+    funnel,
+    cohorts,
+    startFunnel,
+    axisRows,
+    cvrSnap,
+    friction,
+    midway,
+    paywall,
+    emailExperiments,
+  ] = await Promise.all([
     fetchLandingArmFunnel(windowStart, windowEnd),
     fetchArmCohorts(windowStart, windowEnd),
     fetchLandingStartFunnel(windowStart, windowEnd),
@@ -344,6 +356,8 @@ async function main(): Promise<void> {
     // The SAME threshold the cron uses, imported rather than retyped: a preview
     // computed at a different midway point is a preview of a different message.
     fetchMidwayProgress(windowStart, windowEnd, MIDWAY_QUESTION_INDEX),
+    fetchPaywallHits(windowStart, windowEnd),
+    fetchEmailExperimentResults(windowStart, windowEnd),
   ]);
 
   // adSpend deliberately null: GA4 needs a service-account credential this
@@ -358,6 +372,8 @@ async function main(): Promise<void> {
     adSpend: null,
     friction,
     midway,
+    paywall,
+    emailExperiments,
     now,
   });
 
