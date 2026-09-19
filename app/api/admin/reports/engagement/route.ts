@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { verifyAdminSession } from "@features/admin/server/auth";
 import { hasRole } from "@features/admin/server/roles";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import { readerSessionDurationsMs } from "@features/admin/server/reader-sessions";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 
@@ -15,6 +16,8 @@ interface SessionRow {
   personal_report_id: number;
   started_at: string;
   ended_at: string | null;
+  /** Embedded so a staff session can be kept out of the duration average. */
+  app_user: { email: string | null } | null;
 }
 
 interface SectionRatingRow {
@@ -88,7 +91,7 @@ export async function GET(request: Request) {
         ),
         // Q2: Sessions with duration data
         supabaseFetch(
-          `/rest/v1/report_session?select=id,personal_report_id,started_at,ended_at${sessionDateFilter}&order=started_at.asc`,
+          `/rest/v1/report_session?select=id,personal_report_id,started_at,ended_at,app_user(email)${sessionDateFilter}&order=started_at.asc`,
           { headers: { Range: "0-49999" } }
         ),
         // Q3: Section ratings (join through personal_report_section to get report_section_id)
@@ -139,16 +142,9 @@ export async function GET(request: Request) {
     const viewRate = totalReports > 0 ? Math.round((reportsWithSessions / totalReports) * 100) : 0;
 
     // Average session duration
-    const durations: number[] = [];
-    for (const s of sessions) {
-      if (s.ended_at) {
-        const durationSec =
-          (new Date(s.ended_at).getTime() - new Date(s.started_at).getTime()) / 1000;
-        if (durationSec > 0 && durationSec < 86400) {
-          durations.push(durationSec);
-        }
-      }
-    }
+    // Staff excluded and the 24h sanity cap applied in one place, shared with
+    // the core-KPI card so the two can no longer disagree.
+    const durations = readerSessionDurationsMs(sessions, 86_400_000).map((ms) => ms / 1000);
     /**
      * NULL, not 0, when no session was ever closed.
      *
