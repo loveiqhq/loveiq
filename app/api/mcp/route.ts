@@ -2277,6 +2277,10 @@ async function callTool(
 
   const ARG_ALIASES: Record<string, Record<string, string>> = {
     fetch_document: { document_id: "id" },
+    // Measured in `brain_query`: callers reach for `decided_by` when recording a
+    // decision. It can only mean `actor` — the tool has no other field for a person —
+    // so refusing it costs a round trip and teaches nothing.
+    record_decision: { decided_by: "actor" },
   };
   for (const [alias, real] of Object.entries(ARG_ALIASES[name] ?? {})) {
     if (!(alias in args)) continue;

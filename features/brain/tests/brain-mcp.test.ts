@@ -4581,3 +4581,61 @@ describe("the runbook's tool count is the real one", () => {
     );
   });
 });
+
+/**
+ * The SECOND alias, added for the same measured reason as `document_id`.
+ *
+ * `record_decision` takes `actor`, and callers in `brain_query` reach for `decided_by`.
+ * It has exactly one possible meaning — the tool has no other field naming a person —
+ * which is the only kind of alias allowed here: a second NAME, never a second meaning.
+ */
+describe("record_decision decided_by alias", () => {
+  const callRecord = (args: Record<string, unknown>) =>
+    POST(
+      rpc({
+        jsonrpc: "2.0",
+        id: 77,
+        method: "tools/call",
+        params: { name: "record_decision", arguments: args },
+      })
+    ).then((r) => r.json().then((b) => b.result));
+
+  it("accepts decided_by as another word for actor", async () => {
+    mockSupabaseFetch.mockImplementation(async () => ({
+      ok: true,
+      headers: new Headers(),
+      json: async () => [],
+    }));
+    const r = await callRecord({
+      decision: "We ship the sheets reader",
+      why: "spreadsheets were indexed one tab deep",
+      decided_by: "Eman",
+    });
+    expect(JSON.stringify(r)).not.toContain("no argument named");
+  });
+
+  it("refuses when decided_by and actor disagree, rather than picking one", async () => {
+    const r = await callRecord({
+      decision: "d",
+      why: "w",
+      actor: "Eman",
+      decided_by: "Someone else",
+    });
+    expect(r.isError).toBe(true);
+    expect(JSON.stringify(r)).toContain("no argument named");
+  });
+
+  it("does not leak the alias to other tools", async () => {
+    // Keyed by tool on purpose: `search_company_context` has no actor at all.
+    const r = await POST(
+      rpc({
+        jsonrpc: "2.0",
+        id: 78,
+        method: "tools/call",
+        params: { name: "search_company_context", arguments: { query: "x", decided_by: "Eman" } },
+      })
+    ).then((x) => x.json().then((b) => b.result));
+    expect(r.isError).toBe(true);
+    expect(JSON.stringify(r)).toContain("decided_by");
+  });
+});
