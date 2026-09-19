@@ -23,6 +23,15 @@
 --    message's own header says "30-day window ending 2026-09-17 Berlin time"
 --    over a row counting a window that ends a day earlier than that.
 --
+--    THIS IS THE UNFINISHED HALF OF 20260915162358. That migration moved funnel
+--    day boundaries to Berlin "because that is the day GA4 already counts", and
+--    did it for `get_axis_funnel_daily`, `get_landing_arm_funnel_daily` and
+--    `get_landing_start_funnel_daily`. The four sparkline functions carry the
+--    identical defect and were not touched, so for four days the digest has been
+--    drawing a Berlin-day chart above a UTC-day funnel table. Same fix, same
+--    reasoning, the three functions it missed plus the one that is only used
+--    here.
+--
 --    Worse inside `get_funnel_cvr_sparklines` specifically: its `visitors` CTE
 --    filters on these day bounds while its `starts` CTE filters on the raw
 --    timestamps. The two halves of the same rate were measuring different 30
