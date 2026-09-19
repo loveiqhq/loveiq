@@ -36,7 +36,7 @@ export function reportFullBEmail({
 
   const subject = "Something specific came up in your results\u2026";
   const previewText =
-    "Your Full Report is inside \u2014 18 dimensions of insight, in your language.";
+    "Your Full Report is inside \u2014 every dimension of insight, in your language.";
 
   const bodyHtml = `
   <tr>
@@ -58,7 +58,7 @@ export function reportFullBEmail({
         <strong style="font-weight:700;">Your Full report is inside.</strong>
       </p>
       <p style="margin:0 0 16px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
-        It goes further than most people expect. <strong style="font-weight:700;">Eighteen analysed dimensions</strong> &mdash; not just who you are, but how you desire, connect, and grow. <strong style="font-weight:700;">The patterns that are hardest to put into words now have language.</strong> Most people find at least one dimension they didn&rsquo;t see coming.
+        It goes further than most people expect. <strong style="font-weight:700;">Every analysed dimension</strong> &mdash; not just who you are, but how you desire, connect, and grow. <strong style="font-weight:700;">The patterns that are hardest to put into words now have language.</strong> Most people find at least one dimension they didn&rsquo;t see coming.
       </p>
       <p style="margin:0 0 24px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
         You can <strong style="font-weight:700;">share this report</strong> with up to two people you trust. Some of the most interesting conversations start here. <strong style="font-weight:700;">Don&rsquo;t let that go to waste.</strong>
@@ -77,7 +77,7 @@ export function reportFullBEmail({
       </p>
       <ul style="margin:0 0 16px 0; padding-left:22px; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
         <li style="margin:0 0 6px 0;">Built on psychology + real response patterns</li>
-        <li style="margin:0 0 6px 0;">18 dimensions of insight you can actually use</li>
+        <li style="margin:0 0 6px 0;">Dimensions of insight you can actually use</li>
         <li style="margin:0 0 6px 0;">Private by design &mdash; your data stays yours</li>
       </ul>
       <p style="margin:16px 0 16px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
@@ -114,7 +114,7 @@ export function reportFullBEmail({
     "",
     "Your Full report is inside.",
     "",
-    "It goes further than most people expect. Eighteen analysed dimensions — not just who you are, but how you desire, connect, and grow. The patterns that are hardest to put into words now have language. Most people find at least one dimension they didn't see coming.",
+    "It goes further than most people expect. Every analysed dimension — not just who you are, but how you desire, connect, and grow. The patterns that are hardest to put into words now have language. Most people find at least one dimension they didn't see coming.",
     "",
     "You can share this report with up to two people you trust. Some of the most interesting conversations start here. Don't let that go to waste.",
     "",
@@ -122,7 +122,7 @@ export function reportFullBEmail({
     "",
     "Why it's worth a look:",
     "- Built on psychology + real response patterns",
-    "- 18 dimensions of insight you can actually use",
+    "- Dimensions of insight you can actually use",
     "- Private by design — your data stays yours",
     "",
     "Want to go further? Upgrading to All Reports unlocks all 14 archetypes in full — alongside every benefit of the Full Report — and includes six complimentary months of the LoveIQ Journal on Substack.",

@@ -489,7 +489,7 @@ const ShareReportModal: FC<Props> = ({
               <path d="m3 7 3 3 5-6" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </span>
-          <span>All 18 analysed dimensions — your complete psychometric profile</span>
+          <span>Every analysed dimension — your complete psychometric profile</span>
         </li>
         <li>
           <span className="report-share-modal__locked-check" aria-hidden="true">
