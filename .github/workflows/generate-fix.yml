@@ -1,0 +1,174 @@
+name: Generate and prove a fix
+
+# The last link in the chain: a reproduced defect goes in, a PROVEN fix comes
+# out, and a human merges it. Nothing here is trusted because a model produced
+# it — scripts/prove-fix.mjs decides, and it decides by building the site twice
+# and running the probe against each.
+#
+# AUTHENTICATION IS THE TEAM SUBSCRIPTION, NOT AN API KEY. `claude setup-token`
+# mints a long-lived token for exactly this, billed against the plan we already
+# pay for. Set CLAUDE_CODE_OAUTH_TOKEN in the repository secrets; without it
+# this job skips cleanly rather than failing every run.
+#
+# Dispatch-only, deliberately. Generating a fix costs real money and real
+# review attention, and firing it at every finding would produce a queue of
+# pull requests nobody reads — which is how a useful tool becomes noise. A
+# person decides a defect is worth fixing, then asks for one.
+
+on:
+  workflow_dispatch:
+    inputs:
+      probe:
+        description: "Probe in scripts/probes/ that reproduces the defect"
+        required: true
+      probe_env:
+        description: 'JSON env for the probe, e.g. {"URL_PATH":"/survey","TARGET_SELECTOR":"button.flex-1"}'
+        required: false
+        default: "{}"
+      defect:
+        description: "What a visitor experiences. Plain English, no solution."
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.probe }}
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    name: Propose a fix, then prove it
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium webkit
+
+      # Skips rather than fails. A missing token is "this is not set up yet",
+      # not "the pipeline is broken", and a job that is red for a configuration
+      # gap teaches people to ignore red jobs.
+      - name: Check the subscription token is present
+        id: token
+        env:
+          OAUTH: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -z "$OAUTH" ]; then
+            echo "::warning::CLAUDE_CODE_OAUTH_TOKEN is not set — run 'claude setup-token' and add it as a repository secret"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Claude Code
+        if: steps.token.outputs.ready == 'true'
+        run: npm install -g @anthropic-ai/claude-code
+
+      # The prompt says WHAT IS WRONG and never how to fix it. A prompt that
+      # dictates the change turns this into a slow way of typing, and the
+      # interesting failures are the ones where the obvious fix is wrong.
+      #
+      # Inputs travel through the ENVIRONMENT. `${{ }}` inside `run:` is
+      # substituted before bash sees it, so a defect description containing a
+      # quote is command execution on the runner.
+      - name: Propose a fix
+        if: steps.token.outputs.ready == 'true'
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          DEFECT: ${{ inputs.defect }}
+          PROBE: ${{ inputs.probe }}
+          PROBE_ENV: ${{ inputs.probe_env }}
+        run: |
+          claude -p "$(printf '%s\n' \
+            "A probe in this repository reproduces a real defect a visitor hit." \
+            "" \
+            "What the visitor experiences: $DEFECT" \
+            "The probe that reproduces it: scripts/probes/$PROBE" \
+            "Run it with this environment: $PROBE_ENV" \
+            "" \
+            "Read that probe first so you know exactly what it measures, then fix" \
+            "the product so it passes. Constraints, all enforced mechanically" \
+            "afterwards by scripts/prove-fix.mjs, so a change that breaks one is" \
+            "wasted work:" \
+            "" \
+            "- Touch only presentation code: features/*/ui/, shared/ui/," \
+            "  app/globals.css, and tests. Anything touching API routes, database" \
+            "  migrations, auth, payments or the probes themselves is refused." \
+            "- Keep it small. Well under 40 changed lines." \
+            "- Do NOT edit the probe. It is the judge, not part of the fix." \
+            "- Follow the conventions in CLAUDE.md, especially the comment style." \
+            "" \
+            "Make the change. Do not commit; the workflow does that.")" \
+            --allowedTools "Read,Edit,Write,Grep,Glob,Bash(npm run lint),Bash(npx vitest run:*)" \
+            --permission-mode acceptEdits \
+            --max-turns 40
+
+      - name: Commit whatever it changed
+        if: steps.token.outputs.ready == 'true'
+        id: commit
+        env:
+          DEFECT: ${{ inputs.defect }}
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "::error::the model changed nothing — there is no candidate fix to prove"
+            exit 1
+          fi
+          branch="autofix/$(date -u +%Y%m%d-%H%M%S)"
+          git checkout -b "$branch"
+          git -c user.name=loveiq-autofix -c user.email=ec@loveiq.org \
+            commit -am "fix: $DEFECT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      # The gate. Nothing above this line is trusted.
+      - name: Prove it
+        if: steps.token.outputs.ready == 'true'
+        env:
+          FIX_REF: ${{ steps.commit.outputs.branch }}
+          BASE_REF: origin/main
+          PROBE: ${{ inputs.probe }}
+          PROBE_ENV: ${{ inputs.probe_env }}
+        run: node scripts/prove-fix.mjs
+
+      # Only reached when the proof passed, so this PR is ready for review
+      # rather than a draft — the draft state is what the UNPROVEN reproduction
+      # PRs use, and the difference should mean something.
+      - name: Open a pull request
+        if: steps.token.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ steps.commit.outputs.branch }}
+          DEFECT: ${{ inputs.defect }}
+          PROBE: ${{ inputs.probe }}
+        run: |
+          git push origin "$BRANCH"
+          gh pr create --base main --head "$BRANCH" \
+            --title "fix: $DEFECT" \
+            --body "$(printf '%s\n' \
+              "A visitor hit this, a probe reproduced it, and this change was proven against it." \
+              "" \
+              "**What a visitor experienced:** $DEFECT" \
+              "**Probe:** \`scripts/probes/$PROBE\`" \
+              "" \
+              "\`scripts/prove-fix.mjs\` built the site twice and checked all of:" \
+              "" \
+              "- the probe reproduces on \`main\`" \
+              "- the diff is presentation-only and under the line cap" \
+              "- the probe passes on this branch" \
+              "- the reproduction repeats on \`main\`, so it is not a flake" \
+              "- lint, tests and build are green" \
+              "- no other probe started claiming a defect that is not one" \
+              "" \
+              "Written by Claude Code and proven mechanically. Read it before merging —" \
+              "the proof says the probe is satisfied, not that the approach is right.")"
