@@ -87,6 +87,16 @@ jobs:
             echo "ready=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # Every run logs:
+      #
+      #   Ignoring 65 permissions.allow entries from .claude/settings.local.json:
+      #   this workspace has not been trusted.
+      #
+      # LEAVE THAT WARNING ALONE. The obvious fix — setting
+      # hasTrustDialogAccepted — would apply a developer's local allowlist here,
+      # widening what the model may do beyond the --allowedTools below, which is
+      # the only permission boundary this job actually reasons about. The entries
+      # being IGNORED is the safe state; the warning is just saying so out loud.
       - name: Install Claude Code
         if: steps.token.outputs.ready == 'true'
         run: npm install -g @anthropic-ai/claude-code
