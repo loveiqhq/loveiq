@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { sampleForDay, tabsPresentInText } from "@/app/api/cron/brain-reconcile/route";
 
@@ -64,5 +64,49 @@ describe("sampleForDay", () => {
 
   it("handles a negative day index rather than producing nothing", () => {
     expect(sampleForDay(all, -1, 3)).toHaveLength(3);
+  });
+});
+
+/**
+ * THE CREDENTIAL, which is the part that was wrong and silent.
+ *
+ * These spreadsheets belong to people, not to the service account, so the service
+ * account token is refused with 403 PERMISSION_DENIED on every one of them. Written
+ * that way, the check threw on its first file every night, landed in `unread`, and
+ * reported "could not read: spreadsheet tabs" — which reads as a missing token rather
+ * than as a check that has never once run. It must use the DELEGATED token, the same
+ * one the drive ingester uses.
+ */
+describe("sheetTabReading credential", () => {
+  it("delegates, and never reaches for the service-account token", async () => {
+    vi.resetModules();
+    const delegated = vi.fn(async () => "delegated-token");
+    const serviceAccount = vi.fn(async () => {
+      throw new Error("the service account token is refused by the Sheets API (403)");
+    });
+    vi.doMock("@shared/http/google-oauth", () => ({
+      DRIVE_SCOPE: "https://www.googleapis.com/auth/drive.readonly",
+      getDelegatedToken: delegated,
+      getGoogleAccessToken: serviceAccount,
+      readVercelOidcToken: () => null,
+    }));
+    // Stop after the token: this test is about WHICH credential, not about the walk.
+    vi.doMock("@features/admin/server/supabase", () => ({
+      supabaseFetch: async () => ({ ok: false, status: 500 }),
+    }));
+    process.env.GOOGLE_WORKSPACE_ADMIN = "admin@example.com";
+
+    const { sheetTabReading } = await import("@/app/api/cron/brain-reconcile/route");
+    await expect(sheetTabReading(new Request("https://example.com/"))).resolves.toBeNull();
+
+    expect(serviceAccount).not.toHaveBeenCalled();
+    expect(delegated).toHaveBeenCalledWith(
+      "admin@example.com",
+      "https://www.googleapis.com/auth/drive.readonly",
+      expect.any(Number),
+      null
+    );
+    vi.doUnmock("@shared/http/google-oauth");
+    vi.doUnmock("@features/admin/server/supabase");
   });
 });

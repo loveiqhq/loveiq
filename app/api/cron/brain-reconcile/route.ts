@@ -19,7 +19,7 @@ import { buildReportVoiceRows } from "@features/brain/server/ingest/report-voice
 import { buildDomainRows } from "@features/brain/server/ingest/domain";
 import { redactUrlSecrets } from "@features/brain/server/ingest/upsert";
 import { sheetTabTitles } from "@features/brain/server/ingest/drive";
-import { getGoogleAccessToken, readVercelOidcToken } from "@shared/http/google-oauth";
+import { DRIVE_SCOPE, getDelegatedToken, readVercelOidcToken } from "@shared/http/google-oauth";
 import { reconcile, summarise, type Reading } from "@features/brain/server/reconcile";
 import { recordNotice } from "@features/brain/server/notice";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -316,8 +316,20 @@ export function tabsPresentInText(text: string, titles: string[]): number {
   return titles.filter((t) => text.includes(`## ${t}`)).length;
 }
 
-async function sheetTabReading(request: Request): Promise<Reading | null> {
-  const token = await getGoogleAccessToken(Date.now(), readVercelOidcToken(request));
+export async function sheetTabReading(request: Request): Promise<Reading | null> {
+  // The SERVICE ACCOUNT token is refused here (403 PERMISSION_DENIED): these
+  // spreadsheets belong to people, not to the service account, so reading them needs
+  // the same DELEGATED token the drive ingester uses. Getting this wrong does not
+  // fail loudly — it lands in `unread` every night, which reads as "not checked yet"
+  // rather than "this check has never once run".
+  const admin = process.env.GOOGLE_WORKSPACE_ADMIN?.trim();
+  if (!admin) return null;
+  const token = await getDelegatedToken(
+    admin,
+    DRIVE_SCOPE,
+    Date.now(),
+    readVercelOidcToken(request)
+  );
   if (!token) return null;
 
   // Built from parts rather than written out: the percent-encoded form of this filter
