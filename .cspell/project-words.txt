@@ -63,6 +63,7 @@ Lenis
 livemode
 Lora
 loveiq
+loveiqhq
 Manrope
 Marcus
 minimisation

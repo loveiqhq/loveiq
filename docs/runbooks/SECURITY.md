@@ -288,14 +288,50 @@ The repository uses multiple layers of automated security scanning:
 - `eslint-plugin-no-secrets` for secret detection
 - Custom rules in `eslint.config.mjs`
 
-## CI/CD enforcement (branch protection is unavailable on this plan)
+## CI/CD enforcement (branch protection: partly on)
 
-GitHub **branch protection rules and repository rulesets are a paid feature** for
-private repos (Team/Enterprise) — this repo is on the Free plan, so we **cannot**
-require status checks or reviews at the GitHub layer. A red commit can therefore
-reach `main` (a web merge, or `git push --no-verify`) and Vercel auto-deploys it.
+**Corrected 2026-09-19.** This section used to say branch protection was a paid
+feature we could not have. That was wrong on both counts, and it had been used
+as the reason not to pursue it: `loveiqhq/loveiq` is a **public** repository, so
+protected branches are free on every GitHub plan — and the organisation is on
+**Team** anyway, which includes them for private repos too. It costs nothing.
+`main` had simply never had a rule (`404 Branch not protected`).
 
-Because we can't hard-block merges, enforcement is layered (defence in depth):
+**What is enabled on `main` now:**
+
+|                        |                         |
+| ---------------------- | ----------------------- |
+| Force pushes           | **blocked**             |
+| Branch deletion        | **blocked**             |
+| Required PR review     | not enabled — see below |
+| Required status checks | not enabled — see below |
+
+Verified by attempting both against an identically-configured throwaway branch:
+`remote rejected … (protected branch hook declined)`.
+
+**Why the other two are deliberately off.** Requiring a pull request or a green
+status check also blocks direct pushes, and `main` takes around twenty a day from
+several people and agent sessions. Turning it on mid-stream would stop everyone
+working, so it is staged rather than skipped: it is the prerequisite for letting
+anything merge its own work, and it goes on at the same time as that, not before.
+
+To enable it when that day comes:
+
+```bash
+gh api -X PUT repos/loveiqhq/loveiq/branches/main/protection --input - <<'JSON'
+{
+  "required_status_checks": { "strict": true, "contexts": ["build"] },
+  "enforce_admins": false,
+  "required_pull_request_reviews": { "required_approving_review_count": 1 },
+  "restrictions": null,
+  "allow_force_pushes": false,
+  "allow_deletions": false
+}
+JSON
+```
+
+A red commit can still reach `main` today, so the layered enforcement below is
+still what actually holds, and is not redundant:
 
 ### Layer 1 — local pre-push gate (preventive)
 
