@@ -177,6 +177,43 @@ describe("SurveyPage", () => {
     expect(await screen.findByTestId("survey-engine", {}, { timeout: 1000 })).toBeInTheDocument();
   });
 
+  /**
+   * A disabled button cannot explain itself: it takes no pointer events, so
+   * there is no hover, no click, nothing. On production 22 people tapped this
+   * button while it was disabled in 30 days and 3 never got past the screen —
+   * a hard stop at the entrance to the funnel. The checkboxes sit above it and
+   * the cookie banner covers the lower one on a Pixel 7 and both on an iPhone
+   * SE, so they could not see what was missing.
+   */
+  it("says why the agree button is not working, and stops once it is", async () => {
+    const user = userEvent.setup();
+    sessionStorage.setItem(SURVEY_STEP_KEY, "5");
+
+    render(<SurveyPage />);
+
+    const agreeButton = await screen.findByRole("button", { name: /i agree/i });
+    const checkboxes = screen.getAllByRole("checkbox");
+
+    expect(agreeButton).toBeDisabled();
+    expect(screen.getByText(/tick both boxes above to continue/i)).toBeInTheDocument();
+
+    // Still blocked on one box: the reason must still be shown.
+    await user.click(checkboxes[0]);
+    expect(screen.getByText(/tick both boxes above to continue/i)).toBeInTheDocument();
+
+    // Not nagging once there is nothing to fix.
+    await user.click(checkboxes[1]);
+    expect(agreeButton).toBeEnabled();
+    expect(screen.queryByText(/tick both boxes above to continue/i)).not.toBeInTheDocument();
+  });
+
+  it("announces the reason to a screen reader, not just sighted readers", async () => {
+    sessionStorage.setItem(SURVEY_STEP_KEY, "5");
+    render(<SurveyPage />);
+    const hint = await screen.findByText(/tick both boxes above to continue/i);
+    expect(hint).toHaveAttribute("aria-live", "polite");
+  });
+
   it("restores the consent screen from session storage", async () => {
     sessionStorage.setItem(SURVEY_STEP_KEY, "5");
 

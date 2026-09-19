@@ -1160,6 +1160,35 @@ const ConsentScreen: FC<{
             I agree
           </button>
         </div>
+
+        {/*
+          Why the button is not working, said out loud.
+
+          A disabled control cannot report anything: it takes no pointer events,
+          so there is no hover, no click, no way for it to explain itself. On
+          production 22 people tapped this exact button while it was disabled in
+          30 days and 3 of them never got past this screen at all — a hard stop
+          at the entrance to the whole funnel.
+
+          The two checkboxes are ABOVE the button and the cookie banner covers
+          the lower one on a Pixel 7 and both on an iPhone SE on a first visit,
+          so "just look up" is not advice this reader can act on without being
+          told. That is the whole defect: not that consent is required, but that
+          nothing says so.
+
+          Consent semantics are deliberately untouched. The button stays
+          disabled until both boxes are ticked; this only explains why.
+          `aria-live` because a sighted reader sees the line appear and a screen
+          reader user otherwise gets nothing at all.
+        */}
+        {!canProceed && (
+          <p
+            aria-live="polite"
+            className="mt-4 text-center text-[13px] font-light leading-[20px] text-white/50"
+          >
+            Tick both boxes above to continue.
+          </p>
+        )}
       </div>
     </main>
   );
