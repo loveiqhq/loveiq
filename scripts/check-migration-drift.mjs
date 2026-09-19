@@ -182,6 +182,14 @@ async function fetchLiveState(client) {
     JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public'
   `);
+  const ownFns = await client.query(`
+    SELECT DISTINCT p.proname FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public'
+      AND NOT EXISTS (
+        SELECT 1 FROM pg_depend d
+         WHERE d.objid = p.oid AND d.classid = 'pg_proc'::regclass AND d.deptype = 'e')
+  `);
   const indexes = await client.query(`
     SELECT indexname FROM pg_indexes WHERE schemaname = 'public'
   `);
@@ -200,6 +208,7 @@ async function fetchLiveState(client) {
     constraints: new Set(constraints.rows.map((r) => r.conname)),
     columns: new Set(columns.rows.map((r) => `${r.table_name}.${r.column_name}`)),
     tables: new Set(columns.rows.map((r) => r.table_name.toLowerCase())),
+    ownFunctions: new Set(ownFns.rows.map((r) => r.proname)),
   };
 }
 
@@ -288,6 +297,22 @@ async function fetchViaRpc(supabaseUrl, serviceKey) {
       constraints: new Set(a.constraints),
       columns: new Set(a.columns),
       tables: new Set(a.columns.map((c) => c.split(".")[0].toLowerCase())),
+      /**
+       * NOT `?? []`. An absent key would make the reverse check compare against
+       * an empty set, report zero, and pass — the silent-skip failure this whole
+       * job exists to avoid. If the RPC predates 20260919280000, say so and stop.
+       */
+      ownFunctions: new Set(
+        a.ownFunctions ??
+          (() => {
+            console.error(
+              "\nget_schema_artifacts() returned no `ownFunctions`. The reverse check " +
+                "cannot run,\nand reporting zero would be a false pass. Apply " +
+                "20260919280000_schema_artifacts_add_own_functions.sql.\n"
+            );
+            process.exit(2);
+          })()
+      ),
     },
     ledgerRows: a.ledger,
   };
@@ -354,6 +379,30 @@ async function main() {
   {
     const { live, ledgerRows } = source;
     const repo = extractArtifacts();
+
+    /**
+     * The REVERSE direction: what production has that no migration can rebuild.
+     *
+     * Everything else here asks "does live have what the repo declares". This
+     * asks the opposite, and it is the one that decides whether this repo can
+     * stand up a database at all — for a staging environment, or for disaster
+     * recovery.
+     *
+     * Nothing checked it until 2026-09-20, and the answer was no. Five
+     * functions and four tables existed only in production, so a push into an
+     * empty project stopped dead at 20260329231617_admin_security_hardening,
+     * which does `RAISE EXCEPTION 'Function not found: %'` over a list that
+     * includes three of them. Captured in
+     * 20260307095959_objects_that_predate_the_migration_history.sql.
+     *
+     * Extension-provided functions are excluded via `ownFunctions` — 149 of the
+     * 230 in `public` come from pgvector and pg_trgm and are never declared by
+     * a migration, so including them would bury the real finding in noise.
+     */
+    const unrebuildable = {
+      functions: [...live.ownFunctions].filter((n) => !repo.functions.has(n)).sort(),
+      tables: [...live.tables].filter((n) => !repo.tables.has(n)).sort(),
+    };
 
     const drift = {
       functions: [...repo.functions].filter((n) => !live.functions.has(n)),
@@ -423,6 +472,24 @@ async function main() {
           "  UPDATE supabase_migrations.schema_migrations SET version = '<from filename>'\n" +
           "   WHERE name = '<name>';\n"
       );
+    }
+
+    const unrebuildableTotal = unrebuildable.functions.length + unrebuildable.tables.length;
+    if (unrebuildableTotal > 0) {
+      console.error(
+        `\n❌ ${unrebuildableTotal} object(s) exist in PRODUCTION that no migration creates —\n` +
+          `   this repo cannot rebuild the database (staging, db reset, disaster recovery):\n`
+      );
+      if (unrebuildable.functions.length)
+        console.error("  Functions:", unrebuildable.functions.join(", "));
+      if (unrebuildable.tables.length) console.error("  Tables:", unrebuildable.tables.join(", "));
+      console.error(
+        `\nCapture the LIVE definition into a migration — pg_get_functiondef and\n` +
+          `pg_get_constraintdef, written straight to the file, never retyped. Date it\n` +
+          `before the first migration that references it, and insert a ledger row so\n` +
+          `production skips it. See 20260307095959_objects_that_predate_the_migration_history.sql.\n`
+      );
+      process.exit(1);
     }
 
     if (total === 0 && ledgerTotal === 0) {
