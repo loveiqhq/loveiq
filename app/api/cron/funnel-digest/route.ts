@@ -158,9 +158,9 @@ const CHART_CAPTIONS: Partial<Record<DigestImageKind, string>> = {
   "cvr-start-completion":
     "Of everyone who answers the first question, the share who reach the last one. A 7-day running average.",
   "cvr-completion-paygate":
-    "Of everyone who finishes the survey, the share who reach the point where the report asks for payment. A 7-day running average.",
+    "Of everyone who finishes the survey, the share who reach the point where the report asks for payment. A 7-day running average. The line starts in September because that is when we began recording this properly — earlier days are left blank rather than shown as a low number.",
   "cvr-paygate-purchase":
-    "Of everyone who reaches that point, the share who pay. A 7-day running average — on a single day one sale out of one visitor is 100%, which is noise rather than news.",
+    "Of everyone who reaches that point, the share who pay. A 7-day running average — on a single day one sale out of one visitor is 100%, which is noise rather than news. Starts in September for the same reason as the chart above.",
   "bucket-performance":
     "Each line is one price we showed. The share of people who bought at that price, as a 7-day running average. Both lines share one scale, so their heights compare.",
   "dropout-funnel":
@@ -249,7 +249,9 @@ async function buildCvrChartBlocks(
     alt: string,
     label: string,
     numKey: keyof (typeof days)[number],
-    denKey: keyof (typeof days)[number]
+    denKey: keyof (typeof days)[number],
+    /** Set when the stage was not measured this way for the whole window. */
+    measuredFrom?: string
   ) => {
     // Gate on the DENOMINATOR, not the rate: a real 0% conversion (denominator
     // present, numerator always 0 — e.g. paygate→purchase) is critical signal
@@ -257,10 +259,15 @@ async function buildCvrChartBlocks(
     // that stage = nothing to convert from).
     const hasDenominator = days.some((d) => Number(d[denKey]) > 0);
     if (!hasDenominator) return;
-    const series = trailingRate(
+    const rawSeries = trailingRate(
       days.map((d) => Number(d[numKey])),
       days.map((d) => Number(d[denKey]))
     );
+    const series = measuredFrom
+      ? maskBeforeMeasured(rawSeries, days, measuredFrom)
+      : rawSeries;
+    // A fully masked series is not a chart, it is an empty frame with a title.
+    if (!series.some((v) => v !== null)) return;
     out.push(
       ...(await lineChartBlock(kind, alt, {
         windowLabel,
@@ -321,14 +328,16 @@ async function buildCvrChartBlocks(
     "Share of survey finishers who reach the point where the report asks for payment, over time",
     "Of those who finish",
     "paygate",
-    "completions"
+    "completions",
+    PAYGATE_MEASURED_FROM
   );
   await single(
     "cvr-paygate-purchase",
     "Share of people at the payment point who buy, over time",
     "Of those who reach it",
     "purchased",
-    "paygate"
+    "paygate",
+    PAYGATE_MEASURED_FROM
   );
 
   return out;
@@ -456,6 +465,45 @@ function trailingRate(nums: number[], dens: number[]): Array<number | null> {
       d += dens[i] ?? 0;
     }
     return d >= TRAILING_MIN_DENOMINATOR ? computeRate(n, d) : null;
+  });
+}
+
+/**
+ * The day the paywall stage began being measured the way it is measured now.
+ *
+ * `paygate` in get_funnel_cvr_sparklines is a UNION of a client-posted
+ * `paywall_initiated` analytics event (consent-gated, so lossy) and
+ * `report_price_quote.paywall_reached_at` (server truth). The server column
+ * shipped 2026-09-05 19:15 UTC and has no rows before it, so the union counts a
+ * strictly larger population from that day on.
+ *
+ * Drawn unmasked, the completion→paygate line steps from ~5% to ~60% on 5 Sep
+ * and paygate→purchase collapses from ~9% to ~1.6% on the same day — a 12x
+ * "improvement" and a 6x "collapse" that are one measurement change, not two
+ * product events. That is the single most misreadable thing this digest could
+ * publish, so the unmeasured stretch is a GAP rather than a low number.
+ *
+ * 09-06 rather than 09-05: the 5th holds 4 rows from 21:15 Berlin onward, a
+ * partial day that would read as a near-zero rate.
+ */
+const PAYGATE_MEASURED_FROM = "2026-09-06";
+
+/**
+ * Null every slot whose trailing window reaches back before `measuredFrom`.
+ *
+ * Masking only the days BEFORE the boundary is not enough: a 7-day average on
+ * 8 Sep still has five unmeasured days inside it, so the line would climb a
+ * ramp that is purely the old days ageing out. The first point drawn is the
+ * first whose entire window is on the measured side.
+ */
+function maskBeforeMeasured(
+  series: Array<number | null>,
+  days: Array<{ day: string }>,
+  measuredFrom: string
+): Array<number | null> {
+  return series.map((v, idx) => {
+    const windowStart = days[Math.max(0, idx - (TRAILING_DAYS - 1))]?.day;
+    return windowStart && windowStart < measuredFrom ? null : v;
   });
 }
 

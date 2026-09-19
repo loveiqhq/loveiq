@@ -158,9 +158,26 @@ function buildWeekly(): WeeklyMetrics {
   };
 }
 
+/**
+ * Thirty days ending 2026-09-18.
+ *
+ * Was three days, which is fewer than the seven a trailing average needs, so
+ * every cvr series came back entirely null and the charts these tests assert on
+ * were empty frames carrying a title and a "now —" readout. Nothing checked
+ * that a chart contained a line, so the assertions passed anyway.
+ *
+ * September rather than May so the two paygate-derived charts sit after
+ * PAYGATE_MEASURED_FROM; before that boundary they are deliberately suppressed.
+ * The dates here are what the MOCKED fetcher returns and are independent of the
+ * faked clock, which the window-bounds tests below assert separately.
+ */
+const SNAP_DAYS = 30;
+const snapDay = (i: number) =>
+  new Date(Date.UTC(2026, 7, 20) + i * 86_400_000).toISOString().slice(0, 10);
+
 const cvrSnap: FunnelCvrSnapshot = {
-  days: Array.from({ length: 3 }, (_, i) => ({
-    day: `2026-05-2${i + 5}`,
+  days: Array.from({ length: SNAP_DAYS }, (_, i) => ({
+    day: snapDay(i),
     visitors: 100,
     visitors_control: 100,
     starts: 40,
@@ -173,7 +190,10 @@ const cvrSnap: FunnelCvrSnapshot = {
   })),
 };
 const bucketSnap: BucketPerfSnapshot = {
-  days: [{ day: "2026-05-27", buckets: { a: { shown: 10, purchases: 2, revenue: 60 } } }],
+  days: Array.from({ length: SNAP_DAYS }, (_, i) => ({
+    day: snapDay(i),
+    buckets: { a: { shown: 10, purchases: 2, revenue: 60 } },
+  })),
 };
 const dropoutSnap: DropoutFunnelSnapshot = {
   questions: [
