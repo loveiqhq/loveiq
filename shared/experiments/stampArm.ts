@@ -32,7 +32,16 @@ import { isLandingVariant, LANDING_VARIANT_COOKIE } from "@shared/experiments/la
 export async function stampLandingArm(
   utmTracker: string | null | undefined
 ): Promise<string | null> {
-  const tracker = utmTracker ?? null;
+  /**
+   * `|| null`, not `?? null`: an EMPTY STRING is absence, not a tracker.
+   *
+   * Both routes previously wrote `parsed.data.utmTracker || null`, so a crafted
+   * body sending `""` stored NULL. `??` would have stored `''` instead, and every
+   * `utm_tracker IS NOT NULL` count in the analytics layer — including the
+   * non-null figure this whole change was reasoned from — would quietly start
+   * counting empty strings as trackers.
+   */
+  const tracker = utmTracker || null;
 
   let arm: string | undefined;
   try {
@@ -65,13 +74,26 @@ export async function stampLandingArm(
    * or anyone predating the stamp.
    */
   const { landing_variant: _claimed, ...rest } = base as Record<string, unknown>;
-  const merged = cookieArm ? { ...rest, landing_variant: cookieArm } : rest;
 
   // Unchanged blob in, unchanged blob out — so a tracker with no arm claim and no
   // cookie is byte-identical to what the caller sent, not a re-serialised copy.
   if (!cookieArm && _claimed === undefined) return tracker;
 
-  const candidate = JSON.stringify(merged);
-  // Over budget: keep the ORIGINAL rather than a truncated one.
-  return candidate.length <= 1000 ? candidate : tracker;
+  /**
+   * The strip is UNCONDITIONAL; only the re-add is budgeted.
+   *
+   * This used to fall back to `tracker` when the merged blob went over budget —
+   * and `tracker` is the caller's original, claim included. So a client posting a
+   * ~997-character blob containing `"landing_variant":"white"` while the server
+   * had assigned it `white_prev` pushed the merge to 1002 characters, took the
+   * fallback, and had its own claim stored as fact. The guard defeated itself at
+   * exactly the input designed to defeat it.
+   *
+   * `stripped` can never exceed the budget: JSON.stringify emits no whitespace,
+   * so it is at most as long as the input, and removing a key only shortens it.
+   */
+  const stripped = JSON.stringify(rest);
+  if (!cookieArm) return stripped;
+  const merged = JSON.stringify({ ...rest, landing_variant: cookieArm });
+  return merged.length <= 1000 ? merged : stripped;
 }

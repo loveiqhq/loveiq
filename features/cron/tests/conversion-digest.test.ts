@@ -207,7 +207,9 @@ function landingChartPayloads(): Array<{
           colorLast?: string;
         }
     )
-    .filter((p) => p.legendFirst?.includes("Landing Page") || p.legendLast?.includes("Landing Page"));
+    .filter(
+      (p) => p.legendFirst?.includes("Landing Page") || p.legendLast?.includes("Landing Page")
+    );
 }
 
 describe("conversion-digest handler", () => {
@@ -896,6 +898,66 @@ describe("conversion-digest handler", () => {
     expect(titles.some((t) => t.includes("reaching question"))).toBe(false);
   });
 
+  it("stays silent per-arm too when the funnel refuses the midway row", async () => {
+    /**
+     * One trust decision, two surfaces. When midway reads below the finisher
+     * count the sources are measuring different populations and buildFunnel drops
+     * the row. The per-arm block used to print anyway, so the message both
+     * withheld and asserted the same figure.
+     */
+    mockFetchMidwayProgress.mockResolvedValue({
+      // Below the fixture's 510 finishers.
+      overall: { sessions: 300, reached: 40 },
+      daily: [],
+      totals: [
+        { arm: "white", sessions: 160, reached: 22 },
+        { arm: "white_prev", sessions: 140, reached: 18 },
+      ],
+      midwayIndex: 30,
+      firstArmDay: "2026-09-19",
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const flat = blockText(arg.blocks);
+    expect(flat).not.toContain("Reached question");
+    expect(flat).not.toContain("Midway progress, by landing page");
+    // Not the empty-state note either — that is for "no arm data", not "distrusted".
+    expect(flat).not.toContain("Midway progress per landing page starts from");
+  });
+
+  it("names the drafts with no landing page, so the arms add up", async () => {
+    /**
+     * The RPC buckets arm-less rows as 'unknown' so the arms always sum to the
+     * total. This caller filtered to the two live arms, which defeated the reason
+     * the bucket exists: the printed lines did not reconcile with overall.sessions
+     * and nothing said why. No cookie means a crawler, a direct hit or a consent
+     * refusal — a real population.
+     */
+    const days = Array.from({ length: 14 }, (_, i) =>
+      new Date(Date.UTC(2026, 8, 19) + i * 86_400_000).toISOString().slice(0, 10)
+    );
+    mockFetchMidwayProgress.mockResolvedValue({
+      overall: { sessions: 1000, reached: 620 },
+      daily: days.flatMap((day) => [
+        { day, arm: "white_prev", sessions: 30, reached: 16 },
+        { day, arm: "white", sessions: 34, reached: 21 },
+      ]),
+      totals: [
+        { arm: "white", sessions: 476, reached: 294 },
+        { arm: "white_prev", sessions: 420, reached: 224 },
+        { arm: "unknown", sessions: 104, reached: 61 },
+      ],
+      midwayIndex: 30,
+      firstArmDay: "2026-09-19",
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const flat = blockText(arg.blocks);
+    expect(flat).toContain("no landing page recorded");
+    expect(flat).toContain("61 of 104 drafts");
+    // 476 + 420 + 104 = 1000 = overall.sessions, and every part is on screen.
+  });
+
   it("says when per-arm midway starts, rather than drawing an empty chart", async () => {
     /**
      * Drafts only began carrying an arm on firstArmDay, so for the first week
@@ -934,6 +996,55 @@ describe("conversion-digest handler", () => {
     expect(titles.some((t) => t.includes("reaching question"))).toBe(false);
     // The whole-population row is unaffected and still present.
     expect(flat).toContain("Reached question 30");
+  });
+
+  it("shows a real over-100% step instead of clamping it to 100", async () => {
+    /**
+     * buildFunnel deliberately leaves the last three steps unclamped: a promo
+     * one-tap or an admin-granted unlock sets purchased_at without a checkout, so
+     * paid CAN exceed checkout truthfully. The table used computeRate, which
+     * clamps to 100 — printing "100%" for a real 120% in the one column that
+     * exists to say what happened between two steps.
+     */
+    const base = makeFunnel();
+    mockFetchLandingArmFunnel.mockResolvedValue({
+      ...base,
+      cohort: [
+        { arm: "white", completions: 100, reportOpens: 90, checkout: 5, paid: 6, revenue: 60 },
+      ],
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const funnel = arg.blocks
+      .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
+      .find((t) => t.includes("*The funnel —"));
+    expect(funnel).toBeDefined();
+    const paidRow = funnel!.split("\n").find((l) => l.includes("ever paid"))!;
+    expect(paidRow).toContain("120%");
+    expect(paidRow).not.toMatch(/\s100%\s/);
+  });
+
+  it("prints an em dash, not <0.1%, when the step before is zero", async () => {
+    /**
+     * computeRate returns 0 for a zero denominator, and the table rendered that as
+     * "<0.1%" — a vanishing ratio, for a ratio that does not exist. Reachable by
+     * the same promo path: nobody starts checkout, one person is granted access.
+     */
+    const base = makeFunnel();
+    mockFetchLandingArmFunnel.mockResolvedValue({
+      ...base,
+      cohort: [
+        { arm: "white", completions: 100, reportOpens: 90, checkout: 0, paid: 1, revenue: 10 },
+      ],
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const funnel = arg.blocks
+      .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
+      .find((t) => t.includes("*The funnel —"));
+    const paidRow = funnel!.split("\n").find((l) => l.includes("ever paid"))!;
+    expect(paidRow).toContain("—");
+    expect(paidRow).not.toContain("<0.1%");
   });
 
   it("names both percentages on every funnel row, and states which is which", async () => {

@@ -93,6 +93,67 @@ describe("stampLandingArm", () => {
     expect(() => JSON.parse(out!)).not.toThrow();
   });
 
+  it("still strips a claimed arm when the merged blob would not fit", async () => {
+    /**
+     * THE BUG THIS REPLACED. The over-budget path used to fall back to `tracker`
+     * — the caller's original, claim included — so the anti-spoof strip defeated
+     * itself at precisely the input designed to defeat it.
+     *
+     * utmTracker is `z.string().max(1000)` in both routes, so a ~997-character
+     * body is accepted. Adding a 10-character arm to it exceeds 1000, the
+     * fallback fires, and the client's own claim is stored as fact for a user the
+     * server had assigned to the other arm.
+     */
+    cookie("white_prev");
+    /**
+     * The padding has to sit in a narrow window, and getting it wrong makes this
+     * test measure nothing.
+     *
+     * First written with 950 x's: padded 991, merged 996 — UNDER budget, so the
+     * over-budget branch never ran and the test passed against the very bug it
+     * describes. A mutation run caught it. The window is 955..959; 958 gives
+     * padded 999 (accepted by the route's z.string().max(1000)) and merged 1004.
+     *
+     * The two assertions below PIN that window, so a future edit to the arm
+     * names or the key set fails loudly instead of going quietly vacuous.
+     */
+    const PAD = 958;
+    const padded = JSON.stringify({ landing_variant: "white", utm_term: "x".repeat(PAD) });
+    const wouldMergeTo = JSON.stringify({
+      utm_term: "x".repeat(PAD),
+      landing_variant: "white_prev",
+    });
+    expect(padded.length, "must be accepted by the route schema").toBeLessThanOrEqual(1000);
+    expect(
+      wouldMergeTo.length,
+      "must exceed the budget, or this test exercises the wrong branch"
+    ).toBeGreaterThan(1000);
+
+    const out = await stampLandingArm(padded);
+    const parsed_ = parse(out);
+    // The claim is gone even though the real arm could not be added.
+    expect(parsed_.landing_variant).toBeUndefined();
+    // The blob is still valid and still within budget.
+    expect(out!.length).toBeLessThanOrEqual(1000);
+    expect(() => JSON.parse(out!)).not.toThrow();
+    // And the rest of the tracker survived.
+    expect(parsed_.utm_term).toBe("x".repeat(PAD));
+  });
+
+  it("treats an empty-string tracker as absence, not as a tracker", async () => {
+    /**
+     * Both routes wrote `utmTracker || null` before this helper existed, so `""`
+     * stored NULL. `?? null` would store `''`, and every `utm_tracker IS NOT NULL`
+     * count in the analytics layer would quietly begin counting empty strings —
+     * including the non-null figure this whole change was reasoned from.
+     */
+    cookie(null);
+    expect(await stampLandingArm("")).toBeNull();
+    // With a cookie it becomes a real tracker carrying just the arm.
+    cookie("white");
+    expect(parse(await stampLandingArm(""))).toEqual({ landing_variant: "white" });
+  });
+
   it("leaves the blob byte-identical when there is nothing to do", async () => {
     // No cookie and no claim: not even re-serialised, so key order and spacing
     // survive and a diff of stored rows stays meaningful.

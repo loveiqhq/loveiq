@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { ReactElement } from "react";
 
-import { renderDropoutByArm } from "@/app/api/admin/digest-image/[kind]/route";
+import {
+  renderDropoutByArm,
+  renderLongitudinal,
+  renderStageConversion,
+} from "@/app/api/admin/digest-image/[kind]/route";
 
 /**
  * The producer sending the right colour proves nothing about the picture using it.
@@ -89,6 +93,55 @@ describe("digest-image: colour comes from the payload", () => {
       const marks = marksIn(renderDropoutByArm(payload({ colorFirst: hostile })).element);
       expect(marks, `should have fallen back, given: ${hostile}`).toContain("#2563eb");
       expect(marks.join(" "), `leaked into a mark: ${hostile}`).not.toContain("url(");
+    }
+  });
+});
+
+describe("digest-image: only experiment arms get the arm colours", () => {
+  /**
+   * Blue and orange MEAN Landing Page V1 and V2 — that is what binding colour to
+   * the arm bought. A chart that is not about arms must not use them, or the
+   * message says two different things with one colour. Raised directly on the
+   * 2026-09-16 sync: "some of them are the wrong colour".
+   *
+   * The failure was real and shipped: renderLongitudinal alternated the two arm
+   * hexes by ROW INDEX, so in one funnel-digest message orange meant V2, and
+   * 5-minute engagement, and price bucket #2. renderStageConversion painted every
+   * nurture-stage bar in V1's blue.
+   */
+  const ARM_COLOURS = ["#2563eb", "#e0552f"];
+  const days = ["1 Sep", "2 Sep", "3 Sep", "4 Sep", "5 Sep", "6 Sep", "7 Sep"];
+
+  it("draws small-multiple rows in a neutral ink, one ink for all rows", () => {
+    const { element } = renderLongitudinal({
+      kind: "bucket-performance",
+      rate: true,
+      labels: ["EUR 29", "EUR 39", "EUR 49", "EUR 59", "EUR 19"],
+      series: Array.from({ length: 5 }, (_, s) => days.map((_, i) => 2 + s + (i % 3))),
+      xAxis: days,
+    });
+    const marks = marksIn(element);
+    // Five rows actually rendered, or the assertion below is vacuous.
+    expect(marks.length).toBeGreaterThanOrEqual(5);
+    for (const arm of ARM_COLOURS) {
+      expect(marks, `a non-arm chart used the ${arm} arm colour`).not.toContain(arm);
+    }
+    // And every row shares the one ink, rather than cycling.
+    expect(new Set(marks.filter((m) => m === "#334155")).size).toBe(1);
+  });
+
+  it("draws nurture-stage bars in a neutral ink, not V1's blue", () => {
+    const { element } = renderStageConversion({
+      kind: "reactivation-email",
+      stages: [
+        { label: "6h no view", sent: 410, purchased: 4 },
+        { label: "30h no unlock", sent: 301, purchased: 12 },
+      ],
+    });
+    const marks = marksIn(element);
+    expect(marks.length).toBeGreaterThan(0);
+    for (const arm of ARM_COLOURS) {
+      expect(marks, `the nurture chart used the ${arm} arm colour`).not.toContain(arm);
     }
   });
 });

@@ -53,10 +53,24 @@ const COLORS = {
   // band. #e0552f carries over from the dark palette and passes on both.
   accentBlue: "#2563eb",
   accentOrange: "#e0552f",
+  /**
+   * The ink for a series that is NOT an experiment arm.
+   *
+   * Slate, 10.35:1 on white, and deliberately neither categorical hue. Blue and
+   * orange now MEAN Landing Page V1 and V2 — that is the whole point of binding
+   * colour to the arm — so any other series drawn in them is asserting an
+   * identity it does not have. On the 2026-09-16 sync this was raised directly:
+   * charts where the colours say the wrong thing.
+   *
+   * `conversion-digest` passes this same value for the site-wide total, for the
+   * same reason. Two copies of one hex, both commented, rather than pulling a
+   * server module into an edge route for a string.
+   */
+  neutral: "#334155",
   // Per-arm assignment lives in armColor() in features/attribution/server/labels.ts
   // and rides in the signed payload. These two are the fallback for charts that
   // have no arm (single-series, price buckets, per-question drop-off).
-  barTrack: "#f1f1f1",
+
   // Hairline grid + axis rule, carried over from the dark palette BY CONTRAST RATIO
   // rather than by eye: the dark values were measured at gridline 1.24:1 and
   // baseline 1.44:1 against their surface, and these are the greys that hit the same
@@ -65,12 +79,15 @@ const COLORS = {
   // disappears there even though it survives on a monitor.
   gridline: "#e6e6e6",
   baseline: "#d6d6d6",
-  // Status steps re-picked for a light surface — the dark set (#fbbf24 / #f87171 /
-  // #4ade80) sits at 1.7:1, 2.5:1 and 2.2:1 against white and is unreadable there.
-  // These are 5.02:1, 6.47:1 and 5.02:1.
-  warn: "#b45309",
+  // The one status step anything draws: the worst drop-out bars and their labels.
+  // 6.47:1 on white. The dark set's #f87171 is 2.5:1 there and unreadable.
+  //
+  // `warn` and `good` were carried over from the dark palette and re-picked for
+  // this surface in the same pass — and then found to have ZERO readers in this
+  // file. Removed rather than left as tokens whose contrast someone maintains for
+  // nothing; the dataviz rule that status colours are reserved applies to the ones
+  // that exist.
   danger: "#b91c1c",
-  good: "#15803d",
 };
 
 // The 6 line/curve kinds share `LongitudinalPayload`; `reactivation-email`
@@ -249,7 +266,22 @@ function chartShell(
           {title}
         </div>
         <div
-          style={{ fontSize: 14, color: COLORS.textMuted, flexShrink: 0, whiteSpace: "nowrap" }}
+          style={{
+            fontSize: 14,
+            color: COLORS.textMuted,
+            /**
+             * Shrinks and wraps, and is bounded.
+             *
+             * An earlier version of this fix pinned the subtitle with
+             * `flexShrink: 0` + `whiteSpace: nowrap`, which made it win every
+             * width dispute — and funnel-digest passes a window label carrying the
+             * top revenue bucket, around 77 characters. That squeezed a 26px title
+             * into roughly 190px, wrapped it to three lines, and pushed the x-axis
+             * tick row off the 500px canvas. The header needed a GAP, which it now
+             * has; it did not need the subtitle to be unbreakable.
+             */
+            maxWidth: 300,
+          }}
         >
           {subtitle}
         </div>
@@ -322,7 +354,8 @@ function svgPoints(values: number[], peak: number, width: number, chartH: number
   return pts.join(" ");
 }
 
-function renderLongitudinal(p: LongitudinalPayload): {
+/** Exported for the test that no non-arm chart uses an arm colour. */
+export function renderLongitudinal(p: LongitudinalPayload): {
   element: React.ReactElement;
   height: number;
 } {
@@ -378,7 +411,19 @@ function renderLongitudinal(p: LongitudinalPayload): {
     p.windowLabel ?? "",
     <div style={{ display: "flex", flexDirection: "column", gap: ROW_GAP }}>
       {liveRows.map((row, rIdx) => {
-        const color = rIdx % 2 === 0 ? COLORS.accentBlue : COLORS.accentOrange;
+        /**
+         * ONE ink for every row, not an alternating pair.
+         *
+         * These rows are small multiples — separate plots, stacked, each with its
+         * own label on the left. They never overlap, so colour carries no identity
+         * here and alternating it is decoration. Decoration would be harmless if
+         * the two colours meant nothing; they mean Landing Page V1 and V2. In one
+         * funnel-digest message orange was simultaneously "V2", "5-minute
+         * engagement" and "price bucket #2", and rows 1 and 3 of the engagement
+         * chart shared a colour INSIDE one chart. That is the "some of them are
+         * the wrong colour" Mark raised on the 2026-09-16 sync.
+         */
+        const color = COLORS.neutral;
         const linePts = svgPoints(row.values, row.peak, chartW, chartH);
         const areaPts = linePts ? `0,${chartH} ${linePts} ${chartW},${chartH}` : "";
         const last = row.values.length > 0 ? row.values[row.values.length - 1]! : 0;
@@ -414,10 +459,19 @@ function renderLongitudinal(p: LongitudinalPayload): {
                 <polyline
                   points={`0,${chartH - 1} ${chartW},${chartH - 1}`}
                   fill="none"
-                  stroke={COLORS.barTrack}
+                  stroke={COLORS.baseline}
                   strokeWidth="1"
                 />
-                {areaPts && <polygon points={areaPts} fill={color} fillOpacity="0.22" />}
+                {/*
+                  0.12, not 0.22. The old value was tuned for a saturated accent
+                  on a dark surface; under the neutral slate on white the same
+                  opacity composites to #d2d5da — a 1.47:1 wash heavy enough to
+                  compete with the 2px line that actually carries the data, which
+                  made five stacked rows read as grey blocks. 0.12 lands at 1.23:1,
+                  just under the gridline step, so the band reads as shading and
+                  the line reads as the mark.
+                */}
+                {areaPts && <polygon points={areaPts} fill={color} fillOpacity="0.12" />}
                 {linePts && (
                   <polyline
                     points={linePts}
@@ -493,7 +547,8 @@ function renderLongitudinal(p: LongitudinalPayload): {
 // Stage-conversion bar chart (reactivation email)
 // -----------------------------------------------------------------------------
 
-function renderStageConversion(p: StageConversionPayload): {
+/** Exported for the test that no non-arm chart uses an arm colour. */
+export function renderStageConversion(p: StageConversionPayload): {
   element: React.ReactElement;
   height: number;
 } {
@@ -545,7 +600,9 @@ function renderStageConversion(p: StageConversionPayload): {
                 {`${rate.toFixed(1)}%`}
               </div>
               <div
-                style={{ width: 90, height: h, background: COLORS.accentBlue, borderRadius: 4 }}
+                // Neutral, not V1's blue: these are nurture stages, not arms, and
+                // this chart can share a message with the per-arm ones.
+                style={{ width: 90, height: h, background: COLORS.neutral, borderRadius: 4 }}
               />
               <div
                 style={{
@@ -777,9 +834,18 @@ export function renderDropoutBars(p: DropoutPayload): {
               const h = Math.max(2, Math.round((b.dropPct / peak) * DROPOUT_PLOT_H));
               // A bar at the axis ceiling leaves no room above it, and a label
               // placed there is clipped by the plot edge — which is what happened
-              // to the two 15% bars on the first render. Tuck it inside instead.
+              // to the two 15% bars on the first render.
+              //
+              // There WAS a tuck-inside fallback here for a bar tall enough to
+              // leave no room above it. It became unreachable when the axis gained
+              // 18% headroom (`niceAxis(rawPeak * 1.18)`): peak is then at least
+              // 1.18x the tallest bar, so h never exceeds 254 of 300 and `above`
+              // never drops below 27 — checked across rawPeak 1, 5, 11, 15, 24, 55
+              // and 100. The branch, its white-on-bar colour and the comment
+              // describing the render it fixed were all dead, and a dead branch
+              // that claims to handle a case is worse than no branch: it reads as
+              // cover the code does not have.
               const above = DROPOUT_PLOT_H - h - 19;
-              const inside = above < 2;
               return (
                 <div
                   key={`val-${i}`}
@@ -796,12 +862,12 @@ export function renderDropoutBars(p: DropoutPayload): {
                         DROPOUT_AXIS_W + plotW - DROPOUT_VALUE_W
                       )
                     ),
-                    top: inside ? DROPOUT_PLOT_H - h + 4 : above,
+                    top: above,
                     width: DROPOUT_VALUE_W,
                     justifyContent: "center",
                     fontSize: 13,
                     fontWeight: 700,
-                    color: inside ? COLORS.bg : COLORS.danger,
+                    color: COLORS.danger,
                   }}
                 >
                   {`${Math.round(b.dropPct)}%`}
@@ -1198,8 +1264,7 @@ export function renderDropoutByArm(p: DropoutByArmPayload): {
         {/* A single series is named by the title, so it gets no legend at all —
             two swatches for one line is the "(unused) — no data yet" row this
             renderer produced the first time it was handed one series. */}
-        {!solo &&
-          swatch(colFirst, hasFirst ? legendFirst : `${legendFirst} — no data yet`)}
+        {!solo && swatch(colFirst, hasFirst ? legendFirst : `${legendFirst} — no data yet`)}
         {!solo && swatch(colLast, hasLast ? legendLast : `${legendLast} — no data yet`)}
       </div>
 
@@ -1283,8 +1348,7 @@ export function renderDropoutByArm(p: DropoutByArmPayload): {
         {showLastLabel && endLabel(colLast, shortLast, endLast, yEndLast)}
         {/* Solo: no sub-name under the value. `shortFirst` is a word-diff of the
             two legend strings, which with one series clipped to "Visitor → sur…". */}
-        {showFirstLabel &&
-          endLabel(colFirst, solo ? "" : shortFirst, endFirst, yEndFirst)}
+        {showFirstLabel && endLabel(colFirst, solo ? "" : shortFirst, endFirst, yEndFirst)}
 
         {/* x ticks, each centred on the data point it names */}
         {tickIdx.map((idx) => (

@@ -60,15 +60,40 @@ DECLARE
   -- The day the partial-save arm stamp shipped. Per-arm rows before it carry no
   -- landing_variant at all, so they are excluded rather than bucketed 'unknown'.
   first_arm_day CONSTANT DATE := DATE '2026-09-19';
-  -- ::date on a timestamptz uses the SESSION TimeZone. Pinned to UTC so the day
-  -- buckets cannot drift relative to the window on a non-UTC session.
-  since_day DATE := (since_ts AT TIME ZONE 'UTC')::date;
-  until_day DATE := (until_ts AT TIME ZONE 'UTC')::date;
-  arm_since_day DATE := GREATEST((since_ts AT TIME ZONE 'UTC')::date, first_arm_day);
+  -- ::date on a timestamptz uses the SESSION TimeZone, so every boundary is
+  -- pinned explicitly. EUROPE/BERLIN, not UTC, for two reasons.
+  --
+  -- First, the caller's window is Berlin midnight (`reportingDayStart`). Bucketed
+  -- in UTC, `until_ts` of 2026-09-18T22:00Z becomes until_day 2026-09-18, and
+  -- every row saved between 00:00Z and 22:00Z that same day passes the timestamp
+  -- filter and then fails `day < until_day` — silently discarding the most recent
+  -- TWENTY-TWO HOURS. The "Reached question N" row would be measured over 29d2h
+  -- while Visits, Started and Finished beside it cover the full 30 days, which is
+  -- exactly the different-windows failure the hasStarts guard exists to prevent.
+  --
+  -- Second, 20260915162358 moved get_axis_funnel_daily, get_landing_arm_funnel_daily
+  -- and get_landing_start_funnel_daily from UTC to Berlin precisely because the
+  -- digest prints them beside GA4 ad spend, whose property time zone is Berlin.
+  -- This series is rendered in the same message on the same x-axis; a UTC day here
+  -- would label a different 24 hours than the chart above it.
+  --
+  -- That migration verifies the invariant, but against a HARDCODED list of three
+  -- function names, so it could never have caught this one.
+  since_day DATE := (since_ts AT TIME ZONE 'Europe/Berlin')::date;
+  until_day DATE := (until_ts AT TIME ZONE 'Europe/Berlin')::date;
+  arm_since_day DATE := GREATEST((since_ts AT TIME ZONE 'Europe/Berlin')::date, first_arm_day);
 BEGIN
+  -- A threshold outside the survey is a caller bug, not a measurement. At 0 every
+  -- draft "reaches midway" and the label reads "Reached question 0"; past the last
+  -- question none do, and the funnel row is dropped while the per-arm block still
+  -- prints "0 of 300 (0%)" — two surfaces disagreeing about the same number.
+  IF midway_index IS NULL OR midway_index < 1 OR midway_index > 500 THEN
+    RAISE EXCEPTION 'midway_index must be between 1 and 500, got %', midway_index;
+  END IF;
+
   WITH in_window AS (
     SELECT
-      (saved_at AT TIME ZONE 'UTC')::date AS day,
+      (saved_at AT TIME ZONE 'Europe/Berlin')::date AS day,
       session_id,
       current_index,
       -- Reuses the repo's IMMUTABLE safe-parse rather than casting inline: a bare
@@ -140,6 +165,16 @@ BEGIN
   RETURN result;
 END;
 $$;
+
+-- CREATE FUNCTION grants EXECUTE to PUBLIC, and SECURITY DEFINER bypasses
+-- survey_partial_save's RLS (service_role_only, with EXECUTE revoked from anon
+-- and authenticated) — so without these REVOKEs the daily draft volume and the
+-- live landing A/B split are readable by anyone holding the published anon key.
+-- Every sibling analytics RPC carries these three lines; this one shipped without
+-- them, which is why they are worth restating rather than assuming.
+REVOKE EXECUTE ON FUNCTION get_midway_progress_daily(TIMESTAMPTZ, TIMESTAMPTZ, INT) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION get_midway_progress_daily(TIMESTAMPTZ, TIMESTAMPTZ, INT) FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION get_midway_progress_daily(TIMESTAMPTZ, TIMESTAMPTZ, INT) TO service_role;
 
 COMMENT ON FUNCTION get_midway_progress_daily(TIMESTAMPTZ, TIMESTAMPTZ, INT) IS
   'Midway Progress for the conversion digest. overall = whole population, works '

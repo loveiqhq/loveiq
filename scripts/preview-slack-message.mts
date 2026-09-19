@@ -30,7 +30,10 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { buildConversionDigest } from "../app/api/cron/conversion-digest/route";
+import {
+  buildConversionDigest,
+  MIDWAY_QUESTION_INDEX,
+} from "../app/api/cron/conversion-digest/route";
 import { buildSubmissionJourney } from "../features/attribution/server/journey";
 import { buildJourneyMessage } from "../features/attribution/server/slack-journey";
 import {
@@ -38,6 +41,7 @@ import {
   fetchAxisFunnelDaily,
   fetchLandingArmFunnel,
   fetchLandingStartFunnel,
+  fetchMidwayProgress,
 } from "../features/admin/server/conversion-digest";
 import { dayString, fetchFunnelCvrSparklines } from "../features/admin/server/digest-metrics";
 import {
@@ -330,13 +334,16 @@ async function main(): Promise<void> {
   const windowEnd = dayStart.toISOString();
 
   console.log(`reading production data for ${dayKey} (30-day window)...`);
-  const [funnel, cohorts, startFunnel, axisRows, cvrSnap, friction] = await Promise.all([
+  const [funnel, cohorts, startFunnel, axisRows, cvrSnap, friction, midway] = await Promise.all([
     fetchLandingArmFunnel(windowStart, windowEnd),
     fetchArmCohorts(windowStart, windowEnd),
     fetchLandingStartFunnel(windowStart, windowEnd),
     fetchAxisFunnelDaily(windowStart, windowEnd),
     fetchFunnelCvrSparklines(windowStart, windowEnd),
     buildFrictionReport(windowStart, windowEnd, surveyQuestionNames()),
+    // The SAME threshold the cron uses, imported rather than retyped: a preview
+    // computed at a different midway point is a preview of a different message.
+    fetchMidwayProgress(windowStart, windowEnd, MIDWAY_QUESTION_INDEX),
   ]);
 
   // adSpend deliberately null: GA4 needs a service-account credential this
@@ -350,6 +357,7 @@ async function main(): Promise<void> {
     cvrDays: cvrSnap?.days ?? null,
     adSpend: null,
     friction,
+    midway,
     now,
   });
 
