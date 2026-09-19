@@ -73,9 +73,18 @@ describe("the generate-and-prove workflow", () => {
     for (const job of Object.values(doc.jobs)) {
       for (const step of job.steps) {
         if (!step.run) continue;
-        expect(step.run, `input interpolated into the run: of "${step.name}"`).not.toMatch(
-          /\$\{\{\s*(inputs|github\.event)\./
-        );
+        /**
+         * Widened from inputs/github.event to ANY expression. The narrow
+         * version missed a `${{ steps.… }}` I wrote into a run: block myself
+         * on 2026-09-19 — machine-generated and harmless in that instance, but
+         * the point of the rule is that the shape is uniform, so the one that
+         * can carry something hostile is not the first of its kind anyone has
+         * to notice.
+         */
+        expect(
+          step.run,
+          `an expression is interpolated into the run: of "${step.name}"`
+        ).not.toMatch(/\$\{\{/);
       }
     }
   });
@@ -164,6 +173,38 @@ describe("the generate-and-prove workflow", () => {
     // Resolved from the worktree step, which is what actually determined the
     // code the model saw — not re-read from the input, which may be empty.
     expect(String(proveStep?.env?.BASE_REF)).toContain("steps.tree.outputs.base");
+  });
+
+  /**
+   * A refused attempt must remain readable. The first live run produced a
+   * plausible 12-line change that did not work, the proof refused it, and the
+   * branch died with the runner — so all anyone learned was "not proven",
+   * which does not distinguish a model that misunderstood the defect from a
+   * task no small change could satisfy. That difference decides whether to
+   * retry, reword, or do it by hand.
+   */
+  it("keeps a refused attempt so it can be read", () => {
+    const doc = parse(WF) as {
+      jobs: Record<string, { steps: Array<{ name?: string; if?: string; run?: string }> }>;
+    };
+    const steps = Object.values(doc.jobs).flatMap((j) => j.steps);
+    const keep = steps.find((st) => /Keep the branch/i.test(st.name ?? ""));
+    expect(keep, "a refused attempt is discarded with the runner").toBeTruthy();
+    // `always()`, or it would be skipped by the very failure it exists for.
+    expect(String(keep?.if)).toContain("always()");
+    // A branch, not a pull request: unproven work must not sit in the review
+    // queue wearing the same badge as proven work.
+    expect(keep?.run ?? "").not.toMatch(/gh pr create/);
+  });
+
+  it("prints the proposed diff, so a failed run is not opaque", () => {
+    const doc = parse(WF) as {
+      jobs: Record<string, { steps: Array<{ name?: string; run?: string }> }>;
+    };
+    const shown = Object.values(doc.jobs)
+      .flatMap((j) => j.steps)
+      .some((st) => /git diff HEAD~1/.test(st.run ?? ""));
+    expect(shown).toBe(true);
   });
 
   it("tells the model what is wrong, not how to fix it", () => {
