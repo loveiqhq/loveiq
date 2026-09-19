@@ -445,16 +445,20 @@ const SHEET_TEXT_LIMIT = 400_000;
  * scope and no admin grant. Two calls: the tab names, then every tab's values in one
  * `batchGet`.
  */
-async function sheetText(token: string, fileId: string): Promise<string> {
+export async function sheetTabTitles(token: string, fileId: string): Promise<string[]> {
   const metaRes = await driveGet(
     token,
     `${SHEETS_API}/${fileId}?fields=${encodeURIComponent("sheets(properties(title))")}`
   );
   if (!metaRes.ok) throw new Error(`sheets-meta ${metaRes.status}`);
   const meta = (await metaRes.json()) as { sheets?: Array<{ properties?: { title?: string } }> };
-  const titles = (meta.sheets ?? [])
+  return (meta.sheets ?? [])
     .map((sh) => sh?.properties?.title)
     .filter((t): t is string => typeof t === "string" && t.length > 0);
+}
+
+async function sheetText(token: string, fileId: string): Promise<string> {
+  const titles = await sheetTabTitles(token, fileId);
   if (titles.length === 0) return "";
 
   // A1 notation: the whole tab is just its quoted name, and an apostrophe in that
