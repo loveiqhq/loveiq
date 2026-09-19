@@ -277,3 +277,44 @@ describe("the large-Range backlog only shrinks", () => {
     expect(Number(out)).toBeLessThanOrEqual(131);
   });
 });
+
+/**
+ * The two count helpers are one helper now.
+ *
+ * They drifted the way duplicated helpers do: countRows sent `Range: 0-0` and
+ * fetchExactCount did not, so PostgREST answered the second `0-999/<total>` and
+ * the truncation guard read that capped span as real truncation — four false
+ * "rows are MISSING" per weekly digest run, on counts that were correct.
+ */
+describe("counting rows has ONE implementation", () => {
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "service-key";
+
+  afterEach(() => vi.clearAllMocks());
+
+  /** A count response: one row, true total after the slash. */
+  function counted(contentRange: string | null, ok = true): void {
+    mockFetch.mockResolvedValue({
+      ok,
+      headers: { get: (k: string) => (k === "content-range" ? contentRange : null) },
+    } as unknown as Response);
+  }
+
+  it("asks for the count and for no rows, whichever helper is used", async () => {
+    counted("0-0/11624");
+    await countRows("/rest/v1/funnel_event?select=visitor_id");
+    const [, opts] = mockFetch.mock.calls[0] as [string, { headers: Record<string, string> }];
+    expect(opts.headers.Prefer).toBe("count=exact");
+    // The Range is what keeps the span away from the cap, so the truncation
+    // guard has nothing to misread even before it checks the total.
+    expect(opts.headers.Range).toBe("0-0");
+  });
+
+  it("never warns about truncation while counting", async () => {
+    // Belt and braces with the exact-total check: this is the shape that fired
+    // four times a run before the helpers were collapsed.
+    counted(`0-${POSTGREST_MAX_ROWS - 1}/11624`);
+    await countRows("/rest/v1/payment?select=id");
+    expect(mockWarn).not.toHaveBeenCalled();
+  });
+});

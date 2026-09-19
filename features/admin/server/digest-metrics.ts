@@ -9,7 +9,7 @@
  */
 
 import { Redis } from "@upstash/redis";
-import { supabaseFetch } from "@features/admin/server/supabase";
+import { supabaseFetch, countRows } from "@features/admin/server/supabase";
 import { parseUtmSource } from "@features/admin/server/metric-library";
 import logger from "@shared/observability/logger";
 import {
@@ -499,15 +499,26 @@ export function dayString(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+/**
+ * Exact row count, via the one implementation of count semantics.
+ *
+ * Was a second, near-identical copy of `countRows`. The two drifted in the way
+ * duplicated helpers do: `countRows` sent `Range: 0-0` and this one did not, so
+ * PostgREST answered it `0-999/<total>` and the truncation guard read the capped
+ * span as real truncation — logging "rows are MISSING" four times per weekly
+ * digest run on counts that were completely correct. One helper cannot disagree
+ * with itself.
+ *
+ * ponytail: a failed count still reads as 0 here, because all nine callers are
+ * typed `Promise<number>` and feed metric fields. `countRows` returns null for
+ * exactly this reason — "a failed count and an empty table must not look the
+ * same" — and threading that through means making those fields nullable and
+ * deciding how the digest renders an unknown, which is a product call rather
+ * than a refactor. The `?? 0` is where that decision lives; move it up the stack
+ * when someone wants "unknown" to print differently from "none".
+ */
 async function fetchExactCount(path: string): Promise<number> {
-  const res = await supabaseFetch(path, {
-    method: "HEAD",
-    headers: { Prefer: "count=exact" },
-  });
-  const range = res.headers.get("content-range");
-  if (!range) return 0;
-  const total = range.split("/")[1];
-  return total && total !== "*" ? parseInt(total, 10) : 0;
+  return (await countRows(path)) ?? 0;
 }
 
 /** `gte` + `lt` range encoded for a single column. */
