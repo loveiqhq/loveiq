@@ -68,7 +68,12 @@ const MAX_PAGES = 20;
 /** Bump when the row SHAPE changes; a mismatch counts as stale. See notion.ts. */
 // v3: v1-v2 indexed Google Docs only — 24 call notes out of ~494 readable files on
 // the company Drive. Sheets, markdown, CSV, JSON and Word documents were invisible.
-export const DRIVE_BUILDER_VERSION = 3;
+// v4: v3 read only the FIRST TAB of every spreadsheet, because it exported them as
+// csv and csv holds one table. 40 spreadsheets were indexed that way. Without this
+// bump the fix is inert on all of them: a file is refetched only when its
+// `modifiedTime` moves, and "Business Case" has not been edited since 2026-09-16,
+// so the tab nobody could find would have stayed missing until somebody typed in it.
+export const DRIVE_BUILDER_VERSION = 4;
 
 const DOC_MIME = "application/vnd.google-apps.document";
 const SHEET_MIME = "application/vnd.google-apps.spreadsheet";

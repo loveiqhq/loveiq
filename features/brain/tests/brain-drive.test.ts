@@ -488,6 +488,20 @@ describe("ingestDrive", () => {
     expect(deletedIds()).not.toContain("doc:1AbCdEf");
   });
 
+  /**
+   * The bump is the whole delivery mechanism for a reader change, and it had no test.
+   * A file is refetched when its `modifiedTime` moves — so a fix to HOW a file is read
+   * reaches nothing until the version says the stored row is the wrong shape. v3 -> v4
+   * (spreadsheets, first tab only) depended on exactly this: "Business Case" had not
+   * been edited since 2026-09-16, so without the bump its missing tab stayed missing.
+   */
+  it("re-exports an UNCHANGED document when the builder version moved on", async () => {
+    const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    existing = [{ source_id: "doc:1AbCdEf", meta: { edited: FILE.modifiedTime, v: v - 1 } }];
+    await ingestDrive(STAMP);
+    expect(httpCalls.filter((u) => u.includes("/export?")).length).toBeGreaterThan(0);
+  });
+
   it("re-exports when the document changed", async () => {
     const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
     existing = [{ source_id: "doc:1AbCdEf", meta: { edited: "2026-08-01T00:00:00.000Z", v } }];
