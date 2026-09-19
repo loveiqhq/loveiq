@@ -13,7 +13,7 @@
 --   select get_forced_paywall_ab('2026-06-01T00:00:00Z', '2026-07-01T00:00:00Z');
 --
 -- Conventions match the existing strategy-funnel RPCs
--- (20260527130000_strategy_funnel_rpcs.sql): half-open [since, until) window,
+-- (20260527190916_strategy_funnel_rpcs.sql): half-open [since, until) window,
 -- SECURITY DEFINER + GRANT EXECUTE TO service_role, COALESCE so the shape is
 -- always present (zeros, never NULL), read-only, never throws.
 --

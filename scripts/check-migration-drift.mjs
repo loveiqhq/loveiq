@@ -55,6 +55,7 @@
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const MIGRATIONS_DIR = "supabase/migrations";
 const CONNECTION_ENV = "SUPABASE_DB_URL";
@@ -66,7 +67,19 @@ function listMigrationFiles() {
 }
 
 const FUNCTION_RE = /CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:public\.)?(\w+)\s*\(/gi;
-const INDEX_RE = /CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s+ON/gi;
+const INDEX_RE =
+  /CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:CONCURRENTLY\s+)?(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s+ON\s+(?:ONLY\s+)?(?:public\.)?(\w+)/gi;
+/**
+ * A dropped TABLE takes its indexes, columns and constraints with it.
+ *
+ * Without this, `CREATE INDEX` in an early migration and `DROP TABLE` in a
+ * later one leaves the index in the repo set for ever, and the check reports
+ * a deliberate removal as drift — the exact cry-wolf failure that kept this
+ * job switched off. Measured 2026-09-19: calendly_webhook_event, dropped on
+ * 2026-09-14 along with its route, was the only finding once CONCURRENTLY
+ * indexes became visible at all.
+ */
+const DROP_TABLE_RE = /DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:public\.)?(\w+)/gi;
 const CONSTRAINT_RE = /ALTER\s+TABLE\s+(?:public\.)?(\w+)\s+ADD\s+CONSTRAINT\s+(\w+)/gi;
 const DROP_FUNCTION_RE = /DROP\s+FUNCTION\s+(?:IF\s+EXISTS\s+)?(?:public\.)?(\w+)/gi;
 const DROP_INDEX_RE = /DROP\s+INDEX\s+(?:CONCURRENTLY\s+)?(?:IF\s+EXISTS\s+)?(?:public\.)?(\w+)/gi;
@@ -77,10 +90,14 @@ const DROP_COLUMN_RE =
 const ADD_COLUMN_RE =
   /ALTER\s+TABLE\s+(?:public\.)?(\w+)\s+ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)/gi;
 
-function extractArtifacts() {
+/**
+ * @param {{file: string, sql: string}[]} [files] in-memory migrations, for tests.
+ *   Omitted, it reads the real migrations directory.
+ */
+export function extractArtifacts(files) {
   const artifacts = {
     functions: new Set(),
-    indexes: new Set(),
+    indexes: new Map(),
     constraints: new Map(),
     columns: new Map(),
   };
@@ -104,14 +121,19 @@ function extractArtifacts() {
    * Ordered by position WITHIN each file too, so `DROP x; CREATE x;` still ends
    * with x present.
    */
-  for (const file of listMigrationFiles()) {
-    const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf8");
+  const source =
+    files ??
+    listMigrationFiles().map((file) => ({
+      file,
+      sql: readFileSync(join(MIGRATIONS_DIR, file), "utf8"),
+    }));
+  for (const { sql } of source) {
     const ops = [];
     const collect = (re, apply) => {
       for (const m of sql.matchAll(re)) ops.push({ at: m.index ?? 0, apply: () => apply(m) });
     };
     collect(FUNCTION_RE, (m) => artifacts.functions.add(m[1]));
-    collect(INDEX_RE, (m) => artifacts.indexes.add(m[1]));
+    collect(INDEX_RE, (m) => artifacts.indexes.set(m[1], m[2].toLowerCase()));
     collect(CONSTRAINT_RE, (m) => artifacts.constraints.set(m[2], m[1]));
     collect(ADD_COLUMN_RE, (m) =>
       artifacts.columns.set(`${m[1]}.${m[2]}`, { table: m[1], column: m[2] })
@@ -120,6 +142,18 @@ function extractArtifacts() {
     collect(DROP_INDEX_RE, (m) => artifacts.indexes.delete(m[1]));
     collect(DROP_CONSTRAINT_RE, (m) => artifacts.constraints.delete(m[2]));
     collect(DROP_COLUMN_RE, (m) => artifacts.columns.delete(`${m[1]}.${m[2]}`));
+    collect(DROP_TABLE_RE, (m) => {
+      const table = m[1].toLowerCase();
+      for (const [name, onTable] of artifacts.indexes) {
+        if (onTable === table) artifacts.indexes.delete(name);
+      }
+      for (const [name, onTable] of artifacts.constraints) {
+        if (onTable.toLowerCase() === table) artifacts.constraints.delete(name);
+      }
+      for (const [key, col] of artifacts.columns) {
+        if (col.table.toLowerCase() === table) artifacts.columns.delete(key);
+      }
+    });
     ops.sort((a, b) => a.at - b.at);
     for (const op of ops) op.apply();
   }
@@ -306,7 +340,7 @@ async function main() {
 
     const drift = {
       functions: [...repo.functions].filter((n) => !live.functions.has(n)),
-      indexes: [...repo.indexes].filter((n) => !live.indexes.has(n)),
+      indexes: [...repo.indexes.keys()].filter((n) => !live.indexes.has(n)),
       constraints: [...repo.constraints.keys()].filter((n) => !live.constraints.has(n)),
       columns: [...repo.columns.keys()].filter((n) => !live.columns.has(n)),
     };
@@ -390,7 +424,11 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error("Drift check failed:", err.message);
-  process.exit(2);
-});
+const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (invokedDirectly) {
+  main().catch((err) => {
+    console.error("Drift check failed:", err.message);
+    process.exit(2);
+  });
+}

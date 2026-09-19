@@ -8,8 +8,8 @@
 --   4. get_velocity_percentiles    — p50/p75/p90 paywall→purchase hours per day
 --   5. get_question_abandonment_top_n — top-N q_id by abandon count over window
 --
--- Conventions (match Phase 1 RPCs in 20260527130000_strategy_funnel_rpcs.sql
--- and 20260529120000_funnel_v2_longitudinal.sql):
+-- Conventions (match Phase 1 RPCs in 20260527190916_strategy_funnel_rpcs.sql
+-- and 20260529124736_funnel_v2_longitudinal.sql):
 --   * SECURITY DEFINER + GRANT EXECUTE TO service_role
 --   * Half-open [since_ts, until_ts) windows
 --   * COALESCE on aggregates so JSON is always shaped, never NULL

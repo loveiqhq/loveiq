@@ -1,6 +1,6 @@
 -- F-17: optional report_access_token expiry.
 --
--- The prior migration (20260501130000_report_access_token_revoked_at.sql)
+-- The prior migration (20260430235143_report_access_token_revoked_at.sql)
 -- documented "tokens stay permanent by product design (don't auto-expire
 -- bookmarked URLs)." That decision stands — we don't auto-expire here.
 --

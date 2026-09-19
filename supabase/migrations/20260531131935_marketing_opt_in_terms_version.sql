@@ -1,6 +1,6 @@
 -- T-11: consent versioning for marketing opt-in (GDPR Art. 7(1)).
 --
--- The 20260521210000_marketing_opt_in.sql migration only captures the boolean
+-- The 20260521204408_marketing_opt_in.sql migration only captures the boolean
 -- + timestamp. If we change the Q16015 wording later, we lose the ability to
 -- prove what THIS user consented to.
 --

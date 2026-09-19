@@ -8,7 +8,7 @@
 -- starting-price catalogue on its next view. New prices are strictly lower than
 -- old ones, so the "price never increases" guardrail is preserved by definition.
 --
--- Mirrors 20260506130000_expire_quotes_for_pricing_refresh.sql: clears
+-- Mirrors 20260506140758_expire_quotes_for_pricing_refresh.sql: clears
 -- sessionLocks (so the next /price call rebuilds the lock at the new bucket)
 -- and discountEmailsSent (so the cron re-evaluates discount nudges against
 -- the new initial price).

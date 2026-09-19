@@ -5,7 +5,7 @@
 - Deciders: pending review (Eman)
 - Related: `features/survey/questionFlags.ts`, `features/survey/ui/questionOrder.ts`,
   `features/survey/server/server.ts`,
-  `supabase/migrations/20260911102618_survey_submission_option_order.sql`
+  `supabase/migrations/20260911193327_survey_submission_option_order.sql`
 
 ## Context
 

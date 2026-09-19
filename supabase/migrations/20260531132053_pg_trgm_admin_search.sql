@@ -16,7 +16,7 @@ COMMIT;
 -- Index built CONCURRENTLY (outside the transaction) so the build doesn't
 -- hold an AccessExclusiveLock on app_user. Pattern mirrors the other
 -- post-COMMIT CONCURRENTLY blocks in this codebase (e.g.
--- 20260525120000_data_subject_request_log.sql).
+-- 20260531131756_data_subject_request_log.sql).
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_app_user_email_trgm
   ON app_user
   USING gin (email gin_trgm_ops);

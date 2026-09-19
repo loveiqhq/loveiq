@@ -4,7 +4,7 @@
 
 BEGIN;
 
--- 1. slack_alert_sent (created 2026-05-18 in 20260518150000_create_slack_alert_sent.sql)
+-- 1. slack_alert_sent (created 2026-05-18 in 20260518175108_create_slack_alert_sent.sql)
 --    was missing RLS — advisor flagged as ERROR rls_disabled_in_public. Enable
 --    RLS + service_role_only policy matching every other table in the schema.
 ALTER TABLE slack_alert_sent ENABLE ROW LEVEL SECURITY;

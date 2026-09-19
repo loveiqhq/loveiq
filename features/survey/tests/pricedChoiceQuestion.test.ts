@@ -7,7 +7,7 @@ import { surveyQuestions } from "@/data/survey-data";
 import { RANDOMISE_QIDS } from "@features/survey/questionFlags";
 import { OPT_IN_QID, orderEmailLast } from "@features/survey/ui/questionOrder";
 
-const MIGRATION = "supabase/migrations/20260911152724_survey_question_16009_priced_choice.sql";
+const MIGRATION = "supabase/migrations/20260911193349_survey_question_16009_priced_choice.sql";
 const NONE_OF_THESE = "None of these right now";
 
 describe("16009 — the priced choice", () => {

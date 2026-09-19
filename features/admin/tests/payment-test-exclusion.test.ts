@@ -105,7 +105,7 @@ describe("test payments are excluded from revenue", () => {
      * removed. That is a deliberate decision, not an oversight.
      */
     const sql = readFileSync(
-      join(REPO, "supabase/migrations/20260915120000_digest_paid_excludes_test_payments.sql"),
+      join(REPO, "supabase/migrations/20260915110402_digest_paid_excludes_test_payments.sql"),
       "utf8"
     );
     for (const fn of [

@@ -9,7 +9,7 @@
  *   - This test hits a REAL Supabase instance via the same REST pattern fulfillment.ts
  *     uses, inserts a row, attempts to insert a duplicate, and asserts the second
  *     insert is rejected by the unique constraint added in
- *     supabase/migrations/20260430130000_payment_webhook_event_idempotency.sql.
+ *     supabase/migrations/20260430233158_payment_webhook_event_idempotency.sql.
  *
  * Setup:
  *   Set both env vars before running. The test skips silently when either is absent

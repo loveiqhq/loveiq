@@ -3,7 +3,7 @@
 -- purchase (its real conversion is a booked call, tracked in booking_event), so
 -- the `purchased` column reads 0 for it — consistent with the documented
 -- promoStage gap that already affects the other stages. Body is unchanged from
--- 20260530120000_funnel_cvr.sql except for the added stage in the array.
+-- 20260530105818_funnel_cvr.sql except for the added stage in the array.
 
 BEGIN;
 
