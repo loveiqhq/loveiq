@@ -40,5 +40,14 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules", "__tests__", "features/**/tests", "shared/**/tests"]
+  // `supabase/functions` is DENO, not Next.js: it imports from `jsr:` and uses
+  // the `Deno` global, neither of which exists in this compilation unit. It is
+  // deployed by the Supabase CLI, which typechecks it with Deno's own toolchain.
+  "exclude": [
+    "node_modules",
+    "__tests__",
+    "features/**/tests",
+    "shared/**/tests",
+    "supabase/functions"
+  ]
 }
