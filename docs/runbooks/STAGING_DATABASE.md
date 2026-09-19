@@ -70,8 +70,33 @@ reports, payments and users.
 (NOT `loveiq-web`), set the four variables from step 2, then redeploy. No code
 changes — the app reads these by name.
 
-**5. Confirm the separation.** Submit a survey on staging and check the row count
+**5. Auth, which migrations cannot carry.** The admin panel signs in with a
+Supabase magic link, and two settings live only in the dashboard:
+
+- **Authentication → URL Configuration**: Site URL `https://staging.loveiq.org`,
+  and add it to Redirect URLs. Without this the magic link sends people to
+  production.
+- **Email**: the free tier's built-in SMTP is rate limited to a few messages an
+  hour. Enough for staging logins; do not test email flows here.
+
+The allowlist itself IS seeded — `admin_users` comes from the migrations. Note
+it will not match production exactly: production's list has been edited by hand
+(two people added, two offboarded people removed) without migrations, so the
+replay produces the seeded set instead. `eman.cickusic@loveiq.org` is in it, so
+admin login works.
+
+**6. Confirm the separation.** Submit a survey on staging and check the row count
 in production has not moved.
+
+## What is NOT copied, and why that is right
+
+|                                                            |                                                                                                             |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Submissions, reports, payments, users                      | Real, intimate data. Copying doubles the GDPR footprint for no benefit. The script asserts these are **0**. |
+| The brain corpus (291 MB)                                  | Production-only tool. Staging has no `brain-embed` function and needs none.                                 |
+| `auth.users`                                               | Created on first magic-link login against the seeded allowlist.                                             |
+| Custom DB roles (`claude_readonly`, `posthog_readonly`, …) | They exist to give external tools read access to **production**.                                            |
+| Storage buckets, vault secrets, realtime tables            | Production has **none** of these — verified 2026-09-20, nothing to replicate.                               |
 
 ## Keeping it in step
 
