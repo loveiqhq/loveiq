@@ -216,6 +216,27 @@ describe("the generate-and-prove workflow", () => {
     }
   });
 
+  /**
+   * The three ways proposing can fail need opposite responses, and a bare
+   * "failure" makes them indistinguishable:
+   *
+   *   session limit -> wait; nothing about the task was wrong
+   *   max turns     -> the defect is too big for one pass; split it
+   *   anything else -> a real error worth reading
+   *
+   * Both of the first two happened on 2026-09-19 and both were reported simply
+   * as a failed run, whose natural reading is "the model could not do it" —
+   * wrong in both cases.
+   */
+  it("names a usage limit rather than reporting a generic failure", () => {
+    expect(WF).toMatch(/session limit/i);
+    expect(WF).toMatch(/Reached max turns/i);
+    // The step's own exit code must survive the pipe into tee, or every run
+    // would report success regardless.
+    expect(WF).toContain("PIPESTATUS[0]");
+    expect(WF).toMatch(/exit \$code/);
+  });
+
   it("gives the model enough turns for a real defect", () => {
     const turns = Number(/--max-turns (\d+)/.exec(WF)?.[1]);
     expect(turns, "40 was not enough for the first real defect tried").toBeGreaterThanOrEqual(80);
