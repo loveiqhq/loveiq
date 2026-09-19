@@ -104,6 +104,40 @@ describe("the generate-and-prove workflow", () => {
     expect(Object.keys(doc.on.workflow_dispatch.inputs)).toContain("base_ref");
   });
 
+  /**
+   * The bug that killed the first live run. The workflow checked out
+   * `base_ref` — a commit from two days earlier — and died at the proof
+   * because prove-fix.mjs did not exist yet at that commit. The judge must
+   * come from a fixed, CURRENT source; only the product under test is old.
+   * Same rule the probe and the precision check already follow.
+   */
+  it("checks out the judge from main, not from the commit under test", () => {
+    const doc = parse(WF) as {
+      jobs: Record<
+        string,
+        { steps: Array<{ name?: string; with?: Record<string, unknown>; run?: string }> }
+      >;
+    };
+    const steps = Object.values(doc.jobs).flatMap((j) => j.steps);
+    const checkout = steps.find((st) => JSON.stringify(st).includes("actions/checkout"));
+    expect(
+      String(checkout?.with?.ref ?? ""),
+      "the main checkout must not be moved to base_ref"
+    ).not.toContain("base_ref");
+    // The old code arrives as a worktree instead.
+    expect(steps.some((st) => (st.run ?? "").includes("git worktree add"))).toBe(true);
+  });
+
+  it("has the model edit the worktree, not the judge's checkout", () => {
+    const doc = parse(WF) as {
+      jobs: Record<string, { steps: Array<{ name?: string; "working-directory"?: string }> }>;
+    };
+    const propose = Object.values(doc.jobs)
+      .flatMap((j) => j.steps)
+      .find((st) => st.name === "Propose a fix");
+    expect(propose?.["working-directory"]).toBeTruthy();
+  });
+
   it("proves against the SAME commit the model was given", () => {
     // Proving against main while the model worked from an older commit compares
     // two unrelated things, and would certify a fix for a defect already gone.
@@ -113,7 +147,9 @@ describe("the generate-and-prove workflow", () => {
     const proveStep = Object.values(doc.jobs)
       .flatMap((j) => j.steps)
       .find((s) => s.name === "Prove it");
-    expect(String(proveStep?.env?.BASE_REF)).toContain("inputs.base_ref");
+    // Resolved from the worktree step, which is what actually determined the
+    // code the model saw — not re-read from the input, which may be empty.
+    expect(String(proveStep?.env?.BASE_REF)).toContain("steps.tree.outputs.base");
   });
 
   it("tells the model what is wrong, not how to fix it", () => {

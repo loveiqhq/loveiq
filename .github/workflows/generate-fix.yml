@@ -47,14 +47,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      # `ref` so a PAST commit can be targeted, which is the only way to test
-      # this machine before trusting it: a healthy production has nothing to fix,
-      # and "we will find out when a customer hits something" is not verification.
-      # Empty means main, which is the normal case.
+      # ALWAYS main, never the commit under test.
+      #
+      # The first version checked out `base_ref` directly, and the whole run
+      # died at the proof: prove-fix.mjs did not exist at a commit from two days
+      # earlier. The judge must come from a fixed, current source — the same
+      # reason the precision check and the probe are run from this checkout
+      # rather than from the fix worktree.
+      #
+      # The PRODUCT under test lives in a worktree created below, so a replay
+      # gets old code and a current judge, which is the combination that makes
+      # the answer mean anything.
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
-          ref: ${{ inputs.base_ref || github.ref }}
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
@@ -85,6 +91,19 @@ jobs:
         if: steps.token.outputs.ready == 'true'
         run: npm install -g @anthropic-ai/claude-code
 
+      # The code the model actually edits. A worktree rather than a checkout so
+      # the judge stays present in the main tree alongside it.
+      - name: Check out the code to fix
+        if: steps.token.outputs.ready == 'true'
+        id: tree
+        env:
+          BASE: ${{ inputs.base_ref }}
+        run: |
+          base="${BASE:-origin/main}"
+          echo "base=$(git rev-parse "$base")" >> "$GITHUB_OUTPUT"
+          git worktree add --detach /tmp/fixtree "$base"
+          echo "dir=/tmp/fixtree" >> "$GITHUB_OUTPUT"
+
       # The prompt says WHAT IS WRONG and never how to fix it. A prompt that
       # dictates the change turns this into a slow way of typing, and the
       # interesting failures are the ones where the obvious fix is wrong.
@@ -94,6 +113,7 @@ jobs:
       # quote is command execution on the runner.
       - name: Propose a fix
         if: steps.token.outputs.ready == 'true'
+        working-directory: /tmp/fixtree
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           DEFECT: ${{ inputs.defect }}
@@ -126,6 +146,7 @@ jobs:
 
       - name: Commit whatever it changed
         if: steps.token.outputs.ready == 'true'
+        working-directory: /tmp/fixtree
         id: commit
         env:
           DEFECT: ${{ inputs.defect }}
@@ -148,7 +169,7 @@ jobs:
           # The same base the model was given. Proving against main while the
           # model worked from an older commit would compare two unrelated things
           # and could certify a fix for a defect that is already gone.
-          BASE_REF: ${{ inputs.base_ref || 'origin/main' }}
+          BASE_REF: ${{ steps.tree.outputs.base }}
           PROBE: ${{ inputs.probe }}
           PROBE_ENV: ${{ inputs.probe_env }}
         run: node scripts/prove-fix.mjs
