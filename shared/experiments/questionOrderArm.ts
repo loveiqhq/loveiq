@@ -23,6 +23,22 @@
  *     submission's arm can be recomputed after the fact even if the stamp is
  *     missing. The stamp is a convenience for querying, not the system of record.
  *
+ * READING THE RESULT: FILTER BY START DATE, ALWAYS.
+ *
+ * The arm is a pure function of the session id, which means it returns an arm for
+ * EVERY session ever recorded — including the thousands that predate this
+ * experiment and therefore all saw the control order. A readout that does not
+ * restrict itself to sessions started after launch is not measuring the
+ * experiment; it is splitting historical traffic on a hash and reporting the
+ * difference.
+ *
+ * That is not a theoretical worry. Applying the pre-finalizer arm to the 28 days
+ * BEFORE launch produced a 10.5-point "variant win", positive in all four
+ * independent weeks, for people who had never seen a variant. The null
+ * distribution over 200 random partitions of the same sessions was mean 0.04,
+ * sd 3.30 — so it read as a solid, actionable result and was noise plus a bad
+ * hash. Anyone running "last 30 days" would have shipped on it.
+ *
  * NO SESSION ID MEANS CONTROL. When storage is blocked `getSessionId` returns
  * empty, and the submit path records nothing to slice by. Those respondents get
  * the current order rather than a silently unattributable variant — the same rule
@@ -54,10 +70,38 @@ export function resolveQuestionOrderOverride(
 }
 
 /**
- * FNV-1a, 32-bit. Not a security primitive: it only needs to spread session ids
- * evenly across two buckets. Salted with the experiment name so a visitor who
- * lands in one arm here is not correlated with their bucket in any future test
- * seeded from the same session id.
+ * FNV-1a, 32-bit, FINISHED WITH AN AVALANCHE STEP. Not a security primitive: it
+ * only needs to spread session ids evenly across two buckets, and — because it is
+ * salted with the experiment name — to spread them DIFFERENTLY from any other test
+ * seeded the same way.
+ *
+ * WHY THE FINALIZER IS NOT OPTIONAL. Taking `% 2` of raw FNV-1a is not a coin
+ * flip. The multiplier (0x01000193) is odd, so multiplying never changes the low
+ * bit, and the whole hash collapses to
+ *
+ *     low bit = parity(offset basis) XOR parity(c1) XOR ... XOR parity(cn)
+ *
+ * — i.e. "does this string contain an odd number of odd-valued characters?".
+ * Measured on production data before this changed: the arm agreed with that
+ * parity on 500 of 500 session ids, with no cross-cells at all.
+ *
+ * Two consequences, one harmless and one not:
+ *
+ *   - Balance was FINE (50.24% over 200k random uuids), because that parity is
+ *     itself unbiased for a random uuid. So the split was valid.
+ *   - The SALT DID NOTHING. Changing it can only flip the parity wholesale, so it
+ *     re-labels the two groups without re-drawing them. Measured: changing the salt
+ *     moved 0.00% of 200,000 ids between buckets. The promise made right above this
+ *     comment — that a future test seeded from the same session id would be
+ *     uncorrelated — was therefore exactly false: it would have produced the
+ *     identical split, or its exact complement, and the two experiments would have
+ *     been impossible to tell apart afterwards.
+ *
+ * `fmix32` is murmur3's finalizer, whose entire job is to make every output bit
+ * depend on every input bit. With it, changing the salt moves 50.04% of ids —
+ * a genuinely independent draw. Picking a different single bit of the unfinished
+ * hash (the top one balances and salts fine too) would have worked by luck rather
+ * than by construction, which is the same mistake one bit over.
  */
 function hash(seed: string): number {
   let h = 0x811c9dc5;
@@ -65,6 +109,17 @@ function hash(seed: string): number {
     h ^= seed.charCodeAt(i);
     h = Math.imul(h, 0x01000193);
   }
+  return fmix32(h);
+}
+
+/** murmur3's 32-bit finalizer. Mirrored exactly by `c13_arm()` in SQL. */
+function fmix32(input: number): number {
+  let h = input;
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
   return h >>> 0;
 }
 

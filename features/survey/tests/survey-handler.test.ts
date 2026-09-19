@@ -646,7 +646,7 @@ describe("POST /api/survey", () => {
      * and invalidates the comparison, so it must not pass quietly.
      */
     const ARM_FIXTURES = [
-      { sessionId: "00000000-0000-4000-8000-000000000002", arm: "control" },
+      { sessionId: "00000000-0000-4000-8000-000000000007", arm: "control" },
       { sessionId: "00000000-0000-4000-8000-000000000001", arm: "variant" },
     ] as const;
 

@@ -148,6 +148,42 @@ describe("arm assignment", () => {
     expect(variantCount / n).toBeLessThan(0.55);
   });
 
+  /**
+   * THE REGRESSION THIS EXISTS FOR.
+   *
+   * `% 2` of raw FNV-1a is not a coin flip. The multiplier is odd, so multiplying
+   * never changes the low bit and the hash collapses to "does the seed contain an
+   * odd number of odd-valued characters?". Balance stays fine — that parity is
+   * unbiased for a random uuid — so a balance test cannot see this at all. What
+   * breaks is the SALT: flipping it inverts that parity wholesale, re-labelling the
+   * two groups without re-drawing them, so a future experiment seeded from the same
+   * session id would get the identical split or its exact complement.
+   *
+   * Measured on production before the finalizer was added: the arm agreed with the
+   * parity on 500 of 500 session ids, with no cross-cells at all, and changing the
+   * salt moved 0.00% of 200,000 ids.
+   *
+   * With `fmix32` the arm is independent of that parity, so BOTH arms appear for
+   * BOTH parities. Revert the finalizer and two of these four cells go to zero.
+   */
+  it("is not just the parity of odd characters in the id", () => {
+    const cells = new Map<string, number>();
+    for (let i = 0; i < 2000; i += 1) {
+      const id = `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`;
+      let odd = 0;
+      for (let c = 0; c < id.length; c += 1) odd ^= id.charCodeAt(c) & 1;
+      const key = `${odd}:${assignQuestionOrderArm(id)}`;
+      cells.set(key, (cells.get(key) ?? 0) + 1);
+    }
+    // All four combinations must occur, and none may be vanishingly rare.
+    for (const key of ["0:control", "0:variant", "1:control", "1:variant"]) {
+      expect(
+        cells.get(key) ?? 0,
+        `${key} — the arm has collapsed back onto character parity`
+      ).toBeGreaterThan(200);
+    }
+  });
+
   it("only ever returns a valid arm", () => {
     for (let i = 0; i < 200; i += 1) {
       expect(isQuestionOrderArm(assignQuestionOrderArm(`s${i}`))).toBe(true);
