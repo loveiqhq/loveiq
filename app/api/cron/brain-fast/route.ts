@@ -85,6 +85,10 @@ const DELIBERATE_SKIPS = new Set([
   "ga4-time-budget",
   "slack-not-configured",
   "slack-nothing-to-index",
+  // A walk that ran out of clock is a backfill in progress, not a fault — the same
+  // judgement as `ga4-time-budget` above. Anything ELSE that stops the slack walk
+  // still reports `slack-walk-incomplete:<why>` and still alerts.
+  "slack-time-budget",
 ]);
 
 export async function GET(request: Request) {
