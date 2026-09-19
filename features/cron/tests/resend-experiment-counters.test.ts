@@ -187,6 +187,37 @@ describe("resend webhook: per-arm experiment counters", () => {
     }
   });
 
+  it("does not double-count when Resend retries the same event", async () => {
+    /**
+     * LOAD-BEARING ORDERING. `recordExperimentEvent` runs AFTER the svix_id
+     * claim, which returns early on a replay — so a retry cannot inflate a
+     * counter. Move the call three lines up and every Resend retry inflates the
+     * arm it belongs to, which can flip which variant the digest calls a winner.
+     * Nothing else in the suite pins that order.
+     *
+     * The claim is a POST to resend_webhook_event that answers 409 on a
+     * duplicate, which is what the second call simulates here.
+     */
+    const tagged = {
+      type: "email.opened",
+      data: { to: ["a@example.com"], tags: { exp: "survey-complete", arm: "b" } },
+    };
+    mockVerify.mockReturnValue(tagged);
+
+    // First delivery: claim succeeds (201), counter is written.
+    mockFetch.mockResolvedValue({ ok: true, status: 201, headers: new Headers() });
+    await POST(request());
+    expect(counterCall(), "first delivery must count").not.toBeNull();
+
+    // Retry of the SAME svix_id: the claim 409s and the handler returns early.
+    vi.clearAllMocks();
+    mockVerify.mockReturnValue(tagged);
+    mockFetch.mockResolvedValue({ ok: false, status: 409, headers: new Headers() });
+    const res = await POST(request());
+    expect(res.status).toBe(200);
+    expect(counterCall(), "a replay must not count again").toBeNull();
+  });
+
   it("does not fail the webhook when the counter write throws", async () => {
     /**
      * The webhook's real job is suppressing bounces and complaints. An

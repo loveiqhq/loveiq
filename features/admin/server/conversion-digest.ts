@@ -923,8 +923,14 @@ export { delta };
  * step covers far less than 30 days, and a step-conversion computed across that
  * mismatch would be quietly wrong in the direction that flatters us.
  *
- * A HEAD count rather than a new RPC: one number, and PostgREST already returns
- * it in the content-range header.
+ * THIS WAS A HEAD COUNT AND THAT WAS THE BUG. PostgREST has no COUNT(DISTINCT),
+ * so counting rows was the only thing the shortcut could do — and
+ * `report_price_quote` holds ONE ROW PER PLAN, four per person. The window read
+ * 500, was printed as 500 people, exceeded the 412 report opens above it, and
+ * the funnel's monotonic clamp quietly pulled it back to 412 and rendered
+ * "100%". A fabricated number, from a number 4x too large, under a truthful
+ * label. The RPC counts DISTINCT submissions and scopes to the same cohort as
+ * every other "…of those" row: 106 against 412 opens.
  */
 export interface PaywallHits {
   hits: number;
@@ -937,32 +943,20 @@ export async function fetchPaywallHits(
   untilIso: string
 ): Promise<PaywallHits | null> {
   try {
-    const range = `paywall_reached_at=gte.${encodeURIComponent(sinceIso)}&paywall_reached_at=lt.${encodeURIComponent(untilIso)}`;
-    const res = await supabaseFetch(`/rest/v1/report_price_quote?select=id&${range}`, {
-      method: "HEAD",
-      headers: { Prefer: "count=exact" },
+    const res = await supabaseFetch("/rest/v1/rpc/get_paywall_hits", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ since_ts: sinceIso, until_ts: untilIso }),
     });
     if (!res.ok) {
-      logger.warn({ status: res.status }, "conversion-digest: paywall count non-2xx");
+      logger.warn({ status: res.status }, "conversion-digest: paywall RPC non-2xx");
       return null;
     }
-    const total = res.headers.get("content-range")?.split("/")[1];
-    const hits = total && total !== "*" ? parseInt(total, 10) : 0;
-
-    // The earliest row the instrument ever wrote, so the caller can say how much
-    // of its window the step actually covers instead of implying all of it.
-    const firstRes = await supabaseFetch(
-      "/rest/v1/report_price_quote?select=paywall_reached_at&paywall_reached_at=not.is.null&order=paywall_reached_at.asc&limit=1"
-    );
-    let firstRowDay: string | null = null;
-    if (firstRes.ok) {
-      const rows = (await firstRes.json()) as Array<{ paywall_reached_at?: string }> | null;
-      const raw = Array.isArray(rows) ? rows[0]?.paywall_reached_at : undefined;
-      firstRowDay = typeof raw === "string" ? raw.slice(0, 10) : null;
-    }
-    return { hits: Number.isFinite(hits) ? hits : 0, firstRowDay };
+    const raw = (await res.json()) as { hits?: unknown; firstRowDay?: unknown } | null;
+    if (!raw) return null;
+    return { hits: int(raw.hits), firstRowDay: str(raw.firstRowDay) || null };
   } catch (err) {
-    logger.warn({ err }, "conversion-digest: paywall count threw");
+    logger.warn({ err }, "conversion-digest: paywall RPC threw");
     return null;
   }
 }

@@ -1098,6 +1098,41 @@ describe("conversion-digest handler", () => {
     expect(blockText(arg.blocks)).not.toContain("hit the paywall");
   });
 
+  it("counts paywall hits in people, so the row is a true subset", async () => {
+    /**
+     * THE BUG THIS REPLACED, and it shipped. The first version counted
+     * `report_price_quote` ROWS over a HEAD request, because PostgREST has no
+     * COUNT(DISTINCT) — and that table holds one row per plan, four per person.
+     * A 30-day window read 500, was printed as 500 people, exceeded the 412
+     * report opens above it, and the monotonic clamp pulled it back to 412 and
+     * rendered "100%": a fabricated "everyone who opened their report hit the
+     * paywall", derived from a figure 4x too large.
+     *
+     * Cohort-scoped and de-duplicated the real number is 106 of 412. This test
+     * asserts the row is BELOW the one above it without the clamp having to act,
+     * which is the property that makes the percentage meaningful.
+     */
+    const base = makeFunnel();
+    mockFetchLandingArmFunnel.mockResolvedValue({
+      ...base,
+      cohort: [
+        { arm: "white", completions: 420, reportOpens: 412, checkout: 34, paid: 4, revenue: 60 },
+      ],
+    });
+    mockFetchPaywallHits.mockResolvedValue({ hits: 106, firstRowDay: "2026-09-05" });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const funnel = arg.blocks
+      .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
+      .find((t) => t.includes("*The funnel —"))!;
+    const paywallRow = funnel.split("\n").find((l) => l.includes("hit the paywall"))!;
+    // The count is the one we were given — not clamped to the row above.
+    expect(paywallRow).toMatch(/`\s*106\s/);
+    // And its step share is a real fraction, not a clamped 100%.
+    expect(paywallRow).not.toContain("100%");
+    expect(paywallRow).toContain("25.7%");
+  });
+
   it("keeps the funnel monotonic when paywall hits exceed report opens", async () => {
     /**
      * Measured on production 2026-09-19: 500 paywall hits against 412 report
