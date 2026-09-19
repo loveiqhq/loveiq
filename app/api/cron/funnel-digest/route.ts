@@ -159,7 +159,8 @@ const CHART_CAPTIONS: Partial<Record<DigestImageKind, string>> = {
     "Of everyone who answers the first question, the share who reach the last one.",
   "cvr-completion-paygate":
     "Of everyone who finishes the survey, the share who reach the point where the report asks for payment.",
-  "cvr-paygate-purchase": "Of everyone who reaches that point, the share who pay.",
+  "cvr-paygate-purchase":
+    "Of everyone who reaches that point, the share who pay. A 7-day running average — on a single day one sale out of one visitor is 100%, which is noise rather than news.",
   "bucket-performance":
     "Each line is one price we showed. The share of people who bought at that price.",
   "dropout-funnel": "Where people quit the survey. Taller means more people left on that question.",
@@ -189,7 +190,7 @@ async function lineChartBlock(
   payload: {
     windowLabel?: string;
     labels: string[];
-    series: number[][];
+    series: Array<Array<number | null>>;
     rate?: boolean;
     xAxis?: string[];
   }
@@ -255,7 +256,10 @@ async function buildCvrChartBlocks(
     // that stage = nothing to convert from).
     const hasDenominator = days.some((d) => Number(d[denKey]) > 0);
     if (!hasDenominator) return;
-    const series = days.map((d) => computeRate(Number(d[numKey]), Number(d[denKey])));
+    const series = trailingRate(
+      days.map((d) => Number(d[numKey])),
+      days.map((d) => Number(d[denKey]))
+    );
     out.push(
       ...(await lineChartBlock(kind, alt, {
         windowLabel,
@@ -360,10 +364,12 @@ async function buildBucketChartBlock(
 
   const labels = ranked.map(([bucket]) => bucket.toUpperCase());
   const series = ranked.map(([bucket]) =>
-    days.map((d) => {
-      const c = d.buckets[bucket];
-      return c ? computeRate(c.purchases, c.shown) : 0;
-    })
+    trailingRate(
+      days.map((d) => d.buckets[bucket]?.purchases ?? 0),
+      // A day with no rows for this bucket contributes 0 to the denominator,
+      // which is correct: nobody was shown that price that day.
+      days.map((d) => d.buckets[bucket]?.shown ?? 0)
+    )
   );
 
   // Top bucket by revenue across all buckets (not just ranked) for the subtitle.
@@ -405,6 +411,53 @@ async function buildBucketChartBlock(
  * 1-of-1 bail would otherwise show a misleading 100% bar. The last question
  * has no successor, so it has no drop-off bar (loop stops at length-1).
  */
+/**
+ * A 7-day TRAILING rate, with gaps where a rate cannot honestly be formed.
+ *
+ * A raw daily rate on these funnel steps is noise, not a trend. Paygate→purchase
+ * averages roughly one purchase a week and a handful of people at the paygate
+ * per day, so a day with one of each is 100% — and the chart it produced
+ * oscillated between 0% and 100%, set its own y-scale from a single sale, and
+ * told the reader nothing except that the numbers are small.
+ *
+ * Two kinds of gap, and both are `null` rather than 0, because 0% is a
+ * measurement and "too few to say" is not:
+ *
+ *   the first six days  — no full window behind them. Without this the opening
+ *                         points are 1-, 2-, ... 6-day rates on a chart whose
+ *                         caption promises a 7-day one, and the warm-up
+ *                         artefact sets the y-scale for the whole month.
+ *   an empty window     — nobody reached the step in those seven days, so there
+ *                         is no denominator to divide by.
+ *
+ * Same rule and same window as `buildArmSeries` in the conversion digest, so
+ * the two messages cannot disagree about what a trailing rate means.
+ */
+const TRAILING_DAYS = 7;
+/**
+ * Fewer than this many people in the whole 7-day window and there is no rate to
+ * report. Matches DROPOUT_REACH_FLOOR, which draws the same line for the same
+ * reason.
+ *
+ * Without it a week in which ONE person was shown a price and bought it reads
+ * as 100% — a true statement about one person, drawn at full height, which then
+ * sets the shared y-scale and squashes the row beside it (a real 6.7%) into the
+ * baseline. A rate is a claim about a population; one person is not one.
+ */
+const TRAILING_MIN_DENOMINATOR = 5;
+function trailingRate(nums: number[], dens: number[]): Array<number | null> {
+  return nums.map((_, idx) => {
+    if (idx < TRAILING_DAYS - 1) return null;
+    let n = 0;
+    let d = 0;
+    for (let i = idx - (TRAILING_DAYS - 1); i <= idx; i += 1) {
+      n += nums[i] ?? 0;
+      d += dens[i] ?? 0;
+    }
+    return d >= TRAILING_MIN_DENOMINATOR ? computeRate(n, d) : null;
+  });
+}
+
 const DROPOUT_REACH_FLOOR = 5;
 
 export interface DropoutBar {

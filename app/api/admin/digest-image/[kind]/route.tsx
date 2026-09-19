@@ -116,13 +116,17 @@ interface LongitudinalPayload {
   kind:
     | "cvr-visitor-start"
     | "cvr-start-completion"
-    | "cvr-completion-engagement"
     | "cvr-completion-paygate"
     | "cvr-paygate-purchase"
     | "bucket-performance";
   windowLabel?: string;
   labels: string[];
-  series: number[][];
+  /**
+   * `null` is a gap, never a plotted zero. A day with too few people to form a
+   * rate is not a 0% day, and drawing it as one is how a chart of four
+   * purchases in a month comes to oscillate between 0% and 100%.
+   */
+  series: Array<Array<number | null>>;
   // When true, values are percentages -> readout shows "now X% · max Y%" and
   // the empty-state copy differs. All Phase-3 line charts set this.
   rate?: boolean;
@@ -237,7 +241,6 @@ type AnyPayload =
 const LONG_TITLES: Record<LongitudinalPayload["kind"], string> = {
   "cvr-visitor-start": "Visitors who start the survey",
   "cvr-start-completion": "Survey starts that reach the end",
-  "cvr-completion-engagement": "How soon finishers open their report",
   "cvr-completion-paygate": "Finishers who reach the paywall",
   "cvr-paygate-purchase": "People at the paywall who buy",
   "bucket-performance": "Which price converts best",
@@ -377,6 +380,49 @@ function longitudinalHeight(rowCount: number, rowH: number): number {
  * a low-magnitude rate (e.g. 5%) still uses the full band height — matches the
  * "each chart its own y-scale" decision.
  */
+/**
+ * `null` is a GAP, never a plotted zero — the rule the rest of this file already
+ * follows. A day with too few people to form a rate must not be drawn as 0%,
+ * because 0% is a measurement and "we cannot say" is not.
+ *
+ * Returns ONE polyline per unbroken run, so a gap breaks the line instead of
+ * bridging across it with a straight segment that no data supports.
+ */
+function svgPointRuns(
+  values: Array<number | null>,
+  peak: number,
+  width: number,
+  chartH: number
+): string[] {
+  if (values.length === 0) return [];
+  const safePeak = peak > 0 ? peak : 1;
+  const step = values.length > 1 ? width / (values.length - 1) : 0;
+  const yOf = (v: number) => Math.round(chartH - (v / safePeak) * chartH);
+  const runs: string[] = [];
+  let run: string[] = [];
+  for (let i = 0; i < values.length; i += 1) {
+    const v = values[i];
+    if (v === null || v === undefined || !Number.isFinite(v)) {
+      if (run.length > 1) runs.push(run.join(" "));
+      run = [];
+      continue;
+    }
+    run.push(`${Math.round(i * step)},${yOf(v)}`);
+  }
+  if (run.length > 1) runs.push(run.join(" "));
+  // A single readable point still deserves a mark: widen it into a short stub
+  // rather than emitting a one-point polyline, which renders nothing.
+  if (runs.length === 0) {
+    const only = values.findIndex((v) => typeof v === "number" && Number.isFinite(v));
+    if (only >= 0) {
+      const y = yOf(values[only] as number);
+      const x = Math.round(only * step);
+      return [`${x},${y} ${Math.min(width, x + 6)},${y}`];
+    }
+  }
+  return runs;
+}
+
 function svgPoints(values: number[], peak: number, width: number, chartH: number): string {
   if (values.length === 0) return "";
   /**
@@ -416,13 +462,17 @@ export function renderLongitudinal(p: LongitudinalPayload): {
   const labels = Array.isArray(p.labels) ? p.labels : [];
   const series = Array.isArray(p.series) ? p.series : [];
   const isRate = p.rate === true;
-  const allRows: Array<{ label: string; values: number[]; peak: number }> = [];
+  const allRows: Array<{ label: string; values: Array<number | null>; peak: number }> = [];
   for (let i = 0; i < labels.length; i += 1) {
     const lbl = labels[i];
     const ser = series[i];
     if (typeof lbl !== "string" || !Array.isArray(ser)) continue;
-    const values = ser.map((v) => Math.max(0, Number(v) || 0));
-    const peak = values.reduce((a, b) => Math.max(a, b), 0);
+    // A null stays null; anything else is clamped at zero. `Number(null)` is 0,
+    // so mapping first and filtering after would turn every gap into a 0% day.
+    const values: Array<number | null> = ser.map((v) =>
+      v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Math.max(0, Number(v))
+    );
+    const peak = values.reduce<number>((a, b) => (b === null ? a : Math.max(a, b)), 0);
     allRows.push({ label: lbl, values, peak });
   }
   // Rate charts: KEEP all-zero rows — a flat 0% line is real signal (e.g. a
@@ -471,14 +521,14 @@ export function renderLongitudinal(p: LongitudinalPayload): {
   const chartW = PLOT_W;
   // Readout shows TODAY's value + the window peak, so the reader sees the
   // current rate not just the high-water mark.
-  const readout = (peak: number, last: number): string =>
+  const readout = (peak: number, last: number | null | undefined): string =>
     isRate
       ? // fmtAxis, not Math.round. The axis formatter was rewritten precisely
         // because "a 12.7% rate was published as 13%", and this readout kept the
         // rounding — a 0.4% paygate-to-purchase rate printed "now 0% · max 1%"
         // beside a visibly non-zero line, on the chart that routinely runs
         // sub-1%.
-        `now ${fmtAxis(last)}% · max ${fmtAxis(peak)}%`
+        `${last === null || last === undefined ? "now —" : `now ${fmtAxis(last)}%`} · max ${fmtAxis(peak)}%`
       : `peak ${peak.toLocaleString()}`;
 
   const element = chartShell(
@@ -499,19 +549,30 @@ export function renderLongitudinal(p: LongitudinalPayload): {
          * the wrong colour" Mark raised on the 2026-09-16 sync.
          */
         const color = COLORS.neutral;
-        const linePts = svgPoints(row.values, axisMax, chartW, chartH);
+        const runs = svgPointRuns(row.values, axisMax, chartW, chartH);
         /**
-         * The area closes under the LINE's own span, not the full plot width.
-         * With a single reading the line is a short stub near x=0 while this
-         * closed at chartW — a full-width wedge from one data point. svgPoints
-         * gained a lone-point guard; the polygon that wraps it needs the same
-         * bound or it reintroduces the shape on its own.
+         * ONE area per run, each closed under its OWN x-span.
+         *
+         * A single polygon built from the last run and closed at x=0 drew a
+         * wedge across every gap before it — on the price chart that was a
+         * triangle spanning three weeks of dates with no data in them, which is
+         * a stronger visual claim than the line it was shading.
          */
-        const lineEndX = linePts
-          ? Number(linePts.split(" ").at(-1)?.split(",")[0] ?? chartW)
-          : chartW;
-        const areaPts = linePts ? `0,${chartH} ${linePts} ${lineEndX},${chartH}` : "";
-        const last = row.values.length > 0 ? row.values[row.values.length - 1]! : 0;
+        const areas = runs.map((pts) => {
+          const xs = pts.split(" ");
+          const x0 = Number(xs[0]?.split(",")[0] ?? 0);
+          const x1 = Number(xs[xs.length - 1]?.split(",")[0] ?? 0);
+          return `${x0},${chartH} ${pts} ${x1},${chartH}`;
+        });
+        /**
+         * "now" means the LAST SLOT, not the last readable one.
+         *
+         * Reaching back past a gap for the most recent number printed
+         * "now 100%" beside a line that stopped three weeks earlier — a stale
+         * reading presented as current. When the final day has no rate, the
+         * readout says so.
+         */
+        const lastSlot = row.values.length > 0 ? row.values[row.values.length - 1] : null;
         return (
           <div
             key={`${row.label}-${rIdx}`}
@@ -588,17 +649,22 @@ export function renderLongitudinal(p: LongitudinalPayload): {
                   just under the gridline step, so the band reads as shading and
                   the line reads as the mark.
                 */}
-                {areaPts && <polygon points={areaPts} fill={color} fillOpacity="0.12" />}
-                {linePts && (
+                {areas.map((pts, i) => (
+                  <polygon key={`area-${i}`} points={pts} fill={color} fillOpacity="0.12" />
+                ))}
+                {/* One polyline per unbroken run, so a gap BREAKS the line
+                    rather than being bridged by a segment no data supports. */}
+                {runs.map((pts, i) => (
                   <polyline
-                    points={linePts}
+                    key={`run-${i}`}
+                    points={pts}
                     fill="none"
                     stroke={color}
                     strokeWidth="2"
                     strokeLinejoin="round"
                     strokeLinecap="round"
                   />
-                )}
+                ))}
               </svg>
             </div>
             <div
@@ -612,7 +678,7 @@ export function renderLongitudinal(p: LongitudinalPayload): {
                 overflow: "hidden",
               }}
             >
-              {readout(row.peak, last)}
+              {readout(row.peak, lastSlot)}
             </div>
           </div>
         );
