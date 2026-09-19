@@ -53,6 +53,38 @@ describe("PostgREST max-rows truncation", () => {
     expect(mockWarn).toHaveBeenCalledTimes(1);
   });
 
+  /**
+   * An EXACT total means nothing was truncated, whatever the span says.
+   *
+   * There are TWO count helpers. `countRows` sends `Range: 0-0`, so its header
+   * comes back `0-0/21328` and the span never reaches the cap — which is why
+   * the test below passed while the bug was live. `fetchExactCount` in
+   * digest-metrics sends HEAD + `Prefer: count=exact` with NO Range, and
+   * PostgREST answers `0-999/11624`: a meaningless span (there is no body) over
+   * a correct total, which is the number the caller actually reads.
+   *
+   * That shape fired "rows are MISSING" on a perfectly correct count — four
+   * times per weekly digest run, verified against production 2026-09-19. A
+   * warning that cries wolf on a right answer is worse than none, because the
+   * real one it exists for reads as more of the same noise.
+   */
+  it("stays quiet when the total is exact, even at the cap span", async () => {
+    respond(`0-${POSTGREST_MAX_ROWS - 1}/11624`);
+    await supabaseFetch("/rest/v1/funnel_event?select=visitor_id&event_type=eq.unique_visitor", {
+      method: "HEAD",
+      headers: { Prefer: "count=exact" },
+    });
+    expect(mockWarn).not.toHaveBeenCalled();
+  });
+
+  it("still warns at the same span when the total is unknown", async () => {
+    // The counterpart: identical span, `*` instead of a number. If the fix above
+    // were "never warn at this span", this test fails — which is the point.
+    respond(`0-${POSTGREST_MAX_ROWS - 1}/*`);
+    await supabaseFetch("/rest/v1/funnel_event?select=visitor_id");
+    expect(mockWarn).toHaveBeenCalledTimes(1);
+  });
+
   it("stays quiet for deliberate pagination", async () => {
     // The brain ingest loops limit=1000&offset=N on purpose. Warning on every
     // full page would train everyone to ignore the warning.
@@ -243,5 +275,46 @@ describe("the large-Range backlog only shrinks", () => {
       { encoding: "utf8", cwd: process.cwd() }
     ).trim();
     expect(Number(out)).toBeLessThanOrEqual(131);
+  });
+});
+
+/**
+ * The two count helpers are one helper now.
+ *
+ * They drifted the way duplicated helpers do: countRows sent `Range: 0-0` and
+ * fetchExactCount did not, so PostgREST answered the second `0-999/<total>` and
+ * the truncation guard read that capped span as real truncation — four false
+ * "rows are MISSING" per weekly digest run, on counts that were correct.
+ */
+describe("counting rows has ONE implementation", () => {
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "service-key";
+
+  afterEach(() => vi.clearAllMocks());
+
+  /** A count response: one row, true total after the slash. */
+  function counted(contentRange: string | null, ok = true): void {
+    mockFetch.mockResolvedValue({
+      ok,
+      headers: { get: (k: string) => (k === "content-range" ? contentRange : null) },
+    } as unknown as Response);
+  }
+
+  it("asks for the count and for no rows, whichever helper is used", async () => {
+    counted("0-0/11624");
+    await countRows("/rest/v1/funnel_event?select=visitor_id");
+    const [, opts] = mockFetch.mock.calls[0] as [string, { headers: Record<string, string> }];
+    expect(opts.headers.Prefer).toBe("count=exact");
+    // The Range is what keeps the span away from the cap, so the truncation
+    // guard has nothing to misread even before it checks the total.
+    expect(opts.headers.Range).toBe("0-0");
+  });
+
+  it("never warns about truncation while counting", async () => {
+    // Belt and braces with the exact-total check: this is the shape that fired
+    // four times a run before the helpers were collapsed.
+    counted(`0-${POSTGREST_MAX_ROWS - 1}/11624`);
+    await countRows("/rest/v1/payment?select=id");
+    expect(mockWarn).not.toHaveBeenCalled();
   });
 });

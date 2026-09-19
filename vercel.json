@@ -83,6 +83,10 @@
       "schedule": "17,47 * * * *"
     },
     {
+      "path": "/api/cron/funnel-digest",
+      "schedule": "40 8 * * 1"
+    },
+    {
       "path": "/api/cron/file-invoices",
       "schedule": "40 6 3 * *"
     }

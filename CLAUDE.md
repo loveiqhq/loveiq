@@ -760,10 +760,16 @@ Two consequences worth keeping in view rather than rediscovering:
   that storage was never the constraint an earlier note claimed: measured 2026-09-06,
   the Postgres volume is 8.35 GB with 82% free.
 
-  Paused in the same commit and equally not running: `funnel-digest`,
-  `product-digest`, `deep-engagement-alert`, and `tech-digest` — the last of which
-  carries `fetchCronHealth`, the only aggregate view of cron health, so that view has
-  no schedule invoking it either.
+  Paused in the same commit and still not running: `product-digest`,
+  `deep-engagement-alert`, and `tech-digest` — the last of which carries
+  `fetchCronHealth`, the only aggregate view of cron health, so that view has no
+  schedule invoking it either.
+
+  **`funnel-digest` is running again**, weekly only (`40 8 * * 1`, Mondays). It was
+  paused for being "a rail of pictures with no decision attached"; it now leads with
+  the numbers and carries six charts, and its DAILY arm stays off deliberately
+  (`DAILY_ENABLED = false`) because the 09:00 conversion digest already carries the
+  decisions and the two would print the same figures twice.
 
 - **Add retention for unbounded telemetry tables** not yet covered:
   `survey_behavior_event`, `report_session` (holds IP/UA — privacy angle),
@@ -771,6 +777,37 @@ Two consequences worth keeping in view rather than rediscovering:
   angle; `calendly_webhook_event` was dropped with the Calendly removal on
   2026-09-14). Decide windows when
   enabling the purge above.
+
+---
+
+## Daily series are BERLIN days
+
+Every per-day number this repo publishes — the digests, their charts, the admin
+funnels — buckets on a **Europe/Berlin** day, because GA4's property timezone is
+Berlin and a Berlin numerator over a UTC denominator is not a rate.
+
+Three separate layers have to agree, and fixing one hides the others:
+
+1. **The window bounds** an RPC receives.
+2. **The per-day buckets** inside it. `some_timestamptz::date` resolves in the
+   SESSION timezone, which is UTC on the pooler — always write
+   `(ts AT TIME ZONE 'Europe/Berlin')::date`.
+3. **The caller's own window.** In TypeScript derive days with `reportingDay()` /
+   `reportingDayStart()` from `shared/time/reporting-day.ts`; never
+   `Date.UTC(...)`, `setUTCHours(0,0,0,0)`, or `iso.slice(0, 10)`, and never step
+   a day loop by a fixed `+86_400_000` across a DST change.
+
+Getting this wrong is quiet: window totals stay correct and only the per-day line
+moves, so nothing looks broken. Measured 2026-09-19, one row in seven sat on the
+wrong bar, and a day missing from a series was published as a 100% traffic
+collapse on a day with 543 visits.
+
+`brain-reconcile` (daily, `20 9 * * *`) now checks this: the daily series must end
+on the day before the window closes, and submissions charted must equal
+submissions that exist. It also checks that `get_paywall_hits.firstRowDay` is the
+LATER of that step's two signals. These exist because every unit test mocks the
+RPCs, so nothing else compares what SQL returns against what the code believes —
+which is how an RPC shipped returning the wrong value with all tests green.
 
 ---
 

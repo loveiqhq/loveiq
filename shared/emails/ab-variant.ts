@@ -54,3 +54,28 @@ export function pickFromVariants<T>(
   }
   return variants[hashBucket(trimmed, experiment) % variants.length]!;
 }
+
+/**
+ * The Resend `tags` that make an A/B send readable afterwards.
+ *
+ * Until 2026-09-19 `pickEmailVariant` picked a template and that was the end of
+ * it — no column, no analytics property, no tag — so five experiments had been
+ * running for weeks with results nobody could read. The arm now travels with the
+ * send, and Resend echoes these tags back on every delivered / opened / clicked
+ * webhook, which is where the counters come from.
+ *
+ * Tag names and values are restricted to ASCII letters, numbers, underscores and
+ * dashes, so anything else is stripped rather than sent — an unrecognised
+ * character makes Resend reject the whole send, which would cost us the email to
+ * save the measurement.
+ */
+export function emailExperimentTags(
+  experiment: string,
+  variant: string
+): Array<{ name: string; value: string }> {
+  const clean = (v: string, max: number) => v.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, max);
+  return [
+    { name: "exp", value: clean(experiment, 64) },
+    { name: "arm", value: clean(variant, 16) },
+  ];
+}

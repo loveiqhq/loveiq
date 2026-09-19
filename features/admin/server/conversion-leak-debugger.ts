@@ -57,11 +57,6 @@ interface PartialRow {
   session_id: string;
 }
 
-interface AnalyticsRow {
-  session_id: string | null;
-  metadata: Record<string, unknown> | null;
-}
-
 interface SegmentRow {
   id: number;
   name: string;
@@ -187,7 +182,8 @@ const DIMENSION_META: Record<LeakDimension, { label: string; description: string
   },
   device: {
     label: "Device",
-    description: "Device leakage patterns from analytics metadata when captured.",
+    description:
+      "Device leakage patterns from analytics metadata. Nothing records a device today, so this is a blindspot rather than a measurement.",
   },
 };
 
@@ -296,24 +292,6 @@ function leakHref(dimension: LeakDimension, stage: LeakStage, days: number) {
   return "/admin/revenue";
 }
 
-function deviceFromMetadata(metadata: Record<string, unknown> | null) {
-  const raw =
-    (typeof metadata?.device_type === "string" && metadata.device_type) ||
-    (typeof metadata?.deviceType === "string" && metadata.deviceType) ||
-    (typeof metadata?.device === "string" && metadata.device) ||
-    null;
-
-  if (!raw) return null;
-
-  const normalized = raw.trim().toLowerCase();
-  if (!normalized) return null;
-  if (normalized.includes("desktop")) return "Desktop";
-  if (normalized.includes("tablet")) return "Tablet";
-  if (normalized.includes("mobile") || normalized.includes("phone")) return "Mobile";
-  // normalized is verified non-empty above (`!normalized` early return).
-  return normalized[0]!.toUpperCase() + normalized.slice(1);
-}
-
 function compareLeakStages(aggregate: LeakAggregate) {
   const candidates: Array<{ stage: LeakStage; from: number; to: number }> = [
     { stage: "start_to_complete", from: aggregate.starts, to: aggregate.completed },
@@ -340,7 +318,7 @@ function explanationForLeak(input: {
   hasDeviceCoverage: boolean;
 }) {
   if (input.dimension === "device" && !input.hasDeviceCoverage) {
-    return "Device-specific leakage is directional only because analytics device metadata is missing in the current window.";
+    return "Device-specific leakage is a blindspot: no device is recorded on any analytics event, in this window or any other.";
   }
 
   if (input.stage === "start_to_complete") {
@@ -506,46 +484,42 @@ export async function buildConversionLeakDebuggerSnapshot(
     const submissionIds = submissions.map((submission) => submission.id);
     const userIds = uniqueNumbers(submissions.map((submission) => submission.user_id));
 
-    const [partialsRes, analyticsRes, segmentsRes, scoringRows, profiles, reports] =
-      await Promise.all([
-        /**
-         * Both paged: measured 2026-09-17, this window holds 1,050 partial
-         * saves and 6,291 analytics events, so the capped reads saw 1,000 of
-         * each. The leak report is built by matching sessions across these two
-         * sets, so a short read does not lose rows evenly — it invents leaks,
-         * because a session present in one set and missing from the truncated
-         * other looks like a drop-off.
-         */
-        fetchAllRows<PartialRow>(
-          `/rest/v1/survey_partial_save?select=session_id&saved_at=gte.${since}&order=session_id.asc`
-        ),
-        fetchAllRows<AnalyticsRow>(
-          `/rest/v1/analytics_event?select=session_id,metadata&event_time=gte.${since}&metadata=not.is.null&order=session_id.asc`
-        ),
-        supabaseFetch(
-          `/rest/v1/admin_segment?or=(admin_email.eq.${encodeURIComponent(adminEmail)},is_shared.eq.true)&select=id,name,rules,match_count&order=match_count.desc`,
-          { headers: { Range: "0-49" } }
-        ),
-        submissionIds.length === 0
-          ? Promise.resolve([] as ScoringRow[])
-          : fetchBatches<ScoringRow>(submissionIds, buildScoringResultQuery),
-        userIds.length === 0
-          ? Promise.resolve([] as ProfileRow[])
-          : fetchBatches<ProfileRow>(
-              userIds,
-              (batch) =>
-                `/rest/v1/user_profile?select=id,gender,sexual_orientation,relationship_status,location_primary&id=in.(${batch.join(",")})`
-            ),
-        submissionIds.length === 0
-          ? Promise.resolve([] as ReportRow[])
-          : fetchBatches<ReportRow>(
-              submissionIds,
-              (batch) =>
-                `/rest/v1/personal_report?select=id,survey_submission_id&survey_submission_id=in.(${batch.join(",")})`
-            ),
-      ]);
+    const [partialsRes, segmentsRes, scoringRows, profiles, reports] = await Promise.all([
+      /**
+       * Both paged: measured 2026-09-17, this window holds 1,050 partial
+       * saves and 6,291 analytics events, so the capped reads saw 1,000 of
+       * each. The leak report is built by matching sessions across these two
+       * sets, so a short read does not lose rows evenly — it invents leaks,
+       * because a session present in one set and missing from the truncated
+       * other looks like a drop-off.
+       */
+      fetchAllRows<PartialRow>(
+        `/rest/v1/survey_partial_save?select=session_id&saved_at=gte.${since}&order=session_id.asc`
+      ),
+      supabaseFetch(
+        `/rest/v1/admin_segment?or=(admin_email.eq.${encodeURIComponent(adminEmail)},is_shared.eq.true)&select=id,name,rules,match_count&order=match_count.desc`,
+        { headers: { Range: "0-49" } }
+      ),
+      submissionIds.length === 0
+        ? Promise.resolve([] as ScoringRow[])
+        : fetchBatches<ScoringRow>(submissionIds, buildScoringResultQuery),
+      userIds.length === 0
+        ? Promise.resolve([] as ProfileRow[])
+        : fetchBatches<ProfileRow>(
+            userIds,
+            (batch) =>
+              `/rest/v1/user_profile?select=id,gender,sexual_orientation,relationship_status,location_primary&id=in.(${batch.join(",")})`
+          ),
+      submissionIds.length === 0
+        ? Promise.resolve([] as ReportRow[])
+        : fetchBatches<ReportRow>(
+            submissionIds,
+            (batch) =>
+              `/rest/v1/personal_report?select=id,survey_submission_id&survey_submission_id=in.(${batch.join(",")})`
+          ),
+    ]);
 
-    if (partialsRes === null || analyticsRes === null || !segmentsRes.ok) {
+    if (partialsRes === null || !segmentsRes.ok) {
       throw new Error("Unable to load leak debugger support data.");
     }
 
@@ -568,7 +542,6 @@ export async function buildConversionLeakDebuggerSnapshot(
     ]);
 
     const partials = partialsRes;
-    const analytics = analyticsRes;
     const segments = (await segmentsRes.json()) as SegmentRow[];
 
     const scoringBySubmission = new Map(
@@ -585,15 +558,30 @@ export async function buildConversionLeakDebuggerSnapshot(
         .map((payment) => payment.personal_report_id)
     );
     const resumedSessions = new Set(partials.map((row) => row.session_id));
+    /**
+     * ALWAYS EMPTY, and the read that filled it is gone.
+     *
+     * It was built from `analytics_event`, keyed on `session_id`, and could
+     * never hold anything — for two independent reasons, both measured
+     * 2026-09-19 over a 30-day window of 6,415 events:
+     *
+     *   the KEY   — `analytics_event.session_id` is NULL on every row ever
+     *               written. Nothing sets it; the route inserts
+     *               `survey_submission_id` instead. The loop's first line was
+     *               `if (!event.session_id) continue`, so it skipped all 6,415.
+     *   the VALUE — no row carries `device_type`, `deviceType` or `device` in
+     *               its metadata either. The top metadata keys are
+     *               landing_variant, archetype, plan, price, bucket. So fixing
+     *               the key would have produced an empty map anyway.
+     *
+     * The fetch paginated thousands of rows per call to discover this. It is
+     * removed rather than repaired: `hasDeviceCoverage` stays, the blindspot
+     * wording stays, and the dimension keeps its shape — so the day the client
+     * starts sending a device in `metadata` AND the events carry a key that
+     * reaches a submission, this becomes real work again rather than a
+     * rediscovery.
+     */
     const deviceBySession = new Map<string, string>();
-
-    for (const event of analytics) {
-      if (!event.session_id || deviceBySession.has(event.session_id)) continue;
-      const device = deviceFromMetadata(event.metadata);
-      if (device) {
-        deviceBySession.set(event.session_id, device);
-      }
-    }
 
     const contexts: SubmissionContext[] = submissions.map((submission) => {
       const scoring = scoringBySubmission.get(submission.id);
@@ -741,7 +729,7 @@ export async function buildConversionLeakDebuggerSnapshot(
         description: DIMENSION_META.device.description,
         trustNote: hasDeviceCoverage
           ? null
-          : "No device metadata was captured in analytics_event for the selected window, so device leakage is a blindspot view.",
+          : "No device is recorded on any analytics event — not in this window, not ever — so device leakage is a blindspot view.",
         strongestLeak: null,
         rows: buildRows({
           dimension: "device",

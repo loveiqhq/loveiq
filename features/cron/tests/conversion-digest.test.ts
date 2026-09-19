@@ -1,4 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { armColor, armLabel } from "@features/attribution/server/labels";
+import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 
 const mockNotifySlack = vi.fn();
 const mockTryClaim = vi.fn();
@@ -11,7 +13,21 @@ const mockFetchArmCohorts = vi.fn();
 const mockFetchLandingStartFunnel = vi.fn();
 const mockFetchAxisFunnelDaily = vi.fn();
 const mockFetchFunnelCvrSparklines = vi.fn();
-const mockAdCostByDay = vi.fn();
+/**
+ * Defaulted, not bare. As a bare `vi.fn()` it resolved `undefined` for every
+ * test that did not set it, and the handler swallowed the resulting throw — so
+ * 46 tests ran with the spend clause silently absent and nothing said so. An
+ * empty-but-valid AdCost is the honest "GA4 has nothing for this window".
+ */
+const mockAdCostByDay = vi.fn(async () => ({
+  byDay: new Map<string, number>(),
+  from: null as string | null,
+  to: null as string | null,
+}));
+const mockFetchMidwayProgress = vi.fn();
+const mockFetchPaywallHits = vi.fn();
+const mockFetchEmailExperiments = vi.fn();
+const mockFetchUnitEconomics = vi.fn();
 
 vi.mock("@shared/observability/logger", () => ({
   default: { warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn() },
@@ -63,6 +79,10 @@ vi.mock("@features/admin/server/conversion-digest", async (importActual) => {
     fetchArmCohorts: (...args: unknown[]) => mockFetchArmCohorts(...args),
     fetchLandingStartFunnel: (...args: unknown[]) => mockFetchLandingStartFunnel(...args),
     fetchAxisFunnelDaily: (...args: unknown[]) => mockFetchAxisFunnelDaily(...args),
+    fetchMidwayProgress: (...args: unknown[]) => mockFetchMidwayProgress(...args),
+    fetchPaywallHits: (...args: unknown[]) => mockFetchPaywallHits(...args),
+    fetchEmailExperimentResults: (...args: unknown[]) => mockFetchEmailExperiments(...args),
+    fetchUnitEconomics: (...args: unknown[]) => mockFetchUnitEconomics(...args),
   };
 });
 
@@ -79,6 +99,8 @@ import {
   buildFunnel,
   biggestLeak,
   TINY_ARM,
+  buildEmailExperimentLines,
+  buildUnitEconomicsLines,
 } from "@features/admin/server/conversion-digest";
 import type { SlackBlock } from "@shared/observability/slack";
 
@@ -184,6 +206,71 @@ function blockText(blocks: SlackBlock[]): string {
   return JSON.stringify(blocks);
 }
 
+/** Every signed chart payload in a message whose two legends name landing arms. */
+function landingChartPayloads(blocks: SlackBlock[]): Array<{
+  legendFirst?: string;
+  legendLast?: string;
+  colorFirst?: string;
+  colorLast?: string;
+}> {
+  return blocks
+    .map((b) => (b as { image_url?: string }).image_url)
+    .filter((u): u is string => typeof u === "string")
+    .map(
+      (u) =>
+        JSON.parse(Buffer.from(new URL(u).searchParams.get("d")!, "base64").toString("utf8")) as {
+          legendFirst?: string;
+          legendLast?: string;
+          colorFirst?: string;
+          colorLast?: string;
+        }
+    )
+    .filter(
+      (p) => p.legendFirst?.includes("Landing Page") || p.legendLast?.includes("Landing Page")
+    );
+}
+
+/**
+ * The same message the handler builds, but with the landing axis LIVE.
+ *
+ * VERDICT_AXES is empty in production as of 2026-09-19 — `landing` concluded in
+ * favour of V2 — so the handler no longer emits a per-arm landing chart or a
+ * landing verdict, and it should not. The block-building code behind those is
+ * still there and still correct, and it is what the next experiment will run
+ * through, so it stays under test rather than being deleted with the test that
+ * ran it. These tests therefore go through `buildConversionDigest` with the axis
+ * switched on, and the separate handler test below asserts that the LIVE message
+ * carries none of it.
+ *
+ * Reads the mocks rather than restating their fixtures, so a change to the
+ * shared `beforeEach` reaches these tests the same way it reaches the handler.
+ */
+async function landingLiveBlocks(): Promise<SlackBlock[]> {
+  // Yesterday in Berlin, derived from the (faked) clock exactly as the handler
+  // derives it. Hardcoding a day made every test that moves the clock — and
+  // several do, because the landing axis is only valid from 21 Aug — silently
+  // measure a window its fixtures do not cover.
+  const now = new Date();
+  const dayKey = reportingDay(new Date(reportingDayStart(reportingDay(now)).getTime() - 1));
+  const digest = await buildConversionDigest({
+    dayKey,
+    liveAxesOverride: ["landing"],
+    funnel: (await mockFetchLandingArmFunnel()) ?? null,
+    cohorts: (await mockFetchArmCohorts()) ?? null,
+    startFunnel: (await mockFetchLandingStartFunnel()) ?? null,
+    axisRows: (await mockFetchAxisFunnelDaily()) ?? [],
+    cvrDays: (await mockFetchFunnelCvrSparklines())?.days ?? null,
+    midway: (await mockFetchMidwayProgress()) ?? null,
+    paywall: (await mockFetchPaywallHits()) ?? null,
+    emailExperiments: (await mockFetchEmailExperiments()) ?? null,
+    unitEconomics: (await mockFetchUnitEconomics()) ?? null,
+    adSpend: null,
+    friction: null,
+    now,
+  });
+  return digest.blocks;
+}
+
 describe("conversion-digest handler", () => {
   beforeAll(() => {
     process.env.CRON_SECRET = "test-cron-secret";
@@ -206,6 +293,14 @@ describe("conversion-digest handler", () => {
     // Default: no site-wide CVR source, so the existing expectations about which
     // images a digest contains stay exactly as they were.
     mockFetchFunnelCvrSparklines.mockResolvedValue(null);
+    // Default: midway RPC unavailable, so every expectation written before the
+    // row existed keeps the funnel it was written against.
+    mockFetchMidwayProgress.mockResolvedValue(null);
+    // Default: paywall count unavailable, so expectations written before the
+    // row existed keep the funnel they were written against.
+    mockFetchPaywallHits.mockResolvedValue(null);
+    mockFetchEmailExperiments.mockResolvedValue(null);
+    mockFetchUnitEconomics.mockResolvedValue(null);
     mockFetchArmCohorts.mockResolvedValue([
       { axis: "landing", arm: "white", n: 300, conversions: 10 },
       { axis: "landing", arm: "white_prev", n: 240, conversions: 6 },
@@ -276,18 +371,14 @@ describe("conversion-digest handler", () => {
     // It used to be a daily `info` alert, and the only thing in the Alerts
     // section on a normal day. The fact still has to reach the reader — just at
     // the moment it changes how they read the number next to it.
-    await GET(request());
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const landing = arg.blocks.find((b) =>
-      JSON.stringify(b).includes("Landing page \u2192 survey")
-    );
+    const blocks = await landingLiveBlocks();
+    const landing = blocks.find((b) => JSON.stringify(b).includes("Landing page \u2192 survey"));
     expect(JSON.stringify(landing)).toContain("keep the design they first saw");
   });
 
   it("embeds a signed chart URL for the arm comparison", async () => {
-    await GET(request());
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const image = arg.blocks.find((b) => (b as { type?: string }).type === "image") as
+    const blocks = await landingLiveBlocks();
+    const image = blocks.find((b) => (b as { type?: string }).type === "image") as
       { image_url?: string } | undefined;
     expect(image?.image_url).toMatch(
       /^https:\/\/www\.loveiq\.org\/api\/admin\/digest-image\/conversion-by-arm\?d=[\w-]+&s=[\w-]+$/
@@ -384,9 +475,8 @@ describe("conversion-digest handler", () => {
     // `survey_engine_mount` means "tapped the homepage question" for one arm and
     // "survived four wizard slides plus consent" for the other. Until the
     // instrumentation is symmetric the chart must not read as a verdict.
-    await GET(request());
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const images = arg.blocks.filter((b) => (b as { type?: string }).type === "image");
+    const blocks = await landingLiveBlocks();
+    const images = blocks.filter((b) => (b as { type?: string }).type === "image");
     // One: reached-survey. The survey-theme chart went with the concluded
     // experiment (2026-08-25), and the landing axis's own purchases chart was
     // removed earlier — the per-axis section is the only place landing is charted.
@@ -399,7 +489,7 @@ describe("conversion-digest handler", () => {
     expect(alt).not.toContain("survey%20started%2C%20by%20homepage");
     // And the caption beside it carries the counts AND the caveat, because Slack
     // can fail to load an image and the caption is the accessible text.
-    const flat = blockText(arg.blocks);
+    const flat = blockText(blocks);
     expect(flat).toContain("*Landing page → survey*");
     expect(flat).toContain("Not a like-for-like comparison");
     expect(flat).toMatch(/\d+\/\d+ started/);
@@ -409,19 +499,18 @@ describe("conversion-digest handler", () => {
     // The denominator is server-side and consent-free; the numerator needs
     // __liq_vid, which is minted only under analytics consent. The definitions
     // line used to assert "no analytics-consent gap" over both.
-    await GET(request());
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const flat = blockText(arg.blocks);
+    const blocks = await landingLiveBlocks();
+    const flat = blockText(blocks);
     expect(flat).not.toMatch(/counted server-side, no analytics-consent gap/);
     // The caveat rides on the chart itself — headline, footnote and alt text —
     // so it cannot outlive the chart. The header must not carry it: the chart is
     // absent for whole days at a time and the sentence would point at nothing.
-    const alt = JSON.stringify(arg.blocks.filter((b) => (b as { type?: string }).type === "image"));
+    const alt = JSON.stringify(blocks.filter((b) => (b as { type?: string }).type === "image"));
     // Wording trimmed with the promotion into *The tests*: the alt text now says
     // "A trend, not a verdict" and names the reason, in place of five clauses.
     expect(alt).toContain("A trend, not a verdict");
     expect(alt).toContain("different funnel steps");
-    const definitions = blockText(arg.blocks.slice(0, 2));
+    const definitions = blockText(blocks.slice(0, 2));
     expect(definitions).not.toContain("arm-comparable");
   });
 
@@ -494,22 +583,28 @@ describe("conversion-digest handler", () => {
 
   it("prints a vanishing share as <0.1%, never as a bare 0% beside a real count", async () => {
     /**
-     * 5 payments in 12,308 visits is 0.04%. Rounded to one decimal that is 0, and a
-     * column reading 100 / 3.5 / 3.4 / 0.3 / 0 says nobody paid while the count
-     * beside it says five. Once the test-payment exclusion landed, the paid count
-     * dropped far enough for this to start happening for real.
+     * A step that converts 5 of 12,000 is 0.04%. Rounded to one decimal that is
+     * 0, and a row reading "5  0%" says nobody carried on while the count beside
+     * it says five did.
+     *
+     * The fixture drives it through the STEP column, which is the only
+     * percentage the table now carries — this used to be exercised through
+     * "% of all visits", which was removed on 2026-09-19 for being the second
+     * percentage people kept misreading.
      */
     const base = makeFunnel();
     mockFetchLandingArmFunnel.mockResolvedValue({
       ...base,
-      // A big denominator and a tiny survivor, which is what production looks like.
+      // The visitor row is the ceiling every row below is clamped to, so it has
+      // to be big enough for the cohort numbers to survive intact.
       visitors: base.visitors.map((v: { n: number }) => ({ ...v, n: v.n * 40 })),
       cohort: [
         {
           arm: "white",
-          completions: 425,
-          reportOpens: 414,
-          checkout: 33,
+          completions: 12_400,
+          reportOpens: 12_000,
+          // 5 of 12,000 = 0.04%, which rounds to 0.0 at one decimal.
+          checkout: 5,
           paid: 5,
           revenue: 128.99,
         },
@@ -517,10 +612,17 @@ describe("conversion-digest handler", () => {
     });
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const flat = blockText(arg.blocks);
-    expect(flat).toContain("<0.1%");
-    // And no row anywhere pairs a non-zero count with a bare 0%.
-    expect(flat).not.toMatch(/`\s*[1-9]\d*`\s+0%/);
+    const funnelBlock = arg.blocks.find((b) => JSON.stringify(b).includes("Visits to the site")) as
+      { text: { text: string } } | undefined;
+    expect(funnelBlock).toBeDefined();
+    const text = funnelBlock!.text.text;
+
+    expect(text).toContain("<0.1%");
+    // And never a bare 0% on a row whose count is not zero.
+    for (const row of text.split("\n").filter((l) => l.startsWith("`"))) {
+      const count = Number(row.replace(/`/g, "").trim().split(/\s+/)[0]);
+      if (count > 0) expect(row, `bare 0% beside ${count}`).not.toMatch(/\s0%/);
+    }
   });
 
   it("names both spans the funnel covers, instead of implying one", async () => {
@@ -578,16 +680,17 @@ describe("conversion-digest handler", () => {
     );
   });
 
-  it("draws the same landing arm in the same colour in every chart of one message", async () => {
+  it("draws each landing arm in ITS OWN colour, in every chart of one message", async () => {
     /**
-     * The renderer colours by POSITION, not by name: `first` is purple, `last` is
-     * orange. So two charts about the same two arms must put the same arm in the
-     * same slot, or one message shows V2 purple in one picture and orange two
-     * blocks below it — each chart correctly legended, and the pair unreadable to
-     * anyone who follows a colour from one to the next.
+     * Colour is bound to the arm (`armColor`), not to the series slot. Asked for on
+     * the 2026-09-16 sync: "fixed colour codes for variants, preventing V1 and V2
+     * colours from swapping". V1 is blue, V2 orange, permanently.
      *
-     * The checkout chart sorts its arms by label. The landing->survey chart used
-     * to hardcode the opposite order.
+     * THIS TEST USED TO ASSERT THE WRONG THING. It compared the two charts'
+     * legendFirst/legendLast and checked they agreed — a proxy for colour that was
+     * only valid while the renderer coloured by position. It never read a colour,
+     * so it would have passed just as happily with V1 and V2 painted the same, or
+     * swapped, as long as both charts listed the arms in the same order.
      */
     /**
      * Both fixtures are rebuilt here, aligned to a later clock. The shared ones
@@ -616,27 +719,684 @@ describe("conversion-digest handler", () => {
         { arm: "white_prev", visits: 280 * days.length, starts: 26 * days.length },
       ],
     });
+    const blocks = await landingLiveBlocks();
+    const landing = landingChartPayloads(blocks);
+
+    // Both landing charts must be in this message, or the assertion below is
+    // vacuous — one chart trivially agrees with itself.
+    expect(landing.length).toBeGreaterThanOrEqual(2);
+
+    // Every (arm -> colour) pair drawn anywhere in the message.
+    const drawn = new Map<string, Set<string>>();
+    for (const p of landing) {
+      for (const [legend, colour] of [
+        [p.legendFirst, p.colorFirst],
+        [p.legendLast, p.colorLast],
+      ] as const) {
+        if (!legend || !colour) continue;
+        if (!drawn.has(legend)) drawn.set(legend, new Set());
+        drawn.get(legend)!.add(colour);
+      }
+    }
+
+    const v1 = armLabel("landing", "white_prev").short;
+    const v2 = armLabel("landing", "white").short;
+    // Both arms actually appeared, so neither branch below is skipped silently.
+    expect([...drawn.keys()].sort()).toEqual([v1, v2].sort());
+    // One colour each, across every chart in the message.
+    expect(drawn.get(v1)).toEqual(new Set([armColor("landing", "white_prev")]));
+    expect(drawn.get(v2)).toEqual(new Set([armColor("landing", "white")]));
+    // And they are different colours, which "one colour each" alone does not say.
+    expect(armColor("landing", "white_prev")).not.toBe(armColor("landing", "white"));
+  });
+
+  it("keeps an arm's colour on a day when the other arm has no data", async () => {
+    /**
+     * The case the old design could not express, and the one that put this on the
+     * agenda. When an arm reports nothing the chart still names it, but under
+     * colour-by-position the SURVIVOR slid into the first slot and took the first
+     * slot's colour — so the same arm was one colour on a two-arm day and another
+     * on a one-arm day, with nothing in the picture saying why.
+     *
+     * Sorting the arms by label, which is what this route used to do, cannot fix
+     * this: there is no second arm left to sort against.
+     */
+    vi.setSystemTime(new Date("2026-09-14T09:05:00.000Z"));
+    const days = Array.from({ length: 24 }, (_, d) =>
+      new Date(Date.UTC(2026, 7, 21) + d * 86_400_000).toISOString().slice(0, 10)
+    );
+    // V2 ("white") reports nothing at all this window. V1 carries the chart.
+    mockFetchLandingStartFunnel.mockResolvedValue({
+      daily: days.map((day) => ({ day, arm: "white_prev", visits: 280, starts: 26 })),
+      totals: [
+        { arm: "white_prev", visits: 280 * days.length, starts: 26 * days.length },
+        { arm: "white", visits: 0, starts: 0 },
+      ],
+    });
+    const blocks = await landingLiveBlocks();
+    const landing = landingChartPayloads(blocks);
+    expect(landing.length).toBeGreaterThanOrEqual(1);
+
+    const v1 = armLabel("landing", "white_prev").short;
+    for (const p of landing) {
+      // Whichever slot V1 occupies, it is drawn in V1's colour and not V2's.
+      const colour = p.legendFirst === v1 ? p.colorFirst : p.colorLast;
+      expect(colour).toBe(armColor("landing", "white_prev"));
+      expect(colour).not.toBe(armColor("landing", "white"));
+    }
+  });
+
+  it("puts Midway Progress between started and finished, and names its threshold", async () => {
+    /**
+     * The step Mark named on 2026-09-16, which the KPI framework called the only
+     * funnel step with no instrument at all. It had one — `current_index` on the
+     * draft save — it just had no reader and no arm.
+     *
+     * The label carries the question number rather than the word "midway",
+     * because the number is the fact and "midway" is the definition. An unnamed
+     * figure in this table is exactly what produced a 96.5% nobody could source.
+     */
+    mockFetchFunnelCvrSparklines.mockResolvedValue({
+      days: Array.from({ length: 10 }, (_, i) => ({
+        day: new Date(Date.UTC(2026, 7, 10) + i * 86_400_000).toISOString().slice(0, 10),
+        visitors: 400,
+        starts: 90,
+      })),
+    });
+    mockFetchMidwayProgress.mockResolvedValue({
+      overall: { sessions: 1033, reached: 579 },
+      daily: [],
+      totals: [],
+      midwayIndex: 30,
+    });
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const landing = arg.blocks
+    const funnel = arg.blocks
+      .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
+      .find((t) => t.includes("*The funnel —"));
+    expect(funnel, "the funnel block must be in the message at all").toBeDefined();
+    expect(funnel!).toContain("Reached question 30");
+    // Between the two rows it belongs between, not appended somewhere.
+    expect(funnel!.indexOf("Started the survey")).toBeLessThan(
+      funnel!.indexOf("Reached question 30")
+    );
+    expect(funnel!.indexOf("Reached question 30")).toBeLessThan(
+      funnel!.indexOf("Finished the survey")
+    );
+  });
+
+  it("omits the midway row entirely when the RPC is unavailable", async () => {
+    // Not a zero. "0 reached the halfway point" above 411 finishers says
+    // something false about the product rather than about the measurement.
+    mockFetchMidwayProgress.mockResolvedValue(null);
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    expect(blockText(arg.blocks)).not.toContain("Reached question");
+  });
+
+  it("omits the midway row when it reads below the finisher count", async () => {
+    /**
+     * The sources disagree — midway comes from draft saves, finishers from the
+     * submission cohort, different id spaces and different windows. Drawing it
+     * anyway would clamp the finisher count DOWN to it and publish a smaller,
+     * wrong number of completions under a truthful label. Same guard, same
+     * reason, as the starts row.
+     */
+    mockFetchMidwayProgress.mockResolvedValue({
+      overall: { sessions: 12, reached: 3 },
+      daily: [],
+      totals: [],
+      midwayIndex: 30,
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const flat = blockText(arg.blocks);
+    expect(flat).not.toContain("Reached question");
+    // And the finisher count was NOT dragged down to 3 by a clamp.
+    expect(flat).toContain("Finished the survey");
+    expect(flat).not.toMatch(/`\s*3\s+[\d.<%—]+\s+[\d.<%—]+`\s+Finished the survey/);
+  });
+
+  it("splits midway progress by landing page once both arms have drafts", async () => {
+    // Marcus's acceptance criterion from 2026-09-16: every metric differentiated
+    // by landing-page experiment.
+    const days = Array.from({ length: 14 }, (_, i) =>
+      new Date(Date.UTC(2026, 8, 19) + i * 86_400_000).toISOString().slice(0, 10)
+    );
+    mockFetchMidwayProgress.mockResolvedValue({
+      // Above the fixture's 510 finishers: below it, the sources-disagree guard
+      // correctly suppresses the row and this test would assert the guard
+      // rather than the feature.
+      overall: { sessions: 900, reached: 620 },
+      daily: days.flatMap((day) => [
+        { day, arm: "white_prev", sessions: 30, reached: 16 },
+        { day, arm: "white", sessions: 34, reached: 21 },
+      ]),
+      totals: [
+        { arm: "white", sessions: 476, reached: 294 },
+        { arm: "white_prev", sessions: 420, reached: 224 },
+      ],
+      midwayIndex: 30,
+      firstArmDay: "2026-09-19",
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const flat = blockText(arg.blocks);
+
+    expect(flat).toContain("Midway progress, by landing page");
+    // Plain-English arm names, never a raw stored value.
+    expect(flat).toContain("Landing Page V1 (First Design)");
+    expect(flat).toContain("Landing Page V2 (Survey in Hero)");
+    expect(flat).not.toContain("white_prev");
+    // The counts are named, not bare percentages.
+    expect(flat).toContain("224 of 420 drafts reached question 30");
+
+    // And the trend chart is drawn, in each arm's own colour.
+    const midwayChart = arg.blocks
       .map((b) => (b as { image_url?: string }).image_url)
       .filter((u): u is string => typeof u === "string")
       .map(
         (u) =>
           JSON.parse(Buffer.from(new URL(u).searchParams.get("d")!, "base64").toString("utf8")) as {
-            legendFirst?: string;
-            legendLast?: string;
+            title?: string;
+            colorFirst?: string;
+            colorLast?: string;
           }
       )
-      .filter(
-        (p) => p.legendFirst?.includes("Landing Page") && p.legendLast?.includes("Landing Page")
-      );
+      .find((p) => p.title?.includes("reaching question 30"));
+    expect(midwayChart, "the midway trend chart must be in the message").toBeDefined();
+    expect(midwayChart!.colorFirst).toBe(armColor("landing", "white_prev"));
+    expect(midwayChart!.colorLast).toBe(armColor("landing", "white"));
+  });
 
-    // Both landing charts must be in this message, or the assertion below is
-    // vacuous — one chart trivially agrees with itself.
-    expect(landing.length).toBeGreaterThanOrEqual(2);
-    expect(new Set(landing.map((p) => p.legendFirst)).size).toBe(1);
-    expect(new Set(landing.map((p) => p.legendLast)).size).toBe(1);
+  it("prints the per-arm line but no chart until a trend exists", async () => {
+    /**
+     * The state on day two: the arms have drafts, so the counts are real and worth
+     * printing — but the 7-day trailing series is still all warm-up, so every
+     * plotted value is null. A chart here would be an empty box under a headline
+     * with numbers in it, which reads as a rendering failure rather than as "not
+     * yet".
+     *
+     * This is the case the sibling test cannot reach: there, totals are empty and
+     * the chart branch is never entered at all, so a mutation that always drew the
+     * chart survived.
+     */
+    const days = Array.from({ length: 3 }, (_, i) =>
+      new Date(Date.UTC(2026, 8, 19) + i * 86_400_000).toISOString().slice(0, 10)
+    );
+    mockFetchMidwayProgress.mockResolvedValue({
+      overall: { sessions: 900, reached: 620 },
+      daily: days.flatMap((day) => [
+        { day, arm: "white_prev", sessions: 30, reached: 16 },
+        { day, arm: "white", sessions: 34, reached: 21 },
+      ]),
+      totals: [
+        { arm: "white", sessions: 102, reached: 63 },
+        { arm: "white_prev", sessions: 90, reached: 48 },
+      ],
+      midwayIndex: 30,
+      firstArmDay: "2026-09-19",
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const flat = blockText(arg.blocks);
+
+    // The counts ARE worth printing.
+    expect(flat).toContain("Midway progress, by landing page");
+    expect(flat).toContain("48 of 90 drafts reached question 30");
+    // The chart is not.
+    const titles = arg.blocks
+      .map((b) => (b as { image_url?: string }).image_url)
+      .filter((u): u is string => typeof u === "string")
+      .map(
+        (u) =>
+          (
+            JSON.parse(
+              Buffer.from(new URL(u).searchParams.get("d")!, "base64").toString("utf8")
+            ) as { title?: string }
+          ).title ?? ""
+      );
+    expect(titles.some((t) => t.includes("reaching question"))).toBe(false);
+  });
+
+  it("stays silent per-arm too when the funnel refuses the midway row", async () => {
+    /**
+     * One trust decision, two surfaces. When midway reads below the finisher
+     * count the sources are measuring different populations and buildFunnel drops
+     * the row. The per-arm block used to print anyway, so the message both
+     * withheld and asserted the same figure.
+     */
+    mockFetchMidwayProgress.mockResolvedValue({
+      // Below the fixture's 510 finishers.
+      overall: { sessions: 300, reached: 40 },
+      daily: [],
+      totals: [
+        { arm: "white", sessions: 160, reached: 22 },
+        { arm: "white_prev", sessions: 140, reached: 18 },
+      ],
+      midwayIndex: 30,
+      firstArmDay: "2026-09-19",
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const flat = blockText(arg.blocks);
+    expect(flat).not.toContain("Reached question");
+    expect(flat).not.toContain("Midway progress, by landing page");
+    // Not the empty-state note either — that is for "no arm data", not "distrusted".
+    expect(flat).not.toContain("Midway progress per landing page starts from");
+  });
+
+  it("names the drafts with no landing page, so the arms add up", async () => {
+    /**
+     * The RPC buckets arm-less rows as 'unknown' so the arms always sum to the
+     * total. This caller filtered to the two live arms, which defeated the reason
+     * the bucket exists: the printed lines did not reconcile with overall.sessions
+     * and nothing said why. No cookie means a crawler, a direct hit or a consent
+     * refusal — a real population.
+     */
+    const days = Array.from({ length: 14 }, (_, i) =>
+      new Date(Date.UTC(2026, 8, 19) + i * 86_400_000).toISOString().slice(0, 10)
+    );
+    mockFetchMidwayProgress.mockResolvedValue({
+      overall: { sessions: 1000, reached: 620 },
+      daily: days.flatMap((day) => [
+        { day, arm: "white_prev", sessions: 30, reached: 16 },
+        { day, arm: "white", sessions: 34, reached: 21 },
+      ]),
+      totals: [
+        { arm: "white", sessions: 476, reached: 294 },
+        { arm: "white_prev", sessions: 420, reached: 224 },
+        { arm: "unknown", sessions: 104, reached: 61 },
+      ],
+      midwayIndex: 30,
+      firstArmDay: "2026-09-19",
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const flat = blockText(arg.blocks);
+    expect(flat).toContain("no landing page recorded");
+    expect(flat).toContain("61 of 104 drafts");
+    // 476 + 420 + 104 = 1000 = overall.sessions, and every part is on screen.
+  });
+
+  it("says when per-arm midway starts, rather than drawing an empty chart", async () => {
+    /**
+     * Drafts only began carrying an arm on firstArmDay, so for the first week
+     * there is nothing to plot. `funnel-digest` was unscheduled for being a rail
+     * of charts with no decision attached; an "awaiting data" chart every morning
+     * for a week is that mistake with a new name.
+     */
+    mockFetchMidwayProgress.mockResolvedValue({
+      // Above the fixture's 510 finishers: below it, the sources-disagree guard
+      // correctly suppresses the row and this test would assert the guard
+      // rather than the feature.
+      overall: { sessions: 900, reached: 620 },
+      daily: [],
+      totals: [],
+      midwayIndex: 30,
+      firstArmDay: "2026-09-19",
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const flat = blockText(arg.blocks);
+
+    expect(flat).toContain("Midway progress per landing page starts from 2026-09-19");
+    // A sentence, not a picture, and not a silent omission either.
+    expect(flat).not.toContain("Midway progress, by landing page");
+    const titles = arg.blocks
+      .map((b) => (b as { image_url?: string }).image_url)
+      .filter((u): u is string => typeof u === "string")
+      .map(
+        (u) =>
+          (
+            JSON.parse(
+              Buffer.from(new URL(u).searchParams.get("d")!, "base64").toString("utf8")
+            ) as { title?: string }
+          ).title ?? ""
+      );
+    expect(titles.some((t) => t.includes("reaching question"))).toBe(false);
+    // The whole-population row is unaffected and still present.
+    expect(flat).toContain("Reached question 30");
+  });
+
+  it("shows a real over-100% step instead of clamping it to 100", async () => {
+    /**
+     * buildFunnel deliberately leaves the last three steps unclamped: a promo
+     * one-tap or an admin-granted unlock sets purchased_at without a checkout, so
+     * paid CAN exceed checkout truthfully. The table used computeRate, which
+     * clamps to 100 — printing "100%" for a real 120% in the one column that
+     * exists to say what happened between two steps.
+     */
+    const base = makeFunnel();
+    mockFetchLandingArmFunnel.mockResolvedValue({
+      ...base,
+      cohort: [
+        { arm: "white", completions: 100, reportOpens: 90, checkout: 5, paid: 6, revenue: 60 },
+      ],
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const funnel = arg.blocks
+      .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
+      .find((t) => t.includes("*The funnel —"));
+    expect(funnel).toBeDefined();
+    const paidRow = funnel!.split("\n").find((l) => l.includes("ever unlocked it"))!;
+    expect(paidRow).toContain("120%");
+    expect(paidRow).not.toMatch(/\s100%\s/);
+  });
+
+  it("prints an em dash, not <0.1%, when the step before is zero", async () => {
+    /**
+     * computeRate returns 0 for a zero denominator, and the table rendered that as
+     * "<0.1%" — a vanishing ratio, for a ratio that does not exist. Reachable by
+     * the same promo path: nobody starts checkout, one person is granted access.
+     */
+    const base = makeFunnel();
+    mockFetchLandingArmFunnel.mockResolvedValue({
+      ...base,
+      cohort: [
+        { arm: "white", completions: 100, reportOpens: 90, checkout: 0, paid: 1, revenue: 10 },
+      ],
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const funnel = arg.blocks
+      .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
+      .find((t) => t.includes("*The funnel —"));
+    const paidRow = funnel!.split("\n").find((l) => l.includes("ever unlocked it"))!;
+    expect(paidRow).toContain("—");
+    expect(paidRow).not.toContain("<0.1%");
+  });
+
+  /**
+   * The route's half of the missing-day guard.
+   *
+   * buildAlerts is unit-tested above, but nothing checked that the ROUTE
+   * actually works out whether yesterday is in the data — hardcoding
+   * `yesterdayObserved = true` there left every one of those unit tests green.
+   * This is the test that fails when it does.
+   *
+   * The pinned clock reports on 2026-08-23, which is makeFunnel's last day.
+   */
+  it("works out from the data whether yesterday is missing, not just whether it is zero", async () => {
+    const DAY_REPORTED = "2026-08-23";
+    // 60 visitors a day, so the baseline clears the >= 20 floor the alert needs.
+    const full = makeFunnel({ visitorArms: { white: 1200, white_prev: 600 } });
+    const collapsed = (a: { blocks: SlackBlock[] }) =>
+      a.blocks
+        .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
+        .join("\n")
+        .includes("below the usual daily average");
+
+    const postFor = async (visitors: typeof full.visitors) => {
+      mockNotifySlack.mockClear();
+      mockFetchLandingArmFunnel.mockResolvedValue({ ...full, visitors });
+      await GET(request());
+      return mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    };
+
+    // Present and genuinely zero -> a real collapse, and it must be reported.
+    const zeroed = await postFor(
+      full.visitors.map((v) => (v.day === DAY_REPORTED ? { ...v, n: 0 } : v))
+    );
+    expect(collapsed(zeroed), "a real zero-traffic day must still alert").toBe(true);
+
+    // Absent from the series -> nothing is known, so nothing is claimed. This is
+    // the shape the day-series bug produced on 2026-09-19.
+    const missing = await postFor(full.visitors.filter((v) => v.day !== DAY_REPORTED));
+    expect(collapsed(missing), "a missing day must not be called a collapse").toBe(false);
+
+    /**
+     * And the block above the alerts must not print the absence as a zero
+     * either. It read "Visits 0 _(-100%)_" on a day with 543 visits, which is
+     * the same false claim in the part of the message people read first.
+     */
+    const fieldsOf = (a: { blocks: SlackBlock[] }) =>
+      (a.blocks as Array<{ fields?: Array<{ text: string }> }>)
+        .flatMap((b) => b.fields ?? [])
+        .map((f) => f.text);
+
+    const missingFields = fieldsOf(missing).filter((t) => t.includes("*Visits*"));
+    expect(missingFields).toHaveLength(1);
+    expect(missingFields[0]).toContain("—");
+    expect(missingFields[0]).not.toMatch(/-100%/);
+
+    // The observed day still prints its real number, so the em dash is not
+    // simply always on.
+    const zeroFields = fieldsOf(zeroed).filter((t) => t.includes("*Visits*"));
+    expect(zeroFields[0]).toContain("0");
+    expect(zeroFields[0]).not.toContain("—");
+  });
+
+  /**
+   * The caveat under the funnel had NEVER fired in production.
+   *
+   * get_paywall_hits returns `firstRowDay` so this line can say how much of the
+   * window the paywall row really covers. The RPC computed it as MIN across both
+   * signals, which is the day the LOSSY client event started (2026-05-24), not
+   * the day the step became meaningfully measured (2026-09-05, the server
+   * column). MIN is always outside the window, so the guard always returned null.
+   *
+   * These tests could not have caught that on their own — they mock the RPC, and
+   * the mock already carried the intended "2026-09-05". That is exactly how the
+   * defect survived: the fixture encoded the intent and production did not match
+   * it. Fixed in 20260919260000 by taking MAX of the two per-signal minimums.
+   *
+   * What IS coverable here is the caller's half, which was asserted nowhere.
+   */
+  it("says how much of the window the paywall row covers, and stops once it covers all of it", async () => {
+    vi.setSystemTime(new Date("2026-09-14T09:05:00.000Z"));
+    const noteFrom = async (firstRowDay: string | null) => {
+      mockNotifySlack.mockClear();
+      mockFetchPaywallHits.mockResolvedValue({ hits: 106, firstRowDay });
+      await GET(request());
+      const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+      return arg.blocks.map((b) => (b as { text?: { text?: string } }).text?.text ?? "").join("\n");
+    };
+
+    // Window is 30 Berlin days ending 2026-09-14, so a signal that started on
+    // the 5th covers 9 of them.
+    const fired = await noteFrom("2026-09-05");
+    expect(fired).toContain("The paywall row covers 9 days, not 30");
+    expect(fired).toContain("that signal only started on 2026-09-05");
+
+    // Self-expiring: once the instrument predates the window there is nothing to
+    // caveat, and the line must disappear rather than become furniture. This is
+    // the value the RPC used to return, so before the fix EVERY day looked
+    // like this one.
+    const silent = await noteFrom("2026-05-24");
+    expect(silent).not.toContain("The paywall row covers");
+
+    // And it is absent, not blank, when the instrument has never written.
+    const never = await noteFrom(null);
+    expect(never).not.toContain("The paywall row covers");
+  });
+
+  it("puts Paywall Hits between the report and checkout, as Mark named it", async () => {
+    /**
+     * The sixth step of the funnel language agreed on 2026-09-16. The digest
+     * printed "started checkout" in that slot, which is a different decision —
+     * hitting the wall is not deciding to buy, and the drop between them is the
+     * most actionable number in the bottom half of the funnel.
+     */
+    mockFetchPaywallHits.mockResolvedValue({ hits: 300, firstRowDay: "2026-09-05" });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const funnel = arg.blocks
+      .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
+      .find((t) => t.includes("*The funnel —"));
+    expect(funnel, "the funnel block must be in the message").toBeDefined();
+    /**
+     * Positions compared among the ROWS, not across the whole block.
+     * `indexOf` on the block finds these step names in the HEADLINE first —
+     * "biggest drop hit the paywall → started checkout" — and compares two
+     * offsets that are not rows at all. The sibling test above this file already
+     * documents the same trap one level up, where a step name in the definition
+     * line was compared against one in the table.
+     */
+    const rowNames = funnel!
+      .split("\n")
+      .filter((l) => l.startsWith("`"))
+      .map((l) => l.replace(/^`[^`]*`\s*/, ""));
+    expect(rowNames.length).toBeGreaterThan(3);
+    const at = (name: string) => rowNames.findIndex((r) => r.includes(name));
+    expect(at("hit the paywall"), "the paywall row must exist").toBeGreaterThan(-1);
+    expect(at("opened their report")).toBeLessThan(at("hit the paywall"));
+    expect(at("hit the paywall")).toBeLessThan(at("started checkout"));
+  });
+
+  it("omits the paywall row rather than printing a zero", async () => {
+    // The instrument only began on 2026-09-05. A 0 under a 30-day heading says
+    // the paywall was never reached, which is a statement about the product.
+    mockFetchPaywallHits.mockResolvedValue({ hits: 0, firstRowDay: null });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    expect(blockText(arg.blocks)).not.toContain("hit the paywall");
+  });
+
+  it("counts paywall hits in people, so the row is a true subset", async () => {
+    /**
+     * THE BUG THIS REPLACED, and it shipped. The first version counted
+     * `report_price_quote` ROWS over a HEAD request, because PostgREST has no
+     * COUNT(DISTINCT) — and that table holds one row per plan, four per person.
+     * A 30-day window read 500, was printed as 500 people, exceeded the 412
+     * report opens above it, and the monotonic clamp pulled it back to 412 and
+     * rendered "100%": a fabricated "everyone who opened their report hit the
+     * paywall", derived from a figure 4x too large.
+     *
+     * Cohort-scoped and de-duplicated the real number is 106 of 412. This test
+     * asserts the row is BELOW the one above it without the clamp having to act,
+     * which is the property that makes the percentage meaningful.
+     */
+    const base = makeFunnel();
+    mockFetchLandingArmFunnel.mockResolvedValue({
+      ...base,
+      cohort: [
+        { arm: "white", completions: 420, reportOpens: 412, checkout: 34, paid: 4, revenue: 60 },
+      ],
+    });
+    mockFetchPaywallHits.mockResolvedValue({ hits: 106, firstRowDay: "2026-09-05" });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const funnel = arg.blocks
+      .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
+      .find((t) => t.includes("*The funnel —"))!;
+    const paywallRow = funnel.split("\n").find((l) => l.includes("hit the paywall"))!;
+    // The count is the one we were given — not clamped to the row above.
+    expect(paywallRow).toMatch(/`\s*106\s/);
+    // And its step share is a real fraction, not a clamped 100%.
+    expect(paywallRow).not.toContain("100%");
+    expect(paywallRow).toContain("25.7%");
+  });
+
+  it("omits the paywall row when it exceeds report opens, rather than clamping it", async () => {
+    /**
+     * THIS TEST USED TO ASSERT THE OPPOSITE, and the opposite was wrong.
+     *
+     * It checked that a paywall count of 500 against 412 report opens was
+     * clamped down to 412 — "monotonic", which it is, and a fabricated 100%,
+     * which it also is. The clamp only pulls DOWN, so any excess becomes "every
+     * single person who opened their report hit the paywall". That sentence is
+     * what the 4x row-count bug printed, and fixing the count left the mechanism
+     * that laundered it in place.
+     *
+     * It stays reachable with a CORRECT count: get_paywall_hits counts every
+     * submission in the window while reportOpens comes from the arm-attributed
+     * cohort (~92% of them), so the paywall row can legitimately include people
+     * the row above excludes. When it does, the row is omitted. A missing step is
+     * a gap someone notices; a clamped one is a number someone quotes.
+     */
+    const base = makeFunnel();
+    mockFetchLandingArmFunnel.mockResolvedValue({
+      ...base,
+      cohort: [
+        { arm: "white", completions: 420, reportOpens: 412, checkout: 34, paid: 4, revenue: 60 },
+      ],
+    });
+    mockFetchPaywallHits.mockResolvedValue({ hits: 500, firstRowDay: "2026-09-05" });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const funnel = arg.blocks
+      .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
+      .find((t) => t.includes("*The funnel —"))!;
+
+    expect(funnel).not.toContain("hit the paywall");
+    // And above all: no row BELOW the first claims a clamped 100%. The first row
+    // is "Visits to the site", legitimately 100% of all visits — every row under
+    // it reaching 100% would mean nobody was lost at that step.
+    const rows = funnel.split("\n").filter((l) => l.startsWith("`"));
+    expect(rows.length).toBeGreaterThan(3);
+    expect(rows.slice(1).filter((r) => r.includes("100%"))).toHaveLength(0);
+    // The rest of the funnel is untouched and still monotonic.
+    const counts = rows.map((l) => parseInt(l.replace(/^`\s*/, ""), 10));
+    for (let i = 1; i < counts.length; i += 1) {
+      expect(counts[i]!).toBeLessThanOrEqual(counts[i - 1]!);
+    }
+  });
+
+  it("puts the section in the message, above the friction detail", async () => {
+    mockFetchUnitEconomics.mockResolvedValue({
+      adSpend: 1187.6,
+      revenue: 70,
+      paidReports: 3,
+      compedReports: 0,
+      otherCurrencyReports: 0,
+      coveredDays: 30,
+      windowDays: 30,
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const flat = blockText(arg.blocks);
+    expect(flat).toContain("Break-even");
+    /**
+     * Directly under the funnel that produces it: it is the number a decision
+     * gets made on, so it precedes the friction detail that explains the shape.
+     * Anchored on the funnel rather than on the friction block, which is absent
+     * from this fixture — an indexOf of -1 would have made the comparison pass
+     * or fail for the wrong reason.
+     */
+    expect(flat.indexOf("The funnel —")).toBeGreaterThan(-1);
+    expect(flat.indexOf("The funnel —")).toBeLessThan(flat.indexOf("Break-even"));
+  });
+
+  it("omits the section entirely when the figures are unavailable", async () => {
+    // Not zeros. "EUR 0.00 spent, EUR 0.00 earned" reads as a quiet month.
+    mockFetchUnitEconomics.mockResolvedValue(null);
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    expect(blockText(arg.blocks)).not.toContain("Break-even");
+  });
+
+  it("carries ONE percentage per funnel row, and names it", async () => {
+    /**
+     * It used to carry two — % of the step before AND % of all visits — because
+     * the KPI doc asked for both to be stated and named. In practice two
+     * percentage columns on one row is what people kept reading wrong, which is
+     * the same complaint that produced the unsourceable "96.5%" in the first
+     * place. The survivor is % OF THE STEP BEFORE, because it answers the
+     * question the table is read for: where are we losing people.
+     */
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const funnelBlock = arg.blocks.find((b) => JSON.stringify(b).includes("Visits to the site")) as
+      { text: { text: string } } | undefined;
+    expect(funnelBlock, "the funnel block").toBeDefined();
+    const text = funnelBlock!.text.text;
+
+    expect(text).toContain("% of the step above them");
+    expect(text, "the second convention is gone").not.toContain("% of all visits");
+
+    // Every data row carries exactly one percentage in its number columns.
+    const dataRows = text.split("\n").filter((l) => l.startsWith("`"));
+    expect(dataRows.length, "the funnel rows").toBeGreaterThan(2);
+    for (const row of dataRows) {
+      const numbers = row.slice(0, row.lastIndexOf("`") + 1);
+      expect((numbers.match(/%/g) ?? []).length, `one percentage in: ${row}`).toBeLessThanOrEqual(
+        1
+      );
+    }
+    // The top row has no predecessor, so it shows a dash rather than 100%.
+    expect(dataRows[0]).toContain("—");
   });
 
   it("draws the site-wide survey-reach trend through the AUDITED renderer", async () => {
@@ -707,9 +1467,8 @@ describe("conversion-digest handler", () => {
     // visits recorded yet" every morning is the filler that teaches people to
     // skim the whole message.
     mockFetchLandingStartFunnel.mockResolvedValue({ daily: [], totals: [] });
-    await GET(request());
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const block = arg.blocks.find((b) =>
+    const blocks = await landingLiveBlocks();
+    const block = blocks.find((b) =>
       (b as { text?: { text?: string } }).text?.text?.startsWith("*Landing page → survey*")
     ) as { text: { text: string } } | undefined;
     expect(block).toBeDefined();
@@ -733,9 +1492,8 @@ describe("conversion-digest handler", () => {
         { arm: "white_prev", visits: 64, starts: 10 },
       ],
     });
-    await GET(request());
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const text = blockText(arg.blocks);
+    const blocks = await landingLiveBlocks();
+    const text = blockText(blocks);
     expect(text).toContain("*Landing page → survey* — one day of per-arm data");
     // first day + 7, not +6: 20 Aug -> 27 Aug.
     expect(text).toContain("chart from 27 Aug");
@@ -743,7 +1501,7 @@ describe("conversion-digest handler", () => {
     expect(text).toContain("64 visit-days → 10 started the survey");
     expect(text).toContain("Not a like-for-like comparison");
     // No image while it cannot honestly draw one.
-    expect(arg.blocks.filter((b) => (b as { type?: string }).type === "image")).toHaveLength(0);
+    expect(blocks.filter((b) => (b as { type?: string }).type === "image")).toHaveLength(0);
   });
 
   it("puts a too-young test's numbers in a full-size section, not a footnote", async () => {
@@ -756,9 +1514,8 @@ describe("conversion-digest handler", () => {
       rows.push({ axis: "landing", arm: "white_prev", day, completions: 6, checkouts: 2, paid: 0 });
     }
     mockFetchAxisFunnelDaily.mockResolvedValue(rows);
-    await GET(request());
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const section = arg.blocks.find(
+    const blocks = await landingLiveBlocks();
+    const section = blocks.find(
       (b) =>
         (b as { type?: string }).type === "section" &&
         (b as { text?: { text?: string } }).text?.text?.startsWith("*Landing page design*")
@@ -770,7 +1527,7 @@ describe("conversion-digest handler", () => {
     expect(text).toContain("18 finished → 6 checkout → 0 paid");
     expect(text).toMatch(/chart (from|once)/);
     // And no image was emitted for it — the whole point of the counts path.
-    const imgs = arg.blocks.filter((b) =>
+    const imgs = blocks.filter((b) =>
       (b as { alt_text?: string }).alt_text?.startsWith("Landing page")
     );
     expect(imgs).toHaveLength(0);
@@ -796,9 +1553,8 @@ describe("conversion-digest handler", () => {
     // Only one arm has data, so nothing can be compared. The digest must say so
     // rather than leave the reader wondering where the test went.
     mockFetchAxisFunnelDaily.mockResolvedValue(makeAxisRows().filter((r) => r.arm === "white"));
-    await GET(request());
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const flat = blockText(arg.blocks);
+    const blocks = await landingLiveBlocks();
+    const flat = blockText(blocks);
     expect(flat).toContain("nothing to compare");
     expect(flat).toContain("*The tests*");
   });
@@ -850,6 +1606,121 @@ describe("conversion-digest handler", () => {
     expect(blockText(arg.blocks)).toContain("measurement failure");
   });
 
+  it("never uses one word for both unlocks and sales", async () => {
+    /**
+     * `report_price_quote.purchased_at` is set by fulfillment on ANY unlock,
+     * including a 100%-off coupon; `payment.amount > 0` is a sale. Three places
+     * in this message counted one or the other and ALL THREE said "paid", so a
+     * single message answered "how many paid" with different numbers in the
+     * funnel, in yesterday's fields and in break-even — and the fields block
+     * could print "Paid 1 · Revenue EUR 0.00", which contradicts itself inside
+     * four words.
+     *
+     * The fixture makes the two differ on purpose: yesterday has 2 unlocks of
+     * which 1 was free. If they were equal this test would pass without
+     * distinguishing anything.
+     */
+    const day = "2026-08-23";
+    mockFetchLandingArmFunnel.mockResolvedValue({
+      visitors: [{ day, arm: "white", n: 100 }],
+      daily: [
+        {
+          day,
+          arm: "white",
+          completions: 10,
+          reportOpens: 9,
+          checkout: 3,
+          paid: 2, // two unlocks…
+          charges: 1, // …one of which was a sale
+          freeUnlocks: 1,
+          revenue: 29,
+        },
+      ],
+      cohort: [
+        { arm: "white", completions: 10, reportOpens: 9, checkout: 3, paid: 2, revenue: 29 },
+      ],
+    });
+    mockFetchUnitEconomics.mockResolvedValue({
+      adSpend: 1185.32,
+      revenue: 29,
+      paidReports: 1,
+      compedReports: 1,
+      otherCurrencyReports: 0,
+      coveredDays: 30,
+      windowDays: 30,
+    });
+
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { text: string; blocks: SlackBlock[] };
+    const blockTexts = arg.blocks.map((b) => JSON.stringify(b));
+
+    // The funnel counts UNLOCKS and says so. It must not say "paid" at all.
+    const funnelBlock = blockTexts.find((t) => t.includes("Visits to the site"))!;
+    expect(funnelBlock, "the funnel block").toBeDefined();
+    expect(funnelBlock).toContain("ever unlocked it");
+    expect(funnelBlock).not.toMatch(/\bpaid\b/i);
+
+    // Yesterday's "Paid" counts SALES, so it agrees with the Revenue beside it.
+    const fieldsBlock = blockTexts.find((t) => t.includes("Finished survey"))!;
+    expect(fieldsBlock, "the yesterday fields block").toBeDefined();
+    expect(fieldsBlock).toContain("*Paid*\\n1");
+    expect(fieldsBlock, "2 is the unlock count and must not appear here").not.toContain(
+      "*Paid*\\n2"
+    );
+
+    // Break-even counts sales and names the free unlock separately.
+    const breakEven = blockTexts.find((t) => t.includes("Break-even"))!;
+    expect(breakEven).toContain("1 paid report");
+    expect(breakEven).toContain("1 unlocked free, not counted as sales");
+
+    // The notification preview gets no surrounding context, so it must be
+    // unambiguous on its own.
+    expect(arg.text).toContain("1 paid");
+    expect(arg.text).toContain("ever unlocked");
+    expect(arg.text).not.toContain("ever paid");
+  });
+
+  it("ships no landing comparison at all, because the test is over", async () => {
+    /**
+     * THE TEST THE OTHER LANDING TESTS CANNOT BE.
+     *
+     * Every one of them goes through `landingLiveBlocks()`, which switches the
+     * axis back ON so the block-building code stays covered. That leaves nobody
+     * asserting the thing that actually changed on 2026-09-19 — and a mutation
+     * forcing `landingIsLive` to true survived all 110 of them, because not one
+     * looked at the message the handler really sends.
+     *
+     * Asserted on the LIVE path, with fixtures that would happily draw the
+     * chart: makeStartFunnel() and makeAxisRows() both carry two landing arms.
+     * If they did not, this would pass by having nothing to omit.
+     */
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const json = JSON.stringify(arg.blocks);
+
+    // No per-arm headline, no per-arm chart, no verdict.
+    expect(json).not.toContain("Landing page → survey");
+    expect(json).not.toContain("visit-days →");
+    expect(json).not.toContain("genuinely ahead");
+    expect(json).not.toContain("no clear winner yet");
+    const landingCharts = landingChartPayloads(arg.blocks);
+    expect(landingCharts, "no chart may legend a landing arm").toHaveLength(0);
+
+    // And it says why, rather than the chart simply vanishing.
+    expect(json).toContain("Landing page test concluded");
+    expect(json).toContain(armLabel("landing", "white").short);
+  });
+
+  it("stops repeating the conclusion once it falls out of the window", async () => {
+    // The notice is news while the window still covers days the test ran, and
+    // filler after that. It expires on the window, with no second constant to
+    // remember to delete.
+    vi.setSystemTime(new Date("2026-11-30T09:05:00.000Z"));
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    expect(JSON.stringify(arg.blocks)).not.toContain("Landing page test concluded");
+  });
+
   it("keeps the definitions at the top, where trimming cannot reach them", async () => {
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
@@ -861,15 +1732,606 @@ describe("conversion-digest handler", () => {
   });
 });
 
+describe("buildFunnel: the midway row and the clamp that moves with it", () => {
+  const cohort = [
+    // reportOpens ABOVE completions on purpose — the live shape. report_session
+    // counts an open on the day it happens, so a report opened today from a
+    // survey completed last month lands outside its cohort; production read 506
+    // opens against 430 completions on 2026-09-16.
+    { arm: "white", completions: 425, reportOpens: 500, checkout: 33, paid: 5, revenue: 0 },
+  ];
+
+  it("slots the row in and names the threshold on it", () => {
+    const steps = buildFunnel(cohort, 12308, 1025, { reached: 700, index: 30 });
+    expect(steps.map((x) => x.step)).toEqual([
+      "Visits to the site",
+      "Started the survey",
+      "Reached question 30",
+      "Finished the survey",
+      "…of those, opened their report",
+      "…of those, started checkout",
+      "…of those, ever unlocked it",
+    ]);
+    expect(steps.map((x) => x.count)).toEqual([12308, 1025, 700, 425, 425, 33, 5]);
+  });
+
+  it("keeps the funnel monotonic once the extra row shifts the clamp", () => {
+    /**
+     * THE REGRESSION THIS FILE EXISTS FOR. `CLAMPED_STEPS` counts array positions,
+     * and it was hardcoded `hasStarts ? 4 : 3`. Adding the midway row pushes
+     * "opened their report" from index 3 to index 4, so with the old constant it
+     * falls OUTSIDE the clamp — and report opens legitimately exceed completions,
+     * so the funnel starts going UP. That is the 117.7% the 2026-09-16 sync could
+     * not explain, drawn as though it were a real step.
+     *
+     * A mutation run confirmed nothing else catches it: reverting the constant
+     * left all 68 tests green.
+     */
+    const steps = buildFunnel(cohort, 12308, 1025, { reached: 700, index: 30 });
+    for (let i = 1; i < 5; i += 1) {
+      expect(
+        steps[i]!.count,
+        `${steps[i]!.step} must not exceed ${steps[i - 1]!.step}`
+      ).toBeLessThanOrEqual(steps[i - 1]!.count);
+    }
+    // Specifically: opens clamped down to the 425 finishers, not left at 500.
+    expect(steps.find((x) => x.step.includes("opened their report"))!.count).toBe(425);
+  });
+
+  it("still clamps correctly with no midway row, and with no starts row either", () => {
+    // The constant has to be right in all four combinations, not just the new one.
+    for (const [starts, midway] of [
+      [1025, { reached: 700, index: 30 }],
+      [1025, null],
+      [null, { reached: 700, index: 30 }],
+      [null, null],
+    ] as const) {
+      const steps = buildFunnel(cohort, 12308, starts, midway);
+      const opened = steps.findIndex((x) => x.step.includes("opened their report"));
+      expect(opened).toBeGreaterThan(0);
+      expect(
+        steps[opened]!.count,
+        `opens must be clamped with starts=${starts} midway=${midway ? "yes" : "no"}`
+      ).toBeLessThanOrEqual(steps[opened - 1]!.count);
+    }
+  });
+});
+
+describe("email A/B tests in the digest", () => {
+  /**
+   * Marcus asked on 2026-08-24 for CVR per EXPERIMENT. Five of ours are emails,
+   * and until the arm started riding on the Resend tags they could not appear
+   * here at all — pickEmailVariant chose a template and forgot.
+   */
+  it("reports click rate per arm, with a verdict, per experiment", () => {
+    const lines = buildEmailExperimentLines([
+      {
+        experiment: "survey-complete",
+        arm: "a",
+        delivered: 900,
+        complained: 0,
+        bounced: 0,
+        clicked: 90,
+      },
+      {
+        experiment: "survey-complete",
+        arm: "b",
+        delivered: 900,
+        complained: 0,
+        bounced: 0,
+        clicked: 140,
+      },
+    ]);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!).toContain("survey-complete");
+    expect(lines[0]!).toContain("A 10% (90/900)");
+    expect(lines[0]!).toContain("B 15.6% (140/900)");
+    expect(lines[0]!).toContain("genuinely ahead");
+    expect(lines[0]!).toContain("95% CI");
+  });
+
+  it("measures clicks, not opens", () => {
+    /**
+     * Open tracking fires on a pixel load, and Apple Mail Privacy Protection
+     * pre-fetches it for every message whether or not a human looked — so an
+     * open rate measures which mail clients each arm drew, and both arms draw
+     * the same clients. A click is a person deciding.
+     */
+    const lines = buildEmailExperimentLines([
+      // B wins overwhelmingly on OPENS and loses on clicks. If the readout used
+      // opens, it would call B the winner.
+      { experiment: "invite", arm: "a", delivered: 500, complained: 0, bounced: 0, clicked: 100 },
+      { experiment: "invite", arm: "b", delivered: 500, complained: 0, bounced: 0, clicked: 20 },
+    ]);
+    expect(lines[0]!).toContain("A 20% (100/500)");
+    expect(lines[0]!).toContain("B 4% (20/500)");
+    // The leader named is A, the click winner.
+    expect(lines[0]!).toMatch(/A is genuinely ahead/);
+  });
+
+  it("says the measurement cannot run, rather than calling it a tie", () => {
+    // "No clear winner" claims we measured and found the arms equal. With four
+    // clicks the z-test cannot run at all, and collapsing the two is how a test
+    // gets concluded on nothing.
+    const lines = buildEmailExperimentLines([
+      {
+        experiment: "report-share",
+        arm: "a",
+        delivered: 40,
+        complained: 0,
+        bounced: 0,
+        clicked: 2,
+      },
+      {
+        experiment: "report-share",
+        arm: "b",
+        delivered: 40,
+        complained: 0,
+        bounced: 0,
+        clicked: 2,
+      },
+    ]);
+    expect(lines[0]!).toContain("not enough clicks yet");
+    expect(lines[0]!).not.toContain("no clear winner");
+  });
+
+  it("does not present a single arm as a result", () => {
+    // One arm with traffic is not a comparison; a lone rate reads as a finding.
+    const lines = buildEmailExperimentLines([
+      {
+        experiment: "survey-paused",
+        arm: "a",
+        delivered: 300,
+        complained: 0,
+        bounced: 0,
+        clicked: 30,
+      },
+      {
+        experiment: "survey-paused",
+        arm: "b",
+        delivered: 0,
+        complained: 0,
+        bounced: 0,
+        clicked: 0,
+      },
+    ]);
+    expect(lines[0]!).toContain("only one arm has data yet");
+    expect(lines[0]!).not.toContain("ahead");
+  });
+
+  it("handles a three-way test by comparing the top two", () => {
+    const lines = buildEmailExperimentLines([
+      {
+        experiment: "report-share",
+        arm: "a",
+        delivered: 600,
+        complained: 0,
+        bounced: 0,
+        clicked: 30,
+      },
+      {
+        experiment: "report-share",
+        arm: "b",
+        delivered: 600,
+        complained: 0,
+        bounced: 0,
+        clicked: 90,
+      },
+      {
+        experiment: "report-share",
+        arm: "c",
+        delivered: 600,
+        complained: 0,
+        bounced: 0,
+        clicked: 60,
+      },
+    ]);
+    expect(lines).toHaveLength(1);
+    // All three arms are shown…
+    for (const arm of ["A ", "B ", "C "]) expect(lines[0]!).toContain(arm);
+    // …and the verdict is about the leader.
+    expect(lines[0]!).toMatch(/B is genuinely ahead/);
+  });
+
+  it("ranks on the raw proportion, not a rounded one", () => {
+    /**
+     * THE BUG: `rate()` rounds to one decimal, so 12/2000 (0.600%) and 13/2100
+     * (0.619%) both became "0.6". The sort saw a tie, stable sort fell back to
+     * alphabetical, and A was named as ahead — while the z-test, running on the
+     * raw counts the sort had ignored, printed a NEGATIVE delta for A. The line
+     * contradicted itself. Reachable at ordinary email volumes.
+     */
+    const lines = buildEmailExperimentLines([
+      { experiment: "invite", arm: "a", delivered: 2000, complained: 0, bounced: 0, clicked: 12 },
+      { experiment: "invite", arm: "b", delivered: 2100, complained: 0, bounced: 0, clicked: 13 },
+    ]);
+    // B is genuinely the higher rate, so B must be the one named.
+    expect(lines[0]!).not.toMatch(/A is ahead/);
+    // And no line may claim a direction while printing the opposite sign.
+    const claimsA = /\bA is (ahead|genuinely ahead)/.test(lines[0]!);
+    const negativeDelta = /\(-\d/.test(lines[0]!);
+    expect(claimsA && negativeDelta, `self-contradicting line: ${lines[0]}`).toBe(false);
+  });
+
+  it("calls a dead heat level, not a lead", () => {
+    // Identical rates with enough volume to say so. "A is ahead" over two
+    // literally equal numbers is the sentence this digest exists to avoid.
+    const lines = buildEmailExperimentLines([
+      { experiment: "invite", arm: "a", delivered: 1000, complained: 0, bounced: 0, clicked: 100 },
+      { experiment: "invite", arm: "b", delivered: 1000, complained: 0, bounced: 0, clicked: 100 },
+    ]);
+    expect(lines[0]!).toContain("level so far");
+    expect(lines[0]!).not.toContain("ahead");
+  });
+
+  it("prefers 'not enough clicks' over 'level' when the sample is tiny", () => {
+    // Identical rates on two clicks each is a coincidence, not a finding.
+    const lines = buildEmailExperimentLines([
+      { experiment: "invite", arm: "a", delivered: 40, complained: 0, bounced: 0, clicked: 2 },
+      { experiment: "invite", arm: "b", delivered: 40, complained: 0, bounced: 0, clicked: 2 },
+    ]);
+    expect(lines[0]!).toContain("not enough clicks yet");
+    expect(lines[0]!).not.toContain("level so far");
+  });
+
+  it("survives more clicks than deliveries, and says it capped them", () => {
+    /**
+     * Clicks are click EVENTS — Resend fires one per link, each with its own svix
+     * id, so one reader clicking three links counts three times while `delivered`
+     * counts one. twoProportionSignal REFUSES when successes exceed the sample,
+     * so an arm with abundant clicks printed "not enough clicks yet" — the exact
+     * opposite of the truth.
+     */
+    const lines = buildEmailExperimentLines([
+      {
+        experiment: "report-share",
+        arm: "a",
+        delivered: 40,
+        complained: 0,
+        bounced: 0,
+        clicked: 45,
+      },
+      {
+        experiment: "report-share",
+        arm: "b",
+        delivered: 40,
+        complained: 0,
+        bounced: 0,
+        clicked: 10,
+      },
+    ]);
+    expect(lines[0]!).not.toContain("not enough clicks yet");
+    // The raw counts are still shown, and the verdict is declined with a reason
+    // rather than manufactured from a capped 100% rate.
+    expect(lines[0]!).toContain("45/40");
+    expect(lines[0]!).toContain("not comparable");
+    expect(lines[0]!).not.toContain("genuinely ahead");
+  });
+
+  it("names spam complaints beside the click rate", () => {
+    /**
+     * An arm that wins on clicks while being marked as spam twice as often has
+     * not won. The webhook has always written these counters; until an audit
+     * noticed, the readout selected only delivered/opened/clicked, so four of the
+     * six event types accumulated forever with no consumer — including a test
+     * asserting complaints were counted while the number was unreachable.
+     */
+    const lines = buildEmailExperimentLines([
+      { experiment: "invite", arm: "a", delivered: 900, clicked: 90, complained: 1, bounced: 0 },
+      { experiment: "invite", arm: "b", delivered: 900, clicked: 140, complained: 12, bounced: 0 },
+    ]);
+    expect(lines[0]!).toContain("spam:");
+    expect(lines[0]!).toContain("B 12");
+  });
+
+  it("says why an experiment has no rate, instead of vanishing", () => {
+    /**
+     * Every arm has a zero denominator but clicks exist — delivered webhooks are
+     * not arriving. The route's fallback only fires when the whole result set is
+     * empty, so this experiment used to disappear entirely: no section, no line,
+     * no explanation. That is the quiet omission the feature exists to remove.
+     */
+    const lines = buildEmailExperimentLines([
+      { experiment: "invite", arm: "a", delivered: 0, clicked: 3, complained: 0, bounced: 0 },
+    ]);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!).toContain("invite");
+    expect(lines[0]!).toContain("no deliveries");
+  });
+
+  it("flags an arm that has clicks but no recorded deliveries", () => {
+    // Filtering it out silently loses the clicks AND hides that the denominator
+    // is broken for that arm.
+    const lines = buildEmailExperimentLines([
+      { experiment: "invite", arm: "a", delivered: 300, clicked: 30, complained: 0, bounced: 0 },
+      { experiment: "invite", arm: "b", delivered: 0, clicked: 7, complained: 0, bounced: 0 },
+    ]);
+    expect(lines[0]!).toContain("only one arm has data yet");
+    expect(lines[0]!).toContain("B has clicks but no recorded deliveries");
+  });
+
+  it("puts each experiment on its own line", () => {
+    const lines = buildEmailExperimentLines([
+      { experiment: "invite", arm: "a", delivered: 400, complained: 0, bounced: 0, clicked: 40 },
+      { experiment: "invite", arm: "b", delivered: 400, complained: 0, bounced: 0, clicked: 44 },
+      {
+        experiment: "survey-complete",
+        arm: "a",
+        delivered: 800,
+        complained: 0,
+        bounced: 0,
+        clicked: 80,
+      },
+      {
+        experiment: "survey-complete",
+        arm: "b",
+        delivered: 800,
+        complained: 0,
+        bounced: 0,
+        clicked: 130,
+      },
+    ]);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]!).toContain("invite");
+    expect(lines[1]!).toContain("survey-complete");
+  });
+});
+
+describe("break-even: what we spent against what came back", () => {
+  /**
+   * Marcus, 2026-09-18: "Our core mission is to turn the survey to report journey
+   * break even." Nothing in the digest said how far off that is. Measured over
+   * the 30 days to 2026-09-18: EUR 1,187.60 of ad spend against EUR 70.00 from 3
+   * paid reports.
+   *
+   * The KPI framework marked this whole layer NO DATA because `marketing_spend`
+   * is empty. It is — but the spend is not missing, it is in GA4 and already
+   * ingested; nothing had joined the two halves.
+   */
+  it("states the spend, the return and the gap", () => {
+    const lines = buildUnitEconomicsLines({
+      adSpend: 1187.6,
+      revenue: 70,
+      paidReports: 3,
+      compedReports: 0,
+      otherCurrencyReports: 0,
+      coveredDays: 30,
+      windowDays: 30,
+    });
+    const all = lines.join("\n");
+    expect(all).toContain("EUR 1,187.60");
+    expect(all).toContain("EUR 70.00");
+    expect(all).toContain("3 paid reports");
+    // EUR 395.87 to acquire each one, against EUR 23.33 earned.
+    expect(all).toContain("EUR 395.87");
+    expect(all).toContain("EUR 23.33");
+    // And the gap, named as a gap.
+    expect(all).toContain("EUR -1,117.60");
+    expect(all).toContain("short of break-even");
+  });
+
+  it("does not count a free unlock as a sale", () => {
+    /**
+     * `payment` rows at EUR 0 are comped unlocks — the post-call coupon. They
+     * count as reports by an explicit decision, and they are not sales. Folded
+     * into the denominator they make acquisition look cheaper than it is:
+     * measured over the 30 days to 2026-09-19 there were 3 succeeded non-test
+     * payments of which ONE was a zero, so cost per sale would divide by 3
+     * instead of 2 — 33% flattering, the direction this file warns about
+     * everywhere else.
+     */
+    const lines = buildUnitEconomicsLines({
+      adSpend: 1000,
+      revenue: 70,
+      paidReports: 2,
+      compedReports: 1,
+      otherCurrencyReports: 0,
+      coveredDays: 30,
+      windowDays: 30,
+    });
+    const all = lines.join("\n");
+    // Cost per sale divides by the 2 that paid, not the 3 unlocks.
+    expect(all).toContain("EUR 500.00");
+    expect(all).not.toContain("EUR 333.33");
+    // And the free one is named rather than hidden.
+    expect(all).toContain("1 unlocked free");
+    expect(all).toContain("not counted as sales");
+  });
+
+  it("says nothing about comps when there were none", () => {
+    const lines = buildUnitEconomicsLines({
+      adSpend: 1000,
+      revenue: 70,
+      paidReports: 2,
+      compedReports: 0,
+      otherCurrencyReports: 0,
+      coveredDays: 30,
+      windowDays: 30,
+    });
+    expect(lines.join("\n")).not.toContain("unlocked free");
+  });
+
+  it("says what the figure does NOT include", () => {
+    /**
+     * The framework's own formula for CB I is "revenue − MARKETING". Salaries,
+     * software and freelancers live in the Business Case spreadsheet and in no
+     * database this reads — roughly EUR 3,000 a month. A reader who takes this
+     * line for profit is out by that much.
+     */
+    const lines = buildUnitEconomicsLines({
+      adSpend: 1000,
+      revenue: 100,
+      paidReports: 5,
+      compedReports: 0,
+      otherCurrencyReports: 0,
+      coveredDays: 30,
+      windowDays: 30,
+    });
+    expect(lines.join("\n")).toContain("Advertising only");
+  });
+
+  it("refuses to divide by no paid reports", () => {
+    // "EUR 0.00 per report" would read as free acquisition. Dividing by nothing
+    // is not a cost of nothing.
+    const lines = buildUnitEconomicsLines({
+      adSpend: 900,
+      revenue: 0,
+      paidReports: 0,
+      compedReports: 0,
+      otherCurrencyReports: 0,
+      coveredDays: 30,
+      windowDays: 30,
+    });
+    const all = lines.join("\n");
+    expect(all).toContain("no paid reports in this window");
+    expect(all).not.toMatch(/EUR 0\.00 to acquire/);
+  });
+
+  it("says a profitable report MAKES us money, not that it costs us a negative", () => {
+    /**
+     * There was no profitable branch at all: the line printed `cppr - arpp`
+     * unconditionally, so the day the product started making money the line
+     * whose whole job is to announce that read "each one costs us EUR -15.00".
+     */
+    const all = buildUnitEconomicsLines({
+      adSpend: 100,
+      revenue: 250,
+      paidReports: 10,
+      compedReports: 0,
+      otherCurrencyReports: 0,
+      coveredDays: 30,
+      windowDays: 30,
+    }).join("\n");
+    expect(all).toContain("each one makes us EUR 15.00");
+    expect(all, "a negative cost is not a way of saying profit").not.toContain("costs us EUR -");
+    expect(all).toContain("above break-even");
+  });
+
+  it("says nothing came back rather than inventing a multiple", () => {
+    /**
+     * The shortfall was `Math.round(1 / Math.max(roas, 0.0001))`. With no
+     * revenue that clamp produced "10000x short of break-even" — a number
+     * measured from nothing. The honest output is that nothing came back.
+     */
+    const all = buildUnitEconomicsLines({
+      adSpend: 900,
+      revenue: 0,
+      paidReports: 0,
+      compedReports: 0,
+      otherCurrencyReports: 0,
+      coveredDays: 30,
+      windowDays: 30,
+    }).join("\n");
+    expect(all).toContain("nothing came back at all");
+    expect(all, "10000 is the clamp, not a measurement").not.toContain("10000x");
+  });
+
+  it("does not cap a real shortfall at the clamp", () => {
+    // EUR 100,000 spent against EUR 1 is 100,000x short. The old clamp printed
+    // "10000x" — understating the gap, the flattering direction.
+    const all = buildUnitEconomicsLines({
+      adSpend: 100_000,
+      revenue: 1,
+      paidReports: 1,
+      compedReports: 0,
+      otherCurrencyReports: 0,
+      coveredDays: 30,
+      windowDays: 30,
+    }).join("\n");
+    expect(all).toContain("100,000x short of break-even");
+  });
+
+  it("calls exactly break-even exactly that", () => {
+    // `roas >= 1` printed "EUR 0.00 · above break-even" in one line.
+    const all = buildUnitEconomicsLines({
+      adSpend: 119,
+      revenue: 119,
+      paidReports: 4,
+      compedReports: 0,
+      otherCurrencyReports: 0,
+      coveredDays: 30,
+      windowDays: 30,
+    }).join("\n");
+    expect(all).toContain("exactly break-even");
+    expect(all).not.toContain("above break-even");
+  });
+
+  it("refuses a cost per report when no spend was recorded", () => {
+    /**
+     * The guard was on `paidReports` alone, so a window with sales and no spend
+     * printed "EUR 0.00 to acquire" — the exact cost-of-nothing the sibling
+     * branch exists to refuse, wearing the sign of a bargain. Reachable whenever
+     * ads are paused or GA4's ad report has not landed.
+     */
+    const all = buildUnitEconomicsLines({
+      adSpend: 0,
+      revenue: 119,
+      paidReports: 4,
+      compedReports: 0,
+      otherCurrencyReports: 0,
+      coveredDays: 0,
+      windowDays: 30,
+    }).join("\n");
+    expect(all).toContain("no ad spend recorded in this window");
+    expect(all).not.toMatch(/EUR 0\.00 to acquire/);
+  });
+
+  it("names a payment in another currency instead of summing it into euros", () => {
+    const all = buildUnitEconomicsLines({
+      adSpend: 100,
+      revenue: 29,
+      paidReports: 1,
+      compedReports: 0,
+      otherCurrencyReports: 1,
+      coveredDays: 30,
+      windowDays: 30,
+    }).join("\n");
+    expect(all).toContain("1 succeeded payment is in another currency");
+  });
+
+  it("calls out partial GA4 coverage, so the spend reads as a floor", () => {
+    // Understating spend OVERSTATES profit, which is the direction that matters.
+    const lines = buildUnitEconomicsLines({
+      adSpend: 400,
+      revenue: 50,
+      paidReports: 2,
+      compedReports: 0,
+      otherCurrencyReports: 0,
+      coveredDays: 11,
+      windowDays: 30,
+    });
+    expect(lines.join("\n")).toContain("11 of 30 days");
+    expect(lines.join("\n")).toContain("floor");
+  });
+
+  it("says so plainly when we are above break-even", () => {
+    const lines = buildUnitEconomicsLines({
+      adSpend: 100,
+      revenue: 250,
+      paidReports: 10,
+      compedReports: 0,
+      otherCurrencyReports: 0,
+      coveredDays: 30,
+      windowDays: 30,
+    });
+    expect(lines.join("\n")).toContain("above break-even");
+    expect(lines.join("\n")).not.toContain("short of break-even");
+  });
+});
+
 describe("conversion-digest verdicts", () => {
   it("calls a real winner and quotes the confidence interval", () => {
     // 60/500 vs 20/500 — a wide, unambiguous gap. On the LANDING axis: the survey
     // axis used to host this fixture, and its `dark` arm is retired now, so
     // buildArmVerdict correctly filters it and the pair collapses to one arm.
-    const verdict = buildArmVerdict("landing", [
-      { arm: "white", n: 500, conversions: 60 },
-      { arm: "white_prev", n: 500, conversions: 20 },
-    ]);
+    const verdict = buildArmVerdict(
+      "landing",
+      [
+        { arm: "white", n: 500, conversions: 60 },
+        { arm: "white_prev", n: 500, conversions: 20 },
+      ],
+      { includeRetired: true }
+    );
     expect(verdict.state).toBe("winner");
     expect(verdict.sentence).toContain("genuinely ahead");
     expect(verdict.sentence).toContain("95% CI");
@@ -881,10 +2343,14 @@ describe("conversion-digest verdicts", () => {
   it("refuses to call the real 308-vs-13 landing split, however tempting the rates", () => {
     // The live shape as measured in production: one arm is 24x the other, and the
     // big arm alone satisfies twoProportionSignal's combined n>=50 rule.
-    const verdict = buildArmVerdict("landing", [
-      { arm: "white", n: 308, conversions: 10 },
-      { arm: "white_prev", n: 13, conversions: 0 },
-    ]);
+    const verdict = buildArmVerdict(
+      "landing",
+      [
+        { arm: "white", n: 308, conversions: 10 },
+        { arm: "white_prev", n: 13, conversions: 0 },
+      ],
+      { includeRetired: true }
+    );
     expect(verdict.state).toBe("too-early");
     expect(verdict.sentence).toContain("too early");
     expect(verdict.sentence).toContain("13");
@@ -894,10 +2360,14 @@ describe("conversion-digest verdicts", () => {
   });
 
   it("says insufficient data below a combined 50, and how many more are needed", () => {
-    const verdict = buildArmVerdict("landing", [
-      { arm: "white", n: 12, conversions: 1 },
-      { arm: "white_prev", n: 10, conversions: 0 },
-    ]);
+    const verdict = buildArmVerdict(
+      "landing",
+      [
+        { arm: "white", n: 12, conversions: 1 },
+        { arm: "white_prev", n: 10, conversions: 0 },
+      ],
+      { includeRetired: true }
+    );
     expect(verdict.state).toBe("insufficient-data");
     expect(verdict.sentence).toContain("not enough data");
     expect(verdict.sentence).toContain("28 more");
@@ -912,10 +2382,14 @@ describe("conversion-digest verdicts", () => {
     // the pricing axis, moved to landing when the price test was concluded on
     // 2026-08-31 — `buildArmVerdict` drops retired arms, so a retired axis can no
     // longer exercise the two-arm branches.)
-    const verdict = buildArmVerdict("landing", [
-      { arm: "white", n: 165, conversions: 3 },
-      { arm: "white_prev", n: 163, conversions: 7 },
-    ]);
+    const verdict = buildArmVerdict(
+      "landing",
+      [
+        { arm: "white", n: 165, conversions: 3 },
+        { arm: "white_prev", n: 163, conversions: 7 },
+      ],
+      { includeRetired: true }
+    );
     expect(verdict.state).toBe("insufficient-data");
     expect(verdict.sentence).toContain("not enough purchases");
     expect(verdict.sentence).toContain("10");
@@ -931,30 +2405,42 @@ describe("conversion-digest verdicts", () => {
     // Same shape, but with conversions above the validity floor on both sides —
     // so the comparison genuinely runs and genuinely finds no winner. Keeps the
     // no-winner branch covered now that thin data no longer reaches it.
-    const verdict = buildArmVerdict("landing", [
-      { arm: "white", n: 165, conversions: 20 },
-      { arm: "white_prev", n: 163, conversions: 24 },
-    ]);
+    const verdict = buildArmVerdict(
+      "landing",
+      [
+        { arm: "white", n: 165, conversions: 20 },
+        { arm: "white_prev", n: 163, conversions: 24 },
+      ],
+      { includeRetired: true }
+    );
     expect(verdict.state).toBe("no-winner");
     expect(verdict.sentence).toContain("no clear winner");
   });
 
   it("drops a retired arm instead of comparing a live design against a dead one", () => {
-    const verdict = buildArmVerdict("landing", [
-      { arm: "white", n: 300, conversions: 10 },
-      // `control` is the retired dark landing — nobody has been served it for months.
-      { arm: "control", n: 800, conversions: 40 },
-    ]);
+    const verdict = buildArmVerdict(
+      "landing",
+      [
+        { arm: "white", n: 300, conversions: 10 },
+        // `control` is the retired dark landing — nobody has been served it for months.
+        { arm: "control", n: 800, conversions: 40 },
+      ]
+      // No `includeRetired` here, deliberately: this is the test OF that filter.
+    );
     expect(verdict.arms.map((a) => a.label)).toEqual(["Landing Page V2 (Survey in Hero)"]);
     expect(verdict.state).toBe("single-arm");
     expect(verdict.sentence).toContain("nothing to compare");
   });
 
   it("never lets conversions exceed the denominator", () => {
-    const verdict = buildArmVerdict("survey", [
-      { arm: "white", n: 10, conversions: 999 },
-      { arm: "dark", n: 10, conversions: 0 },
-    ]);
+    const verdict = buildArmVerdict(
+      "survey",
+      [
+        { arm: "white", n: 10, conversions: 999 },
+        { arm: "dark", n: 10, conversions: 0 },
+      ],
+      { includeRetired: true }
+    );
     expect(verdict.arms[0]!.rate).toBeLessThanOrEqual(100);
   });
 });
@@ -977,7 +2463,7 @@ describe("conversion-digest funnel", () => {
       "Finished the survey",
       "…of those, opened their report",
       "…of those, started checkout",
-      "…of those, ever paid",
+      "…of those, ever unlocked it",
     ]);
     expect(steps.map((x) => x.count)).toEqual([12308, 1025, 425, 414, 33, 5]);
     // The point of the row: the old single 96.5% becomes 91.7% then 58.5%, and the
@@ -1063,6 +2549,36 @@ describe("conversion-digest alerts", () => {
     now: new Date("2026-08-24T09:00:00Z"),
   };
 
+  /**
+   * A day that is MISSING from the data is not a day with no traffic.
+   *
+   * This alert published "Visits yesterday were 100% below the usual daily
+   * average (0 vs ~515)" on 2026-09-19 — a day with 543 visits — because the
+   * day series stopped one day short. A bare `::date` on a Berlin-midnight
+   * bound resolved in the pooler's UTC zone, so `until_day - 1` landed on the
+   * day before yesterday and yesterday's bucket was never generated.
+   * `sumVisitors` cannot tell an absent day from an empty one, so it returned 0
+   * and the threshold fired on an absence of data.
+   *
+   * The bound is fixed (20260919180000). This is the second guard, because the
+   * failure mode is a confident false alarm about the headline number.
+   */
+  it("does not call a missing day a traffic collapse", () => {
+    const collapsed = { ...base, yesterday: { visitors: 0, completions: 0, paid: 0 } };
+
+    // Observed and genuinely zero: that IS a collapse and must still be said.
+    const real = buildAlerts({ ...collapsed, yesterdayObserved: true });
+    expect(real.some((a) => a.message.includes("below the usual daily average"))).toBe(true);
+
+    // Not in the data at all: nothing is known about yesterday, so nothing is claimed.
+    const absent = buildAlerts({ ...collapsed, yesterdayObserved: false });
+    expect(absent.some((a) => a.message.includes("below the usual daily average"))).toBe(false);
+
+    // Omitted defaults to observed, so an un-plumbed caller cannot mute a real alert.
+    const defaulted = buildAlerts(collapsed);
+    expect(defaulted.some((a) => a.message.includes("below the usual daily average"))).toBe(true);
+  });
+
   it("says nothing happened rather than listing green ticks", () => {
     const alerts = buildAlerts(base);
     expect(alerts).toHaveLength(1);
@@ -1096,10 +2612,14 @@ describe("conversion-digest alerts", () => {
     const alerts = buildAlerts({
       ...base,
       verdicts: [
-        buildArmVerdict("landing", [
-          { arm: "white", n: 300, conversions: 10 },
-          { arm: "white_prev", n: 240, conversions: 6 },
-        ]),
+        buildArmVerdict(
+          "landing",
+          [
+            { arm: "white", n: 300, conversions: 10 },
+            { arm: "white_prev", n: 240, conversions: 6 },
+          ],
+          { includeRetired: true }
+        ),
       ],
     });
     expect(alerts.some((a) => a.message.includes("not a fair split"))).toBe(false);
@@ -1234,13 +2754,10 @@ describe("conversion-digest chart series", () => {
     mockFetchLandingArmFunnel.mockResolvedValue(makeFunnel());
     mockIsProdCronHost.mockReturnValue(true);
     mockTryClaim.mockResolvedValue(true);
-    await GET(
-      new Request("https://www.loveiq.org/api/cron/conversion-digest", {
-        headers: { authorization: "Bearer test-cron-secret" },
-      })
-    );
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const image = arg.blocks.find((b) => (b as { type?: string }).type === "image") as
+    mockFetchLandingStartFunnel.mockResolvedValue(makeStartFunnel());
+    mockFetchAxisFunnelDaily.mockResolvedValue(makeAxisRows());
+    const blocks = await landingLiveBlocks();
+    const image = blocks.find((b) => (b as { type?: string }).type === "image") as
       { image_url?: string } | undefined;
     expect(image?.image_url).toBeDefined();
     expect(image!.image_url!.length).toBeLessThan(2800);

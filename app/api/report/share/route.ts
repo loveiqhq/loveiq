@@ -8,7 +8,7 @@ import logger from "@shared/observability/logger";
 import { reportSharedEmail } from "@features/report/server/emails/report-shared";
 import { reportSharedBEmail } from "@features/report/server/emails/report-shared-b";
 import { reportSharedCEmail } from "@features/report/server/emails/report-shared-c";
-import { pickFromVariants } from "@shared/emails/ab-variant";
+import { emailExperimentTags, pickFromVariants } from "@shared/emails/ab-variant";
 import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
 import { isEmailSuppressed } from "@shared/emails/suppression";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
@@ -154,7 +154,8 @@ export async function POST(request: Request) {
     //   C = "Something personal I wanted you to see" subject + P.S. (Figma 5813-467)
     // Variant is deterministic per recipient email so retries land on the same
     // copy and dashboards stay coherent.
-    const variant = pickFromVariants(recipientEmail, "report-share", ["a", "b", "c"] as const);
+    const experiment = "report-share";
+    const variant = pickFromVariants(recipientEmail, experiment, ["a", "b", "c"] as const);
     scheduleAfterResponse("report-share-email", async () => {
       // A shared-report invite is a user-initiated outreach to a third party,
       // not a transactional receipt — respect the recipient's prior unsubscribe.
@@ -206,6 +207,8 @@ export async function POST(request: Request) {
             subject: tpl.subject,
             html: tpl.html,
             text: tpl.text,
+            // Echoed back on every Resend webhook, which is how the A/B result is read.
+            tags: emailExperimentTags(experiment, variant),
             headers: {
               "X-LoveIQ-Variant": variant,
               ...(unsubscribeUrl && {

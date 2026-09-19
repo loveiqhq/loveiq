@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   activeArms,
+  armColor,
   armLabel,
   AXIS_TITLES,
   isKnownArm,
@@ -73,7 +74,14 @@ describe("arm labels", () => {
   });
 
   it("excludes retired arms from the active set used for charts", () => {
-    expect(activeArms("landing")).toEqual(["white", "white_prev"]);
+    // V1 retired 2026-09-19 when the landing test concluded in favour of V2, so
+    // V2 is the only design still being served.
+    expect(activeArms("landing")).toEqual(["white"]);
+    expect(armLabel("landing", "white_prev").retired).toBe(true);
+    // …but still KNOWN, so the ~180 stored submissions that carry it keep a
+    // plain-English label instead of reading as "Not recorded".
+    expect(isKnownArm("landing", "white_prev")).toBe(true);
+    expect(armLabel("landing", "white_prev").short).toBe("Landing Page V1 (First Design)");
     // Arm A retired 2026-08-31 when the higher-priced arm was dropped, so B is
     // the only group still stamped on a new quote.
     expect(activeArms("pricing")).toEqual(["B"]);
@@ -113,6 +121,10 @@ describe("arm labels", () => {
       expect(armLabel("landing", poisoned)).toEqual({
         short: "Not recorded",
         long: "not recorded",
+        // Stays an exhaustive toEqual, not a toMatchObject: the point of this
+        // assertion is that a poisoned key returns the UNKNOWN object and nothing
+        // else, so a new field has to be added here deliberately.
+        color: "#64748b",
       });
       expect(armLabel("landing", poisoned).short).toBe("Not recorded");
       expect(isKnownArm("landing", poisoned)).toBe(false);
@@ -130,5 +142,63 @@ describe("arm labels", () => {
 
   it("titles every axis", () => {
     expect(Object.keys(AXIS_TITLES).sort()).toEqual(["landing", "paywall", "pricing", "survey"]);
+  });
+});
+
+describe("arm colours", () => {
+  /**
+   * Asked for on the 2026-09-16 sync: "fixed colour codes for variants, e.g.
+   * preventing V1 and V2 colours from swapping". The renderer used to colour by
+   * series POSITION, so an arm's colour depended on the order the caller passed
+   * the arms in — and on a day when one arm had no data, the survivor took the
+   * first slot's colour.
+   */
+  it("gives V1 blue and V2 orange, and never the same colour", () => {
+    expect(armColor("landing", "white_prev")).toBe("#2563eb"); // V1, first design
+    expect(armColor("landing", "white")).toBe("#e0552f"); // V2, survey in hero
+    expect(armColor("landing", "white_prev")).not.toBe(armColor("landing", "white"));
+  });
+
+  it("gives every declared arm a colour, on every axis", () => {
+    /**
+     * `color` is a REQUIRED field on ArmLabel, so this cannot fail at runtime
+     * without the build failing first. It is here because the compiler only checks
+     * the arms that exist today: it is the assertion that says a new arm needs a
+     * colour decision, in words, to whoever adds one.
+     */
+    let checked = 0;
+    for (const axis of ["landing", "survey", "pricing", "paywall"] as ExperimentAxis[]) {
+      for (const arm of activeArms(axis)) {
+        expect(armColor(axis, arm), `${axis}/${arm} has no colour`).toMatch(/^#[0-9a-f]{6}$/i);
+        checked += 1;
+      }
+    }
+    // The loop ran. `activeArms` returning nothing would otherwise pass this test
+    // while checking not one arm — `paywall` is already a legitimately empty axis,
+    // so an empty result is not obviously wrong from inside the loop.
+    expect(checked).toBeGreaterThanOrEqual(3);
+  });
+
+  it("does not repaint an arm when the other arm is filtered out", () => {
+    /**
+     * The property the old positional scheme could not hold. Reading the colour
+     * from a one-arm list must give the same answer as reading it from the pair —
+     * which is trivially true once colour is a property of the arm, and was
+     * impossible to guarantee while it was a property of the slot.
+     */
+    const pair = ["white_prev", "white"];
+    for (const arm of pair) {
+      const inPair = pair.map((a) => armColor("landing", a))[pair.indexOf(arm)];
+      const alone = [arm].map((a) => armColor("landing", a))[0];
+      expect(alone).toBe(inPair);
+    }
+  });
+
+  it("draws a retired arm in the low-chroma step, not in a live arm's colour", () => {
+    // A concluded arm still needs a truthful label, but it must not compete with a
+    // live one for the eye.
+    expect(armColor("landing", "control")).toBe("#64748b");
+    expect(armColor("landing", "control")).not.toBe(armColor("landing", "white"));
+    expect(armColor("landing", "control")).not.toBe(armColor("landing", "white_prev"));
   });
 });

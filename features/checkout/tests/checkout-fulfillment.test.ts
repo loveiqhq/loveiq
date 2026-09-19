@@ -955,13 +955,17 @@ describe("checkout fulfillment", () => {
       // delivery failure, and its first 100 chars are the 60s dedup key.
       expect(body.text).toContain("Purchase #");
       expect(body.text).toContain("EUR 19.99");
-      // No utm_tracker → Direct. No landingVariant → not recorded, stated as such
-      // rather than guessed.
+      // No utm_tracker → Direct.
       expect(all).toContain("Direct");
-      expect(all).toContain("Not recorded");
-      // The concluded paywall experiment is NOT listed as one they were "in":
-      // nothing randomises it any more, so it is a finished test, not a live arm.
+      /**
+       * NO "Experiments they were in" block at all, as of 2026-09-19: the
+       * landing axis concluded in favour of V2 and was the last one being
+       * randomised. A heading over an empty field list is rejected by Slack
+       * outright, and would be wrong even if it posted.
+       */
+      expect(all).not.toContain("Experiments they were in");
       expect(all).not.toContain("Paywall style");
+      expect(all).not.toContain("Landing page design");
       // every arm is named in plain English, never as a raw code
       expect(all).not.toContain("white_prev");
 
@@ -1010,7 +1014,9 @@ describe("checkout fulfillment", () => {
       // and still shown in /admin's concluded section.
       expect(all).not.toContain("Forced paywall");
       expect(all).not.toContain("Paywall style");
-      expect(all).toContain("Landing Page V2 (Survey in Hero)");
+      // And not the landing arm either, now that nothing is randomised — see the
+      // note on the first Slack test above.
+      expect(all).not.toContain("Landing Page V2 (Survey in Hero)");
       // utm_content (base64 referrer email) must never reach Slack — in the
       // fallback text OR in any block.
       expect(all).not.toContain("cmVmZXJyZXJAZXhhbXBsZS5jb20=");
@@ -1046,10 +1052,16 @@ describe("checkout fulfillment", () => {
       const all = rendered(slackCalls[0]!.body);
       expect(all).toContain("Organic");
       expect(all).not.toContain("Dismissible paywall");
-      // landingVariant "control" is the RETIRED round-1 dark arm and must be
-      // labelled as itself — not conflated with round-2 V1.
-      expect(all).toContain("Dark landing page (before V1)");
-      expect(all).toContain("retired arm");
+      /**
+       * No arm block at all, even for a buyer carrying the retired round-1
+       * "control" cookie. Nothing is randomised as of 2026-09-19, and an arm
+       * nothing randomises is a permanent constant on every purchase ping —
+       * noise, which is what the "Experiments they were in" block exists to
+       * avoid. The LABEL itself is still guaranteed, by labels.test.ts and by
+       * the survey-journey message, which does still print it.
+       */
+      expect(all).not.toContain("Dark landing page (before V1)");
+      expect(all).not.toContain("Experiments they were in");
       expect(all).not.toContain("Landing Page V1 (First Design)");
 
       delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;

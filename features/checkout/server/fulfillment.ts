@@ -13,7 +13,7 @@ import { reportFullEmail } from "@features/report/server/emails/report-full";
 import { reportFullBEmail } from "@features/report/server/emails/report-full-b";
 import { partnerCodeEmail } from "@features/report/server/emails/nurture/partner-code";
 import { getCouponIdForStage, mintUserPromoCode } from "@features/checkout/server/promoCodes";
-import { pickEmailVariant } from "@shared/emails/ab-variant";
+import { emailExperimentTags, pickEmailVariant } from "@shared/emails/ab-variant";
 import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import {
@@ -266,10 +266,14 @@ async function sendPurchaseEmail({
   // single report CTA inside the template).
   const coreArchetypes =
     plan === "core" ? await lookupTopThreeArchetypesForSubmission(submissionId) : undefined;
-  const variant =
-    plan === "essentials" || plan === "core"
-      ? "a"
-      : pickEmailVariant(recipient.email, `purchase-${plan}`);
+  /**
+   * `essentials` and `core` are NOT under test — they have one template, and the
+   * "a" here is a default, not an arm. Tagging them as an experiment would put a
+   * one-armed test in the results with a 100% share and no comparison, which
+   * reads as a winner.
+   */
+  const purchaseExperiment = plan === "essentials" || plan === "core" ? null : `purchase-${plan}`;
+  const variant = purchaseExperiment ? pickEmailVariant(recipient.email, purchaseExperiment) : "a";
 
   const tpl =
     plan === "all_reports"
@@ -317,6 +321,8 @@ async function sendPurchaseEmail({
         subject: tpl.subject,
         html: tpl.html,
         text: tpl.text,
+        // Echoed back on every Resend webhook, which is how the A/B result is read.
+        ...(purchaseExperiment ? { tags: emailExperimentTags(purchaseExperiment, variant) } : {}),
         headers: {
           "X-LoveIQ-Variant": variant,
           ...(unsubscribeUrl && {

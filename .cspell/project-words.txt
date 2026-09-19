@@ -112,6 +112,7 @@ Svix
 tappable
 teamspace
 teamspaces
+timestamptz
 trgm
 trimable
 TrustBox

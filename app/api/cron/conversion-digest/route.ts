@@ -76,18 +76,58 @@ import {
   fetchAxisFunnelDaily,
   fetchLandingArmFunnel,
   fetchLandingStartFunnel,
+  fetchMidwayProgress,
+  fetchPaywallHits,
+  fetchEmailExperimentResults,
+  fetchUnitEconomics,
+  buildUnitEconomicsLines,
+  type UnitEconomics,
+  buildEmailExperimentLines,
+  type EmailExperimentRow,
+  type MidwayProgress,
+  type PaywallHits,
   sumDays,
   sumVisitors,
 } from "@features/admin/server/conversion-digest";
-import { armLabel, type ExperimentAxis } from "@features/attribution/server/labels";
-import { adCostByDay, adCovers } from "@features/brain/server/ingest/analytics";
+import { armColor, armLabel, type ExperimentAxis } from "@features/attribution/server/labels";
+import { adCostByDay, adCovers, type AdCost } from "@features/brain/server/ingest/analytics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /** Trends need history to read as trends; matches funnel-digest's window. */
-const WINDOW_DAYS = 30;
+/**
+ * Exported so the local preview runs the SAME window rather than retyping 30.
+ * A preview computed over a different span is a preview of a different message.
+ */
+export const WINDOW_DAYS = 30;
+
+/**
+ * The day the landing A/B was switched off, and the last day its result is
+ * worth repeating.
+ *
+ * The notice expires by ITSELF once this day falls out of the reporting window
+ * — no second constant, no "remember to delete this". A result is news for as
+ * long as the window still contains days when the test was running; after that
+ * it is a line everyone has read thirty times, which is how a daily message
+ * teaches people to skim it.
+ */
+const LANDING_CONCLUDED_ON = "2026-09-19";
+
+/**
+ * Where "Midway Progress" sits, as a question index.
+ *
+ * A DEFINITION, not a constant of nature, and Mark owns it. 30 is the literal
+ * midpoint of the ~59-question survey as it stood on 2026-09-19. Measured that
+ * day: 579 of 1,033 sessions reached question 30, against 697 at question 10 —
+ * so the choice moves the number by a lot and should be made against those
+ * figures rather than inherited from this line.
+ *
+ * Named here and echoed onto the funnel row's own label, so the threshold is
+ * visible in Slack instead of being a number only the code knows.
+ */
+export const MIDWAY_QUESTION_INDEX = 30;
 
 /**
  * The axes worth a verdict. `paywall`, `survey` and `pricing` are deliberately
@@ -97,7 +137,12 @@ const WINDOW_DAYS = 30;
  * nothing randomises any of them any more, so presenting one as a live test is
  * exactly the mistake the /admin dashboard made before it was corrected.
  */
-const VERDICT_AXES: ExperimentAxis[] = ["landing"];
+/**
+ * EMPTY as of 2026-09-19 — `landing` was the last live axis and it concluded in
+ * favour of V2. A verdict on a test nobody is running is not a verdict.
+ * Re-add an axis here the same day it starts being randomised.
+ */
+const VERDICT_AXES: ExperimentAxis[] = [];
 
 /**
  * When report prices last changed. `buildAlerts` uses it to suppress the
@@ -131,14 +176,19 @@ function deployStamp(): string {
  * `v` is the deploy stamp, which busts the proxy cache on each deploy.
  */
 /**
- * `kind` selects the renderer. Defaults to the two-arm comparison every existing
- * caller wants; `cvr-visitor-start` is the single-line longitudinal renderer that
- * already exists for the funnel digest, reused here rather than reimplemented.
+ * Every chart in this digest is drawn by the two-arm renderer, including the
+ * single-series ones — it has an axis, gridlines and a shared scale, and its solo
+ * mode exists precisely so a second renderer was not needed.
+ *
+ * This used to take a `kind` parameter offering `cvr-visitor-start`, the
+ * longitudinal renderer from funnel-digest, and its doc comment said that one was
+ * "reused here rather than reimplemented". No call site ever passed it, and the
+ * decision was reversed in the same file 480 lines below — the sparkline renderer
+ * was abandoned because a 6% rate and a 0.6% rate drew byte-identical plots on it.
+ * Two comments contradicting each other with a dead union type between them.
  */
-async function signedChartUrl(
-  payload: Record<string, unknown>,
-  kind: "conversion-by-arm" | "cvr-visitor-start" = "conversion-by-arm"
-): Promise<string | null> {
+async function signedChartUrl(payload: Record<string, unknown>): Promise<string | null> {
+  const kind = "conversion-by-arm";
   const base = process.env.NEXT_PUBLIC_SITE_URL;
   if (!base) {
     logger.warn("conversion-digest: NEXT_PUBLIC_SITE_URL unset; skipping chart");
@@ -297,6 +347,32 @@ export function buildSiteStartSeries(
  * GAP rather than a plotted zero. Trailing rather than daily because a handful of
  * starts on a low-traffic day swings a daily rate wildly.
  */
+/**
+ * Midway daily rows in the shape `buildStartSeries` already understands.
+ *
+ * sessions -> visits, reached -> starts. Mapping rather than duplicating keeps
+ * ONE implementation of the 7-day trailing window and its warm-up gap; the rule
+ * that the first six days are gaps rather than partial windows was already
+ * missing from one of these two builders once.
+ */
+export function buildMidwaySeries(
+  midway: MidwayProgress,
+  arms: [string, string]
+): { labels: string[]; first: Array<number | null>; last: Array<number | null> } {
+  return buildStartSeries(
+    {
+      daily: midway.daily.map((r) => ({
+        day: r.day,
+        arm: r.arm,
+        visits: r.sessions,
+        starts: r.reached,
+      })),
+      totals: [],
+    },
+    arms
+  );
+}
+
 export function buildStartSeries(
   funnel: LandingStartFunnel,
   arms: [string, string]
@@ -337,10 +413,64 @@ export function buildStartSeries(
 
 interface DigestInput {
   dayKey: string;
+  /**
+   * Treat these axes as live, retired arms included.
+   *
+   * Production omits it and gets VERDICT_AXES, which is EMPTY — `landing`
+   * concluded 2026-09-19 and it was the last one running.
+   *
+   * ONE field, not an axis list plus a retired-arms flag, because those two can
+   * disagree and a message has to have a single answer to "what is running". An
+   * axis that is live has live arms; saying "landing is live" and then filtering
+   * out the arm it is being compared against produces a one-armed test, which is
+   * the shape every guard here exists to refuse.
+   *
+   * It also decides whether the landing→survey per-arm block is drawn, so the
+   * whole message agrees with itself.
+   *
+   * It exists so the per-axis machinery — the verdict wording, the confidence
+   * interval, the per-arm colours, the too-young and too-thin refusals — stays
+   * under test while nothing is running, and so a historical read of a concluded
+   * comparison is possible. Without it every one of those tests would pass by
+   * iterating an empty list, which is a suite that cannot fail.
+   */
+  liveAxesOverride?: ExperimentAxis[];
   funnel: LandingArmFunnel | null;
   cohorts: AxisCohort[] | null;
   /** Landing -> survey-start. Null until its migration is applied. */
   startFunnel?: LandingStartFunnel | null;
+  /**
+   * Midway Progress. Null until its migration is applied, which omits the funnel
+   * row rather than printing a zero for a step that is measured.
+   *
+   * REQUIRED, not optional, and that is the point. `scripts/preview-slack-message.mts`
+   * builds this same input from its own copy of the fetch list, and every other
+   * field here is optional — so when this one was added to the cron the preview
+   * still compiled, still ran, and silently rendered a digest missing a section
+   * that the real message now has. A preview that can disagree with the message it
+   * previews is worse than no preview: it is a message you believe you have
+   * checked. Passing `null` explicitly is fine; forgetting it is not.
+   */
+  midway: MidwayProgress | null;
+  /**
+   * Paywall Hits — Mark's sixth funnel step. REQUIRED for the same reason
+   * `midway` is: the preview script builds this same input from its own fetch
+   * list, and an optional field lets it silently render a funnel the real message
+   * does not have. Passing null explicitly is fine; forgetting it is not.
+   */
+  paywall: PaywallHits | null;
+  /**
+   * What we spent on ads against what came back. Required, same reason as the
+   * others: an optional field lets the preview render a message the real one
+   * does not have.
+   */
+  unitEconomics: UnitEconomics | null;
+  /**
+   * Per-arm results for the email A/B tests. Required, same reason as the two
+   * above: an optional field lets the preview render a message the real one
+   * does not have.
+   */
+  emailExperiments: EmailExperimentRow[] | null;
   /** Per-day, per-arm rows for every live axis. [] when the RPC is unavailable. */
   axisRows?: AxisFunnelRow[];
   /** Site-wide visitors + starts per day, for the landing→survey trend line. */
@@ -371,17 +501,24 @@ export interface BuiltDigest {
 export async function buildConversionDigest(input: DigestInput): Promise<BuiltDigest> {
   const { dayKey, funnel, cohorts, now, cvrDays } = input;
   const startFunnel = input.startFunnel ?? null;
+  const midway = input.midway;
+  const paywall = input.paywall;
+  const unitEconomics = input.unitEconomics;
+  const emailExperiments = input.emailExperiments;
   const axisRows = input.axisRows ?? [];
+  const verdictAxes = input.liveAxesOverride ?? VERDICT_AXES;
+  // An overridden axis is being declared live, so its arms are live too.
+  const includeRetired = input.liveAxesOverride !== undefined;
   const windowLabel = `${WINDOW_DAYS}-day window ending ${dayKey} Berlin time`;
 
   const verdicts: ArmVerdict[] = [];
   if (cohorts) {
-    for (const axis of VERDICT_AXES) {
+    for (const axis of verdictAxes) {
       const rows = cohorts
         .filter((c) => c.axis === axis && c.arm !== "unknown")
         .map((c) => ({ arm: c.arm, n: c.n, conversions: c.conversions }));
       if (rows.length === 0) continue;
-      verdicts.push(buildArmVerdict(axis, rows));
+      verdicts.push(buildArmVerdict(axis, rows, { includeRetired }));
     }
   }
 
@@ -436,9 +573,14 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     );
   }
 
+  /** "914  _(+136%)_", or just "914" when there is nothing worth comparing to. */
+  const withDelta = (value: string, d: string) => (d ? `${value}  _(${d})_` : value);
+
   // ---- Yesterday vs the usual ----
   let yesterday = { visitors: 0, completions: 0, paid: 0 };
   let baseline = { visitors: 0, completions: 0, paid: 0 };
+  // Was yesterday in the data at all? See `yesterdayObserved` in buildAlerts.
+  let yesterdayObserved = true;
   if (funnel) {
     const y = sumDays(funnel.daily, (d) => d === dayKey);
     const yVisitors = sumVisitors(funnel.visitors, (d) => d === dayKey);
@@ -453,26 +595,56 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     const p = sumDays(funnel.daily, (d) => priorDays.includes(d));
     const pVisitors = sumVisitors(funnel.visitors, (d) => priorDays.includes(d));
 
-    yesterday = { visitors: yVisitors, completions: y.completions, paid: y.paid };
+    /**
+     * `charges`, not `paid`. `paid` counts `report_price_quote.purchased_at`,
+     * which fulfillment sets on ANY unlock including a 100%-off coupon, while
+     * `revenue` beside it counts money. On a comp day this field printed
+     * "Paid 1 · Revenue EUR 0.00" — a line that contradicts itself inside four
+     * words, which is how this class of bug announces itself.
+     *
+     * `charges` is the same rows filtered to `amount > 0`, already returned by
+     * `sumDays`, so the count and the money beside it now answer the same
+     * question. Matches the definition recorded 2026-09-19 and the break-even
+     * block below; the funnel's own unlock count is labelled "unlocked".
+     */
+    yesterdayObserved = funnel.visitors.some((row) => row.day === dayKey);
+    yesterday = { visitors: yVisitors, completions: y.completions, paid: y.charges };
     baseline = {
       visitors: pVisitors / 7,
       completions: p.completions / 7,
-      paid: p.paid / 7,
+      paid: p.charges / 7,
     };
 
     blocks.push(divider());
     blocks.push(section("*Yesterday vs a normal day*"));
+    /**
+     * An em dash when yesterday is not in the data at all.
+     *
+     * Every figure here comes from summing the rows whose day equals `dayKey`,
+     * which is 0 both for a quiet day and for a day the series never generated.
+     * When the bounds were a day short (see `yesterdayObserved`) this block read
+     * "Visits 0 _(-100%)_" on a day with 543 visits. A number we do not have is
+     * not a zero, and the funnel above already uses "—" for exactly that.
+     */
+    const yField = (value: string, d: string) => (yesterdayObserved ? withDelta(value, d) : "—");
     blocks.push(
       fields([
-        { label: "Visits", value: `${yVisitors}  _(${delta(yVisitors, pVisitors / 7)})_` },
+        /**
+         * `delta` returns "" when the baseline is too small for a percentage to
+         * mean anything, and the parenthetical is dropped rather than printed
+         * empty. "Paid 0 _(-100% (low base))_" was on this message most days:
+         * one sale a week averages to 0.14, so the arithmetic said -100% and the
+         * statement said nothing.
+         */
+        { label: "Visits", value: yField(String(yVisitors), delta(yVisitors, pVisitors / 7)) },
         {
           label: "Finished survey",
-          value: `${y.completions}  _(${delta(y.completions, p.completions / 7)})_`,
+          value: yField(String(y.completions), delta(y.completions, p.completions / 7)),
         },
-        { label: "Paid", value: `${y.paid}  _(${delta(y.paid, p.paid / 7)})_` },
+        { label: "Paid", value: yField(String(y.charges), delta(y.charges, p.charges / 7)) },
         {
           label: "Revenue",
-          value: `${money(y.revenue)}  _(${delta(y.revenue, p.revenue / 7)})_`,
+          value: yField(money(y.revenue), delta(y.revenue, p.revenue / 7)),
         },
       ])
     );
@@ -488,7 +660,13 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     // and finisher totals as the funnel either side of the new row. Null when that
     // read failed, in which case the row is omitted rather than drawn as zero.
     const startsTotal = cvrDays?.reduce((t, d) => t + d.starts, 0) ?? null;
-    steps = buildFunnel(funnel.cohort, totalVisits, startsTotal);
+    steps = buildFunnel(
+      funnel.cohort,
+      totalVisits,
+      startsTotal,
+      midway ? { reached: midway.overall.reached, index: midway.midwayIndex } : null,
+      paywall?.hits ?? null
+    );
     // Skip the visits -> finished step. It is the largest drop by construction
     // (most visitors never start a survey) and would be the headline every single
     // day, which is how a digest becomes wallpaper. The full funnel is printed
@@ -496,17 +674,99 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     // someone can act on.
     const leak = biggestLeak(steps.slice(1));
     blocks.push(divider());
-    const rows = steps.map((s) => {
-      const drop = s.dropFromPrev > 0 ? `  ▼ ${s.dropFromPrev}%` : "";
-      /**
-       * A non-zero count whose share rounds to nothing prints "<0.1", never "0".
-       * With 5 payments against 12,308 visits the share is 0.04%, and a column
-       * reading 100 / 8.3 / 3.5 / 3.4 / 0.3 / 0 invites exactly one conclusion —
-       * that nobody paid — while the count beside it says five. Same rule the
-       * charts already follow: zero and nearly-zero are different facts.
-       */
-      const share = s.pctOfTop === 0 && s.count > 0 ? "<0.1" : String(s.pctOfTop);
-      return `\`${String(s.count).padStart(6)}\`  ${share.padStart(5)}%  ${escapeSlack(s.step)}${drop}`;
+    /**
+     * A non-zero count whose share rounds to nothing prints "<0.1", never "0".
+     * With 5 payments against 12,308 visits the share is 0.04%, and a column
+     * reading 100 / 8.3 / 3.5 / 3.4 / 0.3 / 0 invites exactly one conclusion —
+     * that nobody paid — while the count beside it says five. Same rule the
+     * charts already follow: zero and nearly-zero are different facts.
+     */
+    /**
+     * The share of `of`, as the table prints it. NOT `computeRate`.
+     *
+     * `computeRate` is right for a chart and wrong for this table, in two ways
+     * that both produce a confident wrong number:
+     *
+     *   * it CLAMPS to 100. buildFunnel deliberately leaves the last three steps
+     *     unclamped, because a promo one-tap or an admin-granted unlock sets
+     *     purchased_at without a checkout — so paid CAN exceed checkout truthfully.
+     *     6 paid from 5 checkouts printed "100%" and hid a real 120%, in the one
+     *     column that exists to say what happened between two steps.
+     *   * it returns 0 for a zero denominator, which this table then rendered as
+     *     "<0.1%" — a vanishing ratio, for a ratio that does not exist. Reachable
+     *     by the same promo path: 0 checkouts, 1 paid.
+     *
+     * A number over 100 is shown as it is. It means the two rows are not a subset
+     * of each other, which is a fact about the funnel worth seeing rather than
+     * rounding away.
+     */
+    const share = (count: number, of: number): string => {
+      if (of <= 0) return "—";
+      const raw = (count / of) * 100;
+      // A non-zero count whose share rounds to nothing prints "<0.1%", never "0".
+      // With 5 payments against 12,308 visits the share is 0.04%, and a column
+      // reading 100 / 8.3 / 3.5 / 3.4 / 0.3 / 0 invites exactly one conclusion —
+      // that nobody paid — while the count beside it says five.
+      if (raw > 0 && raw < 0.05) return "<0.1%";
+      return `${Math.round(raw * 10) / 10}%`;
+    };
+    /**
+     * BOTH percentages, on every row, each one named — asked for on the 2026-09-16
+     * sync ("consistent percentage labels across all visual graphs", and funnel
+     * steps stating either the step-by-step or the cumulative conversion).
+     *
+     * The table used to print the cumulative share bare and the step figure as a
+     * "▼ 45%" suffix, and named neither. That is precisely how a 96.5% turned up in
+     * a meeting with nobody able to say 96.5% of WHAT: it was the drop from all
+     * visits to a finished survey, sitting in a column of numbers measured against
+     * a different base. Two named columns cost one context line and remove the
+     * whole class of question.
+     *
+     * The step column is a CONVERSION, not a drop — "65.5% carried on", not "34.5%
+     * left" — because that is the direction the rest of the report, the framework
+     * sheet and the meeting all speak in. It is computed from the counts rather
+     * than as 100 minus the rounded drop, so the two columns cannot disagree by a
+     * rounding step.
+     */
+    /**
+     * Says so when the paywall row covers less of the window than the rows above
+     * it. Only when it actually does: once the instrument is older than the
+     * window this line disappears on its own rather than becoming furniture.
+     */
+    const paywallNote = (() => {
+      if (!paywall?.firstRowDay || !steps.some((x) => x.step.includes("hit the paywall"))) {
+        return null;
+      }
+      // The digest's own reporting day, not wall-clock — the same boundary the
+      // window is cut on, so the two cannot disagree across a DST change.
+      const windowEnd = reportingDayStart(reportingDay(now)).getTime();
+      const first = new Date(`${paywall.firstRowDay}T00:00:00Z`).getTime();
+      if (!Number.isFinite(first) || first <= windowEnd - WINDOW_DAYS * 86_400_000) return null;
+      const days = Math.max(1, Math.round((windowEnd - first) / 86_400_000));
+      return `_The paywall row covers ${days} days, not ${WINDOW_DAYS} — that signal only started on ${escapeSlack(paywall.firstRowDay)}._`;
+    })();
+
+    /**
+     * ONE percentage, not two.
+     *
+     * The table used to carry both conventions side by side — % of the step
+     * before AND % of all visits — because the KPI doc asked for both to be
+     * stated and named. In practice two percentage columns on one row is what
+     * people kept reading wrong: the 2026-09-19 review said plainly that it was
+     * causing the confusion it was meant to remove, which is the same complaint
+     * that produced the unsourceable "96.5%" in the first place.
+     *
+     * The one that survives is % OF THE STEP BEFORE, because it answers the
+     * question the table is read for — where are we losing people — and because
+     * the header line already names the single biggest drop from it. The
+     * overall conversion is not lost: the last row's count against the first
+     * row's count is the whole funnel, both are on screen, and the break-even
+     * block below states revenue per visit in money.
+     */
+    const rows = steps.map((s, i) => {
+      const prev = i === 0 ? null : steps[i - 1]!;
+      const stepPct = prev ? share(s.count, prev.count) : "—";
+      return `\`${String(s.count).padStart(6)}  ${stepPct.padStart(6)}\`  ${escapeSlack(s.step)}`;
     });
     // Heading, headline and table in ONE block. Split across two, Slack put a
     // paragraph gap between the title and the numbers it titles.
@@ -519,7 +779,31 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
               : ""
           }`,
           rows.join("\n"),
+          "_people  ·  % of the step above them_",
+          /**
+           * The paywall step's instrument is younger than the window, and a row
+           * measured over 14 days sitting in a table headed "30 days" is the
+           * quiet kind of wrong. `firstRowDay` existed for exactly this and was
+           * fetched, typed and read by nothing until an audit noticed.
+           */
+          ...(paywallNote ? [paywallNote] : []),
         ].join("\n")
+      )
+    );
+  }
+
+  /**
+   * Break-even, directly under the funnel that produces it.
+   *
+   * Marcus, 2026-09-18: "Our core mission is to turn the survey to report journey
+   * break even." Nothing in this message said how far off that is. It is the
+   * business case in three lines, and it goes above the friction detail because
+   * it is the number a decision gets made on.
+   */
+  if (unitEconomics) {
+    blocks.push(
+      section(
+        [`*Break-even — ${WINDOW_DAYS} days*`, ...buildUnitEconomicsLines(unitEconomics)].join("\n")
       )
     );
   }
@@ -585,6 +869,14 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
         // second arm with no data, which is a different statement.
         title: "Visits that reach the survey",
         legendFirst: "Visits that reach the survey",
+        /**
+         * Slate, not the categorical blue. This is the site TOTAL, not an arm, and
+         * it sits two blocks above a chart where blue means Landing Page V1 — the
+         * same "follow the coloured line across two charts and you are following
+         * two different things" problem the per-arm colours were bound to fix.
+         * 10.35:1 on white.
+         */
+        colorFirst: "#334155",
         headline: `${latest}% of visits reach the survey${direction}`,
         footnote:
           "survey starts ÷ all-page visit-days, 7-day trailing · a gap is a day with no visits",
@@ -627,27 +919,131 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
    * both landings link with next/link and a soft navigation is not a document
    * request. Until then: trend, caveat, no verdict.
    */
+  /**
+   * Midway Progress per landing page.
+   *
+   * Reuses `buildStartSeries` by mapping sessions->visits and reached->starts: the
+   * shape is identical and the 7-day trailing rule, including its warm-up gap, is
+   * the part with the bug history. A second copy of that loop is how the two
+   * versions drift.
+   *
+   * EMPTY IS A SENTENCE, NOT A PICTURE. Drafts only started carrying an arm on
+   * `firstArmDay`, so for the first week there is nothing to plot. `funnel-digest`
+   * was unscheduled for being a rail of charts with no decision attached, and an
+   * empty chart that says "awaiting data" every morning for a week is that same
+   * mistake with a new name. One line until there is something to show.
+   */
+  const midwayBlocks: SlackBlock[] = [];
+  /**
+   * ONE trust decision, two surfaces.
+   *
+   * `buildFunnel` drops the midway row when the sources disagree — midway below
+   * the finisher count means draft saves and the submission cohort are measuring
+   * different populations. Without this gate the funnel stayed silent about
+   * midway while the block below printed per-arm midway numbers anyway, so the
+   * message both withheld and asserted the same figure. Reading the rendered
+   * steps rather than recomputing the condition keeps them from drifting apart.
+   */
+  const midwayRowShown =
+    !!midway && steps.some((step) => step.step === `Reached question ${midway.midwayIndex}`);
+  if (midway && midwayRowShown) {
+    const armTotal = (arm: string) => midway.totals.find((t) => t.arm === arm);
+    const named = (["white_prev", "white"] as const).filter(
+      (a) => (armTotal(a)?.sessions ?? 0) > 0
+    );
+
+    if (named.length > 0) {
+      const line = named
+        .map((arm) => {
+          const t = armTotal(arm)!;
+          return `• *${armLabel("landing", arm).short}* — ${t.reached} of ${t.sessions} drafts reached question ${midway.midwayIndex} (${computeRate(t.reached, t.sessions)}%)`;
+        })
+        .join("\n");
+      /**
+       * The unattributed drafts are named, not dropped.
+       *
+       * The RPC buckets arm-less rows as 'unknown' so the arms always sum to the
+       * total — and this caller then filtered to the two live arms, which quietly
+       * defeated the reason the bucket exists: the printed lines did not add up to
+       * `overall.sessions` and nothing on screen said why. A visitor with no
+       * landing cookie is a crawler, a direct hit or a consent refusal; that is a
+       * real population and hiding it makes the split look cleaner than it is.
+       */
+      const unknown = armTotal("unknown");
+      const unattributed =
+        unknown && unknown.sessions > 0
+          ? `\n• _no landing page recorded_ — ${unknown.reached} of ${unknown.sessions} drafts (${computeRate(unknown.reached, unknown.sessions)}%)`
+          : "";
+      midwayBlocks.push(section(`*Midway progress, by landing page*\n${line}${unattributed}`));
+
+      const series = buildMidwaySeries(midway, ["white_prev", "white"]);
+      const hasReal = series.first.some((v) => v != null) || series.last.some((v) => v != null);
+      if (hasReal && series.labels.length > 1) {
+        const url = await signedChartUrl({
+          windowLabel,
+          labels: series.labels,
+          first: series.first,
+          last: series.last,
+          title: `Drafts reaching question ${midway.midwayIndex}, by landing page`,
+          legendFirst: armLabel("landing", "white_prev").short,
+          legendLast: armLabel("landing", "white").short,
+          colorFirst: armColor("landing", "white_prev"),
+          colorLast: armColor("landing", "white"),
+          headline: named
+            .map(
+              (a) =>
+                `${armLabel("landing", a).short} ${armTotal(a)!.reached}/${armTotal(a)!.sessions}`
+            )
+            .join("  ·  "),
+          footnote: `reached ÷ drafts saved, 7-day trailing · peak {peak}%`,
+        });
+        if (url) {
+          midwayBlocks.push({
+            type: "image",
+            image_url: url,
+            alt_text: `Share of survey drafts reaching question ${midway.midwayIndex}, per landing page, over the reporting window`,
+          });
+        }
+      }
+    } else if (midway.firstArmDay) {
+      // Says WHY it is empty and WHEN it starts, so nobody reads the absence as
+      // "no one gets halfway".
+      midwayBlocks.push(
+        context(
+          `Midway progress per landing page starts from ${escapeSlack(midway.firstArmDay)} — before that, drafts did not record which landing page the visitor came from.`
+        )
+      );
+    }
+  }
+
   const landingStartBlocks: SlackBlock[] = [];
   if (startFunnel) {
     /**
-     * Ordered by LABEL, for the same reason `buildAxisTrends` orders its arms that
-     * way — and this is the call site that rule never reached.
+     * V1 then V2, so the message reads in version order.
      *
-     * The chart renderer colours by POSITION: `first` is purple, `last` is orange.
-     * This array was hardcoded `["white", "white_prev"]` (V2 then V1) while the
-     * checkout chart directly below sorts by label (V1 then V2). Both charts were
-     * individually correct and correctly legended, and they drew the same two arms
-     * in OPPOSITE colours, two blocks apart in one message — so a reader following
-     * "the purple line" from one chart to the next was following V2 and then V1.
-     * Sorting both by label makes an arm's colour stable across the whole message
-     * and from one day's message to the next.
+     * This used to be sorted by label, and the sort was load-bearing: the renderer
+     * coloured by POSITION, so the order the arms were passed in decided which one
+     * was blue. Sorting made two charts in one message agree — but it could not
+     * help on a day when one arm had no traffic and was dropped, because there was
+     * no second arm left to sort against, and the survivor took the first slot's
+     * colour. Colour is now bound to the arm itself (`armColor`), so ORDER HERE IS
+     * ONLY READING ORDER and changing it cannot repaint anything.
      */
-    const liveArms = (["white", "white_prev"] as const)
-      .slice()
-      .sort((l, r) => armLabel("landing", l).short.localeCompare(armLabel("landing", r).short)) as [
-      string,
-      string,
-    ];
+    const liveArms: [string, string] = ["white_prev", "white"];
+    /**
+     * The comparison only exists while the axis is live.
+     *
+     * Gated on the AXIS LIST, which is the one place that says what is being
+     * randomised — not on `liveArms` (a literal, so retiring an arm never
+     * reaches it) and not on `armLabel(...).retired` (a second source of truth
+     * that can disagree with the list). Without this the block went on drawing
+     * a two-arm chart of a test that had ended, which is the exact failure the
+     * axis-level retirement idiom exists to avoid.
+     *
+     * The site-wide "Visits that reach the survey" chart above is unaffected —
+     * it never split by arm, and it is the one that still measures something.
+     */
+    const landingIsLive = verdictAxes.includes("landing");
     const series = buildStartSeries(startFunnel, [liveArms[0], liveArms[1]]);
     const totalFor = (arm: string) => startFunnel.totals.find((t) => t.arm === arm);
     const hasVisits = (arm: string) => (totalFor(arm)?.visits ?? 0) > 0;
@@ -672,7 +1068,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
       "Not a like-for-like comparison: V2's inline question puts its visitors straight into the survey, and the denominator counts every page rather than landing views — the two pull opposite ways, so treat the gap as unknown. Returning visitors also keep the design they first saw, which warms V2's traffic further.";
     const hasAny = series.first.some((v) => v != null) || series.last.some((v) => v != null);
 
-    if (hasAny && series.labels.length > 1) {
+    if (landingIsLive && hasAny && series.labels.length > 1) {
       const url = await signedChartUrl({
         windowLabel,
         labels: series.labels,
@@ -684,6 +1080,8 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
         title: "Site visit-days → started the survey, by landing page",
         legendFirst: armLabel("landing", liveArms[0]).short,
         legendLast: armLabel("landing", liveArms[1]).short,
+        colorFirst: armColor("landing", liveArms[0]),
+        colorLast: armColor("landing", liveArms[1]),
         // Labelled. Unlabelled fractions ("12/300 · 3/90 started") are ambiguous
         // in the image alone, and the image is what gets forwarded.
         headline: `${armLabel("landing", liveArms[0]).short} ${totalFor(liveArms[0])?.starts ?? 0}/${totalFor(liveArms[0])?.visits ?? 0}  ·  ${armLabel("landing", liveArms[1]).short} ${totalFor(liveArms[1])?.starts ?? 0}/${totalFor(liveArms[1])?.visits ?? 0}`,
@@ -711,6 +1109,26 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
           alt_text:
             "Started-the-survey rate per landing page arm over the reporting window. A trend, not a verdict — the two arms measure different funnel steps.",
         });
+      }
+    } else if (!landingIsLive) {
+      /**
+       * The test is over, so there is no comparison to draw — but for as long as
+       * the window still covers days when it ran, say what happened rather than
+       * letting the chart vanish without explanation.
+       *
+       * ONE line, and it removes itself. Without this the branch below would
+       * have gone on reporting "30 days of per-arm data" under two arm bullets,
+       * which is a concluded experiment presented as a running one.
+       */
+      const stillInWindow =
+        Date.parse(`${dayKey}T00:00:00Z`) - Date.parse(`${LANDING_CONCLUDED_ON}T00:00:00Z`) <
+        WINDOW_DAYS * 86_400_000;
+      if (stillInWindow) {
+        landingStartBlocks.push(
+          context(
+            `_Landing page test concluded ${LANDING_CONCLUDED_ON} — ${armLabel("landing", "white").short} now serves all traffic, so there is no per-arm split to chart. The site-wide rate above still applies._`
+          )
+        );
       }
     } else if (!hasVisits(liveArms[0]) && !hasVisits(liveArms[1])) {
       /**
@@ -796,7 +1214,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   // from the tail, so a cut can only ever lose the picture and keep the caveat,
   // never the reverse.
   {
-    const trends = buildAxisTrends(axisRows, dayKey);
+    const trends = buildAxisTrends(axisRows, dayKey, verdictAxes, { includeRetired });
     if (
       trends.charted.length > 0 ||
       trends.counts.length > 0 ||
@@ -808,6 +1226,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     // Landing → survey leads: it is the only axis that measures what a landing
     // page is FOR, and the one the section was reorganised around.
     blocks.push(...landingStartBlocks);
+    blocks.push(...midwayBlocks);
     for (const chart of trends.charted) {
       const series = buildArmSeries(
         rowsForAxis(axisRows, chart.axis).rows,
@@ -824,6 +1243,8 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
           title: chart.title,
           legendFirst: chart.legendFirst,
           legendLast: chart.legendLast,
+          colorFirst: armColor(chart.axis, chart.arms[0]),
+          colorLast: armColor(chart.axis, chart.arms[1]),
           headline: chart.headline,
           footnote: chart.footnote,
         });
@@ -847,6 +1268,28 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     for (const gap of trends.skipped) {
       blocks.push(context(gap.caption));
     }
+
+    /**
+     * The email A/B tests, in the same section as the on-site ones.
+     *
+     * Marcus asked for CVR per EXPERIMENT. Five of ours are emails, and until
+     * the arm started riding on the Resend tags they could not appear here at
+     * all — `pickEmailVariant` chose a template and forgot. A section that shows
+     * the landing test and silently omits five others is the quiet omission this
+     * whole exercise exists to remove.
+     */
+    const emailLines = emailExperiments ? buildEmailExperimentLines(emailExperiments) : [];
+    if (emailLines.length > 0) {
+      blocks.push(section(`*Email tests — click rate per arm*\n${emailLines.join("\n")}`));
+    } else if (emailExperiments && emailExperiments.length === 0) {
+      // Counting starts when the tags ship. Saying so is not the same as saying
+      // the emails got no clicks.
+      blocks.push(
+        context(
+          "Email A/B results start accumulating from this deploy — before it, the arm an email was sent with was never recorded anywhere."
+        )
+      );
+    }
   }
 
   // ---- Alerts ----
@@ -863,6 +1306,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     visitorArms,
     yesterday,
     baseline,
+    yesterdayObserved,
     pricingCutoverIso: PRICING_CUTOVER_ISO,
     now,
   });
@@ -900,7 +1344,11 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   const text =
     funnel === null
       ? `:chart_with_upwards_trend: Conversion ${dayKey} — data unavailable (could not read the funnel)`
-      : `:chart_with_upwards_trend: Conversion ${dayKey} — ${yesterday.completions} finished, ${yesterday.paid} paid${spentClause} yesterday; ${paidTotal} ever paid from ${WINDOW_DAYS} days of finishers`;
+      : // `paidTotal` is the funnel's last row, which counts UNLOCKS — so it is
+        // named "unlocked" here too. `yesterday.paid` is `charges`, real sales.
+        // This string is the push-notification preview and the dead-letter text,
+        // so it is the one place a reader gets no surrounding context at all.
+        `:chart_with_upwards_trend: Conversion ${dayKey} — ${yesterday.completions} finished, ${yesterday.paid} paid${spentClause} yesterday; ${paidTotal} ever unlocked from ${WINDOW_DAYS} days of finishers`;
 
   const fitted = fitBlocks(blocks, text);
   return { text, blocks: fitted.blocks, trimmed: fitted.trimmed };
@@ -976,34 +1424,69 @@ export async function GET(request: Request) {
       reportingDay(new Date(dayStart.getTime() - WINDOW_DAYS * 86_400_000))
     ).toISOString();
     const windowEnd = dayStart.toISOString();
-    const [funnel, cohorts, startFunnel, axisRows, cvrSnap, friction] = await Promise.all([
+
+    /**
+     * ONE read of the GA4 day-chunks, shared by the day's spend clause and the
+     * 30-day break-even block. They used to read the same rows twice with two
+     * disagreeing notions of the window and of "covered"; `adCostByDay` is the
+     * paginated, coverage-aware one, so it is the one that survives. Best-effort
+     * by design: GA4 being unreachable must cost the digest its spend figures,
+     * never the digest.
+     */
+    let ad: AdCost = { byDay: new Map<string, number>(), from: null, to: null };
+    try {
+      const fetched = await adCostByDay();
+      // Shape-checked before it is adopted. This clause is best-effort by
+      // design — GA4 being unreachable OR returning something unexpected must
+      // cost the digest its spend figures, never the digest — and reading
+      // `.byDay` off a malformed value outside this try is how a best-effort
+      // clause becomes a 500 for the whole message.
+      if (fetched?.byDay instanceof Map) ad = fetched;
+      else logger.warn({ day: dayKey }, "conversion-digest: ad spend read returned no map");
+    } catch (err) {
+      logger.warn({ err, day: dayKey }, "conversion-digest: ad spend unavailable");
+    }
+
+    const [
+      funnel,
+      cohorts,
+      startFunnel,
+      axisRows,
+      cvrSnap,
+      friction,
+      midway,
+      paywall,
+      emailExperiments,
+      unitEconomics,
+    ] = await Promise.all([
       fetchLandingArmFunnel(windowStart, windowEnd),
       fetchArmCohorts(windowStart, windowEnd),
       fetchLandingStartFunnel(windowStart, windowEnd),
       fetchAxisFunnelDaily(windowStart, windowEnd),
       fetchFunnelCvrSparklines(windowStart, windowEnd),
       buildFrictionReport(windowStart, windowEnd, surveyQuestionNames()),
+      fetchMidwayProgress(windowStart, windowEnd, MIDWAY_QUESTION_INDEX),
+      fetchPaywallHits(windowStart, windowEnd),
+      fetchEmailExperimentResults(windowStart, windowEnd),
+      fetchUnitEconomics(ad, windowStart, windowEnd, WINDOW_DAYS),
     ]);
 
     /**
-     * Ad spend for the day being reported. Best-effort by design: GA4 being unreachable
-     * must cost the digest its spend clause, never the digest. `adCovers` is what keeps
-     * an uncovered day out — without it a day GA4 has not reported yet reads as EUR 0.00,
+     * Ad spend for the day being reported. `adCovers` is what keeps an uncovered
+     * day out — without it a day GA4 has not reported yet reads as EUR 0.00,
      * which is the reassuring falsehood this whole line exists to remove.
      */
-    let adSpend: number | null = null;
-    try {
-      const ad = await adCostByDay();
-      adSpend = adCovers(ad, dayKey) ? (ad.byDay.get(dayKey) ?? 0) : null;
-    } catch (err) {
-      logger.warn({ err, day: dayKey }, "conversion-digest: ad spend unavailable");
-    }
+    const adSpend: number | null = adCovers(ad, dayKey) ? (ad.byDay.get(dayKey) ?? 0) : null;
 
     const digest = await buildConversionDigest({
       dayKey,
       funnel,
       cohorts,
       startFunnel,
+      midway,
+      paywall,
+      emailExperiments,
+      unitEconomics,
       axisRows,
       cvrDays: cvrSnap?.days ?? null,
       adSpend,

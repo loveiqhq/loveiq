@@ -1,8 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 
 const supabaseFetch = vi.fn();
 vi.mock("@features/admin/server/supabase", () => ({
   supabaseFetch: (...a: unknown[]) => supabaseFetch(...a),
+  /**
+   * Mirrors the real countRows: it reads the total out of `content-range`, not
+   * the body. Routed through the same fake fetch so a test can break the count
+   * the same way it breaks any other source.
+   */
+  countRows: async (path: string) => {
+    const res = (await supabaseFetch(path, {
+      headers: { Prefer: "count=exact", Range: "0-0" },
+    })) as { ok: boolean; headers: { get: (k: string) => string | null } };
+    if (!res.ok) return null;
+    const range = res.headers.get("content-range");
+    const total = range?.split("/")[1];
+    return total && total !== "*" ? Number(total) : null;
+  },
 }));
 
 const ok = (body: unknown) => ({ ok: true, json: async () => body, headers: { get: () => null } });
@@ -12,6 +27,19 @@ const fail = () => ({
   json: async () => null,
   headers: { get: () => null },
 });
+
+/**
+ * The contract readings compare the RPC's own output against facts, so the
+ * fixtures have to be internally consistent rather than arbitrary: the series'
+ * last day must be the day before the window closes, and firstRowDay must match
+ * the server signal's first row. A test that wants to break one breaks it
+ * explicitly through `over`.
+ */
+const PAYWALL_SIGNAL_DAY = "2026-09-05";
+function defaultLastDay(): string {
+  const until = reportingDayStart(reportingDay(new Date()));
+  return reportingDay(new Date(until.getTime() - 1));
+}
 
 /** Route each call by what it asks for, so a test can break exactly one source. */
 function routeFetch(over: Record<string, unknown> = {}) {
@@ -27,7 +55,25 @@ function routeFetch(over: Record<string, unknown> = {}) {
         "axis" in over ? over.axis : [{ axis: "landing", arm: "white", completions: 425, paid: 5 }]
       );
     if (path.includes("get_funnel_cvr_sparklines"))
-      return ok("cvr" in over ? over.cvr : { days: [{ visitors: 12308 }] });
+      return ok(
+        "cvr" in over
+          ? over.cvr
+          : { days: [{ day: defaultLastDay(), visitors: 12308, completions: 417 }] }
+      );
+    if (path.includes("get_paywall_hits"))
+      return ok("paywall" in over ? over.paywall : { hits: 131, firstRowDay: PAYWALL_SIGNAL_DAY });
+    // The server paywall signal's first row, read for the firstRowDay contract.
+    if (path.includes("report_price_quote") && path.includes("paywall_reached_at"))
+      return ok(
+        "serverSignal" in over
+          ? over.serverSignal
+          : [{ paywall_reached_at: `${PAYWALL_SIGNAL_DAY}T12:00:00Z` }]
+      );
+    // The submission count for the conservation reading (count=exact header).
+    if (path.includes("/survey_submission?select=id")) {
+      const n = (over.submissionCount as number | undefined) ?? 417;
+      return { ok: true, json: async () => [], headers: { get: () => `0-0/${n}` } };
+    }
     if (path.includes("get_landing_arm_funnel_daily"))
       return ok("arm" in over ? over.arm : { visitors: [{ n: 12308 }] });
     if (path.includes("source_id=eq.alltime"))
@@ -69,7 +115,7 @@ describe("brain-reconcile — the readings it actually assembles", () => {
     const { buildReadings } = await import("@/app/api/cron/brain-reconcile/route");
     const { reconcile } = await import("@features/brain/server/reconcile");
     const { readings, unread } = await buildReadings();
-    expect(readings).toHaveLength(7);
+    expect(readings).toHaveLength(10);
     expect(unread).toEqual([]);
     expect(reconcile(readings)).toEqual([]);
   });
@@ -194,5 +240,58 @@ describe("brain-reconcile — the readings it actually assembles", () => {
     const { reconcile } = await import("@features/brain/server/reconcile");
     const found = reconcile((await buildReadings()).readings);
     expect(found.find((f) => f.what === "all-time revenue")?.detail).toContain("704.91");
+  });
+
+  /**
+   * The SQL-to-TypeScript contract readings.
+   *
+   * These exist because nothing else checks it: the unit tests everywhere else
+   * mock the RPCs, so a fixture encodes what an RPC is BELIEVED to return and
+   * production is free to disagree — which is how get_paywall_hits shipped a
+   * firstRowDay that disabled the funnel's coverage caveat for weeks with every
+   * test green. Each test below breaks one invariant and expects drift; a
+   * reading that cannot fail is not a check.
+   */
+  it("drifts when firstRowDay is not the later paywall signal", async () => {
+    // The defect exactly: MIN across both signals returns the LOSSY client
+    // event's start instead of the server column's.
+    supabaseFetch.mockImplementation(
+      routeFetch({ paywall: { hits: 131, firstRowDay: "2026-05-24" } })
+    );
+    const { buildReadings } = await import("@/app/api/cron/brain-reconcile/route");
+    const { reconcile } = await import("@features/brain/server/reconcile");
+    const gaps = reconcile((await buildReadings()).readings);
+    expect(gaps.map((g) => g.what)).toContain("paywall signal start, as the digest is told it");
+  });
+
+  it("drifts when the day series stops short of the window", async () => {
+    // A bare ::date on a Berlin-midnight bound cuts the last day off the axis,
+    // so the newest day reads as absent rather than zero.
+    supabaseFetch.mockImplementation(
+      routeFetch({ cvr: { days: [{ day: "2026-01-01", visitors: 12308, completions: 417 }] } })
+    );
+    const { buildReadings } = await import("@/app/api/cron/brain-reconcile/route");
+    const { reconcile } = await import("@features/brain/server/reconcile");
+    const gaps = reconcile((await buildReadings()).readings);
+    expect(gaps.map((g) => g.what)).toContain("last day of the daily funnel series");
+  });
+
+  it("drifts when a submission falls outside the charted days", async () => {
+    // The window total stays right and only the chart loses the row, so this
+    // comparison is the only thing that sees it.
+    supabaseFetch.mockImplementation(routeFetch({ submissionCount: 419 }));
+    const { buildReadings } = await import("@/app/api/cron/brain-reconcile/route");
+    const { reconcile } = await import("@features/brain/server/reconcile");
+    const gaps = reconcile((await buildReadings()).readings);
+    expect(gaps.map((g) => g.what)).toContain("submissions charted vs submissions that exist");
+  });
+
+  it("reports the contract sources as UNREAD when they cannot be read", async () => {
+    // Never a silent pass: an unreadable RPC must not look like agreement.
+    supabaseFetch.mockImplementation(routeFetch({ paywall: null, cvr: null }));
+    const { buildReadings } = await import("@/app/api/cron/brain-reconcile/route");
+    const { unread } = await buildReadings();
+    expect(unread).toContain("get_paywall_hits firstRowDay");
+    expect(unread).toContain("get_funnel_cvr_sparklines day series");
   });
 });
