@@ -172,6 +172,21 @@ jobs:
             commit -am "fix: $DEFECT"
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
 
+      # A refused attempt is still worth reading. Without this the branch dies
+      # with the runner and all anyone learns is "not proven" — which says
+      # nothing about whether the model misunderstood the defect, fixed the
+      # wrong thing, or was given a task no 40-line change could satisfy. That
+      # difference decides whether to retry, reword, or do it by hand.
+      - name: Show what it proposed
+        if: steps.token.outputs.ready == 'true'
+        working-directory: /tmp/fixtree
+        run: |
+          echo "### Proposed change" >> "$GITHUB_STEP_SUMMARY"
+          echo '```diff' >> "$GITHUB_STEP_SUMMARY"
+          git diff HEAD~1 >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          git --no-pager diff HEAD~1
+
       # The gate. Nothing above this line is trusted.
       - name: Prove it
         if: steps.token.outputs.ready == 'true'
@@ -188,6 +203,19 @@ jobs:
       # Only reached when the proof passed, so this PR is ready for review
       # rather than a draft — the draft state is what the UNPROVEN reproduction
       # PRs use, and the difference should mean something.
+      # Kept even when the proof refused it, so the attempt can be read rather
+      # than guessed at. It is a branch, not a pull request: an unproven change
+      # must not sit in the review queue wearing the same badge as a proven one.
+      - name: Keep the branch even if the proof refused it
+        if: always() && steps.commit.outputs.branch != ''
+        # Through the environment like every other value here. This one is
+        # machine-generated from a timestamp so it could not carry anything
+        # hostile, but a `${{ }}` inside a run: block is the shape that goes
+        # unnoticed next to one that can.
+        env:
+          BRANCH: ${{ steps.commit.outputs.branch }}
+        run: git push origin "$BRANCH" || true
+
       - name: Open a pull request
         if: steps.token.outputs.ready == 'true'
         env:
