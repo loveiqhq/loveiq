@@ -51,6 +51,31 @@ describe("the generate-and-prove workflow", () => {
     expect(WF).toMatch(/steps\.token\.outputs\.ready == 'true'/);
   });
 
+  /**
+   * Every run logs "Ignoring 65 permissions.allow entries … this workspace has
+   * not been trusted", and the obvious way to silence it is to mark the
+   * workspace trusted. That would apply a developer's LOCAL allowlist inside
+   * CI, widening what the model may do past --allowedTools — which is the only
+   * permission boundary this job reasons about. The entries being ignored is
+   * the safe state.
+   */
+  it("does not trust the repository's local Claude settings", () => {
+    /**
+     * Asserted on the EXECUTABLE yaml, not the file. The first version matched
+     * the comment directly above the step — the one explaining this very trap —
+     * and failed against a correct workflow. That is the second time a source
+     * test in this file has reported on its own prose; comments are stripped
+     * here for the same reason.
+     */
+    const code = WF.split("\n")
+      .filter((l) => !/^\s*#/.test(l))
+      .join("\n");
+    expect(code).not.toMatch(/hasTrustDialogAccepted/);
+    expect(code).not.toMatch(/dangerously-skip-permissions/);
+    // The boundary it DOES rely on must still be there.
+    expect(code).toContain("--allowedTools");
+  });
+
   it("uses the subscription, not an API key", () => {
     expect(WF).not.toContain("ANTHROPIC_API_KEY");
   });
