@@ -9,6 +9,79 @@ import {
   type LandingVariant,
 } from "@shared/experiments/landingVariant";
 import { sanitizeUtmSource } from "@shared/url/utm";
+import { reportingDay } from "@shared/time/reporting-day";
+
+// Google Ads remarketing/audience pixels (`/ads/ga-audiences` and
+// `/pagead/1p-user-list/<id>`) are requested from the visitor's LOCAL Google
+// country domain, not google.com. CSP host-source syntax cannot wildcard a TLD
+// (`https://www.google.*` is invalid), so each country domain must be named or
+// that visitor's remarketing data is silently dropped. Only `www.` is allowed —
+// narrower than `*.google.<tld>`.
+//
+// Deliberately NOT the full ~190 Google domains: that measured at +4.4KB on a
+// header returned by every page and API response, to serve countries we have no
+// visitors in. This is EU/EEA + UK + Balkans + the major English/LatAm/Asia
+// markets (~1KB). Adding a country later is one line. Since 2017 Google
+// redirects country search domains to google.com, so these pixels are already
+// the minority case.
+//
+// Joined once at module load, not per request: the CSP is otherwise rebuilt on
+// every request through the middleware.
+const GOOGLE_COUNTRY_DOMAINS = [
+  // EU / EEA
+  "at",
+  "be",
+  "bg",
+  "ch",
+  "com.cy",
+  "cz",
+  "de",
+  "dk",
+  "ee",
+  "es",
+  "fi",
+  "fr",
+  "gr",
+  "hr",
+  "hu",
+  "ie",
+  "is",
+  "it",
+  "li",
+  "lt",
+  "lu",
+  "lv",
+  "com.mt",
+  "nl",
+  "no",
+  "pl",
+  "pt",
+  "ro",
+  "se",
+  "si",
+  "sk",
+  // UK + Balkans (our own region)
+  "co.uk",
+  "ba",
+  "me",
+  "mk",
+  "rs",
+  "al",
+  // Major markets outside Europe
+  "com",
+  "ca",
+  "com.au",
+  "co.nz",
+  "co.in",
+  "com.br",
+  "com.mx",
+  "co.za",
+  "co.jp",
+  "com.tr",
+  "com.ua",
+]
+  .map((tld) => `https://www.google.${tld}`)
+  .join(" ");
 
 const isProduction = process.env.NODE_ENV === "production";
 const CSRF_COOKIE_NAME = isProduction ? "__Host-csrf" : "__csrf";
@@ -21,20 +94,41 @@ const LANDING_BOT_UA_REGEX =
   /bot|crawl|spider|slurp|bingpreview|facebookexternalhit|embedly|quora link preview|outbrain|pinterest|vkshare|w3c_validator|whatsapp|telegrambot|applebot|gptbot|chatgpt|ccbot|claudebot|claude-web|perplexity|google-extended|amazonbot|bytespider/i;
 
 /**
- * Landing variant for a `/` request. The white-vs-dark A/B concluded in favour
- * of white (decision 2026-06-19), so EVERY visitor now gets "white" — the dark
- * landing has been retired. The `landing_variant` value is still threaded
- * through the cookie / visit tag / analytics so the funnel stays attributable
- * (now constant "white") and the historical split is preserved.
+ * Landing variant for a `/` request — a 50/50 split between the current white
+ * landing ("white") and the one that preceded the 2026-08-10 rebuild
+ * ("white_prev"). See shared/experiments/landingVariant.ts for the history.
+ *
+ * Order matters:
+ *   - bots always get "white", so crawlers index one canonical landing and never
+ *     dilute the split;
+ *   - `?variant=` is a QA override (it also re-stamps the cookie below, so the
+ *     arm sticks for the rest of the session);
+ *   - an existing cookie wins, so a returning visitor keeps their arm;
+ *   - otherwise a coin flip from crypto, not Math.random.
  */
-function resolveLandingVariant(_request: NextRequest): LandingVariant {
-  return "white";
+function resolveLandingVariant(request: NextRequest): LandingVariant {
+  const ua = request.headers.get("user-agent") || "";
+  if (LANDING_BOT_UA_REGEX.test(ua)) return "white";
+
+  const override = request.nextUrl.searchParams.get("variant");
+  if (isLandingVariant(override)) return override;
+
+  const existing = request.cookies.get(LANDING_VARIANT_COOKIE)?.value;
+  // "control" is a retired round-1 arm: a visitor still carrying that cookie is
+  // re-assigned rather than served a landing that no longer exists.
+  if (existing === "white" || existing === "white_prev") return existing;
+
+  const buf = new Uint8Array(1);
+  crypto.getRandomValues(buf);
+  return (buf[0]! & 1) === 0 ? "white" : "white_prev";
 }
 
 // Daily dedup flag for the consent-independent unique-visit count (the
-// Visitor→Survey-start CVR denominator). Holds only a UTC date — no identifier,
-// no cross-day linkage — so it is a strictly-functional, aggregate-analytics
-// cookie, set regardless of analytics consent.
+// Visitor→Survey-start CVR denominator). Holds only a date — no identifier, no
+// cross-day linkage — so it is a strictly-functional, aggregate-analytics cookie,
+// set regardless of analytics consent. The date is the Europe/Berlin reporting day
+// (see shared/time/reporting-day.ts), NOT UTC, and must stay the same clock as the
+// funnel_event row or every visitor in the offset window counts twice a day.
 const VISIT_DAY_COOKIE = "liq_dv";
 
 /**
@@ -115,6 +209,30 @@ async function sha256(value: string): Promise<string> {
 let stagingPasswordHash: string | null = null;
 let stagingPasswordSource: string | null = null;
 
+/**
+ * Static media under `public/`, which the staging gate must let through.
+ *
+ * Next's image optimizer fetches the SOURCE file over HTTP before resizing it.
+ * That internal request carries no staging cookie, so a gated path answers it
+ * with a 307 to /login and the optimizer reports `received null` — every
+ * `/_next/image` URL for it then 400s. `/images/` was already exempt; nothing
+ * else under `public/` was, so `/testimonials/`, `/academic/`, `/privacy/`,
+ * `/about/` and `/report-previews/` (the blurred locked-chapter images on the
+ * report) all 400'd.
+ *
+ * SCOPE: this bit LOCALLY BUILT servers only — `npm run build && npm start`
+ * with STAGING_PASSWORD set, which is the normal local setup. Measured
+ * 2026-09-14: staging.loveiq.org and production served the same URLs 200 both
+ * before and after, because Vercel optimizes images at the edge and its source
+ * fetch never passes through this middleware. So this fixes local builds and
+ * the report QA sweep (56 of its 85 failures), not anything a visitor saw.
+ *
+ * Matched by extension rather than by folder so a new asset directory does not
+ * silently reintroduce it. Deliberately NOT matched: `.js`, `.html`, `.json`,
+ * `.md` — `public/clarity-init.js` and friends stay behind the gate.
+ */
+const STATIC_MEDIA_RE = /\.(?:jpe?g|png|gif|webp|avif|svg|ico|mp4|webm|woff2?)$/i;
+
 async function getStagingPasswordHash(password: string): Promise<string> {
   if (stagingPasswordHash && stagingPasswordSource === password) {
     return stagingPasswordHash;
@@ -124,7 +242,42 @@ async function getStagingPasswordHash(password: string): Promise<string> {
   return stagingPasswordHash;
 }
 
+/**
+ * The trailing-slash 308 that Next used to do for us.
+ *
+ * Next's own version of it is switched off in next.config.js, because Next applied that
+ * redirect BEFORE any rewrite — `beforeFiles` included — and the proxy forwards endpoints
+ * that legitimately end in a slash (`/i/v0/e/`, `/e/`, `/s/`). With the automatic redirect
+ * on, every capture POST got a 308 rather than reaching PostHog.
+ *
+ * Doing it here instead restores the exact previous behaviour for pages, because this
+ * middleware does not run on the proxy path at all (see `config.matcher`). `/about/` still
+ * 308s to `/about`; the sitemap, the canonical tags and every existing inbound link keep
+ * working, and search engines are not handed a second URL for every page.
+ *
+ * Root is excluded: "/" is entirely a trailing slash, and stripping it yields "".
+ */
+export function stripTrailingSlash(request: NextRequest): NextResponse | null {
+  const { pathname } = request.nextUrl;
+  if (pathname === "/" || !pathname.endsWith("/")) return null;
+  // A PLAIN `URL` built from `request.url`, not `request.nextUrl.clone()`.
+  //
+  // `nextUrl` is a NextURL, which re-applies Next's own trailing-slash normalisation when
+  // `pathname` is assigned — so the slash came straight back and the response redirected
+  // /about/ to /about/. Verified on a preview deployment: five hops and still 308, an
+  // infinite loop on every page with a trailing slash, and browsers cache a 308.
+  // A plain URL stores exactly what it is given.
+  const url = new URL(request.url);
+  url.pathname = url.pathname.replace(/\/+$/, "");
+  return NextResponse.redirect(url, 308);
+}
+
 export async function proxy(request: NextRequest) {
+  // Restore Next's trailing-slash redirect, which next.config.js disables for the
+  // PostHog proxy's sake. Must run first: everything below assumes a normalised path.
+  const trailingSlashRedirect = stripTrailingSlash(request);
+  if (trailingSlashRedirect) return trailingSlashRedirect;
+
   // Staging gate: when STAGING_PASSWORD is set, require a valid session cookie
   const STAGING_PASSWORD = process.env.STAGING_PASSWORD;
   if (STAGING_PASSWORD) {
@@ -133,13 +286,22 @@ export async function proxy(request: NextRequest) {
       path === "/login" ||
       path === "/api/health" ||
       path === "/api/stripe/webhook" ||
-      path === "/api/calendly/webhook" ||
+      // Slack posts events here signed, not cookied, so it can never satisfy the
+      // staging gate — same reason the two webhooks above are exempt. Without
+      // this the staging deployment answers Slack with a redirect to /login and
+      // the brain silently never replies.
+      path === "/api/slack/events" ||
+      // The MCP endpoint authenticates with a bearer token and is called by
+      // Claude, not a browser, so it has no staging session cookie and never
+      // could. Same reason as the webhooks above.
+      path === "/api/mcp" ||
       path.startsWith("/api/cron/") ||
       path.startsWith("/api/staging-") ||
       path.startsWith("/admin") ||
       path.startsWith("/_next/") ||
       path.startsWith("/images/") ||
       path.startsWith("/emails/") ||
+      STATIC_MEDIA_RE.test(path) ||
       path === "/favicon.ico" ||
       path === "/favicon.svg" ||
       path === "/apple-touch-icon.png";
@@ -170,6 +332,56 @@ export async function proxy(request: NextRequest) {
     "https://api.stripe.com https://m.stripe.com https://m.stripe.network https://r.stripe.com";
   const stripeFrameSources =
     "https://js.stripe.com https://*.js.stripe.com https://hooks.stripe.com https://checkout.stripe.com";
+  // Widen CSP to the configured PostHog host plus its registrable domain (the
+  // SDK pulls the recorder/assets from sibling subdomains). Parsing is guarded
+  // because this runs in middleware on every request: an unparseable
+  // NEXT_PUBLIC_POSTHOG_HOST would otherwise throw and 500 the entire site
+  // rather than merely dropping analytics.
+  /*
+   * Supabase origins for connect-src, including the wss:// scheme.
+   *
+   * The admin panel's PagePresence widget opens a Supabase Realtime WebSocket.
+   * connect-src never listed supabase.co, so that socket has always been refused
+   * — silently in Chromium, but Safari THROWS a SecurityError straight out of the
+   * WebSocket constructor. That throw escapes PagePresence's useEffect into the
+   * app error boundary, which is why every admin page except /admin/login (which
+   * returns before PagePresence mounts) rendered and was then replaced by
+   * "Something went wrong".
+   *
+   * Parsed defensively: this runs in middleware on every request, so a malformed
+   * NEXT_PUBLIC_SUPABASE_URL must degrade to "no entry" rather than 500 the site.
+   */
+  const supabaseCspSources = (() => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!url) return "";
+    try {
+      const { origin, hostname } = new URL(url);
+      return `${origin} wss://${hostname}`;
+    } catch {
+      return "";
+    }
+  })();
+
+  /**
+   * Still emitted, though the browser no longer talks to PostHog directly.
+   *
+   * Since the /relay proxy every analytics request is same-origin and covered by 'self',
+   * so these entries grant nothing that is currently used. They are kept deliberately
+   * rather than tidied away: posthog-js reaches for an absolute host in paths this proxy
+   * has not been exercised on — a toolbar load, a replay upload retry — and a CSP refusal
+   * is invisible outside the browser console. Removing them is a separate change that
+   * needs its own evidence, not a side effect of adding the proxy.
+   */
+  const posthogCspSources = (() => {
+    const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
+    if (!host) return "";
+    try {
+      const { hostname } = new URL(host);
+      return `${host} https://*.${hostname.split(".").slice(-2).join(".")}`;
+    } catch {
+      return "";
+    }
+  })();
 
   // Build CSP header
   // Production: 'self' + 'unsafe-inline' + explicit external domain allowlist.
@@ -182,14 +394,33 @@ export async function proxy(request: NextRequest) {
   const cspHeader = [
     "default-src 'self'",
     isDev
-      ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
-      : `script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://googleads.g.doubleclick.net https://www.googleadservices.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://cdn-cookieyes.com https://cookieyes.com https://connect.facebook.net https://analytics.tiktok.com https://t.contentsquare.net https://*.contentsquare.net https://*.hotjar.com https://widget.trustpilot.com ${stripeScriptSources}`,
+      ? `script-src 'self' 'unsafe-inline' 'unsafe-eval' ${posthogCspSources}`
+      : `script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://googleads.g.doubleclick.net https://www.googleadservices.com https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://cdn-cookieyes.com https://cookieyes.com https://connect.facebook.net https://analytics.tiktok.com https://www.clarity.ms https://*.clarity.ms https://widget.trustpilot.com ${posthogCspSources} ${stripeScriptSources}`,
     `style-src 'self' 'unsafe-inline' ${googleFontStyleSources}`, // Tailwind requires unsafe-inline for styles
+    "worker-src 'self' blob:",
     `font-src 'self' data: ${googleFontSources}`,
-    `img-src 'self' data: blob: https://images.unsplash.com https://www.google-analytics.com https://www.googletagmanager.com https://googleads.g.doubleclick.net https://www.googleadservices.com https://www.google.com https://cdn-cookieyes.com https://flagcdn.com https://www.facebook.com https://*.hotjar.com https://*.trustpilot.com https://*.trustpilotcdn.net ${stripeImageSources}`,
+    `img-src 'self' data: blob: https://images.unsplash.com https://www.google-analytics.com https://*.google-analytics.com https://www.googletagmanager.com https://googleads.g.doubleclick.net https://www.googleadservices.com https://www.google.com ${GOOGLE_COUNTRY_DOMAINS} https://cdn-cookieyes.com https://flagcdn.com https://www.facebook.com https://*.clarity.ms https://c.bing.com https://*.trustpilot.com https://*.trustpilotcdn.net ${stripeImageSources}`,
     "media-src 'self'",
-    `connect-src 'self'${isDev ? " ws://localhost:* http://localhost:*" : ""} https://www.google-analytics.com https://www.googletagmanager.com https://googleads.g.doubleclick.net https://www.googleadservices.com https://www.google.com https://images.unsplash.com https://www.google.com/recaptcha/ https://cdn-cookieyes.com https://log.cookieyes.com https://cookieyes.com https://www.facebook.com https://analytics.tiktok.com https://*.contentsquare.net https://*.hotjar.com https://*.hotjar.io https://widget.trustpilot.com ${stripeConnectSources}`,
-    `frame-src 'self' https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://cdn-cookieyes.com https://*.hotjar.com https://widget.trustpilot.com ${stripeFrameSources}`,
+    // GA4 does not post only to www.google-analytics.com: it uses region-scoped
+    // hosts (region1.google-analytics.com, analytics.google.com) and Google Ads
+    // conversions post to stats./ad.doubleclick.net and
+    // pagead2.googlesyndication.com. None of those were allowlisted, so every
+    // such /collect was refused and GA4 + Ads numbers were silently lossy while
+    // the browser console filled with CSP errors. Known remaining gap: the Ads
+    // remarketing pixels on Google country domains
+    // (www.google.<cc>/ads/ga-audiences, /pagead/1p-user-list) still fail —
+    // CSP host-source cannot wildcard a TLD and enumerating ~190 ccTLDs is worse
+    // than losing audience pixels. Conversion measurement is unaffected by that.
+    // `*.cookieyes.com` rather than the two subdomains we happened to know about.
+    // The consent banner calls `directory.cookieyes.com/api/v1/ip` to learn the visitor's
+    // region, and CSP host matching is EXACT — `cookieyes.com` does not cover a subdomain
+    // — so that call was refused on every page load. Measured 2026-09-14 on a production
+    // report: "Refused to connect ... directory.cookieyes.com", then `TypeError: Failed to
+    // fetch` inside banner.js. Without the region the banner cannot tell a GDPR visitor
+    // from a CCPA one, and this site's traffic is overwhelmingly US. The wildcard matches
+    // how `*.clarity.ms` is already handled, and stops the next subdomain repeating it.
+    `connect-src 'self'${isDev ? " ws://localhost:* http://localhost:*" : ""} https://www.google-analytics.com https://*.google-analytics.com https://analytics.google.com https://*.analytics.google.com https://www.googletagmanager.com https://googleads.g.doubleclick.net https://stats.g.doubleclick.net https://ad.doubleclick.net https://pagead2.googlesyndication.com https://www.googleadservices.com https://www.google.com https://images.unsplash.com https://www.google.com/recaptcha/ https://cdn-cookieyes.com https://cookieyes.com https://*.cookieyes.com https://www.facebook.com https://analytics.tiktok.com https://*.clarity.ms https://c.bing.com https://widget.trustpilot.com ${posthogCspSources} ${supabaseCspSources} ${stripeConnectSources}`,
+    `frame-src 'self' https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://cdn-cookieyes.com https://widget.trustpilot.com ${stripeFrameSources}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -246,16 +477,24 @@ export async function proxy(request: NextRequest) {
   // funnel_event row gets a throwaway random id, so there is no profiling. The
   // row itself is written by the root layout via after() when this header is
   // present (keeps the DB write in Node app code, not the edge middleware).
-  const visitDay = new Date().toISOString().slice(0, 10);
+  const visitDay = reportingDay();
   const isNewDailyVisit =
     shouldCountVisit(request) && request.cookies.get(VISIT_DAY_COOKIE)?.value !== visitDay;
   if (isNewDailyVisit) {
-    // Tag the visit with the landing arm. On "/" the arm is freshly resolved
-    // (now always "white"); elsewhere read the sticky __liq_lv cookie. The A/B
-    // concluded, so an absent/unknown cookie defaults to "white" (no dark arm).
+    // Tag the visit with the landing arm. On "/" the arm is freshly resolved;
+    // elsewhere read the sticky __liq_lv cookie.
+    //
+    // An unresolvable arm is recorded as "unknown", NOT as "white". It used to
+    // default to white, which quietly credited one arm with every visit it could
+    // not attribute: the arm is only resolved on "/", but a visit is counted on
+    // any public page, so every first-time entry via /survey, /glossary/*, an
+    // invite link or an email deep-link — plus every cookieless and incognito
+    // client — inflated white's denominator. That is the denominator of the
+    // landing→survey-start comparison, so the bias landed straight on the
+    // headline number.
     const cookieVariant = request.cookies.get(LANDING_VARIANT_COOKIE)?.value;
     const visitVariant =
-      landingVariant ?? (isLandingVariant(cookieVariant) ? cookieVariant : "white");
+      landingVariant ?? (isLandingVariant(cookieVariant) ? cookieVariant : "unknown");
     requestHeaders.set("x-liq-new-visit", visitVariant);
     // Last-touch acquisition source for THIS visit. sanitizeUtmSource strips to
     // a safe charset + length-caps + lowercases at the trust boundary (the raw
@@ -455,9 +694,9 @@ export async function proxy(request: NextRequest) {
   }
 
   // Landing variant cookie. The A/B concluded → everyone is "white", so we
-  // (re)mint the cookie on `/` for non-bots whenever it isn't already "white".
-  // This also migrates returning pre-cutover visitors off a stale "control"
-  // cookie so their analytics stamp "white" going forward. FUNCTIONAL cookie —
+  // (re)mint the cookie on `/` for non-bots whenever it differs from the resolved
+  // arm — which is also how the `?variant=` override sticks, and how a visitor on
+  // the retired "control" cookie gets moved onto a live arm. FUNCTIONAL cookie —
   // stores only the variant, no PII — set regardless of analytics consent, like
   // the CSRF cookie. Bots are never given a cookie.
   if (isLandingRoute && landingVariant) {
@@ -517,7 +756,14 @@ export const config = {
   matcher: [
     // Match all paths except static files and API routes that don't need CSP
     {
-      source: "/((?!_next/static|_next/image|favicon.ico|images/).*)",
+      // `relay` is the PostHog reverse proxy (see shared/analytics/posthog-proxy.ts).
+      // Excluded for two reasons: this middleware would otherwise run on EVERY analytics
+      // event and every session-replay chunk — by far the highest-volume path on the site
+      // — and none of what it does (CSP headers, CSRF cookie, staging gate, security
+      // logging) means anything for a request that is forwarded verbatim to PostHog.
+      // The staging gate exclusion is deliberate, not incidental: a gated preview must
+      // still be able to send analytics, which is how this proxy gets verified at all.
+      source: "/((?!_next/static|_next/image|favicon.ico|images/|relay/).*)",
       missing: [
         { type: "header", key: "next-router-prefetch" },
         { type: "header", key: "purpose", value: "prefetch" },

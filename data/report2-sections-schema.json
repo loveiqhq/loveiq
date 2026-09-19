@@ -1,0 +1,2186 @@
+[
+  {
+    "id": "core-archetype",
+    "title": "Core Archetype",
+    "slots": [
+      {
+        "key": "chartnote1",
+        "type": "chart-note",
+        "universal": true,
+        "derived": false
+      }
+    ]
+  },
+  {
+    "id": "map",
+    "title": "Map",
+    "slots": [
+      {
+        "key": "tile1.sub",
+        "type": "tile-subline",
+        "universal": false,
+        "derived": true
+      },
+      {
+        "key": "tile2.sub",
+        "type": "tile-subline",
+        "universal": false,
+        "derived": true
+      },
+      {
+        "key": "tile3.sub",
+        "type": "tile-subline",
+        "universal": false,
+        "derived": true
+      },
+      {
+        "key": "tile4.sub",
+        "type": "tile-subline",
+        "universal": false,
+        "derived": true
+      },
+      {
+        "key": "tile5.sub",
+        "type": "tile-subline",
+        "universal": false,
+        "derived": true
+      },
+      {
+        "key": "featured.title",
+        "type": "tile-title",
+        "universal": false,
+        "derived": true
+      },
+      {
+        "key": "featured.sub",
+        "type": "tile-subline",
+        "universal": false,
+        "derived": true
+      }
+    ]
+  },
+  {
+    "id": "stage",
+    "title": "Stage",
+    "slots": [
+      {
+        "key": "eyebrow",
+        "type": "eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "result",
+        "type": "result-word",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "row1.label",
+        "type": "row-label",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "row1.value",
+        "type": "row-value",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "row2.label",
+        "type": "row-label",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "row2.value",
+        "type": "row-value",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "row3.label",
+        "type": "row-label",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "row3.value",
+        "type": "row-value",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "practical.label",
+        "type": "practical-label",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "practical.body",
+        "type": "practical-body",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "chartnote1",
+        "type": "chart-note",
+        "universal": true,
+        "derived": false
+      }
+    ]
+  },
+  {
+    "id": "importance",
+    "title": "Importance",
+    "slots": [
+      {
+        "key": "chartnote1",
+        "type": "chart-note",
+        "universal": true,
+        "derived": false
+      }
+    ]
+  },
+  {
+    "id": "attachment",
+    "title": "Attachment",
+    "slots": [
+      {
+        "key": "gate.hook",
+        "type": "hook-line",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "eyebrow",
+        "type": "eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "result",
+        "type": "result-word",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "row1.label",
+        "type": "row-label",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "row1.value",
+        "type": "row-value",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "row2.label",
+        "type": "row-label",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "row2.value",
+        "type": "row-value",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "row3.label",
+        "type": "row-label",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "row3.value",
+        "type": "row-value",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "insight.label",
+        "type": "insight-label",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "insight.value",
+        "type": "insight",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "edu.eyebrow",
+        "type": "edu-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.teaser",
+        "type": "edu-teaser-3lines",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p1",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p2",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p3",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p4",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p5",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p6",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "body.p1",
+        "type": "body-copy",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p7",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.eyebrow",
+        "type": "learn-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.body",
+        "type": "learn-body",
+        "universal": true,
+        "derived": false
+      }
+    ]
+  },
+  {
+    "id": "insecurities",
+    "title": "Insecurities",
+    "slots": [
+      {
+        "key": "gate.hook",
+        "type": "hook-line",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "takeaway",
+        "type": "takeaway",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "practical.label",
+        "type": "practical-label",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "practical.teaser",
+        "type": "practical-teaser-3lines",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "practical.line1",
+        "type": "practical-line",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "practical.line2",
+        "type": "practical-line",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "practical.line3",
+        "type": "practical-line",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "body.p1",
+        "type": "body-copy",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "learn.eyebrow",
+        "type": "learn-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.body",
+        "type": "learn-body",
+        "universal": true,
+        "derived": false
+      }
+    ]
+  },
+  {
+    "id": "confidence",
+    "title": "Confidence",
+    "slots": [
+      {
+        "key": "gate.hook",
+        "type": "hook-line",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.eyebrow",
+        "type": "edu-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.teaser",
+        "type": "edu-teaser-3lines",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p1",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p2",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "chartnote1",
+        "type": "chart-note",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.eyebrow",
+        "type": "learn-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.body",
+        "type": "learn-body",
+        "universal": true,
+        "derived": false
+      }
+    ]
+  },
+  {
+    "id": "beliefs",
+    "title": "Beliefs",
+    "slots": [
+      {
+        "key": "gate.hook",
+        "type": "hook-line",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.eyebrow",
+        "type": "edu-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.teaser",
+        "type": "edu-teaser-3lines",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p1",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p2",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "body.p1",
+        "type": "body-copy",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "keep.1",
+        "type": "belief-keep",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "keep.2",
+        "type": "belief-keep",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "keep.3",
+        "type": "belief-keep",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "keep.4",
+        "type": "belief-keep",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "keep.5",
+        "type": "belief-keep",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "keep.6",
+        "type": "belief-keep",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "keep.7",
+        "type": "belief-keep",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "keep.8",
+        "type": "belief-keep",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "keep.9",
+        "type": "belief-keep",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "loosen.1.belief",
+        "type": "belief-limiting",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "loosen.1.shift",
+        "type": "belief-shift",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "loosen.2.belief",
+        "type": "belief-limiting",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "loosen.2.shift",
+        "type": "belief-shift",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "loosen.3.belief",
+        "type": "belief-limiting",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "loosen.3.shift",
+        "type": "belief-shift",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "loosen.4.belief",
+        "type": "belief-limiting",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "loosen.4.shift",
+        "type": "belief-shift",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "loosen.5.belief",
+        "type": "belief-limiting",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "loosen.5.shift",
+        "type": "belief-shift",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "loosen.6.belief",
+        "type": "belief-limiting",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "loosen.6.shift",
+        "type": "belief-shift",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "loosen.7.belief",
+        "type": "belief-limiting",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "loosen.7.shift",
+        "type": "belief-shift",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "loosen.8.belief",
+        "type": "belief-limiting",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "loosen.8.shift",
+        "type": "belief-shift",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "loosen.9.belief",
+        "type": "belief-limiting",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "loosen.9.shift",
+        "type": "belief-shift",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "loosen.10.belief",
+        "type": "belief-limiting",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "loosen.10.shift",
+        "type": "belief-shift",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p3",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.eyebrow",
+        "type": "learn-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.body",
+        "type": "learn-body",
+        "universal": true,
+        "derived": false
+      }
+    ]
+  },
+  {
+    "id": "reward",
+    "title": "Reward",
+    "slots": [
+      {
+        "key": "gate.hook",
+        "type": "hook-line",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "takeaway",
+        "type": "takeaway",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "edu.eyebrow",
+        "type": "edu-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.teaser",
+        "type": "edu-teaser-3lines",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p1",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p2",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "stat1",
+        "type": "mini-stat",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "stat1.caption",
+        "type": "stat-caption",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p3",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.eyebrow",
+        "type": "learn-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.body",
+        "type": "learn-body",
+        "universal": true,
+        "derived": false
+      }
+    ]
+  },
+  {
+    "id": "energy",
+    "title": "Energy",
+    "slots": [
+      {
+        "key": "gate.hook",
+        "type": "hook-line",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "takeaway",
+        "type": "takeaway",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "edu.eyebrow",
+        "type": "edu-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.teaser",
+        "type": "edu-teaser-3lines",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p1",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p2",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "chartnote1",
+        "type": "chart-note",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p3",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.eyebrow",
+        "type": "learn-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.body",
+        "type": "learn-body",
+        "universal": true,
+        "derived": false
+      }
+    ]
+  },
+  {
+    "id": "power",
+    "title": "Power",
+    "slots": [
+      {
+        "key": "gate.hook",
+        "type": "hook-line",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "takeaway",
+        "type": "takeaway",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "body.p1",
+        "type": "body-copy",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "edu.eyebrow",
+        "type": "edu-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.teaser",
+        "type": "edu-teaser-3lines",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p1",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p2",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p3",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p4",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.eyebrow",
+        "type": "learn-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.body",
+        "type": "learn-body",
+        "universal": true,
+        "derived": false
+      }
+    ]
+  },
+  {
+    "id": "curiosity",
+    "title": "Curiosity",
+    "slots": [
+      {
+        "key": "gate.hook",
+        "type": "hook-line",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "takeaway",
+        "type": "takeaway",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "body.p1",
+        "type": "body-copy",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "body.p2",
+        "type": "body-copy",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "body.p3",
+        "type": "body-copy",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "edu.eyebrow",
+        "type": "edu-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.teaser",
+        "type": "edu-teaser-3lines",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p1",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p2",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.struct.1",
+        "type": "edu-structure-item",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.struct.2",
+        "type": "edu-structure-item",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.struct.3",
+        "type": "edu-structure-item",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.struct.4",
+        "type": "edu-structure-item",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.struct.5",
+        "type": "edu-structure-item",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.struct.6",
+        "type": "edu-structure-item",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.struct.7",
+        "type": "edu-structure-item",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.struct.8",
+        "type": "edu-structure-item",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.struct.9",
+        "type": "edu-structure-item",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.struct.10",
+        "type": "edu-structure-item",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.struct.11",
+        "type": "edu-structure-item",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.struct.12",
+        "type": "edu-structure-item",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.struct.13",
+        "type": "edu-structure-item",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.struct.14",
+        "type": "edu-structure-item",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.eyebrow",
+        "type": "learn-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.body",
+        "type": "learn-body",
+        "universal": true,
+        "derived": false
+      }
+    ]
+  },
+  {
+    "id": "lovelang",
+    "title": "Lovelang",
+    "slots": [
+      {
+        "key": "gate.hook",
+        "type": "hook-line",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.eyebrow",
+        "type": "edu-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.teaser",
+        "type": "edu-teaser-3lines",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p1",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p2",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "body.p1",
+        "type": "body-copy",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p3",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.eyebrow",
+        "type": "learn-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.body",
+        "type": "learn-body",
+        "universal": true,
+        "derived": false
+      }
+    ]
+  },
+  {
+    "id": "arousal",
+    "title": "Arousal",
+    "slots": [
+      {
+        "key": "gate.hook",
+        "type": "hook-line",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "eyebrow",
+        "type": "eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "result",
+        "type": "result-word",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "insight.label",
+        "type": "insight-label",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "insight.value",
+        "type": "insight",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "edu.eyebrow",
+        "type": "edu-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.teaser",
+        "type": "edu-teaser-3lines",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p1",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p2",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "stat1",
+        "type": "mini-stat",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "stat1.caption",
+        "type": "stat-caption",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "stat2",
+        "type": "mini-stat",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "stat2.caption",
+        "type": "stat-caption",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p3",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p4",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.eyebrow",
+        "type": "learn-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.body",
+        "type": "learn-body",
+        "universal": true,
+        "derived": false
+      }
+    ]
+  },
+  {
+    "id": "initiation",
+    "title": "Initiation",
+    "slots": [
+      {
+        "key": "gate.hook",
+        "type": "hook-line",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "eyebrow",
+        "type": "eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "result",
+        "type": "result-word",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "row1.label",
+        "type": "row-label",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "row1.value",
+        "type": "row-value",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "takeaway",
+        "type": "takeaway",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "practical.label",
+        "type": "practical-label",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "practical.teaser",
+        "type": "practical-teaser-3lines",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "practical.line1",
+        "type": "practical-line",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "practical.line2",
+        "type": "practical-line",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "practical.line3",
+        "type": "practical-line",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "body.p1",
+        "type": "body-copy",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "stat1",
+        "type": "mini-stat",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "stat1.caption",
+        "type": "stat-caption",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "learn.eyebrow",
+        "type": "learn-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.body",
+        "type": "learn-body",
+        "universal": true,
+        "derived": false
+      }
+    ]
+  },
+  {
+    "id": "accel",
+    "title": "Accel",
+    "slots": [
+      {
+        "key": "gate.hook",
+        "type": "hook-line",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "takeaway",
+        "type": "takeaway",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "edu.eyebrow",
+        "type": "edu-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.teaser",
+        "type": "edu-teaser-3lines",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p1",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p2",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p3",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.eyebrow",
+        "type": "learn-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.body",
+        "type": "learn-body",
+        "universal": true,
+        "derived": false
+      }
+    ]
+  },
+  {
+    "id": "fantasy",
+    "title": "Fantasy",
+    "slots": [
+      {
+        "key": "gate.hook",
+        "type": "hook-line",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.eyebrow",
+        "type": "edu-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.teaser",
+        "type": "edu-teaser-3lines",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p1",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p2",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "chartnote1",
+        "type": "chart-note",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "chartnote2",
+        "type": "chart-note",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p3",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p4",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.eyebrow",
+        "type": "learn-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.body",
+        "type": "learn-body",
+        "universal": true,
+        "derived": false
+      }
+    ]
+  },
+  {
+    "id": "libido",
+    "title": "Libido",
+    "slots": [
+      {
+        "key": "gate.hook",
+        "type": "hook-line",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "eyebrow",
+        "type": "eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "result",
+        "type": "result-word",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "row1.label",
+        "type": "row-label",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "row1.value",
+        "type": "row-value",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "row2.label",
+        "type": "row-label",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "row2.value",
+        "type": "row-value",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "row3.label",
+        "type": "row-label",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "row3.value",
+        "type": "row-value",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "row4.label",
+        "type": "row-label",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "row4.value",
+        "type": "row-value",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "practical.label",
+        "type": "practical-label",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "practical.teaser",
+        "type": "practical-teaser-3lines",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "practical.line1",
+        "type": "practical-line",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "practical.line2",
+        "type": "practical-line",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "practical.line3",
+        "type": "practical-line",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "learn.eyebrow",
+        "type": "learn-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.body",
+        "type": "learn-body",
+        "universal": true,
+        "derived": false
+      }
+    ]
+  },
+  {
+    "id": "enjoy",
+    "title": "Enjoy",
+    "slots": [
+      {
+        "key": "gate.hook",
+        "type": "hook-line",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "eyebrow",
+        "type": "eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "result",
+        "type": "result-word",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "row1.label",
+        "type": "row-label",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "row1.value",
+        "type": "row-value",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "row2.label",
+        "type": "row-label",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "row2.value",
+        "type": "row-value",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "row3.label",
+        "type": "row-label",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "row3.value",
+        "type": "row-value",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "insight.label",
+        "type": "insight-label",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "insight.value",
+        "type": "insight",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "edu.eyebrow",
+        "type": "edu-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.teaser",
+        "type": "edu-teaser-3lines",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p1",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p2",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p3",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.eyebrow",
+        "type": "learn-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.body",
+        "type": "learn-body",
+        "universal": true,
+        "derived": false
+      }
+    ]
+  },
+  {
+    "id": "partnership",
+    "title": "Partnership",
+    "slots": [
+      {
+        "key": "gate.hook",
+        "type": "hook-line",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "eyebrow",
+        "type": "eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "result",
+        "type": "result-word",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "row1.label",
+        "type": "row-label",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "row1.value",
+        "type": "row-value",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "row2.label",
+        "type": "row-label",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "row2.value",
+        "type": "row-value",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "row3.label",
+        "type": "row-label",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "row3.value",
+        "type": "row-value",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "edu.eyebrow",
+        "type": "edu-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.teaser",
+        "type": "edu-teaser-3lines",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p1",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p2",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "edu.body.p3",
+        "type": "edu-body",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.eyebrow",
+        "type": "learn-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.body",
+        "type": "learn-body",
+        "universal": true,
+        "derived": false
+      }
+    ]
+  },
+  {
+    "id": "growth",
+    "title": "Growth",
+    "slots": [
+      {
+        "key": "gate.hook",
+        "type": "hook-line",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "takeaway",
+        "type": "takeaway",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "ladder.headline",
+        "type": "sec-sub",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "rung1.from",
+        "type": "rung-from",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "rung1.to",
+        "type": "rung-to",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "rung1.move",
+        "type": "rung-move",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "rung2.from",
+        "type": "rung-from",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "rung2.to",
+        "type": "rung-to",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "rung2.move",
+        "type": "rung-move",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "rung3.from",
+        "type": "rung-from",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "rung3.to",
+        "type": "rung-to",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "rung3.move",
+        "type": "rung-move",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "rung4.from",
+        "type": "rung-from",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "rung4.to",
+        "type": "rung-to",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "rung4.move",
+        "type": "rung-move",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "rung5.from",
+        "type": "rung-from",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "rung5.to",
+        "type": "rung-to",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "rung5.move",
+        "type": "rung-move",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "ladder.close",
+        "type": "closing-line",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "learn.eyebrow",
+        "type": "learn-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.body",
+        "type": "learn-body",
+        "universal": true,
+        "derived": false
+      }
+    ]
+  },
+  {
+    "id": "reading",
+    "title": "Reading",
+    "slots": [
+      {
+        "key": "gate.hook",
+        "type": "hook-line",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "book1.tag",
+        "type": "book-tag",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "book1.title",
+        "type": "book-title",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "book1.author",
+        "type": "book-author",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "book1.blurb",
+        "type": "book-blurb",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "book2.tag",
+        "type": "book-tag",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "book2.title",
+        "type": "book-title",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "book2.author",
+        "type": "book-author",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "book2.blurb",
+        "type": "book-blurb",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "book3.tag",
+        "type": "book-tag",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "book3.title",
+        "type": "book-title",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "book3.author",
+        "type": "book-author",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "book3.blurb",
+        "type": "book-blurb",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "book4.tag",
+        "type": "book-tag",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "book4.title",
+        "type": "book-title",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "book4.author",
+        "type": "book-author",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "book4.blurb",
+        "type": "book-blurb",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "closing.lead",
+        "type": "closing-line",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "closing.formula",
+        "type": "closing-formula",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "learn.eyebrow",
+        "type": "learn-eyebrow",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "learn.body",
+        "type": "learn-body",
+        "universal": true,
+        "derived": false
+      }
+    ]
+  },
+  {
+    "id": "snapshot",
+    "title": "Snapshot",
+    "slots": [
+      {
+        "key": "compare1.stat",
+        "type": "mini-stat",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "compare1.caption",
+        "type": "stat-caption",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "compare2.stat",
+        "type": "mini-stat",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "compare2.caption",
+        "type": "stat-caption",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "compare3.stat",
+        "type": "mini-stat",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "compare3.caption",
+        "type": "stat-caption",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "satisfaction.subline",
+        "type": "value-subline",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "importance.subline",
+        "type": "value-subline",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "stage.subline",
+        "type": "value-subline",
+        "universal": false,
+        "derived": false
+      }
+    ]
+  },
+  {
+    "id": "findings",
+    "title": "Findings",
+    "slots": [
+      {
+        "key": "f1.head",
+        "type": "finding-head",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "f1.body",
+        "type": "finding-body",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "f2.head",
+        "type": "finding-head",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "f2.body",
+        "type": "finding-body",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "f3.head",
+        "type": "finding-head",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "f3.body",
+        "type": "finding-body",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "f4.head",
+        "type": "finding-head",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "f4.body",
+        "type": "finding-body",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "f5.head",
+        "type": "finding-head",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "f5.body",
+        "type": "finding-body",
+        "universal": false,
+        "derived": false
+      },
+      {
+        "key": "f3.locked.head",
+        "type": "finding-head-locked",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "f3.locked.body",
+        "type": "finding-body-locked",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "f4.locked.head",
+        "type": "finding-head-locked",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "f4.locked.body",
+        "type": "finding-body-locked",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "f5.locked.head",
+        "type": "finding-head-locked",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "f5.locked.body",
+        "type": "finding-body-locked",
+        "universal": true,
+        "derived": false
+      },
+      {
+        "key": "upsell.line",
+        "type": "upsell",
+        "universal": true,
+        "derived": false
+      }
+    ]
+  },
+  {
+    "id": "constellation",
+    "title": "Constellation",
+    "slots": [
+      {
+        "key": "motto",
+        "type": "motto",
+        "universal": false,
+        "derived": false
+      }
+    ]
+  }
+]

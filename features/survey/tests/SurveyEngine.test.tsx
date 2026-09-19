@@ -11,6 +11,8 @@ const mockSubmit = vi.fn();
 let mockCurrentIndex = 0;
 let mockProgress = 0;
 let mockSubmitStatus = "idle";
+// qIds answered on the landing page — SurveyEngine drops these from the flow.
+let mockPrefilled: string[] = [];
 
 vi.mock("@features/survey/ui/hooks/useSurveyState", () => ({
   useSurveyState: () => ({
@@ -19,11 +21,17 @@ vi.mock("@features/survey/ui/hooks/useSurveyState", () => ({
       return mockCurrentIndex;
     },
     startedAt: new Date().toISOString(),
+    get prefilled() {
+      return mockPrefilled;
+    },
     get progress() {
       return mockProgress;
     },
     setAnswer: mockSetAnswer,
     getAnswer: mockGetAnswer,
+    // The submit path reads the answers through this, never the `answers` closure —
+    // see features/survey/tests/hooks/latestAnswers.test.ts for why.
+    getLatestAnswers: () => ({}),
     setCurrentIndex: mockSetCurrentIndex,
     clearState: vi.fn(),
   }),
@@ -60,10 +68,9 @@ vi.mock("@features/analytics/client", () => ({
   trackSurveyProgress: vi.fn(),
   trackSurveyComplete: vi.fn(),
   trackSurveyPause: vi.fn(),
+  trackSurveyFormError: vi.fn(),
   setReportSubmissionContext: vi.fn(),
-  setForcedPaywallArm: vi.fn(),
   setSurveyVariant: vi.fn(),
-  setEmailPositionArm: vi.fn(),
   trackExperimentExposure: vi.fn(),
 }));
 
@@ -145,6 +152,7 @@ beforeEach(() => {
   mockCurrentIndex = 0;
   mockProgress = 0;
   mockSubmitStatus = "idle";
+  mockPrefilled = [];
   mockSetAnswer.mockClear();
   mockGetAnswer.mockClear().mockReturnValue(null);
   mockSetCurrentIndex.mockClear();
@@ -158,6 +166,21 @@ afterEach(() => {
 });
 
 describe("SurveyEngine", () => {
+  it("drops a landing-prefilled question from the flow", () => {
+    // A question answered on the landing page must not be asked again: it is
+    // removed from the list, so everything after it shifts up by one index.
+    mockCurrentIndex = 1;
+    const { unmount } = render(<SurveyEngine onExit={() => {}} onComplete={() => {}} />);
+    expect(screen.getByText("Q2?")).toBeInTheDocument();
+    unmount();
+
+    mockPrefilled = ["q2"];
+    render(<SurveyEngine onExit={() => {}} onComplete={() => {}} />);
+    expect(screen.queryByText("Q2?")).toBeNull();
+    // Index 1 now holds what used to be index 2.
+    expect(screen.getByText("Q3?")).toBeInTheDocument();
+  });
+
   it("renders first question on mount", () => {
     render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
     expect(screen.getByTestId("single-choice")).toBeInTheDocument();
@@ -253,6 +276,59 @@ describe("SurveyEngine", () => {
 
     expect(mockSetCurrentIndex).not.toHaveBeenCalled();
     expect(screen.getByText("Q4? (validated)")).toBeInTheDocument();
+  });
+
+  it("records the blocked attempt, naming the question and why", async () => {
+    // `trackSurveyFormError` sat in analytics/client.ts and was never called
+    // once — the event was not even in PostHog's taxonomy — while Marcus was
+    // asking the agents to check against form errors. This is the only kind
+    // this survey can produce: a Next that refuses.
+    const { trackSurveyFormError } = await import("@features/analytics/client");
+    // This suite does not reset mocks between tests, so a call count is
+    // cumulative unless it is cleared here.
+    vi.mocked(trackSurveyFormError).mockClear();
+    mockCurrentIndex = 3;
+    mockGetAnswer.mockImplementation((qId: string) => (qId === "q4" ? ["A", "B", "C", "D"] : null));
+
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    fireEvent.keyDown(window, { key: "Enter" });
+
+    expect(trackSurveyFormError).toHaveBeenCalledWith({
+      question_id: "q4",
+      error_kind: "out_of_range",
+    });
+  });
+
+  it("counts every blocked attempt, not one per question", async () => {
+    // Pressing Next four times against the same rejection is the signal, the
+    // same way a rage click is. Deduping would erase it.
+    const { trackSurveyFormError } = await import("@features/analytics/client");
+    // This suite does not reset mocks between tests, so a call count is
+    // cumulative unless it is cleared here.
+    vi.mocked(trackSurveyFormError).mockClear();
+    mockCurrentIndex = 3;
+    mockGetAnswer.mockImplementation((qId: string) => (qId === "q4" ? ["A", "B", "C", "D"] : null));
+
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    fireEvent.keyDown(window, { key: "Enter" });
+    fireEvent.keyDown(window, { key: "Enter" });
+    fireEvent.keyDown(window, { key: "Enter" });
+
+    expect(trackSurveyFormError).toHaveBeenCalledTimes(3);
+  });
+
+  it("stays silent when the answer is valid", async () => {
+    const { trackSurveyFormError } = await import("@features/analytics/client");
+    // This suite does not reset mocks between tests, so a call count is
+    // cumulative unless it is cleared here.
+    vi.mocked(trackSurveyFormError).mockClear();
+    mockCurrentIndex = 3;
+    mockGetAnswer.mockImplementation((qId: string) => (qId === "q4" ? ["A", "B", "C"] : null));
+
+    render(<SurveyEngine onExit={vi.fn()} onComplete={vi.fn()} />);
+    fireEvent.keyDown(window, { key: "Enter" });
+
+    expect(trackSurveyFormError).not.toHaveBeenCalled();
   });
 
   it("allows a capped multiselect answer at the limit to proceed normally", () => {

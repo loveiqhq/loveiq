@@ -50,7 +50,7 @@ const WProblemValue: FC = () => {
               <span className="shrink-0 pt-1 text-[11px] font-bold text-[#6b6678]">{p.num}</span>
               <div className="flex flex-col gap-2.5">
                 <h3 className="font-serif text-[19px] font-bold text-[#161021]">{p.title}</h3>
-                <p className="text-[15px] leading-6 text-[#6b7280]">{p.body}</p>
+                <p className="text-[15px] leading-6 text-[#69707d]">{p.body}</p>
               </div>
             </div>
           ))}

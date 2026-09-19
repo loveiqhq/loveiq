@@ -11,12 +11,14 @@ export type { ReportAccessPlan } from "@features/report/server/access";
 export const SHARE_SEAT_LIMIT_BY_PLAN: Record<NonNullable<ReportAccessPlan>, number> = {
   essentials: 1,
   full_report: 2,
+  core: 2,
   all_reports: 2,
 };
 
 export function getShareSeatLimit(plan: ReportAccessPlan): number {
   switch (plan) {
     case "full_report":
+    case "core":
     case "all_reports":
       return 2;
     case "essentials":

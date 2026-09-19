@@ -1,12 +1,7 @@
 export type ProductIssueSeverity = "critical" | "high" | "medium" | "watch";
 export type ProductIssueCategory = "abandonment" | "confusion" | "signal" | "quality" | "pain";
 export type ProductIssueDimension =
-  | "question"
-  | "chapter"
-  | "source"
-  | "device"
-  | "browser"
-  | "placement";
+  "question" | "chapter" | "source" | "device" | "browser" | "placement";
 export type ProductPortfolioStatus = "critical" | "action" | "watch" | "healthy";
 
 export interface ProductIssueCluster {

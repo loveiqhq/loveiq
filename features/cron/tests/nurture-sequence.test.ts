@@ -64,13 +64,13 @@ function makeRequest(token?: string): Request {
   });
 }
 
+function jsonResponse(body: unknown, status = 200) {
+  return { ok: status < 400, status, json: async () => body };
+}
+
 interface MockFetchCall {
   match: (url: string, init?: { method?: string }) => boolean;
   respond: () => unknown;
-}
-
-function jsonResponse(body: unknown, status = 200) {
-  return { ok: status < 400, status, json: async () => body };
 }
 
 /**
@@ -101,14 +101,14 @@ describe("GET /api/cron/nurture-sequence", () => {
       SUPABASE_URL: "https://test.supabase.co",
       SUPABASE_SERVICE_ROLE_KEY: "service-key",
       STRIPE_COUPON_50: "nurture_50",
-      STRIPE_COUPON_75: "nurture_75",
       NEXT_PUBLIC_SITE_URL: "https://test.loveiq.org",
     };
     mockGetReportPlan.mockResolvedValue(null);
     mockIsEmailSuppressed.mockResolvedValue(false);
     mockResendSend.mockResolvedValue({ data: { id: "msg_1" }, error: null });
+    // Pricing 2.0: the single nurture discount stage is 72h → 50% off.
     mockGetCouponIdForStage.mockImplementation((stage: string) =>
-      stage === "30h_no_unlock" ? "nurture_50" : stage === "54h_no_unlock" ? "nurture_75" : null
+      stage === "72h_no_unlock" ? "nurture_50" : null
     );
     mockGetStripeClient.mockReturnValue({
       promotionCodes: {
@@ -141,26 +141,20 @@ describe("GET /api/cron/nurture-sequence", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.success).toBe(true);
-    expect(body.summaries["6h_no_view"].sent).toBe(0);
-    expect(body.summaries["30h_no_unlock"].sent).toBe(0);
+    expect(body.summaries["72h_no_unlock"].sent).toBe(0);
   });
 
-  // The 3 fetchCandidatesByAge calls are dispatched via Promise.all in fixed
-  // order: 6h, 30h, 54h. We mock by call-index — robust against URL encoding
-  // of the timestamp differences.
+  // ONE candidate window remains. The 78h call-invite stage was removed with the
+  // Calendly integration on 2026-09-14, so `fetchCandidatesByAge` is called once
+  // rather than dispatched through Promise.all. Still mocked by call-index, which
+  // is robust against URL encoding of the timestamp.
   function mockCandidateWindows({
-    sixHour,
-    thirtyHour,
-    fiftyFourHour,
-    seventyEightHour = [],
+    seventyTwoHour,
     quoteMetadata = {},
     accessToken = "rpt_AbCdEfGhIjKlMnOpQrSt",
     patchSpy,
   }: {
-    sixHour: unknown[];
-    thirtyHour: unknown[];
-    fiftyFourHour: unknown[];
-    seventyEightHour?: unknown[];
+    seventyTwoHour: unknown[];
     quoteMetadata?: Record<string, unknown>;
     accessToken?: string | null;
     patchSpy?: () => unknown;
@@ -169,10 +163,7 @@ describe("GET /api/cron/nurture-sequence", () => {
     mockFetchWithTimeout.mockImplementation((url: string, init?: { method?: string }) => {
       if (url.includes("/rest/v1/personal_report")) {
         personalReportCalls += 1;
-        if (personalReportCalls === 1) return Promise.resolve(jsonResponse(sixHour));
-        if (personalReportCalls === 2) return Promise.resolve(jsonResponse(thirtyHour));
-        if (personalReportCalls === 3) return Promise.resolve(jsonResponse(fiftyFourHour));
-        if (personalReportCalls === 4) return Promise.resolve(jsonResponse(seventyEightHour));
+        if (personalReportCalls === 1) return Promise.resolve(jsonResponse(seventyTwoHour));
         return Promise.resolve(jsonResponse([]));
       }
       if (url.includes("/rest/v1/report_price_quote") && init?.method !== "PATCH") {
@@ -188,19 +179,17 @@ describe("GET /api/cron/nurture-sequence", () => {
     });
   }
 
-  it("routes a 30h candidate through promo creation + send + metadata write", async () => {
+  it("routes a 72h candidate through promo creation + send + metadata write", async () => {
     const candidate = {
       id: 42,
       survey_submission_id: 7,
-      created_date_time: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
+      created_date_time: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
       survey_submission: { app_user: { email: "user@example.com", first_name: "Sam" } },
     };
     const patchSpy = vi.fn(() => jsonResponse({}, 204));
 
     mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [candidate],
-      fiftyFourHour: [],
+      seventyTwoHour: [candidate],
       quoteMetadata: { nurtureEmailsSent: [] },
       patchSpy,
     });
@@ -208,7 +197,7 @@ describe("GET /api/cron/nurture-sequence", () => {
     const res = await GET(makeRequest("test-cron-secret"));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.summaries["30h_no_unlock"].sent).toBe(1);
+    expect(body.summaries["72h_no_unlock"].sent).toBe(1);
 
     expect(mockStripePromoCreate).toHaveBeenCalledTimes(1);
     const stripeArgs = mockStripePromoCreate.mock.calls[0][0];
@@ -232,21 +221,19 @@ describe("GET /api/cron/nurture-sequence", () => {
     const candidate = {
       id: 99,
       survey_submission_id: 9,
-      created_date_time: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
+      created_date_time: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
       survey_submission: { app_user: { email: "already@example.com", first_name: "Al" } },
     };
     mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [candidate],
-      fiftyFourHour: [],
-      quoteMetadata: { nurtureEmailsSent: ["30h_no_unlock"] },
+      seventyTwoHour: [candidate],
+      quoteMetadata: { nurtureEmailsSent: ["72h_no_unlock"] },
     });
 
     const res = await GET(makeRequest("test-cron-secret"));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.summaries["30h_no_unlock"].sent).toBe(0);
-    expect(body.summaries["30h_no_unlock"].skippedAlreadySent).toBe(1);
+    expect(body.summaries["72h_no_unlock"].sent).toBe(0);
+    expect(body.summaries["72h_no_unlock"].skippedAlreadySent).toBe(1);
     expect(mockStripePromoCreate).not.toHaveBeenCalled();
     expect(mockResendSend).not.toHaveBeenCalled();
   });
@@ -256,19 +243,17 @@ describe("GET /api/cron/nurture-sequence", () => {
     const candidate = {
       id: 50,
       survey_submission_id: 5,
-      created_date_time: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
+      created_date_time: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
       survey_submission: { app_user: { email: "paid@example.com", first_name: "Pay" } },
     };
     mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [candidate],
-      fiftyFourHour: [],
+      seventyTwoHour: [candidate],
       quoteMetadata: {},
     });
 
     const res = await GET(makeRequest("test-cron-secret"));
     const body = await res.json();
-    expect(body.summaries["30h_no_unlock"].skippedPaid).toBe(1);
+    expect(body.summaries["72h_no_unlock"].skippedPaid).toBe(1);
     expect(mockStripePromoCreate).not.toHaveBeenCalled();
   });
 
@@ -289,13 +274,11 @@ describe("GET /api/cron/nurture-sequence", () => {
     const candidate = {
       id: 7,
       survey_submission_id: 70,
-      created_date_time: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
+      created_date_time: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
       survey_submission: { app_user: { email: "order@example.com", first_name: "Or" } },
     };
     mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [candidate],
-      fiftyFourHour: [],
+      seventyTwoHour: [candidate],
       quoteMetadata: { nurtureEmailsSent: [] },
       patchSpy,
     });
@@ -320,13 +303,11 @@ describe("GET /api/cron/nurture-sequence", () => {
     const candidate = {
       id: 8,
       survey_submission_id: 80,
-      created_date_time: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
+      created_date_time: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
       survey_submission: { app_user: { email: "boom@example.com", first_name: "Bo" } },
     };
     mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [candidate],
-      fiftyFourHour: [],
+      seventyTwoHour: [candidate],
       quoteMetadata: { nurtureEmailsSent: [] },
       patchSpy,
     });
@@ -336,64 +317,8 @@ describe("GET /api/cron/nurture-sequence", () => {
     expect(patchSpy).toHaveBeenCalledTimes(1);
 
     const body = await res.json();
-    expect(body.summaries["30h_no_unlock"].sent).toBe(0);
-    expect(body.summaries["30h_no_unlock"].failed).toBe(1);
-  });
-
-  it("R-06/F-08: 54h candidate deactivates the prior 30h promo code on Stripe", async () => {
-    // Pre-existing 30h promo code stored in quote metadata — the cron
-    // must deactivate it on Stripe before sending the more aggressive
-    // 54h offer so the user can't redeem the older smaller discount.
-    const priorPromoId = "promo_30h_existing";
-    const candidate = {
-      id: 9,
-      survey_submission_id: 90,
-      created_date_time: new Date(Date.now() - 54 * 60 * 60 * 1000).toISOString(),
-      survey_submission: { app_user: { email: "x@example.com", first_name: "X" } },
-    };
-
-    mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [],
-      fiftyFourHour: [candidate],
-      quoteMetadata: {
-        nurtureEmailsSent: ["30h_no_unlock"],
-        nurturePromoCodes: {
-          "30h_no_unlock": {
-            code: "LIQ-50-OLD1ABCD",
-            stripePromotionCodeId: priorPromoId,
-            percentOff: 50,
-            expiresAt: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
-          },
-        },
-      },
-    });
-
-    const res = await GET(makeRequest("test-cron-secret"));
-    expect(res.status).toBe(200);
-
-    // Verify Stripe was asked to deactivate the prior 30h code.
-    expect(mockStripePromoUpdate).toHaveBeenCalledWith(priorPromoId, { active: false });
-  });
-
-  it("R-06/F-08: 30h candidate does NOT call deactivate (no prior stage to retire)", async () => {
-    const candidate = {
-      id: 10,
-      survey_submission_id: 100,
-      created_date_time: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
-      survey_submission: { app_user: { email: "y@example.com", first_name: "Y" } },
-    };
-
-    mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [candidate],
-      fiftyFourHour: [],
-      quoteMetadata: { nurtureEmailsSent: [] },
-    });
-
-    const res = await GET(makeRequest("test-cron-secret"));
-    expect(res.status).toBe(200);
-    expect(mockStripePromoUpdate).not.toHaveBeenCalled();
+    expect(body.summaries["72h_no_unlock"].sent).toBe(0);
+    expect(body.summaries["72h_no_unlock"].failed).toBe(1);
   });
 
   it("time-budget guard: defers all candidates when the wall-clock budget is exhausted", async () => {
@@ -405,13 +330,11 @@ describe("GET /api/cron/nurture-sequence", () => {
     const candidate = {
       id: 11,
       survey_submission_id: 110,
-      created_date_time: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
+      created_date_time: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
       survey_submission: { app_user: { email: "deferred@example.com", first_name: "De" } },
     };
     mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [candidate],
-      fiftyFourHour: [],
+      seventyTwoHour: [candidate],
       quoteMetadata: { nurtureEmailsSent: [] },
     });
 
@@ -419,8 +342,8 @@ describe("GET /api/cron/nurture-sequence", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     // Candidate counted (set before the loop) but never processed → no send/promo.
-    expect(body.summaries["30h_no_unlock"].candidates).toBe(1);
-    expect(body.summaries["30h_no_unlock"].sent).toBe(0);
+    expect(body.summaries["72h_no_unlock"].candidates).toBe(1);
+    expect(body.summaries["72h_no_unlock"].sent).toBe(0);
     expect(mockStripePromoCreate).not.toHaveBeenCalled();
     expect(mockResendSend).not.toHaveBeenCalled();
   });
@@ -432,143 +355,17 @@ describe("GET /api/cron/nurture-sequence", () => {
     const candidate = {
       id: 12,
       survey_submission_id: 120,
-      created_date_time: new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString(),
+      created_date_time: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
       survey_submission: { app_user: { email: "fallback@example.com", first_name: "Fa" } },
     };
     mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [candidate],
-      fiftyFourHour: [],
+      seventyTwoHour: [candidate],
       quoteMetadata: { nurtureEmailsSent: [] },
     });
 
     const res = await GET(makeRequest("test-cron-secret"));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.summaries["30h_no_unlock"].sent).toBe(1);
-  });
-
-  it("78h candidate sends the Calendly call invite, mints NO promo, logs booking_event", async () => {
-    // The 78h call-invite stage is gated off by default; enable it + provide the
-    // operator Calendly URL (now env-driven, no longer hardcoded) for this test.
-    process.env.NURTURE_78H_CALL_ENABLED = "true";
-    process.env.NURTURE_78H_CALENDLY_URL = "https://calendly.com/loveiq-team/20min";
-    const candidate = {
-      id: 78,
-      survey_submission_id: 780,
-      created_date_time: new Date(Date.now() - 78 * 60 * 60 * 1000).toISOString(),
-      survey_submission: { app_user: { email: "call@example.com", first_name: "Cal" } },
-    };
-    mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [],
-      fiftyFourHour: [],
-      seventyEightHour: [candidate],
-      quoteMetadata: { nurtureEmailsSent: [] },
-    });
-
-    const res = await GET(makeRequest("test-cron-secret"));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.summaries["78h_no_unlock"].sent).toBe(1);
-
-    // No discount stage → no Stripe promo minted.
-    expect(mockStripePromoCreate).not.toHaveBeenCalled();
-
-    expect(mockResendSend).toHaveBeenCalledTimes(1);
-    const sent = mockResendSend.mock.calls[0][0];
-    expect(sent.to).toBe("call@example.com");
-    expect(sent.headers["X-LoveIQ-Stage"]).toBe("78h_no_unlock");
-    expect(sent.html).toContain("calendly.com/loveiq-team/20min");
-    expect(sent.html).toContain("utm_campaign=78h_no_unlock");
-    expect(sent.html).toContain("email=call%40example.com");
-
-    // A booking_event call_invite_sent row was written.
-    const bookingCall = mockFetchWithTimeout.mock.calls.find(
-      ([url, init]) =>
-        String(url).includes("/rest/v1/booking_event") &&
-        (init as { method?: string } | undefined)?.method === "POST"
-    );
-    expect(bookingCall).toBeTruthy();
-    const bookingBody = JSON.parse((bookingCall![1] as { body: string }).body);
-    expect(bookingBody.event_type).toBe("call_invite_sent");
-    expect(bookingBody.survey_submission_id).toBe(780);
-    expect(bookingBody.personal_report_id).toBe(78);
-  });
-
-  it("78h candidate already sent is skipped (idempotent)", async () => {
-    process.env.NURTURE_78H_CALL_ENABLED = "true";
-    process.env.NURTURE_78H_CALENDLY_URL = "https://calendly.com/loveiq-team/20min";
-    const candidate = {
-      id: 79,
-      survey_submission_id: 790,
-      created_date_time: new Date(Date.now() - 78 * 60 * 60 * 1000).toISOString(),
-      survey_submission: { app_user: { email: "again@example.com", first_name: "Ag" } },
-    };
-    mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [],
-      fiftyFourHour: [],
-      seventyEightHour: [candidate],
-      quoteMetadata: { nurtureEmailsSent: ["78h_no_unlock"] },
-    });
-
-    const res = await GET(makeRequest("test-cron-secret"));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.summaries["78h_no_unlock"].sent).toBe(0);
-    expect(body.summaries["78h_no_unlock"].skippedAlreadySent).toBe(1);
-    expect(mockResendSend).not.toHaveBeenCalled();
-  });
-
-  it("78h call invite is paused by default (NURTURE_78H_CALL_ENABLED unset)", async () => {
-    // No product person to take the calls → the stage is gated off unless the
-    // env flag is explicitly "true". A fresh 78h candidate must NOT be emailed.
-    const candidate = {
-      id: 81,
-      survey_submission_id: 810,
-      created_date_time: new Date(Date.now() - 78 * 60 * 60 * 1000).toISOString(),
-      survey_submission: { app_user: { email: "paused@example.com", first_name: "Pz" } },
-    };
-    mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [],
-      fiftyFourHour: [],
-      seventyEightHour: [candidate],
-      quoteMetadata: { nurtureEmailsSent: [] },
-    });
-
-    const res = await GET(makeRequest("test-cron-secret"));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.summaries["78h_no_unlock"].sent).toBe(0);
-    expect(mockResendSend).not.toHaveBeenCalled();
-  });
-
-  it("78h stays paused when enabled but NURTURE_78H_CALENDLY_URL is unset (no dead link)", async () => {
-    // Belt-and-braces after the call host was offboarded: even with the stage
-    // flag flipped on, a missing booking URL must NOT send an email pointing at
-    // a dead/empty Calendly link. Set NURTURE_78H_CALENDLY_URL to re-enable.
-    process.env.NURTURE_78H_CALL_ENABLED = "true";
-    delete process.env.NURTURE_78H_CALENDLY_URL;
-    const candidate = {
-      id: 82,
-      survey_submission_id: 820,
-      created_date_time: new Date(Date.now() - 78 * 60 * 60 * 1000).toISOString(),
-      survey_submission: { app_user: { email: "nourl@example.com", first_name: "No" } },
-    };
-    mockCandidateWindows({
-      sixHour: [],
-      thirtyHour: [],
-      fiftyFourHour: [],
-      seventyEightHour: [candidate],
-      quoteMetadata: { nurtureEmailsSent: [] },
-    });
-
-    const res = await GET(makeRequest("test-cron-secret"));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.summaries["78h_no_unlock"].sent).toBe(0);
-    expect(mockResendSend).not.toHaveBeenCalled();
+    expect(body.summaries["72h_no_unlock"].sent).toBe(1);
   });
 });

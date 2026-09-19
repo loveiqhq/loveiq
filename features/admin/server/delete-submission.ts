@@ -20,8 +20,7 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 
 export type DeleteSubmissionResult =
-  | { ok: true }
-  | { ok: false; reason: "personal_report_exists" | "delete_failed"; status: number };
+  { ok: true } | { ok: false; reason: "personal_report_exists" | "delete_failed"; status: number };
 
 export async function deleteSubmissionCascade(numericId: number): Promise<DeleteSubmissionResult> {
   // Guard: a paid/issued report makes the submission too valuable to cascade.

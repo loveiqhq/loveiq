@@ -13,7 +13,7 @@ import { getCsrfToken } from "@shared/http/csrf-client";
 import { maskEmail } from "@features/admin/server/format";
 
 /**
- * Click-to-copy chip used for the hjUid and the survey session id. Tries the
+ * Click-to-copy chip used for the survey session id. Tries the
  * modern `navigator.clipboard.writeText` first, falls back to a hidden
  * textarea + `document.execCommand("copy")` for environments where the
  * Clipboard API is missing or rejects (sandboxed iframes, some embedded
@@ -96,7 +96,6 @@ interface SubmissionData {
     current_index?: number | null;
     recoverable?: boolean;
     report_token?: string | null;
-    hotjar_user_id?: string | null;
   };
   answers: Array<{
     q_id: string;
@@ -287,18 +286,9 @@ export default function SubmissionDetail({ id, mode = "submission" }: Submission
 
   const siteUrl =
     (process.env.NEXT_PUBLIC_SITE_URL || "").replace(/\/$/, "") || "https://loveiq.org";
-  // Hotjar accounts on this workspace have been migrated to Contentsquare,
-  // so the recordings live at app.contentsquare.com — `insights.hotjar.com`
-  // just redirects to the Surveys list. Set NEXT_PUBLIC_CONTENTSQUARE_PROJECT_ID
-  // to the Contentsquare project number (e.g. 743568) to enable the chip.
-  const contentsquareProjectId = process.env.NEXT_PUBLIC_CONTENTSQUARE_PROJECT_ID || "";
   const reportUrl =
     !isPartial && submission.report_token
       ? `${siteUrl}/report/${encodeURIComponent(submission.report_token)}`
-      : null;
-  const sessionReplayUrl =
-    !isPartial && submission.hotjar_user_id && contentsquareProjectId
-      ? `https://app.contentsquare.com/#/session-replay?project=${encodeURIComponent(contentsquareProjectId)}`
       : null;
 
   return (
@@ -312,7 +302,7 @@ export default function SubmissionDetail({ id, mode = "submission" }: Submission
         </h2>
       </div>
 
-      {(reportUrl || sessionReplayUrl || (!isPartial && submission.session_id)) && (
+      {(reportUrl || (!isPartial && submission.session_id)) && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-surface px-5 py-3 text-sm">
           {reportUrl && (
             <a
@@ -324,29 +314,11 @@ export default function SubmissionDetail({ id, mode = "submission" }: Submission
               View report ↗
             </a>
           )}
-          {sessionReplayUrl && submission.hotjar_user_id && (
-            <>
-              <a
-                href={sessionReplayUrl}
-                target="_blank"
-                rel="noreferrer noopener"
-                title="Opens Contentsquare Session Replay. Paste the hjUid (next to this button) into the User-ID / User-attribute filter to see only this user's sessions."
-                className="rounded-lg border border-orange-500/30 bg-orange-500/10 px-3 py-1.5 text-xs font-medium text-orange-300 transition hover:bg-orange-500/20"
-              >
-                Session replay ↗
-              </a>
-              <CopyableChip
-                label={`hjUid: ${submission.hotjar_user_id}`}
-                value={submission.hotjar_user_id}
-                title="Click to copy. Paste into Contentsquare → Session Replay → Filter → User ID."
-              />
-            </>
-          )}
-          {!sessionReplayUrl && submission.session_id && (
+          {submission.session_id && (
             <CopyableChip
               label={`session: ${submission.session_id}`}
               value={submission.session_id}
-              title="Click to copy the survey session id. Paste into Contentsquare or Hotjar's user-attribute search if no recording link is available."
+              title="Click to copy the survey session id. Paste into Clarity's search to find this user's recordings."
             />
           )}
         </div>

@@ -110,9 +110,13 @@ export default function ProductKpiDashboard() {
     // when data.reportSections itself is empty — handle below.
     const highestFriction = data.reportSections
       .filter((s) => s.frictionIndex != null)
-      .reduce<
-        (typeof data.reportSections)[number] | undefined
-      >((max, s) => (max == null || (s.frictionIndex ?? -Infinity) > (max.frictionIndex ?? -Infinity) ? s : max), data.reportSections[0]);
+      .reduce<(typeof data.reportSections)[number] | undefined>(
+        (max, s) =>
+          max == null || (s.frictionIndex ?? -Infinity) > (max.frictionIndex ?? -Infinity)
+            ? s
+            : max,
+        data.reportSections[0]
+      );
 
     const chaptersWithData = data.chapters.filter((c) => c.completionPct != null);
     const avgCompletion =

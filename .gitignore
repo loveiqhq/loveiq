@@ -10,6 +10,14 @@ out
 .env
 .env.local
 .env.*.local
+# Any BACKUP or variant of an env file, however it got named. The three patterns
+# above missed `.env.local.bak.<timestamp>`, which tooling writes when it rewrites
+# .env.local — two such files were sitting untracked and unignored on 2026-08-28,
+# full of live keys, one `git add -A` away from the public repo. A leading-glob
+# pattern is the only version that survives a naming convention nobody chose.
+.env*.bak*
+.env*.backup*
+*.env.local
 
 # OS / editor
 .DS_Store

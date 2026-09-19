@@ -230,9 +230,15 @@ function main() {
     // embedded as "(Pick up to N.)" in the question text — V3 (May 2026) moved
     // that wording into the formatGuidance column as "Select up to N options." or
     // "Select up to <word> options." (e.g. "three"). Parse either form.
+    // "up to" is optional so a cap of one can read as "Select one option." rather than
+    // the stilted "Select up to one option." — this string is shown to the respondent,
+    // so it has to be ordinary English. Widening it cannot over-cap an existing
+    // question: the cap is only applied when answerType is "multiple" (see below), and
+    // across every multiple-choice question today the only guidance this matches is the
+    // three that already say "Select up to three options."
     const inlineMaxMatch = question.match(/\(\s*Pick up to (\d+)\.?\s*\)/i);
     const guidanceMaxMatch = formatGuidance.match(
-      /select up to (\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/i
+      /select (?:up to )?(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/i
     );
     const wordToInt = {
       one: 1,

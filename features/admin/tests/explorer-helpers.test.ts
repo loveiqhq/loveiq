@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  DIMENSION_ORDER,
+  parseLandingVariant,
   applyFilters,
   archetypeMatchFilter,
   bucketDate,
@@ -267,7 +269,6 @@ describe("new dimensions", () => {
   it("exposes pricing/experiment/device/acquisition/engagement via the accessor", () => {
     const r = row({
       device: "mobile",
-      paywallArm: "armB",
       experimentGroup: "variant",
       countryTier: "tier2",
       priceBucket: "high",
@@ -278,7 +279,6 @@ describe("new dimensions", () => {
       sessionCount: 2,
     });
     expect(dimensionValue(r, "device", opts)).toBe("mobile");
-    expect(dimensionValue(r, "paywallArm", opts)).toBe("armB");
     expect(dimensionValue(r, "experimentGroup", opts)).toBe("variant");
     expect(dimensionValue(r, "utmMedium", opts)).toBe("cpc");
     expect(dimensionValue(r, "utmCampaign", opts)).toBe("spring");
@@ -286,9 +286,33 @@ describe("new dimensions", () => {
     expect(dimensionValue(r, "sessionBucket", opts)).toBe("2");
   });
 
+  /**
+   * A MISSING ARM IS NOT AN ARM.
+   *
+   * This case read `row.landingVariant || "control"` until 2026-09-12, alone among the
+   * seven cases in that switch. MEASURED that day: 809 of 1,969 completed submissions
+   * carry no arm in their utm_tracker, while the real `control` arm has 53 and ran for
+   * five days in June. So the explorer reported 862 as the retired dark arm -- a 16x
+   * overstatement of a finished test, and every A/B answer it gave was wrong about it.
+   */
+  it.each([null, undefined, ""])(
+    "a landing arm of %p reads as Unknown, never as the retired control arm",
+    (missing) => {
+      const r = row({ landingVariant: missing as unknown as string });
+      expect(dimensionValue(r, "landingVariant", opts)).toBe("Unknown");
+      expect(dimensionValue(r, "landingVariant", opts)).not.toBe("control");
+    }
+  );
+
+  it("a real arm is still passed through untouched", () => {
+    // The fix must not swallow genuine values -- white_prev is the live round-2 arm.
+    for (const arm of ["white", "white_prev", "control"]) {
+      expect(dimensionValue(row({ landingVariant: arm }), "landingVariant", opts)).toBe(arm);
+    }
+  });
+
   it("missing pricing/engagement reads as Unknown / Not viewed / 0", () => {
-    const r = row({ paywallArm: null, reportViewed: false, sessionCount: 0 });
-    expect(dimensionValue(r, "paywallArm", opts)).toBe("Unknown");
+    const r = row({ reportViewed: false, sessionCount: 0 });
     expect(dimensionValue(r, "reportViewed", opts)).toBe("Not viewed");
     expect(dimensionValue(r, "sessionBucket", opts)).toBe("0");
   });
@@ -616,5 +640,62 @@ describe("breakdown gender split (byGender)", () => {
     // TailM (Man) + TailW (Woman) merged.
     expect(other.byGender.Men?.count).toBe(1);
     expect(other.byGender.Women?.count).toBe(1);
+  });
+});
+
+/**
+ * The Explorer's "Landing page" dimension.
+ *
+ * Until 2026-08-27 this returned `"control"` for anything that was not exactly
+ * `"white"`, so the dimension put the retired dark arm, the LIVE V1 arm, and every
+ * submission with no arm stamped into one bucket and named it the dark landing page.
+ * Measured on production that bucket was 805 arm-less rows + 34 V1 rows against 53
+ * genuinely dark ones — 94% not dark, with the arm under test hiding inside it.
+ * Nothing threw and no test failed, which is why it survived two months.
+ */
+describe("parseLandingVariant", () => {
+  const stamp = (arm: string) => JSON.stringify({ utm_source: "google", landing_variant: arm });
+
+  it("gives each arm its own plain-English name", () => {
+    expect(parseLandingVariant(stamp("white"))).toBe("Landing Page V2 (Survey in Hero)");
+    expect(parseLandingVariant(stamp("white_prev"))).toBe("Landing Page V1 (First Design)");
+    expect(parseLandingVariant(stamp("control"))).toBe("Dark landing page (before V1)");
+  });
+
+  it("never folds the live V1 arm into the retired dark one", () => {
+    // The exact regression. These three must be three different buckets.
+    const seen = new Set(
+      ["white", "white_prev", "control"].map((arm) => parseLandingVariant(stamp(arm)))
+    );
+    expect(seen.size).toBe(3);
+  });
+
+  it("reports missing, empty and unparseable trackers as not recorded, not as dark", () => {
+    for (const tracker of [
+      null,
+      "",
+      "   ",
+      "not json",
+      JSON.stringify({ utm_source: "google" }),
+      JSON.stringify({ landing_variant: "" }),
+      JSON.stringify({ landing_variant: "   " }),
+    ]) {
+      expect(parseLandingVariant(tracker), JSON.stringify(tracker)).toBe("Not recorded");
+    }
+  });
+
+  it("reports an unrecognised arm as not recorded rather than inventing a name", () => {
+    expect(parseLandingVariant(stamp("white_v3_experiment"))).toBe("Not recorded");
+  });
+
+  it("keeps the dimension's value ordering in step with what it returns", () => {
+    // These two drifted apart before: the ordering listed raw values ["white",
+    // "control"] while the parser returned display names, so once the round-2 arm
+    // existed its rows had no place in the order at all.
+    for (const label of DIMENSION_ORDER.landingVariant ?? []) {
+      expect(typeof label).toBe("string");
+    }
+    expect(DIMENSION_ORDER.landingVariant).toContain(parseLandingVariant(stamp("white_prev")));
+    expect(DIMENSION_ORDER.landingVariant).toContain(parseLandingVariant(null));
   });
 });

@@ -25,7 +25,6 @@
  */
 
 import {
-  hasCookieYesConsent,
   trackDeadClick,
   trackRageClick,
   trackScrollDepth,
@@ -107,7 +106,26 @@ function selectorFor(target: EventTarget | null): string {
 
 function isInteractive(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
-  if (target.closest(INTERACTIVE_SELECTOR)) return true;
+  const control = target.closest(INTERACTIVE_SELECTOR);
+  if (control) {
+    /**
+     * A DISABLED control is the highest-signal dead click there is: it looks
+     * live, a reader taps it, and nothing happens. This listener used to class
+     * it as interactive and throw it away, so the only dead clicks we ever
+     * recorded were taps on decoration — `div.flex`, `p.font-sans`,
+     * `h2.font-serif`. Measured on production: readers tapped a disabled survey
+     * "Next" 1,347 times and not one reached this table.
+     *
+     * `disabled` covers the real form controls; `aria-disabled` covers the
+     * custom ones, which stay focusable and so never set the property.
+     */
+    const isDisabled =
+      (control as HTMLButtonElement).disabled === true ||
+      control.getAttribute("aria-disabled") === "true";
+    // Report it (return false) rather than falling through to the cursor walk,
+    // which would call it interactive again off any `cursor: pointer` ancestor.
+    return !isDisabled;
+  }
   // Walk up checking computed cursor — covers `cursor: pointer` on custom
   // overlays without an explicit role. Only check 3 levels to keep it cheap.
   let node: Element | null = target;
@@ -142,7 +160,6 @@ export function installUxSignals(): void {
     scrollRafScheduled = true;
     requestAnimationFrame(() => {
       scrollRafScheduled = false;
-      if (!hasCookieYesConsent("analytics")) return;
       const state = ensureState();
       const doc = document.documentElement;
       const total = Math.max(1, doc.scrollHeight - window.innerHeight);
@@ -165,7 +182,6 @@ export function installUxSignals(): void {
   // ── Click signals (rage + dead) ─────────────────────────────────────────
   const clickTimestampsByNode = new WeakMap<Element, number[]>();
   const onPointerDown = (event: PointerEvent) => {
-    if (!hasCookieYesConsent("analytics")) return;
     const target = event.target;
     if (!(target instanceof Element)) return;
     const state = ensureState();
@@ -203,7 +219,6 @@ export function installUxSignals(): void {
 
   // ── Tab visibility ──────────────────────────────────────────────────────
   const onVisibilityChange = () => {
-    if (!hasCookieYesConsent("analytics")) return;
     const state = ensureState();
     const now = Date.now();
     if (document.visibilityState === "hidden") {

@@ -12,7 +12,7 @@ import {
   type SegmentComparableRow,
   type SegmentRules,
 } from "@features/admin/server/segment-evaluator";
-import { supabaseFetch } from "@features/admin/server/supabase";
+import { fetchAllRows, supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 
 interface SubmissionRow {
@@ -508,14 +508,19 @@ export async function buildConversionLeakDebuggerSnapshot(
 
     const [partialsRes, analyticsRes, segmentsRes, scoringRows, profiles, reports] =
       await Promise.all([
-        supabaseFetch(`/rest/v1/survey_partial_save?select=session_id&saved_at=gte.${since}`, {
-          headers: { Range: "0-49999" },
-        }),
-        supabaseFetch(
-          `/rest/v1/analytics_event?select=session_id,metadata&event_time=gte.${since}&metadata=not.is.null`,
-          {
-            headers: { Range: "0-49999" },
-          }
+        /**
+         * Both paged: measured 2026-09-17, this window holds 1,050 partial
+         * saves and 6,291 analytics events, so the capped reads saw 1,000 of
+         * each. The leak report is built by matching sessions across these two
+         * sets, so a short read does not lose rows evenly — it invents leaks,
+         * because a session present in one set and missing from the truncated
+         * other looks like a drop-off.
+         */
+        fetchAllRows<PartialRow>(
+          `/rest/v1/survey_partial_save?select=session_id&saved_at=gte.${since}&order=session_id.asc`
+        ),
+        fetchAllRows<AnalyticsRow>(
+          `/rest/v1/analytics_event?select=session_id,metadata&event_time=gte.${since}&metadata=not.is.null&order=session_id.asc`
         ),
         supabaseFetch(
           `/rest/v1/admin_segment?or=(admin_email.eq.${encodeURIComponent(adminEmail)},is_shared.eq.true)&select=id,name,rules,match_count&order=match_count.desc`,
@@ -540,7 +545,7 @@ export async function buildConversionLeakDebuggerSnapshot(
             ),
       ]);
 
-    if (!partialsRes.ok || !analyticsRes.ok || !segmentsRes.ok) {
+    if (partialsRes === null || analyticsRes === null || !segmentsRes.ok) {
       throw new Error("Unable to load leak debugger support data.");
     }
 
@@ -558,12 +563,12 @@ export async function buildConversionLeakDebuggerSnapshot(
         : fetchBatches<PaymentRow>(
             reportIds,
             (batch) =>
-              `/rest/v1/payment?select=personal_report_id,status&personal_report_id=in.(${batch.join(",")})`
+              `/rest/v1/payment?is_test=is.false&select=personal_report_id,status&personal_report_id=in.(${batch.join(",")})`
           ),
     ]);
 
-    const partials = (await partialsRes.json()) as PartialRow[];
-    const analytics = (await analyticsRes.json()) as AnalyticsRow[];
+    const partials = partialsRes;
+    const analytics = analyticsRes;
     const segments = (await segmentsRes.json()) as SegmentRow[];
 
     const scoringBySubmission = new Map(

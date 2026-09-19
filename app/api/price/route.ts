@@ -3,6 +3,10 @@ import { z } from "zod";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
+import { scheduleAfterResponse } from "@shared/http/after-response";
+import { resolveSubmissionAccessContext } from "@features/report/server/personalReport";
+import { refreshJourneyMessage } from "@features/attribution/server/journey-message";
+import { markReportPriceQuotePaywallReached } from "@features/pricing/logic/reportPricing";
 import {
   getReportPriceQuoteForContext,
   getReportPriceQuotesForContext,
@@ -28,6 +32,75 @@ const RATE_LIMIT_CONFIG = {
   limit: 60,
   windowMs: 60_000,
 };
+
+const armSchema = z
+  .object({
+    plan: z.enum(REPORT_PURCHASE_PLAN_IDS).optional(),
+    pricingSessionId: z.string().uuid().optional(),
+    reportSessionId: z.string().uuid().optional(),
+    token: z.string().regex(REPORT_ACCESS_TOKEN_REGEX).optional(),
+  })
+  .refine((value) => Boolean(value.reportSessionId || value.token), {
+    message: "Report context required.",
+  });
+
+/**
+ * Record that a reader reached the paywall.
+ *
+ * This used to arm a three-minute urgency window with a price consequence; that
+ * surcharge and its countdown were removed on 2026-08-31. What is left is the reason
+ * the endpoint has to stay: it is the only SERVER-SIDE evidence that a reader got to
+ * the paywall, so the Slack journey message can fill its "Paywall hit" step. The
+ * `paywall_initiated` analytics event cannot stand in — it lives in the consent-gated
+ * table, so it is missing for everyone who declined.
+ *
+ * Still a CSRF-guarded POST rather than a flag on the GET: a shared report link
+ * unfurling in Slack or WhatsApp fetches the GET, and a link preview is not a reader.
+ */
+export async function POST(request: Request) {
+  if (!(await verifyCsrfToken(request))) {
+    return NextResponse.json({ error: "Invalid request." }, { status: 403 });
+  }
+
+  const ip = getClientIp(request);
+  const rateLimit = await checkRateLimit(ip, RATE_LIMIT_CONFIG);
+  if (!rateLimit.allowed) {
+    return NextResponse.json({ error: "Please try again later." }, { status: 429 });
+  }
+
+  const parsed = armSchema.safeParse(await request.json().catch(() => ({})));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid input." }, { status: 400 });
+  }
+
+  try {
+    // After-response and self-skipping, so reaching the paywall repeatedly is free.
+    scheduleAfterResponse("journey-message-paywall", async () => {
+      const accessContext = await resolveSubmissionAccessContext({
+        reportSessionId: parsed.data.reportSessionId ?? null,
+        reportToken: parsed.data.token ?? null,
+      });
+      if (accessContext?.submissionId) {
+        const submissionId = accessContext.submissionId;
+        // Two independent writes, each in its own catch: the durable stamp is
+        // what the funnel reads and the Slack edit is what a human reads, and a
+        // failure in either must not cost the other.
+        try {
+          await markReportPriceQuotePaywallReached({ submissionId });
+        } catch (err) {
+          logger.warn({ err, submissionId }, "Unable to stamp paywall_reached_at");
+        }
+        await refreshJourneyMessage(submissionId, "paywall");
+      }
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    // Never block the reader on a reporting write.
+    logger.error({ error }, "Failed to record paywall reached");
+    return NextResponse.json({ success: true });
+  }
+}
 
 export async function GET(request: Request) {
   const url = new URL(request.url);

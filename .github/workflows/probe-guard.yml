@@ -1,0 +1,251 @@
+name: Probe guard — check production directly
+
+# The gap this closes: this repository has ~30 probes in scripts/probes/, and
+# until now NOTHING ran any of them on a schedule. They only ran when
+# verify-ux-findings.mjs matched a scanner's claim to a criterion — so a probe
+# was a guard only if a language model happened to describe the defect it
+# covers. A regression nobody wrote a finding about was invisible.
+#
+# This runs the probes that are safe to point at production unattended: they
+# read pages, measure geometry, and write nothing.
+
+on:
+  schedule:
+    # Once a day, off the hour. These drive real browsers against the live site,
+    # so they are deliberately not frequent.
+    - cron: "23 5 * * *"
+    # Weekly, and much heavier: every auto-PR probe is run with its own defect
+    # injected, across its full device list.
+    - cron: "41 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      origin:
+        description: "Origin to probe (defaults to production)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    name: Measure production
+    # Daily cron or a manual run only. Without this it would also fire on the
+    # weekly falsifiability schedule below, running twice every Monday.
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '23 5 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      # Both engines. A layout that clears on Chromium has shipped broken to
+      # iOS from this repository before.
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium webkit
+
+      # Five seconds, because a refused connection fails instantly. It asks
+      # every gate probe the one question the exit codes exist for: when you
+      # cannot reach the site at all, do you say "inconclusive" or do you say
+      # "reproduced"? Six probes said "reproduced" on 2026-09-17, two of them on
+      # criteria allowed to open a pull request.
+      - name: No probe reports a defect it could not measure
+        run: |
+          set +e
+          npx tsx scripts/verify-probe-falsifiability.mjs --contract-only
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ]; then
+            echo "::error::a probe reports a defect when the site is unreachable"
+            exit 1
+          fi
+
+      - name: Consent banner does not trap the primary CTA
+        env:
+          REPORT_ORIGIN: ${{ inputs.origin }}
+          STAGING_PASSWORD: ${{ secrets.STAGING_PASSWORD }}
+        run: |
+          set +e
+          if [ -n "$REPORT_ORIGIN" ]; then
+            npx tsx scripts/probes/verify-consent-banner-clearance.mjs
+          else
+            env -u REPORT_ORIGIN npx tsx scripts/probes/verify-consent-banner-clearance.mjs
+          fi
+          code=$?
+          set -e
+          # Three-way, deliberately. 3 means the probe could not measure — a
+          # banner that never appeared, a page that would not load. That is not
+          # a pass, but it is not proof of a defect either, and treating it as
+          # one is how a broken probe manufactures confident failures.
+          if [ "$code" -eq 1 ]; then
+            echo "::error::a primary CTA cannot be reached past the consent banner"
+            exit 1
+          elif [ "$code" -eq 3 ]; then
+            echo "::warning::probe could not measure — not a pass, investigate"
+            exit 0
+          elif [ "$code" -ne 0 ]; then
+            echo "::error::probe exited $code"
+            exit 1
+          fi
+          echo "clear"
+
+  falsifiability:
+    name: Auto-PR probes can still fail
+    # Weekly only, or on a manual run. Seven probes across their full device
+    # lists against production is minutes of real browser time.
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '41 4 * * 1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium webkit
+
+      # The unit test asserts an auto-PR probe's SOURCE contains "MUTATE". That
+      # proxy was wrong on 2026-09-17: verify-consent-return carried a MUTATE
+      # block that polled to bind a listener, lost the race 1 run in 3, and so
+      # exited 0 with its own defect injected — claiming to be falsifiable while
+      # B1 sat in AUTO_PR_CRITERIA. Only running it settles the question.
+      # One HogQL query, no browsers. It scores the scanners against the
+      # labelled fixtures in scripts/replay-bench/.
+      #
+      # Below bar does NOT fail: precision has been 0.20 since it was first
+      # measured, that is a documented state rather than a regression, and a
+      # job that is permanently red is a job nobody reads. What DOES fail is
+      # exit 2 — "incomplete", meaning the fixtures could not be scored at all.
+      # That is the failure worth waking up for: on 2026-09-17 the scorer's
+      # 7-day window was four days from making every fixture unreadable, and
+      # nothing would have said so.
+      - name: Score the scanners against the labelled fixtures
+        env:
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+        run: |
+          set +e
+          npm run replay:bench
+          code=$?
+          set -e
+          if [ "$code" -eq 2 ]; then
+            echo "::error::the benchmark could not be scored — fixtures unreadable or unscanned"
+            exit 1
+          elif [ "$code" -eq 1 ]; then
+            echo "::warning::scanners are below the precision/recall bars (a known state, not a regression)"
+          elif [ "$code" -ne 0 ]; then
+            echo "::error::replay:bench exited $code"
+            exit 1
+          fi
+
+      # The fixture bench above dies on a known date: the recordings were
+      # captured 2026-08-29 and expire 2026-09-28, and a scanner observes a
+      # given session once ever, so they cannot be refreshed. This scores the
+      # same scanners against the `ux_finding` ledger instead, which is written
+      # by the probes themselves and never expires.
+      #
+      # Exit 2 here means "not enough labelled findings yet", which is the
+      # expected state until the ledger fills. It is reported, never failed —
+      # a permanently red job is a job nobody reads. Exit 3 and above is a real
+      # error (the ledger could not be read at all).
+      - name: Score the scanners against the probe ledger
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set +e
+          node scripts/replay-bench/score.mjs --ledger --no-save
+          code=$?
+          set -e
+          if [ "$code" -eq 2 ]; then
+            echo "::notice::not enough labelled findings in the ledger yet — expected while it fills"
+          elif [ "$code" -eq 1 ]; then
+            echo "::warning::scanner precision is below the bar on ledger-labelled findings"
+          elif [ "$code" -ne 0 ]; then
+            echo "::error::the ledger could not be scored (exit $code)"
+            exit 1
+          fi
+
+      # Recall, from evidence the scanner never sees. The ledger cannot measure
+      # it — it only holds findings a scanner already flagged — and the fixtures
+      # that could expire 2026-09-28 and cannot be re-scanned. Our own
+      # dead_click event does not expire.
+      #
+      # Exit 1 is below bar and reported, not failed: recall has been 0.06 since
+      # it was first measured, which is a documented state rather than a
+      # regression, and a permanently red job is a job nobody reads. Exit 2 is
+      # "not enough observed sessions yet".
+      - name: Score scanner recall against our own dead-click events
+        env:
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+        run: |
+          set +e
+          node scripts/replay-bench/score.mjs --recall
+          code=$?
+          set -e
+          if [ "$code" -eq 2 ]; then
+            echo "::notice::not enough observed sessions with a dead click yet"
+          elif [ "$code" -eq 1 ]; then
+            echo "::warning::scanner recall is below the bar (a known state, not a regression)"
+          elif [ "$code" -ne 0 ]; then
+            echo "::error::recall could not be scored (exit $code)"
+            exit 1
+          fi
+
+      # Which finished readers no scanner ever opened. The digest says how many;
+      # this names which, and only counts one as missed if it HAD a recording and
+      # a trigger event — a reader who declined recording is not a miss.
+      #
+      # Exit 1 is reported, not failed: misses are a PostHog-side sweep gap we
+      # cannot re-queue without the 'replay_scanner:write' scope, so failing on
+      # it would be a permanently red job. Exit 2 and above is a real error.
+      - name: Name the finished readers no scanner opened
+        env:
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set +e
+          node scripts/ux-review-coverage.mjs
+          code=$?
+          set -e
+          if [ "$code" -eq 1 ]; then
+            echo "::warning::some finished readers had a recording and a trigger but were never observed"
+          elif [ "$code" -ne 0 ]; then
+            echo "::error::coverage could not be measured (exit $code)"
+            exit 1
+          fi
+
+      - name: Every auto-PR probe reports its own defect
+        env:
+          STAGING_PASSWORD: ${{ secrets.STAGING_PASSWORD }}
+          RUNS: "2"
+        run: |
+          set +e
+          npx tsx scripts/verify-probe-falsifiability.mjs
+          code=$?
+          set -e
+          if [ "$code" -eq 1 ]; then
+            echo "::error::a probe allowed to open a pull request passed with its own defect injected"
+            exit 1
+          elif [ "$code" -eq 3 ]; then
+            echo "::warning::nothing to check — no auto-PR probe declares a MUTATE mode"
+            exit 0
+          elif [ "$code" -ne 0 ]; then
+            echo "::error::falsifiability check exited $code"
+            exit 1
+          fi

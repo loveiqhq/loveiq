@@ -11,7 +11,7 @@ interface Props {
   primaryArchetype: string;
   ranking: string[];
   unlockedArchetypes: Set<string>;
-  accessPlan: "essentials" | "full_report" | "all_reports" | null;
+  accessPlan: "essentials" | "full_report" | "core" | "all_reports" | null;
   diagnostics?: { uDimensions?: Record<string, number> } | null;
   submissionSeed?: string | number | null;
 }

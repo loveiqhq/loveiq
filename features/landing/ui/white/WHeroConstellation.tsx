@@ -134,7 +134,7 @@ const Label: FC<{ item: Item }> = ({ item }) =>
       {item.text}
     </span>
   ) : (
-    <span className="whitespace-nowrap font-sans text-[11px] font-bold uppercase leading-none tracking-[1.6px] text-[#9a96a6]">
+    <span className="whitespace-nowrap font-sans text-[11px] font-bold uppercase leading-none tracking-[1.6px] text-[#6f6c78]">
       {item.text}
     </span>
   );

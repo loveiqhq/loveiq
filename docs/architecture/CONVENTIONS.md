@@ -8,10 +8,11 @@
 
 **Files:**
 
-- PascalCase for React components: `S01Hero.tsx`, `LandingPage.tsx`
+- PascalCase for React components: `WHero.tsx`, `LandingPageWhite.tsx`
 - camelCase for utilities: `analytics.ts`, `ratelimit.ts`
 - kebab-case for directories: `app/api/contact/`
-- Numbered landing sections: `S01Hero.tsx` through `S15Testimonials.tsx`
+- Landing sections: `W{Name}.tsx` under `features/landing/ui/white/`. The numbered
+  `S##Name.tsx` scheme belonged to the dark arm, retired 2026-06-19 and deleted.
 
 **Functions:**
 
@@ -53,7 +54,7 @@
 1. React/Next.js imports (`next/script`, `next/font/google`)
 2. External packages (`resend`, `zod`)
 3. Internal modules (`@shared/http/csrf`, `@shared/http/ratelimit`)
-4. Relative imports (`./S01Hero`)
+4. Relative imports (`./WHero`)
 5. Type imports (`type { Metadata }`)
 
 **Grouping:**

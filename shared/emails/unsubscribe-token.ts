@@ -116,6 +116,7 @@ export const UNSUBSCRIBE_CAMPAIGNS = {
   reportUnlocked: "report_unlocked",
   chapterNudge: "chapter_nudge",
   postCallCoupon: "post_call_coupon",
+  testLink: "test_link",
 } as const;
 
 /**
@@ -132,9 +133,13 @@ export const CAMPAIGN_LABELS: Record<string, string> = {
   [UNSUBSCRIBE_CAMPAIGNS.reportUnlocked]: "Report unlocked (purchase confirmation)",
   [UNSUBSCRIBE_CAMPAIGNS.chapterNudge]: "Chapter nudge drip",
   [UNSUBSCRIBE_CAMPAIGNS.postCallCoupon]: "Post-call 100% coupon",
+  [UNSUBSCRIBE_CAMPAIGNS.testLink]: "Test link (landing email capture)",
   // Nurture-sequence stages
   "6h_no_view": "Nurture 6h (report ready)",
   "6h_no_unlock": "Nurture 6h (unlock nudge)",
+  "72h_no_unlock": "Nurture 72h (50% off)",
+  // Retired stages (pre pricing 2.0) — kept so historical unsubscribe links
+  // already sitting in inboxes still resolve to a readable label.
   "30h_no_unlock": "Nurture 30h (50% off)",
   "54h_no_unlock": "Nurture 54h (75% off)",
   "78h_no_unlock": "Nurture 78h (call invite)",
@@ -182,8 +187,7 @@ export function campaignLabel(campaign: string): string {
  * Pure + escape-free: the caller escapes `label` for Slack; notes are static.
  */
 export type UnsubscribeSource =
-  | { attributed: true; label: string }
-  | { attributed: false; note: string };
+  { attributed: true; label: string } | { attributed: false; note: string };
 
 export function describeUnsubscribeSource(
   campaign: string,

@@ -242,7 +242,7 @@ describe("funnel-digest cron handler — Phase 3 wiring", () => {
       expect(imageBlocks.length).toBeGreaterThanOrEqual(5);
       for (const img of imageBlocks) {
         expect(img.image_url).toMatch(
-          /^https:\/\/example\.test\/api\/admin\/digest-image\/(cvr-visitor-start|cvr-visitor-start-dark|cvr-start-completion|cvr-completion-engagement|cvr-completion-paygate|cvr-paygate-purchase|bucket-performance|dropout-funnel|reactivation-email)\?d=[^&]+&s=/
+          /^https:\/\/example\.test\/api\/admin\/digest-image\/(cvr-visitor-start|cvr-start-completion|cvr-completion-engagement|cvr-completion-paygate|cvr-paygate-purchase|bucket-performance|dropout-funnel|reactivation-email)\?d=[^&]+&s=/
         );
       }
       // Revenue footer section present.

@@ -26,16 +26,20 @@ describe("NURTURE_PROMO_CODE_REGEX", () => {
 });
 
 describe("getCouponIdForStage", () => {
-  it("maps post_call → STRIPE_COUPON_100", () => {
+  it("maps post_call + partner → STRIPE_COUPON_100", () => {
     process.env.STRIPE_COUPON_100 = "nurture_100";
     expect(getCouponIdForStage("post_call")).toBe("nurture_100");
+    expect(getCouponIdForStage("partner")).toBe("nurture_100");
   });
 
-  it("maps the nurture stages and returns null for unknown stages", () => {
+  it("maps the 72h discount stage to STRIPE_COUPON_50 and returns null for others", () => {
     process.env.STRIPE_COUPON_50 = "nurture_50";
-    process.env.STRIPE_COUPON_75 = "nurture_75";
-    expect(getCouponIdForStage("30h_no_unlock")).toBe("nurture_50");
-    expect(getCouponIdForStage("54h_no_unlock")).toBe("nurture_75");
+    // Pricing 2.0: the only nurture discount is 72h → 50%. The retired 30h/54h
+    // ladder no longer maps to a coupon (historical codes resolve via their
+    // stored promotion id, never re-minted here).
+    expect(getCouponIdForStage("72h_no_unlock")).toBe("nurture_50");
+    expect(getCouponIdForStage("30h_no_unlock")).toBeNull();
+    expect(getCouponIdForStage("54h_no_unlock")).toBeNull();
     expect(getCouponIdForStage("78h_no_unlock")).toBeNull();
     expect(getCouponIdForStage("bogus")).toBeNull();
   });

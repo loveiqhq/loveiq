@@ -2,6 +2,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 
+const ph = vi.hoisted(() => ({
+  capture: vi.fn(),
+  identify: vi.fn(),
+  register: vi.fn(),
+  init: vi.fn(),
+}));
+vi.mock("posthog-js", () => ({ default: ph }));
+
 import { useSubmitSurvey } from "@features/survey/ui/hooks/useSubmitSurvey";
 
 // --- Helpers ---
@@ -225,5 +233,41 @@ describe("useSubmitSurvey", () => {
       string
     >;
     expect(callHeaders["Content-Type"]).toBe("application/json");
+  });
+});
+
+/**
+ * This hook used to fire its own `posthog.capture("survey_completed")` right
+ * after `identify`, so that the event was attributed to the identified person.
+ * But `SurveyEngine` already reports completion via `trackSurveyComplete`, so
+ * every completion was counted TWICE — measured at 2.06 events per session,
+ * 209 of 218 sessions firing a pair 30-95ms apart, while the server-side record
+ * was singular (79 rows across 79 sessions).
+ *
+ * The identify stays; only the duplicate capture is gone.
+ */
+describe("useSubmitSurvey does not double-count completion", () => {
+  beforeEach(() => {
+    ph.capture.mockClear();
+    ph.identify.mockClear();
+  });
+
+  it("identifies the buyer but emits no survey_completed of its own", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ reportToken: "rpt_ABCDEFGHIJKLMNOPQRST", submissionId: 1978 }),
+    });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const { result } = renderHook(() => useSubmitSurvey());
+    await act(async () => {
+      await result.current.submit(makeAnswers(), new Date().toISOString());
+    });
+
+    // identify is load-bearing: the Stripe webhook keys the purchase on this
+    // same lower-cased email, so dropping it would orphan revenue.
+    expect(ph.identify).toHaveBeenCalledWith("alice@example.com", expect.any(Object));
+    const completions = ph.capture.mock.calls.filter(([n]) => n === "survey_completed");
+    expect(completions).toHaveLength(0);
   });
 });

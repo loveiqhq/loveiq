@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "loveiq-brain": {
+      "type": "http",
+      "url": "https://www.loveiq.org/api/mcp",
+      "headers": {
+        "Authorization": "Bearer ${LOVEIQ_MCP_TOKEN}"
+      }
+    }
+  }
+}

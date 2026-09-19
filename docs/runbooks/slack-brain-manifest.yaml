@@ -1,0 +1,56 @@
+# LoveIQ Brain — Slack app manifest (PHASE 1 of 2)
+#
+# WHY THIS IS SPLIT IN TWO. Slack verifies the Events Request URL the moment it is
+# saved, by POSTing a url_verification challenge. Our route answers that challenge
+# only once SLACK_BRAIN_SIGNING_SECRET is set — before that it returns 503 by
+# design, so it is safe to deploy before Slack exists. But the signing secret only
+# exists AFTER the app is created. Putting event_subscriptions in this manifest
+# therefore guarantees a failed verification on creation.
+#
+# So: create the app WITHOUT events (this file), copy the two credentials out, set
+# them on Vercel, redeploy, and only then add the Request URL. Verification then
+# passes first try.
+#
+# PHASE 1 — create the app
+#   1. https://api.slack.com/apps → Create New App → From an app manifest
+#   2. Pick the LoveIQ workspace, paste this YAML, Create
+#   3. Basic Information → App Credentials → copy the SIGNING SECRET
+#   4. Install App → Install to Workspace → copy the BOT USER OAUTH TOKEN (xoxb-…)
+#   5. Hand both to me; I set them on Vercel and redeploy
+#
+# PHASE 2 — turn on events (after the redeploy)
+#   6. Event Subscriptions → toggle Enable Events on
+#   7. Request URL: https://www.loveiq.org/api/slack/events
+#      It should show "Verified" immediately. If it does not, the secret is not
+#      live yet — the route is still answering 503.
+#   8. Subscribe to bot events: app_mention, message.im  → Save Changes
+#   9. Reinstall if Slack asks. Then invite it: /invite @LoveIQ Brain
+#
+# Then @-mention it in a channel, or DM it.
+
+display_information:
+  name: LoveIQ Brain
+  description: Ask about anything we have written down — docs, commits, Jira, and our numbers.
+  background_color: "#0b0613"
+features:
+  bot_user:
+    display_name: LoveIQ Brain
+    always_online: true
+oauth_config:
+  scopes:
+    bot:
+      # Read @-mentions in channels the bot is invited to.
+      - app_mentions:read
+      # Post the answer.
+      - chat:write
+      # Read and reply in direct messages.
+      - im:history
+      - im:read
+      - im:write
+settings:
+  org_deploy_enabled: false
+  # Deliberately false. Socket Mode would avoid needing a public URL, but this app
+  # is a Vercel route that already has one, and Socket Mode requires a process
+  # holding a websocket open — which serverless cannot do.
+  socket_mode_enabled: false
+  token_rotation_enabled: false

@@ -17,6 +17,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "previews:generate": "node scripts/generate-locked-previews.mjs",
+    "qa:report": "node scripts/qa-report-sweep.mjs",
     "docs:truth": "node scripts/check-docs-truth.mjs",
     "docs:lint": "markdownlint-cli2",
     "docs:spell": "cspell lint \"**/*.md\" --no-progress --no-must-find-files",
@@ -26,6 +28,10 @@
     "survey:check-db-sync": "node scripts/check-survey-db-sync.js",
     "lint": "eslint .",
     "test": "vitest run",
+    "brain:ask": "tsx scripts/brain-ask.ts",
+    "brain:battery": "tsx scripts/brain-battery.ts",
+    "brain:battery:retrieval": "tsx --env-file-if-exists=.env.local scripts/brain-battery.ts --retrieval",
+    "brain:battery:mcp": "tsx --env-file-if-exists=.env.local scripts/brain-battery.ts --mcp",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run --config vitest.integration.config.ts",
@@ -33,7 +39,6 @@
     "test:e2e": "playwright test",
     "test:visual": "playwright test --project=\"Desktop Chrome\" e2e/visual-regression.spec.ts",
     "typecheck": "tsc --noEmit",
-    "format:check": "prettier --check .",
     "format:fix": "prettier --write .",
     "audit:high": "npm audit --audit-level=high",
     "sbom": "npx --yes @cyclonedx/cyclonedx-npm --ignore-npm-errors --output-file sbom.json",
@@ -45,13 +50,21 @@
     "ci:local:quick": "QUICK=1 bash scripts/ci-local.sh",
     "ci:local:full": "FULL=1 bash scripts/ci-local.sh",
     "analyze": "ANALYZE=true npm run build",
-    "check": "npm run lint && npm test && npm run docs:check && npm run build",
+    "check": "npm run lint && npx prettier --check . && npm run check:migrations && npm test && npm run docs:check && npm run build",
     "generate:practice-tendencies": "node scripts/generate-practice-tendencies.js",
     "scoring:extract": "python scripts/extract-scoring-xlsm.py",
     "scoring:update": "python scripts/extract-scoring-xlsm.py && node scripts/update-scoring-config.js",
     "setup": "npm install && node -e \"const fs=require('fs');if(!fs.existsSync('.env.local')){fs.copyFileSync('.env.example','.env.local');console.log('.env.local created from .env.example')}else{console.log('.env.local already exists')}\"",
     "update:product-kpis": "node scripts/update-product-kpis.js",
-    "prepare": "husky"
+    "prepare": "husky",
+    "brain:backfill-google": "tsx --env-file-if-exists=.env.local scripts/brain-backfill-google.ts",
+    "brain:rebuild-notion": "tsx scripts/brain-rebuild-notion.ts",
+    "voice:check": "tsx --env-file-if-exists=.env.local scripts/voice-check.ts",
+    "brain:claims": "tsx --env-file-if-exists=.env.local scripts/check-mcp-claims.ts",
+    "brain:drift": "tsx --env-file-if-exists=.env.local scripts/brain-mcp-drift.ts",
+    "replay:bench": "node scripts/replay-bench/score.mjs",
+    "brain:gaps": "tsx --env-file-if-exists=.env.local scripts/brain-gaps.ts",
+    "brain:redact": "tsx --env-file-if-exists=.env.local scripts/brain-redact-backfill.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
@@ -61,13 +74,15 @@
     "d3-sankey": "^0.12.3",
     "d3-shape": "^3.2.0",
     "lenis": "^1.3.25",
-    "next": "^16.2.9",
+    "next": "^16.2.12",
     "pino": "^10.3.1",
+    "posthog-js": "^1.418.10",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "resend": "^6.16.0",
     "stripe": "^22.1.1",
     "svix": "^1.96.1",
+    "unpdf": "^1.8.1",
     "web-vitals": "^5.3.0",
     "zod": "^4.4.3"
   },
@@ -87,7 +102,7 @@
     "@vitest/coverage-v8": "^4.1.9",
     "autoprefixer": "^10.5.0",
     "cspell": "9.8.0",
-    "csv-parse": "^6.2.1",
+    "csv-parse": "^7.0.2",
     "eslint": "^9.39.2",
     "eslint-config-next": "^16.2.9",
     "eslint-plugin-no-secrets": "^2.3.3",
@@ -96,14 +111,14 @@
     "jsdom": "^29.0.2",
     "lint-staged": "^17.0.7",
     "mammoth": "^1.12.0",
-    "markdownlint-cli2": "0.22.1",
+    "markdownlint-cli2": "0.23.2",
     "msw": "^2.14.6",
-    "postcss": "^8.5.15",
-    "prettier": "^3.8.4",
+    "postcss": "^8.5.25",
+    "prettier": "^3.9.6",
     "tailwindcss": "^3.4.19",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.11"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
@@ -112,17 +127,25 @@
     ],
     "*.{json,md,css,yml,yaml}": [
       "prettier --write"
+    ],
+    "*.{mjs,cjs,js}": [
+      "prettier --write"
     ]
   },
   "overrides": {
     "esbuild": "^0.28.1",
     "glob": "^10.5.0",
     "minimatch": ">=10.2.1",
+    "nanoid": "^3.3.18",
     "postcss": "$postcss",
     "uuid": ">=11.0.0",
     "vite": "^8.0.16",
-    "js-yaml": ">=4.2.0",
+    "js-yaml": ">=5.2.2",
     "markdown-it": ">=14.2.0",
-    "yaml": ">=2.8.3"
+    "yaml": ">=2.8.3",
+    "sharp": ">=0.35.3",
+    "brace-expansion": ">=5.0.9",
+    "linkify-it": ">=5.0.2",
+    "smol-toml": ">=1.8.0"
   }
 }

@@ -10,11 +10,7 @@ import { getScoringConfig } from "@features/scoring/logic/config";
 import logger from "@shared/observability/logger";
 
 export type DriftCategoryKey =
-  | "taxonomy"
-  | "event-naming"
-  | "config"
-  | "answer-mapping"
-  | "experiment-setup";
+  "taxonomy" | "event-naming" | "config" | "answer-mapping" | "experiment-setup";
 
 export type DriftSeverity = "risk" | "watch";
 export type DriftCategoryStatus = "stable" | "watch" | "risk";

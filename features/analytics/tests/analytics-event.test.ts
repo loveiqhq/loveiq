@@ -20,6 +20,19 @@ vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
+const mockRefreshJourneyDetail = vi.fn().mockResolvedValue(undefined);
+vi.mock("@features/attribution/server/journey-message", () => ({
+  refreshJourneyDetail: (...args: unknown[]) => mockRefreshJourneyDetail(...args),
+}));
+
+// Run the scheduled work inline so the test observes it, which is what
+// `scheduleAfterResponse` does anyway when there is no request scope.
+vi.mock("@shared/http/after-response", () => ({
+  scheduleAfterResponse: (_label: string, run: () => unknown) => {
+    void run();
+  },
+}));
+
 import { POST } from "@/app/api/analytics-event/route";
 
 function makeRequest(body: unknown) {
@@ -215,4 +228,136 @@ describe("POST /api/analytics-event — forced-paywall experiment events (Phase 
       );
     }
   );
+});
+
+/**
+ * The wiring between a dwell milestone and the Slack "Report time" line.
+ *
+ * Deleting this block from the route used to break no test at all, so the one
+ * thing that makes the headline feature ever fill in was unproven — every other
+ * test mocks the value further downstream.
+ */
+describe("journey dwell refresh", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSubmissionLookup(2013);
+  });
+
+  it.each(["report_engagement_1min", "report_engagement_5min", "report_engagement_10min"])(
+    "refreshes the Slack message on %s",
+    async (event_type) => {
+      const res = await POST(makeRequest({ event_type, submission_id: 2013 }));
+      expect(res.status).toBe(204);
+      expect(mockRefreshJourneyDetail).toHaveBeenCalledWith(2013);
+    }
+  );
+
+  /**
+   * Any report-page event moves the line, not just the three milestones.
+   *
+   * This is the half of the "always 1+ min" bug that the measurement alone does
+   * not fix: gated on milestones only, a reader who crossed one minute and then
+   * read for eight more was frozen at their first minute, because nothing they
+   * did afterwards was allowed to re-render the message.
+   */
+  it.each(["report_viewed", "paywall_initiated", "scroll_depth_50", "rage_click"])(
+    "refreshes on %s, so the last thing they do is what lands in Slack",
+    async (event_type) => {
+      await POST(makeRequest({ event_type, submission_id: 2013 }));
+      expect(mockRefreshJourneyDetail).toHaveBeenCalledWith(2013);
+    }
+  );
+
+  // The wizard fires these before the report exists, so they can only ever
+  // produce the same em dash — not worth a Supabase read and a Slack call.
+  it.each(["wizard_slide_advanced", "survey_confirmation_cta_clicked"])(
+    "does not refresh on %s",
+    async (event_type) => {
+      await POST(makeRequest({ event_type, submission_id: 2013 }));
+      expect(mockRefreshJourneyDetail).not.toHaveBeenCalled();
+    }
+  );
+
+  it("does not refresh when the event was never stored", async () => {
+    // insert non-2xx — refreshing would render a dwell the DB does not carry
+    mockSupabaseFetch.mockImplementation((url: string) => {
+      if (url.includes("/rest/v1/survey_submission?id=eq.2013")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([{ id: 2013 }]) });
+      }
+      return Promise.resolve({ ok: false, status: 400, clone: () => ({ text: async () => "" }) });
+    });
+    const res = await POST(
+      makeRequest({ event_type: "report_engagement_5min", submission_id: 2013 })
+    );
+    expect(res.status).toBe(204);
+    expect(mockRefreshJourneyDetail).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The milestones fire once per PAGE LOAD, not once per submission — the
+   * client's dedupe set is rebuilt on every mount, and production already has a
+   * submission carrying 27 of these rows. The cooldown is what makes the
+   * documented "three extra edits per submission" ceiling real, and it also
+   * stops an anonymous caller driving `chat.update` past its Tier 3 budget.
+   */
+  it("skips the refresh when the same milestone is still within its cooldown", async () => {
+    const { checkRateLimit } = await import("@shared/http/ratelimit");
+    vi.mocked(checkRateLimit).mockImplementation(async (_key, opts) => ({
+      allowed: opts?.bucket !== "journey-dwell-refresh",
+      remaining: 0,
+      resetAt: new Date(),
+    }));
+    const res = await POST(
+      makeRequest({ event_type: "report_engagement_10min", submission_id: 2013 })
+    );
+    // still stored — only the Slack edit is suppressed
+    expect(res.status).toBe(204);
+    expect(mockSupabaseFetch).toHaveBeenCalledWith(
+      "/rest/v1/analytics_event",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(mockRefreshJourneyDetail).not.toHaveBeenCalled();
+  });
+
+  it("keys the cooldown by submission and milestone, never by IP", async () => {
+    const { checkRateLimit } = await import("@shared/http/ratelimit");
+    await POST(makeRequest({ event_type: "report_engagement_5min", submission_id: 2013 }));
+    expect(checkRateLimit).toHaveBeenCalledWith(
+      "2013:report_engagement_5min",
+      expect.objectContaining({ bucket: "journey-dwell-refresh", limit: 1 })
+    );
+  });
+
+  /**
+   * Ordinary activity shares ONE slot every five minutes, so a chatty page
+   * (scroll depth alone fires four times) cannot rewrite the message on every
+   * row. A milestone keeps its own hourly slot: a quiet reader produces no
+   * scrolls and no clicks, so their heartbeats are the only evidence that time
+   * is passing, and a shared bucket would let chatter swallow them.
+   */
+  it("gives ordinary activity its own five-minute slot, keyed by submission alone", async () => {
+    const { checkRateLimit } = await import("@shared/http/ratelimit");
+    await POST(makeRequest({ event_type: "scroll_depth_75", submission_id: 2013 }));
+    expect(checkRateLimit).toHaveBeenCalledWith(
+      "2013",
+      expect.objectContaining({
+        bucket: "journey-activity-refresh",
+        limit: 1,
+        windowMs: 300_000,
+      })
+    );
+  });
+
+  it("skips the refresh when ordinary activity is still within its cooldown", async () => {
+    const { checkRateLimit } = await import("@shared/http/ratelimit");
+    vi.mocked(checkRateLimit).mockImplementation(async (_key, opts) => ({
+      allowed: opts?.bucket !== "journey-activity-refresh",
+      remaining: 0,
+      resetAt: new Date(),
+    }));
+    const res = await POST(makeRequest({ event_type: "scroll_depth_75", submission_id: 2013 }));
+    // still stored — only the Slack edit is suppressed
+    expect(res.status).toBe(204);
+    expect(mockRefreshJourneyDetail).not.toHaveBeenCalled();
+  });
 });

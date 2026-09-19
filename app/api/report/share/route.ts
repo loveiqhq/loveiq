@@ -112,7 +112,7 @@ export async function POST(request: Request) {
       personalReportId: owner.personalReportId,
       recipientEmail,
       sharedByUserId: owner.ownerUserId,
-      plan: plan as "essentials" | "full_report" | "all_reports",
+      plan: plan as "essentials" | "full_report" | "core" | "all_reports",
       seatLimit,
       shareToken,
       personalMessage,

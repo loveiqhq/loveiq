@@ -23,8 +23,50 @@ export interface PendingSurveyCompletion {
   savedAt: string;
 }
 
+/**
+ * The one question the landing page asks up front (the hero / closing-CTA card
+ * in features/landing/ui/white/WQuestionCard.tsx). Answering it there stores a
+ * real answer and marks the qId as "prefilled", so SurveyEngine drops it from
+ * the flow — 59 questions total, 58 of them inside /survey.
+ */
+export const LANDING_PREFILL_QID = "01002";
+
 function canUseStorage(): boolean {
   return typeof window !== "undefined";
+}
+
+/**
+ * Persist an answer captured before the survey started, into the same blob
+ * `useSurveyState` hydrates from.
+ *
+ * It only marks the question as prefilled for a FRESH draft. If the visitor
+ * already has survey progress, the answer is still saved (so their choice is
+ * never lost) but the question stays in the flow — removing a question from
+ * under someone mid-survey would shift every index after it.
+ */
+export function saveLandingPrefill(qId: string, value: number): void {
+  if (!canUseStorage()) return;
+  try {
+    const raw = localStorage.getItem(SURVEY_STATE_KEY);
+    const prev = raw ? (JSON.parse(raw) as Record<string, unknown> | null) : null;
+    const base = prev && typeof prev === "object" ? prev : {};
+    const answers = (base.answers as Record<string, unknown> | undefined) ?? {};
+    const prefilled = Array.isArray(base.prefilled) ? (base.prefilled as string[]) : [];
+    const isFreshDraft = Object.keys(answers).length === 0 && !base.currentIndex;
+
+    localStorage.setItem(
+      SURVEY_STATE_KEY,
+      JSON.stringify({
+        ...base,
+        answers: { ...answers, [qId]: value },
+        startedAt: (base.startedAt as string | undefined) || new Date().toISOString(),
+        prefilled: isFreshDraft && !prefilled.includes(qId) ? [...prefilled, qId] : prefilled,
+      })
+    );
+  } catch {
+    // Storage unavailable (private mode / quota). The survey still works — the
+    // visitor just answers this question again inside the flow.
+  }
 }
 
 export function loadPendingCompletion(): PendingSurveyCompletion | null {

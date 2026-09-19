@@ -1,5 +1,6 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
+import { isProductionSite } from "@shared/env/is-non-prod-deploy";
 
 /**
  * Server-side GA4 purchase tracking via the Measurement Protocol.
@@ -8,8 +9,38 @@ import logger from "@shared/observability/logger";
  * GTM → GA4) only fires for the consented subset of buyers who actually land back
  * on /checkout/return with a "paid & complete" status — it's lost to ad blockers,
  * closed tabs, and async payments. The Stripe webhook, by contrast, fulfills 100%
- * of payments server-side. Sending the purchase from there makes GA4's purchase
- * count match reality.
+ * of payments server-side, so sending the purchase from there recovers the buyers
+ * who paid and never came back.
+ *
+ * IT DOES NOT MAKE GA4 MATCH REALITY, and an earlier version of this comment
+ * claimed it did. Measured 2026-08-27 over 12 months: 24 purchases in GA4 against 51
+ * REAL sales in the database — under half. (The payment table holds 81 succeeded
+ * rows, but 30 of them are EUR 0 free unlocks — 22 in May alone — which contribute no
+ * revenue and mostly never pass through a browser purchase, so 81 is the wrong
+ * denominator. An earlier version of this comment used it and understated the ratio
+ * as 30%.) The cause is the two gates below, which this function INHERITS from the
+ * client rather than bypassing:
+ *
+ *   - `consentGranted` — of 68 paying submissions, only 35 ever wrote a single
+ *     `analytics_event` row, and that table is itself consent-gated. So roughly
+ *     half of all buyers decline analytics, and for them there is nothing to send.
+ *   - `clientId` — it comes from the buyer's `_ga` cookie. A buyer who declined
+ *     analytics has no `_ga` cookie, so even if consent were ignored there would be
+ *     no id to attribute the purchase to.
+ *
+ * Both gates are correct: sending a declined visitor's purchase to Google is
+ * exactly what the CookieYes gate exists to prevent. The consequence is simply that
+ * **GA4 is not a source of revenue truth for this product and cannot be made into
+ * one from here** — the `payment` table is. Anything that needs a real number (the
+ * digest, /admin, a board slide) must read the database.
+ *
+ * The number that matters for advertising: GA4 sees roughly HALF of real sales by
+ * count and a QUARTER of revenue (EUR 269 of EUR 1,099.29). Revenue is the sounder of
+ * the two — it is unaffected by how free unlocks are counted, because they contribute
+ * nothing to either side. A consistent undercount still ranks campaigns correctly, so
+ * conversion-based bidding is not broken, but any target-ROAS figure fed from GA4 will
+ * be wrong by roughly 4x. Closing that properly means Google Consent Mode v2 with
+ * modelling, not more server-side sends.
  *
  * Dedup: we send the SAME `transaction_id` the client uses (the Stripe checkout
  * session id), so GA4 collapses the client + server events into one purchase.
@@ -41,6 +72,11 @@ export interface Ga4PurchaseInput {
   itemName: string;
   /** Optional extra GA4 event params (cluster, arm, device, …). */
   params?: Record<string, string | number | undefined>;
+  /**
+   * True when the payer is staff — the same classification written to
+   * `payment.is_test`. A test purchase must never become an Ads conversion.
+   */
+  isTest?: boolean;
 }
 
 /**
@@ -49,6 +85,52 @@ export interface Ga4PurchaseInput {
  * Fulfillment must never fail because analytics did.
  */
 export async function sendGa4PurchaseEvent(input: Ga4PurchaseInput): Promise<void> {
+  /**
+   * Production only. This is the one analytics send that survives the client-side
+   * gate in app/layout.tsx, because it runs in the Stripe webhook rather than in a
+   * browser: staging shares the production Supabase database and can take Stripe
+   * test-mode webhooks, so a sandbox test purchase would otherwise arrive in the
+   * real GA4 property as revenue — and GA4 purchases feed Google Ads, so it would
+   * arrive as a conversion the bidding algorithm optimises on. `GA4_API_SECRET`
+   * being unset on staging today is a configuration accident, not a guard.
+   */
+  if (!isProductionSite()) {
+    logger.info(
+      { transactionId: input.transactionId },
+      "Non-production deploy — skipping server-side GA4 purchase event"
+    );
+    return;
+  }
+
+  /**
+   * A GA4 purchase becomes a Google Ads conversion the bidding algorithm
+   * optimises on, so a purchase that carried no money must never be sent.
+   *
+   * Measured 2026-09-09: 34 `purchase` events landed on 2026-09-07 with
+   * `value: 0.0` — device-matrix test purchases redeemed with a 100%-off promo
+   * code. Nothing excluded them, so Ads was told there were 34 sales worth
+   * nothing, which is the strongest possible signal that conversions are free
+   * and cheap to buy.
+   *
+   * Two independent reasons to skip, because they catch different cases:
+   * `isTest` catches a staff purchase at any price, and a non-positive value
+   * catches a 100%-off comp (including the post-call grant) made by anyone.
+   */
+  if (input.isTest) {
+    logger.info(
+      { transactionId: input.transactionId },
+      "Test purchase — skipping server-side GA4 purchase event"
+    );
+    return;
+  }
+  if (!(input.value > 0)) {
+    logger.info(
+      { transactionId: input.transactionId, value: input.value },
+      "Zero-value purchase — skipping server-side GA4 purchase event"
+    );
+    return;
+  }
+
   const apiSecret = process.env.GA4_API_SECRET;
   if (!apiSecret) {
     logger.info(

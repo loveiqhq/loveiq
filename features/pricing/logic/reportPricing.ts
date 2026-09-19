@@ -8,13 +8,10 @@ import {
 import {
   resolveSubmissionAccessContext,
   ensurePersonalReportForSubmission,
-  lookupReportTokenBySubmissionId,
 } from "@features/report/server/personalReport";
 import { parseUtmSource } from "@features/survey/server/utils";
-import {
-  getForcedPaywallCohort,
-  type ForcedPaywallCohort,
-} from "@shared/experiments/forcedPaywall";
+import logger from "@shared/observability/logger";
+import { isFeatureEnabled } from "@shared/flags/system-flags";
 
 const SUPABASE_TIMEOUT_MS = 8_000;
 const QUOTE_VALIDITY_MS = 21 * 24 * 60 * 60 * 1_000;
@@ -32,32 +29,73 @@ const PLAN_LADDER_ALL = [{ delayMs: 0, multiplier: 1, step: 0 }] as const;
 const PLAN_LADDERS = {
   essentials: PLAN_LADDER_ESSENTIALS_FULL,
   full_report: PLAN_LADDER_ESSENTIALS_FULL,
+  core: PLAN_LADDER_ESSENTIALS_FULL,
   all_reports: PLAN_LADDER_ALL,
 } as const satisfies Record<
   ReportPurchasePlanId,
   ReadonlyArray<{ delayMs: number; multiplier: number; step: number }>
 >;
 
-const PRICING_SIGNAL_QIDS = ["15001", "16012", "03005", "03010", "03012"] as const;
+/**
+ * The survey answers pricing is allowed to read: country (15001) and the behavioural
+ * spend band (16012). Nothing else.
+ *
+ * `03005`, `03010` and `03012` used to be here. They are sexual-preference answers —
+ * Article 9 special-category data — and reading them produced `fantasySignalCount`, which
+ * added 20 points to the engagement score, was written to `report_price_quote`, and was
+ * passed onward to Stripe as checkout metadata and into purchase analytics. The uplift
+ * flag only ever stopped it changing a PRICE; it never stopped the value being derived,
+ * stored against a payment record and shared with a processor.
+ *
+ * They are removed rather than gated, because a gate leaves the derivation running: the
+ * quote row keeps a column populated from those answers whether or not anything reads it.
+ * Do not add a sexual-preference qid back to this list.
+ *
+ * 16009 does not belong here either, for a different reason. It asks which of four priced
+ * formats someone would buy first, and its options carry euro amounts — hypothetical ones,
+ * there to rank the formats against each other, not to charge anyone. Feeding them into
+ * pricing would break in both directions: the reader could be quoted a number they were
+ * shown in a survey, and the measurement would stop being clean, because a preference
+ * stated before the paywall would then be entangled with the price it produced.
+ */
+const PRICING_SIGNAL_QIDS = ["15001", "16012"] as const;
+
 const PRICING_SIGNAL_SELECT = [
   "answer_text",
-  "normalized_value",
   "survey_question!inner(frontend_qid)",
   "answer_option!fk_ssa_answer_option(option_text)",
 ].join(",");
 
 /**
- * Pricing buckets. 2026-06 reset: the BASE prices were lowered and the A/B
- * buckets now carry identical base values per plan. Group A is charged the flat
- * `startingCents`; Group B gets the per-user contextual uplift on top (see
- * buildQuotePayload). The 14-day time-decay ladder is currently off (flat over
- * time). Base prices:
- *   Essentials €9.99 (was €29.99) · Full €14.99 (was €49.99) · All €29.99 (was €79.99)
- * MSRP is the struck-out anchor shown in the modal/email.
+ * The price list. One bucket per plan since the A/B price test was CONCLUDED on
+ * 2026-08-31 in favour of B; `startingCents` is what the reader is charged and
+ * `msrpCents` is the struck-out anchor shown in the modal and the emails.
+ *
+ * Why B, and what the data actually said. Group A was the dearer arm from the
+ * 2.1 flip on 2026-08-24 (39.99/49.99/59 against B's 29/39/49); before that, in
+ * 2.0, A was the cheaper one. Measured over the whole life of the test:
+ *
+ *   before the flip   A 2,525 quotes / 21 paid / EUR 482.29
+ *                     B 2,376 quotes / 23 paid / EUR 684.81
+ *   since the flip    A   195 quotes /  1 paid / EUR  39.99
+ *                     B   191 quotes /  2 paid / EUR  68.00
+ *
+ * B earned more in both eras, but the flip means the two eras are not one test,
+ * and 1-vs-2 purchases since the flip settles nothing on its own. This was called
+ * on the stakeholder's instruction to drop the higher-priced arm, which the
+ * numbers do not contradict — not on a result the sample could support.
+ *
+ * Existing quotes are frozen on create, so a change here reprices ONLY new
+ * quotes: the stored msrp/starting_price, initial_price and current_price each
+ * independently pin an existing row to its old price. Every change here
+ * therefore needs a matching re-sync of unpurchased rows, or it silently does
+ * nothing for everyone who already has a quote (see
+ * supabase/migrations/*_resync_quotes.sql).
  */
-// "C" retired 2026-06 (3-bucket → 2-bucket). Kept in the union so legacy quotes
-// stamped base_price_bucket="C" still rehydrate — they read msrp/starting off the
-// stored row, and bucketFromCode("C") → null is handled gracefully downstream.
+// "C" retired 2026-06 (3-bucket → 2-bucket); "A" retired 2026-08-31. Both stay in
+// the union so legacy quotes stamped with them still rehydrate — they read
+// msrp/starting off the stored row, and bucketFromCode → null is handled
+// gracefully downstream.
 export type PricingBucketCode = "A" | "B" | "C";
 interface PricingBucket {
   code: PricingBucketCode;
@@ -66,18 +104,14 @@ interface PricingBucket {
   startingCents: number;
 }
 const PLAN_BUCKETS: Record<ReportPurchasePlanId, readonly PricingBucket[]> = {
-  essentials: [
-    { code: "A", weight: 50, msrpCents: 2999, startingCents: 999 },
-    { code: "B", weight: 50, msrpCents: 2999, startingCents: 999 },
-  ],
-  full_report: [
-    { code: "A", weight: 50, msrpCents: 4999, startingCents: 1499 },
-    { code: "B", weight: 50, msrpCents: 4999, startingCents: 1499 },
-  ],
-  all_reports: [
-    { code: "A", weight: 50, msrpCents: 7999, startingCents: 2999 },
-    { code: "B", weight: 50, msrpCents: 7999, startingCents: 2999 },
-  ],
+  // Retired/grandfathered tier, untouched by the 2.1 flip and by this cut.
+  essentials: [{ code: "B", weight: 100, msrpCents: 2999, startingCents: 999 }],
+  // Tier 1 "Just a snapshot": €29 (priced at its own anchor, so no strike)
+  full_report: [{ code: "B", weight: 100, msrpCents: 2900, startingCents: 2900 }],
+  // Tier 2 "All your core archetypes": €39 (strike €87)
+  core: [{ code: "B", weight: 100, msrpCents: 8700, startingCents: 3900 }],
+  // Tier 3 "For you & your partner": €49 (strike €58)
+  all_reports: [{ code: "B", weight: 100, msrpCents: 5800, startingCents: 4900 }],
 };
 
 const COUNTRY_CODE_TO_TIER: Record<
@@ -155,12 +189,7 @@ const PRICING_SESSION_ID_REGEX =
 export type PricingExperimentGroup = "A" | "B";
 export type PricingDeviceType = "iOS" | "Android" | "Desktop";
 export type PricingTrafficSource =
-  | "direct"
-  | "newsletter"
-  | "google"
-  | "instagram"
-  | "tiktok"
-  | "other";
+  "direct" | "newsletter" | "google" | "instagram" | "tiktok" | "other";
 export type PricingBehavioralBucket = "zero" | "light" | "moderate" | "consistent" | "serious";
 
 export interface ReportPriceQuoteSnapshot {
@@ -184,6 +213,16 @@ export interface ReportPriceQuoteSnapshot {
   startingPriceCents: number;
   currentPriceCents: number;
   initialPriceCents: number;
+  /**
+   * What the reader is shown and what Stripe charges. Every price surface and the
+   * Stripe line item read THIS, so the screen and the invoice cannot disagree.
+   *
+   * Equal to `currentPriceCents` since the +2 EUR urgency surcharge was removed on
+   * 2026-08-31. Kept as its own field because it is the one name for "the amount we
+   * charge", and collapsing it would edit every price surface on the money path for
+   * no change in behaviour.
+   */
+  chargedPriceCents: number;
   discountMultiplier: number;
   discountStep: number;
   pricingClusterId: string;
@@ -198,7 +237,6 @@ export interface ReportPriceQuoteSnapshot {
   engagementScore: number;
   engagementMultiplier: number;
   reportPreviewViews: number;
-  fantasySignalCount: number;
   surveyDurationMs: number | null;
   initialPriceTimestamp: string;
   expiresAt: string;
@@ -254,7 +292,6 @@ interface SubmissionAnswerRow {
     option_text?: string | null;
   } | null;
   answer_text: string | null;
-  normalized_value: number | null;
   survey_question: {
     frontend_qid: string;
   } | null;
@@ -271,10 +308,12 @@ interface ReportPriceQuoteRow {
   /**
    * Forced-paywall A/B arm for this report ("treatment" | "control"), stamped
    * once at first quote persist. Consent-independent denominator for the
-   * experiment (see get_forced_paywall_ab RPC). Nullable for rows written
+   * experiment, which was removed on 2026-08-31. READ-ONLY now: nothing writes
+   * this any more, and it survives so historical rows still report truthfully
+   * (see get_forced_paywall_ab RPC). Nullable for rows written
    * before the 2026-05 column migration.
    */
-  forced_paywall_arm?: ForcedPaywallCohort | null;
+  forced_paywall_arm?: "treatment" | "control" | null;
   base_price_bucket: string;
   base_price: number;
   /** MSRP anchor in EUR (numeric). Nullable for rows written before the 2026-04 pricing migration. */
@@ -374,7 +413,6 @@ interface PricingContext {
   utmTracker: string | null;
   countryCode: string | null;
   behavioralAnswer: string | null;
-  fantasySignalCount: number;
 }
 
 function getSupabaseServiceConfig() {
@@ -552,13 +590,6 @@ function mergeSessionLockedQuote({
   return metadata;
 }
 
-export function formatReportPrice(cents: number, currency = "EUR") {
-  return new Intl.NumberFormat("en-IE", {
-    currency,
-    style: "currency",
-  }).format(cents / 100);
-}
-
 export function normalizePriceEnding(rawCents: number) {
   const rounded = Math.max(49, Math.round(rawCents));
   const euroFloor = Math.floor(rounded / 100);
@@ -572,31 +603,12 @@ export function normalizePriceEnding(rawCents: number) {
   return candidates.find((candidate) => candidate >= rounded) ?? rounded;
 }
 
-export function getPricingExperimentGroup(personalReportId: number): PricingExperimentGroup {
-  return hashString(`experiment:${personalReportId}`) % 2 === 0 ? "A" : "B";
-}
-
 /**
- * Deterministic bucket selection using the hash-of-personalReportId seeded
- * against the weighted distribution (A=50%, B=50%). One bucket per
- * user — the same code (A/B) is applied across all three plans so the
- * tier ladder stays monotonic (Full Report ≥ Essentials, All ≥ Full).
+ * The surviving pricing group. Nothing is randomised any more — the A/B price test
+ * concluded on 2026-08-31 — but `report_price_quote.experiment_group` is NOT NULL,
+ * so new rows carry the group that won rather than an arm nobody was assigned to.
  */
-function pickBucket(plan: ReportPurchasePlanId, personalReportId: number): PricingBucket {
-  // eslint-disable-next-line security/detect-object-injection -- plan is a closed union of internal purchase-plan ids.
-  const buckets = PLAN_BUCKETS[plan];
-  const draw = hashString(`bucket:${personalReportId}`) % 100;
-  let running = 0;
-  for (const bucket of buckets) {
-    running += bucket.weight;
-    if (draw < running) {
-      return bucket;
-    }
-  }
-  // Weights sum to 100; the loop always returns, but fall through defensively.
-  // Callers only pass non-empty `buckets`, so the final index is defined.
-  return buckets[buckets.length - 1]!;
-}
+const SURVIVING_PRICING_GROUP: PricingExperimentGroup = "B";
 
 function bucketFromCode(
   plan: ReportPurchasePlanId,
@@ -606,6 +618,17 @@ function bucketFromCode(
   // eslint-disable-next-line security/detect-object-injection -- plan is a closed union.
   const buckets = PLAN_BUCKETS[plan];
   return buckets.find((bucket) => bucket.code === code) ?? null;
+}
+
+/**
+ * The same lookup for the FRESH-quote path, where a miss is a bug rather than a
+ * legacy row: throwing means a mis-stamped group fails the quote instead of
+ * silently charging whatever bucket happened to be first in the list.
+ */
+function mustGetBucket(plan: ReportPurchasePlanId, code: string): PricingBucket {
+  const bucket = bucketFromCode(plan, code);
+  if (!bucket) throw new Error(`pricing_bucket_missing:${plan}:${code}`);
+  return bucket;
 }
 
 function normalizeCountryCode(value: string | null | undefined) {
@@ -744,12 +767,17 @@ export function getBehavioralPricing(answer: string | null | undefined): {
   return { bucket: "light", multiplier: 0.9 };
 }
 
+/**
+ * How engaged this reader looks, from behaviour only: how long they spent on the survey
+ * and how many times they came back to the preview.
+ *
+ * Sexual-fantasy answers used to add a third +20 here. That component is gone — see
+ * `PRICING_SIGNAL_QIDS`. The score is therefore capped at 40 rather than 60.
+ */
 export function getEngagementScore({
-  fantasySignalCount,
   previewViews,
   surveyDurationMs,
 }: {
-  fantasySignalCount: number;
   previewViews: number;
   surveyDurationMs: number | null;
 }) {
@@ -760,10 +788,6 @@ export function getEngagementScore({
   }
 
   if (previewViews >= 2) {
-    score += 20;
-  }
-
-  if (fantasySignalCount > 0) {
     score += 20;
   }
 
@@ -872,6 +896,8 @@ function toSnapshot(
       ? fromEuroAmount(row.starting_price)
       : (catalogueBucket?.startingCents ?? initialCents);
 
+  const currentPriceCents = override?.currentPriceCents ?? fromEuroAmount(row.current_price);
+
   return {
     id: row.id,
     plan: row.plan,
@@ -881,8 +907,9 @@ function toSnapshot(
     basePriceCents: fromEuroAmount(row.base_price),
     msrpCents,
     startingPriceCents: startingCents,
-    currentPriceCents: override?.currentPriceCents ?? fromEuroAmount(row.current_price),
+    currentPriceCents,
     initialPriceCents: initialCents,
+    chargedPriceCents: currentPriceCents,
     discountMultiplier: override?.discountMultiplier ?? row.discount_multiplier,
     discountStep: override?.discountStep ?? row.discount_step,
     pricingClusterId: row.pricing_cluster_id,
@@ -897,7 +924,6 @@ function toSnapshot(
     engagementScore: row.engagement_score,
     engagementMultiplier: row.engagement_multiplier,
     reportPreviewViews: row.report_preview_views,
-    fantasySignalCount: row.fantasy_signal_count,
     surveyDurationMs: row.survey_duration_ms,
     initialPriceTimestamp: row.initial_price_timestamp,
     expiresAt: row.expires_at,
@@ -974,32 +1000,6 @@ async function getPricingContext({
     answerRows.find((row) => row.survey_question?.frontend_qid === "16012")?.answer_text ??
     null;
 
-  const fantasySignalCount = answerRows.reduce((count, row) => {
-    const qid = row.survey_question?.frontend_qid;
-    const optionText =
-      row.answer_option?.option_text?.toLowerCase() ?? row.answer_text?.toLowerCase() ?? "";
-
-    if (qid === "03005" && optionText.includes("fantasy")) {
-      return count + 1;
-    }
-
-    if (
-      qid === "03010" &&
-      (optionText.includes("adventurous") ||
-        optionText.includes("taboo") ||
-        optionText.includes("edge") ||
-        optionText.includes("high-risk"))
-    ) {
-      return count + 1;
-    }
-
-    if (qid === "03012" && (row.normalized_value ?? 0) >= 5) {
-      return count + 1;
-    }
-
-    return count;
-  }, 0);
-
   return {
     personalReportId: personalReport.id,
     reportToken: reportToken ?? null,
@@ -1011,7 +1011,6 @@ async function getPricingContext({
     utmTracker: submissionRow.utm_tracker ?? appUser?.utm_tracker ?? null,
     countryCode: countryAnswer ?? null,
     behavioralAnswer,
-    fantasySignalCount,
   };
 }
 
@@ -1054,6 +1053,7 @@ function buildQuotePayload({
   now,
   plan,
   pricingSessionId,
+  upliftEnabled,
 }: {
   context: PricingContext;
   existingQuote?: ReportPriceQuoteRow | null;
@@ -1061,9 +1061,12 @@ function buildQuotePayload({
   now: Date;
   plan: ReportPurchasePlanId;
   pricingSessionId?: string | null;
+  // When false (pricing_uplift_enabled flag OFF), all per-visitor boosts are
+  // paused: Group B is charged its flat bucket base, same as Group A. The A/B
+  // base prices still differ (bucket.startingCents), but no dynamic uplift.
+  upliftEnabled: boolean;
 }): BuiltQuotePayload {
-  const experimentGroup =
-    existingQuote?.experiment_group ?? getPricingExperimentGroup(context.personalReportId);
+  const experimentGroup = existingQuote?.experiment_group ?? SURVIVING_PRICING_GROUP;
 
   // Resolve the bucket — either read the stored code (with MSRP/starting
   // sourced from the row when present) or pick fresh for a brand-new quote.
@@ -1087,7 +1090,10 @@ function buildQuotePayload({
             ? fromEuroAmount(existingQuote.starting_price)
             : (existingBucketFromCode?.startingCents ?? fromEuroAmount(existingQuote.base_price)),
       }
-    : pickBucket(plan, context.personalReportId);
+    : // One price list, so a fresh quote takes the only bucket there is. The
+      // lookup is by code rather than `[0]` so a stray group value can never
+      // silently price someone off the wrong row — it throws instead.
+      mustGetBucket(plan, experimentGroup);
 
   const countryPricing = getCountryPricing(context.countryCode);
   const deviceType = existingQuote?.device_type ?? getDeviceTypeFromUserAgent(context.userAgent);
@@ -1106,7 +1112,6 @@ function buildQuotePayload({
   const engagementScore =
     existingQuote?.engagement_score ??
     getEngagementScore({
-      fantasySignalCount: context.fantasySignalCount,
       previewViews: context.previewViews,
       surveyDurationMs: context.surveyDurationMs,
     });
@@ -1118,25 +1123,26 @@ function buildQuotePayload({
       ? existingQuote.initial_price_timestamp
       : now.toISOString();
 
-  // Per-user pricing: Group A is charged the flat catalogue `starting` price;
-  // Group B gets the contextual uplift (country × device × traffic × behavioral ×
-  // engagement), clamped to MSRP. Group A's starting is a deliberate .99 price so
-  // it's shown verbatim; Group B's computed uplift is charm-rounded to a .49/.99
-  // ending, then clamped to MSRP.
-  const groupBInitialRaw =
+  // The charged price is the bucket's flat `starting` price. While
+  // `pricing_uplift_enabled` is OFF (current default) NO per-visitor uplift is
+  // applied. If uplift is ever re-enabled, the contextual multiplier (country ×
+  // device × traffic × behavioral × engagement) is applied to that base,
+  // charm-rounded to a .49/.99 ending and clamped to MSRP. Note this used to apply
+  // to Group B only; with one group it applies to everyone, which is what the flag
+  // has always described.
+  const upliftedInitialRaw =
     bucket.startingCents *
     countryPricing.multiplier *
     deviceMultiplier *
     trafficMultiplier *
     behavioralPricing.multiplier *
     engagementMultiplier;
-  const computedInitialCents =
-    experimentGroup === "A"
-      ? Math.min(bucket.msrpCents, bucket.startingCents)
-      : Math.min(
-          bucket.msrpCents,
-          normalizePriceEnding(Math.min(bucket.msrpCents, groupBInitialRaw))
-        );
+  const computedInitialCents = upliftEnabled
+    ? Math.min(
+        bucket.msrpCents,
+        normalizePriceEnding(Math.min(bucket.msrpCents, upliftedInitialRaw))
+      )
+    : Math.min(bucket.msrpCents, bucket.startingCents);
   const initialPriceCents =
     !regenerateInitialPrice && existingQuote?.initial_price != null
       ? fromEuroAmount(existingQuote.initial_price)
@@ -1212,7 +1218,10 @@ function buildQuotePayload({
       engagement_multiplier: engagementMultiplier,
       engagement_score: engagementScore,
       expires_at: new Date(now.getTime() + QUOTE_VALIDITY_MS).toISOString(),
-      fantasy_signal_count: context.fantasySignalCount,
+      // Always 0: nothing is derived from sexual-preference answers any more.
+      // The column stays because historical rows reference it; the 2026-09-11 migration
+      // zeroed those. See PRICING_SIGNAL_QIDS.
+      fantasy_signal_count: 0,
       initial_price: toEuroAmount(initialPriceCents),
       initial_price_timestamp: initialPriceTimestamp,
       last_viewed_at: now.toISOString(),
@@ -1260,6 +1269,18 @@ async function persistQuote({
   plan: ReportPurchasePlanId;
   pricingSessionId?: string | null;
 }) {
+  /**
+   * Fails CLOSED, unlike most flags here. `isFeatureEnabled` returns this default
+   * when the row is missing OR Supabase is unreachable, and the row has been
+   * `false` in production since 2026-08-03 — so defaulting to `true` meant a
+   * Supabase blip switched per-visitor price boosts ON for everyone and charged
+   * more than the page showed. It was survivable only because Group A
+   * short-circuited the uplift branch, covering half of readers; retiring arm A
+   * on 2026-08-31 removed that accident. A pricing flag must fail towards
+   * charging LESS, the same rule the urgency surcharge followed.
+   */
+  const upliftEnabled = await isFeatureEnabled("pricing_uplift_enabled", false);
+
   const builtQuote = buildQuotePayload({
     context,
     existingQuote,
@@ -1267,21 +1288,18 @@ async function persistQuote({
     now,
     plan,
     pricingSessionId,
+    upliftEnabled,
   });
 
-  // Stamp the forced-paywall A/B arm ONCE (stable across re-quotes / per-plan
-  // rows, like experiment_group). Keyed on the SAME canonical report token the
-  // experience uses (token ?? data.ownerToken) so session-only users aren't
-  // mis-stamped as control. Consent-independent denominator for the experiment.
-  const forcedPaywallArm: ForcedPaywallCohort =
-    existingQuote?.forced_paywall_arm ??
-    getForcedPaywallCohort(
-      context.reportToken ?? (await lookupReportTokenBySubmissionId(context.submissionId))
-    );
-
+  // The forced-paywall A/B was removed on 2026-08-31, so nothing stamps
+  // `forced_paywall_arm` any more. An existing stamp is carried forward
+  // untouched rather than nulled, so a re-quote never erases the arm a
+  // historical reader actually experienced.
   const payload = {
     ...builtQuote.payload,
-    forced_paywall_arm: forcedPaywallArm,
+    ...(existingQuote?.forced_paywall_arm
+      ? { forced_paywall_arm: existingQuote.forced_paywall_arm }
+      : {}),
     created_date_time: existingQuote?.id ? undefined : now.toISOString(),
     personal_report_id: context.personalReportId,
     survey_submission_id: context.submissionId,
@@ -1364,11 +1382,13 @@ async function resolveQuote({
 
 async function getValidatedQuoteForContext({
   context,
+  now,
   plan,
   pricingSessionId,
   quoteId,
 }: {
   context: PricingContext;
+  now: Date;
   plan: ReportPurchasePlanId;
   pricingSessionId?: string | null;
   quoteId: number;
@@ -1433,6 +1453,7 @@ export async function getReportPriceQuoteForContext({
   if (typeof quoteId === "number") {
     const validatedQuote = await getValidatedQuoteForContext({
       context,
+      now,
       plan,
       pricingSessionId,
       quoteId,
@@ -1492,6 +1513,41 @@ export async function getReportPriceQuotesForContext({
   return Object.fromEntries(results) as Record<ReportPurchasePlanId, ReportPriceQuoteSnapshot>;
 }
 
+/**
+ * Record that this reader reached the paywall, server-side.
+ *
+ * The funnel's `paywall_initiated` stage is a consent-gated client event and was
+ * the only stage with no server-side witness behind it — which matters more now
+ * that `begin_checkout` reads `checkout_started_at`, because a consent-gated
+ * stage sitting directly above a consent-independent one can invert in a quiet
+ * window. /api/price POST is that witness; it just never wrote anything down.
+ *
+ * Scoped to the submission, not one quote: the paywall is reached once per
+ * reader, not once per plan, and all four of their quotes get the same stamp so
+ * the funnel can count `DISTINCT survey_submission_id` exactly as it does for
+ * checkout. The `paywall_reached_at=is.null` filter makes it idempotent AND
+ * preserves the FIRST view — reopening the modal cannot move the timestamp
+ * later, which is what makes it usable as a funnel entry time.
+ */
+export async function markReportPriceQuotePaywallReached({
+  submissionId,
+}: {
+  submissionId: number;
+}) {
+  const response = await supabaseServiceFetch(
+    `/rest/v1/report_price_quote?survey_submission_id=eq.${submissionId}&paywall_reached_at=is.null`,
+    {
+      body: JSON.stringify({ paywall_reached_at: new Date().toISOString() }),
+      headers: { Prefer: "return=minimal" },
+      method: "PATCH",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("pricing_quote_paywall_reached_update_failed");
+  }
+}
+
 export async function markReportPriceQuoteCheckoutStarted({ quoteId }: { quoteId: number }) {
   const response = await supabaseServiceFetch(`/rest/v1/report_price_quote?id=eq.${quoteId}`, {
     body: JSON.stringify({
@@ -1542,31 +1598,9 @@ export async function markReportPriceQuotePurchased({
 }
 
 /**
- * Display helper used by legacy admin screens. Returns the bucket-B MSRP as
- * the default "retail" price — the per-user strike is stored on the quote now
- * and should be read from `ReportPriceQuoteSnapshot.msrpCents` instead.
- * Since the 2026-06 reset A and B are identical, so the returned value is
- * unambiguous regardless of the bucket-B preference.
- */
-export function getReportPriceStrikeDisplay(plan: ReportPurchasePlanId) {
-  // eslint-disable-next-line security/detect-object-injection -- plan is a closed union of internal purchase-plan ids.
-  const bucketList = PLAN_BUCKETS[plan];
-  const defaultBucket = bucketList.find((entry) => entry.code === "B") ?? bucketList[0];
-  return defaultBucket ? formatReportPrice(defaultBucket.msrpCents) : null;
-}
-
-/**
  * Exported so tests + admin tools can read the bucket catalogue.
  */
 export function getPricingBucketsForPlan(plan: ReportPurchasePlanId) {
   // eslint-disable-next-line security/detect-object-injection -- plan is a closed union.
   return PLAN_BUCKETS[plan];
 }
-
-/**
- * Test-only surface — production code should call `getReportPriceQuoteForContext`
- * which internally invokes `pickBucket`. Exposed here so the bucket-coherence
- * invariant ("same user lands the same A/B/C across all 3 plans") can be
- * asserted directly without mocking the full Supabase fetch chain.
- */
-export const __testing__ = { pickBucket };

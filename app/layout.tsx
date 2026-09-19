@@ -5,6 +5,7 @@ import { Lora, Manrope } from "next/font/google";
 import { headers } from "next/headers";
 import SmoothScroll from "@shared/ui/SmoothScroll";
 import { NonceProvider } from "@shared/ui/NonceProvider";
+import ConsentBannerOffset from "@shared/ui/ConsentBannerOffset";
 import HydrationMarker from "@shared/ui/HydrationMarker";
 import UtmCapture from "@shared/ui/UtmCapture";
 import { GtmScript, GtmNoScript } from "@shared/ui/GtmScript";
@@ -14,6 +15,7 @@ import WebVitals from "@shared/ui/WebVitals";
 import { after } from "next/server";
 import { recordUniqueVisit } from "@shared/observability/recordVisit";
 import { jsonLdString } from "@shared/seo/json-ld";
+import { isProductionSite } from "@shared/env/is-non-prod-deploy";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
@@ -130,6 +132,13 @@ export const metadata: Metadata = {
       "Take LoveIQ's science-backed sexual psychology assessment to understand your desires, attachment patterns, and intimacy styles.",
     images: [`${siteUrl}/images/og-image.png`],
   },
+  // Google Search Console property verification. Renders
+  // <meta name="google-site-verification" ...> into <head> on every route.
+  // Search Console only requires the tag to be somewhere in <head> — its
+  // position there is not part of the check, and Next owns the tag order.
+  verification: {
+    google: "nVfAGktr8B1Ozc61mSDqVm6j0DuYsgyZIu5EnwKXmlk",
+  },
 };
 
 export const viewport: Viewport = {
@@ -140,15 +149,32 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-const HOTJAR_SITE_ID_RAW = process.env.NEXT_PUBLIC_HOTJAR_SITE_ID;
-const hotjarSiteId =
-  HOTJAR_SITE_ID_RAW && /^\d+$/.test(HOTJAR_SITE_ID_RAW) ? HOTJAR_SITE_ID_RAW : null;
-
 // Trustpilot review widget. The bootstrap is loaded only when the master kill
 // switch is on (isTrustpilotEnabled) AND a Business Unit ID is configured, and
 // only after the visitor grants the CookieYes `functional` category (it sets
 // Trustpilot's third-party cookies). Gated off by default until we have enough
 // reviews, so the script never loads while the on-site widgets are hidden.
+/**
+ * Whether the third-party production analytics tags may load at all.
+ *
+ * GA4, Google Ads and Clarity are hardcoded IDs (there is no per-environment
+ * property), so before this gate every `npm run dev` page view and every visit to
+ * staging.loveiq.org landed in the same GA4 property, the same Ads account and the
+ * same Clarity project as real customers. Marketing asked for that separation, and
+ * on Google Ads it is worse than noise: a developer clicking through checkout on a
+ * laptop was feeding the conversion signal the bidding algorithm optimises on.
+ *
+ * Build-time, so the tags are not even emitted off production — nothing to block,
+ * nothing to strip, no runtime flag that can be flipped by mistake.
+ *
+ * CookieYes deliberately stays on every environment: the consent cookie it sets is
+ * what gates first-party durable analytics (`persistAnalyticsEvent`), so removing
+ * it off production would silently stop the funnel tables that staging QA checks.
+ * PostHog also stays on — it is the tool used to debug staging, and it tags its own
+ * events with `deploy_env` instead (see instrumentation-client.ts).
+ */
+const productionAnalyticsEnabled = isProductionSite();
+
 const trustpilotBusinessUnitId =
   isTrustpilotEnabled() && (process.env.NEXT_PUBLIC_TRUSTPILOT_BUSINESS_UNIT_ID || "").trim()
     ? (process.env.NEXT_PUBLIC_TRUSTPILOT_BUSINESS_UNIT_ID || "").trim()
@@ -173,8 +199,22 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en" className={`${manrope.variable} ${lora.variable}`}>
       <head>
         <link rel="preconnect" href="https://cdn-cookieyes.com" />
-        <link rel="preconnect" href="https://t.contentsquare.net" />
-        <link rel="preconnect" href="https://www.googletagmanager.com" />
+        {/* The PostHog preconnect that used to sit here is GONE, and its 300 ms is
+            still saved — better than before.
+            PageSpeed named `eu-assets.i.posthog.com` the best remaining preconnect
+            candidate on 2026-08-28, because posthog-js fetched its config, recorder
+            and autocapture bundles from that origin on first paint. Those bundles now
+            come from THIS origin via the /relay rewrite, which the browser has already
+            connected to in order to fetch the page — so there is no handshake left to
+            pre-warm, and preconnecting to a host we no longer talk to would just hold a
+            socket open for nothing. It also put a known-blocked hostname in the HTML of
+            every page, which is a signal some blockers read on its own. */}
+        {productionAnalyticsEnabled && (
+          <>
+            <link rel="preconnect" href="https://www.clarity.ms" />
+            <link rel="preconnect" href="https://www.googletagmanager.com" />
+          </>
+        )}
         <link rel="dns-prefetch" href="https://www.google.com" />
         <link rel="dns-prefetch" href="https://www.gstatic.com" />
         <link rel="dns-prefetch" href="https://images.unsplash.com" />
@@ -184,66 +224,88 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           strategy="lazyOnload"
           nonce={nonce}
         />
-        <GtmScript nonce={nonce} />
-        <Script
-          id="ga-loader"
-          src="https://www.googletagmanager.com/gtag/js?id=G-QTYY69L46N"
-          strategy="lazyOnload"
-          nonce={nonce}
-          data-cookieyes="cookieyes-analytics"
-        />
-        <Script
-          id="ga-init"
-          strategy="lazyOnload"
-          nonce={nonce}
-          data-cookieyes="cookieyes-analytics"
-        >
-          {`
+        {productionAnalyticsEnabled && <GtmScript nonce={nonce} />}
+        {/* GA4 + Google Ads. Production only — see productionAnalyticsEnabled above.
+            `features/analytics/client.ts` gates on the same build-time
+            `isProductionSite()` rather than on a window flag these scripts set. It
+            used to read `window.__loveiqAnalyticsEnabled`, which lazyOnload does not
+            define until window load — so every event fired from a mount effect was
+            dropped, dataLayer push included. PostHog and the durable
+            `analytics_event` writes are unaffected, so staging QA can still verify
+            that an event fired. */}
+        {/* The gtag BOOTSTRAP — shim, `js`, and the GA4 `config` — at
+            afterInteractive. No network: these are dataLayer pushes.
+
+            The library itself (ga-loader) stays lazyOnload; 185 KiB has no business
+            blocking first paint. What must NOT stay there is the bootstrap. Two
+            rounds of this bug:
+
+            1. The shim was trapped inside the lazyOnload script, so `window.gtag`
+               did not exist until window load and every event from a mount effect
+               went nowhere. Hoisting the shim (2026-08-28) fixed interaction events:
+               price_shown went from 0 GA4 events in 9 days to arriving the same day.
+            2. It did not fix MOUNT events, because `config` was still lazyOnload.
+               gtag.js drains the queue in order and an event that precedes `config`
+               for its measurement id has no configured destination, so it is
+               discarded. Captured on production the same day, consented reload:
+               landing_page_view sat at dataLayer index 1 and config at index 13.
+               GA4 had 97 sessions landing on `/` that day and 0 landing_page_view.
+
+            So config is hoisted too. Google's own snippet does exactly this — shim,
+            js, config inline; library async — and the ordering is the whole point.
+
+            The GA4 config is deliberately NOT behind `data-cookieyes` even though
+            ga-init was: a config command transmits nothing on its own, and the
+            LIBRARY remains analytics-gated, so no data leaves the browser without
+            consent. `track()` also checks consent before it pushes. The Ads config
+            keeps its own advertisement gate below, because that one must not ride in
+            on analytics consent. */}
+        {productionAnalyticsEnabled && (
+          <Script id="gtag-shim" strategy="afterInteractive" nonce={nonce}>
+            {`
             window.dataLayer = window.dataLayer || [];
             window.gtag = window.gtag || function(){window.dataLayer.push(arguments);}
             if (!window.__loveiqGtagBootstrapped) {
               window.gtag('js', new Date());
               window.__loveiqGtagBootstrapped = true;
             }
-            window.__loveiqAnalyticsEnabled = true;
             window.gtag('config', 'G-QTYY69L46N', {
               page_path: window.location.pathname,
             });
           `}
-        </Script>
-        <Script
-          id="google-ads-loader"
-          src="https://www.googletagmanager.com/gtag/js?id=AW-18068690553"
-          strategy="lazyOnload"
-          nonce={nonce}
-          data-cookieyes="cookieyes-advertisement"
-        />
-        <Script
-          id="google-ads-init"
-          strategy="lazyOnload"
-          nonce={nonce}
-          data-cookieyes="cookieyes-advertisement"
-        >
-          {`
+          </Script>
+        )}
+        {productionAnalyticsEnabled && (
+          <>
+            <Script
+              id="ga-loader"
+              src="https://www.googletagmanager.com/gtag/js?id=G-QTYY69L46N"
+              strategy="lazyOnload"
+              nonce={nonce}
+              data-cookieyes="cookieyes-analytics"
+            />
+            <Script
+              id="google-ads-init"
+              strategy="lazyOnload"
+              nonce={nonce}
+              data-cookieyes="cookieyes-advertisement"
+            >
+              {`
             window.dataLayer = window.dataLayer || [];
             window.gtag = window.gtag || function(){window.dataLayer.push(arguments);}
             if (!window.__loveiqGtagBootstrapped) {
               window.gtag('js', new Date());
               window.__loveiqGtagBootstrapped = true;
             }
-            window.__loveiqGoogleAdsEnabled = true;
             window.gtag('config', 'AW-18068690553');
+            /* No second gtag/js loader for AW-. gtag.js is ONE library serving every
+               destination, so loading it twice fetched ~151 KiB of identical code;
+               Google's own snippet loads it once and calls config() per ID.
+               Verified 2026-08-28 that the duplicate was NOT caused by GTM: after GA4
+               was removed from that container entirely, both loads still appeared. */
           `}
-        </Script>
-        {hotjarSiteId && (
-          <Script
-            id="hotjar-init"
-            strategy="lazyOnload"
-            nonce={nonce}
-            data-cookieyes="cookieyes-analytics"
-          >
-            {`(function(h,o,t,j,a,r){h.hj=h.hj||function(){(h.hj.q=h.hj.q||[]).push(arguments)};h._hjSettings={hjid:${hotjarSiteId},hjsv:6};a=o.getElementsByTagName('head')[0];r=o.createElement('script');r.async=1;r.src=t+h._hjSettings.hjid+j+h._hjSettings.hjsv;a.appendChild(r);})(window,document,'https://static.hotjar.com/c/hotjar-','.js?sv=');`}
-          </Script>
+            </Script>
+          </>
         )}
         {trustpilotBusinessUnitId && (
           <Script
@@ -265,22 +327,35 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: jsonLdString(websiteSchema) }}
         />
-        {/* Contentsquare UXA tag — consent-gated via CookieYes. [Audit H1]
-            Marked type="text/plain" + data-cookieyes so the browser does NOT
-            execute it until the visitor grants analytics consent (CookieYes
-            rewrites the type post-consent). Previously this loaded pre-consent on
-            every page including /survey, instrumenting Article-9 special-category
-            answers before any consent. Trade-off: the Contentsquare vendor
-            verifier won't see CS_CONF/_uxa globals until after consent is given. */}
-        <script
-          type="text/plain"
-          data-cookieyes="cookieyes-analytics"
-          src="https://t.contentsquare.net/uxa/f1a8d593041c0.js"
-          defer
-        />
+        {/* Microsoft Clarity (session replay + heatmaps) — the only behavioural
+            recorder on the site; it replaced Hotjar and Contentsquare, which
+            were removed in the same change rather than run three tools over the
+            same sessions.
+
+            DELIBERATELY NOT CONSENT-GATED (owner decision, 2026-08-10). This
+            tag carries no type="text/plain" / data-cookieyes, so it executes on
+            every page load for every visitor regardless of the CookieYes
+            banner. That is a reversal of audit finding H1, taken knowingly to
+            maximise recorded sessions. Consequences, all documented in
+            docs/compliance/{DPIA,ROPA,LAWFUL_BASIS}.md: recording of EU
+            visitors happens without consent, and the survey mask was removed in
+            the same change, so Article-9 answers are captured. Re-gating is a
+            one-line change — restore type="text/plain" + data-cookieyes, which
+            is the only mechanism measured to actually withhold a tag here.
+            Bootstrap lives in public/clarity-init.js — see that file for why it
+            is not inline.
+
+            PRODUCTION ONLY since 2026-08-27. The consent decision above is
+            untouched — on production this still runs for every visitor regardless
+            of the banner. What changed is the ENVIRONMENT: the Clarity project id is
+            hardcoded, so localhost and staging.loveiq.org were recording into the
+            same project as customers, and dev-build React/HMR errors were landing in
+            its JavaScript-errors list as if they were production faults. That is the
+            noise marketing asked to separate out. */}
+        {productionAnalyticsEnabled && <script src="/clarity-init.js" defer />}
       </head>
       <body className="bg-white dark:bg-[#050208]">
-        <GtmNoScript />
+        {productionAnalyticsEnabled && <GtmNoScript />}
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-black focus:shadow-lg"
@@ -288,6 +363,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           Skip to main content
         </a>
         <HydrationMarker />
+        <ConsentBannerOffset />
         <UtmCapture />
         <WebVitals />
         <UxSignals />

@@ -110,7 +110,7 @@ export async function GET(request: Request) {
         { headers: { Range: "0-99999" } }
       ),
       supabaseFetch(
-        `/rest/v1/payment?select=id,status,payment_date_time&payment_date_time=gte.${priorSince}`,
+        `/rest/v1/payment?is_test=is.false&select=id,status,payment_date_time&payment_date_time=gte.${priorSince}`,
         { headers: { Range: "0-99999" } }
       ),
     ]);

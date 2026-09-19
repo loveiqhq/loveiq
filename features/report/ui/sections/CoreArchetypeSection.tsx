@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState, type FC } from "react";
 import { TraitIcons, type ReportTheme } from "../reportTheme";
+import { archetypeSlug, getReport2Config, type Report2CopySlug } from "@/data/report2-config";
+import { heroTraitSubtexts } from "@/data/report2-hero-traits";
 
 interface Props {
-  archetypeHtml: string | null;
   matchScore: number;
   theme: ReportTheme;
 }
@@ -24,9 +25,13 @@ function splitMottoForWrap(motto: string) {
   return trailingSegment ? [leadSegment, trailingSegment] : [motto];
 }
 
-const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) => {
+const CoreArchetypeSection: FC<Props> = ({ matchScore, theme }) => {
   const matchPct = Math.round(matchScore);
   const mottoSegments = splitMottoForWrap(theme.motto);
+  // Report 2.0 config drives the ratified behavioural-tendency values + segment
+  // fills; fall back to the existing theme where an archetype's config is a stub.
+  const hero = getReport2Config(theme.archetype)?.hero ?? null;
+  const heroSubs = heroTraitSubtexts[archetypeSlug(theme.archetype) as Report2CopySlug];
   const fillRef = useRef<HTMLDivElement>(null);
   const hasAnimated = useRef(false);
   const [displayPct, setDisplayPct] = useState(0);
@@ -161,20 +166,28 @@ const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) =
 
           <div className="report-hero-card__traits">
             <TraitItem
-              label="Communication"
-              value={theme.communication}
+              label="Communication — how desire gets spoken"
+              value={hero?.traits?.communication ?? theme.communication}
+              sub={heroSubs?.communication}
               icon={TraitIcons.communication}
             />
-            <TraitItem label="Initiation" value={theme.initiation} icon={TraitIcons.initiation} />
             <TraitItem
-              label="Attachment"
-              value={theme.attachment}
+              label="Initiation — how sex gets started"
+              value={hero?.traits?.initiation ?? theme.initiation}
+              sub={heroSubs?.initiation}
+              icon={TraitIcons.initiation}
+            />
+            <TraitItem
+              label="Attachment — how closeness feels"
+              value={hero?.traits?.attachment ?? theme.attachment}
+              sub={heroSubs?.attachment}
               icon={TraitIcons.attachment}
               iconClassName="report-trait__icon report-trait__icon--attachment"
             />
             <TraitItem
-              label="Power orientation"
-              value={theme.powerOrientation}
+              label="Power — who leads, who yields"
+              value={hero?.traits?.power ?? theme.powerOrientation}
+              sub={heroSubs?.power}
               icon={TraitIcons.powerOrientation}
             />
           </div>
@@ -182,21 +195,17 @@ const CoreArchetypeSection: FC<Props> = ({ archetypeHtml, matchScore, theme }) =
           <div className="report-hero-card__progress">
             <ProgressRow
               label="Risk orientation"
-              segments={theme.riskSegments}
+              segments={hero?.risk_segments ?? theme.riskSegments}
               value={theme.riskOrientation}
             />
             <ProgressRow
               label="Typical confidence"
-              segments={theme.confidenceSegments}
+              segments={hero?.confidence_segments ?? theme.confidenceSegments}
               value={theme.confidence}
             />
           </div>
         </div>
       </article>
-
-      {archetypeHtml ? (
-        <div className="report-prose" dangerouslySetInnerHTML={{ __html: archetypeHtml }} />
-      ) : null}
     </div>
   );
 };
@@ -206,13 +215,15 @@ const TraitItem: FC<{
   iconClassName?: string;
   label: string;
   value: string;
-}> = ({ icon: Icon, iconClassName = "report-trait__icon", label, value }) => (
+  sub?: string;
+}> = ({ icon: Icon, iconClassName = "report-trait__icon", label, value, sub }) => (
   <div className="report-trait">
     <p className="report-trait__label">
       <Icon className={iconClassName} />
       <span>{label}</span>
     </p>
     <p className="report-trait__value">{value}</p>
+    {sub ? <p className="report-trait__sub">yours: {sub}</p> : null}
   </div>
 );
 

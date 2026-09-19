@@ -10,7 +10,6 @@ export const metadata: Metadata = {
   alternates: {
     canonical: `${siteUrl}/privacy-policy`,
   },
-  robots: { index: false },
 };
 
 export default function PrivacyPolicyPage() {
@@ -46,7 +45,7 @@ export default function PrivacyPolicyPage() {
                 Email:{" "}
                 <a
                   href="mailto:hello@loveiq.org"
-                  className="text-[#C2410C] hover:text-[#fe6839] transition-colors"
+                  className="text-[#C2410C] underline hover:text-[#fe6839] transition-colors"
                 >
                   hello@loveiq.org
                 </a>
@@ -163,9 +162,9 @@ export default function PrivacyPolicyPage() {
             <section>
               <h2 className="text-gray-900 font-semibold mb-4">7. Recipients of Data</h2>
               <p className="mb-4">
-                We disclose your personal data to the following categories of recipients
-                (processors). All recipients act as our processors under data-processing agreements
-                in accordance with Art. 28 GDPR.
+                We disclose your personal data to the following categories of recipients. With the
+                exception noted in section 7.4, all recipients act as our processors under
+                data-processing agreements in accordance with Art. 28 GDPR.
               </p>
 
               <h3 className="text-gray-900 font-medium mb-2">7.1 Infrastructure and hosting</h3>
@@ -192,17 +191,34 @@ export default function PrivacyPolicyPage() {
               <h3 className="text-gray-900 font-medium mb-2">7.4 Analytics and product insight</h3>
               <ul className="list-disc list-inside mb-4 space-y-1">
                 <li>Google Ireland Ltd. - Google Analytics 4 (consent-gated)</li>
-                <li>Hotjar Ltd. (MT) - heatmaps and session recording (consent-gated)</li>
                 <li>
-                  Contentsquare SAS (FR) - session replay and digital experience (consent-gated)
+                  Microsoft Ireland Operations Ltd. - Microsoft Clarity, heatmaps and session
+                  recording (loaded on all visits; Microsoft acts as an independent controller)
+                </li>
+                <li>
+                  PostHog Inc. (USA / EU) - product analytics and session replay (loaded on all
+                  visits)
                 </li>
               </ul>
+              <p className="mb-4">
+                We also record how our own pages are used - which sections were opened, how long a
+                report was read, where a visit stopped - in our own database on our own
+                infrastructure. This is first-party measurement: it sets no cookie, reads nothing
+                stored on your device and is not shared with any of the recipients above. It is
+                carried out on the basis of our legitimate interest in understanding and improving
+                the service (Art. 6(1)(f) GDPR) and therefore does not depend on your cookie choice.
+                Your cookie choice continues to govern every third-party recipient listed in
+                sections 7.4 and 7.5. You may object to this processing at any time under Art. 21
+                GDPR using the contact details in section 1.
+              </p>
 
               <h3 className="text-gray-900 font-medium mb-2">7.5 Advertising and attribution</h3>
               <ul className="list-disc list-inside mb-4 space-y-1">
-                <li>Meta Platforms Ireland Ltd. - Facebook/Instagram pixel (consent-gated)</li>
-                <li>TikTok Technology Ltd. (IE) - TikTok pixel (consent-gated)</li>
-                <li>Google Ireland Ltd. - Google Ads conversion tracking (consent-gated)</li>
+                <li>
+                  Google Ireland Ltd. - Google Ads conversion tracking. Conversion events are sent
+                  only with your consent. The Google Ads tag itself loads on every visit and may set
+                  a measurement cookie (<code>_gcl_au</code>) before you answer the cookie banner.
+                </li>
               </ul>
 
               <h3 className="text-gray-900 font-medium mb-2">7.6 Consent management</h3>
@@ -233,7 +249,7 @@ export default function PrivacyPolicyPage() {
                 contractual clauses for non-EU processors can be requested from{" "}
                 <a
                   href="mailto:hello@loveiq.org"
-                  className="text-[#C2410C] hover:text-[#fe6839] transition-colors"
+                  className="text-[#C2410C] underline hover:text-[#fe6839] transition-colors"
                 >
                   hello@loveiq.org
                 </a>
@@ -283,7 +299,7 @@ export default function PrivacyPolicyPage() {
                 Requests can be sent to:{" "}
                 <a
                   href="mailto:hello@loveiq.org"
-                  className="text-[#C2410C] hover:text-[#fe6839] transition-colors"
+                  className="text-[#C2410C] underline hover:text-[#fe6839] transition-colors"
                 >
                   hello@loveiq.org
                 </a>
@@ -300,7 +316,7 @@ export default function PrivacyPolicyPage() {
                   href="https://www.datenschutz-berlin.de"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-[#C2410C] hover:text-[#fe6839] transition-colors"
+                  className="text-[#C2410C] underline hover:text-[#fe6839] transition-colors"
                 >
                   https://www.datenschutz-berlin.de
                 </a>

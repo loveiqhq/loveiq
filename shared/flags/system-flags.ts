@@ -12,6 +12,7 @@
  *   nurture_sequence
  *   report_paywall_enforced
  *   chapter_nudge
+ *   pricing_uplift_enabled   — when OFF, all per-visitor price boosts are paused (base prices only)
  *
  * Add new flags by INSERT into system_flags + listing here so callers get
  * type-checked names.
@@ -25,7 +26,9 @@ export type SystemFlagKey =
   | "survey_submissions"
   | "nurture_sequence"
   | "report_paywall_enforced"
-  | "chapter_nudge";
+  | "chapter_nudge"
+  | "pricing_uplift_enabled"
+  | "ux_review_alerts";
 
 const CACHE_TTL_MS = 30_000;
 const FAIL_OPEN_TTL_MS = 5_000;
@@ -74,6 +77,15 @@ export async function isFeatureEnabled(
   key: SystemFlagKey,
   defaultWhenMissing = true
 ): Promise<boolean> {
+  // Env override: a matching SYSTEM_FLAG_ environment variable (its value the
+  // string "true" or "false") short-circuits the DB entirely, so we can preview a
+  // flag state on localhost/CI without writing to the shared prod system_flags
+  // table. Any other value falls through to the normal lookup.
+  const envOverride = process.env[`SYSTEM_FLAG_${key}`];
+  if (envOverride === "true" || envOverride === "false") {
+    return envOverride === "true";
+  }
+
   const now = Date.now();
   const cached = cache.get(key);
   if (cached && cached.expiresAt > now) return cached.enabled;

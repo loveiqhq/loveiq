@@ -2,7 +2,8 @@
  * Pure aggregation core for the admin Data Explorer (`/admin/explorer`).
  *
  * The route (`app/api/admin/explorer/route.ts`) fetches + enriches submission
- * rows into `EnrichedRow[]`; everything here is pure (no DB / env / Next imports)
+ * rows into `EnrichedRow[]`; everything here is pure (no DB / env / Next imports —
+ * `armLabel` is a pure lookup table)
  * so the filtering, breakdown, cross-tab, trend, real-revenue and normalization
  * logic is unit-testable in isolation.
  *
@@ -12,6 +13,8 @@
  * device come from `report_price_quote`; engagement from `report_session`. The
  * route resolves all of it and hands clean values to the row.
  */
+
+import { armLabel } from "@features/attribution/server/labels";
 
 export type DimensionKey =
   | "archetype"
@@ -27,7 +30,6 @@ export type DimensionKey =
   | "utmCampaign"
   | "landingVariant"
   | "device"
-  | "paywallArm"
   | "experimentGroup"
   | "countryTier"
   | "priceBucket"
@@ -47,9 +49,8 @@ export const DIMENSION_LABELS: Record<DimensionKey, string> = {
   trafficSource: "Traffic source",
   utmMedium: "UTM medium",
   utmCampaign: "UTM campaign",
-  landingVariant: "Landing variant (white/dark)",
+  landingVariant: "Landing page",
   device: "Device",
-  paywallArm: "Paywall arm (A/B)",
   experimentGroup: "Experiment group",
   countryTier: "Country tier",
   priceBucket: "Price bucket",
@@ -65,6 +66,37 @@ export function isDimensionKey(value: unknown): value is DimensionKey {
 }
 
 /** Bucket used when a dimension value is missing. */
+/**
+ * Landing arm stamped onto the submission's utm_tracker at submit time, as a
+ * plain-English name.
+ *
+ * It used to return `"control"` for anything that was not exactly `"white"` —
+ * matching the get_landing_variant_funnel RPC, which had the same bug — so the
+ * Explorer's "Landing variant" dimension put the retired dark arm, the LIVE V1 arm
+ * and every submission with no arm stamped into one bucket and called it the dark
+ * landing page. On production that was 805 arm-less rows and 34 V1 rows against 53
+ * genuinely dark ones: the bucket was 94% not dark, and the arm currently under
+ * test was hiding inside it.
+ *
+ * Returns the display name rather than the raw value because that is how this route
+ * already works (see parseTracker returning "Direct" / "(none)") — the Explorer
+ * groups by whatever string it gets, and a non-technical reader should never meet
+ * `white_prev`. Names come from armLabel, the one vocabulary Slack and the rest of
+ * /admin use, so this screen cannot drift from them again.
+ */
+export function parseLandingVariant(tracker: string | null): string {
+  const raw = ((): string | null => {
+    if (!tracker?.trim()) return null;
+    try {
+      const parsed = JSON.parse(tracker) as Record<string, string | undefined>;
+      return parsed.landing_variant?.trim() || null;
+    } catch {
+      return null;
+    }
+  })();
+  return armLabel("landing", raw).short;
+}
+
 export const UNKNOWN_LABEL = "Unknown";
 
 /** Stable display order for age buckets (matches survey Q15003 options). */
@@ -76,12 +108,21 @@ const SESSION_ORDER = ["0", "1", "2", "3+"];
  * Dimensions with a fixed display order. Presence here ALSO means "never fold
  * into Other" (these are low-cardinality, ordered axes).
  */
-const DIMENSION_ORDER: Partial<Record<DimensionKey, readonly string[]>> = {
+export const DIMENSION_ORDER: Partial<Record<DimensionKey, readonly string[]>> = {
   age: AGE_ORDER,
   sessionBucket: SESSION_ORDER,
   reportViewed: ["Viewed", "Not viewed"],
   paidStatus: ["Paid", "Free"],
-  landingVariant: ["white", "control"],
+  // Display names, in reading order: the two live arms, then the retired one, then
+  // traffic that carried no arm. Must be the strings parseLandingVariant returns —
+  // it used to be the raw values ["white", "control"], which stopped matching the
+  // moment the round-2 arm existed, so V1 rows fell out of the ordering entirely.
+  landingVariant: [
+    armLabel("landing", "white").short,
+    armLabel("landing", "white_prev").short,
+    armLabel("landing", "control").short,
+    armLabel("landing", null).short,
+  ],
 };
 
 export interface EnrichedRow {
@@ -111,7 +152,6 @@ export interface EnrichedRow {
   landingVariant: string;
   // Pricing / experiment / device — from the submission's canonical quote.
   device: string | null;
-  paywallArm: string | null;
   experimentGroup: string | null;
   countryTier: string | null;
   priceBucket: string | null;
@@ -233,11 +273,23 @@ export function dimensionValue(row: EnrichedRow, dim: DimensionKey, opts: Access
     case "utmCampaign":
       return row.utmCampaign || UNKNOWN_LABEL;
     case "landingVariant":
-      return row.landingVariant || "control";
+      /**
+       * `|| UNKNOWN_LABEL`, NOT `|| "control"`, which is what this was until 2026-09-12
+       * and which every one of the six sibling cases above already got right.
+       *
+       * MEASURED that day: 809 completed submissions carry no arm in their utm_tracker,
+       * against 966 `white`, 141 `white_prev` and 53 `control`. The real control arm ran
+       * for five days, 14-19 June. So this line reported 862 submissions as the retired
+       * dark arm where the truth is 53 -- a 16x overstatement, and every A/B answer this
+       * explorer gave was wrong about it.
+       *
+       * Not recorded is not a variant. `get_landing_variant_funnel` already returns
+       * these as `unknown` and `recordVisit.ts` already stores the raw value; this was
+       * the last of the three helpers to still collapse.
+       */
+      return row.landingVariant || UNKNOWN_LABEL;
     case "device":
       return row.device ?? UNKNOWN_LABEL;
-    case "paywallArm":
-      return row.paywallArm ?? UNKNOWN_LABEL;
     case "experimentGroup":
       return row.experimentGroup ?? UNKNOWN_LABEL;
     case "countryTier":

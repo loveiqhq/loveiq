@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef, type FC } from "react";
 import { surveyQuestions } from "@/data/survey-data";
+import { isHidden } from "@features/survey/questionFlags";
 import { useSurveyState, type AnswerValue } from "./hooks/useSurveyState";
 import SurveyHeader from "./SurveyHeader";
 import SurveyNav from "./SurveyNav";
@@ -17,24 +18,12 @@ import {
   trackSurveyProgress,
   trackSurveyComplete,
   trackSurveyPause,
+  trackSurveyFormError,
   setReportSubmissionContext,
-  setForcedPaywallArm,
   setSurveyVariant,
-  setEmailPositionArm,
-  trackExperimentExposure,
 } from "@features/analytics/client";
-import { getForcedPaywallCohort } from "@shared/experiments/forcedPaywall";
-import {
-  assignSurveyVariant,
-  SURVEY_VARIANT_EXPERIMENT,
-  type SurveyVariant,
-} from "@shared/experiments/surveyVariant";
-import {
-  assignEmailPositionVariant,
-  orderByEmailPosition,
-  EMAIL_POSITION_EXPERIMENT,
-  type EmailPositionVariant,
-} from "@shared/experiments/emailPositionVariant";
+import { assignSurveyVariant, type SurveyVariant } from "@shared/experiments/surveyVariant";
+import { orderEmailLast } from "./questionOrder";
 import { SurveyThemeProvider } from "./SurveyThemeContext";
 import { useSubmitSurvey } from "./hooks/useSubmitSurvey";
 import { useSurveyTracking } from "./hooks/useSurveyTracking";
@@ -45,6 +34,7 @@ import { clearPersistedSurveyState } from "./hooks/surveyStorage";
 import { copySurveySessionToReportSession } from "./hooks/surveySession";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { readCookie } from "@shared/observability/cookie";
+import { isLandingVariant, LANDING_VARIANT_COOKIE } from "@shared/experiments/landingVariant";
 import { getStoredUtm, sanitizeUtmSource } from "@shared/url/utm";
 import SurveyConfirmation from "./SurveyConfirmation";
 import PreReportWizard from "./PreReportWizard";
@@ -59,8 +49,17 @@ interface SurveyEngineProps {
 }
 
 const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
-  const { answers, currentIndex, startedAt, progress, setAnswer, getAnswer, setCurrentIndex } =
-    useSurveyState();
+  const {
+    answers,
+    currentIndex,
+    startedAt,
+    prefilled,
+    progress,
+    setAnswer,
+    getAnswer,
+    getLatestAnswers,
+    setCurrentIndex,
+  } = useSurveyState();
   const {
     submit: submitSurvey,
     retryPending,
@@ -78,12 +77,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   useEffect(() => {
     if (submissionId != null) {
       setReportSubmissionContext(submissionId);
-      // Stamp the forced-paywall arm so wizard analytics rows (and the wizard
-      // exposure) self-identify the arm. Keyed on the same report token the
-      // /report page uses, so both surfaces agree.
-      setForcedPaywallArm(getForcedPaywallCohort(reportToken));
     }
-  }, [submissionId, reportToken]);
+  }, [submissionId]);
   const utmTracker = useUtmCapture();
   const { savePartial } = usePartialSave(answers, currentIndex, startedAt, utmTracker);
 
@@ -100,30 +95,29 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
 
   const hasCleared = useRef(false);
 
-  // Survey email-position A/B. Resolve (and stick) the arm on first render, then
-  // order the questions for this arm: "first" (control) returns the canonical
-  // order unchanged (email at index 0); "last" moves the email question to just
-  // before the marketing opt-in. Reading the cookie + reordering here is SSR-safe
-  // and flash-free (the engine renders client-only behind SurveyPage's hydration
-  // gate). `?emailPosition=first|last` is a dev/preview-only override.
-  const [emailPositionVariant] = useState<EmailPositionVariant>(() => {
-    const devParam =
-      typeof window === "undefined"
-        ? null
-        : new URLSearchParams(window.location.search).get("emailPosition");
-    return assignEmailPositionVariant(devParam);
-  });
+  // Questions answered before the survey opened (the landing-page card) are
+  // dropped from the flow so nobody is asked twice. Their answers stay in
+  // `answers` and submit + score exactly like the rest, so the total is
+  // unchanged — only where the question gets asked moves.
+  // `orderEmailLast` moves the email question from its generated index 0 to just
+  // before the marketing opt-in, for everyone (the email-position A/B that used
+  // to pick this per visitor was retired 2026-08-16 in favour of "last").
+  // Joined into a string so the memo key is stable across re-renders.
+  const prefilledKey = prefilled.join(",");
   const orderedQuestions = useMemo(
-    () => orderByEmailPosition(surveyQuestions, emailPositionVariant),
-    [emailPositionVariant]
+    () =>
+      orderEmailLast(surveyQuestions)
+        .filter((q) => !isHidden(q.qId))
+        .filter((q) => !prefilledKey.split(",").includes(q.qId)),
+    [prefilledKey]
   );
   const totalQuestions = orderedQuestions.length;
   const question = orderedQuestions[currentIndex];
 
-  // Survey white A/B. Resolve (and stick) the arm on first render so the very
-  // first question paint is already themed (the engine renders client-only,
-  // behind SurveyPage's hydration gate, so reading/minting the cookie here is
-  // SSR-safe and flash-free). `?survey=white|dark` is a dev-only override.
+  // Survey theme. The A/B concluded in white's favour on 2026-08-25, so this is
+  // "white" for everyone; `?survey=white|dark` still previews either on
+  // dev/staging. Resolved on first render so the first question paint is already
+  // themed (the engine renders client-only, behind SurveyPage's hydration gate).
   const [surveyVariant] = useState<SurveyVariant>(() => {
     const devParam =
       typeof window === "undefined"
@@ -135,21 +129,17 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   useEffect(() => {
     if (surveyExposureFired.current) return;
     surveyExposureFired.current = true;
-    // Stamp the arms onto every persisted survey event + fire the one-per-user
-    // exposure records (the per-arm denominators for completion-rate analysis).
+    /**
+     * Stamp the theme onto persisted survey events. Still worth doing — on
+     * staging `?survey=dark` previews the old arm and the events should say so.
+     *
+     * No `trackExperimentExposure` any more. That wrote a one-per-visitor
+     * `experiment_exposure` row as the denominator for a per-arm completion
+     * rate, and the experiment is over: it would have gone on recording
+     * exposures to a concluded test, for one arm, forever.
+     */
     setSurveyVariant(surveyVariant);
-    trackExperimentExposure({
-      experiment: SURVEY_VARIANT_EXPERIMENT,
-      variant: surveyVariant,
-      surface: "survey",
-    });
-    setEmailPositionArm(emailPositionVariant);
-    trackExperimentExposure({
-      experiment: EMAIL_POSITION_EXPERIMENT,
-      variant: emailPositionVariant,
-      surface: "survey",
-    });
-  }, [surveyVariant, emailPositionVariant]);
+  }, [surveyVariant]);
 
   // Post-survey completion phase management
   const [completionPhase, setCompletionPhase] = useState<CompletionPhase>(() =>
@@ -166,6 +156,8 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
       // funnel_event PK dedupes per (visitor_id, day) so a re-mount in the
       // same day is a no-op server-side.
       const visitorId = readCookie("__Host-liq_vid") || readCookie("__liq_vid");
+      // The landing arm is NOT sent from here: /api/funnel-event reads the same
+      // cookie server-side, so it cannot be attested by a client.
       if (visitorId) {
         // First-touch acquisition source, so start-rate can be split by channel
         // (the visitor denominator carries it too — see proxy.ts/recordVisit.ts).
@@ -294,6 +286,29 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
 
   const goNext = useCallback(() => {
     if (!isEmailValid || !isSelectionCountValid) {
+      /**
+       * A blocked Next is the only "form error" this survey can produce, and
+       * until now nothing recorded it: `trackSurveyFormError` was defined in
+       * features/analytics/client.ts and never called once, so the event was
+       * not even in PostHog's taxonomy. Marcus asked the agents to check
+       * against form errors; we were blind to them.
+       *
+       * PostHog only, deliberately. persistAnalyticsEvent needs
+       * `window.__loveiqReportSubmissionId`, and during the survey nothing has
+       * been submitted yet — there is no submission to key a row to. The daily
+       * digest therefore cannot see these, and says so rather than implying it
+       * looked.
+       *
+       * Fired per attempt, not once per question: a reader pressing Next four
+       * times against the same rejection is the signal, the same way a rage
+       * click is.
+       */
+      if (question?.qId) {
+        trackSurveyFormError({
+          question_id: question.qId,
+          error_kind: !isEmailValid ? "invalid_email" : "out_of_range",
+        });
+      }
       setAttemptedNext(true);
       return;
     }
@@ -302,8 +317,17 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
       hasCompleted.current = true;
       trackNavigation("complete");
       const duration = Date.now() - new Date(startedAt).getTime();
+      /**
+       * Reported here, once. A second emitter used to live in
+       * `useSubmitSurvey` — see the note there — which double-counted every
+       * completion. This path is the one that survives because it reaches GA4
+       * as well as PostHog.
+       */
       trackSurveyComplete(duration, totalQuestions);
-      submitSurvey(answers, startedAt, utmTracker);
+      // `getLatestAnswers()`, never the `answers` closure: on the last question the
+      // answer and this submit are two clicks apart, and the closure can predate the
+      // first of them. See the note in useSurveyState.
+      submitSurvey(getLatestAnswers(), startedAt, utmTracker);
       goTo(totalQuestions); // one past the end → triggers completion
       return;
     }
@@ -321,7 +345,11 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
     question,
     goTo,
     submitSurvey,
-    answers,
+    // `answers` is deliberately NOT a dependency. Nothing in this callback reads it any
+    // more, and leaving it out is what makes `goNext` stable across answer changes — so
+    // the auto-advance timer's captured copy is the same function and still reads fresh
+    // answers through getLatestAnswers().
+    getLatestAnswers,
     trackNavigation,
     isEmailValid,
     isSelectionCountValid,
@@ -458,9 +486,7 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
 
     // Pre-report wizard phase
     if (completionPhase === "wizard") {
-      return (
-        <PreReportWizard reportToken={reportToken} onComplete={() => onComplete(reportToken)} />
-      );
+      return <PreReportWizard onComplete={() => onComplete(reportToken)} />;
     }
 
     // Error confirmation only
@@ -481,20 +507,27 @@ const SurveyEngine: FC<SurveyEngineProps> = ({ onExit, onComplete }) => {
   const isWhite = surveyVariant === "white";
 
   return (
-    // Survey white A/B: the QUESTIONS-only theme. The provider + data attribute
-    // scope it to this <main> (the post-submit processing/wizard/confirmation are
-    // separate early returns above and stay dark). Dark branch = current literal.
+    // The QUESTIONS-only theme, white for everyone since the test concluded
+    // 2026-08-25. The provider + data attribute scope it to this <main> (the
+    // post-submit processing/wizard/confirmation are separate early returns above
+    // and stay dark). The dark branches remain, reachable via ?survey=dark on
+    // dev/staging.
     <SurveyThemeProvider variant={surveyVariant}>
-      {/* [Audit L8] data-hj-suppress on the survey root keeps Hotjar session replay
-          from capturing the intimate Q&A (question text, choice labels, selection
-          state). Default Hotjar input masking covers form fields but not visible
-          choice-button text / selected state, which would otherwise reconstruct
-          Article-9 answers in recordings. */}
+      {/* NOTE: the survey root is deliberately NOT masked from session replay
+          (owner decision, 2026-08-10) — this reverses audit finding L8. It
+          previously carried data-clarity-mask (and data-hj-suppress before
+          that), which stopped the recorder capturing question text, choice
+          labels and selection state. Without it, Clarity recordings can
+          reconstruct a visitor's Article-9 answers, and those recordings sit
+          with Microsoft as an independent controller (30-day retention, no
+          per-user deletion). Documented in docs/compliance/DPIA.md §6.
+
+          To restore the protection, put data-clarity-mask="true" back on the
+          <main> below — that single attribute is the whole control. */}
       <main
         className={`relative flex min-h-screen flex-col ${isWhite ? "bg-white" : "bg-[#0a0510]"}`}
         style={{ touchAction: "pan-y" }}
         data-survey-theme={surveyVariant}
-        data-hj-suppress
       >
         {/* Background gradient blurs */}
         <div className="pointer-events-none fixed inset-0 overflow-hidden">

@@ -63,11 +63,7 @@ interface SubmissionOutcomeContext {
 }
 
 type SignalKey =
-  | "report_viewed"
-  | "repeat_session"
-  | "multi_day_return"
-  | "shared_report"
-  | "sent_referral";
+  "report_viewed" | "repeat_session" | "multi_day_return" | "shared_report" | "sent_referral";
 
 interface OutcomeStats {
   monetizationRate: number;
@@ -285,7 +281,7 @@ export async function buildValueRealizationSnapshot(
       reportIds.length === 0
         ? Promise.resolve([] as PaymentRow[])
         : fetchBatches<PaymentRow>(reportIds, (batch) => {
-            return `/rest/v1/payment?select=personal_report_id,status,amount&personal_report_id=in.(${batch.join(",")})`;
+            return `/rest/v1/payment?is_test=is.false&select=personal_report_id,status,amount&personal_report_id=in.(${batch.join(",")})`;
           }),
       supabaseFetch(`/rest/v1/invite_event?select=referrer_email&created_at=gte.${since}`, {
         headers: { Range: "0-49999" },

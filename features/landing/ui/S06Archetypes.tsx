@@ -388,30 +388,56 @@ const PowerIcon: FC<{ color: string }> = ({ color }) => (
   </svg>
 );
 
-export const ArchetypeCard: FC<{ archetype: Archetype }> = ({ archetype }) => {
+/**
+ * `variant="white"` themes the card for the light landing. The archetype accent
+ * stays as fills only (icon tile, bars, borders, glow) — every one of them is
+ * 1.8–3.0:1 on white, so using it for TEXT there would fail contrast. Labels
+ * fall back to neutral ink instead.
+ */
+export const ArchetypeCard: FC<{ archetype: Archetype; variant?: "dark" | "white" }> = ({
+  archetype,
+  variant = "dark",
+}) => {
   const riskLevel = getRiskLevel(archetype.riskOrientation);
   const confidenceLevel = getRiskLevel(archetype.typicalConfidence);
   const attributeColor = archetype.color;
+  const light = variant === "white";
+
+  const t = light
+    ? {
+        card: "bg-white border-black/[0.08] shadow-[0_10px_30px_-18px_rgba(20,15,33,0.35)]",
+        ink: "text-[#161021]",
+        muted: "text-[#5f6675]",
+        boxBg: "#ffffff",
+        emptyBar: "rgba(20,15,33,0.10)",
+        glow: 0.3,
+        accentLabel: "#5f6675",
+      }
+    : {
+        card: "bg-[#130b17] border-white/10",
+        ink: "text-white",
+        muted: "text-[#9ca3af]",
+        boxBg: "#130b17",
+        emptyBar: "rgba(255,255,255,0.1)",
+        glow: 1,
+        accentLabel: archetype.color,
+      };
 
   return (
     <div
-      className="relative h-full flex-shrink-0 w-[280px] sm:w-[320px] md:w-[360px] lg:w-[400px] bg-[#130b17] border-2 border-white/10 rounded-[20px] overflow-hidden px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10 box-border isolate"
+      className={`relative h-full flex-shrink-0 w-[280px] sm:w-[320px] md:w-[360px] lg:w-[400px] border-2 rounded-[20px] overflow-hidden px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10 box-border isolate ${t.card}`}
       style={{ clipPath: "inset(0 round 20px)" }}
     >
       {/* Top-right blur effect */}
       <div
         className="absolute w-[100px] h-[100px] sm:w-[150px] sm:h-[140px] lg:w-[200px] lg:h-[190px] -right-[60px] -top-[60px] sm:-right-[70px] sm:-top-[80px] lg:-right-[100px] lg:-top-[120px] rounded-full pointer-events-none blur-[40px] sm:blur-[50px] lg:blur-[60px]"
-        style={{
-          background: archetype.color,
-        }}
+        style={{ background: archetype.color, opacity: t.glow }}
         aria-hidden="true"
       />
       {/* Bottom-left blur effect */}
       <div
         className="absolute w-[100px] h-[100px] sm:w-[160px] sm:h-[140px] lg:w-[210px] lg:h-[190px] -left-[60px] -bottom-[60px] sm:-left-[60px] sm:-bottom-[90px] lg:-left-[90px] lg:-bottom-[150px] rounded-full pointer-events-none blur-[40px] sm:blur-[50px] lg:blur-[60px]"
-        style={{
-          background: archetype.color,
-        }}
+        style={{ background: archetype.color, opacity: t.glow }}
         aria-hidden="true"
       />
 
@@ -424,10 +450,14 @@ export const ArchetypeCard: FC<{ archetype: Archetype }> = ({ archetype }) => {
           {archetype.icon}
         </div>
         <div className="flex-1 min-w-0 overflow-hidden">
-          <h3 className="font-serif text-[16px] sm:text-[22px] lg:text-[26px] leading-tight text-white break-words">
+          <h3
+            className={`font-serif text-[16px] sm:text-[22px] lg:text-[26px] leading-tight break-words ${t.ink}`}
+          >
             {archetype.name}
           </h3>
-          <p className="font-serif italic text-[11px] sm:text-[13px] lg:text-[14px] leading-snug text-[#9ca3af] mt-1 break-words">
+          <p
+            className={`font-serif italic text-[11px] sm:text-[13px] lg:text-[14px] leading-snug mt-1 break-words ${t.muted}`}
+          >
             {archetype.tagline}
           </p>
         </div>
@@ -435,14 +465,14 @@ export const ArchetypeCard: FC<{ archetype: Archetype }> = ({ archetype }) => {
 
       {/* Behavioral Tendencies */}
       <div className="relative py-3 sm:py-4 w-full overflow-hidden">
-        <p className="text-[11px] sm:text-[13px] lg:text-[14px] text-[#9ca3af] mb-3 sm:mb-4">
+        <p className={`text-[11px] sm:text-[13px] lg:text-[14px] mb-3 sm:mb-4 ${t.muted}`}>
           Behavioral tendencies:
         </p>
 
         {/* Core motivation box */}
         <div
           className="flex items-center gap-2 sm:gap-3 p-2 sm:p-4 rounded-xl mb-4 sm:mb-5 w-full box-border"
-          style={{ backgroundColor: "#130b17", border: `1px solid ${archetype.color}` }}
+          style={{ backgroundColor: t.boxBg, border: `1px solid ${archetype.color}` }}
         >
           <div
             className="flex-shrink-0 flex items-center justify-center w-7 h-7 sm:w-10 sm:h-10 rounded-full"
@@ -461,11 +491,13 @@ export const ArchetypeCard: FC<{ archetype: Archetype }> = ({ archetype }) => {
           <div className="min-w-0 flex-1">
             <p
               className="text-[9px] sm:text-[11px] lg:text-[12px] font-bold"
-              style={{ color: archetype.color }}
+              style={{ color: t.accentLabel }}
             >
               Core motivation:
             </p>
-            <p className="font-serif text-[14px] sm:text-[18px] lg:text-[20px] font-medium text-white break-words">
+            <p
+              className={`font-serif text-[14px] sm:text-[18px] lg:text-[20px] font-medium break-words ${t.ink}`}
+            >
               {archetype.coreMotivation}
             </p>
           </div>
@@ -476,44 +508,52 @@ export const ArchetypeCard: FC<{ archetype: Archetype }> = ({ archetype }) => {
           <div className="min-w-0 overflow-hidden">
             <div className="flex items-center gap-1 sm:gap-1.5 mb-0.5 sm:mb-1">
               <CommunicationIcon color={attributeColor} />
-              <span className="text-[9px] sm:text-[11px] lg:text-[12px] text-[#9ca3af]">
+              <span className={`text-[9px] sm:text-[11px] lg:text-[12px] ${t.muted}`}>
                 Communication
               </span>
             </div>
-            <p className="font-serif text-[12px] sm:text-[14px] lg:text-[16px] font-medium text-white whitespace-nowrap">
+            <p
+              className={`font-serif text-[12px] sm:text-[14px] lg:text-[16px] font-medium whitespace-nowrap ${t.ink}`}
+            >
               {archetype.communication}
             </p>
           </div>
           <div className="min-w-0 overflow-hidden">
             <div className="flex items-center gap-1 sm:gap-1.5 mb-0.5 sm:mb-1">
               <InitiationIcon color={attributeColor} />
-              <span className="text-[9px] sm:text-[11px] lg:text-[12px] text-[#9ca3af]">
+              <span className={`text-[9px] sm:text-[11px] lg:text-[12px] ${t.muted}`}>
                 Initiation
               </span>
             </div>
-            <p className="font-serif text-[12px] sm:text-[14px] lg:text-[16px] font-medium text-white whitespace-nowrap">
+            <p
+              className={`font-serif text-[12px] sm:text-[14px] lg:text-[16px] font-medium whitespace-nowrap ${t.ink}`}
+            >
               {archetype.initiation}
             </p>
           </div>
           <div className="min-w-0 overflow-hidden">
             <div className="flex items-center gap-1 sm:gap-1.5 mb-0.5 sm:mb-1">
               <AttachmentIcon color={attributeColor} />
-              <span className="text-[9px] sm:text-[11px] lg:text-[12px] text-[#9ca3af]">
+              <span className={`text-[9px] sm:text-[11px] lg:text-[12px] ${t.muted}`}>
                 Attachment
               </span>
             </div>
-            <p className="font-serif text-[12px] sm:text-[14px] lg:text-[16px] font-medium text-white whitespace-nowrap">
+            <p
+              className={`font-serif text-[12px] sm:text-[14px] lg:text-[16px] font-medium whitespace-nowrap ${t.ink}`}
+            >
               {archetype.attachment}
             </p>
           </div>
           <div className="min-w-0 overflow-hidden">
             <div className="flex items-center gap-1 sm:gap-1.5 mb-0.5 sm:mb-1">
               <PowerIcon color={attributeColor} />
-              <span className="text-[9px] sm:text-[11px] lg:text-[12px] text-[#9ca3af] truncate">
+              <span className={`text-[9px] sm:text-[11px] lg:text-[12px] truncate ${t.muted}`}>
                 Power
               </span>
             </div>
-            <p className="font-serif text-[12px] sm:text-[14px] lg:text-[16px] font-medium text-white whitespace-nowrap">
+            <p
+              className={`font-serif text-[12px] sm:text-[14px] lg:text-[16px] font-medium whitespace-nowrap ${t.ink}`}
+            >
               {archetype.powerOrientation}
             </p>
           </div>
@@ -524,10 +564,12 @@ export const ArchetypeCard: FC<{ archetype: Archetype }> = ({ archetype }) => {
       <div className="relative space-y-3 sm:space-y-4 mt-3 sm:mt-4 w-full">
         <div className="w-full">
           <div className="flex items-center justify-between mb-1.5 sm:mb-2">
-            <span className="text-[9px] sm:text-[11px] lg:text-[12px] text-[#9ca3af]">
+            <span className={`text-[9px] sm:text-[11px] lg:text-[12px] ${t.muted}`}>
               Risk orientation
             </span>
-            <span className="font-serif text-[10px] sm:text-[13px] lg:text-[14px] font-medium text-white">
+            <span
+              className={`font-serif text-[10px] sm:text-[13px] lg:text-[14px] font-medium ${t.ink}`}
+            >
               {archetype.riskOrientation}
             </span>
           </div>
@@ -537,7 +579,7 @@ export const ArchetypeCard: FC<{ archetype: Archetype }> = ({ archetype }) => {
                 key={level}
                 className="flex-1 h-[4px] sm:h-[6px] rounded-full"
                 style={{
-                  backgroundColor: level <= riskLevel ? archetype.color : "rgba(255,255,255,0.1)",
+                  backgroundColor: level <= riskLevel ? archetype.color : t.emptyBar,
                 }}
               />
             ))}
@@ -545,10 +587,12 @@ export const ArchetypeCard: FC<{ archetype: Archetype }> = ({ archetype }) => {
         </div>
         <div className="w-full">
           <div className="flex items-center justify-between mb-1.5 sm:mb-2">
-            <span className="text-[9px] sm:text-[11px] lg:text-[12px] text-[#9ca3af]">
+            <span className={`text-[9px] sm:text-[11px] lg:text-[12px] ${t.muted}`}>
               Typical confidence
             </span>
-            <span className="font-serif text-[10px] sm:text-[13px] lg:text-[14px] font-medium text-white">
+            <span
+              className={`font-serif text-[10px] sm:text-[13px] lg:text-[14px] font-medium ${t.ink}`}
+            >
               {archetype.typicalConfidence}
             </span>
           </div>
@@ -558,8 +602,7 @@ export const ArchetypeCard: FC<{ archetype: Archetype }> = ({ archetype }) => {
                 key={level}
                 className="flex-1 h-[4px] sm:h-[6px] rounded-full"
                 style={{
-                  backgroundColor:
-                    level <= confidenceLevel ? archetype.color : "rgba(255,255,255,0.1)",
+                  backgroundColor: level <= confidenceLevel ? archetype.color : t.emptyBar,
                 }}
               />
             ))}

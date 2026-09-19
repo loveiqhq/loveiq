@@ -32,9 +32,15 @@ describe("Survey theme (white A/B) — scoped theming", () => {
     expect(cls).not.toContain("bg-[#f5f6f8]");
   });
 
-  it("defaults to DARK when rendered outside any provider (safe default)", () => {
+  it("defaults to WHITE when rendered outside any provider", () => {
+    // Was dark, which meant a consumer outside the provider silently fell back to
+    // the arm that lost. White is what every visitor now gets, so the fallback
+    // matches the only theme in use.
     const { container } = render(<ChoiceCard label="Yes" selected={false} onClick={() => {}} />);
-    expect(cardClass(container)).toContain("bg-white/[0.05]");
+    // Positive, like its two siblings: `not.toContain` also passes when the card
+    // renders no background at all, which would hide a real regression.
+    expect(cardClass(container)).toContain("bg-[#f5f6f8]");
+    expect(cardClass(container)).not.toContain("bg-white/[0.05]");
   });
 
   it("uses the orange selected tint in BOTH arms (accent preserved)", () => {

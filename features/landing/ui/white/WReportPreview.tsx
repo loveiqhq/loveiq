@@ -50,7 +50,7 @@ const WReportPreview: FC = () => (
               +50 page long report
             </span>
           </h2>
-          <p className="max-w-xl text-[16px] leading-relaxed text-[#6b7280]">
+          <p className="max-w-xl text-[16px] leading-relaxed text-[#69707d]">
             LoveIQ helps you decode your desires, attachment patterns, emotional needs, and intimate
             dynamics so you can build relationships that are aligned, exciting, and safe.
           </p>
@@ -59,7 +59,7 @@ const WReportPreview: FC = () => (
         <div className="flex flex-col gap-5">
           {items.map((it) => (
             <div key={it.num} className="flex items-center gap-10">
-              <span className="text-[11px] font-bold text-[#9a96a6]">{it.num}</span>
+              <span className="text-[11px] font-bold text-[#6f6c78]">{it.num}</span>
               <div className="flex flex-col gap-1">
                 <p className="text-[15px] font-bold text-[#161021]">{it.title}</p>
                 <p className="text-[13.5px] text-[#6b6678]">{it.body}</p>
@@ -129,7 +129,7 @@ const WReportPreview: FC = () => (
               <strong className="font-bold text-black">shockingly accurate</strong>.&rdquo;
             </p>
             <p className="mt-1 text-[18px] font-bold text-black">Dr. Philip Gebhardt, 40</p>
-            <p className="text-[14px] text-[#6b7280]">Dentist and orthodontist</p>
+            <p className="text-[14px] text-[#69707d]">Dentist and orthodontist</p>
           </div>
         </div>
       </div>

@@ -26,9 +26,9 @@ const WFAQ: FC = () => {
             id="w-faq-heading"
             className="font-serif text-3xl font-medium leading-tight text-[#161021] sm:text-[44px]"
           >
-            Curious minds ask.
+            The questions people
             <br />
-            <span className="text-accent-orange">We answer.</span>
+            <span className="text-[#c2410c]">actually ask.</span>
           </h2>
         </div>
 
@@ -54,7 +54,7 @@ const WFAQ: FC = () => {
                   }}
                 >
                   <span className="flex items-baseline gap-4">
-                    <span className="font-serif text-sm text-[#9a96a6]">
+                    <span className="font-serif text-sm text-[#6f6a7a]">
                       {String(i + 1).padStart(2, "0")}
                     </span>
                     <span className="font-serif text-lg font-medium text-[#161021]">
@@ -64,7 +64,7 @@ const WFAQ: FC = () => {
                   {/* Plus icon → rotates 45° to an × when open (Figma). */}
                   <svg
                     aria-hidden
-                    className={`h-5 w-5 shrink-0 text-[#9a96a6] transition-transform duration-300 ${isOpen ? "rotate-45" : ""}`}
+                    className={`h-5 w-5 shrink-0 text-[#6f6a7a] transition-transform duration-300 ${isOpen ? "rotate-45" : ""}`}
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -92,12 +92,12 @@ const WFAQ: FC = () => {
         {/* "Still unanswered" contact block (Figma). */}
         <p className="mt-10 text-center text-[15px] text-[#6b6678]">
           If a question is still unanswered, write to us. Reach us at{" "}
-          <a href="mailto:hello@loveiq.org" className="font-medium text-accent-orange">
+          <a href="mailto:hello@loveiq.org" className="font-medium text-[#c2410c]">
             hello@loveiq.org
           </a>
           .
           <br />
-          <span className="text-[#9a96a6]">
+          <span className="text-[#6f6a7a]">
             We read every message, and we will get back to you.
           </span>
         </p>

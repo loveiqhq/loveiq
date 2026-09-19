@@ -4,16 +4,15 @@ import { cookies } from "next/headers";
 import { Resend } from "resend";
 import { z } from "zod";
 import { LANDING_VARIANT_COOKIE, isLandingVariant } from "@shared/experiments/landingVariant";
-import { SURVEY_VARIANT_COOKIE, isSurveyVariant } from "@shared/experiments/surveyVariant";
-import {
-  EMAIL_POSITION_COOKIE,
-  isEmailPositionVariant,
-} from "@shared/experiments/emailPositionVariant";
 import { checkRateLimit, checkCooldown, getClientIp } from "@shared/http/ratelimit";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import logger from "@shared/observability/logger";
+import { buildSubmissionJourney } from "@features/attribution/server/journey";
+import { buildJourneyMessage } from "@features/attribution/server/slack-journey";
+import { tryPostJourneyViaBot } from "@features/attribution/server/journey-message";
+import { codeSpan } from "@shared/observability/slack-blocks";
 import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
 import { surveyCompleteEmail } from "@features/survey/server/emails/survey-complete";
 import { surveyCompleteBEmail } from "@features/survey/server/emails/survey-complete-b";
@@ -23,11 +22,11 @@ import { pickEmailVariant } from "@shared/emails/ab-variant";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
 import { ensurePersonalReportForSubmission } from "@features/report/server/personalReport";
 import type { SurveyAnswers } from "@features/survey/server/types";
+import { surveyAnswersSchema } from "@features/survey/server/answersSchema";
 import {
   computeSurveyScoring,
   ensureSubmissionScored,
   isSurveyClosed,
-  setSubmissionHotjarUserId,
   submitSurveyOnce,
 } from "@features/survey/server/server";
 import { isFeatureEnabled } from "@shared/flags/system-flags";
@@ -55,18 +54,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const surveySchema = z.object({
   email: z.string().email().max(320),
   firstName: z.string().max(80),
-  // Keys are question IDs (numeric, ≤~12 chars). Bound key length AND key count
-  // so an oversized junk-key body can't bloat downstream JSONB. [Audit L1]
-  answers: z
-    .record(
-      z.string().min(1).max(16),
-      z.union([
-        z.string().max(1000),
-        z.array(z.string().max(500)).max(20),
-        z.number().int().min(1).max(7),
-      ])
-    )
-    .refine((obj) => Object.keys(obj).length <= 200, { message: "Too many answers" }),
+  // Key/value bounds and the per-question selection cap live in the schema module so
+  // they can be tested directly — Next.js rejects arbitrary exports from a route file.
+  answers: surveyAnswersSchema,
   startedAt: z.string().datetime(),
   durationMs: z.number().int().min(0).max(86_400_000),
   // 1000 (not 500) so a Google Ads click id (gclid, ~100 chars) captured
@@ -74,7 +64,38 @@ const surveySchema = z.object({
   // submission. Column is `text`, so the cap is only an anti-abuse bound.
   utmTracker: z.string().max(1000).optional().nullable(),
   sessionId: z.string().regex(UUID_RE).optional().nullable(),
-  hotjarUserId: z.string().max(64).optional().nullable(),
+  /**
+   * PostHog `$session_id` for the browsing session that finished the survey, used
+   * to deep-link the Slack notification to the session replay.
+   *
+   * Validated as an opaque id, not a UUID: PostHog's format is its own business and
+   * has changed before, so the guard is "short, and safe to paste into a URL path"
+   * rather than a shape that would silently start rejecting every id after a
+   * posthog-js upgrade. It is interpolated into a Slack link, so the character class
+   * is what stops it carrying anything else in there.
+   */
+  posthogSessionId: z
+    .string()
+    .max(100)
+    .regex(/^[A-Za-z0-9_-]+$/)
+    .optional()
+    .nullable(),
+  /**
+   * The order answer options were SHOWN in, per question — `{ "<qId>": ["<label>", …] }`.
+   *
+   * Needed to separate primacy bias from real preference when ranking multi-select
+   * answers: randomising the order without recording it just replaces one unusable
+   * dataset with another.
+   *
+   * Bounded on every axis for the same reason `answers` is — this lands in JSONB, and
+   * the client is untrusted. Never used to resolve an answer (submit_survey matches on
+   * exact option text), so a wrong or absent value costs analysis, never correctness.
+   */
+  optionOrder: z
+    .record(z.string().min(1).max(16), z.array(z.string().max(500)).max(60))
+    .refine((obj) => Object.keys(obj).length <= 200, { message: "Too many option orders" })
+    .optional()
+    .nullable(),
   website: z.string().max(0).optional().nullable(),
 });
 
@@ -101,41 +122,62 @@ const notifySlackSurvey = async ({
   questionCount: number;
   durationMs: number;
 }) => {
-  const url = process.env.SLACK_SURVEY_WEBHOOK_URL;
+  // Routed through notifySlack rather than a bespoke fetch, which is what buys the
+  // 60s dedup, the dead-letter row on failure, and Block Kit support. The old
+  // hand-rolled sender had none of those and re-implemented email masking inline.
+  const journey = await buildSubmissionJourney(submissionId);
 
-  if (!url) {
-    logger.warn(
-      { submissionId, sessionId },
-      "Slack webhook missing: set SLACK_SURVEY_WEBHOOK_URL to enable survey alerts."
-    );
+  if (!journey) {
+    // The submission row was unreadable (a slow replica, say). Still tell the team
+    // something rather than going silent.
+    await notifySlack({
+      channel: "survey",
+      kind: "survey_completed",
+      text: `:memo: Survey completed #${submissionId} — ${escapeSlack(firstName)} (${codeSpan(maskEmail(email))}) — ${questionCount} questions in ~${Math.round(durationMs / 60_000)} min`,
+      username: "survey_response",
+      context: { submissionId, sessionId },
+    });
     return;
   }
 
-  const maskedEmail = email.replace(/^(.).+(@.+)$/, "$1***$2");
-  const minutes = Math.round(durationMs / 60_000);
-  const text = `Survey completed: *${firstName}* (${maskedEmail}) - ${questionCount} questions in ~${minutes} min`;
+  const message = buildJourneyMessage(journey, { kind: "survey_completed", questionCount });
 
-  try {
-    logger.info({ submissionId, sessionId, maskedEmail }, "Sending Slack survey notification");
-    const res = await fetchWithTimeout(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, username: "survey_response" }),
-      timeoutMs: 5000,
-    });
+  logger.info(
+    {
+      submissionId,
+      sessionId,
+      blocks: message.blocks.length,
+      payloadChars: message.size,
+      trimmed: message.trimmed,
+      arms: journey.arms,
+    },
+    "Sending Slack survey notification"
+  );
 
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      logger.error(
-        { submissionId, sessionId, status: res.status, body },
-        "Slack survey webhook failed"
-      );
-    } else {
-      logger.info({ submissionId, sessionId, status: res.status }, "Slack survey webhook sent");
-    }
-  } catch (err) {
-    logger.error({ err, submissionId, sessionId }, "Slack survey webhook error");
+  // Post via the Slack bot when it is configured, so later milestones can EDIT
+  // this message instead of it being frozen at the one instant of submission (the
+  // rail here can only ever show step 1 of 5 — nothing downstream exists yet).
+  // Falls through to the webhook when unconfigured or on failure, so behaviour is
+  // unchanged without a token.
+  if (
+    await tryPostJourneyViaBot({
+      submissionId,
+      questionCount,
+      message,
+      milestones: journey.milestones,
+    })
+  ) {
+    return;
   }
+
+  await notifySlack({
+    channel: "survey",
+    kind: "survey_completed",
+    text: message.text,
+    blocks: message.blocks,
+    username: "survey_response",
+    context: { submissionId, sessionId },
+  });
 };
 
 export async function POST(request: Request) {
@@ -194,7 +236,8 @@ export async function POST(request: Request) {
     durationMs,
     utmTracker,
     sessionId,
-    hotjarUserId,
+    posthogSessionId,
+    optionOrder,
     website,
   } = parsed.data;
   const normalizedEmail = email.trim().toLowerCase();
@@ -205,35 +248,32 @@ export async function POST(request: Request) {
   // Wrapped in try/catch because cookies() throws when there is no request
   // scope (e.g. unit tests that call POST directly) — then we leave them unset.
   let landingVariantRaw: string | undefined;
-  let surveyVariantRaw: string | undefined;
-  let emailPositionRaw: string | undefined;
   try {
     const cookieStore = await cookies();
     landingVariantRaw = cookieStore.get(LANDING_VARIANT_COOKIE)?.value;
-    surveyVariantRaw = cookieStore.get(SURVEY_VARIANT_COOKIE)?.value;
-    emailPositionRaw = cookieStore.get(EMAIL_POSITION_COOKIE)?.value;
   } catch {
-    /* no request scope — leave the variants undefined (no stamp) */
+    /* no request scope — leave the variant undefined (no stamp) */
   }
 
-  // A/B: stamp the sticky landing + survey variants onto the submission's
-  // utm_tracker JSON so submissions are sliceable by arm in the DB (survey_variant
-  // is the survey-white A/B's completion-rate denominator). Guarded so the merged
-  // blob never exceeds the 1000-char utm_tracker budget, and a non-JSON /
-  // unparseable tracker is left untouched. Each arm only stamps when its cookie is
-  // actually present, preserving "no cookie → no stamp" for crawlers / direct hits.
+  /**
+   * Stamp the sticky landing arm onto the submission's utm_tracker JSON so
+   * submissions stay sliceable by arm in the DB. Guarded so the merged blob never
+   * exceeds the 1000-char utm_tracker budget, and a non-JSON tracker is left
+   * untouched. Only stamps when the cookie is present, preserving "no cookie → no
+   * stamp" for crawlers and direct hits.
+   *
+   * `survey_variant` is no longer stamped. The survey theme test concluded on
+   * 2026-08-25, the arm cookie is expired rather than written, so this read could
+   * only ever have produced nothing — a dead branch reading a cookie with no
+   * writer. Past submissions keep theirs; new ones legitimately have no survey
+   * arm, which also makes the final 453/411 split permanently reproducible.
+   */
   let mergedUtmTracker = utmTracker ?? null;
   try {
-    if (
-      isLandingVariant(landingVariantRaw) ||
-      isSurveyVariant(surveyVariantRaw) ||
-      isEmailPositionVariant(emailPositionRaw)
-    ) {
+    if (isLandingVariant(landingVariantRaw)) {
       const base = utmTracker ? JSON.parse(utmTracker) : {};
       if (base && typeof base === "object" && !Array.isArray(base)) {
-        if (isLandingVariant(landingVariantRaw)) base.landing_variant = landingVariantRaw;
-        if (isSurveyVariant(surveyVariantRaw)) base.survey_variant = surveyVariantRaw;
-        if (isEmailPositionVariant(emailPositionRaw)) base.survey_email_position = emailPositionRaw;
+        base.landing_variant = landingVariantRaw;
         const candidate = JSON.stringify(base);
         if (candidate.length <= 1000) mergedUtmTracker = candidate;
       }
@@ -292,6 +332,8 @@ export async function POST(request: Request) {
       durationMs,
       utmTracker: mergedUtmTracker,
       sessionId,
+      posthogSessionId,
+      optionOrder,
       marketingOptIn,
     });
     const tSubmit = performance.now();
@@ -353,12 +395,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // Three independent post-submit writes run concurrently. Each only needs
+    // Two independent post-submit writes run concurrently. Each only needs
     // submissionId (already in scope), writes a different table/column, and
-    // has no data-flow dependency on the others. Failure semantics are
+    // has no data-flow dependency on the other. Failure semantics are
     // preserved per branch via try/catch or `.catch()`:
     //   - scoring: returns the summary or null on internal error (existing)
-    //   - hotjar PATCH: lib swallows failures internally; defensive .catch keeps Promise.all alive
     //   - report-token POST: failure clears reportToken so the response omits it
     const supabaseUrl = process.env.SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -396,17 +437,8 @@ export async function POST(request: Request) {
             })
         : Promise.resolve();
 
-    const hotjarPromise: Promise<void> =
-      !isExisting && hotjarUserId
-        ? setSubmissionHotjarUserId(submissionId, hotjarUserId).catch(() => {
-            // setSubmissionHotjarUserId already swallows internally; defensive
-            // catch here keeps Promise.all alive if that ever changes.
-          })
-        : Promise.resolve();
-
     const [scoringSummary] = await Promise.all([
       ensureSubmissionScored(submissionId, answers as SurveyAnswers, scoringResult),
-      hotjarPromise,
       reportTokenPromise,
     ]);
 

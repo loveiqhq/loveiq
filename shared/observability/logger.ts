@@ -15,6 +15,19 @@ import { notifySlack } from "@shared/observability/slack";
 const SLACK_MIRROR_ENABLED =
   process.env.NODE_ENV === "production" && Boolean(process.env.SLACK_OPS_WEBHOOK_URL);
 
+/**
+ * Does this error line come from the company brain?
+ *
+ * Matched on the message because the mirror below sees only what was logged, and
+ * threading a channel through every `logger.error` in the brain would be a larger diff
+ * than the routing is worth. Anchored at the start so an unrelated error that happens to
+ * mention the brain in passing is not rerouted. A miss is harmless: the message lands in
+ * `ops` exactly as it does today.
+ */
+export function isBrainMessage(msg: string): boolean {
+  return /^(brain[-_: ]|mcp )/i.test(msg);
+}
+
 const logger = pino({
   level: process.env.LOG_LEVEL || "info",
   redact: {
@@ -84,11 +97,16 @@ const logger = pino({
         if (!optedOut) {
           const msg = typeof first === "string" ? first : String(args[1] ?? "(no message)");
           const kind = level === 60 ? "fatal" : "api_5xx";
+          // The company brain is the chattiest thing in this codebase and none of it is
+          // a site outage. Send its failures to their own channel so #prod-alerts stays
+          // a channel somebody reads. `brain` falls back to `ops` when its webhook is
+          // unset, so this never silences anything.
+          const channel = isBrainMessage(msg) ? "brain" : "ops";
           // Best-effort fire-and-forget. See file-top comment for why we
           // can't use next/server's `after()` here. Errors inside
           // notifySlack are swallowed and (with slack:false) won't recurse.
           void notifySlack({
-            channel: "ops",
+            channel,
             kind,
             text: `:rotating_light: *${kind}* — ${msg}`,
             username: "ops_alerts",

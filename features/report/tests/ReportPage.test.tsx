@@ -1,12 +1,23 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 
 const mockRouterPush = vi.fn();
-const mockCacheReportCheckoutQuote = vi.fn();
+const mockStartReportCheckout = vi.fn().mockResolvedValue(null);
+vi.mock("@features/checkout/ui/startReportCheckout", () => ({
+  startReportCheckout: (...args: unknown[]) => mockStartReportCheckout(...args),
+}));
 
-const mockSearchParams = vi.fn(() => new URLSearchParams());
+// This suite was written against Report 2.0 and still covers it. V1 became the
+// DEFAULT on 2026-09-13 (see features/report/ui/v1/ReportExperienceV1.tsx), so
+// every case here opts into `?v2=1` explicitly. V1's own coverage lives in
+// ReportPageV1.test.tsx.
+//
+// NOTE: useSearchParams() is called by BOTH the shell and the experience, and
+// the shell calls first — so a `mockReturnValueOnce` override lands on the shell
+// and must carry `v2=1` too, or the page silently renders V1 instead.
+const mockSearchParams = vi.fn(() => new URLSearchParams("v2=1"));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/report",
   useRouter: () => ({ push: mockRouterPush }),
@@ -16,10 +27,10 @@ vi.mock("next/navigation", () => ({
 const mockGetReportSessionId = vi.fn();
 vi.mock("@features/survey/ui/hooks/surveySession", () => ({
   getReportSessionId: () => mockGetReportSessionId(),
-  getReportPaywallDeadline: () => 1_700_000_000_000,
+  getReportNurturePromo: () => null,
+  getReportPricingSessionId: () => null,
   setReportNurturePromo: () => {},
   setReportPricingSessionId: () => {},
-  REPORT_PAYWALL_COUNTDOWN_MS: 120_000,
 }));
 
 const mockUseReportData = vi.fn();
@@ -35,23 +46,6 @@ vi.mock("@features/report/ui/hooks/useSectionFeedback", () => ({
   }),
 }));
 
-vi.mock("@features/checkout/server/reportCheckoutQuoteCache", () => ({
-  cacheReportCheckoutQuote: (...args: unknown[]) => mockCacheReportCheckoutQuote(...args),
-}));
-
-// Stub the scroll teaser so we can assert the cohort → `dismissible` wiring
-// without simulating the scroll/timer. The real component is exercised in
-// features/report/tests/ScrollPricingModal.test.tsx.
-vi.mock("@features/report/ui/ScrollPricingModal", () => ({
-  default: (props: { dismissible?: boolean; open?: boolean }) => (
-    <div
-      data-testid="scroll-teaser"
-      data-dismissible={String(props.dismissible)}
-      data-open={String(props.open)}
-    />
-  ),
-}));
-
 const mockTrackReportViewed = vi.fn();
 const mockTrackPaywallView = vi.fn();
 const mockTrackPaywallInitiated = vi.fn();
@@ -64,8 +58,6 @@ vi.mock("@features/analytics/client", () => ({
   trackBeginCheckout: (...args: unknown[]) => mockTrackBeginCheckout(...args),
   trackPriceShown: (...args: unknown[]) => mockTrackPriceShown(...args),
   setReportSubmissionContext: vi.fn(),
-  setForcedPaywallArm: vi.fn(),
-  trackExperimentExposure: vi.fn(),
   // New track functions exercised by ReportPage interactions.
   trackLockIconClicked: vi.fn(),
   trackReferFriendOpened: vi.fn(),
@@ -77,14 +69,16 @@ vi.mock("@features/analytics/client", () => ({
   trackSectionNavigated: vi.fn(),
   trackChapterFeedbackSubmitted: vi.fn(),
   trackLockedCardPriceShown: vi.fn(),
-  trackPaywallCountdownExpired: vi.fn(),
   hasCookieYesConsent: () => true,
 }));
 
 import ReportPage from "@features/report/ui/ReportPage";
+import * as analytics from "@features/analytics/client";
 import { archetypeContent } from "@/data/report-archetypes";
 import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
 import type { ReportPracticeTendencyContentForUser } from "@features/report/ui/hooks/useReportData";
+import { reportSections } from "@/data/report-general";
+import { resolveReportSections } from "@features/report/ui/reportTitles";
 // The 50/50 was concluded → any non-empty token now buckets to the forced
 // "treatment" arm. The soft "control" (dismissible) experience is now reached
 // only via the email-return escape hatch (from=email / utm_source=email) or the
@@ -117,6 +111,25 @@ describe("ReportPage", () => {
           currentSexualSatisfaction: 3,
           importanceOfSex: 5,
         },
+        // Report 2.0 Growth section (Part IV, full_report tier). An unpaid
+        // client receives only the universal framing slots + locked:true; the
+        // per-archetype ladder is withheld server-side.
+        growthCopy: {
+          locked: true,
+          "learn.eyebrow": "What you will learn",
+          "learn.body": "The specific shifts that move you toward what you want.",
+        },
+        // A SECOND locked premium section, so "clicking one CTA leaves the others
+        // locked" is actually exercised. The legacy `summary` chapter used to be
+        // the incidental second one; it is retired (not in the Report 2.0 Figma),
+        // so the fixture now supplies one deliberately.
+        libidoCopy: {
+          locked: true,
+          eyebrow: "The Pattern",
+          "learn.eyebrow": "What you will learn",
+          "learn.body": "The loop that quietly drains desire, and the way out.",
+        },
+        growthRungs: 5,
         pricingQuotes: {
           essentials: {
             id: 1,
@@ -126,6 +139,7 @@ describe("ReportPage", () => {
             basePriceBucket: "essentials_center",
             basePriceCents: 1499,
             currentPriceCents: 1499,
+            chargedPriceCents: 1499,
             initialPriceCents: 1499,
             discountMultiplier: 1,
             discountStep: 1,
@@ -158,6 +172,7 @@ describe("ReportPage", () => {
             basePriceBucket: "full_center",
             basePriceCents: 2999,
             currentPriceCents: 2749,
+            chargedPriceCents: 2749,
             initialPriceCents: 2999,
             discountMultiplier: 1,
             discountStep: 1,
@@ -189,6 +204,7 @@ describe("ReportPage", () => {
             basePriceBucket: "all_center",
             basePriceCents: 12999,
             currentPriceCents: 11499,
+            chargedPriceCents: 11499,
             initialPriceCents: 12999,
             discountMultiplier: 1,
             discountStep: 1,
@@ -316,7 +332,8 @@ describe("ReportPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRouterPush.mockReset();
-    mockCacheReportCheckoutQuote.mockReset();
+    mockStartReportCheckout.mockReset();
+    mockStartReportCheckout.mockResolvedValue(null);
     mockGetReportSessionId.mockReturnValue("02d88f31-eceb-4402-940d-c8cd98d01848");
   });
 
@@ -330,9 +347,15 @@ describe("ReportPage", () => {
 
     render(<ReportPage />);
 
-    expect(screen.getByRole("heading", { name: /no saved report session/i })).toBeInTheDocument();
-    expect(screen.getByText(/in this browser/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /take the survey/i })).toHaveAttribute(
+    // Copy changed deliberately: this screen used to say "Complete the survey
+    // again to generate a fresh report", which told someone who had already
+    // answered 56 questions to redo them. Opening the report on a second phone
+    // is the ordinary way to land here, and the completion email carries their
+    // link, so the email is the way back in. The survey link stays for people
+    // who genuinely have not taken it, but as an aside rather than the fix.
+    expect(screen.getByRole("heading", { name: /can.t find your report/i })).toBeInTheDocument();
+    expect(screen.getByText(/we emailed your report link/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /taken the test yet/i })).toHaveAttribute(
       "href",
       "/survey"
     );
@@ -357,16 +380,32 @@ describe("ReportPage", () => {
     expect(screen.getByRole("link", { name: /reload report/i })).toHaveAttribute("href", "/report");
   });
 
-  it("renders the Figma-style satisfaction status from the stored 01002 answer", () => {
+  it("does not render pre-2.0 sections the redesign retired", () => {
     mockUseReportData.mockReturnValue(buildSuccessResponse());
 
-    render(<ReportPage />);
+    const { container } = render(<ReportPage />);
 
-    expect(screen.getByText("Slightly dissatisfied")).toBeInTheDocument();
-    expect(screen.getByText("Slightly important")).toBeInTheDocument();
-    expect(
-      screen.getByText(/enough frustration, inconsistency, or disappointment/i)
-    ).toBeInTheDocument();
+    // Report 2.0 opens on the Part I divider — the Welcome intro (which carried
+    // the 01002 satisfaction status) and the LoveIQ Concept are gone, as are the
+    // sections folded into combined ones.
+    for (const id of [
+      "welcome",
+      "the_loveiq_concept",
+      "core_motivation",
+      "probability_of_other_archetypes",
+      "risk_orientation",
+      "relationship_form_preference",
+      "communication_style",
+      "background_know_how_arousal_desire_and_pleasure",
+      "typical_arousal_brakes_turn_offs_of_the_core_archetype",
+      "about_fantasies_desire_amp_pleasure_per_context",
+      "about_living_or_not_living_fantasies",
+    ]) {
+      expect(container.querySelector(`#${id}`)).toBeNull();
+    }
+    // The satisfaction label is still interpolated into copy via
+    // {{SEXUAL_SATISFACTION}} — it just no longer has its own intro section.
+    expect(screen.queryByText("Slightly dissatisfied")).not.toBeInTheDocument();
   });
 
   it("fires trackReportViewed once on data success with locked accessPlan + primaryArchetype", async () => {
@@ -387,7 +426,7 @@ describe("ReportPage", () => {
       // ?offer=1 forces the modal open even without quotes — same path the
       // discount-email deep-link uses, and it's the only way the modal can
       // open when there's no quote data to derive a discount step from.
-      mockSearchParams.mockReturnValueOnce(new URLSearchParams("offer=1"));
+      mockSearchParams.mockReturnValueOnce(new URLSearchParams("offer=1&v2=1"));
 
       render(<ReportPage />);
 
@@ -406,7 +445,7 @@ describe("ReportPage", () => {
 
       const { container } = render(<ReportPage />);
 
-      expect(screen.getByRole("heading", { name: /unlock your full report/i })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /unlock your reports/i })).toBeInTheDocument();
       expect(container.querySelector(".report-pricing-modal__scroll-region")).toBeInTheDocument();
 
       // Auto-mount paywalls no longer fire paywall_view (founder's "forced"
@@ -425,10 +464,11 @@ describe("ReportPage", () => {
       );
 
       expect(growthSection).toBeInTheDocument();
-      // Locked premium HTML now renders inside `.report-themed-block__blurred`
-      // so the client can blur it visually behind the overlay (visual tease,
-      // not byte-level paywall — see plan "whimsical-greeting-popcorn").
-      const blurred = growthSection?.querySelector(".report-themed-block__blurred");
+      // The Report 2.0 Growth section renders its locked preview: a blurred
+      // stand-in ladder (aria-hidden) sitting behind the premium overlay — a
+      // visual tease, not a byte-level paywall (the real per-archetype ladder is
+      // withheld server-side).
+      const blurred = growthSection?.querySelector(".report-growth__preview-fade");
       expect(blurred).toBeInTheDocument();
       expect(blurred?.getAttribute("aria-hidden")).toBe("true");
       expect(growthSection?.querySelector(".report-premium-overlay")).toBeInTheDocument();
@@ -497,20 +537,24 @@ describe("ReportPage", () => {
       expect(document.body.style.right).toBe("");
       expect(document.body.style.width).toBe("");
       expect(document.body.style.overflow).toBe("");
-      expect(mockScrollTo).toHaveBeenCalledWith(0, 240);
+      // Restored through `restoreScroll`, which passes `behavior: "instant"`: the bare
+      // `scrollTo(0, y)` obeyed `html { scroll-behavior: smooth }` and, since the page
+      // is at 0 the instant `position: fixed` comes off, it animated from the top of the
+      // page down to where the reader was (MO, 2026-08-22).
+      expect(mockScrollTo).toHaveBeenCalledWith({ top: 240, left: 0, behavior: "instant" });
     },
     REPORT_MODAL_TEST_TIMEOUT_MS
   );
 
   it(
-    "routes to checkout when a pricing modal CTA is clicked",
+    "goes straight to Stripe when a pricing modal CTA is clicked",
     async () => {
       const user = userEvent.setup();
       mockUseReportData.mockReturnValue(buildSuccessResponse());
 
       const { container } = render(<ReportPage />);
 
-      await user.click(screen.getByRole("button", { name: /^unlock full report$/i }));
+      await user.click(screen.getByRole("button", { name: /^unlock my report$/i }));
 
       // Price must be a positive, finite EUR amount (matches the pricingQuotes fixture).
       expect(mockTrackBeginCheckout).toHaveBeenCalledTimes(1);
@@ -520,17 +564,17 @@ describe("ReportPage", () => {
       expect(typeof price).toBe("number");
       expect(Number.isFinite(price)).toBe(true);
       expect(price).toBeGreaterThan(0);
-      expect(mockCacheReportCheckoutQuote).toHaveBeenCalledWith({
+      // Straight to Stripe: no /checkout navigation in between, and the quote the
+      // reader was shown is handed over rather than re-fetched on another page.
+      expect(mockRouterPush).not.toHaveBeenCalled();
+      await waitFor(() => expect(mockStartReportCheckout).toHaveBeenCalledTimes(1));
+      expect(mockStartReportCheckout).toHaveBeenCalledWith({
+        archetype: "Emotional Voyeur",
         plan: "full_report",
         quote: buildSuccessResponse().data.pricingQuotes.full_report,
-        sessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
+        reportSessionId: "02d88f31-eceb-4402-940d-c8cd98d01848",
         token: undefined,
       });
-      await waitFor(() =>
-        expect(mockRouterPush).toHaveBeenCalledWith(
-          "/checkout?plan=full_report&archetype=emotional-voyeur"
-        )
-      );
       expect(container.querySelector(".report-premium-overlay__cta")).toBeInTheDocument();
     },
     REPORT_MODAL_TEST_TIMEOUT_MS
@@ -615,7 +659,7 @@ describe("ReportPage", () => {
       response.data.pricingQuotes!.full_report.discountStep = 0;
       response.data.pricingQuotes!.all_reports.discountStep = 0;
       mockUseReportData.mockReturnValue(response);
-      mockSearchParams.mockReturnValueOnce(new URLSearchParams("offer=1"));
+      mockSearchParams.mockReturnValueOnce(new URLSearchParams("offer=1&v2=1"));
 
       const { container } = render(<ReportPage />);
 
@@ -634,9 +678,7 @@ describe("ReportPage", () => {
     render(<ReportPage />);
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: /unlock your full report/i })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /unlock your reports/i })).not.toBeInTheDocument();
   });
 
   it("does NOT open the offer modal for a paid customer on an ?offer=1 email link (Marcus regression)", () => {
@@ -645,79 +687,235 @@ describe("ReportPage", () => {
     const paid = buildSuccessResponse();
     paid.data.accessPlan = "full_report";
     mockUseReportData.mockReturnValue(paid);
-    mockSearchParams.mockReturnValueOnce(new URLSearchParams("offer=1"));
+    mockSearchParams.mockReturnValueOnce(new URLSearchParams("offer=1&v2=1"));
 
     render(<ReportPage />);
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("gives a forced-arm visitor the soft control experience when arriving from an email link", () => {
-    mockUseReportData.mockReturnValue(buildSuccessResponse());
-    // Persistent (not Once): the cohort is recomputed from searchParams on every
-    // render, so the email signal must survive re-renders.
-    mockSearchParams.mockImplementation(() => new URLSearchParams("from=email"));
-    try {
-      render(<ReportPage token={TREATMENT_TOKEN} />);
-      const teaser = screen.getByTestId("scroll-teaser");
-      // Treatment-arm token, but an email return ⇒ soft control UX: dismissible
-      // and NOT force-opened on load.
-      expect(teaser).toHaveAttribute("data-dismissible", "true");
-      expect(teaser).toHaveAttribute("data-open", "false");
-    } finally {
-      mockSearchParams.mockImplementation(() => new URLSearchParams());
-    }
-  });
-
-  it("treats utm_source=email as an email return too (covers already-sent emails)", () => {
-    mockUseReportData.mockReturnValue(buildSuccessResponse());
-    mockSearchParams.mockImplementation(() => new URLSearchParams("utm_source=email"));
-    try {
-      render(<ReportPage token={TREATMENT_TOKEN} />);
-      const teaser = screen.getByTestId("scroll-teaser");
-      expect(teaser).toHaveAttribute("data-dismissible", "true");
-    } finally {
-      mockSearchParams.mockImplementation(() => new URLSearchParams());
-    }
-  });
-
-  it("makes the scroll teaser non-dismissible for the forced-paywall treatment cohort", () => {
+  it("shows no paywall on load — the forced hard wall is gone", () => {
+    /**
+     * A report token used to bucket the reader into the forced-paywall
+     * "treatment" arm: a non-dismissible modal opened on mount, before any
+     * scroll. That experiment was removed on 2026-08-31. An identifiable report
+     * now opens with nothing over it, and the reader reaches the plans pop-up by
+     * scrolling to Attachment Style or clicking an unlock CTA.
+     */
     mockUseReportData.mockReturnValue(buildSuccessResponse());
     render(<ReportPage token={TREATMENT_TOKEN} />);
-    const teaser = screen.getByTestId("scroll-teaser");
-    expect(teaser).toHaveAttribute("data-dismissible", "false");
+    // This fixture sits at discountStep 1, so the ordinary 24h-ladder modal does
+    // auto-open — the forced arm used to suppress it. What must NOT come back is
+    // the un-closable one: whatever opens is always closable.
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /close/i })).toBeInTheDocument();
   });
 
-  it("keeps the scroll teaser dismissible for an email-return (soft) visit", () => {
+  it("an email return is no longer a special case — same closable surface", () => {
+    // `from=email` existed to soften the forced wall for re-engagement links.
+    // With the wall gone there is nothing to soften, so an email return must
+    // look exactly like any other visit.
     mockUseReportData.mockReturnValue(buildSuccessResponse());
-    mockSearchParams.mockImplementation(() => new URLSearchParams("from=email"));
+    mockSearchParams.mockImplementation(() => new URLSearchParams("from=email&v2=1"));
     try {
       render(<ReportPage token={TREATMENT_TOKEN} />);
-      const teaser = screen.getByTestId("scroll-teaser");
-      expect(teaser).toHaveAttribute("data-dismissible", "true");
+      const dialog = screen.getByRole("dialog");
+      expect(within(dialog).getByRole("button", { name: /close/i })).toBeInTheDocument();
     } finally {
-      mockSearchParams.mockImplementation(() => new URLSearchParams());
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
     }
   });
 
-  it("opens the forced paywall immediately on load for the treatment cohort", () => {
-    mockUseReportData.mockReturnValue(buildSuccessResponse());
-    render(<ReportPage token={TREATMENT_TOKEN} />);
-    // No scroll simulated — treatment must already be open on mount.
-    expect(screen.getByTestId("scroll-teaser")).toHaveAttribute("data-open", "true");
-    // …and the closable discount-offer modal must NOT preempt it, even though
-    // the fixture is at discountStep 1 (which would auto-open it for control).
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  /**
+   * `locked_card_price_shown` reached PostHog 331 times across 276 sessions while
+   * writing ZERO rows to `analytics_event` from 2026-08-01 onward. The cause was
+   * effect ORDER: `persistAnalyticsEvent` drops any event fired before
+   * `window.__loveiqReportSubmissionId` is set, and the submission context used
+   * to be published ~1500 lines BELOW this effect. Its one-shot ref is set
+   * before the call, so the dropped attempt was never retried.
+   *
+   * The damage was to what we believed rather than to what readers saw: the
+   * admin funnel read as though 39% of report readers never saw a price, when
+   * the client-side event shows 89% did.
+   */
+  describe("persisted analytics can be attributed", () => {
+    function withSubmission(id: number | null) {
+      const base = buildSuccessResponse();
+      return { ...base, data: { ...base.data, submissionId: id } };
+    }
+
+    it("publishes the submission context BEFORE the locked-card price event", async () => {
+      mockUseReportData.mockReturnValue(withSubmission(1920));
+
+      render(<ReportPage />);
+
+      const setCtx = vi.mocked(analytics.setReportSubmissionContext);
+      const priceShown = vi.mocked(analytics.trackLockedCardPriceShown);
+      await waitFor(() => expect(priceShown).toHaveBeenCalled());
+      expect(setCtx).toHaveBeenCalledWith(1920);
+      // Order IS the defect — both merely firing is not enough.
+      expect(Math.min(...setCtx.mock.invocationCallOrder)).toBeLessThan(
+        Math.min(...priceShown.mock.invocationCallOrder)
+      );
+    });
+
+    it("does not burn the one-shot ref when there is no submission to attribute to", async () => {
+      mockUseReportData.mockReturnValue(withSubmission(null));
+
+      render(<ReportPage />);
+      await waitFor(() => expect(mockTrackReportViewed).toHaveBeenCalled());
+
+      // Firing here would persist nothing AND mark the event done for the whole
+      // pageview, which is exactly how five weeks of rows were lost.
+      expect(vi.mocked(analytics.trackLockedCardPriceShown)).not.toHaveBeenCalled();
+    });
   });
 
-  it("does NOT open the teaser on load for an email-return (soft) visit (waits for scroll)", () => {
-    mockUseReportData.mockReturnValue(buildSuccessResponse());
-    mockSearchParams.mockImplementation(() => new URLSearchParams("from=email"));
-    try {
-      render(<ReportPage token={TREATMENT_TOKEN} />);
-      expect(screen.getByTestId("scroll-teaser")).toHaveAttribute("data-open", "false");
-    } finally {
+  /**
+   * V1 is the pre-2.0 report, restored on 2026-09-13 and made the DEFAULT for
+   * every reader (WhatsApp 2026-09-12, Mark: "Revert back fully please").
+   * Report 2.0 is still in the tree behind `?v2=1` — every other case in this
+   * file opts into it — so these guard the half that actually ships.
+   */
+  describe("V1 — the restored pre-2.0 report", () => {
+    beforeEach(() => {
+      // No `v2=1`: this is what a real visitor gets.
       mockSearchParams.mockImplementation(() => new URLSearchParams());
-    }
+    });
+
+    it("is what renders by default, and Report 2.0 only behind ?v2=1", () => {
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      const { container: v1 } = render(<ReportPage />);
+      // `welcome` is the clearest tell: Report 2.0 retires it, V1 opens on it.
+      expect(v1.querySelector("#welcome")).not.toBeNull();
+      cleanup();
+
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      const { container: v2 } = render(<ReportPage />);
+      expect(v2.querySelector("#welcome")).toBeNull();
+    });
+
+    it("renders every chapter of report-general, in sectionNumber order", () => {
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      const { container } = render(<ReportPage />);
+
+      // The exact list and order the old report shipped: no retirement filter
+      // and no Figma re-sort, both of which are Report 2.0 concepts. Comparing
+      // against the resolver rather than a hand-written list means a change to
+      // data/report-general.ts cannot silently drift past this.
+      const expected = resolveReportSections(reportSections, "Emotional Voyeur").map((s) => s.id);
+      const rendered = Array.from(container.querySelectorAll("section[id]")).map((el) => el.id);
+      expect(rendered).toEqual(expected);
+
+      // Guard the count too — `toEqual` on two empty arrays would also pass.
+      expect(expected.length).toBeGreaterThan(25);
+      // And the chapters 2.0 retired are genuinely back, not merely unfiltered.
+      for (const id of [
+        "welcome",
+        "the_loveiq_concept",
+        "core_motivation",
+        "probability_of_other_archetypes",
+        "risk_orientation",
+        "about_living_or_not_living_fantasies",
+      ]) {
+        expect(rendered).toContain(id);
+      }
+    });
+
+    it("goes straight to Stripe from the pricing modal — no /checkout hop", async () => {
+      const user = userEvent.setup();
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      render(<ReportPage />);
+      await user.click(screen.getByRole("button", { name: /^unlock my report$/i }));
+
+      // The pre-2.0 report navigated to a /checkout page that c37514d3 deleted.
+      // Restoring the old UI must not restore that hop.
+      expect(mockRouterPush).not.toHaveBeenCalled();
+      await waitFor(() => expect(mockStartReportCheckout).toHaveBeenCalledTimes(1));
+      expect(mockStartReportCheckout.mock.calls[0][0]).toMatchObject({
+        plan: "full_report",
+        archetype: "Emotional Voyeur",
+      });
+    });
+
+    it("keeps ?v2=1 when the reader opens another archetype", async () => {
+      const user = userEvent.setup();
+      mockRouterPush.mockReset();
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+      const response = buildSuccessResponse();
+      response.data.accessPlan = "all_reports";
+      response.data.unlockedArchetypes = ["Emotional Voyeur", "Explorer of Edges"];
+      mockUseReportData.mockReturnValue(response);
+
+      render(<ReportPage />);
+      const [tile] = screen.getAllByRole("button", { name: /view Explorer of Edges report/i });
+      await user.click(tile);
+
+      await waitFor(() => expect(mockRouterPush).toHaveBeenCalled());
+      const href = String(mockRouterPush.mock.calls[0][0]);
+      expect(href).toContain("archetype=");
+      // The arm has to ride along. Without it, anyone comparing the two reports
+      // is silently dropped back to V1 on the first tile they click.
+      expect(href).toContain("v2=1");
+    });
+
+    it("carries neither the forced paywall nor the EUR 2 urgency countdown", async () => {
+      const user = userEvent.setup();
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      const { container } = render(<ReportPage />);
+
+      // 565f4cac removed the countdown. Its label was the only text on the card
+      // and in the modal, so its absence is the whole assertion.
+      expect(screen.queryByText(/time left to secure this price/i)).not.toBeInTheDocument();
+
+      // 05725c7f removed the forced wall: the modal must always be dismissible.
+      await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+      const closeButton = screen.getByRole("button", { name: /close pricing modal/i });
+      expect(closeButton).toBeInTheDocument();
+      await user.click(closeButton);
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+      // And the report underneath is readable rather than walled off.
+      expect(container.querySelector(".report-page")).not.toBeNull();
+    });
+
+    it("stays dismissed once closed, even after the scroll teaser's timer lands", async () => {
+      /**
+       * This is the assertion the test above was making by accident.
+       *
+       * The scroll teaser arms a 1.6s timer and, when it fires, opens the modal
+       * if one is not already open. A reader arriving with a ladder discount
+       * has the modal auto-opened on mount, scrolling arms that timer
+       * underneath it, and closing inside the window let the timer throw the
+       * modal straight back — dismissed, then back a second and a half later.
+       *
+       * The test above only caught it when the run was slow enough for the
+       * timer to land inside its `waitFor`, which is why it read as a flake for
+       * days. Waiting PAST the timer makes it deterministic in both directions:
+       * it fails on the unfixed component every time, and it cannot pass by
+       * being quick.
+       */
+      const user = userEvent.setup();
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      render(<ReportPage />);
+
+      await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+      await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+      // Real time, not fake: the component owns the timer and the point is that
+      // it never fires. 1.6s is the delay; 2.2s clears it with margin.
+      await new Promise((resolve) => setTimeout(resolve, 2200));
+
+      expect(
+        screen.queryByRole("dialog"),
+        "the pricing modal reopened itself after the reader dismissed it"
+      ).toBeNull();
+    });
   });
 });

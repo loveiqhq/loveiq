@@ -18,46 +18,219 @@ GDPR Art. 30 requires the controller to maintain a written record of processing 
 
 ## 2. Processing activities
 
-| #   | Activity                           | Purposes                                                  | Data subjects                         | Categories of personal data                                                      | Categories of recipients (processors) | Lawful basis (Art. 6)   | Retention                                             | Cross-border transfer          | Technical + organisational measures                                                                                                                                                                   |
-| --- | ---------------------------------- | --------------------------------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------- | ----------------------- | ----------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Waitlist signup                    | Track pre-launch interest                                 | Waitlist signups                      | email, optional first_name, UTM, IP                                              | Supabase, Vercel                      | (a) consent             | Indefinite until DSAR                                 | EU (Supabase EU region)        | RLS, TLS, RBAC, no client DB access                                                                                                                                                                   |
-| 2   | Survey submission                  | Generate personality archetype report                     | Survey takers                         | email, first_name, ~60 answers (incl. sensitive-by-context), IP, session_id      | Supabase, Vercel                      | (a) consent             | Until DSAR delete                                     | EU                             | RLS, TLS, F-18 RLS integration test, retention purge of partial saves >30d                                                                                                                            |
-| 3   | Archetype scoring                  | Produce the report content                                | Survey takers                         | Derived from #2 (no new PII)                                                     | Supabase, Vercel                      | (b) contract            | Follows #2                                            | EU                             | `config_sha` audit (F-03); deterministic engine                                                                                                                                                       |
-| 4   | Report delivery                    | Render purchased report                                   | Survey takers + share-link recipients | personal_report row, signed token                                                | Supabase, Vercel                      | (b) contract            | Indefinite (tokens revocable)                         | EU                             | Token signing + `revoked_at` + `expires_at` (F-17) + share-recipient cookie HMAC                                                                                                                      |
-| 5   | Transactional email                | Deliver purchase confirmation, share link                 | Survey takers, share recipients       | recipient email, first_name, signed unsubscribe token                            | Resend, Vercel                        | (b) contract            | Resend processor-side log (DPA)                       | US (Resend)                    | TLS, DKIM/SPF on send domain, idempotent webhook (R-02)                                                                                                                                               |
-| 6   | Marketing nurture email            | Re-engage non-converted users                             | Survey takers who opted in (Q16015)   | recipient email, first_name, promo code                                          | Resend, Stripe, Vercel                | (a) consent             | Resend processor-side log                             | US (Resend, Stripe)            | Suppression list, RFC 8058 unsubscribe header, marketing_opt_in_terms_version (T-11), kill switch (F-12), mid-loop kill-switch re-check (T-20)                                                        |
-| 7   | Payment processing                 | Take card payments                                        | Paying customers                      | Stripe customer id, card brand/last4, charge id, amount, IP, UA, risk_level      | Stripe, Vercel, Supabase              | (b) contract            | Indefinite (accounting)                               | US (Stripe)                    | TLS, webhook signature + livemode guard (T-01), idempotency UNIQUE on stripe_event_id, partial-refund handling (F-07), async/SCA paymentIntent re-check (T-04), payment-row UNIQUE constraints (T-05) |
-| 8   | Engagement analytics (first-party) | Funnel + UX telemetry for product                         | Survey takers, paying customers       | analytics_event rows, scroll depth, time-on-section, click events                | Supabase, Vercel                      | (a) consent             | 180d (F-02 purge)                                     | EU                             | Consent-gated visitor ID (T-02), per-submission rate limit (R-18), CSRF-protected ingest                                                                                                              |
-| 9   | Engagement analytics (third-party) | Cross-session product insights                            | Survey takers, paying customers       | Vendor cross-site identifiers                                                    | GA4, Hotjar, Contentsquare            | (a) consent             | Vendor-controlled                                     | US (GA, Hotjar, Contentsquare) | CSP allowlist, CookieYes category-tagged loading                                                                                                                                                      |
-| 10  | Advertising tracking               | Attribution + retargeting                                 | Survey takers, paying customers       | Vendor pixels                                                                    | Facebook, TikTok, Google Ads          | (a) consent             | Vendor-controlled                                     | US                             | CookieYes "advertisement" category gating                                                                                                                                                             |
-| 11  | Operational forensics              | Investigate incidents + audit admin actions               | Admins                                | admin email, action, IP, target id                                               | Supabase, Vercel                      | (f) legitimate interest | Indefinite (audit trail)                              | EU                             | RLS service_role-only, log redaction (F-10), Slack masking                                                                                                                                            |
-| 12  | Abuse detection                    | Rate-limit, CSRF storm detection, honeypot, fraud signals | All visitors                          | IP (collapsed to /64 for IPv6 per R-08), event counters, Stripe Radar risk_level | Upstash KV, Vercel, Stripe            | (f) legitimate interest | KV TTL (≤5 min); risk_level follows payment lifecycle | EU/US                          | Per-IP + per-(IP, submission) buckets; honeypot duration check (R-09)                                                                                                                                 |
-| 13  | Email-bounce suppression           | Avoid re-mailing complainants                             | All email recipients                  | email + reason                                                                   | Supabase, Resend                      | (f) legitimate interest | Indefinite (deletion would re-mail)                   | EU + US                        | Resend webhook signature + idempotency (R-02)                                                                                                                                                         |
-| 14  | DSAR fulfillment                   | Honour Art. 17 / Art. 20 requests                         | All data subjects exercising rights   | email, action, admin email, IP, rows_affected                                    | Supabase                              | (c) legal obligation    | Indefinite (proof)                                    | EU                             | Optimistic locking on admin PATCH (F-05), audit-log (F-01)                                                                                                                                            |
+| #   | Activity                           | Purposes                                                  | Data subjects                         | Categories of personal data                                                                     | Categories of recipients (processors) | Lawful basis (Art. 6)   | Retention                                             | Cross-border transfer          | Technical + organisational measures                                                                                                                                                                                                  |
+| --- | ---------------------------------- | --------------------------------------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------- | ----------------------- | ----------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Waitlist signup                    | Track pre-launch interest                                 | Waitlist signups                      | email, optional first_name, UTM, IP                                                             | Supabase, Vercel                      | (a) consent             | Indefinite until DSAR                                 | EU (Supabase EU region)        | RLS, TLS, RBAC, no client DB access                                                                                                                                                                                                  |
+| 2   | Survey submission                  | Generate personality archetype report                     | Survey takers                         | email, first_name, ~60 answers (incl. sensitive-by-context), IP, session_id, posthog_session_id | Supabase, Vercel                      | (a) consent             | Until DSAR delete                                     | EU                             | RLS, TLS, F-18 RLS integration test, retention purge of partial saves >30d                                                                                                                                                           |
+| 3   | Archetype scoring                  | Produce the report content                                | Survey takers                         | Derived from #2 (no new PII)                                                                    | Supabase, Vercel                      | (b) contract            | Follows #2                                            | EU                             | `config_sha` audit (F-03); deterministic engine                                                                                                                                                                                      |
+| 4   | Report delivery                    | Render purchased report                                   | Survey takers + share-link recipients | personal_report row, signed token                                                               | Supabase, Vercel                      | (b) contract            | Indefinite (tokens revocable)                         | EU                             | Token signing + `revoked_at` + `expires_at` (F-17) + share-recipient cookie HMAC                                                                                                                                                     |
+| 5   | Transactional email                | Deliver purchase confirmation, share link                 | Survey takers, share recipients       | recipient email, first_name, signed unsubscribe token                                           | Resend, Vercel                        | (b) contract            | Resend processor-side log (DPA)                       | US (Resend)                    | TLS, DKIM/SPF on send domain, idempotent webhook (R-02)                                                                                                                                                                              |
+| 6   | Marketing nurture email            | Re-engage non-converted users                             | Survey takers who opted in (Q16015)   | recipient email, first_name, promo code                                                         | Resend, Stripe, Vercel                | (a) consent             | Resend processor-side log                             | US (Resend, Stripe)            | Suppression list, RFC 8058 unsubscribe header, marketing_opt_in_terms_version (T-11), kill switch (F-12), mid-loop kill-switch re-check (T-20)                                                                                       |
+| 7   | Payment processing                 | Take card payments                                        | Paying customers                      | Stripe customer id, card brand/last4, charge id, amount, IP, UA, risk_level                     | Stripe, Vercel, Supabase              | (b) contract            | Indefinite (accounting)                               | US (Stripe)                    | TLS, webhook signature + livemode guard (T-01), idempotency UNIQUE on stripe_event_id, partial-refund handling (F-07), async/SCA paymentIntent re-check (T-04), payment-row UNIQUE constraints (T-05)                                |
+| 8   | Engagement analytics (first-party) | Funnel + UX telemetry for product                         | Survey takers, paying customers       | analytics_event rows, scroll depth, time-on-section, click events                               | Supabase, Vercel                      | (a) consent             | 180d (F-02 purge)                                     | EU                             | Consent-gated visitor ID (T-02), per-submission rate limit (R-18), CSRF-protected ingest                                                                                                                                             |
+| 9   | Engagement analytics (third-party) | Cross-session product insights                            | Survey takers, paying customers       | Vendor cross-site identifiers; PostHog session replay                                           | GA4, Microsoft Clarity, PostHog       | (a) consent (see note)  | Vendor-controlled; PostHog replay 30d                 | US (GA, Clarity), EU (PostHog) | CSP allowlist, CookieYes category-tagged loading, production-only tag gating (GA4/Ads/Clarity are not loaded on staging or localhost); GA4 custom dimensions registered 2026-08-27 for the arms and funnel params already being sent |
+| 10  | Advertising tracking               | Attribution + retargeting                                 | Survey takers, paying customers       | Vendor pixels                                                                                   | Facebook, TikTok, Google Ads          | (a) consent             | Vendor-controlled                                     | US                             | CookieYes "advertisement" category gating                                                                                                                                                                                            |
+| 11  | Operational forensics              | Investigate incidents + audit admin actions               | Admins                                | admin email, action, IP, target id                                                              | Supabase, Vercel                      | (f) legitimate interest | Indefinite (audit trail)                              | EU                             | RLS service_role-only, log redaction (F-10), Slack masking                                                                                                                                                                           |
+| 12  | Abuse detection                    | Rate-limit, CSRF storm detection, honeypot, fraud signals | All visitors                          | IP (collapsed to /64 for IPv6 per R-08), event counters, Stripe Radar risk_level                | Upstash KV, Vercel, Stripe            | (f) legitimate interest | KV TTL (≤5 min); risk_level follows payment lifecycle | EU/US                          | Per-IP + per-(IP, submission) buckets; honeypot duration check (R-09)                                                                                                                                                                |
+| 13  | Email-bounce suppression           | Avoid re-mailing complainants                             | All email recipients                  | email + reason                                                                                  | Supabase, Resend                      | (f) legitimate interest | Indefinite (deletion would re-mail)                   | EU + US                        | Resend webhook signature + idempotency (R-02)                                                                                                                                                                                        |
+| 14  | DSAR fulfillment                   | Honour Art. 17 / Art. 20 requests                         | All data subjects exercising rights   | email, action, admin email, IP, rows_affected                                                   | Supabase                              | (c) legal obligation    | Indefinite (proof)                                    | EU                             | Optimistic locking on admin PATCH (F-05), audit-log (F-01)                                                                                                                                                                           |
 
 ## 3. Processors / sub-processors
 
-| Vendor                 | Role                                 | Data shared                           | Location          | DPA on file?                           |
-| ---------------------- | ------------------------------------ | ------------------------------------- | ----------------- | -------------------------------------- |
-| **Supabase**           | Database, auth                       | All personal data (encrypted at rest) | EU region         | ✅ standard Supabase DPA (out-of-repo) |
-| **Vercel**             | Hosting + edge runtime               | Request logs (IP, UA, URL)            | Global edge       | ✅ Vercel DPA                          |
-| **Stripe**             | Payment processing                   | Payment data per activity #7          | US (with EU SCCs) | ✅ Stripe DPA                          |
-| **Resend**             | Email delivery                       | Recipient email, first_name, content  | US (with EU SCCs) | ✅ Resend DPA                          |
-| **Upstash**            | KV (rate-limit, engagement counters) | IP-derived keys, ephemeral            | Configured region | ✅ Upstash DPA                         |
-| **Google Analytics 4** | Web analytics                        | Consent-gated identifiers             | US                | ✅ Google DPA via Workspace            |
-| **Hotjar**             | Session replay + heatmaps            | Consent-gated                         | EU + US           | ✅ Hotjar DPA                          |
-| **Contentsquare**      | UX heatmaps                          | Consent-gated                         | EU + US           | ✅ Contentsquare DPA                   |
-| **CookieYes**          | Consent management                   | Cookie consent state                  | EU                | ✅ CookieYes DPA                       |
-| **Facebook (Meta)**    | Ad pixel                             | Consent-gated cross-site id           | US                | ✅ Meta Business DPA                   |
-| **TikTok Ads**         | Ad pixel                             | Consent-gated cross-site id           | US/Singapore      | ✅ TikTok DPA                          |
-| **Google Ads**         | Ad pixel                             | Consent-gated cross-site id           | US                | ✅ Google Ads DPA                      |
-| **Slack**              | Ops alerting                         | Masked email, action, kind            | US                | ✅ Slack DPA                           |
+| Vendor                        | Role                                               | Data shared                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Location                 | DPA on file?                                             |
+| ----------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | -------------------------------------------------------- |
+| **Supabase**                  | Database, auth                                     | All personal data (encrypted at rest)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | EU region                | ✅ standard Supabase DPA (out-of-repo)                   |
+| **Vercel**                    | Hosting + edge runtime                             | Request logs (IP, UA, URL)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Global edge              | ✅ Vercel DPA                                            |
+| **Stripe**                    | Payment processing                                 | Payment data per activity #7                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | US (with EU SCCs)        | ✅ Stripe DPA                                            |
+| **Resend**                    | Email delivery                                     | Recipient email, first_name, content                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | US (with EU SCCs)        | ✅ Resend DPA                                            |
+| **Upstash**                   | KV (rate-limit, engagement counters)               | IP-derived keys, ephemeral                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Configured region        | ✅ Upstash DPA                                           |
+| **Google Analytics 4**        | Web analytics                                      | Consent-gated identifiers                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | US                       | ✅ Google DPA via Workspace                              |
+| **Microsoft Clarity**         | Session replay + heatmaps                          | NOT consent-gated (see note)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | EU + US                  | ⚠️ NOT a processor — see note below                      |
+| **PostHog**                   | Product analytics + session replay — **processor** | Custom event stream, autocapture, session replay (30d retention), distinct_id = lowercased email once a survey is submitted                                                                                                                                                                                                                                                                                                                                                                                                                                                           | EU — Cloud EU, Frankfurt | ✅ generated + countersigned 2026-08-27 — see note below |
+| **CookieYes**                 | Consent management                                 | Cookie consent state                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | EU                       | ✅ CookieYes DPA                                         |
+| **Facebook (Meta)**           | Ad pixel — **NOT LIVE, planned**                   | No data shared yet: no pixel exists in the codebase (verified 2026-08-27)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | US                       | ✅ Meta Business DPA                                     |
+| **TikTok Ads**                | Ad pixel — **NOT LIVE, planned**                   | No data shared yet: no pixel exists in the codebase (verified 2026-08-27)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | US/Singapore             | ✅ TikTok DPA                                            |
+| **Google Ads**                | Ad pixel                                           | Consent-gated cross-site id                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | US                       | ✅ Google Ads DPA                                        |
+| **Slack**                     | Ops alerting + funnel notifications                | Masked email, action, kind, acquisition channel (UTM source/medium/campaign), device type, self-reported country tier, A/B arm, journey timings, purchase amount. **No survey answers, no scoring/archetype output beyond the archetype name already shown on a purchase, never a raw email address, never `utm_content`**                                                                                                                                                                                                                                                            | US                       | ✅ Slack DPA                                             |
+| **Google Gemini (Google AI)** | Company-brain answer model                         | Internal company text only: repo documentation, the Notion board and pages (board tasks carry the assignee's name, pages carry their author), and AGGREGATE business figures (visits, signups, revenue, ad spend). **No customer personal data, no survey answers, no scoring output, no email addresses of users.** The free tier means Google may use these prompts to improve its models — a deliberate, documented trade-off. Groq is a drop-in swap that does not train on prompts (`BRAIN_LLM_BASE_URL` + `BRAIN_LLM_MODEL`, no code change) if that trade-off is reconsidered. | US                       | ⚠️ free tier, no DPA — see note                          |
 
 DPAs are stored outside this repository (in the company's contract management). Refresh annually; verify whenever a vendor SOC/ISO certification renews.
 
+### Google Gemini is a free-tier AI vendor with no DPA
+
+Added 2026-08-28, when the company brain (`features/brain/`) began sending
+internal text to a language model. Recorded here because `ROPA.md`'s own review
+trigger is "when a new vendor processor is engaged", and this one had been
+engaged in code without a row.
+
+**What actually leaves the building:** repo documentation, the Notion workspace
+(the team board and its pages) and aggregate business numbers. Jira is listed in
+the code but has never been ingested — 0 chunks — and Notion replaced it on
+2026-08-28.
+
+**Git commit messages are no longer indexed** (2026-09-09), which removes a
+category of personal data rather than adding one: they carried contributor names
+AND git email addresses, and 1,795 chunks of them are now deleted. They were
+dropped for retrieval quality — dense engineering prose crowded out the answers
+to business questions — and the privacy reduction is a side effect worth
+recording.
+
+There IS still personal data, and it is the team's own: board tasks carry the
+assignee's name, and Notion pages carry their author. No survey answers, no
+archetype output, no customer email addresses, no payment data.
+
+**Notion is indexed in full, so the "no customer data" line is measured rather
+than structural.** Company policy is that everything indexed is readable by
+everyone, so no page is excluded for confidentiality — which means the guarantee
+cannot come from the selection. It comes from checking: all 233 indexed Notion
+chunks were scanned on 2026-08-28 and contain exactly one email address, a
+`@loveiq.org` staff one, with no non-staff email, phone number or IBAN anywhere.
+Re-run that scan when the shape of what the team writes in Notion changes; a page
+pasting a customer thread would move this row from team data to customer data
+without any code changing.
+
+Two categories are refused at the shared write path regardless of policy.
+Credentials: `upsertChunks` rejects any chunk containing a recognisable secret,
+because indexing a key copies it into a searchable table, into every prompt that
+retrieves it, and into a free-tier provider that may train on it. And user-level
+rows: see the line below.
+
+**Why it is a ⚠️ and not a ✅:** the free tier has no DPA and Google may train on
+the prompts. That is acceptable for internal documents and our own aggregate
+numbers, and unacceptable the moment any customer data enters the corpus — so the
+line to hold is that `brain_chunk` must never index user-level rows. Two exits if
+the trade-off is reconsidered: point `BRAIN_LLM_BASE_URL`/`BRAIN_LLM_MODEL` at
+Groq (free, does not train on prompts) or at a paid Gemini tier with a DPA.
+Neither needs a code change.
+
 ## 4. Cross-border transfers
 
-Activities involving US-based processors (Stripe, Resend, Hotjar, Contentsquare, Facebook, TikTok, Google, Slack) rely on the SCCs included in their respective DPAs. No transfer to a country without an EU adequacy decision OR SCCs in place.
+Activities involving US-based processors (Stripe, Resend, Facebook, TikTok, Google, Slack) rely on the SCCs included in their respective DPAs. No transfer to a country without an EU adequacy decision OR SCCs in place.
+
+### PostHog was missing from this record entirely (found 2026-08-27)
+
+PostHog has run in production since its organization was created on **2026-08-09**
+(org `loveiq`, one member, one project `244778`) with **session replay enabled** and a
+30-day recording retention — 35,671 events in the 30 days to 2026-08-27 — and it had
+no row in either table above. It is now listed, and its status was researched rather
+than assumed:
+
+**Settled.**
+
+1. **PostHog is a PROCESSOR, not an independent controller.** Its own DPA names the
+   customer as Controller and "PostHog, Inc." as Processor, obliged to process only on
+   the controller's documented instructions. This is a materially better position than
+   Microsoft Clarity below, which is an independent controller with no DPA available
+   at all — so the Clarity note's hardest consequences do NOT carry over wholesale.
+2. **Data stays in the EU.** The project is on PostHog Cloud EU (`eu.posthog.com`,
+   Frankfurt), which is what PostHog itself recommends for GDPR. Contrast GA4 and
+   Clarity, both US.
+3. **Per-person deletion is possible.** PostHog supports right-to-be-forgotten
+   deletion for an individual, which Clarity does not — so a DSAR erasure is
+   technically achievable here. No runbook step performs it yet; that is a gap in our
+   process, not in the vendor.
+4. **The DPA is executed — signed 2026-08-27**, closing the one action this review
+   found. PostHog does not incorporate its DPA by reference into standard terms: it
+   must be generated and countersigned per organization at `app.posthog.com/legal`,
+   and PostHog states the published text "is not binding on its own — only the one you
+   generate and countersign through the app counts." That page read _"You haven't
+   generated any legal documents yet."_ when this record was written earlier the same
+   day, so the processor relationship had been real but undocumented for the whole
+   period PostHog had been recording — from 2026-08-09. The DPA (not the BAA, which is
+   HIPAA, nor the MSA, which is sales-negotiated) was generated and countersigned the
+   same day.
+
+**How this entry is evidenced, because it differs from the rest.** Everything else in
+the PostHog section above was verified against the API or the vendor's own published
+terms. DPA status is not exposed anywhere in PostHog's API — which is why it had to be
+checked by eye in the first place — so this line rests on the operator's confirmation
+rather than a programmatic check. The executed document itself is the evidence and
+lives in the organization's list at `app.posthog.com/legal`; anyone auditing this row
+should open that page rather than trust this sentence. Re-check it after any change of
+PostHog organization or billing entity, since the agreement is per-organization.
+
+**Also true, and a deliberate choice rather than an oversight.**
+
+- **PostHog is not consent-gated**, the same owner decision as Microsoft Clarity.
+  `features/analytics/client.ts` captures to PostHog _before_ the two GA4 consent
+  checks, specifically so that declining analytics does not silently empty the custom
+  event funnel. Everything the Clarity note says about recording EU visitors without
+  consent, and about Article-9 answers appearing in survey replays, applies here too.
+- **`posthog.identify()` sets `distinct_id` to the lowercased email** on survey submit
+  (`features/survey/ui/hooks/useSubmitSurvey.ts`), so PostHog holds a direct
+  identifier rather than a pseudonymous one.
+
+**What changed on 2026-08-27**, and what it does and does not fix:
+
+- `survey_submission.posthog_session_id` now stores the PostHog `$session_id` of the
+  session that submitted, so the Slack notification can deep-link to that replay. This
+  creates no new category of data in PostHog — the recording already existed; it
+  stores a pointer to it in our own database, which is why activity #2 above now lists
+  the column. A DSAR erasure of a submission therefore removes our link to the
+  recording but not the recording itself (30-day expiry aside).
+- GA4, Google Ads, GTM and Clarity are no longer loaded outside production. Before
+  this, staging and every developer's localhost recorded into the same GA4 property,
+  Ads account and Clarity project as customers — verified by curl:
+  staging.loveiq.org served `G-QTYY69L46N`, `AW-18068690553` and `/clarity-init.js`
+  identically to the live site, and GA4 measurement afterwards put **16% of the
+  property's sessions and 17% of its "users" on developer machines**, still running at
+  426 sessions in August. That is a data-minimisation improvement — materially fewer
+  people's sessions sent to US controllers — and is recorded as such in activity #9.
+  PostHog deliberately still runs everywhere and tags its events `deploy_env` instead,
+  because it is the only replay/error trail staging and dev have.
+- The Facebook and TikTok rows are corrected to **NOT LIVE**. Both were recorded as
+  active data sharing; no pixel for either exists anywhere in the codebase (verified
+  2026-08-27). They are planned, so the rows are kept and marked rather than deleted —
+  a processing record must not claim transfers to two US/Singapore recipients that
+  are not happening. Google Ads stays live: its conversion tag is real
+  (`trackGoogleAdsPurchaseConversion`, gated on the advertisement consent category).
+
+### Microsoft Clarity is an independent controller, not a processor
+
+Unlike the Hotjar and Contentsquare arrangements it replaced (both processors
+under signed DPAs), Microsoft operates Clarity **as an independent data
+controller** and does not execute processor/service-provider addenda for it.
+Microsoft's own FAQ states Clarity "is GDPR-compliant **as a data controller**"
+(<https://learn.microsoft.com/en-us/clarity/faq>). There is therefore no Clarity
+DPA to obtain, and the processor table row above is retained only for
+completeness — the relationship is controller-to-controller disclosure made on
+the basis of the visitor's consent, not processing on LoveIQ's instructions.
+
+Consequences that need a legal decision (flagged 2026-08-10, not resolved here):
+
+1. **Special-category exposure — UNMITIGATED (owner decision, 2026-08-10).**
+   Session recordings are captured on `/survey`, which collects Art. 9 data. The
+   survey root previously carried `data-clarity-mask` so question text, choice
+   labels and selection state were masked; **that mask was deliberately
+   removed**, so recordings can now reconstruct a visitor's Art. 9 answers and
+   those recordings are disclosed to an independent controller. Compounding
+   this, the tag is **no longer consent-gated** (see §"Consent" below), so the
+   disclosure happens without the Art. 9(2)(a) explicit consent that the privacy
+   policy §5 relies on. Restoring either control is a one-line change.
+2. **No per-user erasure.** Clarity has no per-subject delete: Microsoft's FAQ
+   states "You need to delete the entire project to delete user's data." This
+   conflicts with the Art. 17 route in activity #14 — an erasure request cannot
+   currently be honoured inside Clarity without deleting the whole project.
+   Mitigating factor: recordings are retained 30 days (favorites and a random
+   sample up to 9 months), so exposure is time-bounded.
+3. **Privacy-policy wording.** §7 now carves Microsoft out of the blanket
+   "all recipients are processors under Art. 28 DPAs" statement, and §7.4
+   describes Clarity as loaded on all visits with Microsoft as an independent
+   controller. **Still unreconciled:** §5 states Art. 9 data is processed on
+   Art. 9(2)(a) explicit consent, which the un-gated recorder contradicts. That
+   is a lawyer's call to resolve, not an engineering one — flagged 2026-08-10.
+
+### Consent — Clarity is NOT consent-gated (owner decision, 2026-08-10)
+
+The Clarity tag in `app/layout.tsx` carries no `type="text/plain"` and no
+`data-cookieyes` attribute, so it executes on every page load for every
+visitor irrespective of the CookieYes banner. This knowingly reverses audit
+finding H1 and was chosen to maximize recorded sessions. Consequences: EU
+visitors are recorded without consent; the CookieYes banner does not reflect
+actual behavior for this vendor; and because the survey mask was removed in
+the same change, Art. 9 answers are among what is recorded. `e2e/smoke.spec.ts`
+asserts the un-gated shape so the decision cannot be reversed by accident in
+either direction.
 
 ## 5. Security measures (cross-reference)
 

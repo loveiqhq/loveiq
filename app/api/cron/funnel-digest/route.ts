@@ -20,7 +20,11 @@ import { NextResponse } from "next/server";
 import logger from "@shared/observability/logger";
 import { notifySlack, escapeSlack, type SlackBlock } from "@shared/observability/slack";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
-import { signImagePayload } from "@shared/url/signed-image-url";
+import {
+  fitsSlackImageUrl,
+  signImagePayload,
+  SLACK_IMAGE_URL_MAX,
+} from "@shared/url/signed-image-url";
 import {
   markSlackAlertDelivered,
   recordCronRun,
@@ -60,7 +64,6 @@ const BUCKET_TOP_N = 5;
 
 type DigestImageKind =
   | "cvr-visitor-start"
-  | "cvr-visitor-start-dark"
   | "cvr-start-completion"
   | "cvr-completion-engagement"
   | "cvr-completion-paygate"
@@ -74,6 +77,9 @@ type DigestImageKind =
 const NURTURE_STAGE_LABELS: Record<string, string> = {
   "6h_no_view": "6h · no view",
   "6h_no_unlock": "6h · no unlock",
+  "72h_no_unlock": "72h · 50% off",
+  // Retired stages (pre pricing 2.0) — retained so historical digests still label
+  // the old ladder correctly.
   "30h_no_unlock": "30h · 50% off",
   "54h_no_unlock": "54h · 75% off",
   "78h_no_unlock": "78h · call invite",
@@ -131,7 +137,17 @@ async function buildSignedImageUrl(
     const u = new URL(`/api/admin/digest-image/${kind}`, base);
     u.searchParams.set("d", d);
     u.searchParams.set("s", s);
-    return u.toString();
+    const url = u.toString();
+    // Over Slack's cap the block is rejected and the WHOLE post fails. Drop the
+    // one image instead, loudly enough to be noticed.
+    if (!fitsSlackImageUrl(url)) {
+      logger.warn(
+        { kind, length: url.length, max: SLACK_IMAGE_URL_MAX },
+        "digest-image: signed URL over Slack's image_url cap; skipping image block"
+      );
+      return null;
+    }
+    return url;
   } catch (err) {
     logger.warn({ err, kind }, "digest-image: sign failed; skipping image block");
     return null;
@@ -230,17 +246,25 @@ async function buildCvrChartBlocks(
     "visitors"
   );
 
-  // Visitor → survey-start conversion for the control (dark) landing arm. Both
-  // arms now take the same free survey (the white arm's old pay-first funnel was
-  // removed), so there is no separate white pay-funnel chart.
-  await single(
-    "cvr-visitor-start-dark",
-    "Dark journey: visitor to survey-start conversion over time",
-    "Visitor → Start (dark)",
-    "starts",
-    "visitors_control"
-  );
-
+  /**
+   * There was a "Dark journey: visitor to survey-start" chart here. DELETED
+   * 2026-08-27 rather than fixed.
+   *
+   * It drew `visitors_control` from `get_funnel_cvr_sparklines`, a CTE defined as
+   * `COALESCE(landing_variant, 'control') <> 'white'` — "everything that is not
+   * white", not "the dark arm". Those were the same thing when it was written and
+   * stopped being so on 2026-08-21 when round 2 introduced `white_prev`; they were
+   * never the same for arm-less traffic. Measured the day it was removed the bucket
+   * held 805 arm-less submissions and 34 Landing Page V1 ones against 53 genuinely
+   * dark, so the title was ~94% wrong.
+   *
+   * Deleted rather than repaired because the SCHEDULED conversion-digest already
+   * plots the landing axis per real arm through `armLabel`, so a per-arm version of
+   * this would only duplicate it. `visitors_control` itself is left in the RPC and
+   * in DigestDay — the field is still read by nothing else, and dropping a column
+   * from a SECURITY DEFINER function is a migration for no gain; its docstring in
+   * digest-metrics.ts records what it actually means.
+   */
   await single(
     "cvr-start-completion",
     "Survey-start to completion conversion rate over time",
@@ -435,8 +459,11 @@ async function buildDropoutByArmChartBlock(
   const labels = [...new Set([...firstMap.keys(), ...lastMap.keys()])].sort(
     (a, b) => Number(a.slice(1)) - Number(b.slice(1))
   );
-  const first = labels.map((l) => firstMap.get(l) ?? 0);
-  const last = labels.map((l) => lastMap.get(l) ?? 0);
+  // null, not 0: a question that an arm has no reading for is a GAP, not a
+  // measured zero drop-off. `?? 0` drew a flat line along the axis and published
+  // it as a real result — the same falsehood the conversion chart was carrying.
+  const first = labels.map((l) => firstMap.get(l) ?? null);
+  const last = labels.map((l) => lastMap.get(l) ?? null);
 
   const url = await buildSignedImageUrl("dropout-by-arm", { windowLabel, labels, first, last });
   if (!url) return null;
@@ -481,6 +508,7 @@ async function buildReactivationChartBlock(
 const PLAN_ORDER: Array<keyof DailyMetrics["revenue"]["planMix"]> = [
   "essentials",
   "full_report",
+  "core",
   "all_reports",
 ];
 

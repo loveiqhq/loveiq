@@ -60,6 +60,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     // subs.length checked > 0 above; [0] is non-undefined.
     const sub = subs[0]!;
     const events: TimelineEvent[] = [];
+    /** Which consent-gated analytics events exist, so the server-side stamps below
+     *  only fill genuine gaps rather than duplicating a row. */
+    let seenAnalyticsTypes = new Set<string>();
 
     // 2. Check waitlist signup
     if (sub.user_id) {
@@ -259,6 +262,74 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           label: ANALYTICS_LABELS[row.event_type] ?? row.event_type,
           detail: buildAnalyticsDetail(row.event_type, row.metadata, row.duration_ms),
         });
+      }
+      seenAnalyticsTypes = new Set(rows.map((row) => row.event_type));
+    }
+
+    /**
+     * 12b. The paywall and checkout steps, from the SERVER-side stamps — but only
+     * when the consent-gated client event above is missing.
+     *
+     * `analytics_event` is written by `persistAnalyticsEvent`, which returns early
+     * without analytics consent, and most buyers decline: of the 9 paid Stripe
+     * sessions since 2026-08-06, 7 carried `gaAnalyticsConsent=0`. So this
+     * timeline showed no "Began checkout" for readers who demonstrably checked
+     * out — while the funnel tab on the SAME submission, which reads
+     * `checkout_started_at`, showed that they had. One admin screen contradicting
+     * another about one person is what started this whole investigation.
+     *
+     * Added only when the client event is absent, so a consented reader's
+     * timeline is unchanged and nothing appears twice. The labels say "server" so
+     * it is obvious which witness a row came from.
+     */
+    const quoteRes = await supabaseFetch(
+      `/rest/v1/report_price_quote?survey_submission_id=eq.${submissionId}` +
+        `&select=plan,current_price,currency,paywall_reached_at,checkout_started_at` +
+        `&order=created_date_time.asc`
+    );
+    if (quoteRes.ok) {
+      const quotes = (await quoteRes.json()) as Array<{
+        plan: string | null;
+        current_price: number | string | null;
+        currency: string | null;
+        paywall_reached_at: string | null;
+        checkout_started_at: string | null;
+      }>;
+
+      if (!seenAnalyticsTypes.has("paywall_initiated")) {
+        const reached = quotes
+          .map((q) => q.paywall_reached_at)
+          .filter((v): v is string => Boolean(v))
+          .sort()[0];
+        if (reached) {
+          events.push({
+            type: "paywall_reached_server",
+            timestamp: reached,
+            label: "Reached paywall (server)",
+            detail: "no analytics consent — recorded by /api/price",
+          });
+        }
+      }
+
+      if (!seenAnalyticsTypes.has("begin_checkout")) {
+        const started = quotes
+          .filter((q) => q.checkout_started_at)
+          .sort((a, b) => (a.checkout_started_at! < b.checkout_started_at! ? -1 : 1))[0];
+        if (started?.checkout_started_at) {
+          const price = started.current_price;
+          const detail = [
+            started.plan,
+            price != null ? `${price} ${started.currency ?? ""}`.trim() : null,
+          ]
+            .filter(Boolean)
+            .join(" · ");
+          events.push({
+            type: "checkout_started_server",
+            timestamp: started.checkout_started_at,
+            label: "Sent to Stripe (server)",
+            detail: detail || "recorded at Stripe session creation",
+          });
+        }
       }
     }
 

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
+import posthog from "posthog-js";
+import { recoverFromError } from "@shared/ui/chunkLoadError";
 import Link from "next/link";
 import { LoveIQMark, LoveIQWordmark } from "@shared/ui/branding/LoveIQBrand";
 
@@ -12,6 +14,20 @@ interface ErrorPageProps {
 export default function ErrorPage({ error, reset }: ErrorPageProps) {
   useEffect(() => {
     console.error(error);
+    // PostHog's exception autocapture listens on window.onerror /
+    // unhandledrejection. A React error boundary CATCHES the error, so it never
+    // reaches either — every error that renders this page was invisible in
+    // error tracking. Wrapped because a throw inside the error page's own
+    // effect would break the fallback UI, which is the one thing that must
+    // always render.
+    try {
+      posthog.captureException(error, {
+        error_boundary: "app/error.tsx",
+        digest: error.digest,
+      });
+    } catch {
+      /* analytics must never break the error page */
+    }
   }, [error]);
 
   return (
@@ -53,7 +69,7 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
           {/* Primary: Try again */}
           <button
             type="button"
-            onClick={reset}
+            onClick={() => recoverFromError(error, reset)}
             className="group relative inline-flex h-[54px] min-w-[200px] cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-full bg-gradient-brand px-8 text-[15px] font-semibold text-white shadow-pill transition hover:-translate-y-[2px] focus-visible-ring"
           >
             <span

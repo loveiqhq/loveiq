@@ -10,7 +10,6 @@ export const metadata: Metadata = {
   alternates: {
     canonical: `${siteUrl}/cookies`,
   },
-  robots: { index: false },
 };
 
 export default function CookiesPage() {
@@ -49,7 +48,7 @@ export default function CookiesPage() {
               Email:{" "}
               <a
                 href="mailto:hello@loveiq.org"
-                className="text-[#C2410C] hover:text-[#fe6839] transition-colors"
+                className="text-[#C2410C] underline hover:text-[#fe6839] transition-colors"
               >
                 hello@loveiq.org
               </a>
@@ -142,7 +141,12 @@ export default function CookiesPage() {
                 <li>retargeting</li>
                 <li>conversion tracking</li>
               </ul>
-              <p className="mb-2">These are only activated after explicit consent.</p>
+              <p className="mb-2">
+                Conversion events are only sent to Google Ads if you accept marketing cookies.
+                Google&rsquo;s advertising tag itself loads on every visit and may set a measurement
+                cookie (<code>_gcl_au</code>) before you answer this banner; you can remove it at
+                any time in your browser settings.
+              </p>
               <p className="mb-6">Legal basis: Consent (Art. 6(1)(a) GDPR)</p>
 
               <h3 className="text-gray-900 font-medium mb-2">E. Third-Party Services</h3>

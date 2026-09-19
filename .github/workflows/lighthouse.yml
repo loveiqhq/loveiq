@@ -31,6 +31,16 @@ jobs:
         run: npm run build
         env:
           NEXT_PUBLIC_SITE_URL: https://www.loveiq.org
+          # SAYS OUT LOUD THAT THIS IS NOT THE LIVE SITE, which the site URL above
+          # otherwise claims. `isProductionSite()` matches on the host allowlist, and off
+          # Vercel there is no environment to contradict it — so this build served on
+          # localhost loaded the real analytics tags. Only Microsoft Clarity actually
+          # localhost. Microsoft Clarity recorded 177 of 711 sessions over three days that
+          # way, and GA4 recorded 587 over fourteen — measured after the fact, because
+          # reasoning that "CI never accepts the banner" produced a confident wrong answer
+          # about GA4. Consent defaults vary by region; a US-hosted runner is not a
+          # refusing browser.
+          NEXT_PUBLIC_VERCEL_ENV: ci
           NEXT_PUBLIC_RECAPTCHA_SITE_KEY: dummy
 
       - name: Run Lighthouse CI

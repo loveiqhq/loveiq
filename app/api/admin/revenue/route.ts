@@ -61,7 +61,7 @@ export async function GET(request: Request) {
   try {
     const [paymentsRes, itemsRes] = await Promise.all([
       supabaseFetch(
-        `/rest/v1/payment?select=id,amount,currency,status,card_brand,failure_code,failure_message,refund_amount,payment_date_time${dateFilter}&order=payment_date_time.desc`,
+        `/rest/v1/payment?is_test=is.false&select=id,amount,currency,status,card_brand,failure_code,failure_message,refund_amount,payment_date_time${dateFilter}&order=payment_date_time.desc`,
         { headers: { Range: "0-49999" } }
       ),
       supabaseFetch(`/rest/v1/payment_item?select=item_name,total_price`, {

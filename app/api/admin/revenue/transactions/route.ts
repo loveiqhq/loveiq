@@ -31,7 +31,7 @@ export async function GET(request: Request) {
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
-  let query = `/rest/v1/payment?select=id,amount,currency,status,card_brand,card_last4,payment_date_time,failure_code&order=payment_date_time.desc`;
+  let query = `/rest/v1/payment?is_test=is.false&select=id,amount,currency,status,card_brand,card_last4,payment_date_time,failure_code&order=payment_date_time.desc`;
   if (status) query += `&status=eq.${status}`;
 
   try {

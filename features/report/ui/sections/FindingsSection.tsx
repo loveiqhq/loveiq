@@ -1,0 +1,163 @@
+"use client";
+
+import type { FC } from "react";
+
+/**
+ * Server-resolved findings copy (`getReport2Section(name, "findings")`), threaded
+ * as a prop because the 634KB copy module is server-only (see
+ * `app/api/report/route.ts` → `findingsCopy`). Findings 1-2 are always the real
+ * head/body. For findings 3-5 the server sends EITHER the real head/body (paid)
+ * OR the universal `.locked.` teaser (unpaid) — the real f3-5 text is never
+ * shipped to a locked client. `locked` tells the client which it received so it
+ * can render the blur/lock treatment + upsell.
+ */
+export interface FindingsCopy {
+  "f1.head"?: string | null;
+  "f1.body"?: string | null;
+  "f2.head"?: string | null;
+  "f2.body"?: string | null;
+  "f3.head"?: string | null;
+  "f3.body"?: string | null;
+  "f4.head"?: string | null;
+  "f4.body"?: string | null;
+  "f5.head"?: string | null;
+  "f5.body"?: string | null;
+  /**
+   * Shipped by the server but deliberately NOT rendered: the paywall shows only
+   * the CTA over the withheld rows, per Figma 8988:16141, which carries no line
+   * of copy above its button. Kept on the type so the payload stays described.
+   */
+  "upsell.line"?: string | null;
+  /** True when f3-5 carry the locked teaser text (user lacks paid access). */
+  locked: boolean;
+}
+
+interface Props {
+  copy: FindingsCopy | null;
+  onUnlock: () => void;
+}
+
+const LockIcon: FC = () => (
+  <svg viewBox="0 0 24 24" fill="none" className="report-findings__lock-icon" aria-hidden="true">
+    <rect
+      x="4.5"
+      y="10.5"
+      width="15"
+      height="10"
+      rx="2.5"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    />
+    <path
+      d="M8 10.5V7.5a4 4 0 0 1 8 0v3"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+
+const FindingRow: FC<{
+  index: number;
+  head: string | null | undefined;
+  body: string | null | undefined;
+  locked: boolean;
+}> = ({ index, head, body, locked }) => {
+  if (!head && !body) return null;
+  return (
+    <div className={`report-findings__row${locked ? " report-findings__row--locked" : ""}`}>
+      <span className="report-findings__num">{String(index).padStart(2, "0")}</span>
+      <div className="report-findings__text">
+        <div className="report-findings__body-wrap">
+          {head ? <h4 className="report-findings__head">{head}</h4> : null}
+          {body ? <p className="report-findings__body">{body}</p> : null}
+        </div>
+        {locked ? (
+          <span className="report-findings__lock" aria-hidden="true">
+            <LockIcon />
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+};
+
+const FindingsSection: FC<Props> = ({ copy, onUnlock }) => {
+  if (!copy) return null;
+
+  const locked = copy.locked;
+  // Three findings free, two behind the paywall (Eman, 2026-08-19; it was two and
+  // three). The server matches this split — a locked client is never sent the real
+  // f4/f5 head or body, only the universal teaser — so moving the line here alone
+  // would show a blurred teaser where a real finding should be.
+  const rows = [
+    { head: copy["f1.head"], body: copy["f1.body"], locked: false },
+    { head: copy["f2.head"], body: copy["f2.body"], locked: false },
+    { head: copy["f3.head"], body: copy["f3.body"], locked: false },
+    { head: copy["f4.head"], body: copy["f4.body"], locked },
+    { head: copy["f5.head"], body: copy["f5.body"], locked },
+  ];
+
+  // Nothing to render (archetype without a findings block) — bail.
+  if (rows.every((r) => !r.head && !r.body)) return null;
+
+  return (
+    <div className="report-findings">
+      <h3 className="report-findings__heading">Five things this report found</h3>
+
+      <article className="report-findings__card">
+        <div className="report-findings__rows">
+          {rows.slice(0, 3).map((r, i) => (
+            <FindingRow key={i} index={i + 1} head={r.head} body={r.body} locked={r.locked} />
+          ))}
+
+          {/* The withheld findings are grouped so the CTA can sit centred OVER
+              them, which is where Figma 8988:16141 puts it. Pinned under the
+              rows behind a divider, it read as a footnote rather than the way
+              past the blur. The group is the positioning context, so the CTA
+              stays centred on the blurred block at any width or copy length. */}
+          <div
+            className={`report-findings__group${locked ? " report-findings__group--locked" : ""}`}
+          >
+            {rows.slice(3).map((r, i) => (
+              <FindingRow key={i + 3} index={i + 4} head={r.head} body={r.body} locked={r.locked} />
+            ))}
+
+            {locked ? (
+              /**
+               * The handler sits on the WRAPPER, not the button.
+               *
+               * This wrapper is `position:absolute; inset:0` over the whole
+               * blurred block (334x238 on a Pixel 7) with one 235x44 button
+               * centred in it, so 88% of what reads as the unlock affordance
+               * used to swallow taps — PostHog logged 39 Android + 26 iOS
+               * `dead_click` events on `div.report-findings__upsell` in 90 days,
+               * readers aiming at the CTA and missing.
+               *
+               * A CSS `::after` hit-area expansion on the button is NOT a
+               * cross-engine fix: Safari treats form controls as containing
+               * blocks, so `inset: 0` resolved against the 235x44 button there
+               * while stretching to the full 242x363 wrapper on Chromium
+               * (measured on production, iPhone SE vs Pixel 7). The wrapper's
+               * own click covers both engines.
+               *
+               * The button keeps its semantics, so keyboard and screen-reader
+               * behaviour are unchanged — its click simply bubbles to here.
+               */
+              <div className="report-findings__upsell" onClick={onUnlock}>
+                {/* Figma labels this CTA "Unlock the Full Report →" — distinct
+                    from PremiumOverlay's "Unlock your report" (8993:19194),
+                    which is a different component in the design. */}
+                <button type="button" className="report-findings__unlock">
+                  Unlock the Full Report →
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </article>
+    </div>
+  );
+};
+
+export default FindingsSection;

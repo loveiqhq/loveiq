@@ -45,24 +45,49 @@ test.describe("smoke tests", () => {
     expect(headers["strict-transport-security"]).toBeDefined();
   });
 
-  test("Contentsquare tag is present AND consent-gated in the server-rendered head", async ({
-    request,
-  }) => {
+  /**
+   * The production analytics tags must NOT be in this build's head.
+   *
+   * Playwright builds and serves locally, so this run is by definition not the live
+   * site — and since 2026-08-27 GA4, Google Ads, GTM and Clarity are emitted only
+   * when the baked NEXT_PUBLIC_SITE_URL is a production host. Their ids are
+   * hardcoded with no per-environment property, so before that gate every e2e run,
+   * every dev session and every staging visit recorded into the same GA4 property,
+   * Ads account and Clarity project as real customers.
+   *
+   * This test used to assert the opposite — that Clarity WAS present — which is
+   * itself the evidence that a throwaway CI build was recording into production.
+   *
+   * Its other two assertions (that the tag carries no type="text/plain" and no
+   * data-cookieyes) tested nothing at all: the regex they built the tag from had a
+   * raw backspace byte where a `\b` was meant, so it never matched, `clarityTag`
+   * was always the empty string, and both `not.toContain` checks passed vacuously.
+   * That half of the contract now lives in
+   * features/analytics/tests/production-analytics-gate.test.ts, asserted against
+   * the layout source — which is the right layer for it anyway, being a property of
+   * the code rather than of whichever environment the runner booted.
+   */
+  test("no production analytics tag is emitted on a non-production build", async ({ request }) => {
     const res = await request.get("/");
     expect(res.status()).toBe(200);
 
-    const html = await res.text();
-    const head = html.match(/<head[^>]*>([\s\S]*?)<\/head>/i)?.[1];
-
+    const head = (await res.text()).match(/<head[^>]*>([\s\S]*?)<\/head>/i)?.[1];
     expect(head).toBeDefined();
-    expect(head).toContain('src="https://t.contentsquare.net/uxa/f1a8d593041c0.js"');
 
-    // [Audit H1] The Contentsquare tag must be consent-gated: CookieYes category
-    // attribute + type="text/plain" so it does NOT execute before the visitor
-    // grants analytics consent (it would otherwise record Article-9 survey data).
-    const csTag = head?.match(/<script\b[^>]*contentsquare[^>]*>/i)?.[0] ?? "";
-    expect(csTag).toContain("text/plain");
-    expect(csTag).toContain('data-cookieyes="cookieyes-analytics"');
+    for (const fingerprint of [
+      "clarity-init.js",
+      "clarity.ms",
+      "G-QTYY69L46N",
+      "AW-18068690553",
+      "googletagmanager.com",
+    ]) {
+      expect(head, fingerprint).not.toContain(fingerprint);
+    }
+
+    // CookieYes still loads everywhere: its consent cookie is what gates the
+    // FIRST-party durable analytics writes, so dropping it off production would
+    // silently stop the funnel tables rather than just quieten a third party.
+    expect(head).toContain("cdn-cookieyes.com");
   });
 
   test("404 page handles unknown routes", async ({ page }) => {

@@ -1,9 +1,16 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import posthog from "posthog-js";
 import { getCsrfToken } from "@shared/http/csrf-client";
 
 const analyticsItems = [
+  {
+    href: "/admin",
+    label: "Overview",
+    // house-style: a single SVG path string, matching the other icons
+    icon: "M3 12h4l3 8 4-16 3 8h4",
+  },
   {
     href: "/admin/analytics",
     label: "Core KPIs",
@@ -59,10 +66,13 @@ export default function AdminSidebar({ open, onClose }: AdminSidebarProps) {
   };
 
   async function handleLogout() {
-    await fetch("/api/admin/logout", {
+    const response = await fetch("/api/admin/logout", {
       method: "POST",
       headers: { "x-csrf-token": getCsrfToken() },
     });
+    if (response.ok) {
+      posthog.reset();
+    }
     window.location.href = "/admin/login";
   }
 

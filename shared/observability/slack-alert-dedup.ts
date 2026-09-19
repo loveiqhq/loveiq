@@ -136,7 +136,8 @@ export function startCronTimer(cronName: string, maxDurationSec: number): () => 
     if (!claimed) return;
     const pct = Math.round((elapsedMs / budgetMs) * 100);
     await notifySlack({
-      channel: "ops",
+      // Brain crons keep their noise in their own channel. See FALLBACK_BY_CHANNEL.
+      channel: cronName.startsWith("brain-") ? "brain" : "ops",
       kind: "cron_slow",
       text: `:warning: Cron *${cronName}* used ${pct}% of its ${maxDurationSec}s budget (${Math.round(elapsedMs / 1000)}s). Approaching timeout — investigate slowness.`,
       username: "ops_alerts",

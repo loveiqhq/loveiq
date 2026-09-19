@@ -1,0 +1,176 @@
+/**
+ * Plain-English names for every A/B arm, in one place.
+ *
+ * Both the Slack notifications and the /admin dashboard render arms through
+ * these helpers, so the two surfaces can never disagree about what an arm is
+ * called. The audience is non-technical: nobody reading a Slack message should
+ * have to know that `white_prev` means the pre-rebuild landing page.
+ *
+ * Read the RAW stored value, and never substitute an arm for a missing one.
+ *
+ * This warning used to name three helpers that collapsed anything not `"white"`
+ * down to `"control"`. All three are fixed now — `recordVisit.ts` stores the raw
+ * value, `get_landing_variant_funnel` was corrected on 2026-08-27 and returns
+ * `unknown`, and `features/admin/server/explorer.ts` was the last, on 2026-09-12.
+ * A warning that names already-fixed code sends the next reader to the wrong file,
+ * so it is rewritten rather than left standing.
+ *
+ * What the rule protects, measured 2026-09-12: **809 of 1,969 completed submissions
+ * carry no arm at all**, and the real `control` arm has 53 and ran for five days in
+ * June. Defaulting a missing arm to any real arm therefore does not add a rounding
+ * error — it invents a 16x result for a test that was already over.
+ */
+
+/** The four experiment axes we can attribute a person to, server-side. */
+export type ExperimentAxis = "landing" | "survey" | "pricing" | "paywall";
+
+export interface ArmLabel {
+  /** Short name for a chart axis or a table cell, e.g. "Landing Page V2 (Survey in Hero)". */
+  short: string;
+  /** Sentence for Slack, e.g. "Landing Page V2: survey in the hero". */
+  long: string;
+  /** Set when the arm is no longer being assigned to new visitors. */
+  retired?: boolean;
+}
+
+const UNKNOWN: ArmLabel = {
+  short: "Not recorded",
+  long: "not recorded",
+};
+
+/**
+ * `unknown` is a real, expected state, not an error: the landing and survey arms
+ * are only stamped when the visitor actually carried the cookie, so crawlers,
+ * direct hits and anyone who predates the stamping (added 2026-06-20) legitimately
+ * have no arm. Saying "not recorded" is honest; guessing an arm would not be.
+ */
+const LABELS: Record<ExperimentAxis, Record<string, ArmLabel>> = {
+  landing: {
+    // Marketing's naming convention (2026-08-27), adopted verbatim so the words in
+    // Slack, in /admin and in a meeting are the same words. It replaced "Landing
+    // page A / B (current / previous design)", which had two problems: the A/B
+    // letters carried no hint of WHICH came first, and "current design" is a name
+    // that goes stale the next time the page is rebuilt — the same failure already
+    // documented on the pricing arms below.
+    //
+    // V2 is the version with question 1 in the hero, hence "Survey in Hero"; V1 is
+    // the white landing that preceded that rebuild. The version numbers are the
+    // identity and the parenthetical says which is which. Parentheses rather than a
+    // dash because these strings are interpolated into whole sentences in the
+    // digest, where a second dash reads as a break in the sentence.
+    white: {
+      short: "Landing Page V2 (Survey in Hero)",
+      long: "Landing Page V2: survey in the hero",
+    },
+    white_prev: {
+      short: "Landing Page V1 (First Design)",
+      long: "Landing Page V1: the first design",
+    },
+    // Round-1 dark landing page. Never assigned since 2026-08-21, but ~5% of stored
+    // submissions still carry it, so it needs a truthful label of its own.
+    //
+    // Deliberately NOT called V0 or "first". It predates the V1/V2 numbering, which
+    // covers the two white designs only, and "Original dark landing page" beside
+    // "Landing Page V1 (First Design)" would put two arms on screen both claiming to
+    // be the first one. "before V1" is the one phrase that orders it without
+    // competing for the name.
+    control: {
+      short: "Dark landing page (before V1)",
+      long: "Landing page: the original dark design, before V1",
+      retired: true,
+    },
+  },
+  survey: {
+    white: { short: "White survey", long: "Survey questions: white" },
+    // Concluded 2026-08-25 in favour of white. The AXIS is retired too — it is
+    // absent from every live-axis list, the same as `paywall` — but the flag is
+    // what makes `activeArms("survey")` truthful, and it is a second guard: if
+    // anyone re-adds the axis to CHART_AXES, `rowsForAxis` drops this arm and the
+    // comparison collapses to one arm rather than quietly reviving a dead test.
+    dark: { short: "Dark survey", long: "Survey questions: dark", retired: true },
+  },
+  pricing: {
+    // No "(lower)" / "(higher)" here on purpose. These labels said A was the lower
+    // arm, which was true for pricing 2.0 and became FALSE on 2026-08-24 when 2.1
+    // raised A above B (A 39.99/49.99/59 vs B 29/39/49). Nothing failed — the
+    // label just quietly started lying to Slack and /admin about which price a
+    // buyer was shown. A direction baked into a name goes stale silently every
+    // time the test flips, so the name identifies the arm and the surrounding
+    // numbers (the amount paid, the digest's rates) carry the direction.
+    // Retired 2026-08-31: the higher-priced arm was dropped and the axis concluded.
+    // A was the CHEAPER arm until the 2.1 flip on 2026-08-24 and the dearer one after
+    // it, which is why the label says neither.
+    A: { short: "Pricing A", long: "Pricing: group A", retired: true },
+    B: { short: "Pricing B", long: "Pricing: group B" },
+    // Retired 2026-06 in the 3-bucket → 2-bucket cut. Legacy quotes still read back as C.
+    C: { short: "Pricing C", long: "Pricing: group C", retired: true },
+  },
+  // Whole axis concluded, and the forced wall itself was removed on 2026-08-31,
+  // so NEITHER arm is assigned any more — both carry `retired` for the same
+  // second-guard reason as the survey axis above. Stored rows still read back
+  // with a truthful label; `activeArms("paywall")` is correctly empty.
+  paywall: {
+    treatment: {
+      short: "Forced paywall",
+      long: "Paywall: forced — had to pay to read on",
+      retired: true,
+    },
+    control: {
+      short: "Dismissible paywall",
+      long: "Paywall: dismissible — could close it",
+      retired: true,
+    },
+  },
+};
+
+/**
+ * Own-property lookup, never an inherited one.
+ *
+ * `LABELS[axis]` is an object literal, so it inherits every `Object.prototype`
+ * member: `LABELS.landing.constructor` is a function, not `undefined`, and
+ * `?? UNKNOWN` cannot catch it because a function is not nullish. That matters
+ * because an arm is a RAW string off `utm_tracker` — `readStampedArms`
+ * deliberately does not allowlist it, and `app/api/survey/route.ts` stores the
+ * client's blob verbatim whenever no arm cookie is present — so `constructor`,
+ * `__proto__` or `toString` reaches here from any crafted client.
+ *
+ * Two things went wrong without this. `armLabel` returned an object whose
+ * `short` was `undefined`, which the compact Slack layout then called
+ * `.indexOf()` on and THREW — and in the backfill cron one throw abandons the
+ * rest of the run. And `isKnownArm`, which is the whitelist deciding what
+ * reaches the conversion digest and the axis trends, answered `true` for an arm
+ * nobody has ever assigned.
+ */
+function ownArm(axis: ExperimentAxis, arm: string): ArmLabel | undefined {
+  // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
+  const table = LABELS[axis];
+  // eslint-disable-next-line security/detect-object-injection -- own-property checked on the line above.
+  return Object.prototype.hasOwnProperty.call(table, arm) ? table[arm] : undefined;
+}
+
+/** Look up an arm's labels. Never throws; unrecognised or absent values read as "not recorded". */
+export function armLabel(axis: ExperimentAxis, arm: string | null | undefined): ArmLabel {
+  if (!arm) return UNKNOWN;
+  return ownArm(axis, arm) ?? UNKNOWN;
+}
+
+/** Every arm we actively assign for an axis, in a stable order for charts. Excludes retired arms. */
+export function activeArms(axis: ExperimentAxis): string[] {
+  // eslint-disable-next-line security/detect-object-injection -- axis is a closed union.
+  return Object.entries(LABELS[axis])
+    .filter(([, label]) => !label.retired)
+    .map(([arm]) => arm);
+}
+
+/** True when the value is an arm we know about (retired ones included). */
+export function isKnownArm(axis: ExperimentAxis, arm: string | null | undefined): boolean {
+  return Boolean(arm && ownArm(axis, arm));
+}
+
+/** Human name for the experiment itself, for chart titles and Slack section headings. */
+export const AXIS_TITLES: Record<ExperimentAxis, string> = {
+  landing: "Landing page design",
+  survey: "Survey design",
+  pricing: "Report pricing",
+  paywall: "Paywall style",
+};

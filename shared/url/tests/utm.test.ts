@@ -175,4 +175,54 @@ describe("lib/utm", () => {
       expect(getStoredUtm()).toBeNull();
     });
   });
+
+  describe("captureUtmFromUrl — Google Ads ValueTrack detail", () => {
+    it("captures matchtype and network, which are not utm_-prefixed", () => {
+      // Regression: the allowlist held only utm_* keys plus the click ids, so these
+      // two were dropped on capture even though `classifyTraffic` reads them and
+      // `trafficLine` renders them into the Slack survey ping. Measured live: ads
+      // arrived with utm_campaign and utm_term set and these two null.
+      setUrl(
+        "?utm_source=google&utm_medium=cpc&utm_campaign=price_time_test" +
+          "&utm_term=sexual%20archetype&matchtype=e&network=g&gclid=abc123"
+      );
+      const json = captureUtmFromUrl();
+      expect(json).not.toBeNull();
+      const parsed = JSON.parse(json!) as Record<string, string>;
+      expect(parsed.matchtype).toBe("e");
+      expect(parsed.network).toBe("g");
+      // and it must not have disturbed what already worked
+      expect(parsed.utm_campaign).toBe("price_time_test");
+      expect(parsed.utm_term).toBe("sexual archetype");
+      expect(parsed.gclid).toBe("abc123");
+    });
+
+    it("omits them entirely when Google does not send them", () => {
+      setUrl("?gclid=abc123");
+      const parsed = JSON.parse(captureUtmFromUrl()!) as Record<string, string>;
+      expect("matchtype" in parsed).toBe(false);
+      expect("network" in parsed).toBe(false);
+      // the auto-tagging fallback still applies
+      expect(parsed.utm_source).toBe("google");
+      expect(parsed.utm_medium).toBe("cpc");
+    });
+
+    it("does not treat ValueTrack detail alone as a reason to store anything", () => {
+      // matchtype/network with no campaign and no click id is not an attribution
+      // signal; storing it would overwrite a real earlier first-touch value.
+      //
+      // Asserting on `json.utm_source` alone is NOT enough — that passes whether
+      // or not the bug exists, because the failure mode is storing
+      // {matchtype, network} with no utm_source at all. The two assertions that
+      // actually bite are: nothing returned, and the earlier value still there.
+      store[GLOBAL_UTM_KEY] = JSON.stringify({ utm_source: "newsletter", utm_medium: "email" });
+      setUrl("?matchtype=e&network=g");
+
+      expect(captureUtmFromUrl()).toBeNull();
+      expect(localStorage.setItem).not.toHaveBeenCalled();
+      expect(getStoredUtm()).toBe(
+        JSON.stringify({ utm_source: "newsletter", utm_medium: "email" })
+      );
+    });
+  });
 });

@@ -105,6 +105,25 @@ function main(): void {
     process.exit(2);
   }
 
+  // Two files sharing a version prefix is not cosmetic: `supabase_migrations`
+  // keys by version, so a replay onto a fresh branch (or a DR restore) applies
+  // one and silently considers the other done. That happened once with a
+  // security migration revoking anonymous EXECUTE, which would have come back.
+  const byVersion = new Map<string, string[]>();
+  for (const f of files) {
+    const version = f.split("_")[0] ?? "";
+    byVersion.set(version, [...(byVersion.get(version) ?? []), f]);
+  }
+  const collisions = [...byVersion.entries()].filter(([, group]) => group.length > 1);
+  if (collisions.length > 0) {
+    console.error(`check-migrations: duplicate migration version(s):\n`);
+    for (const [version, group] of collisions) {
+      console.error(`  ${version}\n${group.map((f) => `    ${f}`).join("\n")}\n`);
+    }
+    console.error(`Renumber the newer file — only one can own a version.`);
+    process.exit(1);
+  }
+
   const enforced = files.filter((f) => {
     const ts = f.split("_")[0] ?? "";
     return ts >= CUTOFF_TIMESTAMP;

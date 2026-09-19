@@ -9,9 +9,14 @@ on:
   workflow_dispatch:
     inputs:
       target_url:
-        description: "Target URL (defaults to staging)"
+        description: "Deployed URL to screenshot (leave EMPTY to build and test locally, which is what the baselines were captured from)"
         required: false
-        default: "https://staging.loveiq.org"
+        default: ""
+      update_baselines:
+        description: "Regenerate the golden images instead of comparing them, then upload them as an artifact to commit"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -26,7 +31,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      TARGET_URL: ${{ inputs.target_url || 'https://staging.loveiq.org' }}
+      # Empty means "build locally", which is the default and what the committed
+      # baselines were captured from. This input used to default to staging and was
+      # silently ignored, because playwright.config.ts hardcoded localhost; now that
+      # the config honours PLAYWRIGHT_BASE_URL, defaulting it to a deployed URL would
+      # change what every scheduled run measures — and staging content can lag main.
+      TARGET_URL: ${{ inputs.target_url }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -41,9 +51,44 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run visual regression tests
-        run: npx playwright test visual-regression --project="Desktop Chrome"
+        # Playwright names golden images per platform, so the runner can only ever
+        # compare against `*-linux.png`. The committed baselines were generated on a
+        # Windows machine (`*-win32.png`), so every scheduled run since this workflow
+        # was added found no baseline at all and failed with "a snapshot doesn't
+        # exist … writing actual". Seed the Linux set from this job (the only place
+        # that renders on the same image the comparison runs on), download the
+        # artifact, and commit it.
+        run: |
+          if [ "$UPDATE_BASELINES" = "true" ]; then
+            # `=all`, not the bare flag. Bare `--update-snapshots` means "changed": it
+            # only rewrites a baseline whose comparison FAILED, so any baseline still
+            # passing within maxDiffPixelRatio survives even though it was captured
+            # under different conditions. After reduced-motion emulation was added on
+            # 2026-08-28, the white landing baseline passed at 0.4% and was kept, which
+            # left a permanent fixed 0.4% offset eating 40% of its 1% budget. `=all`
+            # matches what this input claims to do — regenerate, not compare.
+            npx playwright test visual-regression --project="Desktop Chrome" --update-snapshots=all
+          else
+            npx playwright test visual-regression --project="Desktop Chrome"
+          fi
         env:
           PLAYWRIGHT_BASE_URL: ${{ env.TARGET_URL }}
+          # Only for a REMOTE target. proxy.ts turns the gate on from this variable
+          # alone, so passing it unconditionally gated the server this job builds
+          # locally — and the first regenerated set came back as 7 screenshots of
+          # /login, then, once the cookie fixed that, as pages with broken images.
+          # A locally built server has nothing to gate; keep the secret for the
+          # remote path, where the config mints the `staging_session` cookie.
+          STAGING_PASSWORD: ${{ inputs.target_url != '' && secrets.STAGING_PASSWORD || '' }}
+          UPDATE_BASELINES: ${{ inputs.update_baselines }}
+
+      - name: Upload regenerated baselines
+        if: ${{ inputs.update_baselines }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: visual-regression-baselines
+          path: e2e/visual-regression.spec.ts-snapshots/
+          retention-days: 14
 
       - name: Upload Playwright report
         if: always()

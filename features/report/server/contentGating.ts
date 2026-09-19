@@ -9,7 +9,7 @@
  * rows can show what's there.
  *
  * Inputs:
- *   - `accessPlan`: null | "essentials" | "full_report" | "all_reports"
+ *   - `accessPlan`: null | "essentials" | "full_report" | "core" | "all_reports"
  *   - `unlockedArchetypes`: every archetype this user can read for the
  *     sections their plan covers (always includes the primary archetype)
  *
@@ -22,8 +22,90 @@ import { archetypeContent } from "@/data/report-archetypes";
 import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
 import { reportSections } from "@/data/report-general";
 import { isSectionUnlockedForPlan, type ReportAccessPlan } from "@features/report/server/access";
+import { summaryArchetypeContent } from "@/data/report-summary";
 
 export const PRACTICE_SECTION_ID = "typical_sexual_fantasy_amp_practice_tendencies";
+
+/**
+ * Withhold the "Learn:" disclosure body from a locked section.
+ *
+ * Every section copy carries universal educational slots. The eyebrow and the
+ * one-line `edu.teaser` are the tease and stay — they're what makes the reader
+ * want the section. The body paragraphs (`edu.body.*`) and the enumerated
+ * structure list (`edu.struct.*`) are the paid asset.
+ *
+ * These used to ship whole regardless of `locked`, and the peek→expand control
+ * that reveals them is client-side only — so a reader who had bought nothing
+ * could open "Read the full explanation" and get all of it. Hiding the control
+ * alone would not have been enough either: the prose would still sit in the
+ * /api/report JSON for anyone reading the network tab. It has to come off the
+ * wire, which is what this does.
+ *
+ * The one exception is the FIRST body paragraph, which ships as a short prefix
+ * — see {@link LOCKED_EDU_BODY_TEASE_CHARS}.
+ *
+ * The `practical.*` sections (libido, initiation, insecurities) already gate
+ * their own teaser and lines at the call site, so they need nothing here.
+ */
+/**
+ * How much of the opening body paragraph a locked client receives.
+ *
+ * Figma's collapsed peek (8762:15709) is three lines whose last one breaks
+ * mid-sentence: the teaser, then the start of the body. Nulling the body
+ * outright left the third line BLANK on most chapters, because at desktop width
+ * a line holds ~97 characters and the teasers run 197-290 — two to three lines,
+ * no more. 140 characters is the smallest prefix that carries every chapter past
+ * three lines, so the cut always lands inside a sentence the way the design
+ * draws it. The remainder of p1 and every later paragraph stay on the server.
+ */
+const LOCKED_EDU_BODY_TEASE_CHARS = 140;
+
+/**
+ * Cut to `max` characters on a word boundary, with no ellipsis — Figma's peek
+ * ends mid-word-free but mid-SENTENCE, and the fade sells the cut. Falls back to
+ * a hard cut only if the prefix holds no late space (a 140-char single word).
+ */
+function clipToWordBoundary(value: unknown, max: number): string | null {
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  if (text.length <= max) return text || null;
+  const head = text.slice(0, max);
+  const lastSpace = head.lastIndexOf(" ");
+  return (lastSpace > max * 0.6 ? head.slice(0, lastSpace) : head).trimEnd();
+}
+
+export function stripLockedEduBody<T extends { locked?: boolean }>(copy: T): T {
+  if (!copy || typeof copy !== "object" || copy.locked !== true) return copy;
+
+  const gated: Record<string, unknown> = { ...copy };
+  for (const key of Object.keys(gated)) {
+    if (key === "edu.body.p1") {
+      gated[key] = clipToWordBoundary(gated[key], LOCKED_EDU_BODY_TEASE_CHARS);
+    } else if (key.startsWith("edu.body.") || key.startsWith("edu.struct.")) {
+      gated[key] = null;
+    }
+  }
+  return gated as T;
+}
+
+/**
+ * Apply {@link stripLockedEduBody} across a whole response payload.
+ *
+ * Section copies are top-level keys on the /api/report body, so gating here
+ * covers every section at once — including any added later, which is the point:
+ * a new section gets the gate for free instead of depending on whoever writes
+ * it remembering to ask for one.
+ */
+export function stripLockedEduBodyFromPayload<T extends Record<string, unknown>>(payload: T): T {
+  const out: Record<string, unknown> = { ...payload };
+  for (const [key, value] of Object.entries(out)) {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const candidate = value as { locked?: boolean };
+      if (candidate.locked === true) out[key] = stripLockedEduBody(candidate);
+    }
+  }
+  return out as T;
+}
 
 export interface PracticeTendencyRowForUser {
   practice: string;
@@ -45,6 +127,9 @@ export interface PracticeTendencyContentForUser {
   introBlocks: string[];
   groups: PracticeTendencyGroupForUser[];
 }
+
+/** Key the `summary` chapter's prose travels under inside `archetypeContent`. */
+export const SUMMARY_BLOCK_ID = "summary";
 
 export function buildArchetypeContentForUser(
   accessPlan: ReportAccessPlan,
@@ -71,26 +156,54 @@ export function buildArchetypeContentForUser(
       result[section.archetypeBlockId]![archetype] = html;
     }
   }
+
+  /**
+   * The `summary` chapter is premium but has no `archetypeBlockId`, so it fell
+   * outside the loop above and the client imported `data/report-summary.ts`
+   * directly instead. That put every archetype's premium summary — Core
+   * Essence, Key Strengths, Core Challenges — into the public JS bundle, where
+   * a reader who had bought nothing could read all fourteen. Exactly the leak
+   * `__tests__/security/premium-content-bundle.test.ts` was written to stop,
+   * through a module that test did not list.
+   *
+   * Ship it under the same rule as every other chapter: unlocked archetypes
+   * only. Per-SECTION locking still happens on the client, so an owner still
+   * sees it blurred behind the paywall rather than missing.
+   */
+  for (const archetype of unlockedSet) {
+    const html = summaryArchetypeContent[archetype];
+    if (!html) continue;
+    if (!result[SUMMARY_BLOCK_ID]) result[SUMMARY_BLOCK_ID] = {};
+    result[SUMMARY_BLOCK_ID]![archetype] = html;
+  }
+
   return result;
 }
 
 export function buildPracticeTendenciesForUser(
   accessPlan: ReportAccessPlan,
-  unlockedArchetypes: string[]
+  unlockedArchetypes: string[],
+  archetypeTiers: Record<string, "essentials" | "full_report"> = {}
 ): Record<string, PracticeTendencyContentForUser> {
   const result: Record<string, PracticeTendencyContentForUser> = {};
   const practiceSection = reportSections.find((s) => s.id === PRACTICE_SECTION_ID);
   if (!practiceSection) return result;
 
-  const sectionUnlocked = isSectionUnlockedForPlan({
-    accessPlan,
-    isPremium: practiceSection.isPremium ?? false,
-    sectionId: practiceSection.id,
-  });
-
   for (const archetype of unlockedArchetypes) {
     const content = reportPracticeTendencies[archetype];
     if (!content) continue;
+
+    // Gate per-archetype: the practice section is full_report-tier, so it
+    // unlocks for an archetype held at full_report (core's top-3, full_report's
+    // own, all_reports' everything) but stays locked at essentials tier. The
+    // earlier GLOBAL check broke `core` — its plan isn't in the tier fallback,
+    // so it stripped scores from the very top-3 the buyer paid to unlock.
+    const sectionUnlocked = isSectionUnlockedForPlan({
+      accessPlan,
+      archetypeTier: archetypeTiers[archetype] ?? null,
+      isPremium: practiceSection.isPremium ?? false,
+      sectionId: practiceSection.id,
+    });
 
     if (sectionUnlocked) {
       result[archetype] = {

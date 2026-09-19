@@ -1,5 +1,7 @@
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import { isLandingVariant } from "@shared/experiments/landingVariant";
 import { sanitizeUtmSource } from "@shared/url/utm";
+import { reportingDay } from "@shared/time/reporting-day";
 import logger from "@shared/observability/logger";
 
 /**
@@ -39,10 +41,27 @@ export async function recordUniqueVisit(variant: string, utmSource?: string): Pr
       },
       body: JSON.stringify({
         visitor_id: crypto.randomUUID(),
-        day: new Date().toISOString().slice(0, 10),
+        day: reportingDay(),
         event_type: "unique_visitor",
-        // Landing A/B arm so the digest can split dark vs white (see proxy.ts).
-        landing_variant: variant === "white" ? "white" : "control",
+        // Landing A/B arm, stored RAW so the arms stay distinguishable (see proxy.ts).
+        //
+        // This used to be `variant === "white" ? "white" : "control"`, which wrote
+        // round-2's `white_prev` under round-1's RETIRED `control` label. Because
+        // this is the server write path, that destroyed the arm at write time: it
+        // left one column conflating genuine June dark traffic with today's
+        // `white_prev`, and every consumer splitting on it (get_funnel_cvr_sparklines,
+        // get_landing_variant_funnel, the admin explorer) reported `white_prev` as
+        // "dark". Rows written BEFORE this fix stay ambiguous and must never be
+        // relabelled — per-arm visitor counts are only trustworthy from here on.
+        //
+        // Still clamped, just to the real arm set instead of collapsing: the header
+        // this arrives on is copied from an inbound request in proxy.ts, so an
+        // unrecognised value must not reach the column.
+        // isLandingVariant, not normalizeLandingVariant: the normaliser defaults
+        // anything unrecognised to "white", which is exactly the mis-attribution
+        // proxy.ts now avoids by sending "unknown". Normalising here would undo
+        // it one layer down.
+        landing_variant: isLandingVariant(variant) ? variant : "unknown",
         // Last-touch acquisition source for THIS visit (re-sanitized above).
         // Omitted (stays NULL) for direct/untagged visits so COUNT(utm_source)
         // reflects only real campaign traffic.

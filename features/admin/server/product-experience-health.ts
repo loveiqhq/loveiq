@@ -144,7 +144,7 @@ async function fetchMonetizationSummary(days: number): Promise<MonetizationSumma
   const since = days > 0 ? new Date(Date.now() - days * 86_400_000).toISOString() : null;
   const dateFilter = since ? `&payment_date_time=gte.${since}` : "";
   const res = await supabaseFetch(
-    `/rest/v1/payment?select=amount,status${dateFilter}&order=payment_date_time.desc`,
+    `/rest/v1/payment?is_test=is.false&select=amount,status${dateFilter}&order=payment_date_time.desc`,
     { headers: { Range: "0-49999" } }
   );
 

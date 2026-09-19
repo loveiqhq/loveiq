@@ -182,7 +182,7 @@ const CountryQuestion: FC<CountryQuestionProps> = ({ question, value, onChange }
             onKeyDown={handleKeyDown}
             placeholder="Search for a country..."
             autoComplete="off"
-            className={`w-full rounded-xl border py-3 font-sans text-[15px] focus:outline-none ${
+            className={`w-full rounded-xl border py-3 font-sans text-[16px] sm:text-[15px] focus:outline-none ${
               white
                 ? "border-black/[0.08] bg-[#f5f6f8] text-[#161021] placeholder:text-black/30 focus:border-[#8b6fbf]"
                 : "border-white/10 bg-white/5 text-white placeholder:text-white/30 focus:border-[#a78bfa]"

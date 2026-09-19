@@ -9,6 +9,7 @@ import logger from "@shared/observability/logger";
 import { surveyQuestions } from "@/data/survey-data";
 import {
   applyFilters,
+  parseLandingVariant,
   archetypeMatchFilter,
   buildArchetypeDistribution,
   buildBreakdownBy,
@@ -51,7 +52,6 @@ const QUOTE_SELECT = [
   "personal_report_id",
   "plan",
   "purchased_at",
-  "forced_paywall_arm",
   "experiment_group",
   "device_type",
   "country_tier",
@@ -117,19 +117,6 @@ function parseUtmField(
   }
 }
 
-// Landing A/B arm stamped onto the submission's utm_tracker at submit time.
-// Anything not explicitly "white" (missing / pre-feature / unparseable) is the
-// original dark experience → "control", matching the get_landing_variant_funnel RPC.
-function parseLandingVariant(tracker: string | null): string {
-  if (!tracker?.trim()) return "control";
-  try {
-    const parsed = JSON.parse(tracker) as Record<string, string | undefined>;
-    return parsed.landing_variant?.trim() === "white" ? "white" : "control";
-  } catch {
-    return "control";
-  }
-}
-
 /**
  * Coerce a scoring_result percentages jsonb into a clean `{archetype: number}`.
  * Drops non-finite / non-numeric values so cohort averages never see NaN.
@@ -187,7 +174,6 @@ interface QuoteRow {
   personal_report_id: number | null;
   plan: string | null;
   purchased_at: string | null;
-  forced_paywall_arm: string | null;
   experiment_group: string | null;
   device_type: string | null;
   country_tier: string | null;
@@ -540,7 +526,6 @@ export async function GET(request: Request) {
         utmCampaign: parseUtmField(s.utm_tracker, "utm_campaign"),
         landingVariant: parseLandingVariant(s.utm_tracker),
         device: normalizeLabel(attrs?.device_type),
-        paywallArm: normalizeLabel(attrs?.forced_paywall_arm),
         experimentGroup: normalizeLabel(attrs?.experiment_group),
         countryTier: normalizeLabel(attrs?.country_tier),
         priceBucket: normalizeLabel(attrs?.base_price_bucket),
@@ -620,7 +605,6 @@ export async function GET(request: Request) {
         "relationship",
         "plan",
         "device",
-        "paywall_arm",
         "experiment_group",
         "country_tier",
         "price_bucket",
@@ -648,7 +632,6 @@ export async function GET(request: Request) {
             r.relationship,
             r.plan,
             r.device,
-            r.paywallArm,
             r.experimentGroup,
             r.countryTier,
             r.priceBucket,

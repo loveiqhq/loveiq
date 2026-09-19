@@ -101,6 +101,49 @@ jobs:
           SUPABASE_TEST_URL: ${{ secrets.SUPABASE_TEST_URL }}
           SUPABASE_TEST_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_TEST_SERVICE_ROLE_KEY }}
 
+  migration-drift:
+    name: Migration drift (repo vs live DB)
+    runs-on: ubuntu-latest
+    needs: [lint]
+    # Catches the three failure modes audited on 2026-08-27, none of which any other
+    # job can see:
+    #   - a migration FILE with no ledger row, so `supabase db push` would re-run it.
+    #     Two such files were DML re-syncs of report_price_quote, and one re-synced to
+    #     the superseded pricing 2.0 catalogue — a push would have silently reverted
+    #     live prices.
+    #   - a LEDGER ROW with no file, so the object exists in production and would be
+    #     missing from any environment rebuilt from this repo (branch, db reset, DR).
+    #   - a file whose version stamp disagrees with its ledger row, which is what
+    #     applying through the Supabase MCP produces if the file is not renamed after.
+    # Nine of these had accumulated silently because this only ran when remembered.
+    #
+    # Skips itself until SUPABASE_DB_URL is set, exactly like the integration job
+    # above, so adding the secret is the only step needed to switch it on.
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'push' }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - name: Skip if SUPABASE_DB_URL unset
+        id: gate
+        run: |
+          if [ -z "${SUPABASE_DB_URL}" ]; then
+            echo "SUPABASE_DB_URL unset — skipping drift check."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      - name: Check migration drift
+        if: steps.gate.outputs.run == 'true'
+        run: npm run check:migration-drift
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -199,7 +242,7 @@ jobs:
   notify-failure:
     name: Alert on red main
     runs-on: ubuntu-latest
-    needs: [lint, test, integration, build]
+    needs: [lint, test, integration, migration-drift, build]
     if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(needs.*.result, 'failure') }}
     steps:
       - name: Post failure to Slack

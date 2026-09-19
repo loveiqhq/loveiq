@@ -11,7 +11,7 @@ interface ReportShareItem {
 }
 
 interface ReportSharesState {
-  plan: "essentials" | "full_report" | "all_reports" | null;
+  plan: "essentials" | "full_report" | "core" | "all_reports" | null;
   seatLimit: number;
   seatsUsed: number;
   shares: ReportShareItem[];
@@ -39,6 +39,7 @@ const INITIAL: ReportSharesState = {
 const SEAT_LIMIT_BY_PLAN: Record<NonNullable<ReportSharesState["plan"]>, number> = {
   essentials: 1,
   full_report: 2,
+  core: 2,
   all_reports: 2,
 };
 

@@ -3,6 +3,7 @@
 import { useMemo, useState, type FC, type ReactNode } from "react";
 import { useAdminFetch } from "@features/admin/ui/hooks/useAdminFetch";
 import StatCard from "@features/admin/ui/StatCard";
+import { armLabel } from "@features/attribution/server/labels";
 import JourneyFlowSankey, {
   type FlowNode,
   type FlowLink,
@@ -90,7 +91,6 @@ interface FlowData {
 interface Segment {
   source: string;
   landingVariant: string;
-  paywallArm: string;
 }
 
 const money = (n: number) =>
@@ -137,24 +137,23 @@ const SegmentFilters: FC<{ value: Segment; onChange: (s: Segment) => void }> = (
       onChange={(v) => onChange({ ...value, source: v })}
       options={SOURCE_OPTIONS.map((s) => ({ value: s, label: s === "all" ? "All sources" : s }))}
     />
+    {/* Values are the RAW arm as stored in utm_tracker, because the route filters on
+        exact equality against it (journey/flow route.ts); only the labels are
+        translated, and from the shared vocabulary so this dropdown cannot drift from
+        the names in Slack and the rest of /admin.
+
+        `white_prev` was missing entirely, so the arm CURRENTLY under test could not
+        be selected — the only choices were the live V2 arm and a dark arm that has
+        not been assigned since 21 Aug. */}
     <Select
-      label="Landing variant"
+      label="Landing page"
       value={value.landingVariant}
       onChange={(v) => onChange({ ...value, landingVariant: v })}
       options={[
         { value: "all", label: "All" },
-        { value: "control", label: "Dark (control)" },
-        { value: "white", label: "White" },
-      ]}
-    />
-    <Select
-      label="Paywall arm"
-      value={value.paywallArm}
-      onChange={(v) => onChange({ ...value, paywallArm: v })}
-      options={[
-        { value: "all", label: "All" },
-        { value: "control", label: "Control" },
-        { value: "treatment", label: "Treatment" },
+        { value: "white", label: armLabel("landing", "white").short },
+        { value: "white_prev", label: armLabel("landing", "white_prev").short },
+        { value: "control", label: armLabel("landing", "control").short },
       ]}
     />
   </>
@@ -522,16 +521,8 @@ const SegmentColumn: FC<{ label: string; params: Record<string, string>; enabled
 const FunnelFlowTab: FC = () => {
   const [days, setDays] = useState(30);
   const [compare, setCompare] = useState(false);
-  const [segA, setSegA] = useState<Segment>({
-    source: "all",
-    landingVariant: "all",
-    paywallArm: "all",
-  });
-  const [segB, setSegB] = useState<Segment>({
-    source: "Google Ads",
-    landingVariant: "all",
-    paywallArm: "all",
-  });
+  const [segA, setSegA] = useState<Segment>({ source: "all", landingVariant: "all" });
+  const [segB, setSegB] = useState<Segment>({ source: "Google Ads", landingVariant: "all" });
 
   const paramsA = useMemo(() => ({ days: String(days), ...segA }), [days, segA]);
   const paramsB = useMemo(() => ({ days: String(days), ...segB }), [days, segB]);
@@ -540,7 +531,6 @@ const FunnelFlowTab: FC = () => {
     [
       s.source === "all" ? "All sources" : s.source,
       s.landingVariant !== "all" ? s.landingVariant : null,
-      s.paywallArm !== "all" ? s.paywallArm : null,
     ]
       .filter(Boolean)
       .join(" · ");

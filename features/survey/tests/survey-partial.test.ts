@@ -30,8 +30,9 @@ vi.mock("@features/survey/server/server", () => ({
   isSurveyClosed: vi.fn().mockResolvedValue(false),
 }));
 
-// next/headers cookies() — drives the email-position A/B arm stamp. Default
-// returns no cookie (arm omitted), matching pre-experiment traffic.
+// next/headers cookies() — the route no longer reads cookies (the email-position
+// A/B was retired), but the mock stays so the regression test below can prove a
+// stale arm cookie is never picked up.
 const { mockCookieGet } = vi.hoisted(() => ({ mockCookieGet: vi.fn() }));
 vi.mock("next/headers", () => ({
   cookies: vi.fn(async () => ({ get: mockCookieGet })),
@@ -156,25 +157,12 @@ describe("POST /api/survey-partial", () => {
     expect(row.utm_tracker).toBeNull();
   });
 
-  it("stamps email_position from the A/B cookie", async () => {
-    mockCookieGet.mockReturnValue({ value: "last" });
-    await POST(makeRequest(validBody()));
-
-    const call = mockFetchWithTimeout.mock.calls[0];
-    const row = JSON.parse(call[1].body);
-    expect(row.email_position).toBe("last");
-  });
-
-  it("omits email_position when no A/B cookie is present", async () => {
-    await POST(makeRequest(validBody()));
-
-    const call = mockFetchWithTimeout.mock.calls[0];
-    const row = JSON.parse(call[1].body);
-    expect(row.email_position).toBeUndefined();
-  });
-
-  it("ignores an invalid email_position cookie value", async () => {
-    mockCookieGet.mockReturnValue({ value: "sideways" });
+  // The email-position A/B was retired 2026-08-16 (email is asked last for
+  // everyone). Arm cookies were minted with a 1-year Max-Age, so returning
+  // visitors still carry one — the row must not pick it up and mislabel a
+  // post-retirement save as an experiment arm.
+  it("never stamps email_position, even when a stale arm cookie is still set", async () => {
+    mockCookieGet.mockReturnValue({ value: "first" });
     await POST(makeRequest(validBody()));
 
     const call = mockFetchWithTimeout.mock.calls[0];

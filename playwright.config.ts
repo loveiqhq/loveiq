@@ -1,8 +1,81 @@
+import { createHash } from "node:crypto";
 import { defineConfig, devices } from "@playwright/test";
 import { loadEnvConfig } from "@next/env";
 
 // Load .env.local so E2E tests can access env vars (e.g. STAGING_PASSWORD)
 loadEnvConfig(process.cwd());
+
+/**
+ * What the suite points at. `PLAYWRIGHT_BASE_URL` runs it against a deployed
+ * environment instead of a local build.
+ *
+ * The visual-regression workflow has always passed this variable, and until now
+ * nothing read it: `baseURL` was hardcoded to localhost, so its `target_url` input
+ * did nothing and every run silently tested a local build. That was the safer of
+ * the two outcomes — staging is password-gated, so a run that HAD honoured it would
+ * have screenshotted the login page — which is why the dead knob went unnoticed.
+ */
+const baseURL = process.env.PLAYWRIGHT_BASE_URL?.trim() || "http://localhost:3000";
+const targetHost = new URL(baseURL).hostname;
+const isLocalTarget = targetHost === "localhost" || targetHost === "127.0.0.1";
+
+/**
+ * Cookies every context starts with.
+ *
+ * Local: pin the landing A/B arm. `/` is a 50/50 split between two entirely
+ * different designs (shared/experiments/landingVariant.ts), so without this every
+ * landing assertion — and every visual baseline — would flip arm at random.
+ *
+ * Remote: deliberately NO arm cookie. Deployed builds name it `__Host-liq_lv`, and
+ * a `__Host-` cookie may not carry a Domain attribute, which is exactly what
+ * storageState has to supply. Specs that care about the arm use the `?variant=`
+ * override the middleware already honours — which is what visual-regression does.
+ */
+const stagingPassword = process.env.STAGING_PASSWORD;
+const startingCookies = [
+  ...(isLocalTarget
+    ? [
+        {
+          name: "__liq_lv",
+          value: "white",
+          domain: targetHost,
+          path: "/",
+          expires: -1,
+          httpOnly: false,
+          secure: false,
+          sameSite: "Lax" as const,
+        },
+      ]
+    : []),
+  /**
+   * Past the staging gate. proxy.ts compares `staging_session` against the hex
+   * SHA-256 of STAGING_PASSWORD, so the cookie can be minted directly — no login
+   * round-trip. Without it, every screenshot is of the login page.
+   *
+   * Keyed on the PASSWORD being set, NOT on the target being remote. The gate is
+   * proxy.ts reading `process.env.STAGING_PASSWORD`, so a LOCALLY built server with
+   * that variable present is gated too. This was originally `!isLocalTarget &&`,
+   * which broke the moment the visual-regression workflow started passing the
+   * secret: CI built locally, the gate switched on, no cookie was carried, and all
+   * seven regenerated baselines came back 1280x720 — the login page, not the pages
+   * under test.
+   */
+  ...(stagingPassword
+    ? [
+        {
+          name: "staging_session",
+          value: createHash("sha256").update(stagingPassword).digest("hex"),
+          domain: targetHost,
+          path: "/",
+          expires: -1,
+          httpOnly: true,
+          // http on localhost drops a Secure cookie, so this must follow the target.
+          secure: !isLocalTarget,
+          sameSite: "Strict" as const,
+        },
+      ]
+    : []),
+];
 
 export default defineConfig({
   testDir: "./e2e",
@@ -17,10 +90,14 @@ export default defineConfig({
     },
   },
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "on-first-retry",
+    // See `startingCookies` above: the landing-arm pin (local only) plus the
+    // staging-gate session when a remote target needs one. To test the other arm,
+    // override storageState in that spec or use `?variant=`.
+    storageState: { cookies: startingCookies, origins: [] },
   },
   projects: [
     { name: "Desktop Chrome", use: { ...devices["Desktop Chrome"] } },
@@ -33,12 +110,17 @@ export default defineConfig({
     { name: "Mobile Chrome", use: { ...devices["Pixel 7"] } },
     { name: "Mobile Safari", use: { ...devices["iPhone 15 Pro"] } },
   ],
-  webServer: {
-    command: "npm run build && npm run start",
-    url: "http://localhost:3000",
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-    stdout: "ignore",
-    stderr: "pipe",
-  },
+  // Only build and serve locally when the target IS local. Pointing at a deployed
+  // environment and then also building a local server would waste minutes and, worse,
+  // leave it ambiguous which of the two was actually measured.
+  webServer: isLocalTarget
+    ? {
+        command: "npm run build && npm run start",
+        url: baseURL,
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+        stdout: "ignore",
+        stderr: "pipe",
+      }
+    : undefined,
 });

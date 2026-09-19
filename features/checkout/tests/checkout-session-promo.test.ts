@@ -67,6 +67,7 @@ const QUOTE = {
   msrpCents: 5999,
   startingPriceCents: 2999,
   currentPriceCents: 2749,
+  chargedPriceCents: 2749,
   initialPriceCents: 2999,
   discountMultiplier: 1,
   discountStep: 0,

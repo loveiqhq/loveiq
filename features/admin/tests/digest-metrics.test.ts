@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 import { delta, dayString, isoWeekString } from "@features/admin/server/digest-metrics";
 
 describe("delta", () => {
-  it("returns +∞% when prev is 0 and curr is positive", () => {
-    expect(delta(5, 0)).toBe("+∞%");
+  it('says "vs none" rather than inventing a percentage, when the base is 0', () => {
+    // "+∞%" is not a fact about the business. One sale after a quiet week
+    // rendered as "EUR 29.00 (+∞%)", which reads like a spike and means
+    // nothing — a change from zero has no percentage.
+    expect(delta(5, 0)).toBe("vs none");
+    expect(delta(5, 0)).not.toContain("∞");
   });
 
   it('returns "—" when both are 0', () => {

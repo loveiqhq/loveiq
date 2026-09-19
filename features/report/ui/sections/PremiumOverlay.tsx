@@ -1,11 +1,6 @@
 "use client";
 
-import { useState, type FC } from "react";
-import {
-  PaywallCountdownDigits,
-  usePaywallCountdownValue,
-} from "@features/report/ui/PaywallCountdown";
-import { REPORT_PAYWALL_COUNTDOWN_MS } from "@features/survey/ui/hooks/surveySession";
+import { type FC } from "react";
 import {
   formatReportPurchasePrice,
   getReportPurchaseBadgeFromPrice,
@@ -16,6 +11,13 @@ import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPri
 export type PremiumOverlayTier = "essentials" | "full_report";
 
 interface Props {
+  /**
+   * Kept on the type because every call site passes it, but nothing renders it any
+   * more: the line it fed ("This section is part of the full <archetype>
+   * report...") is not on Figma's paywall card (8993:19140, whose only copy is the
+   * "Premium content" heading, the offer block, the two reassurance rows and the
+   * button), so it was removed.
+   */
   archetype: string;
   sectionTitle: string;
   tier: PremiumOverlayTier;
@@ -24,16 +26,9 @@ interface Props {
    * Live full-report price quote. When present the card renders the real
    * price / strike / "you save" / discount badge (never Figma placeholders),
    * matching the paywall modal exactly. Null while pricing is unavailable —
-   * the card then hides the price block but still shows the countdown + CTA.
+   * the card then hides the price block but still shows the CTA.
    */
   quote?: ReportPriceQuoteSnapshot | null;
-  /**
-   * Shared epoch-ms deadline for the urgency countdown (resolved once per
-   * report session by ReportPage, persisted in sessionStorage). Passing the
-   * same value to the modal and every card keeps all timers in lock-step.
-   * Falls back to a fresh 2-minute window when omitted.
-   */
-  offerDeadline?: number;
 }
 
 const LockIcon: FC = () => (
@@ -99,10 +94,17 @@ const FlaskIcon: FC = () => (
   </svg>
 );
 
-const PremiumOverlay: FC<Props> = ({ archetype, tier, onUnlock, quote = null, offerDeadline }) => {
+// `tier` stays on Props — all sixteen call sites pass it and it still describes
+// which plan opens the section — but nothing renders it now that the badge is gone,
+// so it is deliberately not destructured.
+const PremiumOverlay: FC<Props> = ({ onUnlock, quote = null }) => {
   // ── Live pricing — identical computation to the paywall modal so the card
   //    and modal always agree. ────────────────────────────────────────────────
-  const currentCents = quote?.currentPriceCents ?? 0;
+  // Every price surface and the Stripe line item read `chargedPriceCents`, so what
+  // the card promises is what the invoice says. `strikeEligible` hides the anchor
+  // for any bucket priced at or above its own MSRP rather than advertising a
+  // strike-through that is not a saving.
+  const currentCents = quote?.chargedPriceCents ?? 0;
   const msrpCents = quote?.msrpCents ?? null;
   const strikeEligible = typeof msrpCents === "number" && msrpCents > currentCents;
   const priceLabel = quote ? formatReportPurchasePrice(currentCents) : null;
@@ -115,22 +117,36 @@ const PremiumOverlay: FC<Props> = ({ archetype, tier, onUnlock, quote = null, of
     ? getReportPurchaseBadgeFromPrice({ strikeCents: msrpCents, currentCents })
     : null;
 
-  // ── Countdown — same drift-free hook + shared deadline as the modal. ────────
-  const [fallbackDeadline] = useState(() =>
-    typeof window === "undefined" ? 0 : Date.now() + REPORT_PAYWALL_COUNTDOWN_MS
-  );
-  const deadline = offerDeadline ?? fallbackDeadline;
-  // Reads the shared report-level countdown (one interval for all cards) when
-  // rendered under a PaywallCountdownProvider; falls back to a local ticker with
-  // `deadline` when standalone (e.g. unit tests).
-  const { mm, ss } = usePaywallCountdownValue(deadline);
-
   // Green offer pill (Figma 8005:744): "⚡ {badge} OFF · SAVE €{save}". The badge
   // already reads "85% OFF"; append the merged "· SAVE €X" when we know the save.
   const pillText = badge ? (saveLabel ? `${badge} · SAVE ${saveLabel}` : badge) : null;
 
   return (
-    <div className="report-premium-overlay">
+    /**
+     * The WHOLE overlay activates, not just the button inside it.
+     *
+     * This is the paywall, so every miss is a pricing view we never got.
+     * Measured on production: readers tapped `div.report-premium-overlay` in 25
+     * sessions, its card in 15, its offer row in 15, and its feature titles and
+     * subtitles in 8 each — all dead, because only the CTA was wired. Same
+     * defect as the Insight Map rows and the featured card, on the one surface
+     * that decides revenue.
+     *
+     * The overlay is `position: absolute; inset: 0` over the locked section, so
+     * this makes tapping a locked chapter anywhere offer to unlock it — which is
+     * already the established behaviour for locked blocks elsewhere.
+     */
+    <div
+      className="report-premium-overlay"
+      onClick={() => {
+        // `.report-page` sets `user-select: none` in production, but
+        // `.report-page--copyable` re-enables it on staging and locally, which
+        // is how the team quotes report copy. A drag that ends inside the card
+        // must not open the paywall.
+        if (typeof window !== "undefined" && window.getSelection()?.toString()) return;
+        onUnlock?.();
+      }}
+    >
       <div className="report-premium-overlay__card">
         <div className="report-premium-overlay__head">
           <div className="report-premium-overlay__icon" aria-hidden="true">
@@ -138,11 +154,6 @@ const PremiumOverlay: FC<Props> = ({ archetype, tier, onUnlock, quote = null, of
           </div>
           <h3 className="report-premium-overlay__title">Premium content</h3>
         </div>
-
-        <p className="report-premium-overlay__copy">
-          This section is part of the full <strong>{archetype}</strong> report.{" "}
-          <span className="report-premium-overlay__copy-cta">Unlock it to keep reading.</span>
-        </p>
 
         <div className="report-premium-overlay__offer">
           {pillText ? (
@@ -154,19 +165,9 @@ const PremiumOverlay: FC<Props> = ({ archetype, tier, onUnlock, quote = null, of
             </span>
           ) : null}
 
-          <span className="report-premium-overlay__timer-label">
-            Time left to secure this price
-          </span>
-
           <div className="report-premium-overlay__price-line">
-            <PaywallCountdownDigits mm={mm} ss={ss} />
             {priceLabel ? (
-              <>
-                <span className="report-premium-overlay__arrow" aria-hidden="true">
-                  <ArrowIcon />
-                </span>
-                <span className="report-premium-overlay__price">{priceLabel}</span>
-              </>
+              <span className="report-premium-overlay__price">{priceLabel}</span>
             ) : null}
           </div>
 
@@ -208,21 +209,17 @@ const PremiumOverlay: FC<Props> = ({ archetype, tier, onUnlock, quote = null, of
           </div>
         </div>
 
-        <div className="report-premium-overlay__badges-group" aria-hidden="true">
-          <span className="report-premium-overlay__badges-label">Included in</span>
-          <div className="report-premium-overlay__badges-row">
-            {tier === "essentials" ? (
-              <span className="report-premium-overlay__badge report-premium-overlay__badge--essentials">
-                Essentials
-              </span>
-            ) : null}
-            <span className="report-premium-overlay__badge report-premium-overlay__badge--full">
-              Full Report
-            </span>
-          </div>
-        </div>
+        {/* The "Included in — Full Report" badge block was removed on request. With
+            the essentials tier retired every premium section carried the same
+            single "Full Report" pill, so it told the reader nothing and only put a
+            step between the guarantees and the CTA. */}
 
-        <button type="button" className="report-premium-overlay__cta" onClick={onUnlock}>
+        {/* No own `onClick`: the overlay owns it. Having both fired `onUnlock`
+            twice, which opens the pricing modal twice. The click still bubbles,
+            so keyboard Enter and Space on this button behave exactly as before
+            (asserted in the tests). Same shape as PatternRow and the featured
+            Insight Map card. */}
+        <button type="button" className="report-premium-overlay__cta">
           Unlock your report
         </button>
       </div>

@@ -3,7 +3,7 @@ import { verifyAdminSession } from "@features/admin/server/auth";
 import { hasRole } from "@features/admin/server/roles";
 import { parseUtmCampaign, sourceLabel } from "@features/admin/server/next-level";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
-import { supabaseFetch } from "@features/admin/server/supabase";
+import { fetchAllRows, supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 
 function getOrCreate<K, V>(map: Map<K, V>, key: K, create: () => V): V {
@@ -46,26 +46,28 @@ export async function GET(request: Request) {
           `/rest/v1/survey_submission?select=id,created_date_time,utm_tracker&status=eq.completed${completedFilter}&order=created_date_time.asc`,
           { headers: { Prefer: "count=exact", Range: "0-49999" } }
         ),
-        supabaseFetch(`/rest/v1/personal_report?select=id,survey_submission_id,created_date_time`, {
-          headers: { Range: "0-49999" },
-        }),
-        supabaseFetch(`/rest/v1/report_session?select=id,personal_report_id,started_at`, {
-          headers: { Range: "0-49999" },
-        }),
+        // Paged: 2,051 reports and 11,224 sessions, both past the 1,000-row cap
+        // a Range header does not lift. Retention curves were drawn on a slice.
+        fetchAllRows<{ id: number; survey_submission_id: number; created_date_time: string }>(
+          `/rest/v1/personal_report?select=id,survey_submission_id,created_date_time&order=id.asc`
+        ),
+        fetchAllRows<{ id: number; personal_report_id: number; started_at: string }>(
+          `/rest/v1/report_session?select=id,personal_report_id,started_at&order=id.asc`
+        ),
         supabaseFetch(`/rest/v1/report_access_email?select=id,personal_report_id`, {
           headers: { Prefer: "count=exact" },
         }),
         supabaseFetch(`/rest/v1/invite_event?select=id,referrer_email,created_at`, {
           headers: { Prefer: "count=exact", Range: "0-49999" },
         }),
-        supabaseFetch(`/rest/v1/payment?select=personal_report_id,status`, {
+        supabaseFetch(`/rest/v1/payment?is_test=is.false&select=personal_report_id,status`, {
           headers: { Range: "0-49999" },
         }),
       ]);
 
     const submissions = submissionsRes.ok ? await submissionsRes.json() : [];
-    const reports = reportsRes.ok ? await reportsRes.json() : [];
-    const sessions = sessionsRes.ok ? await sessionsRes.json() : [];
+    const reports = reportsRes ?? [];
+    const sessions = sessionsRes ?? [];
     const accessEmails = accessRes.ok ? await accessRes.json() : [];
     const invites = inviteRes.ok ? await inviteRes.json() : [];
     const payments = paymentsRes.ok ? await paymentsRes.json() : [];

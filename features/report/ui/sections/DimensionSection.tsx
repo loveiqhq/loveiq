@@ -19,7 +19,6 @@ interface Props {
   isPremium: boolean;
   isStageValueLocked?: boolean;
   isUnlocked?: boolean;
-  offerDeadline?: number;
   onUnlock?: () => void;
   quote?: ReportPriceQuoteSnapshot | null;
   sectionId: string;
@@ -37,7 +36,6 @@ const DimensionSection: FC<Props> = ({
   isPremium,
   isStageValueLocked = false,
   isUnlocked = false,
-  offerDeadline,
   onUnlock,
   quote = null,
   sectionId,
@@ -146,7 +144,6 @@ const DimensionSection: FC<Props> = ({
                     sectionTitle={sectionTitle}
                     tier={tier}
                     quote={quote}
-                    offerDeadline={offerDeadline}
                     onUnlock={handleUnlock}
                   />
                 </div>

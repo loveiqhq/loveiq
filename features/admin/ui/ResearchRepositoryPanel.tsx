@@ -10,13 +10,7 @@ export type ResearchRepositoryDraftInput = {
   title: string;
   summary: string;
   entry_type:
-    | "signal"
-    | "theme"
-    | "pain-point"
-    | "contradiction"
-    | "wording"
-    | "answer-quality"
-    | "custom";
+    "signal" | "theme" | "pain-point" | "contradiction" | "wording" | "answer-quality" | "custom";
   status?: "draft" | "active" | "validated" | "archived";
   priority?: "low" | "medium" | "high";
   owner_email?: string;
@@ -59,12 +53,7 @@ interface ResearchRepositoryEntry {
   review_state: "fresh" | "due" | "overdue" | "none";
   open_review_count: number;
   latest_review_status:
-    | "requested"
-    | "in-review"
-    | "approved"
-    | "changes-requested"
-    | "rejected"
-    | null;
+    "requested" | "in-review" | "approved" | "changes-requested" | "rejected" | null;
   linked_action: {
     id: number;
     title: string;

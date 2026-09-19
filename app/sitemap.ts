@@ -8,6 +8,20 @@ const coreRoutes = ["/"];
 // /survey and /report are intentionally excluded — disallowed in robots.ts.
 const mainRoutes = ["/about", "/glossary", "/trust-zone"];
 
+// Legal pages are indexable on purpose: they are original text, people search
+// for them by name, and an accessible privacy policy / terms set is a trust
+// signal for a site that takes payments and handles sensitive data. They sit at
+// a low priority so they never compete with real content.
+const legalRoutes = [
+  "/privacy-policy",
+  "/terms-of-use",
+  "/terms-and-conditions",
+  "/digital-content-terms",
+  "/medical-disclaimer",
+  "/cookies",
+  "/imprint",
+];
+
 export default function sitemap(): MetadataRoute.Sitemap {
   const siteLastModified = new Date();
 
@@ -25,6 +39,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.8,
   }));
 
+  const legalEntries = legalRoutes.map((path) => ({
+    url: `${siteUrl}${path}`,
+    lastModified: siteLastModified,
+    changeFrequency: "yearly" as const,
+    priority: 0.3,
+  }));
+
   const glossaryLastModified = new Date("2026-02-28");
 
   const glossaryEntries = getAllSlugs().map((slug) => ({
@@ -34,5 +55,5 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.7,
   }));
 
-  return [...coreEntries, ...mainEntries, ...glossaryEntries];
+  return [...coreEntries, ...mainEntries, ...legalEntries, ...glossaryEntries];
 }

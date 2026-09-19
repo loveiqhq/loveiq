@@ -68,7 +68,7 @@
 
 1. User navigates to `/`
 2. Next.js renders `app/page.tsx` (Server Component)
-3. `LandingPage` component composes all sections (S01Hero through S15Testimonials)
+3. `LandingPageWhite` composes all sections (the `W*` components under `features/landing/ui/white/`)
 4. Client components hydrate for interactivity
 5. Smooth scroll initialized (Lenis)
 6. Google Analytics tracks page view
@@ -114,7 +114,7 @@
 **Section Components:**
 
 - Purpose: Self-contained page sections
-- Examples: `S01Hero`, `S06Archetypes`, `S13FAQ`, `S14CTA`
+- Examples: `WHero`, `WArchetypes`, `WFAQ`, `WCTA`
 - Pattern: Functional components with Tailwind styling
 - Location: `features/landing/ui/*.tsx`, `features/about/ui/*.tsx`
 

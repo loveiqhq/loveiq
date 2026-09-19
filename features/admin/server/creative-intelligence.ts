@@ -7,7 +7,7 @@ import {
   round1,
   sourceLabel,
 } from "@features/admin/server/next-level";
-import { supabaseFetch } from "@features/admin/server/supabase";
+import { fetchAllRows, supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 
 interface SubmissionRow {
@@ -165,18 +165,24 @@ export async function buildCreativeIntelligenceSnapshot(inputDays: number) {
           `/rest/v1/survey_submission?select=id,status,utm_tracker,session_id&created_date_time=gte.${since}`,
           { headers: { Range: "0-49999" } }
         ),
-        supabaseFetch(
-          `/rest/v1/survey_partial_save?select=session_id,utm_tracker&saved_at=gte.${since}`,
-          { headers: { Range: "0-49999" } }
+        // Paged: measured 2026-09-17 at 1,050 rows over this window, so the
+        // read stopped 50 short and every creative's partial-save count was
+        // drawn on 95% of the data.
+        fetchAllRows<PartialSaveRow>(
+          `/rest/v1/survey_partial_save?select=session_id,utm_tracker&saved_at=gte.${since}&order=session_id.asc`
         ),
-        supabaseFetch("/rest/v1/personal_report?select=id,survey_submission_id", {
-          headers: { Range: "0-49999" },
-        }),
-        supabaseFetch("/rest/v1/report_session?select=personal_report_id", {
-          headers: { Range: "0-49999" },
-        }),
+        // Paged: 1,000 of 2,051 reports, so half the report->submission
+        // mapping was missing from the attribution join.
+        fetchAllRows<{ id: number; survey_submission_id: number }>(
+          "/rest/v1/personal_report?select=id,survey_submission_id&order=id.asc"
+        ),
+        // Paged: 1,000 of 11,224 sessions decided `viewedReports`, which the
+        // per-creative attention rating is built on.
+        fetchAllRows<ReportSessionRow>(
+          "/rest/v1/report_session?select=personal_report_id&order=personal_report_id.asc"
+        ),
         supabaseFetch(
-          `/rest/v1/payment?select=personal_report_id,status,amount&payment_date_time=gte.${since}`,
+          `/rest/v1/payment?is_test=is.false&select=personal_report_id,status,amount&payment_date_time=gte.${since}`,
           { headers: { Range: "0-49999" } }
         ),
         supabaseFetch(
@@ -189,9 +195,9 @@ export async function buildCreativeIntelligenceSnapshot(inputDays: number) {
 
     if (
       !submissionsRes.ok ||
-      !partialsRes.ok ||
-      !reportsRes.ok ||
-      !reportSessionsRes.ok ||
+      partialsRes === null ||
+      reportsRes === null ||
+      reportSessionsRes === null ||
       !paymentsRes.ok ||
       !scoresRes.ok
     ) {
@@ -200,9 +206,9 @@ export async function buildCreativeIntelligenceSnapshot(inputDays: number) {
     }
 
     const submissions = (await submissionsRes.json()) as SubmissionRow[];
-    const partials = (await partialsRes.json()) as PartialSaveRow[];
-    const reports = (await reportsRes.json()) as ReportRow[];
-    const reportSessions = (await reportSessionsRes.json()) as ReportSessionRow[];
+    const partials = partialsRes;
+    const reports = reportsRes;
+    const reportSessions = reportSessionsRes;
     const payments = (await paymentsRes.json()) as PaymentRow[];
     const scores = (await scoresRes.json()) as ScoreRow[];
 

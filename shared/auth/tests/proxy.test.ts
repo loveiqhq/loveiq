@@ -81,6 +81,7 @@ vi.mock("@shared/auth/supabase-middleware", () => ({
 
 import { proxy, shouldCountVisit } from "@/proxy";
 import logger from "@shared/observability/logger";
+import { reportingDay } from "@shared/time/reporting-day";
 
 function makeNextRequest(
   url = "http://localhost:3000/",
@@ -160,6 +161,32 @@ describe("proxy middleware", () => {
     expect(csp).toContain("default-src 'self'");
     expect(csp).toContain("script-src");
     expect(csp).toContain("googletagmanager.com");
+  });
+
+  /**
+   * Regression: connect-src never listed supabase.co, so the admin panel's
+   * PagePresence Realtime socket was refused. Chromium fails it silently, but
+   * Safari throws a SecurityError out of the WebSocket constructor, which escaped
+   * the effect and replaced every admin page with the app error boundary.
+   */
+  it("allows the Supabase Realtime socket in connect-src, over https and wss", () => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://abcdefgh.supabase.co";
+    proxy(makeNextRequest());
+    const csp = mockResponseHeaders.get("Content-Security-Policy") ?? "";
+    const connectSrc = csp.split(";").find((part) => part.trim().startsWith("connect-src")) ?? "";
+    expect(connectSrc).toContain("https://abcdefgh.supabase.co");
+    // the WebSocket needs the wss scheme explicitly — an https entry does not cover it
+    expect(connectSrc).toContain("wss://abcdefgh.supabase.co");
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+  });
+
+  it("omits the Supabase entry rather than throwing when the URL is unusable", () => {
+    // middleware runs on every request: a malformed value must not 500 the site
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "not a url";
+    expect(() => proxy(makeNextRequest())).not.toThrow();
+    const csp = mockResponseHeaders.get("Content-Security-Policy") ?? "";
+    expect(csp).not.toContain("wss://not a url");
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
   });
 
   it("sets X-Frame-Options to DENY", () => {
@@ -313,6 +340,74 @@ describe("proxy middleware", () => {
     expect(csp).toContain("https://fonts.gstatic.com");
   });
 
+  // Regression guard: these hosts were missing for a long time, so GA4 and Ads
+  // /collect calls were refused by CSP and the numbers were silently lossy.
+  // A dropped entry here loses analytics data without failing any build.
+  it("CSP includes every GA4 + Google Ads measurement endpoint", () => {
+    proxy(makeNextRequest());
+    const csp = mockResponseHeaders.get("Content-Security-Policy");
+    for (const host of [
+      "https://www.google-analytics.com",
+      "https://*.google-analytics.com",
+      "https://analytics.google.com",
+      "https://*.analytics.google.com",
+      "https://googleads.g.doubleclick.net",
+      "https://stats.g.doubleclick.net",
+      "https://ad.doubleclick.net",
+      "https://pagead2.googlesyndication.com",
+    ]) {
+      expect(csp).toContain(host);
+    }
+  });
+
+  it("CSP includes the configured PostHog host and a blob: worker source", () => {
+    process.env.NEXT_PUBLIC_POSTHOG_HOST = "https://eu.i.posthog.com";
+    proxy(makeNextRequest());
+    const csp = mockResponseHeaders.get("Content-Security-Policy");
+    // The SDK pulls the recorder/assets from sibling subdomains, and session
+    // replay needs a blob: worker (which default-src 'self' would block).
+    expect(csp).toContain("https://eu.i.posthog.com");
+    expect(csp).toContain("https://*.posthog.com");
+    expect(csp).toContain("worker-src 'self' blob:");
+    delete process.env.NEXT_PUBLIC_POSTHOG_HOST;
+  });
+
+  it("survives an unparseable NEXT_PUBLIC_POSTHOG_HOST instead of 500ing", () => {
+    // This runs in middleware on every request, so a bad env value must
+    // degrade to "no PostHog CSP entry", never throw.
+    process.env.NEXT_PUBLIC_POSTHOG_HOST = "eu.i.posthog.com";
+    expect(() => proxy(makeNextRequest())).not.toThrow();
+    const csp = mockResponseHeaders.get("Content-Security-Policy");
+    expect(csp).toContain("default-src 'self'");
+    expect(csp).not.toContain("posthog.com");
+    delete process.env.NEXT_PUBLIC_POSTHOG_HOST;
+  });
+
+  it("CSP allows Google Ads remarketing pixels on local country domains", () => {
+    proxy(makeNextRequest());
+    const csp = mockResponseHeaders.get("Content-Security-Policy");
+    // CSP cannot wildcard a TLD, so these are enumerated. A few representative
+    // markets, including .ba (our own region) which we caught being blocked.
+    for (const host of [
+      "https://www.google.de",
+      "https://www.google.fr",
+      "https://www.google.co.uk",
+      "https://www.google.ba",
+    ]) {
+      expect(csp).toContain(host);
+    }
+  });
+
+  it("keeps the CSP header within a sane size budget", () => {
+    proxy(makeNextRequest());
+    const csp = mockResponseHeaders.get("Content-Security-Policy") ?? "";
+    // This header goes out on every page and API response. Enumerating all ~190
+    // Google country domains measured at 6.7KB; the curated list is ~3.4KB.
+    // If this trips, something re-inflated the allowlist — trim it rather than
+    // raising the ceiling.
+    expect(csp.length).toBeLessThan(4500);
+  });
+
   it("CSP includes frame-ancestors 'none'", () => {
     proxy(makeNextRequest());
     const csp = mockResponseHeaders.get("Content-Security-Policy");
@@ -361,6 +456,48 @@ describe("proxy middleware", () => {
         href: "http://localhost:3000/login?next=%2Fcheckout%2Freturn%3Fplan%3Dfull_report%26session_id%3Dcs_test_123",
       })
     );
+  });
+
+  /**
+   * The staging gate must not block static media under `public/`.
+   *
+   * Next's image optimizer fetches the SOURCE file over HTTP before resizing.
+   * That internal request carries no staging cookie, so a gated path answered it
+   * with a 307 to /login and the optimizer returned `received null` — every
+   * `/_next/image` URL for it 400'd. `/images/` was exempt; nothing else under
+   * `public/` was, so the testimonial avatars on the report's paywall and the
+   * blurred locked-chapter previews in `/report-previews/` were broken on any
+   * gated build.
+   */
+  describe("staging gate — static media under public/", () => {
+    const mediaPaths = [
+      "/testimonials/dorian.jpg",
+      "/report-previews/attach-card-desktop.jpg",
+      "/academic/logo.png",
+      "/privacy/badge.svg",
+      "/couple-hero.mp4",
+      "/people-in-relationships.webp",
+    ];
+
+    for (const path of mediaPaths) {
+      it(`lets ${path} through without a session`, async () => {
+        process.env.STAGING_PASSWORD = "test-staging-pw";
+        await proxy(makeNextRequest(`http://localhost:3000${path}`));
+        expect(mockRedirect).not.toHaveBeenCalled();
+      });
+    }
+
+    // The gate still has to do its job: only MEDIA is exempt, not anything
+    // that happens to sit in public/.
+    for (const path of ["/clarity-init.js", "/AGENT_README.md", "/some-page.html", "/survey"]) {
+      it(`still gates ${path}`, async () => {
+        process.env.STAGING_PASSWORD = "test-staging-pw";
+        await proxy(makeNextRequest(`http://localhost:3000${path}`));
+        expect(mockRedirect).toHaveBeenCalledWith(
+          expect.objectContaining({ href: expect.stringContaining("/login?next=") })
+        );
+      });
+    }
   });
 
   // R-13: admin idle-timeout gate. The admin gate previously had no middleware
@@ -439,7 +576,7 @@ describe("proxy middleware", () => {
   });
 });
 
-describe("proxy middleware — white-landing A/B (__liq_lv)", () => {
+describe("proxy middleware — landing A/B (__liq_lv)", () => {
   beforeEach(() => {
     mockResponseHeaders.clear();
     mockNextOpts.value = null;
@@ -451,35 +588,73 @@ describe("proxy middleware — white-landing A/B (__liq_lv)", () => {
     mockCookiesSet.mock.calls.filter((c) => c[0] === "__liq_lv" || c[0] === "__Host-liq_lv");
   const variantHeader = () => mockNextOpts.value?.request?.headers?.get("x-landing-variant");
 
-  it("mints a sticky white cookie + request header on / for a fresh non-bot visitor", async () => {
+  it("assigns one of the two live arms on / and mints it as a sticky cookie", async () => {
     await proxy(makeNextRequest("http://localhost:3000/"));
-    // A/B concluded: every visitor gets "white".
-    expect(variantHeader()).toBe("white");
+    // Round 2 is current-white vs previous-white, 50/50 — either is valid here,
+    // and the distribution itself is asserted below.
+    expect(["white", "white_prev"]).toContain(variantHeader());
     const calls = landingCookieCalls();
     expect(calls).toHaveLength(1);
-    expect(calls[0]![1]).toBe("white");
+    expect(calls[0]![1]).toBe(variantHeader());
     expect(calls[0]![2]).toEqual(
       expect.objectContaining({ path: "/", sameSite: "lax", maxAge: 60 * 60 * 24 * 365 })
     );
   });
 
-  it("ignores a ?variant=control override — the A/B is over, everyone is white", async () => {
-    await proxy(makeNextRequest("http://localhost:3000/?variant=control"));
-    expect(variantHeader()).toBe("white");
+  it("maps the coin flip to both arms", async () => {
+    // `crypto.getRandomValues` is stubbed deterministically at the top of this file
+    // (byte 0 = 0), so a plain loop would only ever exercise one side. Drive the
+    // byte directly instead: even -> the current arm, odd -> the previous one.
+    const original = globalThis.crypto.getRandomValues;
+    try {
+      for (const [byte, expected] of [
+        [0, "white"],
+        [2, "white"],
+        [1, "white_prev"],
+        [255, "white_prev"],
+      ] as const) {
+        (globalThis.crypto as { getRandomValues: (a: Uint8Array) => Uint8Array }).getRandomValues =
+          (arr: Uint8Array) => {
+            arr[0] = byte;
+            return arr;
+          };
+        mockNextOpts.value = null;
+        mockCookiesSet.mockClear();
+        await proxy(makeNextRequest("http://localhost:3000/"));
+        expect(variantHeader()).toBe(expected);
+        expect(landingCookieCalls()[0]![1]).toBe(expected);
+      }
+    } finally {
+      (globalThis.crypto as { getRandomValues: typeof original }).getRandomValues = original;
+    }
+  });
+
+  it("honours a ?variant= override and makes it stick", async () => {
+    await proxy(makeNextRequest("http://localhost:3000/?variant=white_prev"));
+    expect(variantHeader()).toBe("white_prev");
     const calls = landingCookieCalls();
     expect(calls).toHaveLength(1);
-    expect(calls[0]![1]).toBe("white");
+    expect(calls[0]![1]).toBe("white_prev");
   });
 
-  it("keeps an existing white cookie and does not re-set it", async () => {
-    await proxy(
-      makeNextRequest("http://localhost:3000/", undefined, undefined, undefined, undefined, "white")
-    );
-    expect(variantHeader()).toBe("white");
-    expect(landingCookieCalls()).toHaveLength(0);
+  it("ignores an unknown ?variant= value", async () => {
+    await proxy(makeNextRequest("http://localhost:3000/?variant=purple"));
+    expect(["white", "white_prev"]).toContain(variantHeader());
   });
 
-  it("migrates a returning visitor off a stale control cookie to white", async () => {
+  it("keeps an existing arm cookie and does not re-set it", async () => {
+    for (const arm of ["white", "white_prev"]) {
+      mockNextOpts.value = null;
+      mockCookiesSet.mockClear();
+      await proxy(
+        makeNextRequest("http://localhost:3000/", undefined, undefined, undefined, undefined, arm)
+      );
+      expect(variantHeader()).toBe(arm);
+      expect(landingCookieCalls()).toHaveLength(0);
+    }
+  });
+
+  it("re-assigns a visitor still carrying the retired control cookie", async () => {
     await proxy(
       makeNextRequest(
         "http://localhost:3000/",
@@ -490,13 +665,15 @@ describe("proxy middleware — white-landing A/B (__liq_lv)", () => {
         "control"
       )
     );
-    expect(variantHeader()).toBe("white");
+    // The dark landing no longer exists, so "control" cannot be served: the
+    // visitor joins one of the two live arms and the cookie is re-stamped.
+    expect(["white", "white_prev"]).toContain(variantHeader());
     const calls = landingCookieCalls();
     expect(calls).toHaveLength(1);
-    expect(calls[0]![1]).toBe("white");
+    expect(calls[0]![1]).toBe(variantHeader());
   });
 
-  it("serves white to crawlers too and never sets a cookie (no cloaking — one page for all)", async () => {
+  it("serves the current arm to crawlers and never sets a cookie (one indexed page)", async () => {
     await proxy(
       makeNextRequest(
         "http://localhost:3000/",
@@ -508,8 +685,8 @@ describe("proxy middleware — white-landing A/B (__liq_lv)", () => {
         "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
       )
     );
-    // Bots see the same white page as everyone (no separate indexed arm), and
-    // are still never given a cookie.
+    // Bots are pinned to "white" so `/` has one canonical rendering in the index,
+    // and they are still never given a cookie.
     expect(variantHeader()).toBe("white");
     expect(landingCookieCalls()).toHaveLength(0);
   });
@@ -602,9 +779,37 @@ describe("proxy — consent-independent daily unique-visit count", () => {
   });
 
   it("does NOT flag/set when liq_dv already equals today (deduped)", async () => {
-    const today = new Date().toISOString().slice(0, 10);
+    // MUST be the Europe/Berlin reporting day, not UTC. proxy.ts dedupes against
+    // `reportingDay()` so the cookie matches the funnel_event row; a UTC date here
+    // agrees for 22 hours and disagrees during the offset window, so this test
+    // failed only between 00:00 and 02:00 Berlin — a nightly CI flake.
+    const today = reportingDay();
     await proxy(makeVisitRequest({ dest: "document", liqDv: today }));
     expect(mockNextOpts.value?.request?.headers?.get("x-liq-new-visit")).toBeFalsy();
     expect(mockCookiesSet.mock.calls.find((c) => c[0] === "liq_dv")).toBeUndefined();
+  });
+});
+
+/**
+ * The consent banner asks `directory.cookieyes.com/api/v1/ip` which region the visitor is
+ * in, and CSP host matching is EXACT — listing `cookieyes.com` does not cover a subdomain.
+ * That call was refused on every page load, verified on a production report page:
+ * "Refused to connect", then `TypeError: Failed to fetch` inside banner.js. Without a
+ * region the banner cannot distinguish a GDPR visitor from a CCPA one, and this site's
+ * traffic is overwhelmingly US.
+ */
+describe("CSP — the consent banner can reach its own region lookup", () => {
+  it("allows CookieYes subdomains to be connected to, not just the bare domain", () => {
+    proxy(makeNextRequest());
+    const csp = mockResponseHeaders.get("Content-Security-Policy") ?? "";
+    const connect = csp.split(";").find((d) => d.trim().startsWith("connect-src")) ?? "";
+    expect(connect).toContain("cookieyes.com");
+    // The assertion that matters: a SUBDOMAIN must be permitted.
+    const allowsSubdomain =
+      connect.includes("https://*.cookieyes.com") ||
+      connect.includes("https://directory.cookieyes.com");
+    expect(allowsSubdomain, `connect-src does not permit directory.cookieyes.com: ${connect}`).toBe(
+      true
+    );
   });
 });

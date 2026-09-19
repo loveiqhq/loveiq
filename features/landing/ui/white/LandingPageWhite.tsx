@@ -4,56 +4,60 @@ import ScrollAnimator from "../ScrollAnimator";
 import LandingPageTracker from "../LandingPageTracker";
 import WNavSection from "./WNavSection";
 import WHero from "./WHero";
-import WHowItWorks from "./WHowItWorks";
-import WTestimonials from "./WTestimonials";
-import WProblemValue from "./WProblemValue";
-import WArchetypes from "./WArchetypes";
-import WInlineCTA from "./WInlineCTA";
+import WTrustStrip from "./WTrustStrip";
+import WDiscover from "./WDiscover";
+import WVocab from "./WVocab";
+import WFindOut from "./WFindOut";
+import WWowStats from "./WWowStats";
+import WResultTeaser from "./WResultTeaser";
 import WArchetypeCards from "./WArchetypeCards";
-import WTrustRow from "./WTrustRow";
-import WReportPreview from "./WReportPreview";
-import WAcademicBoard from "./WAcademicBoard";
-import WPerfectFor from "./WPerfectFor";
-import WGlossary from "./WGlossary";
+import WTestimonials from "./WTestimonials";
+import WFoundation from "./WFoundation";
 
 // Bottom-of-fold sections are code-split (SSR stays on) to keep initial client
-// JS small — mirrors the dark LandingPage.
+// JS small.
 const WFAQ = dynamic(() => import("./WFAQ"));
 const WCTA = dynamic(() => import("./WCTA"));
 const WFooterSection = dynamic(() => import("./WFooterSection"));
+const WStickyBar = dynamic(() => import("./WStickyBar"));
 
 /**
- * White A/B variant of the landing page (Figma node 7828-9330). Served at `/`
- * to ~50% of visitors via the `__liq_lv` cookie (see shared/experiments/
- * landingVariant.ts). Reuses the same data + shared infra as the dark page; the
- * funnel CTA still points at /survey and the analytics variant is auto-stamped.
+ * The live landing page (Figma node 8947-7360, "Landing E — workshop build").
+ * Served at `/` to 100% of visitors — the dark A/B arm was retired 2026-06-19.
+ *
+ * Section order mirrors the Figma frame top to bottom. Sections the mock marks
+ * "(live)" — nav, archetypes, field reports, FAQ, footer — are the existing
+ * components, reused unchanged.
  */
 const LandingPageWhite: FC = () => {
   return (
     <main id="main-content" className="relative bg-white text-gray-900">
-      {/* The global body background is dark (var(--color-bg)). On the white arm
-          that shows through on mobile overscroll bounce, so paint the page
-          surface white for this variant only. Server-rendered → no flash, and
-          absent entirely on the dark arm. */}
+      {/* The global body background is dark (var(--color-bg)). That shows
+          through on mobile overscroll bounce, so paint the page surface white.
+          Server-rendered → no flash. */}
       <style dangerouslySetInnerHTML={{ __html: "html,body{background:#ffffff;}" }} />
       <ScrollAnimator />
       <LandingPageTracker variant="white" />
       <WNavSection />
       <WHero />
-      <WHowItWorks />
-      <WTestimonials />
-      <WProblemValue />
-      <WArchetypes />
-      <WInlineCTA />
+      <WTrustStrip />
+      <WDiscover />
+      <WVocab />
+      <WFindOut />
+      <WWowStats />
+      <WResultTeaser />
       <WArchetypeCards />
-      <WTrustRow />
-      <WReportPreview />
-      <WAcademicBoard />
-      <WPerfectFor />
-      <WGlossary />
+      <WTestimonials />
+      <WFoundation />
+      {/* Email-capture band ("Not in the mood right now?") is parked, not
+          deleted — the component, POST /api/test-link and its tests all still
+          work. Re-import WCapBand and drop it back here to switch it on. */}
       <WFAQ />
       <WCTA />
       <WFooterSection />
+      {/* Keeps the last row of the footer clear of the sticky bar. */}
+      <div aria-hidden className="h-[68px]" />
+      <WStickyBar />
     </main>
   );
 };

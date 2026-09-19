@@ -1,14 +1,10 @@
 // @vitest-environment jsdom
 import userEvent from "@testing-library/user-event";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import PracticeTendenciesSection from "@features/report/ui/sections/PracticeTendenciesSection";
-import { reportSections } from "@/data/report-general";
 import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
 import type { ReportPracticeTendencyContentForUser } from "@features/report/ui/hooks/useReportData";
-
-const practiceGeneralHtml =
-  reportSections.find((section) => section.sectionNumber === 27)?.generalContent ?? "";
 
 // Helpers that mirror the server-side filter in app/api/report/route.ts so
 // section-level tests exercise the same shapes the real client receives.
@@ -47,30 +43,73 @@ afterEach(() => {
 });
 
 describe("PracticeTendenciesSection", () => {
-  it("renders the shared practice intro from the report section", () => {
+  it("renders the first category table and no legacy prose intro", () => {
     const { container } = render(
       <PracticeTendenciesSection
         archetype="Spark Seeker"
-        archetypeHtml={null}
         content={buildFullContent("Spark Seeker")}
-        generalHtml={practiceGeneralHtml}
         isPremium={false}
         sectionTitle="Typical Sexual Fantasy & Practice Tendencies"
       />
     );
 
-    const intro = container.querySelector(".report-practice-panel__intro");
-
-    // V3 template rewrote the section 27 intro from the probability disclaimer to
-    // a "recurring sexual scripts" framing about fantasy vs lived experience.
-    expect(intro?.textContent).toContain("recurring sexual scripts");
-    expect(screen.getByText(/arousal non-concordance/i)).toBeInTheDocument();
+    // The Report 2.0 Figma Article (8427:2466) has no prose block here — the
+    // "Learn: what fantasies are for" accordion in FantasySection replaces it.
+    expect(container.querySelector(".report-practice-panel__intro")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Core Relational & Embodied" })).toBeInTheDocument();
     expect(screen.getByText("Romantic lovemaking")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Technology & Distance" })).toBeInTheDocument();
+    // Collapsed by default (Figma 8480:16003) — only the first category renders;
+    // the rest sit behind the expand pill. Reachability is covered by the
+    // "collapses to the first category" test below.
+    expect(
+      screen.queryByRole("heading", { name: "Technology & Distance" })
+    ).not.toBeInTheDocument();
     expect(container.querySelector(".report-practice-table")).toBeInTheDocument();
     expect(container.querySelector(".report-practice-panel__glow")).not.toBeInTheDocument();
-    expect(screen.getAllByText("60%").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/More likely|Neutral likely|Less likely/).length).toBeGreaterThan(0);
+  });
+
+  it("collapses to the first category behind a 'Show all N' pill, then expands", async () => {
+    const user = userEvent.setup();
+    const content = buildFullContent("Spark Seeker");
+    const groupCount = content.groups.length;
+
+    const { container } = render(
+      <PracticeTendenciesSection
+        archetype="Spark Seeker"
+        content={content}
+        isPremium={false}
+        sectionTitle="Typical Sexual Fantasy & Practice Tendencies"
+      />
+    );
+
+    const shown = () =>
+      container.querySelectorAll(".report-practice-panel__groups .report-practice-group").length;
+
+    // Collapsed: exactly one category, plus the next one clipped as a teaser.
+    expect(shown()).toBe(1);
+    expect(container.querySelector(".report-practice-panel__peek")).toBeInTheDocument();
+
+    // The count is DERIVED, never the Figma mock's hardcoded "7".
+    // Queries are container-scoped: this file has no auto-cleanup, so earlier
+    // renders are still in document.body and `screen` would match across them.
+    // The chevron is aria-hidden, so it is absent from the accessible name.
+    const pill = within(container).getByRole("button", {
+      name: new RegExp(`^Show all ${groupCount} categories$`),
+    });
+    expect(pill).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(pill);
+
+    expect(shown()).toBe(groupCount);
+    expect(container.querySelector(".report-practice-panel__peek")).not.toBeInTheDocument();
+    expect(
+      within(container).getByRole("heading", { name: "Technology & Distance" })
+    ).toBeInTheDocument();
+
+    // And it collapses back.
+    await user.click(within(container).getByRole("button", { name: /Show fewer categories/ }));
+    expect(shown()).toBe(1);
   });
 
   it("opens and closes explanation popovers from the row info affordance", async () => {
@@ -79,9 +118,7 @@ describe("PracticeTendenciesSection", () => {
     render(
       <PracticeTendenciesSection
         archetype="Spark Seeker"
-        archetypeHtml={null}
         content={buildFullContent("Spark Seeker")}
-        generalHtml={practiceGeneralHtml}
         isPremium={false}
         sectionTitle="Typical Sexual Fantasy & Practice Tendencies"
       />
@@ -109,10 +146,22 @@ describe("PracticeTendenciesSection", () => {
       ).not.toBeInTheDocument();
     });
 
+    // This is the INLINE (touch) path — jsdom reports no hover capability, and
+    // the section now honours that: a touch browser synthesises mouseenter after
+    // every tap, so opening on it re-opened the row the tap was toggling shut.
+    // Hover-to-open is unchanged for pointers that really hover; that half is
+    // asserted with matchMedia stubbed in PracticeTendencies.infoToggle.test.tsx.
     await user.hover(infoButton);
+    expect(
+      screen.queryByText(/chemistry, freedom, and playful connection/i)
+    ).not.toBeInTheDocument();
+
+    // What a finger gets instead: the ⓘ toggles, so the popover it opens can
+    // also be dismissed without hunting for empty space to tap.
+    await user.click(infoButton);
     expect(screen.getByText(/chemistry, freedom, and playful connection/i)).toBeInTheDocument();
 
-    await user.unhover(infoButton);
+    await user.click(infoButton);
 
     await waitFor(() => {
       expect(
@@ -148,9 +197,7 @@ describe("PracticeTendenciesSection", () => {
     const { container } = render(
       <PracticeTendenciesSection
         archetype="Spark Seeker"
-        archetypeHtml={null}
         content={buildFullContent("Spark Seeker")}
-        generalHtml={practiceGeneralHtml}
         isPremium={false}
         sectionTitle="Typical Sexual Fantasy & Practice Tendencies"
       />
@@ -183,54 +230,75 @@ describe("PracticeTendenciesSection", () => {
     });
   }, 60_000);
 
-  it("scales the metric fill gradient intensity with the score", () => {
+  it("maps each score to its likelihood bucket (7–10 / 4–6 / 0–3)", async () => {
     const { container } = render(
       <PracticeTendenciesSection
         archetype="Spark Seeker"
-        archetypeHtml={null}
         content={buildFullContent("Spark Seeker")}
-        generalHtml={practiceGeneralHtml}
         isPremium={false}
         sectionTitle="Typical Sexual Fantasy & Practice Tendencies"
       />
     );
+
+    // Categories collapse to the first one by default, so expand before asserting
+    // — the bucket invariant must hold for EVERY row, not just group 1's.
+    await userEvent
+      .setup()
+      .click(within(container).getByRole("button", { name: /Show all \d+ categories/ }));
 
     const rows = Array.from(container.querySelectorAll(".report-practice-table__row"));
     const highRow =
       rows.find((row) => row.textContent?.includes("Double-penetration fantasy")) ?? null;
     const lowRow = rows.find((row) => row.textContent?.includes("Penetrating partner")) ?? null;
 
-    const highFill = highRow?.querySelector(
-      ".report-practice-table__metric--fantasy .report-practice-table__metric-bar span"
-    ) as HTMLElement | null;
-    const lowFill = lowRow?.querySelector(
-      ".report-practice-table__metric--fantasy .report-practice-table__metric-bar span"
-    ) as HTMLElement | null;
+    const fantasyCell = (row: Element | null) =>
+      row?.querySelector(".report-practice-table__metric--fantasy") ?? null;
+    const numberOf = (cell: Element | null) =>
+      cell?.querySelector(".report-practice-table__metric-value")?.textContent;
+    const labelOf = (cell: Element | null) =>
+      cell?.querySelector(".report-practice-table__metric-likelihood")?.textContent;
 
-    expect(
-      container.querySelectorAll(".report-practice-table__metric-bar span").length
-    ).toBeGreaterThan(0);
-    expect(highFill?.style.getPropertyValue("--practice-fill-w")).toBe("100%");
-    expect(lowFill?.style.getPropertyValue("--practice-fill-w")).toBe("20%");
-    expect(highFill?.style.getPropertyValue("--practice-fill-opacity-end")).toBe("0.940");
-    expect(lowFill?.style.getPropertyValue("--practice-fill-opacity-end")).toBe("0.556");
-    expect(highFill?.style.getPropertyValue("--practice-fill-shadow-opacity")).toBe("0.320");
-    expect(lowFill?.style.getPropertyValue("--practice-fill-shadow-opacity")).toBe("0.128");
+    const highCell = fantasyCell(highRow);
+    const lowCell = fantasyCell(lowRow);
+
+    // fantasyPull 10 → "More likely" (7–10); fantasyPull 2 → "Less likely" (0–3).
+    expect(numberOf(highCell)).toBe("10");
+    expect(labelOf(highCell)).toBe("More likely");
+    expect(numberOf(lowCell)).toBe("2");
+    expect(labelOf(lowCell)).toBe("Less likely");
+
+    // Invariant: EVERY rendered cell's label matches its number's bucket
+    // (7-10 More, 4-6 Neutral, 0-3 Less) — also proves the middle bucket is hit.
+    const bucket = (n: number) =>
+      n >= 7 ? "More likely" : n >= 4 ? "Neutral likely" : "Less likely";
+    let checked = 0;
+    let neutralSeen = 0;
+    for (const cell of container.querySelectorAll(".report-practice-table__metric")) {
+      const num = cell.querySelector(".report-practice-table__metric-value")?.textContent ?? "";
+      if (!/^\d+$/.test(num)) continue; // skip locked "--"
+      const n = Number(num);
+      expect(cell.querySelector(".report-practice-table__metric-likelihood")?.textContent).toBe(
+        bucket(n)
+      );
+      checked += 1;
+      if (n >= 4 && n <= 6) neutralSeen += 1;
+    }
+    expect(checked).toBeGreaterThan(0);
+    expect(neutralSeen).toBeGreaterThan(0);
   });
 
   it("renders the premium overlay preview when the section is locked", () => {
     const { container } = render(
       <PracticeTendenciesSection
         archetype="Spark Seeker"
-        archetypeHtml={null}
         content={buildLockedContent("Spark Seeker")}
-        generalHtml={practiceGeneralHtml}
         isPremium={true}
         sectionTitle="Typical Sexual Fantasy & Practice Tendencies"
       />
     );
 
-    expect(container.querySelector(".report-practice-panel__intro")).toBeInTheDocument();
+    // No legacy prose intro in the Report 2.0 layout (see the first test).
+    expect(container.querySelector(".report-practice-panel__intro")).not.toBeInTheDocument();
     // One locked group per practice group
     const lockedGroups = container.querySelectorAll(".report-practice-group--locked");
     expect(lockedGroups.length).toBeGreaterThanOrEqual(1);
@@ -245,39 +313,53 @@ describe("PracticeTendenciesSection", () => {
     // One unlock button per practice group
     const unlockButtons = screen.getAllByRole("button", { name: /unlock your report/i });
     expect(unlockButtons.length).toBeGreaterThanOrEqual(1);
+
+    // Locked rows must render "--" with NO numeric score and NO likelihood label
+    // in the DOM (premium scores never reach the client behind the blur/overlay).
+    const lockedValues = container.querySelectorAll(
+      ".report-practice-table__row--locked .report-practice-table__metric-value"
+    );
+    expect(lockedValues.length).toBeGreaterThan(0);
+    lockedValues.forEach((cell) => expect(cell.textContent).toBe("--"));
+    expect(
+      container.querySelector(
+        ".report-practice-table__row--locked .report-practice-table__metric-likelihood"
+      )
+    ).not.toBeInTheDocument();
   }, 60_000);
 
-  it("uses the compact locked modifier only for the shorter locked groups", () => {
-    const { container } = render(
+  // The "compact locked modifier" test that lived here is gone with the code it
+  // guarded: only the FIRST category renders when locked (one paywall card per
+  // section), and that group is always "Core Relational & Embodied", which was
+  // never one of the three compact titles — so the branch became unreachable.
+  it("renders exactly one locked category, and drops its card when the host owns it", () => {
+    const locked = buildLockedContent("Spark Seeker");
+    const { container, rerender } = render(
       <PracticeTendenciesSection
         archetype="Spark Seeker"
-        archetypeHtml={null}
-        content={buildLockedContent("Spark Seeker")}
-        generalHtml={practiceGeneralHtml}
+        content={locked}
         isPremium={true}
         sectionTitle="Typical Sexual Fantasy & Practice Tendencies"
       />
     );
 
-    const lockedGroups = Array.from(
-      container.querySelectorAll<HTMLElement>(".report-practice-group--locked")
-    );
-    const compactGroups = lockedGroups.filter((group) =>
-      group.querySelector(".report-practice-table__locked-cover__metrics--compact")
+    expect(container.querySelectorAll(".report-practice-group--locked")).toHaveLength(1);
+    expect(container.querySelector(".report-practice-table__locked-cover")).toBeInTheDocument();
+
+    // hideOverlay: the Fantasy card already shows this section's paywall.
+    rerender(
+      <PracticeTendenciesSection
+        archetype="Spark Seeker"
+        content={locked}
+        hideOverlay
+        isPremium={true}
+        sectionTitle="Typical Sexual Fantasy & Practice Tendencies"
+      />
     );
 
-    expect(compactGroups).toHaveLength(3);
-    expect(
-      compactGroups.some((group) => group.textContent?.includes("Penetration & Body Opening"))
-    ).toBe(true);
-    expect(
-      compactGroups.some((group) => group.textContent?.includes("Technology & Distance"))
-    ).toBe(true);
-    expect(
-      compactGroups.some((group) => group.textContent?.includes("Ritual, Tantra & Conscious Sex"))
-    ).toBe(true);
-    expect(compactGroups.some((group) => group.textContent?.includes("Sensation & Touch"))).toBe(
-      false
-    );
+    expect(container.querySelectorAll(".report-practice-group--locked")).toHaveLength(1);
+    expect(container.querySelector(".report-practice-table__locked-cover")).not.toBeInTheDocument();
+    // Names still tease; the premium numbers stay server-stripped either way.
+    expect(container.querySelector(".report-practice-table__row--locked")).toBeInTheDocument();
   });
 });

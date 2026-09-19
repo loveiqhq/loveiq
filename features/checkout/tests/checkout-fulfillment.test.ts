@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { __resetSlackDedupForTests } from "@shared/observability/slack";
 
 const mockFetchWithTimeout = vi.fn();
 
@@ -22,9 +23,14 @@ vi.mock("@features/report/server/personalReport", () => ({
   upsertArchetypeTierForPersonalReport: vi.fn(),
 }));
 
-vi.mock("@features/pricing/logic/reportPricing", () => ({
-  markReportPriceQuotePurchased: vi.fn(),
-}));
+// Spread the real module rather than listing exports: the purchase notification
+// reads the live price catalogue (getPricingBucketsForPlan) to say which SIDE of
+// the price test the buyer was on, and a hand-listed mock silently breaks the
+// moment the notification reaches for one more export.
+vi.mock("@features/pricing/logic/reportPricing", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@features/pricing/logic/reportPricing")>();
+  return { ...actual, markReportPriceQuotePurchased: vi.fn() };
+});
 
 import { classifyTraffic, processStripeWebhookEvent } from "@features/checkout/server/fulfillment";
 import {
@@ -66,6 +72,7 @@ describe("checkout fulfillment", () => {
   afterEach(() => {
     process.env.SUPABASE_URL = originalSupabaseUrl;
     process.env.SUPABASE_SERVICE_ROLE_KEY = originalSupabaseServiceRoleKey;
+    delete process.env.STRIPE_COUPON_100;
   });
 
   it("persists promo details and request context for a fully discounted checkout", async () => {
@@ -163,7 +170,6 @@ describe("checkout fulfillment", () => {
               pricingClusterId:
                 "A-full_report-full_low_2-tier_2-desktop-direct-consistent-engaged-d0",
               experimentGroup: "A",
-              forcedPaywallArm: "treatment",
               basePriceBucket: "full_low_2",
               discountStep: "0",
               currentPrice: "24.49",
@@ -227,9 +233,6 @@ describe("checkout fulfillment", () => {
         couponPercentOff: 100,
         discountAmount: 24.49,
         experimentGroup: "A",
-        // Forced-paywall arm carried from session metadata → durable payment row
-        // for consent-independent conversion/revenue-by-arm analysis.
-        forcedPaywallArm: "treatment",
         requestIp: "127.0.0.1",
         requestUserAgent: "Mozilla/5.0 (Vitest)",
         stripePaymentStatus: "no_payment_required",
@@ -237,7 +240,7 @@ describe("checkout fulfillment", () => {
     );
     expect(paymentItemPayload).toEqual(
       expect.objectContaining({
-        item_name: "Full report",
+        item_name: "Just a snapshot",
         quantity: 1,
         total_price: 0,
         unit_price: 0,
@@ -443,6 +446,96 @@ describe("checkout fulfillment", () => {
 
     expect(unlockAllArchetypesForPersonalReport).toHaveBeenCalledWith(5);
     expect(upsertArchetypeTierForPersonalReport).not.toHaveBeenCalled();
+  });
+
+  it("all_reports partner-code quote lookup is NOT filtered to full_report (I-2 regression)", async () => {
+    // Tier-3's partner 100%-off code is carried by ANY of the buyer's quote rows
+    // (resolveNurturePromo scans them all at redemption). Filtering the lookup to
+    // plan=full_report meant an all_reports buyer — who may have no full_report
+    // quote — never got a code minted. Guard: the lookup keys on the submission
+    // only, never plan=full_report. STRIPE_COUPON_100 set so the path runs past
+    // the coupon guard to the quote lookup (the mint then no-ops on the unmocked
+    // Stripe client — we only assert the query shape here).
+    process.env.STRIPE_COUPON_100 = "nurture_100";
+    let quoteLookupUrl: string | null = null;
+
+    mockFetchWithTimeout.mockImplementation(
+      async (url: string, options?: { body?: string; method?: string }) => {
+        if (url.includes("/rest/v1/payment_webhook_event?stripe_event_id=eq.")) {
+          return createJsonResponse([]);
+        }
+        if (
+          url.includes("/rest/v1/payment?stripe_charge_id=eq.") ||
+          url.includes("/rest/v1/payment?stripe_payment_intent_id=eq.")
+        ) {
+          return createJsonResponse([]);
+        }
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment")) {
+          return createJsonResponse([{ id: 99 }]);
+        }
+        if (url.includes("/rest/v1/payment_item?payment_id=eq.99")) {
+          return createJsonResponse([]);
+        }
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment_item")) {
+          return createJsonResponse([{ id: 9 }]);
+        }
+        if (options?.method === "PATCH" && url.includes("/rest/v1/personal_report?id=eq.5")) {
+          return createJsonResponse([]);
+        }
+        if (options?.method === "POST" && url.endsWith("/rest/v1/payment_webhook_event")) {
+          return createJsonResponse([{ id: 100 }]);
+        }
+        // The partner-code carrier lookup inside mintAndEmailPartnerCode.
+        if (url.includes("/rest/v1/report_price_quote?survey_submission_id=eq.")) {
+          quoteLookupUrl = url;
+          return createJsonResponse([{ id: 55, metadata: {} }]);
+        }
+        throw new Error(`Unexpected fetch call: ${options?.method ?? "GET"} ${url}`);
+      }
+    );
+
+    const stripe = {
+      charges: { retrieve: vi.fn() },
+      checkout: {
+        sessions: {
+          retrieve: vi.fn().mockResolvedValue({
+            id: "cs_test_all_reports_i2",
+            amount_total: 4900,
+            currency: "eur",
+            customer: null,
+            metadata: {
+              plan: "all_reports",
+              reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
+              requestIp: "127.0.0.1",
+              requestUserAgent: "Mozilla/5.0 (Vitest)",
+            },
+            payment_intent: null,
+            payment_status: "paid",
+            total_details: { amount_discount: 0 },
+          }),
+        },
+      },
+      paymentIntents: { retrieve: vi.fn() },
+    };
+
+    await processStripeWebhookEvent({
+      event: {
+        id: "evt_test_all_reports_i2",
+        type: "checkout.session.completed",
+        data: {
+          object: {
+            id: "cs_test_all_reports_i2",
+            metadata: { plan: "all_reports", reportToken: "rpt_ABCDEFGHIJKLMNOPQRST" },
+          },
+        },
+      } as never,
+      stripe: stripe as never,
+    });
+
+    // The lookup fired and is scoped to the submission — NOT plan=full_report.
+    expect(quoteLookupUrl).not.toBeNull();
+    expect(quoteLookupUrl).toContain("survey_submission_id=eq.");
+    expect(quoteLookupUrl).not.toContain("plan=eq.full_report");
   });
 
   it("does not append unlocked archetype when metadata.archetype is unknown", async () => {
@@ -690,6 +783,42 @@ describe("checkout fulfillment", () => {
   describe("Slack purchase notification", () => {
     const SLACK_URL = "https://hooks.slack.com/services/TEST/PAYMENTS/secret";
 
+    beforeEach(() => {
+      // notifySlack dedups identical messages for 60s, keyed on the first 100
+      // chars of the fallback text. These fixtures all reuse submission #70 with
+      // the same plan and amount, so without a reset the 2nd and 3rd assertions
+      // would silently receive zero calls. Real buyers have distinct ids.
+      __resetSlackDedupForTests();
+    });
+
+    /**
+     * The purchase ping now sends Block Kit, so the detail lives in `blocks`, not
+     * in `text` (which is only the fallback / dead-letter string). Flatten
+     * everything Slack will actually display so these assertions cover the whole
+     * message.
+     */
+    function rendered(body: string): string {
+      const parsed = JSON.parse(body) as {
+        text: string;
+        blocks?: Array<{
+          text?: { text?: string };
+          fields?: Array<{ text?: string }>;
+          elements?: Array<{ text?: { text?: string }; url?: string; text_?: string }>;
+        }>;
+      };
+      const parts: string[] = [parsed.text];
+      for (const block of parsed.blocks ?? []) {
+        if (block.text?.text) parts.push(block.text.text);
+        for (const field of block.fields ?? []) if (field.text) parts.push(field.text);
+        for (const el of block.elements ?? []) {
+          if (typeof el.text === "string") parts.push(el.text);
+          else if (el.text?.text) parts.push(el.text.text);
+          if (el.url) parts.push(el.url);
+        }
+      }
+      return parts.join("\n");
+    }
+
     function setupHappyPathMocks(
       opts: { existingPayment?: boolean; utmTracker?: string | null } = {}
     ) {
@@ -752,7 +881,6 @@ describe("checkout fulfillment", () => {
       plan: "essentials" | "full_report" | "all_reports",
       archetype?: string,
       paymentIntent: string | null = "pi_test_slack_001",
-      forcedPaywallArm?: string,
       landingVariant?: string
     ) {
       return {
@@ -767,7 +895,6 @@ describe("checkout fulfillment", () => {
               metadata: {
                 plan,
                 ...(archetype ? { archetype } : {}),
-                ...(forcedPaywallArm ? { forcedPaywallArm } : {}),
                 ...(landingVariant ? { landingVariant } : {}),
                 reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
               },
@@ -814,23 +941,34 @@ describe("checkout fulfillment", () => {
 
       expect(slackCalls).toHaveLength(1);
       const body = JSON.parse(slackCalls[0]!.body) as { text: string; username: string };
+      const all = rendered(slackCalls[0]!.body);
       expect(body.username).toBe("payment_notification");
-      expect(body.text).toContain("*Eman*");
+      expect(all).toContain("*Eman*");
       // lookupRecipientForSubmission lowercases the email before returning it,
-      // so the masked output is also lowercase.
-      expect(body.text).toContain("e***@loveiq.org");
-      expect(body.text).toContain("Full report");
-      expect(body.text).toContain("Relational Nurturer");
+      // so the masked output is also lowercase. It is rendered as a code span so
+      // Slack does not treat the mask's asterisks as bold markers.
+      expect(all).toContain("`e***@loveiq.org`");
+      expect(all).toContain("Just a snapshot");
+      expect(all).toContain("Relational Nurturer");
+      expect(all).toContain("EUR 19.99");
+      // The fallback text must stand alone: it is all that gets dead-lettered on a
+      // delivery failure, and its first 100 chars are the 60s dedup key.
+      expect(body.text).toContain("Purchase #");
       expect(body.text).toContain("EUR 19.99");
-      // No utm_tracker, no forcedPaywallArm, no landingVariant → Direct + unknown.
-      expect(body.text).toContain("Source: Direct");
-      expect(body.text).toContain("Paywall: unknown");
-      expect(body.text).toContain("Journey: unknown");
+      // No utm_tracker → Direct. No landingVariant → not recorded, stated as such
+      // rather than guessed.
+      expect(all).toContain("Direct");
+      expect(all).toContain("Not recorded");
+      // The concluded paywall experiment is NOT listed as one they were "in":
+      // nothing randomises it any more, so it is a finished test, not a live arm.
+      expect(all).not.toContain("Paywall style");
+      // every arm is named in plain English, never as a raw code
+      expect(all).not.toContain("white_prev");
 
       delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
     });
 
-    it("includes referral source + forced paywall arm in the Slack ping", async () => {
+    it("includes referral source, and never the removed paywall arm, in the Slack ping", async () => {
       process.env.SLACK_PAYMENTS_WEBHOOK_URL = SLACK_URL;
       const slackCalls = setupHappyPathMocks({
         utmTracker: JSON.stringify({
@@ -852,35 +990,35 @@ describe("checkout fulfillment", () => {
               metadata: {
                 plan: "full_report",
                 archetype: "Spark Seeker",
-                forcedPaywallArm: "treatment",
                 reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
               },
             },
           },
         } as never,
-        stripe: buildStripe(
-          "full_report",
-          "Spark Seeker",
-          "pi_test_slack_001",
-          "treatment",
-          "white"
-        ) as never,
+        stripe: buildStripe("full_report", "Spark Seeker", "pi_test_slack_001", "white") as never,
       });
 
       expect(slackCalls).toHaveLength(1);
-      const body = JSON.parse(slackCalls[0]!.body) as { text: string };
-      expect(body.text).toContain("Source: Referral");
-      // utm values are escaped for Slack (underscore → \_ so it isn't italicised).
-      expect(body.text).toContain("referral / email / survey\\_invite");
-      expect(body.text).toContain("Paywall: Forced (must pay to view)");
-      expect(body.text).toContain("Journey: White landing");
-      // utm_content (base64 referrer email) must never reach Slack.
-      expect(body.text).not.toContain("cmVmZXJyZXJAZXhhbXBsZS5jb20=");
+      const all = rendered(slackCalls[0]!.body);
+      expect(all).toContain("Referral");
+      // utm values travel literally: Slack has no backslash escape, so the old
+      // "survey\_invite" put a visible backslash in front of the whole team.
+      expect(all).toContain("referral / email / survey_invite");
+      expect(all).not.toContain("survey\\_invite");
+      // The paywall arm is no longer listed: that experiment concluded, so
+      // presenting it as one the buyer "was in" was wrong. It is still stored
+      // and still shown in /admin's concluded section.
+      expect(all).not.toContain("Forced paywall");
+      expect(all).not.toContain("Paywall style");
+      expect(all).toContain("Landing Page V2 (Survey in Hero)");
+      // utm_content (base64 referrer email) must never reach Slack — in the
+      // fallback text OR in any block.
+      expect(all).not.toContain("cmVmZXJyZXJAZXhhbXBsZS5jb20=");
 
       delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
     });
 
-    it("includes organic source + closeable paywall arm in the Slack ping", async () => {
+    it("includes organic source, and never the removed paywall arm, in the Slack ping", async () => {
       process.env.SLACK_PAYMENTS_WEBHOOK_URL = SLACK_URL;
       const slackCalls = setupHappyPathMocks({
         utmTracker: JSON.stringify({ utm_source: "google", utm_medium: "organic" }),
@@ -896,26 +1034,23 @@ describe("checkout fulfillment", () => {
               metadata: {
                 plan: "full_report",
                 archetype: "Spark Seeker",
-                forcedPaywallArm: "control",
                 reportToken: "rpt_ABCDEFGHIJKLMNOPQRST",
               },
             },
           },
         } as never,
-        stripe: buildStripe(
-          "full_report",
-          "Spark Seeker",
-          "pi_test_slack_001",
-          "control",
-          "control"
-        ) as never,
+        stripe: buildStripe("full_report", "Spark Seeker", "pi_test_slack_001", "control") as never,
       });
 
       expect(slackCalls).toHaveLength(1);
-      const body = JSON.parse(slackCalls[0]!.body) as { text: string };
-      expect(body.text).toContain("Source: Organic");
-      expect(body.text).toContain("Paywall: Closeable (can dismiss & pay later)");
-      expect(body.text).toContain("Journey: Dark / Control landing");
+      const all = rendered(slackCalls[0]!.body);
+      expect(all).toContain("Organic");
+      expect(all).not.toContain("Dismissible paywall");
+      // landingVariant "control" is the RETIRED round-1 dark arm and must be
+      // labelled as itself — not conflated with round-2 V1.
+      expect(all).toContain("Dark landing page (before V1)");
+      expect(all).toContain("retired arm");
+      expect(all).not.toContain("Landing Page V1 (First Design)");
 
       delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
     });
@@ -942,9 +1077,10 @@ describe("checkout fulfillment", () => {
       });
 
       expect(slackCalls).toHaveLength(1);
-      const body = JSON.parse(slackCalls[0]!.body) as { text: string };
-      expect(body.text).toContain("All 14 reports");
-      expect(body.text).not.toMatch(/\([A-Z][a-z]+ [A-Z][a-z]+\)/);
+      const all = rendered(slackCalls[0]!.body);
+      expect(all).toContain("For you & your partner");
+      // all_reports unlocks every archetype, so naming one would mislead.
+      expect(all).not.toContain("Relational Nurturer");
 
       delete process.env.SLACK_PAYMENTS_WEBHOOK_URL;
     });
@@ -1011,6 +1147,10 @@ describe("classifyTraffic", () => {
         source: null,
         medium: null,
         campaign: null,
+        isGoogleAds: false,
+        keyword: null,
+        matchType: null,
+        network: null,
       });
     }
   });
@@ -1050,7 +1190,18 @@ describe("classifyTraffic", () => {
 
   it("ignores non-string utm values without throwing", () => {
     const result = classifyTraffic(JSON.stringify({ utm_source: 123, utm_campaign: true }));
-    expect(result).toEqual({ bucket: "Direct", source: null, medium: null, campaign: null });
+    expect(result).toEqual({
+      bucket: "Direct",
+      source: null,
+      medium: null,
+      campaign: null,
+      // Google Ads is asserted from the auto-tagging click id, never inferred
+      // from utm_source — any link can set that to "google".
+      isGoogleAds: false,
+      keyword: null,
+      matchType: null,
+      network: null,
+    });
   });
 
   it("treats a JSON array as having no utm fields (Direct, no crash)", () => {
@@ -1059,6 +1210,42 @@ describe("classifyTraffic", () => {
       source: null,
       medium: null,
       campaign: null,
+      isGoogleAds: false,
+      keyword: null,
+      matchType: null,
+      network: null,
+    });
+  });
+
+  it("asserts Google Ads from the click id, never from utm_source", () => {
+    // Measured over 30 days: 287 of 335 submissions carried a click id and only
+    // 2 carried a campaign, because auto-tagging appends ONLY the click id. So
+    // the click id is the proof, and utm_source="google" is not.
+    for (const key of ["gclid", "gbraid", "wbraid"]) {
+      expect(classifyTraffic(JSON.stringify({ [key]: "abc123" })).isGoogleAds).toBe(true);
+    }
+    // Anyone can write this on a link; it must not claim a paid Google click.
+    expect(classifyTraffic(JSON.stringify({ utm_source: "google" })).isGoogleAds).toBe(false);
+    // An empty click id is not a click.
+    expect(classifyTraffic(JSON.stringify({ gclid: "   " })).isGoogleAds).toBe(false);
+  });
+
+  it("carries ValueTrack detail through when the tracking template supplies it", () => {
+    const t = classifyTraffic(
+      JSON.stringify({
+        gclid: "abc",
+        utm_campaign: "brand-eu",
+        utm_term: "love language test",
+        matchtype: "e",
+        network: "g",
+      })
+    );
+    expect(t).toMatchObject({
+      isGoogleAds: true,
+      campaign: "brand-eu",
+      keyword: "love language test",
+      matchType: "e",
+      network: "g",
     });
   });
 

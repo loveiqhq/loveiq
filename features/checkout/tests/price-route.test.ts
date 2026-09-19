@@ -16,11 +16,31 @@ vi.mock("@shared/observability/logger", () => ({
 vi.mock("@features/pricing/logic/reportPricing", () => ({
   getReportPriceQuoteForContext: vi.fn(),
   getReportPriceQuotesForContext: vi.fn(),
+  markReportPriceQuotePaywallReached: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { GET } from "@/app/api/price/route";
+// Run the deferred work inline so the journey ping is observable in the test.
+// Swallows like the real helper, which logs rather than rejecting.
+vi.mock("@shared/http/after-response", () => ({
+  scheduleAfterResponse: vi.fn((_key: string, fn: () => Promise<void>) => {
+    void fn().catch(() => {});
+  }),
+}));
+
+vi.mock("@features/report/server/personalReport", () => ({
+  resolveSubmissionAccessContext: vi.fn().mockResolvedValue({ submissionId: 4242 }),
+}));
+
+import { markReportPriceQuotePaywallReached } from "@features/pricing/logic/reportPricing";
+
+vi.mock("@features/attribution/server/journey-message", () => ({
+  refreshJourneyMessage: vi.fn().mockResolvedValue(undefined),
+}));
+
+import { GET, POST } from "@/app/api/price/route";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit } from "@shared/http/ratelimit";
+import { refreshJourneyMessage } from "@features/attribution/server/journey-message";
 import {
   getReportPriceQuoteForContext,
   getReportPriceQuotesForContext,
@@ -46,6 +66,7 @@ describe("GET /api/price", () => {
       basePriceBucket: "full_center",
       basePriceCents: 2999,
       currentPriceCents: 2749,
+      chargedPriceCents: 2749,
       initialPriceCents: 2999,
       discountMultiplier: 1,
       discountStep: 0,
@@ -86,6 +107,7 @@ describe("GET /api/price", () => {
     await expect(res.json()).resolves.toEqual({
       quote: expect.objectContaining({
         currentPriceCents: 2749,
+        chargedPriceCents: 2749,
         plan: "full_report",
       }),
     });
@@ -101,6 +123,7 @@ describe("GET /api/price", () => {
         basePriceBucket: "essentials_center",
         basePriceCents: 1499,
         currentPriceCents: 1499,
+        chargedPriceCents: 1499,
         initialPriceCents: 1499,
         discountMultiplier: 1,
         discountStep: 0,
@@ -132,6 +155,7 @@ describe("GET /api/price", () => {
         basePriceBucket: "full_center",
         basePriceCents: 2999,
         currentPriceCents: 2999,
+        chargedPriceCents: 2999,
         initialPriceCents: 2999,
         discountMultiplier: 1,
         discountStep: 0,
@@ -163,6 +187,7 @@ describe("GET /api/price", () => {
         basePriceBucket: "all_center",
         basePriceCents: 12999,
         currentPriceCents: 12999,
+        chargedPriceCents: 12999,
         initialPriceCents: 12999,
         discountMultiplier: 1,
         discountStep: 0,
@@ -200,5 +225,116 @@ describe("GET /api/price", () => {
         all_reports: expect.objectContaining({ currentPriceCents: 12999 }),
       }),
     });
+  });
+});
+
+/**
+ * Arming the urgency window — the three minutes after which every plan costs two euros
+ * more.
+ *
+ * A POST rather than a flag on the GET: the GET is fetched by things that are not
+ * readers (a shared report link unfurling in Slack), and arming has a price
+ * consequence, so it must only be reachable from our own page.
+ */
+/**
+ * The POST used to arm a three-minute urgency window that added 2 EUR to every plan.
+ * That surcharge and its countdown were removed on 2026-08-31; the endpoint survives
+ * for the one thing only it can do — tell the server, consent-independently, that a
+ * reader reached the paywall, so the Slack journey message can fill "Paywall hit".
+ */
+describe("POST /api/price", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(verifyCsrfToken).mockResolvedValue(true);
+    vi.mocked(checkRateLimit).mockResolvedValue({
+      allowed: true,
+      remaining: 59,
+      resetAt: new Date(),
+    });
+  });
+
+  function armRequest(body: unknown) {
+    return new Request("http://localhost/api/price", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-csrf-token": "valid" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it("advances the journey message to Paywall hit", async () => {
+    const res = await POST(armRequest({ token: "rpt_ABCDEFGHIJKLMNOPQRST" }));
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ success: true });
+    expect(refreshJourneyMessage).toHaveBeenCalledWith(4242, "paywall");
+  });
+
+  it("returns no price or deadline — this endpoint no longer moves money", async () => {
+    const res = await POST(armRequest({ token: "rpt_ABCDEFGHIJKLMNOPQRST" }));
+    const body = (await res.json()) as Record<string, unknown>;
+
+    expect(Object.keys(body)).toEqual(["success"]);
+  });
+
+  it("refuses a request without a CSRF token", async () => {
+    vi.mocked(verifyCsrfToken).mockResolvedValue(false);
+
+    const res = await POST(armRequest({ token: "rpt_ABCDEFGHIJKLMNOPQRST" }));
+
+    expect(res.status).toBe(403);
+    expect(refreshJourneyMessage).not.toHaveBeenCalled();
+  });
+
+  it("refuses a request with no report context", async () => {
+    const res = await POST(armRequest({}));
+
+    expect(res.status).toBe(400);
+    expect(refreshJourneyMessage).not.toHaveBeenCalled();
+  });
+
+  it("never fails the reader when the journey write throws", async () => {
+    vi.mocked(refreshJourneyMessage).mockRejectedValueOnce(new Error("supabase down"));
+
+    const res = await POST(armRequest({ token: "rpt_ABCDEFGHIJKLMNOPQRST" }));
+
+    expect(res.status).toBe(200);
+  });
+
+  /**
+   * This POST is the only SERVER-SIDE witness that a reader reached the paywall.
+   * It used to write nothing durable — it just passed a transient `reachedFloor`
+   * to the Slack message — which left `paywall_initiated` in the funnel as the
+   * one stage with no consent-independent signal behind it. That matters now
+   * that `begin_checkout` reads `checkout_started_at`: a consent-gated stage
+   * sitting directly above a consent-independent one can invert.
+   */
+  it("stamps the paywall server-side, not only in the Slack message", async () => {
+    const res = await POST(armRequest({ token: "rpt_ABCDEFGHIJKLMNOPQRST" }));
+
+    expect(res.status).toBe(200);
+    await vi.waitFor(() =>
+      expect(markReportPriceQuotePaywallReached).toHaveBeenCalledWith({ submissionId: 4242 })
+    );
+  });
+
+  it("still advances the Slack message when the durable stamp fails", async () => {
+    // Two independent writes: the funnel reads one, a human reads the other, and
+    // a failure in the first must not cost the second.
+    vi.mocked(markReportPriceQuotePaywallReached).mockRejectedValueOnce(new Error("db down"));
+
+    const res = await POST(armRequest({ token: "rpt_ABCDEFGHIJKLMNOPQRST" }));
+
+    expect(res.status).toBe(200);
+    // Both writes happen after the response, and the rejected stamp costs an
+    // extra microtask turn before the journey call is reached — so wait for it
+    // rather than asserting on the same tick.
+    await vi.waitFor(() => expect(refreshJourneyMessage).toHaveBeenCalledWith(4242, "paywall"));
+  });
+
+  it("stamps nothing when there is no report context", async () => {
+    const res = await POST(armRequest({}));
+
+    expect(res.status).toBe(400);
+    expect(markReportPriceQuotePaywallReached).not.toHaveBeenCalled();
   });
 });

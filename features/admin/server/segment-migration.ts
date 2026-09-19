@@ -412,7 +412,7 @@ export async function buildSegmentMigrationSnapshot(
       reportIds.length === 0
         ? Promise.resolve([] as PaymentRow[])
         : fetchBatches<PaymentRow>(reportIds, (batch) => {
-            return `/rest/v1/payment?select=personal_report_id,status&personal_report_id=in.(${batch.join(",")})`;
+            return `/rest/v1/payment?is_test=is.false&select=personal_report_id,status&personal_report_id=in.(${batch.join(",")})`;
           }),
     ]);
 

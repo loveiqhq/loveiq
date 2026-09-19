@@ -10,18 +10,31 @@ import { test, expect } from "@playwright/test";
 // If a baseline gets older than ~90 days, schedule a refresh — otherwise
 // "no regression" silently rots and stale screenshots become noise.
 //
-//   landing-page          last reviewed: 2026-06-19 — white landing (dark A/B retired)
-//   about-page            last reviewed: 2026-05-11 — initial baseline
-//   survey-intro          last reviewed: 2026-05-11 — initial baseline
-//   glossary-page         last reviewed: 2026-06-27 — full-white redesign
-//   glossary-term-page    last reviewed: 2026-06-27 — full-white redesign (new baseline)
-//   admin-login           last reviewed: 2026-05-11 — initial baseline
-//   nav-mobile-menu-open  last reviewed: 2026-06-19 — white landing nav (dark A/B retired)
+//   landing-page            last reviewed: 2026-08-23 — Linux baseline, `white` arm
+//   landing-page-white-prev last reviewed: 2026-08-23 — Linux baseline, `white_prev` arm
+//   about-page              last reviewed: 2026-08-23 — Linux baseline
+//   survey-intro            last reviewed: 2026-08-23 — Linux baseline
+//   glossary-page           last reviewed: 2026-08-23 — Linux baseline
+//   glossary-term-page      last reviewed: 2026-08-23 — Linux baseline
+//   admin-login             last reviewed: 2026-08-23 — Linux baseline
+//   nav-mobile-menu-open    last reviewed: 2026-06-19 — Windows only; no Desktop Chrome run
+//
+// The committed `*-win32.png` set predates the Linux baselines and is only used
+// by anyone running the suite on Windows locally; CI compares the `*-linux.png`
+// files, which are the ones the dates above refer to.
 //
 // To refresh: bump the date here, run `npx playwright test visual-regression
 // --update-snapshots --project="Desktop Chrome"`, eyeball every diff, commit.
 
-// Helper to disable all animations/transitions for stable screenshots
+// Helper to disable all animations/transitions for stable screenshots, AND to
+// force scroll-reveal elements visible.
+//
+// The reveal rules belong here rather than in individual tests: a `fullPage`
+// capture stitches the page without ever scrolling it, so anything still waiting
+// on its IntersectionObserver stays at opacity 0 and is captured as blank space.
+// Three tests used to inject these rules themselves and four did not, which is
+// why the about-page baseline came out as a hero, six thousand blank pixels and a
+// footer. Every test calls this helper, so putting them here covers all of them.
 async function disableAnimations(page: import("@playwright/test").Page) {
   await page.addStyleTag({
     content: `
@@ -32,14 +45,31 @@ async function disableAnimations(page: import("@playwright/test").Page) {
         transition-delay: 0s !important;
         scroll-behavior: auto !important;
       }
-      video { visibility: hidden !important; }
+      .animate-on-scroll,
+      .animate-on-load,
+      .reveal-on-scroll {
+        opacity: 1 !important;
+        transform: none !important;
+      }
+      video,
+      iframe {
+        visibility: hidden !important;
+      }
     `,
   });
 }
 
 // Deterministic "everything has settled" wait — replaces ad-hoc waitForTimeout
-// in screenshot tests. Waits for fonts to load and one extra requestAnimationFrame
-// pass so any layout caused by font-swap is visible before capture.
+// in screenshot tests. Waits for fonts to load, forces every lazy image to load
+// and waits for it, then gives one extra requestAnimationFrame pass so any layout
+// caused by font-swap is visible before capture.
+//
+// The lazy-image step matters for `fullPage` captures. next/image emits
+// loading="lazy" unless it is marked priority, so an image below the fold may or
+// may not have arrived by capture time — networkidle does not help, because the
+// request is never made until the element approaches the viewport. That is a
+// coin-flip baseline: the about page's two leadership photos came out as empty
+// grey boxes. Flipping them to eager and awaiting each one removes the race.
 async function waitForVisualReady(page: import("@playwright/test").Page) {
   await page.evaluate(
     () =>
@@ -52,10 +82,47 @@ async function waitForVisualReady(page: import("@playwright/test").Page) {
         }
       })
   );
+
+  await page.evaluate(async () => {
+    const images = Array.from(document.images);
+    for (const img of images) {
+      img.loading = "eager";
+    }
+    await Promise.all(
+      images
+        .filter((img) => !img.complete)
+        .map(
+          (img) =>
+            new Promise<void>((resolve) => {
+              // resolve on error too — a genuinely broken image should show up as a
+              // diff against the baseline, not hang the test until it times out
+              img.addEventListener("load", () => resolve(), { once: true });
+              img.addEventListener("error", () => resolve(), { once: true });
+            })
+        )
+    );
+  });
+
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
 }
 
 test.describe("Visual Regression", () => {
-  test.use({ viewport: { width: 1280, height: 720 } });
+  /**
+   * `reducedMotion: "reduce"` is what makes these screenshots deterministic, and it is
+   * load-bearing rather than a nicety.
+   *
+   * `disableAnimations` below zeroes CSS animation and transition durations, but two
+   * things on the landing page animate from JavaScript and ignore it entirely: the hero
+   * constellation cycles which label it shows on a timer, and the archetype carousel
+   * auto-scrolls, settling at a different offset every run. Measured on 2026-08-28 by
+   * capturing the same build three times: 0.37-0.48% of pixels differed run to run
+   * (58,000-75,000 px) with nothing changed at all. Under reduced motion the same
+   * comparison is 0.0000% — zero pixels, three for three — because both components
+   * already honour the media query (`WHeroConstellation` tracks a `reduced` state,
+   * `WArchetypeCards` uses `motion-reduce:`). Using the app's own static path beats
+   * masking the regions, which would have taken them out of regression cover.
+   */
+  test.use({ viewport: { width: 1280, height: 720 }, contextOptions: { reducedMotion: "reduce" } });
   test.beforeEach(({}, testInfo) => {
     test.skip(
       testInfo.project.name !== "Desktop Chrome",
@@ -63,28 +130,39 @@ test.describe("Visual Regression", () => {
     );
   });
 
-  test("landing page full screenshot", async ({ page }) => {
-    await page.goto("/");
-    await page.waitForLoadState("networkidle");
-    await disableAnimations(page);
-    // Force all scroll-triggered elements visible (full-page capture triggers scroll animations)
-    await page.addStyleTag({
-      content: `
-        .animate-on-scroll { opacity: 1 !important; transform: none !important; }
-        .reveal-on-scroll { opacity: 1 !important; transform: none !important; }
-        iframe { visibility: hidden !important; }
-      `,
+  // The landing is a live A/B and the two arms are entirely different pages —
+  // 9,789 vs 12,195 pixels tall, different sections, different headline.
+  // proxy.ts picks one on a crypto coin flip, so a baseline captured from a bare
+  // "/" compares whichever arm the runner was dealt against whichever arm was
+  // dealt when the baseline was taken: red roughly half the time, for a reason
+  // that has nothing to do with the page changing. `?variant=` is the QA
+  // override the middleware already honours, so pin the arm and keep one
+  // baseline each — a regression in either arm is a real regression.
+  const LANDING_ARMS = [
+    { variant: "white", snapshot: "landing-page.png" },
+    { variant: "white_prev", snapshot: "landing-page-white-prev.png" },
+  ] as const;
+
+  for (const arm of LANDING_ARMS) {
+    test(`landing page full screenshot (${arm.variant})`, async ({ page }) => {
+      await page.goto(`/?variant=${arm.variant}`);
+      await page.waitForLoadState("networkidle");
+      await disableAnimations(page);
+      // Landing page has lots of scroll-triggered content + late-arriving images.
+      // Wait for fonts + network idle a second time to catch any deferred fetches.
+      await waitForVisualReady(page);
+      await page.waitForLoadState("networkidle");
+      await expect(page).toHaveScreenshot(arm.snapshot, {
+        fullPage: true,
+        // 0.01, matching every other page here. It sat at 0.03 — three times the rest
+        // of this file — to absorb the JS-driven noise the reduced-motion setting above
+        // now removes. At 0.03 a whole section of a 12,000px page could change and
+        // still pass, so leaving it loose would waste the determinism.
+        maxDiffPixelRatio: 0.01,
+        timeout: 30000,
+      });
     });
-    // Landing page has lots of scroll-triggered content + late-arriving images.
-    // Wait for fonts + network idle a second time to catch any deferred fetches.
-    await waitForVisualReady(page);
-    await page.waitForLoadState("networkidle");
-    await expect(page).toHaveScreenshot("landing-page.png", {
-      fullPage: true,
-      maxDiffPixelRatio: 0.03,
-      timeout: 30000,
-    });
-  });
+  }
 
   test("about page full screenshot", async ({ page }) => {
     await page.goto("/about");
@@ -112,10 +190,6 @@ test.describe("Visual Regression", () => {
     await page.goto("/glossary");
     await page.waitForLoadState("networkidle");
     await disableAnimations(page);
-    // Force scroll-triggered content visible for a deterministic full-page capture.
-    await page.addStyleTag({
-      content: `.reveal-on-scroll { opacity: 1 !important; transform: none !important; }`,
-    });
     await waitForVisualReady(page);
     await expect(page).toHaveScreenshot("glossary-page.png", {
       fullPage: true,
@@ -127,9 +201,6 @@ test.describe("Visual Regression", () => {
     await page.goto("/glossary/abandonment-insecurity");
     await page.waitForLoadState("networkidle");
     await disableAnimations(page);
-    await page.addStyleTag({
-      content: `.reveal-on-scroll { opacity: 1 !important; transform: none !important; }`,
-    });
     await waitForVisualReady(page);
     await expect(page).toHaveScreenshot("glossary-term-page.png", {
       fullPage: true,
@@ -150,7 +221,8 @@ test.describe("Visual Regression", () => {
 });
 
 test.describe("Component Visual Regression", () => {
-  test.use({ viewport: { width: 412, height: 915 } }); // Mobile viewport
+  // Mobile viewport. Reduced motion for the same reason as above.
+  test.use({ viewport: { width: 412, height: 915 }, contextOptions: { reducedMotion: "reduce" } });
   test.beforeEach(({}, testInfo) => {
     test.skip(
       testInfo.project.name !== "Mobile Chrome",

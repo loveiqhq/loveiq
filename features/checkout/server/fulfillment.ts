@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import { isStaffEmail } from "@shared/env/staff-email";
 import { Resend } from "resend";
 import { getBreaker } from "@shared/http/circuit-breaker";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
@@ -6,9 +7,12 @@ import logger from "@shared/observability/logger";
 import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack";
 import { reportAllEmail } from "@features/report/server/emails/report-all";
 import { reportAllBEmail } from "@features/report/server/emails/report-all-b";
+import { reportCoreEmail } from "@features/report/server/emails/report-core";
 import { reportEssentialsEmail } from "@features/report/server/emails/report-essentials";
 import { reportFullEmail } from "@features/report/server/emails/report-full";
 import { reportFullBEmail } from "@features/report/server/emails/report-full-b";
+import { partnerCodeEmail } from "@features/report/server/emails/nurture/partner-code";
+import { getCouponIdForStage, mintUserPromoCode } from "@features/checkout/server/promoCodes";
 import { pickEmailVariant } from "@shared/emails/ab-variant";
 import { buildUnsubscribeUrl, UNSUBSCRIBE_CAMPAIGNS } from "@shared/emails/unsubscribe-token";
 import { getEmailSiteUrl } from "@shared/emails/site-url";
@@ -18,6 +22,7 @@ import {
   type ReportPurchasePlanId,
 } from "./reportPurchase";
 import { sendGa4PurchaseEvent } from "@features/analytics/server/ga4";
+import { sendPosthogPurchaseEvent } from "@features/analytics/server/posthog";
 
 let _resend: Resend | null = null;
 function getResend(): Resend | null {
@@ -77,73 +82,27 @@ async function lookupRecipientForSubmission(submissionId: number): Promise<{
   }
 }
 
-// Paid-traffic media identifiers (utm_medium). Anything here, or any utm_campaign
-// at all, classifies the visit as a paid acquisition.
-const PAID_UTM_MEDIA = new Set(["cpc", "ppc", "paid", "paid_social", "ads", "display"]);
+// classifyTraffic moved to features/attribution/server/traffic.ts so the survey
+// notification can share it. Imported for local use here and re-exported, because
+// the existing tests (and any other caller) import it from this module.
+import { journeyFromPurchase } from "@features/attribution/server/journey";
+import { scheduleAfterResponse } from "@shared/http/after-response";
+import { refreshJourneyMessage } from "@features/attribution/server/journey-message";
+import { buildJourneyMessage } from "@features/attribution/server/slack-journey";
+import { classifyTraffic } from "@features/attribution/server/traffic";
 
-type TrafficInfo = {
-  bucket: "Direct" | "Referral" | "Paid" | "Organic";
-  source: string | null;
-  medium: string | null;
-  campaign: string | null;
-};
-
-// Classify the buyer's acquisition channel from the survey_submission.utm_tracker
-// JSON blob, for the purchase Slack ping. utm_* values are user-controllable (they
-// ride in on the landing URL), so callers MUST escape every string returned here
-// before it reaches Slack. We deliberately ignore utm_content: invite links base64
-// the referrer's email into it, and that must never be echoed to Slack.
-export function classifyTraffic(utmTracker: string | null): TrafficInfo {
-  // Real utm values are short; cap each one so a padded/oversized tracker can't
-  // blow past Slack's 3,000-char message limit (which would 400 the webhook).
-  const MAX_UTM_LEN = 100;
-  const str = (value: unknown): string | null => {
-    if (typeof value !== "string") return null;
-    const trimmed = value.trim();
-    return trimmed ? trimmed.slice(0, MAX_UTM_LEN) : null;
-  };
-
-  let parsed: Record<string, unknown> = {};
-  if (utmTracker?.trim()) {
-    try {
-      const json: unknown = JSON.parse(utmTracker);
-      // Arrays are typeof "object" too — exclude them so we never read utm_* off
-      // an array (which would silently mislabel as Direct).
-      if (json !== null && typeof json === "object" && !Array.isArray(json)) {
-        parsed = json as Record<string, unknown>;
-      }
-    } catch {
-      // Malformed tracker — treat the raw string as the source so we still
-      // surface something rather than silently dropping it.
-      parsed = { utm_source: utmTracker };
-    }
-  }
-
-  const source = str(parsed.utm_source);
-  const medium = str(parsed.utm_medium);
-  const campaign = str(parsed.utm_campaign);
-
-  let bucket: TrafficInfo["bucket"];
-  if (!source && !medium && !campaign) {
-    bucket = "Direct";
-  } else if (source?.toLowerCase() === "referral") {
-    bucket = "Referral";
-  } else if (campaign || (medium && PAID_UTM_MEDIA.has(medium.toLowerCase()))) {
-    bucket = "Paid";
-  } else {
-    bucket = "Organic";
-  }
-
-  return { bucket, source, medium, campaign };
-}
+export { classifyTraffic };
 
 async function notifySlackPurchase({
   amount,
   archetype,
+  basePriceBucket,
+  countryTier,
   currency,
+  deviceType,
   email,
+  experimentGroup,
   firstName,
-  forcedPaywallArm,
   landingVariant,
   paymentId,
   plan,
@@ -152,82 +111,81 @@ async function notifySlackPurchase({
 }: {
   amount: number | null;
   archetype: string | null;
+  basePriceBucket: string | null;
+  countryTier: string | null;
   currency: string | null;
+  deviceType: string | null;
   email: string | null;
+  experimentGroup: string | null;
   firstName: string | null;
-  forcedPaywallArm: string | null;
   landingVariant: string | null;
   paymentId: number;
   plan: ReportPurchasePlanId;
   submissionId: number;
   utmTracker: string | null;
 }) {
-  const url = process.env.SLACK_PAYMENTS_WEBHOOK_URL;
-
-  if (!url) {
-    logger.info(
-      { paymentId, plan, submissionId },
-      "Slack payments webhook env unset — skipping purchase notification"
-    );
-    return;
-  }
-
   const planLabel = getReportPurchasePlan(plan).title;
-  const archetypeSuffix = plan === "all_reports" || !archetype ? "" : ` (${archetype})`;
-  const safeName = firstName?.trim() || "anonymous";
-  const safeEmail = email?.trim() || null;
-  const maskedEmail = safeEmail ? safeEmail.replace(/^(.).+(@.+)$/, "$1***$2") : "no-email";
   const formattedAmount =
     typeof amount === "number" && Number.isFinite(amount)
       ? `${(currency ?? "EUR").toUpperCase()} ${amount.toFixed(2)}`
-      : "amount unknown";
+      : null;
 
-  // Traffic source line — derived from the buyer's utm_tracker. utm_* values are
-  // user-controllable, so escape each before it reaches Slack. utm_content is
-  // intentionally excluded (invite links base64 the referrer's email into it).
-  const traffic = classifyTraffic(utmTracker);
-  const utmParts = [traffic.source, traffic.medium, traffic.campaign]
-    .map((part) => (part ? escapeSlack(part) : "—"))
-    .join(" / ");
-  const sourceLine = `:chart_with_upwards_trend: Source: ${traffic.bucket} · utm: ${utmParts}`;
+  // Built from the Stripe session metadata already in hand — a frozen snapshot of
+  // what this buyer actually experienced. Deliberately no extra queries: this runs
+  // inside the webhook, and re-reading would add latency while telling us nothing
+  // the session does not already carry.
+  const journey = journeyFromPurchase({
+    submissionId,
+    firstName,
+    email,
+    utmTracker,
+    experimentGroup,
+    basePriceBucket,
+    landingVariant,
+    deviceType,
+    countryTier,
+    amount,
+    currency,
+    plan,
+  });
 
-  // Paywall A/B arm the buyer experienced: "treatment" = forced (non-dismissible),
-  // "control" = closeable. Anything else (null/empty/unexpected) renders unknown.
-  const paywallLine =
-    forcedPaywallArm === "treatment"
-      ? ":lock: Paywall: Forced (must pay to view)"
-      : forcedPaywallArm === "control"
-        ? ":unlock: Paywall: Closeable (can dismiss & pay later)"
-        : ":lock: Paywall: unknown";
+  const message = buildJourneyMessage(journey, {
+    kind: "purchase",
+    planLabel,
+    // all_reports covers every archetype, so naming one would be misleading.
+    archetype: plan === "all_reports" ? null : archetype,
+    amountText: formattedAmount,
+  });
 
-  // Landing A/B journey the buyer came through, so revenue is attributable to the
-  // landing variant they first saw. "white" = the new pay-first white landing,
-  // "control" = the original dark landing.
-  const journeyLine =
-    landingVariant === "white"
-      ? ":sparkles: Journey: White landing"
-      : landingVariant === "control"
-        ? ":crescent_moon: Journey: Dark / Control landing"
-        : ":grey_question: Journey: unknown";
+  logger.info(
+    {
+      paymentId,
+      plan,
+      submissionId,
+      blocks: message.blocks.length,
+      payloadChars: message.size,
+      trimmed: message.trimmed,
+      arms: journey.arms,
+    },
+    "Sending Slack purchase notification"
+  );
 
-  const text = `:credit_card: New purchase: *${safeName}* (${maskedEmail}) — ${planLabel}${archetypeSuffix} — ${formattedAmount}\n${sourceLine}\n${paywallLine}\n${journeyLine}`;
+  await notifySlack({
+    channel: "payments",
+    kind: "purchase",
+    text: message.text,
+    blocks: message.blocks,
+    username: "payment_notification",
+    context: { paymentId, plan, submissionId },
+  });
 
-  try {
-    logger.info({ paymentId, plan, submissionId }, "Sending Slack purchase notification");
-    const res = await fetchWithTimeout(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, username: "payment_notification" }),
-      timeoutMs: 5000,
-    });
-
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      logger.error({ paymentId, plan, status: res.status, body }, "Slack purchase webhook failed");
-    }
-  } catch (err) {
-    logger.error({ err, paymentId, plan }, "Slack purchase webhook error");
-  }
+  // Also fill in the ORIGINAL survey-completion message, so the rail there reaches
+  // "Paid" instead of staying frozen at the moment the survey was submitted. This
+  // is the money ping's counterpart in the survey channel, not a duplicate of it.
+  // Never throws, and skips itself when the Slack bot is not configured.
+  scheduleAfterResponse("journey-message-paid", async () => {
+    await refreshJourneyMessage(submissionId, "paid");
+  });
 }
 
 async function lookupReportTokenForSubmission(submissionId: number): Promise<string | null> {
@@ -255,7 +213,12 @@ async function sendPurchaseEmail({
   submissionId: number;
   unlockedArchetype?: string | null;
 }): Promise<void> {
-  if (plan !== "essentials" && plan !== "full_report" && plan !== "all_reports") {
+  if (
+    plan !== "essentials" &&
+    plan !== "full_report" &&
+    plan !== "all_reports" &&
+    plan !== "core"
+  ) {
     return;
   }
 
@@ -296,40 +259,54 @@ async function sendPurchaseEmail({
       )
     : undefined;
 
-  // Essentials has a single template; full_report and all_reports run an A/B
-  // copy test. Variant is deterministic per recipient (hashed email) so retries
-  // and dashboards stay consistent.
+  // Essentials + core each have a single template; full_report and all_reports
+  // run an A/B copy test. Variant is deterministic per recipient (hashed email)
+  // so retries and dashboards stay consistent. Core lists the buyer's unlocked
+  // top matches, so resolve them here (best-effort — a miss falls back to a
+  // single report CTA inside the template).
+  const coreArchetypes =
+    plan === "core" ? await lookupTopThreeArchetypesForSubmission(submissionId) : undefined;
   const variant =
-    plan === "essentials" ? "a" : pickEmailVariant(recipient.email, `purchase-${plan}`);
+    plan === "essentials" || plan === "core"
+      ? "a"
+      : pickEmailVariant(recipient.email, `purchase-${plan}`);
 
   const tpl =
     plan === "all_reports"
       ? variant === "b"
         ? reportAllBEmail({ firstName: recipient.firstName, reportUrl, siteUrl, unsubscribeUrl })
         : reportAllEmail({ firstName: recipient.firstName, reportUrl, siteUrl, unsubscribeUrl })
-      : plan === "essentials"
-        ? reportEssentialsEmail({
+      : plan === "core"
+        ? reportCoreEmail({
             firstName: recipient.firstName,
             reportUrl,
             siteUrl,
-            unlockedArchetype: unlockedArchetype ?? null,
+            archetypes: coreArchetypes,
             unsubscribeUrl,
           })
-        : variant === "b"
-          ? reportFullBEmail({
+        : plan === "essentials"
+          ? reportEssentialsEmail({
               firstName: recipient.firstName,
               reportUrl,
               siteUrl,
               unlockedArchetype: unlockedArchetype ?? null,
               unsubscribeUrl,
             })
-          : reportFullEmail({
-              firstName: recipient.firstName,
-              reportUrl,
-              siteUrl,
-              unlockedArchetype: unlockedArchetype ?? null,
-              unsubscribeUrl,
-            });
+          : variant === "b"
+            ? reportFullBEmail({
+                firstName: recipient.firstName,
+                reportUrl,
+                siteUrl,
+                unlockedArchetype: unlockedArchetype ?? null,
+                unsubscribeUrl,
+              })
+            : reportFullEmail({
+                firstName: recipient.firstName,
+                reportUrl,
+                siteUrl,
+                unlockedArchetype: unlockedArchetype ?? null,
+                unsubscribeUrl,
+              });
 
   try {
     const { error } = await Promise.race([
@@ -375,6 +352,150 @@ import { isArchetypeName } from "@features/report/server/archetypeSlug";
 import { markReportPriceQuotePurchased } from "@features/pricing/logic/reportPricing";
 
 const SUPABASE_TIMEOUT_MS = 8_000;
+
+// Partner code (tier-3 "For you & your partner") validity window. Longer than
+// the post-call grant because the partner has to take the full assessment
+// before they can redeem it.
+const PARTNER_CODE_EXPIRY_DAYS = 30;
+
+/**
+ * Tier-3 only: mint a one-time 100%-off code the buyer can hand to a partner,
+ * store it on the buyer's full_report quote (the code carrier), and email it.
+ *
+ * Redemption is DIFFERENT from nurture codes: the partner is a different person,
+ * so the code is NOT wired into a `?promo=` link (owner-scoped resolveNurturePromo
+ * would never match them). Instead the partner types it on Stripe's hosted page,
+ * which checkout-session enables via `allow_promotion_codes` whenever no owner
+ * promo is present. Stripe's `max_redemptions:1` + expiry are the guards.
+ *
+ * Idempotent + best-effort: never re-mints if a partner code already exists, and
+ * every failure degrades to a log (the tier-3 unlock itself already succeeded).
+ */
+async function mintAndEmailPartnerCode({
+  submissionId,
+  email,
+  firstName,
+}: {
+  submissionId: number;
+  email: string | null;
+  firstName: string | null;
+}): Promise<void> {
+  const couponId = getCouponIdForStage("partner");
+  if (!couponId) {
+    logger.error(
+      { submissionId },
+      "Partner code NOT minted — STRIPE_COUPON_100 not configured (tier-3 paid feature broken)"
+    );
+    return;
+  }
+
+  // Any quote row for this submission can carry the per-user partner code
+  // (metadata.nurturePromoCodes) — resolveNurturePromo scans ALL of a
+  // submission's quotes at redemption. Tier-3 buyers purchased `all_reports`, so
+  // filtering to `full_report` risked finding no row (partner code never minted).
+  // Take the newest quote, which is guaranteed to exist (the purchased
+  // all_reports quote at minimum).
+  let quote: { id: number; metadata: Record<string, unknown> | null } | null = null;
+  try {
+    const res = await supabaseServiceFetch(
+      `/rest/v1/report_price_quote?survey_submission_id=eq.${submissionId}&select=id,metadata&order=id.desc&limit=1`
+    );
+    if (res.ok) {
+      const rows = (await res.json()) as Array<{
+        id: number;
+        metadata: Record<string, unknown> | null;
+      }>;
+      quote = rows[0] ?? null;
+    }
+  } catch (err) {
+    logger.warn({ err, submissionId }, "Partner code: quote lookup failed");
+  }
+  if (!quote) {
+    logger.error({ submissionId }, "Partner code: no quote row to carry the code");
+    return;
+  }
+
+  const existingCodes =
+    (quote.metadata?.nurturePromoCodes as Record<string, { code?: string }> | undefined) ?? {};
+  if (existingCodes.partner?.code) return; // already granted — do not re-mint/re-email
+
+  const minted = await mintUserPromoCode({
+    percentOff: 100,
+    couponId,
+    expiresAtSec: Math.floor(Date.now() / 1000) + PARTNER_CODE_EXPIRY_DAYS * 24 * 3600,
+  });
+  if (!minted) {
+    logger.error({ submissionId }, "Partner code: mint failed");
+    return;
+  }
+
+  const nextMetadata: Record<string, unknown> = {
+    ...(quote.metadata ?? {}),
+    nurturePromoCodes: {
+      ...existingCodes,
+      partner: {
+        code: minted.code,
+        stripePromotionCodeId: minted.stripePromotionCodeId,
+        percentOff: minted.percentOff,
+        expiresAt: minted.expiresAt,
+      },
+    },
+  };
+  try {
+    const patch = await supabaseServiceFetch(`/rest/v1/report_price_quote?id=eq.${quote.id}`, {
+      body: JSON.stringify({
+        metadata: nextMetadata,
+        updated_date_time: new Date().toISOString(),
+      }),
+      headers: { Prefer: "return=minimal" },
+      method: "PATCH",
+    });
+    if (!patch.ok) {
+      // Non-fatal: the Stripe code is valid regardless; losing the DB copy only
+      // disables the buyer-side ?promo= convenience (partner types it anyway).
+      logger.error({ status: patch.status, submissionId }, "Partner code: metadata write failed");
+    }
+  } catch (err) {
+    logger.error({ err, submissionId }, "Partner code: metadata write threw");
+  }
+
+  const resend = getResend();
+  if (!resend || !email) return;
+  const siteUrl = getEmailSiteUrl();
+  const ctaUrl = `${siteUrl}/survey?utm_source=email&utm_medium=purchase&utm_campaign=partner_code`;
+  const unsubSecret = process.env.UNSUBSCRIBE_SECRET;
+  const unsubscribeUrl = unsubSecret
+    ? buildUnsubscribeUrl(email, siteUrl, unsubSecret, UNSUBSCRIBE_CAMPAIGNS.reportUnlocked)
+    : undefined;
+  const tpl = partnerCodeEmail({
+    firstName,
+    ctaUrl,
+    promoCode: minted.code,
+    siteUrl,
+    unsubscribeUrl,
+  });
+  try {
+    const { error } = await resend.emails.send({
+      from: process.env.RESEND_FROM || "LoveIQ <hello@send.loveiq.org>",
+      to: email,
+      replyTo: process.env.RESEND_REPLY_TO || "hello@loveiq.org",
+      subject: tpl.subject,
+      html: tpl.html,
+      text: tpl.text,
+      headers: {
+        "X-LoveIQ-Stage": "partner",
+        ...(unsubscribeUrl && {
+          "List-Unsubscribe": `<${unsubscribeUrl}>`,
+          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        }),
+      },
+    });
+    if (error) logger.error({ error, submissionId }, "Partner code email send failed");
+    else logger.info({ submissionId }, "Partner code email sent");
+  } catch (err) {
+    logger.error({ err, submissionId }, "Partner code email error");
+  }
+}
 
 interface ServiceFetchOptions {
   body?: string;
@@ -445,6 +566,33 @@ async function lookupPrimaryArchetypeForSubmission(submissionId: number): Promis
     // eslint-disable-next-line no-secrets/no-secrets -- log message, not a secret
     logger.warn({ err, submissionId }, "lookupPrimaryArchetypeForSubmission failed");
     return null;
+  }
+}
+
+/**
+ * The buyer's TOP 3 archetypes by V5 match % — the "core" tier unlocks all
+ * three at full_report tier. Ranked from scoring_result.v5_percentages (falls
+ * back to v4 percentages). Returns [] when scoring isn't available.
+ */
+async function lookupTopThreeArchetypesForSubmission(submissionId: number): Promise<string[]> {
+  try {
+    const response = await supabaseServiceFetch(
+      `/rest/v1/scoring_result?survey_submission_id=eq.${submissionId}&select=v5_percentages,percentages&limit=1`
+    );
+    if (!response.ok) return [];
+    const rows = (await response.json()) as Array<{
+      v5_percentages: Record<string, number> | null;
+      percentages: Record<string, number> | null;
+    }>;
+    const pct = rows[0]?.v5_percentages ?? rows[0]?.percentages ?? {};
+    return Object.entries(pct)
+      .filter(([name, value]) => isArchetypeName(name) && typeof value === "number")
+      .sort((a, b) => (b[1] as number) - (a[1] as number))
+      .slice(0, 3)
+      .map(([name]) => name);
+  } catch (err) {
+    logger.warn({ err, submissionId }, "top-archetypes lookup failed");
+    return [];
   }
 }
 
@@ -634,6 +782,7 @@ async function fetchExistingPayment({
 
 async function upsertPaymentRecord({
   amount,
+  buyerEmail,
   cardBrand,
   cardExpMonth,
   cardExpYear,
@@ -659,6 +808,8 @@ async function upsertPaymentRecord({
   userId,
 }: {
   amount: number | null;
+  /** The address that actually paid, from the Stripe session. Decides `is_test`. */
+  buyerEmail: string | null;
   cardBrand: string | null;
   cardExpMonth: number | null;
   cardExpYear: number | null;
@@ -695,6 +846,20 @@ async function upsertPaymentRecord({
     failure_code: failureCode,
     failure_message: failureMessage,
     ip_address: ipAddress,
+    /**
+     * `is_test` gates roughly thirty admin revenue, KPI and digest queries
+     * (`is_test=is.false`) — and until now NOTHING wrote it. It was last set by
+     * hand on 2026-05-02, so every internal purchase since has been counted as
+     * real: 48 staff-owned rows, 26 of them succeeded, 24 of those €0 comps,
+     * against ~79 total purchases. That was enough to inflate the reported
+     * iOS-vs-Android conversion gap from 2.0x to 2.4x.
+     *
+     * Deciding it here, from the address that actually paid, means it can never
+     * drift from the payment again. It is a REPORTING flag only: access is
+     * derived from `metadata.plan`, so flagging a payment never revokes a
+     * report the buyer paid for.
+     */
+    is_test: isStaffEmail(buyerEmail),
     metadata,
     payment_date_time: paymentDateTime,
     payment_method_type: paymentMethodType,
@@ -1008,6 +1173,22 @@ async function syncCheckoutSessionPayment({
   }
 
   const amount = toAmount(settledSession.amount_total);
+
+  /**
+   * Whether this payment is one of OURS rather than a customer's — the same test that
+   * decides the `is_test` column, so the Slack line and the database never disagree.
+   *
+   * It is computed here rather than at each call site because three of them already
+   * recomputed it independently and the Slack alerts did not compute it at all: in the
+   * fortnight to 2026-09-14, THIRTY-FIVE of thirty-eight ":tag: Promo redeemed (100%
+   * off)" pings in #prod-alerts were internal sandbox runs, indistinguishable from a
+   * real one. A channel that cries wolf 92% of the time is a channel nobody reads.
+   */
+  const isInternalPayment = isStaffEmail(
+    settledSession.customer_details?.email ?? settledSession.customer_email ?? null
+  );
+  /** Prefix for any ops line about this payment. Empty for real money. */
+  const internalTag = isInternalPayment ? ":test_tube: [internal] " : "";
   const pricingQuoteIdRaw = settledSession.metadata?.pricingQuoteId;
   const pricingQuoteId =
     typeof pricingQuoteIdRaw === "string" && /^\d+$/.test(pricingQuoteIdRaw)
@@ -1040,10 +1221,6 @@ async function syncCheckoutSessionPayment({
     pricingQuoteId,
     pricingClusterId: settledSession.metadata?.pricingClusterId ?? null,
     experimentGroup: settledSession.metadata?.experimentGroup ?? null,
-    // Forced-paywall A/B arm ("treatment" | "control"), stamped server-side at
-    // checkout-session creation. Query via payment.metadata->>'forcedPaywallArm'
-    // for consent-independent conversion + revenue by arm.
-    forcedPaywallArm: settledSession.metadata?.forcedPaywallArm ?? null,
     // Landing A/B arm ("white" | "control") the buyer first saw, stamped on the
     // Stripe session at checkout-session creation. Persisted here so paid rows are
     // self-describing for CSV/exports; the admin funnel groups via the submission's
@@ -1096,6 +1273,8 @@ async function syncCheckoutSessionPayment({
 
   const paymentId = await upsertPaymentRecord({
     amount,
+    // Stripe's own record of who paid — no extra lookup needed.
+    buyerEmail: settledSession.customer_details?.email ?? settledSession.customer_email ?? null,
     cardBrand: chargeDetails.cardBrand,
     cardExpMonth: chargeDetails.cardExpMonth,
     cardExpYear: chargeDetails.cardExpYear,
@@ -1165,6 +1344,31 @@ async function syncCheckoutSessionPayment({
         "No archetype available for tier persistence — purchase recorded but tier write skipped"
       );
     }
+  } else if (effectiveStatus === "succeeded" && plan === "core") {
+    // Core ("All your core archetypes"): unlock the buyer's TOP 3 archetypes
+    // (by V5 match %) at full_report tier.
+    const top3 = await lookupTopThreeArchetypesForSubmission(context.submissionId);
+    if (top3.length > 0) {
+      for (const archetype of top3) {
+        try {
+          await upsertArchetypeTierForPersonalReport({
+            archetype,
+            personalReportId: personalReport.id,
+            tier: "full_report",
+          });
+        } catch (err) {
+          logger.warn(
+            { archetype, err, personalReportId: personalReport.id },
+            "Unable to persist core archetype tier after checkout"
+          );
+        }
+      }
+    } else {
+      logger.error(
+        { personalReportId: personalReport.id, plan, submissionId: context.submissionId },
+        "No top-3 archetypes for core purchase — tier write skipped"
+      );
+    }
   } else if (effectiveStatus === "succeeded" && plan === "all_reports") {
     // The all-reports plan unlocks every archetype at full_report tier.
     // Resolver code synthesizes this at read time, but persisting the tiers
@@ -1201,16 +1405,30 @@ async function syncCheckoutSessionPayment({
       await notifySlackPurchase({
         amount,
         archetype: unlockedArchetype,
+        basePriceBucket: metadata.basePriceBucket,
+        countryTier: metadata.countryTier,
         currency: settledSession.currency ?? null,
+        deviceType: metadata.deviceType,
+        experimentGroup: metadata.experimentGroup,
         email: recipient.email,
         firstName: recipient.firstName,
-        forcedPaywallArm: settledSession.metadata?.forcedPaywallArm ?? null,
         landingVariant: settledSession.metadata?.landingVariant ?? null,
         paymentId,
         plan,
         submissionId: context.submissionId,
         utmTracker: recipient.utmTracker,
       });
+
+      // Tier-3 ("For you & your partner") only: hand the buyer a one-time
+      // 100%-off code to share with a partner. Inside isFirstFulfillment so it
+      // mints exactly once per purchase (Stripe re-deliveries are skipped).
+      if (plan === "all_reports") {
+        await mintAndEmailPartnerCode({
+          submissionId: context.submissionId,
+          email: recipient.email,
+          firstName: recipient.firstName,
+        });
+      }
 
       // Server-side GA4 purchase — fires for 100% of paid checkouts, unlike the
       // client event (GTM → GA4) which only catches consented buyers who return
@@ -1223,6 +1441,7 @@ async function syncCheckoutSessionPayment({
         consentGranted: settledSession.metadata?.gaAnalyticsConsent === "1",
         transactionId: settledSession.id,
         value: amount ?? 0,
+        isTest: isInternalPayment,
         currency: (settledSession.currency ?? "eur").toUpperCase(),
         itemName: getReportPurchasePlan(plan).title,
         params: {
@@ -1235,8 +1454,34 @@ async function syncCheckoutSessionPayment({
           country_tier: metadata.countryTier ?? undefined,
           device_type: metadata.deviceType ?? undefined,
           traffic_source: metadata.trafficSource ?? undefined,
-          forced_paywall_arm: metadata.forcedPaywallArm ?? undefined,
           landing_variant: metadata.landingVariant ?? undefined,
+        },
+      });
+
+      // Same purchase to PostHog, for the same reason as the GA4 send above:
+      // the client-side half only fires for buyers who return to
+      // /checkout/return, so ad blockers and closed tabs silently undercount
+      // revenue. Not consent-gated (see the module doc) because PostHog itself
+      // is un-gated on this site. Best-effort: never throws.
+      await sendPosthogPurchaseEvent({
+        email: recipient.email,
+        transactionId: settledSession.id,
+        value: amount ?? 0,
+        isTest: isInternalPayment,
+        currency: (settledSession.currency ?? "eur").toUpperCase(),
+        plan,
+        itemName: getReportPurchasePlan(plan).title,
+        params: {
+          archetype: unlockedArchetype ?? undefined,
+          pricing_cluster_id: metadata.pricingClusterId ?? undefined,
+          experiment_group: metadata.experimentGroup ?? undefined,
+          base_price_bucket: metadata.basePriceBucket ?? undefined,
+          discount_step: metadata.discountStep ?? undefined,
+          country_tier: metadata.countryTier ?? undefined,
+          device_type: metadata.deviceType ?? undefined,
+          traffic_source: metadata.trafficSource ?? undefined,
+          landing_variant: metadata.landingVariant ?? undefined,
+          submission_id: context.submissionId ?? undefined,
         },
       });
 
@@ -1249,7 +1494,7 @@ async function syncCheckoutSessionPayment({
         await notifySlack({
           channel: "ops",
           kind: `stripe_risk_${chargeDetails.riskLevel}`,
-          text: `${urgentIcon} Stripe Radar *${chargeDetails.riskLevel}* risk on payment #${paymentId} (score ${chargeDetails.riskScore ?? "?"}). Fulfilled; review for proactive refund / contact.`,
+          text: `${internalTag}${urgentIcon} Stripe Radar *${chargeDetails.riskLevel}* risk on payment #${paymentId} (score ${chargeDetails.riskScore ?? "?"}). Fulfilled; review for proactive refund / contact.`,
           username: "ops_alerts",
         });
       }
@@ -1270,7 +1515,7 @@ async function syncCheckoutSessionPayment({
         await notifySlack({
           channel: "ops",
           kind: "promo_redeemed",
-          text: `:tag: Promo *${escapeSlack(promotionSummary.promotionCode)}* redeemed (${discountSummary})${stageSuffix} — payment #${paymentId}`,
+          text: `${internalTag}:tag: Promo *${escapeSlack(promotionSummary.promotionCode)}* redeemed (${discountSummary})${stageSuffix} — payment #${paymentId}`,
           username: "ops_alerts",
         });
       }
@@ -1282,7 +1527,7 @@ async function syncCheckoutSessionPayment({
     await notifySlack({
       channel: "ops",
       kind: "stripe_payment_failed",
-      text: `:credit_card: Payment failed — ${escapeSlack(masked)} — ${escapeSlack(reason)} — payment #${paymentId}`,
+      text: `${internalTag}:credit_card: Payment failed — ${escapeSlack(masked)} — ${escapeSlack(reason)} — payment #${paymentId}`,
       username: "ops_alerts",
     });
   }

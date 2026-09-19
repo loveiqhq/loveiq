@@ -11,7 +11,6 @@ export const metadata: Metadata = {
   alternates: {
     canonical: `${siteUrl}/medical-disclaimer`,
   },
-  robots: { index: false },
 };
 
 export default function MedicalDisclaimerPage() {
@@ -47,7 +46,7 @@ export default function MedicalDisclaimerPage() {
                 Email:{" "}
                 <a
                   href="mailto:hello@loveiq.org"
-                  className="text-[#C2410C] hover:text-[#fe6839] transition-colors"
+                  className="text-[#C2410C] underline hover:text-[#fe6839] transition-colors"
                 >
                   hello@loveiq.org
                 </a>

@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import posthog from "posthog-js";
 import AdminSidebar from "@features/admin/ui/AdminSidebar";
 import AdminHeader from "@features/admin/ui/AdminHeader";
 import PagePresence from "@features/admin/ui/PagePresence";
 
 const pageTitles: Record<string, string> = {
+  "/admin": "Overview",
   "/admin/analytics": "Core KPIs",
   "/admin/explorer": "Data Explorer",
   "/admin/journey": "User Journey",
@@ -18,6 +20,8 @@ const pageTitles: Record<string, string> = {
 };
 
 const pageDescriptions: Record<string, string> = {
+  "/admin":
+    "How the funnel is performing and what each A/B test is actually telling us, with sample sizes and a plain-English verdict.",
   "/admin/analytics":
     "Single source of truth for marketing, funnel, monetization, engagement, virality, retention, and segmentation KPIs.",
   "/admin/explorer":
@@ -38,6 +42,17 @@ const pageDescriptions: Record<string, string> = {
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    const distinctId = document.cookie
+      .split("; ")
+      .find((cookie) => cookie.startsWith("admin_posthog_distinct_id="))
+      ?.split("=")[1];
+
+    if (distinctId) {
+      posthog.identify(decodeURIComponent(distinctId));
+    }
+  }, []);
 
   // Login page renders without the admin shell
   if (pathname === "/admin/login") {

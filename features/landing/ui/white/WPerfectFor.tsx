@@ -75,7 +75,7 @@ const WPerfectFor: FC = () => {
               Who is this perfect for?
             </span>
           </h2>
-          <p className="mt-3 max-w-xl text-[16px] leading-relaxed text-[#6b7280]">
+          <p className="mt-3 max-w-xl text-[16px] leading-relaxed text-[#69707d]">
             This is for people who are ready to explore who they are, grow with more awareness, and
             bring more intention into their sexual lives. We built it for you, and we built it for
             ourselves too.
@@ -86,7 +86,7 @@ const WPerfectFor: FC = () => {
           {/* Quadrant map */}
           <div className="animate-on-scroll rounded-2xl border border-black/[0.08] bg-white p-6 sm:p-8">
             <div className="flex gap-3">
-              <span className="flex rotate-180 items-center justify-center text-[9px] font-medium uppercase tracking-wide text-[#9a96a6] [writing-mode:vertical-rl]">
+              <span className="flex rotate-180 items-center justify-center text-[9px] font-medium uppercase tracking-wide text-[#6f6c78] [writing-mode:vertical-rl]">
                 Self-understanding ← → Active change
               </span>
               <div className="flex-1">
@@ -96,10 +96,10 @@ const WPerfectFor: FC = () => {
                   <div className="absolute inset-y-0 left-2/3 border-l border-dashed border-black/[0.07]" />
                   <div className="absolute inset-x-0 top-1/3 border-t border-dashed border-black/[0.07]" />
                   <div className="absolute inset-x-0 top-2/3 border-t border-dashed border-black/[0.07]" />
-                  <span className="absolute left-3 top-2 text-[10px] font-medium uppercase tracking-wide text-[#9a96a6]">
+                  <span className="absolute left-3 top-2 text-[10px] font-medium uppercase tracking-wide text-[#6f6c78]">
                     Solo
                   </span>
-                  <span className="absolute right-3 top-2 text-[10px] font-medium uppercase tracking-wide text-[#9a96a6]">
+                  <span className="absolute right-3 top-2 text-[10px] font-medium uppercase tracking-wide text-[#6f6c78]">
                     Shared
                   </span>
                   {audiences.map((a) => (
@@ -112,7 +112,7 @@ const WPerfectFor: FC = () => {
                     </span>
                   ))}
                 </div>
-                <p className="mt-2 text-center text-[9px] font-medium uppercase tracking-wide text-[#9a96a6]">
+                <p className="mt-2 text-center text-[9px] font-medium uppercase tracking-wide text-[#6f6c78]">
                   Inward / Solo ← → Shared / Relational
                 </p>
               </div>
@@ -131,11 +131,11 @@ const WPerfectFor: FC = () => {
                     <NumberBadge n={a.n} className="h-6 w-6 text-[11px]" />
                     <h3 className="font-serif text-lg font-bold text-[#161021]">{a.title}</h3>
                   </div>
-                  <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-[#9a96a6]">
+                  <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-[#6f6c78]">
                     {a.tag}
                   </span>
                 </div>
-                <p className="pl-9 text-[14px] leading-relaxed text-[#6b7280]">{a.body}</p>
+                <p className="pl-9 text-[14px] leading-relaxed text-[#69707d]">{a.body}</p>
               </div>
             ))}
           </div>

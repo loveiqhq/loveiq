@@ -12,4 +12,4 @@
 **Does NOT belong:**
 
 - Product KPIs (those are admin domain).
-- Hotjar / Contentsquare scripts (`shared/observability/hotjar.ts` + `shared/ui/GtmScript.tsx`).
+- Microsoft Clarity session recording (`public/clarity-init.js`, consent-gated in `app/layout.tsx`) and GTM (`shared/ui/GtmScript.tsx`).

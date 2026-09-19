@@ -1,5 +1,5 @@
 import { parseUtmSource } from "@features/admin/server/metric-library";
-import { supabaseFetch } from "@features/admin/server/supabase";
+import { fetchAllRows, supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 
 type Confidence = "high" | "medium" | "low";
@@ -349,6 +349,19 @@ export async function buildForecastSnapshot(inputDays: number): Promise<Forecast
     .toISOString()
     .slice(0, 10);
 
+  /**
+   * The report sessions are PAGED and therefore fetched apart from the uniform
+   * response array below, which maps `.ok` and `.json()` across every entry.
+   *
+   * Measured 2026-09-17: this window holds 4,250 sessions, so the capped read
+   * saw 1,000 of them — under a quarter — and every session-derived figure in
+   * the forecast (viewing pace, the projection built on it) came from that
+   * slice while the submissions and reports beside it were complete.
+   */
+  const reportSessionsPaged = fetchAllRows<ReportSessionRow>(
+    `/rest/v1/report_session?select=id,personal_report_id,started_at&started_at=gte.${previousSince}&order=started_at.asc`
+  );
+
   const responses = await Promise.all([
     supabaseFetch(
       `/rest/v1/survey_submission?select=id,status,created_date_time,duration_ms,utm_tracker&created_date_time=gte.${previousSince}&order=created_date_time.asc`,
@@ -359,11 +372,7 @@ export async function buildForecastSnapshot(inputDays: number): Promise<Forecast
       { headers: { Range: "0-49999" } }
     ),
     supabaseFetch(
-      `/rest/v1/report_session?select=id,personal_report_id,started_at&started_at=gte.${previousSince}&order=started_at.asc`,
-      { headers: { Range: "0-49999" } }
-    ),
-    supabaseFetch(
-      `/rest/v1/payment?select=id,amount,status,payment_date_time&payment_date_time=gte.${previousSince}&order=payment_date_time.asc`,
+      `/rest/v1/payment?is_test=is.false&select=id,amount,status,payment_date_time&payment_date_time=gte.${previousSince}&order=payment_date_time.asc`,
       { headers: { Range: "0-49999" } }
     ),
     supabaseFetch(
@@ -376,7 +385,8 @@ export async function buildForecastSnapshot(inputDays: number): Promise<Forecast
     }),
   ]);
 
-  if (responses.some((response) => !response.ok)) {
+  const reportSessions = await reportSessionsPaged;
+  if (responses.some((response) => !response.ok) || reportSessions === null) {
     logger.error(
       { statuses: responses.map((response) => response.status) },
       "Forecast snapshot query failed"
@@ -384,15 +394,9 @@ export async function buildForecastSnapshot(inputDays: number): Promise<Forecast
     throw new Error("forecast_snapshot_failed");
   }
 
-  const [submissions, reports, reportSessions, payments, scoringRows, insights] =
-    (await Promise.all(responses.map((response) => response.json()))) as [
-      SubmissionRow[],
-      ReportRow[],
-      ReportSessionRow[],
-      PaymentRow[],
-      ScoringRow[],
-      PredictiveInsight[],
-    ];
+  const [submissions, reports, payments, scoringRows, insights] = (await Promise.all(
+    responses.map((response) => response.json())
+  )) as [SubmissionRow[], ReportRow[], PaymentRow[], ScoringRow[], PredictiveInsight[]];
 
   const submissionsPrevious = submissions.filter((row) => row.created_date_time < currentSince);
   const submissionsCurrent = submissions.filter((row) => row.created_date_time >= currentSince);

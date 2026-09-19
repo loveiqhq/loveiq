@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import posthog from "posthog-js";
 import type { AdminReviewResourceType } from "@features/admin/server/reviews";
 import { getCsrfToken } from "@shared/http/csrf-client";
 
@@ -79,6 +80,10 @@ export default function AdminReviewRequestButton({
         );
       }
 
+      posthog.capture("admin_review_requested", {
+        impact_level: impactLevel,
+        resource_type: resourceType,
+      });
       setFeedback({ type: "success", text: "Review request queued." });
       onSuccess?.();
     } catch (err) {

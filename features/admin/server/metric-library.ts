@@ -1,5 +1,5 @@
 import { ADMIN_BENCHMARKS, type AdminBenchmarkDefinition } from "@/data/admin-benchmarks";
-import { supabaseFetch } from "@features/admin/server/supabase";
+import { countRows, fetchAllRows, supabaseFetch } from "@features/admin/server/supabase";
 import { WORKFLOW_TAGS } from "@features/admin/server/workflow-tags";
 import logger from "@shared/observability/logger";
 
@@ -173,11 +173,12 @@ async function fetchScoringAgreement(): Promise<number | null> {
 }
 
 async function fetchAverageDurationMinutes(): Promise<number | null> {
-  const res = await supabaseFetch("/rest/v1/survey_submission?select=duration_ms", {
-    headers: { Range: "0-49999" },
-  });
-  if (!res.ok) return null;
-  const rows = (await res.json()) as Array<{ duration_ms: number | null }>;
+  // Paged: 2,061 submissions, past the 1,000-row cap, so this average was
+  // taken over an arbitrary half of them.
+  const rows = await fetchAllRows<{ duration_ms: number | null }>(
+    "/rest/v1/survey_submission?select=duration_ms&order=id.asc"
+  );
+  if (rows === null) return null;
   const durations = rows
     .map((row) => row.duration_ms)
     .filter((value): value is number => value != null && value > 0);
@@ -201,30 +202,38 @@ async function fetchWaitlistToStartRate(): Promise<number | null> {
   return waitlist === 0 ? 0 : Math.round((started / waitlist) * 1000) / 10;
 }
 
+/**
+ * COUNTED, not fetched — this is the canonical definition of the metric.
+ *
+ * It used to read both tables with `Range: 0-49999` and take `.length` and a
+ * Set size. PostgREST caps a response at 1,000 rows with no error, and
+ * report_session holds 11,224 against personal_report's 2,051 — so the
+ * numerator was a distinct count over an arbitrary 9% slice while the
+ * denominator was capped at 1,000. It reported **16%**. The real figure is
+ * **96%**, and this metric's own healthy threshold is 50%, so the number was
+ * not merely wrong, it was on the other side of the bar.
+ *
+ * The inner embed counts reports having at least one session, which is exactly
+ * `count(DISTINCT personal_report_id)` over sessions whose report still exists,
+ * and transfers no rows.
+ */
 async function fetchReportViewRate(): Promise<number | null> {
-  const [reportsRes, sessionsRes] = await Promise.all([
-    supabaseFetch("/rest/v1/personal_report?select=id", {
-      headers: { Range: "0-49999" },
-    }),
-    supabaseFetch("/rest/v1/report_session?select=personal_report_id", {
-      headers: { Range: "0-49999" },
-    }),
+  const [reports, viewed] = await Promise.all([
+    countRows("/rest/v1/personal_report?select=id"),
+    countRows("/rest/v1/personal_report?select=id,report_session!inner(id)"),
   ]);
-  if (!reportsRes.ok || !sessionsRes.ok) return null;
-  const reports = (await reportsRes.json()) as Array<{ id: number }>;
-  const sessions = (await sessionsRes.json()) as Array<{ personal_report_id: number }>;
-  if (reports.length === 0) return 0;
-  return (
-    Math.round(
-      (new Set(sessions.map((row) => row.personal_report_id)).size / reports.length) * 1000
-    ) / 10
-  );
+  if (reports === null || viewed === null) return null;
+  if (reports === 0) return 0;
+  return Math.round((viewed / reports) * 1000) / 10;
 }
 
 async function fetchRevenueTotal(): Promise<number | null> {
-  const res = await supabaseFetch("/rest/v1/payment?select=amount&status=eq.succeeded", {
-    headers: { Range: "0-49999" },
-  });
+  const res = await supabaseFetch(
+    "/rest/v1/payment?is_test=is.false&select=amount&status=eq.succeeded",
+    {
+      headers: { Range: "0-49999" },
+    }
+  );
   if (!res.ok) return null;
   const rows = (await res.json()) as Array<{ amount: number | null }>;
   return Math.round(rows.reduce((sum, row) => sum + Number(row.amount ?? 0), 0) * 100) / 100;

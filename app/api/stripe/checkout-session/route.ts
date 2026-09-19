@@ -22,16 +22,18 @@ import {
 } from "@features/checkout/server/promoCodes";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
+import { scheduleAfterResponse } from "@shared/http/after-response";
+import { refreshJourneyMessage } from "@features/attribution/server/journey-message";
 import {
   getReportAccessPlanForSubmission,
-  resolveReportAccessToken,
+  lookupReportTokenBySubmissionId,
   resolveSubmissionAccessContext,
 } from "@features/report/server/personalReport";
 import { isPlanOwnedForArchetype } from "@features/report/server/access";
-import { getForcedPaywallCohort } from "@shared/experiments/forcedPaywall";
 import {
   LANDING_VARIANT_COOKIE,
   normalizeLandingVariant,
+  type LandingVariant,
 } from "@shared/experiments/landingVariant";
 import logger from "@shared/observability/logger";
 import {
@@ -115,28 +117,26 @@ function buildSuccessUrl({
   return `${origin}/checkout/return?${params.join("&")}`;
 }
 
+/**
+ * Where Stripe sends a buyer who backs out.
+ *
+ * Straight back to the report they came from, since the `/checkout` review page
+ * they used to land on was removed on 2026-08-31. An archetype-scoped purchase
+ * returns to that archetype's view so the reader is where they left off.
+ */
 function buildCancelUrl({
   archetypeSlug,
   origin,
-  plan,
   reportToken,
 }: {
   archetypeSlug?: string | null;
   origin: string;
-  plan: ReportPurchasePlanId;
   reportToken?: string | null;
 }) {
-  const params = [`plan=${encodeURIComponent(plan)}`];
-
-  if (reportToken) {
-    params.push(`token=${encodeURIComponent(reportToken)}`);
-  }
-
-  if (archetypeSlug) {
-    params.push(`archetype=${encodeURIComponent(archetypeSlug)}`);
-  }
-
-  return `${origin}/checkout?${params.join("&")}`;
+  const path = reportToken ? `/report/${encodeURIComponent(reportToken)}` : "/report";
+  return archetypeSlug
+    ? `${origin}${path}?archetype=${encodeURIComponent(archetypeSlug)}`
+    : `${origin}${path}`;
 }
 
 export async function POST(request: Request) {
@@ -234,28 +234,31 @@ export async function POST(request: Request) {
       logger.warn({ err }, "checkout-session: paid-plan precheck failed; allowing checkout");
     }
 
+    // Both Stripe return URLs must identify the report ON THEIR OWN. A
+    // session-driven checkout (bare `/report`, token only in storage) sends no
+    // URL token, so success/cancel used to fall back to bare `/report` — and if
+    // the browser drops storage across the cross-site Stripe round trip (Safari
+    // ITP, in-app WebViews) the reader lands on a report with no identifier,
+    // whose only button is "Take the survey". That is the reported
+    // "paywall link brought me back to the survey beginning", and on the
+    // success path it strands someone who has just paid. The server already
+    // resolved the submission, so reuse it rather than the session lookup.
+    // Best-effort: a null keeps the previous behaviour, never blocks checkout.
+    let returnToken = parsed.data.reportToken ?? null;
+    if (!returnToken && accessContext) {
+      returnToken = await lookupReportTokenBySubmissionId(accessContext.submissionId);
+    }
+
     const plan = getReportPurchasePlan(parsed.data.plan);
     const archetypeName = parsed.data.archetype ?? null;
     const archetypeSlug = archetypeName ? toArchetypeSlug(archetypeName) : null;
     const planTitle = archetypeName ? `${archetypeName} report` : plan.title;
 
-    // Forced-paywall A/B arm, recomputed server-side from the canonical report
-    // token. Token checkouts carry it directly; session-only checkouts resolve
-    // it from the submission so the attribution arm matches the arm the user
-    // EXPERIENCED on the report (which keys on token ?? data.ownerToken). Never
-    // throws — a resolution miss defaults to control.
-    const forcedPaywallArm = getForcedPaywallCohort(
-      await resolveReportAccessToken({
-        reportSessionId: parsed.data.reportSessionId ?? null,
-        reportToken: parsed.data.reportToken ?? null,
-      })
-    );
-
     // White-landing A/B arm, read from the sticky cookie, so revenue is
     // attributable to the landing variant the buyer first saw. Defaults to
     // "control" when the cookie is absent (e.g. they never hit `/`) or when
     // there is no request scope (cookies() throws — e.g. unit tests).
-    let landingVariant: "control" | "white" = "control";
+    let landingVariant: LandingVariant = "white";
     try {
       landingVariant = normalizeLandingVariant(
         (await cookies()).get(LANDING_VARIANT_COOKIE)?.value
@@ -331,7 +334,10 @@ export async function POST(request: Request) {
                 description: plan.description,
                 name: `LoveIQ ${planTitle}`,
               },
-              unit_amount: quote.currentPriceCents,
+              // `chargedPriceCents`, never `currentPriceCents`: it is the same number
+              // every price surface renders, so
+              // the screen and the invoice cannot disagree.
+              unit_amount: quote.chargedPriceCents,
             },
             quantity: 1,
           },
@@ -341,7 +347,10 @@ export async function POST(request: Request) {
           basePriceBucket: quote.basePriceBucket,
           behavioralBucket: quote.behavioralBucket,
           countryTier: quote.countryTier,
-          currentPrice: String((quote.currentPriceCents / 100).toFixed(2)),
+          // What we charged, and the base it was built from — so a support question
+          // about a €2 difference is answerable from the payment alone.
+          currentPrice: String((quote.chargedPriceCents / 100).toFixed(2)),
+          basePrice: String((quote.currentPriceCents / 100).toFixed(2)),
           deviceType: quote.deviceType,
           discountStep: String(quote.discountStep),
           engagementScore: String(quote.engagementScore),
@@ -352,11 +361,6 @@ export async function POST(request: Request) {
           gaClientId: toStripeMetadataValue(parsed.data.gaClientId ?? null),
           gaSessionId: toStripeMetadataValue(parsed.data.gaSessionId ?? null),
           gaAnalyticsConsent: parsed.data.gaConsent ? "1" : "0",
-          // Forced-paywall A/B arm (computed above from the canonical report
-          // token, consent-independent). Mirrors experimentGroup → flows
-          // webhook → fulfillment → payment.metadata for conversion attribution
-          // that survives analytics-consent declines.
-          forcedPaywallArm,
           landingVariant,
           initialPrice: String((quote.initialPriceCents / 100).toFixed(2)),
           msrp: String((quote.msrpCents / 100).toFixed(2)),
@@ -382,23 +386,37 @@ export async function POST(request: Request) {
           archetypeSlug,
           origin: siteUrl,
           plan: parsed.data.plan,
-          reportToken: parsed.data.reportToken ?? null,
+          reportToken: returnToken,
         }),
         cancel_url: buildCancelUrl({
           archetypeSlug,
           origin: siteUrl,
-          plan: parsed.data.plan,
-          reportToken: parsed.data.reportToken ?? null,
+          reportToken: returnToken,
         }),
       },
       { idempotencyKey }
     );
 
-    await markReportPriceQuoteCheckoutStarted({ quoteId: quote.id });
-
+    // Nothing above this line may record a checkout. A session without a hosted
+    // URL cannot be handed off: the reader gets a 500 and never sees Stripe, so
+    // stamping the quote and telling Slack "checkout" first would report a
+    // checkout that demonstrably did not happen — and `checkout_started_at` is
+    // now the funnel's server-side truth for that stage, so the error would
+    // land in the digest and the journey rail too.
     if (!session.url) {
       logger.error({ sessionId: session.id }, "Stripe checkout session missing hosted URL");
       return NextResponse.json({ error: "Unable to process request." }, { status: 500 });
+    }
+
+    await markReportPriceQuoteCheckoutStarted({ quoteId: quote.id });
+
+    // Advance the Slack journey message to "checkout". After-response so the
+    // redirect to Stripe is never delayed by a Slack call.
+    if (accessContext?.submissionId) {
+      const submissionIdForJourney = accessContext.submissionId;
+      scheduleAfterResponse("journey-message-checkout", async () => {
+        await refreshJourneyMessage(submissionIdForJourney, "checkout");
+      });
     }
 
     const successResponse: StripeCheckoutSessionResponse = {

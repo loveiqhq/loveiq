@@ -1,5 +1,17 @@
 import { test, expect } from "@playwright/test";
 
+/**
+ * These cover the WHITE nav (features/landing/ui/white/WNavSection.tsx), which
+ * has served 100% of traffic since the dark A/B arm was retired on 2026-06-19.
+ *
+ * Until 2026-09-14 they were still written against the retired DARK NavSection:
+ * a "Trust Zone" link that had been renamed "Trust Center", and a menu-role
+ * drawer the white nav does not build (it uses .w-menu-panel, toggled by an
+ * is-open class). Six of the nine cases here failed against the live site and
+ * had done for months, because E2E is not a CI gate. Change the nav, change
+ * these with it.
+ */
+
 // Desktop nav is visible at lg breakpoint (1024px+).
 // Hamburger is visible below sm breakpoint (640px).
 //
@@ -24,7 +36,7 @@ test.describe("Desktop navigation", () => {
     await expect(nav.getByRole("link", { name: "Home" }).first()).toBeVisible();
     await expect(nav.getByRole("link", { name: "About Us" }).first()).toBeVisible();
     await expect(nav.getByRole("link", { name: "Glossary" }).first()).toBeVisible();
-    await expect(nav.getByRole("link", { name: "Trust Zone" }).first()).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Trust Center" }).first()).toBeVisible();
   });
 
   test("CTA button is visible", async ({ page }) => {
@@ -56,34 +68,34 @@ test.describe("Mobile navigation", () => {
   });
 
   test("mobile menu is closed initially", async ({ page }) => {
-    const menu = page.locator('[role="menu"]');
+    const menu = page.locator(".w-menu-panel");
     await expect(menu).not.toHaveClass(/is-open/);
   });
 
   test("clicking hamburger opens the menu", async ({ page }) => {
     await page.getByRole("button", { name: "Open menu" }).click();
-    await expect(page.locator('[role="menu"]')).toHaveClass(/is-open/);
+    await expect(page.locator(".w-menu-panel")).toHaveClass(/is-open/);
     await expect(page.getByRole("button", { name: "Close menu" })).toBeVisible();
   });
 
   test("clicking hamburger again closes the menu", async ({ page }) => {
     await page.getByRole("button", { name: "Open menu" }).click();
-    await expect(page.locator('[role="menu"]')).toHaveClass(/is-open/);
+    await expect(page.locator(".w-menu-panel")).toHaveClass(/is-open/);
     await page.getByRole("button", { name: "Close menu" }).click();
-    await expect(page.locator('[role="menu"]')).not.toHaveClass(/is-open/);
+    await expect(page.locator(".w-menu-panel")).not.toHaveClass(/is-open/);
   });
 
   test("Escape key closes the menu", async ({ page }) => {
     await page.getByRole("button", { name: "Open menu" }).click();
-    await expect(page.locator('[role="menu"]')).toHaveClass(/is-open/);
+    await expect(page.locator(".w-menu-panel")).toHaveClass(/is-open/);
     await page.keyboard.press("Escape");
-    await expect(page.locator('[role="menu"]')).not.toHaveClass(/is-open/);
+    await expect(page.locator(".w-menu-panel")).not.toHaveClass(/is-open/);
   });
 
   test("clicking a nav link from the menu navigates", async ({ page }) => {
     await page.getByRole("button", { name: "Open menu" }).click();
-    await expect(page.locator('[role="menu"]')).toHaveClass(/is-open/);
-    await page.getByRole("menuitem", { name: "About Us" }).click();
+    await expect(page.locator(".w-menu-panel")).toHaveClass(/is-open/);
+    await page.locator(".w-menu-panel").getByRole("link", { name: "About us" }).click();
     await expect(page).toHaveURL(/\/about/);
   });
 });

@@ -88,84 +88,117 @@ describe("Funnels dashboard resilience", () => {
     expect(screen.getByText("Compared Releases")).toBeInTheDocument();
   });
 
-  it("renders the landing A/B comparison and highlights the higher paid rate", () => {
+  /**
+   * One row per arm, named from the shared vocabulary. Until 2026-08-27 this was
+   * two fixed columns and the second one, rendered "Dark / Control", was a bin
+   * holding the retired dark arm, the live V1 arm and every arm-less submission at
+   * once — on production it credited the dark landing page with 61 purchases and
+   * €807.89 against an arm that sold nothing. These assert the RENDERED TEXT: the
+   * bug was a screen that looked fine and read false.
+   */
+  const landingRows = [
+    {
+      variant: "white",
+      label: "Landing Page V2 (Survey in Hero)",
+      retired: false,
+      completed: 310,
+      paid: 47,
+      revenue: 470,
+      paidRate: 15.2,
+    },
+    {
+      variant: "white_prev",
+      label: "Landing Page V1 (First Design)",
+      retired: false,
+      completed: 288,
+      paid: 31,
+      revenue: 310,
+      paidRate: 10.8,
+    },
+    {
+      variant: "control",
+      label: "Dark landing page (before V1)",
+      retired: true,
+      completed: 53,
+      paid: 0,
+      revenue: 0,
+      paidRate: 0,
+    },
+    {
+      variant: "unknown",
+      label: "Not recorded",
+      retired: false,
+      completed: 805,
+      paid: 61,
+      revenue: 807.89,
+      paidRate: 7.6,
+    },
+  ];
+
+  const mockLanding = (rows: unknown[]) =>
     mockUseAdminFetch.mockReturnValue({
-      data: {
-        rows: [
-          {
-            variant: "white",
-            visitors: 1240,
-            completed: 310,
-            paid: 47,
-            revenue: 470,
-            paidRate: 15.2,
-            completionRate: 25,
-          },
-          {
-            variant: "control",
-            visitors: 1198,
-            completed: 288,
-            paid: 31,
-            revenue: 310,
-            paidRate: 10.8,
-            completionRate: 24,
-          },
-        ],
-      },
+      data: { rows },
       loading: false,
       error: null,
       refetch: vi.fn(),
     });
 
+  it("gives every landing arm its own row, named from the shared vocabulary", () => {
+    mockLanding(landingRows);
     render(<LandingVariantTab days={30} />);
 
-    expect(screen.getByText("Landing A/B — White vs Dark")).toBeInTheDocument();
-    expect(screen.getByText("15.2%")).toBeInTheDocument();
-    expect(screen.getByText("10.8%")).toBeInTheDocument();
+    expect(screen.getByText("Landing Page V2 (Survey in Hero)")).toBeInTheDocument();
+    expect(screen.getByText("Landing Page V1 (First Design)")).toBeInTheDocument();
+    expect(screen.getByText("Dark landing page (before V1)")).toBeInTheDocument();
+    expect(screen.getByText("Not recorded")).toBeInTheDocument();
+
+    // The old two-column framing must be gone: it is the thing that made three
+    // different arms read as one.
+    expect(screen.queryByText(/White vs Dark/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Dark \/ Control/i)).not.toBeInTheDocument();
+
+    // Each arm keeps its OWN revenue — the €807.89 belongs to the unattributed
+    // bucket, not to the dark landing page.
+    expect(screen.getByText("€807.89")).toBeInTheDocument();
     expect(screen.getByText("€470.00")).toBeInTheDocument();
-    expect(screen.getByText("€310.00")).toBeInTheDocument();
-    // White's paid rate wins → exactly one winner marker, and no "empty" banner.
-    expect(screen.getByText("▲")).toBeInTheDocument();
-    expect(screen.queryByText(/No white-cohort activity/i)).not.toBeInTheDocument();
   });
 
-  it("shows the empty-cohort banner when white has no activity yet (real prod state)", () => {
-    mockUseAdminFetch.mockReturnValue({
-      data: {
-        rows: [
-          {
-            variant: "control",
-            visitors: 0,
-            completed: 769,
-            paid: 60,
-            revenue: 777.9,
-            paidRate: 7.8,
-            completionRate: null,
-          },
-          {
-            variant: "white",
-            visitors: 0,
-            completed: 0,
-            paid: 0,
-            revenue: 0,
-            paidRate: 0,
-            completionRate: null,
-          },
-        ],
-      },
-      loading: false,
-      error: null,
-      refetch: vi.fn(),
-    });
-
+  it("marks the retired arm and the unattributed bucket as not part of the test", () => {
+    mockLanding(landingRows);
     render(<LandingVariantTab days={0} />);
 
-    // Control data still renders…
-    expect(screen.getByText("769")).toBeInTheDocument();
-    expect(screen.getByText("€777.90")).toBeInTheDocument();
-    // …and the empty-white banner explains the zeros instead of looking broken.
-    expect(screen.getByText(/No white-cohort activity/i)).toBeInTheDocument();
-    // With only one arm populated, no winner marker is shown.
+    expect(screen.getByText(/no longer assigned/i)).toBeInTheDocument();
+    expect(screen.getByText(/no arm was stamped/i)).toBeInTheDocument();
+  });
+
+  it("highlights the leading LIVE arm only", () => {
+    mockLanding(landingRows);
+    render(<LandingVariantTab days={30} />);
+
+    // V2's 15.2% wins against V1's 10.8% — exactly one marker.
+    expect(screen.getAllByText("▲")).toHaveLength(1);
+    const winner = screen.getByText("15.2%");
+    expect(winner.className).toContain("text-emerald-400");
+  });
+
+  it("never crowns the retired arm or the unattributed bucket, however high its rate", () => {
+    // The regression this blocks: the unattributed bucket has the most rows by far,
+    // so a naive "best rate wins" would routinely declare a winner that is not an
+    // arm at all — and a retired arm cannot win a test that is not running.
+    mockLanding([
+      { ...landingRows[0], paidRate: 1.0 },
+      { ...landingRows[2], paidRate: 99.0 },
+      { ...landingRows[3], paidRate: 98.0 },
+    ]);
+    render(<LandingVariantTab days={30} />);
+
+    // Only one live arm has data → no comparison → no marker at all.
     expect(screen.queryByText("▲")).not.toBeInTheDocument();
+  });
+
+  it("shows an empty state rather than a bare table when nothing is in the window", () => {
+    mockLanding([]);
+    render(<LandingVariantTab days={7} />);
+    expect(screen.getByText(/No submissions in this window/i)).toBeInTheDocument();
   });
 });

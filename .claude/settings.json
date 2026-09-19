@@ -53,9 +53,9 @@
     "semgrep@claude-plugins-official": true,
     "asana@claude-plugins-official": true,
     "pinecone@claude-plugins-official": true,
-    "qodo-skills@claude-plugins-official": true,
     "posthog@claude-plugins-official": true,
     "sonatype-guide@claude-plugins-official": true,
-    "postman@claude-plugins-official": true
+    "postman@claude-plugins-official": true,
+    "qodo@claude-plugins-official": true
   }
 }

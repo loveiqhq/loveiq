@@ -41,6 +41,19 @@ export interface SurveySubmissionPayload {
   utmTracker?: string | null;
   sessionId?: string | null;
   /**
+   * PostHog `$session_id` for the session that submitted, so a reader can open the
+   * session replay. Stored on `survey_submission.posthog_session_id`. Absent
+   * whenever replay did not run (no project token, ad blocker, sampled out).
+   */
+  posthogSessionId?: string | null;
+  /**
+   * Order the answer options were shown in, per question — `{ "<qId>": ["<label>", …] }`.
+   * Stored on `survey_submission.option_order`. Absent for questions that do not
+   * randomise, and for any respondent whose browser blocks storage (no session id, so no
+   * stable shuffle). Analysis-only: nothing reads it to resolve an answer.
+   */
+  optionOrder?: Record<string, string[]> | null;
+  /**
    * Marketing-opt-in answer (Q16015). `true` = user picked "Yes", `false` =
    * "No", `null` (or absent) = unknown / question not answered. Stored on
    * `survey_submission.marketing_opt_in`; when true, the row also gets a
@@ -184,19 +197,81 @@ export async function submitSurveyOnce(
   // is logged and swallowed — the submission itself already succeeded and the
   // audit-trail gap can be backfilled if needed.
   try {
-    const consentPatch: Record<string, string> = {
+    const consentPatch: Record<string, string | Record<string, string[]>> = {
       consent_at: new Date().toISOString(),
       terms_version: CONSENT_TERMS_VERSION,
     };
     if (payload.marketingOptIn === true) {
       consentPatch.marketing_opt_in_terms_version = MARKETING_OPT_IN_TERMS_VERSION;
     }
-    await supabaseServiceFetch(`/rest/v1/survey_submission?id=eq.${submissionId}`, {
-      method: "PATCH",
-      headers: { Prefer: "return=minimal" },
-      body: JSON.stringify(consentPatch),
-      timeoutMs: 3000,
-    });
+    // Session-replay id rides along on the PATCH that already exists rather than in
+    // the submit_survey RPC: the RPC's signature would have to change (and with it
+    // every caller and the migration that defines it) to carry one nullable string
+    // that nothing else in the fan-out needs. Same best-effort contract as the
+    // consent fields — if this PATCH fails the submission still stands, and the
+    // only loss is a link in a Slack message.
+    if (payload.posthogSessionId) {
+      consentPatch.posthog_session_id = payload.posthogSessionId;
+    }
+    // Shown option order rides along for the same reason as the replay id above: it is
+    // one nullable value the answer fan-out has no use for, so it is not worth changing
+    // the submit_survey signature (and its migration, and every caller) to carry it.
+    // Best-effort to match — a lost order costs one submission's worth of primacy
+    // correction, never the submission itself.
+    if (payload.optionOrder && Object.keys(payload.optionOrder).length > 0) {
+      consentPatch.option_order = payload.optionOrder;
+    }
+    const patch = (body: object) =>
+      supabaseServiceFetch(`/rest/v1/survey_submission?id=eq.${submissionId}`, {
+        method: "PATCH",
+        headers: { Prefer: "return=minimal" },
+        body: JSON.stringify(body),
+        timeoutMs: 3000,
+      });
+
+    let response = await patch(consentPatch);
+
+    /**
+     * `fetch` only rejects on a network error, so an HTTP 4xx/5xx lands here as a normal
+     * response and the catch below never runs — the "logged and swallowed" contract above
+     * was only ever true for timeouts and breaker trips. An HTTP failure was silent.
+     *
+     * That matters most for one specific failure. `option_order` is the newest field on
+     * this patch, and PostgREST rejects the WHOLE body when a column is missing from its
+     * schema cache — verified: `{"code":"PGRST204","message":"Could not find the
+     * 'option_order' column"}`, HTTP 400, while the same patch without that key returns
+     * 204. Migrations are applied by hand, not by CI or the build, so a deploy that lands
+     * before the migration that adds the `option_order` column would take `consent_at`
+     * and `terms_version` down with it on EVERY submission, with nothing logged.
+     *
+     * Those two fields are the GDPR Art. 5(2) accountability record. Losing an option
+     * order costs one submission's worth of primacy correction; losing the consent stamp
+     * costs the proof of which terms were agreed to and when. So the order gets dropped
+     * and the consent record is retried on its own.
+     */
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      const blamesOptionOrder = "option_order" in consentPatch && detail.includes("option_order");
+
+      if (blamesOptionOrder) {
+        const { option_order: droppedOrder, ...consentOnly } = consentPatch;
+        void droppedOrder;
+        response = await patch(consentOnly);
+        logger.warn(
+          { submissionId, status: response.status },
+          response.ok
+            ? "option_order rejected by PostgREST (migration not applied?) — consent stamped without it"
+            : "consent patch failed even without option_order"
+        );
+      }
+
+      if (!response.ok) {
+        logger.warn(
+          { submissionId, status: response.status, detail: detail.slice(0, 200) },
+          "Audit M2 / T-11: consent patch rejected"
+        );
+      }
+    }
   } catch (err) {
     logger.warn(
       { err, submissionId, termsVersion: CONSENT_TERMS_VERSION },
@@ -205,37 +280,6 @@ export async function submitSurveyOnce(
   }
 
   return { submissionId, isExisting: false };
-}
-
-/**
- * Persists the Hotjar user_id (parsed client-side from the
- * `_hjSessionUser_<siteid>` cookie) onto the submission row so admins can
- * deep-link to recordings. Best-effort: a failure here is logged and
- * swallowed — never block survey completion on optional analytics metadata.
- */
-export async function setSubmissionHotjarUserId(
-  submissionId: number,
-  hotjarUserId: string
-): Promise<void> {
-  try {
-    const response = await supabaseServiceFetch(
-      `/rest/v1/survey_submission?id=eq.${submissionId}`,
-      {
-        method: "PATCH",
-        headers: { Prefer: "return=minimal" },
-        body: JSON.stringify({ hotjar_user_id: hotjarUserId }),
-        timeoutMs: 3000,
-      }
-    );
-    if (!response.ok) {
-      logger.warn(
-        { submissionId, status: response.status },
-        "Failed to persist hotjar_user_id on submission"
-      );
-    }
-  } catch (err) {
-    logger.warn({ err, submissionId }, "Error setting hotjar_user_id");
-  }
 }
 
 export async function fetchScoringSummary(

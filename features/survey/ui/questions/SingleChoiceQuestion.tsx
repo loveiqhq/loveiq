@@ -5,6 +5,7 @@ import type { SurveyQuestion } from "@/data/survey-data";
 import ChoiceCard from "./ChoiceCard";
 import QuestionHeading from "./QuestionHeading";
 import { getOptionExplanation } from "./getOptionExplanation";
+import { useOrderedOptions } from "./useOrderedOptions";
 import { useSurveyTheme } from "../SurveyThemeContext";
 
 interface SingleChoiceQuestionProps {
@@ -23,15 +24,16 @@ const SingleChoiceQuestion: FC<SingleChoiceQuestionProps> = ({
   onOtherTextChange,
 }) => {
   const white = useSurveyTheme() === "white";
+  const options = useOrderedOptions(question);
 
   return (
     <div className="flex flex-col gap-5">
       {/* Title + subtitle */}
       <QuestionHeading question={question} />
 
-      {/* Options — single column */}
+      {/* Options — single column, in this session's display order */}
       <div className="flex flex-col gap-3">
-        {question.options.map((option) => (
+        {options.map((option) => (
           <ChoiceCard
             key={option}
             label={option}

@@ -58,7 +58,7 @@ function safeCompare(a: string, b: string): boolean {
 interface StuckPayment {
   payment_id: number;
   personal_report_id: number;
-  plan: "essentials" | "full_report" | "all_reports";
+  plan: "essentials" | "full_report" | "core" | "all_reports";
   archetype: string | null;
   primary_archetype: string | null;
 }
@@ -105,8 +105,44 @@ async function findStuckPayments(): Promise<StuckPayment[]> {
 
   return rows.filter(
     (row): row is StuckPayment =>
-      row.plan === "essentials" || row.plan === "full_report" || row.plan === "all_reports"
+      row.plan === "essentials" ||
+      row.plan === "full_report" ||
+      row.plan === "core" ||
+      row.plan === "all_reports"
   );
+}
+
+/**
+ * Resolve the buyer's top-3 archetypes (by V5 match %) — the same ranking the
+ * webhook's core fulfilment uses. Two small REST reads: personal_report →
+ * submission, then scoring_result → percentages. Returns [] on any miss so the
+ * caller skips rather than throws.
+ */
+async function resolveTopThreeArchetypes(personalReportId: number): Promise<string[]> {
+  const prRes = await supabaseFetch(
+    `/rest/v1/personal_report?id=eq.${personalReportId}&select=survey_submission_id&limit=1`
+  );
+  if (!prRes.ok) return [];
+  const prRows = (await prRes.json()) as Array<{ survey_submission_id: number | null }>;
+  const submissionId = prRows[0]?.survey_submission_id ?? null;
+  if (!submissionId) return [];
+
+  const srRes = await supabaseFetch(
+    `/rest/v1/scoring_result?survey_submission_id=eq.${submissionId}&select=v5_percentages,percentages&limit=1`
+  );
+  if (!srRes.ok) return [];
+  const srRows = (await srRes.json()) as Array<{
+    v5_percentages: Record<string, number> | null;
+    percentages: Record<string, number> | null;
+  }>;
+  const pct = srRows[0]?.v5_percentages ?? srRows[0]?.percentages ?? null;
+  if (!pct || typeof pct !== "object") return [];
+
+  return Object.entries(pct)
+    .filter(([name, value]) => isArchetypeName(name) && typeof value === "number")
+    .sort((a, b) => (b[1] as number) - (a[1] as number))
+    .slice(0, 3)
+    .map(([name]) => name);
 }
 
 async function fulfillStuckPayment(stuck: StuckPayment): Promise<"fixed" | "skipped"> {
@@ -120,6 +156,32 @@ async function fulfillStuckPayment(stuck: StuckPayment): Promise<"fixed" | "skip
     });
     if (!response.ok) {
       throw new Error(`unlock_all_archetypes_failed:${response.status}`);
+    }
+    return "fixed";
+  }
+
+  // Core ("All your core archetypes"): unlock the buyer's top-3 at full_report
+  // tier — same as the webhook. The stuck row doesn't carry the ranking, so
+  // resolve it here.
+  if (stuck.plan === "core") {
+    const top3 = await resolveTopThreeArchetypes(stuck.personal_report_id);
+    if (top3.length === 0) {
+      logger.warn(
+        { paymentId: stuck.payment_id, personalReportId: stuck.personal_report_id },
+        "Sweep: core payment has no resolvable top-3 archetypes, skipping"
+      );
+      return "skipped";
+    }
+    for (const name of top3) {
+      const r = await supabaseFetch("/rest/v1/rpc/upsert_archetype_tier", {
+        method: "POST",
+        body: JSON.stringify({
+          p_personal_report_id: stuck.personal_report_id,
+          p_archetype: name,
+          p_tier: "full_report",
+        }),
+      });
+      if (!r.ok) throw new Error(`upsert_archetype_tier_failed:${r.status}`);
     }
     return "fixed";
   }

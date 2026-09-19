@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyAdminSession } from "@features/admin/server/auth";
 import { hasRole } from "@features/admin/server/roles";
+import { readerSessionDurationsMs } from "@features/admin/server/reader-sessions";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { normalizeLabel } from "@features/admin/server/explorer";
@@ -359,7 +360,7 @@ export async function GET(request: Request) {
     }> = [];
     try {
       const paymentRes = await supabaseFetch(
-        `/rest/v1/payment?select=id,user_id,personal_report_id,amount,payment_date_time,created_date_time&status=eq.succeeded&created_date_time=gte.${since}`,
+        `/rest/v1/payment?is_test=is.false&select=id,user_id,personal_report_id,amount,payment_date_time,created_date_time&status=eq.succeeded&created_date_time=gte.${since}`,
         { headers: { Range: "0-49999" } }
       );
       if (paymentRes.ok) {
@@ -412,7 +413,7 @@ export async function GET(request: Request) {
     // ─── 4. Engagement (report_session) ─────────────────────────────────────
     try {
       const sessionRes = await supabaseFetch(
-        `/rest/v1/report_session?select=user_id,personal_report_id,started_at,ended_at&started_at=gte.${since}`,
+        `/rest/v1/report_session?select=user_id,personal_report_id,started_at,ended_at,app_user(email)&started_at=gte.${since}`,
         { headers: { Range: "0-99999" } }
       );
       if (sessionRes.ok) {
@@ -421,16 +422,17 @@ export async function GET(request: Request) {
           personal_report_id: number;
           started_at: string;
           ended_at: string | null;
+          app_user: { email: string | null } | null;
         }>;
         const uniqueReports = new Set(sessions.map((s) => s.personal_report_id));
         const reopenRate =
           uniqueReports.size > 0
             ? Math.round(((sessions.length - uniqueReports.size) / uniqueReports.size) * 1000) / 10
             : null;
-        const durationsMs = sessions
-          .filter((s) => s.ended_at != null)
-          .map((s) => new Date(s.ended_at!).getTime() - new Date(s.started_at).getTime())
-          .filter((d) => d > 0 && d < 4 * 3600_000); // sanity-cap at 4h
+        // Staff excluded and the 4h sanity cap applied, both in the shared
+        // helper. The reopen rate above deliberately still counts every session
+        // — it is a ratio of opens, not a duration.
+        const durationsMs = readerSessionDurationsMs(sessions, 4 * 3600_000);
         const medMs = median(durationsMs);
         const p90Ms = percentile(durationsMs, 90);
         response.engagement = {
@@ -674,7 +676,7 @@ export async function GET(request: Request) {
           { headers: { Prefer: "count=exact", Range: "0-0" } }
         ),
         supabaseFetch(
-          `/rest/v1/payment?select=id,amount&status=eq.succeeded&created_date_time=gte.${prevSince}&created_date_time=lt.${prevUntil}`,
+          `/rest/v1/payment?is_test=is.false&select=id,amount&status=eq.succeeded&created_date_time=gte.${prevSince}&created_date_time=lt.${prevUntil}`,
           { headers: { Range: "0-49999" } }
         ),
       ]);

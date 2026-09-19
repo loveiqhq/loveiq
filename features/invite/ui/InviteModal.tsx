@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback, type FC } from "react";
 import { getCsrfToken } from "@shared/http/csrf-client";
 import {
-  hasCookieYesConsent,
   trackInviteLinkCopied,
   trackInviteModalDismissed,
   trackSurveyInvite,
@@ -43,10 +42,6 @@ function buildShareUrl(referrerEmail: string, medium: ShareMethod): string {
 function trackShare(method: ShareMethod, referrerEmail: string, onShared?: (m: string) => void) {
   trackSurveyInvite(method);
   onShared?.(method);
-  // Consent gate: trackSurveyInvite() already checks CookieYes inside track(),
-  // but the direct fetch to /api/invite-tracking would otherwise write to
-  // invite_event regardless of consent. Skip when consent is missing.
-  if (!hasCookieYesConsent("analytics")) return;
   fetch("/api/invite-tracking", {
     method: "POST",
     headers: {

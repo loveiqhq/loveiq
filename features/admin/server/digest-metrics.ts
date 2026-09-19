@@ -46,7 +46,9 @@ export { parseUtmSource };
 export interface RevenueBreakdown {
   count: number;
   byCurrency: Record<string, number>;
-  planMix: { essentials: number; full_report: number; all_reports: number };
+  // `core` is optional so pre-pricing-2.0 fixtures/snapshots stay valid; the
+  // metric builder always populates it (0 when no core sales in the window).
+  planMix: { essentials: number; full_report: number; core?: number; all_reports: number };
   promoRedemptions: number;
 }
 
@@ -456,7 +458,11 @@ export interface WeeklyMetrics extends DailyMetrics {
 
 /** Percentage change with a low-base annotation. */
 export function delta(curr: number, prev: number, lowBaseThreshold = 5): string {
-  if (prev === 0) return curr > 0 ? "+∞%" : "—";
+  // A percentage change from a base of zero is undefined, and "+∞%" is not a
+  // fact about the business — 1 sale after a quiet week rendered as "+∞%" next
+  // to EUR 29.00, which reads like a spike and means nothing. Say what actually
+  // happened instead.
+  if (prev === 0) return curr > 0 ? "vs none" : "—";
   const pct = Math.round(((curr - prev) / prev) * 100);
   const capped = Math.max(-999, Math.min(999, pct));
   const sign = capped > 0 ? "+" : "";
@@ -683,14 +689,14 @@ async function fetchDistinctReportViewers(sinceIso: string, untilIso: string): P
  */
 async function fetchRevenue(sinceIso: string, untilIso: string): Promise<RevenueBreakdown> {
   const res = await supabaseFetch(
-    `/rest/v1/payment?select=amount,currency,metadata&status=eq.succeeded&${dateRange("created_date_time", sinceIso, untilIso)}`,
+    `/rest/v1/payment?is_test=is.false&select=amount,currency,metadata&status=eq.succeeded&${dateRange("created_date_time", sinceIso, untilIso)}`,
     { headers: { Range: "0-999" } }
   );
   if (!res.ok)
     return {
       count: 0,
       byCurrency: {},
-      planMix: { essentials: 0, full_report: 0, all_reports: 0 },
+      planMix: { essentials: 0, full_report: 0, core: 0, all_reports: 0 },
       promoRedemptions: 0,
     };
 
@@ -701,7 +707,7 @@ async function fetchRevenue(sinceIso: string, untilIso: string): Promise<Revenue
   }>;
 
   const byCurrency: Record<string, number> = {};
-  const planMix = { essentials: 0, full_report: 0, all_reports: 0 };
+  const planMix = { essentials: 0, full_report: 0, core: 0, all_reports: 0 };
   let promoRedemptions = 0;
 
   for (const row of rows) {
@@ -710,7 +716,12 @@ async function fetchRevenue(sinceIso: string, untilIso: string): Promise<Revenue
     byCurrency[currency] = (byCurrency[currency] ?? 0) + (Number.isFinite(amount) ? amount : 0);
 
     const plan = row.metadata && (row.metadata.plan as string | undefined);
-    if (plan === "essentials" || plan === "full_report" || plan === "all_reports") {
+    if (
+      plan === "essentials" ||
+      plan === "full_report" ||
+      plan === "core" ||
+      plan === "all_reports"
+    ) {
       planMix[plan] += 1;
     }
     const promo = row.metadata && (row.metadata.promotionCode as string | undefined);
@@ -725,7 +736,7 @@ async function fetchRefunds(
   untilIso: string
 ): Promise<{ count: number; amount: number }> {
   const res = await supabaseFetch(
-    `/rest/v1/payment?select=refund_amount&status=eq.refunded&${dateRange("refunded_at", sinceIso, untilIso)}`,
+    `/rest/v1/payment?is_test=is.false&select=refund_amount&status=eq.refunded&${dateRange("refunded_at", sinceIso, untilIso)}`,
     { headers: { Range: "0-999" } }
   );
   if (!res.ok) return { count: 0, amount: 0 };
@@ -745,7 +756,7 @@ async function fetchPaymentCountByStatus(
   untilIso: string
 ): Promise<number> {
   return fetchExactCount(
-    `/rest/v1/payment?select=id&status=eq.${status}&${dateRange("created_date_time", sinceIso, untilIso)}`
+    `/rest/v1/payment?is_test=is.false&select=id&status=eq.${status}&${dateRange("created_date_time", sinceIso, untilIso)}`
   );
 }
 
@@ -888,7 +899,7 @@ async function fetchMedianTimeToPurchaseHours(
   untilIso: string
 ): Promise<number | null> {
   const paymentsRes = await supabaseFetch(
-    `/rest/v1/payment?select=survey_submission_id,created_date_time&status=eq.succeeded&${dateRange("created_date_time", sinceIso, untilIso)}`,
+    `/rest/v1/payment?is_test=is.false&select=survey_submission_id,created_date_time&status=eq.succeeded&${dateRange("created_date_time", sinceIso, untilIso)}`,
     { headers: { Range: "0-999" } }
   );
   if (!paymentsRes.ok) return null;
@@ -1078,6 +1089,12 @@ export interface FunnelCvrDay {
   day: string;
   visitors: number;
   /** unique_visitor tagged control (or legacy/untagged → control). */
+  /**
+   * NOT "the dark arm" — the RPC defines it as `landing_variant <> 'white'`, so it
+   * also holds Landing Page V1 (`white_prev`, live since 2026-08-21) and all
+   * arm-less traffic. Only consumer is the UNSCHEDULED funnel-digest, where the
+   * mislabelling and both ways out are documented in full.
+   */
   visitors_control: number;
   starts: number;
   completions: number;
@@ -1227,9 +1244,10 @@ export async function fetchDropoutFunnel(
   sinceIso: string,
   untilIso: string
 ): Promise<DropoutFunnelSnapshot | null> {
-  // NOTE: get_dropout_funnel is restricted to the control/legacy cohort
-  // (email_position IS NULL OR 'first') so the email-position A/B can't blend
-  // the two arms in this chart. Per-arm curves come from fetchDropoutFunnelByArm.
+  // NOTE: get_dropout_funnel excludes the retired email-FIRST arm
+  // (email_position IS DISTINCT FROM 'first') so this curve only ever contains
+  // the one question order we still ship — email asked last. See the 2026-08-16
+  // migration that retired the email-position A/B.
   const raw = await callRpc<{ questions?: unknown }>("get_dropout_funnel", {
     since_ts: sinceIso,
     until_ts: untilIso,
@@ -1241,6 +1259,12 @@ export async function fetchDropoutFunnel(
  * Per-arm drop-out funnel for the email-position A/B (survey-email-position-ab).
  * Same shape as fetchDropoutFunnel but filtered to a single arm so the digest
  * can chart email-first vs email-last side by side. Null on RPC failure.
+ *
+ * HISTORICAL as of 2026-08-16: the experiment was retired ("last" shipped to
+ * everyone) and nothing stamps `email_position` anymore, so both arms return
+ * empty once the requested window no longer overlaps the experiment period —
+ * at which point the digest's chart 7b self-disables (it returns null with no
+ * drawable curve) and this fetcher can be deleted with it.
  */
 export async function fetchDropoutFunnelByArm(
   sinceIso: string,
@@ -1698,7 +1722,7 @@ export async function fetchFunnelStages(sinceIso: string, untilIso: string): Pro
       "survey_submission_id"
     ),
     supabaseFetch(
-      `/rest/v1/payment?select=user_id&status=eq.succeeded&${dateRange("created_date_time", sinceIso, untilIso)}`,
+      `/rest/v1/payment?is_test=is.false&select=user_id&status=eq.succeeded&${dateRange("created_date_time", sinceIso, untilIso)}`,
       { headers: { Range: "0-999" } }
     ),
   ]);

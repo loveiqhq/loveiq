@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, type FC } from "react";
 import { createPortal } from "react-dom";
+import { lockBodyScroll, unlockBodyScroll } from "@shared/ui/body-scroll-lock";
 import { useSurveyTheme } from "./SurveyThemeContext";
 
 interface SurveyPauseModalProps {
@@ -115,11 +116,8 @@ const SurveyPauseModal: FC<SurveyPauseModalProps> = ({ open, email, onResume, on
   // Lock body scroll while open
   useEffect(() => {
     if (!open) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
+    lockBodyScroll();
+    return unlockBodyScroll;
   }, [open]);
 
   // ESC dismiss + focus trap

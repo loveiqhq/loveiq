@@ -8,6 +8,7 @@ export const ESSENTIALS_SECTION_IDS = [
   "confidence_level",
 
   "typical_beliefs",
+  "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
 ] as const;
 
 const ESSENTIALS_SECTION_SET = new Set<string>(ESSENTIALS_SECTION_IDS);
@@ -15,7 +16,9 @@ const ESSENTIALS_SECTION_SET = new Set<string>(ESSENTIALS_SECTION_IDS);
 export type ReportAccessPlan = ReportPurchasePlanId | null;
 
 export function isReportPurchasePlan(value: unknown): value is ReportPurchasePlanId {
-  return value === "essentials" || value === "full_report" || value === "all_reports";
+  return (
+    value === "essentials" || value === "full_report" || value === "core" || value === "all_reports"
+  );
 }
 
 export function getStrongestReportAccessPlan(
@@ -39,8 +42,10 @@ function getPlanPriority(plan: ReportPurchasePlanId) {
       return 1;
     case "full_report":
       return 2;
-    case "all_reports":
+    case "core":
       return 3;
+    case "all_reports":
+      return 4;
     default:
       return 0;
   }
@@ -84,6 +89,10 @@ export function isPlanOwnedForArchetype({
   unlockedTier: "essentials" | "full_report" | null;
 }): boolean {
   if (accessPlan === "all_reports") return true;
+  // A core buyer owns the core tier (their top-3 are unlocked at full_report);
+  // they can still upgrade to all_reports. Checked before the unlockedTier guard
+  // so it holds even while viewing a not-yet-unlocked archetype.
+  if (accessPlan === "core" && targetPlan === "core") return true;
   if (targetPlan === "all_reports") return false;
   if (!unlockedTier) return false;
   if (targetPlan === "essentials") return true; // any tier covers essentials
@@ -114,9 +123,20 @@ export function isSectionUnlockedForPlan({
 }) {
   if (!isPremium) return true;
   if (accessPlan === "all_reports") return true;
+  // `core` buys the reader's top-3 archetypes at full_report tier, and the
+  // primary is rank 1 by definition — so it always covers the archetype being
+  // gated here. It was missing from this ladder, which left `effectiveTier`
+  // null and locked EVERY premium section for core buyers whenever no
+  // per-archetype tier was passed (every server call site). Keep it as a
+  // fallback even now that the route passes a tier: a core purchase whose
+  // archetype_tiers write failed must still open the report they paid for.
   const effectiveTier =
     archetypeTier ??
-    (accessPlan === "full_report" || accessPlan === "essentials" ? accessPlan : null);
+    (accessPlan === "core"
+      ? "full_report"
+      : accessPlan === "full_report" || accessPlan === "essentials"
+        ? accessPlan
+        : null);
   if (!effectiveTier) return false;
   if (effectiveTier === "full_report") return true;
   return isSectionIncludedInEssentials(sectionId);
@@ -125,7 +145,7 @@ export function isSectionUnlockedForPlan({
 export function getUnlockedPremiumSectionIdsForPlan(accessPlan: ReportAccessPlan) {
   if (!accessPlan) return [];
 
-  if (accessPlan === "full_report" || accessPlan === "all_reports") {
+  if (accessPlan === "full_report" || accessPlan === "core" || accessPlan === "all_reports") {
     return reportSections.filter((section) => section.isPremium).map((section) => section.id);
   }
 
