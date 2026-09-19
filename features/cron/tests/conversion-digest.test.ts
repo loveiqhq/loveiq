@@ -1187,6 +1187,7 @@ describe("conversion-digest handler", () => {
       adSpend: 1187.6,
       revenue: 70,
       paidReports: 3,
+      compedReports: 0,
       coveredDays: 30,
       windowDays: 30,
     });
@@ -1831,6 +1832,7 @@ describe("break-even: what we spent against what came back", () => {
       adSpend: 1187.6,
       revenue: 70,
       paidReports: 3,
+      compedReports: 0,
       coveredDays: 30,
       windowDays: 30,
     });
@@ -1846,6 +1848,45 @@ describe("break-even: what we spent against what came back", () => {
     expect(all).toContain("short of break-even");
   });
 
+  it("does not count a free unlock as a sale", () => {
+    /**
+     * `payment` rows at EUR 0 are comped unlocks — the post-call coupon. They
+     * count as reports by an explicit decision, and they are not sales. Folded
+     * into the denominator they make acquisition look cheaper than it is:
+     * measured over the 30 days to 2026-09-19 there were 3 succeeded non-test
+     * payments of which ONE was a zero, so cost per sale would divide by 3
+     * instead of 2 — 33% flattering, the direction this file warns about
+     * everywhere else.
+     */
+    const lines = buildUnitEconomicsLines({
+      adSpend: 1000,
+      revenue: 70,
+      paidReports: 2,
+      compedReports: 1,
+      coveredDays: 30,
+      windowDays: 30,
+    });
+    const all = lines.join("\n");
+    // Cost per sale divides by the 2 that paid, not the 3 unlocks.
+    expect(all).toContain("EUR 500.00");
+    expect(all).not.toContain("EUR 333.33");
+    // And the free one is named rather than hidden.
+    expect(all).toContain("1 unlocked free");
+    expect(all).toContain("not counted as sales");
+  });
+
+  it("says nothing about comps when there were none", () => {
+    const lines = buildUnitEconomicsLines({
+      adSpend: 1000,
+      revenue: 70,
+      paidReports: 2,
+      compedReports: 0,
+      coveredDays: 30,
+      windowDays: 30,
+    });
+    expect(lines.join("\n")).not.toContain("unlocked free");
+  });
+
   it("says what the figure does NOT include", () => {
     /**
      * The framework's own formula for CB I is "revenue − MARKETING". Salaries,
@@ -1857,6 +1898,7 @@ describe("break-even: what we spent against what came back", () => {
       adSpend: 1000,
       revenue: 100,
       paidReports: 5,
+      compedReports: 0,
       coveredDays: 30,
       windowDays: 30,
     });
@@ -1870,6 +1912,7 @@ describe("break-even: what we spent against what came back", () => {
       adSpend: 900,
       revenue: 0,
       paidReports: 0,
+      compedReports: 0,
       coveredDays: 30,
       windowDays: 30,
     });
@@ -1884,6 +1927,7 @@ describe("break-even: what we spent against what came back", () => {
       adSpend: 400,
       revenue: 50,
       paidReports: 2,
+      compedReports: 0,
       coveredDays: 11,
       windowDays: 30,
     });
@@ -1896,6 +1940,7 @@ describe("break-even: what we spent against what came back", () => {
       adSpend: 100,
       revenue: 250,
       paidReports: 10,
+      compedReports: 0,
       coveredDays: 30,
       windowDays: 30,
     });

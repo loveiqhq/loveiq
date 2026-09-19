@@ -1208,7 +1208,18 @@ export function buildEmailExperimentLines(rows: EmailExperimentRow[]): string[] 
 export interface UnitEconomics {
   adSpend: number;
   revenue: number;
+  /** Unlocks that money was actually paid for. The denominator for cost per sale. */
   paidReports: number;
+  /**
+   * Unlocks granted at EUR 0 — the post-call coupon and any comp.
+   *
+   * They count as reports by an explicit decision, and they are NOT sales. Folded
+   * into the denominator they make acquisition look cheaper than it is: measured
+   * over the 30 days to 2026-09-19, 3 succeeded non-test payments of which ONE
+   * was a zero, so cost per sale divided by 3 instead of 2 — 33% flattering, in
+   * the direction this file warns about everywhere else.
+   */
+  compedReports: number;
   /** Days in the window GA4 actually reported spend for. */
   coveredDays: number;
   windowDays: number;
@@ -1238,11 +1249,18 @@ export async function fetchUnitEconomics(
     let coveredDays = 0;
     for (const row of Array.isArray(spendRows) ? spendRows : []) {
       const raw = row?.meta?.ad_cost;
+      /**
+       * `null` and `undefined` are NOT zero spend, they are no reading.
+       * `Number(null)` is 0, which is finite — so a day GA4 returned without a
+       * cost figure counted as covered, which suppresses the "the spend figure is
+       * a floor" caveat on exactly the windows that need it. Understating spend
+       * overstates profit.
+       */
+      if (raw === null || raw === undefined || raw === "") continue;
       const n = typeof raw === "number" ? raw : Number(raw);
-      if (Number.isFinite(n)) {
-        adSpend += n;
-        coveredDays += 1;
-      }
+      if (!Number.isFinite(n)) continue;
+      adSpend += n;
+      coveredDays += 1;
     }
 
     /**
@@ -1263,15 +1281,16 @@ export async function fetchUnitEconomics(
     const payRows = (await payRes.json()) as Array<{ amount?: unknown }>;
     let revenue = 0;
     let paidReports = 0;
+    let compedReports = 0;
     for (const row of Array.isArray(payRows) ? payRows : []) {
       const n = typeof row?.amount === "number" ? row.amount : Number(row?.amount);
-      if (Number.isFinite(n)) {
-        revenue += n;
-        paidReports += 1;
-      }
+      if (!Number.isFinite(n)) continue;
+      revenue += n;
+      if (n > 0) paidReports += 1;
+      else compedReports += 1;
     }
 
-    return { adSpend, revenue, paidReports, coveredDays, windowDays };
+    return { adSpend, revenue, paidReports, compedReports, coveredDays, windowDays };
   } catch (err) {
     logger.warn({ err }, "conversion-digest: unit economics threw");
     return null;
@@ -1289,7 +1308,9 @@ function eur(n: number): string {
  */
 export function buildUnitEconomicsLines(u: UnitEconomics): string[] {
   const lines: string[] = [
-    `• *Spent* ${eur(u.adSpend)} on ads · *earned* ${eur(u.revenue)} from ${u.paidReports} paid report${u.paidReports === 1 ? "" : "s"}`,
+    `• *Spent* ${eur(u.adSpend)} on ads · *earned* ${eur(u.revenue)} from ${u.paidReports} paid report${u.paidReports === 1 ? "" : "s"}` +
+      // Named, not folded in. A comped unlock is a report and is not a sale.
+      (u.compedReports > 0 ? ` (plus ${u.compedReports} unlocked free, not counted as sales)` : ""),
   ];
 
   if (u.paidReports > 0) {
