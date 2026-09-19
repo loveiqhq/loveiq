@@ -286,8 +286,8 @@ async function buildCvrChartBlocks(
 
   await single(
     "cvr-visitor-start",
-    "Visitor to survey-start conversion rate over time",
-    "Visitor → Start",
+    "Share of site visitors who answer the first survey question, over time",
+    "Of all visitors",
     "starts",
     "visitors"
   );
@@ -313,8 +313,8 @@ async function buildCvrChartBlocks(
    */
   await single(
     "cvr-start-completion",
-    "Survey-start to completion conversion rate over time",
-    "Start → Completion",
+    "Share of people who start the survey and reach the end, over time",
+    "Of those who start",
     "completions",
     "starts"
   );
@@ -344,15 +344,15 @@ async function buildCvrChartBlocks(
 
   await single(
     "cvr-completion-paygate",
-    "Completion to paygate conversion rate over time",
-    "Completion → Paygate",
+    "Share of survey finishers who reach the point where the report asks for payment, over time",
+    "Of those who finish",
     "paygate",
     "completions"
   );
   await single(
     "cvr-paygate-purchase",
-    "Paygate to purchase conversion rate over time",
-    "Paygate → Purchase",
+    "Share of people at the payment point who buy, over time",
+    "Of those who reach it",
     "purchased",
     "paygate"
   );
@@ -414,13 +414,17 @@ async function buildBucketChartBlock(
       ? `top revenue bucket: ${topRevBucket.toUpperCase()} (~${Math.round(topRev).toLocaleString()})`
       : "no purchases yet";
 
-  return lineChartBlock("bucket-performance", "Price-bucket conversion rate over time", {
-    windowLabel: `${windowLabel} · ${revNote}`,
-    labels,
-    series,
-    rate: true,
-    xAxis: days.map((d) => shortDate(d.day)),
-  });
+  return lineChartBlock(
+    "bucket-performance",
+    "Share of people who bought, at each price we showed, over time",
+    {
+      windowLabel: `${windowLabel} · ${revNote}`,
+      labels,
+      series,
+      rate: true,
+      xAxis: days.map((d) => shortDate(d.day)),
+    }
+  );
 }
 
 /**
@@ -480,7 +484,7 @@ async function buildDropoutChartBlock(
   return {
     type: "image",
     image_url: url,
-    alt_text: "Survey drop-off rate per question — where users quit",
+    alt_text: "Where people quit the survey — the share who left on each question",
   };
 }
 
@@ -523,7 +527,8 @@ async function buildReactivationChartBlock(
   return {
     type: "image",
     image_url: url,
-    alt_text: "Reactivation email performance per nurture stage",
+    alt_text:
+      "How each follow-up email performed — how many were sent and how many led to a purchase",
   };
 }
 

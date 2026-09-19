@@ -55,8 +55,6 @@ export interface RevenueBreakdown {
 export interface DailyMetrics {
   // Acquisition
   uniqueVisitors: number;
-  newVisitors: number;
-  returningVisitors: number;
   surveyEngineMounts: number;
   surveyStarts: number;
   completions: number;
@@ -605,47 +603,25 @@ export async function fetchFunnelCaptureStart(): Promise<string | null> {
 }
 
 /**
- * Splits today's unique visitors into NEW (first-ever seen) vs RETURNING
- * (seen on any prior day). Uses the funnel_event table where one row per
- * (visitor_id, day, event_type='unique_visitor') is written server-side by the
- * root layout (recordUniqueVisit), flagged by proxy.ts on the first countable
- * page view per browser per day (consent-independent, aggregate).
+ * DELETED 2026-09-19: `fetchNewVsReturning`.
  *
- * Both queries are capped to keep page-cap behavior predictable; at prelaunch
- * volume neither approaches the limit.
+ * It could not answer its own question. `funnel_event.visitor_id` is minted
+ * FRESH EACH DAY by design — the cookie behind it holds only a date, with no
+ * identifier and no cross-day linkage, which is precisely what lets it be set
+ * without analytics consent. Measured that day: 92 of 31,744 visitor ids have
+ * ever appeared on a second day, 0.29%, so the split was ~99.7% "new" no matter
+ * what the traffic did.
+ *
+ * And it computed even that from a slice. Both reads carried `Range` headers
+ * ("0-9999", "0-99999") under a comment saying neither approached the limit;
+ * PostgREST's max-rows cap is 1,000 and a Range header does not lift it, so it
+ * saw 1,000 of 11,331 current rows and 1,000 of ~20,500 prior ones. Two
+ * unpaginated reads of a 31,000-row table per digest run, for a number nothing
+ * outside its own tests ever read.
+ *
+ * If new-vs-returning is wanted, it needs a source that can recognise a person
+ * across days — GA4, or a cookie we do not have consent to set.
  */
-export async function fetchNewVsReturning(
-  sinceIso: string,
-  untilIso: string
-): Promise<{ newVisitors: number; returningVisitors: number }> {
-  const sinceDay = sinceIso.slice(0, 10);
-  const untilDay = untilIso.slice(0, 10);
-  const [todayRes, priorRes] = await Promise.all([
-    supabaseFetch(
-      `/rest/v1/funnel_event?select=visitor_id&event_type=eq.unique_visitor&day=gte.${sinceDay}&day=lt.${untilDay}`,
-      { headers: { Range: "0-9999" } }
-    ),
-    supabaseFetch(
-      `/rest/v1/funnel_event?select=visitor_id&event_type=eq.unique_visitor&day=lt.${sinceDay}`,
-      { headers: { Range: "0-99999" } }
-    ),
-  ]);
-
-  if (!todayRes.ok) return { newVisitors: 0, returningVisitors: 0 };
-  const todayRows = (await todayRes.json()) as Array<{ visitor_id: string }>;
-  const todaySet = new Set<string>();
-  for (const r of todayRows) if (r.visitor_id) todaySet.add(r.visitor_id);
-
-  let priorSet = new Set<string>();
-  if (priorRes.ok) {
-    const priorRows = (await priorRes.json()) as Array<{ visitor_id: string }>;
-    priorSet = new Set(priorRows.map((r) => r.visitor_id).filter((v): v is string => !!v));
-  }
-
-  let returning = 0;
-  for (const id of todaySet) if (priorSet.has(id)) returning += 1;
-  return { newVisitors: todaySet.size - returning, returningVisitors: returning };
-}
 
 /**
  * Top 3 UTC hours that produced the most completed submissions in the window.
@@ -1828,7 +1804,6 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
 
   const [
     uniqueVisitors,
-    visitorSplit,
     topCompletionHours,
     surveyEngineMounts,
     surveyStarts,
@@ -1866,7 +1841,6 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
     velocity30d,
   ] = await Promise.all([
     fetchFunnelEventCount("unique_visitor", sinceIso, untilIso),
-    fetchNewVsReturning(sinceIso, untilIso),
     fetchHourlyCompletions(sinceIso, untilIso, 3),
     fetchFunnelEventCount("survey_engine_mount", sinceIso, untilIso),
     fetchSurveyStarts(sinceIso, untilIso),
@@ -1945,8 +1919,6 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
 
   return {
     uniqueVisitors,
-    newVisitors: visitorSplit.newVisitors,
-    returningVisitors: visitorSplit.returningVisitors,
     surveyEngineMounts,
     surveyStarts,
     completions,
