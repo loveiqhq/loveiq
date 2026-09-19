@@ -48,6 +48,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      # checkout fetches the ref it checked out and nothing else, so the branch
+      # carrying the candidate fix is simply absent and `git rev-parse` fails
+      # before anything is measured. The first run of this workflow died there.
+      - name: Fetch every branch, so the candidate can be found
+        run: git fetch --no-tags --prune origin "+refs/heads/*:refs/remotes/origin/*"
+
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: "20"

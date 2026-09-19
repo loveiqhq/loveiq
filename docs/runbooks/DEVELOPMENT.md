@@ -184,6 +184,12 @@ call for rewording, retrying, and doing it by hand respectively.
 healthy production has nothing to fix, and waiting for a customer to hit
 something is not verification.
 
+**A ref can be a local branch, a remote branch or a SHA** — the harness tries
+each spelling, because in CI a branch pushed from a laptop exists only on the
+remote and `actions/checkout` does not fetch it. An unresolvable ref fails
+rather than falling back to `HEAD`, which would quietly prove a diff nobody
+asked about.
+
 Proving a candidate on its own, without generating anything:
 `.github/workflows/prove-fix.yml`, or locally —
 
