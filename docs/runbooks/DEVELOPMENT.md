@@ -180,6 +180,13 @@ of "failed" is "the model could not do it", and that is wrong in two of the thre
 In all three the partial work is committed, printed and pushed, so what it had
 got to is readable.
 
+**What a proven run produces.** `prove-fix.mjs` prints `PROVEN` and then a
+machine-readable `PROVEN_TIER=small|large`, which is what the workflow reads to
+decide ready-for-review versus draft. That line going missing once cost a
+genuinely proven fix its pull request — `grep` found nothing, exited 1, and
+`bash -e` failed the step after six green checks — so the workflow now tolerates
+a missing tier and a test requires the line to exist.
+
 **When it fails.** The proof refusing a fix is a normal outcome, not a
 malfunction — the first live run produced a plausible twelve-line change that
 simply did not work, and was refused. The run then leaves two things behind so

@@ -241,7 +241,13 @@ jobs:
           # A proven change over the line cap is still proven — it just carries
           # more than one probe's word is worth, so it opens as a draft for real
           # review instead of ready-to-merge.
-          tier=$(grep -oE 'PROVEN_TIER=(small|large)' /tmp/proof.log | tail -1 | cut -d= -f2)
+          # `|| true`: grep exits 1 when it matches nothing, and under `bash -e`
+          # that fails the step AFTER a successful proof. It did exactly that on
+          # 2026-09-19 — six green checks, "PROVEN" printed, and no pull request,
+          # because prove-fix.mjs was not emitting the line this looks for. The
+          # tier is a detail about a proof that already succeeded; not finding it
+          # must never undo the proof.
+          tier=$(grep -oE 'PROVEN_TIER=(small|large)' /tmp/proof.log | tail -1 | cut -d= -f2 || true)
           echo "tier=${tier:-small}" >> "$GITHUB_OUTPUT"
 
       # Only reached when the proof passed, so this PR is ready for review
