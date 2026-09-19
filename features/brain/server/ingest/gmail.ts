@@ -527,7 +527,9 @@ export function attachmentRefs(thread: GmailThread): AttachmentRef[] {
   for (const m of thread.messages ?? []) {
     if (m.id) walk(m.id, m.payload);
   }
-  return out.slice(0, MAX_ATTACHMENTS_PER_THREAD);
+  // No trim needed: `walk` returns the moment the cap is reached, so `out` can never
+  // exceed it. A `.slice()` here survived mutation precisely because it was dead.
+  return out;
 }
 
 /** Text out of one attachment. Returns "" for anything it cannot read, never throws. */
