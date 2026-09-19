@@ -36,7 +36,6 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "test:integration:safe": "vitest run --config vitest.integration.config.ts __tests__/integration/rls-boundary.integration.test.ts",
     "test:e2e": "playwright test",
     "test:visual": "playwright test --project=\"Desktop Chrome\" e2e/visual-regression.spec.ts",
     "typecheck": "tsc --noEmit",

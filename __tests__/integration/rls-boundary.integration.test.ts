@@ -22,8 +22,7 @@
  * by vitest.integration.config.ts.
  *
  * Run:
- *   npm run test:integration:safe       # this test only (read-only, prod-safe)
- *   npm run test:integration            # all integration tests (some write)
+ *   npm run test:integration            # this is now the only integration test
  */
 
 import { describe, it, expect } from "vitest";

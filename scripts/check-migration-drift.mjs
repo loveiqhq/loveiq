@@ -438,7 +438,7 @@ async function main() {
     if (drift.constraints.length) console.error("  Constraints:", drift.constraints.join(", "));
     if (drift.columns.length) console.error("  Columns:", drift.columns.join(", "));
     console.error(
-      "\nApply via `supabase db push` or the Supabase dashboard. See round 7 retro: an unapplied UNIQUE constraint silently re-opened a webhook idempotency race.\n"
+      "\nApply via `supabase db push` or the Supabase dashboard. See round 7 retro: an unapplied UNIQUE constraint silently re-opened a webhook idempotency race.\nThis check is the guard for payment_webhook_event_stripe_event_id_unique — the integration test that used to assert it needed a paid Supabase branch and never once ran.\n"
     );
     process.exit(1);
   }
