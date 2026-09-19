@@ -12,7 +12,17 @@ const mockFetchArmCohorts = vi.fn();
 const mockFetchLandingStartFunnel = vi.fn();
 const mockFetchAxisFunnelDaily = vi.fn();
 const mockFetchFunnelCvrSparklines = vi.fn();
-const mockAdCostByDay = vi.fn();
+/**
+ * Defaulted, not bare. As a bare `vi.fn()` it resolved `undefined` for every
+ * test that did not set it, and the handler swallowed the resulting throw — so
+ * 46 tests ran with the spend clause silently absent and nothing said so. An
+ * empty-but-valid AdCost is the honest "GA4 has nothing for this window".
+ */
+const mockAdCostByDay = vi.fn(async () => ({
+  byDay: new Map<string, number>(),
+  from: null as string | null,
+  to: null as string | null,
+}));
 const mockFetchMidwayProgress = vi.fn();
 const mockFetchPaywallHits = vi.fn();
 const mockFetchEmailExperiments = vi.fn();
@@ -1188,6 +1198,7 @@ describe("conversion-digest handler", () => {
       revenue: 70,
       paidReports: 3,
       compedReports: 0,
+      otherCurrencyReports: 0,
       coveredDays: 30,
       windowDays: 30,
     });
@@ -1833,6 +1844,7 @@ describe("break-even: what we spent against what came back", () => {
       revenue: 70,
       paidReports: 3,
       compedReports: 0,
+      otherCurrencyReports: 0,
       coveredDays: 30,
       windowDays: 30,
     });
@@ -1863,6 +1875,7 @@ describe("break-even: what we spent against what came back", () => {
       revenue: 70,
       paidReports: 2,
       compedReports: 1,
+      otherCurrencyReports: 0,
       coveredDays: 30,
       windowDays: 30,
     });
@@ -1881,6 +1894,7 @@ describe("break-even: what we spent against what came back", () => {
       revenue: 70,
       paidReports: 2,
       compedReports: 0,
+      otherCurrencyReports: 0,
       coveredDays: 30,
       windowDays: 30,
     });
@@ -1899,6 +1913,7 @@ describe("break-even: what we spent against what came back", () => {
       revenue: 100,
       paidReports: 5,
       compedReports: 0,
+      otherCurrencyReports: 0,
       coveredDays: 30,
       windowDays: 30,
     });
@@ -1913,12 +1928,115 @@ describe("break-even: what we spent against what came back", () => {
       revenue: 0,
       paidReports: 0,
       compedReports: 0,
+      otherCurrencyReports: 0,
       coveredDays: 30,
       windowDays: 30,
     });
     const all = lines.join("\n");
     expect(all).toContain("no paid reports in this window");
     expect(all).not.toMatch(/EUR 0\.00 to acquire/);
+  });
+
+  it("says a profitable report MAKES us money, not that it costs us a negative", () => {
+    /**
+     * There was no profitable branch at all: the line printed `cppr - arpp`
+     * unconditionally, so the day the product started making money the line
+     * whose whole job is to announce that read "each one costs us EUR -15.00".
+     */
+    const all = buildUnitEconomicsLines({
+      adSpend: 100,
+      revenue: 250,
+      paidReports: 10,
+      compedReports: 0,
+      otherCurrencyReports: 0,
+      coveredDays: 30,
+      windowDays: 30,
+    }).join("\n");
+    expect(all).toContain("each one makes us EUR 15.00");
+    expect(all, "a negative cost is not a way of saying profit").not.toContain("costs us EUR -");
+    expect(all).toContain("above break-even");
+  });
+
+  it("says nothing came back rather than inventing a multiple", () => {
+    /**
+     * The shortfall was `Math.round(1 / Math.max(roas, 0.0001))`. With no
+     * revenue that clamp produced "10000x short of break-even" — a number
+     * measured from nothing. The honest output is that nothing came back.
+     */
+    const all = buildUnitEconomicsLines({
+      adSpend: 900,
+      revenue: 0,
+      paidReports: 0,
+      compedReports: 0,
+      otherCurrencyReports: 0,
+      coveredDays: 30,
+      windowDays: 30,
+    }).join("\n");
+    expect(all).toContain("nothing came back at all");
+    expect(all, "10000 is the clamp, not a measurement").not.toContain("10000x");
+  });
+
+  it("does not cap a real shortfall at the clamp", () => {
+    // EUR 100,000 spent against EUR 1 is 100,000x short. The old clamp printed
+    // "10000x" — understating the gap, the flattering direction.
+    const all = buildUnitEconomicsLines({
+      adSpend: 100_000,
+      revenue: 1,
+      paidReports: 1,
+      compedReports: 0,
+      otherCurrencyReports: 0,
+      coveredDays: 30,
+      windowDays: 30,
+    }).join("\n");
+    expect(all).toContain("100,000x short of break-even");
+  });
+
+  it("calls exactly break-even exactly that", () => {
+    // `roas >= 1` printed "EUR 0.00 · above break-even" in one line.
+    const all = buildUnitEconomicsLines({
+      adSpend: 119,
+      revenue: 119,
+      paidReports: 4,
+      compedReports: 0,
+      otherCurrencyReports: 0,
+      coveredDays: 30,
+      windowDays: 30,
+    }).join("\n");
+    expect(all).toContain("exactly break-even");
+    expect(all).not.toContain("above break-even");
+  });
+
+  it("refuses a cost per report when no spend was recorded", () => {
+    /**
+     * The guard was on `paidReports` alone, so a window with sales and no spend
+     * printed "EUR 0.00 to acquire" — the exact cost-of-nothing the sibling
+     * branch exists to refuse, wearing the sign of a bargain. Reachable whenever
+     * ads are paused or GA4's ad report has not landed.
+     */
+    const all = buildUnitEconomicsLines({
+      adSpend: 0,
+      revenue: 119,
+      paidReports: 4,
+      compedReports: 0,
+      otherCurrencyReports: 0,
+      coveredDays: 0,
+      windowDays: 30,
+    }).join("\n");
+    expect(all).toContain("no ad spend recorded in this window");
+    expect(all).not.toMatch(/EUR 0\.00 to acquire/);
+  });
+
+  it("names a payment in another currency instead of summing it into euros", () => {
+    const all = buildUnitEconomicsLines({
+      adSpend: 100,
+      revenue: 29,
+      paidReports: 1,
+      compedReports: 0,
+      otherCurrencyReports: 1,
+      coveredDays: 30,
+      windowDays: 30,
+    }).join("\n");
+    expect(all).toContain("1 succeeded payment is in another currency");
   });
 
   it("calls out partial GA4 coverage, so the spend reads as a floor", () => {
@@ -1928,6 +2046,7 @@ describe("break-even: what we spent against what came back", () => {
       revenue: 50,
       paidReports: 2,
       compedReports: 0,
+      otherCurrencyReports: 0,
       coveredDays: 11,
       windowDays: 30,
     });
@@ -1941,6 +2060,7 @@ describe("break-even: what we spent against what came back", () => {
       revenue: 250,
       paidReports: 10,
       compedReports: 0,
+      otherCurrencyReports: 0,
       coveredDays: 30,
       windowDays: 30,
     });

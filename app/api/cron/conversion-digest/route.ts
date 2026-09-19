@@ -90,14 +90,18 @@ import {
   sumVisitors,
 } from "@features/admin/server/conversion-digest";
 import { armColor, armLabel, type ExperimentAxis } from "@features/attribution/server/labels";
-import { adCostByDay, adCovers } from "@features/brain/server/ingest/analytics";
+import { adCostByDay, adCovers, type AdCost } from "@features/brain/server/ingest/analytics";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /** Trends need history to read as trends; matches funnel-digest's window. */
-const WINDOW_DAYS = 30;
+/**
+ * Exported so the local preview runs the SAME window rather than retyping 30.
+ * A preview computed over a different span is a preview of a different message.
+ */
+export const WINDOW_DAYS = 30;
 
 /**
  * Where "Midway Progress" sits, as a question index.
@@ -1289,6 +1293,29 @@ export async function GET(request: Request) {
       reportingDay(new Date(dayStart.getTime() - WINDOW_DAYS * 86_400_000))
     ).toISOString();
     const windowEnd = dayStart.toISOString();
+
+    /**
+     * ONE read of the GA4 day-chunks, shared by the day's spend clause and the
+     * 30-day break-even block. They used to read the same rows twice with two
+     * disagreeing notions of the window and of "covered"; `adCostByDay` is the
+     * paginated, coverage-aware one, so it is the one that survives. Best-effort
+     * by design: GA4 being unreachable must cost the digest its spend figures,
+     * never the digest.
+     */
+    let ad: AdCost = { byDay: new Map<string, number>(), from: null, to: null };
+    try {
+      const fetched = await adCostByDay();
+      // Shape-checked before it is adopted. This clause is best-effort by
+      // design — GA4 being unreachable OR returning something unexpected must
+      // cost the digest its spend figures, never the digest — and reading
+      // `.byDay` off a malformed value outside this try is how a best-effort
+      // clause becomes a 500 for the whole message.
+      if (fetched?.byDay instanceof Map) ad = fetched;
+      else logger.warn({ day: dayKey }, "conversion-digest: ad spend read returned no map");
+    } catch (err) {
+      logger.warn({ err, day: dayKey }, "conversion-digest: ad spend unavailable");
+    }
+
     const [
       funnel,
       cohorts,
@@ -1310,22 +1337,15 @@ export async function GET(request: Request) {
       fetchMidwayProgress(windowStart, windowEnd, MIDWAY_QUESTION_INDEX),
       fetchPaywallHits(windowStart, windowEnd),
       fetchEmailExperimentResults(windowStart, windowEnd),
-      fetchUnitEconomics(windowStart, windowEnd, WINDOW_DAYS),
+      fetchUnitEconomics(ad, windowStart, windowEnd, WINDOW_DAYS),
     ]);
 
     /**
-     * Ad spend for the day being reported. Best-effort by design: GA4 being unreachable
-     * must cost the digest its spend clause, never the digest. `adCovers` is what keeps
-     * an uncovered day out — without it a day GA4 has not reported yet reads as EUR 0.00,
+     * Ad spend for the day being reported. `adCovers` is what keeps an uncovered
+     * day out — without it a day GA4 has not reported yet reads as EUR 0.00,
      * which is the reassuring falsehood this whole line exists to remove.
      */
-    let adSpend: number | null = null;
-    try {
-      const ad = await adCostByDay();
-      adSpend = adCovers(ad, dayKey) ? (ad.byDay.get(dayKey) ?? 0) : null;
-    } catch (err) {
-      logger.warn({ err, day: dayKey }, "conversion-digest: ad spend unavailable");
-    }
+    const adSpend: number | null = adCovers(ad, dayKey) ? (ad.byDay.get(dayKey) ?? 0) : null;
 
     const digest = await buildConversionDigest({
       dayKey,

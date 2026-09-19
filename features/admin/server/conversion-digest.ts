@@ -38,6 +38,8 @@ import {
   type ExperimentAxis,
 } from "@features/attribution/server/labels";
 import type { AxisFunnelRow } from "@features/attribution/server/axis-trends";
+import { adCovers, type AdCost } from "@features/brain/server/ingest/analytics";
+import { reportingDay } from "@shared/time/reporting-day";
 import logger from "@shared/observability/logger";
 import { escapeSlack } from "@shared/observability/slack";
 
@@ -1189,8 +1191,10 @@ export function buildEmailExperimentLines(rows: EmailExperimentRow[]): string[] 
  * WHY THIS EXISTS. Marcus, 2026-09-18: "Our core mission is to turn the survey
  * to report journey break even." Nothing in the digest said how far from break
  * even we are. Measured over the 30 days to 2026-09-18: EUR 1,187.60 of ad spend
- * against EUR 70.00 of revenue from 3 paid reports — EUR 395.87 per paid report,
- * and six cents back per euro. That single line is the business case.
+ * against EUR 70.00 of revenue from 2 paid reports and one EUR 0 comp — EUR 593.80
+ * per paid report, and six cents back per euro. That single line is the business
+ * case. (This figure read "3 paid reports — EUR 395.87" until the comp was split
+ * out of the denominator; it was 33% flattering, which is why the split exists.)
  *
  * The KPI framework's "Unit Economics" layer — cost per paid report, gross
  * contribution CB I, ROAS/payback — was marked NO DATA because `marketing_spend`
@@ -1220,47 +1224,73 @@ export interface UnitEconomics {
    * the direction this file warns about everywhere else.
    */
   compedReports: number;
-  /** Days in the window GA4 actually reported spend for. */
+  /**
+   * Succeeded non-test payments in a currency other than EUR, excluded from
+   * `revenue` rather than summed into a total labelled EUR. Zero today (53/53
+   * are EUR); named so that if one ever appears the line says so instead of
+   * quietly adding MXN to euros.
+   */
+  otherCurrencyReports: number;
+  /** Days in the window GA4's AD report actually covers — zero-spend days included. */
   coveredDays: number;
   windowDays: number;
 }
 
+/**
+ * The Berlin day keys inside `[sinceIso, untilIso)`.
+ *
+ * NOT `sinceIso.slice(0, 10)`. Both bounds are Berlin midnight expressed in UTC
+ * — `2026-09-18T22:00:00.000Z` IS Berlin the 19th — so slicing the string names
+ * the day BEFORE the one it bounds, and the spend window came out shifted a
+ * whole day off the revenue window. Both were 30 days long, so `coveredDays`
+ * still reached 30 and the caveat never fired: a silent one-day mis-attribution
+ * on every run, and materially wrong on any day a campaign started or stopped.
+ *
+ * Stepping lands at NOON, not midnight. Adding 24h to a Berlin-midnight instant
+ * gives 23:00 or 01:00 across the DST changeover, and `reportingDay` would then
+ * name the wrong day twice a year. Noon is unambiguous in both offsets.
+ */
+function berlinDaysInWindow(sinceIso: string, untilIso: string): string[] {
+  const startMs = Date.parse(sinceIso);
+  const endDay = reportingDay(new Date(Date.parse(untilIso)));
+  if (!Number.isFinite(startMs)) return [];
+  const days: string[] = [];
+  for (let i = 0; i < 400; i += 1) {
+    const d = reportingDay(new Date(startMs + i * 86_400_000 + 43_200_000));
+    if (d >= endDay) break;
+    days.push(d);
+  }
+  return days;
+}
+
 export async function fetchUnitEconomics(
+  ad: AdCost,
   sinceIso: string,
   untilIso: string,
   windowDays: number
 ): Promise<UnitEconomics | null> {
   try {
-    const since = sinceIso.slice(0, 10);
-    const until = untilIso.slice(0, 10);
-
-    // Ad spend: GA4 day-chunks, the same source the spend clause already uses.
-    const spendRes = await supabaseFetch(
-      // eslint-disable-next-line no-secrets/no-secrets -- a PostgREST query path, not a secret
-      "/rest/v1/brain_chunk?source=eq.ga4&select=period_end,meta&meta->>grain=eq.day" +
-        `&period_end=gte.${since}&period_end=lt.${until}&order=period_end.asc&limit=1000`
-    );
-    if (!spendRes.ok) {
-      logger.warn({ status: spendRes.status }, "conversion-digest: ad-spend read non-2xx");
-      return null;
-    }
-    const spendRows = (await spendRes.json()) as Array<{ meta?: Record<string, unknown> }>;
+    /**
+     * Spend comes from the `AdCost` the handler ALREADY fetched for the spend
+     * clause, not a second read of the same `brain_chunk` rows. That read is
+     * paginated and keyed on `meta.day` — a true Berlin day — where this one
+     * filtered on `period_end` against a sliced timestamp, and the two disagreed
+     * about both the window and what "covered" means.
+     */
     let adSpend = 0;
     let coveredDays = 0;
-    for (const row of Array.isArray(spendRows) ? spendRows : []) {
-      const raw = row?.meta?.ad_cost;
+    for (const day of berlinDaysInWindow(sinceIso, untilIso)) {
       /**
-       * `null` and `undefined` are NOT zero spend, they are no reading.
-       * `Number(null)` is 0, which is finite — so a day GA4 returned without a
-       * cost figure counted as covered, which suppresses the "the spend figure is
-       * a floor" caveat on exactly the windows that need it. Understating spend
-       * overstates profit.
+       * Coverage is the window GA4's AD report reached, which is what
+       * `adCovers` answers — not the presence of an `ad_cost` key. A day GA4
+       * fully covered on which no campaign ran carries no `ad_cost` at all
+       * (`google.ts` writes the key only `...(ad ? {…} : {})`), so keying on it
+       * reported a genuinely complete window as partial. `analytics.ts` settled
+       * this already: "a day with no spend is still a day we know about".
        */
-      if (raw === null || raw === undefined || raw === "") continue;
-      const n = typeof raw === "number" ? raw : Number(raw);
-      if (!Number.isFinite(n)) continue;
-      adSpend += n;
+      if (!adCovers(ad, day)) continue;
       coveredDays += 1;
+      adSpend += ad.byDay.get(day) ?? 0;
     }
 
     /**
@@ -1270,7 +1300,12 @@ export async function fetchUnitEconomics(
      * or quotes rather than money that arrived.
      */
     const payRes = await supabaseFetch(
-      "/rest/v1/payment?select=amount&status=eq.succeeded&is_test=is.false" +
+      // `currency`, because the sum below is printed as EUR. `funnel-digest`
+      // carries the same warning ("mostly EUR, occasionally MXN") and buckets by
+      // currency for exactly this reason. 53/53 succeeded non-test rows are EUR
+      // today, so this is a guard against a future MXN row silently inflating
+      // "earned EUR …" and every ratio built on it — not a bug biting now.
+      "/rest/v1/payment?select=amount,currency&status=eq.succeeded&is_test=is.false" +
         `&created_date_time=gte.${encodeURIComponent(sinceIso)}` +
         `&created_date_time=lt.${encodeURIComponent(untilIso)}&limit=1000`
     );
@@ -1278,19 +1313,35 @@ export async function fetchUnitEconomics(
       logger.warn({ status: payRes.status }, "conversion-digest: revenue read non-2xx");
       return null;
     }
-    const payRows = (await payRes.json()) as Array<{ amount?: unknown }>;
+    const payRows = (await payRes.json()) as Array<{ amount?: unknown; currency?: unknown }>;
     let revenue = 0;
     let paidReports = 0;
     let compedReports = 0;
+    let otherCurrencyReports = 0;
     for (const row of Array.isArray(payRows) ? payRows : []) {
       const n = typeof row?.amount === "number" ? row.amount : Number(row?.amount);
       if (!Number.isFinite(n)) continue;
+      // A missing currency is treated as EUR — every row we have is EUR and the
+      // column is nullable on older rows; dropping them would understate revenue.
+      const cur = typeof row?.currency === "string" ? row.currency.toUpperCase() : "EUR";
+      if (cur !== "EUR") {
+        otherCurrencyReports += 1;
+        continue;
+      }
       revenue += n;
       if (n > 0) paidReports += 1;
       else compedReports += 1;
     }
 
-    return { adSpend, revenue, paidReports, compedReports, coveredDays, windowDays };
+    return {
+      adSpend,
+      revenue,
+      paidReports,
+      compedReports,
+      otherCurrencyReports,
+      coveredDays,
+      windowDays,
+    };
   } catch (err) {
     logger.warn({ err }, "conversion-digest: unit economics threw");
     return null;
@@ -1313,15 +1364,36 @@ export function buildUnitEconomicsLines(u: UnitEconomics): string[] {
       (u.compedReports > 0 ? ` (plus ${u.compedReports} unlocked free, not counted as sales)` : ""),
   ];
 
-  if (u.paidReports > 0) {
-    const cppr = u.adSpend / u.paidReports;
-    const arpp = u.revenue / u.paidReports;
+  if (u.otherCurrencyReports > 0) {
     lines.push(
-      `• *Per paid report* — ${eur(cppr)} to acquire, ${eur(arpp)} earned; each one costs us ${eur(cppr - arpp)}`
+      `_${u.otherCurrencyReports} succeeded payment${u.otherCurrencyReports === 1 ? " is" : "s are"} in another currency and ${u.otherCurrencyReports === 1 ? "is" : "are"} not in the figures above._`
     );
-  } else {
+  }
+
+  if (u.paidReports === 0) {
     // Not "EUR 0.00 per report" — dividing by nothing is not a cost of nothing.
     lines.push(`• *Per paid report* — no paid reports in this window, so there is no cost per one`);
+  } else if (u.adSpend === 0) {
+    /**
+     * The guard used to be on `paidReports` alone, so a window with sales and no
+     * spend printed "EUR 0.00 to acquire" — the exact "cost of nothing" the
+     * branch above exists to refuse, with the sign of a bargain. Reachable
+     * whenever ads are paused, or GA4's ad report has not landed.
+     */
+    lines.push(
+      `• *Per paid report* — ${eur(u.revenue / u.paidReports)} earned; no ad spend recorded in this window, so there is no cost to compare it to`
+    );
+  } else {
+    const cppr = u.adSpend / u.paidReports;
+    const arpp = u.revenue / u.paidReports;
+    const margin = arpp - cppr;
+    lines.push(
+      `• *Per paid report* — ${eur(cppr)} to acquire, ${eur(arpp)} earned; ` +
+        // There was no profitable branch at all: `cppr - arpp` printed "each one
+        // costs us EUR -15.00" the moment the product started making money — on
+        // the line whose whole job is to announce that.
+        (margin >= 0 ? `each one makes us ${eur(margin)}` : `each one costs us ${eur(-margin)}`)
+    );
   }
 
   const contribution = u.revenue - u.adSpend;
@@ -1331,9 +1403,22 @@ export function buildUnitEconomicsLines(u: UnitEconomics): string[] {
       (roas === null
         ? ""
         : ` · ${eur(roas)} back per EUR 1 spent` +
-          (roas >= 1
+          /**
+           * Three states, not two. `roas >= 1` printed "EUR 0.00 · above
+           * break-even" at exactly 1, and the shortfall multiple was
+           * `Math.round(1 / Math.max(roas, 0.0001))` — a clamp that invented
+           * "10000x short" out of zero revenue (nothing came back; the honest
+           * output is that nothing came back) and CAPPED a genuinely larger
+           * shortfall at 10000x, understating the gap, which is the flattering
+           * direction this file warns about everywhere else.
+           */
+          (roas > 1
             ? " — above break-even"
-            : `, so ${Math.round(1 / Math.max(roas, 0.0001))}x short of break-even`))
+            : roas === 1
+              ? " — exactly break-even"
+              : roas === 0
+                ? ", and nothing came back at all"
+                : `, so ${Math.round(1 / roas).toLocaleString("en-US")}x short of break-even`))
   );
 
   /**

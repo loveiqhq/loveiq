@@ -1,8 +1,10 @@
 /**
  * GET /api/cron/funnel-digest
  *
- * Daily ops digest at 09:00 UTC (and a weekly recap on Mondays). Phase 3
- * refocus: a CHART-DOMINANT funnel view. The message is a rail of conversion-
+ * WEEKLY ops digest, Mondays at 08:40 UTC. The daily arm is off — it sent the
+ * same nine charts every morning, which is why the whole cron was unscheduled in
+ * July, and the scheduled conversion-digest already carries the daily decisions
+ * and the per-experiment charts. A CHART-DOMINANT funnel view. The message is a rail of conversion-
  * rate-over-time charts plus a price-bucket chart, a survey drop-out retention
  * curve, and reactivation-email performance — followed by a compact Revenue +
  * Alerts text footer. All the old raw-count charts + verbose text were removed
@@ -69,7 +71,6 @@ type DigestImageKind =
   | "cvr-paygate-purchase"
   | "bucket-performance"
   | "dropout-funnel"
-  | "dropout-by-arm"
   | "reactivation-email";
 
 // Human labels for the reactivation-email nurture stages.
@@ -154,6 +155,46 @@ async function buildSignedImageUrl(
 }
 
 /** Build a line/curve image block, or null when the URL builder fails. */
+/**
+ * One plain sentence per chart, said before the picture.
+ *
+ * The weekly message used to be EIGHT bare images in a row with nothing between
+ * them, so the only words a reader got were the internal step names burned into
+ * each title. The daily message has always captioned its charts; this one did
+ * not, and the difference is why it reads as a rail of pictures rather than a
+ * report.
+ *
+ * These say what the chart COUNTS — the population and the action — which is the
+ * question a reader has before they have any question about the trend.
+ */
+const CHART_CAPTIONS: Partial<Record<DigestImageKind, string>> = {
+  "cvr-visitor-start": "Of everyone who lands on the site, the share who answer the first survey question.",
+  "cvr-start-completion": "Of everyone who answers the first question, the share who reach the last one.",
+  "cvr-completion-engagement":
+    "Of everyone who finishes the survey, the share who have opened their report within 1, 5 and 10 minutes. Three lines, one per waiting time — so the top line is always the highest.",
+  "cvr-completion-paygate": "Of everyone who finishes the survey, the share who reach the point where the report asks for payment.",
+  "cvr-paygate-purchase": "Of everyone who reaches that point, the share who pay.",
+  "bucket-performance": "Each line is one price we showed. The share of people who bought at that price.",
+  "dropout-funnel": "Where people quit the survey. Taller means more people left on that question.",
+  "reactivation-email": "The follow-up emails we send to people who never opened or never bought. How each one performed.",
+};
+
+/** The caption for a chart, then the chart. Nothing when there is no chart. */
+function withCaption(kind: DigestImageKind, block: SlackBlock | null): SlackBlock[] {
+  if (!block) return [];
+  const caption = CHART_CAPTIONS[kind];
+  return caption
+    ? [{ type: "context", elements: [{ type: "mrkdwn", text: caption }] }, block]
+    : [block];
+}
+
+/**
+ * The caption block plus the image, in reading order.
+ *
+ * Returns an ARRAY because a chart is a caption and a picture, not a picture.
+ * An empty array when the URL could not be signed — the caption must never
+ * outlive the image it describes, or the message claims a chart it did not send.
+ */
 async function lineChartBlock(
   kind: DigestImageKind,
   altText: string,
@@ -164,10 +205,10 @@ async function lineChartBlock(
     rate?: boolean;
     xAxis?: string[];
   }
-): Promise<SlackBlock | null> {
+): Promise<SlackBlock[]> {
   const url = await buildSignedImageUrl(kind, payload);
-  if (!url) return null;
-  return { type: "image", image_url: url, alt_text: altText };
+  if (!url) return [];
+  return withCaption(kind, { type: "image", image_url: url, alt_text: altText });
 }
 
 // Pure YYYY-MM-DD -> "MMM D" (no Date/locale -> no tz drift). Used for the
@@ -227,14 +268,15 @@ async function buildCvrChartBlocks(
     const hasDenominator = days.some((d) => Number(d[denKey]) > 0);
     if (!hasDenominator) return;
     const series = days.map((d) => computeRate(Number(d[numKey]), Number(d[denKey])));
-    const block = await lineChartBlock(kind, alt, {
-      windowLabel,
-      labels: [label],
-      series: [series],
-      rate: true,
-      xAxis,
-    });
-    if (block) out.push(block);
+    out.push(
+      ...(await lineChartBlock(kind, alt, {
+        windowLabel,
+        labels: [label],
+        series: [series],
+        rate: true,
+        xAxis,
+      }))
+    );
   };
 
   await single(
@@ -278,18 +320,21 @@ async function buildCvrChartBlocks(
     const eng1 = days.map((d) => computeRate(d.eng_1m, d.completions));
     const eng5 = days.map((d) => computeRate(d.eng_5m, d.completions));
     const eng10 = days.map((d) => computeRate(d.eng_10m, d.completions));
-    const block = await lineChartBlock(
-      "cvr-completion-engagement",
-      "Completion to report-view conversion (1m / 5m / 10m) over time",
-      {
-        windowLabel,
-        labels: ["1 min", "5 min", "10 min"],
-        series: [eng1, eng5, eng10],
-        rate: true,
-        xAxis,
-      }
+    out.push(
+      ...(await lineChartBlock(
+        "cvr-completion-engagement",
+        "Share of survey finishers who opened their report within 1, 5 and 10 minutes",
+        {
+          windowLabel,
+          // "Within", not a bare duration: the rows are cumulative shares, and
+          // "5 min" alone reads as the share who opened at exactly five minutes.
+          labels: ["Within 1 min", "Within 5 min", "Within 10 min"],
+          series: [eng1, eng5, eng10],
+          rate: true,
+          xAxis,
+        }
+      ))
     );
-    if (block) out.push(block);
   }
 
   await single(
@@ -317,8 +362,8 @@ async function buildCvrChartBlocks(
 async function buildBucketChartBlock(
   snap: BucketPerfSnapshot | null,
   windowLabel: string
-): Promise<SlackBlock | null> {
-  if (!snap || snap.days.length === 0) return null;
+): Promise<SlackBlock[]> {
+  if (!snap || snap.days.length === 0) return [];
   const days = snap.days;
 
   // Aggregate per-bucket totals to rank + to find the top-revenue bucket.
@@ -337,7 +382,7 @@ async function buildBucketChartBlock(
     .filter(([, t]) => t.shown > 0)
     .sort((a, b) => b[1].shown + b[1].purchases - (a[1].shown + a[1].purchases))
     .slice(0, BUCKET_TOP_N);
-  if (ranked.length === 0) return null;
+  if (ranked.length === 0) return [];
 
   const labels = ranked.map(([bucket]) => bucket.toUpperCase());
   const series = ranked.map(([bucket]) =>
@@ -569,12 +614,16 @@ export async function buildFunnelDigestBlocks(opts: {
 
   // Charts 1-5 (CVR funnel steps), 6 (bucket), 7 (drop-out), 8 (reactivation).
   for (const b of await buildCvrChartBlocks(opts.cvr, opts.windowLabel)) blocks.push(b);
-  const bucketBlock = await buildBucketChartBlock(opts.bucket, opts.windowLabel);
-  if (bucketBlock) blocks.push(bucketBlock);
-  const dropoutBlock = await buildDropoutChartBlock(opts.dropout, opts.windowLabel);
-  if (dropoutBlock) blocks.push(dropoutBlock);
-  const reactivationBlock = await buildReactivationChartBlock(opts.nurture, opts.windowLabel);
-  if (reactivationBlock) blocks.push(reactivationBlock);
+  blocks.push(...(await buildBucketChartBlock(opts.bucket, opts.windowLabel)));
+  blocks.push(
+    ...withCaption("dropout-funnel", await buildDropoutChartBlock(opts.dropout, opts.windowLabel))
+  );
+  blocks.push(
+    ...withCaption(
+      "reactivation-email",
+      await buildReactivationChartBlock(opts.nurture, opts.windowLabel)
+    )
+  );
 
   // Text footer: Revenue (always) + Alerts (when breaches exist).
   const footerLines = [

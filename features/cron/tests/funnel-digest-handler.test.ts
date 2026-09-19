@@ -3,8 +3,8 @@
  *
  * Mocks every external boundary (Slack, dedup table, env probes, cron auth,
  * metric + chart fetchers) so the test exercises the full GET-handler path:
- *  - single daily_digest message (chart rail + Revenue/Alerts footer)
- *  - Monday weekly_digest recap
+ *  - the daily arm stays silent (DAILY_ENABLED is false)
+ *  - a single Monday weekly_digest message (chart rail + Revenue/Alerts footer)
  *  - image blocks point at the new /api/admin/digest-image/<kind> URLs
  */
 

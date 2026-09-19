@@ -221,13 +221,26 @@ interface DropoutByArmPayload {
 type AnyPayload =
   LongitudinalPayload | StageConversionPayload | DropoutPayload | DropoutByArmPayload;
 
+/**
+ * Titles in the words the reader uses, not ours.
+ *
+ * These were the internal step names — "Completion → Report-view CVR (1m / 5m /
+ * 10m)", "Paygate → Purchase CVR". Everyone on this chart's distribution list
+ * had to decode "CVR", "paygate" and an arrow notation before they could read
+ * the line underneath, and the person the digest is written for said plainly
+ * that he could not. A chart nobody can read is worse than no chart: it looks
+ * like information.
+ *
+ * Each one now names the PEOPLE it counts and the thing they did, so the title
+ * alone answers "what am I looking at".
+ */
 const LONG_TITLES: Record<LongitudinalPayload["kind"], string> = {
-  "cvr-visitor-start": "Visitor → Survey-start CVR",
-  "cvr-start-completion": "Survey-start → Completion CVR",
-  "cvr-completion-engagement": "Completion → Report-view CVR (1m / 5m / 10m)",
-  "cvr-completion-paygate": "Completion → Paygate CVR",
-  "cvr-paygate-purchase": "Paygate → Purchase CVR",
-  "bucket-performance": "Price-bucket conversion rate",
+  "cvr-visitor-start": "Visitors who start the survey",
+  "cvr-start-completion": "Survey starts that reach the end",
+  "cvr-completion-engagement": "How soon finishers open their report",
+  "cvr-completion-paygate": "Finishers who reach the paywall",
+  "cvr-paygate-purchase": "People at the paywall who buy",
+  "bucket-performance": "Which price converts best",
 };
 
 function chartShell(
@@ -310,8 +323,17 @@ const X_AXIS_H = 28;
 // Layout columns shared by every line row (and the x-axis tick row, so the
 // ticks sit exactly under the plot). label | plot(+gutters) | readout.
 const LABEL_W = 150;
-const READOUT_W = 120;
-const PLOT_W = 450; // svgPoints width == <svg> width == area-close x (clip-safe)
+/**
+ * 120 was sized for the `Math.round` readout it used to carry ("now 13% · max
+ * 45%"). `computeRate` rounds to ONE DECIMAL and `fmtAxis` prints it, so the
+ * common string is now "now 66.7% · max 86.7%" — about 140px. With
+ * `justifyContent: flex-end` the overflow is clipped at the START, so the live
+ * completion→report-view chart shipped rows reading "ow 66.7% · max 86.7%".
+ * Widened to hold the longest producible string, "now 100.0% · max 100.0%".
+ */
+const READOUT_W = 152;
+// 150 + 440 + 152 = 742, inside the 744 the shell's 28px padding leaves of WIDTH.
+const PLOT_W = 440; // svgPoints width == <svg> width == area-close x (clip-safe)
 
 /** Up to 5 evenly-spaced ticks from an x-axis label array (all if <=5). */
 /**

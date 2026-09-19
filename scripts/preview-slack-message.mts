@@ -33,6 +33,7 @@ import { dirname, join } from "node:path";
 import {
   buildConversionDigest,
   MIDWAY_QUESTION_INDEX,
+  WINDOW_DAYS,
 } from "../app/api/cron/conversion-digest/route";
 import { buildSubmissionJourney } from "../features/attribution/server/journey";
 import { buildJourneyMessage } from "../features/attribution/server/slack-journey";
@@ -47,6 +48,8 @@ import {
   fetchUnitEconomics,
 } from "../features/admin/server/conversion-digest";
 import { dayString, fetchFunnelCvrSparklines } from "../features/admin/server/digest-metrics";
+import { adCostByDay } from "../features/brain/server/ingest/analytics";
+import { reportingDay, reportingDayStart } from "../shared/time/reporting-day";
 import {
   buildDigestMessage as buildUxReviewDigest,
   fetchCoverageStats,
@@ -330,13 +333,20 @@ async function main(): Promise<void> {
     return;
   }
   const now = new Date();
-  const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const yesterdayStart = new Date(dayStart.getTime() - 86_400_000);
-  const dayKey = dayString(yesterdayStart);
-  const windowStart = new Date(dayStart.getTime() - 30 * 86_400_000).toISOString();
+  /**
+   * BERLIN day boundaries, and the cron's own snap-back — not UTC midnight and a
+   * flat 30x86,400,000. The cron reports Berlin days; a preview on UTC days sits
+   * an hour or two off every bound and lands a different day either side of a
+   * DST change, so it previews numbers the real message will not print.
+   */
+  const dayKey = reportingDay(now);
+  const dayStart = reportingDayStart(dayKey);
+  const windowStart = reportingDayStart(
+    reportingDay(new Date(dayStart.getTime() - WINDOW_DAYS * 86_400_000))
+  ).toISOString();
   const windowEnd = dayStart.toISOString();
 
-  console.log(`reading production data for ${dayKey} (30-day window)...`);
+  console.log(`reading production data for ${dayKey} (${WINDOW_DAYS}-day window)...`);
   const [
     funnel,
     cohorts,
@@ -360,8 +370,14 @@ async function main(): Promise<void> {
     fetchMidwayProgress(windowStart, windowEnd, MIDWAY_QUESTION_INDEX),
     fetchPaywallHits(windowStart, windowEnd),
     fetchEmailExperimentResults(windowStart, windowEnd),
-    // WINDOW_DAYS is not exported; the preview mirrors the cron's 30-day window.
-    fetchUnitEconomics(windowStart, windowEnd, 30),
+    /**
+     * Real ad spend. `adCostByDay` reads the `ga4` chunks out of Supabase, which
+     * this script already has a key for — no Google credential involved — so the
+     * preview shows the break-even figures the message will actually carry.
+     */
+    adCostByDay()
+      .catch(() => ({ byDay: new Map<string, number>(), from: null, to: null }))
+      .then((ad) => fetchUnitEconomics(ad, windowStart, windowEnd, WINDOW_DAYS)),
   ]);
 
   // adSpend deliberately null: GA4 needs a service-account credential this
