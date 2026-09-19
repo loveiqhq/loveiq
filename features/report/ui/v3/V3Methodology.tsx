@@ -18,6 +18,8 @@ interface ScienceCard {
   n: string;
   title: string;
   question: string;
+  /** Report V4 shortened five of the seven questions (1:222 and siblings). */
+  questionV4?: string;
   chapters: string[];
 }
 
@@ -45,6 +47,7 @@ const CARDS: readonly ScienceCard[] = [
     n: "03",
     title: "Attachment research",
     question: "How you connect in relationships and what throws you off?",
+    questionV4: "Why does safety change what you want?",
     chapters: ["Attachment Style", "Challenges in Partnership"],
   },
   {
@@ -53,6 +56,7 @@ const CARDS: readonly ScienceCard[] = [
     n: "04",
     title: "Sexology",
     question: "How does arousal actually work, and why is it different from desire or pleasure?",
+    questionV4: "How does arousal actually work?",
     chapters: ["Initiation Style", "Fantasy vs. Reality"],
   },
   {
@@ -61,6 +65,7 @@ const CARDS: readonly ScienceCard[] = [
     n: "05",
     title: "Behavioral science",
     question: "Why do habits often overwrite intentions? How do we break through self-sabotage?",
+    questionV4: "Why do habits outrun intentions?",
     chapters: ["Accelerators & Brakes", "Libido Challenges"],
   },
   {
@@ -69,6 +74,7 @@ const CARDS: readonly ScienceCard[] = [
     n: "06",
     title: "Relationship research",
     question: "What keeps intimacy and desire alive over years?",
+    questionV4: "What keeps desire alive over years?",
     chapters: ["Love Language", "Growth Potentials"],
   },
   {
@@ -78,18 +84,44 @@ const CARDS: readonly ScienceCard[] = [
     title: "Therapy rooms",
     question:
       "What do decades in the room teach? What are 3 practical ways to keep intimacy intact?",
+    questionV4: "What do decades in the room teach?",
     chapters: ["Reading Recommendations"],
   },
 ];
 
 /** 10392:18700 — the three source cards under the deck. */
-const SOURCES: readonly { title: string; body: string }[] = [
-  { title: "Hundreds of papers", body: "peer reviewed from a variety of scientific fields" },
-  { title: "Clinical models", body: "what therapists rely on and their practical pointers" },
-  { title: "Foundational books", body: "the texts experts return to and their main insights" },
+const SOURCES: readonly { title: string; body: string; icon: string }[] = [
+  {
+    title: "Hundreds of papers",
+    body: "peer reviewed from a variety of scientific fields",
+    icon: "papers",
+  },
+  {
+    title: "Clinical models",
+    body: "what therapists rely on and their practical pointers",
+    icon: "models",
+  },
+  {
+    title: "Foundational books",
+    body: "the texts experts return to and their main insights",
+    icon: "books",
+  },
 ];
 
-const V3Methodology: FC = () => {
+interface Props {
+  /**
+   * "full" (the default) renders the section exactly as `?v3=1` does today, heading
+   * and intro included — do not change that default, it is the live V3 report.
+   *
+   * "deck" is Report V4's 1:195, which is the card deck, the source cards and a
+   * plain closing paragraph only: V4 promotes this section's heading and intro into
+   * their own collapsible chapter (1:185), so rendering them here too duplicates
+   * them, and V4's closing paragraph (1:480) carries no bold.
+   */
+  chrome?: "full" | "deck";
+}
+
+const V3Methodology: FC<Props> = ({ chrome = "full" }) => {
   const trackRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
 
@@ -100,10 +132,26 @@ const V3Methodology: FC = () => {
     const onScroll = () => {
       const cards = el.querySelectorAll<HTMLElement>(".rv3-sci__card");
       if (!cards.length) return;
+      // At maximum scroll the last card cannot reach the snap edge — the track's
+      // trailing padding is smaller than the gap it would need — so "nearest to the
+      // edge" keeps naming the second-to-last one while the last is fully in view.
+      // Being at the end IS being on the last card, whatever the geometry says.
+      if (el.scrollLeft >= el.scrollWidth - el.clientWidth - 2) {
+        setActive(cards.length - 1);
+        return;
+      }
+      // Measure against the scroller's own left edge, not `offsetLeft`.
+      // `offsetLeft` is relative to the nearest POSITIONED ancestor — which here is
+      // usually <body>, so it silently carries the page's own x-offset. That
+      // cancels out in a full-bleed mobile column but not in any centred layout,
+      // where every card reads hundreds of pixels too far right and the dots stick
+      // on the first one. Bounding rects are already scroll-relative, so this is
+      // correct wherever the deck is placed.
+      const trackLeft = el.getBoundingClientRect().left;
       let nearest = 0;
       let best = Infinity;
       cards.forEach((c, i) => {
-        const d = Math.abs(c.offsetLeft - el.scrollLeft);
+        const d = Math.abs(c.getBoundingClientRect().left - trackLeft);
         if (d < best) {
           best = d;
           nearest = i;
@@ -116,18 +164,25 @@ const V3Methodology: FC = () => {
   }, []);
 
   return (
-    <section className="rv3-method" data-node-id="10392:18465">
+    <section
+      className={`rv3-method${chrome === "deck" ? " is-v4" : ""}`}
+      data-node-id={chrome === "deck" ? "1:195" : "10392:18465"}
+    >
       {/* One serif heading. The designer removed the coral "WHAT SHAPED THIS
           REPORT" eyebrow AND the separate "Methodology" heading on 2026-09-05;
           the section now opens straight into this. */}
-      <h2 className="rv3-method__heading" data-node-id="10392:18469">
-        What shaped this report
-      </h2>
-      <p className="rv3-prose rv3-method__intro" data-node-id="10392:18471">
-        To support self-understanding, we combined insights from multiple disciplines such as
-        neuroscience, psychology and relationship research alongside insights from decades of
-        therapeutic experience.
-      </p>
+      {chrome === "full" ? (
+        <>
+          <h2 className="rv3-method__heading" data-node-id="10392:18469">
+            What shaped this report
+          </h2>
+          <p className="rv3-prose rv3-method__intro" data-node-id="10392:18471">
+            To support self-understanding, we combined insights from multiple disciplines such as
+            neuroscience, psychology and relationship research alongside insights from decades of
+            therapeutic experience.
+          </p>
+        </>
+      ) : null}
 
       <div className="rv3-sci" data-node-id="10360:9879">
         <div className="rv3-sci__track" ref={trackRef}>
@@ -137,7 +192,7 @@ const V3Methodology: FC = () => {
               className="rv3-sci__card"
               style={{ "--rv3-accent": card.accent } as CSSProperties}
             >
-              <span className="rv3-sci__rule" aria-hidden="true" />
+              {chrome === "full" ? <span className="rv3-sci__rule" aria-hidden="true" /> : null}
               <header className="rv3-sci__head">
                 {/* Figma's own exported vector, tinted via a CSS mask. An
                     <img>-loaded SVG cannot see `currentColor`, so masking is what
@@ -150,11 +205,21 @@ const V3Methodology: FC = () => {
                     }
                   />
                 </span>
-                <span className="rv3-sci__n">{card.n}</span>
+                {/* 1:204 — V4 sets the title beside the icon and drops the number. */}
+                {chrome === "deck" ? (
+                  <h3 className="rv3-sci__title">{card.title}</h3>
+                ) : (
+                  <span className="rv3-sci__n">{card.n}</span>
+                )}
               </header>
-              <h3 className="rv3-sci__title">{card.title}</h3>
-              <p className="rv3-sci__q">{card.question}</p>
-              <p className="rv3-sci__label">read this in CHAPTER:</p>
+              {chrome === "full" ? <h3 className="rv3-sci__title">{card.title}</h3> : null}
+              <p className="rv3-sci__q">
+                {chrome === "deck" ? (card.questionV4 ?? card.question) : card.question}
+              </p>
+              {/* 1:225 — sentence case in V4, against V3's small-caps label. */}
+              <p className="rv3-sci__label">
+                {chrome === "deck" ? "Read more in chapter" : "read this in CHAPTER:"}
+              </p>
               <ul className="rv3-sci__list">
                 {card.chapters.map((c) => (
                   <li key={c}>
@@ -176,28 +241,57 @@ const V3Methodology: FC = () => {
       <div className="rv3-src" data-node-id="10392:18700">
         {SOURCES.map((s) => (
           <div key={s.title} className="rv3-src__card">
+            {/* 1:426 — V4 adds a 29.87px gradient tile above the title. */}
+            {chrome === "deck" ? (
+              <span className="rv3-src__icon" aria-hidden="true">
+                <span
+                  className="rv3-src__glyph"
+                  style={
+                    { "--rv3-glyph": `url(/report/v3/sources/${s.icon}.svg)` } as CSSProperties
+                  }
+                />
+              </span>
+            ) : null}
             <p className="rv3-src__title">{s.title}</p>
             <p className="rv3-src__body">{s.body}</p>
           </div>
         ))}
       </div>
 
+      {/* 10392:18726 / V4 1:480. Same three paragraphs either way; V4 draws them
+       * without the bold runs, so "deck" emits them plain. The duplicated word in
+       * the first line is the copy as written — flagged to Mark, not corrected. */}
       <div className="rv3-prose rv3-method__outro" data-node-id="10392:18726">
         <p>
           We translate this knowledge into clear clear and understandable patterns that people can
           recognise in themselves.
         </p>
-        <p>
-          This report is a <strong>psychometric approximation.</strong> It does not describe you in
-          a fixed or absolute way, but highlights{" "}
-          <strong>
-            tendencies, patterns, and possible directions of your personality and sexual identity.
-          </strong>
-        </p>
-        <p>
-          With that in mind, it&rsquo;s time to dive into your{" "}
-          <strong>personalized LoveIQ report.</strong>
-        </p>
+        {chrome === "deck" ? (
+          <>
+            <p>
+              This report is a psychometric approximation.
+              <br />
+              It does not describe you in a fixed or absolute way, but highlights tendencies,
+              patterns, and possible directions of your personality and sexual identity.
+            </p>
+            <p>With that in mind, it&rsquo;s time to dive into your personalized LoveIQ report.</p>
+          </>
+        ) : (
+          <>
+            <p>
+              This report is a <strong>psychometric approximation.</strong> It does not describe you
+              in a fixed or absolute way, but highlights{" "}
+              <strong>
+                tendencies, patterns, and possible directions of your personality and sexual
+                identity.
+              </strong>
+            </p>
+            <p>
+              With that in mind, it&rsquo;s time to dive into your{" "}
+              <strong>personalized LoveIQ report.</strong>
+            </p>
+          </>
+        )}
       </div>
 
       <div className="rv3-method__rule" aria-hidden="true" data-node-id="10392:18729" />

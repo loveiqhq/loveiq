@@ -38,6 +38,12 @@ const PREMIUM_DATA_MODULES = [
   // bundle for a reader who had bought nothing. It now travels in `archetypeContent`
   // under SUMMARY_BLOCK_ID like every other chapter.
   "@/data/report-summary",
+  // Added 2026-09-19. The "Go deeper & learn more" article (Figma 153:2260) is
+  // ~9,000 words of paid copy. A locked reader is meant to receive only the few
+  // blocks the blurred window can show — splitArticleForReader() in
+  // contentGating.ts does that cut — so a client component importing the module
+  // directly would hand over the whole thing and make the cut pointless.
+  "@/data/report3-learn-more",
 ];
 
 const PROJECT_ROOT = join(__dirname, "..", "..");
@@ -95,10 +101,15 @@ describe("premium content bundle isolation", () => {
     ).toEqual([]);
   });
 
-  it("no app-router page or layout imports premium data at runtime", () => {
+  it("no app-router component imports premium data at runtime", () => {
     // Pages and layouts are server components by default but easy to make
     // client-side accidentally (a single `"use client"` flips them). Apply
     // the same guard.
+    //
+    // Scans EVERY .tsx under app/, not just page/layout. Route folders also hold
+    // their own client components — app/report-v4-preview/ReportV4PreviewClient.tsx
+    // is one — and those sat in a blind spot: not under features/**/ui/**, and not
+    // named page or layout, so neither check saw them.
     const allAppFiles = listFilesRecursively(PROJECT_ROOT, join(PROJECT_ROOT, "app")).map((p) =>
       p.startsWith("app/") ? p : `app/${p}`
     );

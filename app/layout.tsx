@@ -1,7 +1,7 @@
 import "./globals.css";
 import Script from "next/script";
 import type { Metadata, Viewport } from "next";
-import { Lora, Manrope } from "next/font/google";
+import { Lora, Manrope, Plus_Jakarta_Sans } from "next/font/google";
 import { headers } from "next/headers";
 import SmoothScroll from "@shared/ui/SmoothScroll";
 import { NonceProvider } from "@shared/ui/NonceProvider";
@@ -23,6 +23,24 @@ const manrope = Manrope({
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700", "800"],
   variable: "--font-sans",
+  display: "swap",
+});
+
+/**
+ * Report V4 is specced in Plus Jakarta Sans (Figma "Report V4 — MOBILE", 1:165),
+ * where the rest of the site is Manrope. Loaded as its own variable rather than
+ * swapping --font-sans globally: the two have different metrics, so a site-wide
+ * change would reflow every landing and survey page. It is applied by shadowing
+ * --font-sans inside the V4 report scope only (see .rv4-doc in reportV3.css).
+ *
+ * Weights are exactly the six the frames use: 200 ExtraLight (labels, meter
+ * steps), 300 Light (the rating line), 400, 600 SemiBold (chapter links),
+ * 700 Bold and 800 ExtraBold (summary leads, peeking deck labels).
+ */
+const plusJakarta = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  weight: ["200", "300", "400", "600", "700", "800"],
+  variable: "--font-jakarta",
   display: "swap",
 });
 
@@ -196,7 +214,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   }
 
   return (
-    <html lang="en" className={`${manrope.variable} ${lora.variable}`}>
+    <html lang="en" className={`${manrope.variable} ${lora.variable} ${plusJakarta.variable}`}>
       <head>
         <link rel="preconnect" href="https://cdn-cookieyes.com" />
         {/* PostHog loads on every environment, so this preconnect is NOT gated with
