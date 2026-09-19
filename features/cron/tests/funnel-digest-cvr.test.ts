@@ -465,3 +465,56 @@ describe("Slack's image_url cap", () => {
     );
   });
 });
+
+/**
+ * The producer decides the renderer's ranking, and only a producer test can see
+ * that.
+ *
+ * The chart's "Steepest drop-offs" line ranks on whatever numbers arrive in the
+ * payload. Sending Math.round(dropPct) collapsed 5.1 / 4.9 / 4.8 to a single 5,
+ * and the renderer's stable sort then named the lowest-indexed of them — "Q2"
+ * instead of Q56. Reverting this to integers leaves every renderer test green,
+ * which is how it shipped.
+ */
+describe("drop-off payload precision", () => {
+  it("sends one decimal so equal-looking bars can still be ranked", async () => {
+    const curr = mkDaily();
+    // 1000 -> 949 is 5.1%; 949 -> 902 is 4.95%. Both print as "5%" and must not
+    // arrive as the same number.
+    const questions = [
+      { question_index: 0, q_id: "a", sessions: 1000 },
+      { question_index: 1, q_id: "b", sessions: 949 },
+      { question_index: 2, q_id: "c", sessions: 902 },
+      { question_index: 3, q_id: "d", sessions: 500 },
+    ];
+    const { blocks } = await buildFunnelDigestBlocks({
+      title: "Test",
+      windowLabel: "30d",
+      cvr: null,
+      bucket: null,
+      dropout: { questions },
+      nurture: null,
+      curr,
+      prev: curr,
+      cadence: "WoW",
+    });
+    const img = (blocks as Array<{ type: string; image_url?: string }>).find(
+      (b) => b.type === "image" && (b.image_url ?? "").includes("dropout-funnel")
+    );
+    expect(img, "the drop-off chart must be in the message").toBeDefined();
+    const d = new URL(img!.image_url!).searchParams.get("d")!;
+    const payload = JSON.parse(Buffer.from(d, "base64url").toString("utf8")) as {
+      bars: Array<{ label: string; dropPct: number }>;
+    };
+
+    const pcts = payload.bars.map((b) => b.dropPct);
+    // At least one value carries a fraction — an all-integer payload is the bug.
+    expect(pcts.some((v) => !Number.isInteger(v))).toBe(true);
+    // And the two that both display as "5%" are distinguishable.
+    const [first, second] = pcts;
+    expect(Math.round(first!)).toBe(Math.round(second!));
+    expect(first).not.toBe(second);
+    // Still only one decimal — full floats would waste the URL budget.
+    for (const v of pcts) expect(Math.round(v * 10) / 10).toBe(v);
+  });
+});

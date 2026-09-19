@@ -164,7 +164,7 @@ const CHART_CAPTIONS: Partial<Record<DigestImageKind, string>> = {
   "bucket-performance":
     "Each line is one price we showed. The share of people who bought at that price, as a 7-day running average. Both lines share one scale, so their heights compare.",
   "dropout-funnel":
-    "Where people quit the survey. Taller means more people left at that point. The last two positions are the contact-details screen and the final opt-in, which is where the steepest drop is — people reach the end and stop at being asked for an email.",
+    "Where people quit the survey. Taller means more people left at that point. The last two positions are not questions — they are the contact-details screen and the final opt-in. The chart names the steepest drops under the title; they move week to week, so read them there rather than assuming where they are.",
   "reactivation-email":
     "The follow-up emails we send to people who never opened or never bought. How each one performed.",
 };
@@ -547,9 +547,25 @@ async function buildDropoutChartBlock(
   if (!snap || snap.questions.length < 2) return null;
   const bars = computeDropoutBars(snap.questions);
   if (bars.length === 0) return null;
-  // Compact payload (label + integer %) so ~59 bars stay under Slack's
-  // ~3000-char image_url cap. `reached` is dropped (renderer doesn't use it).
-  const compact = bars.map((b) => ({ label: b.label, dropPct: Math.round(b.dropPct) }));
+  /**
+   * Compact payload so ~59 bars stay under Slack's ~3000-char image_url cap.
+   * `reached` is dropped (the renderer does not use it).
+   *
+   * ONE DECIMAL, not an integer. The renderer ranks the "Steepest drop-offs"
+   * summary and the red highlight off these numbers, so rounding here decides
+   * the ranking there. On the 30 days to 2026-09-18, Q56 (5.1%), Q3 (4.9%) and
+   * Q4 (4.8%) all became 5 and a stable sort kept the lowest index — so the
+   * chart named Q2 as the third-steepest question when Q56 was. The top two
+   * were right, which is why it read as plausible.
+   *
+   * Costs 117 characters on a 58-bar chart (2,359 -> 2,476 of 3,000). Display is
+   * unchanged: both the summary and the bar labels already print
+   * Math.round(dropPct).
+   */
+  const compact = bars.map((b) => ({
+    label: b.label,
+    dropPct: Math.round(b.dropPct * 10) / 10,
+  }));
   const url = await buildSignedImageUrl("dropout-funnel", { windowLabel, bars: compact });
   if (!url) return null;
   return {
