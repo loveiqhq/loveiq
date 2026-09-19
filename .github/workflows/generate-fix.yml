@@ -216,6 +216,7 @@ jobs:
       # The gate. Nothing above this line is trusted.
       - name: Prove it
         if: steps.token.outputs.ready == 'true'
+        id: proof
         env:
           FIX_REF: ${{ steps.commit.outputs.branch }}
           # The same base the model was given. Proving against main while the
@@ -224,7 +225,14 @@ jobs:
           BASE_REF: ${{ steps.tree.outputs.base }}
           PROBE: ${{ inputs.probe }}
           PROBE_ENV: ${{ inputs.probe_env }}
-        run: node scripts/prove-fix.mjs
+        run: |
+          set -o pipefail
+          node scripts/prove-fix.mjs | tee /tmp/proof.log
+          # A proven change over the line cap is still proven — it just carries
+          # more than one probe's word is worth, so it opens as a draft for real
+          # review instead of ready-to-merge.
+          tier=$(grep -oE 'PROVEN_TIER=(small|large)' /tmp/proof.log | tail -1 | cut -d= -f2)
+          echo "tier=${tier:-small}" >> "$GITHUB_OUTPUT"
 
       # Only reached when the proof passed, so this PR is ready for review
       # rather than a draft — the draft state is what the UNPROVEN reproduction
@@ -249,9 +257,15 @@ jobs:
           BRANCH: ${{ steps.commit.outputs.branch }}
           DEFECT: ${{ inputs.defect }}
           PROBE: ${{ inputs.probe }}
+          TIER: ${{ steps.proof.outputs.tier }}
         run: |
           git push origin "$BRANCH"
-          gh pr create --base main --head "$BRANCH" \
+          # Draft when the change is larger than the cap: the proof is true, but
+          # a reviewer should not read "ready" as "one probe vouches for all of
+          # this".
+          draft=""
+          if [ "$TIER" = "large" ]; then draft="--draft"; fi
+          gh pr create --base main --head "$BRANCH" $draft \
             --title "fix: $DEFECT" \
             --body "$(printf '%s\n' \
               "A visitor hit this, a probe reproduced it, and this change was proven against it." \

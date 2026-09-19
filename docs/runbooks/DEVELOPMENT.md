@@ -149,8 +149,20 @@ Two things it will not do, both enforced mechanically rather than by the prompt:
   themselves, and refuses a change over the line cap. A green probe says the UI
   behaves; it says nothing about whether a payment still settles.
 
-**What it is allowed to change.** Presentation code and tests only — and the
-size cap counts PRODUCT lines, not test lines. A test changes no runtime
+**What it is allowed to change.** Presentation code and tests only. Paths and
+size are judged differently, because they answer different questions:
+
+|          | question                             | answer                                                                                                                       |
+| -------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| **path** | can a probe speak to this at all?    | a hard gate — API routes, migrations, auth, payments and the probes themselves are refused before anything runs, at any size |
+| **size** | how much should one green probe buy? | a tier — an oversize change is still proven, and opens as a **draft** rather than ready-to-merge                             |
+
+Refusing a large diff unmeasured threw away the measurement too. The real
+survey-loop fix was 171 product lines across a hook, a submit path and the
+probe, and the honest verdict on it is "proven, and too big to merge on the
+proof alone" — not silence.
+
+The size cap counts PRODUCT lines, not test lines. A test changes no runtime
 behaviour, so it cannot widen what the probe failed to check, and a fix that
 brings its own regression test should not be penalised for it. (Measured: this
 morning's consent-gate fix was 37 lines of product code and 56 of test.)

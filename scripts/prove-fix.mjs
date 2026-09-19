@@ -96,14 +96,21 @@ export function judgeDiff(
   changedLines,
   { allow = ALLOW, deny = DENY, cap = MAX_CHANGED_LINES } = {}
 ) {
-  if (files.length === 0) return { ok: false, why: "the fix changes nothing" };
+  if (files.length === 0) return { ok: false, oversize: false, why: "the fix changes nothing" };
   // DENY is checked first and wins: a path matching both must be refused, or
   // adding a broad allow entry would silently unlock a denied one.
   const denied = files.filter((f) => deny.some((re) => re.test(f)));
-  if (denied.length > 0)
-    return { ok: false, why: `touches paths a probe cannot vouch for: ${denied.join(", ")}` };
+  if (denied.length > 0) {
+    return {
+      ok: false,
+      oversize: false,
+      why: `touches paths a probe cannot vouch for: ${denied.join(", ")}`,
+    };
+  }
   const outside = files.filter((f) => !allow.some((re) => re.test(f)));
-  if (outside.length > 0) return { ok: false, why: `outside the allowlist: ${outside.join(", ")}` };
+  if (outside.length > 0) {
+    return { ok: false, oversize: false, why: `outside the allowlist: ${outside.join(", ")}` };
+  }
   /**
    * TESTS DO NOT COUNT AGAINST THE CAP.
    *
@@ -121,12 +128,38 @@ export function judgeDiff(
    */
   const product = typeof changedLines === "object" ? changedLines.product : changedLines;
   const total = typeof changedLines === "object" ? changedLines.total : changedLines;
-  if (product > cap) {
-    return { ok: false, why: `${product} changed lines of product code, cap is ${cap}` };
-  }
   const testNote = total > product ? `, plus ${total - product} line(s) of tests` : "";
+
+  /**
+   * SIZE IS A CONFIDENCE TIER, NOT A GATE. Paths are the gate.
+   *
+   * These answer two different questions and the first version conflated them.
+   * A denied PATH means a probe cannot speak to the change at all — no green
+   * light on a UI probe says anything about whether a payment still settles —
+   * so that is refused outright, before anything runs.
+   *
+   * A large diff is different: the probe's answer is still true, there is just
+   * more change than one probe's word is worth. Refusing it before measuring
+   * threw away the measurement too, and taught nobody anything. The real
+   * survey-loop fix was 171 product lines across a hook, a submit path and the
+   * probe; the honest response to that is "proven, and too big to merge on the
+   * proof alone", not silence.
+   *
+   * So an oversize change is still proven, and comes out as a DRAFT for real
+   * review rather than ready-to-merge.
+   */
+  if (product > cap) {
+    return {
+      ok: true,
+      oversize: true,
+      why:
+        `${files.length} file(s), ${product} line(s) of product code${testNote} — ` +
+        `over the ${cap}-line cap, so this will be proven but opened as a draft`,
+    };
+  }
   return {
     ok: true,
+    oversize: false,
     why: `${files.length} file(s), ${product} line(s) of product code${testNote}, all presentation`,
   };
 }
@@ -143,7 +176,25 @@ if (process.argv.includes("--selftest")) {
   eq(judgeDiff(["app/api/survey/route.ts"], 2).ok, false, "api route refused");
   eq(judgeDiff(["supabase/migrations/x.sql"], 2).ok, false, "migration refused");
   eq(judgeDiff(["features/checkout/ui/Pay.tsx"], 2).ok, false, "deny beats allow");
-  eq(judgeDiff(["features/survey/ui/SurveyPage.tsx"], 999).ok, false, "line cap enforced");
+  eq(judgeDiff(["features/survey/ui/SurveyPage.tsx"], 999).ok, true, "oversize is still proven");
+  eq(
+    judgeDiff(["features/survey/ui/SurveyPage.tsx"], 999).oversize,
+    true,
+    "oversize is flagged for a draft"
+  );
+  eq(
+    judgeDiff(["features/survey/ui/SurveyPage.tsx"], 10).oversize,
+    false,
+    "a small change is not flagged"
+  );
+  // The real survey-loop fix: 171 product lines. Now measured, not dismissed.
+  eq(
+    judgeDiff(["features/survey/ui/SurveyPage.tsx"], { total: 227, product: 171 }).oversize,
+    true,
+    "the 171-line fix is proven as a draft rather than refused unmeasured"
+  );
+  // A DENIED PATH still refuses outright, whatever its size.
+  eq(judgeDiff(["app/api/survey/route.ts"], 1).ok, false, "a denied path is never proven");
   // Tests ride along free. The real consent-gate fix was 37 product + 56 test.
   eq(
     judgeDiff(["features/survey/ui/SurveyPage.tsx", "features/survey/tests/SurveyPage.test.tsx"], {
@@ -154,9 +205,9 @@ if (process.argv.includes("--selftest")) {
     "a fix that brings its own test is not punished for it"
   );
   eq(
-    judgeDiff(["features/survey/ui/SurveyPage.tsx"], { total: 200, product: 200 }).ok,
-    false,
-    "product code is still capped"
+    judgeDiff(["features/survey/ui/SurveyPage.tsx"], { total: 200, product: 200 }).oversize,
+    true,
+    "a large product change is proven but marked oversize, not refused"
   );
   eq(isTest("features/survey/tests/x.test.tsx"), true, "feature tests recognised");
   eq(isTest("__tests__/scripts/x.test.ts"), true, "root tests recognised");
@@ -252,7 +303,10 @@ async function main() {
   const verdict = judgeDiff(files, counted);
   console.log(`    ${verdict.ok ? "ok" : "REFUSED"} — ${verdict.why}`);
   if (!verdict.ok) {
-    console.log("\nNOT PROVEN — the diff was refused before anything was run.");
+    // Only a PATH reaches here now — size no longer refuses, see judgeDiff.
+    console.log(
+      "\nNOT PROVEN — the diff touches something a probe cannot vouch for, " + "so nothing was run."
+    );
     process.exit(1);
   }
 

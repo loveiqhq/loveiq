@@ -90,8 +90,31 @@ describe("what a generated fix is allowed to touch", () => {
     expect(judgeDiff(["features/checkout/ui/Pay.tsx"], 2).ok).toBe(false);
   });
 
-  it("caps the size of a change", () => {
-    expect(judgeDiff(["features/survey/ui/SurveyPage.tsx"], 10_000).ok).toBe(false);
+  /**
+   * SIZE IS A TIER, NOT A GATE — and this test used to assert the opposite.
+   *
+   * Paths and lines answer different questions. A denied PATH means a probe
+   * cannot speak to the change at all, so it is refused before anything runs.
+   * A large diff is not like that: the probe's answer is still true, there is
+   * simply more change than one probe's word is worth. Refusing it unmeasured
+   * threw away the measurement as well — the real survey-loop fix was 171
+   * product lines and we learned nothing about whether it worked.
+   */
+  it("proves a large change, but marks it for real review", () => {
+    const big = judgeDiff(["features/survey/ui/SurveyPage.tsx"], 10_000);
+    expect(big.ok, "an oversize change is still measured").toBe(true);
+    expect(big.oversize, "…and flagged so it opens as a draft").toBe(true);
+  });
+
+  it("does not mark a small change", () => {
+    expect(judgeDiff(["features/survey/ui/SurveyPage.tsx"], 10).oversize).toBe(false);
+  });
+
+  it("still refuses a denied path outright, however small", () => {
+    // The gate that did not become a tier: one line touching a payment route
+    // is still something no UI probe can vouch for.
+    expect(judgeDiff(["features/checkout/ui/Pay.tsx"], 1).ok).toBe(false);
+    expect(judgeDiff(["app/api/survey/route.ts"], 1).ok).toBe(false);
   });
 
   it("refuses an empty diff — nothing is not a fix", () => {
