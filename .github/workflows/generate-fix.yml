@@ -281,6 +281,7 @@ jobs:
           # this".
           draft=""
           if [ "$TIER" = "large" ]; then draft="--draft"; fi
+          set +e
           gh pr create --base main --head "$BRANCH" $draft \
             --title "fix: $DEFECT" \
             --body "$(printf '%s\n' \
@@ -300,3 +301,15 @@ jobs:
               "" \
               "Written by Claude Code and proven mechanically. Read it before merging —" \
               "the proof says the probe is satisfied, not that the approach is right.")"
+          code=$?
+          set -e
+          if [ $code -ne 0 ]; then
+            # The likely cause is a SETTING, not a fault: "GitHub Actions is
+            # not permitted to create or approve pull requests" is an
+            # organisation toggle, off by default. Nothing is lost when it
+            # bites — the branch is pushed and the proof is in the log — so
+            # say what to do rather than dying on a GraphQL error nobody can
+            # act on.
+            echo "::error::The proof PASSED and branch $BRANCH is pushed, but opening the pull request failed. If the log says Actions may not create pull requests, an org owner must enable that at https://github.com/organizations/loveiqhq/settings/actions — then open a PR from $BRANCH, or re-run this."
+            exit $code
+          fi

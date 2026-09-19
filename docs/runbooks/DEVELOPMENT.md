@@ -180,6 +180,22 @@ of "failed" is "the model could not do it", and that is wrong in two of the thre
 In all three the partial work is committed, printed and pushed, so what it had
 got to is readable.
 
+**One organisation setting gates the pull request.** "Allow GitHub Actions to
+create and approve pull requests" is off by default, and while it is off the
+last step fails with `GitHub Actions is not permitted to create or approve pull
+requests`. That is why this repo had never opened an automatic pull request —
+including from `replay-pr.mjs`, since the day it was written. An org owner
+enables it at <https://github.com/organizations/loveiqhq/settings/actions>.
+
+Nothing is lost while it is off: the branch is pushed and the proof is in the
+log, so the pull request can be opened by hand from `autofix/<timestamp>`.
+
+Worth knowing before enabling it: the same toggle also lets Actions _approve_
+pull requests. That is harmless today because `main` requires **zero**
+approvals, so an approval gates nothing — but if required approvals is ever
+raised to make review the human gate, this setting would let a workflow satisfy
+it, and the two must be reconsidered together.
+
 **What a proven run produces.** `prove-fix.mjs` prints `PROVEN` and then a
 machine-readable `PROVEN_TIER=small|large`, which is what the workflow reads to
 decide ready-for-review versus draft. That line going missing once cost a
