@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { execSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { pickEmailVariant, pickFromVariants } from "@shared/emails/ab-variant";
+import { pickEmailVariant, pickFromVariants, emailExperimentTags } from "@shared/emails/ab-variant";
 
 describe("pickEmailVariant", () => {
   it("returns the same variant for the same key + experiment", () => {
@@ -77,5 +80,101 @@ describe("pickFromVariants", () => {
     expect(counts.a).toBeGreaterThan(N * 0.25);
     expect(counts.b).toBeGreaterThan(N * 0.25);
     expect(counts.c).toBeGreaterThan(N * 0.25);
+  });
+});
+
+describe("emailExperimentTags", () => {
+  /**
+   * These tags are the ONLY thing that makes an email A/B test readable. Until
+   * 2026-09-19 `pickEmailVariant` picked a template and forgot; five experiments
+   * had been running for weeks with results that existed nowhere. Resend echoes
+   * tags back on every webhook, which is where the per-arm counters come from.
+   */
+  it("carries the experiment and the arm", () => {
+    expect(emailExperimentTags("survey-complete", "b")).toEqual([
+      { name: "exp", value: "survey-complete" },
+      { name: "arm", value: "b" },
+    ]);
+  });
+
+  it("replaces characters Resend rejects instead of dropping the send", () => {
+    /**
+     * Resend allows ASCII letters, numbers, underscores and dashes in a tag, and
+     * REJECTS THE WHOLE SEND otherwise. Losing the email to save the measurement
+     * is the wrong trade, so anything else is substituted.
+     */
+    const [exp, arm] = emailExperimentTags("purchase full_report!", "a/b");
+    expect(exp!.value).toBe("purchase_full_report_");
+    expect(arm!.value).toBe("a_b");
+    for (const t of [exp!, arm!]) {
+      expect(t.value, `${t.value} must be tag-safe`).toMatch(/^[A-Za-z0-9_-]*$/);
+    }
+  });
+
+  it("bounds the length, so a crafted value cannot be stored unbounded", () => {
+    const [exp, arm] = emailExperimentTags("x".repeat(500), "y".repeat(500));
+    expect(exp!.value.length).toBe(64);
+    expect(arm!.value.length).toBe(16);
+  });
+
+  it("round-trips every experiment the codebase actually runs", () => {
+    // If a live experiment's salt does not survive sanitising, its counters land
+    // under a different name than the readout looks for and it silently reports
+    // nothing.
+    for (const exp of [
+      "survey-complete",
+      "survey-paused",
+      "invite",
+      "report-share",
+      "purchase-full_report",
+      "purchase-all_reports",
+    ]) {
+      expect(emailExperimentTags(exp, "a")[0]!.value, exp).toBe(exp);
+    }
+  });
+});
+
+describe("every email A/B send is tagged", () => {
+  /**
+   * The wiring, not the behaviour. Behaviour is covered by the helper tests above
+   * and by features/cron/tests/resend-experiment-counters.test.ts; what a future
+   * refactor can silently drop is the tag on ONE of the five sends, which makes
+   * that experiment quietly unreadable again without failing anything.
+   *
+   * This is the exact failure mode that let five experiments run for weeks with
+   * no results: nothing asserted the arm went anywhere.
+   */
+  const SEND_SITES = [
+    "app/api/survey/route.ts", // survey-complete
+    "app/api/cron/survey-paused/route.ts", // survey-paused
+    "app/api/invite/route.ts", // invite
+    "app/api/report/share/route.ts", // report-share (3-way)
+    "features/checkout/server/fulfillment.ts", // purchase-<plan>
+  ];
+
+  it("attaches emailExperimentTags at every site that picks a variant", () => {
+    for (const site of SEND_SITES) {
+      const src = readFileSync(join(process.cwd(), site), "utf8");
+      // It picks an arm...
+      expect(src, `${site} should pick a variant`).toMatch(/pickEmailVariant|pickFromVariants/);
+      // ...so it must also tag the send with it.
+      expect(src, `${site} picks an A/B arm but never tags the send`).toContain(
+        "emailExperimentTags("
+      );
+    }
+  });
+
+  it("covers every site in the codebase that picks a variant", () => {
+    // Guards the list above: a NEW send site that picks an arm and is not listed
+    // here would otherwise never be checked.
+    const found = execSync(
+      "grep -rl 'pickEmailVariant(\\|pickFromVariants(' app features shared --include='*.ts' " +
+        "| grep -v '/tests/' | grep -v 'ab-variant.ts' | sort",
+      { encoding: "utf8", cwd: process.cwd() }
+    )
+      .trim()
+      .split("\n")
+      .filter(Boolean);
+    expect(found.sort()).toEqual([...SEND_SITES].sort());
   });
 });

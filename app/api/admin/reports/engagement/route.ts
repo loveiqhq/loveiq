@@ -148,10 +148,22 @@ export async function GET(request: Request) {
     /**
      * NULL, not 0, when no session was ever closed.
      *
-     * Nothing writes `report_session.ended_at` — 0 of 11,230 rows carry one — so
-     * `durations` is always empty and this card has shown a confident
-     * "Avg Session Duration: 0m" on /admin/reports since it shipped. A zero is a
-     * measurement; the truth is that there is no measurement.
+     * A zero is a measurement; "nobody closed a session" is the absence of one,
+     * and this card showed a confident "Avg Session Duration: 0m" for months
+     * because it could not tell the two apart.
+     *
+     * **This is no longer always empty.** `ead7ebf3` (2026-09-18) shipped
+     * `/api/report-session-end`, a `sendBeacon` on the way out of the report,
+     * and it works: measured 2026-09-19, 0% of sessions closed up to and
+     * including 17 Sep, then 19.5% on the 18th and 47.8% on the 19th as cached
+     * pages picked up the new bundle. 34 of 11,371 rows all time.
+     *
+     * So the average is now REAL but PARTIAL, and partial in a way that is not
+     * random: a beacon fires on a clean exit and is lost on a crash, a hard
+     * kill, or a browser that drops it — the sessions most likely to be missing
+     * are the ones that ended badly. Treat the figure as a floor on engagement
+     * from the readers who left normally, not as the average reader. The NULL
+     * is still the honest answer while coverage is this thin.
      */
     const avgSessionDurationSec =
       durations.length > 0

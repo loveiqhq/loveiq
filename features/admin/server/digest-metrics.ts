@@ -55,8 +55,6 @@ export interface RevenueBreakdown {
 export interface DailyMetrics {
   // Acquisition
   uniqueVisitors: number;
-  newVisitors: number;
-  returningVisitors: number;
   surveyEngineMounts: number;
   surveyStarts: number;
   completions: number;
@@ -463,11 +461,27 @@ export function delta(curr: number, prev: number, lowBaseThreshold = 5): string 
   // to EUR 29.00, which reads like a spike and means nothing. Say what actually
   // happened instead.
   if (prev === 0) return curr > 0 ? "vs none" : "—";
+  /**
+   * Below the threshold, say NOTHING rather than a percentage with a warning
+   * glued to it.
+   *
+   * It used to return e.g. "-100% (low base)". On the daily message that is what
+   * "Paid" showed almost every day: yesterday 0 against a baseline of one sale a
+   * week, which the average turns into 0.14 — so the arithmetic is -100% and the
+   * statement is noise. Raised on the 2026-09-19 review as confusing, and it is:
+   * a reader cannot tell "-100% (low base)" meaning "we sell about one a week and
+   * yesterday was not the day" from a real collapse, and "(low base)" is jargon
+   * that explains the caveat without removing it.
+   *
+   * The count itself is right there next to it. An empty string lets the caller
+   * drop the parenthetical entirely, which is the honest presentation of "too
+   * few to compare".
+   */
+  if (prev < lowBaseThreshold) return "";
   const pct = Math.round(((curr - prev) / prev) * 100);
   const capped = Math.max(-999, Math.min(999, pct));
   const sign = capped > 0 ? "+" : "";
-  const suffix = prev < lowBaseThreshold ? " (low base)" : "";
-  return `${sign}${capped}%${suffix}`;
+  return `${sign}${capped}%`;
 }
 
 /** ISO 8601 week string like "2026-W20" (Mon-Sun). */
@@ -563,6 +577,32 @@ async function fetchAnalyticsEventCount(
  * funnel_event.day is a DATE column (UTC day-stamp), not a timestamp, so we
  * slice the ISO timestamps to YYYY-MM-DD. The window is half-open
  * [sinceDay, untilDay) which matches every other fetcher's convention.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * THE TWO EVENT TYPES ARE NOT COMPARABLE. Do not divide one by the other and
+ * present the result as a conversion rate.
+ *
+ * `unique_visitor` is written by `recordUniqueVisit` on the SERVER with a
+ * throwaway per-day UUID that is never persisted client-side. It is therefore
+ * complete and consent-independent — which is the whole point of it, and the
+ * reason it replaced an earlier consent-gated pinger that "massively
+ * under-counted".
+ *
+ * `survey_engine_mount` is posted by the BROWSER, keyed on the `__liq_vid`
+ * cookie, and proxy.ts mints that cookie only after the visitor clicks Accept.
+ * So it is consent-gated. Measured 2026-09-19 over 30 days: 637 distinct
+ * visitors reached it against 977 server-written survey drafts past question
+ * one — roughly two thirds of the people.
+ *
+ * And the identifiers are unrelated: of 3,172 mount ids all time, only 632
+ * (20%) appear as a `unique_visitor` id at all. One is a per-day random UUID,
+ * the other a persistent cookie value, so they cannot be matched person to
+ * person even in principle.
+ *
+ * The complete server-side alternative for "started the survey" is
+ * `survey_partial_save` with `current_index >= 1` — different id space again
+ * (a survey session), but at least complete. That is the source the funnel
+ * table uses, labelled as starts per VISIT-DAY rather than per person.
  */
 async function fetchFunnelEventCount(
   eventType: "unique_visitor" | "survey_engine_mount",
@@ -605,47 +645,25 @@ export async function fetchFunnelCaptureStart(): Promise<string | null> {
 }
 
 /**
- * Splits today's unique visitors into NEW (first-ever seen) vs RETURNING
- * (seen on any prior day). Uses the funnel_event table where one row per
- * (visitor_id, day, event_type='unique_visitor') is written server-side by the
- * root layout (recordUniqueVisit), flagged by proxy.ts on the first countable
- * page view per browser per day (consent-independent, aggregate).
+ * DELETED 2026-09-19: `fetchNewVsReturning`.
  *
- * Both queries are capped to keep page-cap behavior predictable; at prelaunch
- * volume neither approaches the limit.
+ * It could not answer its own question. `funnel_event.visitor_id` is minted
+ * FRESH EACH DAY by design — the cookie behind it holds only a date, with no
+ * identifier and no cross-day linkage, which is precisely what lets it be set
+ * without analytics consent. Measured that day: 92 of 31,744 visitor ids have
+ * ever appeared on a second day, 0.29%, so the split was ~99.7% "new" no matter
+ * what the traffic did.
+ *
+ * And it computed even that from a slice. Both reads carried `Range` headers
+ * ("0-9999", "0-99999") under a comment saying neither approached the limit;
+ * PostgREST's max-rows cap is 1,000 and a Range header does not lift it, so it
+ * saw 1,000 of 11,331 current rows and 1,000 of ~20,500 prior ones. Two
+ * unpaginated reads of a 31,000-row table per digest run, for a number nothing
+ * outside its own tests ever read.
+ *
+ * If new-vs-returning is wanted, it needs a source that can recognise a person
+ * across days — GA4, or a cookie we do not have consent to set.
  */
-export async function fetchNewVsReturning(
-  sinceIso: string,
-  untilIso: string
-): Promise<{ newVisitors: number; returningVisitors: number }> {
-  const sinceDay = sinceIso.slice(0, 10);
-  const untilDay = untilIso.slice(0, 10);
-  const [todayRes, priorRes] = await Promise.all([
-    supabaseFetch(
-      `/rest/v1/funnel_event?select=visitor_id&event_type=eq.unique_visitor&day=gte.${sinceDay}&day=lt.${untilDay}`,
-      { headers: { Range: "0-9999" } }
-    ),
-    supabaseFetch(
-      `/rest/v1/funnel_event?select=visitor_id&event_type=eq.unique_visitor&day=lt.${sinceDay}`,
-      { headers: { Range: "0-99999" } }
-    ),
-  ]);
-
-  if (!todayRes.ok) return { newVisitors: 0, returningVisitors: 0 };
-  const todayRows = (await todayRes.json()) as Array<{ visitor_id: string }>;
-  const todaySet = new Set<string>();
-  for (const r of todayRows) if (r.visitor_id) todaySet.add(r.visitor_id);
-
-  let priorSet = new Set<string>();
-  if (priorRes.ok) {
-    const priorRows = (await priorRes.json()) as Array<{ visitor_id: string }>;
-    priorSet = new Set(priorRows.map((r) => r.visitor_id).filter((v): v is string => !!v));
-  }
-
-  let returning = 0;
-  for (const id of todaySet) if (priorSet.has(id)) returning += 1;
-  return { newVisitors: todaySet.size - returning, returningVisitors: returning };
-}
 
 /**
  * Top 3 UTC hours that produced the most completed submissions in the window.
@@ -1828,7 +1846,6 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
 
   const [
     uniqueVisitors,
-    visitorSplit,
     topCompletionHours,
     surveyEngineMounts,
     surveyStarts,
@@ -1866,7 +1883,6 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
     velocity30d,
   ] = await Promise.all([
     fetchFunnelEventCount("unique_visitor", sinceIso, untilIso),
-    fetchNewVsReturning(sinceIso, untilIso),
     fetchHourlyCompletions(sinceIso, untilIso, 3),
     fetchFunnelEventCount("survey_engine_mount", sinceIso, untilIso),
     fetchSurveyStarts(sinceIso, untilIso),
@@ -1945,8 +1961,6 @@ export async function fetchDailyMetrics(sinceIso: string, untilIso: string): Pro
 
   return {
     uniqueVisitors,
-    newVisitors: visitorSplit.newVisitors,
-    returningVisitors: visitorSplit.returningVisitors,
     surveyEngineMounts,
     surveyStarts,
     completions,

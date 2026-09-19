@@ -14,7 +14,7 @@
  * why `funnel-digest` was unscheduled for being FYI-only.
  */
 import { NextResponse } from "next/server";
-import { supabaseFetch } from "@features/admin/server/supabase";
+import { supabaseFetch, countRows } from "@features/admin/server/supabase";
 import { buildReportVoiceRows } from "@features/brain/server/ingest/report-voice";
 import { buildDomainRows } from "@features/brain/server/ingest/domain";
 import { redactUrlSecrets } from "@features/brain/server/ingest/upsert";
@@ -30,6 +30,7 @@ import {
   verifyCronAuth,
 } from "@shared/observability/slack-alert-dedup";
 import logger from "@shared/observability/logger";
+import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -87,10 +88,41 @@ async function corpusRevenue(): Promise<number | null> {
   return m ? Number(m[1]) : null;
 }
 
+/** The first day the SERVER paywall signal wrote anything, as a plain date string. */
+async function serverPaywallSignalFirstDay(): Promise<string | null> {
+  const res = await supabaseFetch(
+    "/rest/v1/report_price_quote?select=paywall_reached_at&paywall_reached_at=not.is.null" +
+      "&order=paywall_reached_at.asc&limit=1"
+  );
+  if (!res.ok) return null;
+  const rows = (await res.json().catch(() => [])) as Array<{ paywall_reached_at?: string }>;
+  const t = rows[0]?.paywall_reached_at;
+  return t ? reportingDay(new Date(t)) : null;
+}
+
+/** A date string as days since epoch, so two dates can be compared as a Reading. */
+function asDayNumber(day: string): number {
+  return Math.round(Date.parse(`${day}T00:00:00Z`) / 86_400_000);
+}
+
 export async function buildReadings(): Promise<{ readings: Reading[]; unread: string[] }> {
-  const until = new Date();
-  until.setUTCHours(0, 0, 0, 0);
-  const since = new Date(until.getTime() - WINDOW_DAYS * 86_400_000);
+  /**
+   * BERLIN midnight, not UTC midnight.
+   *
+   * Every RPC read below buckets on a Berlin day, and the sparkline functions
+   * generate their day axis from these bounds. A UTC-midnight `until` makes the
+   * axis stop a day short of the window it claims, so the newest day is absent
+   * rather than zero — which the two series readings below caught on their first
+   * run: 414 submissions charted against 416 that exist.
+   *
+   * `reportingDayStart` rather than arithmetic, because Berlin midnight is 22:00
+   * or 23:00 UTC depending on the season, and the 30-day step snaps for the same
+   * reason instead of subtracting fixed days across a DST change.
+   */
+  const until = reportingDayStart(reportingDay(new Date()));
+  const since = reportingDayStart(
+    reportingDay(new Date(until.getTime() - WINDOW_DAYS * 86_400_000))
+  );
   const range = { since_ts: since.toISOString(), until_ts: until.toISOString() };
 
   const readings: Reading[] = [];
@@ -252,6 +284,86 @@ export async function buildReadings(): Promise<{ readings: Reading[]; unread: st
       because:
         "every write goes through the redaction, so anything above zero means something wrote around it — usually a hand-run script from a checkout that predates the rule. Fix with `npm run brain:redact -- --apply`",
     });
+  }
+
+  /**
+   * THE SQL-TO-TYPESCRIPT CONTRACT.
+   *
+   * Nothing else checks it. The unit tests mock every RPC, so a fixture encodes
+   * what the RPC is BELIEVED to return and production is free to disagree —
+   * which is exactly how `get_paywall_hits` shipped returning the wrong
+   * `firstRowDay` for weeks while its tests stayed green, and how four sparkline
+   * RPCs bucketed on a UTC day under a Berlin header. The integration lane
+   * cannot cover it either: it skips on an unset secret, so a guard there never
+   * runs. This cron already runs daily against production with a real database,
+   * which makes it the only honest home for these.
+   *
+   * Each is a fact the RPC must satisfy, not a number someone typed.
+   */
+  const [paywall, serverFirstDay, cvrForContract] = await Promise.all([
+    rpc<{ hits?: number; firstRowDay?: string | null }>("get_paywall_hits", range),
+    serverPaywallSignalFirstDay(),
+    rpc<{ days?: Array<{ day: string; completions: number }> }>("get_funnel_cvr_sparklines", range),
+  ]);
+
+  if (!paywall?.firstRowDay || !serverFirstDay) {
+    unread.push("get_paywall_hits firstRowDay");
+  } else {
+    // firstRowDay must be the LATER of the two paywall signals — the day the step
+    // became meaningfully measured. It was MIN across both, which returned the
+    // day the LOSSY client event started (2026-05-24) and made the caller's
+    // "this row covers N days, not 30" caveat unreachable for ever.
+    readings.push({
+      what: "paywall signal start, as the digest is told it",
+      left: { source: "get_paywall_hits.firstRowDay", value: asDayNumber(paywall.firstRowDay) },
+      right: { source: "the server column's first row", value: asDayNumber(serverFirstDay) },
+      tolerance: 0,
+      because:
+        "firstRowDay must be the LATER of the two paywall signals. MIN across both returns the lossy client event's start and silently disables the funnel's coverage caveat",
+    });
+  }
+
+  const cvrDays = cvrForContract?.days;
+  if (!Array.isArray(cvrDays) || cvrDays.length === 0) {
+    unread.push("get_funnel_cvr_sparklines day series");
+  } else {
+    // The series must END on the day before the window closes. A bare `::date` on
+    // a Berlin-midnight bound resolves in the pooler's UTC and drops the last day
+    // entirely — which is how "visits yesterday were 100% below average" was
+    // published on a day with 543 visits.
+    const expectedLastDay = reportingDay(new Date(new Date(range.until_ts).getTime() - 1));
+    readings.push({
+      what: "last day of the daily funnel series",
+      left: {
+        source: "the RPC's own series",
+        value: asDayNumber(cvrDays[cvrDays.length - 1]!.day),
+      },
+      right: { source: "the day before the window closes", value: asDayNumber(expectedLastDay) },
+      tolerance: 0,
+      because:
+        "a bare ::date on a Berlin-midnight bound resolves in the pooler's UTC zone and cuts the series a day short, so the most recent day reads as zero rather than missing",
+    });
+
+    // And the series must CONSERVE rows: every submission in the window has to
+    // land on a day the series generates. It did not when the buckets moved to
+    // Berlin days while the axis did not.
+    const charted = cvrDays.reduce((t, d) => t + Number(d.completions ?? 0), 0);
+    const actual = await countRows(
+      `/rest/v1/survey_submission?select=id&created_date_time=gte.${range.since_ts}` +
+        `&created_date_time=lt.${range.until_ts}`
+    );
+    if (actual === null) {
+      unread.push("survey_submission count for the series check");
+    } else {
+      readings.push({
+        what: "submissions charted vs submissions that exist",
+        left: { source: "summed across the RPC's days", value: charted },
+        right: { source: "counted in the window", value: actual },
+        tolerance: 0,
+        because:
+          "a row whose Berlin day falls outside the generated axis is dropped from the chart with no error — the window total stays right, so only this comparison sees it",
+      });
+    }
   }
 
   const [corpus, ledger] = await Promise.all([corpusRevenue(), ledgerRevenue()]);

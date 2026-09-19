@@ -30,9 +30,11 @@ vi.mock("@features/survey/server/server", () => ({
   isSurveyClosed: vi.fn().mockResolvedValue(false),
 }));
 
-// next/headers cookies() — the route no longer reads cookies (the email-position
-// A/B was retired), but the mock stays so the regression test below can prove a
-// stale arm cookie is never picked up.
+// next/headers cookies() — the route reads the LANDING arm cookie (added
+// 2026-09-19 so a draft save can be split by experiment). It must still never
+// pick up the retired email-position arm, which is what the regression test at
+// the bottom proves; `mockCookieGet` answers for every cookie name, so a test
+// that sets one value is setting it for both.
 const { mockCookieGet } = vi.hoisted(() => ({ mockCookieGet: vi.fn() }));
 vi.mock("next/headers", () => ({
   cookies: vi.fn(async () => ({ get: mockCookieGet })),
@@ -155,6 +157,49 @@ describe("POST /api/survey-partial", () => {
     const call = mockFetchWithTimeout.mock.calls[0];
     const row = JSON.parse(call[1].body);
     expect(row.utm_tracker).toBeNull();
+  });
+
+  it("stamps the landing arm from the cookie onto the saved tracker", async () => {
+    /**
+     * The whole point of the change. A draft save is the ONLY row left by someone
+     * who starts the survey and does not finish, and the arm used to be stamped
+     * at submit only — so the mid-funnel was unsplittable by experiment, which is
+     * what "Midway Progress has no source" actually meant.
+     */
+    mockCookieGet.mockReturnValue({ value: "white_prev" });
+    await POST(
+      makeRequest({ ...validBody(), utmTracker: JSON.stringify({ utm_source: "google" }) })
+    );
+
+    const row = JSON.parse(mockFetchWithTimeout.mock.calls[0][1].body);
+    expect(JSON.parse(row.utm_tracker)).toEqual({
+      utm_source: "google",
+      landing_variant: "white_prev",
+    });
+  });
+
+  it("stamps the arm even when the visitor carried no UTMs at all", async () => {
+    // Direct traffic still belongs to an arm, and previously produced a null
+    // tracker — so organic visitors were invisible in any per-arm mid-funnel.
+    mockCookieGet.mockReturnValue({ value: "white" });
+    await POST(makeRequest(validBody()));
+
+    const row = JSON.parse(mockFetchWithTimeout.mock.calls[0][1].body);
+    expect(JSON.parse(row.utm_tracker)).toEqual({ landing_variant: "white" });
+  });
+
+  it("refuses an arm the body claims when no cookie backs it", async () => {
+    // utm_tracker is assembled in the browser and posted verbatim.
+    mockCookieGet.mockReturnValue(undefined);
+    await POST(
+      makeRequest({
+        ...validBody(),
+        utmTracker: JSON.stringify({ utm_source: "google", landing_variant: "white" }),
+      })
+    );
+
+    const row = JSON.parse(mockFetchWithTimeout.mock.calls[0][1].body);
+    expect(JSON.parse(row.utm_tracker)).toEqual({ utm_source: "google" });
   });
 
   // The email-position A/B was retired 2026-08-16 (email is asked last for

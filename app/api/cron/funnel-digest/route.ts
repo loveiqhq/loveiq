@@ -1,8 +1,10 @@
 /**
  * GET /api/cron/funnel-digest
  *
- * Daily ops digest at 09:00 UTC (and a weekly recap on Mondays). Phase 3
- * refocus: a CHART-DOMINANT funnel view. The message is a rail of conversion-
+ * WEEKLY ops digest, Mondays at 08:40 UTC. The daily arm is off — it sent the
+ * same nine charts every morning, which is why the whole cron was unscheduled in
+ * July, and the scheduled conversion-digest already carries the daily decisions
+ * and the per-experiment charts. A CHART-DOMINANT funnel view. The message is a rail of conversion-
  * rate-over-time charts plus a price-bucket chart, a survey drop-out retention
  * curve, and reactivation-email performance — followed by a compact Revenue +
  * Alerts text footer. All the old raw-count charts + verbose text were removed
@@ -20,6 +22,7 @@ import { NextResponse } from "next/server";
 import logger from "@shared/observability/logger";
 import { notifySlack, escapeSlack, type SlackBlock } from "@shared/observability/slack";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
+import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 import {
   fitsSlackImageUrl,
   signImagePayload,
@@ -38,18 +41,14 @@ import {
   type FunnelCvrSnapshot,
   type BucketPerfSnapshot,
   type DropoutFunnelSnapshot,
-  type NurturePerfSnapshot,
   computeRate,
   delta,
-  dayString,
   isoWeekString,
   fetchDailyMetrics,
   fetchWeeklyMetrics,
   fetchFunnelCvrSparklines,
   fetchBucketPerformance,
   fetchDropoutFunnel,
-  fetchDropoutFunnelByArm,
-  fetchNurturePerformance,
 } from "@features/admin/server/digest-metrics";
 
 export const runtime = "nodejs";
@@ -65,25 +64,11 @@ const BUCKET_TOP_N = 5;
 type DigestImageKind =
   | "cvr-visitor-start"
   | "cvr-start-completion"
-  | "cvr-completion-engagement"
   | "cvr-completion-paygate"
   | "cvr-paygate-purchase"
   | "bucket-performance"
   | "dropout-funnel"
-  | "dropout-by-arm"
   | "reactivation-email";
-
-// Human labels for the reactivation-email nurture stages.
-const NURTURE_STAGE_LABELS: Record<string, string> = {
-  "6h_no_view": "6h · no view",
-  "6h_no_unlock": "6h · no unlock",
-  "72h_no_unlock": "72h · 50% off",
-  // Retired stages (pre pricing 2.0) — retained so historical digests still label
-  // the old ladder correctly.
-  "30h_no_unlock": "30h · 50% off",
-  "54h_no_unlock": "54h · 75% off",
-  "78h_no_unlock": "78h · call invite",
-};
 
 // -----------------------------------------------------------------------------
 // Shared Slack-text helper (consumed by the tech-digest + product-digest crons)
@@ -155,20 +140,65 @@ async function buildSignedImageUrl(
 }
 
 /** Build a line/curve image block, or null when the URL builder fails. */
+/**
+ * One plain sentence per chart, said before the picture.
+ *
+ * The weekly message used to be EIGHT bare images in a row with nothing between
+ * them, so the only words a reader got were the internal step names burned into
+ * each title. The daily message has always captioned its charts; this one did
+ * not, and the difference is why it reads as a rail of pictures rather than a
+ * report.
+ *
+ * These say what the chart COUNTS — the population and the action — which is the
+ * question a reader has before they have any question about the trend.
+ */
+const CHART_CAPTIONS: Partial<Record<DigestImageKind, string>> = {
+  "cvr-visitor-start":
+    "Of everyone who lands on the site, the share who answer the first survey question. A 7-day running average, so one quiet day does not read as a collapse.",
+  "cvr-start-completion":
+    "Of everyone who answers the first question, the share who reach the last one. A 7-day running average.",
+  "cvr-completion-paygate":
+    "Of everyone who finishes the survey, the share who reach the point where the report asks for payment. A 7-day running average. The line starts in September because that is when we began recording this properly — earlier days are left blank rather than shown as a low number.",
+  "cvr-paygate-purchase":
+    "Of everyone who reaches that point, the share who pay. A 7-day running average — on a single day one sale out of one visitor is 100%, which is noise rather than news. Starts in September for the same reason as the chart above.",
+  "bucket-performance":
+    "Each line is one price we showed. The share of people who bought at that price, as a 7-day running average. Both lines share one scale, so their heights compare.",
+  "dropout-funnel":
+    "Where people quit the survey. Taller means more people left at that point. The last two positions are not questions — they are the contact-details screen and the final opt-in. The chart names the steepest drops under the title; they move week to week, so read them there rather than assuming where they are.",
+  "reactivation-email":
+    "The follow-up emails we send to people who never opened or never bought. How each one performed.",
+};
+
+/** The caption for a chart, then the chart. Nothing when there is no chart. */
+function withCaption(kind: DigestImageKind, block: SlackBlock | null): SlackBlock[] {
+  if (!block) return [];
+  const caption = CHART_CAPTIONS[kind];
+  return caption
+    ? [{ type: "context", elements: [{ type: "mrkdwn", text: caption }] }, block]
+    : [block];
+}
+
+/**
+ * The caption block plus the image, in reading order.
+ *
+ * Returns an ARRAY because a chart is a caption and a picture, not a picture.
+ * An empty array when the URL could not be signed — the caption must never
+ * outlive the image it describes, or the message claims a chart it did not send.
+ */
 async function lineChartBlock(
   kind: DigestImageKind,
   altText: string,
   payload: {
     windowLabel?: string;
     labels: string[];
-    series: number[][];
+    series: Array<Array<number | null>>;
     rate?: boolean;
     xAxis?: string[];
   }
-): Promise<SlackBlock | null> {
+): Promise<SlackBlock[]> {
   const url = await buildSignedImageUrl(kind, payload);
-  if (!url) return null;
-  return { type: "image", image_url: url, alt_text: altText };
+  if (!url) return [];
+  return withCaption(kind, { type: "image", image_url: url, alt_text: altText });
 }
 
 // Pure YYYY-MM-DD -> "MMM D" (no Date/locale -> no tz drift). Used for the
@@ -219,7 +249,9 @@ async function buildCvrChartBlocks(
     alt: string,
     label: string,
     numKey: keyof (typeof days)[number],
-    denKey: keyof (typeof days)[number]
+    denKey: keyof (typeof days)[number],
+    /** Set when the stage was not measured this way for the whole window. */
+    measuredFrom?: string
   ) => {
     // Gate on the DENOMINATOR, not the rate: a real 0% conversion (denominator
     // present, numerator always 0 — e.g. paygate→purchase) is critical signal
@@ -227,21 +259,28 @@ async function buildCvrChartBlocks(
     // that stage = nothing to convert from).
     const hasDenominator = days.some((d) => Number(d[denKey]) > 0);
     if (!hasDenominator) return;
-    const series = days.map((d) => computeRate(Number(d[numKey]), Number(d[denKey])));
-    const block = await lineChartBlock(kind, alt, {
-      windowLabel,
-      labels: [label],
-      series: [series],
-      rate: true,
-      xAxis,
-    });
-    if (block) out.push(block);
+    const rawSeries = trailingRate(
+      days.map((d) => Number(d[numKey])),
+      days.map((d) => Number(d[denKey]))
+    );
+    const series = measuredFrom ? maskBeforeMeasured(rawSeries, days, measuredFrom) : rawSeries;
+    // A fully masked series is not a chart, it is an empty frame with a title.
+    if (!series.some((v) => v !== null)) return;
+    out.push(
+      ...(await lineChartBlock(kind, alt, {
+        windowLabel,
+        labels: [label],
+        series: [series],
+        rate: true,
+        xAxis,
+      }))
+    );
   };
 
   await single(
     "cvr-visitor-start",
-    "Visitor to survey-start conversion rate over time",
-    "Visitor → Start",
+    "Share of site visitors who answer the first survey question, over time",
+    "Of all visitors",
     "starts",
     "visitors"
   );
@@ -267,45 +306,36 @@ async function buildCvrChartBlocks(
    */
   await single(
     "cvr-start-completion",
-    "Survey-start to completion conversion rate over time",
-    "Start → Completion",
+    "Share of people who start the survey and reach the end, over time",
+    "Of those who start",
     "completions",
     "starts"
   );
 
-  // Chart 3 — completion -> report-view at 1m / 5m / 10m (3 lines, one chart).
-  // Gate on the denominator (completions), so a real 0% engagement still shows.
-  if (days.some((d) => d.completions > 0)) {
-    const eng1 = days.map((d) => computeRate(d.eng_1m, d.completions));
-    const eng5 = days.map((d) => computeRate(d.eng_5m, d.completions));
-    const eng10 = days.map((d) => computeRate(d.eng_10m, d.completions));
-    const block = await lineChartBlock(
-      "cvr-completion-engagement",
-      "Completion to report-view conversion (1m / 5m / 10m) over time",
-      {
-        windowLabel,
-        labels: ["1 min", "5 min", "10 min"],
-        series: [eng1, eng5, eng10],
-        rate: true,
-        xAxis,
-      }
-    );
-    if (block) out.push(block);
-  }
+  /**
+   * DELETED 2026-09-19: "How soon finishers open their report" (1m / 5m / 10m).
+   *
+   * Removed at the team's request. Three cumulative lines on one axis read as
+   * three competing series rather than one thing measured at three delays, and
+   * it was reliably the chart people asked about instead of acting on. The
+   * `eng_1m/5m/10m` columns and their RPC are untouched.
+   */
 
   await single(
     "cvr-completion-paygate",
-    "Completion to paygate conversion rate over time",
-    "Completion → Paygate",
+    "Share of survey finishers who reach the point where the report asks for payment, over time",
+    "Of those who finish",
     "paygate",
-    "completions"
+    "completions",
+    PAYGATE_MEASURED_FROM
   );
   await single(
     "cvr-paygate-purchase",
-    "Paygate to purchase conversion rate over time",
-    "Paygate → Purchase",
+    "Share of people at the payment point who buy, over time",
+    "Of those who reach it",
     "purchased",
-    "paygate"
+    "paygate",
+    PAYGATE_MEASURED_FROM
   );
 
   return out;
@@ -318,8 +348,8 @@ async function buildCvrChartBlocks(
 async function buildBucketChartBlock(
   snap: BucketPerfSnapshot | null,
   windowLabel: string
-): Promise<SlackBlock | null> {
-  if (!snap || snap.days.length === 0) return null;
+): Promise<SlackBlock[]> {
+  if (!snap || snap.days.length === 0) return [];
   const days = snap.days;
 
   // Aggregate per-bucket totals to rank + to find the top-revenue bucket.
@@ -338,14 +368,16 @@ async function buildBucketChartBlock(
     .filter(([, t]) => t.shown > 0)
     .sort((a, b) => b[1].shown + b[1].purchases - (a[1].shown + a[1].purchases))
     .slice(0, BUCKET_TOP_N);
-  if (ranked.length === 0) return null;
+  if (ranked.length === 0) return [];
 
   const labels = ranked.map(([bucket]) => bucket.toUpperCase());
   const series = ranked.map(([bucket]) =>
-    days.map((d) => {
-      const c = d.buckets[bucket];
-      return c ? computeRate(c.purchases, c.shown) : 0;
-    })
+    trailingRate(
+      days.map((d) => d.buckets[bucket]?.purchases ?? 0),
+      // A day with no rows for this bucket contributes 0 to the denominator,
+      // which is correct: nobody was shown that price that day.
+      days.map((d) => d.buckets[bucket]?.shown ?? 0)
+    )
   );
 
   // Top bucket by revenue across all buckets (not just ranked) for the subtitle.
@@ -365,13 +397,17 @@ async function buildBucketChartBlock(
       ? `top revenue bucket: ${topRevBucket.toUpperCase()} (~${Math.round(topRev).toLocaleString()})`
       : "no purchases yet";
 
-  return lineChartBlock("bucket-performance", "Price-bucket conversion rate over time", {
-    windowLabel: `${windowLabel} · ${revNote}`,
-    labels,
-    series,
-    rate: true,
-    xAxis: days.map((d) => shortDate(d.day)),
-  });
+  return lineChartBlock(
+    "bucket-performance",
+    "Share of people who bought, at each price we showed, over time",
+    {
+      windowLabel: `${windowLabel} · ${revNote}`,
+      labels,
+      series,
+      rate: true,
+      xAxis: days.map((d) => shortDate(d.day)),
+    }
+  );
 }
 
 /**
@@ -383,6 +419,92 @@ async function buildBucketChartBlock(
  * 1-of-1 bail would otherwise show a misleading 100% bar. The last question
  * has no successor, so it has no drop-off bar (loop stops at length-1).
  */
+/**
+ * A 7-day TRAILING rate, with gaps where a rate cannot honestly be formed.
+ *
+ * A raw daily rate on these funnel steps is noise, not a trend. Paygate→purchase
+ * averages roughly one purchase a week and a handful of people at the paygate
+ * per day, so a day with one of each is 100% — and the chart it produced
+ * oscillated between 0% and 100%, set its own y-scale from a single sale, and
+ * told the reader nothing except that the numbers are small.
+ *
+ * Two kinds of gap, and both are `null` rather than 0, because 0% is a
+ * measurement and "too few to say" is not:
+ *
+ *   the first six days  — no full window behind them. Without this the opening
+ *                         points are 1-, 2-, ... 6-day rates on a chart whose
+ *                         caption promises a 7-day one, and the warm-up
+ *                         artefact sets the y-scale for the whole month.
+ *   an empty window     — nobody reached the step in those seven days, so there
+ *                         is no denominator to divide by.
+ *
+ * Same rule and same window as `buildArmSeries` in the conversion digest, so
+ * the two messages cannot disagree about what a trailing rate means.
+ */
+const TRAILING_DAYS = 7;
+/**
+ * Fewer than this many people in the whole 7-day window and there is no rate to
+ * report. Matches DROPOUT_REACH_FLOOR, which draws the same line for the same
+ * reason.
+ *
+ * Without it a week in which ONE person was shown a price and bought it reads
+ * as 100% — a true statement about one person, drawn at full height, which then
+ * sets the shared y-scale and squashes the row beside it (a real 6.7%) into the
+ * baseline. A rate is a claim about a population; one person is not one.
+ */
+const TRAILING_MIN_DENOMINATOR = 5;
+function trailingRate(nums: number[], dens: number[]): Array<number | null> {
+  return nums.map((_, idx) => {
+    if (idx < TRAILING_DAYS - 1) return null;
+    let n = 0;
+    let d = 0;
+    for (let i = idx - (TRAILING_DAYS - 1); i <= idx; i += 1) {
+      n += nums[i] ?? 0;
+      d += dens[i] ?? 0;
+    }
+    return d >= TRAILING_MIN_DENOMINATOR ? computeRate(n, d) : null;
+  });
+}
+
+/**
+ * The day the paywall stage began being measured the way it is measured now.
+ *
+ * `paygate` in get_funnel_cvr_sparklines is a UNION of a client-posted
+ * `paywall_initiated` analytics event (consent-gated, so lossy) and
+ * `report_price_quote.paywall_reached_at` (server truth). The server column
+ * shipped 2026-09-05 19:15 UTC and has no rows before it, so the union counts a
+ * strictly larger population from that day on.
+ *
+ * Drawn unmasked, the completion→paygate line steps from ~5% to ~60% on 5 Sep
+ * and paygate→purchase collapses from ~9% to ~1.6% on the same day — a 12x
+ * "improvement" and a 6x "collapse" that are one measurement change, not two
+ * product events. That is the single most misreadable thing this digest could
+ * publish, so the unmeasured stretch is a GAP rather than a low number.
+ *
+ * 09-06 rather than 09-05: the 5th holds 4 rows from 21:15 Berlin onward, a
+ * partial day that would read as a near-zero rate.
+ */
+const PAYGATE_MEASURED_FROM = "2026-09-06";
+
+/**
+ * Null every slot whose trailing window reaches back before `measuredFrom`.
+ *
+ * Masking only the days BEFORE the boundary is not enough: a 7-day average on
+ * 8 Sep still has five unmeasured days inside it, so the line would climb a
+ * ramp that is purely the old days ageing out. The first point drawn is the
+ * first whose entire window is on the measured side.
+ */
+function maskBeforeMeasured(
+  series: Array<number | null>,
+  days: Array<{ day: string }>,
+  measuredFrom: string
+): Array<number | null> {
+  return series.map((v, idx) => {
+    const windowStart = days[Math.max(0, idx - (TRAILING_DAYS - 1))]?.day;
+    return windowStart && windowStart < measuredFrom ? null : v;
+  });
+}
+
 const DROPOUT_REACH_FLOOR = 5;
 
 export interface DropoutBar {
@@ -423,83 +545,62 @@ async function buildDropoutChartBlock(
   if (!snap || snap.questions.length < 2) return null;
   const bars = computeDropoutBars(snap.questions);
   if (bars.length === 0) return null;
-  // Compact payload (label + integer %) so ~59 bars stay under Slack's
-  // ~3000-char image_url cap. `reached` is dropped (renderer doesn't use it).
-  const compact = bars.map((b) => ({ label: b.label, dropPct: Math.round(b.dropPct) }));
+  /**
+   * Compact payload so ~59 bars stay under Slack's ~3000-char image_url cap.
+   * `reached` is dropped (the renderer does not use it).
+   *
+   * ONE DECIMAL, not an integer. The renderer ranks the "Steepest drop-offs"
+   * summary and the red highlight off these numbers, so rounding here decides
+   * the ranking there. On the 30 days to 2026-09-18, Q56 (5.1%), Q3 (4.9%) and
+   * Q4 (4.8%) all became 5 and a stable sort kept the lowest index — so the
+   * chart named Q2 as the third-steepest question when Q56 was. The top two
+   * were right, which is why it read as plausible.
+   *
+   * Costs 117 characters on a 58-bar chart (2,359 -> 2,476 of 3,000). Display is
+   * unchanged: both the summary and the bar labels already print
+   * Math.round(dropPct).
+   */
+  const compact = bars.map((b) => ({
+    label: b.label,
+    dropPct: Math.round(b.dropPct * 10) / 10,
+  }));
   const url = await buildSignedImageUrl("dropout-funnel", { windowLabel, bars: compact });
   if (!url) return null;
   return {
     type: "image",
     image_url: url,
-    alt_text: "Survey drop-off rate per question — where users quit",
+    alt_text: "Where people quit the survey — the share who left on each question",
   };
 }
 
 /**
- * Chart 7b: per-arm drop-off (email-position A/B). Overlays the email-first
- * (control) and email-last drop-off curves on a shared x-axis so the strategy
- * lead can see whether asking email later reduces the early drop-off — the
- * first-question (Q1) bar is the headline. Both arms aligned on the union of
- * question labels; a question missing in one arm (too few sessions to clear the
- * reach floor) is filled with 0% there. Skipped entirely until at least one arm
- * has a drawable curve.
+ * DELETED 2026-09-19: "Survey drop-off by question — email-first vs email-last".
+ *
+ * It charted the `survey-email-position-ab` experiment, which was RETIRED on
+ * 2026-08-16. `email_position` has not been written since: all 1,055
+ * `survey_partial_save` rows carry NULL, the oldest from 2026-08-20. The chart
+ * could only ever draw two empty curves under a title naming a live test.
+ *
+ * Removed rather than repaired — there is nothing to repair. This is the
+ * axis-level retirement idiom the repo already uses: the arm labels stay in
+ * labels.ts so stored rows read truthfully, and the chart that claimed a running
+ * comparison goes. The `get_dropout_funnel_by_arm` RPC and the `first`/`last`
+ * fetchers are left alone; dropping a SECURITY DEFINER function is a migration
+ * for no gain, and its comment already records the retirement.
  */
-async function buildDropoutByArmChartBlock(
-  firstSnap: DropoutFunnelSnapshot | null,
-  lastSnap: DropoutFunnelSnapshot | null,
-  windowLabel: string
-): Promise<SlackBlock | null> {
-  const firstBars = firstSnap ? computeDropoutBars(firstSnap.questions) : [];
-  const lastBars = lastSnap ? computeDropoutBars(lastSnap.questions) : [];
-  if (firstBars.length === 0 && lastBars.length === 0) return null;
-
-  const firstMap = new Map(firstBars.map((b) => [b.label, Math.round(b.dropPct)]));
-  const lastMap = new Map(lastBars.map((b) => [b.label, Math.round(b.dropPct)]));
-  // Union of question labels ("Q1".."Qn"), ordered by question number.
-  const labels = [...new Set([...firstMap.keys(), ...lastMap.keys()])].sort(
-    (a, b) => Number(a.slice(1)) - Number(b.slice(1))
-  );
-  // null, not 0: a question that an arm has no reading for is a GAP, not a
-  // measured zero drop-off. `?? 0` drew a flat line along the axis and published
-  // it as a real result — the same falsehood the conversion chart was carrying.
-  const first = labels.map((l) => firstMap.get(l) ?? null);
-  const last = labels.map((l) => lastMap.get(l) ?? null);
-
-  const url = await buildSignedImageUrl("dropout-by-arm", { windowLabel, labels, first, last });
-  if (!url) return null;
-  return {
-    type: "image",
-    image_url: url,
-    alt_text: "Survey drop-off by question — email-first vs email-last arm",
-  };
-}
 
 /**
- * Chart 8: reactivation-email performance — per nurture stage sent + purchased
- * with CVR%. purchased may read 0 until checkout stamps payment.metadata.
- * promoStage (documented gap); the chart still shows send volume.
+ * DELETED 2026-09-19: "Reactivation email performance".
+ *
+ * Removed at the team's request while trimming the weekly message to the charts
+ * people act on. Its `purchased` half was never trustworthy anyway — checkout
+ * does not stamp `payment.metadata.promoStage`, so that column read 0 whatever
+ * the emails did, which is a documented gap rather than a result.
+ *
+ * `fetchNurturePerformance` and `get_nurture_performance` stay: the data is
+ * correct and worth having when someone looks at the sequence deliberately.
+ * This removes the weekly picture, not the source.
  */
-async function buildReactivationChartBlock(
-  snap: NurturePerfSnapshot | null,
-  windowLabel: string
-): Promise<SlackBlock | null> {
-  if (!snap || snap.stages.length === 0) return null;
-  const stages = snap.stages
-    .filter((s) => s.sent > 0 || s.purchased > 0)
-    .map((s) => ({
-      label: NURTURE_STAGE_LABELS[s.stage] ?? s.stage,
-      sent: s.sent,
-      purchased: s.purchased,
-    }));
-  if (stages.length === 0) return null;
-  const url = await buildSignedImageUrl("reactivation-email", { windowLabel, stages });
-  if (!url) return null;
-  return {
-    type: "image",
-    image_url: url,
-    alt_text: "Reactivation email performance per nurture stage",
-  };
-}
 
 // -----------------------------------------------------------------------------
 // Revenue + Alerts text footer (the only text we keep)
@@ -581,9 +682,6 @@ export async function buildFunnelDigestBlocks(opts: {
   cvr: FunnelCvrSnapshot | null;
   bucket: BucketPerfSnapshot | null;
   dropout: DropoutFunnelSnapshot | null;
-  dropoutFirst: DropoutFunnelSnapshot | null;
-  dropoutLast: DropoutFunnelSnapshot | null;
-  nurture: NurturePerfSnapshot | null;
   curr: DailyMetrics;
   prev: DailyMetrics;
   cadence: "DoD" | "WoW";
@@ -595,18 +693,10 @@ export async function buildFunnelDigestBlocks(opts: {
 
   // Charts 1-5 (CVR funnel steps), 6 (bucket), 7 (drop-out), 8 (reactivation).
   for (const b of await buildCvrChartBlocks(opts.cvr, opts.windowLabel)) blocks.push(b);
-  const bucketBlock = await buildBucketChartBlock(opts.bucket, opts.windowLabel);
-  if (bucketBlock) blocks.push(bucketBlock);
-  const dropoutBlock = await buildDropoutChartBlock(opts.dropout, opts.windowLabel);
-  if (dropoutBlock) blocks.push(dropoutBlock);
-  const dropoutByArmBlock = await buildDropoutByArmChartBlock(
-    opts.dropoutFirst,
-    opts.dropoutLast,
-    opts.windowLabel
+  blocks.push(...(await buildBucketChartBlock(opts.bucket, opts.windowLabel)));
+  blocks.push(
+    ...withCaption("dropout-funnel", await buildDropoutChartBlock(opts.dropout, opts.windowLabel))
   );
-  if (dropoutByArmBlock) blocks.push(dropoutByArmBlock);
-  const reactivationBlock = await buildReactivationChartBlock(opts.nurture, opts.windowLabel);
-  if (reactivationBlock) blocks.push(reactivationBlock);
 
   // Text footer: Revenue (always) + Alerts (when breaches exist).
   const footerLines = [
@@ -630,18 +720,18 @@ export async function buildFunnelDigestBlocks(opts: {
 
 /** Fetch the 4 chart snapshots for the trailing 30-day window. */
 async function fetchChartSnapshots(untilIso: string) {
-  const sinceIso = new Date(
-    new Date(untilIso).getTime() - CHART_WINDOW_DAYS * 86_400_000
+  // Snap back to a real Berlin midnight rather than subtracting fixed days,
+  // which lands an hour out whenever the window crosses a DST change — and the
+  // RPCs behind these charts generate their day axis from this bound.
+  const sinceIso = reportingDayStart(
+    reportingDay(new Date(new Date(untilIso).getTime() - CHART_WINDOW_DAYS * 86_400_000))
   ).toISOString();
-  const [cvr, bucket, dropout, dropoutFirst, dropoutLast, nurture] = await Promise.all([
+  const [cvr, bucket, dropout] = await Promise.all([
     fetchFunnelCvrSparklines(sinceIso, untilIso),
     fetchBucketPerformance(sinceIso, untilIso),
     fetchDropoutFunnel(sinceIso, untilIso),
-    fetchDropoutFunnelByArm(sinceIso, untilIso, "first"),
-    fetchDropoutFunnelByArm(sinceIso, untilIso, "last"),
-    fetchNurturePerformance(sinceIso, untilIso),
   ]);
-  return { cvr, bucket, dropout, dropoutFirst, dropoutLast, nurture };
+  return { cvr, bucket, dropout };
 }
 
 export async function GET(request: Request) {
@@ -660,16 +750,47 @@ export async function GET(request: Request) {
 
   try {
     const now = new Date();
-    const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    const yesterdayStart = new Date(dayStart.getTime() - 86_400_000);
-    const dayBeforeStart = new Date(yesterdayStart.getTime() - 86_400_000);
-    const dayKey = dayString(yesterdayStart);
+    /**
+     * Berlin midnight, not UTC midnight.
+     *
+     * Every daily series this digest charts is bucketed on a BERLIN day (the
+     * RPCs were converted 2026-09-19). A UTC-midnight window end therefore cut
+     * the series two hours short: rows between 22:00 and 24:00 UTC belong to the
+     * NEXT Berlin day, which is past the last day the RPC generates, so they were
+     * dropped from the chart entirely rather than merely landing on the wrong bar.
+     *
+     * `conversion-digest` has snapped to `reportingDayStart` since it started
+     * printing GA4 spend beside our counts; this digest was never given the same
+     * treatment and kept a UTC day. Same helper, same reason.
+     */
+    const dayStart = reportingDayStart(reportingDay(now));
+    // One millisecond before today began is yesterday, without assuming a day is
+    // 24 hours — on the two changeover days it is 23 or 25.
+    const dayKey = reportingDay(new Date(dayStart.getTime() - 1));
+    const yesterdayStart = reportingDayStart(dayKey);
+    const dayBeforeStart = reportingDayStart(reportingDay(new Date(yesterdayStart.getTime() - 1)));
 
     let dailySent = false;
     let weeklySent = false;
 
-    // ---- Daily (single message) ----
-    const dailyClaimed = await tryClaimSlackAlert("daily_digest", "day", dayKey);
+    /**
+     * ---- Daily: WEEKLY ONLY, deliberately ----
+     *
+     * This digest was unscheduled on 2026-07-26 "per the strategy lead" for being
+     * a rail of pictures with no decision attached, and the daily and weekly
+     * messages post the SAME 30-day chart rail — only the revenue cadence differs
+     * (DoD vs WoW). Re-enabling it daily would put a second nine-chart message in
+     * #ops every morning, beside `conversion-digest`, which already leads with a
+     * decision and carries the per-experiment charts Marcus asked for. Two of the
+     * charts would be the same metric twice.
+     *
+     * So it comes back weekly, where a broad picture earns its place and cannot
+     * become wallpaper. The daily branch stays in the code, gated, rather than
+     * deleted: the weekly path reuses every builder it calls, and flipping this
+     * constant is how you would turn it back on.
+     */
+    const DAILY_ENABLED = false;
+    const dailyClaimed = DAILY_ENABLED && (await tryClaimSlackAlert("daily_digest", "day", dayKey));
     if (dailyClaimed) {
       const yesterdayIso = yesterdayStart.toISOString();
       const [curr, prev, snaps] = await Promise.all([
@@ -679,13 +800,10 @@ export async function GET(request: Request) {
       ]);
       const digest = await buildFunnelDigestBlocks({
         title: `📊 Funnel — ${dayKey} UTC`,
-        windowLabel: `${CHART_WINDOW_DAYS}-day trends ending ${dayKey} UTC`,
+        windowLabel: `${CHART_WINDOW_DAYS}-day trends ending ${dayKey} Berlin time`,
         cvr: snaps.cvr,
         bucket: snaps.bucket,
         dropout: snaps.dropout,
-        dropoutFirst: snaps.dropoutFirst,
-        dropoutLast: snaps.dropoutLast,
-        nurture: snaps.nurture,
         curr,
         prev,
         cadence: "DoD",
@@ -706,8 +824,12 @@ export async function GET(request: Request) {
       const weekKey = isoWeekString(yesterdayStart);
       const weeklyClaimed = await tryClaimSlackAlert("weekly_digest", "week", weekKey);
       if (weeklyClaimed) {
-        const weekStart = new Date(dayStart.getTime() - 7 * 86_400_000);
-        const prevWeekStart = new Date(weekStart.getTime() - 7 * 86_400_000);
+        const weekStart = reportingDayStart(
+          reportingDay(new Date(dayStart.getTime() - 7 * 86_400_000))
+        );
+        const prevWeekStart = reportingDayStart(
+          reportingDay(new Date(weekStart.getTime() - 7 * 86_400_000))
+        );
         const weekStartIso = weekStart.toISOString();
         const [currW, prevW, snaps] = await Promise.all([
           fetchWeeklyMetrics(weekStartIso, dayStart.toISOString()),
@@ -716,13 +838,10 @@ export async function GET(request: Request) {
         ]);
         const digest = await buildFunnelDigestBlocks({
           title: `📈 Weekly funnel — ${weekKey}`,
-          windowLabel: `${CHART_WINDOW_DAYS}-day trends ending ${dayKey} UTC`,
+          windowLabel: `${CHART_WINDOW_DAYS}-day trends ending ${dayKey} Berlin time`,
           cvr: snaps.cvr,
           bucket: snaps.bucket,
           dropout: snaps.dropout,
-          dropoutFirst: snaps.dropoutFirst,
-          dropoutLast: snaps.dropoutLast,
-          nurture: snaps.nurture,
           curr: currW,
           prev: prevW,
           cadence: "WoW",
