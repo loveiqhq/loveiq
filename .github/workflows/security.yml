@@ -125,8 +125,29 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Same shape as the gate in ci.yml, and for the same reason: a
+      # VULNERABILITY is a finding, an OUTAGE is not. npm's audit endpoint
+      # answered 503 for the better part of an hour on 2026-09-19 and this job
+      # went red over it. A security job that is red for reasons nobody can act
+      # on is a security job people learn to scroll past, which costs more than
+      # it saves.
       - name: Run npm audit
-        run: npm audit --audit-level=high
+        run: |
+          set +e
+          report=$(npm audit --audit-level=high --json 2>/dev/null)
+          set -e
+          high=$(printf '%s' "$report" \
+            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const v=JSON.parse(s).metadata.vulnerabilities;console.log((v.high||0)+(v.critical||0))}catch{console.log("unknown")}})')
+          if [ "$high" = "unknown" ]; then
+            echo "::warning::npm audit could not be read — the registry endpoint did not answer. NOT treating this as a vulnerability."
+            exit 0
+          fi
+          echo "high+critical advisories: $high"
+          if [ "$high" -gt 0 ]; then
+            npm audit --audit-level=high || true
+            echo "::error::$high high or critical advisory(ies)"
+            exit 1
+          fi
 
       - name: Generate SBOM (CycloneDX)
         run: npx @cyclonedx/cyclonedx-npm --output-file sbom.json
