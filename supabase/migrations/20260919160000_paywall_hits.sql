@@ -39,20 +39,44 @@ DECLARE
 BEGIN
   SELECT json_build_object(
     -- DISTINCT submission: one person, however many plan quotes they were shown.
+    -- BOTH signals, like every other paywall stage in this schema.
+    --
+    -- 20260905182829 and 20260905190406 rewrote the production funnel RPCs to
+    -- count this step as a UNION of `report_price_quote.paywall_reached_at` (the
+    -- newer server-side signal) and `analytics_event.paywall_initiated` (the
+    -- older client one), precisely because one source alone was insufficient.
+    -- The first version of this function used the quote signal only and
+    -- under-reported by 22 people in 128 — 17% — against every other paywall
+    -- number the team can pull. `conversion-digest.ts` opens by naming that exact
+    -- failure: two surfaces computing the same metric differently.
     'hits', (
-      SELECT COUNT(DISTINCT q.survey_submission_id)::int
-        FROM report_price_quote q
-        JOIN survey_submission s ON s.id = q.survey_submission_id
-       WHERE q.paywall_reached_at IS NOT NULL
-         AND s.created_date_time >= since_ts
-         AND s.created_date_time <  until_ts
+      SELECT COUNT(*)::int FROM (
+        SELECT DISTINCT s.id
+          FROM survey_submission s
+         WHERE s.created_date_time >= since_ts
+           AND s.created_date_time <  until_ts
+           AND (
+             EXISTS (SELECT 1 FROM report_price_quote q
+                      WHERE q.survey_submission_id = s.id
+                        AND q.paywall_reached_at IS NOT NULL)
+             OR
+             EXISTS (SELECT 1 FROM analytics_event a
+                      WHERE a.survey_submission_id = s.id
+                        AND a.event_type = 'paywall_initiated')
+           )
+      ) reached
     ),
-    -- First day the instrument ever wrote anything, so the caller can say how
-    -- much of its window this step actually covers.
+    -- The earliest day EITHER signal wrote anything. The caller needs it to say
+    -- how much of its window this step actually covers — the quote signal only
+    -- began on 2026-09-05, so a 30-day window is really a 12-day one.
     'firstRowDay', (
-      SELECT to_char(MIN(paywall_reached_at) AT TIME ZONE 'Europe/Berlin', 'YYYY-MM-DD')
-        FROM report_price_quote
-       WHERE paywall_reached_at IS NOT NULL
+      SELECT to_char(MIN(t) AT TIME ZONE 'Europe/Berlin', 'YYYY-MM-DD')
+        FROM (
+          SELECT MIN(paywall_reached_at) AS t FROM report_price_quote
+           WHERE paywall_reached_at IS NOT NULL
+          UNION ALL
+          SELECT MIN(event_time) FROM analytics_event WHERE event_type = 'paywall_initiated'
+        ) f
     )
   ) INTO result;
 
@@ -68,5 +92,6 @@ REVOKE EXECUTE ON FUNCTION get_paywall_hits(TIMESTAMPTZ, TIMESTAMPTZ) FROM anon,
 GRANT EXECUTE ON FUNCTION get_paywall_hits(TIMESTAMPTZ, TIMESTAMPTZ) TO service_role;
 
 COMMENT ON FUNCTION get_paywall_hits(TIMESTAMPTZ, TIMESTAMPTZ) IS
-  'Paywall Hits in PEOPLE, cohort-scoped on the submission date. report_price_quote '
-  'holds one row per plan (4 per person), so a row count over-reports by 4x.';
+  'Paywall Hits in PEOPLE, cohort-scoped on the submission date, counting BOTH the '
+  'quote signal and analytics_event.paywall_initiated — the same union the production '
+  'funnel RPCs use. report_price_quote holds one row per plan, so a row count is 4x.';

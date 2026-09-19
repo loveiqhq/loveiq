@@ -637,6 +637,24 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
      * than as 100 minus the rounded drop, so the two columns cannot disagree by a
      * rounding step.
      */
+    /**
+     * Says so when the paywall row covers less of the window than the rows above
+     * it. Only when it actually does: once the instrument is older than the
+     * window this line disappears on its own rather than becoming furniture.
+     */
+    const paywallNote = (() => {
+      if (!paywall?.firstRowDay || !steps.some((x) => x.step.includes("hit the paywall"))) {
+        return null;
+      }
+      // The digest's own reporting day, not wall-clock — the same boundary the
+      // window is cut on, so the two cannot disagree across a DST change.
+      const windowEnd = reportingDayStart(reportingDay(now)).getTime();
+      const first = new Date(`${paywall.firstRowDay}T00:00:00Z`).getTime();
+      if (!Number.isFinite(first) || first <= windowEnd - WINDOW_DAYS * 86_400_000) return null;
+      const days = Math.max(1, Math.round((windowEnd - first) / 86_400_000));
+      return `_The paywall row covers ${days} days, not ${WINDOW_DAYS} — that signal only started on ${escapeSlack(paywall.firstRowDay)}._`;
+    })();
+
     const top = steps[0]?.count ?? 0;
     const rows = steps.map((s, i) => {
       const prev = i === 0 ? null : steps[i - 1]!;
@@ -656,6 +674,13 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
           }`,
           rows.join("\n"),
           "_people  ·  % of the step before  ·  % of all visits_",
+          /**
+           * The paywall step's instrument is younger than the window, and a row
+           * measured over 14 days sitting in a table headed "30 days" is the
+           * quiet kind of wrong. `firstRowDay` existed for exactly this and was
+           * fetched, typed and read by nothing until an audit noticed.
+           */
+          ...(paywallNote ? [paywallNote] : []),
         ].join("\n")
       )
     );

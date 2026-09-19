@@ -675,19 +675,28 @@ export function buildFunnel(
    * is not.
    */
   /**
-   * Same guard, third time: a step sourced from a different table over a
-   * different instrumented period must not be drawn below the step it precedes,
-   * because the clamp would then drag THAT step down and publish a smaller,
-   * wrong number under a truthful label.
+   * Same guard, third time — and this one was MISSING while the comment above it
+   * claimed it was here. An audit caught it.
    *
-   * Paywall hits come from report_price_quote; report opens come from the
-   * submission cohort. Measured 2026-09-19: 500 hits against 412 opens, so the
-   * paywall row sits above checkout comfortably — this is for the windows where
-   * it does not.
+   * The paywall row sits below report opens and the clamp only ever pulls DOWN,
+   * so a paywall count larger than opens is silently rewritten to equal opens and
+   * the table prints "100%" — "every single person who opened their report hit
+   * the paywall". That fabrication is exactly what the 4x row-count bug produced,
+   * and fixing the count did not remove the mechanism that laundered it.
+   *
+   * It is still reachable with a correct count, because the two rows have
+   * different denominators: get_paywall_hits counts every submission in the
+   * window, while reportOpens comes from the arm-attributed cohort, which covers
+   * ~92% of them. So the paywall row can legitimately include people the row
+   * above excludes.
+   *
+   * When that happens the row is OMITTED rather than clamped. A missing step is
+   * a gap someone notices; a clamped one is a number someone quotes.
    */
   const paywallCount =
     typeof paywallHits === "number" && Number.isFinite(paywallHits) ? paywallHits : null;
-  const hasPaywall = paywallCount !== null && paywallCount > 0;
+  const reportOpensTotal = sum((r) => r.reportOpens);
+  const hasPaywall = paywallCount !== null && paywallCount > 0 && paywallCount <= reportOpensTotal;
 
   const hasMidway =
     !!midway &&
@@ -745,13 +754,15 @@ export function buildFunnel(
    * finished, opened, [paywall]. Hardcoding it was already a latent trap, and it
    * has since had to absorb two new optional rows.
    *
-   * PAYWALL IS CLAMPED, and that is a judgement worth stating. Measured
-   * 2026-09-19 it reads 500 against 412 report opens — but every row below
-   * "Finished the survey" is labelled "…of those", a cohort, and a cohort row
-   * cannot exceed the one above it. The excess is the period-vs-cohort mismatch
-   * that also produces the 117.7% on report opens: paywall hits are counted when
-   * they happen, so somebody who finished the survey last month and hit the wall
-   * this month lands outside the cohort they belong to.
+   * PAYWALL IS CLAMPED, but the clamp can no longer bite: `hasPaywall` refuses
+   * the row outright when it exceeds report opens, so by the time it is in the
+   * array it is already a subset. The clamp stays as the second guard — if the
+   * refusal is ever loosened, monotonicity still holds.
+   *
+   * The history is worth keeping. This comment used to justify clamping with
+   * "it reads 500 against 412 report opens". That 500 was a row count over a
+   * table holding four rows per person, and the clamp turned it into a tidy,
+   * fabricated 100% instead of letting the absurdity show.
    *
    * `ever paid` stays unclamped for the opposite reason: a promo one-tap or an
    * admin-granted unlock sets purchased_at with no checkout, so paid can exceed
@@ -977,8 +988,10 @@ export interface EmailExperimentRow {
   experiment: string;
   arm: string;
   delivered: number;
-  opened: number;
   clicked: number;
+  /** Spam complaints. A variant marked as spam more often is a result. */
+  complained: number;
+  bounced: number;
 }
 
 export async function fetchEmailExperimentResults(
@@ -1008,8 +1021,9 @@ export async function fetchEmailExperimentResults(
         experiment,
         arm,
         delivered: int(r.delivered),
-        opened: int(r.opened),
         clicked: int(r.clicked),
+        complained: int(r.complained),
+        bounced: int(r.bounced),
       });
     }
     return rows;
@@ -1042,7 +1056,30 @@ export function buildEmailExperimentLines(rows: EmailExperimentRow[]): string[] 
   const lines: string[] = [];
   for (const [experiment, arms] of [...byExperiment.entries()].sort()) {
     const live = arms.filter((a) => a.delivered > 0).sort((a, b) => a.arm.localeCompare(b.arm));
-    if (live.length === 0) continue;
+
+    /**
+     * An arm with clicks but no recorded deliveries is a BROKEN MEASUREMENT, not
+     * an absent one, and dropping it silently hides that. It means delivered
+     * webhooks were missed while clicked ones landed — the denominator is gone
+     * and every rate computed beside it is against a different population.
+     */
+    const clicksWithoutDeliveries = arms.filter((a) => a.delivered === 0 && a.clicked > 0);
+
+    if (live.length === 0) {
+      /**
+       * Every arm has a zero denominator. The route's fallback only fires when
+       * the whole result set is empty, so without this the experiment vanishes
+       * with no section, no line and no explanation — precisely the quiet
+       * omission this feature was built to remove.
+       */
+      const clicks = arms.reduce((t, a) => t + a.clicked, 0);
+      lines.push(
+        clicks > 0
+          ? `• *${escapeSlack(experiment)}* — ${clicks} click(s) recorded but no deliveries; the delivered webhook is not arriving, so no rate can be computed`
+          : `• *${escapeSlack(experiment)}* — nothing recorded yet`
+      );
+      continue;
+    }
 
     const rate = (a: EmailExperimentRow) => computeRate(a.clicked, a.delivered);
     const parts = live.map(
@@ -1052,14 +1089,53 @@ export function buildEmailExperimentLines(rows: EmailExperimentRow[]): string[] 
     if (live.length === 1) {
       // One arm with traffic is not a comparison. Say so rather than printing a
       // lone rate that reads as a result.
-      lines.push(`• *${escapeSlack(experiment)}* — ${parts[0]}, only one arm has data yet`);
+      lines.push(
+        `• *${escapeSlack(experiment)}* — ${parts[0]}, only one arm has data yet` +
+          (clicksWithoutDeliveries.length > 0
+            ? ` (${clicksWithoutDeliveries.map((a) => a.arm.toUpperCase()).join(", ")} has clicks but no recorded deliveries)`
+            : "")
+      );
       continue;
     }
 
-    // Best against second-best, which is the only pair worth a verdict in a
-    // three-way test.
-    const ranked = [...live].sort((a, b) => rate(b) - rate(a));
+    /**
+     * Ranked on the RAW proportion, not on `rate()`.
+     *
+     * `rate()` is computeRate, which rounds to one decimal — so 12/2000 (0.600%)
+     * and 13/2100 (0.619%) both became "0.6", the sort saw a tie, and stable sort
+     * fell back to alphabetical order. The line then named A as ahead while
+     * printing a NEGATIVE delta for A, because the z-test ran on the raw counts
+     * the sort had ignored. Realistic email volumes reach that every day.
+     */
+    const raw = (a: EmailExperimentRow) => (a.delivered > 0 ? a.clicked / a.delivered : 0);
+    const ranked = [...live].sort((a, b) => raw(b) - raw(a));
     const [lead, next] = [ranked[0]!, ranked[1]!];
+
+    /**
+     * Clicks are click EVENTS: Resend fires one per link, each with its own
+     * svix id, so a single reader can click three times. Delivered is one event
+     * per email. The ratio is therefore not a proportion, and twoProportionSignal
+     * refuses outright when successes exceed the sample — which would print
+     * "not enough clicks yet" on an arm with ABUNDANT clicks, the exact opposite
+     * of the truth.
+     *
+     * Capped at the denominator so the z-test gets a valid proportion, and the
+     * cap is disclosed rather than silently applied.
+     */
+    /**
+     * When an arm exceeds its own denominator the ratio is not a proportion at
+     * all, and a z-test on it is arithmetic nonsense. twoProportionSignal refuses
+     * outright, which printed "not enough clicks yet" on an arm with ABUNDANT
+     * clicks; capping to the denominator was worse, manufacturing a 100% rate.
+     * The counts are reported and the verdict declined, with the reason.
+     */
+    const overCounted = live.some((a) => a.clicked > a.delivered);
+    if (overCounted) {
+      lines.push(
+        `• *${escapeSlack(experiment)}* — ${parts.join(" · ")} — not comparable: some readers clicked more than once, so the rate is not a share of recipients`
+      );
+      continue;
+    }
     const signal = twoProportionSignal(next.delivered, next.clicked, lead.delivered, lead.clicked);
     /**
      * Three outcomes, not two. "No clear winner" claims we measured and found
@@ -1070,10 +1146,39 @@ export function buildEmailExperimentLines(rows: EmailExperimentRow[]): string[] 
     const verdict =
       signal.significance === "insufficient-data"
         ? `not enough clicks yet to compare — each arm needs at least ${MIN_CELL_COUNT}`
-        : signal.significance === "inconclusive"
-          ? `no clear winner yet — ${lead.arm.toUpperCase()} is ahead but the gap could still be chance (${formatSignalSummary(signal)})`
-          : `${lead.arm.toUpperCase()} is genuinely ahead (${formatSignalSummary(signal)})`;
-    lines.push(`• *${escapeSlack(experiment)}* — ${parts.join(" · ")} — ${verdict}`);
+        : /**
+           * A dead heat is not a lead, but it is not "level" either until there
+           * is enough data to say so — which is why this sits BELOW the
+           * insufficient-data branch. With two clicks an arm, identical rates are
+           * a coincidence, not a finding. Above it, "inconclusive" used to render
+           * "A is ahead but the gap could still be chance" over two literally
+           * equal numbers.
+           */
+          raw(lead) === raw(next)
+          ? `level so far — the arms are identical on this measure`
+          : signal.significance === "inconclusive"
+            ? `no clear winner yet — ${lead.arm.toUpperCase()} is ahead but the gap could still be chance (${formatSignalSummary(signal)})`
+            : signal.significance === "significant-lift"
+              ? `${lead.arm.toUpperCase()} is genuinely ahead (${formatSignalSummary(signal)})`
+              : /**
+                 * `significant-regression` is the fourth member of the enum and used
+                 * to fall through to "genuinely ahead" — printing the exact opposite
+                 * of the finding. It should be unreachable now that ranking is on the
+                 * raw proportion, so saying so out loud beats asserting a direction
+                 * the numbers contradict.
+                 */
+                `the arms disagree with their own ranking — not reporting a winner (${formatSignalSummary(signal)})`;
+    /**
+     * Complaints, when there are any. An arm that wins on clicks while being
+     * marked as spam twice as often has not won — and the counters have always
+     * been written, they just had no reader.
+     */
+    const complaints = live.filter((a) => a.complained > 0);
+    const spam =
+      complaints.length > 0
+        ? ` · spam: ${complaints.map((a) => `${a.arm.toUpperCase()} ${a.complained}`).join(", ")}`
+        : "";
+    lines.push(`• *${escapeSlack(experiment)}* — ${parts.join(" · ")} — ${verdict}${spam}`);
   }
   return lines;
 }

@@ -1,8 +1,10 @@
 -- Daily per-arm counters for the email A/B tests, so their results can be read.
 --
--- WHY THIS EXISTS. We run five email A/B tests — survey-complete, survey-paused,
--- two purchase variants and the three-way report-share — and as of 2026-09-19
--- not one of them could be read back. `pickEmailVariant` hashes the recipient,
+-- WHY THIS EXISTS. We run SIX email A/B tests — survey-complete, survey-paused,
+-- invite, the three-way report-share, and the two purchase variants
+-- (purchase-full_report, purchase-all_reports) — and as of 2026-09-19 not one of
+-- them could be read back. An earlier draft of this comment said "five" and left
+-- out `invite`, which is its own small joke given the point below. `pickEmailVariant` hashes the recipient,
 -- picks a template, and that is the end of it: no column, no analytics property,
 -- no tag. The experiments were unreadable BY CONSTRUCTION, and had been running
 -- for weeks.
@@ -13,7 +15,7 @@
 -- which is the class of quiet omission the whole KPI push exists to remove.
 --
 -- WHY A COUNTER TABLE AND NOT A ROW PER EMAIL. The question these tests ask is
--- "does variant B get opened and clicked more than variant A", which is a rate
+-- "does variant B get clicked more than variant A", which is a rate
 -- over a population, not a per-person fact. Counters answer it in one small read
 -- and carry no recipient identity at all — no email address, no user id, nothing
 -- to purge later. `resend_webhook_event` was the other candidate and was
@@ -22,8 +24,13 @@
 -- it is deleting them.
 --
 -- THE DENOMINATOR IS `delivered`, not `sent`. An email that never arrived cannot
--- be opened, so counting it in the denominator would penalise whichever arm drew
--- more dead addresses — noise that has nothing to do with the copy under test.
+-- be clicked, so counting it would penalise whichever arm drew more dead
+-- addresses — noise that has nothing to do with the copy under test.
+--
+-- THE NUMERATOR IS `clicked`, not `opened`. Open tracking fires on a pixel that
+-- Apple Mail Privacy Protection pre-fetches whether or not a human looked, so an
+-- open rate measures which mail clients an arm drew. `opened` is still recorded;
+-- it is simply not aggregated.
 --
 -- Arms come from the Resend webhook's echoed tags, which means they describe the
 -- email that was actually sent rather than a re-derivation at read time. There
@@ -51,9 +58,11 @@ COMMENT ON TABLE email_experiment_event IS
   'over a population, not a per-person fact. Written by /api/resend/webhook from '
   'the tags Resend echoes back; read by the conversion digest.';
 
--- The digest reads one experiment across a 30-day window.
+-- The digest reads a 30-day window across ALL experiments and groups them, so
+-- the index is on `day` alone. An earlier version added `experiment` as a second
+-- column under a comment claiming the query filtered on it; it never did.
 CREATE INDEX IF NOT EXISTS email_experiment_event_day_idx
-  ON email_experiment_event (day DESC, experiment);
+  ON email_experiment_event (day DESC);
 
 ALTER TABLE email_experiment_event ENABLE ROW LEVEL SECURITY;
 
@@ -80,7 +89,12 @@ CREATE OR REPLACE FUNCTION bump_email_experiment_event(
   p_event_type TEXT
 )
 RETURNS VOID
-LANGUAGE plpgsql SECURITY DEFINER
+-- INVOKER, not DEFINER. Execute is granted to service_role alone, and
+-- service_role already carries BYPASSRLS — so SECURITY DEFINER would add no
+-- capability while removing RLS as the second line of defence. Running as the
+-- caller means that if EXECUTE were ever loosened, the policy above still
+-- refuses the write rather than the grant being the only thing in the way.
+LANGUAGE plpgsql SECURITY INVOKER
 SET search_path = public, pg_temp AS $$
 BEGIN
   -- Bounded so a crafted or malfunctioning webhook cannot write unbounded text
@@ -97,10 +111,10 @@ BEGIN
 END;
 $$;
 
--- CREATE FUNCTION grants EXECUTE to PUBLIC, and SECURITY DEFINER bypasses the
--- RLS above — so without these REVOKEs anyone holding the published anon key
--- could inflate an experiment's counters and change which arm the digest calls
--- a winner.
+-- CREATE FUNCTION grants EXECUTE to PUBLIC. With SECURITY INVOKER the RLS policy
+-- above would refuse an anon caller anyway, but a function anyone may call is
+-- still a function anyone may probe — and these counters decide which arm the
+-- digest calls a winner.
 REVOKE EXECUTE ON FUNCTION bump_email_experiment_event(DATE, TEXT, TEXT, TEXT) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION bump_email_experiment_event(DATE, TEXT, TEXT, TEXT) FROM anon, authenticated;
 GRANT EXECUTE ON FUNCTION bump_email_experiment_event(DATE, TEXT, TEXT, TEXT) TO service_role;
@@ -112,7 +126,8 @@ CREATE OR REPLACE FUNCTION get_email_experiment_results(
   until_ts TIMESTAMPTZ
 )
 RETURNS JSON
-LANGUAGE plpgsql STABLE SECURITY DEFINER
+-- INVOKER, for the same reason as the writer above.
+LANGUAGE plpgsql STABLE SECURITY INVOKER
 SET search_path = public, pg_temp AS $$
 DECLARE
   result JSON;
@@ -123,7 +138,8 @@ BEGIN
            'experiment', t.experiment,
            'arm',        t.arm,
            'delivered',  t.delivered,
-           'opened',     t.opened,
+           'complained', t.complained,
+           'bounced',    t.bounced,
            'clicked',    t.clicked
          ) ORDER BY t.experiment, t.arm), '[]'::json)
     INTO result
@@ -131,7 +147,16 @@ BEGIN
       SELECT experiment,
              arm,
              COALESCE(SUM(n) FILTER (WHERE event_type = 'delivered'), 0)::int AS delivered,
-             COALESCE(SUM(n) FILTER (WHERE event_type = 'opened'), 0)::int    AS opened,
+             -- `opened` is deliberately NOT selected. Open tracking fires on a
+             -- pixel that Apple Mail Privacy Protection pre-fetches whether or not
+             -- a human looked, so an open rate measures which mail clients an arm
+             -- drew — and both arms draw the same clients. An earlier version
+             -- returned it, parsed it through three layers, and read it nowhere.
+             --
+             -- A variant marked as spam more often is a RESULT. The webhook has
+             -- always written these two; nothing read them until now.
+             COALESCE(SUM(n) FILTER (WHERE event_type = 'complained'), 0)::int AS complained,
+             COALESCE(SUM(n) FILTER (WHERE event_type = 'bounced'), 0)::int    AS bounced,
              COALESCE(SUM(n) FILTER (WHERE event_type = 'clicked'), 0)::int   AS clicked
         FROM email_experiment_event
        WHERE day >= since_day AND day < until_day

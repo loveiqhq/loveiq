@@ -1133,14 +1133,22 @@ describe("conversion-digest handler", () => {
     expect(paywallRow).toContain("25.7%");
   });
 
-  it("keeps the funnel monotonic when paywall hits exceed report opens", async () => {
+  it("omits the paywall row when it exceeds report opens, rather than clamping it", async () => {
     /**
-     * Measured on production 2026-09-19: 500 paywall hits against 412 report
-     * opens. Every row below "Finished the survey" is labelled "…of those" — a
-     * cohort — and a cohort row cannot exceed the one above it. The excess is the
-     * same period-vs-cohort mismatch that produces the 117.7% on report opens.
-     * Drawn unclamped, the funnel visibly goes UP, which reads as a bug in the
-     * product rather than in the measurement.
+     * THIS TEST USED TO ASSERT THE OPPOSITE, and the opposite was wrong.
+     *
+     * It checked that a paywall count of 500 against 412 report opens was
+     * clamped down to 412 — "monotonic", which it is, and a fabricated 100%,
+     * which it also is. The clamp only pulls DOWN, so any excess becomes "every
+     * single person who opened their report hit the paywall". That sentence is
+     * what the 4x row-count bug printed, and fixing the count left the mechanism
+     * that laundered it in place.
+     *
+     * It stays reachable with a CORRECT count: get_paywall_hits counts every
+     * submission in the window while reportOpens comes from the arm-attributed
+     * cohort (~92% of them), so the paywall row can legitimately include people
+     * the row above excludes. When it does, the row is omitted. A missing step is
+     * a gap someone notices; a clamped one is a number someone quotes.
      */
     const base = makeFunnel();
     mockFetchLandingArmFunnel.mockResolvedValue({
@@ -1155,18 +1163,19 @@ describe("conversion-digest handler", () => {
     const funnel = arg.blocks
       .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
       .find((t) => t.includes("*The funnel —"))!;
-    const counts = funnel
-      .split("\n")
-      .filter((l) => /^`\s*\d/.test(l))
-      .map((l) => parseInt(l.replace(/^`\s*/, ""), 10));
-    expect(counts.length).toBeGreaterThan(3);
+
+    expect(funnel).not.toContain("hit the paywall");
+    // And above all: no row BELOW the first claims a clamped 100%. The first row
+    // is "Visits to the site", legitimately 100% of all visits — every row under
+    // it reaching 100% would mean nobody was lost at that step.
+    const rows = funnel.split("\n").filter((l) => l.startsWith("`"));
+    expect(rows.length).toBeGreaterThan(3);
+    expect(rows.slice(1).filter((r) => r.includes("100%"))).toHaveLength(0);
+    // The rest of the funnel is untouched and still monotonic.
+    const counts = rows.map((l) => parseInt(l.replace(/^`\s*/, ""), 10));
     for (let i = 1; i < counts.length; i += 1) {
-      expect(counts[i]!, `row ${i} must not exceed row ${i - 1}`).toBeLessThanOrEqual(
-        counts[i - 1]!
-      );
+      expect(counts[i]!).toBeLessThanOrEqual(counts[i - 1]!);
     }
-    // Specifically: clamped down to the 412 opens, not left at 500.
-    expect(funnel).toMatch(/`\s*412\s+[^`]*`\s+…of those, hit the paywall/);
   });
 
   it("names both percentages on every funnel row, and states which is which", async () => {
@@ -1499,8 +1508,22 @@ describe("email A/B tests in the digest", () => {
    */
   it("reports click rate per arm, with a verdict, per experiment", () => {
     const lines = buildEmailExperimentLines([
-      { experiment: "survey-complete", arm: "a", delivered: 900, opened: 400, clicked: 90 },
-      { experiment: "survey-complete", arm: "b", delivered: 900, opened: 410, clicked: 140 },
+      {
+        experiment: "survey-complete",
+        arm: "a",
+        delivered: 900,
+        complained: 0,
+        bounced: 0,
+        clicked: 90,
+      },
+      {
+        experiment: "survey-complete",
+        arm: "b",
+        delivered: 900,
+        complained: 0,
+        bounced: 0,
+        clicked: 140,
+      },
     ]);
     expect(lines).toHaveLength(1);
     expect(lines[0]!).toContain("survey-complete");
@@ -1520,8 +1543,8 @@ describe("email A/B tests in the digest", () => {
     const lines = buildEmailExperimentLines([
       // B wins overwhelmingly on OPENS and loses on clicks. If the readout used
       // opens, it would call B the winner.
-      { experiment: "invite", arm: "a", delivered: 500, opened: 50, clicked: 100 },
-      { experiment: "invite", arm: "b", delivered: 500, opened: 450, clicked: 20 },
+      { experiment: "invite", arm: "a", delivered: 500, complained: 0, bounced: 0, clicked: 100 },
+      { experiment: "invite", arm: "b", delivered: 500, complained: 0, bounced: 0, clicked: 20 },
     ]);
     expect(lines[0]!).toContain("A 20% (100/500)");
     expect(lines[0]!).toContain("B 4% (20/500)");
@@ -1534,8 +1557,22 @@ describe("email A/B tests in the digest", () => {
     // clicks the z-test cannot run at all, and collapsing the two is how a test
     // gets concluded on nothing.
     const lines = buildEmailExperimentLines([
-      { experiment: "report-share", arm: "a", delivered: 40, opened: 10, clicked: 2 },
-      { experiment: "report-share", arm: "b", delivered: 40, opened: 11, clicked: 2 },
+      {
+        experiment: "report-share",
+        arm: "a",
+        delivered: 40,
+        complained: 0,
+        bounced: 0,
+        clicked: 2,
+      },
+      {
+        experiment: "report-share",
+        arm: "b",
+        delivered: 40,
+        complained: 0,
+        bounced: 0,
+        clicked: 2,
+      },
     ]);
     expect(lines[0]!).toContain("not enough clicks yet");
     expect(lines[0]!).not.toContain("no clear winner");
@@ -1544,8 +1581,22 @@ describe("email A/B tests in the digest", () => {
   it("does not present a single arm as a result", () => {
     // One arm with traffic is not a comparison; a lone rate reads as a finding.
     const lines = buildEmailExperimentLines([
-      { experiment: "survey-paused", arm: "a", delivered: 300, opened: 90, clicked: 30 },
-      { experiment: "survey-paused", arm: "b", delivered: 0, opened: 0, clicked: 0 },
+      {
+        experiment: "survey-paused",
+        arm: "a",
+        delivered: 300,
+        complained: 0,
+        bounced: 0,
+        clicked: 30,
+      },
+      {
+        experiment: "survey-paused",
+        arm: "b",
+        delivered: 0,
+        complained: 0,
+        bounced: 0,
+        clicked: 0,
+      },
     ]);
     expect(lines[0]!).toContain("only one arm has data yet");
     expect(lines[0]!).not.toContain("ahead");
@@ -1553,9 +1604,30 @@ describe("email A/B tests in the digest", () => {
 
   it("handles a three-way test by comparing the top two", () => {
     const lines = buildEmailExperimentLines([
-      { experiment: "report-share", arm: "a", delivered: 600, opened: 200, clicked: 30 },
-      { experiment: "report-share", arm: "b", delivered: 600, opened: 210, clicked: 90 },
-      { experiment: "report-share", arm: "c", delivered: 600, opened: 205, clicked: 60 },
+      {
+        experiment: "report-share",
+        arm: "a",
+        delivered: 600,
+        complained: 0,
+        bounced: 0,
+        clicked: 30,
+      },
+      {
+        experiment: "report-share",
+        arm: "b",
+        delivered: 600,
+        complained: 0,
+        bounced: 0,
+        clicked: 90,
+      },
+      {
+        experiment: "report-share",
+        arm: "c",
+        delivered: 600,
+        complained: 0,
+        bounced: 0,
+        clicked: 60,
+      },
     ]);
     expect(lines).toHaveLength(1);
     // All three arms are shown…
@@ -1564,12 +1636,143 @@ describe("email A/B tests in the digest", () => {
     expect(lines[0]!).toMatch(/B is genuinely ahead/);
   });
 
+  it("ranks on the raw proportion, not a rounded one", () => {
+    /**
+     * THE BUG: `rate()` rounds to one decimal, so 12/2000 (0.600%) and 13/2100
+     * (0.619%) both became "0.6". The sort saw a tie, stable sort fell back to
+     * alphabetical, and A was named as ahead — while the z-test, running on the
+     * raw counts the sort had ignored, printed a NEGATIVE delta for A. The line
+     * contradicted itself. Reachable at ordinary email volumes.
+     */
+    const lines = buildEmailExperimentLines([
+      { experiment: "invite", arm: "a", delivered: 2000, complained: 0, bounced: 0, clicked: 12 },
+      { experiment: "invite", arm: "b", delivered: 2100, complained: 0, bounced: 0, clicked: 13 },
+    ]);
+    // B is genuinely the higher rate, so B must be the one named.
+    expect(lines[0]!).not.toMatch(/A is ahead/);
+    // And no line may claim a direction while printing the opposite sign.
+    const claimsA = /\bA is (ahead|genuinely ahead)/.test(lines[0]!);
+    const negativeDelta = /\(-\d/.test(lines[0]!);
+    expect(claimsA && negativeDelta, `self-contradicting line: ${lines[0]}`).toBe(false);
+  });
+
+  it("calls a dead heat level, not a lead", () => {
+    // Identical rates with enough volume to say so. "A is ahead" over two
+    // literally equal numbers is the sentence this digest exists to avoid.
+    const lines = buildEmailExperimentLines([
+      { experiment: "invite", arm: "a", delivered: 1000, complained: 0, bounced: 0, clicked: 100 },
+      { experiment: "invite", arm: "b", delivered: 1000, complained: 0, bounced: 0, clicked: 100 },
+    ]);
+    expect(lines[0]!).toContain("level so far");
+    expect(lines[0]!).not.toContain("ahead");
+  });
+
+  it("prefers 'not enough clicks' over 'level' when the sample is tiny", () => {
+    // Identical rates on two clicks each is a coincidence, not a finding.
+    const lines = buildEmailExperimentLines([
+      { experiment: "invite", arm: "a", delivered: 40, complained: 0, bounced: 0, clicked: 2 },
+      { experiment: "invite", arm: "b", delivered: 40, complained: 0, bounced: 0, clicked: 2 },
+    ]);
+    expect(lines[0]!).toContain("not enough clicks yet");
+    expect(lines[0]!).not.toContain("level so far");
+  });
+
+  it("survives more clicks than deliveries, and says it capped them", () => {
+    /**
+     * Clicks are click EVENTS — Resend fires one per link, each with its own svix
+     * id, so one reader clicking three links counts three times while `delivered`
+     * counts one. twoProportionSignal REFUSES when successes exceed the sample,
+     * so an arm with abundant clicks printed "not enough clicks yet" — the exact
+     * opposite of the truth.
+     */
+    const lines = buildEmailExperimentLines([
+      {
+        experiment: "report-share",
+        arm: "a",
+        delivered: 40,
+        complained: 0,
+        bounced: 0,
+        clicked: 45,
+      },
+      {
+        experiment: "report-share",
+        arm: "b",
+        delivered: 40,
+        complained: 0,
+        bounced: 0,
+        clicked: 10,
+      },
+    ]);
+    expect(lines[0]!).not.toContain("not enough clicks yet");
+    // The raw counts are still shown, and the verdict is declined with a reason
+    // rather than manufactured from a capped 100% rate.
+    expect(lines[0]!).toContain("45/40");
+    expect(lines[0]!).toContain("not comparable");
+    expect(lines[0]!).not.toContain("genuinely ahead");
+  });
+
+  it("names spam complaints beside the click rate", () => {
+    /**
+     * An arm that wins on clicks while being marked as spam twice as often has
+     * not won. The webhook has always written these counters; until an audit
+     * noticed, the readout selected only delivered/opened/clicked, so four of the
+     * six event types accumulated forever with no consumer — including a test
+     * asserting complaints were counted while the number was unreachable.
+     */
+    const lines = buildEmailExperimentLines([
+      { experiment: "invite", arm: "a", delivered: 900, clicked: 90, complained: 1, bounced: 0 },
+      { experiment: "invite", arm: "b", delivered: 900, clicked: 140, complained: 12, bounced: 0 },
+    ]);
+    expect(lines[0]!).toContain("spam:");
+    expect(lines[0]!).toContain("B 12");
+  });
+
+  it("says why an experiment has no rate, instead of vanishing", () => {
+    /**
+     * Every arm has a zero denominator but clicks exist — delivered webhooks are
+     * not arriving. The route's fallback only fires when the whole result set is
+     * empty, so this experiment used to disappear entirely: no section, no line,
+     * no explanation. That is the quiet omission the feature exists to remove.
+     */
+    const lines = buildEmailExperimentLines([
+      { experiment: "invite", arm: "a", delivered: 0, clicked: 3, complained: 0, bounced: 0 },
+    ]);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!).toContain("invite");
+    expect(lines[0]!).toContain("no deliveries");
+  });
+
+  it("flags an arm that has clicks but no recorded deliveries", () => {
+    // Filtering it out silently loses the clicks AND hides that the denominator
+    // is broken for that arm.
+    const lines = buildEmailExperimentLines([
+      { experiment: "invite", arm: "a", delivered: 300, clicked: 30, complained: 0, bounced: 0 },
+      { experiment: "invite", arm: "b", delivered: 0, clicked: 7, complained: 0, bounced: 0 },
+    ]);
+    expect(lines[0]!).toContain("only one arm has data yet");
+    expect(lines[0]!).toContain("B has clicks but no recorded deliveries");
+  });
+
   it("puts each experiment on its own line", () => {
     const lines = buildEmailExperimentLines([
-      { experiment: "invite", arm: "a", delivered: 400, opened: 90, clicked: 40 },
-      { experiment: "invite", arm: "b", delivered: 400, opened: 95, clicked: 44 },
-      { experiment: "survey-complete", arm: "a", delivered: 800, opened: 300, clicked: 80 },
-      { experiment: "survey-complete", arm: "b", delivered: 800, opened: 310, clicked: 130 },
+      { experiment: "invite", arm: "a", delivered: 400, complained: 0, bounced: 0, clicked: 40 },
+      { experiment: "invite", arm: "b", delivered: 400, complained: 0, bounced: 0, clicked: 44 },
+      {
+        experiment: "survey-complete",
+        arm: "a",
+        delivered: 800,
+        complained: 0,
+        bounced: 0,
+        clicked: 80,
+      },
+      {
+        experiment: "survey-complete",
+        arm: "b",
+        delivered: 800,
+        complained: 0,
+        bounced: 0,
+        clicked: 130,
+      },
     ]);
     expect(lines).toHaveLength(2);
     expect(lines[0]!).toContain("invite");

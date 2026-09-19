@@ -9,14 +9,24 @@ import { notifySlack, maskEmail, escapeSlack } from "@shared/observability/slack
 /**
  * R-02: Application-level idempotency. Returns true if this svix_id is new
  * (caller should process). Returns false if the event has already been
- * processed (caller should return ok without side effects). Returns true on
- * Supabase failure (fail-open: prefer occasional double-processing over
- * silently dropping the event).
+ * processed (caller should return ok without side effects). Fails OPEN on a
+ * Supabase failure: prefer occasional double-processing over silently dropping
+ * the event.
+ *
+ * `certain` says whether the claim actually committed. That distinction did not
+ * matter while every downstream effect was idempotent — `addToSuppression` and a
+ * deduped Slack ping. It matters now: the experiment counter is an INCREMENT.
+ * Fail open, Supabase recovers, Resend retries, the claim succeeds the second
+ * time — and one click has been counted twice, asymmetrically across arms,
+ * during exactly the incident where nobody is reading the digest closely.
  */
-async function claimResendEvent(svixId: string, eventType: string): Promise<boolean> {
+async function claimResendEvent(
+  svixId: string,
+  eventType: string
+): Promise<{ process: boolean; certain: boolean }> {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return true;
+  if (!url || !key) return { process: true, certain: false };
   try {
     const res = await fetchWithTimeout(`${url}/rest/v1/resend_webhook_event`, {
       method: "POST",
@@ -29,15 +39,15 @@ async function claimResendEvent(svixId: string, eventType: string): Promise<bool
       body: JSON.stringify({ svix_id: svixId, event_type: eventType }),
       timeoutMs: 3000,
     });
-    if (res.status === 409) return false; // unique conflict — already handled
+    if (res.status === 409) return { process: false, certain: true }; // already handled
     if (!res.ok) {
       logger.warn({ status: res.status, svixId }, "Resend webhook claim non-ok — failing open");
-      return true;
+      return { process: true, certain: false };
     }
-    return true;
+    return { process: true, certain: true };
   } catch (err) {
     logger.warn({ err, svixId }, "Resend webhook claim threw — failing open");
-    return true;
+    return { process: true, certain: false };
   }
 }
 
@@ -93,7 +103,7 @@ async function recordExperimentEvent(
   if (!experiment || !arm) return;
 
   try {
-    await fetchWithTimeout(`${url}/rest/v1/rpc/bump_email_experiment_event`, {
+    const res = await fetchWithTimeout(`${url}/rest/v1/rpc/bump_email_experiment_event`, {
       method: "POST",
       headers: {
         apikey: key,
@@ -110,6 +120,21 @@ async function recordExperimentEvent(
       }),
       timeoutMs: 3000,
     });
+    /**
+     * CHECK THE STATUS. `fetchWithTimeout` resolves on any HTTP code and only
+     * throws on abort or a network error, so discarding the Response made every
+     * failure silent — including the most likely one by far: deploying this code
+     * before applying the migration, which answers 404 PGRST202. Every counter
+     * write would be dropped, the digest would print "results start accumulating
+     * from this deploy" every morning forever, and nothing anywhere would say so.
+     * `claimResendEvent` a few lines up logs its non-ok for exactly this reason.
+     */
+    if (!res.ok) {
+      logger.warn(
+        { status: res.status, experiment, arm, eventType },
+        "email experiment counter non-ok — is the migration applied?"
+      );
+    }
   } catch (err) {
     logger.warn({ err, experiment, eventType }, "email experiment counter failed");
   }
@@ -168,10 +193,16 @@ export async function POST(request: Request) {
 
   // R-02: claim the svix_id before side effects. Same svix_id arriving twice
   // within Svix's 5-min tolerance window now no-ops the second handler.
+  /**
+   * Whether the replay guard actually committed. Without a svix id there is no
+   * guard at all, so an increment behind it could double-count on any retry.
+   */
+  let claimCertain = false;
   const svixId = svixHeaders["svix-id"];
   if (svixId) {
-    const claimed = await claimResendEvent(svixId, payload.type);
-    if (!claimed) {
+    const claim = await claimResendEvent(svixId, payload.type);
+    claimCertain = claim.certain;
+    if (!claim.process) {
       logger.info({ svixId, type: payload.type }, "Resend webhook replay — already processed");
       return NextResponse.json({ ok: true, deduped: true });
     }
@@ -185,7 +216,23 @@ export async function POST(request: Request) {
    * draw more dead addresses. Bounces and complaints are worth having per arm
    * too: a variant that gets marked as spam more often is a result, not noise.
    */
-  await recordExperimentEvent(payload, payload.type.replace(/^email\./, ""));
+  /**
+   * ONLY behind a claim that certainly committed.
+   *
+   * A counter is an increment, and a double count is unrecoverable — there is no
+   * way to tell afterwards which of two rows was the duplicate. A MISSED count is
+   * recoverable: the arms are affected equally in expectation and the rate is
+   * unchanged. So when the replay guard is uncertain, this skips rather than
+   * risks inflating the arm that happened to be in flight during an incident.
+   *
+   * `payload.type` is read defensively: this is the first place in the handler
+   * that dereferences it rather than comparing it, and a verified payload missing
+   * the field used to fall through to a 200 instead of throwing a TypeError into
+   * a retry storm.
+   */
+  if (claimCertain && typeof payload.type === "string") {
+    await recordExperimentEvent(payload, payload.type.replace(/^email\./, ""));
+  }
 
   const email = payload.data?.to?.[0]?.toLowerCase().trim();
   if (!email) {

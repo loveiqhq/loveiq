@@ -9,12 +9,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * CVR per experiment" could only ever have shown the one landing test and
  * silently omitted five others.
  */
-const { mockFetch, mockVerify, mockNotifySlack, mockAddToSuppression } = vi.hoisted(() => ({
-  mockFetch: vi.fn(),
-  mockVerify: vi.fn(),
-  mockNotifySlack: vi.fn(),
-  mockAddToSuppression: vi.fn(),
-}));
+const { mockFetch, mockVerify, mockNotifySlack, mockAddToSuppression, mockWarn } = vi.hoisted(
+  () => ({
+    mockFetch: vi.fn(),
+    mockVerify: vi.fn(),
+    mockNotifySlack: vi.fn(),
+    mockAddToSuppression: vi.fn(),
+    mockWarn: vi.fn(),
+  })
+);
 
 vi.mock("svix", () => ({
   Webhook: class {
@@ -28,7 +31,7 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: (...args: unknown[]) => mockFetch(...args),
 }));
 vi.mock("@shared/observability/logger", () => ({
-  default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+  default: { info: vi.fn(), warn: (...a: unknown[]) => mockWarn(...a), error: vi.fn() },
 }));
 vi.mock("@shared/observability/slack", () => ({
   notifySlack: (...args: unknown[]) => mockNotifySlack(...args),
@@ -216,6 +219,90 @@ describe("resend webhook: per-arm experiment counters", () => {
     const res = await POST(request());
     expect(res.status).toBe(200);
     expect(counterCall(), "a replay must not count again").toBeNull();
+  });
+
+  it("skips the counter when the replay guard failed open", async () => {
+    /**
+     * `claimResendEvent` fails OPEN on a Supabase error, which was harmless while
+     * every downstream effect was idempotent. A counter is an INCREMENT: fail
+     * open, Supabase recovers, Resend retries, the claim commits the second time
+     * — and one click is counted twice, asymmetrically across arms, during
+     * exactly the incident where nobody is reading the digest closely.
+     *
+     * A missed count is recoverable (both arms lose in expectation, the rate is
+     * unchanged); a double count is not, because afterwards nothing distinguishes
+     * the duplicate row.
+     */
+    mockVerify.mockReturnValue({
+      type: "email.clicked",
+      data: { to: ["a@example.com"], tags: { exp: "invite", arm: "b" } },
+    });
+    // The claim POST returns 500 → fail open → the handler proceeds…
+    mockFetch.mockImplementation((url: string) =>
+      String(url).includes("resend_webhook_event")
+        ? Promise.resolve({ ok: false, status: 500, headers: new Headers() })
+        : Promise.resolve({ ok: true, status: 200, headers: new Headers() })
+    );
+    const res = await POST(request());
+    expect(res.status).toBe(200);
+    // …but does not increment anything.
+    expect(counterCall()).toBeNull();
+  });
+
+  it("skips the counter when there is no svix id to dedupe on", async () => {
+    // No claim at all means no replay protection, so an increment behind it
+    // would inflate on every Resend retry.
+    mockVerify.mockReturnValue({
+      type: "email.clicked",
+      data: { to: ["a@example.com"], tags: { exp: "invite", arm: "a" } },
+    });
+    const noId = new Request("https://www.loveiq.org/api/resend/webhook", {
+      method: "POST",
+      headers: { "svix-timestamp": "1", "svix-signature": "v1,x" },
+      body: "{}",
+    });
+    const res = await POST(noId);
+    expect(res.status).toBe(200);
+    expect(counterCall()).toBeNull();
+  });
+
+  it("does not throw on a verified payload with no type", async () => {
+    /**
+     * This handler is the first place that DEREFERENCES payload.type rather than
+     * comparing it. Before the counter, a payload missing the field fell through
+     * every branch to a 200; a bare `.replace()` on it would throw a TypeError
+     * outside any try/catch, 500, and start a Resend retry storm.
+     */
+    mockVerify.mockReturnValue({ data: { to: ["a@example.com"] } });
+    const res = await POST(request());
+    expect(res.status).toBe(200);
+  });
+
+  it("warns when the counter RPC answers non-ok", async () => {
+    /**
+     * THE MOST LIKELY WAY THIS FEATURE NEVER WORKS. `fetchWithTimeout` resolves
+     * on any HTTP status and only throws on abort or a network error, so
+     * discarding the Response made every failure silent — including deploying
+     * this code before applying the migration, which answers 404 PGRST202. Every
+     * counter write would be dropped, the digest would print "results start
+     * accumulating from this deploy" every morning forever, and nothing anywhere
+     * would say so.
+     */
+    mockVerify.mockReturnValue({
+      type: "email.clicked",
+      data: { to: ["a@example.com"], tags: { exp: "invite", arm: "a" } },
+    });
+    mockFetch.mockImplementation((url: string) =>
+      String(url).includes("bump_email_experiment_event")
+        ? Promise.resolve({ ok: false, status: 404, headers: new Headers() })
+        : Promise.resolve({ ok: true, status: 201, headers: new Headers() })
+    );
+    const res = await POST(request());
+    expect(res.status).toBe(200);
+    const warned = mockWarn.mock.calls.some((c) =>
+      String(c[1] ?? "").includes("email experiment counter non-ok")
+    );
+    expect(warned, "a 404 from the counter RPC must be logged, not swallowed").toBe(true);
   });
 
   it("does not fail the webhook when the counter write throws", async () => {
