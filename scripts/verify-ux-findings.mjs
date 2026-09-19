@@ -726,6 +726,31 @@ console.log(
  * The count is printed rather than swallowed, so a standing backlog is visible.
  */
 const PROBE_BUDGET = Number(process.env.PROBE_BUDGET ?? 10);
+
+/**
+ * How many draft pull requests one run may open.
+ *
+ * The per-branch check in replay-pr.mjs stops the SAME reproduction opening a
+ * second PR, but nothing bounded the total, and the blast radius grew today:
+ * findings are now also synthesised from our own dead_click events, so a run
+ * can carry up to 25 of them and spend its whole probe budget on one criterion.
+ * A systemic probe fault would then open ten PRs before anyone saw the first.
+ *
+ * That is not hypothetical. Hours ago `verify-dead-click-target.mjs` reported
+ * the survey consent gate as a defect because the button is deliberately
+ * disabled — correct behaviour, reproduced convincingly, and D1 is in
+ * AUTO_PR_CRITERIA. The probe is fixed, but "the probe was wrong in a way that
+ * reproduces" is now a known shape rather than a theoretical one, and the cheap
+ * guard against a whole class of it is a cap.
+ *
+ * Two, because a genuine day rarely holds more than one or two distinct
+ * reproduced defects. Nothing is lost when it bites: every verdict still
+ * reaches the reader's thread and the ledger, and the deferred reproduction
+ * opens its PR on the next run.
+ */
+const MAX_PRS_PER_RUN = Number(process.env.MAX_PRS_PER_RUN ?? 2);
+let prsOpened = 0;
+let prsSkipped = 0;
 let probeRuns = 0;
 let deferred = 0;
 let gaps = 0;
@@ -926,10 +951,22 @@ for (const [
   // --dry-run and --classify-only must have NO side effects. Without this guard
   // the workflow's own dry_run path would still push a branch and open a PR,
   // because it sets UX_REVIEW_OPEN_PR=1 for both branches of its if.
-  const prUrl =
-    reproduced && !DRY_RUN && !CLASSIFY_ONLY
-      ? openReproductionPr({ criterion, sessionId, viewport, results })
-      : null;
+  let prUrl = null;
+  if (reproduced && !DRY_RUN && !CLASSIFY_ONLY) {
+    if (prsOpened >= MAX_PRS_PER_RUN) {
+      prsSkipped += 1;
+      console.log(
+        `  PR capped — ${prsOpened} already opened this run, ${sessionId.slice(0, 13)} ` +
+          `(${criterion.id}) deferred to the next one`
+      );
+    } else {
+      prUrl = openReproductionPr({ criterion, sessionId, viewport, results });
+      // Counted on an actual PR, not on an attempt: the helper returns null
+      // when the flag is off or the branch already exists, and counting those
+      // would spend the cap on runs that opened nothing.
+      if (prUrl) prsOpened += 1;
+    }
+  }
 
   /**
    * Say what was actually driven. This read "at 262px-715px, the size this
@@ -1007,5 +1044,8 @@ console.log(
     (contradicted ? ` · ${contradicted} contradicted by events` : "") +
     (skipped ? ` · ${skipped} already verified on an earlier run` : "") +
     // Never silent: a deferred finding is the thing that used to disappear.
-    (deferred ? ` · ${deferred} left for the next run (probe budget ${PROBE_BUDGET})` : "")
+    (deferred ? ` · ${deferred} left for the next run (probe budget ${PROBE_BUDGET})` : "") +
+    (prsOpened ? ` · ${prsOpened} draft PR(s) opened` : "") +
+    // A capped PR is deferred work, not a dropped finding — say so either way.
+    (prsSkipped ? ` · ${prsSkipped} PR(s) held back by the cap of ${MAX_PRS_PER_RUN}` : "")
 );

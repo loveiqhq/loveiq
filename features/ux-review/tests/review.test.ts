@@ -41,6 +41,7 @@ const verified = (over: Record<string, unknown> = {}) => ({
     criterion: string | null;
     urlPath: string | null;
     delivered: boolean;
+    fromOwnRecords: boolean;
   }>,
   clear: 0,
   inconclusive: 0,
@@ -193,6 +194,44 @@ describe("buildDigestMessage", () => {
     expect(json).toContain("1 was already answered");
     expect(json).not.toContain("1 were");
     expect(json).toContain("the checkout page");
+  });
+
+  /**
+   * "We found this without an AI" is a stronger claim than "an AI noticed it
+   * and a probe agreed", and it is the signal that the mechanical half of the
+   * detector is earning its keep. It is the thing worth watching after
+   * 2026-09-19, so it belongs in the message rather than in someone's calendar.
+   */
+  it("says when a confirmed problem was found without any AI", () => {
+    const { blocks } = buildDigestMessage(
+      [],
+      verified({
+        reproduced: 1,
+        total: 1,
+        reproducedItems: [
+          { criterion: "D1", urlPath: "/survey", delivered: true, fromOwnRecords: true },
+        ],
+      }),
+      covered()
+    );
+    expect(JSON.stringify(blocks)).toContain("Found in our own records, without any AI");
+  });
+
+  it("does NOT claim that when a model was involved", () => {
+    const { blocks } = buildDigestMessage(
+      [],
+      verified({
+        reproduced: 2,
+        total: 2,
+        reproducedItems: [
+          { criterion: "D1", urlPath: "/survey", delivered: true, fromOwnRecords: true },
+          { criterion: "D1", urlPath: "/survey", delivered: true, fromOwnRecords: false },
+        ],
+      }),
+      covered()
+    );
+    // Same group, mixed provenance: the stronger claim must not cover both.
+    expect(JSON.stringify(blocks)).not.toContain("without any AI");
   });
 
   it("never leaks a criterion id into the message", () => {
