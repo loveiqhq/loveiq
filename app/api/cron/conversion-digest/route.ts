@@ -617,6 +617,17 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
 
     blocks.push(divider());
     blocks.push(section("*Yesterday vs a normal day*"));
+    /**
+     * An em dash when yesterday is not in the data at all.
+     *
+     * Every figure here comes from summing the rows whose day equals `dayKey`,
+     * which is 0 both for a quiet day and for a day the series never generated.
+     * When the bounds were a day short (see `yesterdayObserved`) this block read
+     * "Visits 0 _(-100%)_" on a day with 543 visits. A number we do not have is
+     * not a zero, and the funnel above already uses "—" for exactly that.
+     */
+    const yField = (value: string, d: string) =>
+      yesterdayObserved ? withDelta(value, d) : "—";
     blocks.push(
       fields([
         /**
@@ -626,15 +637,15 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
          * one sale a week averages to 0.14, so the arithmetic said -100% and the
          * statement said nothing.
          */
-        { label: "Visits", value: withDelta(String(yVisitors), delta(yVisitors, pVisitors / 7)) },
+        { label: "Visits", value: yField(String(yVisitors), delta(yVisitors, pVisitors / 7)) },
         {
           label: "Finished survey",
-          value: withDelta(String(y.completions), delta(y.completions, p.completions / 7)),
+          value: yField(String(y.completions), delta(y.completions, p.completions / 7)),
         },
-        { label: "Paid", value: withDelta(String(y.charges), delta(y.charges, p.charges / 7)) },
+        { label: "Paid", value: yField(String(y.charges), delta(y.charges, p.charges / 7)) },
         {
           label: "Revenue",
-          value: withDelta(money(y.revenue), delta(y.revenue, p.revenue / 7)),
+          value: yField(money(y.revenue), delta(y.revenue, p.revenue / 7)),
         },
       ])
     );

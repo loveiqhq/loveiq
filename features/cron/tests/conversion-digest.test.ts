@@ -1145,6 +1145,27 @@ describe("conversion-digest handler", () => {
     // the shape the day-series bug produced on 2026-09-19.
     const missing = await postFor(full.visitors.filter((v) => v.day !== DAY_REPORTED));
     expect(collapsed(missing), "a missing day must not be called a collapse").toBe(false);
+
+    /**
+     * And the block above the alerts must not print the absence as a zero
+     * either. It read "Visits 0 _(-100%)_" on a day with 543 visits, which is
+     * the same false claim in the part of the message people read first.
+     */
+    const fieldsOf = (a: { blocks: SlackBlock[] }) =>
+      (a.blocks as Array<{ fields?: Array<{ text: string }> }>)
+        .flatMap((b) => b.fields ?? [])
+        .map((f) => f.text);
+
+    const missingFields = fieldsOf(missing).filter((t) => t.includes("*Visits*"));
+    expect(missingFields).toHaveLength(1);
+    expect(missingFields[0]).toContain("—");
+    expect(missingFields[0]).not.toMatch(/-100%/);
+
+    // The observed day still prints its real number, so the em dash is not
+    // simply always on.
+    const zeroFields = fieldsOf(zeroed).filter((t) => t.includes("*Visits*"));
+    expect(zeroFields[0]).toContain("0");
+    expect(zeroFields[0]).not.toContain("—");
   });
 
   /**
