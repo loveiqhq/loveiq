@@ -18,7 +18,11 @@ import logger from "@shared/observability/logger";
  * this writes at most once per browser per day. Best-effort: a failure must
  * never affect the page.
  */
-export async function recordUniqueVisit(variant: string, utmSource?: string): Promise<void> {
+async function writeFunnelEvent(
+  eventType: "unique_visitor" | "survey_page_view",
+  variant: string,
+  utmSource?: string
+): Promise<void> {
   const supabaseUrl = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceRoleKey) return;
@@ -42,7 +46,7 @@ export async function recordUniqueVisit(variant: string, utmSource?: string): Pr
       body: JSON.stringify({
         visitor_id: crypto.randomUUID(),
         day: reportingDay(),
-        event_type: "unique_visitor",
+        event_type: eventType,
         // Landing A/B arm, stored RAW so the arms stay distinguishable (see proxy.ts).
         //
         // This used to be `variant === "white" ? "white" : "control"`, which wrote
@@ -76,10 +80,41 @@ export async function recordUniqueVisit(variant: string, utmSource?: string): Pr
         .catch(() => "");
       logger.warn(
         { status: res.status, body: body.slice(0, 200) },
-        "recordUniqueVisit insert non-2xx"
+        `recordFunnelEvent(${eventType}) insert non-2xx`
       );
     }
   } catch (err) {
-    logger.warn({ err }, "recordUniqueVisit failed");
+    logger.warn({ err, eventType }, "recordFunnelEvent failed");
   }
+}
+
+/**
+ * One aggregate daily unique-visit, as described above.
+ */
+export async function recordUniqueVisit(variant: string, utmSource?: string): Promise<void> {
+  return writeFunnelEvent("unique_visitor", variant, utmSource);
+}
+
+/**
+ * One aggregate daily SURVEY-PAGE view — the consent-independent sibling of the
+ * visit count, written by the same code path with the same throwaway per-day id
+ * and the same Berlin day clock.
+ *
+ * WHY IT EXISTS. The step above it in the funnel was `survey_engine_mount`,
+ * which the BROWSER posts using the `__liq_vid` cookie — and proxy.ts mints that
+ * cookie only after the visitor clicks Accept. So the numerator was
+ * consent-gated while its denominator was not, and /admin labelled the
+ * difference "Bounced on landing". Measured 2026-09-19 over 30 days: 637
+ * visitors reached the consent-gated step against 977 server-written survey
+ * drafts, and of 3,172 mount ids all time only 632 (20%) ever appear as a
+ * `unique_visitor` id at all — a per-day random UUID against a persistent
+ * cookie value, so the two could not be compared even in principle.
+ *
+ * This is a NEW event type, not a change to the old one. Both run side by side:
+ * the existing series keeps its meaning, nothing is double counted, and the
+ * difference between them is a direct readout of the consent gap — which is
+ * worth being able to see rather than assume.
+ */
+export async function recordSurveyPageView(variant: string, utmSource?: string): Promise<void> {
+  return writeFunnelEvent("survey_page_view", variant, utmSource);
 }

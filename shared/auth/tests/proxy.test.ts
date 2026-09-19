@@ -79,7 +79,7 @@ vi.mock("@shared/auth/supabase-middleware", () => ({
   createSupabaseMiddleware: () => ({ auth: { getUser: mockGetUser } }),
 }));
 
-import { proxy, shouldCountVisit } from "@/proxy";
+import { proxy, shouldCountSurveyView, shouldCountVisit } from "@/proxy";
 import logger from "@shared/observability/logger";
 import { reportingDay } from "@shared/time/reporting-day";
 
@@ -737,6 +737,7 @@ describe("proxy — consent-independent daily unique-visit count", () => {
       ua?: string;
       secPurpose?: string;
       liqDv?: string;
+      liqDs?: string;
     } = {}
   ) {
     const url = `http://localhost:3000${opts.path ?? "/"}`;
@@ -750,7 +751,11 @@ describe("proxy — consent-independent daily unique-visit count", () => {
       headers,
       url,
       cookies: {
-        get: (n: string) => (n === "liq_dv" && opts.liqDv ? { value: opts.liqDv } : undefined),
+        get: (n: string) => {
+          if (n === "liq_dv" && opts.liqDv) return { value: opts.liqDv };
+          if (n === "liq_ds" && opts.liqDs) return { value: opts.liqDs };
+          return undefined;
+        },
       },
       nextUrl: {
         pathname: new URL(url).pathname,
@@ -782,6 +787,76 @@ describe("proxy — consent-independent daily unique-visit count", () => {
     expect(shouldCountVisit(makeVisitRequest({ dest: null, accept: "application/json" }))).toBe(
       false
     );
+  });
+
+  it("counts a survey-page view by the same rules as a visit", () => {
+    expect(shouldCountSurveyView(makeVisitRequest({ path: "/survey" }))).toBe(true);
+    // Every exclusion that applies to a visit applies here too — it delegates.
+    expect(shouldCountSurveyView(makeVisitRequest({ path: "/survey", method: "POST" }))).toBe(
+      false
+    );
+    expect(shouldCountSurveyView(makeVisitRequest({ path: "/survey", ua: "Googlebot/2.1" }))).toBe(
+      false
+    );
+    expect(
+      shouldCountSurveyView(makeVisitRequest({ path: "/survey", secPurpose: "prefetch" }))
+    ).toBe(false);
+    // And it is the survey page only.
+    expect(shouldCountSurveyView(makeVisitRequest({ path: "/" }))).toBe(false);
+    expect(shouldCountSurveyView(makeVisitRequest({ path: "/glossary" }))).toBe(false);
+  });
+
+  it("flags x-liq-new-survey and sets liq_ds on a fresh daily survey view", async () => {
+    /**
+     * The consent-independent sibling of x-liq-new-visit. The browser-posted
+     * `survey_engine_mount` needs the __liq_vid cookie, which is only minted
+     * after someone accepts — so /admin was reading a consent gap as people
+     * bouncing. This path does not depend on consent at all.
+     */
+    await proxy(makeVisitRequest({ path: "/survey", dest: "document" }));
+    /**
+     * "unknown", not "white". The arm is only resolved on "/", and /survey is
+     * exactly the entry path that used to inflate white's denominator by
+     * defaulting — a first-time visitor arriving straight on the survey has no
+     * arm, and saying so is the point. Same rule as x-liq-new-visit.
+     */
+    expect(mockNextOpts.value?.request?.headers?.get("x-liq-new-survey")).toBe("unknown");
+    const set = mockCookiesSet.mock.calls.find((c) => c[0] === "liq_ds");
+    expect(set, "liq_ds must be set so the next view today is not counted again").toBeDefined();
+    expect(set![2]).toEqual(
+      expect.objectContaining({ httpOnly: true, sameSite: "lax", path: "/" })
+    );
+  });
+
+  it("carries a sticky landing arm onto the survey view when there is one", async () => {
+    const req = makeVisitRequest({ path: "/survey", dest: "document" });
+    (req as unknown as { cookies: { get: (n: string) => { value: string } | undefined } }).cookies =
+      {
+        get: (n: string) => (n === "__liq_lv" ? { value: "white_prev" } : undefined),
+      };
+    mockNextOpts.value = null;
+    await proxy(req);
+    expect(mockNextOpts.value?.request?.headers?.get("x-liq-new-survey")).toBe("white_prev");
+  });
+
+  it("does not flag a second survey view on the same day", async () => {
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
+    mockNextOpts.value = null;
+    mockCookiesSet.mockClear();
+    await proxy(makeVisitRequest({ path: "/survey", dest: "document", liqDs: today }));
+    expect(mockNextOpts.value?.request?.headers?.get("x-liq-new-survey")).toBeNull();
+    expect(mockCookiesSet.mock.calls.find((c) => c[0] === "liq_ds")).toBeUndefined();
+  });
+
+  it("never lets a client claim the survey flag", async () => {
+    // The header is copied from inbound request headers, so an echoed one would
+    // otherwise let any caller manufacture survey starts. Same guard as its
+    // two siblings.
+    const req = makeVisitRequest({ path: "/glossary", dest: "document" });
+    (req as unknown as { headers: Headers }).headers.set("x-liq-new-survey", "white");
+    mockNextOpts.value = null;
+    await proxy(req);
+    expect(mockNextOpts.value?.request?.headers?.get("x-liq-new-survey")).toBeNull();
   });
 
   it("flags x-liq-new-visit (with the arm) + sets the liq_dv cookie on a fresh daily document visit", async () => {

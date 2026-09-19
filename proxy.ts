@@ -135,6 +135,43 @@ function resolveLandingVariant(request: NextRequest): LandingVariant {
 const VISIT_DAY_COOKIE = "liq_dv";
 
 /**
+ * Same idea, same clock, for the SURVEY PAGE: one row per browser per Berlin
+ * day, written server-side and set regardless of analytics consent. Holds only
+ * a date — no identifier, no cross-day linkage.
+ *
+ * WHY A SECOND SERVER-SIDE COUNTER EXISTS. `survey_engine_mount` is posted by
+ * the browser using the `__liq_vid` cookie, which this middleware mints only
+ * AFTER the visitor clicks Accept — so it is consent-gated, while the
+ * `unique_visitor` denominator beside it is not. Measured 2026-09-19 over 30
+ * days: 637 visitors reached the consent-gated step against 977 server-written
+ * survey drafts. The gap was being read as people bouncing on the landing page;
+ * most of it is people declining cookies.
+ *
+ * The identifiers do not match either: of 3,172 mount ids all time, only 632
+ * (20%) ever appear as a `unique_visitor` id, because one is a per-day random
+ * UUID and the other a persistent cookie value. So the old numerator could not
+ * be compared to its denominator even in principle.
+ *
+ * `survey_page_view` fixes both: same writer, same id scheme, same consent
+ * posture, same day clock as `unique_visitor`. It is a NEW event type rather
+ * than a change to the old one, so the existing series keeps its meaning and
+ * nothing is double counted — the two can run side by side and the difference
+ * between them IS the consent gap, which is worth being able to see.
+ */
+const SURVEY_DAY_COOKIE = "liq_ds";
+
+/**
+ * True when this request is the survey page itself, by the same rules
+ * `shouldCountVisit` uses (document GET, not a bot, not a prefetch). Exported
+ * for unit testing.
+ */
+export function shouldCountSurveyView(request: NextRequest): boolean {
+  if (!shouldCountVisit(request)) return false;
+  const path = request.nextUrl.pathname;
+  return path === "/survey" || path.startsWith("/survey/");
+}
+
+/**
  * True when this request is a real, countable page view for the daily
  * unique-visit metric: a top-level document GET on a public page, not a bot, not
  * `/api|/admin|/login|/_next`. (Next prefetches are already excluded by the
@@ -452,6 +489,7 @@ export async function proxy(request: NextRequest) {
   // funnel_event. These headers are only ever produced by this middleware.
   requestHeaders.delete("x-liq-new-visit");
   requestHeaders.delete("x-liq-new-visit-utm");
+  requestHeaders.delete("x-liq-new-survey");
 
   // R-22: mint a request correlation id per request. Honor an inbound
   // x-request-id from the client/edge if present (helps trace across
@@ -516,6 +554,24 @@ export async function proxy(request: NextRequest) {
       sanitizeUtmSource(request.nextUrl.searchParams.get("utm_source")) ??
       (hasGoogleClickId ? "google" : undefined);
     if (utmSource) requestHeaders.set("x-liq-new-visit-utm", utmSource);
+  }
+
+  /**
+   * First survey-page view per browser per day — the consent-independent
+   * sibling of the visit count above. Written by the survey page via after(),
+   * so the DB write stays in Node app code rather than edge middleware.
+   */
+  const isNewSurveyView =
+    shouldCountSurveyView(request) && request.cookies.get(SURVEY_DAY_COOKIE)?.value !== visitDay;
+  if (isNewSurveyView) {
+    // Same arm resolution as the visit above: an unresolvable arm is "unknown",
+    // never "white". /survey is exactly the entry path that used to inflate
+    // white's denominator by defaulting.
+    const surveyCookieVariant = request.cookies.get(LANDING_VARIANT_COOKIE)?.value;
+    requestHeaders.set(
+      "x-liq-new-survey",
+      landingVariant ?? (isLandingVariant(surveyCookieVariant) ? surveyCookieVariant : "unknown")
+    );
   }
 
   // Create response with security headers
@@ -728,6 +784,16 @@ export async function proxy(request: NextRequest) {
       sameSite: "lax",
       path: "/",
       maxAge: 60 * 60 * 36, // 36h — comfortably covers a UTC-day rollover
+    });
+  }
+
+  if (isNewSurveyView) {
+    response.cookies.set(SURVEY_DAY_COOKIE, visitDay, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 36,
     });
   }
 
