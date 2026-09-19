@@ -13,6 +13,7 @@ import {
   buildFunnelDigestBlocks,
   shortDate,
   computeDropoutBars,
+  formatAlertLines,
 } from "@/app/api/cron/funnel-digest/route";
 
 beforeAll(() => {
@@ -516,5 +517,75 @@ describe("drop-off payload precision", () => {
     expect(first).not.toBe(second);
     // Still only one decimal — full floats would waste the URL budget.
     for (const v of pcts) expect(Math.round(v * 10) / 10).toBe(v);
+  });
+});
+
+/**
+ * Two guards that a mutation sweep found nothing was holding.
+ *
+ * Both were already correct; neither had a test, so either could have been
+ * "simplified" away and the suite would have stayed green.
+ */
+describe("guards the alert footer and the price chart depend on", () => {
+  it("never claims a negative number of extra alerts", async () => {
+    // `breaches.length > 5` caps the list at five and adds "…and N more".
+    // Without the cap check the same line renders with N = length - 5, which is
+    // NEGATIVE for one to five breaches: "…and -4 more".
+    const items = Array.from({ length: 3 }, (_, i) => ({
+      severity: "risk" as const,
+      title: `Breach ${i + 1}`,
+      detail: "something crossed a threshold",
+    }));
+    const lines = formatAlertLines(mkDaily({ anomalies: { items } }) as never);
+    expect(lines.join("\n")).not.toMatch(/…and -\d+ more/);
+    expect(lines.some((l) => l.includes("more (see /admin/anomalies)"))).toBe(false);
+
+    // And with more than five it DOES say so, with a positive count — otherwise
+    // the assertion above passes on a footer that never mentions extras at all.
+    const many = Array.from({ length: 8 }, (_, i) => ({
+      severity: "risk" as const,
+      title: `Breach ${i + 1}`,
+      detail: "x",
+    }));
+    const manyLines = formatAlertLines(mkDaily({ anomalies: { items: many } }) as never);
+    expect(manyLines.join("\n")).toContain("…and 3 more");
+  });
+
+  it("drops a price bucket nobody was ever shown", async () => {
+    // The chart ranks buckets by volume and needs a denominator. A bucket with
+    // shown = 0 has no rate to draw — including it publishes a flat 0% line for
+    // a price no one saw, beside a real one, on a shared scale.
+    const curr = mkDaily();
+    const { blocks } = await buildFunnelDigestBlocks({
+      title: "Test",
+      windowLabel: "30d",
+      cvr: null,
+      bucket: {
+        days: bucketDays().map((d) => ({
+          ...d,
+          buckets: {
+            a: { shown: 40, purchases: 4, revenue: 120 },
+            ghost: { shown: 0, purchases: 0, revenue: 0 },
+          },
+        })),
+      },
+      dropout: null,
+      nurture: null,
+      curr,
+      prev: curr,
+      cadence: "WoW",
+    });
+    const img = (blocks as Array<{ type: string; image_url?: string }>).find(
+      (b) => b.type === "image" && (b.image_url ?? "").includes("bucket-performance")
+    );
+    expect(img, "the price chart must still render for the real bucket").toBeDefined();
+    const d = new URL(img!.image_url!).searchParams.get("d")!;
+    const payload = JSON.parse(Buffer.from(d, "base64url").toString("utf8")) as {
+      labels: string[];
+    };
+    expect(payload.labels).toContain("A");
+    expect(payload.labels, "a bucket with no denominator must not be charted").not.toContain(
+      "GHOST"
+    );
   });
 });
