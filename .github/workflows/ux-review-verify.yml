@@ -124,6 +124,21 @@ jobs:
         env:
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
 
+      # The merge click IS the training data: a merged reproduction means the
+      # finding was real, a closed one means it was not. Nobody has to label
+      # anything — they just do the thing they were going to do anyway — and it
+      # is the only signal in this pipeline that does not come from our own
+      # machinery judging itself.
+      #
+      # It was designed in the plan and never wired up: measured 2026-09-19, the
+      # ledger held 37 findings and 0 human labels.
+      - name: Label findings from merged and closed pull requests
+        run: node scripts/label-findings-from-prs.mjs --write
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
       - name: Self-test the finding classifier
         run: npx tsx scripts/verify-ux-findings.mjs --selftest
 
