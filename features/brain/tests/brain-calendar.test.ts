@@ -196,3 +196,32 @@ describe("calendar rows carry the calendar they were walked from", () => {
     expect(a.source_id).toBe(b.source_id);
   });
 });
+
+describe("the attendee list is capped, the count is not", () => {
+  /**
+   * `meta.attendees` stops at 12. One row in the corpus sits exactly on that cap
+   * today, and from the row alone it is indistinguishable from a meeting that
+   * really had twelve people — a truncation that looks like a fact.
+   */
+  const crowd = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      email: `p${i}@loveiq.org`,
+      displayName: `Person ${i}`,
+      responseStatus: "accepted",
+    }));
+
+  it("keeps twelve names but reports the true total", () => {
+    const [row] = eventToRows(meeting({ attendees: crowd(20) }), STAMP, "ec@loveiq.org");
+    const meta = row.meta as { attendees: string[]; attendeeCount: number };
+    expect(meta.attendees).toHaveLength(12);
+    expect(meta.attendeeCount).toBe(20);
+  });
+
+  it("agrees with itself when nothing was cut", () => {
+    // The control: below the cap the two must match, or the count is just noise.
+    const [row] = eventToRows(meeting({ attendees: crowd(5) }), STAMP, "ec@loveiq.org");
+    const meta = row.meta as { attendees: string[]; attendeeCount: number };
+    expect(meta.attendees).toHaveLength(5);
+    expect(meta.attendeeCount).toBe(5);
+  });
+});
