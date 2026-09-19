@@ -269,7 +269,25 @@ export async function upsertChunks(rows: BrainRow[]): Promise<number> {
     // Refused at the shared write path, so every source is covered and no
     // ingester has to remember. Logged with the title and never the value, so
     // someone can go and rotate it.
-    const kind = credentialKind(`${row.title}\n${row.body}`);
+    /**
+     * REDACT BEFORE JUDGING.
+     *
+     * `redactUrlSecrets` already removes a token sitting in a URL query, and
+     * `clean()` applies it on the way out — but the refusal below was reading the
+     * RAW text, so a part was thrown away for a secret that would have been stripped
+     * a few lines later. Measured 2026-09-19: 126 parts across 35 documents were
+     * refused, every one of them a JWT in a Confluence or Jira action link. The
+     * tokens are single-use and the surrounding email was lost for nothing.
+     *
+     * The guard is not weakened: `credentialKind` still runs, just on the text that
+     * would actually be stored. Anything redaction cannot remove is still refused.
+     */
+    const redacted = {
+      ...row,
+      title: redactUrlSecrets(row.title),
+      body: redactUrlSecrets(row.body),
+    };
+    const kind = credentialKind(`${redacted.title}\n${redacted.body}`);
     if (kind) {
       logger.warn(
         { source: row.source, sourceId: row.source_id, kind, url: row.url },
@@ -288,12 +306,12 @@ export async function upsertChunks(rows: BrainRow[]): Promise<number> {
        * The marker indexes NO secret: the body is fixed text, and the title is kept
        * only when the title on its own is clean, since `kind` may have come from it.
        */
-      const titleHoldsIt = credentialKind(row.title) !== null;
+      const titleHoldsIt = credentialKind(redacted.title) !== null;
       byKey.set(
         `${row.source} ${row.source_id}`,
         clean({
-          ...row,
-          title: titleHoldsIt ? `${row.source}: withheld` : row.title,
+          ...redacted,
+          title: titleHoldsIt ? `${row.source}: withheld` : redacted.title,
           body:
             `This part is deliberately not indexed: it contains a ${kind}, which must ` +
             `not become searchable. Rotate it and remove it from the source. The rest ` +
@@ -306,7 +324,7 @@ export async function upsertChunks(rows: BrainRow[]): Promise<number> {
     const people = peopleIn(row.meta ?? {}, byAlias);
     byKey.set(
       `${row.source} ${row.source_id}`,
-      clean(people ? { ...row, meta: { ...(row.meta ?? {}), people } } : row)
+      clean(people ? { ...redacted, meta: { ...(row.meta ?? {}), people } } : redacted)
     );
   }
   const unique = [...byKey.values()];

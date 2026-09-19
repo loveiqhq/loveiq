@@ -162,6 +162,40 @@ describe("a refused part leaves a marker, not a hole", () => {
     expect(JSON.stringify(marker)).not.toContain(secret);
   });
 
+  it("KEEPS a document whose only secret was removable from a url", async () => {
+    /**
+     * Measured 2026-09-19: 126 parts across 35 documents were refused, every one a
+     * JWT inside a Confluence or Jira action link. `redactUrlSecrets` already strips
+     * exactly that — but the refusal read the RAW text, so the surrounding email was
+     * thrown away for a single-use token that would have been masked a few lines
+     * later. The guard is unchanged; it now judges the text that would be stored.
+     */
+    supabaseFetch.mockClear();
+    const jwt = fake("eyJhbGciOi", 40) + "." + fake("eyJzdWIiOi", 30) + ".sig";
+    const n = await upsertChunks([
+      row("thread:inv", "Email: You were invited", `Accept: https://x.dev/a?token=${jwt}`),
+    ]);
+    const stored = written().find((r) => r.source_id === "thread:inv");
+    expect(n, "the row counts as indexed, not withheld").toBe(1);
+    expect(stored?.meta?.withheld, "must not be a marker").toBeUndefined();
+    expect(stored?.body).toContain("[redacted]");
+    expect(JSON.stringify(stored)).not.toContain(jwt);
+    // The point of keeping it: the text around the link survives.
+    expect(stored?.body).toContain("Accept:");
+  });
+
+  it("still refuses a secret that redaction cannot remove", async () => {
+    // The control. A bare key in prose has no url to strip it from, so the part must
+    // still be withheld — otherwise this change would be a hole, not an improvement.
+    supabaseFetch.mockClear();
+    const secret = fake("sk-ant-", 40);
+    const n = await upsertChunks([row("thread:bare", "Email: keys", `here it is ${secret}`)]);
+    const stored = written().find((r) => r.source_id === "thread:bare");
+    expect(n).toBe(0);
+    expect(stored?.meta?.withheld).toBeTruthy();
+    expect(JSON.stringify(stored)).not.toContain(secret);
+  });
+
   it("does not count a marker as an indexed chunk", async () => {
     /**
      * `record_decision` reports success from this return value. When markers were
