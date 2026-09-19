@@ -12,6 +12,9 @@ import {
   person,
   stripQuoted,
   threadToRows,
+  attachmentRefs,
+  MAX_ATTACHMENTS_PER_THREAD,
+  MAX_ATTACHMENT_BYTES,
   isBulkMail,
   excludeSubjects,
 } from "@features/brain/server/ingest/gmail";
@@ -552,5 +555,81 @@ describe("excludeSubjects — keeping a sibling project's tickets out", () => {
   it("drops a term carrying Gmail query operators rather than changing the query's meaning", () => {
     process.env.GMAIL_EXCLUDE_SUBJECTS = "SHOWUP,from:x@y.test,in(box),a b";
     expect(excludeSubjects()).toBe(" -subject:SHOWUP");
+  });
+});
+
+describe("attachmentRefs — attachments are content, and none were read", () => {
+  /**
+   * Until 2026-09-19 the walk indexed every message BODY and nothing hanging off it.
+   * A proposal sent as a pdf was invisible while the thread around it read as
+   * complete, which is the shape of gap this whole audit is about.
+   */
+  const part = (over: Record<string, unknown> = {}) => ({
+    mimeType: "application/pdf",
+    filename: "Proposal.pdf",
+    body: { attachmentId: "att1", size: 1000 },
+    ...over,
+  });
+  const withParts = (parts: unknown[]) => ({
+    id: "t1",
+    messages: [{ id: "m1", payload: { parts } }],
+  });
+
+  it("picks a readable attachment", () => {
+    const refs = attachmentRefs(withParts([part()]) as never);
+    expect(refs).toHaveLength(1);
+    expect(refs[0]).toMatchObject({
+      messageId: "m1",
+      attachmentId: "att1",
+      filename: "Proposal.pdf",
+    });
+  });
+
+  it("finds one nested inside a multipart tree", () => {
+    const nested = withParts([{ mimeType: "multipart/mixed", parts: [part()] }]);
+    expect(attachmentRefs(nested as never)).toHaveLength(1);
+  });
+
+  it("ignores a format there is no reader for", () => {
+    const img = part({ mimeType: "image/png", filename: "logo.png" });
+    expect(attachmentRefs(withParts([img]) as never)).toHaveLength(0);
+  });
+
+  it("ignores a file too big to be prose", () => {
+    const huge = part({ body: { attachmentId: "att1", size: MAX_ATTACHMENT_BYTES + 1 } });
+    expect(attachmentRefs(withParts([huge]) as never)).toHaveLength(0);
+  });
+
+  it("ignores an inline part that is not an attachment", () => {
+    // No filename and no attachmentId: that is the message body, already indexed.
+    const inline = part({ filename: "", body: { data: "aGk", size: 2 } });
+    expect(attachmentRefs(withParts([inline]) as never)).toHaveLength(0);
+  });
+
+  it("caps how many one thread may contribute", () => {
+    const many = Array.from({ length: MAX_ATTACHMENTS_PER_THREAD + 4 }, (_, i) =>
+      part({ filename: `f${i}.pdf`, body: { attachmentId: `a${i}`, size: 10 } })
+    );
+    expect(attachmentRefs(withParts(many) as never)).toHaveLength(MAX_ATTACHMENTS_PER_THREAD);
+  });
+
+  it("puts the attachment text in the chunk, under the conversation", () => {
+    const [row] = threadToRows(
+      thread as never,
+      "me",
+      "stamp",
+      null,
+      "## Attachment: Proposal.pdf\nPrice is 39.99"
+    );
+    expect(row.body).toContain("## Attachment: Proposal.pdf");
+    expect(row.body).toContain("Price is 39.99");
+    // The conversation still comes first — an attachment supplements, never replaces.
+    expect(row.body.indexOf("Between:")).toBeLessThan(row.body.indexOf("## Attachment"));
+  });
+
+  it("changes nothing when a thread has no attachments", () => {
+    const [plain] = threadToRows(thread as never, "me", "stamp");
+    const [same] = threadToRows(thread as never, "me", "stamp", null, "");
+    expect(same.body).toBe(plain.body);
   });
 });
