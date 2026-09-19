@@ -17,6 +17,16 @@ npm run check        # Lint + test + docs:check + build (full CI check)
 npm run setup        # Install deps + create .env.local from .env.example
 ```
 
+Two checks read the LIVE database, so they run in CI (and locally only with
+`SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` set). Both exit 2 rather than
+passing when they cannot read it — a check that skips silently is how the drift
+lane stayed green for months while reading nothing.
+
+```bash
+npm run check:migration-drift    # repo migrations vs live schema + ledger
+npm run check:postgrest-columns  # every literal select=/filter/order= names a real column
+```
+
 ---
 
 ## Repo Map
