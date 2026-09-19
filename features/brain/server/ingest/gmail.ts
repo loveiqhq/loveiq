@@ -496,6 +496,16 @@ export const MAX_ATTACHMENT_BYTES = 4_000_000;
 export const MAX_ATTACHMENTS_PER_THREAD = 5;
 /** One attachment must not be able to outweigh the conversation that carried it. */
 export const MAX_ATTACHMENT_CHARS = 20_000;
+/**
+ * And five of them must not outweigh the CORPUS.
+ *
+ * Per-file alone, five 20k attachments is 100,000 characters — 42 chunks for a single
+ * thread. Two hundred such threads would add 8,400 chunks to a corpus of 24,694, a
+ * third again of everything, all of it attachment text. That is the drowning problem
+ * the domain vocabulary caused in miniature, and it costs battery probes when it
+ * happens. A thread may contribute ten chunks' worth; past that it is a file store.
+ */
+export const MAX_ATTACHMENT_CHARS_PER_THREAD = 24_000;
 
 export interface AttachmentRef {
   messageId: string;
@@ -579,10 +589,17 @@ export async function threadAttachmentText(
   isOutOfTime: () => boolean = () => false
 ): Promise<string> {
   const parts: string[] = [];
+  let budget = MAX_ATTACHMENT_CHARS_PER_THREAD;
   for (const ref of attachmentRefs(thread)) {
-    if (isOutOfTime()) break;
+    if (isOutOfTime() || budget <= 0) break;
     const text = await attachmentText(token, mailbox, ref);
-    if (text) parts.push(`## Attachment: ${ref.filename}\n${text}`);
+    if (!text) continue;
+    const kept =
+      text.length > budget
+        ? `${text.slice(0, budget)}\n[truncated: the rest of this thread's attachments exceed what the brain indexes]`
+        : text;
+    budget -= text.length;
+    parts.push(`## Attachment: ${ref.filename}\n${kept}`);
   }
   return parts.join("\n\n");
 }
