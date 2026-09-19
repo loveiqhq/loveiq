@@ -330,8 +330,44 @@ gh api -X PUT repos/loveiqhq/loveiq/branches/main/protection --input - <<'JSON'
 JSON
 ```
 
-A red commit can still reach `main` today, so the layered enforcement below is
-still what actually holds, and is not redundant:
+**Enabled 2026-09-19, after the above.** `main` now also requires a pull request
+and three green checks (`Lint`, `Test`, `Build`) before merge:
+
+```bash
+gh api repos/loveiqhq/loveiq/branches/main/protection --jq \
+  '{checks:.required_status_checks.contexts, pr:(.required_pull_request_reviews!=null)}'
+```
+
+Three choices in that rule worth knowing, because each was deliberate:
+
+- **Zero required approvals.** The rule is "nothing reaches `main` without a PR
+  and green CI", not "someone must click approve". GitHub forbids approving your
+  own pull request, so requiring one approval would stop a two-person team from
+  merging anything at all.
+- **`strict: false`.** Requiring branches to be up to date would force a rebase
+  on every PR each time `main` moves, and `main` moves about twenty times a day.
+- **`enforce_admins: false`, and admins really do bypass it** — verified, a direct
+  admin push to `main` succeeds with a warning. That is the intended shape: the
+  rule exists to stop AUTOMATION merging its own work, and the automation runs on
+  `GITHUB_TOKEN`, which is not an admin. It pushes a feature branch and opens a
+  draft; it cannot reach `main`. Do not read the rule as protection against a
+  human with admin rights, because it is not one.
+
+### Letting the pipeline propose fixes (`generate-fix.yml`)
+
+It authenticates with the **team Claude subscription, not an API key**:
+
+```bash
+claude setup-token     # requires a Claude subscription; prints a long-lived token
+```
+
+Add the result as the repository secret `CLAUDE_CODE_OAUTH_TOKEN`. Without it the
+workflow skips with a warning rather than failing. Nothing it writes can merge
+itself: `scripts/prove-fix.mjs` refuses any diff outside presentation code, and
+the pull request it opens is reviewed and merged by a person.
+
+A red commit can still reach `main` when pushed by an admin, so the layered
+enforcement below is still what actually holds, and is not redundant:
 
 ### Layer 1 — local pre-push gate (preventive)
 
