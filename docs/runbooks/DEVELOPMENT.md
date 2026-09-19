@@ -149,6 +149,18 @@ Two things it will not do, both enforced mechanically rather than by the prompt:
   themselves, and refuses a change over the line cap. A green probe says the UI
   behaves; it says nothing about whether a payment still settles.
 
+**When it fails.** The proof refusing a fix is a normal outcome, not a
+malfunction — the first live run produced a plausible twelve-line change that
+simply did not work, and was refused. The run then leaves two things behind so
+the attempt can be read rather than guessed at: the proposed diff in the job
+summary, and the branch itself (`autofix/<timestamp>`), pushed whether or not
+the proof passed. It stays a BRANCH — unproven work must not sit in the review
+queue wearing the same badge as proven work.
+
+Reading that diff is how you tell apart a model that misunderstood the defect,
+one that fixed the wrong thing, and a task no small change could satisfy. Those
+call for rewording, retrying, and doing it by hand respectively.
+
 `base_ref` replays a defect from history. That is how the machine is tested: a
 healthy production has nothing to fix, and waiting for a customer to hit
 something is not verification.
