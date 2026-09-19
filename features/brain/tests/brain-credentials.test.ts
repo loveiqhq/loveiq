@@ -4,7 +4,22 @@ vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-import { credentialKind } from "@features/brain/server/ingest/upsert";
+const supabaseFetch = vi.fn(async () => ({
+  ok: true,
+  status: 201,
+  headers: new Headers(),
+  json: async () => [],
+  text: async () => "",
+}));
+vi.mock("@features/admin/server/supabase", () => ({
+  supabaseFetch: (...a: unknown[]) => supabaseFetch(...(a as [])),
+}));
+vi.mock("@features/brain/server/people", () => ({
+  loadPeople: vi.fn(async () => new Map()),
+  peopleIn: vi.fn(() => null),
+}));
+
+import { credentialKind, upsertChunks } from "@features/brain/server/ingest/upsert";
 
 /**
  * Indexing a credential is not the same act as letting someone read a document.
@@ -87,5 +102,71 @@ describe("credentialKind leaves real content alone", () => {
     ["an ordinary sentence", "We charge 39.99 for the full report and 19.99 for essentials."],
   ])("allows %s", (_label, text) => {
     expect(credentialKind(text)).toBeNull();
+  });
+});
+
+describe("a refused part leaves a marker, not a hole", () => {
+  /**
+   * MEASURED 2026-09-19. The guard `continue`d, dropping the row and saying so only
+   * to a log line that rolls off within hours. Its SIBLINGS still read "part 2 of 2",
+   * so the corpus held fragments of 26 gmail threads — 2FA mails, Jira invites,
+   * signup links — with nothing to say a piece was missing or why. A deliberate
+   * omission that looks identical to a bug is the thing this whole audit is about.
+   */
+  const row = (source_id: string, title: string, body: string) => ({
+    source: "gmail",
+    source_id,
+    title,
+    url: null,
+    body,
+    meta: {},
+    updated_at: "2026-09-19T15:11:00.000Z",
+    period_end: null,
+  });
+
+  const written = () =>
+    supabaseFetch.mock.calls.flatMap((c) =>
+      JSON.parse(String((c[1] as { body?: string } | undefined)?.body ?? "[]"))
+    ) as Array<{ source_id: string; title: string; body: string; meta?: Record<string, unknown> }>;
+
+  it("still writes a row for the refused part, and it carries no secret", async () => {
+    supabaseFetch.mockClear();
+    const secret = fake("sk-ant-", 40);
+    await upsertChunks([
+      row("thread:abc", "Email: Your new trial", `Here is your key ${secret}`),
+      row("thread:abc#2", "Email: Your new trial (part 2 of 2)", "Thanks for signing up."),
+    ]);
+    const rows = written();
+    const marker = rows.find((r) => r.source_id === "thread:abc");
+    expect(marker, "the refused part must still produce a row").toBeDefined();
+    expect(marker!.body).not.toContain(secret);
+    expect(marker!.body).toMatch(/deliberately not indexed/);
+    expect(marker!.meta?.withheld).toBeTruthy();
+  });
+
+  it("does not disturb the sibling that was clean", async () => {
+    supabaseFetch.mockClear();
+    await upsertChunks([
+      row("thread:abc", "Email: Your new trial", `key ${fake("sk-ant-", 40)}`),
+      row("thread:abc#2", "Email: Your new trial (part 2 of 2)", "Thanks for signing up."),
+    ]);
+    const sibling = written().find((r) => r.source_id === "thread:abc#2");
+    expect(sibling?.body).toBe("Thanks for signing up.");
+  });
+
+  it("drops a title that itself holds the credential", async () => {
+    supabaseFetch.mockClear();
+    const secret = fake("sk-ant-", 40);
+    await upsertChunks([row("thread:xyz", `Email: token ${secret}`, "body is clean")]);
+    const marker = written().find((r) => r.source_id === "thread:xyz");
+    expect(JSON.stringify(marker)).not.toContain(secret);
+  });
+
+  it("leaves an ordinary row completely alone", async () => {
+    supabaseFetch.mockClear();
+    await upsertChunks([row("thread:ok", "Email: lunch", "See you at one.")]);
+    const r = written().find((x) => x.source_id === "thread:ok");
+    expect(r?.body).toBe("See you at one.");
+    expect(r?.meta?.withheld).toBeUndefined();
   });
 });

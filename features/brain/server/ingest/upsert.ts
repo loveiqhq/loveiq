@@ -275,6 +275,32 @@ export async function upsertChunks(rows: BrainRow[]): Promise<number> {
         { source: row.source, sourceId: row.source_id, kind, url: row.url },
         "brain: refusing to index a chunk containing a credential — rotate it and remove it from the source"
       );
+      /**
+       * LEAVE A MARKER, NOT A HOLE.
+       *
+       * `continue` alone dropped the row and said so only to a log line that has
+       * rolled off by the time anyone looks. Its SIBLINGS still say "part 2 of 2",
+       * so a reader gets a fragment of a document with nothing to say a piece is
+       * missing or why. Measured 2026-09-19: 26 gmail threads were in exactly that
+       * state — 2FA mails, Jira invites, signup links, all of which legitimately
+       * carry a token in their first part.
+       *
+       * The marker indexes NO secret: the body is fixed text, and the title is kept
+       * only when the title on its own is clean, since `kind` may have come from it.
+       */
+      const titleHoldsIt = credentialKind(row.title) !== null;
+      byKey.set(
+        `${row.source} ${row.source_id}`,
+        clean({
+          ...row,
+          title: titleHoldsIt ? `${row.source}: withheld` : row.title,
+          body:
+            `This part is deliberately not indexed: it contains a ${kind}, which must ` +
+            `not become searchable. Rotate it and remove it from the source. The rest ` +
+            `of this document is indexed normally.`,
+          meta: { ...(row.meta ?? {}), withheld: kind },
+        })
+      );
       continue;
     }
     const people = peopleIn(row.meta ?? {}, byAlias);
