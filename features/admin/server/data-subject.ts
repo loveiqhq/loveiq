@@ -13,7 +13,7 @@
  *   - email_suppression        (by email)
  *   - booking_event            (by invitee email + by submission id) [Audit H2]
  *   - app_user                 (by email; the identity root)
- *     - survey_submission      (via app_user_id)
+ *     - survey_submission      (via user_id)
  *       - survey_submission_answer + history + options
  *       - survey_behavior_event (by submission session_id) [Audit M3]
  *       - scoring_result
@@ -173,7 +173,7 @@ export async function exportDataSubject(emailNorm: string): Promise<DsrResult> {
   const userIdsFilter = inFilter(userIds)!;
 
   const submissions = await fetchRows<SubmissionRow>(
-    `/rest/v1/survey_submission?app_user_id=${userIdsFilter}&select=*`,
+    `/rest/v1/survey_submission?user_id=${userIdsFilter}&select=*`,
     "sub"
   );
   result.exportData!.survey_submission = submissions;
@@ -318,7 +318,7 @@ export async function deleteDataSubject(emailNorm: string): Promise<DsrResult> {
   // No payments path falls through to delete app_user; payments path
   // pseudonymizes it below.
   const submissions = await fetchRows<SubmissionRow>(
-    `/rest/v1/survey_submission?app_user_id=${userIdsFilter}&select=id,session_id`,
+    `/rest/v1/survey_submission?user_id=${userIdsFilter}&select=id,session_id`,
     "sub-lookup"
   );
   const subIds = submissions.map((s) => s.id);

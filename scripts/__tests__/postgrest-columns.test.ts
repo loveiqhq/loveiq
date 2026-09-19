@@ -5,7 +5,10 @@ import { findBadColumns, stripEmbeds } from "../check-postgrest-columns.mjs";
 const live = new Map<string, Set<string>>([
   ["email_suppression", new Set(["email", "reason", "created_at"])],
   ["survey_question", new Set(["id", "frontend_qid", "question"])],
-  ["payment", new Set(["id", "personal_report_id", "created_date_time", "is_test", "status"])],
+  [
+    "payment",
+    new Set(["id", "personal_report_id", "created_date_time", "is_test", "status", "metadata"]),
+  ],
   ["personal_report", new Set(["id", "survey_submission_id"])],
 ]);
 
@@ -55,6 +58,29 @@ describe("findBadColumns", () => {
     expect(scan("`/rest/v1/survey_question?select=text:question`")).toEqual([]);
     expect(scan("`/rest/v1/survey_question?select=*`")).toEqual([]);
     expect(scan("`/rest/v1/survey_question?select=${cols}`")).toEqual([]);
+  });
+
+  /**
+   * survey_submission.app_user_id sat in BOTH GDPR paths — the column is
+   * user_id — so an export silently omitted every submission and an erasure
+   * skipped everything linked to one. The unit tests could not see it: their
+   * mock matched whatever string the code passed.
+   */
+  it("checks filter columns, not just select", () => {
+    expect(scan("`/rest/v1/payment?survey_submission_id=in.(1)&select=id`")).toEqual([
+      "payment.survey_submission_id",
+    ]);
+    expect(scan("`/rest/v1/payment?personal_report_id=in.(1)&select=id`")).toEqual([]);
+  });
+
+  it("checks order columns", () => {
+    expect(scan("`/rest/v1/payment?select=id&order=nope.desc`")).toEqual(["payment.nope"]);
+    expect(scan("`/rest/v1/payment?select=id&order=created_date_time.desc`")).toEqual([]);
+  });
+
+  it("accepts a JSONB path filter, where only the base column is schema", () => {
+    expect(scan("`/rest/v1/payment?metadata->>via=eq.x&select=id`")).toEqual([]);
+    expect(scan("`/rest/v1/payment?nosuch->>via=eq.x&select=id`")).toEqual(["payment.nosuch"]);
   });
 
   it("ignores a table it has no live schema for, rather than guessing", () => {

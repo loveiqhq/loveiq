@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Every PostgREST `select=` in the codebase must name columns that exist live.
+ * Every PostgREST column reference in the codebase — `select=`, a filter, or
+ * `order=` — must name a column that exists live.
  *
  * PostgREST answers an unknown column with `400 column <t>.<c> does not exist`,
  * and almost every caller here turns a failed fetch into a neutral value — 0,
@@ -58,6 +59,18 @@ export function stripEmbeds(select) {
  */
 export function findBadColumns(files, liveColumns, read = (f) => readFileSync(f, "utf8")) {
   const RE = /\/rest\/v1\/(\w+)\?([^`"'\n]*)/g;
+  /** PostgREST query parameters that are not column names. */
+  const RESERVED = new Set([
+    "select",
+    "order",
+    "limit",
+    "offset",
+    "and",
+    "or",
+    "not",
+    "on_conflict",
+    "columns",
+  ]);
   const findings = [];
   let checked = 0;
   let skipped = 0;
@@ -66,14 +79,55 @@ export function findBadColumns(files, liveColumns, read = (f) => readFileSync(f,
     for (const [i, line] of lines.entries()) {
       for (const m of line.matchAll(RE)) {
         const table = m[1];
-        const select = m[2].match(/select=([^&]*)/);
-        if (!select) continue;
-        if (select[1].includes("${") || select[1].includes("*")) {
+        const columns = liveColumns.get(table);
+        if (!columns) {
           skipped++;
           continue;
         }
-        const columns = liveColumns.get(table);
-        if (!columns) {
+        const note = (column) => findings.push({ file, line: i + 1, table, column });
+
+        /**
+         * Filters and order= reject an unknown column exactly like select does.
+         * survey_submission.app_user_id sat in the GDPR export AND erasure paths
+         * — the column is user_id — so a data export silently omitted every
+         * submission and an erasure skipped everything linked to one.
+         */
+        for (const part of m[2].split("&")) {
+          const eq = part.indexOf("=");
+          if (eq < 1) continue;
+          const key = part.slice(0, eq);
+          const value = part.slice(eq + 1);
+          if (key === "order") {
+            if (value.includes("${")) {
+              skipped++;
+              continue;
+            }
+            for (const seg of value.split(",")) {
+              const c = seg.split(".")[0].trim();
+              if (!c || c.includes("${")) {
+                skipped++;
+                continue;
+              }
+              checked++;
+              if (!columns.has(c)) note(c);
+            }
+            continue;
+          }
+          if (RESERVED.has(key)) continue;
+          // `col->>key` / `col->key` filter a JSONB path; only the base column
+          // has to exist, and the key inside it is data, not schema.
+          const base = key.split("->")[0].trim();
+          if (!base || base.includes("${") || base.includes("(") || base.includes(".")) {
+            skipped++;
+            continue;
+          }
+          checked++;
+          if (!columns.has(base)) note(base);
+        }
+
+        const select = m[2].match(/select=([^&]*)/);
+        if (!select) continue;
+        if (select[1].includes("${") || select[1].includes("*")) {
           skipped++;
           continue;
         }

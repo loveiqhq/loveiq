@@ -79,7 +79,7 @@ describe("DSAR report_section_feedback handling (F-01)", () => {
       text: async () => "",
     });
     if (path.includes("/app_user?email=")) return ok([{ id: 1, email: "a@x.com" }]);
-    if (path.includes("/survey_submission?app_user_id=")) return ok([{ id: 10 }]);
+    if (path.includes("/survey_submission?user_id=")) return ok([{ id: 10 }]);
     // Lookups used by the delete cascade.
     if (path.includes("/personal_report?survey_submission_id=")) return ok([]);
     if (path.includes("/survey_submission_answer?survey_submission_id=")) return ok([]);
@@ -135,7 +135,7 @@ describe("DSAR delete branches (F-01 / P-02)", () => {
       if (path.includes("/app_user?email=")) return ok([{ id: 1, email: "a@x.com" }]);
       if (path.includes("/payment?user_id=")) return ok(hasPayments ? [{ id: 99 }] : []);
       // No submissions → focus the test on the app_user branch only.
-      if (path.includes("/survey_submission?app_user_id=")) return ok([]);
+      if (path.includes("/survey_submission?user_id=")) return ok([]);
       return ok([], 0);
     };
   }
