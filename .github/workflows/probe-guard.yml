@@ -99,6 +99,21 @@ jobs:
           fi
           echo "clear"
 
+      # PRECISION, the direction neither job above covers.
+      #
+      # The daily run proves a probe passes on a healthy production; the weekly
+      # falsifiability run proves it CAN fail. Neither asks whether it fails on
+      # the WRONG things — and on 2026-09-19 verify-dead-click-target reported
+      # the survey consent gate as a dead control because its button is
+      # deliberately disabled. Correct behaviour, reproduced convincingly, both
+      # jobs green, D1 in AUTO_PR_CRITERIA. Caught by hand, which does not scale.
+      #
+      # This one DOES fail the job. A scanner below bar is a documented state; a
+      # probe claiming a defect that is not one is a regression in the only
+      # component this pipeline actually trusts.
+      - name: Probes do not claim defects that are not defects
+        run: node scripts/probes/precision-check.mjs
+
   falsifiability:
     name: Auto-PR probes can still fail
     # Weekly only, or on a manual run. Seven probes across their full device
