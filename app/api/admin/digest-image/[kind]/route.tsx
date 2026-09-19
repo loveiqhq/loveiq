@@ -34,33 +34,43 @@ const HEIGHT = 500;
 // Net body = HEIGHT - 110.
 const BODY_OVERHEAD = 110;
 
-// Brand palette mirrored from app/globals.css. Hex literals only because
-// `next/og` (Satori) doesn't read the global CSS — colors must be inline.
+// Chart palette. Hex literals only because `next/og` (Satori) doesn't read the
+// global CSS — colors must be inline.
+//
+// LIGHT SURFACE, not the app's dark one. Asked for on the 2026-09-16 sync: white
+// backgrounds instead of black, so a chart pasted into a doc, a deck or a printout
+// looks like the rest of the material rather than a hole in the page.
 const COLORS = {
-  bg: "#0b0613",
-  surface: "#0f0a18",
-  text: "#e8e0f0",
-  textMuted: "#9ca3af",
-  // Validated with the data-viz palette checker against this dark surface:
-  //   node scripts/validate_palette.js "#8a63f0,#e0552f" --mode dark --surface "#0b0613"
-  //   lightness band PASS (both inside L 0.48-0.67) - chroma PASS -
-  //   CVD separation 29.2 protan / 26.3 tritan - normal-vision 30.3 - contrast PASS
-  // The brand steps (#f26d4f / #9c7dff) FAILED the lightness band -- too light
-  // for this surface -- so these are the same hues stepped down for it. (An
-  // earlier version of this comment quoted the rejected pair's numbers.)
+  bg: "#ffffff",
+  text: "#1f2430",
+  textMuted: "#5b6472",
+  // The categorical pair, validated against THIS surface with the data-viz checker:
+  //   node scripts/validate_palette.js "#2563eb,#e0552f" --mode light --surface "#ffffff"
+  //   lightness band PASS (both inside L 0.43-0.77) - chroma PASS -
+  //   CVD separation 29.2 protan / 33.4 tritan - normal-vision 37.3 - contrast PASS
+  // The brand orange #f26d4f was tried first and WARNed on contrast at 2.97:1
+  // against white — the same step that already failed the dark surface's lightness
+  // band. #e0552f carries over from the dark palette and passes on both.
+  accentBlue: "#2563eb",
   accentOrange: "#e0552f",
-  accentPurple: "#8a63f0",
-  barTrack: "#1a1424",
-  // Hairline grid + axis rule. Measured against this surface with the data-viz
-  // reference: the previous values sat at 1.09:1 and 1.11:1 — fainter than the
-  // rulebook's own gridline floor, and Slack downscales an 800px image to the
-  // message column, which collapses a 1px hairline further. These match the
-  // reference (gridline 1.24:1, baseline 1.44:1).
-  gridline: "#261d33",
-  baseline: "#332742",
-  warn: "#fbbf24",
-  danger: "#f87171",
-  good: "#4ade80",
+  // Per-arm assignment lives in armColor() in features/attribution/server/labels.ts
+  // and rides in the signed payload. These two are the fallback for charts that
+  // have no arm (single-series, price buckets, per-question drop-off).
+  barTrack: "#f1f1f1",
+  // Hairline grid + axis rule, carried over from the dark palette BY CONTRAST RATIO
+  // rather than by eye: the dark values were measured at gridline 1.24:1 and
+  // baseline 1.44:1 against their surface, and these are the greys that hit the same
+  // two ratios against white (1.248 and 1.453). Slack downscales an 800px image to
+  // the ~360px message column, which collapses a 1px hairline, so a fainter rule
+  // disappears there even though it survives on a monitor.
+  gridline: "#e6e6e6",
+  baseline: "#d6d6d6",
+  // Status steps re-picked for a light surface — the dark set (#fbbf24 / #f87171 /
+  // #4ade80) sits at 1.7:1, 2.5:1 and 2.2:1 against white and is unreadable there.
+  // These are 5.02:1, 6.47:1 and 5.02:1.
+  warn: "#b45309",
+  danger: "#b91c1c",
+  good: "#15803d",
 };
 
 // The 6 line/curve kinds share `LongitudinalPayload`; `reactivation-email`
@@ -171,6 +181,24 @@ interface DropoutByArmPayload {
   footnote?: string;
   /** Overrides the "not enough per-arm traffic" copy, which is wrong for a site metric. */
   emptyLabel?: string;
+  /**
+   * The colour each series is drawn in, decided by the PRODUCER from the arm's
+   * identity (`armColor()` in features/attribution/server/labels.ts) rather than
+   * here from its position in the payload.
+   *
+   * This is the fix for the 2026-09-16 complaint that V1 and V2 swap colours. The
+   * renderer used to paint `first` blue and `last` orange unconditionally, so which
+   * arm got which colour depended on the order the caller happened to pass them —
+   * and on a day when one arm had no traffic and was dropped, the survivor slid into
+   * the `first` slot and changed colour. Sorting the arms by label, which is what
+   * conversion-digest did, makes two charts in one message agree but cannot fix the
+   * one-arm day, because there is no second arm to sort against.
+   *
+   * Optional, defaulting to the old positional pair, so `dropout-funnel` and the
+   * other armless kinds render byte-identically.
+   */
+  colorFirst?: string;
+  colorLast?: string;
 }
 
 type AnyPayload =
@@ -340,7 +368,7 @@ function renderLongitudinal(p: LongitudinalPayload): {
     p.windowLabel ?? "",
     <div style={{ display: "flex", flexDirection: "column", gap: ROW_GAP }}>
       {liveRows.map((row, rIdx) => {
-        const color = rIdx % 2 === 0 ? COLORS.accentPurple : COLORS.accentOrange;
+        const color = rIdx % 2 === 0 ? COLORS.accentBlue : COLORS.accentOrange;
         const linePts = svgPoints(row.values, row.peak, chartW, chartH);
         const areaPts = linePts ? `0,${chartH} ${linePts} ${chartW},${chartH}` : "";
         const last = row.values.length > 0 ? row.values[row.values.length - 1]! : 0;
@@ -507,7 +535,7 @@ function renderStageConversion(p: StageConversionPayload): {
                 {`${rate.toFixed(1)}%`}
               </div>
               <div
-                style={{ width: 90, height: h, background: COLORS.accentPurple, borderRadius: 4 }}
+                style={{ width: 90, height: h, background: COLORS.accentBlue, borderRadius: 4 }}
               />
               <div
                 style={{
@@ -866,6 +894,16 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
    * which is a real second arm that has no data yet and must still be named.
    */
   const solo = p.last === undefined;
+  /**
+   * Hex only, 3 or 6 digits. The payload is signed, so a value here cannot be
+   * forged — but it is still interpolated straight into an SVG `stroke`, and a
+   * renderer that will paint whatever string it is handed is one signing-key
+   * mistake away from being an injection point. Anything else falls back.
+   */
+  const asHex = (v: unknown, fallback: string): string =>
+    typeof v === "string" && /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v) ? v : fallback;
+  const colFirst = asHex(p.colorFirst, COLORS.accentBlue);
+  const colLast = asHex(p.colorLast, COLORS.accentOrange);
   const title = p.title ?? "Where users quit by arm — email first vs last";
   const n = Math.max(first.length, last.length);
 
@@ -1121,8 +1159,8 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
             two swatches for one line is the "(unused) — no data yet" row this
             renderer produced the first time it was handed one series. */}
         {!solo &&
-          swatch(COLORS.accentPurple, hasFirst ? legendFirst : `${legendFirst} — no data yet`)}
-        {!solo && swatch(COLORS.accentOrange, hasLast ? legendLast : `${legendLast} — no data yet`)}
+          swatch(colFirst, hasFirst ? legendFirst : `${legendFirst} — no data yet`)}
+        {!solo && swatch(colLast, hasLast ? legendLast : `${legendLast} — no data yet`)}
       </div>
 
       {/* ONE coordinate system for the whole plot: axis labels, gridlines, lines,
@@ -1180,7 +1218,7 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
                 key={`last-${i}`}
                 points={seg}
                 fill="none"
-                stroke={COLORS.accentOrange}
+                stroke={colLast}
                 strokeWidth="2"
                 strokeLinejoin="round"
                 strokeLinecap="round"
@@ -1191,7 +1229,7 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
                 key={`first-${i}`}
                 points={seg}
                 fill="none"
-                stroke={COLORS.accentPurple}
+                stroke={colFirst}
                 strokeWidth="2"
                 strokeLinejoin="round"
                 strokeLinecap="round"
@@ -1200,13 +1238,13 @@ function renderDropoutByArm(p: DropoutByArmPayload): {
           </svg>
         </div>
 
-        {hasLast && endDot(COLORS.accentOrange, yEndLast, xEndLast)}
-        {hasFirst && endDot(COLORS.accentPurple, yEndFirst, xEndFirst)}
-        {showLastLabel && endLabel(COLORS.accentOrange, shortLast, endLast, yEndLast)}
+        {hasLast && endDot(colLast, yEndLast, xEndLast)}
+        {hasFirst && endDot(colFirst, yEndFirst, xEndFirst)}
+        {showLastLabel && endLabel(colLast, shortLast, endLast, yEndLast)}
         {/* Solo: no sub-name under the value. `shortFirst` is a word-diff of the
             two legend strings, which with one series clipped to "Visitor → sur…". */}
         {showFirstLabel &&
-          endLabel(COLORS.accentPurple, solo ? "" : shortFirst, endFirst, yEndFirst)}
+          endLabel(colFirst, solo ? "" : shortFirst, endFirst, yEndFirst)}
 
         {/* x ticks, each centred on the data point it names */}
         {tickIdx.map((idx) => (

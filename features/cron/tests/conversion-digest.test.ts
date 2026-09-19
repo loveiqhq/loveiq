@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { armColor, armLabel } from "@features/attribution/server/labels";
 
 const mockNotifySlack = vi.fn();
 const mockTryClaim = vi.fn();
@@ -182,6 +183,29 @@ function makeStartFunnel(opts: { prevFromDay?: number } = {}) {
 
 function blockText(blocks: SlackBlock[]): string {
   return JSON.stringify(blocks);
+}
+
+/** Every signed chart payload in the last message whose two legends name landing arms. */
+function landingChartPayloads(): Array<{
+  legendFirst?: string;
+  legendLast?: string;
+  colorFirst?: string;
+  colorLast?: string;
+}> {
+  const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+  return arg.blocks
+    .map((b) => (b as { image_url?: string }).image_url)
+    .filter((u): u is string => typeof u === "string")
+    .map(
+      (u) =>
+        JSON.parse(Buffer.from(new URL(u).searchParams.get("d")!, "base64").toString("utf8")) as {
+          legendFirst?: string;
+          legendLast?: string;
+          colorFirst?: string;
+          colorLast?: string;
+        }
+    )
+    .filter((p) => p.legendFirst?.includes("Landing Page") || p.legendLast?.includes("Landing Page"));
 }
 
 describe("conversion-digest handler", () => {
@@ -519,8 +543,18 @@ describe("conversion-digest handler", () => {
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
     const flat = blockText(arg.blocks);
     expect(flat).toContain("<0.1%");
-    // And no row anywhere pairs a non-zero count with a bare 0%.
-    expect(flat).not.toMatch(/`\s*[1-9]\d*`\s+0%/);
+    /**
+     * And no row anywhere pairs a non-zero count with a bare 0%, in EITHER
+     * percentage column.
+     *
+     * This regex is rewritten for the two-column row. The previous one was
+     * `/`\s*[1-9]\d*`\s+0%/` — it matched a count in a backtick span of its own,
+     * followed by the share. When the row became a single span holding the count
+     * and both percentages, that shape stopped existing and the assertion could
+     * never fire again: it would have passed against the exact bug it was written
+     * to catch.
+     */
+    expect(flat).not.toMatch(/`\s*[1-9]\d*(?:\s+[\d.<%—]+)*\s+0%\s*`/);
   });
 
   it("names both spans the funnel covers, instead of implying one", async () => {
@@ -578,16 +612,17 @@ describe("conversion-digest handler", () => {
     );
   });
 
-  it("draws the same landing arm in the same colour in every chart of one message", async () => {
+  it("draws each landing arm in ITS OWN colour, in every chart of one message", async () => {
     /**
-     * The renderer colours by POSITION, not by name: `first` is purple, `last` is
-     * orange. So two charts about the same two arms must put the same arm in the
-     * same slot, or one message shows V2 purple in one picture and orange two
-     * blocks below it — each chart correctly legended, and the pair unreadable to
-     * anyone who follows a colour from one to the next.
+     * Colour is bound to the arm (`armColor`), not to the series slot. Asked for on
+     * the 2026-09-16 sync: "fixed colour codes for variants, preventing V1 and V2
+     * colours from swapping". V1 is blue, V2 orange, permanently.
      *
-     * The checkout chart sorts its arms by label. The landing->survey chart used
-     * to hardcode the opposite order.
+     * THIS TEST USED TO ASSERT THE WRONG THING. It compared the two charts'
+     * legendFirst/legendLast and checked they agreed — a proxy for colour that was
+     * only valid while the renderer coloured by position. It never read a colour,
+     * so it would have passed just as happily with V1 and V2 painted the same, or
+     * swapped, as long as both charts listed the arms in the same order.
      */
     /**
      * Both fixtures are rebuilt here, aligned to a later clock. The shared ones
@@ -617,26 +652,105 @@ describe("conversion-digest handler", () => {
       ],
     });
     await GET(request());
-    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
-    const landing = arg.blocks
-      .map((b) => (b as { image_url?: string }).image_url)
-      .filter((u): u is string => typeof u === "string")
-      .map(
-        (u) =>
-          JSON.parse(Buffer.from(new URL(u).searchParams.get("d")!, "base64").toString("utf8")) as {
-            legendFirst?: string;
-            legendLast?: string;
-          }
-      )
-      .filter(
-        (p) => p.legendFirst?.includes("Landing Page") && p.legendLast?.includes("Landing Page")
-      );
+    const landing = landingChartPayloads();
 
     // Both landing charts must be in this message, or the assertion below is
     // vacuous — one chart trivially agrees with itself.
     expect(landing.length).toBeGreaterThanOrEqual(2);
-    expect(new Set(landing.map((p) => p.legendFirst)).size).toBe(1);
-    expect(new Set(landing.map((p) => p.legendLast)).size).toBe(1);
+
+    // Every (arm -> colour) pair drawn anywhere in the message.
+    const drawn = new Map<string, Set<string>>();
+    for (const p of landing) {
+      for (const [legend, colour] of [
+        [p.legendFirst, p.colorFirst],
+        [p.legendLast, p.colorLast],
+      ] as const) {
+        if (!legend || !colour) continue;
+        if (!drawn.has(legend)) drawn.set(legend, new Set());
+        drawn.get(legend)!.add(colour);
+      }
+    }
+
+    const v1 = armLabel("landing", "white_prev").short;
+    const v2 = armLabel("landing", "white").short;
+    // Both arms actually appeared, so neither branch below is skipped silently.
+    expect([...drawn.keys()].sort()).toEqual([v1, v2].sort());
+    // One colour each, across every chart in the message.
+    expect(drawn.get(v1)).toEqual(new Set([armColor("landing", "white_prev")]));
+    expect(drawn.get(v2)).toEqual(new Set([armColor("landing", "white")]));
+    // And they are different colours, which "one colour each" alone does not say.
+    expect(armColor("landing", "white_prev")).not.toBe(armColor("landing", "white"));
+  });
+
+  it("keeps an arm's colour on a day when the other arm has no data", async () => {
+    /**
+     * The case the old design could not express, and the one that put this on the
+     * agenda. When an arm reports nothing the chart still names it, but under
+     * colour-by-position the SURVIVOR slid into the first slot and took the first
+     * slot's colour — so the same arm was one colour on a two-arm day and another
+     * on a one-arm day, with nothing in the picture saying why.
+     *
+     * Sorting the arms by label, which is what this route used to do, cannot fix
+     * this: there is no second arm left to sort against.
+     */
+    vi.setSystemTime(new Date("2026-09-14T09:05:00.000Z"));
+    const days = Array.from({ length: 24 }, (_, d) =>
+      new Date(Date.UTC(2026, 7, 21) + d * 86_400_000).toISOString().slice(0, 10)
+    );
+    // V2 ("white") reports nothing at all this window. V1 carries the chart.
+    mockFetchLandingStartFunnel.mockResolvedValue({
+      daily: days.map((day) => ({ day, arm: "white_prev", visits: 280, starts: 26 })),
+      totals: [
+        { arm: "white_prev", visits: 280 * days.length, starts: 26 * days.length },
+        { arm: "white", visits: 0, starts: 0 },
+      ],
+    });
+    await GET(request());
+    const landing = landingChartPayloads();
+    expect(landing.length).toBeGreaterThanOrEqual(1);
+
+    const v1 = armLabel("landing", "white_prev").short;
+    for (const p of landing) {
+      // Whichever slot V1 occupies, it is drawn in V1's colour and not V2's.
+      const colour = p.legendFirst === v1 ? p.colorFirst : p.colorLast;
+      expect(colour).toBe(armColor("landing", "white_prev"));
+      expect(colour).not.toBe(armColor("landing", "white"));
+    }
+  });
+
+  it("names both percentages on every funnel row, and states which is which", async () => {
+    /**
+     * The 2026-09-16 sync spent real time on a "96.5%" nobody could source, because
+     * the table printed one percentage bare and the other as a "▼ 45%" suffix and
+     * named neither — so a reader could not tell which figure was measured against
+     * the step above and which against all visits.
+     */
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const funnel = arg.blocks
+      .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
+      .find((t) => t.includes("*The funnel —"));
+    expect(funnel, "the funnel block must be in the message at all").toBeDefined();
+
+    // The columns are named, in the order they appear.
+    expect(funnel!).toContain("% of the step before");
+    expect(funnel!).toContain("% of all visits");
+    expect(funnel!.indexOf("% of the step before")).toBeLessThan(
+      funnel!.indexOf("% of all visits")
+    );
+
+    // A row below the first carries TWO percentages, not one. Anchored on a real
+    // row so the assertion cannot be satisfied by the legend line alone.
+    const rows = funnel!.split("\n").filter((l) => /^`\s*\d/.test(l));
+    expect(rows.length).toBeGreaterThan(1);
+    for (const row of rows.slice(1)) {
+      expect(row.match(/%/g) ?? [], `row should carry both percentages: ${row}`).toHaveLength(2);
+    }
+    // The first row is the base: no step-conversion exists above it, so it says so
+    // rather than claiming 100%.
+    expect(rows[0]!).toContain("—");
+    // And the old drop-suffix is gone, not merely joined by the new columns.
+    expect(funnel!).not.toContain("▼");
   });
 
   it("draws the site-wide survey-reach trend through the AUDITED renderer", async () => {

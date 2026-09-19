@@ -79,7 +79,7 @@ import {
   sumDays,
   sumVisitors,
 } from "@features/admin/server/conversion-digest";
-import { armLabel, type ExperimentAxis } from "@features/attribution/server/labels";
+import { armColor, armLabel, type ExperimentAxis } from "@features/attribution/server/labels";
 import { adCostByDay, adCovers } from "@features/brain/server/ingest/analytics";
 
 export const runtime = "nodejs";
@@ -496,17 +496,38 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     // someone can act on.
     const leak = biggestLeak(steps.slice(1));
     blocks.push(divider());
-    const rows = steps.map((s) => {
-      const drop = s.dropFromPrev > 0 ? `  ▼ ${s.dropFromPrev}%` : "";
-      /**
-       * A non-zero count whose share rounds to nothing prints "<0.1", never "0".
-       * With 5 payments against 12,308 visits the share is 0.04%, and a column
-       * reading 100 / 8.3 / 3.5 / 3.4 / 0.3 / 0 invites exactly one conclusion —
-       * that nobody paid — while the count beside it says five. Same rule the
-       * charts already follow: zero and nearly-zero are different facts.
-       */
-      const share = s.pctOfTop === 0 && s.count > 0 ? "<0.1" : String(s.pctOfTop);
-      return `\`${String(s.count).padStart(6)}\`  ${share.padStart(5)}%  ${escapeSlack(s.step)}${drop}`;
+    /**
+     * A non-zero count whose share rounds to nothing prints "<0.1", never "0".
+     * With 5 payments against 12,308 visits the share is 0.04%, and a column
+     * reading 100 / 8.3 / 3.5 / 3.4 / 0.3 / 0 invites exactly one conclusion —
+     * that nobody paid — while the count beside it says five. Same rule the
+     * charts already follow: zero and nearly-zero are different facts.
+     */
+    const pct = (value: number, count: number): string =>
+      value === 0 && count > 0 ? "<0.1%" : `${value}%`;
+    /**
+     * BOTH percentages, on every row, each one named — asked for on the 2026-09-16
+     * sync ("consistent percentage labels across all visual graphs", and funnel
+     * steps stating either the step-by-step or the cumulative conversion).
+     *
+     * The table used to print the cumulative share bare and the step figure as a
+     * "▼ 45%" suffix, and named neither. That is precisely how a 96.5% turned up in
+     * a meeting with nobody able to say 96.5% of WHAT: it was the drop from all
+     * visits to a finished survey, sitting in a column of numbers measured against
+     * a different base. Two named columns cost one context line and remove the
+     * whole class of question.
+     *
+     * The step column is a CONVERSION, not a drop — "65.5% carried on", not "34.5%
+     * left" — because that is the direction the rest of the report, the framework
+     * sheet and the meeting all speak in. It is computed from the counts rather
+     * than as 100 minus the rounded drop, so the two columns cannot disagree by a
+     * rounding step.
+     */
+    const rows = steps.map((s, i) => {
+      const prev = i === 0 ? null : steps[i - 1]!;
+      const stepPct = prev ? pct(computeRate(s.count, prev.count), s.count) : "—";
+      const allPct = pct(s.pctOfTop, s.count);
+      return `\`${String(s.count).padStart(6)}  ${stepPct.padStart(6)}  ${allPct.padStart(6)}\`  ${escapeSlack(s.step)}`;
     });
     // Heading, headline and table in ONE block. Split across two, Slack put a
     // paragraph gap between the title and the numbers it titles.
@@ -519,6 +540,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
               : ""
           }`,
           rows.join("\n"),
+          "_people  ·  % of the step before  ·  % of all visits_",
         ].join("\n")
       )
     );
@@ -585,6 +607,14 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
         // second arm with no data, which is a different statement.
         title: "Visits that reach the survey",
         legendFirst: "Visits that reach the survey",
+        /**
+         * Slate, not the categorical blue. This is the site TOTAL, not an arm, and
+         * it sits two blocks above a chart where blue means Landing Page V1 — the
+         * same "follow the coloured line across two charts and you are following
+         * two different things" problem the per-arm colours were bound to fix.
+         * 10.35:1 on white.
+         */
+        colorFirst: "#334155",
         headline: `${latest}% of visits reach the survey${direction}`,
         footnote:
           "survey starts ÷ all-page visit-days, 7-day trailing · a gap is a day with no visits",
@@ -630,24 +660,17 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   const landingStartBlocks: SlackBlock[] = [];
   if (startFunnel) {
     /**
-     * Ordered by LABEL, for the same reason `buildAxisTrends` orders its arms that
-     * way — and this is the call site that rule never reached.
+     * V1 then V2, so the message reads in version order.
      *
-     * The chart renderer colours by POSITION: `first` is purple, `last` is orange.
-     * This array was hardcoded `["white", "white_prev"]` (V2 then V1) while the
-     * checkout chart directly below sorts by label (V1 then V2). Both charts were
-     * individually correct and correctly legended, and they drew the same two arms
-     * in OPPOSITE colours, two blocks apart in one message — so a reader following
-     * "the purple line" from one chart to the next was following V2 and then V1.
-     * Sorting both by label makes an arm's colour stable across the whole message
-     * and from one day's message to the next.
+     * This used to be sorted by label, and the sort was load-bearing: the renderer
+     * coloured by POSITION, so the order the arms were passed in decided which one
+     * was blue. Sorting made two charts in one message agree — but it could not
+     * help on a day when one arm had no traffic and was dropped, because there was
+     * no second arm left to sort against, and the survivor took the first slot's
+     * colour. Colour is now bound to the arm itself (`armColor`), so ORDER HERE IS
+     * ONLY READING ORDER and changing it cannot repaint anything.
      */
-    const liveArms = (["white", "white_prev"] as const)
-      .slice()
-      .sort((l, r) => armLabel("landing", l).short.localeCompare(armLabel("landing", r).short)) as [
-      string,
-      string,
-    ];
+    const liveArms: [string, string] = ["white_prev", "white"];
     const series = buildStartSeries(startFunnel, [liveArms[0], liveArms[1]]);
     const totalFor = (arm: string) => startFunnel.totals.find((t) => t.arm === arm);
     const hasVisits = (arm: string) => (totalFor(arm)?.visits ?? 0) > 0;
@@ -684,6 +707,8 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
         title: "Site visit-days → started the survey, by landing page",
         legendFirst: armLabel("landing", liveArms[0]).short,
         legendLast: armLabel("landing", liveArms[1]).short,
+        colorFirst: armColor("landing", liveArms[0]),
+        colorLast: armColor("landing", liveArms[1]),
         // Labelled. Unlabelled fractions ("12/300 · 3/90 started") are ambiguous
         // in the image alone, and the image is what gets forwarded.
         headline: `${armLabel("landing", liveArms[0]).short} ${totalFor(liveArms[0])?.starts ?? 0}/${totalFor(liveArms[0])?.visits ?? 0}  ·  ${armLabel("landing", liveArms[1]).short} ${totalFor(liveArms[1])?.starts ?? 0}/${totalFor(liveArms[1])?.visits ?? 0}`,
@@ -824,6 +849,8 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
           title: chart.title,
           legendFirst: chart.legendFirst,
           legendLast: chart.legendLast,
+          colorFirst: armColor(chart.axis, chart.arms[0]),
+          colorLast: armColor(chart.axis, chart.arms[1]),
           headline: chart.headline,
           footnote: chart.footnote,
         });
