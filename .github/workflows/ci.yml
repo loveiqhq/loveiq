@@ -34,9 +34,37 @@ jobs:
       # block the merge. Dependabot PRs skip the gate so a bot-opened PR
       # whose entire purpose is to fix a CVE doesn't get blocked by the
       # very CVE it's fixing — human reviewer still sees the diff.
+      # A VULNERABILITY blocks the merge. An OUTAGE must not.
+      #
+      # `npm audit` calls a registry endpoint, and on 2026-09-19 that endpoint
+      # answered `Bad Request` for the better part of an hour. This step exited
+      # 1, Lint failed, Build skipped because it needs Lint — and both are
+      # required checks, so a third-party API having a bad day meant nothing in
+      # the repository could be merged by anyone.
+      #
+      # That is a self-inflicted outage, and the fix is to tell the two apart:
+      # `--json` gives a parseable report, and a real finding has
+      # `metadata.vulnerabilities`. No parseable report means the service did
+      # not answer, which is a warning about our visibility, not a verdict about
+      # our dependencies.
       - name: npm audit (high severity blocker)
         if: github.actor != 'dependabot[bot]'
-        run: npm audit --audit-level=high --production
+        run: |
+          set +e
+          report=$(npm audit --audit-level=high --omit=dev --json 2>/dev/null)
+          set -e
+          high=$(printf '%s' "$report" \
+            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const v=JSON.parse(s).metadata.vulnerabilities;console.log((v.high||0)+(v.critical||0))}catch{console.log("unknown")}})')
+          if [ "$high" = "unknown" ]; then
+            echo "::warning::npm audit could not be read — the registry endpoint did not answer. NOT treating this as a vulnerability."
+            exit 0
+          fi
+          echo "high+critical advisories: $high"
+          if [ "$high" -gt 0 ]; then
+            npm audit --audit-level=high --omit=dev || true
+            echo "::error::$high high or critical advisory(ies) in production dependencies"
+            exit 1
+          fi
 
   test:
     name: Test
