@@ -154,16 +154,17 @@ async function buildSignedImageUrl(
  */
 const CHART_CAPTIONS: Partial<Record<DigestImageKind, string>> = {
   "cvr-visitor-start":
-    "Of everyone who lands on the site, the share who answer the first survey question.",
+    "Of everyone who lands on the site, the share who answer the first survey question. A 7-day running average, so one quiet day does not read as a collapse.",
   "cvr-start-completion":
-    "Of everyone who answers the first question, the share who reach the last one.",
+    "Of everyone who answers the first question, the share who reach the last one. A 7-day running average.",
   "cvr-completion-paygate":
-    "Of everyone who finishes the survey, the share who reach the point where the report asks for payment.",
+    "Of everyone who finishes the survey, the share who reach the point where the report asks for payment. A 7-day running average.",
   "cvr-paygate-purchase":
     "Of everyone who reaches that point, the share who pay. A 7-day running average — on a single day one sale out of one visitor is 100%, which is noise rather than news.",
   "bucket-performance":
-    "Each line is one price we showed. The share of people who bought at that price.",
-  "dropout-funnel": "Where people quit the survey. Taller means more people left on that question.",
+    "Each line is one price we showed. The share of people who bought at that price, as a 7-day running average. Both lines share one scale, so their heights compare.",
+  "dropout-funnel":
+    "Where people quit the survey. Taller means more people left at that point. The last two positions are the contact-details screen and the final opt-in, which is where the steepest drop is — people reach the end and stop at being asked for an email.",
   "reactivation-email":
     "The follow-up emails we send to people who never opened or never bought. How each one performed.",
 };
