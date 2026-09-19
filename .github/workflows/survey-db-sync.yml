@@ -36,7 +36,10 @@ jobs:
     name: Survey copy matches the database
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Pinned to a commit, like every other workflow here. A tag can be
+      # moved to point at different code; a commit cannot. This file was the
+      # only one still trusting a tag, found while auditing 2026-09-19.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.0
 
       # `check-survey-db-sync.js` exits 0 when credentials are absent, so that a
       # credential-less job never breaks. That is the right default for the script and the
@@ -56,7 +59,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
 
