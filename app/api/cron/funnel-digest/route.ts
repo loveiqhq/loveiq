@@ -22,6 +22,7 @@ import { NextResponse } from "next/server";
 import logger from "@shared/observability/logger";
 import { notifySlack, escapeSlack, type SlackBlock } from "@shared/observability/slack";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
+import { reportingDay, reportingDayStart } from "@shared/time/reporting-day";
 import {
   fitsSlackImageUrl,
   signImagePayload,
@@ -42,7 +43,6 @@ import {
   type DropoutFunnelSnapshot,
   computeRate,
   delta,
-  dayString,
   isoWeekString,
   fetchDailyMetrics,
   fetchWeeklyMetrics,
@@ -658,8 +658,11 @@ export async function buildFunnelDigestBlocks(opts: {
 
 /** Fetch the 4 chart snapshots for the trailing 30-day window. */
 async function fetchChartSnapshots(untilIso: string) {
-  const sinceIso = new Date(
-    new Date(untilIso).getTime() - CHART_WINDOW_DAYS * 86_400_000
+  // Snap back to a real Berlin midnight rather than subtracting fixed days,
+  // which lands an hour out whenever the window crosses a DST change — and the
+  // RPCs behind these charts generate their day axis from this bound.
+  const sinceIso = reportingDayStart(
+    reportingDay(new Date(new Date(untilIso).getTime() - CHART_WINDOW_DAYS * 86_400_000))
   ).toISOString();
   const [cvr, bucket, dropout] = await Promise.all([
     fetchFunnelCvrSparklines(sinceIso, untilIso),
@@ -685,10 +688,27 @@ export async function GET(request: Request) {
 
   try {
     const now = new Date();
-    const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    const yesterdayStart = new Date(dayStart.getTime() - 86_400_000);
-    const dayBeforeStart = new Date(yesterdayStart.getTime() - 86_400_000);
-    const dayKey = dayString(yesterdayStart);
+    /**
+     * Berlin midnight, not UTC midnight.
+     *
+     * Every daily series this digest charts is bucketed on a BERLIN day (the
+     * RPCs were converted 2026-09-19). A UTC-midnight window end therefore cut
+     * the series two hours short: rows between 22:00 and 24:00 UTC belong to the
+     * NEXT Berlin day, which is past the last day the RPC generates, so they were
+     * dropped from the chart entirely rather than merely landing on the wrong bar.
+     *
+     * `conversion-digest` has snapped to `reportingDayStart` since it started
+     * printing GA4 spend beside our counts; this digest was never given the same
+     * treatment and kept a UTC day. Same helper, same reason.
+     */
+    const dayStart = reportingDayStart(reportingDay(now));
+    // One millisecond before today began is yesterday, without assuming a day is
+    // 24 hours — on the two changeover days it is 23 or 25.
+    const dayKey = reportingDay(new Date(dayStart.getTime() - 1));
+    const yesterdayStart = reportingDayStart(dayKey);
+    const dayBeforeStart = reportingDayStart(
+      reportingDay(new Date(yesterdayStart.getTime() - 1))
+    );
 
     let dailySent = false;
     let weeklySent = false;
@@ -720,7 +740,7 @@ export async function GET(request: Request) {
       ]);
       const digest = await buildFunnelDigestBlocks({
         title: `📊 Funnel — ${dayKey} UTC`,
-        windowLabel: `${CHART_WINDOW_DAYS}-day trends ending ${dayKey} UTC`,
+        windowLabel: `${CHART_WINDOW_DAYS}-day trends ending ${dayKey} Berlin time`,
         cvr: snaps.cvr,
         bucket: snaps.bucket,
         dropout: snaps.dropout,
@@ -744,8 +764,12 @@ export async function GET(request: Request) {
       const weekKey = isoWeekString(yesterdayStart);
       const weeklyClaimed = await tryClaimSlackAlert("weekly_digest", "week", weekKey);
       if (weeklyClaimed) {
-        const weekStart = new Date(dayStart.getTime() - 7 * 86_400_000);
-        const prevWeekStart = new Date(weekStart.getTime() - 7 * 86_400_000);
+        const weekStart = reportingDayStart(
+          reportingDay(new Date(dayStart.getTime() - 7 * 86_400_000))
+        );
+        const prevWeekStart = reportingDayStart(
+          reportingDay(new Date(weekStart.getTime() - 7 * 86_400_000))
+        );
         const weekStartIso = weekStart.toISOString();
         const [currW, prevW, snaps] = await Promise.all([
           fetchWeeklyMetrics(weekStartIso, dayStart.toISOString()),
@@ -754,7 +778,7 @@ export async function GET(request: Request) {
         ]);
         const digest = await buildFunnelDigestBlocks({
           title: `📈 Weekly funnel — ${weekKey}`,
-          windowLabel: `${CHART_WINDOW_DAYS}-day trends ending ${dayKey} UTC`,
+          windowLabel: `${CHART_WINDOW_DAYS}-day trends ending ${dayKey} Berlin time`,
           cvr: snaps.cvr,
           bucket: snaps.bucket,
           dropout: snaps.dropout,

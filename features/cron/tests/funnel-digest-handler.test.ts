@@ -343,4 +343,53 @@ describe("funnel-digest cron handler — Phase 3 wiring", () => {
       vi.useRealTimers();
     }
   });
+
+  /**
+   * The window is a BERLIN day, and nothing asserted that until now.
+   *
+   * Every daily series this digest charts is bucketed on a Berlin day. A
+   * UTC-midnight window end cut those series two hours short: rows between 22:00
+   * and 24:00 UTC belong to the NEXT Berlin day, which is past the last day the
+   * RPC generates, so they vanished from the chart rather than landing on the
+   * wrong bar. Measured against production on 2026-09-19, the UTC bound charted
+   * 414 of 416 completions; the Berlin bound charted 417 of 417.
+   *
+   * Exact instants rather than "is a Monday", because the whole bug is a
+   * two-hour offset and any assertion coarser than the instant passes under it.
+   */
+  it("ends the window at BERLIN midnight, not UTC midnight", async () => {
+    vi.setSystemTime(new Date("2026-05-25T09:00:00Z")); // Monday, CEST (UTC+2)
+    try {
+      await GET(newRequest());
+      expect(mockFetchCvr).toHaveBeenCalled();
+      const [sinceIso, untilIso] = mockFetchCvr.mock.calls[0];
+      expect(untilIso).toBe("2026-05-24T22:00:00.000Z"); // Berlin midnight of the 25th
+      expect(untilIso).not.toBe("2026-05-25T00:00:00.000Z"); // what a UTC day would give
+      expect(sinceIso).toBe("2026-04-24T22:00:00.000Z"); // 30 Berlin days earlier
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  /**
+   * Berlin is UTC+1 in November and UTC+2 in October, so a 30-day chart ending in
+   * November spans the changeover. Subtracting a fixed 30 x 86_400_000 lands an
+   * hour inside the first day instead of on its midnight; snapping through
+   * reportingDay does not. One hour is small but it is the same class of silent
+   * edge-loss, and this is the only day of the year that can catch it.
+   */
+  it("snaps the 30-day start across the autumn DST change", async () => {
+    vi.setSystemTime(new Date("2026-11-02T09:00:00Z")); // Monday, CET (UTC+1)
+    try {
+      await GET(newRequest());
+      const [sinceIso, untilIso] = mockFetchCvr.mock.calls[0];
+      expect(untilIso).toBe("2026-11-01T23:00:00.000Z"); // Berlin midnight, UTC+1
+      // 2026-10-03 Berlin midnight is UTC+2 -> 22:00Z. A naive subtraction of
+      // 30 fixed days would give 23:00Z.
+      expect(sinceIso).toBe("2026-10-02T22:00:00.000Z");
+      expect(sinceIso).not.toBe("2026-10-02T23:00:00.000Z");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
