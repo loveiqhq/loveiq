@@ -1502,6 +1502,47 @@ describe("conversion-digest handler", () => {
     expect(blockText(arg.blocks)).toContain("measurement failure");
   });
 
+  it("ships no landing comparison at all, because the test is over", async () => {
+    /**
+     * THE TEST THE OTHER LANDING TESTS CANNOT BE.
+     *
+     * Every one of them goes through `landingLiveBlocks()`, which switches the
+     * axis back ON so the block-building code stays covered. That leaves nobody
+     * asserting the thing that actually changed on 2026-09-19 — and a mutation
+     * forcing `landingIsLive` to true survived all 110 of them, because not one
+     * looked at the message the handler really sends.
+     *
+     * Asserted on the LIVE path, with fixtures that would happily draw the
+     * chart: makeStartFunnel() and makeAxisRows() both carry two landing arms.
+     * If they did not, this would pass by having nothing to omit.
+     */
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const json = JSON.stringify(arg.blocks);
+
+    // No per-arm headline, no per-arm chart, no verdict.
+    expect(json).not.toContain("Landing page → survey");
+    expect(json).not.toContain("visit-days →");
+    expect(json).not.toContain("genuinely ahead");
+    expect(json).not.toContain("no clear winner yet");
+    const landingCharts = landingChartPayloads(arg.blocks);
+    expect(landingCharts, "no chart may legend a landing arm").toHaveLength(0);
+
+    // And it says why, rather than the chart simply vanishing.
+    expect(json).toContain("Landing page test concluded");
+    expect(json).toContain(armLabel("landing", "white").short);
+  });
+
+  it("stops repeating the conclusion once it falls out of the window", async () => {
+    // The notice is news while the window still covers days the test ran, and
+    // filler after that. It expires on the window, with no second constant to
+    // remember to delete.
+    vi.setSystemTime(new Date("2026-11-30T09:05:00.000Z"));
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    expect(JSON.stringify(arg.blocks)).not.toContain("Landing page test concluded");
+  });
+
   it("keeps the definitions at the top, where trimming cannot reach them", async () => {
     await GET(request());
     const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
