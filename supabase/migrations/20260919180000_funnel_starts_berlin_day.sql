@@ -129,7 +129,15 @@ DECLARE
   old_purch CONSTANT TEXT :=
     '    SELECT created_date_time::date AS day, COUNT(*)::int AS n' || E'\n' ||
     '    FROM payment' || E'\n' ||
-    '    WHERE status = ''succeeded'' AND created_date_time >= since_ts AND created_date_time < until_ts';
+    '    WHERE status = ''succeeded'' AND created_date_time >= since_ts AND created_date_time < until_ts' || E'\n' ||
+    -- The GROUP BY is PART OF THE ANCHOR, and has to be. Leaving it out left
+    -- `GROUP BY created_date_time::date` behind after the FROM clause gained a
+    -- JOIN to personal_report — which also has that column — so the function
+    -- compiled fine and then threw "column reference is ambiguous" at call
+    -- time. It did exactly that in production on 2026-09-19 and had to be
+    -- repaired with a follow-up substitution. A substitution anchor must cover
+    -- every line whose meaning depends on the lines being replaced.
+    '    GROUP BY created_date_time::date';
   new_purch CONSTANT TEXT :=
     '    -- Succeeded, NON-TEST, and money actually moved — and counted per' || E'\n' ||
     '    -- PERSON, because the denominators beside it are distinct submissions.' || E'\n' ||
@@ -140,7 +148,10 @@ DECLARE
     '    FROM payment p' || E'\n' ||
     '    JOIN personal_report pr ON pr.id = p.personal_report_id' || E'\n' ||
     '    WHERE p.status = ''succeeded'' AND NOT p.is_test AND p.amount > 0' || E'\n' ||
-    '      AND p.created_date_time >= since_ts AND p.created_date_time < until_ts';
+    '      AND p.created_date_time >= since_ts AND p.created_date_time < until_ts' || E'\n' ||
+    -- GROUP BY 1, not the column name: `created_date_time` now exists on both
+    -- sides of the join.
+    '    GROUP BY 1';
 
   old_starts CONSTANT TEXT :=
     '    SELECT started_at::date AS day, COUNT(DISTINCT session_id)::int AS n' || E'\n' ||
