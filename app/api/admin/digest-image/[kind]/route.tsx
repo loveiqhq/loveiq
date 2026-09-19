@@ -239,10 +239,20 @@ function chartShell(
           justifyContent: "space-between",
           alignItems: "baseline",
           flexShrink: 0,
+          // A long title ran straight into the window label with no space at all —
+          // "…by landing page21 days to 19 Sep". space-between only separates what
+          // is left over, and the production titles leave nothing over.
+          gap: 16,
         }}
       >
-        <div style={{ fontSize: 26, fontWeight: 700, color: COLORS.text }}>{title}</div>
-        <div style={{ fontSize: 14, color: COLORS.textMuted }}>{subtitle}</div>
+        <div style={{ fontSize: 26, fontWeight: 700, color: COLORS.text, flexShrink: 1 }}>
+          {title}
+        </div>
+        <div
+          style={{ fontSize: 14, color: COLORS.textMuted, flexShrink: 0, whiteSpace: "nowrap" }}
+        >
+          {subtitle}
+        </div>
       </div>
       <div style={{ marginTop: 18, display: "flex", flexDirection: "column" }}>{body}</div>
     </div>
@@ -573,7 +583,8 @@ const DROPOUT_LABEL_W = 34;
 /** Room for a value label like "15%" at 13px bold, with margin. */
 const DROPOUT_VALUE_W = 46;
 
-function renderDropoutBars(p: DropoutPayload): {
+/** Exported for the test that asserts the steepest bar keeps its number. */
+export function renderDropoutBars(p: DropoutPayload): {
   element: React.ReactElement;
   height: number;
 } {
@@ -722,7 +733,15 @@ function renderDropoutBars(p: DropoutPayload): {
                   width: Math.max(2, slot - 1),
                   height: h,
                   background: isWorst ? COLORS.danger : COLORS.accentOrange,
-                  opacity: isWorst ? 1 : 0.5,
+                  /**
+                   * 0.9, not 0.5. The de-emphasis was tuned against the old dark
+                   * surface, where half-strength orange still read as orange. Over
+                   * white the same 0.5 composites to #f0aa97 — 1.93:1, a hard
+                   * contrast failure for a DATA mark, and the bars came out pale
+                   * pink. 0.9 is the first step that passes (3.36:1) and the red
+                   * still carries the highlight on its own.
+                   */
+                  opacity: isWorst ? 1 : 0.9,
                   borderRadius: 1,
                 }}
               />
@@ -732,12 +751,27 @@ function renderDropoutBars(p: DropoutPayload): {
           {/* the number on the bars that matter, so the eye never has to
               estimate the ones being pointed at */}
           {[...worstIdx]
+            /**
+             * Two adjacent worst bars (Q57 and Q58 are neighbours, both 15%) put two
+             * 36px labels on two ~11px slots, which overlapped into an unreadable
+             * smudge — so colliding labels are dropped.
+             *
+             * WHICH one is dropped used to be decided left-to-right: keep the first,
+             * drop its neighbour. That silently dropped the steepest bar whenever a
+             * shallower worst-bar sat immediately to its left — which is not a corner
+             * case, it is what a cliff looks like, with elevated drop-off on the
+             * question before it. Rendered on real shape: Q5 at 24% was the headline
+             * of the summary line, the tallest bar and the only dark red one, and it
+             * was the one with no number on it, because Q4 at 11% came first.
+             *
+             * Steepest first, then greedily keep whatever still fits.
+             */
+            .sort((a, b) => bars[b]!.dropPct - bars[a]!.dropPct)
+            .reduce<number[]>((keep, i) => {
+              if (keep.every((k) => Math.abs(i - k) * slot >= DROPOUT_VALUE_W + 2)) keep.push(i);
+              return keep;
+            }, [])
             .sort((a, b) => a - b)
-            // Two adjacent worst bars (Q57 and Q58 are neighbours, both 15%)
-            // put two 36px labels on two ~11px slots, which overlapped into an
-            // unreadable smudge. Keep the first of any colliding pair — the
-            // summary line underneath names every one of them anyway.
-            .filter((i, n, arr) => n === 0 || (i - arr[n - 1]!) * slot >= DROPOUT_VALUE_W + 2)
             .map((i) => {
               const b = bars[i]!;
               const h = Math.max(2, Math.round((b.dropPct / peak) * DROPOUT_PLOT_H));
