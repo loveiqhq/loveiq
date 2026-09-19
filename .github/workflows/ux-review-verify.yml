@@ -13,6 +13,10 @@ on:
     # and far enough apart that a finding is verified within one working morning
     # without re-running probes against production all day.
     - cron: "41 */3 * * *"
+    # Monday morning, for the weekly scanner scoring step below. The 3-hourly
+    # cron does not fire at this exact minute-and-hour combination, so the two
+    # never collide.
+    - cron: "41 9 * * 1"
   workflow_dispatch:
     inputs:
       lookback_hours:
@@ -101,6 +105,24 @@ jobs:
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+      # The only thing that measures whether the scanners are worth their
+      # credits, and nothing has ever run it — it existed as a package script
+      # and appeared in no workflow. Weekly rather than every run: it reads
+      # fixture observations that are written once and never change, so running
+      # it eight times a day would report the same numbers eight times a day.
+      #
+      # `continue-on-error` on purpose. It exits non-zero when the scanners are
+      # BELOW BAR, which is their standing state (precision 0.20, recall 0.50
+      # against 0.80/0.60) and is a fact about the scanners, not a fault in this
+      # workflow. Failing the verify run for it would stop findings being
+      # verified over a number nobody can fix from here.
+      - name: Score the scanners (weekly)
+        if: github.event.schedule == '41 9 * * 1' || github.event_name == 'workflow_dispatch'
+        continue-on-error: true
+        run: npx tsx scripts/replay-bench/score.mjs
+        env:
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
 
       - name: Self-test the finding classifier
         run: npx tsx scripts/verify-ux-findings.mjs --selftest
