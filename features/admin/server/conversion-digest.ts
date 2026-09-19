@@ -753,13 +753,30 @@ export function buildFunnel(
      */
     ...(hasPaywall ? [{ step: "…of those, hit the paywall", count: paywallCount }] : []),
     { step: "…of those, started checkout", count: sum((r) => r.checkout) },
-    { step: "…of those, ever paid", count: sum((r) => r.paid) },
+    /**
+     * UNLOCKED, not "ever paid".
+     *
+     * This counts `report_price_quote.purchased_at`, which fulfillment sets
+     * whenever a report unlocks — including a 100%-off coupon. The break-even
+     * block below counts SALES (succeeded, non-test, amount > 0) and names the
+     * free unlocks separately, per the definition recorded 2026-09-19. Both were
+     * labelled "paid", so one message answered "how many paid" with two
+     * different numbers — 4 here and 3 there, four lines apart — which is the
+     * class of unsourceable figure this whole rewrite exists to remove.
+     *
+     * The count is not wrong for what it measures, so the LABEL moved rather
+     * than the number: the funnel asks "did they get the report", break-even
+     * asks "did we get money". Reconciling them into one figure needs a
+     * cohort-scoped charge count, which the arm RPC does not return — it has
+     * `charges` on the daily rows but not on the cohort totals.
+     */
+    { step: "…of those, ever unlocked it", count: sum((r) => r.paid) },
   ];
 
   const top = raw[0]?.count ?? 0;
   const steps: FunnelStep[] = [];
   // Clamp only the stages that CAN legitimately over-count against their
-  // predecessor because they are event-day sourced. "ever paid" is not one of
+  // predecessor because they are event-day sourced. "ever unlocked it" is not one of
   // them: a promo one-tap or an admin-granted unlock sets purchased_at without a
   // checkout, so paid can exceed checkout truthfully — and clamping quietly
   // rewrote the number of payers downward under a label that said "Paid".
@@ -784,7 +801,7 @@ export function buildFunnel(
    * table holding four rows per person, and the clamp turned it into a tidy,
    * fabricated 100% instead of letting the absurdity show.
    *
-   * `ever paid` stays unclamped for the opposite reason: a promo one-tap or an
+   * `ever unlocked it` stays unclamped for the opposite reason: a promo one-tap or an
    * admin-granted unlock sets purchased_at with no checkout, so paid can exceed
    * checkout TRUTHFULLY.
    *

@@ -590,11 +590,23 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     const p = sumDays(funnel.daily, (d) => priorDays.includes(d));
     const pVisitors = sumVisitors(funnel.visitors, (d) => priorDays.includes(d));
 
-    yesterday = { visitors: yVisitors, completions: y.completions, paid: y.paid };
+    /**
+     * `charges`, not `paid`. `paid` counts `report_price_quote.purchased_at`,
+     * which fulfillment sets on ANY unlock including a 100%-off coupon, while
+     * `revenue` beside it counts money. On a comp day this field printed
+     * "Paid 1 · Revenue EUR 0.00" — a line that contradicts itself inside four
+     * words, which is how this class of bug announces itself.
+     *
+     * `charges` is the same rows filtered to `amount > 0`, already returned by
+     * `sumDays`, so the count and the money beside it now answer the same
+     * question. Matches the definition recorded 2026-09-19 and the break-even
+     * block below; the funnel's own unlock count is labelled "unlocked".
+     */
+    yesterday = { visitors: yVisitors, completions: y.completions, paid: y.charges };
     baseline = {
       visitors: pVisitors / 7,
       completions: p.completions / 7,
-      paid: p.paid / 7,
+      paid: p.charges / 7,
     };
 
     blocks.push(divider());
@@ -606,7 +618,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
           label: "Finished survey",
           value: `${y.completions}  _(${delta(y.completions, p.completions / 7)})_`,
         },
-        { label: "Paid", value: `${y.paid}  _(${delta(y.paid, p.paid / 7)})_` },
+        { label: "Paid", value: `${y.charges}  _(${delta(y.charges, p.charges / 7)})_` },
         {
           label: "Revenue",
           value: `${money(y.revenue)}  _(${delta(y.revenue, p.revenue / 7)})_`,
@@ -1293,7 +1305,11 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
   const text =
     funnel === null
       ? `:chart_with_upwards_trend: Conversion ${dayKey} — data unavailable (could not read the funnel)`
-      : `:chart_with_upwards_trend: Conversion ${dayKey} — ${yesterday.completions} finished, ${yesterday.paid} paid${spentClause} yesterday; ${paidTotal} ever paid from ${WINDOW_DAYS} days of finishers`;
+      : // `paidTotal` is the funnel's last row, which counts UNLOCKS — so it is
+        // named "unlocked" here too. `yesterday.paid` is `charges`, real sales.
+        // This string is the push-notification preview and the dead-letter text,
+        // so it is the one place a reader gets no surrounding context at all.
+        `:chart_with_upwards_trend: Conversion ${dayKey} — ${yesterday.completions} finished, ${yesterday.paid} paid${spentClause} yesterday; ${paidTotal} ever unlocked from ${WINDOW_DAYS} days of finishers`;
 
   const fitted = fitBlocks(blocks, text);
   return { text, blocks: fitted.blocks, trimmed: fitted.trimmed };

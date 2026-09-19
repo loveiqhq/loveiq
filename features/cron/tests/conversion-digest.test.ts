@@ -1077,7 +1077,7 @@ describe("conversion-digest handler", () => {
       .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
       .find((t) => t.includes("*The funnel —"));
     expect(funnel).toBeDefined();
-    const paidRow = funnel!.split("\n").find((l) => l.includes("ever paid"))!;
+    const paidRow = funnel!.split("\n").find((l) => l.includes("ever unlocked it"))!;
     expect(paidRow).toContain("120%");
     expect(paidRow).not.toMatch(/\s100%\s/);
   });
@@ -1100,7 +1100,7 @@ describe("conversion-digest handler", () => {
     const funnel = arg.blocks
       .map((b) => (b as { text?: { text?: string } }).text?.text ?? "")
       .find((t) => t.includes("*The funnel —"));
-    const paidRow = funnel!.split("\n").find((l) => l.includes("ever paid"))!;
+    const paidRow = funnel!.split("\n").find((l) => l.includes("ever unlocked it"))!;
     expect(paidRow).toContain("—");
     expect(paidRow).not.toContain("<0.1%");
   });
@@ -1502,6 +1502,80 @@ describe("conversion-digest handler", () => {
     expect(blockText(arg.blocks)).toContain("measurement failure");
   });
 
+  it("never uses one word for both unlocks and sales", async () => {
+    /**
+     * `report_price_quote.purchased_at` is set by fulfillment on ANY unlock,
+     * including a 100%-off coupon; `payment.amount > 0` is a sale. Three places
+     * in this message counted one or the other and ALL THREE said "paid", so a
+     * single message answered "how many paid" with different numbers in the
+     * funnel, in yesterday's fields and in break-even — and the fields block
+     * could print "Paid 1 · Revenue EUR 0.00", which contradicts itself inside
+     * four words.
+     *
+     * The fixture makes the two differ on purpose: yesterday has 2 unlocks of
+     * which 1 was free. If they were equal this test would pass without
+     * distinguishing anything.
+     */
+    const day = "2026-08-23";
+    mockFetchLandingArmFunnel.mockResolvedValue({
+      visitors: [{ day, arm: "white", n: 100 }],
+      daily: [
+        {
+          day,
+          arm: "white",
+          completions: 10,
+          reportOpens: 9,
+          checkout: 3,
+          paid: 2, // two unlocks…
+          charges: 1, // …one of which was a sale
+          freeUnlocks: 1,
+          revenue: 29,
+        },
+      ],
+      cohort: [
+        { arm: "white", completions: 10, reportOpens: 9, checkout: 3, paid: 2, revenue: 29 },
+      ],
+    });
+    mockFetchUnitEconomics.mockResolvedValue({
+      adSpend: 1185.32,
+      revenue: 29,
+      paidReports: 1,
+      compedReports: 1,
+      otherCurrencyReports: 0,
+      coveredDays: 30,
+      windowDays: 30,
+    });
+
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { text: string; blocks: SlackBlock[] };
+    const blockTexts = arg.blocks.map((b) => JSON.stringify(b));
+
+    // The funnel counts UNLOCKS and says so. It must not say "paid" at all.
+    const funnelBlock = blockTexts.find((t) => t.includes("Visits to the site"))!;
+    expect(funnelBlock, "the funnel block").toBeDefined();
+    expect(funnelBlock).toContain("ever unlocked it");
+    expect(funnelBlock).not.toMatch(/\bpaid\b/i);
+
+    // Yesterday's "Paid" counts SALES, so it agrees with the Revenue beside it.
+    const fieldsBlock = blockTexts.find((t) => t.includes("Finished survey"))!;
+    expect(fieldsBlock, "the yesterday fields block").toBeDefined();
+    expect(fieldsBlock).toContain("*Paid*\\n1");
+    expect(fieldsBlock, "2 is the unlock count and must not appear here").not.toContain(
+      "*Paid*\\n2"
+    );
+
+    // Break-even counts sales and names the free unlock separately.
+    const breakEven = blockTexts.find((t) => t.includes("Break-even"))!;
+    expect(breakEven).toContain("1 paid report");
+    expect(breakEven).toContain("1 unlocked free, not counted as sales");
+
+    // The notification preview gets no surrounding context, so it must be
+    // unambiguous on its own.
+    expect(arg.text).toContain("1 paid");
+    expect(arg.text).toContain("ever unlocked");
+    expect(arg.text).not.toContain("ever paid");
+  });
+
   it("ships no landing comparison at all, because the test is over", async () => {
     /**
      * THE TEST THE OTHER LANDING TESTS CANNOT BE.
@@ -1572,7 +1646,7 @@ describe("buildFunnel: the midway row and the clamp that moves with it", () => {
       "Finished the survey",
       "…of those, opened their report",
       "…of those, started checkout",
-      "…of those, ever paid",
+      "…of those, ever unlocked it",
     ]);
     expect(steps.map((x) => x.count)).toEqual([12308, 1025, 700, 425, 425, 33, 5]);
   });
@@ -2285,7 +2359,7 @@ describe("conversion-digest funnel", () => {
       "Finished the survey",
       "…of those, opened their report",
       "…of those, started checkout",
-      "…of those, ever paid",
+      "…of those, ever unlocked it",
     ]);
     expect(steps.map((x) => x.count)).toEqual([12308, 1025, 425, 414, 33, 5]);
     // The point of the row: the old single 96.5% becomes 91.7% then 58.5%, and the
