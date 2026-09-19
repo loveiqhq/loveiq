@@ -876,7 +876,13 @@ function fmtAxis(value: number): string {
   return value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
 }
 
-function renderDropoutByArm(p: DropoutByArmPayload): {
+/**
+ * Exported for the test that asserts the payload's colours actually reach the
+ * marks. Everything else here is internal; this one is the path that decides
+ * which arm is which colour on screen, and a producer that sends the right
+ * colour to a renderer that ignores it looks identical from outside.
+ */
+export function renderDropoutByArm(p: DropoutByArmPayload): {
   element: React.ReactElement;
   height: number;
 } {
