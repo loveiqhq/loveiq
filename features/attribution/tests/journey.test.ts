@@ -334,6 +334,41 @@ describe("buildSubmissionJourney", () => {
     });
 
     /**
+     * A CLOSED session is exempt from the one-minute floor, because the beacon
+     * fires when the reader actually leaves — the span stops being an artifact
+     * and becomes a fact.
+     *
+     * #2130 (26 seconds) and #2131 (18 seconds) both had properly closed
+     * sessions and both rendered an em dash, hiding a real bounce from the
+     * channel. The floor exists to distrust a measurement nobody took, not to
+     * throw away one we did.
+     */
+    it.each([
+      ["18 seconds", "10:20:18.000Z", 18_000],
+      ["26 seconds", "10:20:26.000Z", 26_000],
+      ["2 seconds — an instant bounce is information too", "10:20:02.000Z", 2_000],
+    ])("reports a closed session of %s", async (_label, endsAt, expected) => {
+      route({
+        reportSessions: [{ started_at: at("10:20:00"), ended_at: `2026-08-24T${endsAt}` }],
+        events: [],
+      });
+      expect((await buildSubmissionJourney(1296))?.timings.reportDwellMs).toBe(expected);
+    });
+
+    it("still applies the floor when nothing was ever closed", async () => {
+      // No beacon, so the span is only the load burst — exactly what the floor
+      // is for. An unclosed session must not inherit the exemption.
+      route({
+        reportSessions: [{ started_at: at("10:20:00"), ended_at: null }],
+        events: [
+          { event_type: "report_viewed", event_time: at("10:20:01") },
+          { event_type: "locked_card_price_shown", event_time: at("10:20:02") },
+        ],
+      });
+      expect((await buildSubmissionJourney(1296))?.timings.reportDwellMs).toBeNull();
+    });
+
+    /**
      * The load burst is not a visit. Submission #2112's entire stream: the report
      * opened at 15:26:04.6 and two events landed by 15:26:06.2, then silence.
      * Printing "2s" reads in the channel as "bounced instantly" when all it says

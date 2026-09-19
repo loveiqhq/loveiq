@@ -180,7 +180,7 @@ function msBetween(from: string | null, to: string | null): number | null {
 export const REPORT_IDLE_GAP_MS = 30 * 60_000;
 
 /**
- * Below this, report nothing.
+ * Below this, report nothing — but ONLY when no session was properly closed.
  *
  * Opening the report fires a burst of events inside a second or two — the
  * server-side `report_session` row, `locked_card_price_shown`, `report_viewed`.
@@ -192,7 +192,13 @@ export const REPORT_IDLE_GAP_MS = 30 * 60_000;
  * One minute because that is where the instrumentation's own first heartbeat is:
  * anyone who stays a minute leaves a `report_engagement_1min` row, so at or above
  * a minute there is always purpose-built evidence, and below it there is only the
- * load burst. Those readers render an em dash, exactly as they do today.
+ * load burst.
+ *
+ * A CLOSED SESSION IS EXEMPT, since 2026-09-19. The beacon fires when the reader
+ * actually leaves, so a short span stops being an artifact and becomes a fact:
+ * #2130 spent 34 seconds and #2131 spent 18, both with closed sessions, and both
+ * rendered an em dash that hid a real bounce. The floor exists to distrust a
+ * measurement nobody took — not to throw away one we did.
  */
 export const MIN_MEASURABLE_DWELL_MS = 60_000;
 
@@ -271,6 +277,8 @@ export function measureReportDwellMs(
 
   const open = openedAt ? new Date(openedAt).getTime() : Number.NaN;
   let span = 0;
+  /** True once a session with a real close has contributed to the span. */
+  let measured = false;
   if (Number.isFinite(open)) {
     // Anything stamped before the report opened belongs to the survey, not to
     // reading — including a clock-skewed row, which would otherwise start the
@@ -287,6 +295,9 @@ export function measureReportDwellMs(
       if (new Date(session.ended_at).getTime() < new Date(session.started_at).getTime()) continue;
       push(session.started_at, false);
       push(session.ended_at, true);
+      // Somebody watched this reader leave, so the span below is measured
+      // rather than inferred — see MIN_MEASURABLE_DWELL_MS.
+      measured = true;
     }
     // Ties: the close sorts last, so a session that opens and closes in the same
     // millisecond still ends its own sitting rather than the previous one.
@@ -314,6 +325,7 @@ export function measureReportDwellMs(
   }
 
   const dwell = Math.max(span, milestoneFloor);
+  if (measured) return dwell > 0 ? dwell : null;
   return dwell >= MIN_MEASURABLE_DWELL_MS ? dwell : null;
 }
 
