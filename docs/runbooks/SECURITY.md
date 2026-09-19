@@ -369,6 +369,37 @@ the pull request it opens is reviewed and merged by a person.
 A red commit can still reach `main` when pushed by an admin, so the layered
 enforcement below is still what actually holds, and is not redundant:
 
+### A dependency check must not turn someone else's outage into ours
+
+`npm audit` calls a registry endpoint. On 2026-09-19 that endpoint answered
+`503 Service Unavailable — We are currently performing maintenance` for the
+better part of an hour, and because `Lint` and `Build` had just become required
+checks, **nothing in the repository could be merged by anyone** while it lasted.
+
+Both audit steps (`ci.yml` and `security.yml`) now tell the two cases apart:
+
+| what came back                                      | what it means               | what happens             |
+| --------------------------------------------------- | --------------------------- | ------------------------ |
+| a parseable report with high or critical advisories | a finding                   | **build fails**          |
+| a parseable report with none                        | we are clean                | passes                   |
+| nothing parseable                                   | the registry did not answer | **warns**, does not fail |
+
+The distinction is `metadata.vulnerabilities` in the `--json` output. An
+unreadable report is a gap in our visibility, not a verdict about our
+dependencies, and a check that is red for reasons nobody can act on is one
+people learn to scroll past. `__tests__/scripts/npm-audit-gate.test.ts` pins the
+counting against six inputs, including the three shapes an outage actually takes.
+
+### Every action is pinned to a commit, never a tag
+
+A tag is a movable pointer: whoever controls an action's repository can make
+`@v4` mean different code tomorrow, and that code runs with our secrets. A
+commit cannot move. `survey-db-sync.yml` was the last workflow still trusting a
+tag — found by hand on 2026-09-19, which is exactly the kind of check that
+should not depend on someone looking, so
+`__tests__/scripts/workflow-pinning.test.ts` now enforces it across every
+workflow. Commented-out `uses:` lines are ignored, since they execute nothing.
+
 ### Layer 1 — local pre-push gate (preventive)
 
 `.husky/pre-push` runs `lint` + `typecheck` + `test` + `docs:check` before any
