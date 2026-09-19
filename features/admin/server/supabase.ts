@@ -29,7 +29,24 @@ function warnIfTruncated(path: string, res: Response, paginated = false): void {
   if (paginated) return;
   const range = res.headers.get("content-range");
   if (!range) return;
-  const end = Number(range.split("/")[0]?.split("-")[1]);
+  const [span, total] = range.split("/");
+  /**
+   * An EXACT total means nothing was truncated.
+   *
+   * A count request (HEAD + `Prefer: count=exact`, what fetchExactCount sends)
+   * comes back `0-999/11624`: the span is a capped row window that means nothing
+   * because there is no body, and the number after the slash is the real total,
+   * which is exactly what the caller reads. A row request comes back
+   * `0-999/*` — total unknown, 1,000 rows in hand, genuinely truncated.
+   *
+   * Without this, every counted query logged "rows are MISSING" while returning
+   * a correct count: four per weekly digest run. A warning that cries wolf on a
+   * correct answer is worse than no warning, because the real one (a friction
+   * query silently reading 1,000 of 26,109 rows, which changed which question
+   * was the worst) then reads as more of the same noise.
+   */
+  if (total && total !== "*") return;
+  const end = Number(span?.split("-")[1]);
   if (end !== POSTGREST_MAX_ROWS - 1) return;
   if (/[?&]limit=1000(&|$)/.test(path)) return;
   logger.warn(
