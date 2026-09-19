@@ -155,6 +155,19 @@ behaviour, so it cannot widen what the probe failed to check, and a fix that
 brings its own regression test should not be penalised for it. (Measured: this
 morning's consent-gate fix was 37 lines of product code and 56 of test.)
 
+**Three ways the proposal step can fail, which need opposite responses.** The
+job names them rather than reporting a bare failure, because the natural reading
+of "failed" is "the model could not do it", and that is wrong in two of the three:
+
+| what the log says   | what it means                        | what to do                                                      |
+| ------------------- | ------------------------------------ | --------------------------------------------------------------- |
+| `session limit`     | the Claude subscription is exhausted | wait for the reset and re-run; nothing about the task was wrong |
+| `Reached max turns` | the defect is too large for one pass | narrow the defect, or fix it by hand                            |
+| anything else       | a real error                         | read it                                                         |
+
+In all three the partial work is committed, printed and pushed, so what it had
+got to is readable.
+
 **When it fails.** The proof refusing a fix is a normal outcome, not a
 malfunction — the first live run produced a plausible twelve-line change that
 simply did not work, and was refused. The run then leaves two things behind so

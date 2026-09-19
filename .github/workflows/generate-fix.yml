@@ -153,7 +153,28 @@ jobs:
             "Make the change. Do not commit; the workflow does that.")" \
             --allowedTools "Read,Edit,Write,Grep,Glob,Bash(npm run lint),Bash(npx vitest run:*)" \
             --permission-mode acceptEdits \
-            --max-turns 120
+            --max-turns 120 \
+            2>&1 | tee /tmp/propose.log
+          code=${PIPESTATUS[0]}
+          # Name the three ways this step fails, because they need opposite
+          # responses and a bare "failure" makes them look identical.
+          #
+          #   session limit  -> wait; nothing about the task was wrong
+          #   max turns      -> the task is too big for the budget; split it
+          #   anything else  -> a real error worth reading
+          #
+          # Measured on 2026-09-19: the first real attempt ended "Reached max
+          # turns (40)" and the third ended "You've hit your session limit ·
+          # resets 9:40pm (UTC)". Both were reported simply as a failed run, and
+          # the natural reading of that is "the model could not do it", which
+          # was wrong in both cases.
+          if grep -qi "session limit" /tmp/propose.log; then
+            echo "::warning::Claude subscription session limit reached — this says nothing about the task. Re-run after it resets."
+            echo "SESSION LIMIT — partial work is committed and pushed below." >> "$GITHUB_STEP_SUMMARY"
+          elif grep -qi "Reached max turns" /tmp/propose.log; then
+            echo "::warning::ran out of turns — the defect may be too large for one pass. The partial diff is below."
+          fi
+          exit $code
 
       # `always()`, so partial work survives a model that errored or ran out of
       # turns. The first attempt at a substantial defect hit 'Reached max turns'
