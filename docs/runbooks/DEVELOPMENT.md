@@ -124,6 +124,42 @@ The route requires:
 
 It also checks live Supabase reachability, so invalid credentials or a down Supabase project still return `503`.
 
+## Letting the pipeline write a fix
+
+`.github/workflows/generate-fix.yml` — **Actions → Generate and prove a fix →
+Run workflow**. Give it three things: the probe that reproduces the defect, the
+JSON environment that probe needs, and one plain sentence describing what a
+visitor experienced. It proposes a fix, then proves it, then opens a pull
+request — and only in that order.
+
+It authenticates with the **team Claude subscription, not an API key**. Mint the
+token once with `claude setup-token` (it needs a real terminal — Claude Code
+cannot give it one) and store it as the repository secret
+`CLAUDE_CODE_OAUTH_TOKEN`. Without it the workflow skips with a warning instead
+of failing every run.
+
+Two things it will not do, both enforced mechanically rather than by the prompt:
+
+- **It cannot merge its own work.** The pull request opens ready for review and
+  a person merges it — which is also the label the pipeline learns from, so
+  automating the click would destroy the only signal that does not come from
+  our own machinery judging itself.
+- **It cannot touch anything a probe cannot vouch for.** `scripts/prove-fix.mjs`
+  refuses any diff reaching API routes, migrations, auth, payments or the probes
+  themselves, and refuses a change over the line cap. A green probe says the UI
+  behaves; it says nothing about whether a payment still settles.
+
+`base_ref` replays a defect from history. That is how the machine is tested: a
+healthy production has nothing to fix, and waiting for a customer to hit
+something is not verification.
+
+Proving a candidate on its own, without generating anything:
+`.github/workflows/prove-fix.yml`, or locally —
+
+```bash
+FIX_REF=my-branch PROBE=verify-survey-loop.mjs node scripts/prove-fix.mjs
+```
+
 ## Related Docs
 
 - [README.md](../../README.md)
