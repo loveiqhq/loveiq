@@ -124,6 +124,73 @@ The route requires:
 
 It also checks live Supabase reachability, so invalid credentials or a down Supabase project still return `503`.
 
+## Letting the pipeline write a fix
+
+`.github/workflows/generate-fix.yml` — **Actions → Generate and prove a fix →
+Run workflow**. Give it three things: the probe that reproduces the defect, the
+JSON environment that probe needs, and one plain sentence describing what a
+visitor experienced. It proposes a fix, then proves it, then opens a pull
+request — and only in that order.
+
+It authenticates with the **team Claude subscription, not an API key**. Mint the
+token once with `claude setup-token` (it needs a real terminal — Claude Code
+cannot give it one) and store it as the repository secret
+`CLAUDE_CODE_OAUTH_TOKEN`. Without it the workflow skips with a warning instead
+of failing every run.
+
+Two things it will not do, both enforced mechanically rather than by the prompt:
+
+- **It cannot merge its own work.** The pull request opens ready for review and
+  a person merges it — which is also the label the pipeline learns from, so
+  automating the click would destroy the only signal that does not come from
+  our own machinery judging itself.
+- **It cannot touch anything a probe cannot vouch for.** `scripts/prove-fix.mjs`
+  refuses any diff reaching API routes, migrations, auth, payments or the probes
+  themselves, and refuses a change over the line cap. A green probe says the UI
+  behaves; it says nothing about whether a payment still settles.
+
+**What it is allowed to change.** Presentation code and tests only — and the
+size cap counts PRODUCT lines, not test lines. A test changes no runtime
+behaviour, so it cannot widen what the probe failed to check, and a fix that
+brings its own regression test should not be penalised for it. (Measured: this
+morning's consent-gate fix was 37 lines of product code and 56 of test.)
+
+**Three ways the proposal step can fail, which need opposite responses.** The
+job names them rather than reporting a bare failure, because the natural reading
+of "failed" is "the model could not do it", and that is wrong in two of the three:
+
+| what the log says   | what it means                        | what to do                                                      |
+| ------------------- | ------------------------------------ | --------------------------------------------------------------- |
+| `session limit`     | the Claude subscription is exhausted | wait for the reset and re-run; nothing about the task was wrong |
+| `Reached max turns` | the defect is too large for one pass | narrow the defect, or fix it by hand                            |
+| anything else       | a real error                         | read it                                                         |
+
+In all three the partial work is committed, printed and pushed, so what it had
+got to is readable.
+
+**When it fails.** The proof refusing a fix is a normal outcome, not a
+malfunction — the first live run produced a plausible twelve-line change that
+simply did not work, and was refused. The run then leaves two things behind so
+the attempt can be read rather than guessed at: the proposed diff in the job
+summary, and the branch itself (`autofix/<timestamp>`), pushed whether or not
+the proof passed. It stays a BRANCH — unproven work must not sit in the review
+queue wearing the same badge as proven work.
+
+Reading that diff is how you tell apart a model that misunderstood the defect,
+one that fixed the wrong thing, and a task no small change could satisfy. Those
+call for rewording, retrying, and doing it by hand respectively.
+
+`base_ref` replays a defect from history. That is how the machine is tested: a
+healthy production has nothing to fix, and waiting for a customer to hit
+something is not verification.
+
+Proving a candidate on its own, without generating anything:
+`.github/workflows/prove-fix.yml`, or locally —
+
+```bash
+FIX_REF=my-branch PROBE=verify-survey-loop.mjs node scripts/prove-fix.mjs
+```
+
 ## Related Docs
 
 - [README.md](../../README.md)

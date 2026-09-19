@@ -40,11 +40,31 @@
  *   DAYS=7 npx tsx scripts/ux-review-coverage.mjs
  *   npx tsx --env-file=.env.local scripts/ux-review-coverage.mjs --enqueue
  *
- * Exit 0 clean, 1 misses found, 2 could not measure.
+ * Exit 0 clean, 1 misses found, 2 could not measure. With --enqueue, exit 0
+ * means the misses were re-queued successfully — see the note at that branch.
  */
 import { hogQuery } from "./lib/hogql.mjs";
 
 const PROJECT = "244778";
+
+/**
+ * A crash and a finding must not share an exit code.
+ *
+ * Every read here can fail — an expired PostHog key, a 503, a Supabase
+ * timeout — and an unhandled rejection exits 1, which is exactly what this
+ * script uses to mean "misses found". A caller reading the code cannot tell
+ * the difference, and in the three-hourly workflow a dead key would look like
+ * an ordinary day with a few unwatched recordings. 2 means could-not-measure.
+ */
+// BOTH events: this module uses top-level await, and Node reports a throw
+// there as an uncaught exception rather than an unhandled rejection. Listening
+// for only the latter left the exit code at 1 — verified, not assumed.
+for (const signal of ["unhandledRejection", "uncaughtException"]) {
+  process.on(signal, (err) => {
+    console.error(`could not measure: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(2);
+  });
+}
 const DAYS = Number(process.env.DAYS ?? 4);
 
 /** Trigger events the four scanners query on. A session with none of these
@@ -201,8 +221,17 @@ if (misses.length > 0) {
     }
   }
   console.log(`\n${queued} observation(s) queued, ${failed} failed.`);
+  /**
+   * Exit 0 when the gap was CLOSED, not when there was no gap.
+   *
+   * The read-only mode exits 1 on a miss, which is right for a check. But
+   * --enqueue is a remediation, and it runs unattended every three hours: if
+   * finding-and-fixing misses failed the job, the workflow would be red on
+   * every normal day and nobody would look at it by the second week. A real
+   * failure — a refused enqueue — still exits 2.
+   */
   if (failed > 0) process.exit(2);
-  process.exit(1);
+  process.exit(0);
 }
 console.log("every finished reader with a recording was opened by a scanner.");
 process.exit(0);

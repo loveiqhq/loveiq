@@ -53,6 +53,12 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   // and a set of numbers that agree look identical from the outside.
   "brain-reconcile": 26 * 3_600_000,
   "brain-ingest": 26 * 3_600_000,
+  // Monthly, on the 3rd. The house rule is 2-3x the schedule, which would be 62
+  // days — deliberately tighter here at 40, because this one writes to the cost
+  // sheet. Two missed months of invoice filing is a quarter's worth of vendor
+  // changes nobody reconciled, and the sheet feeds runway. 40 days tolerates a
+  // late run and still catches a wholly missed month.
+  "file-invoices": 40 * 24 * 3_600_000,
   // Every 15 minutes, so 45m of silence is two missed ticks.
   "brain-fast": 45 * 60_000,
   // Hourly.

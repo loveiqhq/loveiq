@@ -7,6 +7,7 @@ import {
   googleCredentialShape,
   GMAIL_SCOPE,
 } from "@shared/http/google-oauth";
+import { decodeEntities } from "@shared/format/html-escape";
 import logger from "@shared/observability/logger";
 import { loadPeople } from "@features/brain/server/people";
 import { splitBody } from "./notion";
@@ -91,7 +92,11 @@ const MAX_TOLERATED_THREAD_FAILURES = 25;
 
 /** Bump when the row SHAPE changes; a mismatch counts as stale. See notion.ts. */
 // v2: v1 indexed notification stubs (bodies of "96" and whitespace) as threads.
-export const GMAIL_BUILDER_VERSION = 6;
+// v7: v1-v6 read every message BODY and no attachment, so a proposal sent as a pdf
+// or a spec as a docx was invisible while the thread around it read as complete.
+// Without the bump this reaches only threads that happen to change: a thread is
+// refetched on a historyId move, and an old thread's history never moves again.
+export const GMAIL_BUILDER_VERSION = 7;
 
 /**
  * Mailboxes to read. `me` is whoever the credential belongs to.
@@ -275,7 +280,7 @@ interface GmailHeader {
 interface GmailPart {
   mimeType?: string;
   filename?: string;
-  body?: { data?: string; size?: number };
+  body?: { data?: string; size?: number; attachmentId?: string };
   parts?: GmailPart[];
 }
 interface GmailMessage {
@@ -339,15 +344,17 @@ export function messageText(part?: GmailPart): string {
     }
   }
   if (part.mimeType === "text/html" && part.body?.data) {
-    return decode(part.body.data)
-      .replace(/<style[\s\S]*?<\/style>/gi, " ")
-      .replace(/<script[\s\S]*?<\/script>/gi, " ")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&nbsp;/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"');
+    return decodeEntities(
+      decode(part.body.data)
+        // <head> before <style>: a marketing email's stylesheet is often inside a
+        // conditional comment or left unclosed by a truncated part, and then the
+        // <style> rule below cannot match it. Measured 2026-09-19: 115 gmail chunks
+        // held CSS like `line-height: 2em; color:#000; }` as if it were prose.
+        .replace(/<head[\s\S]*?<\/head>/gi, " ")
+        .replace(/<style[\s\S]*?<\/style>/gi, " ")
+        .replace(/<script[\s\S]*?<\/script>/gi, " ")
+        .replace(/<[^>]+>/g, " ")
+    );
   }
   return "";
 }
@@ -467,6 +474,139 @@ export function person(addr: string): string {
   return addr.replace(/[<>]/g, "").trim();
 }
 
+/**
+ * ATTACHMENTS ARE CONTENT, and until 2026-09-19 none of them were read.
+ *
+ * The walk indexed every message BODY and nothing hanging off it, so a proposal
+ * sent as a pdf, a spec as a docx or a csv of numbers was invisible — and invisible
+ * in the worst way, because the thread around it WAS indexed, so the conversation
+ * read as complete while the thing it was about was missing.
+ *
+ * Deliberately narrow. Only formats there is already a reader for (`unpdf` and
+ * `mammoth` are both dependencies for Drive), only files small enough to be prose
+ * rather than data, and only a few per thread — a mailbox is not a file store and
+ * this must not turn the hourly walk into one.
+ */
+const ATTACHMENT_MIMES = new Set([
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "text/plain",
+  "text/csv",
+  "text/markdown",
+]);
+/** Past this a file is data, not prose, and the reader is the wrong tool for it. */
+export const MAX_ATTACHMENT_BYTES = 4_000_000;
+export const MAX_ATTACHMENTS_PER_THREAD = 5;
+/** One attachment must not be able to outweigh the conversation that carried it. */
+export const MAX_ATTACHMENT_CHARS = 20_000;
+/**
+ * And five of them must not outweigh the CORPUS.
+ *
+ * Per-file alone, five 20k attachments is 100,000 characters — 42 chunks for a single
+ * thread. Two hundred such threads would add 8,400 chunks to a corpus of 24,694, a
+ * third again of everything, all of it attachment text. That is the drowning problem
+ * the domain vocabulary caused in miniature, and it costs battery probes when it
+ * happens. A thread may contribute ten chunks' worth; past that it is a file store.
+ */
+export const MAX_ATTACHMENT_CHARS_PER_THREAD = 24_000;
+
+export interface AttachmentRef {
+  messageId: string;
+  attachmentId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+}
+
+/** Every readable attachment in a thread. Pure, so the choosing is testable offline. */
+export function attachmentRefs(thread: GmailThread): AttachmentRef[] {
+  const out: AttachmentRef[] = [];
+  const walk = (messageId: string, part?: GmailPart): void => {
+    if (!part || out.length >= MAX_ATTACHMENTS_PER_THREAD) return;
+    const filename = (part.filename ?? "").trim();
+    const attachmentId = part.body?.attachmentId;
+    const mimeType = (part.mimeType ?? "").split(";")[0]!.trim();
+    const size = part.body?.size ?? 0;
+    if (
+      filename &&
+      attachmentId &&
+      ATTACHMENT_MIMES.has(mimeType) &&
+      size <= MAX_ATTACHMENT_BYTES
+    ) {
+      out.push({ messageId, attachmentId, filename, mimeType, size });
+    }
+    for (const p of part.parts ?? []) walk(messageId, p);
+  };
+  for (const m of thread.messages ?? []) {
+    if (m.id) walk(m.id, m.payload);
+  }
+  // No trim needed: `walk` returns the moment the cap is reached, so `out` can never
+  // exceed it. A `.slice()` here survived mutation precisely because it was dead.
+  return out;
+}
+
+/** Text out of one attachment. Returns "" for anything it cannot read, never throws. */
+async function attachmentText(token: string, mailbox: string, ref: AttachmentRef): Promise<string> {
+  try {
+    const res = await gmailGet(
+      token,
+      mailbox,
+      `/messages/${encodeURIComponent(ref.messageId)}/attachments/${encodeURIComponent(ref.attachmentId)}`
+    );
+    const data = typeof res?.data === "string" ? res.data : "";
+    if (!data) return "";
+    const buf = Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+    if (buf.byteLength === 0) return "";
+
+    let text = "";
+    if (ref.mimeType === "application/pdf") {
+      const { extractText, getDocumentProxy } = await import("unpdf");
+      const doc = await getDocumentProxy(new Uint8Array(buf));
+      const out = await extractText(doc, { mergePages: true });
+      text = Array.isArray(out.text) ? out.text.join("\n") : out.text;
+    } else if (ref.mimeType.endsWith("wordprocessingml.document")) {
+      const mammoth = await import("mammoth");
+      text = (await mammoth.extractRawText({ buffer: buf })).value;
+    } else {
+      text = buf.toString("utf8");
+    }
+    const clean = text.replace(/\r\n/g, "\n").trim();
+    return clean.length > MAX_ATTACHMENT_CHARS
+      ? `${clean.slice(0, MAX_ATTACHMENT_CHARS)}\n[truncated: this attachment is longer than the brain indexes]`
+      : clean;
+  } catch (err) {
+    // One unreadable attachment must not cost the thread, let alone the walk.
+    logger.warn(
+      { err, file: ref.filename, mime: ref.mimeType },
+      "brain-ingest gmail: attachment unreadable"
+    );
+    return "";
+  }
+}
+
+/** Reads every readable attachment of a thread, newest-first budget permitting. */
+export async function threadAttachmentText(
+  token: string,
+  mailbox: string,
+  thread: GmailThread,
+  isOutOfTime: () => boolean = () => false
+): Promise<string> {
+  const parts: string[] = [];
+  let budget = MAX_ATTACHMENT_CHARS_PER_THREAD;
+  for (const ref of attachmentRefs(thread)) {
+    if (isOutOfTime() || budget <= 0) break;
+    const text = await attachmentText(token, mailbox, ref);
+    if (!text) continue;
+    const kept =
+      text.length > budget
+        ? `${text.slice(0, budget)}\n[truncated: the rest of this thread's attachments exceed what the brain indexes]`
+        : text;
+    budget -= text.length;
+    parts.push(`## Attachment: ${ref.filename}\n${kept}`);
+  }
+  return parts.join("\n\n");
+}
+
 export function threadToRows(
   thread: GmailThread,
   mailbox: string,
@@ -476,7 +616,9 @@ export function threadToRows(
    * up here because this runs per thread and there are thousands of them -- the same
    * reason `notion.ts` passes its user directory into `pageToRow`.
    */
-  byAlias: Map<string, { canonical: string }> | null = null
+  byAlias: Map<string, { canonical: string }> | null = null,
+  /** Text already read out of this thread's attachments, appended after the messages. */
+  attachments = ""
 ): BrainRow[] {
   const msgs = (thread.messages ?? []).filter((m) => m.payload);
   if (!thread.id || msgs.length === 0) return [];
@@ -512,7 +654,13 @@ export function threadToRows(
     source_id: `thread:${thread.id}`,
     title,
     url: `https://mail.google.com/mail/u/0/#all/${thread.id}`,
-    body: [title, `Between: ${participants.join(", ")}`, "", ...lines].join("\n"),
+    body: [
+      title,
+      `Between: ${participants.join(", ")}`,
+      "",
+      ...lines,
+      ...(attachments ? ["", attachments] : []),
+    ].join("\n"),
     meta: {
       kind: "gmail-thread",
       v: GMAIL_BUILDER_VERSION,
@@ -689,6 +837,8 @@ export async function ingestGmail(
    */
   let degraded = false;
   let fetched = 0;
+  /** Threads whose attachments contributed text, reported so the gap stays visible. */
+  let attachmentsRead = 0;
 
   const failedMailboxes: string[] = [];
   /** Threads we listed but could not re-read this run. Protected from the sweep. */
@@ -750,7 +900,9 @@ export async function ingestGmail(
           continue;
         }
         fetched += 1;
-        rows.push(...threadToRows(full, mailbox, stampedAt, people));
+        const attached = await threadAttachmentText(token, mailbox, full, isOutOfTime);
+        if (attached) attachmentsRead += 1;
+        rows.push(...threadToRows(full, mailbox, stampedAt, people, attached));
       }
 
       pageToken = (listed.nextPageToken as string) ?? "";
@@ -863,6 +1015,7 @@ export async function ingestGmail(
   const detail =
     `boxes=${boxes.length}${discovered ? "" : "(directory unavailable, fell back)"} ` +
     `listed=${seen.size} fetched=${fetched} written=${written} kept=${touched} ` +
+    (attachmentsRead > 0 ? `attachments=${attachmentsRead} ` : "") +
     `swept=${swept} complete=${complete}` +
     (stopReason ? ` stopped=${stopReason}` : "") +
     (failedMailboxes.length ? ` unreachable=${failedMailboxes.join(",")}` : "");

@@ -260,3 +260,36 @@ describe("researchableConstructs — terms whose literature is about something e
     expect(out).toHaveLength(2);
   });
 });
+
+/**
+ * Europe PMC returns titles as HTML, so an ampersand arrives as `&amp;` and italics
+ * as `&lt;i&gt;`. A paper title is not internal plumbing — it is printed as the
+ * citation behind a claim — so storing the entity means showing it. Measured
+ * 2026-09-19: "Societal Perceptions ... of Voyeurism &amp; Upskirting" was in the
+ * corpus exactly like that.
+ */
+describe("toPaper decodes the HTML Europe PMC sends", () => {
+  it("decodes an ampersand in the title", () => {
+    const p = toPaper({ title: "Voyeurism &amp; Upskirting in Young Adults.", pubYear: "2026" });
+    expect(p?.title).toBe("Voyeurism & Upskirting in Young Adults");
+  });
+
+  it("decodes markup entities rather than storing them raw", () => {
+    const p = toPaper({ title: "Sexual desire &lt;i&gt;in vivo&lt;/i&gt;", pubYear: "2026" });
+    expect(p?.title).toBe("Sexual desire <i>in vivo</i>");
+  });
+
+  it("decodes the journal name and abstract too", () => {
+    const p = toPaper({
+      title: "A study",
+      journalInfo: { journal: { title: "Journal of sex &amp; marital therapy" } },
+      abstractText: "Desire &amp; arousal were measured.",
+    });
+    expect(p?.journal).toBe("Journal of sex & marital therapy");
+    expect(p?.abstract).toBe("Desire & arousal were measured.");
+  });
+
+  it("still drops a paper with no title at all", () => {
+    expect(toPaper({ pubYear: "2026" })).toBeNull();
+  });
+});

@@ -189,6 +189,13 @@ export function eventToRows(e: CalEvent, stampedAt: string, mailbox: string | nu
       kind: "calendar-event",
       v: CALENDAR_BUILDER_VERSION,
       attendees: attending.slice(0, 12),
+      /**
+       * The TRUE count, because the list above is capped at 12 and one meeting in
+       * the corpus sits exactly on that cap — indistinguishable, from the row
+       * alone, from a meeting that really had twelve people. Cheap to record and
+       * it stops a reader counting a truncated list as the attendance.
+       */
+      attendeeCount: attending.length,
       organizer: e.organizer ? who(e.organizer) : null,
       /**
        * The calendar this row was walked from. One meeting is stored ONCE

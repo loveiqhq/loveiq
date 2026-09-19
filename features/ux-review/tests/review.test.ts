@@ -41,6 +41,7 @@ const verified = (over: Record<string, unknown> = {}) => ({
     criterion: string | null;
     urlPath: string | null;
     delivered: boolean;
+    fromOwnRecords: boolean;
   }>,
   clear: 0,
   inconclusive: 0,
@@ -90,7 +91,11 @@ describe("buildDigestMessage", () => {
     const json = JSON.stringify(blocks);
     expect(json).toContain("39 of the 118 people");
     expect(json).toContain("33%");
-    expect(json).toContain("other 79 were never watched");
+    // "yet", not "never": the most recent hour is always still pending, and
+    // anything skipped is re-queued every three hours.
+    expect(json).toContain("other 79 had not been watched");
+    expect(json).toContain("queued automatically");
+    expect(json).not.toContain("never watched");
   });
 
   it("says nothing was missed when coverage is complete", () => {
@@ -189,6 +194,44 @@ describe("buildDigestMessage", () => {
     expect(json).toContain("1 was already answered");
     expect(json).not.toContain("1 were");
     expect(json).toContain("the checkout page");
+  });
+
+  /**
+   * "We found this without an AI" is a stronger claim than "an AI noticed it
+   * and a probe agreed", and it is the signal that the mechanical half of the
+   * detector is earning its keep. It is the thing worth watching after
+   * 2026-09-19, so it belongs in the message rather than in someone's calendar.
+   */
+  it("says when a confirmed problem was found without any AI", () => {
+    const { blocks } = buildDigestMessage(
+      [],
+      verified({
+        reproduced: 1,
+        total: 1,
+        reproducedItems: [
+          { criterion: "D1", urlPath: "/survey", delivered: true, fromOwnRecords: true },
+        ],
+      }),
+      covered()
+    );
+    expect(JSON.stringify(blocks)).toContain("Found in our own records, without any AI");
+  });
+
+  it("does NOT claim that when a model was involved", () => {
+    const { blocks } = buildDigestMessage(
+      [],
+      verified({
+        reproduced: 2,
+        total: 2,
+        reproducedItems: [
+          { criterion: "D1", urlPath: "/survey", delivered: true, fromOwnRecords: true },
+          { criterion: "D1", urlPath: "/survey", delivered: true, fromOwnRecords: false },
+        ],
+      }),
+      covered()
+    );
+    // Same group, mixed provenance: the stronger claim must not cover both.
+    expect(JSON.stringify(blocks)).not.toContain("without any AI");
   });
 
   it("never leaks a criterion id into the message", () => {

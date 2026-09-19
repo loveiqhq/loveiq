@@ -241,6 +241,13 @@ export interface ReproducedFinding {
   criterion: string | null;
   urlPath: string | null;
   delivered: boolean;
+  /**
+   * True when the finding came from our own dead_click events rather than a
+   * model watching a recording. Worth saying out loud: those are mechanical,
+   * so "we found this without an AI" is a different and stronger claim than
+   * "an AI noticed it and a probe agreed".
+   */
+  fromOwnRecords: boolean;
 }
 
 export interface VerificationStat {
@@ -342,7 +349,7 @@ export async function fetchVerificationStats(): Promise<VerificationStat | null>
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   try {
     const res = await fetchWithTimeout(
-      `${url}/rest/v1/ux_finding?select=outcome,delivered,criterion,url_path` +
+      `${url}/rest/v1/ux_finding?select=outcome,delivered,criterion,url_path,scanner_name` +
         `&created_at=gte.${since}&limit=500`,
       {
         headers: { apikey: key, Authorization: `Bearer ${key}` },
@@ -355,6 +362,7 @@ export async function fetchVerificationStats(): Promise<VerificationStat | null>
       delivered?: boolean;
       criterion?: string | null;
       url_path?: string | null;
+      scanner_name?: string | null;
     }>;
     const tally: VerificationStat = {
       reproduced: 0,
@@ -379,6 +387,7 @@ export async function fetchVerificationStats(): Promise<VerificationStat | null>
           criterion: row.criterion ?? null,
           urlPath: row.url_path ?? null,
           delivered: row.delivered !== false,
+          fromOwnRecords: (row.scanner_name ?? "").includes("our own"),
         });
       }
       if (row.delivered === false) tally.undelivered += 1;
@@ -441,11 +450,27 @@ function coverageLine(c: CoverageStat | null): string {
     return "*How much we watched:* nobody finished the survey in the last 24 hours.";
   const pct = Math.round((c.observed / c.submissions) * 100);
   const missed = c.submissions - c.observed;
+  /**
+   * "not watched yet", not "never watched".
+   *
+   * Marcus read this line and reasonably asked why we still are not watching
+   * everyone. Two different things were being reported as one. PostHog opens a
+   * recording about 38 minutes after it ends, so the most recent hour of any
+   * 24-hour window is always still pending — and separately, it genuinely
+   * skips roughly half the recordings that match a scanner's query (measured
+   * 2026-09-19: 103 of 211 eligible sessions watched by nothing). "Never"
+   * claimed the second for cases that were only the first, and implied nothing
+   * was being done about either.
+   *
+   * Both are now handled the same way: anything unwatched is re-queued every
+   * three hours by the verify workflow, so the honest word is "yet".
+   */
   return (
     `*How much we watched:* ${c.observed} of the ${c.submissions} people who finished ` +
     `the survey (${pct}%).` +
     (missed > 0
-      ? ` The other ${missed} were never watched, so nothing here can speak for them.`
+      ? ` The other ${missed} had not been watched when this was written — ` +
+        `they are queued automatically for another look, so they are not lost.`
       : " Everyone was watched.")
   );
 }
@@ -466,14 +491,18 @@ function confirmedBlock(v: VerificationStat | null): string {
    * one thing to fix, not two lines. Ungrouped, a day with two identical L1s
    * printed the same sentence twice and read like a copy-paste mistake.
    */
-  const groups = new Map<string, { what: string; where: string; n: number; undelivered: number }>();
+  const groups = new Map<
+    string,
+    { what: string; where: string; n: number; undelivered: number; own: number }
+  >();
   for (const f of v.reproducedItems) {
     const what = (f.criterion && PLAIN_CRITERION[f.criterion]) ?? "something did not work";
     const where = placeOf(f.urlPath);
     const k = `${where}|${what}`;
-    const g = groups.get(k) ?? { what, where, n: 0, undelivered: 0 };
+    const g = groups.get(k) ?? { what, where, n: 0, undelivered: 0, own: 0 };
     g.n += 1;
     if (!f.delivered) g.undelivered += 1;
+    if (f.fromOwnRecords) g.own += 1;
     groups.set(k, g);
   }
   const all = [...groups.values()].sort((a, b) => b.n - a.n);
@@ -487,7 +516,10 @@ function confirmedBlock(v: VerificationStat | null): string {
         : g.undelivered === g.n
           ? "No survey entry to post it under."
           : `${g.undelivered} of them had no survey entry to post under.`;
-    return `• On ${escapeSlack(g.where)}, ${escapeSlack(g.what)}${who}. ${posted}`;
+    // Named because it is the stronger claim: no model was involved at any
+    // point, so there is nothing here that could have been imagined.
+    const how = g.own === g.n ? " Found in our own records, without any AI." : "";
+    return `• On ${escapeSlack(g.where)}, ${escapeSlack(g.what)}${who}.${how} ${posted}`;
   });
   const more = all.length > 5 ? `\n…and ${all.length - 5} more.` : "";
   const one = v.reproduced === 1;

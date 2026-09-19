@@ -210,7 +210,7 @@ const SurveyConfirmation: FC<SurveyConfirmationProps> = ({
           {...fadeUp(1000)}
         >
           {isSubmitting &&
-            "We’re carefully analyzing your responses across 14 archetypes and 19 psychological dimensions."}
+            "We’re carefully analyzing your responses across 14 archetypes and 21 psychological dimensions."}
           {isSuccess &&
             "Thank you for sharing your story. Your personalized intimacy profile is being prepared — a deep, science-backed mirror of your desires, patterns, and potential."}
           {isError &&

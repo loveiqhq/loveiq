@@ -68,7 +68,12 @@ const MAX_PAGES = 20;
 /** Bump when the row SHAPE changes; a mismatch counts as stale. See notion.ts. */
 // v3: v1-v2 indexed Google Docs only — 24 call notes out of ~494 readable files on
 // the company Drive. Sheets, markdown, CSV, JSON and Word documents were invisible.
-export const DRIVE_BUILDER_VERSION = 3;
+// v4: v3 read only the FIRST TAB of every spreadsheet, because it exported them as
+// csv and csv holds one table. 40 spreadsheets were indexed that way. Without this
+// bump the fix is inert on all of them: a file is refetched only when its
+// `modifiedTime` moves, and "Business Case" has not been edited since 2026-09-16,
+// so the tab nobody could find would have stayed missing until somebody typed in it.
+export const DRIVE_BUILDER_VERSION = 4;
 
 const DOC_MIME = "application/vnd.google-apps.document";
 const SHEET_MIME = "application/vnd.google-apps.spreadsheet";
@@ -271,7 +276,9 @@ async function driveGet(token: string, path: string): Promise<Response> {
       await new Promise((resolve) => setTimeout(resolve, BACKOFF_MS[attempt - 1] ?? 1200));
       logger.info({ attempt, status: res?.status }, "brain-ingest drive: retrying");
     }
-    res = await fetchWithTimeout(`${API}${path}`, {
+    // An absolute URL passes through, so the Sheets API reuses this retry/backoff
+    // instead of growing a second copy of it.
+    res = await fetchWithTimeout(path.startsWith("https://") ? path : `${API}${path}`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
       timeoutMs: TIMEOUT_MS,
     });
@@ -420,12 +427,92 @@ const clean = (t: string): string =>
     .replace(/\r\n/g, "\n")
     .trim();
 
+const SHEETS_API = "https://sheets.googleapis.com/v4/spreadsheets";
+/** Same ceiling as a pdf: a spreadsheet is the other easy way to blow up a chunk. */
+const SHEET_TEXT_LIMIT = 400_000;
+
+/**
+ * EVERY TAB, not just the first one.
+ *
+ * `files.export?mimeType=text/csv` is what this used to do, and CSV is a
+ * single-table format — Drive answers with the FIRST worksheet and silently drops
+ * the rest. Found 2026-09-19: "Business Case" has two tabs, `Costs` and `Core_KPI`,
+ * and the brain held only the cost lines. Asked about the KPI table it said it could
+ * not see the file, which is worse than saying nothing: the file WAS indexed, so
+ * every check that counts documents called it present.
+ *
+ * The Sheets API takes `drive.readonly`, which this token already carries, so no new
+ * scope and no admin grant. Two calls: the tab names, then every tab's values in one
+ * `batchGet`.
+ */
+export async function sheetTabTitles(token: string, fileId: string): Promise<string[]> {
+  const metaRes = await driveGet(
+    token,
+    `${SHEETS_API}/${fileId}?fields=${encodeURIComponent("sheets(properties(title))")}`
+  );
+  if (!metaRes.ok) throw new Error(`sheets-meta ${metaRes.status}`);
+  const meta = (await metaRes.json()) as { sheets?: Array<{ properties?: { title?: string } }> };
+  return (meta.sheets ?? [])
+    .map((sh) => sh?.properties?.title)
+    .filter((t): t is string => typeof t === "string" && t.length > 0);
+}
+
+async function sheetText(token: string, fileId: string): Promise<string> {
+  const titles = await sheetTabTitles(token, fileId);
+  if (titles.length === 0) return "";
+
+  // A1 notation: the whole tab is just its quoted name, and an apostrophe in that
+  // name is escaped by doubling. Get them all in one request rather than one each.
+  const ranges = titles
+    .map((t) => `ranges=${encodeURIComponent(`'${t.replace(/'/g, "''")}'`)}`)
+    .join("&");
+  const valRes = await driveGet(
+    token,
+    `${SHEETS_API}/${fileId}/values:batchGet?${ranges}&majorDimension=ROWS`
+  );
+  if (!valRes.ok) throw new Error(`sheets-values ${valRes.status}`);
+  const payload = (await valRes.json()) as { valueRanges?: Array<{ values?: unknown[][] }> };
+
+  const parts: string[] = [];
+  (payload.valueRanges ?? []).forEach((vr, i) => {
+    const rows = (vr.values ?? [])
+      .map((row) =>
+        row
+          .map((cell) => String(cell ?? "").trim())
+          .join(", ")
+          .trim()
+      )
+      .filter((line) => line.replace(/,/g, "").trim().length > 0);
+    if (rows.length === 0) return;
+    // NAME THE TAB. Without it two tables run together and a reader cannot tell which
+    // sheet a number came from — the same reason chunks carry their document title.
+    parts.push(`## ${titles[i] ?? `Sheet ${i + 1}`}\n${rows.join("\n")}`);
+  });
+
+  const joined = clean(parts.join("\n\n"));
+  return joined.length > SHEET_TEXT_LIMIT
+    ? `${joined.slice(0, SHEET_TEXT_LIMIT)}\n\n[truncated: this spreadsheet is longer than the brain indexes]`
+    : joined;
+}
+
 async function docText(token: string, fileId: string, mimeType?: string): Promise<string> {
   // Google-native files must be EXPORTED; everything else downloads with alt=media.
   // Asking for the wrong one is a 403 that reads like a permission problem.
-  if (mimeType === DOC_MIME || mimeType === SHEET_MIME) {
-    const as = mimeType === SHEET_MIME ? "text%2Fcsv" : "text%2Fplain";
-    const res = await driveGet(token, `/files/${fileId}/export?mimeType=${as}`);
+  if (mimeType === SHEET_MIME) {
+    try {
+      return await sheetText(token, fileId);
+    } catch (err) {
+      // Fall back to the old first-tab-only export rather than losing the file
+      // entirely — but say so, because a silent fallback is how this went unnoticed.
+      logger.warn({ err, file: fileId }, "brain-ingest drive: sheets api failed, first tab only");
+      const res = await driveGet(token, `/files/${fileId}/export?mimeType=text%2Fcsv`);
+      if (!res.ok) throw new Error(`export ${res.status}`);
+      return clean(await res.text());
+    }
+  }
+
+  if (mimeType === DOC_MIME) {
+    const res = await driveGet(token, `/files/${fileId}/export?mimeType=text%2Fplain`);
     if (!res.ok) throw new Error(`export ${res.status}`);
     return clean(await res.text());
   }

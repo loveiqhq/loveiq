@@ -13,6 +13,10 @@ on:
     # and far enough apart that a finding is verified within one working morning
     # without re-running probes against production all day.
     - cron: "41 */3 * * *"
+    # Monday morning, for the weekly scanner scoring step below. The 3-hourly
+    # cron does not fire at this exact minute-and-hour combination, so the two
+    # never collide.
+    - cron: "41 9 * * 1"
   workflow_dispatch:
     inputs:
       lookback_hours:
@@ -81,6 +85,59 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_JOURNEY_CHANNEL_ID: ${{ secrets.SLACK_JOURNEY_CHANNEL_ID }}
+
+      # Roughly half of eligible recordings are never opened by the scanner
+      # whose query they matched — measured 2026-09-19 over the period since
+      # they went live: 103 of 211 sessions watched by nothing, and only 225 of
+      # 392 (session, scanner) pairs looked at. It is not credits (all four are
+      # far under their limit), not sampling (rate 1), and not lag (the normal
+      # cadence is ~38 minutes). PostHog simply does not pick up every matching
+      # recording.
+      #
+      # So the gap is closed here rather than by hand. The enqueue is idempotent
+      # — the workflow id is derived from (scanner, session) — so re-running
+      # cannot double-charge, and a two-day window catches stragglers without
+      # reaching back over recordings that have already expired.
+      - name: Re-queue recordings no scanner opened
+        run: npx tsx scripts/ux-review-coverage.mjs --enqueue
+        env:
+          DAYS: "2"
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+      # The only thing that measures whether the scanners are worth their
+      # credits, and nothing has ever run it — it existed as a package script
+      # and appeared in no workflow. Weekly rather than every run: it reads
+      # fixture observations that are written once and never change, so running
+      # it eight times a day would report the same numbers eight times a day.
+      #
+      # `continue-on-error` on purpose. It exits non-zero when the scanners are
+      # BELOW BAR, which is their standing state (precision 0.20, recall 0.50
+      # against 0.80/0.60) and is a fact about the scanners, not a fault in this
+      # workflow. Failing the verify run for it would stop findings being
+      # verified over a number nobody can fix from here.
+      - name: Score the scanners (weekly)
+        if: github.event.schedule == '41 9 * * 1' || github.event_name == 'workflow_dispatch'
+        continue-on-error: true
+        run: npx tsx scripts/replay-bench/score.mjs
+        env:
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+
+      # The merge click IS the training data: a merged reproduction means the
+      # finding was real, a closed one means it was not. Nobody has to label
+      # anything — they just do the thing they were going to do anyway — and it
+      # is the only signal in this pipeline that does not come from our own
+      # machinery judging itself.
+      #
+      # It was designed in the plan and never wired up: measured 2026-09-19, the
+      # ledger held 37 findings and 0 human labels.
+      - name: Label findings from merged and closed pull requests
+        run: node scripts/label-findings-from-prs.mjs --write
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
       - name: Self-test the finding classifier
         run: npx tsx scripts/verify-ux-findings.mjs --selftest

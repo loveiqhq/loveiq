@@ -18,6 +18,8 @@ import { supabaseFetch, countRows } from "@features/admin/server/supabase";
 import { buildReportVoiceRows } from "@features/brain/server/ingest/report-voice";
 import { buildDomainRows } from "@features/brain/server/ingest/domain";
 import { redactUrlSecrets } from "@features/brain/server/ingest/upsert";
+import { sheetTabTitles } from "@features/brain/server/ingest/drive";
+import { DRIVE_SCOPE, getDelegatedToken, readVercelOidcToken } from "@shared/http/google-oauth";
 import { reconcile, summarise, type Reading } from "@features/brain/server/reconcile";
 import { recordNotice } from "@features/brain/server/notice";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -383,6 +385,102 @@ export async function buildReadings(): Promise<{ readings: Reading[]; unread: st
   return { readings, unread };
 }
 
+/**
+ * DOES THE CORPUS STILL CONTAIN WHAT THE SOURCE CONTAINS?
+ *
+ * Every other check here compares two numbers we already hold. This one is the only
+ * one that leaves the building, and it exists because on 2026-09-19 a spreadsheet was
+ * indexed, counted, reconciled to the exact file — and held one tab of two. Nothing
+ * failed. The export succeeded, the row existed, the file count was right, and the
+ * answer was confidently wrong. No count could have caught it, because counting
+ * containers cannot see inside them.
+ *
+ * Deliberately tiny: three spreadsheets a day, metadata only, no cell values. Enough
+ * that a reader change which silently drops content stops being invisible, cheap
+ * enough that it can run beside the others forever.
+ */
+/**
+ * How many of a spreadsheet's tabs are actually present in the indexed text.
+ *
+ * Pure, because this one comparison IS the check — everything around it is network
+ * plumbing. A tab counts as present only when its own `## <title>` heading is there,
+ * which is what the reader writes; matching the bare title would pass on a sheet that
+ * merely mentions the word.
+ */
+/**
+ * Which few documents today's run checks.
+ *
+ * `sort().slice(0, 3)` checked the SAME three spreadsheets every day and left the
+ * other thirty-seven never verified — a check that cannot see most of what it is
+ * meant to guard. Rotating by day walks the whole set in about a fortnight, the
+ * same shape `constructsForDay` uses for the evidence cycle.
+ *
+ * Stable order in, stable order out: the walk is by index, so a document is only
+ * reordered when the corpus itself gains or loses spreadsheets.
+ */
+export function sampleForDay<T>(all: T[], dayIndex: number, size: number): T[] {
+  if (all.length <= size) return all;
+  const start = (((dayIndex * size) % all.length) + all.length) % all.length;
+  return Array.from({ length: size }, (_, i) => all[(start + i) % all.length]!);
+}
+
+export function tabsPresentInText(text: string, titles: string[]): number {
+  return titles.filter((t) => text.includes(`## ${t}`)).length;
+}
+
+export async function sheetTabReading(request: Request): Promise<Reading | null> {
+  // The SERVICE ACCOUNT token is refused here (403 PERMISSION_DENIED): these
+  // spreadsheets belong to people, not to the service account, so reading them needs
+  // the same DELEGATED token the drive ingester uses. Getting this wrong does not
+  // fail loudly — it lands in `unread` every night, which reads as "not checked yet"
+  // rather than "this check has never once run".
+  const admin = process.env.GOOGLE_WORKSPACE_ADMIN?.trim();
+  if (!admin) return null;
+  const token = await getDelegatedToken(
+    admin,
+    DRIVE_SCOPE,
+    Date.now(),
+    readVercelOidcToken(request)
+  );
+  if (!token) return null;
+
+  // Built from parts rather than written out: the percent-encoded form of this filter
+  // is high-entropy enough that `no-secrets` refuses the commit, and a literal that
+  // trips a secret scanner is a literal somebody will eventually silence the scanner for.
+  const spreadsheetFilter = `url=ilike.*${encodeURIComponent("/spreadsheets/")}*`;
+  const res = await supabaseFetch(
+    `/rest/v1/brain_chunk?select=source_id,body&source=eq.drive&${spreadsheetFilter}&limit=400`
+  );
+  if (!res.ok) return null;
+  const rows = (await res.json()) as Array<{ source_id: string; body: string }>;
+
+  // Group every part back to its document: a tab heading may sit in any of them.
+  const byDoc = new Map<string, string>();
+  for (const r of rows) {
+    const base = r.source_id.split("#")[0]!;
+    byDoc.set(base, `${byDoc.get(base) ?? ""}\n${r.body ?? ""}`);
+  }
+  const dayIndex = Math.floor(Date.now() / 86_400_000);
+  const sample = sampleForDay([...byDoc.keys()].sort(), dayIndex, 3);
+  if (sample.length === 0) return null;
+
+  let expected = 0;
+  let found = 0;
+  for (const base of sample) {
+    const fileId = base.replace(/^doc:/, "");
+    const titles = await sheetTabTitles(token, fileId);
+    const text = byDoc.get(base) ?? "";
+    expected += titles.length;
+    found += tabsPresentInText(text, titles);
+  }
+  return {
+    what: `spreadsheet tabs present in the corpus (${sample.length} sampled)`,
+    left: { source: "google sheets", value: expected },
+    right: { source: "brain_chunk", value: found },
+    tolerance: 0,
+  };
+}
+
 export async function GET(request: Request) {
   // Returns a boolean, not a response — the same shape every other cron checks.
   if (!verifyCronAuth(request)) {
@@ -401,6 +499,16 @@ export async function GET(request: Request) {
 
   try {
     const { readings, unread } = await buildReadings();
+    // The only check that leaves the building. "Could not read it" is not "it agrees",
+    // so a missing token lands in `unread` rather than passing silently.
+    try {
+      const tabs = await sheetTabReading(request);
+      if (tabs) readings.push(tabs);
+      else unread.push("spreadsheet tabs (no Google token)");
+    } catch (err) {
+      logger.warn({ err }, "brain-reconcile: the spreadsheet tab check could not run");
+      unread.push("spreadsheet tabs");
+    }
     checked = readings.length;
     const found = reconcile(readings);
     disagreements = found.length;

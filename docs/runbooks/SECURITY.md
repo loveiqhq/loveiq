@@ -288,14 +288,117 @@ The repository uses multiple layers of automated security scanning:
 - `eslint-plugin-no-secrets` for secret detection
 - Custom rules in `eslint.config.mjs`
 
-## CI/CD enforcement (branch protection is unavailable on this plan)
+## CI/CD enforcement (branch protection: partly on)
 
-GitHub **branch protection rules and repository rulesets are a paid feature** for
-private repos (Team/Enterprise) — this repo is on the Free plan, so we **cannot**
-require status checks or reviews at the GitHub layer. A red commit can therefore
-reach `main` (a web merge, or `git push --no-verify`) and Vercel auto-deploys it.
+**Corrected 2026-09-19.** This section used to say branch protection was a paid
+feature we could not have. That was wrong on both counts, and it had been used
+as the reason not to pursue it: `loveiqhq/loveiq` is a **public** repository, so
+protected branches are free on every GitHub plan — and the organisation is on
+**Team** anyway, which includes them for private repos too. It costs nothing.
+`main` had simply never had a rule (`404 Branch not protected`).
 
-Because we can't hard-block merges, enforcement is layered (defence in depth):
+**What is enabled on `main` now:**
+
+|                        |                         |
+| ---------------------- | ----------------------- |
+| Force pushes           | **blocked**             |
+| Branch deletion        | **blocked**             |
+| Required PR review     | not enabled — see below |
+| Required status checks | not enabled — see below |
+
+Verified by attempting both against an identically-configured throwaway branch:
+`remote rejected … (protected branch hook declined)`.
+
+**Why the other two are deliberately off.** Requiring a pull request or a green
+status check also blocks direct pushes, and `main` takes around twenty a day from
+several people and agent sessions. Turning it on mid-stream would stop everyone
+working, so it is staged rather than skipped: it is the prerequisite for letting
+anything merge its own work, and it goes on at the same time as that, not before.
+
+To enable it when that day comes:
+
+```bash
+gh api -X PUT repos/loveiqhq/loveiq/branches/main/protection --input - <<'JSON'
+{
+  "required_status_checks": { "strict": true, "contexts": ["build"] },
+  "enforce_admins": false,
+  "required_pull_request_reviews": { "required_approving_review_count": 1 },
+  "restrictions": null,
+  "allow_force_pushes": false,
+  "allow_deletions": false
+}
+JSON
+```
+
+**Enabled 2026-09-19, after the above.** `main` now also requires a pull request
+and three green checks (`Lint`, `Test`, `Build`) before merge:
+
+```bash
+gh api repos/loveiqhq/loveiq/branches/main/protection --jq \
+  '{checks:.required_status_checks.contexts, pr:(.required_pull_request_reviews!=null)}'
+```
+
+Three choices in that rule worth knowing, because each was deliberate:
+
+- **Zero required approvals.** The rule is "nothing reaches `main` without a PR
+  and green CI", not "someone must click approve". GitHub forbids approving your
+  own pull request, so requiring one approval would stop a two-person team from
+  merging anything at all.
+- **`strict: false`.** Requiring branches to be up to date would force a rebase
+  on every PR each time `main` moves, and `main` moves about twenty times a day.
+- **`enforce_admins: false`, and admins really do bypass it** — verified, a direct
+  admin push to `main` succeeds with a warning. That is the intended shape: the
+  rule exists to stop AUTOMATION merging its own work, and the automation runs on
+  `GITHUB_TOKEN`, which is not an admin. It pushes a feature branch and opens a
+  draft; it cannot reach `main`. Do not read the rule as protection against a
+  human with admin rights, because it is not one.
+
+### Letting the pipeline propose fixes (`generate-fix.yml`)
+
+It authenticates with the **team Claude subscription, not an API key**:
+
+```bash
+claude setup-token     # requires a Claude subscription; prints a long-lived token
+```
+
+Add the result as the repository secret `CLAUDE_CODE_OAUTH_TOKEN`. Without it the
+workflow skips with a warning rather than failing. Nothing it writes can merge
+itself: `scripts/prove-fix.mjs` refuses any diff outside presentation code, and
+the pull request it opens is reviewed and merged by a person.
+
+A red commit can still reach `main` when pushed by an admin, so the layered
+enforcement below is still what actually holds, and is not redundant:
+
+### A dependency check must not turn someone else's outage into ours
+
+`npm audit` calls a registry endpoint. On 2026-09-19 that endpoint answered
+`503 Service Unavailable — We are currently performing maintenance` for the
+better part of an hour, and because `Lint` and `Build` had just become required
+checks, **nothing in the repository could be merged by anyone** while it lasted.
+
+Both audit steps (`ci.yml` and `security.yml`) now tell the two cases apart:
+
+| what came back                                      | what it means               | what happens             |
+| --------------------------------------------------- | --------------------------- | ------------------------ |
+| a parseable report with high or critical advisories | a finding                   | **build fails**          |
+| a parseable report with none                        | we are clean                | passes                   |
+| nothing parseable                                   | the registry did not answer | **warns**, does not fail |
+
+The distinction is `metadata.vulnerabilities` in the `--json` output. An
+unreadable report is a gap in our visibility, not a verdict about our
+dependencies, and a check that is red for reasons nobody can act on is one
+people learn to scroll past. `__tests__/scripts/npm-audit-gate.test.ts` pins the
+counting against six inputs, including the three shapes an outage actually takes.
+
+### Every action is pinned to a commit, never a tag
+
+A tag is a movable pointer: whoever controls an action's repository can make
+`@v4` mean different code tomorrow, and that code runs with our secrets. A
+commit cannot move. `survey-db-sync.yml` was the last workflow still trusting a
+tag — found by hand on 2026-09-19, which is exactly the kind of check that
+should not depend on someone looking, so
+`__tests__/scripts/workflow-pinning.test.ts` now enforces it across every
+workflow. Commented-out `uses:` lines are ignored, since they execute nothing.
 
 ### Layer 1 — local pre-push gate (preventive)
 

@@ -214,9 +214,11 @@ export default function PrivacyPolicyPage() {
 
               <h3 className="text-gray-900 font-medium mb-2">7.5 Advertising and attribution</h3>
               <ul className="list-disc list-inside mb-4 space-y-1">
-                <li>Meta Platforms Ireland Ltd. - Facebook/Instagram pixel (consent-gated)</li>
-                <li>TikTok Technology Ltd. (IE) - TikTok pixel (consent-gated)</li>
-                <li>Google Ireland Ltd. - Google Ads conversion tracking (consent-gated)</li>
+                <li>
+                  Google Ireland Ltd. - Google Ads conversion tracking. Conversion events are sent
+                  only with your consent. The Google Ads tag itself loads on every visit and may set
+                  a measurement cookie (<code>_gcl_au</code>) before you answer the cookie banner.
+                </li>
               </ul>
 
               <h3 className="text-gray-900 font-medium mb-2">7.6 Consent management</h3>

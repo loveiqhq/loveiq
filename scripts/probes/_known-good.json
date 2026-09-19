@@ -1,0 +1,56 @@
+{
+  "_comment": [
+    "Cases that are NOT defects. Every probe listed here must answer 0 (clean) or",
+    "3 (could not measure) — never 1. An exit of 1 is a claim that a real reader",
+    "hit a real problem, and on these inputs that claim is false.",
+    "",
+    "This is probe PRECISION, and until 2026-09-19 nothing measured it. The weekly",
+    "falsifiability job proves a probe CAN fail (MUTATE); the daily job proves it",
+    "passes on a healthy production. Neither catches the failure that actually",
+    "happened: verify-dead-click-target reported the survey consent gate as a dead",
+    "control because its button is deliberately disabled until both consent boxes",
+    "are ticked. Correct behaviour, reproduced convincingly, and D1 is in",
+    "AUTO_PR_CRITERIA — so it would have opened a draft pull request arguing",
+    "against correct behaviour on every run. It was caught by hand, which does not",
+    "scale and is the whole reason a human is still in this loop.",
+    "",
+    "Add a case here whenever a probe is found reporting something that is not a",
+    "defect. That turns a one-off catch into a permanent guard."
+  ],
+  "cases": [
+    {
+      "probe": "verify-dead-click-target.mjs",
+      "why": "A tap on a paragraph is not a defect — the scanner prompt's HARD RULE says so and the probe is supposed to agree. 807 of 827 sessions with a dead_click are exactly this.",
+      "env": { "URL_PATH": "/survey", "TARGET_SELECTOR": "p.font-sans", "DEVICES": "Pixel 7" }
+    },
+    {
+      "probe": "verify-dead-click-target.mjs",
+      "why": "The consent gate's 'I agree' is disabled until both boxes are ticked. That is correct, and the button now says why via aria-describedby. A blocked control that explains itself is not a dead end. THIS IS THE CASE THAT WAS WRONG.",
+      "env": { "URL_PATH": "/survey", "TARGET_SELECTOR": "button.flex-1", "DEVICES": "Pixel 7" }
+    },
+    {
+      "probe": "verify-dead-click-target.mjs",
+      "why": "A live, reachable control on the survey intro.",
+      "env": { "URL_PATH": "/survey", "TARGET_SELECTOR": "button.mt-10", "DEVICES": "Pixel 7" }
+    },
+    {
+      "probe": "verify-dead-click-target.mjs",
+      "why": "A selector that matches nothing must be INCONCLUSIVE, never a reproduction.",
+      "env": {
+        "URL_PATH": "/survey",
+        "TARGET_SELECTOR": "button.no-such-class-anywhere",
+        "DEVICES": "Pixel 7"
+      }
+    },
+    {
+      "probe": "verify-survey-loop.mjs",
+      "why": "Finishing the survey and pressing back shows the 'already finished' screen. Fixed 2026-09-17 and must stay fixed.",
+      "env": { "DEVICES": "Pixel 7" }
+    },
+    {
+      "probe": "verify-no-survey-restart.mjs",
+      "why": "A valid report must never offer 'Take the survey' as the only way forward.",
+      "env": { "DEVICES": "Pixel 7" }
+    }
+  ]
+}

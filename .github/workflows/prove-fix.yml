@@ -1,0 +1,83 @@
+name: Prove a fix
+
+# Decides mechanically whether a candidate fix is real, without asking anyone's
+# opinion. See scripts/prove-fix.mjs for the full obligation; in short it builds
+# the site twice — base and fix — and requires the probe to reproduce on one and
+# pass on the other, with the reproduction repeating so a flake cannot certify a
+# diff.
+#
+# Dispatch-only on purpose. There is nothing to prove on a schedule: this runs
+# against a specific candidate, and a cron would either sit idle or re-prove the
+# same branch forever.
+
+on:
+  workflow_dispatch:
+    inputs:
+      fix_ref:
+        description: "Branch or SHA carrying the candidate fix"
+        required: true
+      probe:
+        description: "Probe file in scripts/probes/ that covers the defect"
+        required: true
+      probe_env:
+        description: 'JSON env for the probe, e.g. {"URL_PATH":"/survey"}'
+        required: false
+        default: "{}"
+      base_ref:
+        description: "What to compare against"
+        required: false
+        default: "origin/main"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.fix_ref }}
+  cancel-in-progress: false
+
+jobs:
+  prove:
+    name: Reproduce on base, clean on the fix
+    runs-on: ubuntu-latest
+    # Two npm installs, two production builds and several browser runs.
+    timeout-minutes: 45
+    steps:
+      # Full history: the harness resolves two refs and diffs them, and a
+      # shallow clone cannot see the base.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium webkit
+
+      # Inputs go through the ENVIRONMENT, never interpolated into the run
+      # script. `${{ }}` inside `run:` splices its value in before bash sees it,
+      # so a branch name is code execution on the runner — semgrep's
+      # run-shell-injection rule blocks it and that gate has failed main before.
+      - name: Prove it
+        env:
+          FIX_REF: ${{ inputs.fix_ref }}
+          BASE_REF: ${{ inputs.base_ref }}
+          PROBE: ${{ inputs.probe }}
+          PROBE_ENV: ${{ inputs.probe_env }}
+        run: |
+          set +e
+          node scripts/prove-fix.mjs
+          code=$?
+          set -e
+          # 1 is the interesting answer, not an infrastructure failure: the fix
+          # is NOT proven. It still fails the job, because a job that goes green
+          # on "not proven" is a job whose colour means nothing.
+          if [ "$code" -eq 2 ]; then
+            echo "::error::could not decide — see the log above"
+            exit 1
+          fi
+          exit $code

@@ -137,7 +137,12 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
   }),
 }));
 
-import { GMAIL_BUILDER_VERSION, ingestGmail } from "@features/brain/server/ingest/gmail";
+import { decodeEntities } from "@shared/format/html-escape";
+import {
+  GMAIL_BUILDER_VERSION,
+  ingestGmail,
+  messageText,
+} from "@features/brain/server/ingest/gmail";
 
 beforeEach(() => {
   existing = [];
@@ -645,5 +650,96 @@ describe("a thread records whether we were writing or being written at", () => {
       ),
     ]);
     expect(personal[0]?.meta.correspondents).toBe("external");
+  });
+});
+
+/**
+ * HTML mail is not text, and the corpus was storing the difference.
+ *
+ * Measured 2026-09-19 over 9,776 gmail chunks: 262 carried a raw HTML entity and 115
+ * carried CSS declarations as if they were prose — `line-height: 2em; color:#000; }`
+ * sitting in the body of an indexed email. Neither answers a question, and both are
+ * text a search can match.
+ */
+describe("messageText on HTML mail", () => {
+  const html = (markup: string) => ({
+    mimeType: "text/html",
+    body: { data: Buffer.from(markup, "utf8").toString("base64url") },
+  });
+
+  it("decodes the entities marketing mail actually uses", () => {
+    const out = messageText(
+      html("<p>Plans &bull; Pricing &mdash; 50&#37; off &#x2022; caf&eacute;</p>")
+    );
+    expect(out).toContain("•");
+    expect(out).toContain("—");
+    expect(out).toContain("%");
+    expect(out).not.toContain("&bull;");
+    expect(out).not.toContain("&mdash;");
+  });
+
+  it("does NOT double-decode, which turned escaped text into markup", () => {
+    // `&amp;lt;` is the sender writing a literal "&lt;". Decoding & first and then
+    // lt second produced "<" — a tag the sender never wrote.
+    expect(messageText(html("<p>&amp;lt;b&amp;gt;</p>")).trim()).toBe("&lt;b&gt;");
+  });
+
+  it("leaves an unknown entity alone rather than eating it", () => {
+    expect(messageText(html("<p>&notarealentity; x</p>"))).toContain("&notarealentity;");
+  });
+
+  it("strips a stylesheet that sits in <head> with no closing style tag", () => {
+    const out = messageText(
+      html(
+        "<html><head><style>.a { line-height: 2em; color:#000; }</head><body><p>Real text</p></body></html>"
+      )
+    );
+    expect(out).toContain("Real text");
+    expect(out).not.toContain("line-height");
+  });
+
+  it("still strips a normal style block and keeps the prose", () => {
+    const out = messageText(html("<style>p{margin:0}</style><p>Hello there</p>"));
+    expect(out).toContain("Hello there");
+    expect(out).not.toContain("margin");
+  });
+});
+
+/**
+ * The map is not a guess. These are the named entities actually present in the gmail
+ * corpus on 2026-09-19, by frequency: zwnj 864, bull 73, mdash 19, ldquo 17, rdquo 17,
+ * middot 16, rsquo 15, gt 11, lt 11, amp 10, nbsp 9, ndash 9, rarr 6, apos 3, reg 2.
+ * `rarr` was the one the first draft missed, which is why this test reads from the
+ * measurement rather than from what seemed likely.
+ */
+describe("the entity map covers what the corpus actually contains", () => {
+  const MEASURED = [
+    "zwnj",
+    "bull",
+    "mdash",
+    "ldquo",
+    "rdquo",
+    "middot",
+    "rsquo",
+    "gt",
+    "lt",
+    "amp",
+    "nbsp",
+    "ndash",
+    "rarr",
+    "apos",
+    "reg",
+  ];
+
+  it("decodes every one of them", () => {
+    const undecoded = MEASURED.filter((name) => decodeEntities(`&${name};`) === `&${name};`);
+    expect(undecoded, `these entities are in the corpus but not in HTML_ENTITIES`).toEqual([]);
+  });
+
+  it("removes zero-width padding rather than rendering it", () => {
+    // 864 occurrences, all of it invisible preheader padding in marketing mail.
+    expect(decodeEntities("Order&zwnj;&zwnj;confirmed")).toBe(
+      "Ordconfirmed".replace("Ord", "Order")
+    );
   });
 });

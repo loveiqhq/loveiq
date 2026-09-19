@@ -37,6 +37,7 @@
 import { upsertChunks, type BrainRow } from "./upsert";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
+import { decodeEntities } from "@shared/format/html-escape";
 
 const SEARCH = "https://www.ebi.ac.uk/europepmc/webservices/rest/search";
 
@@ -230,13 +231,16 @@ export function toPaper(row: Record<string, unknown>): Paper | null {
   const cited = Number(row.citedByCount);
   return {
     // Europe PMC ends most titles with a full stop; two in a row reads as a typo.
-    title: title.replace(/\.$/, ""),
-    journal: str(journalInfo?.journal?.title),
+    // It also returns titles as HTML, so `&amp;` and `&lt;i&gt;` arrive intact and
+    // would be stored — and then SHOWN — as the literal entity. Measured 2026-09-19:
+    // "Voyeurism &amp; Upskirting" was sitting in a citation.
+    title: decodeEntities(title.replace(/\.$/, "")),
+    journal: decodeEntities(str(journalInfo?.journal?.title) ?? "") || null,
     year: str(row.pubYear),
     doi: str(row.doi),
     citedBy: Number.isFinite(cited) ? cited : 0,
     openAccess: row.isOpenAccess === "Y",
-    abstract: str(row.abstractText),
+    abstract: decodeEntities(str(row.abstractText) ?? "") || null,
   };
 }
 

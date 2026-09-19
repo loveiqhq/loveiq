@@ -128,7 +128,10 @@ const MAX_RETRIES = 4;
 // v3: v1-v2 stored every thread reply BEFORE its parent and in reverse order.
 // v2: v1 wrote days whose thread replies had been dropped by a 429 without
 // recording the gap, so every v1 row must be rebuilt rather than trusted.
-export const SLACK_BUILDER_VERSION = 8;
+// v9: v1-v8 dropped any message with no text, so an upload posted without a caption
+// left NO trace — not the file, not even that one was shared. File names are now
+// rendered (no extra scope), and content is read when `files:read` is granted.
+export const SLACK_BUILDER_VERSION = 9;
 
 /**
  * Message subtypes that are membership bookkeeping, not conversation. Slack emits
@@ -160,6 +163,15 @@ interface SlackMessage {
   reply_count?: number;
   /** Already on every `conversations.history` message; simply never read until now. */
   reactions?: Array<{ name?: string; count?: number }>;
+  /** Uploads. Metadata needs no extra scope; the CONTENT needs `files:read`. */
+  files?: Array<{
+    id?: string;
+    name?: string;
+    filetype?: string;
+    mimetype?: string;
+    size?: number;
+    url_private?: string;
+  }>;
 }
 
 interface SlackChannel {
@@ -303,6 +315,96 @@ function reactionSuffix(m: SlackMessage): string {
   return `  [reactions: ${rs.map((r) => `${r.name} x${r.count}`).join(", ")}]`;
 }
 
+/**
+ * Uploads worth reading. Images dominate what Slack actually holds — 25 of 36 files
+ * shared since June 2026 are screenshots — and there is no OCR here, so they are
+ * named by `renderMessage` and never fetched.
+ */
+const SLACK_FILE_TYPES = new Set(["pdf", "docx", "csv", "text", "markdown", "javascript", "json"]);
+export const MAX_SLACK_FILE_BYTES = 4_000_000;
+export const MAX_SLACK_FILE_CHARS = 20_000;
+
+/** Pure: which of a message's uploads this ingester would try to read. */
+export function readableFiles(m: SlackMessage): NonNullable<SlackMessage["files"]> {
+  return (m.files ?? []).filter(
+    (f) =>
+      f.url_private &&
+      SLACK_FILE_TYPES.has((f.filetype ?? "").toLowerCase()) &&
+      (f.size ?? 0) > 0 &&
+      (f.size ?? 0) <= MAX_SLACK_FILE_BYTES
+  );
+}
+
+/**
+ * Set once per process when Slack refuses a download.
+ *
+ * Reading file CONTENT needs the `files:read` scope, which this bot did not have on
+ * 2026-09-19 — a real download returned 403. Without this latch every upload in every
+ * channel would retry and log on every run, which is how a missing scope turns into
+ * noise that gets ignored. One warning, then the walk stops asking.
+ */
+let filesReadDenied = false;
+
+/** Text out of one Slack upload. Returns "" for anything unreadable; never throws. */
+async function slackFileText(
+  token: string,
+  file: NonNullable<SlackMessage["files"]>[number]
+): Promise<string> {
+  if (filesReadDenied || !file.url_private) return "";
+  try {
+    const res = await fetchWithTimeout(file.url_private, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeoutMs: 20_000,
+    });
+    if (res.status === 403 || res.status === 401) {
+      filesReadDenied = true;
+      logger.warn(
+        { file: file.name, status: res.status },
+        "brain-ingest slack: cannot read file content — the bot is missing the files:read scope"
+      );
+      return "";
+    }
+    if (!res.ok) return "";
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.byteLength === 0) return "";
+    const type = (file.filetype ?? "").toLowerCase();
+    let text = "";
+    if (type === "pdf") {
+      const { extractText, getDocumentProxy } = await import("unpdf");
+      const doc = await getDocumentProxy(new Uint8Array(buf));
+      const out = await extractText(doc, { mergePages: true });
+      text = Array.isArray(out.text) ? out.text.join("\n") : out.text;
+    } else if (type === "docx") {
+      const mammoth = await import("mammoth");
+      text = (await mammoth.extractRawText({ buffer: buf })).value;
+    } else {
+      text = buf.toString("utf8");
+    }
+    const cleaned = text.replace(/\r\n/g, "\n").trim();
+    return cleaned.length > MAX_SLACK_FILE_CHARS
+      ? `${cleaned.slice(0, MAX_SLACK_FILE_CHARS)}\n[truncated: this file is longer than the brain indexes]`
+      : cleaned;
+  } catch (err) {
+    logger.warn({ err, file: file.name }, "brain-ingest slack: file unreadable");
+    return "";
+  }
+}
+
+/** Every readable upload on a message, rendered under its own heading. */
+export async function messageFileText(token: string, m: SlackMessage): Promise<string> {
+  const parts: string[] = [];
+  for (const f of readableFiles(m)) {
+    const text = await slackFileText(token, f);
+    if (text) parts.push(`## File: ${f.name ?? "untitled"}\n${text}`);
+  }
+  return parts.join("\n\n");
+}
+
+/** Test seam: the 403 latch is process-wide, so a test must be able to clear it. */
+export function resetFilesReadLatchForTest(): void {
+  filesReadDenied = false;
+}
+
 export function renderMessage(
   m: SlackMessage,
   names: Map<string, string>,
@@ -311,7 +413,18 @@ export function renderMessage(
   if (m.bot_id || !m.user) return null;
   if (m.subtype && NOISE_SUBTYPES.has(m.subtype)) return null;
   const text = (m.text ?? "").trim();
-  if (!text) return null;
+  /**
+   * A FILE-ONLY MESSAGE IS STILL A MESSAGE.
+   *
+   * Dropping anything without text meant someone posting a deck with no caption
+   * left no trace at all — not the file, not even the fact that they shared one.
+   * Measured 2026-09-19: 36 files were shared in channels since June, and 25 of
+   * them are screenshots that will never be readable. Naming them still makes
+   * "who sent the refactor deck" answerable, and the name costs no extra scope:
+   * `files` is already on every history message.
+   */
+  const shared = (m.files ?? []).map((f) => (f.name ?? "").trim()).filter(Boolean);
+  if (!text && shared.length === 0) return null;
 
   // Rewrite <@Uxxxx> mentions inline too — a message about a person is only
   // searchable by that person's name if the name is actually in the text.
@@ -323,7 +436,8 @@ export function renderMessage(
     .replace(/&gt;/g, ">")
     .replace(/&amp;/g, "&");
   const who = names.get(m.user) ?? m.user;
-  return `${indent ? "  ↳ " : ""}${who}: ${body}${reactionSuffix(m)}`;
+  const files = shared.length ? ` [shared: ${shared.join(", ")}]` : "";
+  return `${indent ? "  ↳ " : ""}${who}: ${body}${files}${reactionSuffix(m)}`;
 }
 
 /**
@@ -536,10 +650,25 @@ export async function ingestSlack(
     .toISOString()
     .slice(0, 10);
   let complete = true;
+  /**
+   * WHY the walk did not finish, first cause winning — the shape gmail already uses.
+   *
+   * Four different things set `complete = false`: the clock running out, an API call
+   * failing, a channel hitting the page cap, and a thread whose replies were
+   * rate-limited away. Collapsing them into one word made a version-bump backfill —
+   * which is expected to run out of clock for hours — indistinguishable from Slack
+   * being down. Measured 2026-09-19: the v9 bump put brain-fast into `status=error`
+   * on every run, which is how a real outage gets ignored.
+   */
+  let incomplete: string | null = null;
+  const stopped = (why: string) => {
+    complete = false;
+    incomplete ??= why;
+  };
 
   for (const ch of channels) {
     if (isOutOfTime()) {
-      complete = false;
+      stopped("time-budget");
       break;
     }
     /**
@@ -624,7 +753,7 @@ export async function ingestSlack(
         isOutOfTime
       );
       if (!json) {
-        complete = false;
+        stopped("api-refused");
         break;
       }
       const messages = (json.messages as SlackMessage[]) ?? [];
@@ -656,7 +785,16 @@ export async function ingestSlack(
         const seen = firstTs.get(day);
         if (!seen || m.ts < seen) firstTs.set(day, m.ts);
         const bucket = byDay.get(day) ?? [];
-        const entry = { line, replies: [] as string[] };
+        /**
+         * File CONTENT, appended to the line that shared it so the two stay together.
+         * Needs `files:read`; without it `messageFileText` returns "" after one warning
+         * and the name rendered by `renderMessage` is all that survives.
+         */
+        const fileText = await messageFileText(token, m);
+        const entry = {
+          line: fileText ? `${line ?? ""}\n${fileText}`.trim() : line,
+          replies: [] as string[],
+        };
 
         // Thread replies do NOT appear in channel history, and a thread is usually
         // where the actual argument happens — fetching only the parent would index
@@ -715,7 +853,7 @@ export async function ingestSlack(
       }
       cursor = ((json.response_metadata as Record<string, string>) ?? {}).next_cursor ?? "";
       if (!cursor) break;
-      if (page === MAX_PAGES - 1) complete = false;
+      if (page === MAX_PAGES - 1) stopped("page-cap");
     }
 
     for (const [day, entries] of byDay) {
@@ -724,7 +862,7 @@ export async function ingestSlack(
       // day recorded with a thread gap is rebuilt until it is whole.
       if (day < yesterday && known.get(`ch:${ch.name}:${day}`) === true) continue;
       const whole = !threadGaps.has(day);
-      if (!whole) complete = false;
+      if (!whole) stopped("thread-replies-rate-limited");
       // Reverse the top-level sequence only, then flatten each thread back in
       // order, so replies follow their parent and read oldest-first.
       const lines = [...entries]
@@ -816,7 +954,16 @@ export async function ingestSlack(
    * `slack-walk-incomplete` is not in the cron's DELIBERATE_SKIPS, so it alerts.
    */
   if (!complete) {
-    return { source: SOURCE, rows: written + touched, swept, skipped: "slack-walk-incomplete" };
+    /**
+     * A clock-bound walk is a backfill in progress and must not alert; anything else
+     * is a fault and must. `slack-time-budget` is in the cron's DELIBERATE_SKIPS for
+     * the same reason `ga4-time-budget` already is.
+     */
+    const skipped =
+      incomplete === "time-budget"
+        ? "slack-time-budget"
+        : `slack-walk-incomplete:${incomplete ?? "unknown"}`;
+    return { source: SOURCE, rows: written + touched, swept, skipped };
   }
   return { source: SOURCE, rows: written + touched, swept };
 }

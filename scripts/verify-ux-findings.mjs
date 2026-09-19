@@ -630,7 +630,76 @@ const findings = await posthog(`
   LIMIT 50
 `);
 
-console.log(`${findings.length} finding(s) in the last ${LOOKBACK_HOURS}h`);
+/**
+ * Findings we do not need a model for.
+ *
+ * The scanners measure precision 0.20 and recall 0.50 against bars of 0.80 and
+ * 0.60, and the repo has already established that prompt hardening does not fix
+ * it — the v2 prompts carry both an anti-inference rule and a HARD RULE and the
+ * model broke both. Low precision is survivable, because every claim is gated by
+ * a probe and a false one costs CI minutes rather than a reader's trust. Low
+ * RECALL is not: a defect the scanner never flags is never looked at by anything.
+ *
+ * But for one whole class we are not guessing. `dead_click` is our own event,
+ * emitted by shared/observability/uxSignals.ts when a reader taps a control that
+ * cannot respond, and it carries the pathname and the CSS selector. Measured
+ * 2026-09-19: of four sessions where a reader pressed a real, dead control, the
+ * dead-click scanner flagged ZERO. Asking a language model to notice what we
+ * already recorded is the expensive way to be wrong.
+ *
+ * So these are synthesised directly from the events. They are not a second
+ * opinion on the scanner's output; they are the mechanical half of the detector,
+ * and they carry `scannerName` saying so, because a verdict in a reader's thread
+ * should not imply a model saw something it did not.
+ *
+ * Deliberately narrow: only dead clicks on a REAL control. A tap on a paragraph
+ * is not a defect — the scanner prompt's HARD RULE says so, the probe agrees,
+ * and 807 of 827 sessions with a dead_click are exactly that.
+ */
+const OWN_EVENT_FINDINGS = await posthog(`
+  SELECT toString($session_id) AS sid,
+         toString(properties.pathname) AS path,
+         toString(properties.target_selector) AS sel,
+         count() AS n
+  FROM events
+  WHERE event = 'dead_click'
+    AND timestamp > now() - INTERVAL ${LOOKBACK_HOURS} HOUR
+    AND $session_id IS NOT NULL
+    AND (
+      startsWith(toString(properties.target_selector), 'button')
+      OR startsWith(toString(properties.target_selector), 'a.')
+      OR startsWith(toString(properties.target_selector), 'a#')
+      OR toString(properties.target_selector) = 'a'
+      OR startsWith(toString(properties.target_selector), '[data-track-id')
+      OR startsWith(toString(properties.target_selector), '[role=button')
+    )
+  GROUP BY sid, path, sel
+  ORDER BY n DESC
+  LIMIT 25
+`);
+
+/** Only one per session: the same reader tapping the same dead thing is one defect. */
+const seenSessions = new Set(findings.map((f) => String(f[1])));
+for (const [sid, path, sel, n] of OWN_EVENT_FINDINGS) {
+  if (seenSessions.has(String(sid))) continue;
+  seenSessions.add(String(sid));
+  findings.push([
+    // Stable id, so the once-ever claim holds across runs. Not a PostHog uuid:
+    // nothing else keys on this and a collision with a real one is impossible.
+    `own-dead-click:${sid}`,
+    String(sid),
+    "our own dead_click events",
+    `A reader tapped ${sel} on ${path} ${n} time(s) and it did not respond. ` +
+      `Recorded by our own instrumentation, not inferred from a recording.`,
+    1,
+    0,
+  ]);
+}
+
+console.log(
+  `${findings.length} finding(s) in the last ${LOOKBACK_HOURS}h ` +
+    `(${OWN_EVENT_FINDINGS.length} from our own dead_click events)`
+);
 
 /**
  * How many findings may actually DRIVE A BROWSER in one run.
@@ -657,6 +726,31 @@ console.log(`${findings.length} finding(s) in the last ${LOOKBACK_HOURS}h`);
  * The count is printed rather than swallowed, so a standing backlog is visible.
  */
 const PROBE_BUDGET = Number(process.env.PROBE_BUDGET ?? 10);
+
+/**
+ * How many draft pull requests one run may open.
+ *
+ * The per-branch check in replay-pr.mjs stops the SAME reproduction opening a
+ * second PR, but nothing bounded the total, and the blast radius grew today:
+ * findings are now also synthesised from our own dead_click events, so a run
+ * can carry up to 25 of them and spend its whole probe budget on one criterion.
+ * A systemic probe fault would then open ten PRs before anyone saw the first.
+ *
+ * That is not hypothetical. Hours ago `verify-dead-click-target.mjs` reported
+ * the survey consent gate as a defect because the button is deliberately
+ * disabled — correct behaviour, reproduced convincingly, and D1 is in
+ * AUTO_PR_CRITERIA. The probe is fixed, but "the probe was wrong in a way that
+ * reproduces" is now a known shape rather than a theoretical one, and the cheap
+ * guard against a whole class of it is a cap.
+ *
+ * Two, because a genuine day rarely holds more than one or two distinct
+ * reproduced defects. Nothing is lost when it bites: every verdict still
+ * reaches the reader's thread and the ledger, and the deferred reproduction
+ * opens its PR on the next run.
+ */
+const MAX_PRS_PER_RUN = Number(process.env.MAX_PRS_PER_RUN ?? 2);
+let prsOpened = 0;
+let prsSkipped = 0;
 let probeRuns = 0;
 let deferred = 0;
 let gaps = 0;
@@ -857,10 +951,22 @@ for (const [
   // --dry-run and --classify-only must have NO side effects. Without this guard
   // the workflow's own dry_run path would still push a branch and open a PR,
   // because it sets UX_REVIEW_OPEN_PR=1 for both branches of its if.
-  const prUrl =
-    reproduced && !DRY_RUN && !CLASSIFY_ONLY
-      ? openReproductionPr({ criterion, sessionId, viewport, results })
-      : null;
+  let prUrl = null;
+  if (reproduced && !DRY_RUN && !CLASSIFY_ONLY) {
+    if (prsOpened >= MAX_PRS_PER_RUN) {
+      prsSkipped += 1;
+      console.log(
+        `  PR capped — ${prsOpened} already opened this run, ${sessionId.slice(0, 13)} ` +
+          `(${criterion.id}) deferred to the next one`
+      );
+    } else {
+      prUrl = openReproductionPr({ criterion, sessionId, viewport, results });
+      // Counted on an actual PR, not on an attempt: the helper returns null
+      // when the flag is off or the branch already exists, and counting those
+      // would spend the cap on runs that opened nothing.
+      if (prUrl) prsOpened += 1;
+    }
+  }
 
   /**
    * Say what was actually driven. This read "at 262px-715px, the size this
@@ -938,5 +1044,8 @@ console.log(
     (contradicted ? ` · ${contradicted} contradicted by events` : "") +
     (skipped ? ` · ${skipped} already verified on an earlier run` : "") +
     // Never silent: a deferred finding is the thing that used to disappear.
-    (deferred ? ` · ${deferred} left for the next run (probe budget ${PROBE_BUDGET})` : "")
+    (deferred ? ` · ${deferred} left for the next run (probe budget ${PROBE_BUDGET})` : "") +
+    (prsOpened ? ` · ${prsOpened} draft PR(s) opened` : "") +
+    // A capped PR is deferred work, not a dropped finding — say so either way.
+    (prsSkipped ? ` · ${prsSkipped} PR(s) held back by the cap of ${MAX_PRS_PER_RUN}` : "")
 );

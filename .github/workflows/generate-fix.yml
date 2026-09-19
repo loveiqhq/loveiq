@@ -1,0 +1,272 @@
+name: Generate and prove a fix
+
+# The last link in the chain: a reproduced defect goes in, a PROVEN fix comes
+# out, and a human merges it. Nothing here is trusted because a model produced
+# it — scripts/prove-fix.mjs decides, and it decides by building the site twice
+# and running the probe against each.
+#
+# AUTHENTICATION IS THE TEAM SUBSCRIPTION, NOT AN API KEY. `claude setup-token`
+# mints a long-lived token for exactly this, billed against the plan we already
+# pay for. Set CLAUDE_CODE_OAUTH_TOKEN in the repository secrets; without it
+# this job skips cleanly rather than failing every run.
+#
+# Dispatch-only, deliberately. Generating a fix costs real money and real
+# review attention, and firing it at every finding would produce a queue of
+# pull requests nobody reads — which is how a useful tool becomes noise. A
+# person decides a defect is worth fixing, then asks for one.
+
+on:
+  workflow_dispatch:
+    inputs:
+      probe:
+        description: "Probe in scripts/probes/ that reproduces the defect"
+        required: true
+      probe_env:
+        description: 'JSON env for the probe, e.g. {"URL_PATH":"/survey","TARGET_SELECTOR":"button.flex-1"}'
+        required: false
+        default: "{}"
+      defect:
+        description: "What a visitor experiences. Plain English, no solution."
+        required: true
+      base_ref:
+        description: "Commit to fix from. Defaults to main; set it to replay a past defect."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.probe }}
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    name: Propose a fix, then prove it
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      # ALWAYS main, never the commit under test.
+      #
+      # The first version checked out `base_ref` directly, and the whole run
+      # died at the proof: prove-fix.mjs did not exist at a commit from two days
+      # earlier. The judge must come from a fixed, current source — the same
+      # reason the precision check and the probe are run from this checkout
+      # rather than from the fix worktree.
+      #
+      # The PRODUCT under test lives in a worktree created below, so a replay
+      # gets old code and a current judge, which is the combination that makes
+      # the answer mean anything.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium webkit
+
+      # Skips rather than fails. A missing token is "this is not set up yet",
+      # not "the pipeline is broken", and a job that is red for a configuration
+      # gap teaches people to ignore red jobs.
+      - name: Check the subscription token is present
+        id: token
+        env:
+          OAUTH: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -z "$OAUTH" ]; then
+            echo "::warning::CLAUDE_CODE_OAUTH_TOKEN is not set — run 'claude setup-token' and add it as a repository secret"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Claude Code
+        if: steps.token.outputs.ready == 'true'
+        run: npm install -g @anthropic-ai/claude-code
+
+      # The code the model actually edits. A worktree rather than a checkout so
+      # the judge stays present in the main tree alongside it.
+      - name: Check out the code to fix
+        if: steps.token.outputs.ready == 'true'
+        id: tree
+        env:
+          BASE: ${{ inputs.base_ref }}
+        run: |
+          base="${BASE:-origin/main}"
+          echo "base=$(git rev-parse "$base")" >> "$GITHUB_OUTPUT"
+          git worktree add --detach /tmp/fixtree "$base"
+          echo "dir=/tmp/fixtree" >> "$GITHUB_OUTPUT"
+
+      # A worktree starts with no node_modules, and the model is allowed to run
+      # lint and the test suite to check its own work. Without this those tools
+      # fail on every invocation — it would still produce a diff, but blind,
+      # and the first thing it learns about its change would be the proof
+      # refusing it. Installed from the BASE commit's lockfile, not main's,
+      # because that is the tree being edited.
+      - name: Install dependencies for the code under test
+        if: steps.token.outputs.ready == 'true'
+        working-directory: /tmp/fixtree
+        run: npm ci
+
+      # The prompt says WHAT IS WRONG and never how to fix it. A prompt that
+      # dictates the change turns this into a slow way of typing, and the
+      # interesting failures are the ones where the obvious fix is wrong.
+      #
+      # Inputs travel through the ENVIRONMENT. `${{ }}` inside `run:` is
+      # substituted before bash sees it, so a defect description containing a
+      # quote is command execution on the runner.
+      - name: Propose a fix
+        if: steps.token.outputs.ready == 'true'
+        working-directory: /tmp/fixtree
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          DEFECT: ${{ inputs.defect }}
+          PROBE: ${{ inputs.probe }}
+          PROBE_ENV: ${{ inputs.probe_env }}
+        run: |
+          claude -p "$(printf '%s\n' \
+            "A probe in this repository reproduces a real defect a visitor hit." \
+            "" \
+            "What the visitor experiences: $DEFECT" \
+            "The probe that reproduces it: scripts/probes/$PROBE" \
+            "Run it with this environment: $PROBE_ENV" \
+            "" \
+            "Read that probe first so you know exactly what it measures, then fix" \
+            "the product so it passes. Constraints, all enforced mechanically" \
+            "afterwards by scripts/prove-fix.mjs, so a change that breaks one is" \
+            "wasted work:" \
+            "" \
+            "- Touch only presentation code: features/*/ui/, shared/ui/," \
+            "  app/globals.css, and tests. Anything touching API routes, database" \
+            "  migrations, auth, payments or the probes themselves is refused." \
+            "- Keep it small. Well under 40 changed lines." \
+            "- Do NOT edit the probe. It is the judge, not part of the fix." \
+            "- Follow the conventions in CLAUDE.md, especially the comment style." \
+            "" \
+            "Make the change. Do not commit; the workflow does that.")" \
+            --allowedTools "Read,Edit,Write,Grep,Glob,Bash(npm run lint),Bash(npx vitest run:*)" \
+            --permission-mode acceptEdits \
+            --max-turns 120 \
+            2>&1 | tee /tmp/propose.log
+          code=${PIPESTATUS[0]}
+          # Name the three ways this step fails, because they need opposite
+          # responses and a bare "failure" makes them look identical.
+          #
+          #   session limit  -> wait; nothing about the task was wrong
+          #   max turns      -> the task is too big for the budget; split it
+          #   anything else  -> a real error worth reading
+          #
+          # Measured on 2026-09-19: the first real attempt ended "Reached max
+          # turns (40)" and the third ended "You've hit your session limit ·
+          # resets 9:40pm (UTC)". Both were reported simply as a failed run, and
+          # the natural reading of that is "the model could not do it", which
+          # was wrong in both cases.
+          if grep -qi "session limit" /tmp/propose.log; then
+            echo "::warning::Claude subscription session limit reached — this says nothing about the task. Re-run after it resets."
+            echo "SESSION LIMIT — partial work is committed and pushed below." >> "$GITHUB_STEP_SUMMARY"
+          elif grep -qi "Reached max turns" /tmp/propose.log; then
+            echo "::warning::ran out of turns — the defect may be too large for one pass. The partial diff is below."
+          fi
+          exit $code
+
+      # `always()`, so partial work survives a model that errored or ran out of
+      # turns. The first attempt at a substantial defect hit 'Reached max turns'
+      # and left nothing at all behind — the run reported a failure and every
+      # later step skipped, including the ones whose entire job is preserving
+      # what was tried.
+      - name: Commit whatever it changed
+        if: always() && steps.token.outputs.ready == 'true'
+        working-directory: /tmp/fixtree
+        id: commit
+        env:
+          DEFECT: ${{ inputs.defect }}
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "::error::the model changed nothing — there is no candidate fix to prove"
+            exit 1
+          fi
+          branch="autofix/$(date -u +%Y%m%d-%H%M%S)"
+          git checkout -b "$branch"
+          git -c user.name=loveiq-autofix -c user.email=ec@loveiq.org \
+            commit -am "fix: $DEFECT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      # A refused attempt is still worth reading. Without this the branch dies
+      # with the runner and all anyone learns is "not proven" — which says
+      # nothing about whether the model misunderstood the defect, fixed the
+      # wrong thing, or was given a task no 40-line change could satisfy. That
+      # difference decides whether to retry, reword, or do it by hand.
+      - name: Show what it proposed
+        if: always() && steps.commit.outputs.branch != ''
+        working-directory: /tmp/fixtree
+        run: |
+          echo "### Proposed change" >> "$GITHUB_STEP_SUMMARY"
+          echo '```diff' >> "$GITHUB_STEP_SUMMARY"
+          git diff HEAD~1 >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          git --no-pager diff HEAD~1
+
+      # The gate. Nothing above this line is trusted.
+      - name: Prove it
+        if: steps.token.outputs.ready == 'true'
+        env:
+          FIX_REF: ${{ steps.commit.outputs.branch }}
+          # The same base the model was given. Proving against main while the
+          # model worked from an older commit would compare two unrelated things
+          # and could certify a fix for a defect that is already gone.
+          BASE_REF: ${{ steps.tree.outputs.base }}
+          PROBE: ${{ inputs.probe }}
+          PROBE_ENV: ${{ inputs.probe_env }}
+        run: node scripts/prove-fix.mjs
+
+      # Only reached when the proof passed, so this PR is ready for review
+      # rather than a draft — the draft state is what the UNPROVEN reproduction
+      # PRs use, and the difference should mean something.
+      # Kept even when the proof refused it, so the attempt can be read rather
+      # than guessed at. It is a branch, not a pull request: an unproven change
+      # must not sit in the review queue wearing the same badge as a proven one.
+      - name: Keep the branch even if the proof refused it
+        if: always() && steps.commit.outputs.branch != ''
+        # Through the environment like every other value here. This one is
+        # machine-generated from a timestamp so it could not carry anything
+        # hostile, but a `${{ }}` inside a run: block is the shape that goes
+        # unnoticed next to one that can.
+        env:
+          BRANCH: ${{ steps.commit.outputs.branch }}
+        run: git push origin "$BRANCH" || true
+
+      - name: Open a pull request
+        if: steps.token.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ steps.commit.outputs.branch }}
+          DEFECT: ${{ inputs.defect }}
+          PROBE: ${{ inputs.probe }}
+        run: |
+          git push origin "$BRANCH"
+          gh pr create --base main --head "$BRANCH" \
+            --title "fix: $DEFECT" \
+            --body "$(printf '%s\n' \
+              "A visitor hit this, a probe reproduced it, and this change was proven against it." \
+              "" \
+              "**What a visitor experienced:** $DEFECT" \
+              "**Probe:** \`scripts/probes/$PROBE\`" \
+              "" \
+              "\`scripts/prove-fix.mjs\` built the site twice and checked all of:" \
+              "" \
+              "- the probe reproduces on \`main\`" \
+              "- the diff is presentation-only and under the line cap" \
+              "- the probe passes on this branch" \
+              "- the reproduction repeats on \`main\`, so it is not a flake" \
+              "- lint, tests and build are green" \
+              "- no other probe started claiming a defect that is not one" \
+              "" \
+              "Written by Claude Code and proven mechanically. Read it before merging —" \
+              "the proof says the probe is satisfied, not that the approach is right.")"

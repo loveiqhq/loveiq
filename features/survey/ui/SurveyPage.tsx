@@ -1155,11 +1155,48 @@ const ConsentScreen: FC<{
             type="button"
             onClick={handleAgreeClick}
             disabled={!canProceed || isLeaving}
+            // Points at the line below that explains the disabled state. This
+            // is what a screen reader reads out when the button takes focus,
+            // and it is also the machine-readable form of "this control
+            // explains itself" — scripts/probes/verify-dead-click-target.mjs
+            // reads it to tell a dead end apart from a blocked-but-explained
+            // control, which otherwise look identical from the outside.
+            aria-describedby={canProceed ? undefined : "consent-blocked-reason"}
             className="flex-1 rounded-full border border-white/10 bg-white/5 py-[15px] text-[14px] font-bold leading-[20px] tracking-[0.7px] shadow-[0_10px_15px_rgba(0,0,0,0.1),0_4px_6px_rgba(0,0,0,0.1)] transition focus-visible-ring disabled:text-white/40 enabled:bg-[#fe6839] enabled:text-white enabled:hover:-translate-y-[1px]"
           >
             I agree
           </button>
         </div>
+
+        {/*
+          Why the button is not working, said out loud.
+
+          A disabled control cannot report anything: it takes no pointer events,
+          so there is no hover, no click, no way for it to explain itself. On
+          production 22 people tapped this exact button while it was disabled in
+          30 days and 3 of them never got past this screen at all — a hard stop
+          at the entrance to the whole funnel.
+
+          The two checkboxes are ABOVE the button and the cookie banner covers
+          the lower one on a Pixel 7 and both on an iPhone SE on a first visit,
+          so "just look up" is not advice this reader can act on without being
+          told. That is the whole defect: not that consent is required, but that
+          nothing says so.
+
+          Consent semantics are deliberately untouched. The button stays
+          disabled until both boxes are ticked; this only explains why.
+          `aria-live` because a sighted reader sees the line appear and a screen
+          reader user otherwise gets nothing at all.
+        */}
+        {!canProceed && (
+          <p
+            id="consent-blocked-reason"
+            aria-live="polite"
+            className="mt-4 text-center text-[13px] font-light leading-[20px] text-white/50"
+          >
+            Tick both boxes above to continue.
+          </p>
+        )}
       </div>
     </main>
   );

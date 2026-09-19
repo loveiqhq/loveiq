@@ -89,9 +89,38 @@ let exportFailStatus = 500;
 /** How many times the listing should answer with a transient 5xx before succeeding. */
 let listTransientFailures = 0;
 const httpCalls: string[] = [];
+/** Tab names and their rows, as the Sheets API would answer. */
+let sheetTabs: string[] = ["Costs", "Core_KPI"];
+let sheetValues: Array<{ values?: unknown[][] }> = [
+  {
+    values: [
+      ["Name", "Cost"],
+      ["Slack", "(41.25)"],
+    ],
+  },
+  {
+    values: [
+      ["Layer", "KPI"],
+      ["Monetization", "Paid Reports"],
+    ],
+  },
+];
+let sheetsApiFails = false;
+
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: vi.fn(async (url: string) => {
     httpCalls.push(url);
+    if (url.startsWith("https://sheets.googleapis.com/")) {
+      if (sheetsApiFails) return { ok: false, status: 500, text: async () => "boom" };
+      if (url.includes("values:batchGet")) {
+        return { ok: true, status: 200, json: async () => ({ valueRanges: sheetValues }) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ sheets: sheetTabs.map((t) => ({ properties: { title: t } })) }),
+      };
+    }
     if (url.includes("/files?q=")) {
       if (listTransientFailures > 0) {
         listTransientFailures -= 1;
@@ -459,6 +488,20 @@ describe("ingestDrive", () => {
     expect(deletedIds()).not.toContain("doc:1AbCdEf");
   });
 
+  /**
+   * The bump is the whole delivery mechanism for a reader change, and it had no test.
+   * A file is refetched when its `modifiedTime` moves — so a fix to HOW a file is read
+   * reaches nothing until the version says the stored row is the wrong shape. v3 -> v4
+   * (spreadsheets, first tab only) depended on exactly this: "Business Case" had not
+   * been edited since 2026-09-16, so without the bump its missing tab stayed missing.
+   */
+  it("re-exports an UNCHANGED document when the builder version moved on", async () => {
+    const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    existing = [{ source_id: "doc:1AbCdEf", meta: { edited: FILE.modifiedTime, v: v - 1 } }];
+    await ingestDrive(STAMP);
+    expect(httpCalls.filter((u) => u.includes("/export?")).length).toBeGreaterThan(0);
+  });
+
   it("re-exports when the document changed", async () => {
     const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
     existing = [{ source_id: "doc:1AbCdEf", meta: { edited: "2026-08-01T00:00:00.000Z", v } }];
@@ -646,6 +689,90 @@ describe("Google Meet shortcuts", () => {
     expect(httpCalls.filter((u) => u.includes(`/files/${FILE.id}?fields=id,name`))).toHaveLength(0);
     // and it is still indexed exactly once
     expect(written().filter((r) => r.source_id === `doc:${FILE.id}`)).toHaveLength(1);
+  });
+});
+
+describe("spreadsheets — every tab, not just the first", () => {
+  const SHEET = {
+    id: "sheet1",
+    name: "Business Case",
+    mimeType: "application/vnd.google-apps.spreadsheet",
+    modifiedTime: "2026-09-16T14:05:00.000Z",
+    createdTime: "2026-08-26T14:00:00.000Z",
+    webViewLink: "https://docs.google.com/spreadsheets/d/sheet1/edit",
+    owners: [{ emailAddress: "ec@loveiq.org" }],
+  };
+
+  beforeEach(() => {
+    files = [SHEET];
+    existing = [];
+    dbCalls.length = 0;
+    httpCalls.length = 0;
+    listOk = true;
+    alwaysMorePages = false;
+    sheetsApiFails = false;
+    sheetTabs = ["Costs", "Core_KPI"];
+    sheetValues = [
+      {
+        values: [
+          ["Name", "Cost"],
+          ["Slack", "(41.25)"],
+        ],
+      },
+      {
+        values: [
+          ["Layer", "KPI"],
+          ["Monetization", "Paid Reports"],
+        ],
+      },
+    ];
+  });
+
+  const writtenBody = () =>
+    dbCalls
+      .filter((c) => c.method === "POST" && c.path.includes("brain_chunk"))
+      .map((c) => c.body)
+      .join(" ");
+
+  /**
+   * FOUND IN PRODUCTION 2026-09-19. `files.export?mimeType=text/csv` answers with the
+   * FIRST worksheet and drops the rest, because CSV is a single-table format. "Business
+   * Case" has `Costs` and `Core_KPI`; the brain held only the cost lines, so asked about
+   * the KPI table it reported it could not see the file — while every count of indexed
+   * documents called that file present.
+   */
+  it("indexes a tab that is not the first one", async () => {
+    await ingestDrive(STAMP, () => false, null);
+    const body = writtenBody();
+    expect(body).toContain("Paid Reports");
+    expect(body).toContain("Core_KPI");
+  });
+
+  it("still indexes the first tab, and names both", async () => {
+    await ingestDrive(STAMP, () => false, null);
+    const body = writtenBody();
+    expect(body).toContain("Slack");
+    expect(body).toContain("Costs");
+  });
+
+  it("asks the Sheets API rather than exporting csv", async () => {
+    await ingestDrive(STAMP, () => false, null);
+    expect(httpCalls.some((u) => u.includes("sheets.googleapis.com"))).toBe(true);
+    expect(httpCalls.some((u) => u.includes("export?mimeType=text%2Fcsv"))).toBe(false);
+  });
+
+  it("falls back to the first tab rather than losing the file when Sheets fails", async () => {
+    // Worse than the new behaviour, better than nothing — and the warn says which.
+    sheetsApiFails = true;
+    const res = await ingestDrive(STAMP, () => false, null);
+    expect(res.complete).toBe(true);
+    expect(httpCalls.some((u) => u.includes("export?mimeType=text%2Fcsv"))).toBe(true);
+  });
+
+  it("skips a spreadsheet whose tabs are all empty", async () => {
+    sheetValues = [{ values: [] }, { values: [[""], [" "]] }];
+    await ingestDrive(STAMP, () => false, null);
+    expect(writtenBody()).not.toContain("Business Case");
   });
 });
 

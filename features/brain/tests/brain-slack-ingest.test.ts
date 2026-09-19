@@ -10,6 +10,8 @@ import {
   SLACK_BUILDER_VERSION,
   slackPermalink,
   tsDate,
+  readableFiles,
+  MAX_SLACK_FILE_BYTES,
 } from "@features/brain/server/ingest/slack";
 
 /**
@@ -452,5 +454,96 @@ describe("reactions, the cheapest agreement signal there is", () => {
     );
     expect(line).toContain("↳");
     expect(line).toContain("[reactions: +1 x1]");
+  });
+});
+
+describe("uploads — a file-only message used to vanish entirely", () => {
+  /**
+   * `renderMessage` returned null for anything without text, so a deck posted with
+   * no caption left NO trace: not the file, not even the fact that one was shared.
+   * The name costs no extra scope — `files` is already on every history message —
+   * and 25 of the 36 files shared since June 2026 are screenshots that will never
+   * be readable, so the name is all there will ever be for most of them.
+   */
+  const names = new Map([["U1", "Marcus"]]);
+  const file = (over: Record<string, unknown> = {}) => ({
+    id: "F1",
+    name: "Refactor_Deck.pdf",
+    filetype: "pdf",
+    size: 1000,
+    url_private: "https://files.slack.com/x.pdf",
+    ...over,
+  });
+
+  it("keeps a message that is nothing but an upload", () => {
+    const line = renderMessage({ user: "U1", ts: "1", files: [file()] }, names);
+    expect(line).toContain("Marcus:");
+    expect(line).toContain("Refactor_Deck.pdf");
+  });
+
+  it("names the file alongside the words when there are both", () => {
+    const line = renderMessage({ user: "U1", ts: "1", text: "see this", files: [file()] }, names);
+    expect(line).toContain("see this");
+    expect(line).toContain("[shared: Refactor_Deck.pdf]");
+  });
+
+  it("still drops a message that is genuinely empty", () => {
+    // The control: without it the fix would keep every tombstone and join notice.
+    expect(renderMessage({ user: "U1", ts: "1" }, names)).toBeNull();
+    expect(renderMessage({ user: "U1", ts: "1", text: "  ", files: [] }, names)).toBeNull();
+  });
+
+  it("would read a pdf but not a screenshot", () => {
+    expect(readableFiles({ files: [file()] })).toHaveLength(1);
+    expect(readableFiles({ files: [file({ filetype: "png", name: "image.png" })] })).toHaveLength(
+      0
+    );
+  });
+
+  it("would not read a file too big to be prose", () => {
+    const huge = file({ size: MAX_SLACK_FILE_BYTES + 1 });
+    expect(readableFiles({ files: [huge] })).toHaveLength(0);
+  });
+
+  it("would not try to read a file Slack gave no url for", () => {
+    expect(readableFiles({ files: [file({ url_private: undefined })] })).toHaveLength(0);
+  });
+});
+
+describe("an unfinished walk must say WHY", () => {
+  /**
+   * Four different things stop the walk: the clock, a refused API call, a channel
+   * hitting the page cap, and thread replies lost to a rate limit. They all used to
+   * return the single word `slack-walk-incomplete`, which alerts.
+   *
+   * Measured 2026-09-19: bumping SLACK_BUILDER_VERSION to 9 made every indexed day
+   * stale at once, so the walk legitimately ran out of clock every run — and put
+   * brain-fast into `status=error` on each one. Hours of that is exactly how a real
+   * outage stops being noticed.
+   */
+  const fs = require("fs") as typeof import("fs");
+  const src = fs.readFileSync("features/brain/server/ingest/slack.ts", "utf8");
+  const cron = fs.readFileSync("app/api/cron/brain-fast/route.ts", "utf8");
+
+  it("names each of the four causes separately", () => {
+    for (const why of ["time-budget", "api-refused", "page-cap", "thread-replies-rate-limited"])
+      expect(src, why).toContain(`stopped("${why}")`);
+  });
+
+  it("reports the clock as a DIFFERENT skip from a fault", () => {
+    // The clock is a backfill in progress; a refused API call is a fault.
+    expect(src).toMatch(/=== "time-budget"\s*\?\s*"slack-time-budget"/);
+    expect(src).toContain('`slack-walk-incomplete:${incomplete ?? "unknown"}`');
+  });
+
+  it("whitelists ONLY the clock in the cron, so a fault still alerts", () => {
+    expect(cron).toContain('"slack-time-budget"');
+    // The control: if this ever appears, every slack fault goes silent.
+    expect(cron).not.toContain('"slack-walk-incomplete"');
+  });
+
+  it("keeps the first cause, not the last", () => {
+    // An API refusal followed by the clock running out must still read as the fault.
+    expect(src).toContain("incomplete ??= why");
   });
 });

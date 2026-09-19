@@ -269,17 +269,64 @@ export async function upsertChunks(rows: BrainRow[]): Promise<number> {
     // Refused at the shared write path, so every source is covered and no
     // ingester has to remember. Logged with the title and never the value, so
     // someone can go and rotate it.
-    const kind = credentialKind(`${row.title}\n${row.body}`);
+    /**
+     * REDACT BEFORE JUDGING.
+     *
+     * `redactUrlSecrets` already removes a token sitting in a URL query, and
+     * `clean()` applies it on the way out — but the refusal below was reading the
+     * RAW text, so a part was thrown away for a secret that would have been stripped
+     * a few lines later. Measured 2026-09-19: 126 parts across 35 documents were
+     * refused, every one of them a JWT in a Confluence or Jira action link. The
+     * tokens are single-use and the surrounding email was lost for nothing.
+     *
+     * The guard is not weakened: `credentialKind` still runs, just on the text that
+     * would actually be stored. Anything redaction cannot remove is still refused.
+     */
+    const redacted = {
+      ...row,
+      title: redactUrlSecrets(row.title),
+      body: redactUrlSecrets(row.body),
+    };
+    const kind = credentialKind(`${redacted.title}\n${redacted.body}`);
     if (kind) {
       logger.warn(
         { source: row.source, sourceId: row.source_id, kind, url: row.url },
         "brain: refusing to index a chunk containing a credential — rotate it and remove it from the source"
+      );
+      /**
+       * LEAVE A MARKER, NOT A HOLE.
+       *
+       * `continue` alone dropped the row and said so only to a log line that has
+       * rolled off by the time anyone looks. Its SIBLINGS still say "part 2 of 2",
+       * so a reader gets a fragment of a document with nothing to say a piece is
+       * missing or why. Measured 2026-09-19: 26 gmail threads were in exactly that
+       * state — 2FA mails, Jira invites, signup links, all of which legitimately
+       * carry a token in their first part.
+       *
+       * The marker indexes NO secret: the body is fixed text, and the title is kept
+       * only when the title on its own is clean, since `kind` may have come from it.
+       */
+      const titleHoldsIt = credentialKind(redacted.title) !== null;
+      byKey.set(
+        `${row.source} ${row.source_id}`,
+        clean({
+          ...redacted,
+          title: titleHoldsIt ? `${row.source}: withheld` : redacted.title,
+          body:
+            `This part is deliberately not indexed: it contains a ${kind}, which must ` +
+            `not become searchable. Rotate it and remove it from the source. The rest ` +
+            `of this document is indexed normally.`,
+          meta: { ...(row.meta ?? {}), withheld: kind },
+        })
       );
       continue;
     }
     const people = peopleIn(row.meta ?? {}, byAlias);
     byKey.set(
       `${row.source} ${row.source_id}`,
+      // `row`, not `redacted`: `clean()` redacts on the way out regardless, so passing
+      // the pre-redacted copy here changes nothing. Mutation proved it — swapping them
+      // broke no test, because the two produce identical bytes.
       clean(people ? { ...row, meta: { ...(row.meta ?? {}), people } } : row)
     );
   }
@@ -307,7 +354,22 @@ export async function upsertChunks(rows: BrainRow[]): Promise<number> {
     }
     written += batch.length;
   }
-  return written;
+  /**
+   * A MARKER IS NOT AN INDEXED CHUNK, and the count callers act on must say so.
+   *
+   * `record_decision` reports success from this number. When the decision it was
+   * asked to record contained a credential, the marker made the row count 1 and the
+   * caller was told the decision had been recorded — while what is actually stored
+   * says the content was withheld. A guard that reports success is worse than the
+   * hole it replaced; the existing test caught this the moment markers were added.
+   *
+   * Counted off the deduped set rather than incremented at the refusal, so a marker
+   * later overwritten by a clean row with the same key is not subtracted twice.
+   */
+  const withheld = unique.filter(
+    (r) => (r.meta as { withheld?: unknown } | undefined)?.withheld
+  ).length;
+  return written - withheld;
 }
 
 /**
