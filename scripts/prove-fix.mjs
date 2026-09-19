@@ -482,8 +482,20 @@ async function main() {
     console.log(
       `\nPROVEN — ${PROBE} reproduces on ${baseSha.slice(0, 8)}, passes on ` +
         `${fixSha.slice(0, 8)}, repeats on base, and the gate is green.\n` +
+        (verdict.oversize
+          ? `It is LARGER than the ${MAX_CHANGED_LINES}-line cap, so the proof is true ` +
+            `but does not carry the whole change. Read it properly.\n`
+          : "") +
         `A human still merges it.`
     );
+
+    /**
+     * Machine-readable, so a caller can tell the tiers apart without parsing
+     * prose. Its absence cost a genuinely PROVEN fix its pull request on
+     * 2026-09-19: the workflow grepped for this line, found nothing, and
+     * `grep` exiting 1 under `bash -e` failed the step after six green checks.
+     */
+    console.log(`PROVEN_TIER=${verdict.oversize ? "large" : "small"}`);
     exitCode = 0;
   } catch (err) {
     console.error(`\ncould not decide: ${err.message}`);

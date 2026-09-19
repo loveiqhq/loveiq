@@ -122,6 +122,27 @@ describe("what a generated fix is allowed to touch", () => {
   });
 });
 
+describe("the proof reports its tier", () => {
+  /**
+   * The workflow greps for this line to decide draft vs ready. It went missing
+   * once — a prettier reflow moved the anchor my edit targeted and the write
+   * silently did nothing — and the cost was a genuinely PROVEN fix never
+   * becoming a pull request: six green checks, "PROVEN" printed, then grep
+   * found nothing and exited 1 under `bash -e`.
+   */
+  it("emits a machine-readable tier alongside the prose", () => {
+    expect(SRC).toContain("PROVEN_TIER=");
+    expect(SRC).toMatch(/PROVEN_TIER=\$\{verdict\.oversize \? "large" : "small"\}/);
+  });
+
+  it("is greped in a way that cannot undo a successful proof", () => {
+    const WF = readFileSync(resolve(process.cwd(), ".github/workflows/generate-fix.yml"), "utf8");
+    const line = WF.split("\n").find((l) => l.includes("PROVEN_TIER=(small|large)"));
+    expect(line, "the workflow no longer reads the tier").toBeTruthy();
+    expect(line, "a grep miss must not fail the step").toContain("|| true");
+  });
+});
+
 describe("the proof obligation itself", () => {
   it("passes its own selftest", () => {
     const out = execFileSync("node", ["scripts/prove-fix.mjs", "--selftest"], { encoding: "utf8" });
