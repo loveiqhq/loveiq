@@ -18,6 +18,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const CI = readFileSync(resolve(process.cwd(), ".github/workflows/ci.yml"), "utf8");
+const SECURITY = readFileSync(resolve(process.cwd(), ".github/workflows/security.yml"), "utf8");
 
 /** The exact expression the workflow runs, lifted out so they cannot drift. */
 const COUNTER =
@@ -55,6 +56,33 @@ describe("the npm audit gate", () => {
   it("warns rather than failing on unknown, and fails on a real finding", () => {
     expect(CI).toMatch(/if \[ "\$high" = "unknown" \][\s\S]{0,300}?exit 0/);
     expect(CI).toMatch(/if \[ "\$high" -gt 0 \][\s\S]{0,300}?exit 1/);
+  });
+
+  /**
+   * There were TWO of these, and fixing only the one that blocked the merge
+   * would have left the other going red on every npm incident — a security job
+   * that is red for reasons nobody can act on is one people learn to scroll
+   * past, which costs more than it saves.
+   */
+  it("applies the same rule in security.yml, not just the blocking one", () => {
+    expect(SECURITY).toContain("metadata.vulnerabilities");
+    expect(SECURITY).toMatch(/if \[ "\$high" = "unknown" \][\s\S]{0,300}?exit 0/);
+    expect(SECURITY).toMatch(/if \[ "\$high" -gt 0 \][\s\S]{0,300}?exit 1/);
+  });
+
+  it("leaves no bare `npm audit` that can fail on an outage", () => {
+    // The whole class, not the two instances that happened to be found.
+    for (const [name, wf] of [
+      ["ci.yml", CI],
+      ["security.yml", SECURITY],
+    ] as const) {
+      const bare = wf
+        .split("\n")
+        .filter(
+          (l) => /^\s*run:\s*npm audit/.test(l) || /^\s+npm audit --audit-level=high$/.test(l)
+        );
+      expect(bare, `${name} still has a bare npm audit: ${bare.join(" | ")}`).toEqual([]);
+    }
   });
 
   it("does not use the deprecated --production flag", () => {
