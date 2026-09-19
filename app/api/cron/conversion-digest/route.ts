@@ -313,6 +313,32 @@ export function buildSiteStartSeries(
  * GAP rather than a plotted zero. Trailing rather than daily because a handful of
  * starts on a low-traffic day swings a daily rate wildly.
  */
+/**
+ * Midway daily rows in the shape `buildStartSeries` already understands.
+ *
+ * sessions -> visits, reached -> starts. Mapping rather than duplicating keeps
+ * ONE implementation of the 7-day trailing window and its warm-up gap; the rule
+ * that the first six days are gaps rather than partial windows was already
+ * missing from one of these two builders once.
+ */
+export function buildMidwaySeries(
+  midway: MidwayProgress,
+  arms: [string, string]
+): { labels: string[]; first: Array<number | null>; last: Array<number | null> } {
+  return buildStartSeries(
+    {
+      daily: midway.daily.map((r) => ({
+        day: r.day,
+        arm: r.arm,
+        visits: r.sessions,
+        starts: r.reached,
+      })),
+      totals: [],
+    },
+    arms
+  );
+}
+
 export function buildStartSeries(
   funnel: LandingStartFunnel,
   arms: [string, string]
@@ -684,6 +710,74 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
    * both landings link with next/link and a soft navigation is not a document
    * request. Until then: trend, caveat, no verdict.
    */
+  /**
+   * Midway Progress per landing page.
+   *
+   * Reuses `buildStartSeries` by mapping sessions->visits and reached->starts: the
+   * shape is identical and the 7-day trailing rule, including its warm-up gap, is
+   * the part with the bug history. A second copy of that loop is how the two
+   * versions drift.
+   *
+   * EMPTY IS A SENTENCE, NOT A PICTURE. Drafts only started carrying an arm on
+   * `firstArmDay`, so for the first week there is nothing to plot. `funnel-digest`
+   * was unscheduled for being a rail of charts with no decision attached, and an
+   * empty chart that says "awaiting data" every morning for a week is that same
+   * mistake with a new name. One line until there is something to show.
+   */
+  const midwayBlocks: SlackBlock[] = [];
+  if (midway) {
+    const armTotal = (arm: string) => midway.totals.find((t) => t.arm === arm);
+    const named = (["white_prev", "white"] as const).filter((a) => (armTotal(a)?.sessions ?? 0) > 0);
+
+    if (named.length > 0) {
+      const line = named
+        .map((arm) => {
+          const t = armTotal(arm)!;
+          return `• *${armLabel("landing", arm).short}* — ${t.reached} of ${t.sessions} drafts reached question ${midway.midwayIndex} (${computeRate(t.reached, t.sessions)}%)`;
+        })
+        .join("\n");
+      midwayBlocks.push(
+        section(`*Midway progress, by landing page*\n${line}`)
+      );
+
+      const series = buildMidwaySeries(midway, ["white_prev", "white"]);
+      const hasReal =
+        series.first.some((v) => v != null) || series.last.some((v) => v != null);
+      if (hasReal && series.labels.length > 1) {
+        const url = await signedChartUrl({
+          windowLabel,
+          labels: series.labels,
+          first: series.first,
+          last: series.last,
+          title: `Drafts reaching question ${midway.midwayIndex}, by landing page`,
+          legendFirst: armLabel("landing", "white_prev").short,
+          legendLast: armLabel("landing", "white").short,
+          colorFirst: armColor("landing", "white_prev"),
+          colorLast: armColor("landing", "white"),
+          headline: named
+            .map((a) => `${armLabel("landing", a).short} ${armTotal(a)!.reached}/${armTotal(a)!.sessions}`)
+            .join("  ·  "),
+          footnote: `reached ÷ drafts saved, 7-day trailing · peak {peak}%`,
+        });
+        if (url) {
+          midwayBlocks.push({
+            type: "image",
+            image_url: url,
+            alt_text: `Share of survey drafts reaching question ${midway.midwayIndex}, per landing page, over the reporting window`,
+          });
+        }
+      }
+    } else if (midway.firstArmDay) {
+      // Says WHY it is empty and WHEN it starts, so nobody reads the absence as
+      // "no one gets halfway".
+      midwayBlocks.push(
+        context(
+          `Midway progress per landing page starts from ${escapeSlack(midway.firstArmDay)} — before that, drafts did not record which landing page the visitor came from.`
+        )
+      );
+    }
+  }
+
   const landingStartBlocks: SlackBlock[] = [];
   if (startFunnel) {
     /**
@@ -860,6 +954,7 @@ export async function buildConversionDigest(input: DigestInput): Promise<BuiltDi
     // Landing → survey leads: it is the only axis that measures what a landing
     // page is FOR, and the one the section was reorganised around.
     blocks.push(...landingStartBlocks);
+    blocks.push(...midwayBlocks);
     for (const chart of trends.charted) {
       const series = buildArmSeries(
         rowsForAxis(axisRows, chart.axis).rows,

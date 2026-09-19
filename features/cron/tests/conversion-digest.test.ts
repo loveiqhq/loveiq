@@ -794,6 +794,148 @@ describe("conversion-digest handler", () => {
     expect(flat).not.toMatch(/`\s*3\s+[\d.<%—]+\s+[\d.<%—]+`\s+Finished the survey/);
   });
 
+  it("splits midway progress by landing page once both arms have drafts", async () => {
+    // Marcus's acceptance criterion from 2026-09-16: every metric differentiated
+    // by landing-page experiment.
+    const days = Array.from({ length: 14 }, (_, i) =>
+      new Date(Date.UTC(2026, 8, 19) + i * 86_400_000).toISOString().slice(0, 10)
+    );
+    mockFetchMidwayProgress.mockResolvedValue({
+      // Above the fixture's 510 finishers: below it, the sources-disagree guard
+      // correctly suppresses the row and this test would assert the guard
+      // rather than the feature.
+      overall: { sessions: 900, reached: 620 },
+      daily: days.flatMap((day) => [
+        { day, arm: "white_prev", sessions: 30, reached: 16 },
+        { day, arm: "white", sessions: 34, reached: 21 },
+      ]),
+      totals: [
+        { arm: "white", sessions: 476, reached: 294 },
+        { arm: "white_prev", sessions: 420, reached: 224 },
+      ],
+      midwayIndex: 30,
+      firstArmDay: "2026-09-19",
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const flat = blockText(arg.blocks);
+
+    expect(flat).toContain("Midway progress, by landing page");
+    // Plain-English arm names, never a raw stored value.
+    expect(flat).toContain("Landing Page V1 (First Design)");
+    expect(flat).toContain("Landing Page V2 (Survey in Hero)");
+    expect(flat).not.toContain("white_prev");
+    // The counts are named, not bare percentages.
+    expect(flat).toContain("224 of 420 drafts reached question 30");
+
+    // And the trend chart is drawn, in each arm's own colour.
+    const midwayChart = arg.blocks
+      .map((b) => (b as { image_url?: string }).image_url)
+      .filter((u): u is string => typeof u === "string")
+      .map(
+        (u) =>
+          JSON.parse(Buffer.from(new URL(u).searchParams.get("d")!, "base64").toString("utf8")) as {
+            title?: string;
+            colorFirst?: string;
+            colorLast?: string;
+          }
+      )
+      .find((p) => p.title?.includes("reaching question 30"));
+    expect(midwayChart, "the midway trend chart must be in the message").toBeDefined();
+    expect(midwayChart!.colorFirst).toBe(armColor("landing", "white_prev"));
+    expect(midwayChart!.colorLast).toBe(armColor("landing", "white"));
+  });
+
+  it("prints the per-arm line but no chart until a trend exists", async () => {
+    /**
+     * The state on day two: the arms have drafts, so the counts are real and worth
+     * printing — but the 7-day trailing series is still all warm-up, so every
+     * plotted value is null. A chart here would be an empty box under a headline
+     * with numbers in it, which reads as a rendering failure rather than as "not
+     * yet".
+     *
+     * This is the case the sibling test cannot reach: there, totals are empty and
+     * the chart branch is never entered at all, so a mutation that always drew the
+     * chart survived.
+     */
+    const days = Array.from({ length: 3 }, (_, i) =>
+      new Date(Date.UTC(2026, 8, 19) + i * 86_400_000).toISOString().slice(0, 10)
+    );
+    mockFetchMidwayProgress.mockResolvedValue({
+      overall: { sessions: 900, reached: 620 },
+      daily: days.flatMap((day) => [
+        { day, arm: "white_prev", sessions: 30, reached: 16 },
+        { day, arm: "white", sessions: 34, reached: 21 },
+      ]),
+      totals: [
+        { arm: "white", sessions: 102, reached: 63 },
+        { arm: "white_prev", sessions: 90, reached: 48 },
+      ],
+      midwayIndex: 30,
+      firstArmDay: "2026-09-19",
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const flat = blockText(arg.blocks);
+
+    // The counts ARE worth printing.
+    expect(flat).toContain("Midway progress, by landing page");
+    expect(flat).toContain("48 of 90 drafts reached question 30");
+    // The chart is not.
+    const titles = arg.blocks
+      .map((b) => (b as { image_url?: string }).image_url)
+      .filter((u): u is string => typeof u === "string")
+      .map(
+        (u) =>
+          (
+            JSON.parse(
+              Buffer.from(new URL(u).searchParams.get("d")!, "base64").toString("utf8")
+            ) as { title?: string }
+          ).title ?? ""
+      );
+    expect(titles.some((t) => t.includes("reaching question"))).toBe(false);
+  });
+
+  it("says when per-arm midway starts, rather than drawing an empty chart", async () => {
+    /**
+     * Drafts only began carrying an arm on firstArmDay, so for the first week
+     * there is nothing to plot. `funnel-digest` was unscheduled for being a rail
+     * of charts with no decision attached; an "awaiting data" chart every morning
+     * for a week is that mistake with a new name.
+     */
+    mockFetchMidwayProgress.mockResolvedValue({
+      // Above the fixture's 510 finishers: below it, the sources-disagree guard
+      // correctly suppresses the row and this test would assert the guard
+      // rather than the feature.
+      overall: { sessions: 900, reached: 620 },
+      daily: [],
+      totals: [],
+      midwayIndex: 30,
+      firstArmDay: "2026-09-19",
+    });
+    await GET(request());
+    const arg = mockNotifySlack.mock.calls[0]![0] as { blocks: SlackBlock[] };
+    const flat = blockText(arg.blocks);
+
+    expect(flat).toContain("Midway progress per landing page starts from 2026-09-19");
+    // A sentence, not a picture, and not a silent omission either.
+    expect(flat).not.toContain("Midway progress, by landing page");
+    const titles = arg.blocks
+      .map((b) => (b as { image_url?: string }).image_url)
+      .filter((u): u is string => typeof u === "string")
+      .map(
+        (u) =>
+          (
+            JSON.parse(
+              Buffer.from(new URL(u).searchParams.get("d")!, "base64").toString("utf8")
+            ) as { title?: string }
+          ).title ?? ""
+      );
+    expect(titles.some((t) => t.includes("reaching question"))).toBe(false);
+    // The whole-population row is unaffected and still present.
+    expect(flat).toContain("Reached question 30");
+  });
+
   it("names both percentages on every funnel row, and states which is which", async () => {
     /**
      * The 2026-09-16 sync spent real time on a "96.5%" nobody could source, because

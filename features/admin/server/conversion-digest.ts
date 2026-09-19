@@ -360,6 +360,8 @@ export interface MidwayProgress {
   daily: Array<{ day: string; arm: string; sessions: number; reached: number }>;
   totals: Array<{ arm: string; sessions: number; reached: number }>;
   midwayIndex: number;
+  /** First day drafts carried an arm. Days before it are ABSENT, never zero. */
+  firstArmDay: string | null;
 }
 
 export async function fetchMidwayProgress(
@@ -386,6 +388,7 @@ export async function fetchMidwayProgress(
       daily?: unknown;
       totals?: unknown;
       midwayIndex?: unknown;
+      firstArmDay?: unknown;
     } | null;
     if (!raw) return null;
 
@@ -415,6 +418,7 @@ export async function fetchMidwayProgress(
       // Echoed back by the RPC. Trusting the REQUEST's number here would let the
       // caption name a threshold the numbers were not computed at.
       midwayIndex: int(raw.midwayIndex) || midwayIndex,
+      firstArmDay: str(raw.firstArmDay) || null,
     };
   } catch (err) {
     logger.warn({ err }, "conversion-digest: midway RPC threw");
