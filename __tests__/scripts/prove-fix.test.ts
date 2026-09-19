@@ -1,0 +1,132 @@
+/**
+ * The gate that decides whether a fix is proven.
+ *
+ * This is the piece Phase 5 rests on: a fix may come from a model, a codemod or
+ * a person, and what makes it safe to merge is that something outside the author
+ * checked it. Every step of that check is a command with an exit code — but the
+ * DIFF judgement is pure, and it is where the dangerous mistakes live, so it is
+ * pinned here rather than only in the script's own selftest.
+ */
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+import { describe, expect, it } from "vitest";
+
+import { judgeDiff } from "../../scripts/prove-fix.mjs";
+
+const SRC = readFileSync(resolve(process.cwd(), "scripts/prove-fix.mjs"), "utf8");
+
+describe("what a generated fix is allowed to touch", () => {
+  it("accepts a presentation-only change", () => {
+    expect(judgeDiff(["features/survey/ui/SurveyPage.tsx"], 12).ok).toBe(true);
+  });
+
+  it("accepts tests alongside it", () => {
+    // A fix that brings its own regression test is strictly better, and test
+    // files change no runtime behaviour, so the probe's verdict still covers
+    // everything that ships.
+    expect(judgeDiff(["features/survey/tests/SurveyPage.test.tsx"], 40).ok).toBe(true);
+  });
+
+  /**
+   * THE HOLE THAT MATTERED. The first allowlist permitted scripts/probes/, so a
+   * "fix" could edit the probe until it stopped failing and every later step
+   * would certify it — reproduces on base with the old probe, passes on the fix
+   * with the new one. The before and after would be answering two different
+   * questions and the green light would mean nothing.
+   */
+  it("refuses a fix that edits its own judge", () => {
+    expect(judgeDiff(["scripts/probes/verify-survey-loop.mjs"], 2).ok).toBe(false);
+    expect(judgeDiff(["scripts/prove-fix.mjs"], 2).ok).toBe(false);
+  });
+
+  /**
+   * The assertion above passes for the WRONG REASON on its own, and a mutation
+   * proved it: deleting `scripts/` from DENY changed nothing, because those
+   * paths are also outside ALLOW and were refused by the fallthrough. The guard
+   * that actually matters would then be gone with every test still green, and
+   * anyone later widening ALLOW to cover scripts/ would unlock it silently.
+   *
+   * So this pins DENY itself, by handing in an allowlist that DOES permit
+   * scripts/ and requiring the refusal to survive.
+   */
+  it("refuses it because DENY says so, not merely because ALLOW is narrow", () => {
+    const permissive = [/^scripts\//, /^features\//];
+    expect(
+      judgeDiff(["scripts/probes/verify-survey-loop.mjs"], 2, { allow: permissive }).ok,
+      "with scripts/ explicitly allowed, only DENY can still refuse it"
+    ).toBe(false);
+    // The control: the same permissive allowlist must still let a real fix through,
+    // or this test would pass even if judgeDiff refused everything.
+    expect(judgeDiff(["features/survey/ui/SurveyPage.tsx"], 2, { allow: permissive }).ok).toBe(
+      true
+    );
+  });
+
+  it("refuses a probe edit smuggled in beside a real fix", () => {
+    const r = judgeDiff(["features/survey/ui/SurveyPage.tsx", "scripts/probes/x.mjs"], 6);
+    expect(r.ok).toBe(false);
+  });
+
+  it("refuses anything a probe cannot vouch for", () => {
+    for (const path of [
+      "app/api/survey/route.ts",
+      "supabase/migrations/20260101_x.sql",
+      "shared/auth/supabase-middleware.ts",
+      "proxy.ts",
+      ".github/workflows/ci.yml",
+      "package.json",
+      "features/checkout/ui/CheckoutPage.tsx",
+    ]) {
+      expect(judgeDiff([path], 2).ok, `${path} should be refused`).toBe(false);
+    }
+  });
+
+  it("lets DENY beat ALLOW", () => {
+    // features/checkout/ui/ matches the allow pattern AND the payment deny
+    // pattern. If allow won, widening the allowlist would silently unlock a
+    // denied path.
+    expect(judgeDiff(["features/checkout/ui/Pay.tsx"], 2).ok).toBe(false);
+  });
+
+  it("caps the size of a change", () => {
+    expect(judgeDiff(["features/survey/ui/SurveyPage.tsx"], 10_000).ok).toBe(false);
+  });
+
+  it("refuses an empty diff — nothing is not a fix", () => {
+    expect(judgeDiff([], 0).ok).toBe(false);
+  });
+});
+
+describe("the proof obligation itself", () => {
+  it("passes its own selftest", () => {
+    const out = execFileSync("node", ["scripts/prove-fix.mjs", "--selftest"], { encoding: "utf8" });
+    expect(out).toContain("selftest ok");
+  });
+
+  it("requires the base to reproduce before anything counts", () => {
+    // Without this a "fix" for a defect that was never there would be certified.
+    expect(SRC).toContain("nothing to fix on the base commit");
+  });
+
+  it("re-runs the base to catch a flaky reproduction", () => {
+    // A one-off failure that does not repeat would otherwise certify any diff.
+    expect(SRC).toContain("flake guard");
+    expect(SRC).toContain("the reproduction did not repeat");
+  });
+
+  it("probes a build of the commit, never production", () => {
+    // Pointing at the live site proves something about whatever is deployed,
+    // which is neither commit under test.
+    expect(SRC).toContain("not against production");
+    // REPORT_ORIGIN must be applied AFTER the caller's env, or PROBE_ENV could
+    // redirect the probe at production while the harness reports otherwise.
+    expect(SRC).toMatch(/\.\.\.PROBE_ENV, REPORT_ORIGIN: origin/);
+  });
+
+  it("never touches the working checkout", () => {
+    expect(SRC).toContain("worktree");
+    expect(SRC).not.toMatch(/execFileSync\("git", \["checkout"/);
+  });
+});
