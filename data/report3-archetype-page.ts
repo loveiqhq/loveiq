@@ -1,0 +1,333 @@
+/**
+ * Report V4 — page copy that is not per-archetype.
+ *
+ * Figma: "Report V4 — MOBILE" (1:165). Everything here is transcribed verbatim from
+ * the frame, including its own typos, because this is a fidelity build and the copy
+ * is Mark's to correct — see NOTE markers below.
+ *
+ * Per-archetype card copy lives separately in `data/report3-archetype-card.ts`.
+ * Chapter teasers are NOT here: the frame draws all seventeen as a literal
+ * `[Teaser Text]` placeholder, so they are rendered as that placeholder rather than
+ * invented. `TEASER_PLACEHOLDER` is the single source of that string.
+ */
+
+import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
+
+/** The frame's own placeholder for the 17 unwritten chapter teasers (e.g. 1:871). */
+export const TEASER_PLACEHOLDER = "[Teaser Text]";
+
+/** The frame's own placeholder for the 4 unwritten part introductions (1:855). */
+export const PART_INTRO_PLACEHOLDER = "[Part Introductory Text]";
+
+export interface Report3PartHeading {
+  /** "Part I" … "Part VI" — 1:173 / 1:856. */
+  eyebrow: string;
+  /** Upright serif segment. Empty when the whole title is the accent (Part I). */
+  lead: string;
+  /** Italic segment. Violet on the part+intro blocks, near-black on Part I. */
+  accent: string;
+  /** Part I renders its accent in near-black rather than violet — 1:174. */
+  tone?: "violet" | "ink";
+}
+
+export const REPORT_V4_PARTS: readonly Report3PartHeading[] = [
+  // 1:169 — no introduction paragraph, and the accent is near-black, not violet.
+  { eyebrow: "Part I", lead: "", accent: "Welcome", tone: "ink" },
+  // 1:486
+  { eyebrow: "Part II", lead: "Your ", accent: "Constellation" },
+  // 1:856 / 1:857
+  { eyebrow: "Part III", lead: "How your archetype ", accent: "works" },
+  { eyebrow: "Part IV", lead: "Your Erotic ", accent: "Engine" },
+  { eyebrow: "Part V", lead: "How You ", accent: "connect" },
+  { eyebrow: "Part VI", lead: "Your ", accent: "edges" },
+];
+
+/** Part 1 · Introduction — 1:175 / 1:184. Paragraph breaks as the frame sets them. */
+export const REPORT_V4_INTRODUCTION: readonly string[] = [
+  "Thank you for your trust, and congratulations on having the courage to look inward.",
+  "Many people grow up absorbing narratives about sexuality that create shame, confusion, or a sense of being “wrong”.  At LoveIQ, we offer you a different lens with evidence-based insights rooted in compassion, context, and self-acceptance.",
+  "This report won't tell you who you are.\nInstead, it will help you understand why certain patterns feel familiar, why certain challenges keep repeating, and exactly what you can do, starting today, to move forward.",
+];
+
+/** Part 1 · "What shaped this report" — 1:185 / 1:194. */
+export const REPORT_V4_WHAT_SHAPED =
+  "To support  self-understanding, we combined insights from multiple disciplines such as  neuroscience, psychology and relationship research alongside insights from decades of therapeutic  experience.";
+
+/**
+ * Part 1 · closing paragraph after the science deck — 1:479 / 1:480.
+ *
+ * NOT duplicated here on purpose: `V3Methodology` already ships these exact three
+ * paragraphs as its outro (10392:18726), typo and all — the frame reads "clear clear
+ * and understandable patterns", a duplicated word that predates this work. V4 draws
+ * them without the bold runs, which `V3Methodology`'s `chrome="deck"` handles.
+ *
+ * NOTE for Mark: "clear clear" is in both the frame and the shipped V3 report.
+ */
+
+/* ───────────────────────── Part II ───────────────────────── */
+
+/** A weighted run inside a summary paragraph. The frame mixes 400 / 700 / 800
+ * within single paragraphs (1:742), so runs are the only faithful model. */
+export interface Report3Run {
+  text: string;
+  weight?: 400 | 700 | 800;
+  /** Plus Jakarta Sans Italic. The learn-more article (153:2277) sets quoted
+   * beliefs in italic, which weight alone cannot express. */
+  italic?: true;
+}
+
+export interface Report3Summary {
+  /** 1:742 — seven paragraphs, each opening on a bold or extra-bold lead. */
+  paragraphs: readonly (readonly Report3Run[])[];
+  /** 1:744 — the extra-bold closing line. */
+  closer: string;
+}
+
+/**
+ * Part II · "Summary of the <Archetype>" — 1:736.
+ *
+ * Only Spark Seeker is drawn in the frame, so only Spark Seeker is transcribed.
+ * `missingReport3Summary()` names the rest, the same way `missingReport3Blurbs()`
+ * and `missingReport3CardCopy()` do, so the gap closes loudly.
+ */
+export const REPORT_V4_SUMMARY: Readonly<Record<string, Report3Summary>> = {
+  "Spark Seeker": {
+    paragraphs: [
+      [
+        {
+          weight: 800,
+          text: "The Spark Seeker experiences sexuality primarily as a space for aliveness, chemistry, and playful charge.",
+        },
+        {
+          text: " For them, desire begins in anticipation, energy, and the feeling that something exciting is unfolding. When there is flirtation, novelty, and a sense of \u201Cspark,\u201D their erotic system ignites quickly and vividly.",
+        },
+      ],
+      [
+        {
+          weight: 700,
+          text: "They are lively, charismatic, and pleasure-forward lovers who value teasing, spontaneity, and emotional lightness over heaviness or routine.",
+        },
+        {
+          text: " Sexuality is meaningful to them not as reassurance or devotion, but as a way to feel energized, wanted, and fully awake in the moment. Fun, novelty, and momentum are central to their arousal.",
+        },
+      ],
+      [
+        {
+          weight: 700,
+          text: "At their best, Spark Seekers create intimacy that feels electric, playful, and creatively alive for both partners. ",
+        },
+        {
+          text: "Their presence invites laughter, confidence, and erotic adventure. However, because their desire is closely tied to stimulation and freshness, they ",
+        },
+        {
+          weight: 700,
+          text: "may struggle when sex becomes predictable, duty-like, or emotionally dense.",
+        },
+        {
+          text: "  In such moments, arousal can drop quickly not because attraction is gone, but because their system stops feeling \u201Ccharged.\u201D",
+        },
+      ],
+      [
+        {
+          weight: 800,
+          text: "Spark Seekers may hesitate to slow down or go deeper emotionally, fearing it will dull the spark or trap them in expectations. ",
+        },
+        {
+          text: "This can lead to repeated cycles of intensity followed by restlessness, or to disconnect when a partner asks for more consistency than they naturally offer. They may also worry that if they are not exciting, they will lose desirability or feel bored and stuck.",
+        },
+      ],
+      [
+        {
+          weight: 800,
+          text: "Growth for the Spark Seeker lies in learning to sustain desire beyond novelty, ",
+        },
+        {
+          text: "building depth without losing play, communicating needs for variety without shame, and developing the capacity to enjoy calm intimacy without interpreting it as \u201Cdead.\u201D",
+        },
+      ],
+      [
+        {
+          text: "When supported and understood, the Spark Seeker\u2019s sexuality becomes a powerful source of joy, creativity, and lasting erotic vitality that can keep relationships feeling bright over time.",
+        },
+      ],
+    ],
+    closer: "Not a verdict. A mirror, and a map for where your intimacy goes next.",
+  },
+};
+
+/** Archetypes still waiting on a Part II summary. Asserted by a test. */
+export function missingReport3Summary(): string[] {
+  return KNOWN_ARCHETYPES.filter((name) => !REPORT_V4_SUMMARY[name]);
+}
+
+/** Part II · the Core Archetype heading's lede — 1:580. */
+export const REPORT_V4_CORE_ARCHETYPE_LEDE: readonly Report3Run[] = [
+  { text: "The following archetype is your " },
+  { weight: 700, text: "core archetype " },
+  { text: "- the highest probability match of all 14. " },
+];
+
+/**
+ * Part II · "Snapshot of the <Archetype>" — 1:763 / 55:1700.
+ *
+ * Five claim-and-body rows. V4 draws every row OPEN (55:1701 "Row 1 — open"
+ * through 55:1749), where V3's equivalent was a single-open accordion — see
+ * V4Snapshot for why that is a separate component rather than a prop.
+ */
+export interface Report3SnapshotRow {
+  claim: string;
+  /** "\n" where the frame sets an explicit line break inside the body. */
+  body: string;
+}
+
+export const REPORT_V4_SNAPSHOT: Readonly<Record<string, readonly Report3SnapshotRow[]>> = {
+  "Spark Seeker": [
+    {
+      claim: "Your desire ignites fast and fades faster.",
+      body: "Desire can fade, but it can also be rebuilt. Learning what brings it back is a skill you can practice. \nA drop in desire does not automatically mean something is wrong with you or your relationship.",
+    },
+    {
+      claim: "You initiate playfully; partners hear a demand.",
+      body: "A playful tease can land as pressure for others, leaving them feeling expected to respond while you experience their hesitation as rejection. When neither of you names what happened, a small misread can quickly turn into distance.",
+    },
+    {
+      claim: "Predictability switches your desire off fastest.",
+      body: "When things feel too familiar, desire can fade.  \nOften, a small shift in setting, mood, or routine is enough to bring the spark back.",
+    },
+    {
+      claim: "Restraint is your biggest mind-vs-body split.",
+      body: "The idea of being restrained may feel exciting in fantasy but leave the spark seeker feeling trapped in practice. A fantasy does not need to become reality to be valid or meaningful.",
+    },
+    {
+      claim: "Uncertainty is your rarest strength.",
+      body: "What shuts many people down can spark curiosity. Not knowing what comes next often feels less like a threat and more like an invitation to play.",
+    },
+  ],
+};
+
+/**
+ * Part II · the three highest-scoring archetypes — 1:493.
+ *
+ * The frame draws 43.4 / 39.5 / 36.2. `V3TopThree` already renders this section and
+ * takes exactly this shape, so it is reused rather than rebuilt.
+ */
+export const REPORT_V4_TOP_THREE: Readonly<Record<string, number>> = {
+  "Spark Seeker": 43.4,
+  "Explorer of Edges": 39.5,
+  "Emotional Voyeur": 36.2,
+};
+
+/** Part II · the top-three section's heading — 1:494 (Lora 20/24, -0.8px). */
+export const REPORT_V4_TOP_THREE_HEADING = "3 highest scoring Archetypes";
+
+/** Part II · its lede — 1:496. Two paragraphs, one bold run. */
+export const REPORT_V4_TOP_THREE_LEDE: readonly (readonly Report3Run[])[] = [
+  [{ text: "No one fits a single sexual personality or archetype." }],
+  [
+    { text: "These are your " },
+    { weight: 700, text: "top 3 archetypes out of 14," },
+    { text: " ranked by how closely they match your profile." },
+  ],
+];
+
+/* ───────────────────────── Parts III–VI ───────────────────────── */
+
+/** The frame's placeholder for an expanded chapter's body — 1:860, distinct from
+ * the collapsed rows' `[Teaser Text]`. Also unwritten. */
+export const CHAPTER_COPY_PLACEHOLDER = "[Chapter Copy]";
+
+export interface Report3Chapter {
+  title: string;
+  /**
+   * The section id this chapter maps to in `data/report-general.ts`, taken from
+   * REPORT_V3_CHAPTERS (reportV3Nav.ts:30-75) rather than re-derived. Absent only
+   * where the frame draws a chapter that has no section row at all.
+   */
+  id?: string;
+  /**
+   * Gate against a DIFFERENT section, for chapters with no premium row of their
+   * own. Same indirection as ReportV3NavPart.items (reportV3Nav.ts:141, :168-170).
+   */
+  gateId?: string;
+  /** Which of the frame's two placeholders this row carries. */
+  body: "teaser" | "chapter";
+  /**
+   * Most rows read "<Chapter> - of the <Archetype>", but three do not: Your Sexual
+   * Stage (1:1050), Reading Recommendations (1:1161) and Other Archetypes (1:1172)
+   * are drawn as a plain title. Verified against 1:1161's own design context.
+   */
+  suffix?: false;
+}
+
+/**
+ * Part III · "How your archetype works" — 1:849.
+ *
+ * Every body is a placeholder in the frame, so every body is a placeholder here.
+ * `1:860` is the one instance of the component's default variant and carries
+ * `[Chapter Copy]`; the other four are overridden frames carrying `[Teaser Text]`.
+ * Visually they are identical — same chevron rotation, same serif body.
+ */
+export const REPORT_V4_PART3_CHAPTERS: readonly Report3Chapter[] = [
+  { title: "Typical Beliefs", id: "typical_beliefs", body: "chapter" }, // 1:860
+  { title: "Core Insecurities", id: "core_insecurities", body: "teaser" }, // 1:862
+  { title: "Confidence Level", id: "confidence_level", body: "teaser" }, // 1:873
+  { title: "Power Orientation", id: "power_orientation", body: "teaser" }, // 1:884
+  { title: "Importance of Sexuality", id: "the_importance_of_sexuality", body: "teaser" }, // 1:895
+];
+
+/** Part IV · "Your Erotic Engine" — 1:982. */
+export const REPORT_V4_PART4_CHAPTERS: readonly Report3Chapter[] = [
+  // 1:993. NOTE for Mark: the frame reads "Accelerator & Brakes" (singular) here,
+  // against "Accelerators & Brakes" in the science deck and reportV3Nav.
+  {
+    title: "Accelerator & Brakes",
+    id: "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
+    body: "chapter",
+  },
+  { title: "Libido Challenges", id: "libido_challenges_in_relationships", body: "teaser" }, // 1:995
+  {
+    title: "Arousal, Desire & Pleasure",
+    id: "background_know_how_arousal_desire_and_pleasure",
+    body: "teaser",
+  }, // 1:1006
+  { title: "Arousal Style", id: "arousal_style", body: "teaser" }, // 1:1017
+  { title: "Initiation Style", id: "initiation_style", body: "teaser" }, // 1:1028
+  { title: "Energy & Risk", id: "energy_level", body: "teaser" }, // 1:1039
+  { title: "Your Sexual Stage", id: "sexual_stage", body: "teaser", suffix: false }, // 1:1050
+];
+
+/** Part V · "How You connect" — 38:1507. The only part with no expanded row. */
+export const REPORT_V4_PART5_CHAPTERS: readonly Report3Chapter[] = [
+  {
+    title: "Challenges in Partnership",
+    id: "challenges_in_partnership",
+    gateId: "libido_challenges_in_relationships",
+    body: "teaser",
+  }, // 38:1672
+  { title: "Attachment Style", id: "attachment_style", body: "teaser" }, // 38:1520
+  { title: "Love Language", id: "love_language", body: "teaser" }, // 38:1542
+  { title: "Curiosity & Relationship Form", id: "curiosity_level", body: "teaser" }, // 38:1683
+];
+
+/** Part VI · "Your edges" — 1:1137. */
+export const REPORT_V4_PART6_CHAPTERS: readonly Report3Chapter[] = [
+  {
+    title: "Fantasy vs. Reality",
+    id: "typical_sexual_fantasy_amp_practice_tendencies",
+    body: "chapter",
+  }, // 1:1148
+  {
+    title: "Growth Potentials",
+    id: "typical_growth_potentials_for_the_core_archetype",
+    body: "teaser",
+  }, // 1:1150
+  { title: "Reading Recommendations", id: "recommendations", body: "teaser", suffix: false }, // 1:1161
+  {
+    // `constellation` has no row in reportSections. ReportPage.tsx:794 records the
+    // rule for this class of nav id: free by construction.
+    title: "Other Archetypes",
+    id: "constellation",
+    body: "teaser",
+    suffix: false,
+  }, // 1:1172
+];

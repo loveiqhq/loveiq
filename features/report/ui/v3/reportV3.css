@@ -1881,3 +1881,1845 @@
   margin: 0;
   padding-top: 12px;
 }
+
+/* ══ Archetype card + dimension deck ═══════════════════════════════
+ * Figma "Report V4 — MOBILE" (1:165) > Archetype card 15:815 (361x1031) and the
+ * "Archetype dimension deck" component 15:194, placed as instance 15:847.
+ *
+ * Palette note: #ff6a3d and #f97316 are NOT deck constants — they are
+ * archetypePresentation["Spark Seeker"].iconBg and .dotColor, so both arrive as
+ * --rv3-arch-accent / --rv3-arch-deep and the card works for any archetype.
+ * #d5451c is new: it is both the active meter label and the rgb of the focused
+ * card's glow, rgba(213,69,28,.28).
+ */
+.rv3 {
+  --rv3-accent-ink: #d5451c; /* active meter label + focused-card glow */
+  --rv3-name-ink: #d63200; /* archetype name; already used by .report-snapshot-compare__rail */
+  --rv3-peach: #faf6f4; /* peeking card ground */
+  --rv3-quiet: #9a96a6; /* peeking card sub-label */
+  --rv3-scale: #9c95a3; /* inactive meter step */
+}
+
+.rv3 .rv3-sr {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+/* ── Card shell — 15:815 ─────────────────────────────────────────── */
+.rv3 .rv3-arch {
+  align-items: flex-start;
+  background: #fff;
+  border: 1px solid rgba(255, 106, 61, 0.45);
+  border-radius: 24px;
+  box-shadow:
+    0 20px 80px -24px rgba(255, 106, 61, 0.28),
+    inset 0 1px 0 0 rgba(255, 106, 61, 0.14);
+  display: flex;
+  flex-direction: column;
+  overflow: clip;
+  padding: 19px 1px;
+  width: 100%;
+}
+
+/* ── Header — 15:816 ─────────────────────────────────────────────── */
+.rv3 .rv3-arch__head {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  padding-inline: 22px;
+  width: 100%;
+}
+.rv3 .rv3-arch__name {
+  color: var(--rv3-name-ink);
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 24px;
+  margin: 0;
+}
+.rv3 .rv3-arch__match {
+  padding-block: 10px;
+  width: 323px;
+}
+.rv3 .rv3-arch__match-row {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+.rv3 .rv3-arch__match-label {
+  color: var(--rv3-copy);
+  font-size: 14px;
+  font-weight: 200;
+  line-height: 22.4px;
+}
+.rv3 .rv3-arch__match-value {
+  color: var(--rv3-ink);
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 24px;
+}
+.rv3 .rv3-arch__bar {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 9999px;
+  height: 8px;
+  margin-top: 8px;
+  overflow: clip;
+  width: 100%;
+}
+.rv3 .rv3-arch__bar-fill {
+  /* 15:827 — three stops, 27% / 77% / end. At 43% the fill is 138.875 of 323. */
+  background: linear-gradient(to right, #fe6839 27%, #a78bfa 77%, #e9d5ff 100%);
+  border-radius: 9999px;
+  display: block;
+  height: 8px;
+}
+.rv3 .rv3-arch__tagline {
+  color: var(--rv3-ink);
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.2px;
+  line-height: 24px;
+  margin: 0;
+  width: 323px;
+}
+
+/* ── Core motivation — 15:830 / 15:831 ───────────────────────────── */
+.rv3 .rv3-arch__motive-wrap {
+  padding: 22px;
+  width: 100%;
+}
+.rv3 .rv3-arch__motive {
+  align-items: flex-start;
+  background: linear-gradient(
+    168.3779248324052deg,
+    rgba(255, 106, 61, 0.11) 8.4861%,
+    rgba(255, 106, 61, 0.05) 91.514%
+  );
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  height: 178px;
+  padding: 18px;
+  width: 100%;
+}
+.rv3 .rv3-arch__motive-head {
+  align-items: center;
+  display: flex;
+  gap: 11px;
+  width: 100%;
+}
+.rv3 .rv3-arch__motive-chip {
+  align-items: center;
+  background: var(--rv3-arch-accent);
+  border-radius: 13px;
+  display: inline-flex;
+  flex-shrink: 0;
+  padding: 11px;
+}
+.rv3 .rv3-arch__motive-glyph {
+  background: #fff;
+  display: block;
+  height: 23px;
+  mask: url("/report/v3/dimensions/core-motivation.svg") center / contain no-repeat;
+  -webkit-mask: url("/report/v3/dimensions/core-motivation.svg") center / contain no-repeat;
+  width: 23px;
+}
+.rv3 .rv3-arch__motive-labels {
+  display: flex;
+  flex-direction: column;
+}
+.rv3 .rv3-arch__motive-label {
+  color: var(--rv3-copy);
+  font-size: 14px;
+  font-weight: 200;
+  line-height: 22.4px;
+}
+.rv3 .rv3-arch__motive-value {
+  color: var(--rv3-ink);
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.2px;
+  line-height: 24px;
+  padding-top: 2px;
+}
+.rv3 .rv3-arch__motive-body {
+  color: var(--rv3-copy);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22.4px;
+  margin: 20px 0 0;
+  width: 259px;
+}
+
+/* ── Spacers — 15:846 / 15:924 / 15:925 ──────────────────────────── */
+.rv3 .rv3-arch__gap-15 {
+  height: 15px;
+  width: 100%;
+}
+.rv3 .rv3-arch__gap-26 {
+  height: 26px;
+  width: 100%;
+}
+.rv3 .rv3-arch__gap-14 {
+  height: 14px;
+  width: 100%;
+}
+
+/* ── Meters — 15:926. 3 x 113 + 2 x 5 = 349. ─────────────────────── */
+.rv3 .rv3-arch__meters {
+  display: grid;
+  gap: 20px;
+  padding-inline: 5px;
+  width: 100%;
+}
+.rv3 .rv3-arch__meter-label {
+  color: var(--rv3-copy);
+  display: block;
+  font-size: 14px;
+  font-weight: 200;
+  height: 28.4px;
+  line-height: 22.4px;
+  padding: 3.36px 0 0 19px;
+}
+.rv3 .rv3-arch__meter-bars,
+.rv3 .rv3-arch__meter-scale {
+  display: grid;
+  gap: 5px;
+  grid-template-columns: repeat(3, 113px);
+}
+.rv3 .rv3-arch__meter-bars {
+  padding-top: 9px;
+}
+.rv3 .rv3-arch__meter-scale {
+  padding-top: 7px;
+}
+.rv3 .rv3-arch__seg {
+  background: var(--rv3-hairline);
+  border-radius: 99px;
+  height: 7px;
+}
+.rv3 .rv3-arch__seg.is-on {
+  background: linear-gradient(to right, var(--rv3-arch-accent), var(--rv3-arch-deep));
+}
+.rv3 .rv3-arch__stop {
+  color: var(--rv3-scale);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  line-height: 16px;
+  text-align: center;
+  text-transform: uppercase;
+}
+.rv3 .rv3-arch__stop.is-current {
+  color: var(--rv3-accent-ink);
+}
+
+/* ── Dimension deck — 15:194 / instance 15:847 ───────────────────────
+ * 359x360: a 345 viewport over a 1128 track, plus a 15px indicator row.
+ * The track steps by exactly 280 (card 268 + gap 12), which is the `left`
+ * offset every variant frame uses. The focused card measures 266 against the
+ * peeking cards' 268 because it is auto-width around a 230px paragraph; the
+ * slot stays a constant 268 so the step stays exactly 280 and the track never
+ * reflows mid-swipe. Cost: a non-focused neighbour sits up to 2px from where
+ * its own variant frame draws it, which the frames themselves disagree on.
+ */
+.rv3 .rv3-deck {
+  height: 360px;
+  position: relative;
+  width: 359px;
+}
+.rv3 .rv3-deck__viewport {
+  cursor: grab;
+  height: 345px;
+  overflow: clip;
+  /* Vertical scrolling stays with the page; only horizontal is ours. */
+  touch-action: pan-y;
+  width: 359px;
+}
+.rv3 .rv3-deck__viewport:active {
+  cursor: grabbing;
+}
+.rv3 .rv3-deck__viewport:focus-visible {
+  border-radius: 18px;
+  outline: 2px solid var(--rv3-deck-accent);
+  outline-offset: -2px;
+}
+.rv3 .rv3-deck__track {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  height: 345px;
+  padding: 14px 0 6px 22px;
+  transition: transform 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  width: max-content;
+  will-change: transform;
+}
+/* While a finger is down the track tracks the finger 1:1, with no easing. */
+.rv3 .rv3-deck__viewport.is-dragging .rv3-deck__track {
+  transition: none;
+}
+
+.rv3 .rv3-deck__card {
+  flex-shrink: 0;
+  height: 325px;
+  position: relative;
+  width: 268px;
+}
+.rv3 .rv3-deck__inner {
+  display: flex;
+  flex-direction: column;
+  transition:
+    background 220ms ease,
+    opacity 220ms ease;
+}
+/* Focused — 15:1161 */
+.rv3 .rv3-deck__card.is-focused .rv3-deck__inner {
+  background: #fff;
+  border-radius: 18px;
+  box-shadow:
+    0 2px 6px 0 rgba(22, 16, 33, 0.06),
+    0 30px 60px 0 rgba(213, 69, 28, 0.28);
+  gap: 5px;
+  height: 100%;
+  min-height: 236px;
+  padding: 18px;
+  width: 266px;
+}
+/* Peeking — 15:1139. Inset 8.04/9.73 inside its 268 slot. */
+.rv3 .rv3-deck__card.is-peeking .rv3-deck__inner {
+  background: var(--rv3-peach);
+  border: 0.94px solid rgba(22, 16, 33, 0.1);
+  border-radius: 16.92px;
+  gap: 4.7px;
+  height: 304.56px;
+  left: 8.04px;
+  min-height: 221.84px;
+  opacity: 0.62;
+  padding: 17.86px;
+  position: absolute;
+  top: 9.73px;
+  width: 251.92px;
+}
+
+/* Head row — chip + right-aligned labels */
+.rv3 .rv3-deck__head {
+  align-items: center;
+  display: flex;
+  overflow: clip;
+  width: 100%;
+}
+.rv3 .rv3-deck__chip {
+  align-items: center;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.rv3 .rv3-deck__card.is-focused .rv3-deck__chip {
+  background: var(--rv3-deck-accent);
+  border-radius: 13px;
+  padding: 11px;
+}
+.rv3 .rv3-deck__card.is-peeking .rv3-deck__chip {
+  /* 15:1141 — the accent at 11%, derived so it follows the archetype. */
+  background: color-mix(in srgb, var(--rv3-deck-accent) 11%, transparent);
+  border-radius: 12.22px;
+  padding: 10.34px;
+}
+/* Mask, not <img>: the exported glyphs carry a hardcoded stroke of #D5451C, so
+ * an <img> can never take the archetype accent or go white on the focused chip.
+ * Same reasoning as .rv3-sci__glyph above. */
+.rv3 .rv3-deck__glyph {
+  display: block;
+  mask: var(--rv3-deck-glyph) center / contain no-repeat;
+  -webkit-mask: var(--rv3-deck-glyph) center / contain no-repeat;
+}
+.rv3 .rv3-deck__card.is-focused .rv3-deck__glyph {
+  background: #fff;
+  height: 23px;
+  width: 23px;
+}
+.rv3 .rv3-deck__card.is-peeking .rv3-deck__glyph {
+  background: var(--rv3-deck-accent);
+  height: 21.62px;
+  width: 21.62px;
+}
+
+.rv3 .rv3-deck__labels {
+  align-items: flex-end;
+  display: flex;
+  flex: 1 0 0;
+  flex-direction: column;
+  min-width: 0;
+  overflow: clip;
+  white-space: nowrap;
+}
+.rv3 .rv3-deck__card.is-focused .rv3-deck__title {
+  color: var(--rv3-muted);
+  font-size: 14px;
+  font-weight: 200;
+  line-height: 22.4px;
+  text-transform: capitalize;
+}
+.rv3 .rv3-deck__card.is-focused .rv3-deck__sub {
+  color: var(--rv3-copy);
+  font-size: 12px;
+  font-weight: 200;
+  line-height: 19.2px;
+}
+.rv3 .rv3-deck__card.is-peeking .rv3-deck__title,
+.rv3 .rv3-deck__card.is-peeking .rv3-deck__sub {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.2831px;
+  line-height: 16px;
+  text-transform: uppercase;
+}
+.rv3 .rv3-deck__card.is-peeking .rv3-deck__title {
+  color: var(--rv3-muted);
+}
+.rv3 .rv3-deck__card.is-peeking .rv3-deck__sub {
+  color: var(--rv3-quiet);
+}
+
+.rv3 .rv3-deck__value {
+  color: var(--rv3-ink);
+  font-family: var(--font-serif);
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 28.8px;
+  margin: 0;
+  white-space: nowrap;
+}
+.rv3 .rv3-deck__card.is-focused .rv3-deck__value {
+  letter-spacing: -0.5px;
+  padding-top: 8px;
+}
+.rv3 .rv3-deck__card.is-peeking .rv3-deck__value {
+  letter-spacing: -0.47px;
+  padding-top: 7.52px;
+}
+
+.rv3 .rv3-deck__body {
+  color: var(--rv3-muted);
+  font-weight: 400;
+  margin: 0;
+}
+.rv3 .rv3-deck__card.is-focused .rv3-deck__body {
+  font-size: 14px;
+  line-height: 22.4px;
+  padding: 11px 0 13.5px;
+  width: 230px;
+}
+.rv3 .rv3-deck__card.is-peeking .rv3-deck__body {
+  font-size: 12px;
+  line-height: 19.2px;
+  padding: 10.34px 0 12.69px;
+  width: 216.2px;
+}
+
+/* "LEARN MORE in CHAPTER:" — 15:1152, peeking cards only. */
+.rv3 .rv3-deck__more {
+  border-top: 1px solid rgba(22, 16, 33, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  height: 56px;
+  padding-top: 13px;
+  width: 216.2px;
+}
+.rv3 .rv3-deck__more-label {
+  color: var(--rv3-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.0218px;
+  line-height: 16px;
+  text-transform: uppercase;
+}
+.rv3 .rv3-deck__more-item {
+  align-items: center;
+  display: flex;
+  gap: 7px;
+}
+.rv3 .rv3-deck__bullet {
+  background: var(--rv3-deck-accent);
+  display: block;
+  flex-shrink: 0;
+  height: 13px;
+  mask: url("/report/v3/dimensions/chapter-bullet.svg") center / contain no-repeat;
+  -webkit-mask: url("/report/v3/dimensions/chapter-bullet.svg") center / contain no-repeat;
+  width: 13px;
+}
+.rv3 .rv3-deck__chapter {
+  color: var(--rv3-ink);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 19.2px;
+}
+
+/* Page indicator — 15:1231. Four bars across 359 - 44 = 315, gap 5 => 75 each. */
+.rv3 .rv3-deck__dots {
+  align-items: center;
+  display: flex;
+  gap: 5px;
+  height: 15px;
+  padding: 12px 22px 0;
+  width: 359px;
+}
+.rv3 .rv3-deck__dot {
+  background: var(--rv3-hairline);
+  border: 0;
+  border-radius: 99px;
+  cursor: pointer;
+  flex: 1 0 0;
+  height: 3px;
+  margin: 0;
+  padding: 0;
+  transition: background 220ms ease;
+}
+.rv3 .rv3-deck__dot.is-active {
+  background: var(--rv3-deck-accent);
+}
+.rv3 .rv3-deck__dot:focus-visible {
+  outline: 2px solid var(--rv3-deck-accent);
+  outline-offset: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv3-deck__track,
+  .rv3 .rv3-deck__inner,
+  .rv3 .rv3-deck__dot {
+    transition: none;
+  }
+}
+
+/* ══ Report V4 page chrome ═════════════════════════════════════════
+ * Figma "Report V4 — MOBILE" (1:165). Separate `rv4-` classes rather than edits to
+ * the `rv3-` families above, because those still render the live `?v3=1` report and
+ * V4 changes their type scale. Nothing below touches lines 1–1884.
+ */
+
+/* ── Part heading — 1:169 (divider) / 1:852 (divider + lede) ─────── */
+.rv3 .rv4-part {
+  width: 100%;
+}
+/* 1:169 — only Part I carries the 56px lead-in above its 148px band. */
+.rv3 .rv4-part--lead {
+  padding-top: 56px;
+}
+.rv3 .rv4-part__stage {
+  height: 148px;
+  overflow: clip;
+  position: relative;
+  width: 100%;
+}
+.rv3 .rv4-part--intro .rv4-part__stage {
+  height: auto;
+  /* 1:854 — the glow box is 185 tall and the lede flows beneath it. */
+  padding-top: 185px;
+}
+/* 1:172 — 332x226 at left 14, top -33.39. The two radials are the same pair
+ * .rv3-glow uses; Figma emits them as inline SVG data-URIs, but they are plain
+ * elliptical radials so CSS reproduces them exactly. */
+.rv3 .rv4-part__glow {
+  background:
+    radial-gradient(
+      129.48px 103.96px at 175.96px 106.22px,
+      rgba(208, 89, 118, 0.14) 0%,
+      rgba(208, 89, 118, 0) 73%
+    ),
+    radial-gradient(
+      149.4px 117.52px at 166px 113px,
+      rgba(157, 138, 215, 0.24) 0%,
+      rgba(157, 138, 215, 0) 71%
+    );
+  height: 226px;
+  left: 14px;
+  position: absolute;
+  top: -33.39px;
+  width: 332px;
+}
+/* 1:854 — shorter box, both centres rise with it. */
+.rv3 .rv4-part--intro .rv4-part__glow {
+  background:
+    radial-gradient(
+      129.48px 85.1px at 175.96px 86.95px,
+      rgba(208, 89, 118, 0.14) 0%,
+      rgba(208, 89, 118, 0) 73%
+    ),
+    radial-gradient(
+      149.4px 96.2px at 166px 92.5px,
+      rgba(157, 138, 215, 0.24) 0%,
+      rgba(157, 138, 215, 0) 71%
+    );
+  height: 185px;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+}
+.rv3 .rv4-part__eyebrow {
+  color: var(--rv3-violet-ink);
+  font-size: 12px;
+  font-weight: 600;
+  left: 178.66px;
+  letter-spacing: 2.6px;
+  line-height: 19.2px;
+  margin: 0;
+  position: absolute;
+  text-align: center;
+  text-transform: uppercase;
+  top: 48px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.rv3 .rv4-part__title {
+  color: var(--rv3-ink);
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 400;
+  left: 180.45px;
+  letter-spacing: -0.47px;
+  line-height: 24px;
+  margin: 0;
+  position: absolute;
+  text-align: center;
+  top: 80px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.rv3 .rv4-part__title > span:last-child {
+  color: var(--rv3-violet);
+  font-style: italic;
+}
+/* 1:174 — Part I's accent is near-black, not violet. */
+.rv3 .rv4-part__title.is-ink > span:last-child {
+  color: #191a1b;
+}
+.rv3 .rv4-part__intro {
+  margin: 0;
+  width: 356px;
+}
+
+/* ── Chapter row — 1:175 / 1:185 / 1:862 ─────────────────────────── */
+.rv3 .rv4-chapter {
+  width: 100%;
+}
+.rv3 .rv4-chapter__button {
+  align-items: flex-start;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 8px;
+  padding: 11px 0 0;
+  text-align: left;
+  width: 100%;
+}
+.rv3 .rv4-chapter__title {
+  color: var(--rv3-ink);
+  flex: 330 0 0;
+  font-family: var(--font-serif);
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.47px;
+  line-height: 28.8px;
+  margin: 0;
+  min-width: 0;
+}
+/* 1:865 — the suffixed titles are tracked slightly tighter than the plain ones. */
+.rv3 .rv4-chapter__title.has-suffix {
+  letter-spacing: -0.24px;
+}
+.rv3 .rv4-chapter__of,
+.rv3 .rv4-chapter__archetype {
+  font-size: 14px;
+  line-height: 16.8px;
+}
+.rv3 .rv4-chapter__archetype {
+  color: var(--rv3-name-ink);
+}
+.rv3 .rv4-chapter__chev {
+  color: var(--rv3-violet);
+  flex-shrink: 0;
+  height: 15px;
+  /* Sits 8px below the title's cap height, per the Icon:margin box at 1:866. */
+  margin-top: 8px;
+  transition: transform 260ms ease;
+  width: 15px;
+}
+.rv3 .rv4-chapter__chev svg {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+/* Inverted from the usual accordion convention, and from `.rv3-chapter`, because
+ * that is what the frames draw: the EXPANDED chapter (1:189) has no rotation and
+ * points down, the COLLAPSED one (1:866) carries rotate-180 and points up. */
+.rv3 .rv4-chapter:not(.is-open) .rv4-chapter__chev {
+  transform: rotate(180deg);
+}
+.rv3 .rv4-chapter__body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 0;
+  width: 100%;
+}
+.rv3 .rv4-chapter__body > .rv3-prose,
+.rv3 .rv4-chapter__body > * {
+  width: 356px;
+}
+/* 1:871 — the closed-state teaser is SERIF at 19.2, against the open body's
+ * sans at 25.6. Two different treatments, not one revealed. */
+.rv3 .rv4-chapter__teaser {
+  color: var(--rv3-copy);
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 19.2px;
+  margin: 0;
+  width: 356px;
+}
+
+/* ── Separators — 1:481 (393x44) and 1:850 (361x19) ──────────────── */
+.rv3 .rv4-sep {
+  height: 44px;
+  width: 100%;
+}
+.rv3 .rv4-rule {
+  align-items: center;
+  display: flex;
+  height: 19px;
+  width: 100%;
+}
+.rv3 .rv4-rule::before {
+  background: var(--rv3-hairline);
+  content: "";
+  height: 1px;
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv4-chapter__chev {
+    transition: none;
+  }
+}
+
+/* ── Part block layout ───────────────────────────────────────────────
+ * The frame's parts are 393 wide; most children sit in the 361 content column
+ * (16px gutter), while the science section and the separators run full bleed.
+ */
+.rv3 .rv4-partblock {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+.rv3 .rv4-partblock > .rv4-part,
+.rv3 .rv4-partblock > .rv4-chapter,
+.rv3 .rv4-partblock > .rv4-closing {
+  margin-inline: var(--rv3-gutter);
+  width: 361px;
+}
+/* Figma sets paragraph spacing with an empty line rather than a margin, so the
+ * gap between blocks is exactly one 25.6px line (1:184, 1:480). */
+.rv3 .rv4-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 25.6px;
+  width: 356px;
+}
+.rv3 .rv4-copy > p {
+  margin: 0;
+  width: 356px;
+}
+
+/* The 361 content column. `.rv3-sci__track` escapes it with `margin: 0 -16px`
+ * to reach the full 393 bleed, so this gutter is load-bearing, not cosmetic. */
+.rv3 .rv4-col {
+  padding-inline: var(--rv3-gutter);
+  width: 100%;
+}
+
+/* ── Science + source cards, Report V4 ───────────────────────────────
+ * Figma 1:202 (Article) and 1:425 (source card). Scoped under `.rv3-method.is-v4`
+ * so the V3 deck that `?v3=1` renders is untouched. V4 changes the card
+ * composition rather than just its values: the title moves up beside the icon, the
+ * top accent rule and the "01" number go, and the label loses its small caps.
+ */
+.rv3 .rv3-method.is-v4 {
+  padding-top: 0;
+}
+/* 1:202 — 212x230, padding 15.934 / 14.755 / 16.72, gap 15. */
+.rv3 .rv3-method.is-v4 .rv3-sci__card {
+  gap: 15px;
+  padding: 15.934px 14.755px 16.72px;
+}
+/* 1:204 — icon and title on one row, 9px apart. */
+.rv3 .rv3-method.is-v4 .rv3-sci__head {
+  align-items: center;
+  display: flex;
+  gap: 9px;
+  justify-content: flex-start;
+  width: 100%;
+}
+/* 1:205 — 34.977 tile, accent at 11% behind a 30% border, 10px radius. */
+.rv3 .rv3-method.is-v4 .rv3-sci__icon {
+  align-items: center;
+  background: color-mix(in srgb, var(--rv3-accent) 11%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rv3-accent) 30%, transparent);
+  border-radius: 10px;
+  display: flex;
+  flex-shrink: 0;
+  height: 34.977px;
+  justify-content: center;
+  padding: 1px;
+  width: 34.977px;
+}
+.rv3 .rv3-method.is-v4 .rv3-sci__glyph {
+  height: 19.648px;
+  width: 19.648px;
+}
+/* 1:220 — Lora 16/19.2, and it now shares the header row. */
+.rv3 .rv3-method.is-v4 .rv3-sci__title {
+  flex: 1 0 0;
+  font-size: 16px;
+  letter-spacing: -0.169px;
+  line-height: 19.2px;
+  margin: 0;
+  min-width: 0;
+}
+/* 1:222 */
+.rv3 .rv3-method.is-v4 .rv3-sci__q {
+  color: var(--rv3-muted);
+  font-size: 12px;
+  line-height: 19.2px;
+  margin: 0;
+  width: 183px;
+}
+/* 1:225 — sentence case, #777, regular weight. */
+.rv3 .rv3-method.is-v4 .rv3-sci__label {
+  color: #777;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 1.0218px;
+  line-height: 16px;
+  margin: 0;
+  text-transform: none;
+}
+/* 1:226 */
+.rv3 .rv3-method.is-v4 .rv3-sci__list {
+  gap: 5.502px;
+}
+
+/* 1:425 — source card: white, hairline border, 14px radius, centred title. */
+.rv3 .rv3-method.is-v4 .rv3-src__card {
+  align-items: center;
+  background: #fff;
+  border: 1px solid rgba(22, 16, 33, 0.09);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  padding: 12.71px 11.5px 9.5px;
+}
+/* 1:426 — a 29.87px tile carrying the coral→orchid wash. */
+.rv3 .rv3-method.is-v4 .rv3-src__icon {
+  align-items: center;
+  background: linear-gradient(to right, rgba(254, 104, 57, 0.1), rgba(195, 109, 223, 0.12));
+  border: 1px solid rgba(195, 109, 223, 0.22);
+  border-radius: 8px;
+  display: flex;
+  flex-shrink: 0;
+  height: 29.867px;
+  justify-content: center;
+  margin-bottom: 15.13px;
+  padding: 1px;
+  width: 29.867px;
+}
+/* The exported glyph hardcodes stroke #C9683F, so it is painted through a mask
+ * for the same reason .rv3-sci__glyph is. */
+.rv3 .rv3-method.is-v4 .rv3-src__glyph {
+  background: #c9683f;
+  display: block;
+  height: 17px;
+  mask: var(--rv3-glyph) center / contain no-repeat;
+  -webkit-mask: var(--rv3-glyph) center / contain no-repeat;
+  width: 17px;
+}
+/* 1:433 — centred; 1:434 — left aligned beneath it. */
+.rv3 .rv3-method.is-v4 .rv3-src__title {
+  color: var(--rv3-ink);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 19.2px;
+  margin: 0 0 7.33px;
+  text-align: center;
+  width: 91px;
+}
+.rv3 .rv3-method.is-v4 .rv3-src__body {
+  color: var(--rv3-muted);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 16px;
+  margin: 0;
+  text-align: left;
+  width: 91px;
+}
+
+/* 1:202 — V4's Article is 212x230 against V3's 212.22x276. Figma still fixes the
+ * height so the seven cards align however long each question runs; it is simply a
+ * shorter card, because the title no longer occupies a row of its own. */
+.rv3 .rv3-method.is-v4 .rv3-sci__card {
+  flex: 0 0 212px;
+  height: 230px;
+}
+
+/* ══ Report V4 · Part II ═══════════════════════════════════════════ */
+
+/* ── "Core Archetype" heading — 1:576, 361x148 ───────────────────── */
+.rv3 .rv4-corehead {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 0 0 20px 5.502px;
+  width: 100%;
+}
+.rv3 .rv4-corehead__title {
+  color: var(--rv3-ink);
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 500;
+  /* 1:578 — tracked tighter than either chapter variant. */
+  letter-spacing: -0.8px;
+  line-height: 24px;
+  margin: 0;
+  padding-top: 10px;
+  width: 360.781px;
+}
+.rv3 .rv4-corehead__accent {
+  color: var(--rv3-name-ink);
+}
+.rv3 .rv4-corehead__lede {
+  color: var(--rv3-copy);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 25.6px;
+  margin: 0;
+  width: 356px;
+}
+
+/* ── "Does this resonate?" — 1:833 / 1:747 ───────────────────────── */
+.rv3 .rv4-rating {
+  width: 100%;
+}
+.rv3 .rv4-rating__row {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  height: 26px;
+  justify-content: flex-end;
+}
+.rv3 .rv4-rating__label {
+  color: var(--rv3-muted);
+  font-size: 12px;
+  font-weight: 300;
+  line-height: 19.2px;
+}
+.rv3 .rv4-rating__buttons {
+  align-items: center;
+  display: flex;
+}
+.rv3 .rv4-rating__btn {
+  align-items: center;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  height: 26px;
+  justify-content: center;
+  padding: 4px;
+  width: 26px;
+}
+.rv3 .rv4-rating__btn:focus-visible {
+  outline: 2px solid var(--rv3-violet);
+  outline-offset: 1px;
+}
+/* The exported glyphs hardcode stroke #6B6678, so they are masked like every
+ * other Figma-exported icon here — that is what lets the pressed state tint. */
+.rv3 .rv4-rating__glyph {
+  background: var(--rv3-muted);
+  display: block;
+  height: 18px;
+  width: 18px;
+}
+.rv3 .rv4-rating__glyph--yes {
+  mask: url("/report/v3/rating/resonates.svg") center / contain no-repeat;
+  -webkit-mask: url("/report/v3/rating/resonates.svg") center / contain no-repeat;
+}
+.rv3 .rv4-rating__glyph--no {
+  mask: url("/report/v3/rating/not-resonates.svg") center / contain no-repeat;
+  -webkit-mask: url("/report/v3/rating/not-resonates.svg") center / contain no-repeat;
+}
+.rv3 .rv4-rating__btn.is-on .rv4-rating__glyph {
+  background: var(--rv3-name-ink);
+}
+/* 1:847 — the frame's own 44px tail, which is why the block measures 70. */
+.rv3 .rv4-rating__tail {
+  height: 44px;
+  width: 100%;
+}
+
+/* ── Summary Chapter — 1:736, 393x1486 ───────────────────────────── */
+.rv3 .rv4-summary {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+.rv3 .rv4-summary__inner {
+  width: 361px;
+}
+.rv3 .rv4-summary__heading {
+  color: var(--rv3-ink);
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 21.6px;
+  margin: 0;
+}
+.rv3 .rv4-summary__archetype,
+.rv3 .rv4-snap__archetype {
+  color: var(--rv3-name-ink);
+  letter-spacing: -0.8px;
+}
+.rv3 .rv4-summary__body {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px 0 0 5.502px;
+}
+/* Figma separates these with an empty line, so the gap is one 25.6px line. */
+.rv3 .rv4-summary__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 25.6px;
+  width: 356px;
+}
+.rv3 .rv4-summary__copy p {
+  color: var(--rv3-copy);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 25.6px;
+  margin: 0;
+}
+.rv3 .rv4-summary__closer {
+  color: var(--rv3-copy);
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 25.6px;
+  margin: 0;
+  width: 356px;
+}
+.rv3 .rv4-summary__sep {
+  height: 20px;
+  width: 100%;
+}
+
+/* ── Snapshot — 1:763 / panel 55:1700 ────────────────────────────── */
+.rv3 .rv4-snap {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+.rv3 .rv4-snap__heading {
+  color: var(--rv3-ink);
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 21.6px;
+  margin: 0;
+  padding: 10px 0 20px 5.502px;
+  width: 360.781px;
+}
+/* 55:1700 — one white panel with a violet hairline and a single offset shadow,
+ * against V3's washed, ramp-coloured card. */
+.rv3 .rv4-snap__panel {
+  background: #fff;
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  border-radius: 26px;
+  box-shadow: 20px 22px 54px -20px rgba(103, 60, 120, 0.3);
+  overflow: clip;
+  padding: 26px 22px 24px;
+  width: 361px;
+}
+.rv3 .rv4-snap__divider {
+  background: rgba(22, 16, 33, 0.08);
+  height: 1px;
+  width: 100%;
+}
+.rv3 .rv4-snap__row {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+}
+/* 55:1702 — a 3px rail the frame leaves empty in the delivered state. */
+.rv3 .rv4-snap__edge {
+  align-self: stretch;
+  flex-shrink: 0;
+  padding-block: 8px;
+  width: 3px;
+}
+.rv3 .rv4-snap__content {
+  display: flex;
+  flex: 1 0 0;
+  flex-direction: column;
+  min-width: 0;
+  padding-left: 20px;
+}
+.rv3 .rv4-snap__claimrow {
+  align-items: flex-start;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 12px;
+  padding: 17px 0;
+  text-align: left;
+  width: 100%;
+}
+.rv3 .rv4-snap__claim {
+  color: var(--rv3-ink);
+  flex: 1 0 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.17px;
+  line-height: 25.6px;
+  min-width: 0;
+}
+.rv3 .rv4-snap__chev {
+  color: var(--rv3-muted);
+  flex-shrink: 0;
+  height: 18px;
+  transition: transform 260ms ease;
+  width: 18px;
+}
+.rv3 .rv4-snap__chev svg {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+/* Delivered open, so the chevron points up until a row is closed. */
+.rv3 .rv4-snap__row.is-open .rv4-snap__chev {
+  transform: rotate(180deg);
+}
+.rv3 .rv4-snap__body {
+  color: var(--rv3-copy);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 25.6px;
+  margin: 0;
+  padding-bottom: 18px;
+}
+.rv3 .rv4-snap__sep {
+  height: 20px;
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv4-snap__chev {
+    transition: none;
+  }
+}
+
+/* ── Top-three section wrapper — 1:493 ───────────────────────────── */
+.rv3 .rv4-top3 {
+  width: 100%;
+}
+/* 1:494 — same 20/24/-0.8 treatment as the Core Archetype heading. */
+.rv3 .rv4-top3__heading {
+  color: var(--rv3-ink);
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.8px;
+  line-height: 24px;
+  margin: 0;
+  width: 328px;
+}
+/* 1:496 — the frame separates the two paragraphs with a blank line. */
+.rv3 .rv4-top3__lede {
+  display: flex;
+  flex-direction: column;
+  gap: 25.6px;
+  padding-top: 17px;
+  width: 356px;
+}
+.rv3 .rv4-top3__lede p {
+  color: var(--rv3-copy);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 25.6px;
+  margin: 0;
+}
+
+/* The preview iframe's own document: the report column at its true 393 width. */
+.rv3.rv4-doc {
+  margin: 0;
+  width: 393px;
+}
+.rv3 .rv4-doc__gutter {
+  padding: var(--rv3-gutter);
+}
+
+/* ══ Preview scope — re-assert the mobile report inside .rv4-doc ════
+ * `reportV3.css` breaks to a 2-up grid at 700px and a 3-up grid at 1280px, and
+ * media queries resolve against the BROWSER viewport, not an ancestor's width. A
+ * 393px preview column inside a laptop window therefore renders the DESKTOP
+ * report: all seven science cards laid flat and overflowing, pagination dots
+ * hidden, prose at 17/28. An iframe would give the stylesheet a real 393 viewport,
+ * but `proxy.ts` sets `frame-ancestors 'none'` + `X-Frame-Options: DENY` globally
+ * and that is not worth weakening for a preview.
+ *
+ * Enumerated, not guessed: of every selector inside those media blocks, exactly
+ * five can appear under `.rv4-doc` — the rest target `.rv3-chapter*`,
+ * `.rv3-part*`, `.rv3-glow`, `.rv3-intro-heading*` and `.report-content`, none of
+ * which the V4 page uses. Scoped to `.rv4-doc`, so the real report is untouched.
+ */
+.rv3.rv4-doc .rv3-sci__track {
+  display: flex;
+  gap: 10px;
+  grid-template-columns: none;
+  margin: 0 -16px;
+  overflow: visible;
+  overflow-x: auto;
+  padding: 6px 16px;
+}
+.rv3.rv4-doc .rv3-sci__card {
+  /* The desktop blocks set min-height: 276px, which would stretch V4's 230 card. */
+  min-height: 0;
+}
+.rv3.rv4-doc .rv3-sci__dots {
+  display: flex;
+}
+.rv3.rv4-doc .rv3-src {
+  gap: 8px;
+}
+.rv3.rv4-doc .rv3-prose {
+  font-size: 16px;
+  line-height: 25.6px;
+}
+
+/* Report V4 is specced in Plus Jakarta Sans; the rest of the site is Manrope.
+ * Shadowing the token rather than rewriting every rule means anything that says
+ * `var(--font-sans)` — or simply inherits from `.rv3` — picks the right face up,
+ * including the V3 components the V4 page reuses. Scoped to `.rv4-doc`, so the
+ * live `?v3=1` report keeps rendering in Manrope until that is a deliberate call.
+ *
+ * This is not cosmetic: Manrope is the wider face, so Part I's Introduction was
+ * wrapping two lines long against the frame. */
+.rv3.rv4-doc {
+  --font-sans: var(--font-jakarta);
+}
+
+/* V3 gives every `.rv3-prose` block a 20px lead-in for its own flow rhythm
+ * (the "Flow spacing" rule above). V4 spaces blocks with the frame's own blank
+ * lines instead — the 25.6px gaps on `.rv4-copy` — so that lead double-counts and
+ * added exactly 20px to every paragraph in every chapter. Scoped to where V4
+ * places prose, not to the preview, because it is a property of the V4 layout. */
+.rv3 .rv4-chapter__body .rv3-prose,
+.rv3 .rv4-copy > .rv3-prose,
+.rv3 .rv4-part__intro {
+  padding-top: 0;
+}
+
+/* ══ Report V4 · the whole page ════════════════════════════════════
+ * Figma 1:165. One continuous scroll — `1:166` is a single 393x12,612 container
+ * holding all six parts — with two overlays floating above it. Nothing in the
+ * frame is tabbed.
+ */
+.rv3 .rv4-report {
+  position: relative;
+  width: 100%;
+}
+.rv3 .rv4-report__flow {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* The overlays take no space in the flow: Part I's own 56px lead-in is exactly
+ * the room the header sits in (header 8→56, pill band 80→136). */
+.rv3 .rv4-chrome {
+  height: 0;
+  overflow: visible;
+  position: sticky;
+  /* 1:1279 sits 8px down; the pill band follows at 80 (24 below the header's 56). */
+  top: 8px;
+  z-index: 3;
+}
+/* 1:1279 — 377x48 at 8,8. */
+.rv3 .rv4-chrome__header {
+  align-items: center;
+  background: #fff;
+  border-radius: 9999px;
+  box-shadow:
+    0 25px 40px rgba(22, 16, 33, 0.12),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.6);
+  display: flex;
+  height: 48px;
+  justify-content: space-between;
+  margin: 0 auto;
+  padding: 12px 12px 12px 16px;
+  width: 377px;
+}
+.rv3 .rv4-chrome__lockup {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+.rv3 .rv4-chrome__wordmark {
+  color: var(--rv3-ink);
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  line-height: 21.6px;
+  white-space: nowrap;
+}
+/* 1:1284 — the IQ is bold italic and carries the brand gradient. */
+.rv3 .rv4-chrome__iq {
+  background: linear-gradient(104.35deg, #d05976 25.072%, #c167cf 48.428%, #8887f6 74.649%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-style: italic;
+}
+/* 1:1271 — a 393x56 band at y=80 holding the 291-wide pill. */
+.rv3 .rv4-chrome__pillband {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+  width: 100%;
+}
+.rv3 .rv4-chrome__pill {
+  align-items: center;
+  background: #f4f1fd;
+  border: 1px solid rgba(167, 139, 250, 0.57);
+  border-radius: 12px;
+  box-shadow: 0 6px 10px rgba(22, 16, 33, 0.08);
+  display: flex;
+  height: 56px;
+  justify-content: space-between;
+  padding: 18px;
+  width: 291px;
+}
+.rv3 .rv4-chrome__pill-text {
+  flex: 1 0 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22.4px;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rv3 .rv4-chrome__pill-label {
+  color: var(--rv3-copy);
+}
+.rv3 .rv4-chrome__pill-name {
+  color: var(--rv3-violet-ink);
+}
+.rv3 .rv4-chrome__pill-chev {
+  background: var(--rv3-violet-ink);
+  display: block;
+  flex-shrink: 0;
+  height: 14px;
+  mask: url("/report/v3/chrome/pill-chevron.svg") center / 14px 8px no-repeat;
+  -webkit-mask: url("/report/v3/chrome/pill-chevron.svg") center / 14px 8px no-repeat;
+  width: 14px;
+}
+
+/* ══ Horizontal decks: keep the gutter, scroll natively ════════════
+ * Two corrections that apply to every horizontal deck on the V4 page.
+ *
+ * 1. THE LOST LEFT GUTTER. These scrollers sit in a 16px column and break out of
+ *    it with a negative margin, restoring the inset as padding. But a snap edge
+ *    defaults to the scrollport's border edge, so `scroll-snap-align: start` snaps
+ *    a card flush to x=0 — scrolling the padding away. It looks right until the
+ *    first scroll, then the first card sits hard against the canvas edge and never
+ *    recovers. `scroll-padding-inline-start` moves the snap edge in by the same
+ *    amount as the padding, so card one's snap position is scrollLeft 0.
+ *
+ * 2. The dimension deck is now a native scroller like the other two, so a trackpad
+ *    or wheel moves it. It previously needed a press-and-drag.
+ */
+.rv3 .rv3-sci__track {
+  scroll-padding-inline-start: 16px;
+}
+
+/* 15:1137 — the deck becomes the scrollport; the track is a plain flex row.
+ * Trailing padding is 69px (359 viewport - 22 inset - 268 card), which is what
+ * lets the LAST card reach the same 22px inset as the others. */
+.rv3 .rv3-deck__viewport {
+  cursor: default;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-padding-inline-start: 22px;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.rv3 .rv3-deck__viewport::-webkit-scrollbar {
+  display: none;
+}
+.rv3 .rv3-deck__viewport:active {
+  cursor: default;
+}
+.rv3 .rv3-deck__track {
+  padding: 14px 69px 6px 22px;
+  transform: none;
+  transition: none;
+  width: max-content;
+}
+.rv3 .rv3-deck__card {
+  scroll-snap-align: start;
+}
+
+/* ══ "Go deeper & learn more" ═══════════════════════════════════════════════
+ * Figma 153:2240 (closed) · 153:2260 (expanded) · 153:2280 (expanded & gated).
+ * Three states of one card that sits inside a chapter, below its body copy.
+ *
+ * The frame draws it 392 wide at x=0, so it breaks out of the 361px chapter
+ * column to both canvas edges — the only full-bleed surface on the page.
+ */
+.rv3 .rv4-learn {
+  background: linear-gradient(180deg, rgba(157, 138, 215, 0.1) 0%, rgba(157, 138, 215, 0.02) 100%);
+  border: 1px solid rgba(157, 138, 215, 0.22);
+  border-radius: 27px;
+  margin-inline: calc(var(--rv3-gutter) * -1);
+  padding: 18.5px 22.5px 0.5px;
+  position: relative;
+  width: calc(100% + var(--rv3-gutter) * 2);
+}
+
+/* 230:282 — the layer name is stale; the text is the reading time. */
+.rv3 .rv4-learn__eyebrow {
+  color: #2e7d5b;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 700;
+  height: 25px;
+  line-height: 12px;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+/* 153:2247 — a FIXED 51px, not content height. The chip is 29px and sits 11px
+ * down, so the row would collapse to 40 and cost the card 11px; the frame sets
+ * the height explicitly and leaves 11px of air below the chip. */
+.rv3 .rv4-learn__button {
+  align-items: flex-start;
+  height: 51px;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 8px;
+  padding: 11px 0 0;
+  text-align: left;
+  width: 100%;
+}
+/* 153:2248 */
+.rv3 .rv4-learn__chip {
+  align-items: center;
+  background: rgba(157, 138, 215, 0.16);
+  border-radius: 9px;
+  display: flex;
+  flex: none;
+  height: 29px;
+  justify-content: center;
+  width: 29px;
+}
+.rv3 .rv4-learn__chip img {
+  display: block;
+  height: 17px;
+  width: 17px;
+}
+/* 153:2253 */
+.rv3 .rv4-learn__label {
+  color: #4000b6;
+  flex: 1 1 auto;
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.24px;
+  line-height: 24px;
+}
+/* 153:2255 — 15px, sitting 8px below the label's cap height. */
+.rv3 .rv4-learn__chev {
+  display: block;
+  flex: none;
+  padding-top: 8px;
+}
+.rv3 .rv4-learn__chev img {
+  display: block;
+  height: 15px;
+  transition: transform 0.18s ease;
+  width: 15px;
+}
+.rv3 .rv4-learn.is-open .rv4-learn__chev img {
+  transform: rotate(180deg);
+}
+
+/* 153:2257 closed / 153:2277 open */
+.rv3 .rv4-learn__body {
+  padding-top: 4px;
+  position: relative;
+}
+.rv3 .rv4-learn__body > :last-child,
+.rv3 .rv4-learn__gated > :last-child {
+  margin-bottom: 0;
+}
+
+/* 153:2240 — the teaser box is exactly 240px: ten 22.4px lines plus one 16px
+ * paragraph gap. Mark faked the fade by colouring the last three lines
+ * progressively lighter (#7e7e7e / #b5b5b5 / #e5e5e5); a mask reproduces those
+ * alphas without baking the cut into the copy, so it survives a reflow. */
+.rv3 .rv4-learn__teaser {
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    #000 0%,
+    #000 70%,
+    rgba(0, 0, 0, 0.5) 78%,
+    rgba(0, 0, 0, 0.29) 87%,
+    rgba(0, 0, 0, 0.1) 96%,
+    rgba(0, 0, 0, 0.05) 100%
+  );
+  mask-image: linear-gradient(
+    180deg,
+    #000 0%,
+    #000 70%,
+    rgba(0, 0, 0, 0.5) 78%,
+    rgba(0, 0, 0, 0.29) 87%,
+    rgba(0, 0, 0, 0.1) 96%,
+    rgba(0, 0, 0, 0.05) 100%
+  );
+  max-height: 240px;
+  overflow: hidden;
+}
+
+/* 153:2259 and 230:238 — the same centred link, over the fade in both states. */
+.rv3 .rv4-learn__open,
+.rv3 .rv4-learn__showmore {
+  background: none;
+  border: 0;
+  color: #561dbd;
+  cursor: pointer;
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  height: 25px;
+  left: 50%;
+  line-height: 12px;
+  padding: 0;
+  position: absolute;
+  text-align: center;
+  text-decoration: underline;
+  text-underline-position: from-font;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+/* Flush with the card's bottom edge: 314 + 25 = the 339 the frame measures. */
+.rv3 .rv4-learn__open {
+  bottom: 0;
+}
+
+/* ── article body — 153:2277 ─────────────────────────────────────────────── */
+.rv3 .rv4-prose__p {
+  color: #000;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22.4px;
+  margin: 0 0 16px;
+}
+.rv3 .rv4-prose__p strong,
+.rv3 .rv4-prose__list strong {
+  font-weight: 700;
+}
+.rv3 .rv4-prose__p em,
+.rv3 .rv4-prose__list em {
+  font-style: italic;
+  font-weight: inherit;
+}
+/* Lora Bold 16/19.2 — five subheadings in the article. */
+.rv3 .rv4-prose__h {
+  color: var(--rv3-ink);
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 19.2px;
+  margin: 0 0 14px;
+}
+/* The block BEFORE a subheading carries 26px rather than 16. Expressed with
+ * `:has()` so the rule follows the content instead of needing a flag on every
+ * block — the technique report.css:20521 already uses to find locked sections. */
+.rv3 .rv4-prose__p:has(+ .rv4-prose__h),
+.rv3 .rv4-prose__list:has(+ .rv4-prose__h) {
+  margin-bottom: 26px;
+}
+.rv3 .rv4-prose__list {
+  color: #000;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 22.4px;
+  list-style: disc;
+  margin: 0 0 16px;
+  padding-left: 21px;
+}
+.rv3 .rv4-prose__list li {
+  margin-bottom: 8px;
+}
+.rv3 .rv4-prose__list li:last-child {
+  margin-bottom: 0;
+}
+
+/* ── the gated window — 173:230 ──────────────────────────────────────────── */
+.rv3 .rv4-learn__gate {
+  cursor: pointer;
+  padding-top: 16px;
+  position: relative;
+}
+/* 170:231. `min-height` and `max-height` are deliberately the same value: a
+ * locked reader whose payload has had `gated` stripped to nothing must still get
+ * a 580px window, or the locked layout stops matching the unlocked one — which
+ * is the whole contract that lets the server withhold the copy. The blur is
+ * decoration over a bounded leak budget, never the control; see
+ * LOCKED_ARTICLE_GATED_BLOCKS in contentGating.ts. */
+.rv3 .rv4-learn__gated {
+  filter: blur(2.5px);
+  max-height: 580px;
+  min-height: 580px;
+  overflow: clip;
+  user-select: none;
+}
+/* 230:236 — fades to #fcfbfe, which is the card's own gradient at its foot. */
+.rv3 .rv4-learn__fade {
+  background: linear-gradient(
+    180deg,
+    rgba(252, 251, 254, 0) 0%,
+    rgba(252, 251, 254, 0.66) 42%,
+    #fcfbfe 100%
+  );
+  bottom: 0;
+  display: block;
+  height: 63px;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+}
+/* 230:238 — 596 - 576.5 = 19.5 from the window's foot. */
+.rv3 .rv4-learn__showmore {
+  bottom: 19.5px;
+}
+
+/* ── the "Premium content" card — 153:2301 ───────────────────────────────────
+ * Floats 90px into the blurred window. Its geometry is a uniform x0.71941 scale
+ * of a larger original (0.719 was 1px, 17.268 was 24, 162.604 was 226), so the
+ * fractions are the design rather than rounding noise and are kept as drawn. */
+.rv3 .rv4-premium {
+  align-items: center;
+  background: #fff;
+  border: 0.719px solid #fe6839;
+  border-radius: 17.268px;
+  box-shadow: -0.719px 5.756px 7.195px 0 rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  height: 191px;
+  left: 50%;
+  overflow: clip;
+  padding: 15.109px 32.376px 0.719px;
+  position: absolute;
+  top: 90px;
+  transform: translateX(-50%);
+  width: 330px;
+}
+/* 153:2303 */
+.rv3 .rv4-premium__head {
+  align-items: center;
+  display: flex;
+  gap: 9.824px;
+  justify-content: center;
+}
+/* 153:2304 */
+.rv3 .rv4-premium__badge {
+  align-items: center;
+  background: linear-gradient(135deg, #d05976 0%, #c167cf 47%, #8887f6 100%);
+  border-radius: 5.881px;
+  box-shadow: 0 2.941px 7.352px -2.206px rgba(193, 103, 207, 0.5);
+  display: flex;
+  flex: none;
+  height: 22.055px;
+  justify-content: center;
+  width: 22.055px;
+}
+.rv3 .rv4-premium__badge img {
+  display: block;
+  height: 9.557px;
+  width: 9.557px;
+}
+/* 153:2307 */
+.rv3 .rv4-premium__title {
+  color: #000;
+  font-family: var(--font-serif);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.4666px;
+  line-height: 28.8px;
+  margin: 0;
+  white-space: nowrap;
+}
+/* 153:2309. Figma draws a uniform 20.865px pad, but its own row is 229.5 wide
+ * inside a 223.5 container — it simply lets the guarantee line overflow. Here it
+ * would wrap instead, which costs 20px of card height, so the HORIZONTAL pad
+ * comes down to 17px: "14-day money-back guarantee" needs 183.83px in Plus
+ * Jakarta Sans Bold 12 and that buys it 187.5. Vertical padding is untouched, so
+ * the box keeps the 78px the frame measures. */
+.rv3 .rv4-premium__guarantee {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.01);
+  border: 0.719px solid rgba(0, 0, 0, 0.08);
+  border-radius: 14.39px;
+  display: flex;
+  gap: 11.512px;
+  padding: 20.865px 17px;
+  width: 100%;
+}
+.rv3 .rv4-premium__shield {
+  display: block;
+  flex: none;
+  height: 28.779px;
+  position: relative;
+  width: 28.779px;
+}
+.rv3 .rv4-premium__shield-bg {
+  display: block;
+  height: 28.779px;
+  width: 28.779px;
+}
+.rv3 .rv4-premium__shield-tick {
+  height: 13.5px;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 9.233px;
+}
+.rv3 .rv4-premium__guarantee-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.rv3 .rv4-premium__guarantee-head {
+  color: #009148;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 19.2px;
+}
+.rv3 .rv4-premium__guarantee-sub {
+  color: #505253;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 16px;
+}
+/* 153:2320 */
+.rv3 .rv4-premium__cta {
+  align-items: center;
+  background: #fe6839;
+  border: 0;
+  border-radius: 999px;
+  box-shadow:
+    0 5.756px 7.195px -4.317px rgba(254, 104, 57, 0.35),
+    0 14.39px 17.987px -3.597px rgba(254, 104, 57, 0.3);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  flex: none;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 800;
+  height: 26.621px;
+  justify-content: center;
+  line-height: 19.2px;
+  padding: 0;
+  white-space: nowrap;
+  width: 162.604px;
+}
+
+/* The article's text column is 358px, NOT the card's 346px content box.
+ *
+ * 153:2277 is drawn 358 wide at x=22.5 inside a 392 card whose padding leaves
+ * 347 — so the copy overflows its own right padding by 11px, giving a 22.5 left
+ * gutter against ~12 on the right. That reads as auto-layout slop, but it is
+ * load-bearing: at 346 the article measures 12,008 against the frame's 11,624
+ * (+3.30%) and breaks "…consciously decide | what" a word early, while at 358 it
+ * lands on 11,582 (-0.36%) with Figma's own line breaks. Measured, not assumed.
+ *
+ * Scoped to the prose so the gate keeps the card's natural width and the floating
+ * premium card still centres where 153:2300 puts it.
+ */
+.rv3 .rv4-learn .rv4-prose__p,
+.rv3 .rv4-learn .rv4-prose__h,
+.rv3 .rv4-learn .rv4-prose__list,
+.rv3 .rv4-learn__teaser {
+  width: 358px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv4-learn__chev img {
+    transition: none;
+  }
+}
+
+/* A chapter whose body is an article has no `[Chapter Copy]` placeholder, so
+ * collapsing it leaves the body empty — and `.rv4-chapter__body`'s 20px vertical
+ * padding would show as 40px of dead space under the title. */
+.rv3 .rv4-chapter__body:empty {
+  padding: 0;
+}
+
+/* Chapters 2 and 3 (235:*, 244:*) brought three variations with them. */
+
+/* The closed clamp is ten LINES of copy, which measures 240px when a paragraph
+ * gap falls inside them (153:2240, 244:238) and 224px when none does (235:234).
+ * CSS cannot count lines across sibling paragraphs, so the article carries the
+ * value and this is only the default. */
+.rv3 .rv4-learn__teaser {
+  max-height: var(--rv4-teaser-h, 240px);
+}
+/* 244:276 stacks three bold questions with no rule between them. */
+.rv3 .rv4-prose__p.is-tight {
+  margin-bottom: 0;
+}
+/* 235:272's "five questions" is numbered, not bulleted. */
+.rv3 .rv4-prose__list.is-ordered {
+  list-style: decimal;
+}
