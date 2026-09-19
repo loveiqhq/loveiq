@@ -125,6 +125,25 @@ describe("the proof obligation itself", () => {
     expect(SRC).toMatch(/\.\.\.PROBE_ENV, REPORT_ORIGIN: origin/);
   });
 
+  /**
+   * A caller should not have to know whether a ref exists locally. In CI it
+   * never does — actions/checkout fetches the ref it checked out and nothing
+   * else — so a branch that exists perfectly well on the remote failed
+   * `git rev-parse` with 'unknown revision'. The first run of prove-fix.yml
+   * died on exactly that, before measuring anything at all.
+   */
+  it("resolves a ref that only exists on the remote", () => {
+    expect(SRC).toContain("`origin/${ref}`");
+    // `^{commit}` so a tag or an annotated object resolves to a commit rather
+    // than to itself, which would break the later worktree add.
+    expect(SRC).toContain("^{commit}");
+  });
+
+  it("fails loudly when a ref cannot be found at all", () => {
+    // Silently falling back to HEAD would prove a diff nobody asked about.
+    expect(SRC).toMatch(/cannot resolve .* locally or on origin/);
+  });
+
   it("never touches the working checkout", () => {
     expect(SRC).toContain("worktree");
     expect(SRC).not.toMatch(/execFileSync\("git", \["checkout"/);

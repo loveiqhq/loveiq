@@ -200,11 +200,31 @@ async function main() {
   const git = (...a) => execFileSync("git", a, { encoding: "utf8" }).trim();
   const step = (n, msg) => console.log(`\n[${n}] ${msg}`);
 
+  /**
+   * Try the ref as given, then as a remote branch.
+   *
+   * A caller should not have to know whether `my-branch` exists locally. In CI
+   * it never does: actions/checkout fetches the ref it checked out and nothing
+   * else, so a branch that exists perfectly well on the remote fails
+   * `git rev-parse` with 'unknown revision'. The first run of prove-fix.yml
+   * died on exactly that, before measuring anything.
+   */
+  const resolve = (ref) => {
+    for (const candidate of [ref, `origin/${ref}`, `refs/remotes/origin/${ref}`]) {
+      try {
+        return git("rev-parse", "--verify", `${candidate}^{commit}`);
+      } catch {
+        /* try the next spelling */
+      }
+    }
+    throw new Error(`cannot resolve "${ref}" locally or on origin`);
+  };
+
   let baseSha;
   let fixSha;
   try {
-    baseSha = git("rev-parse", BASE_REF);
-    fixSha = git("rev-parse", FIX_REF);
+    baseSha = resolve(BASE_REF);
+    fixSha = resolve(FIX_REF);
   } catch (err) {
     console.error(`could not resolve refs: ${err.message}`);
     process.exit(2);
