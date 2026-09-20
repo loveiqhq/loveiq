@@ -29,9 +29,27 @@ already carry the anti-inference rule and a HARD RULE against flagging taps on
 ordinary text, and the model broke both. The gate has to sit outside the model.
 
 So a finding earns a Slack post only by being **reproduced in a real browser at
-the viewport the session reported** — `scripts/verify-ux-findings.mjs`, every
-three hours in CI. `app/api/cron/ux-review/route.ts` collects and posts one
-summary a day; it cannot open a browser, so it publishes no findings.
+the viewport the session reported** — `scripts/verify-ux-findings.mjs`, on a
+three-hourly schedule in CI. `app/api/cron/ux-review/route.ts` collects and posts
+one summary a day; it cannot open a browser, so it publishes no findings.
+
+**Two windows, and neither may be set from the schedule.** Both were, and both
+lost readers — measured 2026-09-20, six days after the scanners went live.
+
+|                                       | bounds                                                         | why it is not the schedule                                                                      |
+| ------------------------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `LOOKBACK_HOURS` (24)                 | how long a **deferred finding stays reachable**                | the workflow asks for eight runs a day and GitHub fires about five, with real gaps to **6h36m** |
+| `DAYS` (14, `ux-review-coverage.mjs`) | how far back an **unwatched recording can still be re-queued** | PostHog holds every recording for ~27 days, so nothing needs abandoning inside a fortnight      |
+
+The work is bounded separately and always: `PROBE_BUDGET` caps real browser time
+per run, `MAX_ENQUEUE` caps observations queued per run, and both print what they
+held over. **Bound the work, never the window** — a window shorter than the real
+gap between runs turns "left for the next run" into silent deletion. It cost 9 of
+60 findings (15%) and made every miss permanent after 48 hours.
+
+Both queries also drain **oldest-first**. Newest-first plus a per-run budget is a
+starvation queue: the newest always outrank the tail, so the same items are
+deferred every run until they leave the window.
 
 **What it concluded is written down.** `public.ux_finding`, one row per
 observation, written by the verifier at every terminal path — contradicted, gap,

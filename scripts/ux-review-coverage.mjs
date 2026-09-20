@@ -65,7 +65,44 @@ for (const signal of ["unhandledRejection", "uncaughtException"]) {
     process.exit(2);
   });
 }
-const DAYS = Number(process.env.DAYS ?? 4);
+/**
+ * REJECT AN ARGUMENT WE DO NOT UNDERSTAND.
+ *
+ * The window is an env var, not a flag, and `--days 7` was accepted in silence
+ * and measured four days while the header said seven. A measurement that
+ * answers a question nobody asked is worse than one that refuses.
+ */
+{
+  const known = new Set(["--enqueue"]);
+  const bad = process.argv.slice(2).filter((a) => !known.has(a));
+  if (bad.length > 0) {
+    console.error(`unknown argument(s): ${bad.join(" ")}`);
+    console.error(`the window is an environment variable: DAYS=7 node ${process.argv[1]}`);
+    process.exit(2);
+  }
+}
+
+/**
+ * How far back to look for a reader nothing watched.
+ *
+ * Was 4 here and 2 in the workflow, on the reasoning that a short window
+ * "catches stragglers without reaching back over recordings that have already
+ * expired". Measured 2026-09-20: PostHog still holds every recording back to
+ * 2026-08-24 — 27 days — and four readers from 2026-09-13 with 17, 36 and 11
+ * dead clicks had been sitting unwatched for a week, permanently out of reach
+ * of a two-day window. Nothing expires inside a fortnight, so nothing needs to
+ * be abandoned inside one.
+ */
+const DAYS = Number(process.env.DAYS ?? 14);
+
+/**
+ * How many observations one run may QUEUE. Bounds the work, not the lookback —
+ * the same distinction the verifier's PROBE_BUDGET makes, and the one the two-
+ * day window got backwards. A wide window over a standing backlog would
+ * otherwise fire hundreds of observations at once; this drains it over
+ * successive runs instead, oldest reader first.
+ */
+const MAX_ENQUEUE = Number(process.env.MAX_ENQUEUE ?? 30);
 
 /** Trigger events the four scanners query on. A session with none of these
  *  matches no scanner, so it is out of scope rather than missed. */
@@ -191,7 +228,12 @@ if (misses.length > 0) {
 
   let queued = 0;
   let failed = 0;
-  for (const m of misses) {
+  // Oldest reader first, so a standing backlog drains from the end that is
+  // closest to expiring rather than being re-queued newest-first forever.
+  const ordered = [...misses].sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  const batch = ordered.slice(0, MAX_ENQUEUE);
+  const held = ordered.length - batch.length;
+  for (const m of batch) {
     for (const [i, trigger] of TRIGGERS.entries()) {
       if ((m.counts[i] ?? 0) === 0) continue;
       const sc = byTrigger.get(trigger);
@@ -221,6 +263,11 @@ if (misses.length > 0) {
     }
   }
   console.log(`\n${queued} observation(s) queued, ${failed} failed.`);
+  // Printed, never swallowed: a standing backlog has to be visible or the run
+  // looks identical whether it caught up or fell further behind.
+  if (held > 0) {
+    console.log(`${held} reader(s) held for the next run (cap ${MAX_ENQUEUE}) — oldest go first.`);
+  }
   /**
    * Exit 0 when the gap was CLOSED, not when there was no gap.
    *

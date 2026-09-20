@@ -96,12 +96,23 @@ jobs:
       #
       # So the gap is closed here rather than by hand. The enqueue is idempotent
       # — the workflow id is derived from (scanner, session) — so re-running
-      # cannot double-charge, and a two-day window catches stragglers without
-      # reaching back over recordings that have already expired.
+      # cannot double-charge.
+      #
+      # THE WINDOW WAS TWO DAYS, and that was wrong. The reasoning was that a
+      # short window avoids "reaching back over recordings that have already
+      # expired", but nothing expires that fast: measured 2026-09-20, PostHog
+      # still holds every recording back to 2026-08-24, twenty-seven days. What
+      # the short window actually did was make a miss PERMANENT after forty-eight
+      # hours — four readers from 2026-09-13, one of them with 36 dead clicks,
+      # had been unwatched for a week and no run could ever reach them again.
+      #
+      # The window is now the script's default (14 days) and the WORK is bounded
+      # instead, by MAX_ENQUEUE, so a standing backlog drains over successive
+      # runs oldest-reader-first rather than firing hundreds of observations at
+      # once. The held count is printed on every run.
       - name: Re-queue recordings no scanner opened
         run: npx tsx scripts/ux-review-coverage.mjs --enqueue
         env:
-          DAYS: "2"
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

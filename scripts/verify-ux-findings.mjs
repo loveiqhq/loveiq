@@ -54,7 +54,29 @@ const DRY_RUN = process.argv.includes("--dry-run");
  *  classifier is matching the prose the scanners currently emit. */
 const CLASSIFY_ONLY = process.argv.includes("--classify-only");
 const PROJECT = "244778";
-const LOOKBACK_HOURS = Number(process.env.LOOKBACK_HOURS ?? 6);
+/**
+ * How far back a run looks — and therefore how long a DEFERRED finding stays
+ * reachable.
+ *
+ * This was 6, on the stated reasoning that "this workflow runs every three
+ * hours, so the claim is always stale by then and the finding comes back".
+ * The schedule says `41 * / 3 * * *`; GitHub actually fires about five of those
+ * eight runs a day, with real gaps up to 6h36m — measured 2026-09-20 over the
+ * six days since the scanners went live. A gap longer than the window means the
+ * findings a run deferred have aged out before the next one looks, so
+ * "left for the next run" was a promise nothing kept.
+ *
+ * It cost 9 of 60 findings (15%). The 2026-09-18 11:48 run printed
+ * "21 finding(s) in the last 6h … 7 left for the next run (probe budget 10)";
+ * the six oldest of that tail have no ledger row and never will.
+ *
+ * Widening this is cheap because it does NOT widen the work: PROBE_BUDGET still
+ * bounds real browser time, and an already-answered finding is rejected by
+ * claimFinding for one Supabase round-trip, before any probe starts. A day is
+ * comfortably longer than any gap GitHub has produced, and matches the window
+ * the digest already reports on.
+ */
+const LOOKBACK_HOURS = Number(process.env.LOOKBACK_HOURS ?? 24);
 
 /**
  * Criterion → probe, keyed by what the scanner's prose actually says. Crude and
@@ -626,7 +648,12 @@ const findings = await posthog(`
   WHERE event = '$recording_observed'
     AND timestamp > now() - INTERVAL ${LOOKBACK_HOURS} HOUR
     AND properties.scanner_output_verdict = 'yes'
-  ORDER BY timestamp DESC
+  -- OLDEST FIRST. Newest-first plus a budget is a starvation queue: on a busy
+  -- day the newest ten always outrank the tail, so the same findings are
+  -- deferred every run until they leave the window. Oldest-first drains it —
+  -- arrivals run ~11/day against a budget of 10 on ~5 runs, so nothing waits
+  -- long, and the thing that waits is the thing with the most slack left.
+  ORDER BY timestamp ASC
   LIMIT 50
 `);
 
