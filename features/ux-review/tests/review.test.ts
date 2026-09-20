@@ -8,7 +8,10 @@ import {
   isSafeSessionId,
   sessionClickTarget,
   sessionViewport,
+  fetchCoverageStats,
   fetchDailyStats,
+  fetchVerificationStats,
+  isChallengerScanner,
   fetchFindings,
   recordingLink,
   type UxFinding,
@@ -675,5 +678,93 @@ describe("sessionViewport", () => {
     vi.stubEnv("POSTHOG_API_KEY", "phx_test");
     stub([[null, null, ""]]);
     await expect(sessionViewport("01a0-sess")).resolves.toBeNull();
+  });
+});
+
+/**
+ * A CHALLENGER MUST NOT SPEAK TO THE TEAM, AND THE DIGEST IS PART OF "THE TEAM".
+ *
+ * The verifier already refuses to post a challenger's verdicts or open its
+ * pull requests. The digest reads PostHog and the ledger directly and had no
+ * notion of role, so the first challenger — created 2026-09-20 on the same
+ * trigger event as its champion — rendered a second bullet:
+ *
+ *     • The report — watched 85, suspected 27
+ *     • The report — watched  3, suspected  0
+ *
+ * Two lines, the same label, different numbers, in the one message written for
+ * someone who does not read the code. Caught by rendering the real digest
+ * against production data before it sent, not by a test.
+ */
+describe("the digest ignores challenger scanners", () => {
+  const CHALLENGER = "LoveIQ report UX (challenger: observation only)";
+
+  it("knows which scanners are experiments", () => {
+    expect(isChallengerScanner(CHALLENGER)).toBe(true);
+    expect(isChallengerScanner("LoveIQ report UX")).toBe(false);
+    // An unknown scanner is PRODUCTION. Defaulting the other way would let a
+    // scanner missing from git vanish from the digest silently; drift already
+    // alerts on that, and hiding it here would mask the alert.
+    expect(isChallengerScanner("Something nobody pinned")).toBe(false);
+    expect(isChallengerScanner(null)).toBe(false);
+  });
+
+  it("drops its bullet from the daily counts", async () => {
+    vi.stubGlobal("fetch", async () => ({
+      ok: true,
+      json: async () => ({
+        results: [
+          ["LoveIQ report UX", 85, 27],
+          [CHALLENGER, 3, 0],
+        ],
+      }),
+    }));
+    vi.stubEnv("POSTHOG_API_KEY", "phx_test");
+    const rows = await fetchDailyStats();
+    expect(rows.map((r) => r.scanner)).toEqual(["LoveIQ report UX"]);
+  });
+
+  it("keeps its verdicts out of the numbers Marcus reads", async () => {
+    // `undelivered` matters most: a challenger is undelivered BY DESIGN, so
+    // unfiltered it reports the experiment working as verdicts reaching nobody.
+    vi.stubGlobal("fetch", async () => ({
+      ok: true,
+      json: async () => [
+        { outcome: "clear", delivered: true, scanner_name: "LoveIQ report UX" },
+        { outcome: "clear", delivered: false, scanner_name: CHALLENGER },
+        { outcome: "reproduced", delivered: false, scanner_name: CHALLENGER },
+      ],
+    }));
+    vi.stubEnv("SUPABASE_URL", "https://test.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service_key");
+    const v = await fetchVerificationStats();
+    expect(v?.total).toBe(1);
+    expect(v?.clear).toBe(1);
+    expect(v?.reproduced).toBe(0);
+    expect(v?.undelivered).toBe(0);
+  });
+
+  it("does not count a challenger-only observation as coverage", async () => {
+    // Coverage exists to expose a gap. A challenger can be deleted tomorrow,
+    // so counting its observations would report a reader as watched when the
+    // scanner that speaks to the team never opened the recording.
+    let hogql = "";
+    vi.stubGlobal("fetch", async (_url: string, init: { body?: string }) => {
+      const body = String(init?.body ?? "");
+      if (body.includes("HogQLQuery")) {
+        hogql = body;
+        return { ok: true, json: async () => ({ results: [[1]] }) };
+      }
+      return {
+        ok: true,
+        json: async () => [{ posthog_session_id: "01a0b000-0000-7000-8000-000000000000" }],
+      };
+    });
+    vi.stubEnv("POSTHOG_API_KEY", "phx_test");
+    vi.stubEnv("SUPABASE_URL", "https://test.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service_key");
+    await fetchCoverageStats();
+    expect(hogql, "the coverage query must exclude challengers").toContain(CHALLENGER);
+    expect(hogql).toMatch(/NOT IN/);
   });
 });
