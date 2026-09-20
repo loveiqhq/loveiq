@@ -326,6 +326,40 @@ describe("ingestDrive", () => {
     expect(res.detail).toMatch(/colleagueNotes=\d+\/\d+asked/);
   });
 
+  /**
+   * THE FILTER, NOT THE PREDICATE.
+   *
+   * `isVendorBilling` and `isJobApplication` were each covered by two dozen cases, and
+   * deleting either one from the listing filter left every one of those green — 1,482
+   * tests passing while the walk indexed receipts and strangers' CVs again. A predicate
+   * nothing calls is decoration. These two drive the whole run and read the rows it
+   * actually wrote.
+   *
+   * Filtered at LISTING time on purpose, so the ids never reach `touch` or `deferred`
+   * either: a skipped document has to look ABSENT to the sweep, not merely unfetched,
+   * or the sweep would protect the very rows being removed.
+   */
+  it.each([
+    ["a vendor invoice", "ZZbillingZZ", "MT-INV00945830.pdf", "application/pdf"],
+    ["a candidate's CV", "ZZcandidateZZ", "Nejra_Rizvic_CV.pdf", "application/pdf"],
+  ])("never even fetches %s that reached the listing", async (_what, id, name, mimeType) => {
+    files = [FILE, { ...FILE, id, name, mimeType }];
+    await ingestDrive(STAMP);
+    const written = dbCalls
+      .filter(
+        (c) =>
+          c.method !== "GET" && c.path.includes("brain_chunk") && c.path.includes("on_conflict")
+      )
+      .flatMap((c) => JSON.parse(c.body) as Array<{ source_id: string }>);
+    // Positive control, or a run that indexed NOTHING would pass this just as well.
+    expect(written.map((r) => r.source_id)).toEqual(["doc:1AbCdEf"]);
+    // Asserted on the HTTP calls, not on what was written: a filtered file must never
+    // be requested at all. Asserting only "no row was written" is vacuous here — a pdf
+    // whose export yields no text is dropped as empty anyway, so the first version of
+    // this test passed with the filter deleted.
+    expect(httpCalls.some((u) => u.includes(id))).toBe(false);
+  });
+
   it("counts the files it skipped for having no text", async () => {
     exportBody = "   ";
     const res = await ingestDrive(STAMP);
