@@ -3928,6 +3928,35 @@ async function callTool(
 
     let path = typeof args.path === "string" ? args.path.trim() : "";
     if (!path.startsWith("/")) path = `/${path}`;
+
+    /**
+     * THE BASE ALREADY CARRIES THE VERSION, and everybody writes it again.
+     *
+     * The stripe entry's base URL ends `/v1`, so `path: "/v1/charges"` is sent to
+     * `/v1/v1/charges` and Stripe answers `Unrecognized request URL` — a 404 that reads
+     * like a missing resource rather than a malformed path, which is why it never
+     * self-corrects. Eight such calls in the last thirty days, the most recent today,
+     * across stripe and figma. Copying the path out of a vendor's own documentation is
+     * the natural way to get it wrong.
+     *
+     * Stripped rather than refused, because there is nothing to disambiguate: no API in
+     * the registry serves `/v1/v1/`. Only an exact leading segment that the base already
+     * ends with is removed, and only when it looks like a version — `/verify/...` keeps
+     * its first segment. The caller is TOLD, so the next call is right for the right
+     * reason instead of mysteriously working.
+     */
+    let pathNote = "";
+    const baseTail = svc.base.replace(/\/+$/, "").split("/").pop() ?? "";
+    if (/^v\d+$/i.test(baseTail)) {
+      const duplicated = new RegExp(`^/${baseTail}(?=/|$)`, "i");
+      if (duplicated.test(path)) {
+        const was = path;
+        path = path.replace(duplicated, "") || "/";
+        pathNote =
+          `\n\nNote: ${key}'s base URL already ends with /${baseTail}, so "${was}" was ` +
+          `read as "${path}". Leave the version off the path next time.`;
+      }
+    }
     // The host is fixed by the registry; these checks stop the PATH from
     // escaping it. `//` would be read as protocol-relative, `..` walks up out of
     // the API's namespace, and `@` can smuggle a different host into a URL.
@@ -4042,7 +4071,7 @@ async function callTool(
     // path decide — a second, quieter truncation is how the first one hid.
     const text = await res.text().catch(() => "");
     if (!res.ok) {
-      return textResult(`${key} returned ${res.status}:\n${text}`, true);
+      return textResult(`${key} returned ${res.status}:\n${text}${pathNote}`, true);
     }
     /**
      * THE SAME PRIVACY GATE AS THE DATABASE HALF, because it is the same data class.
@@ -4078,7 +4107,7 @@ async function callTool(
         : "";
     // Fenced like the corpus tools are. A GitHub issue body on a PUBLIC repository is
     // writable by anyone, and this returned it as raw unframed JSON.
-    return textResult(`${UNTRUSTED_DATA_PREAMBLE}${externalNote}\n\n${payload}`);
+    return textResult(`${UNTRUSTED_DATA_PREAMBLE}${externalNote}${pathNote}\n\n${payload}`);
   }
 
   if (name === "related_context") {

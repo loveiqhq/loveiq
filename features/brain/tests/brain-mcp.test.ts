@@ -3559,6 +3559,48 @@ describe("/api/mcp", () => {
       delete process.env.POSTHOG_API_KEY;
     });
 
+    /**
+     * THE VERSION WRITTEN TWICE.
+     *
+     * Stripe's registry base ends `/v1`, so a path copied out of Stripe's own docs —
+     * `/v1/charges` — was sent to `/v1/v1/charges` and came back "Unrecognized request
+     * URL". That 404 reads like a missing resource rather than a malformed path, which
+     * is why it never self-corrected: eight such calls in the thirty days to
+     * 2026-09-20, the most recent that same day, across stripe and figma.
+     */
+    it("does not send the version twice when the base already carries it", async () => {
+      await call({ service: "stripe", path: "/v1/charges" });
+      const [url] = mockFetch.mock.calls[0] as [string];
+      expect(url).toContain("/v1/charges");
+      expect(url).not.toContain("/v1/v1/");
+    });
+
+    it("says it did so, rather than silently working for a reason nobody can see", async () => {
+      const r = await call({ service: "stripe", path: "/v1/charges" });
+      expect(r.content[0]!.text).toMatch(/already ends with \/v1/);
+    });
+
+    it("leaves an ordinary path completely alone", async () => {
+      await call({ service: "stripe", path: "/charges" });
+      const [url] = mockFetch.mock.calls[0] as [string];
+      expect(url).toContain("/v1/charges");
+      expect(url).not.toContain("/v1/v1/");
+    });
+
+    /**
+     * Only an exact leading segment that the base already ends with, and only when it
+     * looks like a version. A path whose first segment merely STARTS with the same
+     * letters keeps it — otherwise this quietly eats real endpoints.
+     */
+    it.each(["/v1beta/models", "/verify/token", "/v2/charges"])(
+      "does not eat %s, which is not the base's version segment",
+      async (path) => {
+        await call({ service: "stripe", path });
+        const [url] = mockFetch.mock.calls[0] as [string];
+        expect(url).toContain(path);
+      }
+    );
+
     it("only ever issues GET — these keys can refund charges and send mail", async () => {
       await call({ service: "stripe", path: "/charges" });
       await call({ service: "resend", path: "/domains" });
