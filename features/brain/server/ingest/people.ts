@@ -69,8 +69,22 @@ export async function ingestPeople(stampedAt: string): Promise<IngestResult> {
     return `- ${p.canonical}: ${p.role}${acronym(p.role)}${caveat}${here}`;
   };
 
-  const withRole = people.filter((p) => p.role);
-  const withoutRole = people.filter((p) => !p.role && p.active !== false);
+  const current = people.filter((p) => p.active !== false);
+  const withRole = current.filter((p) => p.role);
+  const withoutRole = current.filter((p) => !p.role);
+  /**
+   * PEOPLE WHO HAVE LEFT ARE STILL IN THE CORPUS, so the roster has to say who they
+   * were. Marking them inactive used to drop them from BOTH lists — `withoutRole`
+   * excluded them and `withRole` never held them, because a departed colleague rarely
+   * has a role recorded. They vanished, and `line()`'s "has left the company" suffix
+   * became unreachable for exactly the people it was written for.
+   *
+   * That is worse than listing them wrongly. Measured 2026-09-20: Adna Njuhovic is
+   * named in 315 chunks across six sources, so "who is Adna" is a question the corpus
+   * invites and could no longer answer. Naming them here, separately, answers it
+   * without implying they still work here.
+   */
+  const departed = people.filter((p) => p.active === false);
 
   const body = [
     "Who works at LoveIQ and what each person does — the team, the roles, who does what,",
@@ -87,6 +101,15 @@ export async function ingestPeople(stampedAt: string): Promise<IngestResult> {
           "",
           "Also on the team, with no role recorded — do not guess one:",
           ...withoutRole.map(line),
+        ]
+      : []),
+    ...(departed.length
+      ? [
+          "",
+          "No longer at LoveIQ. They appear throughout the corpus — emails, meetings,",
+          "documents they wrote — so their names are here to identify them, not to",
+          "suggest they are reachable. Do not assign them work or contact them:",
+          ...departed.map(line),
         ]
       : []),
     "",
