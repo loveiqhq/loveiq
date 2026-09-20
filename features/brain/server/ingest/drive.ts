@@ -1116,6 +1116,11 @@ export async function ingestDrive(
     detail:
       `docs=${listed.items.length} written=${written} touched=${touched} swept=${swept} ` +
       `complete=${complete}${stopped ? ` stopped=${stopped}` : ""}` +
+      // Colleague notes are appended to the listing, so without this the only way to
+      // tell "none were found" from "the feature is not running" is a structured log
+      // nobody reads. `asked` is printed even at zero for exactly that reason.
+      ` colleagueNotes=${colleagues.items.length}/${colleagues.asked}asked` +
+      (colleagues.refused > 0 ? ` colleaguesRefused=${colleagues.refused}` : "") +
       (emptyDocs > 0 ? ` empty=${emptyDocs}` : "") +
       (refusedDocs > 0 ? ` refusedAsPeopleList=${refusedDocs}` : "") +
       (unusableDocs > 0 ? ` unusable=${unusableDocs}` : "") +

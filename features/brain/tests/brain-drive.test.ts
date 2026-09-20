@@ -310,6 +310,20 @@ describe("ingestDrive", () => {
    * run: an empty file and a refused people-list both vanish silently. A NEW gap would
    * therefore look exactly like the known one, which is what this summary exists to stop.
    */
+  /**
+   * Printed even at zero, unlike every other counter here.
+   *
+   * Colleague notes are appended to the listing and then compete with the whole
+   * backlog for the fetch budget, so "none are indexed yet" is the NORMAL state for
+   * hours after a rebuild. Without a counter that is always present, that is
+   * indistinguishable from the feature not running at all — which is exactly the
+   * confusion this hit on the night it shipped.
+   */
+  it("always reports whether colleagues were asked for meeting notes", async () => {
+    const res = await ingestDrive(STAMP);
+    expect(res.detail).toMatch(/colleagueNotes=\d+\/\d+asked/);
+  });
+
   it("counts the files it skipped for having no text", async () => {
     exportBody = "   ";
     const res = await ingestDrive(STAMP);
