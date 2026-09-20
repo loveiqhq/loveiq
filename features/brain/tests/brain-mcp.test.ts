@@ -3568,11 +3568,18 @@ describe("/api/mcp", () => {
      * is why it never self-corrected: eight such calls in the thirty days to
      * 2026-09-20, the most recent that same day, across stripe and figma.
      */
+    /**
+     * ASSERTED ON THE WHOLE URL, not with `toContain`, and mutation testing is why.
+     *
+     * The first version of these checked `url).toContain(path)`. Stripping "/v1" off
+     * "/v1beta/models" leaves "beta/models" with no leading slash, which concatenated
+     * onto a base ending "/v1" gives ".../v1beta/models" — the substring the assertion
+     * was looking for. It passed while doing exactly the damage it was written to
+     * forbid. An exact URL has no second way to be satisfied.
+     */
     it("does not send the version twice when the base already carries it", async () => {
       await call({ service: "stripe", path: "/v1/charges" });
-      const [url] = mockFetch.mock.calls[0] as [string];
-      expect(url).toContain("/v1/charges");
-      expect(url).not.toContain("/v1/v1/");
+      expect(mockFetch.mock.calls[0]![0]).toBe("https://api.stripe.com/v1/charges");
     });
 
     it("says it did so, rather than silently working for a reason nobody can see", async () => {
@@ -3582,24 +3589,33 @@ describe("/api/mcp", () => {
 
     it("leaves an ordinary path completely alone", async () => {
       await call({ service: "stripe", path: "/charges" });
-      const [url] = mockFetch.mock.calls[0] as [string];
-      expect(url).toContain("/v1/charges");
-      expect(url).not.toContain("/v1/v1/");
+      expect(mockFetch.mock.calls[0]![0]).toBe("https://api.stripe.com/v1/charges");
+    });
+
+    it.each([
+      ["/v1beta/models", "https://api.stripe.com/v1/v1beta/models"],
+      ["/verify/token", "https://api.stripe.com/v1/verify/token"],
+      ["/v2/charges", "https://api.stripe.com/v1/v2/charges"],
+    ])("does not eat %s, which is not the base's own version segment", async (path, expected) => {
+      await call({ service: "stripe", path });
+      expect(mockFetch.mock.calls[0]![0]).toBe(expected);
     });
 
     /**
-     * Only an exact leading segment that the base already ends with, and only when it
-     * looks like a version. A path whose first segment merely STARTS with the same
-     * letters keeps it — otherwise this quietly eats real endpoints.
+     * NARROW ON PURPOSE: a version segment, not any repeated segment.
+     *
+     * PostHog's base ends `/api`, so `/api/projects/...` doubles in exactly the same
+     * way — and is deliberately left alone, because no logged call has ever made that
+     * mistake and a rule that strips any repeated leading segment can eat a real
+     * endpoint named after its service. Widen it when there is evidence, not before.
+     * This test is what makes the narrowness deliberate rather than accidental.
      */
-    it.each(["/v1beta/models", "/verify/token", "/v2/charges"])(
-      "does not eat %s, which is not the base's version segment",
-      async (path) => {
-        await call({ service: "stripe", path });
-        const [url] = mockFetch.mock.calls[0] as [string];
-        expect(url).toContain(path);
-      }
-    );
+    it("does not strip a repeated segment that is not a version", async () => {
+      process.env.POSTHOG_API_KEY = "phx_test_value";
+      await call({ service: "posthog", path: "/api/projects/1/events" });
+      expect(mockFetch.mock.calls[0]![0]).toBe("https://eu.posthog.com/api/api/projects/1/events");
+      delete process.env.POSTHOG_API_KEY;
+    });
 
     it("only ever issues GET — these keys can refund charges and send mail", async () => {
       await call({ service: "stripe", path: "/charges" });
