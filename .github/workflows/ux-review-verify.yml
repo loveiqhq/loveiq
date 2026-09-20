@@ -135,10 +135,48 @@ jobs:
       # verified over a number nobody can fix from here.
       - name: Score the scanners (weekly)
         if: github.event.schedule == '41 9 * * 1' || github.event_name == 'workflow_dispatch'
-        continue-on-error: true
-        run: npx tsx scripts/replay-bench/score.mjs
+        # BOTH sources, and the second is the one that survives.
+        #
+        # The fixtures are seven hand-curated recordings that EXPIRE 2026-09-28
+        # and cannot be re-scanned — a scanner observes a given session once,
+        # ever. `--ledger` scores from what the probes actually concluded, costs
+        # nothing to collect and never expires. It was written, tested and
+        # documented as the replacement, and then nothing ran it: this step
+        # called the bare script, so every scheduled score came from the seven
+        # rows that are about to die.
+        #
+        # It matters more than a tidy-up. On 84 ledger findings the precision is
+        # 0.02, against 0.20 on the seven fixtures — the larger sample says the
+        # scanners are ten times worse than the number this step has been
+        # reporting.
+        #
+        # `continue-on-error` USED TO COVER THIS STEP and had to go, because it
+        # cannot tell the two failures apart. Below bar (exit 1) and too few
+        # labelled findings (exit 2) are facts about the scanners, not faults
+        # here, and must not fail the run — findings still need verifying. But
+        # the script also exits 3 for "a secret is missing" or "the ledger could
+        # not be read", deliberately distinct so a broken score is never read as
+        # a healthy one. `continue-on-error` swallowed 3 along with 1 and 2,
+        # which is exactly the soft-skip failure three other lanes in this repo
+        # already have.
+        run: |
+          set +e
+          npx tsx scripts/replay-bench/score.mjs
+          fixtures=$?
+          npx tsx scripts/replay-bench/score.mjs --ledger
+          ledger=$?
+          set -e
+          for code in "$fixtures" "$ledger"; do
+            if [ "$code" = "3" ]; then
+              echo "::error::scanner scoring could not run (exit 3) — a secret or the ledger read is broken, not a low score"
+              exit 1
+            fi
+          done
+          echo "scoring finished (fixtures=$fixtures ledger=$ledger); 1=below bar, 2=too few labels, both expected"
         env:
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
       # The merge click IS the training data: a merged reproduction means the
       # finding was real, a closed one means it was not. Nobody has to label

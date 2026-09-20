@@ -88,6 +88,20 @@ SELECT count(*) FILTER (WHERE NOT delivered) AS undelivered,
        count(*) FILTER (WHERE outcome = 'gap') AS no_probe FROM ux_finding;
 ```
 
+**Score it from the LEDGER, not the fixtures.** `scripts/replay-bench/score.mjs
+--ledger` reads what the probes actually concluded; the seven fixtures expire
+2026-09-28 and cannot be re-scanned, because a scanner observes a given session
+once ever. The weekly step ran the bare script until 2026-09-20, so every
+scheduled score came from the seven rows about to die — and the gap is not
+cosmetic: **0.02 precision on 84 ledger findings against 0.20 on the fixtures.**
+The larger sample says the scanners are ten times worse than the number that was
+being reported.
+
+Below bar is a fact about the scanners, not a fault in the workflow, so exit 1
+(below bar) and exit 2 (too few labels) do not fail the run. Exit 3 — a missing
+secret, an unreadable ledger — does, because a score that could not be computed
+must never read as a healthy one.
+
 `human_label` is deliberately null until someone says: a merged reproduction PR
 means the claim was real, a closed one means it was not, and that is ground truth
 nobody has to curate.
