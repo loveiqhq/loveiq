@@ -437,6 +437,21 @@ function retrievalProbes(): RetrievalProbe[] {
        * shoes". The record must win whenever a meeting document comes back at all.
        */
       kind: "record-beats-transcript",
+      /**
+       * RED SINCE 2026-09-20, and measured rather than left a mystery.
+       *
+       * The three meetings that come back have no SUMMARY chunk matching "pricing" —
+       * their summaries are about other things, so only their transcripts match at all
+       * and `bestPerParent` can only return what matched. Two candidate fixes were
+       * measured and both rejected: preferring a document's summary part when one is
+       * among the candidates moved the battery not at all (218 before, 218 after) and
+       * can hand the model a chunk without the evidence in it; and the five `MT-INV`
+       * vendor invoices that were also crowding these results have since been removed,
+       * which changed nothing here either.
+       *
+       * So this needs a summary that talks about pricing, or a different question. It
+       * is NOT the invoice problem it was written for — that one is fixed.
+       */
       q: "what did we agree about pricing in our calls",
       // Restricted to drive so a meeting document is GUARANTEED to come back. Without
       // this the probe was vacuous: commits and mail filled the top 8, no meeting hit
@@ -998,6 +1013,21 @@ function sourceCoverageProbes(live: LiveCounts): RetrievalProbe[] {
       all(topSource(["analytics", "ga4", "gsc"]), bodyHas(/week of/i))
     ),
     P("grain-month", "how did august compare to july", topSource(["analytics", "ga4", "gsc"], 8)),
+    /**
+     * RED SINCE 2026-09-20, BY ONE POSITION. The meeting summary this wants is at #5 of
+     * 12; places 2-4 are decision records about payments, report-opens and coupons —
+     * nothing to do with micro assessments.
+     *
+     * Measured cause: the phrase carries the question. Drop "what did we decide" and ask
+     * "micro assessments and the consumer pivot" and the same summary is at #2 with no
+     * decision record in the top 4. The `decision` source is legitimately favoured for a
+     * decide-question, and this threshold was tuned on 2026-09-16 when there were about
+     * 48 decision records; the miner has since been repaired and there are 82.
+     *
+     * Deliberately NOT fixed by making "decision" a title stopword: that list is
+     * frequency-derived at 3.6% of titles and up, this word is at 0.3%, and stopping it
+     * would break the decide-questions that legitimately want a decision record.
+     */
     P("decision-pivot", "what did we decide about micro assessments and the consumer pivot", (h) =>
       at(h, 4).some((x) => x.source === "drive" && x.meta?.section === "summary")
         ? []
@@ -1461,6 +1491,20 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
       "what did the performance max campaign cost in august",
       bodyHas(/August 2026[\s\S]{0,700}Performance Max EUR [\d.]+/, 3)
     ),
+    /**
+     * RED SINCE 2026-09-20, because the campaign ENDED. Its last appearance in GA4 is
+     * 2026-08-31, so an undated question about it now competes with three weeks of newer
+     * data. `ga4` gets one slot per grain, and within the monthly grain September wins
+     * it from the August chunk that holds the answer.
+     *
+     * The data is not lost and the claim above that this probe "cannot expire" is what
+     * expired: scoped with `sources: ["ga4"]` the brand chunk is #2, and naming the
+     * month puts it at #2 unscoped. Unscoped and undated it sits around #20.
+     *
+     * Fixing it means letting a distinctive term in the question outweigh recency inside
+     * a grain, which is the most delicate part of the ranking, on a battery that flakes
+     * by about one probe between identical runs. Not worth doing on this evidence.
+     */
     P("ga4-brand", "how much did the brand campaign cost", bodyHas(/LoveIQ - Brand/)),
     P("ga4-channels", "which channels send us the most traffic", bodyHas(/Direct|Paid Search/)),
 
