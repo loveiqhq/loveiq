@@ -14,7 +14,7 @@
  * why `funnel-digest` was unscheduled for being FYI-only.
  */
 import { NextResponse } from "next/server";
-import { supabaseFetch, countRows } from "@features/admin/server/supabase";
+import { countRows, fetchAllRows, supabaseFetch } from "@features/admin/server/supabase";
 import { buildReportVoiceRows } from "@features/brain/server/ingest/report-voice";
 import { buildDomainRows } from "@features/brain/server/ingest/domain";
 import { redactUrlSecrets } from "@features/brain/server/ingest/upsert";
@@ -67,11 +67,16 @@ async function sourceCount(source: string): Promise<number | null> {
 
 /** Sum of real money in the ledger: succeeded, not staff testing, actually charged. */
 async function ledgerRevenue(): Promise<number | null> {
-  const res = await supabaseFetch(
-    "/rest/v1/payment?select=amount&status=eq.succeeded&is_test=is.false&amount=gt.0&limit=5000"
+  /**
+   * PAGED, because `limit=5000` is a lie: PostgREST caps a response at 1,000 rows
+   * and says so only in `Content-Range`. At 41 succeeded payments today this summed
+   * correctly; at 1,001 it would silently under-report revenue and the check would
+   * report a disagreement that is really its own truncation — failing precisely when
+   * the business succeeds.
+   */
+  const rows = await fetchAllRows<{ amount: number | string }>(
+    "/rest/v1/payment?select=amount&status=eq.succeeded&is_test=is.false&amount=gt.0&order=id.asc"
   );
-  if (!res.ok) return null;
-  const rows = (await res.json().catch(() => [])) as Array<{ amount: number | string }>;
   if (!Array.isArray(rows)) return null;
   return Math.round(rows.reduce((t, r) => t + Number(r.amount ?? 0), 0) * 100) / 100;
 }
@@ -482,12 +487,11 @@ export async function sheetTabReading(request: Request): Promise<Reading | null>
   // sitting in a chunk the check never fetched.
   const byDoc = new Map<string, string>();
   for (const base of sample) {
-    const res = await supabaseFetch(
+    const rows = await fetchAllRows<{ source_id: string; body: string }>(
       `/rest/v1/brain_chunk?select=source_id,body&source=eq.drive` +
-        `&source_id=like.${encodeURIComponent(base)}*&limit=1000`
+        `&source_id=like.${encodeURIComponent(base)}*&order=source_id.asc`
     );
-    if (!res.ok) return null;
-    const rows = (await res.json()) as Array<{ source_id: string; body: string }>;
+    if (!rows) return null;
     byDoc.set(base, rows.map((r) => r.body ?? "").join("\n"));
   }
 

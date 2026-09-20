@@ -93,6 +93,22 @@ describe("PostgREST max-rows truncation", () => {
     expect(mockWarn).not.toHaveBeenCalled();
   });
 
+  /**
+   * THE HOLE THE EXEMPTION USED TO LEAVE.
+   *
+   * Matching on `limit=1000` alone exempted a SINGLE read that happened to ask for
+   * exactly one full page — which is precisely what a truncating read looks like, so
+   * the warning was blind to it by construction. A caller paginating on purpose
+   * passes an offset as well; one that does not is asking for a page and calling it
+   * the whole table. Found 2026-09-20 in a reconciler check reading one document's
+   * chunks that way.
+   */
+  it("warns for a one-shot limit=1000 with no offset, which is not pagination", async () => {
+    respond(`0-${POSTGREST_MAX_ROWS - 1}/*`);
+    await supabaseFetch("/rest/v1/brain_chunk?select=body&source=eq.drive&limit=1000");
+    expect(mockWarn).toHaveBeenCalled();
+  });
+
   it("stays quiet for a response under the cap", async () => {
     respond("0-4/*");
     await supabaseFetch("/rest/v1/survey_submission?select=id");

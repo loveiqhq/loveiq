@@ -48,7 +48,14 @@ function warnIfTruncated(path: string, res: Response, paginated = false): void {
   if (total && total !== "*") return;
   const end = Number(span?.split("-")[1]);
   if (end !== POSTGREST_MAX_ROWS - 1) return;
-  if (/[?&]limit=1000(&|$)/.test(path)) return;
+  /**
+   * A caller paginating on purpose passes an OFFSET as well as the limit. Matching
+   * on `limit=1000` alone exempted any single unpaged read that happened to ask for
+   * exactly a full page — which is what a truncating read looks like, so the one
+   * signal this family of bugs depends on was blind to it by construction. Found
+   * 2026-09-20 in a reconciler check that read one document's chunks that way.
+   */
+  if (/[?&]limit=1000(&|$)/.test(path) && /[?&]offset=/.test(path)) return;
   logger.warn(
     { path: path.split("?")[0], returned: POSTGREST_MAX_ROWS },
     "supabase: response hit PostgREST's max-rows cap — rows are MISSING and no error was raised; aggregate in SQL or paginate"

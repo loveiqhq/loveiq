@@ -18,6 +18,14 @@ vi.mock("@features/admin/server/supabase", () => ({
     const total = range?.split("/")[1];
     return total && total !== "*" ? Number(total) : null;
   },
+  /**
+   * Delegates to the same mock, so every fixture below still drives it.
+   */
+  fetchAllRows: async (path: string) => {
+    const res = (await supabaseFetch(path)) as { ok: boolean; json: () => Promise<unknown> };
+    if (!res?.ok) return null;
+    return await res.json();
+  },
 }));
 
 const ok = (body: unknown) => ({ ok: true, json: async () => body, headers: { get: () => null } });
