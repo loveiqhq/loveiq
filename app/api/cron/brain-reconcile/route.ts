@@ -207,10 +207,10 @@ export async function buildReadings(): Promise<{ readings: Reading[]; unread: st
    * and look like a normal run. A data file renamed, an export changed shape, a parser that
    * stops matching: all of those are silent, and all of them are caught by counting.
    */
-  for (const [source, expected] of [
-    ["report", buildReportVoiceRows(new Date().toISOString()).length],
-    ["domain", buildDomainRows(new Date().toISOString()).length],
-  ] as Array<[string, number]>) {
+  for (const [source, built] of [
+    ["report", buildReportVoiceRows(new Date().toISOString())],
+    ["domain", buildDomainRows(new Date().toISOString())],
+  ] as Array<[string, Array<{ source_id: string; body: string }>]>) {
     const held = await sourceCount(source);
     if (held === null) {
       unread.push(`${source} chunk count`);
@@ -218,11 +218,40 @@ export async function buildReadings(): Promise<{ readings: Reading[]; unread: st
     }
     readings.push({
       what: `${source} chunks in the corpus`,
-      left: { source: "what the builder produces", value: expected },
+      left: { source: "what the builder produces", value: built.length },
       right: { source: "what the corpus holds", value: held },
       tolerance: 0,
       because:
         "these are built from files in the repo, so the two are the same number or something dropped rows",
+    });
+
+    /**
+     * COUNTING ROWS CANNOT SEE AN EDIT.
+     *
+     * Rewriting a report chapter changes no row count at all: the chunk keeps its
+     * `source_id` and the corpus keeps the OLD words, so the brain quotes copy we no
+     * longer ship and every count above still agrees. The builder's own output is the
+     * exact bytes that should be stored, so comparing against it needs no normalising —
+     * which matters, because comparing against the raw data file instead means
+     * re-deriving the ingester's HTML handling by hand, and four separate attempts at
+     * that each reported staleness that was not there.
+     */
+    const stored = await fetchAllRows<{ source_id: string; body: string }>(
+      `/rest/v1/brain_chunk?select=source_id,body&source=eq.${source}&order=source_id.asc`
+    );
+    if (!stored) {
+      unread.push(`${source} chunk text`);
+      continue;
+    }
+    const bodies = new Map(stored.map((r) => [r.source_id, r.body ?? ""]));
+    const matching = built.filter((r) => bodies.get(r.source_id) === r.body).length;
+    readings.push({
+      what: `${source} chunks whose stored text is what the builder produces`,
+      left: { source: "what the builder produces", value: built.length },
+      right: { source: "what the corpus holds, character for character", value: matching },
+      tolerance: 0,
+      because:
+        "an edit keeps the row and changes the words, so the counts above agree while the brain quotes copy we no longer ship",
     });
   }
 

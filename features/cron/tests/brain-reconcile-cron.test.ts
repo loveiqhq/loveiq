@@ -28,6 +28,12 @@ vi.mock("@features/admin/server/supabase", () => ({
   },
 }));
 
+import { buildReportVoiceRows } from "@features/brain/server/ingest/report-voice";
+import { buildDomainRows } from "@features/brain/server/ingest/domain";
+
+/** Fixed so the fixture's rows and the route's rows are stamped identically. */
+const STAMP = "2026-09-20T00:00:00.000Z";
+
 const ok = (body: unknown) => ({ ok: true, json: async () => body, headers: { get: () => null } });
 const fail = () => ({
   ok: false,
@@ -88,6 +94,21 @@ function routeFetch(over: Record<string, unknown> = {}) {
       return ok("corpus" in over ? over.corpus : [{ body: "Revenue: EUR 704.91" }]);
     if (path.includes("/payment?"))
       return ok("ledger" in over ? over.ledger : [{ amount: 704.91 }]);
+    // The stored TEXT of the repo-built corpora, read back to compare against what the
+    // builder produces. Defaults to exactly the builder's own rows, so an ordinary run
+    // agrees; `reportEdited` stands in for a chapter rewritten after it was ingested.
+    if (path.includes("select=source_id,body")) {
+      if (over.textFails) return fail();
+      const built = path.includes("source=eq.report")
+        ? buildReportVoiceRows(STAMP)
+        : buildDomainRows(STAMP);
+      const rows = built.map((r) => ({ source_id: r.source_id, body: r.body }));
+      if (over.reportEdited && path.includes("source=eq.report") && rows[0]) {
+        rows[0] = { ...rows[0], body: `${rows[0].body} — and a sentence nobody shipped` };
+      }
+      if (over.domainDropped && path.includes("source=eq.domain")) rows.shift();
+      return ok(rows);
+    }
     // The repo-built corpora are counted through a `count=exact` HEAD-style read, so the
     // number arrives in the header rather than the body.
     if (path.includes("source=eq.report") || path.includes("source=eq.domain")) {
@@ -123,9 +144,55 @@ describe("brain-reconcile — the readings it actually assembles", () => {
     const { buildReadings } = await import("@/app/api/cron/brain-reconcile/route");
     const { reconcile } = await import("@features/brain/server/reconcile");
     const { readings, unread } = await buildReadings();
-    expect(readings).toHaveLength(10);
+    expect(readings).toHaveLength(12);
     expect(unread).toEqual([]);
     expect(reconcile(readings)).toEqual([]);
+  });
+
+  /**
+   * A REWRITTEN CHAPTER CHANGES NO COUNT.
+   *
+   * The chunk keeps its `source_id` and the corpus keeps the old words, so every count
+   * in this reconciler still agrees while the brain quotes copy we no longer ship. The
+   * second assertion is the one that earns this check its place: it proves the counting
+   * check is blind here, so deleting the text check would not be caught by it.
+   */
+  it("notices a chapter whose stored text is no longer what we ship", async () => {
+    supabaseFetch.mockImplementation(routeFetch({ reportEdited: true }));
+    const { buildReadings } = await import("@/app/api/cron/brain-reconcile/route");
+    const { reconcile } = await import("@features/brain/server/reconcile");
+    const { readings } = await buildReadings();
+    const found = reconcile(readings).find((d) => d.what.includes("stored text"));
+    expect(found).toBeDefined();
+    expect(found!.gap).toBe(1);
+  });
+
+  it("and the row COUNTS agree throughout, which is why counting them is not enough", async () => {
+    supabaseFetch.mockImplementation(routeFetch({ reportEdited: true }));
+    const { buildReadings } = await import("@/app/api/cron/brain-reconcile/route");
+    const { reconcile } = await import("@features/brain/server/reconcile");
+    const { readings } = await buildReadings();
+    expect(
+      reconcile(readings).find((d) => d.what.includes("chunks in the corpus"))
+    ).toBeUndefined();
+  });
+
+  it("notices a chunk the builder produces that the corpus does not hold at all", async () => {
+    supabaseFetch.mockImplementation(routeFetch({ domainDropped: true }));
+    const { buildReadings } = await import("@/app/api/cron/brain-reconcile/route");
+    const { reconcile } = await import("@features/brain/server/reconcile");
+    const { readings } = await buildReadings();
+    expect(reconcile(readings).find((d) => d.what.includes("stored text"))).toBeDefined();
+  });
+
+  it("reports the text as UNREAD when it cannot be fetched, rather than as agreeing", async () => {
+    // "Could not read it" is not "it agrees" — the rule the whole reconciler runs on.
+    supabaseFetch.mockImplementation(routeFetch({ textFails: true }));
+    const { buildReadings } = await import("@/app/api/cron/brain-reconcile/route");
+    const { reconcile } = await import("@features/brain/server/reconcile");
+    const { readings, unread } = await buildReadings();
+    expect(unread).toContain("report chunk text");
+    expect(reconcile(readings).find((d) => d.what.includes("stored text"))).toBeUndefined();
   });
 
   it("notices a chunk that still holds a secret", async () => {
