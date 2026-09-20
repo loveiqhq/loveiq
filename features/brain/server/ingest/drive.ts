@@ -926,14 +926,30 @@ async function driveToken(oidcToken?: string | null): Promise<string | null> {
  * actually works off live in the Business Case sheet.
  *
  * NARROW ON PURPOSE. Requires a pdf, the word at a boundary (so "invoicing" does not
- * match), AND a run of digits — a vendor reference. "Invoice process redesign.docx"
- * is not a pdf, and a pdf discussing invoicing carries no reference number.
+ * match), AND one of two marks of a real vendor file rather than a document ABOUT
+ * billing: a run of digits in the name — a vendor reference — or a name that is the
+ * billing word and its numbering and nothing else.
+ *
+ * THE SECOND TEST EXISTS BECAUSE THE FIRST MISSED. `invoice 1.1.pdf` and
+ * `invoice 1.2.pdf` survived the first rule and sat in the corpus as Amazon Rechnungen,
+ * VAT boilerplate and all: the vendor put the reference number in the DOCUMENT, and
+ * only the filename is known at listing time. A name with nothing left in it once the
+ * word and the numbering are removed cannot be a document about invoicing, because a
+ * document about invoicing has something to say in its title. Measured over all 705
+ * Drive documents: the addition catches those two and nothing else.
  */
 const BILLING_NAME = /(^|[_\s-])(invoice|receipt|rechnung|billing[_\s-]statement)([_\s-]|\d|\.)/i;
+const BILLING_WORD = /invoice|receipt|rechnung|billing[_\s-]?statement/gi;
 export function isVendorBilling(name?: string, mimeType?: string): boolean {
   if (mimeType !== PDF_MIME) return false;
   const n = (name ?? "").trim();
-  return BILLING_NAME.test(n) && /\d{3,}/.test(n);
+  if (!BILLING_NAME.test(n)) return false;
+  if (/\d{3,}/.test(n)) return true;
+  const rest = n
+    .replace(/\.[a-z0-9]+$/i, "")
+    .replace(BILLING_WORD, "")
+    .replace(/[\d\s._\-()#]/g, "");
+  return rest.length === 0;
 }
 
 export async function ingestDrive(

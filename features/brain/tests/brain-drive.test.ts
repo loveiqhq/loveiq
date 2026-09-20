@@ -1311,6 +1311,12 @@ describe("isVendorBilling", () => {
     "slack_fair_billing_statement_SBIE-11862133.pdf",
     "slack_invoice_11511445020947.pdf",
     "Invoice January 2026.pdf",
+    // THE TWO THAT ESCAPED. Amazon Rechnungen, VAT boilerplate and all, still sitting
+    // in the corpus on 2026-09-20 — the vendor put the reference number in the
+    // document, and only the filename is known when the walk decides.
+    "invoice 1.1.pdf",
+    "invoice 1.2.pdf",
+    "Rechnung.pdf",
   ];
 
   it.each(BILLING)("drops %s", (name) => {
@@ -1335,6 +1341,30 @@ describe("isVendorBilling", () => {
   it("keeps a document ABOUT invoicing, which has no vendor reference", () => {
     expect(isVendorBilling("Invoice process redesign.pdf", PDF)).toBe(false);
     expect(isVendorBilling("How our invoicing works.pdf", PDF)).toBe(false);
+  });
+
+  /**
+   * The line the second test walks. A vendor's file is the word and its numbering; a
+   * document about billing has something to say in its title, and that is exactly what
+   * separates them once the reference number turns out to be unreliable.
+   */
+  it.each(["Invoice template.pdf", "Receipt tracker.pdf"])(
+    "keeps %s — a title with something left in it once the numbering goes",
+    (name) => {
+      expect(isVendorBilling(name, PDF)).toBe(false);
+    }
+  );
+
+  /**
+   * A KNOWN EDGE, recorded rather than fixed. A year reads as a vendor reference, so
+   * "Invoice 2026 policy.pdf" would be dropped even though it is a policy document.
+   * Tightening the digit rule to exclude years would un-drop "Invoice January 2026.pdf",
+   * a real invoice sitting in the list above, so the trade is deliberate. No such name
+   * exists among the 705 Drive documents, so it costs nothing today; this test says so
+   * out loud, so the next person meets a decision rather than a surprise.
+   */
+  it("drops a year-named document about billing, which is the accepted cost", () => {
+    expect(isVendorBilling("Invoice 2026 policy.pdf", PDF)).toBe(true);
   });
 
   it("never drops a non-pdf, whatever it is called", () => {
