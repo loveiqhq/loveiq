@@ -165,14 +165,15 @@ describe("SurveyPage", () => {
     const agreeButton = await screen.findByRole("button", { name: /i agree/i });
     const checkboxes = screen.getAllByRole("checkbox");
 
-    expect(agreeButton).toBeDisabled();
+    await user.click(agreeButton);
+    expect(await screen.findByText(/check both boxes above/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("survey-engine")).not.toBeInTheDocument();
 
     await user.click(checkboxes[0]);
-    expect(agreeButton).toBeDisabled();
+    await user.click(agreeButton);
+    expect(screen.queryByTestId("survey-engine")).not.toBeInTheDocument();
 
     await user.click(checkboxes[1]);
-    expect(agreeButton).toBeEnabled();
-
     await user.click(agreeButton);
     expect(await screen.findByTestId("survey-engine", {}, { timeout: 1000 })).toBeInTheDocument();
   });

@@ -955,12 +955,17 @@ const ConsentScreen: FC<{
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [showAgreeHint, setShowAgreeHint] = useState(false);
   const canProceed = ageConfirmed && termsAccepted;
 
   const handleAgreeClick = useCallback(() => {
+    if (!canProceed) {
+      setShowAgreeHint(true);
+      return;
+    }
     setIsLeaving(true);
     setTimeout(() => onAgree(), 400);
-  }, [onAgree]);
+  }, [canProceed, onAgree]);
 
   return (
     <main
@@ -1151,15 +1156,22 @@ const ConsentScreen: FC<{
           >
             Return to site
           </button>
+          {/* Stays clickable even while unready, so a tap can explain itself
+              instead of doing nothing — a native `disabled` gives no feedback at all. */}
           <button
             type="button"
             onClick={handleAgreeClick}
-            disabled={!canProceed || isLeaving}
-            className="flex-1 rounded-full border border-white/10 bg-white/5 py-[15px] text-[14px] font-bold leading-[20px] tracking-[0.7px] shadow-[0_10px_15px_rgba(0,0,0,0.1),0_4px_6px_rgba(0,0,0,0.1)] transition focus-visible-ring disabled:text-white/40 enabled:bg-[#fe6839] enabled:text-white enabled:hover:-translate-y-[1px]"
+            aria-describedby="consent-agree-hint"
+            className={`flex-1 rounded-full border border-white/10 py-[15px] text-[14px] font-bold leading-[20px] tracking-[0.7px] shadow-[0_10px_15px_rgba(0,0,0,0.1),0_4px_6px_rgba(0,0,0,0.1)] transition focus-visible-ring ${canProceed && !isLeaving ? "bg-[#fe6839] text-white hover:-translate-y-[1px]" : "bg-white/5 text-white/40"}`}
           >
             I agree
           </button>
         </div>
+        {showAgreeHint && !canProceed && (
+          <p id="consent-agree-hint" className="mt-3 text-center text-[13px] text-white/60">
+            Check both boxes above to continue.
+          </p>
+        )}
       </div>
     </main>
   );
