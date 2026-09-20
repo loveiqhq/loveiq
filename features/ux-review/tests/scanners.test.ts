@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  UX_REVIEW_CHALLENGER_MONTHLY_CREDITS,
   UX_REVIEW_ESTIMATED_MONTHLY_CREDITS,
   UX_REVIEW_MIN_CONFIDENCE,
   UX_SCANNERS,
@@ -43,8 +44,13 @@ describe("UX review scanners", () => {
   it("keeps the criteria Marcus named — error messages and loops", () => {
     // Named explicitly in the 2026-09-11 sync: "explicit triggers like error
     // messages or user loops".
-    const surveyAndReport = UX_SCANNERS.filter((s) =>
-      ["survey_started", "report_viewed"].includes(s.triggerEvent)
+    // CHAMPIONS only. A challenger is a duplicate on the same trigger event,
+    // deliberately phrased differently — the observation-only one has no "LOOP"
+    // keyword because it is forbidden from naming causes at all. Scoping here
+    // keeps this guard exactly as strong for every scanner that speaks to the
+    // team, which is what "the criteria Marcus named" has always meant.
+    const surveyAndReport = UX_SCANNERS.filter(
+      (s) => s.role === "champion" && ["survey_started", "report_viewed"].includes(s.triggerEvent)
     );
     expect(surveyAndReport).toHaveLength(2);
     for (const s of surveyAndReport) {
@@ -56,11 +62,17 @@ describe("UX review scanners", () => {
   });
 
   it("keeps excessive scrolling on the report, where it is measurable", () => {
-    const report = UX_SCANNERS.find((s) => s.triggerEvent === "report_viewed");
+    // By role, not by first match: two scanners now watch report_viewed, and
+    // `find` silently returning the challenger would test the wrong prompt.
+    const report = UX_SCANNERS.find(
+      (s) => s.role === "champion" && s.triggerEvent === "report_viewed"
+    );
     expect(report?.prompt).toContain("EXCESSIVE SCROLLING");
     // And nowhere else: the survey is one question per screen, so a scroll rule
     // there is noise, not signal.
-    const survey = UX_SCANNERS.find((s) => s.triggerEvent === "survey_started");
+    const survey = UX_SCANNERS.find(
+      (s) => s.role === "champion" && s.triggerEvent === "survey_started"
+    );
     expect(survey?.prompt).not.toContain("EXCESSIVE SCROLLING");
   });
 
@@ -81,5 +93,22 @@ describe("UX review scanners", () => {
     // it materially higher, that should be a conscious decision, not a surprise.
     expect(UX_REVIEW_ESTIMATED_MONTHLY_CREDITS).toBeLessThanOrEqual(5000);
     expect(UX_REVIEW_MIN_CONFIDENCE).toBeGreaterThanOrEqual(0.7);
+
+    /**
+     * AND THE COMBINED BILL, or splitting the constant would have moved the
+     * ceiling instead of respecting it.
+     *
+     * The line above now covers champions only, so that a temporary experiment
+     * cannot quietly inflate the number an operator agreed to. That is only
+     * honest if what is actually charged stays bounded too — otherwise the
+     * split is a way to make any spend pass. 6,000 leaves room for one
+     * challenger (574) on top of the fleet (4,782) and stays well under
+     * PostHog's 7,500 hard stop; a second concurrent experiment should be a
+     * decision someone makes here, not a surprise on the invoice.
+     */
+    expect(
+      UX_REVIEW_ESTIMATED_MONTHLY_CREDITS + UX_REVIEW_CHALLENGER_MONTHLY_CREDITS,
+      "champions plus challengers is what actually gets billed"
+    ).toBeLessThanOrEqual(6000);
   });
 });

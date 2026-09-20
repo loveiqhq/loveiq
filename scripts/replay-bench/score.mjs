@@ -20,6 +20,7 @@ import { dirname, join } from "node:path";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 import { hogQuery } from "../lib/hogql.mjs";
+import { championChallengerPairs } from "../lib/challenger-pairs.mjs";
 
 const PROJECT = "244778";
 const MIN_PRECISION = 0.8;
@@ -180,9 +181,15 @@ if (process.argv.includes("--ledger")) {
 
   const byScanner = new Map();
   for (const r of lRows) {
-    const e = byScanner.get(r.scanner_name) ?? { right: 0, wrong: 0 };
+    const e = byScanner.get(r.scanner_name) ?? { right: 0, wrong: 0, contradicted: 0 };
     if (r.expect === "yes") e.right += 1;
     else e.wrong += 1;
+    // Broken out because it is a DIFFERENT failure from "the probe could not
+    // reproduce it". A `contradicted` finding is one our own events refute —
+    // the scanner asserted a press nobody made — and it is 20 of the report
+    // scanner's 38 wrong answers. Folded into one "wrong" total, the single
+    // thing the challenger is trying to fix is invisible.
+    if (r.outcome === "contradicted") e.contradicted += 1;
     byScanner.set(r.scanner_name, e);
   }
 
@@ -191,8 +198,47 @@ if (process.argv.includes("--ledger")) {
     const total = e.right + e.wrong;
     console.log(
       `  ${scanner} — ${e.right}/${total} confirmed by a probe ` +
-        `(${fmtScore(total === 0 ? null : e.right / total)})`
+        `(${fmtScore(total === 0 ? null : e.right / total)})` +
+        (e.contradicted ? `, ${e.contradicted} refuted by our own events` : "")
     );
+  }
+
+  /**
+   * CHAMPION vs CHALLENGER, paired by name.
+   *
+   * A challenger is a duplicate scanner on the same trigger event, so the two
+   * see the same recordings and one probe run answers both (see the outcome
+   * cache in verify-ux-findings.mjs). That makes the delta below a real
+   * comparison rather than two populations side by side.
+   *
+   * Printed separately because the headline precision pools every scanner, and
+   * a challenger that is winning would be averaged into a champion that is
+   * losing — the experiment would be invisible in its own report.
+   */
+  // Declared here because the pair report below uses it too, and a `const`
+  // is not hoisted — it threw on first run.
+  const MIN_SAMPLE = 10;
+
+  const pairs = championChallengerPairs(byScanner);
+  if (pairs.length > 0) {
+    console.log(`\nchampion vs challenger`);
+    const pct = (e) => {
+      const t = e.right + e.wrong;
+      return t === 0 ? "n/a" : fmtScore(e.right / t);
+    };
+    for (const { base, champion: champ, challenger: chall } of pairs) {
+      const n = (e) => e.right + e.wrong;
+      console.log(
+        `  ${base}\n` +
+          `    champion   ${String(n(champ)).padStart(3)} findings · precision ${pct(champ)} · ${champ.contradicted} refuted by our own events\n` +
+          `    challenger ${String(n(chall)).padStart(3)} findings · precision ${pct(chall)} · ${chall.contradicted} refuted by our own events`
+      );
+      if (n(chall) < MIN_SAMPLE) {
+        console.log(
+          `    (challenger has ${n(chall)}/${MIN_SAMPLE} labelled findings — too few to call)`
+        );
+      }
+    }
   }
 
   /**
@@ -201,7 +247,6 @@ if (process.argv.includes("--ledger")) {
    * still shown — hiding it would be its own dishonesty — but no pass is
    * claimed and the exit code says "not measured", not "failed".
    */
-  const MIN_SAMPLE = 10;
   console.log(
     `\nprecision ${fmtScore(ls.precision)} (bar ${MIN_PRECISION}) · ` +
       `right ${ls.tp} wrong ${ls.fp} · ` +
