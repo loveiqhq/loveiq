@@ -1,8 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mockWarn = vi.fn();
+/**
+ * The truncation signal is logged at ERROR, because only error and fatal are
+ * mirrored to Slack — a warning here reaches Vercel's log viewer and nobody.
+ */
+const mockError = vi.fn();
 vi.mock("@shared/observability/logger", () => ({
-  default: { info: vi.fn(), warn: (...a: unknown[]) => mockWarn(...a), error: vi.fn() },
+  default: {
+    info: vi.fn(),
+    warn: (...a: unknown[]) => mockWarn(...a),
+    error: (...a: unknown[]) => mockError(...a),
+  },
 }));
 
 const mockFetch = vi.fn();
@@ -33,6 +42,7 @@ describe("PostgREST max-rows truncation", () => {
 
   afterEach(() => {
     mockWarn.mockClear();
+    mockError.mockClear();
     mockFetch.mockClear();
   });
 
@@ -41,8 +51,8 @@ describe("PostgREST max-rows truncation", () => {
     // changed from Q11/14% to Q58/21%. This is the only signal that it happened.
     respond(`0-${POSTGREST_MAX_ROWS - 1}/*`);
     await supabaseFetch("/rest/v1/survey_behavior_event?select=id&limit=50000");
-    expect(mockWarn).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(mockWarn.mock.calls[0])).toContain("max-rows");
+    expect(mockError).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(mockError.mock.calls[0])).toContain("max-rows");
   });
 
   it("warns for a query with no limit at all — the silent case", async () => {
@@ -50,7 +60,7 @@ describe("PostgREST max-rows truncation", () => {
     // 1,000 rows at a 90-day window, which the admin UI can request.
     respond(`0-${POSTGREST_MAX_ROWS - 1}/*`);
     await supabaseFetch("/rest/v1/survey_submission?select=id&created_date_time=gte.2026-01-01");
-    expect(mockWarn).toHaveBeenCalledTimes(1);
+    expect(mockError).toHaveBeenCalledTimes(1);
   });
 
   /**
@@ -89,8 +99,8 @@ describe("PostgREST max-rows truncation", () => {
     // The brain ingest loops limit=1000&offset=N on purpose. Warning on every
     // full page would train everyone to ignore the warning.
     respond(`0-${POSTGREST_MAX_ROWS - 1}/*`);
-    await supabaseFetch("/rest/v1/brain_chunk?select=source_id&limit=1000&offset=3000");
-    expect(mockWarn).not.toHaveBeenCalled();
+    await supabaseFetch("/rest/v1/trunc_paged?select=source_id&limit=1000&offset=3000");
+    expect(mockError).not.toHaveBeenCalled();
   });
 
   /**
@@ -105,20 +115,20 @@ describe("PostgREST max-rows truncation", () => {
    */
   it("warns for a one-shot limit=1000 with no offset, which is not pagination", async () => {
     respond(`0-${POSTGREST_MAX_ROWS - 1}/*`);
-    await supabaseFetch("/rest/v1/brain_chunk?select=body&source=eq.drive&limit=1000");
-    expect(mockWarn).toHaveBeenCalled();
+    await supabaseFetch("/rest/v1/trunc_one?select=body&limit=1000");
+    expect(mockError).toHaveBeenCalled();
   });
 
   it("stays quiet for a response under the cap", async () => {
     respond("0-4/*");
-    await supabaseFetch("/rest/v1/survey_submission?select=id");
-    expect(mockWarn).not.toHaveBeenCalled();
+    await supabaseFetch("/rest/v1/trunc_under?select=id");
+    expect(mockError).not.toHaveBeenCalled();
   });
 
   it("stays quiet when there is no range header at all", async () => {
     respond(null);
     await supabaseFetch("/rest/v1/rpc/get_survey_friction", { method: "POST", body: "{}" });
-    expect(mockWarn).not.toHaveBeenCalled();
+    expect(mockError).not.toHaveBeenCalled();
   });
 });
 
@@ -146,7 +156,7 @@ describe("countRows — the answer to the cap", () => {
 
   it("asks for a count and for no rows", async () => {
     counted("0-0/2061");
-    await countRows("/rest/v1/survey_submission?select=id");
+    await countRows("/rest/v1/trunc_under?select=id");
     const headers = (mockFetch.mock.calls[0]?.[1] as { headers: Record<string, string> }).headers;
     expect(headers.Prefer).toBe("count=exact");
     // Without this the body is still up to 1,000 rows of payload for a number.
@@ -156,7 +166,7 @@ describe("countRows — the answer to the cap", () => {
   it("never fires the truncation warning it exists to prevent", async () => {
     counted("0-0/21328");
     await countRows("/rest/v1/analytics_event?select=id");
-    expect(mockWarn).not.toHaveBeenCalled();
+    expect(mockError).not.toHaveBeenCalled();
   });
 
   it("returns null rather than 0 when the count cannot be read", async () => {
@@ -258,15 +268,38 @@ describe("deliberate pagination is not a truncation", () => {
 
     await fetchAllRows("/rest/v1/report_session?select=id&order=id.asc");
 
-    expect(mockWarn).not.toHaveBeenCalled();
+    expect(mockError).not.toHaveBeenCalled();
   });
 
   it("still warns for an ordinary read that came back capped", async () => {
     // The positive control: suppressing the warning for pagination must not
     // suppress it for everyone.
     respond(`0-${POSTGREST_MAX_ROWS - 1}/*`);
-    await supabaseFetch("/rest/v1/survey_behavior_event?select=id");
-    expect(mockWarn).toHaveBeenCalled();
+    // A route of its own: the report is deduped per route, so reusing one another
+    // test already tripped would suppress this control and pass for the wrong reason.
+    await supabaseFetch("/rest/v1/trunc_control?select=id");
+    expect(mockError).toHaveBeenCalled();
+  });
+
+  /**
+   * The dedup is what makes escalating to ERROR safe. Without it a broken caller
+   * inside a loop reports on every request, and the channel gets muted — which is
+   * the same silence this guard exists to end, arrived at from the other direction.
+   */
+  it("reports a given route once, not on every request", async () => {
+    respond(`0-${POSTGREST_MAX_ROWS - 1}/*`);
+    await supabaseFetch("/rest/v1/trunc_repeat?select=id");
+    await supabaseFetch("/rest/v1/trunc_repeat?select=id&other=1");
+    await supabaseFetch("/rest/v1/trunc_repeat?select=id&other=2");
+    expect(mockError).toHaveBeenCalledTimes(1);
+  });
+
+  it("still reports a DIFFERENT route that truncates", async () => {
+    // The control for the dedup: quieting one caller must not quiet the next one.
+    respond(`0-${POSTGREST_MAX_ROWS - 1}/*`);
+    await supabaseFetch("/rest/v1/trunc_first?select=id");
+    await supabaseFetch("/rest/v1/trunc_second?select=id");
+    expect(mockError).toHaveBeenCalledTimes(2);
   });
 });
 

@@ -25,6 +25,13 @@ export const POSTGREST_MAX_ROWS = 1000;
  * costs nothing. A caller that explicitly asked for exactly 1000 is paginating
  * on purpose (the brain ingest loops do) and is left alone.
  */
+/**
+ * Paths already reported this process. Serverless instances are short-lived and
+ * Fluid Compute reuses them, so this bounds repetition without ever hiding a NEW
+ * caller: a path not in here is always reported.
+ */
+const reportedTruncations = new Set<string>();
+
 function warnIfTruncated(path: string, res: Response, paginated = false): void {
   if (paginated) return;
   const range = res.headers.get("content-range");
@@ -56,8 +63,26 @@ function warnIfTruncated(path: string, res: Response, paginated = false): void {
    * 2026-09-20 in a reconciler check that read one document's chunks that way.
    */
   if (/[?&]limit=1000(&|$)/.test(path) && /[?&]offset=/.test(path)) return;
-  logger.warn(
-    { path: path.split("?")[0], returned: POSTGREST_MAX_ROWS },
+  /**
+   * ERROR, not warn, and deduped by path.
+   *
+   * Only `error` and `fatal` are mirrored to Slack by the logger's hook — a warning
+   * reaches Vercel's log viewer and therefore nobody. This guard exists to catch a
+   * class of bug whose whole character is that it raises no error and returns a
+   * plausible wrong answer, so leaving its one signal somewhere unread makes the
+   * guard decoration. Checked 2026-09-20: several tables this codebase reads whole
+   * are far past the cap — funnel_event 48,183 rows, survey_behavior_event 136,900 —
+   * so a caller that truncates is not hypothetical.
+   *
+   * Deduped by path because the alternative to silence is not spam: one message per
+   * distinct broken caller is the information; the same caller repeating it every
+   * request is what trains people to mute the channel.
+   */
+  const route = path.split("?")[0] ?? path;
+  if (reportedTruncations.has(route)) return;
+  reportedTruncations.add(route);
+  logger.error(
+    { path: route, returned: POSTGREST_MAX_ROWS },
     "supabase: response hit PostgREST's max-rows cap — rows are MISSING and no error was raised; aggregate in SQL or paginate"
   );
 }
