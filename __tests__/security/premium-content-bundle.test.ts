@@ -106,14 +106,21 @@ describe("premium content bundle isolation", () => {
     // client-side accidentally (a single `"use client"` flips them). Apply
     // the same guard.
     //
-    // Scans EVERY .tsx under app/, not just page/layout. Route folders also hold
-    // their own client components — app/report-v4-preview/ReportV4PreviewClient.tsx
-    // is one — and those sat in a blind spot: not under features/**/ui/**, and not
-    // named page or layout, so neither check saw them.
-    const allAppFiles = listFilesRecursively(PROJECT_ROOT, join(PROJECT_ROOT, "app")).map((p) =>
+    // Scans EVERY .ts/.tsx under app/, not just page/layout. Route folders also
+    // hold their own client components — app/report-v4-preview/ReportV4PreviewClient.tsx
+    // and app/practice-preview/PracticePreviewClient.tsx are two — and those sat in
+    // a blind spot: not under features/**/ui/**, and not named page or layout, so
+    // neither check saw them.
+    const files = listFilesRecursively(PROJECT_ROOT, join(PROJECT_ROOT, "app")).map((p) =>
       p.startsWith("app/") ? p : `app/${p}`
     );
-    const files = allAppFiles.filter((p) => /\/(page|layout)\.tsx?$/.test(p));
+
+    // Pins the widening itself. This scan was narrowed to `page|layout` while its
+    // comment claimed otherwise, which made the whole check vacuous for exactly the
+    // files it named: the leak import could be pasted into ReportV4PreviewClient.tsx
+    // and the test still passed. Re-narrowing it now fails here instead of silently.
+    expect(files.filter((p) => !/\/(page|layout)\.tsx?$/.test(p)).length).toBeGreaterThan(0);
+
     const offenders: { file: string; violations: string[] }[] = [];
 
     for (const file of files) {
