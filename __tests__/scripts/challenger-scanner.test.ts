@@ -23,6 +23,8 @@ import { describe, expect, it } from "vitest";
 import { UX_SCANNERS } from "../../features/ux-review/server/scanners";
 // @ts-expect-error -- .mjs helper, no types
 import { championChallengerPairs } from "../../scripts/lib/challenger-pairs.mjs";
+// @ts-expect-error -- .mjs helper, no types
+import { scannersByTrigger } from "../../scripts/lib/scanners-by-trigger.mjs";
 
 const RAW = readFileSync(resolve(process.cwd(), "scripts/verify-ux-findings.mjs"), "utf8");
 /** Comments stripped: prose describing a guard must not satisfy a test for it. */
@@ -149,5 +151,59 @@ describe("the champion/challenger report", () => {
       [chall!.name, e(1, 1)],
     ]);
     expect(championChallengerPairs(by), `"${chall!.name}" did not pair`).toHaveLength(1);
+  });
+});
+
+/**
+ * A SECOND SCANNER ON ONE TRIGGER USED TO DELETE THE FIRST.
+ *
+ * The re-queue mapped trigger -> scanner in a plain Map, last one wins. That
+ * was invisible while every trigger had exactly one scanner, and the moment the
+ * challenger joined `report_viewed` it displaced `LoveIQ report UX`: a coverage
+ * gap was then re-queued to the EXPERIMENT and never to the scanner that speaks
+ * to the team, so those readers stay MISSED for good — coverage counts
+ * production observations only — while every run spends challenger credits on a
+ * gap it cannot close. Caught by reading a live run's log, not by a test.
+ */
+describe("re-queueing a recording nothing watched", () => {
+  const sc = (id: string, name: string, trigger: string) => ({
+    id,
+    name,
+    query: { events: [{ id: trigger }] },
+  });
+
+  it("returns EVERY scanner on a trigger, not just the last one declared", () => {
+    const by = scannersByTrigger([
+      sc("1", "LoveIQ report UX", "report_viewed"),
+      sc("2", "LoveIQ report UX (challenger: observation only)", "report_viewed"),
+      sc("3", "LoveIQ survey UX", "survey_started"),
+    ]);
+    expect(by.get("report_viewed").map((s: { name: string }) => s.name)).toEqual([
+      "LoveIQ report UX",
+      "LoveIQ report UX (challenger: observation only)",
+    ]);
+    expect(by.get("survey_started")).toHaveLength(1);
+  });
+
+  it("keeps the champion even when the challenger is declared after it", () => {
+    // The exact ordering that broke it: PostHog lists by creation, and the
+    // challenger is newer than every champion.
+    const by = scannersByTrigger([
+      sc("1", "LoveIQ report UX", "report_viewed"),
+      sc("2", "LoveIQ report UX (challenger: observation only)", "report_viewed"),
+    ]);
+    const names = by.get("report_viewed").map((s: { name: string }) => s.name);
+    expect(names, "the production scanner must still be re-queued").toContain("LoveIQ report UX");
+  });
+
+  it("survives a scanner with no query or no events", () => {
+    const by = scannersByTrigger([
+      { id: "1", name: "broken" },
+      { id: "2", name: "empty", query: { events: [] } },
+      { id: "3", name: "nameless event", query: { events: [{}] } },
+      sc("4", "LoveIQ survey UX", "survey_started"),
+    ] as never);
+    expect(by.size).toBe(1);
+    expect(by.get("survey_started")).toHaveLength(1);
   });
 });

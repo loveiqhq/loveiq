@@ -44,6 +44,7 @@
  * means the misses were re-queued successfully — see the note at that branch.
  */
 import { hogQuery } from "./lib/hogql.mjs";
+import { scannersByTrigger } from "./lib/scanners-by-trigger.mjs";
 
 const PROJECT = "244778";
 
@@ -218,13 +219,7 @@ if (misses.length > 0) {
   }
   const scannerList = (await scannerRes.json()).results ?? [];
 
-  /** trigger event -> scanner. Taken from each scanner's own query. */
-  const byTrigger = new Map();
-  for (const sc of scannerList) {
-    for (const ev of sc.query?.events ?? []) {
-      if (ev?.id) byTrigger.set(String(ev.id), sc);
-    }
-  }
+  const byTrigger = scannersByTrigger(scannerList);
 
   let queued = 0;
   let failed = 0;
@@ -236,30 +231,30 @@ if (misses.length > 0) {
   for (const m of batch) {
     for (const [i, trigger] of TRIGGERS.entries()) {
       if ((m.counts[i] ?? 0) === 0) continue;
-      const sc = byTrigger.get(trigger);
-      if (!sc) continue;
-      const res = await fetch(
-        `https://eu.posthog.com/api/projects/${PROJECT}/vision/scanners/${sc.id}/observe/`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${need("POSTHOG_API_KEY")}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ session_id: m.sid }),
-        }
-      );
-      const ok = res.ok;
-      if (ok) queued += 1;
-      else failed += 1;
-      const body = await res.text();
-      // The workflow id is the only handle on queued work, so print it.
-      const detail = ok
-        ? ` ${String(JSON.parse(body || "{}").workflow_id ?? "").slice(-13)}`
-        : ` — ${body.slice(0, 120)}`;
-      console.log(
-        `  ${ok ? "queued " : "FAILED "} ${m.sid.slice(0, 13)} -> ${sc.name.padEnd(24)} (${trigger})${detail}`
-      );
+      for (const sc of byTrigger.get(trigger) ?? []) {
+        const res = await fetch(
+          `https://eu.posthog.com/api/projects/${PROJECT}/vision/scanners/${sc.id}/observe/`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${need("POSTHOG_API_KEY")}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ session_id: m.sid }),
+          }
+        );
+        const ok = res.ok;
+        if (ok) queued += 1;
+        else failed += 1;
+        const body = await res.text();
+        // The workflow id is the only handle on queued work, so print it.
+        const detail = ok
+          ? ` ${String(JSON.parse(body || "{}").workflow_id ?? "").slice(-13)}`
+          : ` — ${body.slice(0, 120)}`;
+        console.log(
+          `  ${ok ? "queued " : "FAILED "} ${m.sid.slice(0, 13)} -> ${sc.name.padEnd(24)} (${trigger})${detail}`
+        );
+      }
     }
   }
   console.log(`\n${queued} observation(s) queued, ${failed} failed.`);
