@@ -2140,8 +2140,6 @@
   cursor: grab;
   height: 345px;
   overflow: clip;
-  /* Vertical scrolling stays with the page; only horizontal is ours. */
-  touch-action: pan-y;
   width: 359px;
 }
 .rv3 .rv3-deck__viewport:active {
