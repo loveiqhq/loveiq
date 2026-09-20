@@ -13,7 +13,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { judgeDiff } from "../../scripts/prove-fix.mjs";
+import { countDiff, judgeDiff } from "../../scripts/prove-fix.mjs";
 
 const SRC = readFileSync(resolve(process.cwd(), "scripts/prove-fix.mjs"), "utf8");
 
@@ -27,6 +27,67 @@ describe("what a generated fix is allowed to touch", () => {
     // files change no runtime behaviour, so the probe's verdict still covers
     // everything that ships.
     expect(judgeDiff(["features/survey/tests/SurveyPage.test.tsx"], 40).ok).toBe(true);
+  });
+
+  /**
+   * THE SECOND WAY TO EDIT THE JUDGE, and the pipeline found it unprompted.
+   *
+   * Test lines are free against the cap, on the assumption that they only ever
+   * get ADDED. PR #222 — the first fix this pipeline generated on its own — was
+   * told "do not change whether the button is disabled". It removed `disabled`
+   * from the button and deleted `expect(agreeButton).toBeDisabled()` from the
+   * existing test. Probe green, suite green, six checks green: the assertion
+   * that would have failed was the one it deleted.
+   *
+   * A deletion inside a test is the same act as editing a probe, so it gets the
+   * same answer. A NEW test file has no deletions and stays free.
+   */
+  it("refuses a fix that deletes lines from an existing test", () => {
+    const r = judgeDiff(
+      ["features/survey/ui/SurveyPage.tsx", "features/survey/tests/SurveyPage.test.tsx"],
+      {
+        total: 24,
+        product: 18,
+        testCuts: [{ file: "features/survey/tests/SurveyPage.test.tsx", deletions: 4 }],
+      }
+    );
+    expect(r.ok).toBe(false);
+    // Oversize is a tier, not a refusal — this must be a refusal.
+    expect(r.oversize).toBe(false);
+    expect(r.why).toMatch(/never delete them/);
+    expect(r.why).toContain("SurveyPage.test.tsx");
+  });
+
+  it("spots a test deletion in the numstat itself", () => {
+    // The judgement above is only as good as the collection. These are the real
+    // numstat lines PR #222 produced.
+    const c = countDiff([
+      "5\t4\tfeatures/survey/tests/SurveyPage.test.tsx",
+      "15\t3\tfeatures/survey/ui/SurveyPage.tsx",
+    ]);
+    expect(c.testCuts).toEqual([
+      { file: "features/survey/tests/SurveyPage.test.tsx", deletions: 4 },
+    ]);
+    expect(c.product).toBe(18); // the test file does not count against the cap
+    expect(c.total).toBe(27);
+    expect(judgeDiff(["features/survey/ui/SurveyPage.tsx"], c).ok).toBe(false);
+  });
+
+  it("does not mistake a brand-new test file for a deletion", () => {
+    const c = countDiff(["56\t0\tfeatures/survey/tests/New.test.tsx"]);
+    expect(c.testCuts).toEqual([]);
+    expect(c.product).toBe(0);
+  });
+
+  it("still lets a fix add a brand-new test for free", () => {
+    // Without this the guard could refuse every test change and look correct.
+    expect(
+      judgeDiff(["features/survey/ui/SurveyPage.tsx", "features/survey/tests/New.test.tsx"], {
+        total: 93,
+        product: 37,
+        testCuts: [],
+      }).ok
+    ).toBe(true);
   });
 
   /**
