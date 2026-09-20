@@ -128,16 +128,39 @@ const url = need("SUPABASE_URL");
 const key = need("SUPABASE_SERVICE_ROLE_KEY");
 const since = new Date(Date.now() - DAYS * 86_400_000).toISOString();
 
+// Declared before the fetch that interpolates it — a `const` is not hoisted.
+const SUBMISSIONS_LIMIT = 1000;
 const subsRes = await fetch(
   `${url}/rest/v1/survey_submission?select=id,posthog_session_id,created_date_time` +
-    `&created_date_time=gte.${since}&posthog_session_id=not.is.null&limit=1000`,
+    `&created_date_time=gte.${since}&posthog_session_id=not.is.null&limit=${SUBMISSIONS_LIMIT}`,
   { headers: { apikey: key, Authorization: `Bearer ${key}` } }
 );
 if (!subsRes.ok) {
   console.error(`supabase ${subsRes.status}`);
   process.exit(2);
 }
-const subs = (await subsRes.json()).filter((s) => SAFE_ID.test(s.posthog_session_id ?? ""));
+const subsRaw = await subsRes.json();
+/**
+ * A read that came back exactly full was CUT SHORT.
+ *
+ * PostgREST answers a truncated read with 200 and a short body — no error, no
+ * flag. Every figure below is then computed on a slice: `MISSED` would be a
+ * count of the readers that happened to fit, and the run would report a
+ * coverage percentage it has no basis for. 209 submissions over 14 days today,
+ * so this is margin rather than a live bug — but the number is a fact about
+ * current volume, not a property of the code, and this is the family of failure
+ * that is only ever noticed long afterwards.
+ *
+ * Exit 2 — "could not measure" — because that is exactly what it is.
+ */
+if (subsRaw.length >= SUBMISSIONS_LIMIT) {
+  console.error(
+    `submission read came back at its limit (${subsRaw.length}/${SUBMISSIONS_LIMIT}) — ` +
+      `rows are MISSING, so coverage cannot be measured. Narrow DAYS or paginate.`
+  );
+  process.exit(2);
+}
+const subs = subsRaw.filter((s) => SAFE_ID.test(s.posthog_session_id ?? ""));
 if (subs.length === 0) {
   console.log(`no submissions with a session id in the last ${DAYS} days`);
   process.exit(0);
