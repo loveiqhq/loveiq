@@ -20,6 +20,28 @@ import { context, header, linkButton, section } from "@shared/observability/slac
 
 import { UX_REVIEW_MIN_CONFIDENCE, UX_SCANNERS } from "./scanners";
 
+/**
+ * Scanners the digest must stay silent about.
+ *
+ * A challenger is an experiment running alongside its champion on the same
+ * trigger event. The verifier already refuses to post its verdicts and to open
+ * its pull requests — but the DIGEST reads PostHog and the ledger directly and
+ * had no notion of role, so the first challenger produced a second bullet
+ * reading "The report — watched 3, suspected 0" directly beneath the
+ * champion's "The report — watched 85, suspected 27". Two lines, the same
+ * label, different numbers, in the one message written for someone who does
+ * not read the code.
+ *
+ * Same rule as everywhere else: a challenger is measured, never consulted.
+ * `scripts/replay-bench/score.mjs --ledger` is where the comparison belongs.
+ */
+const CHALLENGER_NAMES = new Set(
+  UX_SCANNERS.filter((s) => s.role === "challenger").map((s) => s.name)
+);
+/** Exported to be tested. An unknown scanner counts as production. */
+export const isChallengerScanner = (name: string | null | undefined): boolean =>
+  CHALLENGER_NAMES.has(String(name ?? ""));
+
 const PROJECT = "244778";
 const POSTHOG_REPLAY_BASE = `https://eu.posthog.com/project/${PROJECT}/replay`;
 
@@ -217,14 +239,19 @@ export async function fetchDailyStats(): Promise<DailyStat[]> {
   if (payload.error) {
     throw new Error(`posthog daily query error: ${String(payload.error).slice(0, 200)}`);
   }
-  return (payload.results ?? []).map((row) => ({
-    // `?? "unknown"` does not fire: HogQL's toString(NULL) is the EMPTY STRING,
-    // not null, so a missing scanner_name arrived here as "" and reached
-    // Marcus's digest as a bullet with no name at all ("• — watched 1").
-    scanner: String(row[0] || "unknown"),
-    observed: Number(row[1]) || 0,
-    yes: Number(row[2]) || 0,
-  }));
+  return (
+    (payload.results ?? [])
+      .map((row) => ({
+        // `?? "unknown"` does not fire: HogQL's toString(NULL) is the EMPTY
+        // STRING, not null, so a missing scanner_name arrived here as "" and
+        // reached Marcus's digest as a bullet with no name ("• — watched 1").
+        scanner: String(row[0] || "unknown"),
+        observed: Number(row[1]) || 0,
+        yes: Number(row[2]) || 0,
+      }))
+      // An experiment does not get a line in the daily summary.
+      .filter((r) => !isChallengerScanner(r.scanner))
+  );
 }
 
 /** The six outcomes `ux_finding.outcome` may hold — mirrors the table's CHECK. */
@@ -319,11 +346,22 @@ export async function fetchCoverageStats(): Promise<CoverageStat | null> {
     // Same id guard as every other per-session lookup here: these are
     // interpolated into HogQL.
     const inList = ids.map((id) => `'${id}'`).join(",");
+    /**
+     * Watched BY THE PRODUCTION FLEET. A challenger observing a recording is
+     * not coverage: it is an experiment, it can be deleted tomorrow, and if the
+     * champion failed to open a session while the challenger did, counting it
+     * here would report the reader as watched when the scanner that speaks to
+     * the team never looked. Narrow today — the challenger only sweeps
+     * sessions its champion already saw — and wrong in exactly the direction
+     * that hides a gap, which is the failure this figure exists to expose.
+     */
+    const excluded = [...CHALLENGER_NAMES].map((n) => `'${n.replace(/'/g, "''")}'`).join(",");
     const observed = await sessionQuery(
       `SELECT count(DISTINCT properties.session_id) FROM events
        WHERE event = '$recording_observed'
          AND timestamp > now() - INTERVAL 10 DAY
-         AND properties.session_id IN (${inList})`
+         AND properties.session_id IN (${inList})` +
+        (excluded ? `\n         AND toString(properties.scanner_name) NOT IN (${excluded})` : "")
     );
     if (observed === null) return null;
     return { submissions: ids.length, observed: Number(observed[0]?.[0]) || 0 };
@@ -360,13 +398,23 @@ export async function fetchVerificationStats(): Promise<VerificationStat | null>
       }
     );
     if (!res.ok) return null;
-    const rows = (await res.json()) as Array<{
+    const allRows = (await res.json()) as Array<{
       outcome?: string;
       delivered?: boolean;
       criterion?: string | null;
       url_path?: string | null;
       scanner_name?: string | null;
     }>;
+    /**
+     * Production rows only. The digest reports what the CURRENT fleet
+     * concluded; a challenger's verdicts are experiment data and would inflate
+     * every count Marcus reads — including "undelivered", which is always true
+     * for a challenger by design, so its findings would show up as verdicts
+     * that reached nobody rather than as an experiment doing what it is meant
+     * to do.
+     */
+    const rows = allRows.filter((r) => !isChallengerScanner(r.scanner_name));
+
     const tally: VerificationStat = {
       reproduced: 0,
       reproducedItems: [],
