@@ -856,6 +856,40 @@ function sourceCoverageProbes(live: LiveCounts): RetrievalProbe[] {
       "how many signups did we get last month",
       all(topSource("analytics"), bodyHas(/Signups/))
     ),
+    /**
+     * THE EDGE THE BATTERY COULD NOT SEE.
+     *
+     * Until 2026-09-20 not one of these 222 probes asserted on `evidence`, so a penalty
+     * large enough to bury the published literature entirely would have scored exactly
+     * as well as a good one — and the value was about to be picked by whichever number
+     * made the battery happiest. These are the questions the evidence base exists to
+     * answer; they are what make a demotion sweep two-sided.
+     *
+     * TOP 3, not the default 5: at a 1.0 penalty the literature was still reachable in
+     * the top TWELVE on all five questions, so a probe that tolerates that cannot tell a
+     * working value from a broken one.
+     *
+     * Mutation-tested by setting the live penalty to 1.0: ONE of these three goes red
+     * (`evidence-construct`). That is a thinner guard than it looks — the other two hold
+     * because their questions have almost no competition in the corpus — so if a future
+     * sweep wants a value above 0.5, take the reach measurement in the migration rather
+     * than trusting these three to object.
+     */
+    P(
+      "evidence-research",
+      "what does the published research say about sexual desire discrepancy",
+      topSource("evidence", 3)
+    ),
+    P(
+      "evidence-construct",
+      "which studies support our attachment style dimension",
+      topSource("evidence", 3)
+    ),
+    P(
+      "evidence-literature",
+      "what does the literature say about relationship satisfaction",
+      topSource("evidence", 3)
+    ),
     P("src-ga4", "how many sessions and users did google analytics record", topSource("ga4")),
     P("src-gsc", "what do people type into google to find us", topSource("gsc")),
     P("src-slack", "what has the team been discussing in slack", topSource("slack"), {
