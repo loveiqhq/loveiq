@@ -504,6 +504,14 @@ hook would clean the event properties and **would not touch the replay**, which
 renders the URL from the recording itself, so it would look like a fix without
 being one. Anyone who can open a session replay can open that reader's report.
 
+**And it is TWO recorders, not one.** Microsoft Clarity also loads in
+production (`public/clarity-init.js`, gated on `productionAnalyticsEnabled`) and
+records the same URLs, in a separate vendor with a separate access list and its
+own masking configured in the Clarity dashboard rather than in this repo. Any
+decision below has to be applied there too, or it is half a decision — and
+Clarity is the easier one to forget, because nothing in the codebase configures
+what it captures.
+
 Access today is four PostHog members, all `@loveiq.org`, so this is internal
 exposure rather than public. That is a reason to decide calmly, not a reason it
 is fine: the data is special-category-adjacent under GDPR and the principle is
