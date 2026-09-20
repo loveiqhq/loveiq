@@ -189,6 +189,7 @@ import {
   ingestDrive,
   isPersonalDataExport,
   isVendorBilling,
+  sheetTabsWithRows,
 } from "@features/brain/server/ingest/drive";
 
 const STAMP = "2026-08-28T04:47:00.000Z";
@@ -1345,5 +1346,45 @@ describe("isVendorBilling", () => {
 
   it("is not fooled by the word appearing mid-word", () => {
     expect(isVendorBilling("invoicing-2026-guide.pdf", PDF)).toBe(false);
+  });
+});
+
+/**
+ * The reconciler asks which tabs SHOULD have produced a heading, and the honest
+ * answer is not "all of them".
+ *
+ * `sheetText` skips a tab with no rows, so a check expecting one heading per tab
+ * title reports a gap the corpus can never close. Measured 2026-09-20: a tab named
+ * ">>> Archive", used as a visual separator and holding nothing, was reported as a
+ * missing tab by the nightly reconciler — a false alarm on a daily job, which is how
+ * a check stops being read.
+ */
+describe("sheetTabsWithRows", () => {
+  it("leaves out a tab that holds nothing", async () => {
+    sheetTabs = ["Costs", ">>> Archive", "Core_KPI"];
+    sheetValues = [
+      { values: [["Slack", "41.25"]] },
+      { values: [] },
+      { values: [["Paid Reports", "600"]] },
+    ];
+    await expect(sheetTabsWithRows("t", "sheet1")).resolves.toEqual(["Costs", "Core_KPI"]);
+  });
+
+  it("treats a tab of blank cells as empty, not as content", async () => {
+    sheetTabs = ["Real", "Blank"];
+    sheetValues = [{ values: [["x"]] }, { values: [["", "  "], [""]] }];
+    await expect(sheetTabsWithRows("t", "sheet1")).resolves.toEqual(["Real"]);
+  });
+
+  it("keeps every tab when they all hold something", async () => {
+    sheetTabs = ["A", "B"];
+    sheetValues = [{ values: [["1"]] }, { values: [["2"]] }];
+    await expect(sheetTabsWithRows("t", "sheet1")).resolves.toEqual(["A", "B"]);
+  });
+
+  it("returns nothing for a spreadsheet with no tabs at all", async () => {
+    sheetTabs = [];
+    sheetValues = [];
+    await expect(sheetTabsWithRows("t", "sheet1")).resolves.toEqual([]);
   });
 });

@@ -18,7 +18,7 @@ import { supabaseFetch, countRows } from "@features/admin/server/supabase";
 import { buildReportVoiceRows } from "@features/brain/server/ingest/report-voice";
 import { buildDomainRows } from "@features/brain/server/ingest/domain";
 import { redactUrlSecrets } from "@features/brain/server/ingest/upsert";
-import { sheetTabTitles } from "@features/brain/server/ingest/drive";
+import { sheetTabsWithRows } from "@features/brain/server/ingest/drive";
 import { DRIVE_SCOPE, getDelegatedToken, readVercelOidcToken } from "@shared/http/google-oauth";
 import { reconcile, summarise, type Reading } from "@features/brain/server/reconcile";
 import { recordNotice } from "@features/brain/server/notice";
@@ -448,27 +448,56 @@ export async function sheetTabReading(request: Request): Promise<Reading | null>
   // is high-entropy enough that `no-secrets` refuses the commit, and a literal that
   // trips a secret scanner is a literal somebody will eventually silence the scanner for.
   const spreadsheetFilter = `url=ilike.*${encodeURIComponent("/spreadsheets/")}*`;
-  const res = await supabaseFetch(
-    `/rest/v1/brain_chunk?select=source_id,body&source=eq.drive&${spreadsheetFilter}&limit=400`
-  );
-  if (!res.ok) return null;
-  const rows = (await res.json()) as Array<{ source_id: string; body: string }>;
 
-  // Group every part back to its document: a tab heading may sit in any of them.
-  const byDoc = new Map<string, string>();
-  for (const r of rows) {
-    const base = r.source_id.split("#")[0]!;
-    byDoc.set(base, `${byDoc.get(base) ?? ""}\n${r.body ?? ""}`);
+  /**
+   * IDS FIRST, PAGED — then every chunk of the three sampled documents.
+   *
+   * This used to read one page of 400 chunks and group whatever came back. There are
+   * 1,004 spreadsheet chunks, so a document whose parts fell outside that page had
+   * its tabs reported MISSING when they were indexed perfectly well. It fired on
+   * 2026-09-20 and named four tabs that were in the corpus, including one of 397
+   * rows — a check that cries wolf daily is worse than no check, because the next
+   * real disagreement is the one nobody reads.
+   *
+   * Ids are cheap (no body), so page them properly rather than trusting one request
+   * not to hit PostgREST's 1,000-row ceiling.
+   */
+  const baseIds = new Set<string>();
+  for (let offset = 0; offset < 20_000; offset += 1000) {
+    const page = await supabaseFetch(
+      `/rest/v1/brain_chunk?select=source_id&source=eq.drive&${spreadsheetFilter}` +
+        `&order=source_id.asc&limit=1000&offset=${offset}`
+    );
+    if (!page.ok) return null;
+    const rows = (await page.json()) as Array<{ source_id: string }>;
+    for (const r of rows) baseIds.add(r.source_id.split("#")[0]!);
+    if (rows.length < 1000) break;
   }
+
   const dayIndex = Math.floor(Date.now() / 86_400_000);
-  const sample = sampleForDay([...byDoc.keys()].sort(), dayIndex, 3);
+  const sample = sampleForDay([...baseIds].sort(), dayIndex, 3);
   if (sample.length === 0) return null;
+
+  // Every part of the sampled documents, so a tab heading cannot be missed for
+  // sitting in a chunk the check never fetched.
+  const byDoc = new Map<string, string>();
+  for (const base of sample) {
+    const res = await supabaseFetch(
+      `/rest/v1/brain_chunk?select=source_id,body&source=eq.drive` +
+        `&source_id=like.${encodeURIComponent(base)}*&limit=1000`
+    );
+    if (!res.ok) return null;
+    const rows = (await res.json()) as Array<{ source_id: string; body: string }>;
+    byDoc.set(base, rows.map((r) => r.body ?? "").join("\n"));
+  }
 
   let expected = 0;
   let found = 0;
   for (const base of sample) {
     const fileId = base.replace(/^doc:/, "");
-    const titles = await sheetTabTitles(token, fileId);
+    // Only tabs that HOLD something: the reader skips an empty tab, so expecting a
+    // heading for one is a gap the corpus can never close.
+    const titles = await sheetTabsWithRows(token, fileId);
     const text = byDoc.get(base) ?? "";
     expected += titles.length;
     found += tabsPresentInText(text, titles);

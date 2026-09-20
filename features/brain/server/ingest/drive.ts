@@ -545,6 +545,36 @@ export async function sheetTabTitles(token: string, fileId: string): Promise<str
     .filter((t): t is string => typeof t === "string" && t.length > 0);
 }
 
+/**
+ * The tabs that actually PRODUCE a heading — i.e. the ones with at least one
+ * non-empty row.
+ *
+ * `sheetText` skips an empty tab outright (`if (rows.length === 0) return`), so a
+ * reconciliation that expects one heading per TITLE reports a false gap for every
+ * empty tab. Measured 2026-09-20: a tab literally named ">>> Archive", used as a
+ * visual separator and holding nothing, was reported as a missing tab.
+ *
+ * This exists so the check can replicate the ingester's rule instead of a
+ * simplification of it.
+ */
+export async function sheetTabsWithRows(token: string, fileId: string): Promise<string[]> {
+  const titles = await sheetTabTitles(token, fileId);
+  if (titles.length === 0) return [];
+  const ranges = titles
+    .map((t) => `ranges=${encodeURIComponent(`'${t.replace(/'/g, "''")}'`)}`)
+    .join("&");
+  const res = await driveGet(
+    token,
+    `${SHEETS_API}/${fileId}/values:batchGet?${ranges}&majorDimension=ROWS`
+  );
+  if (!res.ok) throw new Error(`sheets-values ${res.status}`);
+  const payload = (await res.json()) as { valueRanges?: Array<{ values?: unknown[][] }> };
+  return titles.filter((_, i) => {
+    const rows = (payload.valueRanges ?? [])[i]?.values ?? [];
+    return rows.some((row) => row.join("").trim().length > 0);
+  });
+}
+
 async function sheetText(token: string, fileId: string): Promise<string> {
   const titles = await sheetTabTitles(token, fileId);
   if (titles.length === 0) return "";
