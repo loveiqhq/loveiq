@@ -142,6 +142,32 @@ wrong and the scanner should be deleted rather than tuned.
 Order matters when enabling one: the suppression above must be LIVE before the
 scanner is, or a trial prompt posts into a reader's thread.
 
+**How this one ends, decided before the result is known** (2026-09-20), because
+an experiment with no stopping rule becomes a scanner nobody remembers enabling:
+
+|                        |                                                                                                                                                 |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Sample**             | at least 30 labelled challenger findings, or four weeks, whichever first                                                                        |
+| **Promote if**         | its `contradicted` rate is materially below the champion's AND its precision is no worse                                                        |
+| **Delete if**          | `contradicted` is no lower — the hypothesis was wrong, and a wrong hypothesis is not tuned into a right one                                     |
+| **Blocker either way** | it must cite a moment. It currently does not: 0 of its findings carry a timestamp against the champion's 67%, because it writes "At," and stops |
+
+That last row is why promotion is not just a flag flip. The citation is what
+makes a finding checkable by a human, and the challenger loses it — harmless
+while its findings never reach anybody, disqualifying the moment they do.
+
+**Do NOT fix that prompt on the running scanner.** An edit bumps
+`scanner_version`, and a scanner observes a given session once ever, so the
+170-session like-for-like comparison would be split across two prompts and stop
+meaning anything. Fix it in a SECOND challenger, after this one has answered.
+
+**First reading, 170 sessions seen by both and 0 by only one:** champion flagged
+47 (28%), challenger 2 (1%); champion names a control the user pressed in 28 of
+its 48 findings, challenger in 0 of 2. Directionally what was predicted, on a
+sample far too small to act on — and a scanner that answered NO to everything
+would look identical, which is exactly why the probes, not the flag rate,
+decide.
+
 **Belongs:** scanner prompts and their pinned versions, reading observations,
 refuting them against our telemetry, the digest.
 

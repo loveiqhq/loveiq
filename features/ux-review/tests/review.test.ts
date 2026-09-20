@@ -18,6 +18,7 @@ import {
   fetchVerificationStats,
   isChallengerScanner,
   warnIfTruncated,
+  buildScorecardMessage,
   fetchFindings,
   recordingLink,
   type UxFinding,
@@ -829,7 +830,10 @@ describe("a truncated read is never reported as a whole one", () => {
     const src = readFileSync(resolve(process.cwd(), "features/ux-review/server/review.ts"), "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/(^|[^:])\/\/.*$/gm, "$1");
-    const limitedReads = src.match(/&limit=\d+/g) ?? [];
+    // Matches a literal `&limit=500` AND a `&limit=${LIMIT}`. Digits-only
+    // under-counts the limited reads, so an unguarded templated one would slip
+    // through the very check that exists to find it.
+    const limitedReads = src.match(/&limit=(?:\d+|\$\{[^}]+\})/g) ?? [];
     const calls = src.match(/warnIfTruncated\(/g) ?? [];
     expect(limitedReads.length, "there should be limited reads to guard").toBeGreaterThan(0);
     // One call per limited read, plus the declaration itself.
@@ -842,5 +846,78 @@ describe("a truncated read is never reported as a whole one", () => {
     warnIfTruncated(new Array(501).fill(0), 500, "verification: ux_finding");
     spy.mockRestore();
     expect(JSON.stringify(errors)).toMatch(/rows are MISSING/);
+  });
+});
+
+/**
+ * THE WEEKLY SCORECARD.
+ *
+ * `score.mjs --ledger` computes all of this and prints it into a CI log.
+ * Nobody reads CI logs — that is the failure mode behind most of what went
+ * wrong in this pipeline, and a champion/challenger experiment whose result
+ * lands there is the same mistake with a nicer name.
+ */
+describe("the scanner scorecard", () => {
+  const sc = (scanner: string, right: number, wrong: number, contradicted = 0) => ({
+    scanner,
+    right,
+    wrong,
+    contradicted,
+  });
+  const render = (scores: Parameters<typeof buildScorecardMessage>[0]) =>
+    JSON.stringify(buildScorecardMessage(scores, 30).blocks);
+
+  it("never prints two lines with the same name", () => {
+    // `plainScanner` maps a challenger and its champion to the SAME words, so
+    // without a distinguishing suffix the reader sees "The report" twice with
+    // different numbers. That exact shape reached Marcus once already.
+    const out = render([
+      sc("LoveIQ report UX", 0, 41, 21),
+      sc("LoveIQ report UX (challenger: observation only)", 0, 1),
+    ]);
+    expect(out).toContain("new version being tested");
+    expect(out.match(/The report/g)?.length, "the champion and trial must read differently").toBe(
+      (out.match(/The report — new version/g)?.length ?? 0) + 2
+    );
+  });
+
+  it("uses no internal names", () => {
+    // "our own dead_click events" is the scanner_name in the database. It is
+    // not a phrase for a message written for someone who does not read code.
+    const out = render([sc("our own dead_click events", 0, 6)]);
+    expect(out).toContain("Taps our own code recorded");
+    expect(out).not.toContain("dead_click");
+  });
+
+  it("does not invite a decision before the trial has a sample", () => {
+    const out = render([
+      sc("LoveIQ report UX", 0, 41, 21),
+      sc("LoveIQ report UX (challenger: observation only)", 0, 1),
+    ]);
+    expect(out).toContain("1 of the 30 results needed");
+    expect(out, "no verdict may be implied at n=1").not.toContain("Trial result");
+  });
+
+  it("reports the comparison once the trial has enough", () => {
+    const out = render([
+      sc("LoveIQ report UX", 0, 41, 21),
+      sc("LoveIQ report UX (challenger: observation only)", 6, 24, 1),
+    ]);
+    expect(out).toContain("Trial result");
+    expect(out, "the refutation counts are the point of the experiment").toContain("1 times");
+  });
+
+  it("leaves the challenger out of the headline total", () => {
+    // The headline is what the LIVE checks are worth. Folding an experiment in
+    // would make the number move when nothing about the product changed.
+    const out = buildScorecardMessage(
+      [sc("LoveIQ report UX", 1, 9), sc("LoveIQ report UX (challenger: observation only)", 9, 1)],
+      30
+    );
+    expect(out.text).toContain("1 of 10");
+  });
+
+  it("says so plainly when there is nothing to report", () => {
+    expect(render([])).toContain("No checks have been scored yet");
   });
 });
