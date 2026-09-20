@@ -12,6 +12,9 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+// @ts-expect-error -- .mjs helper, no types
+import { redactReportToken } from "../../scripts/lib/redact-report-token.mjs";
+
 const VERIFIER = resolve(process.cwd(), "scripts/verify-ux-findings.mjs");
 const MIGRATION = resolve(
   process.cwd(),
@@ -80,5 +83,52 @@ describe("ux_finding ledger", () => {
     expect(src.match(/delivered:\s*sent === "posted"/g) ?? []).toHaveLength(3);
     // And a truthiness test on the status string would finalise a failed claim.
     expect(src).not.toMatch(/if \(delivered\)\s*await markVerified/);
+  });
+});
+
+/**
+ * A REPORT TOKEN IS A CREDENTIAL, AND THE LEDGER WAS STORING IT.
+ *
+ * `/report/<token>` is how a paid report is opened: the token IS the auth, it
+ * does not expire, and the report is an intimate psychological profile.
+ * `ux_finding.url_path` held the live path verbatim — 14 rows carrying 13
+ * distinct working tokens by 2026-09-20, three days after the table was
+ * created, one more with every report finding.
+ *
+ * The probe still gets the real path inside the run; only what is PERSISTED is
+ * redacted. The ledger needs the shape of the page, never the key to it.
+ */
+describe("the ledger never stores a report token", () => {
+  it("redacts the token and keeps the shape", () => {
+    expect(redactReportToken("/report/rpt_Ey6yShdpUPQmOUvbZrti")).toBe("/report/<redacted>");
+    expect(redactReportToken("/report/rpt_abc123?archetype=spiritual-lover")).toBe(
+      "/report/<redacted>?archetype=spiritual-lover"
+    );
+    // The fragment is where the most sensitive part of the URL lives.
+    expect(redactReportToken("/report/rpt_abc#typical_sexual_fantasy")).toBe(
+      "/report/<redacted>#typical_sexual_fantasy"
+    );
+  });
+
+  it("leaves every other path alone", () => {
+    // Redacting more than the credential would blind the digest's "where did
+    // this happen" line, which is the whole value of the column.
+    expect(redactReportToken("/survey")).toBe("/survey");
+    expect(redactReportToken("/")).toBe("/");
+    expect(redactReportToken("/reports/overview")).toBe("/reports/overview");
+    expect(redactReportToken(null)).toBe(null);
+    expect(redactReportToken(undefined)).toBe(undefined);
+  });
+
+  it("is actually applied to what gets written", () => {
+    // The function existing proves nothing; a mutation removing the call at the
+    // write sites has to fail. Both recordFinding calls must use it.
+    const src = readFileSync(resolve(process.cwd(), "scripts/verify-ux-findings.mjs"), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/(^|[^:])\/\/.*$/gm, "$1");
+    const writes = src.match(/url_path:/g) ?? [];
+    const redacted = src.match(/url_path: redactReportToken\(/g) ?? [];
+    expect(writes.length, "there should be url_path writes to check").toBeGreaterThan(0);
+    expect(redacted.length, "every url_path write must be redacted").toBe(writes.length);
   });
 });

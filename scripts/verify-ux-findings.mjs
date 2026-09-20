@@ -38,6 +38,7 @@ import {
 // it can be tested without running everything else. See scripts/lib/replay-pr.mjs.
 import { AUTO_PR_CRITERIA, openReproductionPr } from "./lib/replay-pr.mjs";
 import { devicesForSession } from "./lib/session-devices.mjs";
+import { redactReportToken } from "./lib/redact-report-token.mjs";
 import { UX_SCANNERS } from "../features/ux-review/server/scanners.ts";
 import { hogQuery } from "./lib/hogql.mjs";
 
@@ -1135,7 +1136,7 @@ for (const [
     viewport_min: viewport?.min ?? null,
     viewport_max: viewport?.max ?? null,
     os: viewport?.os || null,
-    url_path: clickTarget?.pathname ?? null,
+    url_path: redactReportToken(clickTarget?.pathname ?? null),
     target_selector: clickTarget?.selector ?? null,
     pr_url: prUrl,
     delivered: sent === "posted",
@@ -1155,7 +1156,7 @@ for (const [
     viewport_min: viewport?.min ?? null,
     viewport_max: viewport?.max ?? null,
     os: viewport?.os || null,
-    url_path: clickTarget?.pathname ?? null,
+    url_path: redactReportToken(clickTarget?.pathname ?? null),
     target_selector: clickTarget?.selector ?? null,
     pr_url: null,
   });
