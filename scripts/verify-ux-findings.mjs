@@ -48,6 +48,14 @@ import { hogQuery } from "./lib/hogql.mjs";
  * exactly a V1. Adding it to a scroll or a layout criterion would be running a
  * check that cannot speak to the claim.
  */
+/**
+ * How many findings one run may FETCH. Not a work bound — PROBE_BUDGET is that.
+ * This only has to be larger than the busiest lookback window will ever be; at
+ * ~11 findings a day against a 24-hour window, 500 is two orders of margin, and
+ * the run shouts if it is ever reached. See the check after the query.
+ */
+const FINDINGS_FETCH_LIMIT = Number(process.env.FINDINGS_FETCH_LIMIT ?? 500);
+
 const CLICK_TARGET_CRITERIA = new Set(["D1", "V1"]);
 
 /**
@@ -696,8 +704,35 @@ const findings = await posthog(`
   -- arrivals run ~11/day against a budget of 10 on ~5 runs, so nothing waits
   -- long, and the thing that waits is the thing with the most slack left.
   ORDER BY timestamp ASC
-  LIMIT 50
+  LIMIT ${FINDINGS_FETCH_LIMIT}
 `);
+
+/**
+ * THE FETCH MUST NOT BE A SECOND LOOKBACK BOUND.
+ *
+ * `LIMIT 50` with `ORDER BY timestamp ASC` is the mirror of the bug the
+ * ordering fixed. Oldest-first stops the tail starving; a LIMIT below the
+ * number of findings in the window then starves the HEAD instead — the newest
+ * are never fetched at all, so they are not claimed, not verified, not counted
+ * and nothing says they existed.
+ *
+ * It bit within hours of the window widening 6h -> 24h: 57 findings in the
+ * window, 50 returned, and the 7 newest — including both findings from the
+ * challenger this pipeline had just been set up to measure — silently absent.
+ *
+ * The existing budget test asserts LIMIT > PROBE_BUDGET (50 > 10) and passes
+ * happily through all of that, because that invariant is about the WORK. This
+ * one is about the WINDOW: the fetch has to be able to return everything in it.
+ * Bound the work, never the lookback — and a LIMIT is part of the lookback
+ * whenever it can bite before the budget does.
+ */
+if (findings.length >= FINDINGS_FETCH_LIMIT) {
+  console.log(
+    `::error::the findings fetch returned ${findings.length} rows, its own limit — ` +
+      `the newest findings in the ${LOOKBACK_HOURS}h window were NOT fetched. ` +
+      `Raise FINDINGS_FETCH_LIMIT above the busiest window.`
+  );
+}
 
 /**
  * Findings we do not need a model for.
