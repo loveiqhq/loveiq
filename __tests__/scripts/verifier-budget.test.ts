@@ -98,6 +98,22 @@ describe("the verifier's per-run budget", () => {
       wfFallback,
       "the workflow fallback must match the script default, or the default is decorative"
     ).toBe(scriptDefault);
+
+    /**
+     * And the DISPATCH INPUT must not carry a default of its own.
+     *
+     * A `default:` there makes `inputs.lookback_hours` non-empty on every
+     * manual run, so the `|| '<fallback>'` above never fires — a third copy of
+     * the same number, and the least visible one wins. It really did: the
+     * script, the workflow fallback and the docs all said 24 while every
+     * dispatched run quietly used 6.
+     */
+    const inputBlock = /lookback_hours:\n((?:\s{8}.*\n)+)/.exec(wf)?.[1] ?? "";
+    expect(inputBlock, "the lookback_hours input must exist").not.toBe("");
+    expect(
+      inputBlock.replace(/^\s*#.*$/gm, ""),
+      "lookback_hours must have no default, or it overrides the real window"
+    ).not.toMatch(/^\s*default:/m);
   });
 
   it("drains the oldest finding first, so a busy day cannot starve it", () => {

@@ -20,9 +20,14 @@ on:
   workflow_dispatch:
     inputs:
       lookback_hours:
-        description: "How far back to look for findings"
+        # NO DEFAULT, deliberately. A default here is not a fallback — it makes
+        # `inputs.lookback_hours` non-empty on every dispatch, so the `|| '24'`
+        # below never fires and a manual run silently used 6 while the script,
+        # the workflow and the docs all said 24. Three copies of one number,
+        # and the one that won was the least visible. Leave it blank to get the
+        # real window; type a smaller number only to narrow a run on purpose.
+        description: "How far back to look, in hours (blank = the normal window)"
         required: false
-        default: "6"
       dry_run:
         description: "Verify and print, post nothing to Slack"
         required: false
