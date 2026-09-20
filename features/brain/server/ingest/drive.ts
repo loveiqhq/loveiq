@@ -960,11 +960,22 @@ export async function ingestDrive(
     }
   }
 
+  /**
+   * The files this run actually GOT TO, whatever came of them.
+   *
+   * Not the same as "produced rows". A document that was read and turned out empty,
+   * or was refused as a list of people, belongs in here — it was reached, and the
+   * decision not to index it is a decision, not an outage. Only files the loop never
+   * arrived at are deferred to the sweep's keep-set below.
+   */
+  const reached = new Set<string>();
+
   for (const file of toFetch) {
     if (isOutOfTime()) {
       stop(`time-budget@fetch:${rows.length}rows`);
       break;
     }
+    reached.add(`doc:${file.id}`);
     try {
       const text = await docText(token, file.id as string, file.mimeType);
       // A file that yields no text -- a scanned pdf with no text layer, an empty
@@ -1017,7 +1028,22 @@ export async function ingestDrive(
 
   const written = await upsertChunks(rows);
   const writtenIds = new Set(rows.map((r) => r.source_id));
+  /**
+   * ONLY THE FILES THIS RUN NEVER REACHED.
+   *
+   * This used to defer every file in `toFetch` that produced no rows, which quietly
+   * included the ones that WERE read and deliberately not indexed — an empty
+   * document, or a file refused as a list of people. The empty-document branch above
+   * says in as many words that skipping "lets the sweep remove it if it was indexed
+   * before", and this is what stopped that from ever happening.
+   *
+   * Found 2026-09-19 by chasing the last spreadsheet that would not rebuild: "Discount
+   * sheet" is an empty sheet, one tab, no rows. Its 14-character chunk had survived
+   * since 31 August, protected on every single run, describing a document that holds
+   * nothing.
+   */
   const deferred = toFetch
+    .filter((f) => !reached.has(`doc:${f.id}`))
     .flatMap((f) => [`doc:${f.id}`, ...partIdsOf(known, `doc:${f.id}`)])
     .filter((id) => !writtenIds.has(id));
   /**

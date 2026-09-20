@@ -80,6 +80,7 @@ vi.mock("@features/admin/server/supabase", () => ({
 
 let files: unknown[] = [];
 let exportBody = "Summary\n\nWe agreed to ship the paywall.";
+const exportOverrides: Record<string, string> = {};
 let listOk = true;
 let targets: Record<string, unknown> = {};
 let alwaysMorePages = false;
@@ -139,7 +140,11 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
     }
     if (url.includes("/export?")) {
       if (exportFails) return { ok: false, status: exportFailStatus, text: async () => "boom" };
-      return { ok: true, status: 200, text: async () => "﻿" + exportBody.replace(/\n/g, "\r\n") };
+      // Per-file override, so one document can be empty while another still has
+      // content — the sweep only deletes on a run that wrote something.
+      const exportId = /\/files\/([^/]+)\/export/.exec(url)?.[1] ?? "";
+      const chosen = exportId in exportOverrides ? exportOverrides[exportId] : exportBody;
+      return { ok: true, status: 200, text: async () => "﻿" + chosen.replace(/\n/g, "\r\n") };
     }
     // single-file metadata GET, which is how a shortcut's TARGET is resolved
     const meta = /\/files\/([^?]+)\?fields=id,name/.exec(url);
@@ -993,6 +998,59 @@ describe("a failed sweep must not retry every hour", () => {
 
     expect(deletedIds()).toEqual([]); // nothing deleted at all
     expect(res.swept).toBe(0);
+  });
+
+  /**
+   * A DOCUMENT THAT HAS BECOME EMPTY MUST LOSE ITS OLD CHUNK.
+   *
+   * The empty branch says skipping "lets the sweep remove it if it was indexed
+   * before" — and for a long time it could not, because `deferred` protected every
+   * file in `toFetch` that produced no rows, which includes the ones that were READ
+   * and deliberately not indexed. Found 2026-09-19 on "Discount sheet", a real
+   * spreadsheet with one tab and no rows, whose 14-character chunk had survived
+   * every run since 31 August while describing a document that holds nothing.
+   */
+  it("sweeps the stale chunk of a document that has become empty", async () => {
+    const other = {
+      ...FILE,
+      id: "2ZyXwV",
+      webViewLink: "https://docs.google.com/document/d/2ZyXwV/edit",
+    };
+    files = [FILE, other];
+    exportOverrides[FILE.id] = "   "; // this one is now empty; `other` still has text
+    const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    existing = [
+      { source_id: "doc:1AbCdEf", meta: { edited: "2026-01-01T00:00:00.000Z", v } },
+      { source_id: "doc:2ZyXwV", meta: { edited: "2026-01-01T00:00:00.000Z", v } },
+    ];
+
+    await ingestDrive(STAMP);
+
+    // The emptied document's row goes; the one that still has content stays.
+    expect(deletedIds()).toContain("doc:1AbCdEf");
+    expect(deletedIds()).not.toContain("doc:2ZyXwV");
+  });
+
+  it("still protects a file the clock never reached", async () => {
+    // The control. Deferring exists for genuine outages, and removing that would
+    // delete most of the corpus on any run that runs out of time.
+    const other = {
+      ...FILE,
+      id: "2ZyXwV",
+      webViewLink: "https://docs.google.com/document/d/2ZyXwV/edit",
+    };
+    files = [FILE, other];
+    const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    existing = [
+      { source_id: "doc:1AbCdEf", meta: { edited: "2026-01-01T00:00:00.000Z", v } },
+      { source_id: "doc:2ZyXwV", meta: { edited: "2026-01-01T00:00:00.000Z", v } },
+    ];
+
+    // Out of time immediately after the first file is taken.
+    let ticks = 0;
+    await ingestDrive(STAMP, () => ++ticks > 2);
+
+    expect(deletedIds()).not.toContain("doc:2ZyXwV");
   });
 
   it("deletes a minority of orphans, so the guard is a majority rule and not a veto", async () => {
