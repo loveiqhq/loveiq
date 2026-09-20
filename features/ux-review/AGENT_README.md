@@ -47,6 +47,13 @@ held over. **Bound the work, never the window** — a window shorter than the re
 gap between runs turns "left for the next run" into silent deletion. It cost 9 of
 60 findings (15%) and made every miss permanent after 48 hours.
 
+**Set them in ONE place.** The workflow passes `LOOKBACK_HOURS` explicitly, so
+when the script default moved 6 → 24 the unattended path kept 6 and the change
+did nothing — visible only in the next run's own output, `28 finding(s) in the
+last 6h`. The workflow input now exists solely so a manual run can NARROW the
+window, and `__tests__/scripts/verifier-budget.test.ts` fails if the two numbers
+disagree in either direction. A default the caller overrides is not a default.
+
 Both queries also drain **oldest-first**. Newest-first plus a per-run budget is a
 starvation queue: the newest always outrank the tail, so the same items are
 deferred every run until they leave the window.

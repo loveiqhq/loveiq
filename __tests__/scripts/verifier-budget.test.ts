@@ -70,6 +70,36 @@ describe("the verifier's per-run budget", () => {
     ).toBeGreaterThanOrEqual(12);
   });
 
+  /**
+   * A DEFAULT THE CALLER OVERRIDES IS NOT A DEFAULT.
+   *
+   * The script default moved from 6 to 24 and the workflow kept passing
+   * `LOOKBACK_HOURS: ${{ inputs.lookback_hours || '6' }}`, so the fix was a
+   * no-op on the only path that runs unattended — caught by reading the next
+   * live run's output ("28 finding(s) in the last 6h"), not by any test.
+   * The number belongs in one place; this fails if the two disagree.
+   */
+  it("is not silently overridden by the workflow that runs it", () => {
+    const wf = readFileSync(
+      resolve(process.cwd(), ".github/workflows/ux-review-verify.yml"),
+      "utf8"
+    );
+    const scriptDefault = Number(
+      /LOOKBACK_HOURS\s*=\s*Number\(process\.env\.LOOKBACK_HOURS\s*\?\?\s*(\d+)\)/.exec(SRC)?.[1]
+    );
+    // The workflow's fallback, i.e. what an unattended run actually gets.
+    const wfFallback = Number(
+      /LOOKBACK_HOURS:\s*\$\{\{\s*inputs\.lookback_hours\s*\|\|\s*'(\d+)'\s*\}\}/.exec(wf)?.[1]
+    );
+    expect(wfFallback, "the workflow must pass a readable LOOKBACK_HOURS fallback").toBeGreaterThan(
+      0
+    );
+    expect(
+      wfFallback,
+      "the workflow fallback must match the script default, or the default is decorative"
+    ).toBe(scriptDefault);
+  });
+
   it("drains the oldest finding first, so a busy day cannot starve it", () => {
     // Newest-first plus a per-run budget is a starvation queue: the newest
     // always outrank the tail, so the same findings are deferred every run

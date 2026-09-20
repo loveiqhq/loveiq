@@ -171,7 +171,14 @@ jobs:
           # Opening a PR is opt-in, so the script cannot do it from a laptop.
           UX_REVIEW_OPEN_PR: "1"
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          LOOKBACK_HOURS: ${{ inputs.lookback_hours || '6' }}
+          # The fallback must NOT be re-tuned here. It exists only so a manual
+          # run can narrow the window; the real value lives with the reasoning,
+          # in scripts/verify-ux-findings.mjs, and a number repeated in two
+          # places drifts. It already did: the script default moved to 24 and
+          # this stayed at 6, so the fix was a no-op on the only path that
+          # matters. __tests__/scripts/verifier-budget.test.ts now fails if
+          # these disagree.
+          LOOKBACK_HOURS: ${{ inputs.lookback_hours || '24' }}
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
