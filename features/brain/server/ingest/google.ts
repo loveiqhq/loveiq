@@ -370,8 +370,31 @@ export async function ingestGa4(
    * (Search Console is the opposite and genuinely lags: its newest available day
    * on 2026-08-29 was 2026-08-26, so nothing there is gained by asking sooner.)
    */
-  const dateRanges = [{ startDate: `${fetchDays}daysAgo`, endDate: "today" }];
   const windowFrom = isoDaysAgo(fetchDays);
+  /**
+   * AN ABSOLUTE START DATE, because `NdaysAgo` is not resolved where we count.
+   *
+   * Everything above counts UTC days. GA4 resolves a relative date in the PROPERTY's
+   * timezone, which is ahead of UTC — so for the hours between the property rolling
+   * over and UTC doing the same, GA4's "today" is already tomorrow and `NdaysAgo` lands
+   * one day LATER than intended, cutting the first day off the month.
+   *
+   * Measured in production 2026-09-20: `daily:2026-09-01` was last written at 21:52 UTC
+   * and every later chunk at 22:37, because the 22:37 run's window began on the 2nd.
+   * `monthly:2026-09` then read 6,404 sessions while September's own daily chunks summed
+   * to 6,508 — exactly the 104 of 1 September. The same run had already created
+   * `daily:2026-09-21`, which GA4 only returns once ITS day has rolled over. Every
+   * COMPLETED month checked out, so this bites the current month, nightly.
+   *
+   * Widening the day count instead does not work: the snap to the 1st absorbs an extra
+   * day, and forcing one past it starts the window on the last day of the previous month
+   * — rebuilding that complete month from a single trailing day, which is the bug the
+   * widening exists to prevent. The ambiguity has to go, not be compensated for.
+   *
+   * `endDate` stays relative on purpose: "today" in the property's own timezone is
+   * exactly the intraday row we want, and it has no start-of-month to fall off.
+   */
+  const dateRanges = [{ startDate: windowFrom, endDate: "today" }];
 
   const core = await runGa4Report(
     token,
