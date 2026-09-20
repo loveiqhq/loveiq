@@ -482,7 +482,7 @@ the pipeline otherwise lacks (no SBOM signing / SLSA today).
 - **Prod deploy gating** (approvals / rollback) lives in Vercel project settings,
   not this repo — the revert runbook above is the rollback path.
 
-## Report tokens in analytics (partly closed, 2026-09-20)
+## Report tokens in analytics (database closed, analytics ACCEPTED 2026-09-20)
 
 `/report/<token>` is how a paid report is opened. **The token is the auth** — it
 does not expire, there is no second factor, and the page behind it is an
@@ -525,6 +525,23 @@ The real options, none of them free:
   currently `[]`). Cheap and immediate, and it removes exactly the recordings
   the UX-review pipeline exists to watch.
 - Accept it, and write down that it was a decision.
+
+**DECIDED 2026-09-20 (Eman): accept it.** The report URLs stay in PostHog and
+in Clarity. This is a decision, not an oversight, and it is recorded here so
+the next person to find it does not spend an evening rediscovering it and does
+not "fix" it by blocklisting `/report/*` from session recording — which would
+delete exactly the recordings the UX-review pipeline exists to watch.
+
+What that acceptance is scoped to, so the scope is not quietly widened later:
+
+- **Four internal `@loveiq.org` accounts**, today. If PostHog or Clarity access
+  is granted to anyone outside the company — a contractor, an agency, a support
+  vendor — this decision has to be taken again, because it was made about that
+  access list and nothing else.
+- **The URL only.** Inputs stay masked (`maskAllInputs: true`). If masking is
+  ever relaxed, this is a different question.
+- **Not the database.** `ux_finding.url_path` is redacted and stays redacted;
+  that half was closed on the same day and is not part of what was accepted.
 
 Check the current state with:
 

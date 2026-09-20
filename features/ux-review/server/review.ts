@@ -405,6 +405,135 @@ export async function fetchCoverageStats(): Promise<CoverageStat | null> {
  * missing line would be indistinguishable from a quiet day, which is the
  * failure this whole feature exists to avoid.
  */
+/** One scanner's record, as the scorecard reports it. */
+export interface ScannerScore {
+  scanner: string;
+  right: number;
+  wrong: number;
+  contradicted: number;
+}
+
+/**
+ * Read every labelled finding and score each scanner.
+ *
+ * `reproduced` is the scanner being right; `clear` from a mutation-proven probe
+ * and `contradicted` from our own events are it being wrong. `inconclusive`,
+ * `gap` and `duplicate` carry no verdict and are excluded — a denominator that
+ * counts them would flatter everything equally.
+ *
+ * Challengers are NOT filtered here, unlike everywhere else in this file: the
+ * scorecard is the one place whose entire purpose is to compare them.
+ */
+export async function fetchScannerScores(days = 30): Promise<ScannerScore[] | null> {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  const LIMIT = 5000;
+  try {
+    const res = await fetchWithTimeout(
+      `${url}/rest/v1/ux_finding?select=outcome,scanner_name` +
+        `&outcome=in.(reproduced,clear,contradicted)&created_at=gte.${since}&limit=${LIMIT}`,
+      { headers: { apikey: key, Authorization: `Bearer ${key}` }, timeoutMs: 8_000 }
+    );
+    if (!res.ok) return null;
+    const rows = (await res.json()) as Array<{ outcome?: string; scanner_name?: string | null }>;
+    warnIfTruncated(rows, LIMIT, "scorecard: ux_finding");
+    const by = new Map<string, ScannerScore>();
+    for (const r of rows) {
+      const name = String(r.scanner_name ?? "unknown");
+      const e = by.get(name) ?? { scanner: name, right: 0, wrong: 0, contradicted: 0 };
+      if (r.outcome === "reproduced") e.right += 1;
+      else e.wrong += 1;
+      if (r.outcome === "contradicted") e.contradicted += 1;
+      by.set(name, e);
+    }
+    return [...by.values()].sort((a, b) => b.right + b.wrong - (a.right + a.wrong));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The weekly scorecard: what each scanner is actually worth, in plain words.
+ *
+ * WHY THIS EXISTS. `scripts/replay-bench/score.mjs --ledger` already computes
+ * all of it, and prints it into a CI log. Nobody reads CI logs — that is the
+ * failure mode behind most of what went wrong in this pipeline, and running a
+ * champion/challenger experiment whose result lands there is the same mistake
+ * with a nicer name. The number has to reach a person on its own.
+ *
+ * Pure, so it can be rendered and read before it is ever sent.
+ */
+export function buildScorecardMessage(
+  scores: readonly ScannerScore[],
+  days = 30
+): { text: string; blocks: SlackBlock[] } {
+  const n = (s: ScannerScore) => s.right + s.wrong;
+  const pct = (s: ScannerScore) => (n(s) === 0 ? "n/a" : `${Math.round((s.right / n(s)) * 100)}%`);
+  const live = scores.filter((s) => !isChallengerScanner(s.scanner));
+  const right = live.reduce((a, s) => a + s.right, 0);
+  const total = live.reduce((a, s) => a + n(s), 0);
+
+  const lines = scores.map((s) => {
+    /**
+     * A challenger shares its champion's plain name — `plainScanner` maps both
+     * "LoveIQ report UX" and "LoveIQ report UX (challenger: …)" to "The report"
+     * — so without this the scorecard prints two lines called the same thing
+     * with different numbers. That exact shape already reached Marcus once in
+     * the daily digest; the suffix here is what stops it reaching him again.
+     */
+    const trial = isChallengerScanner(s.scanner) ? " — new version being tested" : "";
+    const refuted = s.contradicted
+      ? `, ${s.contradicted} described something our records say did not happen`
+      : "";
+    return `• ${escapeSlack(plainScanner(s.scanner))}${trial} — ${s.right} of ${n(s)} held up (${pct(s)})${refuted}`;
+  });
+
+  const blocks: SlackBlock[] = [
+    header("🎯 How good are the recording checks?"),
+    section(
+      total === 0
+        ? "*No checks have been scored yet.* Nothing to report."
+        : `*Across the last ${days} days, ${right} of ${total} suspected problems held up when we re-tested them.*` +
+            ` The rest were false alarms.`
+    ),
+    ...(lines.length ? [section(lines.join("\n"))] : []),
+  ];
+
+  /**
+   * The trial is reported against the one it is trying to beat, and only when
+   * BOTH have enough findings to mean anything. A comparison printed at n=2
+   * invites a decision at n=2, which is the thing the sample size exists to
+   * prevent.
+   */
+  const MIN = 30;
+  for (const c of scores.filter((s) => isChallengerScanner(s.scanner))) {
+    const base = c.scanner.replace(/ \(challenger[^)]*\)$/, "");
+    const champ = scores.find((s) => s.scanner === base);
+    if (!champ) continue;
+    blocks.push(
+      section(
+        n(c) < MIN
+          ? `*Trial in progress:* a second version of "${escapeSlack(plainScanner(base))}" is being` +
+              ` tested quietly. ${n(c)} of the ${MIN} results needed before it can be judged. It` +
+              ` says nothing to anyone until it wins.`
+          : `*Trial result:* the new version got ${pct(c)} right against the current` +
+              ` ${pct(champ)}, and described something impossible ${c.contradicted} times against` +
+              ` ${champ.contradicted}. A person decides what happens next.`
+      )
+    );
+  }
+
+  blocks.push(
+    context(
+      "A check 'holds up' only when a real browser reproduces it at the reader's own screen size. " +
+        "These are not opinions about the site; they are how often the AI watching recordings was right."
+    )
+  );
+  return { text: `Recording checks — ${right} of ${total} held up over ${days} days.`, blocks };
+}
+
 export async function fetchVerificationStats(): Promise<VerificationStat | null> {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -517,6 +646,11 @@ function plainScanner(name: string): string {
   if (!n.trim() || n === "unknown") return "An unnamed check";
   if (n.includes("survey")) return "The survey";
   if (n.includes("report")) return "The report";
+  // Findings synthesised from our OWN dead_click events rather than from a model
+  // watching a recording. It reached the scorecard as the raw string
+  // "our own dead_click events" — an internal name in a message written for
+  // someone who does not read the code.
+  if (n.includes("our own")) return "Taps our own code recorded";
   if (n.includes("dead-click")) return "Taps that did nothing";
   if (n.includes("rage-click")) return "Repeated frustrated tapping";
   return name;
