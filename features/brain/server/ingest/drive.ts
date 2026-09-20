@@ -817,9 +817,35 @@ async function knownDriveEdits(): Promise<Map<string, { edited: string; v: numbe
   return out;
 }
 
-function partIdsOf(known: Map<string, unknown>, baseId: string): string[] {
+/**
+ * The stored part ids of one document — optionally only those on a given builder
+ * version.
+ *
+ * WHY THE VERSION FILTER EXISTS. These ids go into the sweep's KEEP-set, and they
+ * come from the database rather than from the file, so they include parts the file
+ * no longer produces. A document that re-chunks SHORTER leaves a tail behind:
+ * measured 2026-09-20, the Glossary went from 311 parts to 223 and the 88 orphans
+ * survived every sweep, because the run after the rewrite found the file unchanged,
+ * TOUCHED it, and re-protected all 311 ids. A shrinking file was therefore only
+ * sweepable during the single run that shrank it, and the sweep runs once a day.
+ *
+ * Pass the current version at the touch site: a part left behind by an older, longer
+ * version carries the older version, so filtering on it separates orphans from live
+ * parts exactly. Do NOT pass it for a file the run never reached — its parts may
+ * legitimately all be on an old version, and protecting none of them would delete
+ * the document for being unread.
+ */
+function partIdsOf(
+  known: Map<string, { edited: string; v: number }>,
+  baseId: string,
+  atVersion?: number
+): string[] {
   const prefix = `${baseId}#`;
-  return [...known.keys()].filter((id) => id.startsWith(prefix));
+  return [...known.entries()]
+    .filter(
+      ([id, meta]) => id.startsWith(prefix) && (atVersion === undefined || meta.v === atVersion)
+    )
+    .map(([id]) => id);
 }
 
 /**
@@ -971,7 +997,9 @@ export async function ingestDrive(
     const edited = file.modifiedTime ?? file.createdTime ?? null;
     const seen = known.get(sourceId);
     if (edited && seen && seen.edited === edited && seen.v === DRIVE_BUILDER_VERSION) {
-      touch.push(sourceId, ...partIdsOf(known, sourceId));
+      // Current version only: an orphan part from a longer previous version must
+      // look absent to the sweep, not be confirmed by it.
+      touch.push(sourceId, ...partIdsOf(known, sourceId, DRIVE_BUILDER_VERSION));
     } else {
       toFetch.push(file);
     }

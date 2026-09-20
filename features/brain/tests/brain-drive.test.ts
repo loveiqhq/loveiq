@@ -1045,6 +1045,42 @@ describe("a failed sweep must not retry every hour", () => {
     expect(deletedIds()).not.toContain("doc:2ZyXwV");
   });
 
+  /**
+   * THE CONTROL FOR THE VERSION FILTER, and it has to use OLD-version parts.
+   *
+   * The touch path protects only parts on the current builder version, so orphans
+   * from a shorter re-chunk are swept. Applying that same filter to DEFERRED files
+   * looks equally reasonable and is catastrophic: during a rebuild every unreached
+   * file still sits on the OLD version, so the filter would protect none of them and
+   * the sweep would delete the backlog for the crime of not having been read yet.
+   *
+   * A mutation applying the filter to `deferred` passed the whole suite on
+   * 2026-09-20 — every existing test used current-version parts, so none could see
+   * it. This one uses old-version parts deliberately.
+   */
+  it("protects an unreached file whose parts are still on the OLD builder version", async () => {
+    const other = {
+      ...FILE,
+      id: "2ZyXwV",
+      webViewLink: "https://docs.google.com/document/d/2ZyXwV/edit",
+    };
+    files = [FILE, other];
+    const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    existing = [
+      { source_id: "doc:1AbCdEf", meta: { edited: "2026-01-01T00:00:00.000Z", v: v - 1 } },
+      // Never reached this run, and every part is on the previous builder version —
+      // which is the normal state of a rebuild backlog.
+      { source_id: "doc:2ZyXwV", meta: { edited: "2026-01-01T00:00:00.000Z", v: v - 1 } },
+      { source_id: "doc:2ZyXwV#2", meta: { edited: "2026-01-01T00:00:00.000Z", v: v - 1 } },
+    ];
+
+    let ticks = 0;
+    await ingestDrive(STAMP, () => ++ticks > 2);
+
+    expect(deletedIds()).not.toContain("doc:2ZyXwV");
+    expect(deletedIds()).not.toContain("doc:2ZyXwV#2");
+  });
+
   it("still protects a file the clock never reached", async () => {
     // The control. Deferring exists for genuine outages, and removing that would
     // delete most of the corpus on any run that runs out of time.
@@ -1065,6 +1101,40 @@ describe("a failed sweep must not retry every hour", () => {
     await ingestDrive(STAMP, () => ++ticks > 2);
 
     expect(deletedIds()).not.toContain("doc:2ZyXwV");
+  });
+
+  /**
+   * A DOCUMENT THAT RE-CHUNKS SHORTER MUST LOSE ITS TAIL.
+   *
+   * The part ids handed to the sweep come from the DATABASE, not from the file, so
+   * they include parts the file no longer produces. The run that shrinks a file
+   * writes the new parts and the orphans go unwritten — but the sweep runs once a
+   * day, and the NEXT run finds the file unchanged, touches it, and re-protects
+   * every stored id including the orphans. A shrinking file was therefore only
+   * sweepable during the single run that shrank it.
+   *
+   * Measured 2026-09-20: the Glossary went from 311 parts to 223 and all 88 orphans
+   * survived, still titled "part 224 of 311" and dated three weeks earlier.
+   */
+  it("sweeps orphan parts of a file that re-chunked shorter, even when it is untouched since", async () => {
+    files = [FILE];
+    const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    existing = [
+      // Current parts, on this builder version, unchanged -> the file is TOUCHED.
+      { source_id: "doc:1AbCdEf", meta: { edited: FILE.modifiedTime, v } },
+      { source_id: "doc:1AbCdEf#2", meta: { edited: FILE.modifiedTime, v } },
+      // The tail of a longer previous version, left on the OLD builder version.
+      { source_id: "doc:1AbCdEf#3", meta: { edited: FILE.modifiedTime, v: v - 1 } },
+      { source_id: "doc:1AbCdEf#4", meta: { edited: FILE.modifiedTime, v: v - 1 } },
+    ];
+
+    await ingestDrive(STAMP);
+
+    expect(deletedIds()).toContain("doc:1AbCdEf#3");
+    expect(deletedIds()).toContain("doc:1AbCdEf#4");
+    // The live parts must survive.
+    expect(deletedIds()).not.toContain("doc:1AbCdEf");
+    expect(deletedIds()).not.toContain("doc:1AbCdEf#2");
   });
 
   it("deletes a minority of orphans, so the guard is a majority rule and not a veto", async () => {
