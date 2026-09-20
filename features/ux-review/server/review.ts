@@ -218,7 +218,10 @@ export async function fetchDailyStats(): Promise<DailyStat[]> {
     throw new Error(`posthog daily query error: ${String(payload.error).slice(0, 200)}`);
   }
   return (payload.results ?? []).map((row) => ({
-    scanner: String(row[0] ?? "unknown"),
+    // `?? "unknown"` does not fire: HogQL's toString(NULL) is the EMPTY STRING,
+    // not null, so a missing scanner_name arrived here as "" and reached
+    // Marcus's digest as a bullet with no name at all ("• — watched 1").
+    scanner: String(row[0] || "unknown"),
     observed: Number(row[1]) || 0,
     yes: Number(row[2]) || 0,
   }));
@@ -437,6 +440,9 @@ function placeOf(urlPath: string | null): string {
  */
 function plainScanner(name: string): string {
   const n = name.toLowerCase();
+  // Every caller, not just the digest: a nameless scanner is still a real
+  // observation and must be reported, but never as an empty bullet.
+  if (!n.trim() || n === "unknown") return "An unnamed check";
   if (n.includes("survey")) return "The survey";
   if (n.includes("report")) return "The report";
   if (n.includes("dead-click")) return "Taps that did nothing";

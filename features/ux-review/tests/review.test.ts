@@ -71,6 +71,26 @@ describe("buildDigestMessage", () => {
     expect(json).toContain("1 could not be tested");
   });
 
+  it("never renders a bullet with no name on it", () => {
+    // Shipped to Marcus on 2026-09-20 as "•  — watched 1, suspected 0". One
+    // $recording_observed event carried no scanner_name, and the guard meant
+    // to catch it (`?? "unknown"`) could not: HogQL's toString(NULL) is the
+    // EMPTY STRING, so the nullish coalescing never fired. The observation is
+    // real and must still be reported — just not anonymously.
+    const { blocks } = buildDigestMessage(
+      [
+        { scanner: "", observed: 1, yes: 0 },
+        { scanner: "unknown", observed: 2, yes: 0 },
+      ],
+      verified(),
+      covered()
+    );
+    const json = JSON.stringify(blocks);
+    expect(json).not.toContain("•  —");
+    expect(json).toContain("An unnamed check — watched 1");
+    expect(json).toContain("An unnamed check — watched 2");
+  });
+
   it("names the verdicts that reached nobody", () => {
     // Two of eight verdicts were printed to a CI log and discarded because the
     // session had no submission thread. Silence made that invisible.
@@ -444,6 +464,18 @@ describe("fetchDailyStats", () => {
     vi.stubGlobal("fetch", async () => ({ ok: false, status: 503, json: async () => ({}) }));
     vi.stubEnv("POSTHOG_API_KEY", "phx_test");
     await expect(fetchDailyStats()).rejects.toThrow(/posthog daily query 503/);
+  });
+
+  it("names a scanner PostHog did not name", async () => {
+    // HogQL's toString(NULL) is the EMPTY STRING, so `?? "unknown"` could
+    // never fire and a real observation reached the digest with no name at
+    // all. Shipped to Marcus on 2026-09-20 as "•  — watched 1, suspected 0".
+    vi.stubGlobal("fetch", async () => ({
+      ok: true,
+      json: async () => ({ results: [["", 1, 0]] }),
+    }));
+    vi.stubEnv("POSTHOG_API_KEY", "phx_test");
+    await expect(fetchDailyStats()).resolves.toEqual([{ scanner: "unknown", observed: 1, yes: 0 }]);
   });
 
   it("returns nothing rather than throwing when PostHog is not configured", async () => {
