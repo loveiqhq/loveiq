@@ -38,6 +38,7 @@ import {
 // it can be tested without running everything else. See scripts/lib/replay-pr.mjs.
 import { AUTO_PR_CRITERIA, openReproductionPr } from "./lib/replay-pr.mjs";
 import { devicesForSession } from "./lib/session-devices.mjs";
+import { UX_SCANNERS } from "../features/ux-review/server/scanners.ts";
 import { hogQuery } from "./lib/hogql.mjs";
 
 /**
@@ -47,6 +48,25 @@ import { hogQuery } from "./lib/hogql.mjs";
  * check that cannot speak to the claim.
  */
 const CLICK_TARGET_CRITERIA = new Set(["D1", "V1"]);
+
+/**
+ * Scanners whose findings are an EXPERIMENT and must not speak to the team.
+ *
+ * A challenger observes the same recordings as its champion so the two can be
+ * compared on identical evidence. Its findings are probed and written to the
+ * ledger — that is the whole point, it cannot be scored otherwise — but they
+ * never reach a reader's Slack thread and never open a pull request. A prompt
+ * being trialled has not earned either.
+ *
+ * Read from scanners.ts by NAME, because that is what the observation event
+ * carries. A scanner missing from git is treated as a champion: the drift
+ * check already alerts on it, and the safe default for an unknown scanner is
+ * the behaviour we have always had, not silent suppression.
+ */
+const CHALLENGER_NAMES = new Set(
+  UX_SCANNERS.filter((s) => s.role === "challenger").map((s) => s.name)
+);
+export const isChallenger = (scannerName) => CHALLENGER_NAMES.has(String(scannerName));
 
 const DRY_RUN = process.argv.includes("--dry-run");
 /** Map findings to criteria and stop. Probes drive real browsers against
@@ -526,6 +546,27 @@ if (process.argv.includes("--selftest")) {
     ["The reader simply finished reading the chapter.", null],
     ["The call to action was hidden below the fold.", "V1"],
     ["The user had to scroll to find the unlock button.", "V1"],
+    /**
+     * THE CHALLENGER'S OWN VOCABULARY.
+     *
+     * The observation-only challenger (see scanners.ts) is forbidden from
+     * naming a control or a motive, so its findings read as screen states
+     * rather than explanations. That is the point — but it is only worth
+     * running if `classify()` can still route what it writes to a probe. An
+     * unclassified finding is recorded as a `gap`, which the ledger score
+     * EXCLUDES, so a challenger nobody can classify would silently score on a
+     * handful of rows and look better than the champion for the wrong reason.
+     *
+     * These are sentences written to the challenger's format rule (what is
+     * wrong on screen · where · timestamp) with every causal clause removed.
+     */
+    ["The paywall card was tapped three times and nothing happened. Lower third, t=112s.", "D1"],
+    ["The same chapter row was tapped twice with no visible change. Mid report, t=54s.", "D1"],
+    ["The screen returned back to the survey start view shown earlier. t=203s.", "L1"],
+    ["The view shown at t=20s is visible again at t=95s, the first introduction screen.", "L1"],
+    ["The chapter pill covers the heading text. Top of the viewport, t=8s.", "C1"],
+    ["Body text is clipped at the right edge. t=41s.", "C1"],
+    ["The pricing modal is closed and the same modal is visible again, twice. t=77s.", "P1"],
     // Verbatim from real observations. These are the claims the classifier is
     // for; inventing test phrasings is how a gap survives its own test suite.
     [
@@ -787,6 +828,8 @@ let skipped = 0;
 let contradicted = 0;
 /** (session, criterion) pairs already probed in THIS run. */
 const probedThisRun = new Set();
+/** What that probe concluded, so a second scanner's finding inherits it. */
+const outcomeThisRun = new Map();
 
 for (const [
   observationId,
@@ -910,9 +953,35 @@ for (const [
    */
   const pairKey = `${sessionId}:${criterion.id}`;
   if (probedThisRun.has(pairKey)) {
-    console.log(`DUP   ${sessionId}  ${criterion.id} — same criterion already probed this run`);
+    /**
+     * REPLAY THE ANSWER, DO NOT DISCARD IT.
+     *
+     * This used to record `outcome: "duplicate"`, which the ledger score
+     * EXCLUDES — correct while every finding came from a different scanner, and
+     * wrong the moment a champion and a challenger watch the same recording.
+     * Both would flag one session, the second would be filed as a duplicate,
+     * and the challenger would be scored on whatever was left. The comparison
+     * would have measured which scanner happened to be fetched first.
+     *
+     * A probe's answer depends on the session, the criterion and the devices —
+     * never on which scanner raised it — so the second finding is entitled to
+     * the first one's result. One probe run, two rows, a real comparison.
+     *
+     * Still not re-delivered: the reader's thread gets one verdict, as before.
+     */
+    const answered = outcomeThisRun.get(pairKey);
+    console.log(
+      `DUP   ${sessionId}  ${criterion.id} — already probed this run` +
+        (answered ? ` → recorded as ${answered.outcome}` : "")
+    );
     await markVerified(observationId);
-    await recordFinding({ ...base, outcome: "duplicate", criterion: criterion.id });
+    await recordFinding(
+      answered
+        ? { ...base, ...answered, criterion: criterion.id, delivered: false }
+        : // No cached answer means the first finding never reached a probe
+          // (classify-only, or a deferral). Nothing to inherit.
+          { ...base, outcome: "duplicate", criterion: criterion.id }
+    );
     continue;
   }
   if (!CLASSIFY_ONLY && probeRuns >= PROBE_BUDGET) {
@@ -979,7 +1048,7 @@ for (const [
   // the workflow's own dry_run path would still push a branch and open a PR,
   // because it sets UX_REVIEW_OPEN_PR=1 for both branches of its if.
   let prUrl = null;
-  if (reproduced && !DRY_RUN && !CLASSIFY_ONLY) {
+  if (reproduced && !DRY_RUN && !CLASSIFY_ONLY && !isChallenger(scannerName)) {
     if (prsOpened >= MAX_PRS_PER_RUN) {
       prsSkipped += 1;
       console.log(
@@ -1038,7 +1107,14 @@ for (const [
   console.log(
     `${reproduced ? "CONFIRM" : inconclusive ? "UNKNOWN" : "CLEAR  "} ${sessionId}  ${criterion.id}`
   );
-  const sent = await deliverVerdict(sessionId, verdict);
+  // A challenger is being measured, not consulted. Its verdict is recorded and
+  // scored; it does not appear under a reader's submission, because a prompt on
+  // trial has not earned a place in the channel — and two scanners posting the
+  // same verdict twice is how a useful thread becomes noise.
+  const sent = isChallenger(scannerName) ? "suppressed" : await deliverVerdict(sessionId, verdict);
+  if (sent === "suppressed") {
+    console.log(`  (challenger — recorded in ux_finding, not posted)`);
+  }
   if (sent !== "failed") await markVerified(observationId);
 
   // The row is written whether or not a thread existed to post into. That gap
@@ -1063,6 +1139,25 @@ for (const [
     target_selector: clickTarget?.selector ?? null,
     pr_url: prUrl,
     delivered: sent === "posted",
+  });
+
+  // What a second scanner's finding on this same (session, criterion) inherits.
+  // Everything here describes the PROBE, never the scanner that raised it.
+  outcomeThisRun.set(pairKey, {
+    outcome: reproduced ? "reproduced" : inconclusive ? "inconclusive" : "clear",
+    probe_runs: results.map((r) => ({
+      file: r.file,
+      passed: r.passed,
+      inconclusive: Boolean(r.inconclusive),
+      tail: String(r.tail ?? "").slice(0, 600),
+    })),
+    devices: ranOn,
+    viewport_min: viewport?.min ?? null,
+    viewport_max: viewport?.max ?? null,
+    os: viewport?.os || null,
+    url_path: clickTarget?.pathname ?? null,
+    target_selector: clickTarget?.selector ?? null,
+    pr_url: null,
   });
 }
 

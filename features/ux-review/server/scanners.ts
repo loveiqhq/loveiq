@@ -24,6 +24,19 @@
 export interface UxScanner {
   /** PostHog scanner UUID. Created disabled on 2026-09-14. */
   id: string | null;
+  /**
+   * `champion` is live and speaks to the team. `challenger` is an experiment:
+   * it observes the same sessions, its findings are probed and recorded in the
+   * ledger so it can be scored, and it NEVER reaches a Slack thread or opens a
+   * pull request. Promotion is a deliberate edit here, not a threshold.
+   *
+   * Why a duplicate rather than an edited prompt: a scanner observes a given
+   * session once, ever. Editing a live prompt is therefore a silent no-op on
+   * every recording already seen, and the new prompt can never be compared
+   * against the old one on the same evidence. Two scanners on one trigger
+   * event can.
+   */
+  role: "champion" | "challenger";
   /** Must match `scanner_name` on the `$recording_observed` event. */
   name: string;
   /** PostHog event that selects the sessions this scanner watches. */
@@ -89,6 +102,7 @@ export const UX_SCANNERS: readonly UxScanner[] = [
   {
     id: "01a0a00e-1714-742d-baaf-567b5ca225f0",
     name: "LoveIQ survey UX",
+    role: "champion",
     triggerEvent: "survey_started",
     samplingMode: "focused",
     estimatedMonthlyCredits: 2160,
@@ -122,6 +136,7 @@ export const UX_SCANNERS: readonly UxScanner[] = [
   {
     id: "01a0a00e-8bf7-7465-8374-f7279a02cabb",
     name: "LoveIQ report UX",
+    role: "champion",
     triggerEvent: "report_viewed",
     samplingMode: "focused",
     estimatedMonthlyCredits: 822,
@@ -156,6 +171,7 @@ export const UX_SCANNERS: readonly UxScanner[] = [
   {
     id: "01a0a00e-fe16-7bd8-aae3-269148a11233",
     name: "LoveIQ rage-click cause",
+    role: "champion",
     triggerEvent: "rage_click",
     samplingMode: "comprehensive",
     estimatedMonthlyCredits: 326,
@@ -187,6 +203,7 @@ export const UX_SCANNERS: readonly UxScanner[] = [
   {
     id: "01a0a00f-8e95-76a8-9192-b1a7463db22f",
     name: "LoveIQ dead-click cause",
+    role: "champion",
     triggerEvent: "dead_click",
     samplingMode: "focused",
     estimatedMonthlyCredits: 1474,
@@ -216,13 +233,109 @@ export const UX_SCANNERS: readonly UxScanner[] = [
       CITE,
     ].join("\n"),
   },
+  /**
+   * CHALLENGER — report UX, observation only. Created 2026-09-20.
+   *
+   * WHY THIS ONE. Scored from the ledger, `LoveIQ report UX` is 0 right and 38
+   * wrong, and the single biggest bucket is not a near miss: **20 of the 38 are
+   * `contradicted`** — the scanner named an unlock click or reaching checkout in
+   * a session where our own events carry no `unlock_click`, `paywall_initiated`,
+   * `checkout_started` or `begin_checkout` at all. It is not mis-ranking real
+   * defects; it is asserting presses nobody made.
+   *
+   * WHY NOT HARDEN THE PROMPT. That has been tried and measured as failed. The
+   * champion already ends with "Do not say which control the user pressed unless
+   * the press and the change it caused are both visible", and it produced those
+   * twenty anyway. A rule the model breaks is not made truer by rewording it.
+   *
+   * SO THE CHANGE IS STRUCTURAL: this scanner is not asked to diagnose. It
+   * reports SCREEN STATES and is forbidden from naming a control or a motive at
+   * all — the thing it was worst at is the thing it no longer has permission to
+   * attempt. Causation is the probe's job, and the probe cannot hallucinate.
+   *
+   * IT STAYS SCOREABLE because `classify()` already keys on observational
+   * phrasing — "nothing happened", "no visible change", "returned back to",
+   * "covered", "clipped" — which is exactly the vocabulary left when causal
+   * language is removed. Checked against the regexes in verify-ux-findings.mjs
+   * before writing this, not assumed.
+   *
+   * WHAT WOULD FALSIFY IT: if the challenger's `contradicted` count is no lower
+   * than the champion's over the same sessions, the hypothesis is wrong and this
+   * scanner should be deleted rather than tuned.
+   */
+  {
+    id: "01a0c035-e3d1-7459-8ead-c71e4e09b222",
+    name: "LoveIQ report UX (challenger: observation only)",
+    role: "challenger",
+    triggerEvent: "report_viewed",
+    samplingMode: "focused",
+    estimatedMonthlyCredits: 574,
+    creditLimit: 700,
+    scannerVersion: 1,
+    prompt: [
+      "You are watching a recording of the LoveIQ report — a long, scroll-based",
+      "psychology report on loveiq.org, with some chapters locked behind a paywall.",
+      "Locked chapters deliberately show blurred placeholder artwork; that is correct,",
+      "not a defect.",
+      "",
+      "YOUR JOB IS TO DESCRIBE THE SCREEN, NOT TO EXPLAIN IT.",
+      "A browser test runs afterwards and establishes cause. You do not need to, and",
+      "you must not try. Specifically, in every answer you give:",
+      "- Never name a control the user pressed. Not 'they clicked Unlock', not 'they",
+      "  tapped the price'. If a press is not both visible and followed by a visible",
+      "  change, it did not happen as far as you are concerned.",
+      "- Never state what the user wanted, expected, intended or was trying to do.",
+      "- Never explain WHY the screen changed. Say only what it changed from and to.",
+      "If you find yourself writing the word 'because', delete the sentence.",
+      "",
+      CORRECT_LOOKS_LIKE,
+      "",
+      "Answer YES only for a screen state you can point at:",
+      "1. Text that says something went wrong is visible — in particular the literal",
+      '   string "Unable to process request." — or a region that stays empty where',
+      "   content belongs.",
+      "2. The screen returns to a view the recording already showed earlier, and you",
+      "   can name both views.",
+      "3. The same control is tapped two or more times and nothing on screen changes.",
+      "   Report it as 'nothing happened' — do not say what the control was for.",
+      "4. A modal is closed and the same modal is visible again, twice or more.",
+      "5. Body text is readable through a blur that is meant to hide it.",
+      "6. Content is covered, clipped or cut off, or the page scrolls sideways.",
+      "",
+      DO_NOT_FLAG,
+      "",
+      "Format, and this is the whole answer:",
+      "- One sentence naming what is wrong ON SCREEN.",
+      "- Where on screen it is.",
+      "- Cite the moment in the recording.",
+      "If you cannot give all three from what you saw, answer NO.",
+    ].join("\n"),
+  },
 ];
 
 /** Verdict/confidence bar a finding must clear before it reaches Slack. */
 export const UX_REVIEW_MIN_CONFIDENCE = 0.7;
 
-/** Total measured spend if every scanner runs uncapped for a month. */
-export const UX_REVIEW_ESTIMATED_MONTHLY_CREDITS = UX_SCANNERS.reduce(
-  (sum, s) => sum + s.estimatedMonthlyCredits,
-  0
-);
+/**
+ * Measured monthly spend of the PERMANENT fleet — champions only.
+ *
+ * Deliberately not the whole bill. This number is the one an operator agreed
+ * to, and a temporary experiment must not quietly raise it: if a challenger
+ * were summed in here, the agreed ceiling would drift upward every time one was
+ * added and nobody would ever see a single decision being made. The real
+ * projection, champions plus challengers, is what
+ * `scripts/sync-vision-scanners.ts` prints against the live quota before it
+ * writes anything.
+ */
+export const UX_REVIEW_ESTIMATED_MONTHLY_CREDITS = UX_SCANNERS.filter(
+  (s) => s.role === "champion"
+).reduce((sum, s) => sum + s.estimatedMonthlyCredits, 0);
+
+/**
+ * What the running experiments add on top, priced separately so it is a line
+ * item rather than a rounding error. Temporary by definition: promoting or
+ * deleting a challenger returns this to zero.
+ */
+export const UX_REVIEW_CHALLENGER_MONTHLY_CREDITS = UX_SCANNERS.filter(
+  (s) => s.role === "challenger"
+).reduce((sum, s) => sum + s.estimatedMonthlyCredits, 0);

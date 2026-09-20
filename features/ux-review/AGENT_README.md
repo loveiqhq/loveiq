@@ -106,6 +106,42 @@ must never read as a healthy one.
 means the claim was real, a closed one means it was not, and that is ground truth
 nobody has to curate.
 
+**Champion vs challenger, because a prompt edit cannot be measured.** A scanner
+observes a given session once, ever, so editing a live prompt is a silent no-op
+on every recording already seen and the new wording can never be compared
+against the old one on the same evidence. The only honest experiment is a second
+scanner on the same trigger event.
+
+The first one, created 2026-09-20: `LoveIQ report UX (challenger: observation
+only)`. Its champion is **0 right, 38 wrong**, and 20 of those 38 are not near
+misses — they are `contradicted`, claims our own events refute, where the
+scanner named an unlock or checkout press that never happened. Prompt hardening
+was already tried against exactly this: the champion ends with "Do not say which
+control the user pressed unless the press and the change it caused are both
+visible", and it produced the twenty anyway. So the challenger is not asked to
+diagnose at all — it reports screen states and is forbidden from naming a
+control or a motive. Causation is the probe's job.
+
+Three rules keep the comparison honest, each with a test:
+
+- **Same trigger event**, or the two are scored on different populations.
+- **A challenger never reaches a Slack thread and never opens a pull request.**
+  Its findings are probed and written to the ledger — it cannot be scored
+  otherwise — and nothing more. Promotion is a deliberate edit to `role`.
+- **One probe answers both.** When a champion and a challenger flag the same
+  (session, criterion), the second inherits the first's outcome instead of being
+  filed as a `duplicate`, which the ledger score EXCLUDES. Without that, the
+  comparison would have measured which scanner happened to be fetched first.
+
+Read the result with `node scripts/replay-bench/score.mjs --ledger`, which
+prints the pair and breaks out `contradicted` — the number the experiment is
+actually about. **What would falsify it:** if the challenger's `contradicted`
+count is no lower than the champion's over the same sessions, the hypothesis is
+wrong and the scanner should be deleted rather than tuned.
+
+Order matters when enabling one: the suppression above must be LIVE before the
+scanner is, or a trial prompt posts into a reader's thread.
+
 **Belongs:** scanner prompts and their pinned versions, reading observations,
 refuting them against our telemetry, the digest.
 
