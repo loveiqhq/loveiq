@@ -433,15 +433,26 @@ export async function mineDecisions(
       // every single run with "stopped early: rate_limited" -- draining a 121-meeting
       // backlog in ~35 days rather than ~6. Half a minute of a 300s budget nobody else
       // is waiting on buys the next five meetings, so wait and re-read this one.
+      /**
+       * `overloaded` waits on the same terms as a quota.
+       *
+       * A 503 from the model is "come back in a moment" and used to be treated as
+       * terminal, which is how two nights running ended with
+       * `stopped early: error:HTTP 503` after reading nothing. The wait budget,
+       * the deadline and the same-`index` retry below are all already correct for
+       * this; it only ever needed to be let through the door.
+       */
       if (
-        res.reason === "rate_limited" &&
+        (res.reason === "rate_limited" || res.reason === "overloaded") &&
         res.retryAfterMs &&
         waits < MAX_QUOTA_WAITS &&
         Date.now() + res.retryAfterMs < deadline
       ) {
         logger.info(
-          { waitMs: res.retryAfterMs, read, waits: waits + 1 },
-          "brain: mining paused for the per-minute quota"
+          { waitMs: res.retryAfterMs, read, waits: waits + 1, reason: res.reason },
+          res.reason === "overloaded"
+            ? "brain: mining paused while the model is overloaded"
+            : "brain: mining paused for the per-minute quota"
         );
         await sleep(res.retryAfterMs);
         waits += 1;

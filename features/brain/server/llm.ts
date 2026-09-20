@@ -59,7 +59,7 @@ export type LlmResult =
   | { ok: true; text: string; truncated: boolean }
   | {
       ok: false;
-      reason: "unconfigured" | "rate_limited" | "error";
+      reason: "unconfigured" | "rate_limited" | "overloaded" | "error";
       detail?: string;
       /** How long the provider asked us to wait, when it said. Only ever set on
        *  `rate_limited`. A caller that can afford to wait (a cron) should; one that
@@ -136,6 +136,9 @@ export function llmModel(): string {
  * Left unset the field is omitted entirely, so a provider that rejects unknown
  * parameters (Groq, older OpenAI-compatible servers) is unaffected.
  */
+/** How long to wait out a provider overload. Short: it is a blip, not a quota. */
+const OVERLOAD_RETRY_MS = 5_000;
+
 function reasoningEffort(): string | null {
   const value = process.env.BRAIN_LLM_REASONING_EFFORT?.trim();
   return value ? value : null;
@@ -210,6 +213,37 @@ export async function complete(
       detail: body.slice(0, 300),
       retryAfterMs,
       dailyQuota,
+    };
+  }
+
+  /**
+   * 503 IS "COME BACK IN A MOMENT", NOT "THIS FAILED".
+   *
+   * Gemini answers 503 when the model is momentarily overloaded, and 502/504 are the
+   * gateway saying the same thing. Every one of these used to land in the terminal
+   * branch below, so a caller that could happily have waited two seconds instead
+   * stopped its whole run.
+   *
+   * Measured 2026-09-20: `brain-mine` closed with `stopped early: error:HTTP 503` on
+   * two consecutive days, 1.5s runs that read zero meetings, while `brain-brief` used
+   * the SAME key and model successfully two hours earlier. The key was never the
+   * problem — the miner sends far longer prompts, which is exactly when a provider
+   * sheds load.
+   *
+   * Named separately from `rate_limited` on purpose: a quota says WHEN to come back
+   * and may mean "not until tomorrow", while an overload is transient and carries no
+   * such promise. Collapsing the two is the mistake this file spends its comments
+   * undoing elsewhere.
+   */
+  if (res.status === 503 || res.status === 502 || res.status === 504) {
+    const detail = (await res.text().catch(() => "")).slice(0, 300);
+    logger.warn({ status: res.status, detail }, "brain llm is overloaded, worth retrying");
+    return {
+      ok: false,
+      reason: "overloaded",
+      detail: `HTTP ${res.status}`,
+      // No promise from the provider, so suggest a short wait rather than invent one.
+      retryAfterMs: OVERLOAD_RETRY_MS,
     };
   }
 

@@ -185,9 +185,12 @@ describe("complete — what a 429 tells the caller", () => {
 
   /** A non-429 failure never carries a delay, so it can never be mistaken for a pause. */
   it("never attaches a retry delay to an ordinary error", async () => {
+    // 400 is the ordinary case this guards: a bad model id or an over-long prompt.
+    // Retrying it changes nothing, so it must not advertise a delay. This used to
+    // use 503, which is no longer an ordinary error — see below.
     fetchWithTimeout.mockResolvedValue({
       ok: false,
-      status: 503,
+      status: 400,
       headers: { get: () => "5" },
       text: async () => '{"retryDelay":"5s"}',
     });
@@ -198,5 +201,46 @@ describe("complete — what a 429 tells the caller", () => {
     if (res.ok) return;
     expect(res.reason).toBe("error");
     expect(res.retryAfterMs).toBeUndefined();
+  });
+
+  /**
+   * 503 IS TRANSIENT, AND TREATING IT AS TERMINAL COST TWO DAYS OF MINING.
+   *
+   * Gemini answers 503 when the model is momentarily overloaded. It used to land in
+   * the ordinary-error branch, so `brain-mine` closed with
+   * `stopped early: error:HTTP 503` on 19 and 20 September having read nothing —
+   * while `brain-brief` used the same key and model successfully two hours earlier.
+   */
+  it.each([503, 502, 504])("treats %i as overloaded and worth retrying", async (status) => {
+    fetchWithTimeout.mockResolvedValue({
+      ok: false,
+      status,
+      headers: { get: () => null },
+      text: async () => "upstream is busy",
+    });
+
+    const res = await complete([{ role: "user", content: "hi" }], 1000);
+
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.reason).toBe("overloaded");
+    expect(res.retryAfterMs).toBeGreaterThan(0);
+  });
+
+  it("keeps overload separate from a quota, which may mean 'not until tomorrow'", async () => {
+    fetchWithTimeout.mockResolvedValue({
+      ok: false,
+      status: 503,
+      headers: { get: () => null },
+      text: async () => "upstream is busy",
+    });
+
+    const res = await complete([{ role: "user", content: "hi" }], 1000);
+
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.reason).not.toBe("rate_limited");
+    // An overload carries no promise about the day, unlike a daily quota.
+    expect(res.dailyQuota).toBeUndefined();
   });
 });
