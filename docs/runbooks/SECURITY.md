@@ -482,6 +482,60 @@ the pipeline otherwise lacks (no SBOM signing / SLSA today).
 - **Prod deploy gating** (approvals / rollback) lives in Vercel project settings,
   not this repo — the revert runbook above is the rollback path.
 
+## Report tokens in analytics (partly closed, 2026-09-20)
+
+`/report/<token>` is how a paid report is opened. **The token is the auth** — it
+does not expire, there is no second factor, and the page behind it is an
+intimate psychological profile. Anywhere that URL is stored is a credential
+store.
+
+**Closed:** `ux_finding.url_path` stored the live path verbatim — 14 rows
+holding 13 distinct working tokens three days after the table was created, one
+more with every report finding. The verifier now redacts to
+`/report/<redacted>` before writing (`scripts/lib/redact-report-token.mjs`) and
+the existing rows were scrubbed. The probe still gets the real path inside the
+run, so reproduction on the reader's own report is unaffected; only what
+PERSISTS is redacted.
+
+**NOT closed, and deliberately stated rather than quietly left:** PostHog holds
+the same URLs — 3,041 events in seven days with a live token in
+`$current_url`, plus the replay's own rrweb stream. A `sanitize_properties`
+hook would clean the event properties and **would not touch the replay**, which
+renders the URL from the recording itself, so it would look like a fix without
+being one. Anyone who can open a session replay can open that reader's report.
+
+**And it is TWO recorders, not one.** Microsoft Clarity also loads in
+production (`public/clarity-init.js`, gated on `productionAnalyticsEnabled`) and
+records the same URLs, in a separate vendor with a separate access list and its
+own masking configured in the Clarity dashboard rather than in this repo. Any
+decision below has to be applied there too, or it is half a decision — and
+Clarity is the easier one to forget, because nothing in the codebase configures
+what it captures.
+
+Access today is four PostHog members, all `@loveiq.org`, so this is internal
+exposure rather than public. That is a reason to decide calmly, not a reason it
+is fine: the data is special-category-adjacent under GDPR and the principle is
+data minimisation.
+
+The real options, none of them free:
+
+- Stop putting the token in the path (signed short-lived URL, or token in a
+  cookie set by a one-time link). Correct, and a product change.
+- Exclude `/report/*` from session recording (`session_recording_url_blocklist_config`,
+  currently `[]`). Cheap and immediate, and it removes exactly the recordings
+  the UX-review pipeline exists to watch.
+- Accept it, and write down that it was a decision.
+
+Check the current state with:
+
+```bash
+curl -s "https://eu.posthog.com/api/projects/244778/" -H "Authorization: Bearer $POSTHOG_API_KEY" \
+  | python3 -c "import sys,json;d=json.load(sys.stdin);print(d['session_recording_masking_config'], d['session_recording_url_blocklist_config'])"
+```
+
+Inputs are already masked project-wide (`maskAllInputs: true`); this is about
+the URL, which masking does not cover.
+
 ## Incident response
 
 - On suspected compromise: rotate Supabase/Resend keys, invalidate sessions if added later, redeploy, and review logs. Notify affected users if data exposure is confirmed.
