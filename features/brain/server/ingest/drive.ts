@@ -377,11 +377,27 @@ export async function colleagueMeetingNotes(
   alreadyListed: ReadonlySet<string>,
   isOutOfTime: () => boolean,
   oidcToken?: string | null
-): Promise<{ items: DriveFile[]; asked: number; refused: number }> {
+): Promise<{
+  items: DriveFile[];
+  /**
+   * The token each note must be READ with, by file id.
+   *
+   * The admin token that lists the rest of Drive cannot fetch these — that is the
+   * whole reason they were invisible. Listing them with a colleague's token and then
+   * exporting them with the admin's produced a 404 for every one, and fourteen of
+   * those tripped the export-failure tolerance, which stopped the walk early AND
+   * blocked the sweep, because the sweep gate is the listing being complete.
+   */
+  tokens: Map<string, string>;
+  asked: number;
+  refused: number;
+}> {
   const mailboxes = await domainMailboxes(oidcToken);
-  if (!mailboxes || mailboxes.length === 0) return { items: [], asked: 0, refused: 0 };
+  if (!mailboxes || mailboxes.length === 0)
+    return { items: [], tokens: new Map(), asked: 0, refused: 0 };
 
   const items: DriveFile[] = [];
+  const tokens = new Map<string, string>();
   const seen = new Set(alreadyListed);
   let asked = 0;
   let refused = 0;
@@ -414,10 +430,11 @@ export async function colleagueMeetingNotes(
       // `contains` is a substring match on Google's side; the regex is what decides.
       if (!f.id || seen.has(f.id) || !MEETING_NOTE_NAME.test(f.name ?? "")) continue;
       seen.add(f.id);
+      tokens.set(f.id, userToken);
       items.push(f);
     }
   }
-  return { items, asked, refused };
+  return { items, tokens, asked, refused };
 }
 
 /**
@@ -977,7 +994,9 @@ export async function ingestDrive(
     }
     reached.add(`doc:${file.id}`);
     try {
-      const text = await docText(token, file.id as string, file.mimeType);
+      // A colleague's meeting note is readable only as that colleague.
+      const readToken = colleagues.tokens.get(file.id as string) ?? token;
+      const text = await docText(readToken, file.id as string, file.mimeType);
       // A file that yields no text -- a scanned pdf with no text layer, an empty
       // doc -- would otherwise be indexed as a chunk whose only content is its own
       // title, which then matches questions it cannot answer. Skipping lets the

@@ -81,7 +81,9 @@ describe("colleagueMeetingNotes", () => {
   it("returns nothing when the directory cannot be read, rather than throwing", async () => {
     mailboxes.value = null;
     const r = await colleagueMeetingNotes(new Set(), () => false);
-    expect(r).toEqual({ items: [], asked: 0, refused: 0 });
+    expect(r.items).toEqual([]);
+    expect(r.tokens.size).toBe(0);
+    expect({ asked: r.asked, refused: r.refused }).toEqual({ asked: 0, refused: 0 });
   });
 
   it("collects a meeting note that only a colleague can see", async () => {
@@ -118,6 +120,31 @@ describe("colleagueMeetingNotes", () => {
     drive["mb@loveiq.org"] = [{ id: "private", name }];
     const r = await colleagueMeetingNotes(new Set(), () => false);
     expect(r.items).toEqual([]);
+  });
+
+  /**
+   * THE REGRESSION THIS SHIPPED WITH, for one night.
+   *
+   * The notes were listed with a colleague's token and then fetched with the ADMIN's,
+   * which cannot see them — that is the whole reason they were invisible. Every one
+   * came back 404, fourteen of those tripped the export-failure tolerance, the walk
+   * stopped early, and because the sweep gate is "the listing completed", the sweep
+   * stopped running too. One wrong token, three failures downstream.
+   */
+  it("returns the token each note must be READ with, not the admin's", async () => {
+    mailboxes.value = ["mo@loveiq.org"];
+    drive["mo@loveiq.org"] = [{ id: "n1", name: NOTE }];
+    const r = await colleagueMeetingNotes(new Set(), () => false);
+    expect(r.tokens.get("n1")).toBe("tok:mo@loveiq.org");
+  });
+
+  it("gives each colleague's note that colleague's own token", async () => {
+    mailboxes.value = ["mo@loveiq.org", "mb@loveiq.org"];
+    drive["mo@loveiq.org"] = [{ id: "a", name: NOTE }];
+    drive["mb@loveiq.org"] = [{ id: "b", name: NOTE2 }];
+    const r = await colleagueMeetingNotes(new Set(), () => false);
+    expect(r.tokens.get("a")).toBe("tok:mo@loveiq.org");
+    expect(r.tokens.get("b")).toBe("tok:mb@loveiq.org");
   });
 
   it("does not re-list something the admin walk already found", async () => {
