@@ -80,6 +80,58 @@ interface SupabaseFetchOptions {
  * Shared Supabase REST API fetch helper for admin routes.
  * Wraps fetchWithTimeout + circuit breaker with standard auth headers.
  */
+/**
+ * Log a write that PostgREST refused.
+ *
+ * A failed write does not throw: `supabaseFetch` hands back the Response, and
+ * 37 of the 182 write call sites never look at it. PostgREST rejects the WHOLE
+ * body over one bad column, so a single stale field silently drops the entire
+ * row — that is how the consent record went missing, and how the DSR audit log
+ * would have failed without a trace (`recordDsrAuditLog` catches a thrown
+ * error, which a 400 is not).
+ *
+ * Observability only: the Response is returned unchanged and no control flow
+ * moves, so a caller that already handles its own errors is unaffected.
+ *
+ * The body is read from a CLONE so the caller still gets an unconsumed stream,
+ * and only `code` plus a redacted `message` are logged — a unique-violation
+ * message embeds the conflicting value (`Key (email)=(a@b.com) already
+ * exists`), which is the user's own data and must not reach the log.
+ */
+async function warnIfWriteRejected(path: string, method: string, res: Response): Promise<void> {
+  if (res.ok) return;
+  if (method === "GET" || method === "HEAD") return;
+  /**
+   * 409 is not a failure here — it is how idempotency is EXPRESSED.
+   *
+   * `payment_webhook_event.stripe_event_id` is UNIQUE precisely so a replayed
+   * Stripe webhook is refused, and fulfillment.ts:722 and :916 both say so in
+   * as many words ("treat as already-recorded rather than retrying"). Stripe
+   * retries routinely, so logging these at error level would post to the ops
+   * Slack channel every time the idempotency guard did its job — noise that
+   * teaches people to ignore the channel, which is the opposite of the point.
+   *
+   * Still logged, at warn: visible when reading logs, not mirrored to Slack
+   * (only levels 50/60 are).
+   */
+  const level = res.status === 409 ? "warn" : "error";
+  let code: string | undefined;
+  let message: string | undefined;
+  try {
+    const parsed = JSON.parse(await res.clone().text()) as { code?: string; message?: string };
+    code = parsed.code;
+    message = parsed.message?.replace(/=\([^)]*\)/g, "=(redacted)").slice(0, 200);
+  } catch {
+    // Non-JSON body (an HTML error page, or empty). The status alone still locates it.
+  }
+  logger[level](
+    { path: path.split("?")[0], method, status: res.status, code, message },
+    level === "warn"
+      ? "supabase: write refused as a duplicate — expected when a unique constraint is doing idempotency"
+      : "supabase: write REJECTED — the row was not written and no error was thrown"
+  );
+}
+
 export async function supabaseFetch(
   path: string,
   options: SupabaseFetchOptions = {}
@@ -107,6 +159,7 @@ export async function supabaseFetch(
     })
   );
   warnIfTruncated(path, res, options.paginated);
+  await warnIfWriteRejected(path, method, res);
   return res;
 }
 

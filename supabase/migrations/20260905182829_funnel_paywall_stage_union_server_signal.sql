@@ -43,6 +43,23 @@ BEGIN
    WHERE n.nspname='public' AND p.proname='get_funnel_sparklines_v3';
   old_t := 'pw AS (SELECT event_time::date AS day, COUNT(DISTINCT survey_submission_id)::int AS n FROM analytics_event WHERE event_type = ''paywall_initiated'' AND event_time >= since_ts AND event_time < until_ts GROUP BY event_time::date)';
   new_t := 'pw AS (SELECT day, COUNT(DISTINCT survey_submission_id)::int AS n FROM (SELECT paywall_reached_at::date AS day, survey_submission_id FROM report_price_quote WHERE paywall_reached_at >= since_ts AND paywall_reached_at < until_ts AND survey_submission_id IS NOT NULL UNION SELECT event_time::date AS day, survey_submission_id FROM analytics_event WHERE event_type = ''paywall_initiated'' AND event_time >= since_ts AND event_time < until_ts AND survey_submission_id IS NOT NULL) reached GROUP BY day)';
+
+  -- Fall back to the MULTILINE shape when the compact one is absent.
+  --
+  -- The comment above says v3 writes this CTE on one line. That is true of
+  -- PRODUCTION, but not of 20260529154209_funnel_v3_more_charts.sql, which
+  -- writes it across lines — byte-identical to v2's. So on a replay the
+  -- compact literal matches nothing and this aborts the push with
+  -- 'v3: paywall CTE matched neither shape'.
+  --
+  -- Production's v3 body therefore did not come from that migration. The repo
+  -- cannot reproduce it; that gap is real and is NOT fixed here. This only
+  -- stops a formatting assumption from breaking a rebuild. The RAISE below
+  -- still fires if neither shape is present.
+  IF position(old_t in def) = 0 AND position(new_t in def) = 0 THEN
+    old_t := E'    SELECT event_time::date AS day, COUNT(DISTINCT survey_submission_id)::int AS n\n    FROM analytics_event\n    WHERE event_type = ''paywall_initiated''\n      AND event_time >= since_ts AND event_time < until_ts\n    GROUP BY event_time::date';
+    new_t := E'    SELECT day, COUNT(DISTINCT survey_submission_id)::int AS n\n    FROM (\n      SELECT paywall_reached_at::date AS day, survey_submission_id\n      FROM report_price_quote\n      WHERE paywall_reached_at >= since_ts AND paywall_reached_at < until_ts\n        AND survey_submission_id IS NOT NULL\n      UNION\n      SELECT event_time::date AS day, survey_submission_id\n      FROM analytics_event\n      WHERE event_type = ''paywall_initiated''\n        AND event_time >= since_ts AND event_time < until_ts\n        AND survey_submission_id IS NOT NULL\n    ) reached\n    GROUP BY day';
+  END IF;
   IF position(new_t in def) = 0 THEN
     IF position(old_t in def) = 0 THEN RAISE EXCEPTION 'v3: paywall CTE matched neither shape'; END IF;
     newdef := replace(def, old_t, new_t);

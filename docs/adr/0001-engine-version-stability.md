@@ -32,7 +32,7 @@ changes (e.g. adding a V6 architecture in parallel would become `"v4+v5+v6"`).
 
 For per-row identification of the config that produced a verdict, use the
 `scoring_result.config_sha` column added by F-03 (migration
-`20260525120200_scoring_result_config_sha.sql`).
+`20260531131902_scoring_result_config_sha.sql`).
 
 ## Consequences
 

@@ -55,6 +55,7 @@
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const MIGRATIONS_DIR = "supabase/migrations";
 const CONNECTION_ENV = "SUPABASE_DB_URL";
@@ -66,7 +67,31 @@ function listMigrationFiles() {
 }
 
 const FUNCTION_RE = /CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:public\.)?(\w+)\s*\(/gi;
-const INDEX_RE = /CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s+ON/gi;
+const INDEX_RE =
+  /CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:CONCURRENTLY\s+)?(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s+ON\s+(?:ONLY\s+)?(?:public\.)?(\w+)/gi;
+/**
+ * A dropped TABLE takes its indexes, columns and constraints with it.
+ *
+ * Without this, `CREATE INDEX` in an early migration and `DROP TABLE` in a
+ * later one leaves the index in the repo set for ever, and the check reports
+ * a deliberate removal as drift — the exact cry-wolf failure that kept this
+ * job switched off. Measured 2026-09-19: calendly_webhook_event, dropped on
+ * 2026-09-14 along with its route, was the only finding once CONCURRENTLY
+ * indexes became visible at all.
+ */
+const DROP_TABLE_RE = /DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:public\.)?(\w+)/gi;
+/**
+ * Anchored to the start of a line, unlike the others: "CREATE TABLE" appears in
+ * prose often enough that the loose form picks up a table called `rather` from
+ * "every NOT NULL is inside CREATE TABLE rather than ADD COLUMN".
+ *
+ * Tables were the last thing this check could not see. 10 of the repo's 83 —
+ * admin_users, survey_question, system_flags, user_profile among them — carry no
+ * index, ADD CONSTRAINT or ADD COLUMN of their own, so their absence from live
+ * produced no drift of any other kind. calendly_webhook_event was only ever
+ * caught through one index it happened to have.
+ */
+const TABLE_RE = /^[ \t]*CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?(\w+)/gim;
 const CONSTRAINT_RE = /ALTER\s+TABLE\s+(?:public\.)?(\w+)\s+ADD\s+CONSTRAINT\s+(\w+)/gi;
 const DROP_FUNCTION_RE = /DROP\s+FUNCTION\s+(?:IF\s+EXISTS\s+)?(?:public\.)?(\w+)/gi;
 const DROP_INDEX_RE = /DROP\s+INDEX\s+(?:CONCURRENTLY\s+)?(?:IF\s+EXISTS\s+)?(?:public\.)?(\w+)/gi;
@@ -77,10 +102,15 @@ const DROP_COLUMN_RE =
 const ADD_COLUMN_RE =
   /ALTER\s+TABLE\s+(?:public\.)?(\w+)\s+ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)/gi;
 
-function extractArtifacts() {
+/**
+ * @param {{file: string, sql: string}[]} [files] in-memory migrations, for tests.
+ *   Omitted, it reads the real migrations directory.
+ */
+export function extractArtifacts(files) {
   const artifacts = {
     functions: new Set(),
-    indexes: new Set(),
+    tables: new Set(),
+    indexes: new Map(),
     constraints: new Map(),
     columns: new Map(),
   };
@@ -104,14 +134,20 @@ function extractArtifacts() {
    * Ordered by position WITHIN each file too, so `DROP x; CREATE x;` still ends
    * with x present.
    */
-  for (const file of listMigrationFiles()) {
-    const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf8");
+  const source =
+    files ??
+    listMigrationFiles().map((file) => ({
+      file,
+      sql: readFileSync(join(MIGRATIONS_DIR, file), "utf8"),
+    }));
+  for (const { sql } of source) {
     const ops = [];
     const collect = (re, apply) => {
       for (const m of sql.matchAll(re)) ops.push({ at: m.index ?? 0, apply: () => apply(m) });
     };
     collect(FUNCTION_RE, (m) => artifacts.functions.add(m[1]));
-    collect(INDEX_RE, (m) => artifacts.indexes.add(m[1]));
+    collect(TABLE_RE, (m) => artifacts.tables.add(m[1].toLowerCase()));
+    collect(INDEX_RE, (m) => artifacts.indexes.set(m[1], m[2].toLowerCase()));
     collect(CONSTRAINT_RE, (m) => artifacts.constraints.set(m[2], m[1]));
     collect(ADD_COLUMN_RE, (m) =>
       artifacts.columns.set(`${m[1]}.${m[2]}`, { table: m[1], column: m[2] })
@@ -120,6 +156,19 @@ function extractArtifacts() {
     collect(DROP_INDEX_RE, (m) => artifacts.indexes.delete(m[1]));
     collect(DROP_CONSTRAINT_RE, (m) => artifacts.constraints.delete(m[2]));
     collect(DROP_COLUMN_RE, (m) => artifacts.columns.delete(`${m[1]}.${m[2]}`));
+    collect(DROP_TABLE_RE, (m) => {
+      const table = m[1].toLowerCase();
+      artifacts.tables.delete(table);
+      for (const [name, onTable] of artifacts.indexes) {
+        if (onTable === table) artifacts.indexes.delete(name);
+      }
+      for (const [name, onTable] of artifacts.constraints) {
+        if (onTable.toLowerCase() === table) artifacts.constraints.delete(name);
+      }
+      for (const [key, col] of artifacts.columns) {
+        if (col.table.toLowerCase() === table) artifacts.columns.delete(key);
+      }
+    });
     ops.sort((a, b) => a.at - b.at);
     for (const op of ops) op.apply();
   }
@@ -132,6 +181,14 @@ async function fetchLiveState(client) {
     SELECT proname FROM pg_proc p
     JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public'
+  `);
+  const ownFns = await client.query(`
+    SELECT DISTINCT p.proname FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public'
+      AND NOT EXISTS (
+        SELECT 1 FROM pg_depend d
+         WHERE d.objid = p.oid AND d.classid = 'pg_proc'::regclass AND d.deptype = 'e')
   `);
   const indexes = await client.query(`
     SELECT indexname FROM pg_indexes WHERE schemaname = 'public'
@@ -150,6 +207,8 @@ async function fetchLiveState(client) {
     indexes: new Set(indexes.rows.map((r) => r.indexname)),
     constraints: new Set(constraints.rows.map((r) => r.conname)),
     columns: new Set(columns.rows.map((r) => `${r.table_name}.${r.column_name}`)),
+    tables: new Set(columns.rows.map((r) => r.table_name.toLowerCase())),
+    ownFunctions: new Set(ownFns.rows.map((r) => r.proname)),
   };
 }
 
@@ -237,6 +296,23 @@ async function fetchViaRpc(supabaseUrl, serviceKey) {
       indexes: new Set(a.indexes),
       constraints: new Set(a.constraints),
       columns: new Set(a.columns),
+      tables: new Set(a.columns.map((c) => c.split(".")[0].toLowerCase())),
+      /**
+       * NOT `?? []`. An absent key would make the reverse check compare against
+       * an empty set, report zero, and pass — the silent-skip failure this whole
+       * job exists to avoid. If the RPC predates 20260919280000, say so and stop.
+       */
+      ownFunctions: new Set(
+        a.ownFunctions ??
+          (() => {
+            console.error(
+              "\nget_schema_artifacts() returned no `ownFunctions`. The reverse check " +
+                "cannot run,\nand reporting zero would be a false pass. Apply " +
+                "20260919280000_schema_artifacts_add_own_functions.sql.\n"
+            );
+            process.exit(2);
+          })()
+      ),
     },
     ledgerRows: a.ledger,
   };
@@ -304,9 +380,34 @@ async function main() {
     const { live, ledgerRows } = source;
     const repo = extractArtifacts();
 
+    /**
+     * The REVERSE direction: what production has that no migration can rebuild.
+     *
+     * Everything else here asks "does live have what the repo declares". This
+     * asks the opposite, and it is the one that decides whether this repo can
+     * stand up a database at all — for a staging environment, or for disaster
+     * recovery.
+     *
+     * Nothing checked it until 2026-09-20, and the answer was no. Five
+     * functions and four tables existed only in production, so a push into an
+     * empty project stopped dead at 20260329231617_admin_security_hardening,
+     * which does `RAISE EXCEPTION 'Function not found: %'` over a list that
+     * includes three of them. Captured in
+     * 20260307095959_objects_that_predate_the_migration_history.sql.
+     *
+     * Extension-provided functions are excluded via `ownFunctions` — 149 of the
+     * 230 in `public` come from pgvector and pg_trgm and are never declared by
+     * a migration, so including them would bury the real finding in noise.
+     */
+    const unrebuildable = {
+      functions: [...live.ownFunctions].filter((n) => !repo.functions.has(n)).sort(),
+      tables: [...live.tables].filter((n) => !repo.tables.has(n)).sort(),
+    };
+
     const drift = {
       functions: [...repo.functions].filter((n) => !live.functions.has(n)),
-      indexes: [...repo.indexes].filter((n) => !live.indexes.has(n)),
+      tables: [...repo.tables].filter((n) => !live.tables.has(n)),
+      indexes: [...repo.indexes.keys()].filter((n) => !live.indexes.has(n)),
       constraints: [...repo.constraints.keys()].filter((n) => !live.constraints.has(n)),
       columns: [...repo.columns.keys()].filter((n) => !live.columns.has(n)),
     };
@@ -354,6 +455,7 @@ async function main() {
 
     const total =
       drift.functions.length +
+      drift.tables.length +
       drift.indexes.length +
       drift.constraints.length +
       drift.columns.length;
@@ -372,6 +474,24 @@ async function main() {
       );
     }
 
+    const unrebuildableTotal = unrebuildable.functions.length + unrebuildable.tables.length;
+    if (unrebuildableTotal > 0) {
+      console.error(
+        `\n❌ ${unrebuildableTotal} object(s) exist in PRODUCTION that no migration creates —\n` +
+          `   this repo cannot rebuild the database (staging, db reset, disaster recovery):\n`
+      );
+      if (unrebuildable.functions.length)
+        console.error("  Functions:", unrebuildable.functions.join(", "));
+      if (unrebuildable.tables.length) console.error("  Tables:", unrebuildable.tables.join(", "));
+      console.error(
+        `\nCapture the LIVE definition into a migration — pg_get_functiondef and\n` +
+          `pg_get_constraintdef, written straight to the file, never retyped. Date it\n` +
+          `before the first migration that references it, and insert a ledger row so\n` +
+          `production skips it. See 20260307095959_objects_that_predate_the_migration_history.sql.\n`
+      );
+      process.exit(1);
+    }
+
     if (total === 0 && ledgerTotal === 0) {
       console.log("✅ No migration drift — repo files match live DB, ledger matches filenames.");
       process.exit(0);
@@ -380,17 +500,22 @@ async function main() {
 
     console.error("❌ Migration drift detected — these artifacts exist in repo but NOT live:\n");
     if (drift.functions.length) console.error("  Functions:", drift.functions.join(", "));
+    if (drift.tables.length) console.error("  Tables:", drift.tables.join(", "));
     if (drift.indexes.length) console.error("  Indexes:", drift.indexes.join(", "));
     if (drift.constraints.length) console.error("  Constraints:", drift.constraints.join(", "));
     if (drift.columns.length) console.error("  Columns:", drift.columns.join(", "));
     console.error(
-      "\nApply via `supabase db push` or the Supabase dashboard. See round 7 retro: an unapplied UNIQUE constraint silently re-opened a webhook idempotency race.\n"
+      "\nApply via `supabase db push` or the Supabase dashboard. See round 7 retro: an unapplied UNIQUE constraint silently re-opened a webhook idempotency race.\nThis check is the guard for payment_webhook_event_stripe_event_id_unique — the integration test that used to assert it needed a paid Supabase branch and never once ran.\n"
     );
     process.exit(1);
   }
 }
 
-main().catch((err) => {
-  console.error("Drift check failed:", err.message);
-  process.exit(2);
-});
+const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (invokedDirectly) {
+  main().catch((err) => {
+    console.error("Drift check failed:", err.message);
+    process.exit(2);
+  });
+}

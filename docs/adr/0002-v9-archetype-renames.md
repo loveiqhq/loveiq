@@ -26,7 +26,7 @@ contained the V8 names; the cutover therefore needed both:
 
 ## Decision
 
-Apply a one-time data rewrite migration (`20260514120000_v9_archetype_renames.sql`)
+Apply a one-time data rewrite migration (`20260521194442_v9_archetype_renames.sql`)
 that updates `scoring_result.primary_archetype` + `v5_primary_archetype` +
 JSONB columns (`percentages`, `raw_scores`, `diagnostics`, `v5_*`) via
 `regexp_replace` on the JSONB cast to text.

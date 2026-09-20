@@ -254,8 +254,8 @@ END;
 $$;
 
 -- Grant + lock down the new signature, matching the previous lockdown migrations
--- (supabase/migrations/20260430140000_lock_security_definer_rpcs.sql,
---  supabase/migrations/20260501000000_lock_security_definer_rpcs_public.sql).
+-- (supabase/migrations/20260430215616_lock_security_definer_rpcs.sql,
+--  supabase/migrations/20260430221635_lock_security_definer_rpcs_public.sql).
 GRANT EXECUTE ON FUNCTION submit_survey(TEXT, TEXT, JSONB, TIMESTAMPTZ, BIGINT, TEXT, UUID, BOOLEAN)
   TO service_role;
 

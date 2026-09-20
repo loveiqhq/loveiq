@@ -1,7 +1,7 @@
 -- Self-audit follow-ups after the three 2026-05-22 audit migrations.
 -- Applied via Supabase MCP on 2026-05-22; this file is the canonical record.
 --
--- Bug 1: 20260522120000_v9_db_question_sync.sql inserted Q16015 with
+-- Bug 1: 20260521234044_v9_db_question_sync.sql inserted Q16015 with
 --        required=false. data/survey-data.ts line 1474 has required=true
 --        (the TS file drives the runtime survey UI — it is authoritative).
 --        Align the DB row.
@@ -10,7 +10,7 @@
 --        survey_question_mapping row. Every other survey_question has 1
 --        mapping row to survey_id=1 (the active survey). Add the link.
 --
--- Bug 3: 20260522120200_admin_rls_initplan.sql rewrote 11 admin_*
+-- Bug 3: 20260521234144_admin_rls_initplan_2026_05_22.sql rewrote 11 admin_*
 --        policies but missed three more flagged by the perf advisor:
 --        submission_tag, submission_tag_assignment, product_changelog.
 --        Apply the same per-row → initplan rewrite.

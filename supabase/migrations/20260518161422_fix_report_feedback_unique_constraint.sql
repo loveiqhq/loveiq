@@ -2,7 +2,7 @@
 -- PostgREST upserts to report_section_feedback can target it.
 --
 -- Background:
---   Migration 20260502120000_report_feedback_user_links_and_unlock_all_archetypes.sql
+--   Migration 20260502101625_report_feedback_user_links_and_unlock_all_archetypes.sql
 --   created a *partial* unique INDEX on (survey_submission_id, section_id)
 --   WHERE (survey_submission_id IS NOT NULL). The /api/report-feedback route
 --   issues PostgREST upserts with `?on_conflict=survey_submission_id,section_id`,

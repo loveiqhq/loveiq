@@ -31,7 +31,7 @@ __tests__/                     # Cross-cutting suites
 ├── app/                       # globals.css report theme + typography invariants
 ├── contracts/                 # Supabase schema/RPC contracts
 ├── data/                      # Generated report-*.ts integrity
-├── integration/               # Payment-webhook idempotency, RLS boundary (npm run test:integration)
+├── integration/               # RLS boundary, read-only against prod (npm run test:integration)
 ├── scripts/                   # Data-generation script tests
 ├── security/                  # Premium-content bundle leakage guard
 ├── __fixtures__/              # Shared test fixtures (MSW server, survey)
