@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mockError = vi.fn();
+const mockWarn = vi.fn();
 vi.mock("@shared/observability/logger", () => ({
-  default: { info: vi.fn(), warn: vi.fn(), error: (...a: unknown[]) => mockError(...a) },
+  default: {
+    info: vi.fn(),
+    warn: (...a: unknown[]) => mockWarn(...a),
+    error: (...a: unknown[]) => mockError(...a),
+  },
 }));
 
 const mockFetch = vi.fn();
@@ -51,6 +56,7 @@ describe("a write PostgREST refused", () => {
 
   afterEach(() => {
     mockError.mockClear();
+    mockWarn.mockClear();
     mockFetch.mockClear();
   });
 
@@ -83,7 +89,7 @@ describe("a write PostgREST refused", () => {
       })
     );
     await supabaseFetch("/rest/v1/email_suppression", { method: "POST", body: "{}" });
-    const logged = JSON.stringify(mockError.mock.calls[0]);
+    const logged = JSON.stringify(mockWarn.mock.calls[0]);
     expect(logged).toContain("23505");
     expect(logged).not.toContain("a@b.com");
     expect(logged).toContain("redacted");
@@ -103,6 +109,21 @@ describe("a write PostgREST refused", () => {
     respond(404, JSON.stringify({ code: "PGRST116", message: "not found" }));
     await supabaseFetch("/rest/v1/x?select=id");
     expect(mockError).not.toHaveBeenCalled();
+  });
+
+  /**
+   * 409 is how idempotency is EXPRESSED, not a failure.
+   * payment_webhook_event.stripe_event_id is UNIQUE so a replayed Stripe webhook
+   * is refused, and fulfillment.ts:722 treats that as already-recorded. Stripe
+   * retries routinely, so error level here would post to the ops Slack channel
+   * every time the guard worked — only levels 50/60 mirror, so this must be warn.
+   */
+  it("logs a 409 duplicate at warn, never error, so it cannot reach ops Slack", async () => {
+    respond(409, JSON.stringify({ code: "23505", message: "duplicate key value" }));
+    await supabaseFetch("/rest/v1/payment_webhook_event", { method: "POST", body: "{}" });
+    expect(mockError).not.toHaveBeenCalled();
+    expect(mockWarn).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(mockWarn.mock.calls[0])).toContain("409");
   });
 
   it("still logs when the error body is not JSON", async () => {

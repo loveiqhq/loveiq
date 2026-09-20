@@ -101,6 +101,20 @@ interface SupabaseFetchOptions {
 async function warnIfWriteRejected(path: string, method: string, res: Response): Promise<void> {
   if (res.ok) return;
   if (method === "GET" || method === "HEAD") return;
+  /**
+   * 409 is not a failure here — it is how idempotency is EXPRESSED.
+   *
+   * `payment_webhook_event.stripe_event_id` is UNIQUE precisely so a replayed
+   * Stripe webhook is refused, and fulfillment.ts:722 and :916 both say so in
+   * as many words ("treat as already-recorded rather than retrying"). Stripe
+   * retries routinely, so logging these at error level would post to the ops
+   * Slack channel every time the idempotency guard did its job — noise that
+   * teaches people to ignore the channel, which is the opposite of the point.
+   *
+   * Still logged, at warn: visible when reading logs, not mirrored to Slack
+   * (only levels 50/60 are).
+   */
+  const level = res.status === 409 ? "warn" : "error";
   let code: string | undefined;
   let message: string | undefined;
   try {
@@ -110,9 +124,11 @@ async function warnIfWriteRejected(path: string, method: string, res: Response):
   } catch {
     // Non-JSON body (an HTML error page, or empty). The status alone still locates it.
   }
-  logger.error(
+  logger[level](
     { path: path.split("?")[0], method, status: res.status, code, message },
-    "supabase: write REJECTED — the row was not written and no error was thrown"
+    level === "warn"
+      ? "supabase: write refused as a duplicate — expected when a unique constraint is doing idempotency"
+      : "supabase: write REJECTED — the row was not written and no error was thrown"
   );
 }
 
