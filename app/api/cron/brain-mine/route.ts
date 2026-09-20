@@ -90,11 +90,21 @@ export async function GET(request: Request) {
    * success and alerted nobody. The miner had been dead since 2026-09-18 and the only
    * way to know was to read `error_message` by hand.
    *
-   * Errors mirror to the ops channel; successes do not. That is the whole difference.
+   * AND IT HAS TO BE LOGGED, NOT ONLY RECORDED. `recordCronRun` writes a row and
+   * nothing else; the mirror to Slack lives in `logger`, and fires on level 50. The
+   * first version of this fix set the status and returned — which made the truth
+   * available to anyone who thought to query `cron_run`, the exact audit that found
+   * the outage in the first place, and told nobody. `cron-stall` does not cover it
+   * either: that watches for a cron that STOPS FIRING, and this one fires happily.
+   *
+   * The message has to begin with "brain" for `isBrainMessage` to route it to the
+   * brain channel rather than ops. No day-key dedup as the ingest crons use, because
+   * this one runs once a day, so at worst it says so once a day.
    */
   if (status === "success" && result.skipped && result.scanned === 0) {
     status = "error";
     errorMessage = `mined nothing: ${result.skipped}`;
+    logger.error({ skipped: result.skipped }, "brain-mine: read no meetings at all");
   }
 
   await checkSlow();

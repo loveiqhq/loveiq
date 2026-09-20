@@ -18,6 +18,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
+import logger from "@shared/observability/logger";
 
 let result: { scanned: number; written: number; dropped: number; skipped: string | null } = {
   scanned: 5,
@@ -58,6 +59,7 @@ const run = () => GET(new Request("https://www.loveiq.org/api/cron/brain-mine"))
 
 beforeEach(() => {
   recorded.length = 0;
+  vi.mocked(logger.error).mockClear();
   throws = false;
   result = { scanned: 5, written: 2, dropped: 1, skipped: null };
 });
@@ -94,6 +96,28 @@ describe("brain-mine run status", () => {
     result = { scanned: 10, written: 0, dropped: 10, skipped: null };
     await run();
     expect(recorded[0]?.status).toBe("success");
+  });
+
+  /**
+   * RECORDING IT IS NOT REPORTING IT.
+   *
+   * `recordCronRun` writes a row and nothing else. The mirror to Slack is in the
+   * logger, on level 50 — so the first version of this fix marked the run an error and
+   * still told nobody, which is the whole defect it was written to close.
+   */
+  it("SAYS SO, rather than only writing a row nobody reads", async () => {
+    result = { scanned: 0, written: 0, dropped: 0, skipped: "error:HTTP 503" };
+    await run();
+    expect(vi.mocked(logger.error)).toHaveBeenCalled();
+    const msg = vi.mocked(logger.error).mock.calls.at(-1)?.[1];
+    // Must start with "brain" or `isBrainMessage` routes it to ops, not the brain channel.
+    expect(String(msg)).toMatch(/^brain/);
+  });
+
+  it("stays quiet on a healthy drain, so the channel keeps being read", async () => {
+    result = { scanned: 5, written: 2, dropped: 0, skipped: "rate_limited:per-minute" };
+    await run();
+    expect(vi.mocked(logger.error)).not.toHaveBeenCalled();
   });
 
   it("still reports a thrown error as an error", async () => {
