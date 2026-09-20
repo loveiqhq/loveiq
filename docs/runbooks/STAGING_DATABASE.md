@@ -37,7 +37,9 @@ double the GDPR footprint of intimate survey answers for no benefit.
 
 **1. Create the organization and project** (dashboard only — no API does this):
 [supabase.com/dashboard](https://supabase.com/dashboard) → new **organization**, plan
-**Free** → new project inside it. Region `eu-central-1` to match production.
+**Free** → new project inside it. Region **`eu-central-2` (Zurich)** to match
+production — the Vercel functions are pinned to `fra1` for exactly this reason,
+and a mismatched region puts the Atlantic back in every round trip.
 
 **2. Collect three values** from the new project:
 
