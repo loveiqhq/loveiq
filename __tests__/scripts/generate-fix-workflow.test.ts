@@ -208,6 +208,30 @@ describe("the generate-and-prove workflow", () => {
    * task no small change could satisfy. That difference decides whether to
    * retry, reword, or do it by hand.
    */
+  /**
+   * "GitHub Actions is not permitted to create or approve pull requests" is an
+   * ORGANISATION toggle, off by default — which is why no auto-PR had ever been
+   * opened by this repo, including by replay-pr.mjs since the day it was
+   * written. It is a setting, not a fault, and nothing is lost when it bites:
+   * the branch is pushed and the proof is in the log. A bare GraphQL error
+   * tells a reader none of that.
+   */
+  it("explains a failed PR creation instead of dying on a GraphQL error", () => {
+    const doc = parse(WF) as {
+      jobs: Record<string, { steps: Array<{ name?: string; run?: string }> }>;
+    };
+    const step = Object.values(doc.jobs)
+      .flatMap((j) => j.steps)
+      .find((st) => st.name === "Open a pull request");
+    const run = step?.run ?? "";
+    expect(run, "the failure is swallowed by bash -e before it can be explained").toContain(
+      "set +e"
+    );
+    expect(run).toContain("org owner must enable");
+    // And it must still FAIL: a green job that opened no pull request is a lie.
+    expect(run).toMatch(/exit \$code/);
+  });
+
   it("keeps a refused attempt so it can be read", () => {
     const doc = parse(WF) as {
       jobs: Record<string, { steps: Array<{ name?: string; if?: string; run?: string }> }>;
