@@ -366,6 +366,29 @@ workflow skips with a warning rather than failing. Nothing it writes can merge
 itself: `scripts/prove-fix.mjs` refuses any diff outside presentation code, and
 the pull request it opens is reviewed and merged by a person.
 
+**It also needs one organisation setting, and nothing in this repository can see
+it.** At <https://github.com/organizations/loveiqhq/settings/actions>, under
+**Workflow permissions**, _"Allow GitHub Actions to create and approve pull
+requests"_ must be ticked. It was off until 2026-09-20, which is why no workflow
+in this repository had ever opened a pull request — every attempt died with
+`GitHub Actions is not permitted to create or approve pull requests`, including
+`scripts/lib/replay-pr.mjs`, which had therefore never once worked since it was
+written. The proof runs, the branch is pushed, and only the last step fails, so
+the run looks like a proof failure and is not one. Check it from here, which
+needs no `admin:org`:
+
+```bash
+gh api repos/loveiqhq/loveiq/actions/permissions/workflow \
+  --jq '.can_approve_pull_request_reviews'   # must be true
+```
+
+Leave the radio buttons on **read-only**; each workflow declares the write
+permissions it needs. The one thing to watch: that same checkbox also lets
+Actions _approve_ a pull request. Harmless today because `main` requires **zero**
+approvals, so an approval buys nothing — but if approvals ever become the human
+gate, this checkbox has to be reconsidered at the same time, or automation could
+satisfy its own gate.
+
 A red commit can still reach `main` when pushed by an admin, so the layered
 enforcement below is still what actually holds, and is not redundant:
 

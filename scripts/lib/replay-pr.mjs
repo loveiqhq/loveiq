@@ -194,7 +194,30 @@ export function openReproductionPr({
     ).trim();
     return url;
   } catch (err) {
-    console.log(`  (could not open a PR: ${String(err.message).split("\n")[0].slice(0, 120)})`);
+    // `err.stderr` is the reason; `err.message` is "Command failed: gh …"
+    // with the ENTIRE argv echoed after it — and the argv carries a multi-line
+    // PR body, so the old `.split("\n")[0]` printed the command, and any
+    // attempt to strip that prefix prints a line of the PR body instead. Both
+    // throw away the one piece of information worth having, which is how every
+    // failure this script has ever had went unexplained. Fall back to the
+    // message for a spawn failure, where there is no stderr at all.
+    const why = String(err.stderr || err.message).trim();
+
+    // A blanket refusal to create pull requests is a CONFIGURATION fault, not a
+    // problem with this finding: it fails identically for every finding, on
+    // every run, until someone ticks a setting in the ORGANISATION that this
+    // repository cannot read. It hid here from the day this file was written
+    // until 2026-09-20, because one quiet line in a green cron run is not
+    // something anybody reads. An annotation is, so raise it to one.
+    if (/not permitted to create or approve pull requests/i.test(why)) {
+      console.log(
+        "::error title=GitHub Actions cannot open pull requests::" +
+          'Tick "Allow GitHub Actions to create and approve pull requests" under Workflow ' +
+          "permissions at https://github.com/organizations/loveiqhq/settings/actions " +
+          "(see docs/runbooks/SECURITY.md). Until then no reproduction can ever open a PR."
+      );
+    }
+    console.log(`  (could not open a PR: ${why.split("\n")[0].slice(0, 200)})`);
     return null;
   } finally {
     if (switched) {

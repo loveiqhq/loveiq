@@ -15,7 +15,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync } from "
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { describe, expect, it, beforeAll } from "vitest";
+import { describe, expect, it, afterAll, beforeAll } from "vitest";
 
 // @ts-expect-error -- .mjs helper, no types
 import { openReproductionPr } from "../../scripts/lib/replay-pr.mjs";
@@ -65,6 +65,26 @@ const finding = (over: Record<string, unknown> = {}) => ({
     },
   ],
   ...over,
+});
+
+/**
+ * A git hook exports GIT_DIR and GIT_INDEX_FILE, and every `git` below — the
+ * helper here AND the ones inside replay-pr.mjs — inherits them, so the
+ * throwaway sandbox silently becomes the real repository and `git commit`
+ * fails. That made this whole file die in `beforeAll` during `pre-push`,
+ * which is the one moment it most needs to run.
+ */
+const gitEnv: Record<string, string | undefined> = {};
+beforeAll(() => {
+  for (const k of Object.keys(process.env)) {
+    if (k.startsWith("GIT_")) {
+      gitEnv[k] = process.env[k];
+      delete process.env[k];
+    }
+  }
+});
+afterAll(() => {
+  for (const [k, v] of Object.entries(gitEnv)) if (v !== undefined) process.env[k] = v;
 });
 
 beforeAll(() => {
@@ -171,5 +191,58 @@ describe("openReproductionPr", () => {
     expect(
       call(finding({ sessionId: "01a0d777-7459) [click](https://evil.example) x" }))
     ).toBeNull();
+  });
+});
+
+/**
+ * WHY THIS BLOCK EXISTS. `gh pr create` refused every call this script ever
+ * made — "GitHub Actions is not permitted to create or approve pull requests",
+ * an ORGANISATION setting the repository cannot read — and the refusal was
+ * swallowed into one quiet line of a green cron run, with the actual reason
+ * stripped off by `.split("\n")[0]`. It stayed hidden for the whole life of
+ * the file. A per-finding failure may stay quiet; a blanket refusal must not.
+ */
+describe("when gh refuses", () => {
+  /** Swap in a `gh` that fails with `stderr`, run once, put the stub back. */
+  function withFailingGh(stderr: string, sessionId: string) {
+    const stub = join(root, "stub", "gh");
+    const good = readFileSync(stub, "utf8");
+    writeFileSync(stub, `#!/bin/sh\nprintf '%s\\n' ${JSON.stringify(stderr)} 1>&2\nexit 1\n`);
+    chmodSync(stub, 0o755);
+    try {
+      const out = call(finding({ sessionId }));
+      return { out, log: lastLog };
+    } finally {
+      writeFileSync(stub, good);
+      chmodSync(stub, 0o755);
+    }
+  }
+
+  const REFUSAL =
+    "GraphQL: GitHub Actions is not permitted to create or approve pull requests (createPullRequest)";
+
+  it("raises the org-setting refusal to an annotation a person actually sees", () => {
+    const { out, log } = withFailingGh(REFUSAL, "01a0e111-1111-1111-1111-111111111111");
+    expect(out).toBeNull();
+    expect(log).toContain("::error title=GitHub Actions cannot open pull requests::");
+    expect(log).toContain("https://github.com/organizations/loveiqhq/settings/actions");
+  });
+
+  it("logs the reason gh gave, not the command that failed", () => {
+    const { log } = withFailingGh(REFUSAL, "01a0e222-2222-2222-2222-222222222222");
+    expect(log).toContain("could not open a PR: GraphQL: GitHub Actions is not permitted");
+    // The old line printed only this, which says nothing about what went wrong.
+    expect(log).not.toContain("could not open a PR: Command failed");
+  });
+
+  it("does NOT annotate an ordinary per-finding failure", () => {
+    // Without this the guard could match anything and still look green.
+    const { out, log } = withFailingGh(
+      "pull request create failed: a pull request already exists for this branch",
+      "01a0e333-3333-3333-3333-333333333333"
+    );
+    expect(out).toBeNull();
+    expect(log).not.toContain("::error");
+    expect(log).toContain("a pull request already exists");
   });
 });
