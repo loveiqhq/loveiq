@@ -78,6 +78,25 @@ export async function GET(request: Request) {
     logger.error({ err }, "brain: decision mining failed");
   }
 
+  /**
+   * A RUN THAT READ NOTHING IS NOT A SUCCESSFUL RUN.
+   *
+   * `skipped` alone is not a failure — stopping on the per-minute quota after mining
+   * five meetings is this cron working as designed, and marking that an error would
+   * fire an alert every night on a healthy drain. Stopping having read ZERO is the
+   * other thing entirely, and it looked identical from the outside: `status` only
+   * became "error" on a thrown exception, so two consecutive days of
+   * `stopped early: error:HTTP 503` — 1.5s runs that mined nothing — recorded as
+   * success and alerted nobody. The miner had been dead since 2026-09-18 and the only
+   * way to know was to read `error_message` by hand.
+   *
+   * Errors mirror to the ops channel; successes do not. That is the whole difference.
+   */
+  if (status === "success" && result.skipped && result.scanned === 0) {
+    status = "error";
+    errorMessage = `mined nothing: ${result.skipped}`;
+  }
+
   await checkSlow();
   await recordCronRun(
     "brain-mine",
