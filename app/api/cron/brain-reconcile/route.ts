@@ -22,6 +22,7 @@ import { sheetTabsWithRows } from "@features/brain/server/ingest/drive";
 import { DRIVE_SCOPE, getDelegatedToken, readVercelOidcToken } from "@shared/http/google-oauth";
 import { reconcile, summarise, type Reading } from "@features/brain/server/reconcile";
 import { recordNotice } from "@features/brain/server/notice";
+import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import { notifySlack } from "@shared/observability/slack";
 import {
@@ -310,6 +311,56 @@ export async function buildReadings(): Promise<{ readings: Reading[]; unread: st
     // read, and saying so is the difference between "clean" and "did not look".
     unread.push(`corpus secret scan (stopped after ${scanned} chunks)`);
   } else {
+    /**
+     * CAN A BROWSER KEY READ THE CORPUS?
+     *
+     * `brain_chunk` holds the company's mail, meeting transcripts, contracts and Notion —
+     * and it sits behind the same PostgREST the browser talks to. What keeps it private is
+     * one row-level-security policy, `service_role_only`, whose `USING` clause is `false`.
+     * Delete that policy, or add a permissive one beside it, and the entire corpus becomes
+     * world-readable to anyone holding the publishable key, which is in the page source of
+     * every visitor's browser.
+     *
+     * NOTHING ENFORCED THAT. The boundary is covered by `__tests__/integration/`, which
+     * skips silently when `SUPABASE_TEST_URL` is unset — and it is unset, in CI and
+     * locally. A guard that never runs is a guard that is not there.
+     *
+     * So it is asked here, the way everything else in this file is asked: derive the same
+     * quantity two ways and compare. The policy SAYS zero rows; the anon key is then used
+     * to actually try. A key that is missing, or a request that fails, lands in `unread` —
+     * "could not check" must never read as "checked and fine", least of all here.
+     */
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!anonKey || !supabaseUrl) {
+      unread.push("corpus readable by a browser key");
+    } else {
+      try {
+        const probe = await fetchWithTimeout(
+          `${supabaseUrl}/rest/v1/brain_chunk?select=id&limit=5`,
+          { headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` }, timeoutMs: 10_000 }
+        );
+        // A refusal (401/403) is the boundary holding just as much as an empty list is.
+        // Only a 2xx that actually RETURNS rows is exposure.
+        const visible = probe.ok ? ((await probe.json().catch(() => [])) as unknown[]).length : 0;
+        if (!probe.ok && probe.status !== 401 && probe.status !== 403) {
+          unread.push(`corpus readable by a browser key (HTTP ${probe.status})`);
+        } else {
+          readings.push({
+            what: "corpus rows a browser key can read",
+            left: { source: "what the row-level-security policy allows", value: 0 },
+            right: { source: "what it actually returns when asked", value: visible },
+            tolerance: 0,
+            because:
+              "brain_chunk holds the company's mail, contracts and meeting transcripts behind one policy whose USING clause is `false`; the publishable key is in every visitor's page source, so anything above zero is the whole corpus being world-readable",
+          });
+        }
+      } catch (err) {
+        logger.warn({ err }, "brain-reconcile: anon corpus probe failed");
+        unread.push("corpus readable by a browser key");
+      }
+    }
+
     readings.push({
       what: `chunks holding a secret (all ${scanned} scanned)`,
       left: { source: "what the redaction rule allows", value: 0 },

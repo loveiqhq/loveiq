@@ -34,6 +34,27 @@ import { buildDomainRows } from "@features/brain/server/ingest/domain";
 /** Fixed so the fixture's rows and the route's rows are stamped identically. */
 const STAMP = "2026-09-20T00:00:00.000Z";
 
+/**
+ * The anon-readability probe leaves the building through `fetchWithTimeout`, not through
+ * `supabaseFetch` — it has to use the BROWSER key to mean anything at all.
+ */
+const anonProbe: { status: number; rows: unknown[]; throws: boolean } = {
+  status: 200,
+  rows: [],
+  throws: false,
+};
+vi.mock("@shared/http/fetch-with-timeout", () => ({
+  fetchWithTimeout: vi.fn(async () => {
+    if (anonProbe.throws) throw new Error("network down");
+    return {
+      ok: anonProbe.status >= 200 && anonProbe.status < 300,
+      status: anonProbe.status,
+      json: async () => anonProbe.rows,
+      text: async () => JSON.stringify(anonProbe.rows),
+    };
+  }),
+}));
+
 const ok = (body: unknown) => ({ ok: true, json: async () => body, headers: { get: () => null } });
 const fail = () => ({
   ok: false,
@@ -137,14 +158,21 @@ function routeFetch(over: Record<string, unknown> = {}) {
 }
 
 describe("brain-reconcile — the readings it actually assembles", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    anonProbe.status = 200;
+    anonProbe.rows = [];
+    anonProbe.throws = false;
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-test-key";
+    process.env.SUPABASE_URL = "https://example.supabase.co";
+  });
 
   it("builds every check and finds no gap when production agrees", async () => {
     supabaseFetch.mockImplementation(routeFetch());
     const { buildReadings } = await import("@/app/api/cron/brain-reconcile/route");
     const { reconcile } = await import("@features/brain/server/reconcile");
     const { readings, unread } = await buildReadings();
-    expect(readings).toHaveLength(12);
+    expect(readings).toHaveLength(13);
     expect(unread).toEqual([]);
     expect(reconcile(readings)).toEqual([]);
   });
@@ -193,6 +221,69 @@ describe("brain-reconcile — the readings it actually assembles", () => {
     const { readings, unread } = await buildReadings();
     expect(unread).toContain("report chunk text");
     expect(reconcile(readings).find((d) => d.what.includes("stored text"))).toBeUndefined();
+  });
+
+  /**
+   * THE BOUNDARY NOTHING ELSE ENFORCES.
+   *
+   * `brain_chunk` holds the company's mail, contracts and meeting transcripts, and what
+   * keeps it private is one RLS policy whose USING clause is `false`. The integration
+   * test that covers it skips silently when `SUPABASE_TEST_URL` is unset — and it is
+   * unset, in CI and locally — so until this check there was nothing between a dropped
+   * policy and the whole corpus being readable with the key in every page source.
+   */
+  it("notices when the corpus answers a browser key with actual rows", async () => {
+    anonProbe.rows = [{ id: 1 }, { id: 2 }];
+    supabaseFetch.mockImplementation(routeFetch());
+    const { buildReadings } = await import("@/app/api/cron/brain-reconcile/route");
+    const { reconcile } = await import("@features/brain/server/reconcile");
+    const { readings } = await buildReadings();
+    const found = reconcile(readings).find((d) => d.what.includes("browser key"));
+    expect(found).toBeDefined();
+    expect(found!.gap).toBe(2);
+  });
+
+  it.each([401, 403])(
+    "treats HTTP %i as the boundary HOLDING, not as a failure",
+    async (status) => {
+      // A refusal is the policy working. Only a 2xx that returns rows is exposure.
+      anonProbe.status = status;
+      supabaseFetch.mockImplementation(routeFetch());
+      const { buildReadings } = await import("@/app/api/cron/brain-reconcile/route");
+      const { reconcile } = await import("@features/brain/server/reconcile");
+      const { readings, unread } = await buildReadings();
+      expect(unread.join()).not.toContain("browser key");
+      expect(reconcile(readings).find((d) => d.what.includes("browser key"))).toBeUndefined();
+    }
+  );
+
+  it.each([
+    [
+      "an unexpected status",
+      () => {
+        anonProbe.status = 500;
+      },
+    ],
+    [
+      "a network failure",
+      () => {
+        anonProbe.throws = true;
+      },
+    ],
+    [
+      "no browser key configured",
+      () => {
+        delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      },
+    ],
+  ])("reports UNREAD on %s, rather than a clean bill of health", async (_what, arrange) => {
+    arrange();
+    supabaseFetch.mockImplementation(routeFetch());
+    const { buildReadings } = await import("@/app/api/cron/brain-reconcile/route");
+    const { reconcile } = await import("@features/brain/server/reconcile");
+    const { readings, unread } = await buildReadings();
+    expect(unread.join(" ")).toContain("browser key");
+    expect(reconcile(readings).find((d) => d.what.includes("browser key"))).toBeUndefined();
   });
 
   it("notices a chunk that still holds a secret", async () => {

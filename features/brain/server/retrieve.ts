@@ -11,19 +11,24 @@ import { expandRelativePeriods, periodAnchor } from "@features/brain/server/peri
  * 20260825215317_brain_chunk.sql). What lives HERE is the shaping that SQL is a
  * clumsy place for, and that measurably changes answer quality:
  *
- *   1. DEDUPE BY PARENT. Long docs and long commit messages are stored as several
- *      chunks, and a query that matches one part usually matches its siblings.
- *      Measured on this corpus, "how do I add a new landing section" returned the
- *      same commit at ranks 2 AND 3 -- which wastes prompt budget on a duplicate
- *      and shows the reader the same citation twice.
- *   2. SOURCE DIVERSITY. There are 1,475 commit chunks against 454 doc chunks, and
- *      commit titles are short subject lines that score well on word-similarity.
- *      So commits crowd the top even when the authoritative answer is a doc: for
- *      "why is the data retention purge turned off" the CLAUDE.md
- *      "Postponed / TODO" section -- which literally answers it -- placed 4th
- *      behind three commits. Rather than invent a fudge factor per source, this
- *      caps how much of the result set any one source may take, so the model sees
- *      the policy doc AND the history and can pick.
+ *   1. DEDUPE BY PARENT. A long document is stored as several chunks, and a query
+ *      that matches one part usually matches its siblings. Measured, "how do I add
+ *      a new landing section" returned the same document at ranks 2 AND 3 -- which
+ *      wastes prompt budget on a duplicate and shows the reader the same citation
+ *      twice.
+ *   2. SOURCE DIVERSITY. One source can crowd the top even when the authoritative
+ *      answer is elsewhere: for "why is the data retention purge turned off" the
+ *      CLAUDE.md "Postponed / TODO" section -- which literally answers it --
+ *      placed 4th. Rather than invent a fudge factor per source, this caps how
+ *      much of the result set any one source may take.
+ *
+ *      BOTH EXAMPLES ABOVE WERE MEASURED AGAINST GIT COMMITS, which this corpus no
+ *      longer holds: `ce785e83` stopped indexing them on 2026-09-09, after finding
+ *      that six of eight questions a founder actually asks had a commit as their
+ *      top hit and not one of those commits contained the answer. The shaping is
+ *      kept because the failure mode is not specific to commits -- `ga4` took 12 of
+ *      14 slots on one measured question -- but the numbers that motivated it are
+ *      history, not a description of what is in there now.
  */
 
 export interface BrainChunk {
