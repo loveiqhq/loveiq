@@ -24,6 +24,7 @@
     "docs:spell": "cspell lint \"**/*.md\" --no-progress --no-must-find-files",
     "docs:check": "npm run docs:truth && npm run docs:lint && npm run docs:spell && prettier --check \"**/*.md\"",
     "check:migration-drift": "node scripts/check-migration-drift.mjs",
+    "check:migration-order": "node scripts/check-migration-order.mjs",
     "check:postgrest-columns": "node scripts/check-postgrest-columns.mjs",
     "setup:staging-db": "node scripts/setup-staging-db.mjs",
     "check:migrations": "tsx scripts/check-migrations.ts",

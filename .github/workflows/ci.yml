@@ -191,6 +191,13 @@ jobs:
       # survey_question.question_text (admin scorecard 500'd), and
       # payment.survey_submission_id (median time-to-purchase always null).
       # Exit codes: 0 clean, 1 bad column, 2 could not check.
+      # Needs no database: it is a pure ordering check over the files. Lives here
+      # because it guards the same thing — that a replay into an empty database
+      # works. Found on 2026-09-20 that chapter_nudge_flag INSERTed into
+      # system_flags eleven hours before system_flags was created.
+      - name: Check migration order
+        run: npm run check:migration-order
+
       - name: Check PostgREST columns exist
         run: npm run check:postgrest-columns
         env:

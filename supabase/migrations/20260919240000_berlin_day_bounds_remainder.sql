@@ -69,14 +69,25 @@ BEGIN
   IF src IS NULL THEN RAISE EXCEPTION 'get_conversion_pipeline not found'; END IF;
 
   SELECT count(*) INTO n FROM regexp_matches(src, '\(effective_since\)::date', 'g');
-  IF n <> 1 THEN
-    RAISE EXCEPTION 'get_conversion_pipeline: expected 1 bare series start, found %', n;
+  IF n = 0
+     AND position('(effective_since AT TIME ZONE ''Europe/Berlin'')::date' in src) > 0 THEN
+    -- Already Berlin. On a REPLAY this function is created by
+    -- 20260307095959_objects_that_predate_the_migration_history.sql, which
+    -- captured production AFTER this migration had run — so the patch it is
+    -- about to apply is already present and there are 0 bare sites to find.
+    -- That is success, not a missing anchor. Raising here aborted the first
+    -- rebuild of this database (2026-09-20).
+    RAISE NOTICE 'get_conversion_pipeline — already on Berlin days, nothing to do';
+  ELSE
+    IF n <> 1 THEN
+      RAISE EXCEPTION 'get_conversion_pipeline: expected 1 bare series start, found %', n;
+    END IF;
+    next := replace(src,
+      '(effective_since)::date',
+      '(effective_since AT TIME ZONE ''Europe/Berlin'')::date');
+    EXECUTE next;
+    RAISE NOTICE 'get_conversion_pipeline — day axis now matches its Berlin buckets';
   END IF;
-  next := replace(src,
-    '(effective_since)::date',
-    '(effective_since AT TIME ZONE ''Europe/Berlin'')::date');
-  EXECUTE next;
-  RAISE NOTICE 'get_conversion_pipeline — day axis now matches its Berlin buckets';
 
   ---------------------------------------------------------------- 3
   SELECT pg_get_functiondef(p.oid) INTO src

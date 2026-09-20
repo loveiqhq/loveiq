@@ -60,16 +60,26 @@ BEGIN
       RAISE EXCEPTION '%: function not found — has it been renamed?', fn;
     END IF;
 
-    IF fn = 'get_funnel_sparklines_v3' THEN
-      -- v3 writes its CTEs on one line each.
-      old_bc := 'SELECT event_time::date AS day, COUNT(DISTINCT survey_submission_id)::int AS n FROM analytics_event WHERE event_type = ''begin_checkout'' AND event_time >= since_ts AND event_time < until_ts GROUP BY event_time::date';
-      new_bc := 'SELECT checkout_started_at::date AS day, COUNT(DISTINCT survey_submission_id)::int AS n FROM report_price_quote WHERE checkout_started_at >= since_ts AND checkout_started_at < until_ts GROUP BY checkout_started_at::date';
-      old_pay := 'FROM payment WHERE status = ''succeeded'' AND created_date_time >= since_ts AND created_date_time < until_ts GROUP BY created_date_time::date';
-      new_pay := 'FROM payment WHERE status = ''succeeded'' AND is_test = false AND created_date_time >= since_ts AND created_date_time < until_ts GROUP BY created_date_time::date';
-    ELSE
-      -- v2 wraps them across lines; the indentation is part of the match.
-      old_bc := E'    SELECT event_time::date AS day, COUNT(DISTINCT survey_submission_id)::int AS n\n    FROM analytics_event\n    WHERE event_type = ''begin_checkout''\n      AND event_time >= since_ts AND event_time < until_ts\n    GROUP BY event_time::date';
-      new_bc := E'    SELECT checkout_started_at::date AS day, COUNT(DISTINCT survey_submission_id)::int AS n\n    FROM report_price_quote\n    WHERE checkout_started_at >= since_ts AND checkout_started_at < until_ts\n    GROUP BY checkout_started_at::date';
+    -- Try the COMPACT shape, then the MULTILINE one, for BOTH functions.
+    --
+    -- This used to pick a shape per function: compact for v3, multiline for v2,
+    -- because that is how each looked in PRODUCTION. On a replay v3 comes from
+    -- 20260529154209_funnel_v3_more_charts.sql, which writes the CTE across
+    -- lines — so the compact literal matched nothing and this aborted the whole
+    -- push with "matches neither the old nor the patched shape".
+    --
+    -- Production's v3 being compact means its body did not come from that
+    -- migration. The repo cannot reproduce it, which is a real gap and is NOT
+    -- fixed here; this only stops the formatting assumption from breaking a
+    -- rebuild. The RAISE below still fires if neither shape is present.
+    old_bc  := 'SELECT event_time::date AS day, COUNT(DISTINCT survey_submission_id)::int AS n FROM analytics_event WHERE event_type = ''begin_checkout'' AND event_time >= since_ts AND event_time < until_ts GROUP BY event_time::date';
+    new_bc  := 'SELECT checkout_started_at::date AS day, COUNT(DISTINCT survey_submission_id)::int AS n FROM report_price_quote WHERE checkout_started_at >= since_ts AND checkout_started_at < until_ts GROUP BY checkout_started_at::date';
+    old_pay := 'FROM payment WHERE status = ''succeeded'' AND created_date_time >= since_ts AND created_date_time < until_ts GROUP BY created_date_time::date';
+    new_pay := 'FROM payment WHERE status = ''succeeded'' AND is_test = false AND created_date_time >= since_ts AND created_date_time < until_ts GROUP BY created_date_time::date';
+
+    IF position(old_bc in def) = 0 AND position(new_bc in def) = 0 THEN
+      old_bc  := E'    SELECT event_time::date AS day, COUNT(DISTINCT survey_submission_id)::int AS n\n    FROM analytics_event\n    WHERE event_type = ''begin_checkout''\n      AND event_time >= since_ts AND event_time < until_ts\n    GROUP BY event_time::date';
+      new_bc  := E'    SELECT checkout_started_at::date AS day, COUNT(DISTINCT survey_submission_id)::int AS n\n    FROM report_price_quote\n    WHERE checkout_started_at >= since_ts AND checkout_started_at < until_ts\n    GROUP BY checkout_started_at::date';
       old_pay := E'    FROM payment\n    WHERE status = ''succeeded''\n      AND created_date_time >= since_ts AND created_date_time < until_ts\n    GROUP BY created_date_time::date';
       new_pay := E'    FROM payment\n    WHERE status = ''succeeded''\n      AND is_test = false\n      AND created_date_time >= since_ts AND created_date_time < until_ts\n    GROUP BY created_date_time::date';
     END IF;
