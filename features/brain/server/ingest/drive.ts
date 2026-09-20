@@ -940,9 +940,29 @@ async function driveToken(oidcToken?: string | null): Promise<string | null> {
  */
 const BILLING_NAME = /(^|[_\s-])(invoice|receipt|rechnung|billing[_\s-]statement)([_\s-]|\d|\.)/i;
 const BILLING_WORD = /invoice|receipt|rechnung|billing[_\s-]?statement/gi;
+/**
+ * The vendor's reference with no spelled-out word: `MT-INV00945830.pdf`.
+ *
+ * Five of these were in the corpus and three of them came back in the TOP TWELVE for
+ * "what did we agree about pricing in our calls" — the exact question this whole rule
+ * was written for, still answered with invoices a month after the first fix.
+ */
+const VENDOR_REF = /(^|[^a-z])inv[-_]?\d{4,}/i;
+/**
+ * WHAT IS DELIBERATELY NOT HERE: a name of nothing but digits.
+ *
+ * `5419031713.pdf` is a Google invoice and `726933.pdf` is a peer-reviewed paper on
+ * sexual and relationship variables, 26 chunks of exactly the literature this company
+ * exists to read. `18.01.161.20221004.pdf` is another. The filename cannot tell them
+ * apart, and the rule runs at LISTING time — before anything is fetched — so there is
+ * no content to appeal to. A "no words in the name" rule measured beautifully and
+ * would have deleted both papers. The nine numeric invoices are one chunk each and
+ * have never surfaced in a probe; the papers are worth far more than they cost.
+ */
 export function isVendorBilling(name?: string, mimeType?: string): boolean {
   if (mimeType !== PDF_MIME) return false;
   const n = (name ?? "").trim();
+  if (VENDOR_REF.test(n)) return true;
   if (!BILLING_NAME.test(n)) return false;
   if (/\d{3,}/.test(n)) return true;
   const rest = n
@@ -950,6 +970,27 @@ export function isVendorBilling(name?: string, mimeType?: string): boolean {
     .replace(BILLING_WORD, "")
     .replace(/[\d\s._\-()#]/g, "");
   return rest.length === 0;
+}
+
+/**
+ * A JOB APPLICATION. Somebody else's personal data, not company knowledge.
+ *
+ * Fifteen were indexed — named CVs and résumés of external candidates, 23 chunks —
+ * searchable by anyone on the team through a tool that answers in prose. Nothing about
+ * how LoveIQ works is in any of them, so the corpus loses nothing by their going, and
+ * the direction to err in with a stranger's personal data is out.
+ *
+ * A RULE, NOT AN ID LIST, for the same reason billing is: recruiting keeps happening,
+ * so a list of ids is stale by the next applicant. Anchored at word boundaries so
+ * "CV screening process" or a file merely mentioning a résumé is untouched; measured
+ * across all 705 Drive documents, it matched those fifteen and produced no near miss.
+ *
+ * REVERSIBLE, and a decision rather than a defect: if the team wants to ask the brain
+ * who applied for a role, delete this function and its call. Recorded 2026-09-20.
+ */
+const JOB_APPLICATION = /(^|[_\s(-])(cv|resume|résumé|lebenslauf)([_\s).\d-]|$)/i;
+export function isJobApplication(name?: string): boolean {
+  return JOB_APPLICATION.test((name ?? "").trim());
 }
 
 export async function ingestDrive(
@@ -992,7 +1033,10 @@ export async function ingestDrive(
   // removing.
   const listed = {
     items: resolved.docs.filter(
-      (f) => !SKIP_FILE_IDS.has(f.id ?? "") && !isVendorBilling(f.name, f.mimeType)
+      (f) =>
+        !SKIP_FILE_IDS.has(f.id ?? "") &&
+        !isVendorBilling(f.name, f.mimeType) &&
+        !isJobApplication(f.name)
     ),
     complete: raw.complete,
     stopped: raw.stopped,

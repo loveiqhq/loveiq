@@ -188,6 +188,7 @@ import {
   docToRows,
   ingestDrive,
   isPersonalDataExport,
+  isJobApplication,
   isVendorBilling,
   sheetTabsWithRows,
 } from "@features/brain/server/ingest/drive";
@@ -1297,6 +1298,55 @@ describe("personal-data exports are refused", () => {
  * for what was agreed about pricing in our calls returned five Slack billing
  * statements and NO meeting note.
  */
+describe("isJobApplication", () => {
+  /**
+   * The real filenames. Fifteen external candidates' CVs were sitting in a corpus the
+   * whole team can ask questions of — personal data of people who applied for a job
+   * here, and nothing at all about how LoveIQ works.
+   */
+  it.each([
+    "Adna Njuhović – CV.pdf (2).pdf",
+    "CV Saša Arslanagić (1).pdf",
+    "Habiba-Raafat-CV-Resume (1).pdf",
+    "Iman_Beslija_CV.pdf",
+    "Lejla Viteškić Resume (3).docx (1).pdf",
+    "Naida Smailbegovic-cv.pdf",
+    "Nađa Sinić 2026 _CV.pdf",
+    "Resume (2).pdf",
+    "hamza_ramic_cv.pdf",
+  ])("drops %s", (name) => {
+    expect(isJobApplication(name)).toBe(true);
+  });
+
+  /**
+   * The line it must not cross. A document ABOUT hiring is company knowledge; the
+   * pattern is anchored at word boundaries so none of these is touched, and measuring
+   * across all 705 Drive documents produced no near miss.
+   */
+  it.each([
+    "Business Case",
+    "LoveIQ_Explorer_of_Edges_Preview.pdf",
+    "Recruiting pipeline 2026",
+    "cover-letter-template.docx",
+    "curriculum-of-the-onboarding-week.md",
+    "Onthology_Enity_Model",
+  ])("keeps %s", (name) => {
+    expect(isJobApplication(name)).toBe(false);
+  });
+
+  /**
+   * A KNOWN EDGE, recorded rather than fixed — the same trade as "Invoice 2026
+   * policy.pdf" below. A candidate's file often leads with the word ("CV Saša
+   * Arslanagić"), so a document ABOUT CVs leads with it identically and the filename
+   * cannot separate them. Narrowing to catch only a trailing token would miss five of
+   * the fifteen real ones. No such document exists among the 705 Drive files, so it
+   * costs nothing today, and this says so out loud.
+   */
+  it("drops a document named like a CV but about screening them", () => {
+    expect(isJobApplication("CV screening process.docx")).toBe(true);
+  });
+});
+
 describe("isVendorBilling", () => {
   const PDF = "application/pdf";
 
@@ -1317,6 +1367,11 @@ describe("isVendorBilling", () => {
     "invoice 1.1.pdf",
     "invoice 1.2.pdf",
     "Rechnung.pdf",
+    // The vendor reference with no spelled-out word. Three of these came back in the
+    // top twelve for "what did we agree about pricing in our calls" — the question
+    // this rule exists for — a day after the rule was supposedly fixed.
+    "MT-INV00945830.pdf",
+    "MT-INV00894286.pdf",
   ];
 
   it.each(BILLING)("drops %s", (name) => {
@@ -1366,6 +1421,22 @@ describe("isVendorBilling", () => {
   it("drops a year-named document about billing, which is the accepted cost", () => {
     expect(isVendorBilling("Invoice 2026 policy.pdf", PDF)).toBe(true);
   });
+
+  /**
+   * THE TWO THIS RULE MUST NEVER REACH.
+   *
+   * `5419031713.pdf` is a Google invoice; `726933.pdf` is a peer-reviewed paper on
+   * sexual and relationship variables, 26 chunks of it. Their names are the same shape,
+   * and the rule decides before anything is fetched — so a "nothing but digits" test,
+   * which catches every numeric invoice cleanly, also deletes the literature. Measured
+   * before it shipped; these cases are why it did not.
+   */
+  it.each(["726933.pdf", "18.01.161.20221004.pdf", "5419031713.pdf"])(
+    "never drops %s — a numeric name is not evidence either way",
+    (name) => {
+      expect(isVendorBilling(name, PDF)).toBe(false);
+    }
+  );
 
   it("never drops a non-pdf, whatever it is called", () => {
     // A spreadsheet named like an invoice is a ledger someone maintains, not a receipt.
