@@ -158,6 +158,10 @@ jobs:
             "  migrations, auth, payments or the probes themselves is refused." \
             "- Keep it small. Well under 40 changed lines." \
             "- Do NOT edit the probe. It is the judge, not part of the fix." \
+            "- You may ADD a test. You may not remove or weaken an existing" \
+            "  one: deleting an assertion is the same as editing the probe, and" \
+            "  any diff that deletes a line from an existing test is refused." \
+            "  If a test genuinely contradicts the fix, stop and say so instead." \
             "- Follow the conventions in CLAUDE.md, especially the comment style." \
             "" \
             "Make the change. Do not commit; the workflow does that.")" \

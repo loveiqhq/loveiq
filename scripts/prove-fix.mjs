@@ -90,6 +90,30 @@ const MAX_CHANGED_LINES = Number(process.env.MAX_CHANGED_LINES ?? 40);
 export const isTest = (f) =>
   /(^|\/)__tests__\//.test(f) || /\/tests\//.test(f) || /\.test\./.test(f);
 
+/**
+ * Turn `git diff --numstat` lines into the three numbers judgeDiff needs.
+ *
+ * Exported and pure so the COLLECTION is testable, not just the judgement. The
+ * test-deletion rule is worthless if the thing that spots the deletions is the
+ * part nobody checks — a unit test that hands judgeDiff a ready-made `testCuts`
+ * stays green while this stops filling it.
+ */
+export function countDiff(numstatLines) {
+  return numstatLines.reduce(
+    (acc, l) => {
+      const [add, del, file] = l.split("\t");
+      const n = (Number(add) || 0) + (Number(del) || 0);
+      acc.total += n;
+      if (!isTest(file ?? "")) acc.product += n;
+      // A new test file has no deletions, so only an EDIT to an existing one
+      // lands here. See judgeDiff for why that is refused.
+      else if ((Number(del) || 0) > 0) acc.testCuts.push({ file, deletions: Number(del) });
+      return acc;
+    },
+    { total: 0, product: 0, testCuts: [] }
+  );
+}
+
 /** Pure, so --selftest can check it without git. */
 export function judgeDiff(
   files,
@@ -129,6 +153,36 @@ export function judgeDiff(
   const product = typeof changedLines === "object" ? changedLines.product : changedLines;
   const total = typeof changedLines === "object" ? changedLines.total : changedLines;
   const testNote = total > product ? `, plus ${total - product} line(s) of tests` : "";
+
+  /**
+   * A FIX MAY ADD TESTS. IT MAY NOT TAKE LINES OUT OF ONE.
+   *
+   * Tests are free against the cap (above) on the assumption that they only
+   * ever get ADDED. Deleting a line from an existing test is the opposite: it
+   * removes an assertion, and it removes exactly the assertion that would have
+   * caught the change being proposed. Every mechanical check still passes,
+   * because the check that would have failed is the one that was deleted.
+   *
+   * Not theoretical. PR #222, the first fix this pipeline ever generated on its
+   * own, was told "do not change whether the button is disabled". It removed
+   * `disabled` from the button AND deleted `expect(agreeButton).toBeDisabled()`
+   * from `SurveyPage.test.tsx`. Probe green, suite green, six checks green.
+   *
+   * This is the same rule that already puts `scripts/probes/` in DENY: a fix
+   * does not get to edit its own judge. A NEW test file cannot trip this — it
+   * has no deletions — so bringing a regression test stays encouraged.
+   */
+  const testCuts = typeof changedLines === "object" ? (changedLines.testCuts ?? []) : [];
+  if (testCuts.length > 0) {
+    return {
+      ok: false,
+      oversize: false,
+      why:
+        `removes ${testCuts.reduce((n, t) => n + t.deletions, 0)} line(s) from existing ` +
+        `test(s): ${testCuts.map((t) => `${t.file} (-${t.deletions})`).join(", ")} — ` +
+        `a fix may add assertions, never delete them`,
+    };
+  }
 
   /**
    * SIZE IS A CONFIDENCE TIER, NOT A GATE. Paths are the gate.
@@ -208,6 +262,28 @@ if (process.argv.includes("--selftest")) {
     judgeDiff(["features/survey/ui/SurveyPage.tsx"], { total: 200, product: 200 }).oversize,
     true,
     "a large product change is proven but marked oversize, not refused"
+  );
+  // PR #222: the fix deleted `expect(agreeButton).toBeDisabled()` and every
+  // mechanical check still went green, because the check that would have failed
+  // was the one it deleted.
+  eq(
+    judgeDiff(["features/survey/ui/SurveyPage.tsx", "features/survey/tests/SurveyPage.test.tsx"], {
+      total: 24,
+      product: 18,
+      testCuts: [{ file: "features/survey/tests/SurveyPage.test.tsx", deletions: 4 }],
+    }).ok,
+    false,
+    "a fix that deletes lines from an existing test is refused"
+  );
+  // ADDING a test must stay free, or the guard punishes the good behaviour.
+  eq(
+    judgeDiff(["features/survey/ui/SurveyPage.tsx", "features/survey/tests/New.test.tsx"], {
+      total: 93,
+      product: 37,
+      testCuts: [],
+    }).ok,
+    true,
+    "a fix that only ADDS test lines is still proven"
   );
   eq(isTest("features/survey/tests/x.test.tsx"), true, "feature tests recognised");
   eq(isTest("__tests__/scripts/x.test.ts"), true, "root tests recognised");
@@ -290,16 +366,7 @@ async function main() {
   const files = git("diff", "--name-only", `${baseSha}..${fixSha}`).split("\n").filter(Boolean);
   const numstat = git("diff", "--numstat", `${baseSha}..${fixSha}`).split("\n").filter(Boolean);
   // Split so the cap can judge product code alone; see judgeDiff.
-  const counted = numstat.reduce(
-    (acc, l) => {
-      const [add, del, file] = l.split("\t");
-      const n = (Number(add) || 0) + (Number(del) || 0);
-      acc.total += n;
-      if (!isTest(file ?? "")) acc.product += n;
-      return acc;
-    },
-    { total: 0, product: 0 }
-  );
+  const counted = countDiff(numstat);
   const verdict = judgeDiff(files, counted);
   console.log(`    ${verdict.ok ? "ok" : "REFUSED"} — ${verdict.why}`);
   if (!verdict.ok) {
