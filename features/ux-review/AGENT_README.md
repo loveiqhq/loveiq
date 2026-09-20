@@ -54,6 +54,12 @@ last 6h`. The workflow input now exists solely so a manual run can NARROW the
 window, and `__tests__/scripts/verifier-budget.test.ts` fails if the two numbers
 disagree in either direction. A default the caller overrides is not a default.
 
+There was a THIRD copy: `workflow_dispatch.inputs.lookback_hours` carried
+`default: "6"`, which makes the input non-empty on every manual run, so the
+`|| '24'` fallback never fired. Scheduled runs were fine; every dispatch — and
+therefore every attempt to verify the fix by hand — quietly used the old window.
+The input now has no default, and the test refuses one.
+
 Both queries also drain **oldest-first**. Newest-first plus a per-run budget is a
 starvation queue: the newest always outrank the tail, so the same items are
 deferred every run until they leave the window.
