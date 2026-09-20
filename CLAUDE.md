@@ -745,10 +745,33 @@ Two consequences worth keeping in view rather than rediscovering:
    a bare opaque string that no safe pattern can distinguish from a hash, so it is
    excluded by title in `notion.ts` and **that token should be rotated**.
 3. **Customer data is the line that does NOT move.** `brain_chunk` must never
-   index user-level rows — survey answers, individual reports, email addresses.
-   Open access among the team is a choice; making customers' private results
-   searchable is not the same choice, and the ROPA entry for the language-model
-   vendor depends on it staying true.
+   index user-level PRODUCT rows — survey answers, individual reports, the
+   waitlist. Open access among the team is a choice; making customers' private
+   results searchable is not the same choice, and the ROPA entry for the
+   language-model vendor depends on it staying true.
+
+   Be precise about what that does and does not promise, because the loose
+   version of this sentence ("never index email addresses") reads as false the
+   moment anyone checks. Audited 2026-09-20 against the live corpus:
+
+   - **Product sources are clean.** Not one chunk from `analytics`, `report` or
+     any product source carries a customer's address. Zero survey answers, zero
+     individual reports.
+   - **Correspondence is indexed, and correspondents have addresses.** Sixteen
+     addresses that also appear in a customer table are in the corpus — five on
+     the company domain, six team members' personal addresses, and nine
+     outsiders who are job candidates, contractors, or people who wrote to us.
+     They appear in `gmail`, `calendar`, `drive`, `notion` and `slack`, never in
+     product data. Indexing the company mailbox means indexing who wrote to it.
+   - **No live token reaches the corpus.** Report links, our own unsubscribe
+     links and Supabase verify links all store as `[redacted]`; 796 chunks carry
+     that marker. Measured the same day: 0 live report tokens, 0 Stripe keys, 0
+     JWTs, 0 private keys.
+
+   Re-run that audit by extracting addresses from `brain_chunk` with a regex and
+   intersecting them against `waitlist_user`, `report_share` and `invite_event`,
+   then grouping the hits BY SOURCE — the source is what separates a support
+   thread from a data leak.
 
 ## Postponed / TODO (deliberately deferred work)
 
