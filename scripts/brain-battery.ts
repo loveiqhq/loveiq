@@ -1492,18 +1492,24 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
       bodyHas(/August 2026[\s\S]{0,700}Performance Max EUR [\d.]+/, 3)
     ),
     /**
-     * RED SINCE 2026-09-20, because the campaign ENDED. Its last appearance in GA4 is
-     * 2026-08-31, so an undated question about it now competes with three weeks of newer
-     * data. `ga4` gets one slot per grain, and within the monthly grain September wins
-     * it from the August chunk that holds the answer.
+     * WENT RED ON 2026-09-20 AND CAME BACK THE SAME NIGHT, for a reason worth keeping.
      *
-     * The data is not lost and the claim above that this probe "cannot expire" is what
-     * expired: scoped with `sources: ["ga4"]` the brand chunk is #2, and naming the
-     * month puts it at #2 unscoped. Unscoped and undated it sits around #20.
+     * The campaign ended: its last appearance in GA4 is 2026-08-31, so an undated
+     * question about it competes with three weeks of newer data, and `ga4` gets one slot
+     * per grain. Within the monthly grain September was winning that slot from the
+     * August chunk holding the answer — the probe sat around #20 unscoped, while
+     * `sources: ["ga4"]` put it at #2.
      *
-     * Fixing it means letting a distinctive term in the question outweigh recency inside
-     * a grain, which is the most delicate part of the ranking, on a battery that flakes
-     * by about one probe between identical runs. Not worth doing on this evidence.
+     * What brought it back was not a ranking change. `monthly:2026-09` had been built
+     * from a window starting on the 2nd, because GA4 resolves `NdaysAgo` in the
+     * property's timezone while the window arithmetic counts UTC days; fixing that to an
+     * absolute start date changed the September chunk enough that August reaches the top
+     * twelve again. Confirmed over three consecutive runs, against a battery that
+     * otherwise moves by about one probe between identical runs.
+     *
+     * So this probe is load-bearing in a way its author did not intend: it is sensitive
+     * to the GA4 window being right. If it reddens again, check `monthly:<this month>`
+     * against the sum of that month's daily chunks before touching the ranking.
      */
     P("ga4-brand", "how much did the brand campaign cost", bodyHas(/LoveIQ - Brand/)),
     P("ga4-channels", "which channels send us the most traffic", bodyHas(/Direct|Paid Search/)),
