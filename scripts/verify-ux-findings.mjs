@@ -50,9 +50,12 @@ import { hogQuery } from "./lib/hogql.mjs";
  */
 /**
  * How many findings one run may FETCH. Not a work bound — PROBE_BUDGET is that.
- * This only has to be larger than the busiest lookback window will ever be; at
- * ~11 findings a day against a 24-hour window, 500 is two orders of margin, and
- * the run shouts if it is ever reached. See the check after the query.
+ * This only has to be larger than the busiest lookback window will ever be.
+ * Measured over the first week: 7, 7, 11, 12, 33, 10, 57 yes-findings a day —
+ * so 500 is about 9x the worst real day, not the "two orders" an earlier draft
+ * of this comment claimed. A backfill is what produced both spikes, and a
+ * backfill is exactly when this would bite, so keep the margin generous. The
+ * run shouts if the limit is ever reached; see the check after the query.
  */
 const FINDINGS_FETCH_LIMIT = Number(process.env.FINDINGS_FETCH_LIMIT ?? 500);
 

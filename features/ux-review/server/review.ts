@@ -15,6 +15,7 @@
  * dedupe claim.
  */
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
+import logger from "@shared/observability/logger";
 import { escapeSlack, type SlackBlock } from "@shared/observability/slack";
 import { context, header, linkButton, section } from "@shared/observability/slack-blocks";
 
@@ -35,6 +36,27 @@ import { UX_REVIEW_MIN_CONFIDENCE, UX_SCANNERS } from "./scanners";
  * Same rule as everywhere else: a challenger is measured, never consulted.
  * `scripts/replay-bench/score.mjs --ledger` is where the comparison belongs.
  */
+/**
+ * A read that came back exactly full is a read that was CUT SHORT.
+ *
+ * These three fetches go straight to PostgREST via `fetchWithTimeout`, not
+ * through `features/admin/server/supabase.ts`, so the max-rows guard that
+ * shouts about this elsewhere does not cover them. Each states its own `limit`,
+ * and none of them is close to it today — but that is a fact about current
+ * volume, not a property of the code, and the failure mode is the quiet one:
+ * the digest reports a coverage percentage or an outcome tally computed on a
+ * slice, with nothing anywhere saying a slice is what it was.
+ *
+ * ERROR, not warn: only error and fatal are mirrored to Slack.
+ */
+export function warnIfTruncated(rows: readonly unknown[], limit: number, what: string): void {
+  if (rows.length < limit) return;
+  logger.error(
+    { what, returned: rows.length, limit },
+    "ux-review: a read came back exactly at its limit — rows are MISSING and the figure built from them is computed on a slice"
+  );
+}
+
 const CHALLENGER_NAMES = new Set(
   UX_SCANNERS.filter((s) => s.role === "challenger").map((s) => s.name)
 );
@@ -338,6 +360,7 @@ export async function fetchCoverageStats(): Promise<CoverageStat | null> {
     );
     if (!res.ok) return null;
     const rows = (await res.json()) as Array<{ posthog_session_id: string | null }>;
+    warnIfTruncated(rows, 500, "coverage: survey_submission");
     const ids = rows
       .map((r) => r.posthog_session_id)
       .filter((id): id is string => id !== null && isSafeSessionId(id));
@@ -413,6 +436,7 @@ export async function fetchVerificationStats(): Promise<VerificationStat | null>
      * that reached nobody rather than as an experiment doing what it is meant
      * to do.
      */
+    warnIfTruncated(allRows, 500, "verification: ux_finding");
     const rows = allRows.filter((r) => !isChallengerScanner(r.scanner_name));
 
     const tally: VerificationStat = {

@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+import logger from "@shared/observability/logger";
+
 import {
   buildDigestMessage,
   contradiction,
@@ -12,6 +17,7 @@ import {
   fetchDailyStats,
   fetchVerificationStats,
   isChallengerScanner,
+  warnIfTruncated,
   fetchFindings,
   recordingLink,
   type UxFinding,
@@ -766,5 +772,75 @@ describe("the digest ignores challenger scanners", () => {
     await fetchCoverageStats();
     expect(hogql, "the coverage query must exclude challengers").toContain(CHALLENGER);
     expect(hogql).toMatch(/NOT IN/);
+  });
+});
+
+/**
+ * A READ THAT CAME BACK EXACTLY FULL WAS CUT SHORT.
+ *
+ * These reads go straight to PostgREST, not through
+ * `features/admin/server/supabase.ts`, so the max-rows guard that shouts about
+ * this elsewhere does not cover them. PostgREST answers a truncated read with
+ * 200 and a short body — no error, no flag — and the digest then reports a
+ * coverage percentage or an outcome tally computed on a slice, with nothing
+ * saying a slice is what it was.
+ */
+describe("a truncated read is never reported as a whole one", () => {
+  const errors: unknown[] = [];
+  const spyOnLogger = () =>
+    vi.spyOn(logger, "error").mockImplementation(((...a: unknown[]) => {
+      errors.push(a);
+    }) as never);
+
+  it("shouts when a read comes back exactly at its limit", () => {
+    errors.length = 0;
+    const spy = spyOnLogger();
+    warnIfTruncated(new Array(500).fill(0), 500, "coverage: survey_submission");
+    spy.mockRestore();
+    expect(JSON.stringify(errors), "a full read must be reported as truncated").toMatch(
+      /rows are MISSING/
+    );
+    // ERROR, not warn: only error and fatal are mirrored to Slack, so a warning
+    // here reaches Vercel's log viewer and therefore nobody.
+    expect(JSON.stringify(errors)).toMatch(/coverage: survey_submission/);
+  });
+
+  it("stays quiet on a read comfortably under the limit", () => {
+    // Otherwise the guard cries wolf every healthy day and gets muted, which
+    // is worse than not having it.
+    errors.length = 0;
+    const spy = spyOnLogger();
+    warnIfTruncated(new Array(499).fill(0), 500, "coverage: survey_submission");
+    warnIfTruncated([], 500, "verification: ux_finding");
+    spy.mockRestore();
+    expect(errors).toEqual([]);
+  });
+
+  it("is actually wired to the reads that can truncate", () => {
+    /**
+     * The function existing proves nothing. A mutation deleting the CALL at the
+     * coverage read left every assertion above green — the guard would have
+     * been dead code shipping a false sense of safety.
+     *
+     * Both PostgREST reads in this file state their own `limit` and neither
+     * goes through the max-rows guard in features/admin/server/supabase.ts, so
+     * both must be checked here.
+     */
+    const src = readFileSync(resolve(process.cwd(), "features/ux-review/server/review.ts"), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/(^|[^:])\/\/.*$/gm, "$1");
+    const limitedReads = src.match(/&limit=\d+/g) ?? [];
+    const calls = src.match(/warnIfTruncated\(/g) ?? [];
+    expect(limitedReads.length, "there should be limited reads to guard").toBeGreaterThan(0);
+    // One call per limited read, plus the declaration itself.
+    expect(calls.length - 1, "every limited read must be guarded").toBe(limitedReads.length);
+  });
+
+  it("also fires when a read somehow exceeds its own limit", () => {
+    errors.length = 0;
+    const spy = spyOnLogger();
+    warnIfTruncated(new Array(501).fill(0), 500, "verification: ux_finding");
+    spy.mockRestore();
+    expect(JSON.stringify(errors)).toMatch(/rows are MISSING/);
   });
 });
