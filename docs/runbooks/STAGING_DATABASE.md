@@ -1,116 +1,114 @@
 # Staging database
 
-## Why
+**Status: live since 2026-09-20.** `staging.loveiq.org` has its own Supabase
+database, separate from production.
 
-`staging.loveiq.org` and `www.loveiq.org` are two Vercel projects pointed at **one**
-Supabase project. Anything staging writes lands in real production data — real
-submissions, real price quotes, real analytics. A second database separates them.
+Before that, both sites pointed at one Supabase project, so everything staging
+wrote landed in real production data — real submissions, real price quotes, real
+analytics.
 
-## Why it is free
+|                  | production             | staging                 |
+| ---------------- | ---------------------- | ----------------------- |
+| Supabase project | `pveqkhdpypfzxggwjsnk` | `slgljpyszkmdieuvhkto`  |
+| Supabase org     | the Pro org            | a **separate Free org** |
+| Region           | eu-central-2 (Zurich)  | eu-central-2 (Zurich)   |
+| Vercel project   | `loveiq-web`           | `loveiq-staging`        |
+| Real data        | yes                    | **none**                |
 
-Supabase bills **per organization**, and plans cannot be mixed inside one:
+## Why it is free, and what that costs us
 
-| Option                         | Cost                    | Why not                                                        |
-| ------------------------------ | ----------------------- | -------------------------------------------------------------- |
-| Second project in the Pro org  | ~$10/mo                 | Each project is its own compute instance                       |
-| Preview branch                 | $0.01344/hr (~$9.81/mo) | Not covered by the Spend Cap; compute credits do **not** apply |
-| **Separate Free organization** | **$0**                  | What we use                                                    |
+Supabase bills **per organization** and plans cannot be mixed inside one:
 
-Free-plan limits and the two that actually bite:
+| Option                         | Cost                                                                              |
+| ------------------------------ | --------------------------------------------------------------------------------- |
+| Second project in the Pro org  | ~$10/mo — each project is its own compute instance                                |
+| Preview branch                 | $0.01344/hr — **not** covered by the Spend Cap, **not** offset by compute credits |
+| **Separate Free organization** | **$0** ← what we use                                                              |
 
-- **500 MB database.** Production is 438 MB, but **291 MB of that is the brain
-  corpus**. Staging carries only the schema and the seed the migrations ship, which
-  is a few MB.
-- **Pauses after 7 days of low activity.** Resumed with one click from the
-  dashboard; the data survives (90-day window). Staging is used in bursts, so
-  expect this.
-- No downloadable backups. Irrelevant — staging holds nothing worth restoring.
+The Free plan's 500 MB is ample: production is 438 MB, but 291 MB of that is the
+brain corpus, which staging does not carry.
 
-## Why staging gets no production data
+The one real cost: **free projects pause after 7 days of low activity.** Resuming
+is one click and the data survives (90-day window). Staging is used in bursts, so
+expect this.
 
-The migrations seed the entire survey themselves — **132 question inserts, 197
-answer options, 66 mappings**, the survey row, system flags and the admin
-allowlist — so the app works with zero user rows. Copying real submissions would
-double the GDPR footprint of intimate survey answers for no benefit.
+## What staging has, and what it deliberately does not
 
-## Setup
+Verified on creation — schema parity against production:
 
-**1. Create the organization and project** (dashboard only — no API does this):
-[supabase.com/dashboard](https://supabase.com/dashboard) → new **organization**, plan
-**Free** → new project inside it. Region **`eu-central-2` (Zurich)** to match
-production — the Vercel functions are pinned to `fra1` for exactly this reason,
-and a mismatched region puts the Atlantic back in every round trip.
+|             |           |
+| ----------- | --------- |
+| Functions   | 81 / 81   |
+| Tables      | 87 / 87   |
+| Columns     | 913 / 913 |
+| Constraints | 254 / 254 |
+| Indexes     | 289 / 289 |
 
-**2. Collect three values** from the new project:
+It carries the reference data the migrations seed — 66 questions, 259 answer
+options, the survey row, system flags, the admin allowlist — so the app works.
+It carries **no** submissions, reports, payments, users, sessions or events, and
+should not: copying real survey answers into a second environment doubles the
+GDPR footprint of intimate data for no benefit.
 
-| From               | Value                                                    |
-| ------------------ | -------------------------------------------------------- |
-| Connect → URI      | `STAGING_DB_URL`                                         |
-| Project URL        | `NEXT_PUBLIC_SUPABASE_URL` / `SUPABASE_URL`              |
-| `service_role` key | `STAGING_SERVICE_ROLE_KEY` / `SUPABASE_SERVICE_ROLE_KEY` |
-| `anon` key         | `NEXT_PUBLIC_SUPABASE_ANON_KEY`                          |
+**It still shares production's Resend and Slack credentials.** Accepted, not an
+oversight. A survey submitted on staging writes to the staging database but sends
+a REAL email and posts to the REAL Slack channel. Stripe IS separate — staging is
+on `sk_test` / `pk_test`.
 
-**3. Dry run, then apply:**
+So **verify staging with `/api/health`**, which is ungated and whose `supabaseOk`
+probe proves the database link, rather than by submitting a test survey.
+
+## Getting the credentials
+
+Stored on Vercel as **Config, not Secret**, deliberately, so they can be read
+back:
 
 ```bash
-export STAGING_DB_URL='postgresql://postgres:PW@db.REF.supabase.co:5432/postgres'
-export STAGING_SERVICE_ROLE_KEY='eyJ...'
-# SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY stay pointed at PRODUCTION — read-only,
-# used only to fetch the object inventory to compare against.
-
-node scripts/setup-staging-db.mjs            # dry run
-node scripts/setup-staging-db.mjs --apply    # apply + verify parity
+vercel env pull .env.stg --environment=preview --project loveiq-staging --scope loveiq --yes
 ```
 
-The script refuses to run if `STAGING_DB_URL` resolves to production's project ref,
-if the ref cannot be parsed, or if either credential is missing — it exits 2 rather
-than guessing. After applying it compares functions, tables, columns, constraints
-and indexes against production, and asserts staging holds **0** submissions,
-reports, payments and users.
+Use the Vercel **CLI**. `VERCEL_TOKEN` is scoped to `loveiq-web` and returns
+`Project not found` for `loveiq-staging` — which reads like a deleted project and
+is not.
 
-**4. Point the staging site at it.** On the Vercel project `loveiq-staging` only
-(NOT `loveiq-web`), set the four variables from step 2, then redeploy. No code
-changes — the app reads these by name.
+## Keeping it in step after merging migrations
 
-**5. Auth, which migrations cannot carry.** The admin panel signs in with a
-Supabase magic link, and two settings live only in the dashboard:
+From a checkout that has them:
 
-- **Authentication → URL Configuration**: Site URL `https://staging.loveiq.org`,
-  and add it to Redirect URLs. Without this the magic link sends people to
-  production.
-- **Email**: the free tier's built-in SMTP is rate limited to a few messages an
-  hour. Enough for staging logins; do not test email flows here.
+```bash
+export STAGING_DB_URL='postgresql://postgres:PW@db.slgljpyszkmdieuvhkto.supabase.co:5432/postgres'
+export STAGING_SERVICE_ROLE_KEY=...        # from the env pull above
+node scripts/setup-staging-db.mjs --apply  # pushes, then proves parity vs production
+```
 
-The allowlist itself IS seeded — `admin_users` comes from the migrations. Note
-it will not match production exactly: production's list has been edited by hand
-(two people added, two offboarded people removed) without migrations, so the
-replay produces the seeded set instead. `eman.cickusic@loveiq.org` is in it, so
-admin login works.
+The script exits 2 rather than guessing if `STAGING_DB_URL` resolves to
+production's project ref, if the ref cannot be parsed, or if a credential is
+missing. The database password is not stored in the repo; reset it in the
+Supabase dashboard if nobody has it.
 
-**6. Confirm the separation.** Submit a survey on staging and check the row count
-in production has not moved.
+Env changes only reach NEW deployments:
 
-## What is NOT copied, and why that is right
+```bash
+vercel ls loveiq-staging --meta githubCommitRef=staging --scope loveiq   # find it
+vercel redeploy <that url> --scope loveiq                                # no --yes flag
+```
 
-|                                                            |                                                                                                             |
-| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Submissions, reports, payments, users                      | Real, intimate data. Copying doubles the GDPR footprint for no benefit. The script asserts these are **0**. |
-| The brain corpus (291 MB)                                  | Production-only tool. Staging has no `brain-embed` function and needs none.                                 |
-| `auth.users`                                               | Created on first magic-link login against the seeded allowlist.                                             |
-| Custom DB roles (`claude_readonly`, `posthog_readonly`, …) | They exist to give external tools read access to **production**.                                            |
-| Storage buckets, vault secrets, realtime tables            | Production has **none** of these — verified 2026-09-20, nothing to replicate.                               |
+## Three differences from production that are PRODUCTION's
 
-## Keeping it in step
+Found by the first rebuild, and worth keeping in view:
 
-`supabase/migrations/` is the single source of truth, and CI enforces both
-directions on every push:
+- `email_suppression.id` exists in staging and **not** in production — production's
+  table was never built from its own migration.
+- 6 `answer_option` rows (Q01003, Q16011, Q16012) exist in production and in no
+  migration.
+- The `admin_users` allowlist has been hand-edited in production — two added, two
+  offboarded removed — never through a migration.
 
-- **repo → live**: `npm run check:migration-drift` fails if production lacks
-  anything a migration declares.
-- **live → repo**: the same job fails if production has a function or table no
-  migration creates. That direction was unchecked until 2026-09-20, when it turned
-  out `supabase db push` into an empty database **failed outright** — five
-  functions and four tables existed only in production. Captured in
-  `20260307095959_objects_that_predate_the_migration_history.sql`.
+## Why this was hard
 
-Re-run step 3 after merging migrations to bring staging forward.
+`supabase db push` into an empty database had never been attempted, and it
+**failed**. Six separate problems, none of which production could notice because
+production applied each migration as it was written. See
+`20260307095959_objects_that_predate_the_migration_history.sql` and the
+`check:migration-order` / `check:migration-drift` CI jobs, which now guard both
+directions.

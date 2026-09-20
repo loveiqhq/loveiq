@@ -27,10 +27,32 @@ npm run check:migration-drift    # repo migrations vs live schema + ledger, BOTH
 npm run check:postgrest-columns  # every literal select=/filter/order= names a real column
 ```
 
-Staging has its own free Supabase database, separate from production — see
-[`docs/runbooks/STAGING_DATABASE.md`](docs/runbooks/STAGING_DATABASE.md).
-`node scripts/setup-staging-db.mjs` applies the migrations and verifies parity;
-it refuses to run if pointed at production.
+### Staging has its OWN database (since 2026-09-20)
+
+`staging.loveiq.org` and `www.loveiq.org` no longer share a Supabase project.
+
+|                  | production             | staging                                                           |
+| ---------------- | ---------------------- | ----------------------------------------------------------------- |
+| Supabase project | `pveqkhdpypfzxggwjsnk` | `slgljpyszkmdieuvhkto` (separate **Free** org, $0)                |
+| Vercel project   | `loveiq-web`           | `loveiq-staging`                                                  |
+| Real data        | yes                    | **none** — schema-identical, 0 submissions/reports/payments/users |
+
+Staging still shares production's **Resend and Slack** (accepted, not an
+oversight): a survey submitted there writes to the staging DB but sends a REAL
+email and posts to the REAL Slack channel. Stripe IS separate (`sk_test`).
+**Verify staging with `/api/health`, not by submitting a test survey.**
+
+Credentials are stored on Vercel as Config so they can be read back:
+`vercel env pull .env.stg --environment=preview --project loveiq-staging --scope loveiq --yes`
+— use the Vercel **CLI**. The project-scoped Vercel API token in `.env.local` is
+scoped to `loveiq-web` and returns "Project not found" for staging, which reads
+like a deleted project and is not.
+
+After merging migrations, bring staging forward with
+`node scripts/setup-staging-db.mjs --apply` (pushes, then proves parity against
+production; exits 2 rather than guessing if pointed at production).
+
+Full detail: [`docs/runbooks/STAGING_DATABASE.md`](docs/runbooks/STAGING_DATABASE.md).
 
 ---
 
