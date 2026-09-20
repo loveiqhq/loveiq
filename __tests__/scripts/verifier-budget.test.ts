@@ -33,7 +33,15 @@ const SRC = RAW.replace(/\/\*[\s\S]*?\*\//g, "")
 
 describe("the verifier's per-run budget", () => {
   it("fetches more findings than it will probe, so the query is not the bound", () => {
-    const limit = Number(/ORDER BY timestamp ASC\s*\n\s*LIMIT (\d+)/.exec(SRC)?.[1]);
+    // The query's LIMIT is the named constant now, so read that. Kept as a
+    // separate assertion from the window test below: this one is about the
+    // WORK (a fetch smaller than the budget makes the budget unreachable),
+    // that one is about the WINDOW.
+    const limit = Number(
+      /FINDINGS_FETCH_LIMIT\s*=\s*Number\(process\.env\.FINDINGS_FETCH_LIMIT\s*\?\?\s*(\d+)\)/.exec(
+        SRC
+      )?.[1]
+    );
     const budget = Number(
       /PROBE_BUDGET\s*=\s*Number\(process\.env\.PROBE_BUDGET\s*\?\?\s*(\d+)\)/.exec(SRC)?.[1]
     );
@@ -150,6 +158,47 @@ describe("the verifier's per-run budget", () => {
     expect(Object.keys(step!.env ?? {})).toEqual(
       expect.arrayContaining(["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"])
     );
+  });
+
+  /**
+   * THE MIRROR OF THE ORDERING BUG, and the budget test above is blind to it.
+   *
+   * That test asserts LIMIT > PROBE_BUDGET, which is about the WORK. This is
+   * about the WINDOW. Oldest-first stops the tail starving; a fetch LIMIT below
+   * the number of findings in the window then starves the HEAD — the newest are
+   * never fetched, so they are not claimed, not verified, not counted, and
+   * nothing says they existed.
+   *
+   * Measured 2026-09-20, hours after the window widened 6h -> 24h: 57 findings
+   * in the window, `LIMIT 50` returned the 50 oldest, and the 7 newest were
+   * absent — including both findings from the challenger the pipeline had just
+   * been set up to measure. `LIMIT 50` passed the budget test the entire time.
+   */
+  it("can fetch a whole window, not just a page of it", () => {
+    const fetchLimit = Number(
+      /FINDINGS_FETCH_LIMIT\s*=\s*Number\(process\.env\.FINDINGS_FETCH_LIMIT\s*\?\?\s*(\d+)\)/.exec(
+        SRC
+      )?.[1]
+    );
+    const budget = Number(
+      /PROBE_BUDGET\s*=\s*Number\(process\.env\.PROBE_BUDGET\s*\?\?\s*(\d+)\)/.exec(SRC)?.[1]
+    );
+    expect(fetchLimit, "the fetch limit must be readable").toBeGreaterThan(0);
+    // Not "bigger than the budget" — bigger than a BUSY WINDOW. ~11 findings a
+    // day against 24 hours, and a backfill can multiply that for a day.
+    expect(
+      fetchLimit,
+      "the fetch limit must exceed anything a lookback window can hold, not merely the budget"
+    ).toBeGreaterThanOrEqual(20 * budget);
+    // And the query must actually use it rather than a literal.
+    expect(SRC).toMatch(/LIMIT \$\{FINDINGS_FETCH_LIMIT\}/);
+  });
+
+  it("shouts when the fetch limit is actually reached", () => {
+    // Silence here is the whole failure mode: a truncated fetch looks exactly
+    // like a quiet day. The check must compare against the limit, not a literal.
+    expect(SRC).toMatch(/findings\.length >= FINDINGS_FETCH_LIMIT/);
+    expect(SRC).toMatch(/::error::/);
   });
 
   it("drains the oldest finding first, so a busy day cannot starve it", () => {
