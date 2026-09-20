@@ -92,7 +92,10 @@ describe("PostgREST max-rows truncation", () => {
     // were "never warn at this span", this test fails — which is the point.
     respond(`0-${POSTGREST_MAX_ROWS - 1}/*`);
     await supabaseFetch("/rest/v1/funnel_event?select=visitor_id");
-    expect(mockWarn).toHaveBeenCalledTimes(1);
+    // ERROR, not warn — see the mock above. This assertion was left on
+    // `mockWarn` when the signal moved, so it asserted that the guard does
+    // NOTHING and went red the moment the exact-total case landed beside it.
+    expect(mockError).toHaveBeenCalledTimes(1);
   });
 
   it("stays quiet for deliberate pagination", async () => {
