@@ -307,7 +307,17 @@ export const UX_SCANNERS: readonly UxScanner[] = [
       "Format, and this is the whole answer:",
       "- One sentence naming what is wrong ON SCREEN.",
       "- Where on screen it is.",
-      "- Cite the moment in the recording.",
+      // "The timestamp", not "Cite the moment", because THIS IS WHAT IS LIVE.
+      // The scanner was created with this wording, every one of its 186
+      // observations was produced under it, and the 170-session comparison
+      // against its champion rests on it. It was changed here to satisfy a test
+      // that matched one exact phrase and never re-synced, so git and PostHog
+      // disagreed for a day — which the drift check caught, correctly.
+      //
+      // Editing the live prompt to match git instead would bump scanner_version
+      // mid-experiment. See AGENT_README: a scanner observes a session once
+      // ever, so the findings either side of that bump are not comparable.
+      "- The timestamp in the recording.",
       "If you cannot give all three from what you saw, answer NO.",
     ].join("\n"),
   },

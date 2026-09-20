@@ -37,7 +37,20 @@ describe("UX review scanners", () => {
       // Without an explicit "do not flag" list a scanner drifts towards
       // answering YES to everything, which is the false-confidence failure.
       expect(s.prompt, `${s.name}: no negative class`).toContain("Do NOT answer YES for");
-      expect(s.prompt.toLowerCase(), `${s.name}: no citation demand`).toContain("cite the moment");
+      /**
+       * The REQUIREMENT is "point at a moment in the recording", not one exact
+       * sentence. This matched the literal "cite the moment", so a prompt that
+       * asked for "the timestamp in the recording" failed a test it actually
+       * satisfied — and the fix applied to the wrong side: the wording was
+       * changed in git while the live scanner kept running the original, and
+       * the two disagreed for a day.
+       *
+       * Same shape as two other guards corrected this week: the test encoded a
+       * phrasing where it meant a property.
+       */
+      expect(s.prompt.toLowerCase(), `${s.name}: no citation demand`).toMatch(
+        /cite the moment in the recording|the timestamp in the recording/
+      );
     }
   });
 
