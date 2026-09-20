@@ -17,6 +17,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
+import { parse } from "yaml";
 
 const RAW = readFileSync(resolve(process.cwd(), "scripts/verify-ux-findings.mjs"), "utf8");
 /**
@@ -114,6 +115,41 @@ describe("the verifier's per-run budget", () => {
       inputBlock.replace(/^\s*#.*$/gm, ""),
       "lookback_hours must have no default, or it overrides the real window"
     ).not.toMatch(/^\s*default:/m);
+  });
+
+  /**
+   * THE SCORING STEP RAN THE WRONG SOURCE.
+   *
+   * `--ledger` scores from what the probes actually concluded; it costs nothing
+   * to collect and never expires. The fixtures are seven hand-curated
+   * recordings that EXPIRE 2026-09-28 and cannot be re-scanned, because a
+   * scanner observes a given session once ever. The ledger mode was written,
+   * tested and documented as the replacement — and the weekly step called the
+   * bare script, so every scheduled score came from the seven rows about to
+   * die. The gap was not cosmetic: 0.02 precision on 84 ledger findings against
+   * 0.20 on the fixtures.
+   */
+  it("scores the scanners from the ledger, not only from expiring fixtures", () => {
+    /**
+     * Parsed, and scoped to THIS STEP. The first version matched the whole
+     * file, so deleting the secret from the scoring step still passed — the
+     * verify step further down has the same one. A workflow-wide `toMatch` for
+     * a name that appears five times is not an assertion.
+     */
+    const doc = parse(
+      readFileSync(resolve(process.cwd(), ".github/workflows/ux-review-verify.yml"), "utf8")
+    ) as { jobs: Record<string, { steps: { name?: string; run?: string; env?: object }[] }> };
+    const steps = Object.values(doc.jobs).flatMap((j) => j.steps);
+    const step = steps.find((x) => x.name === "Score the scanners (weekly)");
+
+    expect(step, "the weekly scoring step must exist under that name").toBeDefined();
+    expect(step!.run, "the weekly step must run the ledger scorer").toMatch(
+      /score\.mjs\s+--ledger/
+    );
+    // --ledger reads Supabase; without these it exits 3 and scores nothing.
+    expect(Object.keys(step!.env ?? {})).toEqual(
+      expect.arrayContaining(["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"])
+    );
   });
 
   it("drains the oldest finding first, so a busy day cannot starve it", () => {
