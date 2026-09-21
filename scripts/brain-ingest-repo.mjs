@@ -241,7 +241,19 @@ export function chunkMarkdown(path, text) {
     packed.shift();
   }
 
-  const docName = path.split("/").pop();
+  /**
+   * The FOLDER for a Next.js route, because every one of them is called `page.tsx`.
+   *
+   * All six legal pages produced titles starting "page.tsx > …" — a token shared by
+   * all of them, carrying no meaning, in the field the ranker weights twice. The
+   * directory is the name a person would use: "privacy-policy > 7. Data Retention".
+   * Markdown files are unaffected; their own filename is already the name.
+   */
+  const pathParts = path.split("/");
+  const fileName = pathParts.pop();
+  const docName = /^(page|route|layout)\.tsx?$/.test(fileName ?? "")
+    ? (pathParts.pop() ?? fileName)
+    : fileName;
 
   /**
    * Title fed to retrieval. Built as filename + heading breadcrumb, with
