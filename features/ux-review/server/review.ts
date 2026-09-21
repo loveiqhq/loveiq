@@ -1120,6 +1120,39 @@ export interface SurveyRestartWitness {
  */
 export const SURVEY_RESTART_MIN_DROP = 5;
 
+/**
+ * The witness for one SURVEY session, which is the id the behaviour log keys on.
+ *
+ * Split out because two callers need it and they must not drift: the witness
+ * below, which starts from a PostHog session because that is what a finding
+ * carries, and the detector in scripts/verify-ux-findings.mjs, which starts
+ * from the survey session because the defect it hunts is often in a session
+ * PostHog never recorded.
+ */
+export async function restartForSurveySession(
+  surveySessionId: string
+): Promise<SurveyRestartWitness | null> {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key || !isSafeSessionId(surveySessionId)) return null;
+  try {
+    const evRes = await fetchWithTimeout(
+      `${url}/rest/v1/survey_behavior_event?select=question_index,event_time,id` +
+        `&session_id=eq.${encodeURIComponent(surveySessionId)}&order=event_time.asc,id.asc&limit=2000`,
+      {
+        headers: { apikey: key, Authorization: `Bearer ${key}` },
+        timeoutMs: 8_000,
+      }
+    );
+    if (!evRes.ok) return null;
+    const rows = (await evRes.json()) as Array<{ question_index: number | null }>;
+    warnIfTruncated(rows, 2000, "restart witness: survey_behavior_event");
+    return biggestIndexDrop(rows);
+  } catch {
+    return null;
+  }
+}
+
 export async function surveyRestartWitness(
   sessionId: string
 ): Promise<SurveyRestartWitness | null> {
@@ -1141,16 +1174,7 @@ export async function surveyRestartWitness(
     warnIfTruncated(subs, 2, "restart witness: survey_submission");
     const surveySession = subs[0]?.session_id;
     if (!surveySession) return null;
-
-    const evRes = await fetchWithTimeout(
-      `${url}/rest/v1/survey_behavior_event?select=question_index,event_time,id` +
-        `&session_id=eq.${encodeURIComponent(surveySession)}&order=event_time.asc,id.asc&limit=2000`,
-      { headers, timeoutMs: 8_000 }
-    );
-    if (!evRes.ok) return null;
-    const rows = (await evRes.json()) as Array<{ question_index: number | null }>;
-    warnIfTruncated(rows, 2000, "restart witness: survey_behavior_event");
-    return biggestIndexDrop(rows);
+    return restartForSurveySession(surveySession);
   } catch {
     return null;
   }

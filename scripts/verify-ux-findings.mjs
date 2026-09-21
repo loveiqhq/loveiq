@@ -32,6 +32,7 @@ import {
   isSafeSessionId,
   sessionClickTarget,
   sessionViewport,
+  restartForSurveySession,
   surveyRestartWitness,
 } from "../features/ux-review/server/review.ts";
 
@@ -59,6 +60,13 @@ import { hogQuery } from "./lib/hogql.mjs";
  * run shouts if the limit is ever reached; see the check after the query.
  */
 const FINDINGS_FETCH_LIMIT = Number(process.env.FINDINGS_FETCH_LIMIT ?? 500);
+
+/**
+ * How many own-event groups one run may FETCH. Same discipline as the limit
+ * above: not a work bound, just larger than the busiest window. Measured
+ * 2026-09-21 — 5 groups over 24h, 11 over 72h, 32 over 33 days.
+ */
+const OWN_EVENT_FETCH_LIMIT = Number(process.env.OWN_EVENT_FETCH_LIMIT ?? 500);
 
 const CLICK_TARGET_CRITERIA = new Set(["D1", "V1"]);
 
@@ -527,12 +535,25 @@ async function threadFor(sessionId) {
   const url = requireEnv("SUPABASE_URL");
   const key = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
   const head = { apikey: key, Authorization: `Bearer ${key}` };
-  const subs = await fetch(
-    `${url}/rest/v1/survey_submission?posthog_session_id=eq.${encodeURIComponent(sessionId)}&select=id&limit=1`,
-    { headers: head }
-  );
-  if (!subs.ok) return null;
-  const id = (await subs.json())[0]?.id;
+  /**
+   * A defect in a session PostHog never recorded still happened to a person.
+   *
+   * Two of the three real survey restarts found in 30 days have no
+   * posthog_session_id, so this lookup could never reach them — and they all
+   * have a Slack thread. The restart detector keys those as `submission:<id>`
+   * so the finding lands under the reader's own entry rather than being
+   * recorded and silently dropped.
+   */
+  const direct = /^submission:(\d+)$/.exec(sessionId);
+  let id = direct ? Number(direct[1]) : null;
+  if (id === null) {
+    const subs = await fetch(
+      `${url}/rest/v1/survey_submission?posthog_session_id=eq.${encodeURIComponent(sessionId)}&select=id&limit=1`,
+      { headers: head }
+    );
+    if (!subs.ok) return null;
+    id = (await subs.json())[0]?.id ?? null;
+  }
   if (!id) return null;
   const msgs = await fetch(
     `${url}/rest/v1/slack_journey_message?survey_submission_id=eq.${id}&select=message_ts&limit=1`,
@@ -793,8 +814,77 @@ const OWN_EVENT_FINDINGS = await posthog(`
     )
   GROUP BY sid, path, sel
   ORDER BY n DESC
-  LIMIT 25
+  LIMIT ${OWN_EVENT_FETCH_LIMIT}
 `);
+
+/**
+ * Reached the limit = findings silently dropped, and this query bounded the
+ * LOOKBACK rather than the work — the shape this repo has now paid for three
+ * times. PROBE_BUDGET is what bounds real browser time; this only has to sit
+ * above the busiest window. 25 was the old value and a 33-day sweep found 32
+ * groups, so it was already capable of dropping seven.
+ */
+if (OWN_EVENT_FINDINGS.length === OWN_EVENT_FETCH_LIMIT) {
+  console.log(
+    `::error::own-event query returned exactly ${OWN_EVENT_FETCH_LIMIT} groups — ` +
+      `dead-control findings are being dropped. Raise OWN_EVENT_FETCH_LIMIT.`
+  );
+}
+
+/**
+ * THE DEFECT CLASS THE SCANNERS PROVABLY CANNOT FIND.
+ *
+ * Measured 2026-09-21 over 30 days: 3 of 755 survey sessions were genuinely
+ * sent back to the start, all by 56-58 questions. The survey scanner flagged 72
+ * findings above the bar in the same window and caught NONE of the three —
+ * roughly 24x over-reporting and zero recall on the one thing it exists for.
+ *
+ * TWO OF THE THREE HAVE NO POSTHOG SESSION AT ALL. They were never recorded, so
+ * no scanner could ever have observed them, and nothing else was looking: they
+ * happened on 25 and 26 August and were still unknown a month later. A pipeline
+ * that can only see what was recorded cannot find them by any amount of prompt
+ * work. Our own survey log recorded all three.
+ *
+ * So this does not ask a model. `survey_behavior_event` stores question_index
+ * per transition and a restart leaves a drop; `biggestIndexDrop` is the same
+ * tested function the witness uses, so the detector and the corroborator cannot
+ * disagree.
+ *
+ * Keyed by SUBMISSION when there is no recording, which is what makes the
+ * unrecorded two reachable — all three have a Slack thread, so all three can be
+ * reported to the reader's own entry.
+ */
+async function ownSurveyRestarts(lookbackHours) {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return [];
+  const headers = { apikey: key, Authorization: `Bearer ${key}` };
+  const since = new Date(Date.now() - lookbackHours * 3_600_000).toISOString();
+  const res = await fetch(
+    `${url}/rest/v1/survey_submission?select=id,session_id,posthog_session_id` +
+      `&created_date_time=gte.${since}&session_id=not.is.null&limit=500`,
+    { headers }
+  );
+  if (!res.ok) {
+    console.log(`  (restart detector: submissions read ${res.status} — skipped this run)`);
+    return [];
+  }
+  const subs = await res.json();
+  if (subs.length === 500) {
+    console.log(`::error::restart detector read exactly 500 submissions — window is truncated`);
+  }
+  const out = [];
+  // One query per session rather than one big IN: PostgREST caps a list read at
+  // 1,000 rows and a busy day is ~25 sessions x ~114 transitions, which is
+  // comfortably past it. Bounded work, no silent truncation.
+  for (const sub of subs) {
+    const witness = await restartForSurveySession(String(sub.session_id));
+    if (witness) out.push({ ...sub, ...witness });
+  }
+  return out;
+}
+
+const RESTART_FINDINGS = await ownSurveyRestarts(LOOKBACK_HOURS);
 
 /** Only one per session: the same reader tapping the same dead thing is one defect. */
 const seenSessions = new Set(findings.map((f) => String(f[1])));
@@ -814,9 +904,64 @@ for (const [sid, path, sel, n] of OWN_EVENT_FINDINGS) {
   ]);
 }
 
+for (const r of RESTART_FINDINGS) {
+  // `submission:<id>` when the session was never recorded. threadFor()
+  // understands both, so a reader whose session PostHog never saw still gets
+  // the finding under their own entry.
+  const sid = r.posthog_session_id ? String(r.posthog_session_id) : `submission:${r.id}`;
+  if (seenSessions.has(sid)) continue;
+  seenSessions.add(sid);
+  findings.push([
+    `own-survey-restart:${r.session_id}`,
+    sid,
+    "our own survey log",
+    // Phrased so classify() routes it to L1 — "back to the start of the survey"
+    // is one of that criterion's own alternatives, taken from real observations.
+    `A reader was sent back to the start of the survey: our own log records ` +
+      `them jumping back ${r.drop} questions after ${r.steps} transitions. ` +
+      `Recorded by our own instrumentation, not inferred from a recording` +
+      (r.posthog_session_id
+        ? "."
+        : " — this session was never recorded, so no scanner could see it."),
+    1,
+    0,
+  ]);
+}
+
+/**
+ * MECHANICAL FINDINGS GO FIRST, because the probe budget is the scarce thing.
+ *
+ * They were pushed onto the end of a list the model had already filled, so they
+ * ranked last and were the first deferred whenever the budget ran out —
+ * observed on a 33-day sweep, where all three real survey restarts were
+ * deferred behind 148 model findings. The lane being starved is the one that
+ * works: over 30 days our own events found 3 of 3 real restarts and the
+ * scanners found 0 of 3 while flagging 72.
+ *
+ * Stable within each group, so the oldest-first drain that stops the tail
+ * starving still holds inside them.
+ */
+/**
+ * Ranked by MEASURED yield, not by source.
+ *
+ * 2 — the survey log. 3 real restarts found in 30 days, 3 of 3 confirmed, and
+ *     two of them in sessions no scanner could ever observe.
+ * 1 — our own dead_click events. Mechanical and cheap, but 0 of 19 confirmed.
+ * 0 — the scanners. 72 flagged in the same window, 0 of the 3 real ones found.
+ *
+ * Re-rank this when the numbers move, and only then.
+ */
+const rank = (f) => {
+  const source = String(f[2]);
+  if (source === "our own survey log") return 2;
+  return source.startsWith("our own") ? 1 : 0;
+};
+findings.sort((a, b) => rank(b) - rank(a));
+
 console.log(
   `${findings.length} finding(s) in the last ${LOOKBACK_HOURS}h ` +
-    `(${OWN_EVENT_FINDINGS.length} from our own dead_click events)`
+    `(${OWN_EVENT_FINDINGS.length} from our own dead_click events, ` +
+    `${RESTART_FINDINGS.length} from our own survey log — both probed first)`
 );
 
 /**
@@ -899,11 +1044,25 @@ for (const [
     reasoning: String(reasoning ?? "").slice(0, 4000),
   };
 
+  /**
+   * A finding about a session PostHog never recorded is keyed `submission:<id>`.
+   *
+   * It is NOT a session id and must never reach the places one goes — a HogQL
+   * literal, a git branch name, a PostHog filter — so isSafeSessionId keeps
+   * refusing the colon and this is matched as its own shape, digits only.
+   * Everything that needs a recording is skipped below rather than attempted
+   * against an id no recording exists for.
+   *
+   * Without this the guard silently discarded the whole point of the restart
+   * detector: two of the three real restarts found in 30 days have no PostHog
+   * session, and both were dropped here as "malformed session id".
+   */
+  const unrecorded = /^submission:\d+$/.test(String(sessionId));
   // The session id comes back from PostHog and is about to become a git branch
   // name, a Supabase filter and a HogQL literal. isSafeSessionId was imported
   // and then only ever exercised in the selftest; validate for real, once, so
   // everything downstream inherits it. Refuse rather than sanitise.
-  if (!isSafeSessionId(sessionId)) {
+  if (!unrecorded && !isSafeSessionId(sessionId)) {
     console.log(`SKIP    malformed session id ${JSON.stringify(String(sessionId).slice(0, 40))}`);
     continue;
   }
@@ -918,7 +1077,10 @@ for (const [
   // Contradicted claims never reach a probe: minutes of real browser time spent
   // on something our own events say did not happen.
   {
-    const events = await fetchSessionEvents(sessionId);
+    // No recording means no PostHog events, so the refusal gate has nothing to
+    // read. NULL, not an empty set: empty means "we looked and found nothing",
+    // which fails CLOSED and would refute every checkable claim.
+    const events = unrecorded ? null : await fetchSessionEvents(sessionId);
     // Say so when the gate could not run. It fails open by design, but a silent
     // fail-open is how the same finding came back refuted on one run and
     // "Reproduced in production" on the next — the difference was a timeout
@@ -1061,7 +1223,7 @@ for (const [
   }
 
   // The reader's own screen, so "could not reproduce" means something.
-  const viewport = await sessionViewport(sessionId);
+  const viewport = unrecorded ? null : await sessionViewport(sessionId);
   if (!viewport) {
     // Silent degradation otherwise: the probes fall back to their own device
     // lists and the verdict quietly stops claiming a device. Observed once on
@@ -1070,7 +1232,7 @@ for (const [
     // seeing a pattern of it in the log. `ux_finding.devices` is null for these.
     console.log(`  (no viewport for ${sessionId}; probes run on their own defaults)`);
   }
-  const clickTarget = await sessionClickTarget(sessionId);
+  const clickTarget = unrecorded ? null : await sessionClickTarget(sessionId);
   if (!clickTarget && CLICK_TARGET_CRITERIA.has(criterion.id)) {
     // Same silent-degradation risk as the viewport above: without it the
     // dead-click probe is simply not appended, and the run is quietly weaker
@@ -1115,20 +1277,28 @@ for (const [
    * Only for loop criteria. A restart says nothing about a covered heading.
    */
   if (RESTART_WITNESS_CRITERIA.has(criterion.id)) {
-    const witness = await surveyRestartWitness(sessionId);
+    // An unrecorded finding came FROM the survey log and its observation id
+    // carries the survey session, so ask the log directly rather than bridging
+    // through a PostHog session that does not exist.
+    const surveySession = unrecorded
+      ? String(observationId).replace(/^own-survey-restart:/, "")
+      : null;
+    const witness = surveySession
+      ? await restartForSurveySession(surveySession)
+      : await surveyRestartWitness(sessionId);
     results.push({
       file: "survey-behaviour-log",
       passed: !witness,
       inconclusive: false,
       claimScoped: true,
       tail: witness
-        ? `our own survey log records the reader jumping back ${witness.drop} questions ` +
+        ? `Our own survey log records the reader jumping back ${witness.drop} questions ` +
           `(${witness.steps} transitions) — the restart is independently confirmed`
-        : "our own survey log records no backwards jump; it neither confirms nor refutes",
+        : "Our own survey log records no backwards jump; it neither confirms nor refutes.",
     });
     if (witness) {
       console.log(
-        `  WITNESS ${sessionId.slice(0, 13)} — survey log confirms a ${witness.drop}-question restart`
+        `  WITNESS ${unrecorded ? sessionId : sessionId.slice(0, 13)} — survey log confirms a ${witness.drop}-question restart`
       );
     }
   }
@@ -1178,7 +1348,16 @@ for (const [
       `❗ *Reproduced in production${at}* — ${criterion.label} (${criterion.id}). ` +
       results
         .filter((r) => !r.passed && !r.inconclusive)
-        .map((r) => `\`${r.file}\` failed: ${r.tail}`)
+        /**
+         * "failed" is probe grammar — a probe that fails has reproduced the
+         * defect. The survey-log witness is not a probe and does not fail: it
+         * CONFIRMS. Reading "`survey-behaviour-log` failed: the restart is
+         * independently confirmed" in a reader's own Slack thread is the kind
+         * of sentence that makes a team stop trusting the channel.
+         */
+        .map((r) =>
+          r.file === "survey-behaviour-log" ? `${r.tail}` : `\`${r.file}\` failed: ${r.tail}`
+        )
         .join(" ") +
       (prUrl ? ` Draft PR with the reproduction: ${prUrl}` : "");
   } else if (inconclusive) {

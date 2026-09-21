@@ -71,3 +71,98 @@ describe("findings synthesised from our own dead_click events", () => {
     expect(SRC).toMatch(/if \(seenSessions\.has\(String\(sid\)\)\) continue;/);
   });
 });
+
+/**
+ * THE DEFECT CLASS THE SCANNERS PROVABLY CANNOT FIND.
+ *
+ * Measured 2026-09-21 over 30 days: 3 of 755 survey sessions were genuinely
+ * sent back to the start, all by 56-58 questions. The survey scanner flagged 72
+ * findings above the bar in the same window and caught NONE of them — 24x
+ * over-reporting and zero recall on the one thing it exists for.
+ *
+ * Two of the three have NO POSTHOG SESSION. They were never recorded, so no
+ * scanner could ever have seen them, and nothing else was looking: they
+ * happened on 25 and 26 August and were still unknown a month later. All three
+ * have a Slack thread, so all three are reportable.
+ */
+describe("findings synthesised from our own survey log", () => {
+  it("detects the restart without asking a model", () => {
+    expect(SRC).toContain("const RESTART_FINDINGS = await ownSurveyRestarts(LOOKBACK_HOURS)");
+    // Reuses the tested pure function, so the detector and the corroborator in
+    // review.ts cannot disagree about what a restart is.
+    expect(SRC).toContain("restartForSurveySession");
+  });
+
+  it("reaches a reader whose session was never recorded", () => {
+    // The whole point: keyed by submission when there is no PostHog session.
+    expect(SRC).toMatch(/`submission:\$\{r\.id\}`/);
+    // And threadFor must understand that key, or the finding is recorded and
+    // silently never delivered.
+    expect(SRC).toMatch(/\^submission:\(\\d\+\)\$/);
+  });
+
+  it("never lets a submission key reach a PostHog lookup", () => {
+    /**
+     * `submission:1781` is not a session id. isSafeSessionId refuses the colon
+     * — correctly, because a session id becomes a HogQL literal and a git
+     * branch name — so every recording-dependent lookup must be skipped rather
+     * than attempted. Without this the guard silently discarded the entire
+     * feature: both unrecorded restarts were dropped as "malformed session id".
+     */
+    expect(SRC).toMatch(/const unrecorded = \/\^submission:/);
+    for (const call of [
+      "fetchSessionEvents(sessionId)",
+      "sessionViewport(sessionId)",
+      "sessionClickTarget(sessionId)",
+    ]) {
+      const guarded = new RegExp(
+        `unrecorded \\? null : await ${call.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`
+      );
+      expect(SRC, `${call} must be skipped when there is no recording`).toMatch(guarded);
+    }
+    // The refusal gate must get NULL, not an empty set: empty means "we looked
+    // and found nothing", which fails closed and would refute every claim.
+    expect(SRC).toMatch(/const events = unrecorded \? null :/);
+  });
+
+  it("phrases the restart so the classifier routes it to the loop criterion", () => {
+    const L1 =
+      /loop(ed|s|ing)? back|a loop where|back (to|at) the (survey |questionnaire )?(start|beginning)/i;
+    const phrasing =
+      "A reader was sent back to the start of the survey: our own log records " +
+      "them jumping back 58 questions after 123 transitions.";
+    expect(L1.test(phrasing)).toBe(true);
+    expect(SRC).toContain("was sent back to the start of the survey");
+  });
+
+  it("reads as a sentence in a reader's own Slack thread", () => {
+    /**
+     * "failed" is probe grammar — a probe that fails has reproduced the defect.
+     * The witness is not a probe and does not fail, it CONFIRMS. The first
+     * version posted "`survey-behaviour-log` failed: the restart is
+     * independently confirmed", which is the kind of sentence that makes a team
+     * stop trusting the channel.
+     */
+    expect(SRC).toMatch(/r\.file === "survey-behaviour-log"/);
+    expect(SRC).toContain("Our own survey log records the reader jumping back");
+    // And the submission key is not truncated by a slice meant for UUIDs.
+    expect(SRC).toMatch(/unrecorded \? sessionId : sessionId\.slice\(0, 13\)/);
+  });
+
+  it("ranks the lanes by measured yield, not by source", () => {
+    // 3 of 3 real restarts from the survey log; 0 of 19 from own dead_clicks;
+    // 0 of 3 from the scanners while they flagged 72. The probe budget is the
+    // scarce thing, so it goes to the lane that finds real defects.
+    expect(SRC).toMatch(/if \(source === "our own survey log"\) return 2;/);
+    expect(SRC).toMatch(/findings\.sort\(\(a, b\) => rank\(b\) - rank\(a\)\)/);
+  });
+
+  it("bounds the work, not the lookback", () => {
+    // The own-event query carried `LIMIT 25` and a 33-day sweep found 32
+    // groups, so it was already capable of dropping seven silently — the third
+    // time this repo has hit that shape.
+    expect(SRC).toContain("LIMIT ${OWN_EVENT_FETCH_LIMIT}");
+    expect(SRC).toMatch(/OWN_EVENT_FINDINGS\.length === OWN_EVENT_FETCH_LIMIT/);
+    expect(SRC).toMatch(/::error::own-event query returned exactly/);
+  });
+});
