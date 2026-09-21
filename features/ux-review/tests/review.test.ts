@@ -721,6 +721,28 @@ describe("the digest ignores challenger scanners", () => {
     expect(isChallengerScanner(null)).toBe(false);
   });
 
+  it("keeps the name and the role saying the same thing", () => {
+    /**
+     * Two independent facts decide whether a scanner is an experiment: the
+     * `(challenger: …)` suffix in its NAME, which is all the ledger and
+     * PostHog carry, and its `role` in scanners.ts, which is all git carries.
+     * Every consumer reads one or the other, so a scanner where they disagree
+     * is counted as production by half the pipeline and as an experiment by
+     * the rest — posted to readers while also being excluded from the digest,
+     * or silently folded into the headline precision it is supposed to be
+     * measured against.
+     *
+     * Copying a scanner and renaming it without flipping `role` is exactly
+     * how that happens, and it is the documented way a challenger is created.
+     */
+    for (const s of UX_SCANNERS) {
+      expect(
+        isChallengerScanner(s.name),
+        `${s.name}: role is ${s.role} but the name says otherwise`
+      ).toBe(s.role === "challenger");
+    }
+  });
+
   it("drops its bullet from the daily counts", async () => {
     vi.stubGlobal("fetch", async () => ({
       ok: true,
