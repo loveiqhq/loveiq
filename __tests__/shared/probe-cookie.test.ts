@@ -41,10 +41,12 @@ describe("the probe marker", () => {
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/(^|[^:])\/\/.*$/gm, "$1");
     // The guard exists...
-    expect(route).toMatch(/const isProbe = /);
+    // CALLED, not merely imported. `const isProbe = false;` leaves the import
+    // line untouched, so a `toContain("isProbeRequest")` is satisfied by a
+    // route that never calls it — caught by mutation.
+    expect(route).toMatch(/const isProbe = isProbeRequest\(/);
     // ...and it is what gates the write, not merely computed and ignored.
     expect(route).toMatch(/if \(isProbe\) \{[\s\S]{0,80}\} else if \(access\.personalReportId/);
-    expect(route).toContain("isProbeRequest");
   });
 
   it("matches the cookie exactly, not as a substring of another one", () => {

@@ -1,0 +1,67 @@
+name: Sync Replay Vision scanners
+
+# Makes "scanners.ts is the source of truth" true instead of aspirational.
+#
+# The daily cron ALERTS on drift between PostHog and git and nothing ever closed
+# it: `scripts/sync-vision-scanners.ts` existed and ran in no workflow, so every
+# correction was somebody noticing a Slack message and remembering the command.
+#
+# That gap has a sharper edge than a stale prompt. Applying from a branch and
+# applying from main are the same command with different content, so whoever ran
+# it last wins — on 2026-09-21 a prompt improvement was pushed to PostHog from an
+# unmerged branch, production still pinned the old version, and the drift alert
+# fired for a change that was correct but not yet deployed. The invariant only
+# holds if ONE place applies it, and that place is main.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "features/ux-review/server/scanners.ts"
+      - "scripts/sync-vision-scanners.ts"
+      - ".github/workflows/sync-vision-scanners.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: sync-vision-scanners
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Apply what git pins
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      # Printed before writing, so the run log says what changed and what it
+      # cost. The script refuses to write when a secret is missing rather than
+      # reporting success — three CI lanes in this repo were dead for weeks on a
+      # silent skip.
+      - name: Show what would change
+        env:
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+        run: npx tsx scripts/sync-vision-scanners.ts
+
+      - name: Apply it
+        env:
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+        run: npx tsx scripts/sync-vision-scanners.ts --apply
+
+      # The apply is only worth anything if it actually converged. A second
+      # dry run must report no drift; anything else means the write was
+      # accepted and did not take, which is the failure that looks like success.
+      - name: Prove it converged
+        env:
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+        run: |
+          set -o pipefail
+          npx tsx scripts/sync-vision-scanners.ts | tee /tmp/sync.log
+          if grep -qE "would update|drifted from git" /tmp/sync.log; then
+            echo "::error::scanners still differ from git after --apply"
+            exit 1
+          fi

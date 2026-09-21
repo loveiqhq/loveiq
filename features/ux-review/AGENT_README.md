@@ -106,6 +106,18 @@ must never read as a healthy one.
 means the claim was real, a closed one means it was not, and that is ground truth
 nobody has to curate.
 
+**One place applies the prompts, and it is main.** The daily cron ALERTS on
+drift between PostHog and `scanners.ts` and nothing ever closed it —
+`scripts/sync-vision-scanners.ts` existed and ran in no workflow, so every
+correction was somebody noticing a Slack message and remembering the command.
+The edge is sharper than a stale prompt: applying from a branch and applying
+from main are the same command with different content, so whoever ran it last
+wins. On 2026-09-21 a prompt improvement was pushed to PostHog from an unmerged
+branch, production still pinned the old version, and the drift alert fired for a
+change that was correct but not yet deployed. `.github/workflows/sync-vision-scanners.yml`
+now applies it on push to main and fails if a second dry run still reports drift.
+**Do not run `--apply` from a branch.**
+
 **Champion vs challenger, because a prompt edit cannot be measured.** A scanner
 observes a given session once, ever, so editing a live prompt is a silent no-op
 on every recording already seen and the new wording can never be compared
