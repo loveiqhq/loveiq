@@ -1654,8 +1654,23 @@ for (const [
       `depend on a device we do not emulate.`;
   }
 
+  /**
+   * NAME THE PROBES, because a verdict without them cannot be read.
+   *
+   * The whole argument of this pipeline is that a `clear` only means something
+   * when a probe could have disagreed — and the run log printed `CLEAR` with no
+   * indication of what produced it, so the one thing you need in order to
+   * believe or disbelieve a line was the thing it left out. A run that was
+   * supposed to replay the reader's route and quietly did not looks identical
+   * to one that did.
+   *
+   * Claim-scoped probes are marked, since that is the distinction that decides
+   * whether the verdict is evidence or a constant.
+   */
+  const ran = results.map((r) => `${r.file}${r.claimScoped ? "*" : ""}`).join(" ");
   console.log(
-    `${reproduced ? "CONFIRM" : inconclusive ? "UNKNOWN" : "CLEAR  "} ${sessionId}  ${criterion.id}`
+    `${reproduced ? "CONFIRM" : inconclusive ? "UNKNOWN" : "CLEAR  "} ${sessionId}  ${criterion.id}` +
+      `  [${ran || "no probes"}]`
   );
   // A challenger is being measured, not consulted. Its verdict is recorded and
   // scored; it does not appear under a reader's submission, because a prompt on
