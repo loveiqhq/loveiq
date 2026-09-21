@@ -343,7 +343,7 @@ describe("ingestDrive", () => {
    */
   it("always reports whether colleagues were asked for meeting notes", async () => {
     const res = await ingestDrive(STAMP);
-    expect(res.detail).toMatch(/colleagueNotes=\d+\/\d+asked/);
+    expect(res.detail).toMatch(/colleagueDocs=\d+\/\d+asked/);
   });
 
   /**

@@ -1260,7 +1260,7 @@ export async function ingestDrive(
   logger.info(
     {
       docs: listed.items.length,
-      colleagueNotes: colleagues.items.length,
+      colleagueDocs: colleagues.items.length,
       colleaguesAsked: colleagues.asked,
       colleaguesRefused: colleagues.refused,
       shortcutsUnreachable: resolved.unreachable,
@@ -1283,10 +1283,14 @@ export async function ingestDrive(
     detail:
       `docs=${listed.items.length} written=${written} touched=${touched} swept=${swept} ` +
       `complete=${complete}${stopped ? ` stopped=${stopped}` : ""}` +
-      // Colleague notes are appended to the listing, so without this the only way to
+      // Colleagues' files are appended to the listing, so without this the only way to
       // tell "none were found" from "the feature is not running" is a structured log
       // nobody reads. `asked` is printed even at zero for exactly that reason.
-      ` colleagueNotes=${colleagues.items.length}/${colleagues.asked}asked` +
+      //
+      // Named `colleagueDocs`, not `colleagueNotes`: the walk stopped being about
+      // meeting notes on 2026-09-21 and a label that still said "notes" while
+      // reporting hundreds of documents would be read as a fault.
+      ` colleagueDocs=${colleagues.items.length}/${colleagues.asked}asked` +
       (colleagues.refused > 0 ? ` colleaguesRefused=${colleagues.refused}` : "") +
       (emptyDocs > 0 ? ` empty=${emptyDocs}` : "") +
       (refusedDocs > 0 ? ` refusedAsPeopleList=${refusedDocs}` : "") +
