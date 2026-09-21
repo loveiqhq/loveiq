@@ -6,22 +6,26 @@ import { resolve } from "node:path";
 import logger from "@shared/observability/logger";
 
 import {
+  ALL_SCANNERS,
   buildDigestMessage,
-  contradiction,
+  buildScorecardMessage,
+  checkVisionQuota,
   compareScanners,
-  fetchSessionEvents,
-  isSafeSessionId,
-  sessionClickTarget,
-  sessionViewport,
+  contradiction,
   fetchCoverageStats,
   fetchDailyStats,
+  fetchFindings,
+  fetchScannerDrift,
+  fetchSessionEvents,
   fetchVerificationStats,
   isChallengerScanner,
-  warnIfTruncated,
-  buildScorecardMessage,
-  fetchFindings,
+  isSafeSessionId,
   recordingLink,
+  sessionClickTarget,
+  sessionViewport,
   type UxFinding,
+  type VisionQuota,
+  warnIfTruncated,
 } from "../server/review";
 import { UX_REVIEW_MIN_CONFIDENCE, UX_SCANNERS } from "../server/scanners";
 
@@ -926,5 +930,141 @@ describe("the scanner scorecard", () => {
 
   it("says so plainly when there is nothing to report", () => {
     expect(render([])).toContain("No checks have been scored yet");
+  });
+});
+
+/**
+ * The credit pool is a ceiling above every scanner's own, and nothing watched
+ * it. `sync-vision-scanners.ts` reads the endpoint and is run by no workflow,
+ * so it only ever spoke when a human already suspected something.
+ *
+ * When the pool empties all four scanners stop at once: nothing observes, no
+ * findings are raised, and the daily digest reports a quiet day. A dark
+ * pipeline and a good day are the same message, which is why this is worth an
+ * alert rather than a dashboard.
+ */
+describe("checkVisionQuota", () => {
+  /** The real payload on 2026-09-21, which must NOT fire. */
+  const HEALTHY: VisionQuota = {
+    credit_limit: 7500,
+    credits_used: 1919,
+    remaining: 5581,
+    exhausted: false,
+    period_start: "2026-09-14T13:24:06Z",
+    period_end: "2026-10-14T13:24:06Z",
+    projected_monthly_credits: 3490,
+  } as VisionQuota;
+
+  it("says nothing on the real, healthy pool", () => {
+    // 3,490/month over 23 remaining days needs ~2,676 of the 5,581 left.
+    expect(checkVisionQuota(HEALTHY, new Date("2026-09-21T16:00:00Z"))).toEqual([]);
+  });
+
+  it("warns before the pool empties, not after", () => {
+    const tight = { ...HEALTHY, remaining: 900 };
+    const drift = checkVisionQuota(tight, new Date("2026-09-21T16:00:00Z"));
+    expect(drift).toHaveLength(1);
+    expect(drift[0].reason).toBe("quota");
+    expect(drift[0].scannerName).toBe(ALL_SCANNERS);
+    // Says what happens, not just that a number is low — the person reading it
+    // in Slack has to know a quiet digest would be the symptom.
+    expect(drift[0].detail).toMatch(/every scanner|scanner.*stop/i);
+  });
+
+  it("is loud when it has already happened", () => {
+    const drift = checkVisionQuota({ ...HEALTHY, exhausted: true, remaining: 0 });
+    expect(drift).toHaveLength(1);
+    expect(drift[0].detail).toMatch(/exhausted/);
+  });
+
+  it("uses PostHog's projection, not credits-used over elapsed time", () => {
+    /**
+     * A BACKFILL wrecks the naive rate. On 2026-09-21 the pool had burned 1,919
+     * credits in 7 days — ~8,200/month extrapolated — against a real projection
+     * of 3,490, because 170 sessions were re-observed by hand. Deriving the
+     * rate from credits_used would have alerted every day after any backfill.
+     */
+    expect(checkVisionQuota(HEALTHY, new Date("2026-09-21T16:00:00Z"))).toEqual([]);
+    // Same pool, PostHog projecting a genuinely unaffordable rate.
+    expect(
+      checkVisionQuota(
+        { ...HEALTHY, projected_monthly_credits: 12000 },
+        new Date("2026-09-21T16:00:00Z")
+      )
+    ).toHaveLength(1);
+  });
+
+  it("stays silent on anything it cannot read", () => {
+    // A field it does not understand is not evidence of a problem. This alert
+    // is only worth having if it is never noise.
+    for (const bad of [
+      {},
+      { remaining: 100 },
+      { projected_monthly_credits: 5000 },
+      { remaining: 100, projected_monthly_credits: 5000 },
+      { remaining: 100, projected_monthly_credits: 5000, period_end: "not-a-date" },
+      { remaining: 100, projected_monthly_credits: 0, period_end: "2026-10-14T13:24:06Z" },
+      // Period already over: it is about to roll over, not about to fail.
+      { remaining: 1, projected_monthly_credits: 5000, period_end: "2026-09-01T00:00:00Z" },
+    ] as VisionQuota[]) {
+      expect(checkVisionQuota(bad, new Date("2026-09-21T16:00:00Z"))).toEqual([]);
+    }
+  });
+});
+
+/**
+ * WIRED IN, not merely present.
+ *
+ * `checkVisionQuota` passed every one of its own tests while being called by
+ * nothing: deleting it from `fetchScannerDrift` left the suite green. The cron
+ * only ever calls `fetchScannerDrift`, so a quota check it does not reach is a
+ * function with tests and no effect.
+ */
+describe("fetchScannerDrift reaches the quota", () => {
+  const OK_SCANNERS = UX_SCANNERS.map((s) => ({
+    name: s.name,
+    enabled: true,
+    scanner_version: s.scannerVersion,
+    scanner_config: { prompt: s.prompt },
+    limit_reached: false,
+  }));
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.POSTHOG_API_KEY;
+  });
+
+  it("reports an exhausted pool through the call the cron makes", async () => {
+    process.env.POSTHOG_API_KEY = "test-key";
+    vi.stubGlobal("fetch", async (url: string) => ({
+      ok: true,
+      status: 200,
+      json: async () =>
+        String(url).includes("/vision/quota/")
+          ? { exhausted: true, remaining: 0 }
+          : { results: OK_SCANNERS },
+    }));
+
+    const drift = await fetchScannerDrift();
+    // Every scanner matches git, so the ONLY thing that can be here is the quota.
+    expect(drift).toHaveLength(1);
+    expect(drift[0].reason).toBe("quota");
+    expect(drift[0].scannerName).toBe(ALL_SCANNERS);
+  });
+
+  it("still reports prompt drift when the quota read fails", async () => {
+    // An unreadable quota must not swallow the check that was already working.
+    process.env.POSTHOG_API_KEY = "test-key";
+    const drifted = OK_SCANNERS.map((s, i) =>
+      i === 0 ? { ...s, scanner_config: { prompt: "something else entirely" } } : s
+    );
+    vi.stubGlobal("fetch", async (url: string) =>
+      String(url).includes("/vision/quota/")
+        ? { ok: false, status: 500, json: async () => ({}) }
+        : { ok: true, status: 200, json: async () => ({ results: drifted }) }
+    );
+
+    const drift = await fetchScannerDrift();
+    expect(drift.map((d) => d.reason)).toContain("prompt");
   });
 });

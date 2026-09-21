@@ -108,8 +108,107 @@ export function recordingLink(sessionId: string): string {
 export interface ScannerDrift {
   scannerName: string;
   /** What is wrong, so the alert can say it rather than imply it. */
-  reason: "missing" | "disabled" | "version" | "prompt" | "limit";
+  reason: "missing" | "disabled" | "version" | "prompt" | "limit" | "quota";
   detail: string;
+}
+
+/** The subset of `GET /vision/quota/` the burn-rate check needs. */
+export interface VisionQuota {
+  credit_limit?: number;
+  credits_used?: number;
+  remaining?: number;
+  exhausted?: boolean;
+  period_end?: string;
+  projected_monthly_credits?: number;
+}
+
+/** Name used for a project-level alert, which belongs to no single scanner. */
+export const ALL_SCANNERS = "(every scanner)";
+
+/**
+ * The credit pool is watched by NOTHING, and running it dry stops all four.
+ *
+ * `compareScanners` catches a scanner that hit its OWN `creditLimit`. The
+ * PROJECT pool is a separate ceiling — 7,500 credits per period — and when it
+ * empties every scanner stops at once. Nothing observes the recordings, no
+ * findings are raised, the verifier has nothing to verify, and the daily digest
+ * reports a quiet day. The pipeline going dark looks exactly like a day with no
+ * problems, which is the worst failure shape this system has.
+ *
+ * `scripts/sync-vision-scanners.ts` reads this endpoint and is run by no
+ * workflow, so it only tells you when a human already suspected something.
+ *
+ * TWO conditions, deliberately:
+ *  - `exhausted` — already stopped, say so loudly.
+ *  - burn-through — at PostHog's OWN projected rate the pool empties before the
+ *    period resets. Their projection is used rather than credits_used/elapsed
+ *    because a BACKFILL inflates the latter badly: 1,919 credits were used in
+ *    the first 7 days of the current period, which extrapolates to ~8,200/month
+ *    against a true projection of 3,490.
+ *
+ * Returns [] on anything it does not understand — a field it cannot read is not
+ * evidence of a problem, and this alert is only useful if it is never noise.
+ */
+export function checkVisionQuota(quota: VisionQuota, now: Date = new Date()): ScannerDrift[] {
+  if (quota.exhausted === true) {
+    return [
+      {
+        scannerName: ALL_SCANNERS,
+        reason: "quota",
+        detail:
+          "the PostHog Vision credit pool is exhausted, so every scanner has stopped " +
+          "observing — recordings are piling up unwatched and a quiet digest means " +
+          "nothing is looking, not that nothing is wrong",
+      },
+    ];
+  }
+
+  const remaining = quota.remaining;
+  const projected = quota.projected_monthly_credits;
+  const periodEnd = quota.period_end ? Date.parse(quota.period_end) : NaN;
+  if (
+    typeof remaining !== "number" ||
+    typeof projected !== "number" ||
+    !Number.isFinite(periodEnd) ||
+    projected <= 0
+  ) {
+    return [];
+  }
+
+  const daysLeft = (periodEnd - now.getTime()) / 86_400_000;
+  // A period that has already ended is about to roll over; nothing to warn about.
+  if (daysLeft <= 0) return [];
+  const needed = (projected / 30) * daysLeft;
+  if (needed <= remaining) return [];
+
+  const runsOutInDays = remaining / (projected / 30);
+  return [
+    {
+      scannerName: ALL_SCANNERS,
+      reason: "quota",
+      detail:
+        `the PostHog Vision credit pool runs out in about ${Math.floor(runsOutInDays)} day(s) ` +
+        `— ${remaining} credits left, ${Math.round(daysLeft)} day(s) until the period resets, ` +
+        `and the projected rate needs ${Math.round(needed)}. When it empties every scanner ` +
+        `stops and the digest goes quiet without saying why`,
+    },
+  ];
+}
+
+/** Read the project credit pool. Empty on any failure — never a false alarm. */
+export async function fetchVisionQuotaDrift(): Promise<ScannerDrift[]> {
+  const key = process.env.POSTHOG_API_KEY;
+  if (!key) return [];
+  try {
+    const res = await fetchWithTimeout(
+      `https://eu.posthog.com/api/projects/${PROJECT}/vision/quota/`,
+      { headers: { Authorization: `Bearer ${key}` }, timeoutMs: 8000 }
+    );
+    if (!res.ok) return [];
+    return checkVisionQuota((await res.json()) as VisionQuota);
+  } catch {
+    return [];
+  }
 }
 
 /** The subset of PostHog's scanner record this comparison needs. */
@@ -225,7 +324,10 @@ export async function fetchScannerDrift(): Promise<ScannerDrift[]> {
     // reporting all four as missing on a bad read would be the false alarm this
     // alert exists to avoid.
     if (!Array.isArray(payload.results)) return [];
-    return compareScanners(payload.results);
+    // Concatenated here so the cron's alert loop, its per-(scanner, reason)
+    // dedupe and its Slack path all cover the quota without a second code path.
+    // Independent awaits: an unreadable quota must not suppress prompt drift.
+    return [...compareScanners(payload.results), ...(await fetchVisionQuotaDrift())];
   } catch {
     return [];
   }
