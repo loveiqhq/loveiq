@@ -14,13 +14,22 @@
  * every step that the page is still usable.
  *
  * IT REPLAYS THE ROUTE, NOT THE PERSON. The steps come from their session; the
- * page is OUR internal report. Driving a customer's own token would open their
- * private report in an automated browser and write report_session and
- * analytics rows attributed to them. The defects this looks for — a dead
- * scroll, an overlay over the text, a thrown error — are page mechanics, so
- * the substitution costs nothing. It does mean a fault specific to one
- * archetype's content will not reproduce; point REPLAY_TOKEN at a matching
- * report when that is the claim.
+ * page is OUR internal report.
+ *
+ * Not for privacy — six probes in this corpus already open the reader's own
+ * report and the verifier hands them the token deliberately. The reason is
+ * VOLUME. Those probes load a page and assert; this one performs the whole
+ * visit, nine to twelve route steps plus up to thirty-six taps, and every one
+ * of those emits analytics: scroll_depth, locked_card_price_shown,
+ * paywall_dismissed. Against a reader's own report that lands in the same
+ * tables the scanners and the funnel read, so the pipeline would be measuring
+ * its own replays. The probe cookie does not cover it either — it suppresses
+ * one `report_session` row and nothing on the analytics_event path.
+ *
+ * The defects this looks for — a dead scroll, an overlay over the text, a
+ * thrown error — are page mechanics, so the substitution costs little. It does
+ * mean a fault specific to one archetype's content will not reproduce; point
+ * REPLAY_TOKEN at a matching report when that is the claim.
  *
  * WHAT IT ASSERTS, after every step:
  *   - the page still scrolls with a real finger, with no dialog open
@@ -288,14 +297,34 @@ async function inspect(page, cdp) {
   return faults;
 }
 
-if (!SESSION_ID) fail("SESSION_ID is not set — nothing to replay. INCONCLUSIVE");
-if (!process.env.POSTHOG_API_KEY) fail("POSTHOG_API_KEY is not set — INCONCLUSIVE");
+/**
+ * A route supplied directly, instead of read from PostHog.
+ *
+ * Two things need this. The contract check in
+ * verify-probe-falsifiability.mjs points every gate probe at a refused
+ * connection and requires exit 3 — but without a route this probe exits 3 at
+ * its first guard, before it ever tries to reach the site, so the check would
+ * pass while testing nothing. And a unit test cannot query PostHog at all.
+ *
+ *   REPLAY_STEPS=scroll_depth_25,report_chapter_menu_opened
+ */
+const scriptedSteps = (process.env.REPLAY_STEPS ?? "")
+  .split(",")
+  .map((e) => e.trim())
+  .filter(Boolean)
+  .map((event) => ({ event, ts: "", vw: 0, os: "", selector: "", url: "" }));
 
 let all;
-try {
-  all = await sessionPath(SESSION_ID);
-} catch (err) {
-  fail(`could not read the session (${String(err).slice(0, 120)}) — INCONCLUSIVE`);
+if (scriptedSteps.length > 0) {
+  all = scriptedSteps;
+} else {
+  if (!SESSION_ID) fail("SESSION_ID is not set — nothing to replay. INCONCLUSIVE");
+  if (!process.env.POSTHOG_API_KEY) fail("POSTHOG_API_KEY is not set — INCONCLUSIVE");
+  try {
+    all = await sessionPath(SESSION_ID);
+  } catch (err) {
+    fail(`could not read the session (${String(err).slice(0, 120)}) — INCONCLUSIVE`);
+  }
 }
 const steps = all.filter((s) => REPLAYABLE.has(s.event));
 if (steps.length === 0) {
@@ -306,7 +335,9 @@ const deviceName = deviceFor(steps);
 if (!devices[deviceName]) fail(`unknown device ${deviceName} — INCONCLUSIVE`);
 const engine = /iphone|ipad/i.test(deviceName) ? webkit : chromium;
 
-console.log(`replaying ${steps.length} step(s) from ${SESSION_ID} on ${deviceName}`);
+console.log(
+  `replaying ${steps.length} step(s) from ${SESSION_ID || "REPLAY_STEPS"} on ${deviceName}`
+);
 
 const browser = await engine.launch();
 const ctx = await browser.newContext({ ...devices[deviceName], locale: "en-US" });

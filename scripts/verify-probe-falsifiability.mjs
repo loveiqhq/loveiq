@@ -27,8 +27,14 @@
  * "net::ERR_CONNECTION_REFUSED", which matches neither "INCONCLUSIVE" nor
  * "exception:".
  *
- *   node scripts/verify-probe-falsifiability.mjs
- *   node scripts/verify-probe-falsifiability.mjs --contract-only
+ *   npx tsx scripts/verify-probe-falsifiability.mjs
+ *   npx tsx scripts/verify-probe-falsifiability.mjs --contract-only
+ *
+ * `tsx`, not `node`: this imports replay-pr.mjs, which imports review.ts and
+ * its `@shared/*` path aliases. Under plain node it dies at import with
+ * "Cannot find package '@shared/http'" before running a single probe, which
+ * reads exactly like the whole corpus being broken. probe-guard.yml has always
+ * used tsx; only this usage block was wrong.
  *   RUNS=3 ...      # repeat each probe, to catch a flaky mutation like the above
  *   DEVICES=…       # narrow the device list for speed
  *
@@ -85,7 +91,17 @@ function appendedProbes() {
   // under a criterion, so criteriaProbes() cannot see it — and it runs for D1,
   // which may open a pull request.
   const src = readFileSync(VERIFIER, "utf8");
-  return [...src.matchAll(/probeFiles\.push\("([^"]+)"\)/g)].map((m) => m[1]);
+  return [
+    ...[...src.matchAll(/probeFiles\.push\("([^"]+)"\)/g)].map((m) => m[1]),
+    // replay-session.mjs is appended to the RESULTS rather than to probeFiles,
+    // so the pattern above cannot see it. Left out, the one probe that drives a
+    // whole visit would be the only one never checked for the contract.
+    ...[...src.matchAll(/runProbe\("([^"]+)"/g)].map((m) => m[1]),
+    // `_`-prefixed files are fixtures, not probes. `_selftest-exit.mjs` exists
+    // to return a chosen exit code to the verifier's own selftest, so it exits
+    // 0 on an unreachable site by design and reported a contract breach the
+    // moment this list started reading runProbe() call sites.
+  ].filter((f) => !f.startsWith("_"));
 }
 
 const gateProbes = [...new Set([...[...probes.values()].flat(), ...appendedProbes()])].sort();
@@ -106,6 +122,9 @@ for (const file of gateProbes) {
         WIDTHS: "320",
         URL_PATH: "/survey",
         TARGET_SELECTOR: "p.probe-contract-check",
+        // A route for replay-session.mjs. Without one it exits 3 before it
+        // tries to reach the site, which would pass this check vacuously.
+        REPLAY_STEPS: "scroll_depth_25",
       },
     });
   } catch (err) {
