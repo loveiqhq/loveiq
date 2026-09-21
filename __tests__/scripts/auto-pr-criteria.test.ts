@@ -12,11 +12,20 @@
  * is running each probe twice against production, which takes minutes per
  * device and cannot live in a unit test. It catches the case that actually
  * occurred: a criterion filing PRs on a probe nobody ever proved could fail.
+ *
+ * It looks for `process.env.MUTATE`, not the bare word. Renaming the variable
+ * in verify-dead-click-target.mjs — which disables the mutation mode entirely —
+ * left this suite green when it matched "MUTATE", because the file's own
+ * comments say MUTATE four times. A `contains` on a word that appears in prose
+ * asserts nothing; the needle has to be something only the code can satisfy.
  */
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
+
+// The set the verifier actually spreads, so this test cannot drift from it.
+import { CLAIM_SCOPED_PROBES } from "@/scripts/lib/claim-scoped-probes.mjs";
 
 // @ts-expect-error -- .mjs helper, no types
 import { AUTO_PR_CRITERIA } from "../../scripts/lib/replay-pr.mjs";
@@ -64,7 +73,12 @@ describe("auto-PR criteria", () => {
     for (const id of AUTO_PR_CRITERIA) {
       const files = probes.get(id) ?? [];
       const provable = files.filter((f) =>
-        readFileSync(resolve(process.cwd(), "scripts/probes", f), "utf8").includes("MUTATE")
+        // `process.env.MUTATE`, not the bare word — see the header. Every probe
+        // that has a mutation mode reads the variable exactly once, so this is
+        // no weaker for any of them and is far harder to satisfy by accident.
+        readFileSync(resolve(process.cwd(), "scripts/probes", f), "utf8").includes(
+          "process.env.MUTATE"
+        )
       );
       expect(
         provable.length,
@@ -107,15 +121,25 @@ describe("auto-PR criteria", () => {
       .filter(Boolean);
     expect(ids.length).toBeGreaterThan(0);
 
-    const appended = /probeFiles\.push\("([^"]+)"\)/.exec(verifier);
-    expect(appended, "nothing is appended any more").toBeTruthy();
-    const file = appended![1];
+    // The verifier spreads CLAIM_SCOPED_PROBES rather than naming a file, so
+    // this covers EVERY member instead of whichever one a regex matched first.
+    // It also still fails if the append is deleted outright, which is what the
+    // literal-matching version was really protecting.
+    expect(
+      verifier.includes("probeFiles.push(...CLAIM_SCOPED_PROBES)"),
+      "nothing appends the claim-scoped probes any more"
+    ).toBe(true);
+    expect(CLAIM_SCOPED_PROBES.size, "CLAIM_SCOPED_PROBES is empty").toBeGreaterThan(0);
 
     // Only enforced when it can actually reach a PR-opening criterion.
     if (!ids.some((id) => AUTO_PR_CRITERIA.has(id))) return;
-    const src = readFileSync(resolve(process.cwd(), "scripts/probes", file), "utf8");
-    expect(src.includes("process.exit(3)"), `${file} has no exit 3`).toBe(true);
-    expect(src.includes("MUTATE"), `${file} has no MUTATE mode`).toBe(true);
+    for (const file of CLAIM_SCOPED_PROBES) {
+      const path = resolve(process.cwd(), "scripts/probes", file);
+      expect(existsSync(path), `${file} is in the set but not on disk`).toBe(true);
+      const src = readFileSync(path, "utf8");
+      expect(src.includes("process.exit(3)"), `${file} has no exit 3`).toBe(true);
+      expect(src.includes("process.env.MUTATE"), `${file} has no MUTATE mode`).toBe(true);
+    }
   });
 
   it("lets Z1 back only because its probe now measures", () => {
