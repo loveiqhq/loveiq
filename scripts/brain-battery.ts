@@ -905,6 +905,33 @@ function sourceCoverageProbes(live: LiveCounts): RetrievalProbe[] {
       "what does the literature say about relationship satisfaction",
       topSource("evidence", 3)
     ),
+    /**
+     * THE SHIPPED COPY ADDED ON 2026-09-21, probed for the same reason the evidence
+     * base is: a source with nothing asserting it can be demoted into invisibility and
+     * the battery would score exactly the same. All three were measured absent before
+     * the change and at rank 1 after it.
+     *
+     * The legal pages are React components, so `git ls-files "*.md"` never saw them;
+     * the FAQ and the practice-score guidance were data files the builders did not
+     * import. Between them they are what we publish, what we promise and what we are
+     * legally answerable for.
+     */
+    P("legal-imprint", "what is in our imprint", bodyHas(/Hasenheide|Commercial Register|HRB/, 5)),
+    P(
+      "legal-cookies",
+      "what does our cookie policy tell visitors about controlling cookies",
+      bodyHas(/cookie/i, 5)
+    ),
+    P(
+      "faq-reachable",
+      "what do we tell customers about whether the assessment is anonymous",
+      bodyHas(/anonymous/i, 8)
+    ),
+    P(
+      "practice-score-guidance",
+      "what does a high fantasy pull with a low lived pleasure mean",
+      bodyHas(/Fantasy Pull|Lived Pleasure/, 8)
+    ),
     P("src-ga4", "how many sessions and users did google analytics record", topSource("ga4")),
     P("src-gsc", "what do people type into google to find us", topSource("gsc")),
     P("src-slack", "what has the team been discussing in slack", topSource("slack"), {
