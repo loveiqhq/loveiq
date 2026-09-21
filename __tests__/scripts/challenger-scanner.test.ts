@@ -34,8 +34,16 @@ const challengers = UX_SCANNERS.filter((s) => s.role === "challenger");
 const champions = UX_SCANNERS.filter((s) => s.role === "champion");
 
 describe("the challenger scanner", () => {
+  /**
+   * NO CHALLENGER NEED BE RUNNING for these rules to be worth pinning. The
+   * first experiment ended 2026-09-21 and the machinery stayed, because the
+   * next one will use it. A suite that only passes while an experiment is live
+   * goes red the moment one ends, which teaches people to delete the suite.
+   *
+   * So: every rule below holds for whatever challengers exist, and the naming
+   * convention is proved against a constructed one so it can never go vacuous.
+   */
   it("watches the same trigger event as a champion, or it is not a comparison", () => {
-    expect(challengers.length).toBeGreaterThan(0);
     for (const c of challengers) {
       const rival = champions.find((p) => p.triggerEvent === c.triggerEvent);
       expect(
@@ -74,9 +82,18 @@ describe("the verifier keeps a challenger out of the channel", () => {
   });
 
   it("never posts its verdict into a reader's thread", () => {
-    expect(SRC).toMatch(
-      /isChallenger\(scannerName\)\s*\?\s*"suppressed"\s*:\s*await deliverVerdict/
+    /**
+     * By INTENT, not by exact expression. This pinned the whole ternary and
+     * went red the day a second reason to stay quiet was added beside it — the
+     * guard still held, the assertion did not. Assert that the challenger is
+     * part of whatever suppresses delivery, however that condition grows.
+     */
+    const line = SRC.split("\n").find((l) =>
+      l.includes("await deliverVerdict(sessionId, verdict)")
     );
+    expect(line, "the main delivery call must exist to be guarded").toBeTruthy();
+    expect(line, "a challenger must never reach a thread").toMatch(/isChallenger\(scannerName\)/);
+    expect(line).toMatch(/"suppressed"/);
   });
 
   it("still records it, or the experiment cannot be scored at all", () => {
@@ -140,17 +157,25 @@ describe("the champion/challenger report", () => {
     expect(championChallengerPairs(by)).toEqual([]);
   });
 
-  it("matches the naming convention the real challenger uses", () => {
-    // The regex and scanners.ts must agree, or the report is silently empty.
-    const chall = UX_SCANNERS.find((s) => s.role === "challenger");
-    const champ = UX_SCANNERS.find(
-      (s) => s.role === "champion" && s.triggerEvent === chall!.triggerEvent
-    );
+  it("matches the naming convention a challenger must use", () => {
+    /**
+     * Proved against the convention itself, not against whichever challenger
+     * happens to be running — there may be none. `<champion> (challenger: …)`
+     * is what scanners.ts documents and what the pairing regex expects; if they
+     * ever disagree the weekly report is silently empty.
+     */
+    const champion = UX_SCANNERS.find((s) => s.role === "champion")!;
+    const name = `${champion.name} (challenger: observation only)`;
     const by = new Map<string, object>([
-      [champ!.name, e(0, 38, 20)],
-      [chall!.name, e(1, 1)],
+      [champion.name, e(0, 38, 20)],
+      [name, e(1, 1)],
     ]);
-    expect(championChallengerPairs(by), `"${chall!.name}" did not pair`).toHaveLength(1);
+    expect(championChallengerPairs(by), `"${name}" did not pair`).toHaveLength(1);
+
+    // And any challenger that IS running must follow it.
+    for (const c of UX_SCANNERS.filter((s) => s.role === "challenger")) {
+      expect(c.name, `${c.name} does not follow the convention`).toMatch(/ \(challenger[^)]*\)$/);
+    }
   });
 });
 
@@ -205,5 +230,48 @@ describe("re-queueing a recording nothing watched", () => {
     ] as never);
     expect(by.size).toBe(1);
     expect(by.get("survey_started")).toHaveLength(1);
+  });
+});
+
+/**
+ * A READER'S THREAD IS FOR THINGS THAT HAPPENED TO THEM.
+ *
+ * Measured 2026-09-21: 80 messages had been posted under people's submissions,
+ * and 2 of them reported a real problem. 55 said "could not reproduce" and 22
+ * said our own scanner had described something that never happened. Both were
+ * added before the ledger existed, when not posting meant losing the verdict.
+ * The ledger records every outcome now, and the daily digest reports the totals,
+ * so the only thing the per-person message still added was noise on top of the
+ * two that mattered.
+ */
+describe("only a real finding reaches a reader's thread", () => {
+  const SRC = readFileSync(resolve(process.cwd(), "scripts/verify-ux-findings.mjs"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:])\/\/.*$/gm, "$1");
+
+  it("posts a reproduction, and an honest could-not-check", () => {
+    // `inconclusive` is a request for a human, not a result — it stays.
+    expect(SRC).toMatch(/const speaks = reproduced \|\| inconclusive;/);
+  });
+
+  it("does not post a could-not-reproduce", () => {
+    expect(SRC).toMatch(/isChallenger\(scannerName\) \|\| !speaks \? "suppressed"/);
+  });
+
+  it("does not announce our own scanner's mistakes under a customer's name", () => {
+    // The contradicted branch must record and stay quiet, never deliverVerdict.
+    const branch = SRC.slice(
+      SRC.indexOf("const why = contradiction("),
+      SRC.indexOf('outcome: "contradicted"')
+    );
+    expect(branch, "the refuted branch must not post").not.toMatch(/await deliverVerdict\(/);
+    expect(branch).toMatch(/const sent = "suppressed";/);
+  });
+
+  it("still records every one of them", () => {
+    // Suppression must never reach the ledger write — that is the whole reason
+    // it is safe to stop posting.
+    const calls = SRC.match(/await recordFinding\(/g) ?? [];
+    expect(calls.length, "every outcome still writes a row").toBeGreaterThanOrEqual(5);
   });
 });

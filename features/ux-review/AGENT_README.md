@@ -142,31 +142,31 @@ wrong and the scanner should be deleted rather than tuned.
 Order matters when enabling one: the suppression above must be LIVE before the
 scanner is, or a trial prompt posts into a reader's thread.
 
-**How this one ends, decided before the result is known** (2026-09-20), because
-an experiment with no stopping rule becomes a scanner nobody remembers enabling:
+**IT ENDED ON 2026-09-21, and the answer was not the one the rule anticipated.**
 
-|                        |                                                                                                                                                 |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Sample**             | at least 30 labelled challenger findings, or four weeks, whichever first                                                                        |
-| **Promote if**         | its `contradicted` rate is materially below the champion's AND its precision is no worse                                                        |
-| **Delete if**          | `contradicted` is no lower — the hypothesis was wrong, and a wrong hypothesis is not tuned into a right one                                     |
-| **Blocker either way** | it must cite a moment. It currently does not: 0 of its findings carry a timestamp against the champion's 67%, because it writes "At," and stops |
+The hypothesis was right: forbidding the model from explaining WHY anything
+happened stopped it inventing causes. On 197 recordings each — champion 43
+findings with 22 invented, challenger 1 finding with 0 invented.
 
-That last row is why promotion is not just a flag flip. The citation is what
-makes a finding checkable by a human, and the challenger loses it — harmless
-while its findings never reach anybody, disqualifying the moment they do.
+The challenger was retired anyway, and both reasons are worth keeping:
 
-**Do NOT fix that prompt on the running scanner.** An edit bumps
-`scanner_version`, and a scanner observes a given session once ever, so the
-170-session like-for-like comparison would be split across two prompts and stop
-meaning anything. Fix it in a SECOND challenger, after this one has answered.
+- **The win evaporated.** Those 22 mattered because each posted a note under a
+  real person's submission saying our scanner had described something that never
+  happened. Verdicts that are not reproductions are no longer posted at all, so
+  the advantage was over a problem that stopped existing.
+- **The stopping rule could not be met.** "30 findings or four weeks" was taken
+  from the champion's flag rate and applied to a scanner whose whole hypothesis
+  is flagging less — at 1% it needed about 300 days. Set the threshold from the
+  behaviour you are testing, not from the thing you are testing it against.
 
-**First reading, 170 sessions seen by both and 0 by only one:** champion flagged
-47 (28%), challenger 2 (1%); champion names a control the user pressed in 28 of
-its 48 findings, challenger in 0 of 2. Directionally what was predicted, on a
-sample far too small to act on — and a scanner that answered NO to everything
-would look identical, which is exactly why the probes, not the flag rate,
-decide.
+**The open question, which no prompt answers:** neither scanner has ever been
+right — 0 of 43 across 197 report recordings. Either there are no report defects
+or our probes cannot see them, and telling those apart is where the next effort
+belongs. The survey scanner holds the only 2 confirmed findings in the system.
+
+The machinery stays: role, suppression, the shared probe outcome, the pairing in
+the scorecard. The next experiment uses it, and the tests prove the rules
+without needing one to be running.
 
 **Belongs:** scanner prompts and their pinned versions, reading observations,
 refuting them against our telemetry, the digest.

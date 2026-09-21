@@ -57,12 +57,27 @@ export function warnIfTruncated(rows: readonly unknown[], limit: number, what: s
   );
 }
 
-const CHALLENGER_NAMES = new Set(
-  UX_SCANNERS.filter((s) => s.role === "challenger").map((s) => s.name)
-);
+/**
+ * MATCHED BY NAME CONVENTION, not by the pinned list in scanners.ts. Three
+ * reasons, the first of which is the one that bit on 2026-09-21:
+ *
+ *  - A RETIRED challenger leaves the pinned list while its rows stay in the
+ *    ledger and its events stay in PostHog for another month. Keyed off the
+ *    list, the digest would start reporting a dead experiment's numbers as
+ *    production on the day it was deleted.
+ *  - A challenger created in PostHog and not yet committed would be reported
+ *    as a live scanner. That is the exact state the drift check exists to
+ *    catch, and the digest should not compound it.
+ *  - `championChallengerPairs` already keys on this convention, so one rule
+ *    governs both and one test proves it.
+ *
+ * `<champion name> (challenger: …)` is the convention; scanners.ts documents it
+ * and __tests__/scripts/challenger-scanner.test.ts enforces it.
+ */
+const CHALLENGER_NAME = / \(challenger[^)]*\)$/;
 /** Exported to be tested. An unknown scanner counts as production. */
 export const isChallengerScanner = (name: string | null | undefined): boolean =>
-  CHALLENGER_NAMES.has(String(name ?? ""));
+  CHALLENGER_NAME.test(String(name ?? ""));
 
 const PROJECT = "244778";
 const POSTHOG_REPLAY_BASE = `https://eu.posthog.com/project/${PROJECT}/replay`;
@@ -378,13 +393,12 @@ export async function fetchCoverageStats(): Promise<CoverageStat | null> {
      * sessions its champion already saw — and wrong in exactly the direction
      * that hides a gap, which is the failure this figure exists to expose.
      */
-    const excluded = [...CHALLENGER_NAMES].map((n) => `'${n.replace(/'/g, "''")}'`).join(",");
     const observed = await sessionQuery(
       `SELECT count(DISTINCT properties.session_id) FROM events
        WHERE event = '$recording_observed'
          AND timestamp > now() - INTERVAL 10 DAY
-         AND properties.session_id IN (${inList})` +
-        (excluded ? `\n         AND toString(properties.scanner_name) NOT IN (${excluded})` : "")
+         AND properties.session_id IN (${inList})
+         AND toString(properties.scanner_name) NOT LIKE '% (challenger%'`
     );
     if (observed === null) return null;
     return { submissions: ids.length, observed: Number(observed[0]?.[0]) || 0 };
