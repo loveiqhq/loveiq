@@ -236,6 +236,46 @@ export const UX_SCANNERS: readonly UxScanner[] = [
       CITE,
     ].join("\n"),
   },
+  /**
+   * THE DEAD-CLICK SCANNER IS ON PROBATION UNTIL 2026-09-28.
+   *
+   * It has 0 confirmed findings in 22 and flags ~10% of what it watches, which
+   * made it the obvious candidate to retire. It is not being retired yet,
+   * because on 2026-09-21 we found that its inputs were wrong in the one place
+   * that mattered: a disabled control is `pointer-events: none`, so the browser
+   * reports the CONTAINER, and our own `dead_click` recorded the site's most
+   * dead-tapped button (the survey's disabled Next — PostHog counted 20,081
+   * taps across 929 sessions) as ordinary prose. `verify-dead-click-target.mjs`
+   * then inspected that container and correctly returned clean. The scanner was
+   * being graded on evidence that could not have agreed with it.
+   *
+   * A WEEK, NOT A MONTH, and the primary test is mechanical rather than
+   * statistical. The last experiment set its threshold from the champion's flag
+   * rate and applied it to a scanner whose whole hypothesis was flagging less,
+   * so it needed ~300 days to reach a verdict; set the bar from the behaviour
+   * you are testing. At ~55 observations and ~6 findings a week, one week
+   * cannot settle a confirm rate — but it can answer the question that decides
+   * this, which is whether the detector now sees blocked controls at all.
+   *
+   *   PRIMARY   Does `dead_click` carry `deadClickReason: "blocked_control"`
+   *             for the survey's disabled Next? Thirty days of the old
+   *             detector produced 28 dead_click rows and NOT ONE as a control.
+   *             If a week of real traffic still produces zero, the fix did not
+   *             take and the scanner is being fed the same wrong input — retune
+   *             the trigger before judging the scanner at all.
+   *   SECONDARY Confirmed findings in the week, POOLED with the existing 0 of
+   *             22. Six more is not a sample on its own; 0 of 28 bounds the true
+   *             rate near 10% and that is the number to decide on.
+   *
+   *   DECIDE    Blocked controls appearing AND still 0 confirmed → retire it;
+   *             the input was fixed and it still finds nothing.
+   *             Blocked controls appearing AND ≥1 confirmed → keep, and stop
+   *             treating its clears as evidence until they are claim-scoped.
+   *             No blocked controls → the fix did not reach production; that is
+   *             a bug to chase, not a verdict on the scanner.
+   *
+   * Credits are not the pressure: 476 a month against a 7,500 ceiling.
+   */
   {
     id: "01a0a00f-8e95-76a8-9192-b1a7463db22f",
     name: "LoveIQ dead-click cause",
