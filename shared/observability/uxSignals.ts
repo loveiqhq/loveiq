@@ -10,8 +10,16 @@
  *   - dead clicks (pointer-down on visibly non-interactive nodes)
  *   - tab visibility transitions (visible↔hidden) with duration
  *
+ * NOT CONSENT-GATED, and the header used to claim it was.
+ *
+ * `track()` sends to PostHog before any consent check, deliberately — a
+ * documented owner decision, the same one that applies to Microsoft Clarity
+ * (see app/layout.tsx). `persistAnalyticsEvent` gates on an allowlist and on
+ * having a submission id, not on consent either. So nothing here exits when
+ * analytics consent is missing, and a compliance review that read the old
+ * sentence would have stopped at it.
+ *
  * Safety rails:
- *   - All listeners exit fast when CookieYes analytics consent is missing.
  *   - Scroll uses requestAnimationFrame throttling.
  *   - All pointer/scroll/touch listeners are `passive: true`.
  *   - One-time install guard on a window flag — survives React StrictMode's
@@ -250,8 +258,23 @@ export function installUxSignals(): void {
     if (!(target instanceof Element)) return;
     const state = ensureState();
 
-    // Rage detection: track per-target click timestamps within a 1s window.
-    const node = (target.closest("[data-track-id], button, a, [role=button]") ?? target) as Element;
+    /**
+     * Rage detection: per-target click timestamps within a 1s window.
+     *
+     * Resolved through the same blocked-control lookup as the dead click below.
+     * A disabled control is `pointer-events: none`, so `event.target` is its
+     * container and `closest(...)` finds nothing — rage-tapping a dead "Next"
+     * was keyed to `nav.flex` and reported as rage on a layout div. Frustrated
+     * repeat taps on a control that cannot respond is the single most useful
+     * thing this listener can report, and it was naming the wrong element.
+     */
+    const blockedForRage =
+      target.closest(INTERACTIVE_SELECTOR) === null
+        ? blockedControlAt(target, event.clientX, event.clientY)
+        : null;
+    const node = (blockedForRage ??
+      target.closest("[data-track-id], button, a, [role=button]") ??
+      target) as Element;
     const now = performance.now();
     const stamps = clickTimestampsByNode.get(node) ?? [];
     const recent = stamps.filter((t) => now - t < RAGE_WINDOW_MS);
@@ -263,7 +286,9 @@ export function installUxSignals(): void {
       // skips the equality check.
       trackRageClick({
         pathname: state.pathname,
-        target_selector: selectorFor(target),
+        // `node`, not `target` — the thing they were hammering, which for a
+        // disabled control is not what the browser handed us.
+        target_selector: selectorFor(node),
         click_count: recent.length,
         window_ms: RAGE_WINDOW_MS,
       });

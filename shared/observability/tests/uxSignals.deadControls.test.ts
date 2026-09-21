@@ -278,6 +278,26 @@ describe("dead-click detection on controls that look live", () => {
       expect(tracked.dead.mock.calls[0][0].reason).toBe("non_interactive");
     });
 
+    it("names the disabled control a reader is HAMMERING, not the container", () => {
+      /**
+       * Rage detection resolved its node with the same target-based `closest`,
+       * so rage-tapping a dead "Next" was keyed to `nav.flex` and reported as
+       * rage on a layout div. Repeat taps on a control that cannot respond is
+       * the most useful thing this listener can report and it named the wrong
+       * element — the same blindness as the dead click, one listener over.
+       */
+      document.body.innerHTML = `<nav class="flex"><button class="next" disabled>Next</button></nav>`;
+      withRects({ "button.next": rect(100, 200, 80, 40) });
+      const nav = document.querySelector("nav")!;
+
+      tapAt(nav, 140, 220);
+      tapAt(nav, 140, 220);
+      tapAt(nav, 140, 220);
+
+      expect(tracked.rage).toHaveBeenCalledTimes(1);
+      expect(tracked.rage.mock.calls[0][0].target_selector).toBe("button.next");
+    });
+
     it("counts aria-disabled, which never sets .disabled", () => {
       document.body.innerHTML = `<nav class="flex"><div role="button" aria-disabled="true" class="cta">Next</div></nav>`;
       withRects({ "div.cta": rect(100, 200, 80, 40) });
