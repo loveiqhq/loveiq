@@ -1887,6 +1887,28 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
     ),
 
     // ── COMMIT ───────────────────────────────────────────────────────────────
+    /**
+     * SITS ON THE BACKFILL EDGE, so it moves whenever the corpus grows. Measured
+     * 2026-09-21 after the Drive walk was widened to every colleague:
+     *
+     *   want=12 (the default this probe uses): the answer is ABSENT
+     *   want=14                              : it is at position 12, five times out of five
+     *
+     * Not flakiness, and not a ranking fault. Within its own source the answer is
+     * SECOND of the `doc` chunks — nothing displaced it there. Every `doc` chunk shares
+     * one `source:grain` bucket, so `grainCap = 1` gives the source a single first-pass
+     * slot and everything after it depends on backfill room. 452 new drive chunks
+     * consumed that room.
+     *
+     * Confirmed by exclusion rather than assumed: re-running with
+     * `exclude_sources: ["drive"]` passes, and it was the only one of five failing
+     * probes for which that was true.
+     *
+     * So this reddens on corpus growth and recovers on corpus shrinkage, which makes it
+     * a poor regression signal and a good pressure gauge. Before tuning anything for it,
+     * check where the answer sits WITHIN `doc` — if it is still near the top there, the
+     * ranking is fine and the probe is simply reading the edge.
+     */
     P(
       "cm-marcus-line",
       "explain a recent change in plain english",
