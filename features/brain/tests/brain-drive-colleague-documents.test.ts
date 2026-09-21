@@ -247,11 +247,38 @@ describe("colleagueDocuments", () => {
     expect((await colleagueDocuments(new Set(), () => false)).complete).toBe(false);
   });
 
-  it("is NOT complete when the clock stops it part way", async () => {
+  /**
+   * TWO CLOCK CHECKS, TWO TESTS. The walk asks the clock once per mailbox and once per
+   * page, and a single test hits whichever comes first — mutation testing showed the
+   * original one passing through the PAGE check while the MAILBOX check's
+   * `complete = false` was deleted. One test per path, with the call count chosen so
+   * the intended one trips.
+   *
+   * Each mailbox with a single unpaged result costs exactly two clock calls: the
+   * mailbox check, then the page check.
+   */
+  it("is NOT complete when the clock stops it between mailboxes", async () => {
     mailboxes.value = ["a@loveiq.org", "b@loveiq.org", "c@loveiq.org"];
     for (const m of mailboxes.value) drive[m] = [{ id: m, name: NOTE }];
     let calls = 0;
-    expect((await colleagueDocuments(new Set(), () => ++calls > 1)).complete).toBe(false);
+    // Calls 1-2 walk the first mailbox; call 3 is the second mailbox's own check.
+    const r = await colleagueDocuments(new Set(), () => ++calls >= 3);
+    expect(r.items.map((f) => f.id)).toEqual(["a@loveiq.org"]);
+    expect(r.complete).toBe(false);
+  });
+
+  it("is NOT complete when the clock stops it between pages", async () => {
+    mailboxes.value = ["a@loveiq.org"];
+    paged.add("a@loveiq.org");
+    drive["a@loveiq.org"] = [
+      { id: "p1", name: "First" },
+      { id: "p2", name: "Second" },
+    ];
+    let calls = 0;
+    // Call 1 is the mailbox check, call 2 the first page; call 3 is the second page.
+    const r = await colleagueDocuments(new Set(), () => ++calls >= 3);
+    expect(r.items.map((f) => f.id)).toEqual(["p1"]);
+    expect(r.complete).toBe(false);
   });
 
   /**
