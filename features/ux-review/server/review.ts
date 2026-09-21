@@ -481,7 +481,19 @@ export async function fetchScannerScores(days = 30): Promise<ScannerScore[] | nu
  */
 export function buildScorecardMessage(
   scores: readonly ScannerScore[],
-  days = 30
+  days = 30,
+  /**
+   * Which challengers are actually RUNNING. Defaults to git, which is the
+   * source of truth; passed explicitly by tests so the live-trial behaviour can
+   * still be exercised when none happens to be running today.
+   *
+   * A parameter rather than a module read because the alternative was deleting
+   * the three tests that pin what a live trial looks like — and those describe
+   * the case this message exists for.
+   */
+  liveChallengerNames: ReadonlySet<string> = new Set(
+    UX_SCANNERS.filter((sc) => sc.role === "challenger").map((sc) => sc.name)
+  )
 ): { text: string; blocks: SlackBlock[] } {
   const n = (s: ScannerScore) => s.right + s.wrong;
   const pct = (s: ScannerScore) => (n(s) === 0 ? "n/a" : `${Math.round((s.right / n(s)) * 100)}%`);
@@ -489,7 +501,22 @@ export function buildScorecardMessage(
   const right = live.reduce((a, s) => a + s.right, 0);
   const total = live.reduce((a, s) => a + n(s), 0);
 
-  const lines = scores.map((s) => {
+  const liveChallengers = liveChallengerNames;
+
+  /**
+   * A RETIRED challenger is dropped from the list entirely.
+   *
+   * Its rows are history, and this message answers "how good are the checks
+   * NOW". Leaving it in printed "The report — new version being tested — 0 of 1
+   * held up" for a scanner deleted from PostHog days earlier. The headline
+   * already excludes challengers from its total, so listing one was
+   * inconsistent as well as untrue.
+   */
+  const listed = scores.filter(
+    (s) => !isChallengerScanner(s.scanner) || liveChallengers.has(s.scanner)
+  );
+
+  const lines = listed.map((s) => {
     /**
      * A challenger shares its champion's plain name — `plainScanner` maps both
      * "LoveIQ report UX" and "LoveIQ report UX (challenger: …)" to "The report"
@@ -522,7 +549,9 @@ export function buildScorecardMessage(
    * prevent.
    */
   const MIN = 30;
+  // Only a LIVE trial is a trial in progress — see `listed` above.
   for (const c of scores.filter((s) => isChallengerScanner(s.scanner))) {
+    if (!liveChallengers.has(c.scanner)) continue;
     const base = c.scanner.replace(/ \(challenger[^)]*\)$/, "");
     const champ = scores.find((s) => s.scanner === base);
     if (!champ) continue;

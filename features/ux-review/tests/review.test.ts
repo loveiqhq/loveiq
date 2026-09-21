@@ -871,17 +871,68 @@ describe("the scanner scorecard", () => {
     wrong,
     contradicted,
   });
+  /** Renders as production does: no challenger is live in git today. */
   const render = (scores: Parameters<typeof buildScorecardMessage>[0]) =>
     JSON.stringify(buildScorecardMessage(scores, 30).blocks);
+  /**
+   * Renders as if the named challenger WERE running, so the live-trial
+   * behaviour stays tested after the real one was retired. Deleting those tests
+   * instead would have removed the only description of what a trial looks like.
+   */
+  const renderWithTrial = (scores: Parameters<typeof buildScorecardMessage>[0], name: string) =>
+    JSON.stringify(buildScorecardMessage(scores, 30, new Set([name])).blocks);
+
+  it("does not announce a trial that was retired", () => {
+    /**
+     * The ledger keeps a challenger's rows forever, so "is there a challenger"
+     * read off the SCORES stays true long after it was deleted. The
+     * observation-only challenger was removed from PostHog on 2026-09-20 and
+     * this still rendered "a second version is being tested quietly, 1 of the
+     * 30 results needed" days later — a trial nobody was running, with a number
+     * that could never move, and a line item claiming a live experiment.
+     *
+     * UX_SCANNERS is the source of truth for what is running, and `render` uses
+     * it — so this also pins the DEFAULT argument, which is what production
+     * passes. A default of "every scanner is live" would fail here.
+     */
+    expect(
+      UX_SCANNERS.some((s) => s.name === "LoveIQ report UX (challenger: observation only)"),
+      "this name must be absent from git for the test to mean anything"
+    ).toBe(false);
+    const out = render([
+      sc("LoveIQ report UX", 1, 44, 22),
+      sc("LoveIQ report UX (challenger: observation only)", 0, 1),
+    ]);
+    expect(out).not.toContain("Trial in progress");
+    expect(out).not.toContain("new version being tested");
+    // The champion is untouched.
+    expect(out).toContain("The report");
+  });
+
+  it("would still report a trial that IS running", () => {
+    // The other half: this must not become "challengers are never mentioned".
+    // Guarded by reading the live set from git rather than hardcoding.
+    const name =
+      UX_SCANNERS.find((s) => s.role === "challenger")?.name ??
+      "LoveIQ report UX (challenger: observation only)";
+    const out = renderWithTrial(
+      [sc(name.replace(/ \(challenger[^)]*\)$/, ""), 1, 44, 22), sc(name, 0, 1)],
+      name
+    );
+    expect(out).toContain("Trial in progress");
+  });
 
   it("never prints two lines with the same name", () => {
     // `plainScanner` maps a challenger and its champion to the SAME words, so
     // without a distinguishing suffix the reader sees "The report" twice with
     // different numbers. That exact shape reached Marcus once already.
-    const out = render([
-      sc("LoveIQ report UX", 0, 41, 21),
-      sc("LoveIQ report UX (challenger: observation only)", 0, 1),
-    ]);
+    const out = renderWithTrial(
+      [
+        sc("LoveIQ report UX", 0, 41, 21),
+        sc("LoveIQ report UX (challenger: observation only)", 0, 1),
+      ],
+      "LoveIQ report UX (challenger: observation only)"
+    );
     expect(out).toContain("new version being tested");
     expect(out.match(/The report/g)?.length, "the champion and trial must read differently").toBe(
       (out.match(/The report — new version/g)?.length ?? 0) + 2
@@ -897,19 +948,25 @@ describe("the scanner scorecard", () => {
   });
 
   it("does not invite a decision before the trial has a sample", () => {
-    const out = render([
-      sc("LoveIQ report UX", 0, 41, 21),
-      sc("LoveIQ report UX (challenger: observation only)", 0, 1),
-    ]);
+    const out = renderWithTrial(
+      [
+        sc("LoveIQ report UX", 0, 41, 21),
+        sc("LoveIQ report UX (challenger: observation only)", 0, 1),
+      ],
+      "LoveIQ report UX (challenger: observation only)"
+    );
     expect(out).toContain("1 of the 30 results needed");
     expect(out, "no verdict may be implied at n=1").not.toContain("Trial result");
   });
 
   it("reports the comparison once the trial has enough", () => {
-    const out = render([
-      sc("LoveIQ report UX", 0, 41, 21),
-      sc("LoveIQ report UX (challenger: observation only)", 6, 24, 1),
-    ]);
+    const out = renderWithTrial(
+      [
+        sc("LoveIQ report UX", 0, 41, 21),
+        sc("LoveIQ report UX (challenger: observation only)", 6, 24, 1),
+      ],
+      "LoveIQ report UX (challenger: observation only)"
+    );
     expect(out).toContain("Trial result");
     expect(out, "the refutation counts are the point of the experiment").toContain("1 times");
   });
@@ -919,7 +976,8 @@ describe("the scanner scorecard", () => {
     // would make the number move when nothing about the product changed.
     const out = buildScorecardMessage(
       [sc("LoveIQ report UX", 1, 9), sc("LoveIQ report UX (challenger: observation only)", 9, 1)],
-      30
+      30,
+      new Set(["LoveIQ report UX (challenger: observation only)"])
     );
     expect(out.text).toContain("1 of 10");
   });
