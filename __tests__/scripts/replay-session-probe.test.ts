@@ -137,6 +137,23 @@ describe("replaying the reader's own route", () => {
     expect(PROBE).not.toMatch(/"locked_card_price_shown"/);
   });
 
+  it("does not count a page view as something the reader did", () => {
+    // Performing it was a no-op that always succeeded, so it padded the
+    // denominator with steps that could not fail — 4 of the first session's 9
+    // "route steps" were free passes.
+    expect(PROBE).not.toMatch(/"\$pageview"/);
+  });
+
+  it("reads the device the verifier passes, rather than ignoring it", () => {
+    // The session's own events win, because they carry the OS as well as the
+    // width and can tell an iPhone from an Android at the same size. But an
+    // input that is passed and silently dropped is how a probe ends up running
+    // a list nobody chose while its verdict claims otherwise — twelve probes
+    // in this corpus did exactly that with DEVICES.
+    expect(PROBE).toMatch(/process\.env\.DEVICES/);
+    expect(PROBE).toMatch(/process\.env\.DEVICE\b/);
+  });
+
   it("keeps the three-way exit contract", () => {
     for (const code of ["process.exit(0)", "process.exit(1)", "process.exit(3)"]) {
       expect(PROBE, `${code} is missing`).toContain(code);

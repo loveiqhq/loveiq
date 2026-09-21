@@ -72,13 +72,19 @@ const MIN_REPLAYED_SHARE = 2 / 3;
 /**
  * Events that describe a step we can actually perform on the page.
  *
- * `locked_card_price_shown` is deliberately NOT here. It fires once on mount
- * behind a one-shot ref when a price is rendered — an impression, not an
- * action, with nothing to tap. Treating it as a step failed on 6 of 6 sessions
- * and quietly cost every run a point of route coverage.
+ * Two events are deliberately NOT here, both because they are not things the
+ * reader DID:
+ *
+ *  - `locked_card_price_shown` fires once on mount behind a one-shot ref when a
+ *    price renders. Nothing to tap; it failed on 6 of 6 sessions and quietly
+ *    cost every run a point of route coverage.
+ *  - `$pageview` is already where we are, and re-navigating would discard the
+ *    state the sequence has built up. Performing it was a no-op that always
+ *    succeeded, so it padded the denominator with steps that could not fail —
+ *    4 of the first session's 9 "route steps" were free passes, which is a
+ *    coverage figure flattering itself.
  */
 const REPLAYABLE = new Set([
-  "$pageview",
   "scroll_depth_25",
   "scroll_depth_50",
   "scroll_depth_75",
@@ -119,12 +125,29 @@ async function sessionPath(sessionId) {
   }));
 }
 
-/** The reader's own screen, not ours — a layout defect is width-specific. */
+/**
+ * The reader's own screen, not ours — a layout defect is width-specific.
+ *
+ * The SESSION's own events win over the verifier's `DEVICES`, which is the
+ * opposite of every other probe here and is deliberate. `DEVICES` is derived
+ * from the finding's viewport width alone; these events carry the width AND
+ * the operating system, so they can tell an iPhone from an Android at the same
+ * width and pick the right engine. `DEVICES` is still read when the session
+ * says nothing, because an input that is passed and silently ignored is how a
+ * probe ends up running a list nobody chose while its verdict claims otherwise.
+ */
 function deviceFor(steps) {
   const explicit = process.env.DEVICE;
   if (explicit) return explicit;
   const ios = steps.some((s) => /ios|mac/i.test(s.os));
   const width = steps.map((s) => s.vw).find((w) => w > 0) ?? 0;
+  if (width === 0 && !ios) {
+    const passed = (process.env.DEVICES ?? "")
+      .split(",")
+      .map((d) => d.trim())
+      .filter(Boolean);
+    if (passed.length > 0) return passed[0];
+  }
   if (ios) return width >= 760 ? "iPad Mini" : "iPhone 15 Pro";
   return width >= 760 ? "Galaxy Tab S4" : "Pixel 7";
 }
@@ -184,8 +207,6 @@ const DONE = { tapped: true, exists: true };
 
 async function perform(step, page, cdp) {
   switch (step.event) {
-    case "$pageview":
-      return DONE; // already there; a second navigation would discard the state
     case "scroll_depth_25":
     case "scroll_depth_50":
     case "scroll_depth_75":
