@@ -21,6 +21,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyCsrfHeaderOrBody } from "@shared/http/csrf";
+import { redactReportTokensDeep } from "@shared/format/redact-report-token";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { refreshJourneyDetail } from "@features/attribution/server/journey-message";
@@ -212,7 +213,12 @@ export async function POST(request: Request) {
       // entity_type:entity_id has consistent meaning across rows.
       entity_id: submission_id,
       survey_submission_id: submission_id,
-      metadata: metadata ?? {},
+      // A report token is the auth on a report, so it must not persist here.
+      // Applied at the INSERT rather than at the parse, because this is the
+      // only point that sees exactly what is about to be written — and the
+      // PostHog event, which we decided to keep intact, has already been sent
+      // from the client by now. See shared/format/redact-report-token.ts.
+      metadata: redactReportTokensDeep(metadata ?? {}),
       ...(typeof duration_ms === "number" ? { duration_ms } : {}),
     }),
   });
