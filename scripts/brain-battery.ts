@@ -3135,6 +3135,41 @@ async function mcpProbes(): Promise<McpProbe[]> {
       args: { channel: "__no_such_channel__", text: "this must never post" },
       check: contains("no channel called", "prod-alerts"),
     },
+    /**
+     * THE TWO WRITE TOOLS THAT HAD NO LIVE PROBE AT ALL.
+     *
+     * Measured 2026-09-21 by listing the deployed tools and grepping this file:
+     * `record_decision` and `write_to_google_doc` were the only two of seventeen with
+     * no mention here. Both have unit tests, which prove the handler; neither had
+     * anything proving the handler is still REACHABLE on the deployed endpoint, which
+     * is the whole reason this battery exists.
+     *
+     * Refusal paths only, like the three above — a refusal writes nothing. For
+     * `record_decision` that matters more than for most: its `actor` is self-declared,
+     * and a forged decision reappears under this server's most assertive header on
+     * every future search.
+     */
+    {
+      kind: "mcp-decision-needs-an-actor",
+      tool: "record_decision",
+      args: { decision: "This decision must never be recorded by the battery." },
+      check: contains("who decided it"),
+    },
+    {
+      kind: "mcp-decision-refuses-a-fragment",
+      // Too short to be a decision. The refusal is what stops the corpus filling with
+      // one-word records that outrank real ones on the strength of the source alone.
+      tool: "record_decision",
+      args: { decision: "ok", actor: "Battery Probe" },
+      check: absent("recorded"),
+    },
+    {
+      kind: "mcp-google-doc-needs-a-target",
+      // Neither a title to create nor a document to append to: nothing to write.
+      tool: "write_to_google_doc",
+      args: { content: "This must never reach a document." },
+      check: absent("https://docs.google.com"),
+    },
     {
       kind: "mcp-notion-unknown-parent",
       tool: "write_to_notion",
