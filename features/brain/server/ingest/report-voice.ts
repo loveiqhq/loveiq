@@ -3,6 +3,7 @@ import { reportSections } from "@/data/report-general";
 import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
 import { summaryArchetypeContent } from "@/data/report-summary";
 import { reportPracticeIntroBlocks } from "@/data/report-practice-intro";
+import { faqs } from "@/data/faqs";
 import { splitBody } from "./notion";
 import { sweepStale, upsertChunks, type BrainRow, type IngestResult } from "./upsert";
 
@@ -56,6 +57,15 @@ function humanise(key: string): string {
     .replace(/[_-]+/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase())
     .trim();
+}
+
+/** A stable id from a question, so editing the ANSWER does not orphan the row. */
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 60);
 }
 
 function rowsFor(
@@ -126,6 +136,36 @@ export function buildReportVoiceRows(stampedAt: string): BrainRow[] {
         `Archetype summary as shipped — the ${archetype}`,
         text,
         { chapter: "summary", archetype },
+        stampedAt
+      )
+    );
+  }
+
+  /**
+   * 3a. THE HOMEPAGE FAQ — the answers we give customers before they buy.
+   *
+   * `data/faqs.ts` is rendered by `WFAQ.tsx` on both landing variants AND emitted as
+   * FAQPage JSON-LD, so it is simultaneously the most-read copy we publish and the
+   * version Google indexes. The brain held none of it: "what do we tell customers
+   * about X" and "what does our FAQ say about refunds" had no source.
+   *
+   * Found 2026-09-21 by diffing every file in `data/` against the imports of the two
+   * repo-built ingesters — the same sweep that found `report-practice-intro`.
+   *
+   * One row per question, because a question is the unit somebody asks about, and
+   * pooling twelve of them would answer about refunds with whichever neighbour scored
+   * highest — the same reasoning the glossary builder already applies per term.
+   */
+  for (const f of faqs) {
+    const q = String(f.question ?? "").trim();
+    const a = htmlToText(String(f.answer ?? ""));
+    if (!q || a.length < 20) continue;
+    rows.push(
+      ...rowsFor(
+        `faq:${slugify(q)}`,
+        `Homepage FAQ as shipped — ${q}`,
+        `${q}\n\n${a}`,
+        { chapter: "faq", archetype: null, scope: "general" },
         stampedAt
       )
     );

@@ -102,6 +102,32 @@ describe("report voice — the shipped copy, indexed", () => {
     }
   });
 
+  /**
+   * THE MOST-READ COPY WE PUBLISH, and the brain held none of it.
+   *
+   * `data/faqs.ts` is rendered by WFAQ.tsx on both landing variants and emitted as
+   * FAQPage JSON-LD, so it is simultaneously what customers read before buying and
+   * what Google indexes. Found 2026-09-21 by diffing every file in `data/` against
+   * the repo-built ingesters' imports.
+   */
+  it("indexes the homepage FAQ, one row per question", () => {
+    const faq = rows.filter((r) => r.source_id.startsWith("faq:"));
+    expect(faq.length).toBeGreaterThanOrEqual(8);
+    // The question is in the title AND the body, so it matches however it is asked.
+    for (const r of faq) {
+      expect(r.title).toMatch(/^Homepage FAQ as shipped — .+/);
+      expect(r.body.length).toBeGreaterThan(20);
+    }
+  });
+
+  it("keys a FAQ on its question, so editing the ANSWER does not orphan the row", () => {
+    // An id derived from the answer would change on every copy edit and leave the old
+    // row behind for the sweep to find — the orphan problem the drive ingester hit.
+    const faq = rows.filter((r) => r.source_id.startsWith("faq:"));
+    expect(faq.some((r) => /^faq:[a-z0-9-]+$/.test(r.source_id))).toBe(true);
+    expect(new Set(faq.map((r) => r.source_id)).size).toBe(faq.length);
+  });
+
   it("gives every row a distinct id, or an upsert would silently drop copy", () => {
     const ids = rows.map((r) => r.source_id);
     expect(new Set(ids).size).toBe(ids.length);
