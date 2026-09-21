@@ -201,9 +201,17 @@ describe("the reader's own report token", () => {
   it("is masked before any probe can echo it", () => {
     // ::add-mask:: makes Actions redact the value from every later log line.
     expect(SRC).toMatch(/console\.log\(`::add-mask::\$\{reportToken\}`\)/);
-    // And it is emitted BEFORE the probes run, or the masking is pointless.
-    const mask = SRC.indexOf("::add-mask::");
-    const run = SRC.indexOf("probeFiles.map((f) => runProbe(");
+    /**
+     * Emitted BEFORE the probes run, or the masking is pointless.
+     *
+     * Measured on the source with COMMENTS STRIPPED: the first version used
+     * indexOf on the raw file, and `::add-mask::` appears in the comment that
+     * explains it — which sits above the call either way. Moving the real line
+     * after the probes changed nothing the test could see.
+     */
+    const code = SRC.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+    const mask = code.indexOf("::add-mask::");
+    const run = code.indexOf("probeFiles.map((f) => runProbe(");
     expect(mask).toBeGreaterThan(-1);
     expect(run).toBeGreaterThan(-1);
     expect(mask).toBeLessThan(run);
