@@ -375,7 +375,12 @@ const probeRunRows = (results) =>
     // `undefined` is falsy — so they read as not-claim-scoped, which is exactly
     // what they were.
     claimScoped: Boolean(r.claimScoped),
-    tail: String(r.tail ?? "").slice(0, 600),
+    // Redacted for the same reason url_path is, two fields over. PR #232
+    // closed url_path and left this one: verify-dead-click-target.mjs prints
+    // "what this reader tapped at /report/rpt_…" and that lands here verbatim.
+    // One live token was already stored this way. The token IS the auth on a
+    // report, so anywhere it persists is a credential store.
+    tail: redactReportToken(String(r.tail ?? "")).slice(0, 600),
   }));
 
 /**

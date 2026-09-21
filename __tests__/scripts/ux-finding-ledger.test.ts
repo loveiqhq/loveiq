@@ -130,5 +130,56 @@ describe("the ledger never stores a report token", () => {
     const redacted = src.match(/url_path: redactReportToken\(/g) ?? [];
     expect(writes.length, "there should be url_path writes to check").toBeGreaterThan(0);
     expect(redacted.length, "every url_path write must be redacted").toBe(writes.length);
+
+    /**
+     * probe_runs[].tail, the sibling column this fix originally missed.
+     *
+     * `verify-dead-click-target.mjs` prints "what this reader tapped at
+     * /report/rpt_…" and that line is stored verbatim. One live token was
+     * already in the table this way while url_path beside it was clean —
+     * redacting one column of a row and not the next is not a fix.
+     */
+    const tails = src.match(/tail: [^,\n]*String\(r\.tail/g) ?? [];
+    const tailsRedacted = src.match(/tail: redactReportToken\(String\(r\.tail/g) ?? [];
+    expect(tails.length, "there should be a probe_runs tail write to check").toBeGreaterThan(0);
+    expect(tailsRedacted.length, "every probe_runs tail must be redacted").toBe(tails.length);
+  });
+
+  /**
+   * The greedy-match bug, pinned.
+   *
+   * `[^/?#]+` ended only at a URL delimiter, so applied to a sentence it ate
+   * everything after the token too — the verdict word included. Harmless while
+   * this only ever saw bare paths; destructive the moment it was pointed at
+   * probe output, which is exactly what it is now used for.
+   */
+  it("catches the token as a QUERY PARAMETER too", () => {
+    /**
+     * `/checkout?plan=…&token=rpt_…` is the other shape the token travels in —
+     * 403 of the 2,424 rows found in `analytics_event` are that form, and a
+     * probe tail can quote a checkout URL just as easily as a report one. A
+     * guard keyed on `/report/` leaves them and still reports success.
+     */
+    expect(redactReportToken("/checkout?plan=all_reports&token=rpt_a9LY0Obbla1FVsclJ1nM")).toBe(
+      "/checkout?plan=all_reports&token=rpt_<redacted>"
+    );
+    // The page and the plan are the analytical value and must survive.
+    expect(
+      redactReportToken("/checkout?plan=all_reports&token=rpt_aaaaaaaaaaaaaaaaaaaa")
+    ).toContain("plan=all_reports");
+    // A checkout with no token is untouched.
+    expect(redactReportToken("/checkout?plan=all_reports")).toBe("/checkout?plan=all_reports");
+  });
+
+  it("redacts inside a sentence without eating the sentence", () => {
+    const tail = "PASS — what this reader tapped at /report/rpt_a9LY0Obbla1FVsclJ1nM behaves";
+    const out = redactReportToken(tail);
+    expect(out).toBe("PASS — what this reader tapped at /report/<redacted> behaves");
+    expect(out).not.toMatch(/rpt_[A-Za-z0-9]{6,}/);
+
+    // Two in one line, which a multi-device tail really can carry.
+    expect(redactReportToken("a /report/rpt_aaaaaaaaaa b /report/rpt_bbbbbbbbbb c")).toBe(
+      "a /report/<redacted> b /report/<redacted> c"
+    );
   });
 });
