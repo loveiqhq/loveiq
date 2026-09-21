@@ -209,11 +209,23 @@ export async function GET(request: Request) {
      * able to reason about anything recent. Exactly the "live, not a snapshot"
      * property this whole job exists for.
      *
-     * Sized against measured growth: ~3 new chunks an hour against roughly 7 this
-     * can embed per run (the edge worker manages ~13 a minute), 96 runs a day.
+     * THE SIZING BELOW IS NO LONGER THE WHOLE STORY, and the old figure was wrong
+     * enough to mislead. It read "~3 new chunks an hour against roughly 7 this can
+     * embed per run", which held while Drive was one account's documents.
      *
-     * ponytail: a builder-version bump that rewrites thousands of chunks drains at
-     * ~670/day, so a full re-index still wants `scripts/brain-embed-backfill.ts`.
+     * On 2026-09-21 the Drive walk was widened to every colleague and wrote ~700
+     * chunks in an afternoon. Measured: 230 sat unembedded across three consecutive
+     * runs — not failing, just arriving faster than ~7-a-run can absorb, which is
+     * about eight hours to drain. During that window the new material is invisible
+     * to the semantic arm and findable only if the question happens to share its
+     * words, which is exactly how the legal pages measured as "0 of 5 unreachable"
+     * twenty minutes after they were indexed.
+     *
+     * SO: after any bulk addition — a widened walk, a re-chunk, a builder-version
+     * bump — drain it deliberately with `scripts/brain-embed-backfill.ts` rather
+     * than waiting. It cleared those 238 in five minutes against the eight hours
+     * this loop would have taken. And do not measure retrieval until
+     * `select count(*) from brain_chunk where embedding is null` reads zero.
      */
     try {
       // Bounded so ONE embed request cannot outlive this function. Worst case

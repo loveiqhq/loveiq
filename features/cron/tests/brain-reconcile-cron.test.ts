@@ -134,8 +134,13 @@ function routeFetch(over: Record<string, unknown> = {}) {
     // number arrives in the header rather than the body.
     if (path.includes("source=eq.report") || path.includes("source=eq.domain")) {
       const held = path.includes("source=eq.report")
-        ? ((over.reportHeld as number | undefined) ?? 682)
-        : ((over.domainHeld as number | undefined) ?? 341);
+        ? // DERIVED, NOT HARDCODED. These were literal 682 and 341, and adding eleven
+          // rows of shipped report copy on 2026-09-21 turned main red — the reconciler
+          // correctly reported the builder and the "corpus" disagreeing, because the
+          // fixture's idea of the corpus had gone stale. A number describing the data
+          // does not belong in a fixture when the builder can be asked.
+          ((over.reportHeld as number | undefined) ?? buildReportVoiceRows(STAMP).length)
+        : ((over.domainHeld as number | undefined) ?? buildDomainRows(STAMP).length);
       return { ok: true, json: async () => [], headers: { get: () => `0-0/${held}` } };
     }
     /**

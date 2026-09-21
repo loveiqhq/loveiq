@@ -51,6 +51,14 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run visual regression tests
+        # BOTH projects. `Component Visual Regression` skips itself on anything that
+        # is not Mobile Chrome, so running only Desktop Chrome skipped it every week
+        # since it was written — "Running 8 tests … 1 skipped, 7 passed" on every
+        # scheduled run, and the one skipped is the whole mobile-nav check. It is the
+        # only baseline in the set with no `*-linux.png` beside its `*-darwin.png`,
+        # which is the tell. Mobile Chrome is chromium under device emulation, so
+        # this costs no extra browser download.
+        #
         # Playwright names golden images per platform, so the runner can only ever
         # compare against `*-linux.png`. The committed baselines were generated on a
         # Windows machine (`*-win32.png`), so every scheduled run since this workflow
@@ -67,9 +75,9 @@ jobs:
             # 2026-08-28, the white landing baseline passed at 0.4% and was kept, which
             # left a permanent fixed 0.4% offset eating 40% of its 1% budget. `=all`
             # matches what this input claims to do — regenerate, not compare.
-            npx playwright test visual-regression --project="Desktop Chrome" --update-snapshots=all
+            npx playwright test visual-regression --project="Desktop Chrome" --project="Mobile Chrome" --update-snapshots=all
           else
-            npx playwright test visual-regression --project="Desktop Chrome"
+            npx playwright test visual-regression --project="Desktop Chrome" --project="Mobile Chrome"
           fi
         env:
           PLAYWRIGHT_BASE_URL: ${{ env.TARGET_URL }}

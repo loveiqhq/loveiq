@@ -905,6 +905,33 @@ function sourceCoverageProbes(live: LiveCounts): RetrievalProbe[] {
       "what does the literature say about relationship satisfaction",
       topSource("evidence", 3)
     ),
+    /**
+     * THE SHIPPED COPY ADDED ON 2026-09-21, probed for the same reason the evidence
+     * base is: a source with nothing asserting it can be demoted into invisibility and
+     * the battery would score exactly the same. All three were measured absent before
+     * the change and at rank 1 after it.
+     *
+     * The legal pages are React components, so `git ls-files "*.md"` never saw them;
+     * the FAQ and the practice-score guidance were data files the builders did not
+     * import. Between them they are what we publish, what we promise and what we are
+     * legally answerable for.
+     */
+    P("legal-imprint", "what is in our imprint", bodyHas(/Hasenheide|Commercial Register|HRB/, 5)),
+    P(
+      "legal-cookies",
+      "what does our cookie policy tell visitors about controlling cookies",
+      bodyHas(/cookie/i, 5)
+    ),
+    P(
+      "faq-reachable",
+      "what do we tell customers about whether the assessment is anonymous",
+      bodyHas(/anonymous/i, 8)
+    ),
+    P(
+      "practice-score-guidance",
+      "what does a high fantasy pull with a low lived pleasure mean",
+      bodyHas(/Fantasy Pull|Lived Pleasure/, 8)
+    ),
     P("src-ga4", "how many sessions and users did google analytics record", topSource("ga4")),
     P("src-gsc", "what do people type into google to find us", topSource("gsc")),
     P("src-slack", "what has the team been discussing in slack", topSource("slack"), {
@@ -1887,6 +1914,28 @@ function perSourceDepthProbes(live: LiveCounts): RetrievalProbe[] {
     ),
 
     // ── COMMIT ───────────────────────────────────────────────────────────────
+    /**
+     * SITS ON THE BACKFILL EDGE, so it moves whenever the corpus grows. Measured
+     * 2026-09-21 after the Drive walk was widened to every colleague:
+     *
+     *   want=12 (the default this probe uses): the answer is ABSENT
+     *   want=14                              : it is at position 12, five times out of five
+     *
+     * Not flakiness, and not a ranking fault. Within its own source the answer is
+     * SECOND of the `doc` chunks — nothing displaced it there. Every `doc` chunk shares
+     * one `source:grain` bucket, so `grainCap = 1` gives the source a single first-pass
+     * slot and everything after it depends on backfill room. 452 new drive chunks
+     * consumed that room.
+     *
+     * Confirmed by exclusion rather than assumed: re-running with
+     * `exclude_sources: ["drive"]` passes, and it was the only one of five failing
+     * probes for which that was true.
+     *
+     * So this reddens on corpus growth and recovers on corpus shrinkage, which makes it
+     * a poor regression signal and a good pressure gauge. Before tuning anything for it,
+     * check where the answer sits WITHIN `doc` — if it is still near the top there, the
+     * ranking is fine and the probe is simply reading the edge.
+     */
     P(
       "cm-marcus-line",
       "explain a recent change in plain english",
@@ -3112,6 +3161,41 @@ async function mcpProbes(): Promise<McpProbe[]> {
       tool: "post_to_slack",
       args: { channel: "__no_such_channel__", text: "this must never post" },
       check: contains("no channel called", "prod-alerts"),
+    },
+    /**
+     * THE TWO WRITE TOOLS THAT HAD NO LIVE PROBE AT ALL.
+     *
+     * Measured 2026-09-21 by listing the deployed tools and grepping this file:
+     * `record_decision` and `write_to_google_doc` were the only two of seventeen with
+     * no mention here. Both have unit tests, which prove the handler; neither had
+     * anything proving the handler is still REACHABLE on the deployed endpoint, which
+     * is the whole reason this battery exists.
+     *
+     * Refusal paths only, like the three above — a refusal writes nothing. For
+     * `record_decision` that matters more than for most: its `actor` is self-declared,
+     * and a forged decision reappears under this server's most assertive header on
+     * every future search.
+     */
+    {
+      kind: "mcp-decision-needs-an-actor",
+      tool: "record_decision",
+      args: { decision: "This decision must never be recorded by the battery." },
+      check: contains("who decided it"),
+    },
+    {
+      kind: "mcp-decision-refuses-a-fragment",
+      // Too short to be a decision. The refusal is what stops the corpus filling with
+      // one-word records that outrank real ones on the strength of the source alone.
+      tool: "record_decision",
+      args: { decision: "ok", actor: "Battery Probe" },
+      check: absent("recorded"),
+    },
+    {
+      kind: "mcp-google-doc-needs-a-target",
+      // Neither a title to create nor a document to append to: nothing to write.
+      tool: "write_to_google_doc",
+      args: { content: "This must never reach a document." },
+      check: absent("https://docs.google.com"),
     },
     {
       kind: "mcp-notion-unknown-parent",

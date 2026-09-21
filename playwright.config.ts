@@ -82,7 +82,20 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 1 : 3, // limit local parallelism so Firefox cold-start doesn't compete with 5 other simultaneous browser launches
+  /**
+   * FOUR IN CI, NOT ONE, and the difference is the whole feasibility of the gate.
+   *
+   * Measured 2026-09-21 on the full suite, five browser projects:
+   *   1 worker  — about 45 minutes, extrapolated from 8m54s for one project
+   *   4 workers — 5m53s, 315 passed, against a local build
+   *
+   * Nobody would accept the first on every push, and that is presumably why this
+   * never became a gate. A GitHub standard runner has 4 vCPU.
+   *
+   * Locally 3, so Firefox's cold start does not compete with five simultaneous
+   * browser launches on a machine that is also being used.
+   */
+  workers: process.env.CI ? 4 : 3,
   reporter: "html",
   expect: {
     toHaveScreenshot: {

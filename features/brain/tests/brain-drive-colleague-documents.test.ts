@@ -217,6 +217,85 @@ describe("colleagueDocuments", () => {
     expect(r.items).toHaveLength(1);
   });
 
+  /**
+   * COMPLETENESS IS A SWEEP GATE, not a statistic.
+   *
+   * `listed.complete` decides whether the sweep deletes rows that were not listed this
+   * run. It used to read the ADMIN listing alone, which was survivable while this
+   * function returned at most fourteen meeting notes. Returning a colleague's whole
+   * Drive changes that: one mailbox lost to the clock or to a refused token would
+   * present ~100 live documents to the sweep as deleted — too few to trip the majority
+   * guard, so they would actually go, come back next run, and go again.
+   */
+  it("is complete when every mailbox was walked to the end", async () => {
+    mailboxes.value = ["mo@loveiq.org", "mb@loveiq.org"];
+    drive["mo@loveiq.org"] = [{ id: "a", name: "One" }];
+    drive["mb@loveiq.org"] = [{ id: "b", name: "Two" }];
+    expect((await colleagueDocuments(new Set(), () => false)).complete).toBe(true);
+  });
+
+  it("is NOT complete when a colleague's token is refused", async () => {
+    mailboxes.value = ["mb@loveiq.org", "mo@loveiq.org"];
+    refuseToken.add("mb@loveiq.org");
+    drive["mo@loveiq.org"] = [{ id: "n1", name: NOTE }];
+    expect((await colleagueDocuments(new Set(), () => false)).complete).toBe(false);
+  });
+
+  it("is NOT complete when a colleague's listing fails", async () => {
+    mailboxes.value = ["mo@loveiq.org"];
+    listFails.add("mo@loveiq.org");
+    expect((await colleagueDocuments(new Set(), () => false)).complete).toBe(false);
+  });
+
+  /**
+   * TWO CLOCK CHECKS, TWO TESTS. The walk asks the clock once per mailbox and once per
+   * page, and a single test hits whichever comes first — mutation testing showed the
+   * original one passing through the PAGE check while the MAILBOX check's
+   * `complete = false` was deleted. One test per path, with the call count chosen so
+   * the intended one trips.
+   *
+   * Each mailbox with a single unpaged result costs exactly two clock calls: the
+   * mailbox check, then the page check.
+   */
+  it("is NOT complete when the clock stops it between mailboxes", async () => {
+    mailboxes.value = ["a@loveiq.org", "b@loveiq.org", "c@loveiq.org"];
+    for (const m of mailboxes.value) drive[m] = [{ id: m, name: NOTE }];
+    let calls = 0;
+    // Calls 1-2 walk the first mailbox; call 3 is the second mailbox's own check.
+    const r = await colleagueDocuments(new Set(), () => ++calls >= 3);
+    expect(r.items.map((f) => f.id)).toEqual(["a@loveiq.org"]);
+    expect(r.complete).toBe(false);
+  });
+
+  it("is NOT complete when the clock stops it between pages", async () => {
+    mailboxes.value = ["a@loveiq.org"];
+    paged.add("a@loveiq.org");
+    drive["a@loveiq.org"] = [
+      { id: "p1", name: "First" },
+      { id: "p2", name: "Second" },
+    ];
+    let calls = 0;
+    // Call 1 is the mailbox check, call 2 the first page; call 3 is the second page.
+    const r = await colleagueDocuments(new Set(), () => ++calls >= 3);
+    expect(r.items.map((f) => f.id)).toEqual(["p1"]);
+    expect(r.complete).toBe(false);
+  });
+
+  /**
+   * `null` and `[]` are different answers from the directory and only one is a
+   * failure. Conflating them blocks the sweep forever wherever the directory is not
+   * configured — which is every test in `brain-drive.test.ts`, and how this was caught.
+   */
+  it("is NOT complete when the directory cannot be read at all", async () => {
+    mailboxes.value = null;
+    expect((await colleagueDocuments(new Set(), () => false)).complete).toBe(false);
+  });
+
+  it("IS complete when the directory is readable and simply empty", async () => {
+    mailboxes.value = [];
+    expect((await colleagueDocuments(new Set(), () => false)).complete).toBe(true);
+  });
+
   it("keeps walking when one colleague refuses, and counts the refusal", async () => {
     mailboxes.value = ["mb@loveiq.org", "mo@loveiq.org"];
     refuseToken.add("mb@loveiq.org");

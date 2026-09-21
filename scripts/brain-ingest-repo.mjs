@@ -46,6 +46,7 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import { legalPageToMarkdown } from "./lib/legal-page-text.mjs";
 
 const REPO = "loveiqhq/loveiq";
 const DRY_RUN = process.argv.includes("--dry-run");
@@ -240,7 +241,19 @@ export function chunkMarkdown(path, text) {
     packed.shift();
   }
 
-  const docName = path.split("/").pop();
+  /**
+   * The FOLDER for a Next.js route, because every one of them is called `page.tsx`.
+   *
+   * All six legal pages produced titles starting "page.tsx > …" — a token shared by
+   * all of them, carrying no meaning, in the field the ranker weights twice. The
+   * directory is the name a person would use: "privacy-policy > 7. Data Retention".
+   * Markdown files are unaffected; their own filename is already the name.
+   */
+  const pathParts = path.split("/");
+  const fileName = pathParts.pop();
+  const docName = /^(page|route|layout)\.tsx?$/.test(fileName ?? "")
+    ? (pathParts.pop() ?? fileName)
+    : fileName;
 
   /**
    * Title fed to retrieval. Built as filename + heading breadcrumb, with
@@ -278,6 +291,33 @@ export function chunkMarkdown(path, text) {
     });
 }
 
+/**
+ * THE LEGAL PAGES, which are React components and therefore invisible to `*.md`.
+ *
+ * Six customer-facing pages — privacy policy, both sets of terms, the cookie policy,
+ * the imprint and the digital-content terms — about 22 KB of the text we are legally
+ * answerable for. Measured 2026-09-21: a sentence taken straight out of the privacy
+ * policy ("Art. 6(1)(f) GDPR (legitimate interest)") appeared in ZERO chunks, so
+ * "what is our legal basis for processing" and "what do our refund terms say" had no
+ * source at all. For a company holding sexual-health data that is the document you
+ * most need quoted rather than paraphrased.
+ *
+ * Converted to markdown and pushed through `chunkMarkdown` rather than given their own
+ * chunker: the heading structure, the `path#slug` ids and the sweep all come for free,
+ * and `## 7. Data Retention` becomes a section the way a markdown heading would.
+ *
+ * Read from the worktree, which is why this lives in the Action and not in a Vercel
+ * function — a bundled function cannot read `app/**` off disk.
+ */
+const LEGAL_PAGES = [
+  "app/privacy-policy/page.tsx",
+  "app/terms-and-conditions/page.tsx",
+  "app/terms-of-use/page.tsx",
+  "app/cookies/page.tsx",
+  "app/imprint/page.tsx",
+  "app/digital-content-terms/page.tsx",
+];
+
 function collectDocs() {
   const files = git(["ls-files", "*.md"])
     .split("\n")
@@ -303,10 +343,32 @@ function collectDocs() {
     readCount += 1;
     rows.push(...chunkMarkdown(f, text));
   }
+
+  // The legal pages, converted to markdown and chunked by the same function.
+  for (const f of LEGAL_PAGES) {
+    let tsx;
+    try {
+      tsx = fs.readFileSync(f, "utf8");
+    } catch {
+      skipped += 1;
+      continue;
+    }
+    const md = legalPageToMarkdown(tsx);
+    // A page that yields almost nothing means the extraction broke, not that the page
+    // is empty — say so rather than silently indexing a stub.
+    if (md.length < 200) {
+      console.warn(`${f}: extracted only ${md.length} characters — the JSX shape may have changed`);
+      continue;
+    }
+    readCount += 1;
+    rows.push(...chunkMarkdown(f, md));
+  }
   if (skipped > 0) {
     console.warn(`${skipped} markdown file(s) are in the git index but missing from the worktree`);
   }
-  return { rows, fileCount: readCount, listedCount: files.length };
+  // The legal pages are listed too, or the diagnostic below reports a NEGATIVE
+  // count of unreadable files — which is how this line first announced the change.
+  return { rows, fileCount: readCount, listedCount: files.length + LEGAL_PAGES.length };
 }
 
 /**

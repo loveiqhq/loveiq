@@ -65,6 +65,69 @@ describe("report voice — the shipped copy, indexed", () => {
     }
   });
 
+  /**
+   * EVERY SHIPPED REPORT FILE, not four of five.
+   *
+   * `data/report-practice-intro.ts` was the one this builder did not import, found
+   * 2026-09-21 by diffing `data/report-*.ts` against the imports at the top. It is
+   * rendered to every reader by `features/report/ui/reportContent.ts` and it is not
+   * decoration: it carries the "probability-based estimates, not deterministic"
+   * disclaimer, the definitions of Fantasy Pull and Lived Pleasure, and all four
+   * combinations. "What does high fantasy pull with low lived pleasure mean" is an
+   * ordinary question about our own product that the brain could not answer from the
+   * copy we ship.
+   */
+  it("indexes the guidance on how to read the two practice scores", () => {
+    const intro = rows.filter((r) => r.source_id.startsWith("practice-intro:"));
+    expect(intro.length).toBeGreaterThanOrEqual(10);
+    const all = intro.map((r) => r.body).join(" ");
+    expect(all).toMatch(/probability-based/i);
+    expect(all).toMatch(/Fantasy Pull/);
+    expect(all).toMatch(/Lived Pleasure/);
+  });
+
+  it("keeps each score combination separately retrievable", () => {
+    // One block per paragraph, so a question about ONE combination does not have to
+    // pull all four to reach it.
+    const intro = rows.filter((r) => r.source_id.startsWith("practice-intro:"));
+    const combos = [
+      "Low Fantasy + Low Pleasure",
+      "Low Fantasy + High Pleasure",
+      "High Fantasy + Low Pleasure",
+      "High Fantasy + High Pleasure",
+    ];
+    for (const c of combos) {
+      const holding = intro.filter((r) => r.body.includes(c));
+      expect(holding.length).toBe(1);
+    }
+  });
+
+  /**
+   * THE MOST-READ COPY WE PUBLISH, and the brain held none of it.
+   *
+   * `data/faqs.ts` is rendered by WFAQ.tsx on both landing variants and emitted as
+   * FAQPage JSON-LD, so it is simultaneously what customers read before buying and
+   * what Google indexes. Found 2026-09-21 by diffing every file in `data/` against
+   * the repo-built ingesters' imports.
+   */
+  it("indexes the homepage FAQ, one row per question", () => {
+    const faq = rows.filter((r) => r.source_id.startsWith("faq:"));
+    expect(faq.length).toBeGreaterThanOrEqual(8);
+    // The question is in the title AND the body, so it matches however it is asked.
+    for (const r of faq) {
+      expect(r.title).toMatch(/^Homepage FAQ as shipped — .+/);
+      expect(r.body.length).toBeGreaterThan(20);
+    }
+  });
+
+  it("keys a FAQ on its question, so editing the ANSWER does not orphan the row", () => {
+    // An id derived from the answer would change on every copy edit and leave the old
+    // row behind for the sweep to find — the orphan problem the drive ingester hit.
+    const faq = rows.filter((r) => r.source_id.startsWith("faq:"));
+    expect(faq.some((r) => /^faq:[a-z0-9-]+$/.test(r.source_id))).toBe(true);
+    expect(new Set(faq.map((r) => r.source_id)).size).toBe(faq.length);
+  });
+
   it("gives every row a distinct id, or an upsert would silently drop copy", () => {
     const ids = rows.map((r) => r.source_id);
     expect(new Set(ids).size).toBe(ids.length);

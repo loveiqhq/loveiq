@@ -110,7 +110,38 @@ export async function buildDailyBrief(day: string): Promise<DailyBrief | null> {
   // — anyone who can write a commit message or send us an email can put text in it.
   // 100s, not the shared 45s default: see `complete`. brain-brief's maxDuration is
   // raised to match, so the route outlives the call it is waiting on.
-  const result = await complete(buildPrompt(BRIEF_QUESTION, chunks), 100_000);
+  /**
+   * RETRY A TRANSIENT REFUSAL, because losing the day is permanent.
+   *
+   * The caller claims the day's alert slot BEFORE calling this, and only marks it
+   * delivered on success or on a deliberate quiet day. So a throw here leaves the
+   * claim unmarked and the schedule — which only ever asks for yesterday — never
+   * comes back for it. Measured 2026-09-21 by correlating `slack_alert_sent` with
+   * `cron_run`: exactly two briefs were never delivered, 2026-09-09 and 2026-09-14,
+   * and they are exactly the two days the model refused. Both briefs are gone.
+   *
+   * One wait, not the miner's loop: this is a single call, and the failures seen
+   * were a 503 that cleared in seconds and a daily quota that a retry cannot help.
+   * `retryAfterMs` comes from `complete` itself, which already distinguishes the
+   * per-minute limit from the daily one.
+   */
+  let result = await complete(buildPrompt(BRIEF_QUESTION, chunks), 100_000);
+  if (
+    !result.ok &&
+    (result.reason === "overloaded" || result.reason === "rate_limited") &&
+    result.retryAfterMs &&
+    !result.dailyQuota
+  ) {
+    // Captured before the closure: `result` is reassigned below, so TypeScript
+    // cannot keep the narrowing inside the callback.
+    const waitMs = result.retryAfterMs;
+    logger.info(
+      { reason: result.reason, waitMs },
+      "brain-brief: the model refused, waiting once before giving up on the day"
+    );
+    await new Promise((r) => setTimeout(r, waitMs));
+    result = await complete(buildPrompt(BRIEF_QUESTION, chunks), 100_000);
+  }
   if (!result.ok) {
     /**
      * THROW, do not return null.
