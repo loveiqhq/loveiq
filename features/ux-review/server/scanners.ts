@@ -98,6 +98,42 @@ you cannot see what caused it, say that the screen changed and that the cause is
 not visible — do not name a button you did not watch being pressed.
 `.trim();
 
+/**
+ * THE FIRST CHAMPION/CHALLENGER EXPERIMENT, AND WHY IT IS OVER (2026-09-21).
+ *
+ * `LoveIQ report UX (challenger: observation only)` ran against the same 197
+ * recordings as its champion. The hypothesis — that a scanner forbidden from
+ * explaining WHY anything happened would stop inventing causes — was answered,
+ * and answered yes:
+ *
+ *     champion    197 watched · 43 judged · 22 invented a cause · 0 real
+ *     challenger  197 watched ·  1 judged ·  0 invented a cause · 0 real
+ *
+ * It is retired anyway, for two reasons that only became visible on the day.
+ *
+ * FIRST, THE WIN EVAPORATED. Those 22 invented causes mattered because each one
+ * posted a note under a real person's submission saying our own scanner had
+ * described something that never happened. Those are no longer posted at all —
+ * see the delivery rules in verify-ux-findings.mjs. With that fixed both
+ * scanners are equally harmless, and the challenger's only measured advantage
+ * was over a problem that no longer exists.
+ *
+ * SECOND, THE STOPPING RULE WAS UNREACHABLE. "30 findings or four weeks" was
+ * set from the champion's flag rate and applied to a scanner whose entire
+ * hypothesis is flagging less: at 1% of recordings it needed roughly 300 days
+ * to reach 30. A rule that cannot be met is not a rule, and waiting to the
+ * deadline would have decided on a sample of about four.
+ *
+ * WHAT IS NOT SETTLED, and is the question worth the next spend: NEITHER
+ * scanner has ever been right — 0 of 43 for the champion across 197 report
+ * recordings. That is either "there are no report defects" or "our probes
+ * cannot see them", and no amount of prompt work tells those apart. The survey
+ * scanner holds the only 2 confirmed findings in the whole system.
+ *
+ * The evidence outlives the deletion: the observations are PostHog events and
+ * the verdicts are rows in `ux_finding`, both keyed by scanner name. The
+ * champion/challenger machinery stays — the next experiment will use it.
+ */
 export const UX_SCANNERS: readonly UxScanner[] = [
   {
     id: "01a0a00e-1714-742d-baaf-567b5ca225f0",
@@ -231,94 +267,6 @@ export const UX_SCANNERS: readonly UxScanner[] = [
       "answering yes anyway is the single failure this rule exists to stop.",
       "",
       CITE,
-    ].join("\n"),
-  },
-  /**
-   * CHALLENGER — report UX, observation only. Created 2026-09-20.
-   *
-   * WHY THIS ONE. Scored from the ledger, `LoveIQ report UX` is 0 right and 38
-   * wrong, and the single biggest bucket is not a near miss: **20 of the 38 are
-   * `contradicted`** — the scanner named an unlock click or reaching checkout in
-   * a session where our own events carry no `unlock_click`, `paywall_initiated`,
-   * `checkout_started` or `begin_checkout` at all. It is not mis-ranking real
-   * defects; it is asserting presses nobody made.
-   *
-   * WHY NOT HARDEN THE PROMPT. That has been tried and measured as failed. The
-   * champion already ends with "Do not say which control the user pressed unless
-   * the press and the change it caused are both visible", and it produced those
-   * twenty anyway. A rule the model breaks is not made truer by rewording it.
-   *
-   * SO THE CHANGE IS STRUCTURAL: this scanner is not asked to diagnose. It
-   * reports SCREEN STATES and is forbidden from naming a control or a motive at
-   * all — the thing it was worst at is the thing it no longer has permission to
-   * attempt. Causation is the probe's job, and the probe cannot hallucinate.
-   *
-   * IT STAYS SCOREABLE because `classify()` already keys on observational
-   * phrasing — "nothing happened", "no visible change", "returned back to",
-   * "covered", "clipped" — which is exactly the vocabulary left when causal
-   * language is removed. Checked against the regexes in verify-ux-findings.mjs
-   * before writing this, not assumed.
-   *
-   * WHAT WOULD FALSIFY IT: if the challenger's `contradicted` count is no lower
-   * than the champion's over the same sessions, the hypothesis is wrong and this
-   * scanner should be deleted rather than tuned.
-   */
-  {
-    id: "01a0c035-e3d1-7459-8ead-c71e4e09b222",
-    name: "LoveIQ report UX (challenger: observation only)",
-    role: "challenger",
-    triggerEvent: "report_viewed",
-    samplingMode: "focused",
-    estimatedMonthlyCredits: 574,
-    creditLimit: 700,
-    scannerVersion: 1,
-    prompt: [
-      "You are watching a recording of the LoveIQ report — a long, scroll-based",
-      "psychology report on loveiq.org, with some chapters locked behind a paywall.",
-      "Locked chapters deliberately show blurred placeholder artwork; that is correct,",
-      "not a defect.",
-      "",
-      "YOUR JOB IS TO DESCRIBE THE SCREEN, NOT TO EXPLAIN IT.",
-      "A browser test runs afterwards and establishes cause. You do not need to, and",
-      "you must not try. Specifically, in every answer you give:",
-      "- Never name a control the user pressed. Not 'they clicked Unlock', not 'they",
-      "  tapped the price'. If a press is not both visible and followed by a visible",
-      "  change, it did not happen as far as you are concerned.",
-      "- Never state what the user wanted, expected, intended or was trying to do.",
-      "- Never explain WHY the screen changed. Say only what it changed from and to.",
-      "If you find yourself writing the word 'because', delete the sentence.",
-      "",
-      CORRECT_LOOKS_LIKE,
-      "",
-      "Answer YES only for a screen state you can point at:",
-      "1. Text that says something went wrong is visible — in particular the literal",
-      '   string "Unable to process request." — or a region that stays empty where',
-      "   content belongs.",
-      "2. The screen returns to a view the recording already showed earlier, and you",
-      "   can name both views.",
-      "3. The same control is tapped two or more times and nothing on screen changes.",
-      "   Report it as 'nothing happened' — do not say what the control was for.",
-      "4. A modal is closed and the same modal is visible again, twice or more.",
-      "5. Body text is readable through a blur that is meant to hide it.",
-      "6. Content is covered, clipped or cut off, or the page scrolls sideways.",
-      "",
-      DO_NOT_FLAG,
-      "",
-      "Format, and this is the whole answer:",
-      "- One sentence naming what is wrong ON SCREEN.",
-      "- Where on screen it is.",
-      // "The timestamp", not "Cite the moment", because THIS IS WHAT IS LIVE.
-      // The scanner was created with this wording, every one of its 186
-      // observations was produced under it, and the 170-session comparison
-      // against its champion rests on it. It was changed here to satisfy a test
-      // that matched one exact phrase and never re-synced, so git and PostHog
-      // disagreed for a day — which the drift check caught, correctly.
-      //
-      // Editing the live prompt to match git instead would bump scanner_version
-      // mid-experiment. See AGENT_README: a scanner observes a session once
-      // ever, so the findings either side of that bump are not comparable.
-      "- The timestamp in the recording.",
-      "If you cannot give all three from what you saw, answer NO.",
     ].join("\n"),
   },
 ];

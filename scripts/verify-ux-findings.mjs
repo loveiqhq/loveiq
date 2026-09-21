@@ -919,11 +919,21 @@ for (const [
     if (why) {
       contradicted += 1;
       console.log(`REFUTED ${sessionId}  ${scannerName} — ${why}`);
-      const sent = await deliverVerdict(
-        sessionId,
-        `🚫 *Contradicted by our own events* — ${why}. Treat the description as ` +
-          `unreliable; the scanner reports what changed but infers why.`
-      );
+      /**
+       * RECORDED, NOT ANNOUNCED. This used to post into the reader's thread.
+       *
+       * Measured 2026-09-21: 80 messages had been posted under people's
+       * submissions and 2 of them reported a real problem. 22 were this one —
+       * a note saying our own scanner had described something that never
+       * happened. That is a fact about our tooling, published under a
+       * customer's name, and it buries the two that matter.
+       *
+       * Nothing is lost: the row still goes to the ledger, and the daily digest
+       * already reports the count in aggregate ("13 were contradicted by our
+       * own records"). The team learns the same thing without a per-person
+       * message saying the AI was wrong about them.
+       */
+      const sent = "suppressed";
       // `sent` is a string now, so a bare truthiness test would finalise the
       // claim even on "failed" and the next run would never retry it.
       if (sent !== "failed") await markVerified(observationId);
@@ -1150,7 +1160,25 @@ for (const [
   // scored; it does not appear under a reader's submission, because a prompt on
   // trial has not earned a place in the channel — and two scanners posting the
   // same verdict twice is how a useful thread becomes noise.
-  const sent = isChallenger(scannerName) ? "suppressed" : await deliverVerdict(sessionId, verdict);
+  /**
+   * ONLY A REPRODUCTION, OR AN HONEST "I COULD NOT CHECK", REACHES A PERSON.
+   *
+   * "Could not reproduce" was 55 of the 80 messages ever posted into readers'
+   * threads, against 2 that reported a real problem. It was added so a finding
+   * was never silently dropped — and that reason expired when the ledger
+   * landed, because every verdict is now recorded whether or not anyone is
+   * told. What was left was 55 notes saying nothing happened, under the names
+   * of people something may well have happened to.
+   *
+   * `inconclusive` still posts: that one is a request for a human, not a
+   * result, and there have been two of them in total.
+   */
+  const speaks = reproduced || inconclusive;
+  const sent =
+    isChallenger(scannerName) || !speaks ? "suppressed" : await deliverVerdict(sessionId, verdict);
+  if (sent === "suppressed" && !isChallenger(scannerName) && !speaks) {
+    console.log(`  (could not reproduce — recorded in ux_finding, not posted)`);
+  }
   if (sent === "suppressed") {
     console.log(`  (challenger — recorded in ux_finding, not posted)`);
   }

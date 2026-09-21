@@ -707,8 +707,13 @@ describe("the digest ignores challenger scanners", () => {
   const CHALLENGER = "LoveIQ report UX (challenger: observation only)";
 
   it("knows which scanners are experiments", () => {
+    // Recognised from the NAME, so it still holds after a challenger is
+    // retired from scanners.ts while its ledger rows and events remain.
     expect(isChallengerScanner(CHALLENGER)).toBe(true);
+    expect(isChallengerScanner("Anything At All (challenger: something else)")).toBe(true);
     expect(isChallengerScanner("LoveIQ report UX")).toBe(false);
+    // Not a challenger merely for containing the word.
+    expect(isChallengerScanner("Challenger deep dive")).toBe(false);
     // An unknown scanner is PRODUCTION. Defaulting the other way would let a
     // scanner missing from git vanish from the digest silently; drift already
     // alerts on that, and hiding it here would mask the alert.
@@ -771,8 +776,10 @@ describe("the digest ignores challenger scanners", () => {
     vi.stubEnv("SUPABASE_URL", "https://test.supabase.co");
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service_key");
     await fetchCoverageStats();
-    expect(hogql, "the coverage query must exclude challengers").toContain(CHALLENGER);
-    expect(hogql).toMatch(/NOT IN/);
+    // By convention, not by a name list: a retired challenger leaves
+    // scanners.ts while its events stay in PostHog for another month.
+    expect(hogql, "the coverage query must exclude challengers").toMatch(/NOT LIKE/);
+    expect(hogql).toMatch(/\(challenger/);
   });
 });
 
