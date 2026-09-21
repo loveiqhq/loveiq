@@ -65,6 +65,43 @@ describe("report voice — the shipped copy, indexed", () => {
     }
   });
 
+  /**
+   * EVERY SHIPPED REPORT FILE, not four of five.
+   *
+   * `data/report-practice-intro.ts` was the one this builder did not import, found
+   * 2026-09-21 by diffing `data/report-*.ts` against the imports at the top. It is
+   * rendered to every reader by `features/report/ui/reportContent.ts` and it is not
+   * decoration: it carries the "probability-based estimates, not deterministic"
+   * disclaimer, the definitions of Fantasy Pull and Lived Pleasure, and all four
+   * combinations. "What does high fantasy pull with low lived pleasure mean" is an
+   * ordinary question about our own product that the brain could not answer from the
+   * copy we ship.
+   */
+  it("indexes the guidance on how to read the two practice scores", () => {
+    const intro = rows.filter((r) => r.source_id.startsWith("practice-intro:"));
+    expect(intro.length).toBeGreaterThanOrEqual(10);
+    const all = intro.map((r) => r.body).join(" ");
+    expect(all).toMatch(/probability-based/i);
+    expect(all).toMatch(/Fantasy Pull/);
+    expect(all).toMatch(/Lived Pleasure/);
+  });
+
+  it("keeps each score combination separately retrievable", () => {
+    // One block per paragraph, so a question about ONE combination does not have to
+    // pull all four to reach it.
+    const intro = rows.filter((r) => r.source_id.startsWith("practice-intro:"));
+    const combos = [
+      "Low Fantasy + Low Pleasure",
+      "Low Fantasy + High Pleasure",
+      "High Fantasy + Low Pleasure",
+      "High Fantasy + High Pleasure",
+    ];
+    for (const c of combos) {
+      const holding = intro.filter((r) => r.body.includes(c));
+      expect(holding.length).toBe(1);
+    }
+  });
+
   it("gives every row a distinct id, or an upsert would silently drop copy", () => {
     const ids = rows.map((r) => r.source_id);
     expect(new Set(ids).size).toBe(ids.length);

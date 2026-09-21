@@ -2,6 +2,7 @@ import { archetypeContent } from "@/data/report-archetypes";
 import { reportSections } from "@/data/report-general";
 import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
 import { summaryArchetypeContent } from "@/data/report-summary";
+import { reportPracticeIntroBlocks } from "@/data/report-practice-intro";
 import { splitBody } from "./notion";
 import { sweepStale, upsertChunks, type BrainRow, type IngestResult } from "./upsert";
 
@@ -129,6 +130,36 @@ export function buildReportVoiceRows(stampedAt: string): BrainRow[] {
       )
     );
   }
+
+  /**
+   * 3b. HOW TO READ THE TWO SCORES — the only shipped report file this builder was
+   * not reading.
+   *
+   * `data/report-practice-intro.ts` is rendered to every reader by
+   * `features/report/ui/reportContent.ts`, and it is not decoration: it carries the
+   * "probability-based estimates, not deterministic" disclaimer, the definitions of
+   * Fantasy Pull and Lived Pleasure, the high/low bands, and all four combinations —
+   * high fantasy with low pleasure and the rest. "What does a high fantasy pull and a
+   * low lived pleasure mean" is an ordinary question about our own product, and the
+   * brain could not answer it from the copy we actually ship.
+   *
+   * Found 2026-09-21 by diffing `data/report-*.ts` against this file's imports: four
+   * of five were read. One block per paragraph rather than one joined chunk, so a
+   * question about a single combination retrieves that combination.
+   */
+  reportPracticeIntroBlocks.forEach((html, i) => {
+    const text = htmlToText(String(html ?? ""));
+    if (text.length < 40) return;
+    rows.push(
+      ...rowsFor(
+        `practice-intro:${i + 1}`,
+        "Report copy as shipped — how to read the Fantasy Pull and Lived Pleasure scores",
+        text,
+        { chapter: "practice-intro", archetype: null, scope: "general" },
+        stampedAt
+      )
+    );
+  });
 
   // 4. Practice tendencies: intro prose plus grouped blocks, flattened per archetype.
   for (const [archetype, content] of Object.entries(reportPracticeTendencies)) {
