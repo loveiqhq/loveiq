@@ -23,11 +23,15 @@ let llmReply: { ok: true; text: string; truncated: boolean } | { ok: false; reas
   truncated: false,
 };
 const prompts: Array<Array<{ role: string; content: string }>> = [];
+/** Replies consumed in order before falling back to `llmReply`. */
+let llmReplies: unknown[] = [];
+
 vi.mock("@features/brain/server/llm", () => ({
   isLlmConfigured: () => llmConfigured,
   complete: vi.fn(async (messages: Array<{ role: string; content: string }>) => {
     prompts.push(messages);
-    return llmReply;
+    // A queued reply lets a test drive the retry: first call refuses, second answers.
+    return llmReplies.length ? llmReplies.shift() : llmReply;
   }),
 }));
 
@@ -49,6 +53,8 @@ const chunk = (source: string, i: number) => ({
 
 beforeEach(() => {
   rows = [chunk("commit", 1), chunk("notion", 1)];
+  // Drained here, or a test that fails part way leaves replies for the next one.
+  llmReplies = [];
   dbOk = true;
   dbPaths.length = 0;
   prompts.length = 0;
@@ -97,6 +103,44 @@ describe("buildDailyBrief — silence is the design", () => {
     llmConfigured = false;
     expect(await buildDailyBrief("2026-08-29")).toBeNull();
     expect(dbPaths).toHaveLength(0); // cheapest check first
+  });
+
+  /**
+   * A TRANSIENT REFUSAL MUST NOT COST THE DAY.
+   *
+   * The route claims the day's alert slot BEFORE calling this, and marks it delivered
+   * only on success or on a deliberate quiet day. A throw leaves the claim unmarked,
+   * and the schedule only ever asks for yesterday — so the day is gone.
+   *
+   * Measured 2026-09-21 by correlating `slack_alert_sent` with `cron_run`: exactly two
+   * briefs were never delivered, 2026-09-09 and 2026-09-14, and those are exactly the
+   * two days the model refused — one 503, one 429. Both briefs are lost.
+   */
+  it("waits and retries once when the model is overloaded", async () => {
+    llmReplies = [
+      { ok: false, reason: "overloaded", detail: "HTTP 503", retryAfterMs: 1 },
+      { ok: true, text: "Something worth saying about the day.", truncated: false },
+    ];
+    const brief = await buildDailyBrief("2026-09-20");
+    expect(brief?.text).toContain("Something worth saying");
+  });
+
+  it("does not retry when the DAILY quota is gone, which waiting cannot fix", async () => {
+    llmReplies = [
+      { ok: false, reason: "rate_limited", detail: "429", retryAfterMs: 1, dailyQuota: true },
+    ];
+    await expect(buildDailyBrief("2026-09-20")).rejects.toThrow(/unavailable/);
+    // One call, not two: a second would spend a request the daily allowance has not got.
+    expect(prompts.length).toBe(1);
+  });
+
+  it("still gives up after one retry, rather than looping", async () => {
+    llmReplies = [
+      { ok: false, reason: "overloaded", detail: "HTTP 503", retryAfterMs: 1 },
+      { ok: false, reason: "overloaded", detail: "HTTP 503", retryAfterMs: 1 },
+    ];
+    await expect(buildDailyBrief("2026-09-20")).rejects.toThrow(/unavailable/);
+    expect(prompts.length).toBe(2);
   });
 
   it("does NOT treat an unavailable model as a quiet day", async () => {
