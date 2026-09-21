@@ -104,12 +104,25 @@ function fail(msg) {
   process.exit(3);
 }
 
+/**
+ * The same allowlist every other per-session lookup here uses.
+ *
+ * The first version stripped quotes out of the id before interpolating it,
+ * which is escapable: a TRAILING BACKSLASH escapes the closing quote, and
+ * `SESSION_ID='x\\'` produced "unterminated string literal" from PostHog — the
+ * input had reached the SQL. It failed safe, but only by accident. An allowlist
+ * cannot be escaped, and `isSafeSessionId` in review.ts is the same rule; it is
+ * restated rather than imported because that file is TypeScript with `@shared`
+ * aliases and this probe runs under plain `node`.
+ */
+const isSafeSessionId = (id) => /^[A-Za-z0-9-]{1,64}$/.test(String(id));
+
 async function sessionPath(sessionId) {
   const rows = await hogQuery(
     `SELECT event, timestamp, properties.$viewport_width, properties.$os,
             properties.target_selector, properties.$current_url
        FROM events
-      WHERE properties.$session_id = '${sessionId.replace(/'/g, "")}'
+      WHERE properties.$session_id = '${sessionId}'
         AND timestamp > now() - INTERVAL 45 DAY
       ORDER BY timestamp ASC
       LIMIT 2000`,
@@ -340,6 +353,7 @@ if (scriptedSteps.length > 0) {
   all = scriptedSteps;
 } else {
   if (!SESSION_ID) fail("SESSION_ID is not set — nothing to replay. INCONCLUSIVE");
+  if (!isSafeSessionId(SESSION_ID)) fail(`SESSION_ID is not a session id — INCONCLUSIVE`);
   if (!process.env.POSTHOG_API_KEY) fail("POSTHOG_API_KEY is not set — INCONCLUSIVE");
   try {
     all = await sessionPath(SESSION_ID);

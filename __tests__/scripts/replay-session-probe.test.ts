@@ -164,6 +164,17 @@ describe("replaying the reader's own route", () => {
     expect(VERIFIER).toMatch(/r\.claimScoped \? "\*" : ""/);
   });
 
+  it("allowlists the session id rather than stripping it", () => {
+    // The first version removed quotes before interpolating into HogQL, which
+    // a TRAILING BACKSLASH escapes: SESSION_ID='x\\' produced "unterminated
+    // string literal" from PostHog, i.e. the input had reached the SQL. It
+    // failed safe, but by accident. Same rule as isSafeSessionId in review.ts.
+    expect(PROBE).toMatch(/\^\[A-Za-z0-9-\]\{1,64\}\$/);
+    expect(PROBE).toMatch(/isSafeSessionId\(SESSION_ID\)/);
+    // And the escapable version is gone.
+    expect(PROBE).not.toMatch(/sessionId\.replace\(/);
+  });
+
   it("keeps the three-way exit contract", () => {
     for (const code of ["process.exit(0)", "process.exit(1)", "process.exit(3)"]) {
       expect(PROBE, `${code} is missing`).toContain(code);
