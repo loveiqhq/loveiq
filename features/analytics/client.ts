@@ -1164,8 +1164,22 @@ export const trackRageClick = (params: {
   persistAnalyticsEvent("rage_click", params);
 };
 
-export const trackDeadClick = (params: { pathname: string; target_selector: string }) =>
-  track("dead_click", params);
+export const trackDeadClick = (params: {
+  pathname: string;
+  target_selector: string;
+  /**
+   * Which of the two things this was. `disabled_control` is a control that
+   * looks live and does nothing; `non_interactive` is a tap on prose or a
+   * container, which is 95% of the volume and mostly just reading.
+   */
+  reason?: "disabled_control" | "non_interactive";
+  /**
+   * How many times this selector had been dead-tapped in this pageview when the
+   * event fired. 1 on the first, 3 on the repeat — the signal that separates a
+   * reader who kept trying from a thumb resting on a paragraph.
+   */
+  repeat_count?: number;
+}) => track("dead_click", params);
 
 export const trackTabHidden = (params: { pathname: string; visible_ms: number }) =>
   track("tab_hidden", params);

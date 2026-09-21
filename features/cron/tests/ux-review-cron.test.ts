@@ -255,6 +255,57 @@ describe("ux-review cron", () => {
     expect(driftClaim?.[2]).toBe("2026-09-15");
   });
 
+  it("tells a quota alert what to actually do about it", async () => {
+    /**
+     * The closing hint has to match the problem. Every drift alert used to end
+     * "features/ux-review/server/scanners.ts is the source of truth", which is
+     * the fix for a rewritten prompt and is meaningless for an empty credit
+     * pool — that is a billing ceiling in PostHog, and nothing in this repo
+     * sets it. An alert that names the wrong remedy costs the reader the time
+     * it was supposed to save.
+     */
+    vi.setSystemTime(new Date("2026-09-15T10:00:00Z"));
+    mockFetchScannerDrift.mockResolvedValue([
+      {
+        scannerName: "(every scanner)",
+        reason: "quota",
+        detail: "the PostHog Vision credit pool is exhausted",
+      },
+    ]);
+
+    await GET(req());
+
+    const posted = mockNotifySlack.mock.calls
+      .map((c) => c[0] as { kind: string; text: string })
+      .find((c) => c.kind === "ux_review_drift");
+    expect(posted).toBeDefined();
+    expect(posted?.text).toContain("Raise the limit in PostHog");
+    expect(posted?.text).not.toContain("scanners.ts is the source of truth");
+    // "Scanner (every scanner)" reads as a stutter; the pool belongs to none.
+    expect(posted?.text).not.toContain("Scanner (every scanner)");
+  });
+
+  it("still names the file for a scanner-level drift", async () => {
+    // The other half of the branch above: removing the condition entirely would
+    // pass the quota test and silently drop the remedy from every prompt alert.
+    vi.setSystemTime(new Date("2026-09-15T10:00:00Z"));
+    mockFetchScannerDrift.mockResolvedValue([
+      {
+        scannerName: "LoveIQ report UX",
+        reason: "prompt",
+        detail: "the prompt in PostHog differs from the one in git",
+      },
+    ]);
+
+    await GET(req());
+
+    const posted = mockNotifySlack.mock.calls
+      .map((c) => c[0] as { kind: string; text: string })
+      .find((c) => c.kind === "ux_review_drift");
+    expect(posted?.text).toContain("scanners.ts is the source of truth");
+    expect(posted?.text).toContain("Scanner LoveIQ report UX");
+  });
+
   it("gates the digest on the Berlin hour, so it does not drift with the clock change", async () => {
     // 07:30 UTC is 09:30 Berlin in summer but 08:30 Berlin in winter. A fixed
     // UTC hour would post an hour earlier from late October without anyone

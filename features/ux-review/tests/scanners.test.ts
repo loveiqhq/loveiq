@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   UX_REVIEW_CHALLENGER_MONTHLY_CREDITS,
   UX_REVIEW_ESTIMATED_MONTHLY_CREDITS,
+  UX_REVIEW_MAX_DEFENSIBLE_CONFIDENCE,
   UX_REVIEW_MIN_CONFIDENCE,
   UX_SCANNERS,
 } from "../server/scanners";
@@ -123,5 +124,26 @@ describe("UX review scanners", () => {
       UX_REVIEW_ESTIMATED_MONTHLY_CREDITS + UX_REVIEW_CHALLENGER_MONTHLY_CREDITS,
       "champions plus challengers is what actually gets billed"
     ).toBeLessThanOrEqual(6000);
+  });
+});
+
+/**
+ * Raising the confidence bar is the obvious reaction to a 0.02 precision, and
+ * it is exactly wrong.
+ *
+ * Measured 2026-09-21: every finding ever produced scores 0.8-1.0, so the bar
+ * has never excluded one — and the 1.0 group is wrong MORE often (100% when
+ * checkable) than the 0.9 group (92%). Raising it discards findings at the
+ * marginally more accurate end and improves nothing.
+ */
+describe("the confidence bar", () => {
+  it("is a floor, not a filter, and cannot be raised past what the data supports", () => {
+    expect(UX_REVIEW_MIN_CONFIDENCE).toBeLessThanOrEqual(UX_REVIEW_MAX_DEFENSIBLE_CONFIDENCE);
+  });
+
+  it("still excludes a genuinely unsure finding, if one is ever produced", () => {
+    // The floor is kept for a future model that does express doubt. A bar of 0
+    // would mean the field is read and ignored.
+    expect(UX_REVIEW_MIN_CONFIDENCE).toBeGreaterThan(0);
   });
 });

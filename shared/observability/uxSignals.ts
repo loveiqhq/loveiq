@@ -10,8 +10,16 @@
  *   - dead clicks (pointer-down on visibly non-interactive nodes)
  *   - tab visibility transitions (visible↔hidden) with duration
  *
+ * NOT CONSENT-GATED, and the header used to claim it was.
+ *
+ * `track()` sends to PostHog before any consent check, deliberately — a
+ * documented owner decision, the same one that applies to Microsoft Clarity
+ * (see app/layout.tsx). `persistAnalyticsEvent` gates on an allowlist and on
+ * having a submission id, not on consent either. So nothing here exits when
+ * analytics consent is missing, and a compliance review that read the old
+ * sentence would have stopped at it.
+ *
  * Safety rails:
- *   - All listeners exit fast when CookieYes analytics consent is missing.
  *   - Scroll uses requestAnimationFrame throttling.
  *   - All pointer/scroll/touch listeners are `passive: true`.
  *   - One-time install guard on a window flag — survives React StrictMode's
@@ -38,7 +46,7 @@ declare global {
     __loveiqUxSignalsState?: {
       pathname: string;
       scrollFired: Set<25 | 50 | 75 | 100>;
-      deadClickSelectors: Set<string>;
+      deadClickCounts: Map<string, number>;
       tabVisibleSince: number;
       tabHiddenSince: number;
       maxScrollPct: number;
@@ -49,6 +57,8 @@ declare global {
 const SCROLL_BUCKETS: ReadonlyArray<25 | 50 | 75 | 100> = [25, 50, 75, 100];
 const RAGE_WINDOW_MS = 1000;
 const RAGE_THRESHOLD = 3;
+/** A second dead-click event fires here, carrying the count. See the call site. */
+const DEAD_CLICK_REPEAT_THRESHOLD = 3;
 // `label` without `for=` still routes its click to the wrapped input, so
 // treat ALL labels as interactive to avoid false-positive dead clicks.
 const INTERACTIVE_SELECTOR =
@@ -66,7 +76,7 @@ function freshState(): NonNullable<Window["__loveiqUxSignalsState"]> {
   return {
     pathname: getPathname(),
     scrollFired: new Set(),
-    deadClickSelectors: new Set(),
+    deadClickCounts: new Map(),
     // Page can mount in a background tab. Track the side that's actually
     // running so the first visibility transition reports the correct delta.
     tabVisibleSince: startsHidden ? 0 : now,
@@ -104,8 +114,65 @@ function selectorFor(target: EventTarget | null): string {
   return parts.join("").slice(0, SELECTOR_MAX_LEN) || "unknown";
 }
 
-function isInteractive(target: EventTarget | null): boolean {
-  if (!(target instanceof Element)) return false;
+/**
+ * Why a tap counted as dead, kept because the two are not the same finding.
+ *
+ * `disabled_control` is the high-signal case: something that looks live, a
+ * reader taps it, nothing happens. `non_interactive` is a tap on prose or a
+ * container, which is overwhelmingly just reading — 95% of 11,662 events in 30
+ * days, against 5% for disabled controls.
+ *
+ * The distinction was computed and thrown away: the event carried only
+ * `pathname` and `target_selector`, so nothing downstream could tell a defect
+ * from someone resting a thumb on a paragraph. Answering "how many of these are
+ * real?" needed a regex over the selector, which is a guess — the first attempt
+ * matched `article` and `aside` because the pattern began `^(button|a|…)`.
+ */
+export type DeadClickReason = "disabled_control" | "non_interactive";
+
+/**
+ * The control a finger was over, when the browser refused to dispatch to it.
+ *
+ * A DISABLED control carries `pointer-events: none`, so it is not in the event
+ * path at all and `event.target` is whatever sits behind it. On the survey that
+ * is `nav.flex`, the container — so the single most dead-clicked control on the
+ * site was classified as a tap on prose, and `selectorFor` reported the
+ * container to the one probe that reads what the scanner claimed.
+ *
+ * Measured 2026-09-21: PostHog's own `$dead_click` sees "Next" die in 929 of
+ * ~1000 sessions, 20,081 taps. Ours recorded 28, none of them as a control.
+ *
+ * So when nothing interactive is in the path, look for a disabled control whose
+ * box contains the point. Verified on production: finds the disabled Next,
+ * finds nothing under a live Previous, a heading, or an answer option.
+ *
+ * Scoped to the hit element's own subtree and only reached when the cheap path
+ * already failed, so it costs nothing on an ordinary tap.
+ */
+function blockedControlAt(hit: Element, x: number, y: number): Element | null {
+  for (const el of hit.querySelectorAll(INTERACTIVE_SELECTOR)) {
+    const disabled =
+      (el as HTMLButtonElement).disabled === true || el.getAttribute("aria-disabled") === "true";
+    if (!disabled) continue;
+    const b = el.getBoundingClientRect();
+    if (x >= b.left && x <= b.right && y >= b.top && y <= b.bottom) return el;
+  }
+  return null;
+}
+
+/**
+ * `null` when the tap was on something that genuinely responds.
+ *
+ * Returns the element to REPORT as well as the reason, because the two differ
+ * exactly when it matters: the browser hands us the container and the thing
+ * that died is the button inside it.
+ */
+function deadClickReason(
+  target: EventTarget | null,
+  x: number,
+  y: number
+): { reason: DeadClickReason; element: Element } | null {
+  if (!(target instanceof Element)) return null;
   const control = target.closest(INTERACTIVE_SELECTOR);
   if (control) {
     /**
@@ -122,18 +189,23 @@ function isInteractive(target: EventTarget | null): boolean {
     const isDisabled =
       (control as HTMLButtonElement).disabled === true ||
       control.getAttribute("aria-disabled") === "true";
-    // Report it (return false) rather than falling through to the cursor walk,
-    // which would call it interactive again off any `cursor: pointer` ancestor.
-    return !isDisabled;
+    // Reported rather than falling through to the cursor walk, which would call
+    // it interactive again off any `cursor: pointer` ancestor.
+    return isDisabled ? { reason: "disabled_control", element: control } : null;
   }
+  // Nothing interactive in the path. Before calling it decoration, check whether
+  // a disabled control was under the finger and simply unreachable.
+  const blocked = blockedControlAt(target, x, y);
+  if (blocked) return { reason: "disabled_control", element: blocked };
+
   // Walk up checking computed cursor — covers `cursor: pointer` on custom
   // overlays without an explicit role. Only check 3 levels to keep it cheap.
   let node: Element | null = target;
   for (let i = 0; node && i < 3; i++, node = node.parentElement) {
     const style = window.getComputedStyle(node);
-    if (style.cursor === "pointer") return true;
+    if (style.cursor === "pointer") return null;
   }
-  return false;
+  return { reason: "non_interactive", element: target };
 }
 
 /**
@@ -186,8 +258,23 @@ export function installUxSignals(): void {
     if (!(target instanceof Element)) return;
     const state = ensureState();
 
-    // Rage detection: track per-target click timestamps within a 1s window.
-    const node = (target.closest("[data-track-id], button, a, [role=button]") ?? target) as Element;
+    /**
+     * Rage detection: per-target click timestamps within a 1s window.
+     *
+     * Resolved through the same blocked-control lookup as the dead click below.
+     * A disabled control is `pointer-events: none`, so `event.target` is its
+     * container and `closest(...)` finds nothing — rage-tapping a dead "Next"
+     * was keyed to `nav.flex` and reported as rage on a layout div. Frustrated
+     * repeat taps on a control that cannot respond is the single most useful
+     * thing this listener can report, and it was naming the wrong element.
+     */
+    const blockedForRage =
+      target.closest(INTERACTIVE_SELECTOR) === null
+        ? blockedControlAt(target, event.clientX, event.clientY)
+        : null;
+    const node = (blockedForRage ??
+      target.closest("[data-track-id], button, a, [role=button]") ??
+      target) as Element;
     const now = performance.now();
     const stamps = clickTimestampsByNode.get(node) ?? [];
     const recent = stamps.filter((t) => now - t < RAGE_WINDOW_MS);
@@ -199,19 +286,44 @@ export function installUxSignals(): void {
       // skips the equality check.
       trackRageClick({
         pathname: state.pathname,
-        target_selector: selectorFor(target),
+        // `node`, not `target` — the thing they were hammering, which for a
+        // disabled control is not what the browser handed us.
+        target_selector: selectorFor(node),
         click_count: recent.length,
         window_ms: RAGE_WINDOW_MS,
       });
     }
 
-    // Dead-click detection: pointer-down on a non-interactive element.
-    // Dedupe per (pageview, selector) to keep volume sane.
-    if (!isInteractive(target)) {
-      const selector = selectorFor(target);
-      if (!state.deadClickSelectors.has(selector)) {
-        state.deadClickSelectors.add(selector);
-        trackDeadClick({ pathname: state.pathname, target_selector: selector });
+    // Dead-click detection: pointer-down on something that does not respond.
+    const dead = deadClickReason(target, event.clientX, event.clientY);
+    if (dead) {
+      // The ELEMENT THAT DIED, not the one the browser happened to hand us. A
+      // disabled control is `pointer-events: none`, so the target is its
+      // container — and this selector is what reaches
+      // verify-dead-click-target.mjs, the one probe that checks what the reader
+      // actually tapped. Given the container it inspects the wrong thing and
+      // correctly reports "ordinary content, not a control": a false clear.
+      const selector = selectorFor(dead.element);
+      const seen = (state.deadClickCounts.get(selector) ?? 0) + 1;
+      state.deadClickCounts.set(selector, seen);
+      /**
+       * Once on the first tap, once more on the third.
+       *
+       * Firing once per (pageview, selector) kept volume sane and made a
+       * persistent dead tap indistinguishable from an incidental one — and the
+       * survey never changes pathname, so one event covered the whole sitting.
+       * PostHog counted 20,081 taps on the disabled Next where we recorded 28.
+       * Repetition is the thing that separates a defect from a thumb resting on
+       * a paragraph, so it has to survive the dedupe. Two events per selector
+       * per pageview is still a hard bound.
+       */
+      if (seen === 1 || seen === DEAD_CLICK_REPEAT_THRESHOLD) {
+        trackDeadClick({
+          pathname: state.pathname,
+          target_selector: selector,
+          reason: dead.reason,
+          repeat_count: seen,
+        });
       }
     }
   };
