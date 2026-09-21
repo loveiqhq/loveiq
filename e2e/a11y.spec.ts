@@ -123,6 +123,49 @@ for (const route of criticalRoutes) {
     ).toHaveLength(0);
 
     if (route === KNOWN_GAP.route && testInfo.project.name === "Desktop Chrome") {
+      /**
+       * A PAGE THAT DID NOT RENDER CANNOT TELL YOU THE GAP WAS FIXED.
+       *
+       * The ratchet below counts nodes measured at white-on-#fe6839 and fails
+       * when there are none, on the reasoning that zero means somebody fixed
+       * it. Zero has a second cause: the button was never painted. E2E points
+       * Supabase at `http://127.0.0.1:9`, so on a slow runner the circuit
+       * breaker opens, `/survey` degrades, and axe finds nothing to measure —
+       * and the run then reports "the gap is GONE. Delete KNOWN_GAP, this
+       * assertion, and the KNOWN RED comment above."
+       *
+       * That is the worst possible false signal: it is an instruction to
+       * delete a standing a11y pin, issued because the page failed to load.
+       * Observed on 2026-09-22 (#241, Desktop Chrome), while a branch carrying
+       * the identical code passed — the difference was the web server, not the
+       * button.
+       *
+       * The comment above already scopes this to one engine for BROWSER
+       * variance. This is a different cause with the same symptom, so it needs
+       * its own check: confirm the colour is on the page at all, and fail
+       * saying THAT when it is not.
+       */
+      const painted = await page.evaluate((bg) => {
+        const toHex = (css: string) => {
+          const parts = css.match(/\d+/g);
+          if (!parts || parts.length < 3) return "";
+          return `#${parts
+            .slice(0, 3)
+            .map((n) => Number(n).toString(16).padStart(2, "0"))
+            .join("")}`;
+        };
+        return [...document.querySelectorAll("*")].some(
+          (el) => toHex(getComputedStyle(el).backgroundColor) === bg.toLowerCase()
+        );
+      }, KNOWN_GAP.bg);
+
+      expect(
+        painted,
+        `Nothing on ${KNOWN_GAP.route} is painted ${KNOWN_GAP.bg}, so this run measured ` +
+          "NOTHING about the contrast gap. The page probably did not render — check the " +
+          "web server log for a circuit-breaker error. Do NOT delete KNOWN_GAP over this."
+      ).toBe(true);
+
       expect(
         knownNodes,
         `The white-on-${KNOWN_GAP.bg} contrast gap on ${KNOWN_GAP.route} is GONE. ` +
