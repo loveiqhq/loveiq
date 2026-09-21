@@ -154,6 +154,16 @@ describe("replaying the reader's own route", () => {
     expect(PROBE).toMatch(/process\.env\.DEVICE\b/);
   });
 
+  it("names the probes behind every verdict", () => {
+    // The argument of this whole pipeline is that a `clear` only means
+    // something when a probe could have disagreed — and the run log printed
+    // CLEAR with no indication of what produced it. A run that was supposed to
+    // replay the reader's route and quietly did not looked identical to one
+    // that did, which is how this went unverified for an afternoon.
+    expect(VERIFIER).toMatch(/results\.map\(\(r\) => `\$\{r\.file\}/);
+    expect(VERIFIER).toMatch(/r\.claimScoped \? "\*" : ""/);
+  });
+
   it("keeps the three-way exit contract", () => {
     for (const code of ["process.exit(0)", "process.exit(1)", "process.exit(3)"]) {
       expect(PROBE, `${code} is missing`).toContain(code);
