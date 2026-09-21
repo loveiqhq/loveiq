@@ -1,5 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+/**
+ * The colleague half of the walk is real in these tests, not stubbed, so the
+ * exclusions can be proved to cover files that arrive through it. `colleagueMailboxes`
+ * is empty by default, which is what every pre-existing test here assumes.
+ */
+const colleagueMailboxes: { value: string[] } = { value: [] };
+/** Files owned by a colleague, keyed by mailbox. */
+const colleagueFiles: Record<string, Array<Record<string, unknown>>> = {};
+vi.mock("@features/brain/server/ingest/gmail", () => ({
+  domainMailboxes: vi.fn(async () => colleagueMailboxes.value),
+}));
+
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
@@ -134,7 +146,13 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
       return {
         ok: true,
         status: 200,
-        json: async () => (alwaysMorePages ? { files, nextPageToken: "more" } : { files }),
+        json: async () => {
+          // A colleague listing names its owner; serve that person's files, not the
+          // admin's, so an exclusion can be proved against a file only they own.
+          const owner = decodeURIComponent(url).match(/'([^']+)' in owners/)?.[1];
+          if (owner) return { files: colleagueFiles[owner] ?? [] };
+          return alwaysMorePages ? { files, nextPageToken: "more" } : { files };
+        },
         text: async () => "",
       };
     }
@@ -299,6 +317,8 @@ describe("ingestDrive", () => {
     httpCalls.length = 0;
     existing = [];
     files = [FILE];
+    colleagueMailboxes.value = [];
+    for (const k of Object.keys(colleagueFiles)) delete colleagueFiles[k];
     listOk = true;
     alwaysMorePages = false;
     exportFails = false;
@@ -358,6 +378,43 @@ describe("ingestDrive", () => {
     // whose export yields no text is dropped as empty anyway, so the first version of
     // this test passed with the filter deleted.
     expect(httpCalls.some((u) => u.includes(id))).toBe(false);
+  });
+
+  /**
+   * THE COLLEAGUE HALF GOES THROUGH THE SAME EXCLUSIONS.
+   *
+   * The walk was widened on 2026-09-21 from "a colleague's meeting notes" to a
+   * colleague's whole Drive, on an explicit decision. That makes `isJobApplication`
+   * load-bearing in a way it was not before: personal Drives are exactly where CVs
+   * live, and the owner's instruction was that CVs stay out.
+   *
+   * Asserted on the HTTP calls, so the file must never be REQUESTED — and with a
+   * positive control from the same colleague, or a run that fetched nothing from
+   * them would pass this just as well.
+   */
+  it("fetches a colleague's ordinary document and never their CV", async () => {
+    colleagueMailboxes.value = ["mo@loveiq.org"];
+    colleagueFiles["mo@loveiq.org"] = [
+      { ...FILE, id: "ZZcolleagueDocZZ", name: "Report Review notes" },
+      { ...FILE, id: "ZZcolleagueCvZZ", name: "Nejra_Rizvic_CV.pdf", mimeType: "application/pdf" },
+    ];
+    await ingestDrive(STAMP);
+    expect(httpCalls.some((u) => u.includes("ZZcolleagueDocZZ"))).toBe(true);
+    expect(httpCalls.some((u) => u.includes("ZZcolleagueCvZZ"))).toBe(false);
+  });
+
+  it("indexes a colleague's document that is not a meeting note at all", async () => {
+    // The whole point of widening: a plain document nobody organised a meeting for.
+    colleagueMailboxes.value = ["mb@loveiq.org"];
+    colleagueFiles["mb@loveiq.org"] = [{ ...FILE, id: "ZZkpiZZ", name: "KPI Framework" }];
+    await ingestDrive(STAMP);
+    const written = dbCalls
+      .filter(
+        (c) =>
+          c.method !== "GET" && c.path.includes("brain_chunk") && c.path.includes("on_conflict")
+      )
+      .flatMap((c) => JSON.parse(c.body) as Array<{ source_id: string }>);
+    expect(written.map((r) => r.source_id)).toContain("doc:ZZkpiZZ");
   });
 
   it("counts the files it skipped for having no text", async () => {

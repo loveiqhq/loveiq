@@ -1,19 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Meeting notes that live in a COLLEAGUE'S Drive.
+ * Everything that lives in a COLLEAGUE'S Drive.
  *
  * Google Meet files a Gemini note in the ORGANISER's Drive, and this walk reads as a
- * single account — so every meeting we did not organise was unreadable. Measured
- * 2026-09-19 by impersonating each colleague in turn: 122 documents were invisible,
- * 14 of them meeting notes.
+ * single account — so measured 2026-09-19, 124 documents were invisible to it, 97 of
+ * them one person's.
  *
- * The rule is deliberately narrow, and these tests exist to keep it narrow. The other
- * 108 invisible files include a colleague's landlord dispute (eviction demand, dunning
- * letters, deposit settlement), a confidential information memorandum, a shareholders
- * agreement and employee option terms. None of them is a Gemini meeting note, so the
- * exclusion holds by construction — and a test that proves it must use those real
- * names, not invented ones.
+ * THIS FILE USED TO ARGUE THE OPPOSITE, and the reversal is the point. The first
+ * version returned only files matching `notes by gemini`, and its tests asserted by
+ * name that a colleague's landlord dispute, a shareholders agreement and employee
+ * option terms were never returned. That trade was put to the owner on 2026-09-21 and
+ * the decision was to index everything, so those assertions are gone — they encoded a
+ * policy the company no longer holds, and leaving them would have made the change look
+ * like a regression.
+ *
+ * What is still asserted, because it is still true: CVs never reach the corpus, each
+ * file is read with the token it was LISTED with, and a colleague who refuses does not
+ * break the walk.
  */
 
 const mailboxes: { value: string[] | null } = { value: null };
@@ -50,21 +54,33 @@ const drive: Record<string, Array<{ id: string; name: string }>> = {};
 const listFails = new Set<string>();
 const queries: string[] = [];
 
+/** Owners whose listing is returned across two pages, to exercise the paging. */
+const paged = new Set<string>();
+
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: vi.fn(async (url: string) => {
     queries.push(url);
-    const owner = decodeURIComponent(url).match(/'([^']+)' in owners/)?.[1] ?? "";
+    const decoded = decodeURIComponent(url);
+    const owner = decoded.match(/'([^']+)' in owners/)?.[1] ?? "";
     if (listFails.has(owner)) return { ok: false, status: 403, text: async () => "denied" };
-    return {
-      ok: true,
-      status: 200,
-      json: async () => ({ files: drive[owner] ?? [] }),
-      text: async () => "",
-    };
+    const all = drive[owner] ?? [];
+    if (paged.has(owner)) {
+      const second = /pageToken=/.test(decoded);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          files: second ? all.slice(1) : all.slice(0, 1),
+          ...(second ? {} : { nextPageToken: "more" }),
+        }),
+        text: async () => "",
+      };
+    }
+    return { ok: true, status: 200, json: async () => ({ files: all }), text: async () => "" };
   }),
 }));
 
-import { colleagueMeetingNotes } from "@features/brain/server/ingest/drive";
+import { colleagueDocuments } from "@features/brain/server/ingest/drive";
 
 const NOTE = "Report Review - 2026/09/07 13:00 WEST - Notes by Gemini";
 const NOTE2 = "Meeting started 2026/09/04 12:50 WEST - Notes by Gemini";
@@ -73,14 +89,15 @@ beforeEach(() => {
   mailboxes.value = null;
   refuseToken.clear();
   listFails.clear();
+  paged.clear();
   queries.length = 0;
   for (const k of Object.keys(drive)) delete drive[k];
 });
 
-describe("colleagueMeetingNotes", () => {
+describe("colleagueDocuments", () => {
   it("returns nothing when the directory cannot be read, rather than throwing", async () => {
     mailboxes.value = null;
-    const r = await colleagueMeetingNotes(new Set(), () => false);
+    const r = await colleagueDocuments(new Set(), () => false);
     expect(r.items).toEqual([]);
     expect(r.tokens.size).toBe(0);
     expect({ asked: r.asked, refused: r.refused }).toEqual({ asked: 0, refused: 0 });
@@ -89,7 +106,7 @@ describe("colleagueMeetingNotes", () => {
   it("collects a meeting note that only a colleague can see", async () => {
     mailboxes.value = ["mo@loveiq.org"];
     drive["mo@loveiq.org"] = [{ id: "n1", name: NOTE }];
-    const r = await colleagueMeetingNotes(new Set(), () => false);
+    const r = await colleagueDocuments(new Set(), () => false);
     expect(r.items.map((f) => f.id)).toEqual(["n1"]);
     expect(r.asked).toBe(1);
   });
@@ -97,13 +114,23 @@ describe("colleagueMeetingNotes", () => {
   it("accepts the other shape Gemini uses", async () => {
     mailboxes.value = ["mo@loveiq.org"];
     drive["mo@loveiq.org"] = [{ id: "n2", name: NOTE2 }];
-    const r = await colleagueMeetingNotes(new Set(), () => false);
+    const r = await colleagueDocuments(new Set(), () => false);
     expect(r.items.map((f) => f.id)).toEqual(["n2"]);
   });
 
   /**
-   * THE TEST THAT MATTERS. These are the real names of the private documents sitting
-   * beside those meeting notes in the same Drive.
+   * THE DECISION, WRITTEN AS A TEST.
+   *
+   * These are the real names of documents sitting in colleagues' Drives. The first
+   * version of this walk refused every one of them by construction, and this block
+   * asserted exactly that. On 2026-09-21 the owner decided the brain should index
+   * everything, so they are returned now.
+   *
+   * Kept as named cases rather than deleted, because the list IS the decision: anyone
+   * reading this can see precisely what "everything" reaches — a shareholders
+   * agreement, employee option terms, a confidential information memorandum, and a
+   * colleague's landlord dispute. `SKIP_FILE_IDS` is the mechanism if any single one
+   * of them should come back out.
    */
   it.each([
     "01_Raeumungsaufforderung",
@@ -115,11 +142,39 @@ describe("colleagueMeetingNotes", () => {
     "AppliedPsychometrics_VSOP_Terms_of_Options",
     "cto-cofounder-profile-loveiq.md",
     "Handelsregisterauszug.pdf",
-  ])("never returns a colleague's private document: %s", async (name) => {
+  ])("now returns %s, which the narrow rule refused", async (name) => {
     mailboxes.value = ["mb@loveiq.org"];
     drive["mb@loveiq.org"] = [{ id: "private", name }];
-    const r = await colleagueMeetingNotes(new Set(), () => false);
-    expect(r.items).toEqual([]);
+    const r = await colleagueDocuments(new Set(), () => false);
+    expect(r.items.map((f) => f.name)).toEqual([name]);
+  });
+
+  it("asks for a colleague's whole Drive, not only their meeting notes", async () => {
+    mailboxes.value = ["mo@loveiq.org"];
+    drive["mo@loveiq.org"] = [{ id: "n1", name: NOTE }];
+    await colleagueDocuments(new Set(), () => false);
+    const q = decodeURIComponent(queries[0] ?? "");
+    expect(q).toContain("'mo@loveiq.org' in owners");
+    // The name filter is gone; the mime filter is the admin walk's.
+    expect(q).not.toContain("Notes by Gemini");
+    expect(q).toContain("application/vnd.google-apps.document");
+    expect(q).toContain("application/pdf");
+  });
+
+  /**
+   * A colleague owning 197 documents is a real case, and the meeting-note version
+   * asked for one unpaged page of 200 — the quiet truncation this file has been
+   * bitten by before.
+   */
+  it("pages through a colleague who owns more than one page", async () => {
+    mailboxes.value = ["mo@loveiq.org"];
+    paged.add("mo@loveiq.org");
+    drive["mo@loveiq.org"] = [
+      { id: "p1", name: "First" },
+      { id: "p2", name: "Second" },
+    ];
+    const r = await colleagueDocuments(new Set(), () => false);
+    expect(r.items.map((f) => f.id).sort()).toEqual(["p1", "p2"]);
   });
 
   /**
@@ -134,7 +189,7 @@ describe("colleagueMeetingNotes", () => {
   it("returns the token each note must be READ with, not the admin's", async () => {
     mailboxes.value = ["mo@loveiq.org"];
     drive["mo@loveiq.org"] = [{ id: "n1", name: NOTE }];
-    const r = await colleagueMeetingNotes(new Set(), () => false);
+    const r = await colleagueDocuments(new Set(), () => false);
     expect(r.tokens.get("n1")).toBe("tok:mo@loveiq.org");
   });
 
@@ -142,7 +197,7 @@ describe("colleagueMeetingNotes", () => {
     mailboxes.value = ["mo@loveiq.org", "mb@loveiq.org"];
     drive["mo@loveiq.org"] = [{ id: "a", name: NOTE }];
     drive["mb@loveiq.org"] = [{ id: "b", name: NOTE2 }];
-    const r = await colleagueMeetingNotes(new Set(), () => false);
+    const r = await colleagueDocuments(new Set(), () => false);
     expect(r.tokens.get("a")).toBe("tok:mo@loveiq.org");
     expect(r.tokens.get("b")).toBe("tok:mb@loveiq.org");
   });
@@ -150,7 +205,7 @@ describe("colleagueMeetingNotes", () => {
   it("does not re-list something the admin walk already found", async () => {
     mailboxes.value = ["mo@loveiq.org"];
     drive["mo@loveiq.org"] = [{ id: "dupe", name: NOTE }];
-    const r = await colleagueMeetingNotes(new Set(["dupe"]), () => false);
+    const r = await colleagueDocuments(new Set(["dupe"]), () => false);
     expect(r.items).toEqual([]);
   });
 
@@ -158,7 +213,7 @@ describe("colleagueMeetingNotes", () => {
     mailboxes.value = ["mo@loveiq.org", "mb@loveiq.org"];
     drive["mo@loveiq.org"] = [{ id: "same", name: NOTE }];
     drive["mb@loveiq.org"] = [{ id: "same", name: NOTE }];
-    const r = await colleagueMeetingNotes(new Set(), () => false);
+    const r = await colleagueDocuments(new Set(), () => false);
     expect(r.items).toHaveLength(1);
   });
 
@@ -166,7 +221,7 @@ describe("colleagueMeetingNotes", () => {
     mailboxes.value = ["mb@loveiq.org", "mo@loveiq.org"];
     refuseToken.add("mb@loveiq.org");
     drive["mo@loveiq.org"] = [{ id: "n1", name: NOTE }];
-    const r = await colleagueMeetingNotes(new Set(), () => false);
+    const r = await colleagueDocuments(new Set(), () => false);
     expect(r.items.map((f) => f.id)).toEqual(["n1"]);
     expect(r.refused).toBe(1);
     expect(r.asked).toBe(1);
@@ -175,7 +230,7 @@ describe("colleagueMeetingNotes", () => {
   it("counts a listing refusal too, rather than reporting an empty Drive", async () => {
     mailboxes.value = ["mo@loveiq.org"];
     listFails.add("mo@loveiq.org");
-    const r = await colleagueMeetingNotes(new Set(), () => false);
+    const r = await colleagueDocuments(new Set(), () => false);
     expect(r.items).toEqual([]);
     expect(r.refused).toBe(1);
   });
@@ -185,16 +240,7 @@ describe("colleagueMeetingNotes", () => {
     for (const m of mailboxes.value) drive[m] = [{ id: m, name: NOTE }];
     let calls = 0;
     const outOfTime = () => ++calls > 1;
-    const r = await colleagueMeetingNotes(new Set(), outOfTime);
+    const r = await colleagueDocuments(new Set(), outOfTime);
     expect(r.items.length).toBeLessThan(3);
-  });
-
-  it("asks Google to filter, so a colleague with thousands of files is not paged through", async () => {
-    mailboxes.value = ["mo@loveiq.org"];
-    drive["mo@loveiq.org"] = [{ id: "n1", name: NOTE }];
-    await colleagueMeetingNotes(new Set(), () => false);
-    const q = decodeURIComponent(queries[0] ?? "");
-    expect(q).toContain("'mo@loveiq.org' in owners");
-    expect(q).toContain("Notes by Gemini");
   });
 });

@@ -351,29 +351,38 @@ async function listDocs(
 }
 
 /**
- * The meeting notes that live in a COLLEAGUE'S Drive, not the admin's.
+ * Everything in a COLLEAGUE'S Drive, not just the admin's.
  *
  * THE GAP THIS CLOSES, measured 2026-09-19. This walk reads as one account, so it
  * sees only what that account owns or has been shared. Impersonating each colleague
- * in turn and diffing showed 122 documents invisible to it — and 14 of those are
- * Gemini meeting notes, including a September Report Review and eight Sanjin/Mark
- * syncs. `resolveShortcuts` below already names the cause: Meet files the note in
- * the ORGANISER's Drive, so every meeting we did not organise was unreadable.
+ * in turn and diffing showed 124 documents invisible to it, 97 of them one person's.
+ * `resolveShortcuts` below names one cause: Meet files a meeting note in the
+ * ORGANISER's Drive, so every meeting we did not organise was unreadable.
  *
- * WHY MEETING NOTES ONLY, AND NOT THE OTHER 108. Reading a colleague's whole Drive
- * would index their private life. The 108 include a landlord dispute — eviction
- * demand, dunning letters, deposit settlement — plus a confidential information
- * memorandum, a shareholders agreement and employee option terms. A name-based rule
- * cannot be talked into any of those: none of them is a Gemini meeting note, so the
- * exclusion holds by construction rather than by an id list somebody has to keep
- * updating as new private documents appear.
+ * WIDENED FROM MEETING NOTES TO EVERYTHING, on an explicit decision recorded
+ * 2026-09-21. The narrow version indexed only files matching `notes by gemini`,
+ * because reading a colleague's whole Drive also reaches documents that are theirs
+ * rather than the company's. That trade was put to the owner and the answer was to
+ * index everything, so the rule is now the same one the admin walk uses: the file
+ * types below, not trashed, minus the three exclusions every listed file passes
+ * through in `ingestDrive` — `SKIP_FILE_IDS`, `isVendorBilling` and
+ * `isJobApplication`.
  *
- * A refusal for one colleague is not an error for the walk. Their notes stay
+ * WHAT THAT MEANS IN PRACTICE, so nobody is surprised by it. The set now reachable
+ * includes a shareholders agreement, employee option terms and a confidential
+ * information memorandum — deliberate — and also a colleague's landlord dispute:
+ * eviction demand, dunning letters, deposit settlement. Those last are a person's
+ * private affairs that happen to sit in a work Drive. They are in scope under the
+ * decision above; if that is reconsidered, `SKIP_FILE_IDS` is the mechanism, which
+ * is exactly why it is an explicit id list rather than a rule.
+ *
+ * CVs stay out regardless — `isJobApplication` is applied to this listing too, and a
+ * test drives a colleague's CV through the whole walk to prove it.
+ *
+ * A refusal for one colleague is not an error for the walk. Their files stay
  * unreadable exactly as they were before this existed.
  */
-const MEETING_NOTE_NAME = /notes by gemini|^meeting started /i;
-
-export async function colleagueMeetingNotes(
+export async function colleagueDocuments(
   alreadyListed: ReadonlySet<string>,
   isOutOfTime: () => boolean,
   oidcToken?: string | null
@@ -410,28 +419,49 @@ export async function colleagueMeetingNotes(
       continue;
     }
     asked += 1;
-    // Filtered at Google rather than here: a colleague may own thousands of files and
-    // only a handful of them are meeting notes.
+    /**
+     * The same file types the admin walk asks for, so a document is indexed on the
+     * same terms whoever happens to own it — including `SHORTCUT_MIME`, which
+     * `resolveShortcuts` needs to follow a Meet note filed in someone else's Drive.
+     */
     const q = encodeURIComponent(
       `'${mailbox.replace(/'/g, "\\'")}' in owners and trashed=false and ` +
-        `mimeType='${DOC_MIME}' and ` +
-        `(name contains 'Notes by Gemini' or name contains 'Meeting started')`
+        `(${[...WANTED_MIMES, SHORTCUT_MIME].map((m) => `mimeType='${m}'`).join(" or ")})`
     );
     const fields = encodeURIComponent(
-      "files(id,name,mimeType,modifiedTime,createdTime,webViewLink,owners(emailAddress))"
+      "nextPageToken,files(id,name,mimeType,modifiedTime,createdTime,webViewLink," +
+        "owners(emailAddress),shortcutDetails(targetId,targetMimeType))"
     );
-    const res = await driveGet(userToken, `/files?q=${q}&fields=${fields}&pageSize=200`);
-    if (!res.ok) {
-      refused += 1;
-      continue;
-    }
-    const body = (await res.json().catch(() => ({}))) as { files?: DriveFile[] };
-    for (const f of body.files ?? []) {
-      // `contains` is a substring match on Google's side; the regex is what decides.
-      if (!f.id || seen.has(f.id) || !MEETING_NOTE_NAME.test(f.name ?? "")) continue;
-      seen.add(f.id);
-      tokens.set(f.id, userToken);
-      items.push(f);
+    /**
+     * PAGED, which the meeting-note version did not need to be. One colleague owns
+     * 197 documents on their own, and a single unpaged `pageSize=200` would have
+     * silently returned the first page and called the walk complete — the quiet
+     * truncation this file has been bitten by before.
+     */
+    let pageToken = "";
+    for (let page = 0; page < MAX_PAGES; page++) {
+      if (isOutOfTime()) break;
+      const res = await driveGet(
+        userToken,
+        `/files?q=${q}&fields=${fields}&pageSize=${PAGE_SIZE}` +
+          (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "")
+      );
+      if (!res.ok) {
+        refused += 1;
+        break;
+      }
+      const body = (await res.json().catch(() => ({}))) as {
+        files?: DriveFile[];
+        nextPageToken?: string;
+      };
+      for (const f of body.files ?? []) {
+        if (!f.id || seen.has(f.id)) continue;
+        seen.add(f.id);
+        tokens.set(f.id, userToken);
+        items.push(f);
+      }
+      pageToken = body.nextPageToken ?? "";
+      if (!pageToken) break;
     }
   }
   return { items, tokens, asked, refused };
@@ -1021,7 +1051,7 @@ export async function ingestDrive(
    * above cannot see. Additive and best-effort: if the directory is unreadable or a
    * colleague refuses, the walk proceeds with exactly what it had before.
    */
-  const colleagues = await colleagueMeetingNotes(
+  const colleagues = await colleagueDocuments(
     new Set(raw.items.map((f) => f.id ?? "")),
     isOutOfTime,
     oidcToken
