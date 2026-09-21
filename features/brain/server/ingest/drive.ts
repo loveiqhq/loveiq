@@ -400,22 +400,53 @@ export async function colleagueDocuments(
   tokens: Map<string, string>;
   asked: number;
   refused: number;
+  /**
+   * Whether every mailbox was walked to the end.
+   *
+   * THIS IS A SWEEP GATE, not a statistic. `listed.complete` decides whether the sweep
+   * deletes rows that were not listed this run, and it used to read `raw.complete` —
+   * the ADMIN listing alone. That was survivable while this function returned at most
+   * fourteen meeting notes; once it returns a colleague's whole Drive, a run that
+   * stopped early or lost one mailbox to a refused token would make up to a hundred
+   * previously-indexed documents look deleted. Too few to trip the majority guard, so
+   * they would go, come back on the next run, and go again.
+   *
+   * A refusal counts as incomplete for the same reason: a colleague reachable
+   * yesterday and refused today has not lost their documents, and the sweep must not
+   * act as though they had.
+   */
+  complete: boolean;
 }> {
   const mailboxes = await domainMailboxes(oidcToken);
-  if (!mailboxes || mailboxes.length === 0)
-    return { items: [], tokens: new Map(), asked: 0, refused: 0 };
+  /**
+   * `null` and `[]` are different answers and only one of them is a failure.
+   *
+   * `null` means the directory could not be READ, so we do not know whose files we
+   * are missing — not complete, and the sweep must not run on it. An empty ARRAY
+   * means it was read and there is nobody to walk, which is a complete answer and is
+   * also the normal state anywhere the directory is not configured. Conflating them
+   * blocks the sweep forever in exactly those environments.
+   */
+  if (!mailboxes) return { items: [], tokens: new Map(), asked: 0, refused: 0, complete: false };
+  if (mailboxes.length === 0)
+    return { items: [], tokens: new Map(), asked: 0, refused: 0, complete: true };
 
   const items: DriveFile[] = [];
   const tokens = new Map<string, string>();
   const seen = new Set(alreadyListed);
   let asked = 0;
   let refused = 0;
+  let complete = true;
 
   for (const mailbox of mailboxes) {
-    if (isOutOfTime()) break;
+    if (isOutOfTime()) {
+      complete = false;
+      break;
+    }
     const userToken = await getDelegatedToken(mailbox, DRIVE_SCOPE, Date.now(), oidcToken);
     if (!userToken) {
       refused += 1;
+      complete = false;
       continue;
     }
     asked += 1;
@@ -440,7 +471,10 @@ export async function colleagueDocuments(
      */
     let pageToken = "";
     for (let page = 0; page < MAX_PAGES; page++) {
-      if (isOutOfTime()) break;
+      if (isOutOfTime()) {
+        complete = false;
+        break;
+      }
       const res = await driveGet(
         userToken,
         `/files?q=${q}&fields=${fields}&pageSize=${PAGE_SIZE}` +
@@ -448,6 +482,7 @@ export async function colleagueDocuments(
       );
       if (!res.ok) {
         refused += 1;
+        complete = false;
         break;
       }
       const body = (await res.json().catch(() => ({}))) as {
@@ -462,9 +497,11 @@ export async function colleagueDocuments(
       }
       pageToken = body.nextPageToken ?? "";
       if (!pageToken) break;
+      // Ran out of pages before running out of files.
+      if (page === MAX_PAGES - 1) complete = false;
     }
   }
-  return { items, tokens, asked, refused };
+  return { items, tokens, asked, refused, complete };
 }
 
 /**
@@ -1068,8 +1105,14 @@ export async function ingestDrive(
         !isVendorBilling(f.name, f.mimeType) &&
         !isJobApplication(f.name)
     ),
-    complete: raw.complete,
-    stopped: raw.stopped,
+    /**
+     * BOTH HALVES, because the sweep reads this. The colleague walk contributes a
+     * colleague's whole Drive now, so a run that lost one mailbox to the clock or a
+     * refused token would otherwise present ~100 live documents to the sweep as
+     * deleted — not enough to trip the majority guard, so they would actually go.
+     */
+    complete: raw.complete && colleagues.complete,
+    stopped: raw.stopped ?? (colleagues.complete ? undefined : "colleague-walk-incomplete"),
   };
 
   if (resolved.unreachable > 0 || resolved.skippedNonDoc > 0) {

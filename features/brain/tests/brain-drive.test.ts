@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * is empty by default, which is what every pre-existing test here assumes.
  */
 const colleagueMailboxes: { value: string[] } = { value: [] };
+/** Mailboxes whose delegated token is refused, to drive the sweep gate. */
+const refuseColleagueToken = new Set<string>();
 /** Files owned by a colleague, keyed by mailbox. */
 const colleagueFiles: Record<string, Array<Record<string, unknown>>> = {};
 vi.mock("@features/brain/server/ingest/gmail", () => ({
@@ -23,6 +25,8 @@ vi.mock("@shared/http/google-oauth", () => ({
   getGoogleAccessToken: vi.fn(async () => "test-token"),
   getDelegatedToken: vi.fn(async (subject: string) => {
     delegatedFor.push(subject);
+    // A colleague whose token is refused is how the sweep gate gets exercised.
+    if (refuseColleagueToken.has(subject)) return null;
     return delegatedToken;
   }),
   isGoogleConfigured: () => true,
@@ -318,6 +322,7 @@ describe("ingestDrive", () => {
     existing = [];
     files = [FILE];
     colleagueMailboxes.value = [];
+    refuseColleagueToken.clear();
     for (const k of Object.keys(colleagueFiles)) delete colleagueFiles[k];
     listOk = true;
     alwaysMorePages = false;
@@ -647,6 +652,37 @@ describe("ingestDrive", () => {
     // The bookkeeping write happens if and only if this run swept, so it is the
     // unambiguous marker. `updated_at=lt.` no longer appears -- that was the
     // timestamp sweep, which drive no longer uses.
+    expect(
+      dbCalls.filter((c) => c.method === "POST" && c.path.includes("brain_sweep_state")).length
+    ).toBeGreaterThan(0);
+  });
+
+  /**
+   * A COLLEAGUE LOST TO A REFUSED TOKEN MUST BLOCK THE SWEEP TOO.
+   *
+   * The sweep gate read the ADMIN listing alone. That was survivable while the
+   * colleague walk returned at most fourteen meeting notes; once it returns a
+   * colleague's whole Drive, one refused token presents ~100 live documents to the
+   * sweep as deleted — too few to trip the majority guard, so they would go, return
+   * on the next run, and go again. Regression found before it ran, on 2026-09-21.
+   */
+  it("does NOT sweep when a colleague's Drive could not be walked", async () => {
+    colleagueMailboxes.value = ["mo@loveiq.org"];
+    // No files served for that owner and the token refused — see the drive mock.
+    refuseColleagueToken.add("mo@loveiq.org");
+    files = [FILE];
+    await ingestDrive(STAMP);
+    expect(
+      dbCalls.filter((c) => c.method === "POST" && c.path.includes("brain_sweep_state")).length
+    ).toBe(0);
+  });
+
+  it("DOES still sweep when every colleague was walked", async () => {
+    // The control: without it, "no sweep" above could come from any other cause.
+    colleagueMailboxes.value = ["mo@loveiq.org"];
+    colleagueFiles["mo@loveiq.org"] = [{ ...FILE, id: "ZZokZZ", name: "Fine" }];
+    files = [FILE];
+    await ingestDrive(STAMP);
     expect(
       dbCalls.filter((c) => c.method === "POST" && c.path.includes("brain_sweep_state")).length
     ).toBeGreaterThan(0);

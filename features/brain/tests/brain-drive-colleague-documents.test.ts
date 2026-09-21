@@ -217,6 +217,58 @@ describe("colleagueDocuments", () => {
     expect(r.items).toHaveLength(1);
   });
 
+  /**
+   * COMPLETENESS IS A SWEEP GATE, not a statistic.
+   *
+   * `listed.complete` decides whether the sweep deletes rows that were not listed this
+   * run. It used to read the ADMIN listing alone, which was survivable while this
+   * function returned at most fourteen meeting notes. Returning a colleague's whole
+   * Drive changes that: one mailbox lost to the clock or to a refused token would
+   * present ~100 live documents to the sweep as deleted — too few to trip the majority
+   * guard, so they would actually go, come back next run, and go again.
+   */
+  it("is complete when every mailbox was walked to the end", async () => {
+    mailboxes.value = ["mo@loveiq.org", "mb@loveiq.org"];
+    drive["mo@loveiq.org"] = [{ id: "a", name: "One" }];
+    drive["mb@loveiq.org"] = [{ id: "b", name: "Two" }];
+    expect((await colleagueDocuments(new Set(), () => false)).complete).toBe(true);
+  });
+
+  it("is NOT complete when a colleague's token is refused", async () => {
+    mailboxes.value = ["mb@loveiq.org", "mo@loveiq.org"];
+    refuseToken.add("mb@loveiq.org");
+    drive["mo@loveiq.org"] = [{ id: "n1", name: NOTE }];
+    expect((await colleagueDocuments(new Set(), () => false)).complete).toBe(false);
+  });
+
+  it("is NOT complete when a colleague's listing fails", async () => {
+    mailboxes.value = ["mo@loveiq.org"];
+    listFails.add("mo@loveiq.org");
+    expect((await colleagueDocuments(new Set(), () => false)).complete).toBe(false);
+  });
+
+  it("is NOT complete when the clock stops it part way", async () => {
+    mailboxes.value = ["a@loveiq.org", "b@loveiq.org", "c@loveiq.org"];
+    for (const m of mailboxes.value) drive[m] = [{ id: m, name: NOTE }];
+    let calls = 0;
+    expect((await colleagueDocuments(new Set(), () => ++calls > 1)).complete).toBe(false);
+  });
+
+  /**
+   * `null` and `[]` are different answers from the directory and only one is a
+   * failure. Conflating them blocks the sweep forever wherever the directory is not
+   * configured — which is every test in `brain-drive.test.ts`, and how this was caught.
+   */
+  it("is NOT complete when the directory cannot be read at all", async () => {
+    mailboxes.value = null;
+    expect((await colleagueDocuments(new Set(), () => false)).complete).toBe(false);
+  });
+
+  it("IS complete when the directory is readable and simply empty", async () => {
+    mailboxes.value = [];
+    expect((await colleagueDocuments(new Set(), () => false)).complete).toBe(true);
+  });
+
   it("keeps walking when one colleague refuses, and counts the refusal", async () => {
     mailboxes.value = ["mb@loveiq.org", "mo@loveiq.org"];
     refuseToken.add("mb@loveiq.org");
