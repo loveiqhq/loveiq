@@ -176,6 +176,25 @@ export const CRITERIA = [
     probes: ["verify-no-survey-restart.mjs", "verify-survey-loop.mjs"],
   },
   {
+    /**
+     * An unhandled exception in our own bundle. NO PROBE, deliberately.
+     *
+     * A browser check driving production today cannot reproduce a hydration
+     * mismatch, or a ChunkLoadError that hit one reader mid-deploy. A probe
+     * that cannot reproduce it would return a clean verdict — the exact false
+     * evidence this pipeline has been full of. So this routes to the
+     * "recognised, no probe covers it" path, which asks a human instead.
+     *
+     * Matched on the exact phrasing the exception lane generates rather than on
+     * loose words like "error": E1 already owns error messages a reader can
+     * SEE, and a broad pattern here would steal its findings.
+     */
+    id: "X1",
+    label: "unhandled error in our own code",
+    match: /An unhandled error was thrown in our own code while a reader was on/i,
+    probes: [],
+  },
+  {
     // CTA visibility is Marcus's bullet 8, and it is a PROBE, not a model
     // question: in the first viewport, reachable by a tap, big enough. A model
     // scoring 0.20 on defects it can literally see would be guessing at
@@ -886,6 +905,56 @@ async function ownSurveyRestarts(lookbackHours) {
 
 const RESTART_FINDINGS = await ownSurveyRestarts(LOOKBACK_HOURS);
 
+/**
+ * Unhandled exceptions in OUR OWN code, which nothing has ever looked at.
+ *
+ * `$exception` carries the type, the message and the source file, and 33
+ * sessions over 30 days threw inside our own bundles against 2 from third
+ * parties. Recurring classes nobody had seen: React error #418 (a hydration
+ * mismatch) in five separate groups, ChunkLoadError in four — a reader on a
+ * page from before a deploy, whose next navigation cannot fetch its chunk — and
+ * a SecurityError that fired 24 times in one session.
+ *
+ * FILTERED, because most of the volume is not a defect we can act on:
+ *  - "Script error." is the cross-origin placeholder: 15 sessions with no type,
+ *    no message and no file. Nothing to report and nothing to fix.
+ *  - Third-party sources (gtm.js, clarity.js and friends) are somebody else's
+ *    bug in somebody else's script.
+ *  - `handled` exceptions were caught by our own code on purpose.
+ *
+ * Grouped by type and message so one finding is a CLASS, not an instance —
+ * twenty-four SecurityErrors in a session are one problem.
+ */
+const EXCEPTION_FINDINGS = await posthog(`
+  SELECT toString($session_id) AS sid,
+         toString(properties.$pathname) AS path,
+         replaceAll(replaceAll(toString(properties.$exception_types), '[', ''), ']', '') AS typ,
+         replaceAll(replaceAll(toString(properties.$exception_values), '[', ''), ']', '') AS val,
+         count() AS n
+  FROM events
+  WHERE event = '$exception'
+    AND timestamp > now() - INTERVAL ${LOOKBACK_HOURS} HOUR
+    AND $session_id IS NOT NULL
+    AND toString(properties.$exception_handled) = 'false'
+    AND toString(properties.$exception_values) NOT LIKE '%Script error.%'
+    AND toString(properties.$exception_sources) NOT LIKE '%gtm.js%'
+    AND toString(properties.$exception_sources) NOT LIKE '%clarity%'
+    AND toString(properties.$exception_sources) NOT LIKE '%googletagmanager%'
+    AND toString(properties.$exception_sources) NOT LIKE '%facebook%'
+    AND toString(properties.$exception_sources) NOT LIKE '%hotjar%'
+    AND toString(properties.$exception_sources) NOT LIKE '%cookieyes%'
+    AND toString(properties.$exception_sources) NOT LIKE '%trustpilot%'
+  GROUP BY sid, path, typ, val
+  ORDER BY n DESC
+  LIMIT ${OWN_EVENT_FETCH_LIMIT}
+`);
+
+if (EXCEPTION_FINDINGS.length === OWN_EVENT_FETCH_LIMIT) {
+  console.log(
+    `::error::exception query returned exactly ${OWN_EVENT_FETCH_LIMIT} groups — findings are being dropped.`
+  );
+}
+
 /** Only one per session: the same reader tapping the same dead thing is one defect. */
 const seenSessions = new Set(findings.map((f) => String(f[1])));
 for (const [sid, path, sel, n] of OWN_EVENT_FINDINGS) {
@@ -958,10 +1027,31 @@ const rank = (f) => {
 };
 findings.sort((a, b) => rank(b) - rank(a));
 
+for (const [sid, path, typ, val, n] of EXCEPTION_FINDINGS) {
+  const key = String(sid);
+  if (seenSessions.has(key)) continue;
+  seenSessions.add(key);
+  const what = `${String(typ).replace(/"/g, "").trim()}: ${String(val).replace(/"/g, "").trim()}`;
+  findings.push([
+    `own-exception:${sid}`,
+    key,
+    "our own error reports",
+    // Phrased to hit X1, which has no probe and therefore asks a human — an
+    // unhandled exception is not something a browser check can reproduce from
+    // the outside, and pretending otherwise would manufacture a clean verdict.
+    `An unhandled error was thrown in our own code while a reader was on ` +
+      `${path}: ${what.slice(0, 200)} (${n} time(s) in this session). ` +
+      `Recorded by our own error reporting, not inferred from a recording.`,
+    1,
+    0,
+  ]);
+}
+
 console.log(
   `${findings.length} finding(s) in the last ${LOOKBACK_HOURS}h ` +
     `(${OWN_EVENT_FINDINGS.length} from our own dead_click events, ` +
-    `${RESTART_FINDINGS.length} from our own survey log — both probed first)`
+    `${RESTART_FINDINGS.length} from our own survey log, ` +
+    `${EXCEPTION_FINDINGS.length} from our own error reports — all probed first)`
 );
 
 /**

@@ -297,8 +297,40 @@ export const UX_SCANNERS: readonly UxScanner[] = [
   },
 ];
 
-/** Verdict/confidence bar a finding must clear before it reaches Slack. */
+/**
+ * A FLOOR, NOT A QUALITY FILTER, and it is important nobody mistakes it again.
+ *
+ * Measured 2026-09-21 over every finding in the ledger:
+ *
+ *     confidence  findings  wrong when checkable
+ *     1.0             16            100%
+ *     0.9            120             92%
+ *     0.8              1              —
+ *
+ * Every finding the scanners have ever produced scores 0.8 or above — they do
+ * not express doubt — so this bar has never excluded one. And confidence is
+ * INVERSELY related to correctness here: the 1.0 group is wrong more often than
+ * the 0.9 group. Raising the bar cannot improve precision; it would only start
+ * discarding findings at the end that is marginally more accurate.
+ *
+ * It is kept as a floor against a future model that does emit low confidence,
+ * not because it is doing anything today. The checks that actually separate a
+ * real finding from a narration are the refusal gate (`contradiction()`), the
+ * corroborators (`surveyRestartWitness`, our own dead_click events) and
+ * claim-scoping in the verifier — see features/ux-review/AGENT_README.md.
+ *
+ * `scanners.test.ts` fails if this is raised above 0.8, because doing so would
+ * be a plausible and entirely counterproductive reaction to a low precision
+ * number.
+ */
 export const UX_REVIEW_MIN_CONFIDENCE = 0.7;
+
+/**
+ * The highest bar the measurement supports. See above: the whole population
+ * sits at 0.8-1.0, so anything above this silently discards findings without
+ * improving precision.
+ */
+export const UX_REVIEW_MAX_DEFENSIBLE_CONFIDENCE = 0.8;
 
 /**
  * Measured monthly spend of the PERMANENT fleet — champions only.

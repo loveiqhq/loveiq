@@ -166,3 +166,61 @@ describe("findings synthesised from our own survey log", () => {
     expect(SRC).toMatch(/::error::own-event query returned exactly/);
   });
 });
+
+/**
+ * Unhandled exceptions in our own bundle, which nothing had ever looked at.
+ *
+ * Measured 2026-09-21 over 30 days: 33 sessions threw inside our own code
+ * against 2 from third parties. Recurring classes nobody had seen — React error
+ * #418 (a hydration mismatch) in five groups, ChunkLoadError in four (a reader
+ * on a pre-deploy page whose next navigation cannot fetch its chunk), and a
+ * SecurityError that fired 24 times in a single session.
+ */
+describe("findings synthesised from our own error reports", () => {
+  it("only reports what we can act on", () => {
+    const block = /const EXCEPTION_FINDINGS = await posthog\(`([\s\S]*?)`\);/.exec(SRC)?.[1] ?? "";
+    expect(block, "the exception query is missing").not.toBe("");
+    // Unhandled only: a caught exception was handled on purpose.
+    expect(block).toContain("$exception_handled) = 'false'");
+    // "Script error." is the cross-origin placeholder — 15 sessions with no
+    // type, no message and no file. Nothing to report and nothing to fix.
+    expect(block).toContain("Script error.");
+    // Somebody else's bug in somebody else's script.
+    for (const vendor of ["gtm.js", "clarity", "googletagmanager", "facebook", "hotjar"]) {
+      expect(block, `${vendor} must be excluded`).toContain(vendor);
+    }
+    // Grouped so one finding is a CLASS, not one of 24 instances.
+    expect(block).toContain("GROUP BY sid, path, typ, val");
+  });
+
+  it("routes to a criterion with NO probe, so it asks a human", () => {
+    /**
+     * A browser check driving production today cannot reproduce a hydration
+     * mismatch or a mid-deploy ChunkLoadError. A probe that cannot reproduce it
+     * returns a clean verdict — the false evidence this pipeline has been full
+     * of. X1 has no probes, which routes to "recognised, no probe covers it"
+     * and posts a request for a human.
+     */
+    expect(SRC).toMatch(/id: "X1",\s*\n\s*label: "unhandled error in our own code",/);
+    expect(SRC).toMatch(/id: "X1"[\s\S]{0,200}probes: \[\],/);
+    // The phrasing the lane emits must be what X1 matches, or the findings fall
+    // through to `gap` and are never delivered.
+    expect(SRC).toContain("An unhandled error was thrown in our own code while a reader was on");
+    const x1 = /match: \/An unhandled error was thrown in our own code while a reader was on\/i/;
+    expect(SRC).toMatch(x1);
+  });
+
+  it("does not steal E1's findings", () => {
+    // E1 owns error messages a reader can SEE. A loose /error/i here would take
+    // them, and E1 has a probe while X1 deliberately does not.
+    const x1Match = /id: "X1",[\s\S]{0,400}?match: (\/[^\n]+\/i),/.exec(SRC)?.[1] ?? "";
+    expect(x1Match).not.toBe("");
+    const re = new RegExp(x1Match.slice(1, -2), "i");
+    expect(re.test("An 'Unable to process request.' error message was shown.")).toBe(false);
+    expect(re.test("The user reached checkout and saw an error")).toBe(false);
+  });
+
+  it("bounds the work here too", () => {
+    expect(SRC).toMatch(/EXCEPTION_FINDINGS\.length === OWN_EVENT_FETCH_LIMIT/);
+  });
+});
