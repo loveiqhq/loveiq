@@ -13,3 +13,17 @@
  * themselves from our own analytics.
  */
 export const PROBE_COOKIE = "loveiq_probe";
+
+/**
+ * Is this request one of our own probes?
+ *
+ * A FUNCTION, not a regex each caller rebuilds. The first version left the
+ * pattern inline in the route and asserted an identical copy in the test, so
+ * loosening the route's match to a bare substring changed nothing the suite
+ * could see — `not_loveiq_probe=1` and `loveiq_probe=10` would both have
+ * counted, and the test still passed because it was grading its own copy.
+ *
+ * Anchored on a cookie boundary for that reason, and on `=1` exactly.
+ */
+export const isProbeRequest = (cookieHeader: string | null | undefined): boolean =>
+  new RegExp(`(?:^|;\\s*)${PROBE_COOKIE}=1(?:;|$)`).test(cookieHeader ?? "");

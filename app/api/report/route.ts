@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { scheduleAfterResponse } from "@shared/http/after-response";
-import { PROBE_COOKIE } from "@shared/http/probe-cookie";
+import { isProbeRequest } from "@shared/http/probe-cookie";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { getBreaker, CircuitOpenError } from "@shared/http/circuit-breaker";
@@ -539,9 +539,7 @@ export async function GET(request: Request) {
        */
       // Read off the raw Cookie header: this handler takes a plain `Request`,
       // which has no `cookies` accessor.
-      const isProbe = new RegExp(`(?:^|;\\s*)${PROBE_COOKIE}=1(?:;|$)`).test(
-        request.headers.get("cookie") ?? ""
-      );
+      const isProbe = isProbeRequest(request.headers.get("cookie"));
       if (isProbe) {
         logger.info({ path: "/api/report" }, "probe request — report_session row skipped");
       }

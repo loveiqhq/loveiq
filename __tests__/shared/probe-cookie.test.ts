@@ -17,7 +17,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { PROBE_COOKIE } from "@shared/http/probe-cookie";
+import { isProbeRequest, PROBE_COOKIE } from "@shared/http/probe-cookie";
 
 const read = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8");
 
@@ -44,19 +44,26 @@ describe("the probe marker", () => {
     expect(route).toMatch(/const isProbe = /);
     // ...and it is what gates the write, not merely computed and ignored.
     expect(route).toMatch(/if \(isProbe\) \{[\s\S]{0,80}\} else if \(access\.personalReportId/);
-    expect(route).toContain("PROBE_COOKIE");
+    expect(route).toContain("isProbeRequest");
   });
 
   it("matches the cookie exactly, not as a substring of another one", () => {
-    // `loveiq_probe=1` must not be satisfied by `not_loveiq_probe=1` or by
-    // `loveiq_probe=10`, which a bare indexOf would accept.
-    const re = new RegExp(`(?:^|;\\s*)${PROBE_COOKIE}=1(?:;|$)`);
-    expect(re.test(`${PROBE_COOKIE}=1`)).toBe(true);
-    expect(re.test(`a=b; ${PROBE_COOKIE}=1`)).toBe(true);
-    expect(re.test(`a=b; ${PROBE_COOKIE}=1; c=d`)).toBe(true);
-    expect(re.test(`not_${PROBE_COOKIE}=1`)).toBe(false);
-    expect(re.test(`${PROBE_COOKIE}=10`)).toBe(false);
-    expect(re.test(`${PROBE_COOKIE}=0`)).toBe(false);
-    expect(re.test("")).toBe(false);
+    /**
+     * Grades THE FUNCTION THE ROUTE CALLS, not a copy of its regex.
+     *
+     * The first version rebuilt the pattern here and asserted that. Loosening
+     * the route's match to a bare substring then changed nothing the suite
+     * could see — caught by mutation, which is the only way that kind of test
+     * ever announces itself.
+     */
+    expect(isProbeRequest(`${PROBE_COOKIE}=1`)).toBe(true);
+    expect(isProbeRequest(`a=b; ${PROBE_COOKIE}=1`)).toBe(true);
+    expect(isProbeRequest(`a=b; ${PROBE_COOKIE}=1; c=d`)).toBe(true);
+    expect(isProbeRequest(`not_${PROBE_COOKIE}=1`)).toBe(false);
+    expect(isProbeRequest(`${PROBE_COOKIE}=10`)).toBe(false);
+    expect(isProbeRequest(`${PROBE_COOKIE}=0`)).toBe(false);
+    expect(isProbeRequest("")).toBe(false);
+    expect(isProbeRequest(null)).toBe(false);
+    expect(isProbeRequest(undefined)).toBe(false);
   });
 });
