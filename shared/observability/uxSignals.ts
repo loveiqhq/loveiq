@@ -104,8 +104,25 @@ function selectorFor(target: EventTarget | null): string {
   return parts.join("").slice(0, SELECTOR_MAX_LEN) || "unknown";
 }
 
-function isInteractive(target: EventTarget | null): boolean {
-  if (!(target instanceof Element)) return false;
+/**
+ * Why a tap counted as dead, kept because the two are not the same finding.
+ *
+ * `disabled_control` is the high-signal case: something that looks live, a
+ * reader taps it, nothing happens. `non_interactive` is a tap on prose or a
+ * container, which is overwhelmingly just reading — 95% of 11,662 events in 30
+ * days, against 5% for disabled controls.
+ *
+ * The distinction was computed and thrown away: the event carried only
+ * `pathname` and `target_selector`, so nothing downstream could tell a defect
+ * from someone resting a thumb on a paragraph. Answering "how many of these are
+ * real?" needed a regex over the selector, which is a guess — the first attempt
+ * matched `article` and `aside` because the pattern began `^(button|a|…)`.
+ */
+export type DeadClickReason = "disabled_control" | "non_interactive";
+
+/** `null` when the tap was on something that genuinely responds. */
+function deadClickReason(target: EventTarget | null): DeadClickReason | null {
+  if (!(target instanceof Element)) return null;
   const control = target.closest(INTERACTIVE_SELECTOR);
   if (control) {
     /**
@@ -122,18 +139,18 @@ function isInteractive(target: EventTarget | null): boolean {
     const isDisabled =
       (control as HTMLButtonElement).disabled === true ||
       control.getAttribute("aria-disabled") === "true";
-    // Report it (return false) rather than falling through to the cursor walk,
-    // which would call it interactive again off any `cursor: pointer` ancestor.
-    return !isDisabled;
+    // Reported rather than falling through to the cursor walk, which would call
+    // it interactive again off any `cursor: pointer` ancestor.
+    return isDisabled ? "disabled_control" : null;
   }
   // Walk up checking computed cursor — covers `cursor: pointer` on custom
   // overlays without an explicit role. Only check 3 levels to keep it cheap.
   let node: Element | null = target;
   for (let i = 0; node && i < 3; i++, node = node.parentElement) {
     const style = window.getComputedStyle(node);
-    if (style.cursor === "pointer") return true;
+    if (style.cursor === "pointer") return null;
   }
-  return false;
+  return "non_interactive";
 }
 
 /**
@@ -205,13 +222,16 @@ export function installUxSignals(): void {
       });
     }
 
-    // Dead-click detection: pointer-down on a non-interactive element.
+    // Dead-click detection: pointer-down on something that does not respond.
     // Dedupe per (pageview, selector) to keep volume sane.
-    if (!isInteractive(target)) {
+    const reason = deadClickReason(target);
+    if (reason) {
       const selector = selectorFor(target);
       if (!state.deadClickSelectors.has(selector)) {
         state.deadClickSelectors.add(selector);
-        trackDeadClick({ pathname: state.pathname, target_selector: selector });
+        // `reason` travels with it so a disabled control is separable from a
+        // tap on prose downstream, without guessing from the selector.
+        trackDeadClick({ pathname: state.pathname, target_selector: selector, reason });
       }
     }
   };

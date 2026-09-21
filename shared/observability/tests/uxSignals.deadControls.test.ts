@@ -100,6 +100,53 @@ describe("dead-click detection on controls that look live", () => {
     expect(tracked.dead).toHaveBeenCalledTimes(1);
   });
 
+  /**
+   * The two cases are not the same finding, and the event could not tell them
+   * apart.
+   *
+   * A disabled control that looks live is a defect. A tap on a paragraph is a
+   * reader resting a thumb — 95% of 11,662 events over 30 days, against 5% for
+   * disabled controls. `isInteractive` computed the difference and the caller
+   * threw it away, so the only way to ask "how many of these are real?" was a
+   * regex over the selector: a guess, and the first attempt matched `article`
+   * and `aside` because the pattern started `^(button|a|…)`.
+   */
+  it("says WHY the tap was dead", () => {
+    document.body.innerHTML = `<button class="survey-next" disabled>Next</button>`;
+    tap(document.querySelector("button")!);
+    expect(tracked.dead).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: "disabled_control" })
+    );
+  });
+
+  it("marks a tap on prose as the other thing entirely", () => {
+    document.body.innerHTML = `<p class="copy">Some report copy</p>`;
+    tap(document.querySelector("p")!);
+    expect(tracked.dead).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: "non_interactive" })
+    );
+  });
+
+  it("never labels a live control, because it never reports one", () => {
+    // The reason only exists on events that fire. An enabled button responds,
+    // so there is nothing to label — asserting that keeps a future "always
+    // report, label it dead-or-not" refactor from doubling the event volume.
+    document.body.innerHTML = `<button class="survey-next">Next</button>`;
+    tap(document.querySelector("button")!);
+    expect(tracked.dead).not.toHaveBeenCalled();
+  });
+
+  it("keeps the fields the pipeline already reads", () => {
+    // verify-ux-findings.mjs passes target_selector and url_path into
+    // verify-dead-click-target.mjs — the one probe that reads what the scanner
+    // claimed. Adding a field must not move the two it depends on.
+    document.body.innerHTML = `<p class="copy">Some report copy</p>`;
+    tap(document.querySelector("p")!);
+    expect(tracked.dead).toHaveBeenCalledWith(
+      expect.objectContaining({ target_selector: "p.copy", pathname: expect.any(String) })
+    );
+  });
+
   it("dedupes per selector per pageview and reopens after a reset", () => {
     document.body.innerHTML = `<button class="survey-next" disabled>Next</button>`;
     const btn = document.querySelector("button")!;
