@@ -72,10 +72,18 @@ async function settleAnimations(page: import("@playwright/test").Page) {
  *   - by ROUTE. The other twelve routes are untouched; this is `/survey` only.
  *   - by PRESENCE. If the gap is ever fixed the pin fails LOUDLY, because an
  *     allowance nobody notices has outlived its subject is how dead cruft survives.
+ *     That last check runs on DESKTOP CHROME ONLY, and the reason is measured: on
+ *     Mobile Chrome and Desktop Safari axe intermittently reports no contrast
+ *     violation on this page at all — the button carries a 700ms entrance animation
+ *     and those two engines sometimes sample it before it settles. Asserting presence
+ *     on every engine therefore reddened CI on browser variance rather than on
+ *     anything about the button (measured: 1 failed, 2 flaky, all three of them this
+ *     assertion). Forgiveness still applies on every engine; only the ratchet is
+ *     scoped, and one engine is all a ratchet needs.
  */
 const KNOWN_GAP = { route: "/survey", id: "color-contrast", fg: "#ffffff", bg: "#fe6839" };
 for (const route of criticalRoutes) {
-  test(`${route} — no critical accessibility violations`, async ({ page }) => {
+  test(`${route} — no critical accessibility violations`, async ({ page }, testInfo) => {
     await page.goto(route);
     await settleAnimations(page);
 
@@ -114,7 +122,7 @@ for (const route of criticalRoutes) {
       `Critical/serious a11y violations on ${route}: ${unexpected.map((v) => `${v.id}: ${v.description}`).join("; ")}`
     ).toHaveLength(0);
 
-    if (route === KNOWN_GAP.route) {
+    if (route === KNOWN_GAP.route && testInfo.project.name === "Desktop Chrome") {
       expect(
         knownNodes,
         `The white-on-${KNOWN_GAP.bg} contrast gap on ${KNOWN_GAP.route} is GONE. ` +
