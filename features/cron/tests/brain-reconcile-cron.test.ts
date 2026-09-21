@@ -138,6 +138,22 @@ function routeFetch(over: Record<string, unknown> = {}) {
         : ((over.domainHeld as number | undefined) ?? 341);
       return { ok: true, json: async () => [], headers: { get: () => `0-0/${held}` } };
     }
+    /**
+     * Rows that carry no sweep scope. Default none; `unsweepable` plants some.
+     *
+     * Answered through `content-range`, because that is what the real `countRows`
+     * reads — a body-length fixture silently shadowed the shared mock and made an
+     * unrelated check report 0 against 417.
+     *
+     * The planted rows are returned ONLY when the query actually covers `calendar`,
+     * the source that had the problem. Without that, narrowing the check to gmail
+     * alone passed every test.
+     */
+    if (path.includes("mailbox=is.null")) {
+      if (over.unsweepableFails) return fail();
+      const n = path.includes("calendar") ? ((over.unsweepable as number | undefined) ?? 0) : 0;
+      return { ok: true, json: async () => [], headers: { get: () => `0-0/${n}` } };
+    }
     // The corpus secret scan pages `select=body,title,url`. Default: one clean page, which
     // ends the loop. `leakyChunks` plants rows that still carry a secret.
     if (path.includes("select=body,title,url")) {
@@ -172,7 +188,7 @@ describe("brain-reconcile — the readings it actually assembles", () => {
     const { buildReadings } = await import("@/app/api/cron/brain-reconcile/route");
     const { reconcile } = await import("@features/brain/server/reconcile");
     const { readings, unread } = await buildReadings();
-    expect(readings).toHaveLength(13);
+    expect(readings).toHaveLength(14);
     expect(unread).toEqual([]);
     expect(reconcile(readings)).toEqual([]);
   });
@@ -284,6 +300,33 @@ describe("brain-reconcile — the readings it actually assembles", () => {
     const { readings, unread } = await buildReadings();
     expect(unread.join(" ")).toContain("browser key");
     expect(reconcile(readings).find((d) => d.what.includes("browser key"))).toBeUndefined();
+  });
+
+  /**
+   * A ROW OUTSIDE EVERY SWEEP SCOPE OUTLIVES WHAT IT DESCRIBES.
+   *
+   * `calendar` sweeps by `meta.mailbox`, so six rows without one sat frozen since
+   * 2026-09-17 while every other calendar chunk was touched hourly — two of them
+   * occurrences of the Roadmap workshop on dates it had been moved off, so the corpus
+   * held three dates for one meeting.
+   */
+  it("notices rows that carry no sweep scope", async () => {
+    supabaseFetch.mockImplementation(routeFetch({ unsweepable: 6 }));
+    const { buildReadings } = await import("@/app/api/cron/brain-reconcile/route");
+    const { reconcile } = await import("@features/brain/server/reconcile");
+    const { readings } = await buildReadings();
+    const found = reconcile(readings).find((d) => d.what.includes("scope"));
+    expect(found).toBeDefined();
+    expect(found!.gap).toBe(6);
+  });
+
+  it("reports UNREAD when that count cannot be taken, not zero", async () => {
+    supabaseFetch.mockImplementation(routeFetch({ unsweepableFails: true }));
+    const { buildReadings } = await import("@/app/api/cron/brain-reconcile/route");
+    const { reconcile } = await import("@features/brain/server/reconcile");
+    const { readings, unread } = await buildReadings();
+    expect(unread.join(" ")).toContain("sweep cannot reach");
+    expect(reconcile(readings).find((d) => d.what.includes("scope"))).toBeUndefined();
   });
 
   it("notices a chunk that still holds a secret", async () => {

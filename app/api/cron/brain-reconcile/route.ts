@@ -312,6 +312,39 @@ export async function buildReadings(): Promise<{ readings: Reading[]; unread: st
     unread.push(`corpus secret scan (stopped after ${scanned} chunks)`);
   } else {
     /**
+     * A ROW THE SWEEP CANNOT REACH IS A ROW THAT LIVES FOREVER.
+     *
+     * `calendar` sweeps with `scopeKey: "mailbox"`, so a chunk whose `meta.mailbox` is
+     * absent sits outside every scope the sweep considers and is never a candidate for
+     * deletion — whatever happens to the meeting it describes.
+     *
+     * Measured 2026-09-20: six such rows, all frozen at 2026-09-17 while every other
+     * calendar chunk was being touched hourly. Two were occurrences of the Roadmap
+     * workshop on dates it had been moved off, so the corpus held three dates for one
+     * meeting and two of them were wrong. They are legacy — `mailbox` is a required
+     * argument to `eventToRows` now, and the comment there records that a mutation
+     * dropping it once compiled and passed every test — so the population is closed,
+     * and it was deleted. This check exists so it cannot quietly reopen.
+     *
+     * Counted for `gmail` too, which scopes the same way and currently has none.
+     */
+    const unsweepable = await countRows(
+      "/rest/v1/brain_chunk?select=id&source=in.(calendar,gmail)&meta->>mailbox=is.null"
+    );
+    if (unsweepable === null) {
+      unread.push("rows the sweep cannot reach");
+    } else {
+      readings.push({
+        what: "chunks outside every scope their source sweeps by",
+        left: { source: "what the sweep can reach", value: 0 },
+        right: { source: "what carries no scope key", value: unsweepable },
+        tolerance: 0,
+        because:
+          "calendar and gmail sweep scoped by `meta.mailbox`, so a row without one is never a deletion candidate and outlives the meeting or thread it describes",
+      });
+    }
+
+    /**
      * CAN A BROWSER KEY READ THE CORPUS?
      *
      * `brain_chunk` holds the company's mail, meeting transcripts, contracts and Notion —
