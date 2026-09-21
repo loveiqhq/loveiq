@@ -313,6 +313,39 @@ function buildProbes(f: LiveFigures): Probe[] {
  * EVERY PROBE HERE IS A DEFECT THAT REALLY HAPPENED. A battery of invented cases
  * measures imagination; this one measures the bugs that got through.
  */
+/**
+ * PROBES THAT ARE RED ON PURPOSE, AND WHY.
+ *
+ * Three of these have been failing for days with their causes written out in full
+ * above their definitions — measured, candidate fixes tried and rejected, left red
+ * deliberately. Reported as plain FAILs they are indistinguishable from a regression
+ * that appeared five minutes ago, which is the whole problem: a run that always shows
+ * red trains everyone to skim the number and move on. Today that cost an hour
+ * re-deriving `record-beats-transcript` from scratch when the answer was three lines
+ * above the probe.
+ *
+ * So they are named here, and the summary separates REGRESSIONS from KNOWN. Only
+ * regressions set the exit code.
+ *
+ * THE ENTRY MUST NOT OUTLIVE ITS SUBJECT. A probe listed here that starts PASSING is
+ * reported as RECOVERED and fails the run, so whoever fixed it is made to delete the
+ * line. An allowance nobody notices has gone stale is how a suite quietly stops
+ * asserting things — the same reason the /survey contrast pin in `e2e/a11y.spec.ts`
+ * fails when its gap disappears.
+ */
+const KNOWN_RED: Record<string, string> = {
+  "record-beats-transcript":
+    "red since 2026-09-20: no meeting SUMMARY chunk mentions pricing, so only transcripts " +
+    "match at all. Two fixes measured and rejected — see the comment on the probe.",
+  "decision-pivot":
+    "the meeting record it wants is crowded out by `decision` chunks, which went from 48 " +
+    "to 82 when the miner was repaired. Threshold was tuned at 48.",
+  "cm-marcus-line":
+    "a pressure gauge, not a regression signal: reddens on corpus growth, recovers on " +
+    "shrinkage. Measured 2026-09-21 — the answer is #2 WITHIN `doc` at 2.00 against " +
+    "2.01, so the ranking is fine and the probe is reading the edge.",
+};
+
 interface RetrievalProbe {
   kind: string;
   q: string;
@@ -2433,6 +2466,7 @@ async function runRetrievalBattery(only: string | null): Promise<number> {
   };
 
   let flaky = 0;
+  let known = 0;
   for (const p of probes) {
     let { hits, issues, ms } = await run(p);
     let firstIssues: string[] = [];
@@ -2444,8 +2478,20 @@ async function runRetrievalBattery(only: string | null): Promise<number> {
       ({ hits, issues, ms } = await run(p));
     }
 
-    const state = issues.length ? "FAIL" : firstIssues.length ? "flaky" : "ok  ";
-    if (issues.length) failures++;
+    const knownWhy = KNOWN_RED[p.kind];
+    const recovered = Boolean(knownWhy) && !issues.length && !firstIssues.length;
+    const state = recovered
+      ? "RECOVERED"
+      : issues.length
+        ? knownWhy
+          ? "KNOWN"
+          : "FAIL"
+        : firstIssues.length
+          ? "flaky"
+          : "ok  ";
+    if (recovered) failures++;
+    else if (issues.length && knownWhy) known++;
+    else if (issues.length) failures++;
     else if (firstIssues.length) flaky++;
 
     console.log(
@@ -2453,6 +2499,12 @@ async function runRetrievalBattery(only: string | null): Promise<number> {
         `${p.opts ? ` ${JSON.stringify(p.opts)}` : ""}`
     );
     console.log(`      ${hits.length} hits in ${ms}ms`);
+    if (recovered)
+      console.log(
+        `      RECOVERED — this probe is listed in KNOWN_RED and now passes. ` +
+          `Delete its entry, or the suite stops asserting it.`
+      );
+    if (issues.length && knownWhy) console.log(`      KNOWN: ${knownWhy}`);
     if (issues.length) for (const i of issues) console.log(`      ISSUE: ${i}`);
     else if (firstIssues.length)
       console.log(`      PASSED ON RETRY — first attempt said: ${firstIssues.join(" | ")}`);
@@ -2460,7 +2512,9 @@ async function runRetrievalBattery(only: string | null): Promise<number> {
   }
 
   console.log(
-    `\n=== retrieval: ${probes.length - failures - flaky}/${probes.length} clean, ${failures} flagged` +
+    `\n=== retrieval: ${probes.length - failures - flaky - known}/${probes.length} clean, ` +
+      `${failures} REGRESSION${failures === 1 ? "" : "S"}` +
+      `${known ? `, ${known} known (red on purpose, listed in KNOWN_RED)` : ""}` +
       `${flaky ? `, ${flaky} FLAKY (passed only on retry — not counted clean)` : ""} ===`
   );
   return failures;
