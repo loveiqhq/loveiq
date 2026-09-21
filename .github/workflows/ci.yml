@@ -278,18 +278,37 @@ jobs:
       # STAGING_PASSWORD is also withheld: with it set, `proxy.ts` gates every
       # route and the a11y check on /survey fails on the login page rather than on
       # the page under test. That is the one failure the first run of this produced.
+      #
+      # The two NEXT_PUBLIC_SUPABASE_* values are unreachable like the rest, but they
+      # must be SET: `createSupabaseMiddleware` passes them straight to
+      # `createServerClient`, which THROWS on undefined ("Your project's URL and Key
+      # are required"). A throw in proxy.ts is a 500 on every /admin path, so the
+      # admin gate never reaches its `if (!user)` redirect and
+      # `admin.spec.ts` sees /admin instead of /admin/login. Measured 2026-09-21:
+      # undefined throws; an unreachable URL returns `user: null` with no network
+      # call at all, which is the real unauthenticated path the gate is built to take.
       - run: npm run build
         env:
           NEXT_PUBLIC_SITE_URL: http://localhost:3000
           NEXT_PUBLIC_RECAPTCHA_SITE_KEY: dummy
           SUPABASE_URL: http://127.0.0.1:9
           SUPABASE_SERVICE_ROLE_KEY: no-database-in-e2e
-      - run: npx playwright test
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:9
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: no-database-in-e2e
+      #
+      # Visual regression is EXCLUDED, and not because it is inconvenient: Playwright
+      # names baselines per platform, so this job can only compare `*-linux.png`, and
+      # `visual-regression.yml` is the job that owns generating and committing those.
+      # Running them here compares Linux renders against whatever the last person
+      # committed from their laptop.
+      - run: npx playwright test --grep-invert "Visual Regression"
         env:
           NEXT_PUBLIC_SITE_URL: http://localhost:3000
           NEXT_PUBLIC_RECAPTCHA_SITE_KEY: dummy
           SUPABASE_URL: http://127.0.0.1:9
           SUPABASE_SERVICE_ROLE_KEY: no-database-in-e2e
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:9
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: no-database-in-e2e
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: failure()
         with:
