@@ -400,7 +400,10 @@ The middleware (`proxy.ts`) relaxes CSP in dev mode:
 ### Pre-push hook standard
 
 - Pre-push runs: `npm test` (unit tests only, ~10–30s) ✅
-- E2E belongs in CI, NOT pre-push — too slow (~3–6 min), blocks developer flow ❌
+- E2E belongs in CI, NOT pre-push — too slow, blocks developer flow ❌
+- E2E now RUNS in CI (`ci.yml`, job `End-to-end (Playwright)`), on every push and PR.
+  ~6 min at 4 workers against a locally built server with NO database credentials,
+  so it cannot write to production the way a local run does.
 
 ### To validate changes manually
 

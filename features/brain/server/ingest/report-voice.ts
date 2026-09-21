@@ -2,6 +2,8 @@ import { archetypeContent } from "@/data/report-archetypes";
 import { reportSections } from "@/data/report-general";
 import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
 import { summaryArchetypeContent } from "@/data/report-summary";
+import { reportPracticeIntroBlocks } from "@/data/report-practice-intro";
+import { faqs } from "@/data/faqs";
 import { splitBody } from "./notion";
 import { sweepStale, upsertChunks, type BrainRow, type IngestResult } from "./upsert";
 
@@ -55,6 +57,15 @@ function humanise(key: string): string {
     .replace(/[_-]+/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase())
     .trim();
+}
+
+/** A stable id from a question, so editing the ANSWER does not orphan the row. */
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 60);
 }
 
 function rowsFor(
@@ -129,6 +140,66 @@ export function buildReportVoiceRows(stampedAt: string): BrainRow[] {
       )
     );
   }
+
+  /**
+   * 3a. THE HOMEPAGE FAQ — the answers we give customers before they buy.
+   *
+   * `data/faqs.ts` is rendered by `WFAQ.tsx` on both landing variants AND emitted as
+   * FAQPage JSON-LD, so it is simultaneously the most-read copy we publish and the
+   * version Google indexes. The brain held none of it: "what do we tell customers
+   * about X" and "what does our FAQ say about refunds" had no source.
+   *
+   * Found 2026-09-21 by diffing every file in `data/` against the imports of the two
+   * repo-built ingesters — the same sweep that found `report-practice-intro`.
+   *
+   * One row per question, because a question is the unit somebody asks about, and
+   * pooling twelve of them would answer about refunds with whichever neighbour scored
+   * highest — the same reasoning the glossary builder already applies per term.
+   */
+  for (const f of faqs) {
+    const q = String(f.question ?? "").trim();
+    const a = htmlToText(String(f.answer ?? ""));
+    if (!q || a.length < 20) continue;
+    rows.push(
+      ...rowsFor(
+        `faq:${slugify(q)}`,
+        `Homepage FAQ as shipped — ${q}`,
+        `${q}\n\n${a}`,
+        { chapter: "faq", archetype: null, scope: "general" },
+        stampedAt
+      )
+    );
+  }
+
+  /**
+   * 3b. HOW TO READ THE TWO SCORES — the only shipped report file this builder was
+   * not reading.
+   *
+   * `data/report-practice-intro.ts` is rendered to every reader by
+   * `features/report/ui/reportContent.ts`, and it is not decoration: it carries the
+   * "probability-based estimates, not deterministic" disclaimer, the definitions of
+   * Fantasy Pull and Lived Pleasure, the high/low bands, and all four combinations —
+   * high fantasy with low pleasure and the rest. "What does a high fantasy pull and a
+   * low lived pleasure mean" is an ordinary question about our own product, and the
+   * brain could not answer it from the copy we actually ship.
+   *
+   * Found 2026-09-21 by diffing `data/report-*.ts` against this file's imports: four
+   * of five were read. One block per paragraph rather than one joined chunk, so a
+   * question about a single combination retrieves that combination.
+   */
+  reportPracticeIntroBlocks.forEach((html, i) => {
+    const text = htmlToText(String(html ?? ""));
+    if (text.length < 40) return;
+    rows.push(
+      ...rowsFor(
+        `practice-intro:${i + 1}`,
+        "Report copy as shipped — how to read the Fantasy Pull and Lived Pleasure scores",
+        text,
+        { chapter: "practice-intro", archetype: null, scope: "general" },
+        stampedAt
+      )
+    );
+  });
 
   // 4. Practice tendencies: intro prose plus grouped blocks, flattened per archetype.
   for (const [archetype, content] of Object.entries(reportPracticeTendencies)) {

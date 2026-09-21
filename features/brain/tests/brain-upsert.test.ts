@@ -476,7 +476,7 @@ describe("the repo ingester redacts the same things the shared write path does",
 describe("every section heading stays findable after packing", () => {
   /** The chunker's functions, without the top-level script that talks to the database. */
   async function loadChunker() {
-    const { readFileSync, writeFileSync, mkdtempSync } = await import("node:fs");
+    const { readFileSync, writeFileSync, mkdtempSync, mkdirSync, cpSync } = await import("node:fs");
     const { join } = await import("node:path");
     const { tmpdir } = await import("node:os");
     const src = readFileSync("scripts/brain-ingest-repo.mjs", "utf8").split("\n");
@@ -485,6 +485,14 @@ describe("every section heading stays findable after packing", () => {
     const dir = mkdtempSync(join(tmpdir(), "chunker-"));
     const file = join(dir, "chunker.mjs");
     writeFileSync(file, src.slice(0, end).join("\n"));
+    /**
+     * The script's own `scripts/lib` imports have to come with it. Adding one relative
+     * import to the script broke this loader with "Cannot find module
+     * ./lib/legal-page-text.mjs" — the copy had no `lib/` beside it. Copying the whole
+     * directory keeps the next such import working without anyone rediscovering this.
+     */
+    mkdirSync(join(dir, "lib"), { recursive: true });
+    cpSync("scripts/lib", join(dir, "lib"), { recursive: true });
     return (await import(file)) as {
       chunkMarkdown: (
         path: string,
