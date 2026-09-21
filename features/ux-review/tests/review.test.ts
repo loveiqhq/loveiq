@@ -23,6 +23,9 @@ import {
   recordingLink,
   sessionClickTarget,
   sessionViewport,
+  biggestIndexDrop,
+  stripEchoedCriterion,
+  SURVEY_RESTART_MIN_DROP,
   type UxFinding,
   type VisionQuota,
   warnIfTruncated,
@@ -1066,5 +1069,136 @@ describe("fetchScannerDrift reaches the quota", () => {
 
     const drift = await fetchScannerDrift();
     expect(drift.map((d) => d.reason)).toContain("prompt");
+  });
+});
+
+/**
+ * THE WORST ERROR THIS SYSTEM CAN MAKE, with the finding it actually cost us.
+ *
+ * Every prompt asks the model to name which condition it matched, so findings
+ * routinely close with "This matches condition #2 (A LOOP: … the paywall and
+ * checkout return them to the report …)". That sentence is the CRITERION, not a
+ * claim about the reader, and the refusal gate was matching `checkout` inside
+ * it.
+ *
+ * Session 01a0bd47 was refuted with "the recording describes reaching checkout"
+ * while its body claimed only that the reader was returned to the survey. Our
+ * own survey_behavior_event log records a 56-question index drop in that
+ * session — the loop was real, and the one real loop this pipeline has observed
+ * was filed as the scanner lying.
+ */
+describe("the criterion the scanner echoes back is not a claim", () => {
+  /** Verbatim from ux_finding 01a0bd47, the finding this cost. */
+  const REAL_LOOP =
+    "The user completed the LoveIQ questionnaire, reached the report page, and " +
+    "later encountered a loop where clicking to unlock or view the report returned " +
+    "them to the survey assessment to take it again, repeating the flow multiple " +
+    "times before ending up back on the report page. This matches condition #2 " +
+    "(A LOOP: a control returns the user to the survey, or the paywall and " +
+    "checkout return them to the report without unlocking anything).";
+
+  const SEEN = new Set(["report_viewed", "survey_completed", "$pageview"]);
+
+  it("no longer refutes the real loop on a word from its own criterion", () => {
+    expect(contradiction(REAL_LOOP, SEEN)).toBeNull();
+  });
+
+  it("still refutes a press the body actually claims", () => {
+    // The other half. This finding says, in its own words, that the reader
+    // pressed Unlock — and no unlock event exists. That refutation is correct
+    // and must survive, or the fix has simply switched the gate off.
+    const REAL_REFUTATION =
+      "While viewing the report, they clicked the 'Unlock full report' button, " +
+      "which triggered a loading state and redirected back to the report page " +
+      "without unlocking the content. This matches condition 2 (A LOOP: the " +
+      "paywall and checkout return them to the report without unlocking anything).";
+    expect(contradiction(REAL_REFUTATION, SEEN)).toMatch(/unlock click/);
+  });
+
+  it("strips only the echo, and only from the end", () => {
+    expect(stripEchoedCriterion("A happened. This matches condition #2 (B).")).toBe("A happened. ");
+    expect(stripEchoedCriterion("A happened. this meets condition 4 (B).")).toBe("A happened. ");
+    // No echo — untouched, so a finding that never quotes its criterion is
+    // graded on its whole text exactly as before.
+    expect(stripEchoedCriterion("The user reached checkout and saw an error.")).toBe(
+      "The user reached checkout and saw an error."
+    );
+    // The word "condition" alone is not an echo; readers have conditions.
+    expect(stripEchoedCriterion("Their condition improved after checkout.")).toBe(
+      "Their condition improved after checkout."
+    );
+  });
+
+  it("keeps a claim that mentions checkout BEFORE the echo", () => {
+    // Stripping must not become a way to smuggle a false claim past the gate:
+    // a body that genuinely describes checkout is still refutable.
+    const claimsCheckout =
+      "The user reached the Stripe checkout and it failed. This matches condition 2 (A LOOP).";
+    expect(contradiction(claimsCheckout, SEEN)).toMatch(/reaching checkout/);
+  });
+});
+
+/**
+ * Our own log, asked whether the thing actually happened.
+ *
+ * `contradiction()` can only ever say NO. Nothing could say yes, so a claim the
+ * instrumentation independently witnessed was graded exactly like one it had
+ * never heard of — and telling those apart is the whole precision problem.
+ *
+ * Measured over 30 days: 3 of 755 survey sessions show an index drop, all of
+ * them 56-58 questions, against 0 of the 38 L1 findings the probes cleared.
+ * Run live against the session whose loop we wrongly refuted: {drop: 56,
+ * steps: 114}.
+ */
+describe("biggestIndexDrop", () => {
+  const seq = (...ix: Array<number | null>) => ix.map((question_index) => ({ question_index }));
+
+  it("sees a restart", () => {
+    expect(biggestIndexDrop(seq(0, 20, 56, 0))).toEqual({ drop: 56, steps: 4 });
+  });
+
+  it("ignores ordinary backwards navigation", () => {
+    // A Back button moves ONE question. Reporting that as a restart would make
+    // the witness fire on almost every session and mean nothing.
+    expect(biggestIndexDrop(seq(5, 4, 5, 6))).toBeNull();
+    expect(biggestIndexDrop(seq(9, 8, 7))).toBeNull();
+  });
+
+  it("ignores a monotonic run and an empty log", () => {
+    expect(biggestIndexDrop(seq(0, 1, 2, 3))).toBeNull();
+    expect(biggestIndexDrop([])).toBeNull();
+  });
+
+  it("skips nulls rather than reading them as question zero", () => {
+    // One bad write would otherwise manufacture a 56-question drop out of
+    // nothing, and this witness exists to be trusted when it fires.
+    expect(biggestIndexDrop(seq(56, null, 55))).toBeNull();
+    expect(biggestIndexDrop(seq(null, null))).toBeNull();
+  });
+
+  it("reports the LARGEST drop, not the last", () => {
+    expect(biggestIndexDrop(seq(60, 0, 3, 2))?.drop).toBe(60);
+  });
+
+  it("holds the threshold well below anything observed", () => {
+    // Every real case in production was 56 or more; the bar is 5. Raising it
+    // above the smallest real restart would silence the witness entirely.
+    expect(SURVEY_RESTART_MIN_DROP).toBeLessThan(56);
+    expect(biggestIndexDrop(seq(SURVEY_RESTART_MIN_DROP, 0))).not.toBeNull();
+    expect(biggestIndexDrop(seq(SURVEY_RESTART_MIN_DROP - 1, 0))).toBeNull();
+  });
+});
+
+describe("the verifier consults the witness", () => {
+  it("runs it for the journey criteria and no others", () => {
+    // A restart says nothing about a covered heading, and a witness wired to
+    // every criterion would add a claim-scoped PASS to findings it cannot
+    // speak to — which is exactly the false evidence this whole change is
+    // about removing.
+    const src = readFileSync(resolve(process.cwd(), "scripts/verify-ux-findings.mjs"), "utf8");
+    expect(src).toMatch(/RESTART_WITNESS_CRITERIA = new Set\(\["L1", "B1"\]\)/);
+    expect(src).toMatch(/if \(RESTART_WITNESS_CRITERIA\.has\(criterion\.id\)\)/);
+    // Recorded as claim-scoped, which is what makes a `clear` mean anything.
+    expect(src).toMatch(/file: "survey-behaviour-log"[\s\S]{0,200}claimScoped: true/);
   });
 });

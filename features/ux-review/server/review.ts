@@ -1057,6 +1057,128 @@ export function isSafeSessionId(sessionId: string): boolean {
   return /^[A-Za-z0-9-]{1,64}$/.test(sessionId);
 }
 
+/**
+ * The scanner quotes its own criterion back, and the refusal gate read it.
+ *
+ * Every prompt ends by asking the model to name which condition it matched, so
+ * a finding routinely closes with "This matches condition #2 (A LOOP: a control
+ * returns the user to the survey, or the paywall and checkout return them to
+ * the report without unlocking anything)". That trailing sentence is the
+ * CRITERION, not a claim about the reader — and CLAIM_EVIDENCE matched the word
+ * `checkout` inside it.
+ *
+ * It cost us the only real loop this pipeline has ever observed. Session
+ * 01a0bd47 was refuted with "the recording describes reaching checkout, but the
+ * session has none of checkout_started, begin_checkout…" while the body of the
+ * finding claimed no such thing — it said the reader was returned to the survey
+ * to take it again. Our own `survey_behavior_event` log independently records a
+ * 56-question index drop in that session: the loop was real, and we suppressed
+ * it. Two of the 24 refutations fire on a word that appears ONLY here.
+ *
+ * A false refutation is the worst error this system can make. A missed defect
+ * waits for the next reader to hit it; a refuted one is recorded as the scanner
+ * lying and nobody looks again.
+ */
+export const stripEchoedCriterion = (reasoning: string): string =>
+  reasoning.replace(/\bthis\s+(?:matches|meets|satisfies)\s+condition\b[\s\S]*$/i, "");
+
+/**
+ * Did the survey ACTUALLY restart? Our own log knows, and nothing asked it.
+ *
+ * `contradiction()` can only ever say no. There was no way for our own data to
+ * say YES, so a claim the instrumentation independently witnessed was graded
+ * exactly like one it had never heard of — and the pipeline's whole precision
+ * problem is that it cannot tell those apart.
+ *
+ * `survey_behavior_event` records `question_index` per transition. A reader
+ * sent back to the start leaves a DROP in that sequence. Measured over 30 days:
+ * 3 of 755 survey sessions show one, all of them 56-58 questions, against 0 of
+ * the 38 L1 findings the probes cleared. Specific, and it is our own data
+ * rather than a narration.
+ *
+ * NOT USED AS A REFUTER, deliberately, and this was tested rather than assumed:
+ * of the two L1 findings a probe genuinely reproduced, only ONE shows a drop.
+ * A restart that begins a fresh forward run leaves no drop at all, so absence
+ * proves nothing and "no drop, therefore no loop" would have suppressed a
+ * confirmed defect. It only ever adds evidence.
+ *
+ * THE BRIDGE: `ux_finding.session_id` is PostHog's; `survey_behavior_event`
+ * keys on the app's own survey session. `survey_submission` carries both, and
+ * 99 of 137 findings join through it.
+ */
+export interface SurveyRestartWitness {
+  /** Largest backwards jump in question_index, in questions. */
+  drop: number;
+  /** Recorded transitions in the session, so a thin log is visible as thin. */
+  steps: number;
+}
+
+/**
+ * A back button moves one question. Anything larger had no control to do it,
+ * and every case observed in production was 56 or more. Five is far below what
+ * was seen and far above what a stray double-fire could produce.
+ */
+export const SURVEY_RESTART_MIN_DROP = 5;
+
+export async function surveyRestartWitness(
+  sessionId: string
+): Promise<SurveyRestartWitness | null> {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key || !isSafeSessionId(sessionId)) return null;
+  const headers = { apikey: key, Authorization: `Bearer ${key}` };
+  try {
+    const subRes = await fetchWithTimeout(
+      `${url}/rest/v1/survey_submission?select=session_id&posthog_session_id=eq.${encodeURIComponent(sessionId)}&limit=2`,
+      { headers, timeoutMs: 8_000 }
+    );
+    if (!subRes.ok) return null;
+    const subs = (await subRes.json()) as Array<{ session_id: string | null }>;
+    // Two, not one, so the guard has something real to say: a second row means
+    // two submissions share a PostHog session, and the witness would then be
+    // reading whichever one PostgREST happened to return first. That is a data
+    // anomaly worth hearing about rather than a limit to silence.
+    warnIfTruncated(subs, 2, "restart witness: survey_submission");
+    const surveySession = subs[0]?.session_id;
+    if (!surveySession) return null;
+
+    const evRes = await fetchWithTimeout(
+      `${url}/rest/v1/survey_behavior_event?select=question_index,event_time,id` +
+        `&session_id=eq.${encodeURIComponent(surveySession)}&order=event_time.asc,id.asc&limit=2000`,
+      { headers, timeoutMs: 8_000 }
+    );
+    if (!evRes.ok) return null;
+    const rows = (await evRes.json()) as Array<{ question_index: number | null }>;
+    warnIfTruncated(rows, 2000, "restart witness: survey_behavior_event");
+    return biggestIndexDrop(rows);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Pure, so the shape of the evidence can be tested without a database.
+ *
+ * Nulls are skipped rather than treated as zero: a missing index is a row we
+ * cannot place, and reading it as question 0 would manufacture a 56-question
+ * drop out of one bad write.
+ */
+export function biggestIndexDrop(
+  rows: ReadonlyArray<{ question_index: number | null }>
+): SurveyRestartWitness | null {
+  let prev: number | null = null;
+  let drop = 0;
+  let steps = 0;
+  for (const row of rows) {
+    const index = row.question_index;
+    if (typeof index !== "number" || !Number.isFinite(index)) continue;
+    steps += 1;
+    if (prev !== null && index < prev) drop = Math.max(drop, prev - index);
+    prev = index;
+  }
+  return drop >= SURVEY_RESTART_MIN_DROP ? { drop, steps } : null;
+}
+
 /** The reason our telemetry contradicts this claim, or null. */
 export function contradiction(
   reasoning: string,
@@ -1075,8 +1197,11 @@ export function contradiction(
   // describes an unlock click, but the session has none"), then "Reproduced in
   // production" at 17:40. The caller now knows which happened and says so.
   if (events === null || events.size === 0) return null;
+  // Matched against what the model SAID HAPPENED, with the criterion it echoed
+  // back removed. See stripEchoedCriterion.
+  const claimed = stripEchoedCriterion(reasoning);
   for (const rule of CLAIM_EVIDENCE) {
-    if (!rule.claim.test(reasoning)) continue;
+    if (!rule.claim.test(claimed)) continue;
     if (rule.requireAny.some((e) => events.has(e))) continue;
     return `the recording describes ${rule.describes}, but the session has none of ${rule.requireAny.join(", ")}`;
   }

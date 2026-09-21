@@ -32,6 +32,7 @@ import {
   isSafeSessionId,
   sessionClickTarget,
   sessionViewport,
+  surveyRestartWitness,
 } from "../features/ux-review/server/review.ts";
 
 // The only part of this script that writes to GitHub, kept in its own module so
@@ -60,6 +61,16 @@ import { hogQuery } from "./lib/hogql.mjs";
 const FINDINGS_FETCH_LIMIT = Number(process.env.FINDINGS_FETCH_LIMIT ?? 500);
 
 const CLICK_TARGET_CRITERIA = new Set(["D1", "V1"]);
+
+/**
+ * Criteria where "did the survey actually restart" is the question.
+ *
+ * L1 is "loop back to an earlier screen" and B1 is "sent backwards through the
+ * funnel" — both are claims about a journey, which is exactly what a probe
+ * driving production today cannot see and what our own log recorded at the
+ * time. Narrow on purpose: a restart says nothing about a covered heading.
+ */
+const RESTART_WITNESS_CRITERIA = new Set(["L1", "B1"]);
 
 /**
  * Scanners whose findings are an EXPERIMENT and must not speak to the team.
@@ -1086,6 +1097,41 @@ for (const [
   }
 
   const results = probeFiles.map((f) => runProbe(f, viewport, clickTarget));
+
+  /**
+   * OUR OWN LOG, asked whether the thing actually happened.
+   *
+   * Every probe here drives production as it is NOW. None of them can observe
+   * what this reader experienced, which is why 26 of 27 return the same verdict
+   * whoever raised the finding. `survey_behavior_event` can: it recorded this
+   * session's question order at the time, and a reader sent back to the start
+   * leaves a drop in it.
+   *
+   * Counted as a probe run because that is what it is — a check that either
+   * fires or does not — and it is claim-scoped by construction: it reads THIS
+   * session and its answer cannot be the same for everyone. That is the
+   * property a `clear` needs before it is evidence of anything.
+   *
+   * Only for loop criteria. A restart says nothing about a covered heading.
+   */
+  if (RESTART_WITNESS_CRITERIA.has(criterion.id)) {
+    const witness = await surveyRestartWitness(sessionId);
+    results.push({
+      file: "survey-behaviour-log",
+      passed: !witness,
+      inconclusive: false,
+      claimScoped: true,
+      tail: witness
+        ? `our own survey log records the reader jumping back ${witness.drop} questions ` +
+          `(${witness.steps} transitions) — the restart is independently confirmed`
+        : "our own survey log records no backwards jump; it neither confirms nor refutes",
+    });
+    if (witness) {
+      console.log(
+        `  WITNESS ${sessionId.slice(0, 13)} — survey log confirms a ${witness.drop}-question restart`
+      );
+    }
+  }
   const inconclusive = results.some((r) => r.inconclusive);
   // A probe that could not measure has NOT reproduced anything.
   const reproduced = results.some((r) => !r.passed && !r.inconclusive);
