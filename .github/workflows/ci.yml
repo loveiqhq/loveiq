@@ -102,7 +102,16 @@ jobs:
     needs: [lint]
     # Requires a Supabase test-branch URL + service role key. PRs from forks (no
     # access to secrets) and any repo without these secrets set skip this job.
-    if: ${{ github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'push' }}
+    #
+    # AND NOT DEPENDABOT. GitHub withholds repository secrets from Dependabot runs by
+    # design, so this job cannot pass there — measured 2026-09-21, both open dependency
+    # PRs red on this job and on migration-drift, for no reason to do with the bump. A
+    # gate that is red on every dependency PR is worse than no gate: it teaches whoever
+    # reviews them that red is normal, which is exactly how a genuinely broken bump gets
+    # merged. Coverage is not lost, only deferred — both jobs run on the push to main
+    # after the merge, and `Alert on red main` fires if they fail there. Same idiom the
+    # audit, secrets and docs-impact jobs already use.
+    if: ${{ (github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'push') && github.actor != 'dependabot[bot]' }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -155,8 +164,10 @@ jobs:
     # Nine of these had accumulated silently because this only ran when remembered.
     #
     # It does NOT skip. It reads the live schema through get_schema_artifacts()
-    # with the service-role key, which is already a repository secret.
-    if: ${{ github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'push' }}
+    # with the service-role key, which is already a repository secret — except on
+    # Dependabot runs, which GitHub gives no secrets at all, so it exits 2 there every
+    # time. Excluded for the same reason as the integration job above.
+    if: ${{ (github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'push') && github.actor != 'dependabot[bot]' }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6

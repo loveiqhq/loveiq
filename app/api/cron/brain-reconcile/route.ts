@@ -354,9 +354,19 @@ export async function buildReadings(): Promise<{ readings: Reading[]; unread: st
      * world-readable to anyone holding the publishable key, which is in the page source of
      * every visitor's browser.
      *
-     * NOTHING ENFORCED THAT. The boundary is covered by `__tests__/integration/`, which
-     * skips silently when `SUPABASE_TEST_URL` is unset — and it is unset, in CI and
-     * locally. A guard that never runs is a guard that is not there.
+     * CI DOES COVER IT, and the first version of this comment said otherwise — wrongly.
+     * `__tests__/integration/rls-boundary.integration.test.ts` runs on every push to
+     * main and asserts the anon role cannot read the locked tables; verified in the run
+     * for b55af8dd, 16 tests in 7.7s. The claim that it "skips on an unset secret" was
+     * true of an older workflow and is not true now: the job needs `SUPABASE_URL` plus
+     * the PUBLIC anon key, not the test-branch secrets, and it fails loudly if they are
+     * absent rather than skipping.
+     *
+     * This check earns its place anyway, for what CI cannot do: CI proves the boundary
+     * held at the moment of a push, and nothing pushes on a quiet weekend. A policy can
+     * be changed in the Supabase dashboard with no commit at all, and the corpus would
+     * be world-readable until somebody next merged. Nightly is the cadence that matches
+     * how the risk actually arrives.
      *
      * So it is asked here, the way everything else in this file is asked: derive the same
      * quantity two ways and compare. The policy SAYS zero rows; the anon key is then used
