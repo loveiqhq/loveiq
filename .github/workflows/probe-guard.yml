@@ -111,6 +111,36 @@ jobs:
       # This one DOES fail the job. A scanner below bar is a documented state; a
       # probe claiming a defect that is not one is a regression in the only
       # component this pipeline actually trusts.
+      - name: A paid report still renders unlocked
+        env:
+          REPORT_ORIGIN: ${{ inputs.origin }}
+          STAGING_PASSWORD: ${{ secrets.STAGING_PASSWORD }}
+        # Every other report probe in the corpus opens a CANCELED report, so
+        # until now nothing had ever checked the surface a paying reader sees —
+        # 1,251 locked overlays against 14. A regression that re-locked a paid
+        # report is the most expensive defect this product has and it was the
+        # one page with no coverage.
+        run: |
+          set +e
+          if [ -n "$REPORT_ORIGIN" ]; then
+            npx tsx scripts/probes/verify-unlocked-report.mjs
+          else
+            env -u REPORT_ORIGIN npx tsx scripts/probes/verify-unlocked-report.mjs
+          fi
+          code=$?
+          set -e
+          # Same three-way contract as the consent step: 3 means the probe could
+          # not measure, which is not a pass and not proof of a defect either.
+          if [ "$code" -eq 1 ]; then
+            echo "::error::a PAID report is showing locked content"
+            exit 1
+          elif [ "$code" -eq 3 ]; then
+            echo "::warning::probe could not measure — not a pass, investigate"
+          elif [ "$code" -ne 0 ]; then
+            echo "::error::probe exited $code"
+            exit 1
+          fi
+
       - name: Probes do not claim defects that are not defects
         run: node scripts/probes/precision-check.mjs
 
