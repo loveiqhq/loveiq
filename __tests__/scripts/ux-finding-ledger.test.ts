@@ -183,3 +183,59 @@ describe("the ledger never stores a report token", () => {
     );
   });
 });
+
+/**
+ * A probe opening THIS reader's report is answering about them.
+ *
+ * Nothing ever passed a token, so every report probe opened one hardcoded
+ * internal report — which is most of why 26 of 27 probes returned the same
+ * verdict whoever raised the finding. The token makes those probes claim-scoped,
+ * and a `clear` from one finally means something.
+ *
+ * The repository is PUBLIC, so its Actions logs are world readable. The token
+ * must never reach one.
+ */
+describe("the reader's own report token", () => {
+  const SRC = readFileSync(resolve(process.cwd(), "scripts/verify-ux-findings.mjs"), "utf8");
+
+  it("is masked before any probe can echo it", () => {
+    // ::add-mask:: makes Actions redact the value from every later log line.
+    expect(SRC).toMatch(/console\.log\(`::add-mask::\$\{reportToken\}`\)/);
+    // And it is emitted BEFORE the probes run, or the masking is pointless.
+    const mask = SRC.indexOf("::add-mask::");
+    const run = SRC.indexOf("probeFiles.map((f) => runProbe(");
+    expect(mask).toBeGreaterThan(-1);
+    expect(run).toBeGreaterThan(-1);
+    expect(mask).toBeLessThan(run);
+  });
+
+  it("travels in the child env, which Actions does not print", () => {
+    expect(SRC).toMatch(/\.\.\.\(reportToken \? \{ REPORT_TOKEN: reportToken \} : \{\}\)/);
+  });
+
+  it("makes a report probe claim-scoped, and only when it was actually given", () => {
+    expect(SRC).toMatch(/REPORT_TOKEN_PROBES\.has\(file\) && Boolean\(reportToken\)/);
+    // A survey-only reader has no report; the probe keeps its own default and
+    // its answer must NOT be counted as evidence about them.
+    expect(SRC).not.toMatch(/REPORT_TOKEN_PROBES\.has\(file\) \|\| /);
+  });
+
+  it("lists the probes that actually open a report", () => {
+    const block = /const REPORT_TOKEN_PROBES = new Set\(\[([\s\S]*?)\]\);/.exec(SRC)?.[1] ?? "";
+    expect(block, "REPORT_TOKEN_PROBES is missing").not.toBe("");
+    for (const f of [
+      "verify-no-survey-restart.mjs",
+      "verify-survey-loop.mjs",
+      "audit-visual.mjs",
+    ]) {
+      expect(block, `${f} opens a report and must be listed`).toContain(f);
+    }
+    // Every listed probe must actually read the variable, or the flag marks a
+    // canonical-page pass as evidence about a reader.
+    for (const f of block.match(/"([^"]+\.mjs)"/g) ?? []) {
+      const file = f.replace(/"/g, "");
+      const probe = readFileSync(resolve(process.cwd(), "scripts/probes", file), "utf8");
+      expect(probe, `${file} must read REPORT_TOKEN`).toContain("process.env.REPORT_TOKEN");
+    }
+  });
+});

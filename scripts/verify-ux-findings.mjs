@@ -32,6 +32,7 @@ import {
   fetchSessionEvents,
   isSafeSessionId,
   sessionClickTarget,
+  reportTokenForSession,
   sessionViewport,
 } from "../features/ux-review/server/review.ts";
 
@@ -46,6 +47,23 @@ import { hogQuery } from "./lib/hogql.mjs";
 // cannot import this file. That module documents what earns a probe a place in
 // the set, and why an unscoped `clear` is not evidence about anyone.
 import { CLAIM_SCOPED_PROBES } from "./lib/claim-scoped-probes.mjs";
+
+/**
+ * Probes that OPEN A REPORT, and are therefore claim-scoped once they are given
+ * the reader's own token rather than the hardcoded internal default.
+ *
+ * Listed rather than inferred for the same reason CLAIM_SCOPED_PROBES is: "does
+ * this file read REPORT_TOKEN" is not observable from here, and a wrong guess
+ * marks a canonical-page pass as evidence about a reader.
+ */
+const REPORT_TOKEN_PROBES = new Set([
+  "verify-no-survey-restart.mjs",
+  "verify-survey-loop.mjs",
+  "verify-narrow-viewport.mjs",
+  "verify-locked-preview-tap.mjs",
+  "verify-stage-carousel-swipe.mjs",
+  "audit-visual.mjs",
+]);
 
 /**
  * Criteria where "what did this reader tap" is the relevant evidence. Narrow on
@@ -279,7 +297,7 @@ export function classify(reasoning) {
  * understand WIDTHS use them; the rest ignore the variable and run their own
  * device list, which is still better than refusing to check.
  */
-function runProbe(file, viewport, clickTarget) {
+function runProbe(file, viewport, clickTarget, reportToken) {
   /**
    * Recorded on the run, not inferred later from the file name: whether this
    * probe was actually handed something the scanner claimed. Without the click
@@ -287,7 +305,13 @@ function runProbe(file, viewport, clickTarget) {
    * for every probe in that run and the resulting `clear` is correctly read as
    * "nothing here could have contradicted the claim".
    */
-  const claimScoped = CLAIM_SCOPED_PROBES.has(file) && Boolean(clickTarget);
+  /**
+   * A probe handed THIS reader's report is answering about them, not about a
+   * canonical page — which is the property that makes a `clear` mean anything.
+   */
+  const claimScoped =
+    (CLAIM_SCOPED_PROBES.has(file) && Boolean(clickTarget)) ||
+    (REPORT_TOKEN_PROBES.has(file) && Boolean(reportToken));
   const widths = viewport
     ? [...new Set([viewport.min, viewport.max].filter((w) => w >= 200 && w <= 2000))].join(",")
     : "";
@@ -314,6 +338,16 @@ function runProbe(file, viewport, clickTarget) {
         ...(clickTarget
           ? { URL_PATH: clickTarget.pathname, TARGET_SELECTOR: clickTarget.selector }
           : {}),
+        /**
+         * This reader's own report. Absent for a survey-only session, and the
+         * probe then keeps its hardcoded internal default rather than opening
+         * somebody else's report and calling the answer evidence.
+         *
+         * Passed in the child ENV, which Actions does not print, and masked by
+         * the caller before this runs. `redactReportToken` strips it from the
+         * probe's output before anything persists.
+         */
+        ...(reportToken ? { REPORT_TOKEN: reportToken } : {}),
       },
     });
     return {
@@ -1185,7 +1219,22 @@ for (const [
     probeFiles.push(...CLAIM_SCOPED_PROBES);
   }
 
-  const results = probeFiles.map((f) => runProbe(f, viewport, clickTarget));
+  /**
+   * This reader's own report, masked before it is used.
+   *
+   * `::add-mask::` tells Actions to redact the value from every subsequent log
+   * line in the job. This repository is PUBLIC, so its Actions logs are world
+   * readable and a token that reached one would be a working key to somebody's
+   * report. Belt and braces: the env is not printed, this masks anything that
+   * echoes it anyway, and redactReportToken strips it from probe output before
+   * it is stored or posted.
+   *
+   * Emitted once per finding, before the first probe starts.
+   */
+  const reportToken = await reportTokenForSession(sessionId);
+  if (reportToken) console.log(`::add-mask::${reportToken}`);
+
+  const results = probeFiles.map((f) => runProbe(f, viewport, clickTarget, reportToken));
   const inconclusive = results.some((r) => r.inconclusive);
   // A probe that could not measure has NOT reproduced anything.
   const reproduced = results.some((r) => !r.passed && !r.inconclusive);
