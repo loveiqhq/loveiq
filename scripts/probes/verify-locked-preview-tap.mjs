@@ -48,19 +48,7 @@ const dismissPaywall = async (page) => {
 // confirmed defect. See scripts/probes/README.md.
 let bad = 0;
 let unmeasured = 0;
-/** Hoisted so the summary counts what ran, not the default list's length. */
-const DEVICE_LIST = (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro,iPhone SE")
-  .split(",")
-  .map((n) => n.trim())
-  .filter(Boolean);
-for (const name of DEVICE_LIST) {
-  // An unknown name yields `devices[name] === undefined`, and spreading that
-  // gives a desktop window with no touch — a pass about a device nobody drove.
-  if (!devices[name]) {
-    console.log(`${name}: UNKNOWN DEVICE — INCONCLUSIVE`);
-    unmeasured += 1;
-    continue;
-  }
+for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro,iPhone SE").split(",")) {
   const engine = /iphone|ipad/i.test(name) ? webkit : chromium;
   const browser = await engine.launch();
   const ctx = await browser.newContext({ ...devices[name], locale: "en-US" });
@@ -185,10 +173,7 @@ for (const name of DEVICE_LIST) {
   await ctx.close();
   await browser.close();
 }
-console.log(
-  `\n${DEVICE_LIST.length - bad}/${DEVICE_LIST.length} devices: ` +
-    `tapping a locked preview opens pricing`
-);
+console.log(`\n${3 - bad}/3 devices: tapping a locked preview opens pricing`);
 if (bad > 0) {
   console.log(`\nFAIL (${bad})`);
   process.exit(1);

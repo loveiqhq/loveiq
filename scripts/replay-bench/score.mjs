@@ -21,9 +21,6 @@ import { dirname, join } from "node:path";
 const HERE = dirname(fileURLToPath(import.meta.url));
 import { hogQuery } from "../lib/hogql.mjs";
 import { championChallengerPairs } from "../lib/challenger-pairs.mjs";
-// One list, two callers. See scripts/lib/claim-scoped-probes.mjs for what
-// earns a probe a place in it and why an unscoped `clear` is not evidence.
-import { clearIsGroundTruth } from "../lib/claim-scoped-probes.mjs";
 
 const PROJECT = "244778";
 const MIN_PRECISION = 0.8;
@@ -73,11 +70,10 @@ export function score(rows) {
  * Ledger rows in the shape `score()` takes.
  *
  * Ground truth costs nothing to collect here and never expires: a probe that
- * REPRODUCED the claim proves the scanner was right, and a `contradicted` from
- * our own events proves it was wrong. A `clear` proves it wrong only when the
- * run was claim-scoped (above). `inconclusive`, `gap` and `duplicate` carry no
- * verdict and are excluded by the caller; an unscoped `clear` now joins them,
- * flagged rather than dropped so the count stays visible.
+ * REPRODUCED the claim proves the scanner was right, and a `clear` from a
+ * mutation-proven probe — or a `contradicted` from our own events — proves it
+ * was wrong. `inconclusive`, `gap` and `duplicate` carry no verdict and are
+ * excluded by the caller.
  *
  * Every row is a YES, by construction: the ledger is written from findings the
  * scanner already flagged. See the recall note at the call site.
@@ -87,7 +83,6 @@ export function ledgerRows(findings) {
     ...f,
     expect: f.outcome === "reproduced" ? "yes" : "no",
     verdict: "yes",
-    unchecked: f.outcome === "clear" && !clearIsGroundTruth(f),
   }));
 }
 
@@ -118,38 +113,6 @@ if (process.argv.includes("--selftest")) {
    */
   const led = score(ledgerRows([{ outcome: "reproduced" }, { outcome: "clear" }]));
 
-  /**
-   * A `clear` is only evidence when a claim-scoped probe ran.
-   *
-   * Four shapes, because three of them were real rows in the ledger on
-   * 2026-09-21: no probe_runs at all (every row written before the stamp
-   * existed), runs that are all unscoped (every L1 report finding), and a
-   * D1 run that included verify-dead-click-target with the reader's own
-   * element. The fourth pins that `reproduced` is never touched by this — a
-   * reproduction is evidence whoever asked.
-   */
-  const gt = [
-    [{ outcome: "clear" }, false],
-    [{ outcome: "clear", probe_runs: [] }, false],
-    [{ outcome: "clear", probe_runs: [{ file: "a.mjs", claimScoped: false }] }, false],
-    [{ outcome: "clear", probe_runs: [{ file: "a.mjs" }, { file: "b.mjs" }] }, false],
-    [{ outcome: "clear", probe_runs: [{ file: "a.mjs" }, { claimScoped: true }] }, true],
-  ];
-  const gtOk = gt.every(([row, want]) => ledgerRows([row])[0].unchecked === !want);
-  // A reproduction is evidence regardless, so it must never be set aside.
-  const reproducedNeverUnchecked =
-    ledgerRows([{ outcome: "reproduced" }])[0].unchecked === false &&
-    ledgerRows([{ outcome: "contradicted" }])[0].unchecked === false;
-  /**
-   * The bug this replaced, stated as an assertion: an unscoped `clear` fed to
-   * score() is expect:no/verdict:yes, i.e. a false positive. Filtering it out
-   * is what stops 59 unanswered questions reading as 59 proofs the scanner
-   * lied — so the filter, not just the flag, is what gets pinned.
-   */
-  const unscoped = ledgerRows([{ outcome: "reproduced" }, { outcome: "clear" }]);
-  const filtered = score(unscoped.filter((r) => !r.unchecked));
-  const filterMatters = score(unscoped).precision === 0.5 && filtered.precision === 1;
-
   const ok =
     led.fn === 0 &&
     led.recall === 1 &&
@@ -162,15 +125,8 @@ if (process.argv.includes("--selftest")) {
     empty.precision === null &&
     empty.recall === null &&
     fmtScore(empty.precision) === "n/a" &&
-    fmtScore(0.2) === "0.20" &&
-    gtOk &&
-    reproducedNeverUnchecked &&
-    filterMatters;
-  console.log(
-    ok
-      ? "replay-bench score selftest ok"
-      : `selftest FAILED: ${JSON.stringify({ s, empty, gtOk, reproducedNeverUnchecked, filterMatters })}`
-  );
+    fmtScore(0.2) === "0.20";
+  console.log(ok ? "selftest ok" : `selftest FAILED: ${JSON.stringify({ s, empty })}`);
   process.exit(ok ? 0 : 1);
 }
 
@@ -184,9 +140,7 @@ if (process.argv.includes("--selftest")) {
  *
  * The `ux_finding` ledger replaces it and never expires. A probe outcome is
  * ground truth that costs nothing to collect: `reproduced` proves the scanner
- * was right and `contradicted` proves it wrong. A `clear` proves it wrong only
- * when a claim-scoped probe ran — see clearIsGroundTruth(); the rest are
- * reported as not counted rather than held against the scanner. Every row is
+ * was right, `clear` and `contradicted` prove it was wrong. Every row is
  * labelled by a mechanical check, not by a person and not by a model.
  *
  * RECALL IS NOT REPORTED, AND THAT IS NOT AN OVERSIGHT. The ledger only ever
@@ -213,10 +167,6 @@ if (process.argv.includes("--ledger")) {
   const since = new Date(Date.now() - days * 86_400_000).toISOString();
   const lRes = await fetch(
     `${url}/rest/v1/ux_finding?select=observation_id,scanner_name,outcome,confidence,criterion` +
-      // probe_runs carries `claimScoped`. Omit it and clearIsGroundTruth() reads
-      // undefined for every row, so every `clear` falls to unchecked and the
-      // scorer silently measures nothing — the failure this whole change is about.
-      `,probe_runs` +
       `&outcome=in.(reproduced,clear,contradicted)&created_at=gte.${since}&limit=1000`,
     { headers: { apikey: key, Authorization: `Bearer ${key}` } }
   );
@@ -227,30 +177,12 @@ if (process.argv.includes("--ledger")) {
   }
   const ledgerFindings = await lRes.json();
   const lRows = ledgerRows(ledgerFindings);
-  // Scored on what was actually asked. An unscoped `clear` is an open claim,
-  // not a false positive, and feeding it to score() as expect:no/verdict:yes
-  // counts it against the scanner exactly as before this change.
-  const scoredRows = lRows.filter((r) => !r.unchecked);
-  const ls = score(scoredRows);
-
-  // Declared before the per-scanner loop, which now uses it too, and a `const`
-  // is not hoisted — it threw on first run when it sat lower down.
-  const MIN_SAMPLE = 10;
+  const ls = score(lRows);
 
   const byScanner = new Map();
   for (const r of lRows) {
-    const e = byScanner.get(r.scanner_name) ?? {
-      right: 0,
-      wrong: 0,
-      contradicted: 0,
-      unchecked: 0,
-    };
-    // An unscoped `clear` is scored as NEITHER. It is not a win for the scanner
-    // and not a loss: no probe in that run could have contradicted it, so the
-    // claim is simply still open. Counting it as `wrong` is what this change
-    // exists to stop.
-    if (r.unchecked) e.unchecked += 1;
-    else if (r.expect === "yes") e.right += 1;
+    const e = byScanner.get(r.scanner_name) ?? { right: 0, wrong: 0, contradicted: 0 };
+    if (r.expect === "yes") e.right += 1;
     else e.wrong += 1;
     // Broken out because it is a DIFFERENT failure from "the probe could not
     // reproduce it". A `contradicted` finding is one our own events refute —
@@ -266,17 +198,8 @@ if (process.argv.includes("--ledger")) {
     const total = e.right + e.wrong;
     console.log(
       `  ${scanner} — ${e.right}/${total} confirmed by a probe ` +
-        `(${fmtScore(total === 0 ? null : e.right / total)}` +
-        // Setting unscoped clears aside shrinks some denominators hard — the
-        // survey scanner went from 44 to 3 — and 0.67 from three rows reads as
-        // a result when it is noise. The pair report below already refuses to
-        // call a small sample; this is the same refusal one line earlier.
-        (total > 0 && total < MIN_SAMPLE ? `, too few to call` : ``) +
-        `)` +
-        (e.contradicted ? `, ${e.contradicted} refuted by our own events` : "") +
-        // Named, not hidden. A scanner scored on 2 of 70 findings looks precise
-        // or hopeless depending on a number you cannot see otherwise.
-        (e.unchecked ? `, ${e.unchecked} not checked by any claim-scoped probe` : "")
+        `(${fmtScore(total === 0 ? null : e.right / total)})` +
+        (e.contradicted ? `, ${e.contradicted} refuted by our own events` : "")
     );
   }
 
@@ -292,6 +215,10 @@ if (process.argv.includes("--ledger")) {
    * a challenger that is winning would be averaged into a champion that is
    * losing — the experiment would be invisible in its own report.
    */
+  // Declared here because the pair report below uses it too, and a `const`
+  // is not hoisted — it threw on first run.
+  const MIN_SAMPLE = 10;
+
   const pairs = championChallengerPairs(byScanner);
   if (pairs.length > 0) {
     console.log(`\nchampion vs challenger`);
@@ -322,16 +249,12 @@ if (process.argv.includes("--ledger")) {
    */
   console.log(
     `\nprecision ${fmtScore(ls.precision)} (bar ${MIN_PRECISION}) · ` +
-      `right ${ls.tp} wrong ${ls.fp}` +
-      (lRows.length - scoredRows.length > 0
-        ? ` · ${lRows.length - scoredRows.length} not counted (no claim-scoped probe ran)`
-        : "") +
-      ` · ` +
+      `right ${ls.tp} wrong ${ls.fp} · ` +
       `recall n/a — the ledger holds only findings the scanner flagged, so a miss cannot appear in it`
   );
-  if (scoredRows.length < MIN_SAMPLE) {
+  if (lRows.length < MIN_SAMPLE) {
     console.log(
-      `not enough labelled findings yet (${scoredRows.length}/${MIN_SAMPLE}) — no verdict claimed`
+      `not enough labelled findings yet (${lRows.length}/${MIN_SAMPLE}) — no verdict claimed`
     );
     process.exit(2);
   }

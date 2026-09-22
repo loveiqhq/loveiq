@@ -156,22 +156,6 @@ test.describe("Survey — Keyboard navigation", () => {
     await expect(page.getByRole("heading", { name: /quality in → magic out/i })).toBeVisible({
       timeout: 5000,
     });
-
-    /**
-     * MOVE FOCUS OFF THE BUTTON WE JUST CLICKED.
-     *
-     * The slide listener is on the document, and after `.click()` the Continue
-     * button still has focus. On WebKit the arrow key is delivered to that
-     * button and never reaches the listener, so both of these tests failed on
-     * Desktop and Mobile Safari while passing everywhere else — intermittently
-     * enough to read as a random flake, and it blocked both open PRs on a gate
-     * that only became required today.
-     *
-     * The ArrowLeft test already clicked `body` for exactly this reason; the
-     * ArrowRight one did not, which is the asymmetry that gave it away. Doing
-     * it once here makes focus deterministic for every test in the block.
-     */
-    await page.locator("body").click({ position: { x: 20, y: 20 } });
   });
 
   test("ArrowRight advances to next slide", async ({ page }) => {

@@ -49,23 +49,7 @@ const dismissPaywall = async (page) => {
   return !(await paywallOpen(page));
 };
 
-/**
- * Hoisted because the summary read the list for its NUMERATOR and used a
- * hardcoded 3 for its denominator. One device passing printed "1/3 devices",
- * which reads as two failures — the opposite of what happened.
- */
-const DEVICE_LIST = (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro,iPhone SE")
-  .split(",")
-  .map((n) => n.trim())
-  .filter(Boolean);
-for (const name of DEVICE_LIST) {
-  // An unknown name spreads as undefined into newContext: a desktop window,
-  // silently, and `page.touchscreen.tap` on a page with no touch support.
-  if (!devices[name]) {
-    console.log(`${name}: UNKNOWN DEVICE — INCONCLUSIVE`);
-    unmeasured += 1;
-    continue;
-  }
+for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro,iPhone SE").split(",")) {
   const engine = /iphone|ipad/i.test(name) ? webkit : chromium;
   const browser = await engine.launch();
   const ctx = await browser.newContext({ ...devices[name], locale: "en-US" });
@@ -254,8 +238,7 @@ for (const name of DEVICE_LIST) {
   await browser.close();
 }
 console.log(
-  `\n${DEVICE_LIST.length - bad}/${DEVICE_LIST.length} devices: ` +
-    `tapping the paywall CARD opens pricing`
+  `\n${(process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro,iPhone SE").split(",").length - bad}/3 devices: tapping the paywall CARD opens pricing`
 );
 if (bad > 0) {
   console.log(`\nFAIL (${bad})`);

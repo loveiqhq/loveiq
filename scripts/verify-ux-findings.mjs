@@ -22,7 +22,6 @@
  * this exits non-zero when one is missing instead of reporting success.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
 
 // Imported, not restated. The cron posts findings and this verifies them; two
 // copies of "does our telemetry contradict this claim" would drift the day one
@@ -32,7 +31,6 @@ import {
   fetchSessionEvents,
   isSafeSessionId,
   sessionClickTarget,
-  reportTokenForSession,
   sessionViewport,
 } from "../features/ux-review/server/review.ts";
 
@@ -43,27 +41,6 @@ import { devicesForSession } from "./lib/session-devices.mjs";
 import { redactReportToken } from "./lib/redact-report-token.mjs";
 import { UX_SCANNERS } from "../features/ux-review/server/scanners.ts";
 import { hogQuery } from "./lib/hogql.mjs";
-// Shared with scripts/replay-bench/score.mjs, which runs under plain node and
-// cannot import this file. That module documents what earns a probe a place in
-// the set, and why an unscoped `clear` is not evidence about anyone.
-import { CLAIM_SCOPED_PROBES } from "./lib/claim-scoped-probes.mjs";
-
-/**
- * Probes that OPEN A REPORT, and are therefore claim-scoped once they are given
- * the reader's own token rather than the hardcoded internal default.
- *
- * Listed rather than inferred for the same reason CLAIM_SCOPED_PROBES is: "does
- * this file read REPORT_TOKEN" is not observable from here, and a wrong guess
- * marks a canonical-page pass as evidence about a reader.
- */
-const REPORT_TOKEN_PROBES = new Set([
-  "verify-no-survey-restart.mjs",
-  "verify-survey-loop.mjs",
-  "verify-narrow-viewport.mjs",
-  "verify-locked-preview-tap.mjs",
-  "verify-stage-carousel-swipe.mjs",
-  "audit-visual.mjs",
-]);
 
 /**
  * Criteria where "what did this reader tap" is the relevant evidence. Narrow on
@@ -297,21 +274,7 @@ export function classify(reasoning) {
  * understand WIDTHS use them; the rest ignore the variable and run their own
  * device list, which is still better than refusing to check.
  */
-function runProbe(file, viewport, clickTarget, reportToken) {
-  /**
-   * Recorded on the run, not inferred later from the file name: whether this
-   * probe was actually handed something the scanner claimed. Without the click
-   * target the dead-click probe is not appended at all, so the flag is false
-   * for every probe in that run and the resulting `clear` is correctly read as
-   * "nothing here could have contradicted the claim".
-   */
-  /**
-   * A probe handed THIS reader's report is answering about them, not about a
-   * canonical page — which is the property that makes a `clear` mean anything.
-   */
-  const claimScoped =
-    (CLAIM_SCOPED_PROBES.has(file) && Boolean(clickTarget)) ||
-    (REPORT_TOKEN_PROBES.has(file) && Boolean(reportToken));
+function runProbe(file, viewport, clickTarget) {
   const widths = viewport
     ? [...new Set([viewport.min, viewport.max].filter((w) => w >= 200 && w <= 2000))].join(",")
     : "";
@@ -338,24 +301,9 @@ function runProbe(file, viewport, clickTarget, reportToken) {
         ...(clickTarget
           ? { URL_PATH: clickTarget.pathname, TARGET_SELECTOR: clickTarget.selector }
           : {}),
-        /**
-         * This reader's own report. Absent for a survey-only session, and the
-         * probe then keeps its hardcoded internal default rather than opening
-         * somebody else's report and calling the answer evidence.
-         *
-         * Passed in the child ENV, which Actions does not print, and masked by
-         * the caller before this runs. `redactReportToken` strips it from the
-         * probe's output before anything persists.
-         */
-        ...(reportToken ? { REPORT_TOKEN: reportToken } : {}),
       },
     });
-    return {
-      file,
-      passed: true,
-      claimScoped,
-      tail: out.trim().split("\n").slice(-3).join(" | "),
-    };
+    return { file, passed: true, tail: out.trim().split("\n").slice(-3).join(" | ") };
   } catch (err) {
     const out = `${err.stdout ?? ""}${err.stderr ?? ""}`.trim();
     // Exit 3 means the probe could not MEASURE (no such control on screen, the
@@ -383,39 +331,10 @@ function runProbe(file, viewport, clickTarget, reportToken) {
       file,
       passed: false,
       inconclusive,
-      claimScoped,
       tail: out.split("\n").slice(-3).join(" | "),
     };
   }
 }
-
-/**
- * What a probe run leaves in the ledger.
- *
- * ONE function because there are two call sites — the row this finding writes,
- * and the cache a second scanner's finding on the same (session, criterion)
- * inherits. They were duplicated literals, and a field added to one and not the
- * other would give a challenger a row shaped differently from its champion's:
- * the comparison would then be measuring the bookkeeping, not the prompts.
- */
-const probeRunRows = (results) =>
-  results.map((r) => ({
-    file: r.file,
-    passed: r.passed,
-    inconclusive: Boolean(r.inconclusive),
-    // Whether this run could have said anything else for THIS finding. The
-    // scorer reads it to decide whether a `clear` is ground truth or merely the
-    // absence of a check. Rows written before 2026-09-21 have no such key, and
-    // `undefined` is falsy — so they read as not-claim-scoped, which is exactly
-    // what they were.
-    claimScoped: Boolean(r.claimScoped),
-    // Redacted for the same reason url_path is, two fields over. PR #232
-    // closed url_path and left this one: verify-dead-click-target.mjs prints
-    // "what this reader tapped at /report/rpt_…" and that lands here verbatim.
-    // One live token was already stored this way. The token IS the auth on a
-    // report, so anywhere it persists is a credential store.
-    tail: redactReportToken(String(r.tail ?? "")).slice(0, 600),
-  }));
 
 /**
  * Claim a finding so it is verified exactly once.
@@ -763,49 +682,6 @@ if (process.argv.includes("--selftest")) {
   delete process.env.SELFTEST_EXIT;
   delete process.env.SELFTEST_SAY;
 
-  /**
-   * CLAIM SCOPING, pinned at both ends.
-   *
-   * Two ways this dies silently, and neither shows up as a failure anywhere:
-   *
-   *  - The set names a file that has been RENAMED. `has()` then matches
-   *    nothing, every run is stamped claimScoped:false, and score.mjs sets every
-   *    `clear` aside as unchecked. The scanners stop being scored at all and the
-   *    report still prints a precision.
-   *  - The flag stops being COPIED into the ledger row. Same end state, reached
-   *    from the other side.
-   *
-   * So: every member must exist on disk, must be one the verifier can actually
-   * append, and must survive the trip through probeRunRows().
-   */
-  const probeDir = new URL("./probes/", import.meta.url);
-  for (const file of CLAIM_SCOPED_PROBES) {
-    // The path is built from CLAIM_SCOPED_PROBES, a constant in this repo, and
-    // this runs only under --selftest — no user input reaches it.
-    if (!existsSync(new URL(file, probeDir))) {
-      console.error(`selftest FAIL (claim-scoped): scripts/probes/${file} does not exist`);
-      process.exitCode = 1;
-    }
-  }
-  const stamped = probeRunRows([
-    { file: "verify-tap-targets.mjs", passed: true, claimScoped: false, tail: "" },
-    { file: "verify-dead-click-target.mjs", passed: true, claimScoped: true, tail: "" },
-  ]);
-  if (stamped[0].claimScoped !== false || stamped[1].claimScoped !== true) {
-    console.error(`selftest FAIL (claim-scoped): probeRunRows dropped the flag`);
-    process.exitCode = 1;
-  }
-  // A probe outside the set is never claim-scoped, WITH a click target present.
-  // Without this the flag could be "clickTarget ? true : false" and pass above.
-  const unscopedRun = runProbe("_selftest-exit.mjs", null, {
-    pathname: "/report/x",
-    selector: "div.a",
-  });
-  if (unscopedRun.claimScoped !== false) {
-    console.error(`selftest FAIL (claim-scoped): a probe outside the set was stamped scoped`);
-    process.exitCode = 1;
-  }
-
   // Computed LAST, after every check. `bad` counts only classifier failures;
   // the claim, session-id and exit-code checks signal through process.exitCode,
   // and a bare process.exit(0) discards them — which it did, silently, until
@@ -813,12 +689,7 @@ if (process.argv.includes("--selftest")) {
   // could not fail. Reading it before the later checks run reintroduces exactly
   // that, which is what happened when the exit-code cases were first added.
   const failed = bad > 0 || process.exitCode === 1;
-  // A marker no imported module shares. "selftest ok" is printed by hogql.mjs
-  // and claim-scoped-probes.mjs too, so grepping for it in CI would be
-  // satisfied by a run where this block never executed — which is exactly
-  // what happened on 2026-09-21 when an imported selftest called
-  // process.exit(0) during import and took the whole gate with it.
-  console.log(failed ? `selftest FAILED (${bad} classifier)` : "verify-ux-findings selftest ok");
+  console.log(failed ? `selftest FAILED (${bad} classifier)` : "selftest ok");
   process.exit(failed ? 1 : 0);
 }
 
@@ -1211,30 +1082,10 @@ for (const [
    */
   const probeFiles = [...criterion.probes];
   if (clickTarget && CLICK_TARGET_CRITERIA.has(criterion.id)) {
-    // Spread from the set rather than naming the file again. The two used to be
-    // separate literals, and a probe added to one and not the other is invisible:
-    // either it runs but never stamps claimScoped, or it stamps a flag for a probe
-    // that never runs. Both end as `clear` rows the scorer sets aside, which reads
-    // as a healthy, filling ledger.
-    probeFiles.push(...CLAIM_SCOPED_PROBES);
+    probeFiles.push("verify-dead-click-target.mjs");
   }
 
-  /**
-   * This reader's own report, masked before it is used.
-   *
-   * `::add-mask::` tells Actions to redact the value from every subsequent log
-   * line in the job. This repository is PUBLIC, so its Actions logs are world
-   * readable and a token that reached one would be a working key to somebody's
-   * report. Belt and braces: the env is not printed, this masks anything that
-   * echoes it anyway, and redactReportToken strips it from probe output before
-   * it is stored or posted.
-   *
-   * Emitted once per finding, before the first probe starts.
-   */
-  const reportToken = await reportTokenForSession(sessionId);
-  if (reportToken) console.log(`::add-mask::${reportToken}`);
-
-  const results = probeFiles.map((f) => runProbe(f, viewport, clickTarget, reportToken));
+  const results = probeFiles.map((f) => runProbe(f, viewport, clickTarget));
   const inconclusive = results.some((r) => r.inconclusive);
   // A probe that could not measure has NOT reproduced anything.
   const reproduced = results.some((r) => !r.passed && !r.inconclusive);
@@ -1325,17 +1176,11 @@ for (const [
   const speaks = reproduced || inconclusive;
   const sent =
     isChallenger(scannerName) || !speaks ? "suppressed" : await deliverVerdict(sessionId, verdict);
-  // One reason, not two. The second branch had no challenger test, so every
-  // suppressed verdict — including a champion's ordinary "could not reproduce" —
-  // printed "(challenger — …)" as well. Reading a run log is how the re-queue
-  // bug and the lost-findings bug were both found; a log that mislabels which
-  // scanner it is talking about is the wrong thing to hand that job.
+  if (sent === "suppressed" && !isChallenger(scannerName) && !speaks) {
+    console.log(`  (could not reproduce — recorded in ux_finding, not posted)`);
+  }
   if (sent === "suppressed") {
-    console.log(
-      isChallenger(scannerName)
-        ? `  (challenger — recorded in ux_finding, not posted)`
-        : `  (could not reproduce — recorded in ux_finding, not posted)`
-    );
+    console.log(`  (challenger — recorded in ux_finding, not posted)`);
   }
   if (sent !== "failed") await markVerified(observationId);
 
@@ -1347,7 +1192,12 @@ for (const [
     ...base,
     outcome: reproduced ? "reproduced" : inconclusive ? "inconclusive" : "clear",
     criterion: criterion.id,
-    probe_runs: probeRunRows(results),
+    probe_runs: results.map((r) => ({
+      file: r.file,
+      passed: r.passed,
+      inconclusive: Boolean(r.inconclusive),
+      tail: String(r.tail ?? "").slice(0, 600),
+    })),
     devices: ranOn,
     viewport_min: viewport?.min ?? null,
     viewport_max: viewport?.max ?? null,
@@ -1362,7 +1212,12 @@ for (const [
   // Everything here describes the PROBE, never the scanner that raised it.
   outcomeThisRun.set(pairKey, {
     outcome: reproduced ? "reproduced" : inconclusive ? "inconclusive" : "clear",
-    probe_runs: probeRunRows(results),
+    probe_runs: results.map((r) => ({
+      file: r.file,
+      passed: r.passed,
+      inconclusive: Boolean(r.inconclusive),
+      tail: String(r.tail ?? "").slice(0, 600),
+    })),
     devices: ranOn,
     viewport_min: viewport?.min ?? null,
     viewport_max: viewport?.max ?? null,

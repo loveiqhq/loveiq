@@ -3,11 +3,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   REPORTING_TIME_ZONE,
-  isReportingMonday,
-  isoWeekKey,
   reportingDay,
-  reportingDayStart,
   reportingHour,
+  reportingDayStart,
 } from "@shared/time/reporting-day";
 
 /**
@@ -118,48 +116,5 @@ describe("reportingDayStart", () => {
       // And one millisecond earlier belongs to the day before.
       expect(reportingDay(new Date(reportingDayStart(day).getTime() - 1))).not.toBe(day);
     }
-  });
-});
-
-/**
- * A weekly post gated on the UTC weekday fires on Sunday night for two hours of
- * every summer week, and then again on Monday. Berlin is +1 or +2 depending on
- * the season, so a fixed offset is wrong for half the year and wrong on both
- * changeover nights.
- */
-describe("isReportingMonday", () => {
-  it("follows Berlin, not UTC, at both ends of the day", () => {
-    // Sunday in UTC, already Monday in Berlin.
-    expect(isReportingMonday(new Date("2026-09-20T22:30:00Z"))).toBe(true);
-    // Monday in UTC, already Tuesday in Berlin.
-    expect(isReportingMonday(new Date("2026-09-21T22:30:00Z"))).toBe(false);
-    // Unambiguous cases.
-    expect(isReportingMonday(new Date("2026-09-21T08:00:00Z"))).toBe(true);
-    expect(isReportingMonday(new Date("2026-09-22T08:00:00Z"))).toBe(false);
-  });
-});
-
-describe("isoWeekKey", () => {
-  it("claims one key per week, stable across the whole Berlin day", () => {
-    // 00:30 and 09:30 Berlin on the same Monday are different UTC days and must
-    // still produce the same key, or the weekly post claims twice.
-    expect(isoWeekKey(new Date("2026-09-20T22:30:00Z"))).toBe(
-      isoWeekKey(new Date("2026-09-21T07:30:00Z"))
-    );
-  });
-
-  it("puts a week in the year containing its Thursday", () => {
-    /**
-     * ISO weeks belong to the year of their Thursday, so the last days of
-     * December can be week 1 of the NEXT year and the first days of January can
-     * be week 52 or 53 of the PREVIOUS one. "Weeks since 1 January" gets that
-     * wrong and would let a new-year post claim a key already used.
-     */
-    expect(isoWeekKey(new Date("2026-12-31T12:00:00Z"))).toBe("2026-W53");
-    expect(isoWeekKey(new Date("2027-01-01T12:00:00Z"))).toBe("2026-W53");
-  });
-
-  it("is shaped so a claim key sorts and reads", () => {
-    expect(isoWeekKey(new Date("2026-09-21T08:00:00Z"))).toMatch(/^\d{4}-W\d{2}$/);
   });
 });

@@ -17,7 +17,6 @@
  *   npx tsx --env-file=.env.local scripts/preview-slack-message.mts --survey        # latest
  *   npx tsx --env-file=.env.local scripts/preview-slack-message.mts --survey=2078
  *   npx tsx --env-file=.env.local scripts/preview-slack-message.mts --ux-review
- *   npx tsx --env-file=.env.local scripts/preview-slack-message.mts --scorecard
  *
  * The image blocks point at NEXT_PUBLIC_SITE_URL, which is localhost in
  * .env.local, so the REAL chart PNGs render in the page — same renderer, same
@@ -53,10 +52,8 @@ import { adCostByDay } from "../features/brain/server/ingest/analytics";
 import { reportingDay, reportingDayStart } from "../shared/time/reporting-day";
 import {
   buildDigestMessage as buildUxReviewDigest,
-  buildScorecardMessage,
   fetchCoverageStats,
   fetchDailyStats as fetchUxDailyStats,
-  fetchScannerScores,
   fetchVerificationStats,
 } from "../features/ux-review/server/review";
 import {
@@ -316,46 +313,6 @@ async function previewUxReview(): Promise<void> {
   }
 }
 
-/**
- * The WEEKLY scorecard — a different message from the daily digest above, sent
- * on Monday mornings. Previewable because it is the one that talks about
- * experiments, and a retired trial announcing itself as live is exactly the
- * kind of thing block JSON does not make obvious.
- */
-async function previewScorecard(): Promise<void> {
-  requireEnv("SUPABASE_URL");
-  console.log("reading the 30-day scanner scorecard from PRODUCTION (read-only)...");
-  const scores = await fetchScannerScores(30);
-  if (!scores) {
-    console.error("the ledger could not be read — nothing to preview");
-    process.exit(2);
-  }
-  for (const s of scores) {
-    console.log(
-      `  ${s.scanner}: ${s.right} right, ${s.wrong} wrong, ${s.contradicted} contradicted`
-    );
-  }
-
-  const msg = buildScorecardMessage(scores, 30);
-  const out = join(OUT_DIR, "slack-preview-scorecard.html");
-  mkdirSync(dirname(out), { recursive: true });
-  writeFileSync(
-    out,
-    page(
-      "Slack preview — weekly scanner scorecard",
-      msg.text,
-      msg.blocks as Block[],
-      `weekly scorecard &middot; rendered ${new Date().toISOString()}`
-    )
-  );
-  console.log(`wrote ${out}`);
-  if (!process.argv.includes("--no-open")) {
-    execFile("open", [out], (err) => {
-      if (err) console.log(`(could not open automatically: ${err.message})`);
-    });
-  }
-}
-
 function requireEnv(name: string): string {
   const v = process.env[name];
   if (!v) {
@@ -368,10 +325,6 @@ function requireEnv(name: string): string {
 async function main(): Promise<void> {
   if (process.argv.includes("--ux-review")) {
     await previewUxReview();
-    return;
-  }
-  if (process.argv.includes("--scorecard")) {
-    await previewScorecard();
     return;
   }
   const surveyArg = process.argv.find((a) => a.startsWith("--survey"));

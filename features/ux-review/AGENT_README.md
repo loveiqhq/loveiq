@@ -97,26 +97,6 @@ cosmetic: **0.02 precision on 84 ledger findings against 0.20 on the fixtures.**
 The larger sample says the scanners are ten times worse than the number that was
 being reported.
 
-**Most of that 0.02 was never measured.** A `clear` used to count as proof the
-scanner was wrong, on the stated condition that the probe was mutation-proven.
-That condition is necessary and not sufficient: `MUTATE=1` shows a probe detects
-its OWN injected defect, not that it asked the question the finding asked. Of 27
-probes exactly one — `verify-dead-click-target.mjs` — reads something the scanner
-claimed (`URL_PATH` and `TARGET_SELECTOR`, from that session's own click event).
-Every other probe opens the same canonical page and takes only the device list
-from the finding, so its verdict is a constant with respect to the claim: the
-same PASS comes back whoever raised it.
-
-Measured on the 21 L1 report findings (2026-09-21): both L1 probes healthy, both
-clean 19/19, neither able to have said anything else. Each probe run is now
-stamped `claimScoped` in `probe_runs`, and a `clear` with none is reported as
-**not counted** rather than held against the scanner — and not counted in its
-favour either, because an unchecked claim is open, not won. The survey scanner
-moves from 2/44 to 2/3 with 41 set aside; the report scanner stays at 0/22,
-because all 22 of its wrong answers are `contradicted` by our own events, which
-was always solid evidence. See `scripts/lib/claim-scoped-probes.mjs` for what
-earns a probe a place in the set.
-
 Below bar is a fact about the scanners, not a fault in the workflow, so exit 1
 (below bar) and exit 2 (too few labels) do not fail the run. Exit 3 — a missing
 secret, an unreadable ledger — does, because a score that could not be computed
