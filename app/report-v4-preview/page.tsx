@@ -16,6 +16,7 @@ import {
 import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { isReportPurchasePlan, type ReportAccessPlan } from "@features/report/server/access";
 import { buildLearnMoreForReader } from "@features/report/server/contentGating";
+import { buildPreviewQuotes } from "./previewQuotes";
 import ReportV4PreviewClient from "./ReportV4PreviewClient";
 
 const ARCHETYPE = "Spark Seeker";
@@ -67,7 +68,9 @@ export default async function ReportV4PreviewPage({
       matchStrength={MATCH_STRENGTH}
       copy={copy}
       learnMore={learnMore}
+      accessPlan={accessPlan}
       accessPlanLabel={accessPlan ?? "no purchase"}
+      quotes={buildPreviewQuotes()}
     />
   );
 }
