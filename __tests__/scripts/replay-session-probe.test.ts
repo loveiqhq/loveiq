@@ -204,6 +204,24 @@ describe("replaying the reader's own route", () => {
     expect(PROBE).toMatch(/setInterval/);
   });
 
+  it("asks again before accusing anyone", () => {
+    /**
+     * The state read is a snapshot, and a paywall that is OPENING locks the
+     * body before its root is visible enough to count as shown. In that window
+     * every check fires on correct behaviour.
+     *
+     * The first CI run of this probe did exactly that:
+     *   CONFIRM 01a0c4c6…  D1  "Reproduced in production on Pixel 7 —
+     *   after scroll_depth_50/75/100: a real finger could not scroll the page"
+     * on a session where scrolling had merely opened the paywall. It was a dry
+     * run so it went nowhere; live, that posts "Reproduced in production" under
+     * a real reader's submission.
+     */
+    expect(PROBE).toMatch(/if \(faults\.length > 0\) \{[\s\S]{0,800}?nowOpen/);
+    // The second look must only ever REMOVE an accusation.
+    expect(PROBE).toMatch(/if \(nowOpen\) return \{ faults: \[\], suppressed: true \}/);
+  });
+
   it("keeps the three-way exit contract", () => {
     for (const code of ["process.exit(0)", "process.exit(1)", "process.exit(3)"]) {
       expect(PROBE, `${code} is missing`).toContain(code);

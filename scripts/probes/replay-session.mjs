@@ -374,6 +374,46 @@ async function inspect(page, cdp) {
     // The lock-state check above is what covers iOS; see touch.mjs.
     if (real && moved <= 0) faults.push("a real finger could not scroll the page");
   }
+
+  /**
+   * ASK AGAIN BEFORE ACCUSING ANYONE. The state above is a snapshot, and a
+   * paywall that is OPENING locks the body before its root is visible enough to
+   * count as shown — mid-animation it is still `opacity: 0`. In that window
+   * `dialogOpen` reads false while the page is legitimately immovable, and
+   * every check here fires on correct behaviour.
+   *
+   * That is not hypothetical. The first CI run of this probe reported
+   *
+   *     CONFIRM 01a0c4c6…  D1  ❗ Reproduced in production on Pixel 7 —
+   *     after scroll_depth_50/75/100: a real finger could not scroll the page
+   *
+   * on a session where scrolling had simply opened the paywall. It was a dry
+   * run, so it went nowhere; on a live run that posts "Reproduced in
+   * production" under a real reader's submission, which is the single worst
+   * thing this pipeline can do.
+   *
+   * Re-reading costs one evaluate and only ever REMOVES an accusation.
+   */
+  if (faults.length > 0) {
+    const nowOpen = await page.evaluate(() => {
+      const shown = (n) => {
+        if (!n) return false;
+        const cs = getComputedStyle(n);
+        if (cs.display === "none" || cs.visibility === "hidden") return false;
+        const r = n.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      };
+      return [
+        ...document.querySelectorAll(
+          '[role="dialog"]:not([hidden]), .report-pricing-modal, .share-report-modal'
+        ),
+      ].some(shown);
+    });
+    // Deliberately NOT checking opacity here: a dialog mid-fade is open enough
+    // to explain a locked page, and the point of the second look is to forgive.
+    if (nowOpen) return { faults: [], suppressed: true };
+  }
+
   return { faults, suppressed: state.dialogOpen };
 }
 
