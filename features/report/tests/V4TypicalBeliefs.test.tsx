@@ -231,4 +231,27 @@ describe("reportV3.css — belief panel contracts", () => {
   it("puts the row's 9px gap inside the collapsing box, so a resting row is 61px", () => {
     expect(block(".rv3 .rv4-turn__shift-inner {")).toContain("padding-top: 9px");
   });
+
+  /**
+   * Figma draws these panels 361 wide because the 393 frame has 16px gutters. Read
+   * as a WIDTH rather than a ceiling, that number puts the panel past the viewport
+   * on any narrower phone and scrolls the whole page sideways — which is what Mark
+   * reported from his phone against the staging build. 361 is a maximum here.
+   */
+  it("treats the frame's 361 as a ceiling, not a width", () => {
+    for (const selector of [".rv3 .rv4-turn,", ".rv3 .rv4-snap__panel {"]) {
+      const css = block(selector);
+      expect(css).toContain("max-width: 361px");
+      expect(css).toContain("width: 100%");
+      expect(css).not.toContain("  width: 361px;");
+    }
+  });
+
+  it("anchors the blob to the panel edge, so the crescent survives a narrow phone", () => {
+    // 368:5483 is drawn at left 251 in a 361 panel, overhanging the right edge by
+    // 22. Pinned to `left`, a narrower panel would slide it into the middle.
+    const css = block(".rv3 .rv4-turn__blob {");
+    expect(css).toContain("right: -22px");
+    expect(css).not.toContain("left:");
+  });
 });
