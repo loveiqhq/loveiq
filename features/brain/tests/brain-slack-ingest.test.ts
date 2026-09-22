@@ -500,6 +500,25 @@ describe("uploads — a file-only message used to vanish entirely", () => {
     );
   });
 
+  /**
+   * THE THIRD DOOR. Drive and mail were closed first; this one was found by asking the
+   * brain "what is in the confidentiality agreement people signed" and reading what came
+   * back — two days of #all-loveiq carrying the signed agreement in full, one of them
+   * with a colleague's home address.
+   *
+   * The message still NAMES the upload, so the channel goes on recording that a document
+   * was shared and signed. Only its contents stop being read.
+   */
+  it("would not read a signed agreement shared in a channel", () => {
+    const nda = file({
+      filetype: "pdf",
+      name: "Confidentiality, Data Protection & Responsible Data Handling Agreement.pdf",
+    });
+    const contract = file({ filetype: "docx", name: "Freelancer Agreement Marc.docx" });
+    // With the positive control beside them, or "reads nothing at all" would pass too.
+    expect(readableFiles({ files: [nda, contract, file()] })).toHaveLength(1);
+  });
+
   it("would not read a file too big to be prose", () => {
     const huge = file({ size: MAX_SLACK_FILE_BYTES + 1 });
     expect(readableFiles({ files: [huge] })).toHaveLength(0);

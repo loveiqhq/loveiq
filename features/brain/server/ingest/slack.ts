@@ -3,6 +3,7 @@ import logger from "@shared/observability/logger";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { splitBody } from "./notion";
 import {
+  isLegalInstrument,
   chunkPage,
   recordSweep,
   shouldSweep,
@@ -131,7 +132,8 @@ const MAX_RETRIES = 4;
 // v9: v1-v8 dropped any message with no text, so an upload posted without a caption
 // left NO trace — not the file, not even that one was shared. File names are now
 // rendered (no extra scope), and content is read when `files:read` is granted.
-export const SLACK_BUILDER_VERSION = 9;
+// v10: uploads that are signed legal instruments are no longer read.
+export const SLACK_BUILDER_VERSION = 10;
 
 /**
  * Message subtypes that are membership bookkeeping, not conversation. Slack emits
@@ -331,7 +333,14 @@ export function readableFiles(m: SlackMessage): NonNullable<SlackMessage["files"
       f.url_private &&
       SLACK_FILE_TYPES.has((f.filetype ?? "").toLowerCase()) &&
       (f.size ?? 0) > 0 &&
-      (f.size ?? 0) <= MAX_SLACK_FILE_BYTES
+      (f.size ?? 0) <= MAX_SLACK_FILE_BYTES &&
+      // The third door the same contract comes through. Drive and mail were closed
+      // first; this one was found by asking the brain "what is in the confidentiality
+      // agreement people signed" and reading what came back — two days of #all-loveiq
+      // carrying the signed agreement in full, one of them with a colleague's home
+      // address. `renderMessage` still NAMES the upload, so the channel still records
+      // that a document was shared and signed; only its contents stop being read.
+      !isLegalInstrument(f.name)
   );
 }
 
