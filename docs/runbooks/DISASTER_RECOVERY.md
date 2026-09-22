@@ -150,7 +150,45 @@ If a retention horizon ever becomes necessary (e.g., 7-year SOX requirement some
 add a separate purge cron that operates on tier-defined cutoffs rather than the
 fast 30/180/365-day tiers in F‑02.
 
-## 10. Known gaps (TODO)
+## 10. The company brain — what comes back, and the 14 rows that do not
+
+The brain is 28,087 rows in `brain_chunk` in the same database, so PITR covers it and
+sections 4 and 5 apply unchanged. What a restore does not tell you is which of it would
+have come back on its own, and under pressure that is the only part worth deciding.
+
+**Almost all of it rebuilds itself.** Every source but one is a copy of something
+upstream — Drive, Gmail, Slack, WhatsApp, Notion, the calendar, GA4, Search Console,
+Clarity, the shipped report copy, the glossary, the repo docs. Delete the lot and the
+hourly crons put it back within a day for the price of some API calls. Do not spend
+restore time on those rows.
+
+**The exception is `source = 'decision'`,** and only part of it:
+
+| decision rows                                            | count | if the table is lost                                                                    |
+| -------------------------------------------------------- | ----- | --------------------------------------------------------------------------------------- |
+| mined from transcripts (`meta.origin = 'mined'`)         | 91    | re-derivable — re-run `brain-mine`; costs model quota and some days of its daily budget |
+| written by hand via `record_decision` (no `meta.origin`) | 14    | **gone.** No upstream holds them                                                        |
+
+Those 14 are the ones a person deliberately wrote down, which is why they are the best
+evidence about what they decide, and why they are the only brain rows needing thought.
+Small enough to export in one request — this exact command was run on 2026-09-22 and
+returned 14:
+
+```bash
+curl -s "$SUPABASE_URL/rest/v1/brain_chunk?source=eq.decision&meta->>origin=is.null&select=source_id,title,body,meta,first_seen_at" \
+  -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" > decisions.json
+```
+
+`is.null` is load-bearing and the obvious spelling is wrong: the hand-written rows carry
+no `origin` key at all, so `not.eq.mined` matches none of them — SQL drops NULLs from a
+negated comparison. The first version of this runbook entry shipped with that filter and
+returned zero rows, which reads exactly like "there is nothing to back up".
+
+**Nothing deletes them in normal operation** — checked 2026-09-22: `decision` is the one
+source with no ingest module, and therefore no sweep. The exposure is a bad restore or
+corruption older than the 7-day PITR window, not a runaway cron.
+
+## 11. Known gaps (TODO)
 
 - **No off-Supabase backup**: PITR is the only path. If Supabase itself loses the
   region, recovery depends on Supabase's own DR. Mitigation: nightly `pg_dump` to S3

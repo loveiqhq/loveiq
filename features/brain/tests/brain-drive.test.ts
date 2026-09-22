@@ -211,6 +211,7 @@ import {
   ingestDrive,
   isPersonalDataExport,
   isJobApplication,
+  isLegalInstrument,
   isVendorBilling,
   sheetTabsWithRows,
 } from "@features/brain/server/ingest/drive";
@@ -367,6 +368,18 @@ describe("ingestDrive", () => {
   it.each([
     ["a vendor invoice", "ZZbillingZZ", "MT-INV00945830.pdf", "application/pdf"],
     ["a candidate's CV", "ZZcandidateZZ", "Nejra_Rizvic_CV.pdf", "application/pdf"],
+    [
+      "a colleague's contract",
+      "ZZcontractZZ",
+      "Freelancer Agreement_Fatih.docx",
+      "application/pdf",
+    ],
+    [
+      "the cap table",
+      "ZZcaptableZZ",
+      "Shareholders Agreement Applied Psychometrics GmbH",
+      "application/pdf",
+    ],
   ])("never even fetches %s that reached the listing", async (_what, id, name, mimeType) => {
     files = [FILE, { ...FILE, id, name, mimeType }];
     await ingestDrive(STAMP);
@@ -402,10 +415,19 @@ describe("ingestDrive", () => {
     colleagueFiles["mo@loveiq.org"] = [
       { ...FILE, id: "ZZcolleagueDocZZ", name: "Report Review notes" },
       { ...FILE, id: "ZZcolleagueCvZZ", name: "Nejra_Rizvic_CV.pdf", mimeType: "application/pdf" },
+      // A personal Drive is exactly where a person's own contract lives, which is why
+      // this half has to carry the exclusion too and not just the shared folders.
+      {
+        ...FILE,
+        id: "ZZcolleagueContractZZ",
+        name: "Freelancer Agreement Marc.docx",
+        mimeType: "application/pdf",
+      },
     ];
     await ingestDrive(STAMP);
     expect(httpCalls.some((u) => u.includes("ZZcolleagueDocZZ"))).toBe(true);
     expect(httpCalls.some((u) => u.includes("ZZcolleagueCvZZ"))).toBe(false);
+    expect(httpCalls.some((u) => u.includes("ZZcolleagueContractZZ"))).toBe(false);
   });
 
   it("indexes a colleague's document that is not a meeting note at all", async () => {
@@ -1425,6 +1447,65 @@ describe("personal-data exports are refused", () => {
  * for what was agreed about pricing in our calls returned five Slack billing
  * statements and NO meeting note.
  */
+/**
+ * Every name below is a real document that was in the corpus on 2026-09-22, and every
+ * SPARED one is a real document that has to stay. Written from the measurement across
+ * all 814 Drive documents rather than from imagination — the last title rule written
+ * blind would have deleted two research papers.
+ */
+describe("isLegalInstrument", () => {
+  it.each([
+    "Freelancer Agreement_Fatih.docx",
+    "Freelancer Agreement_\u2060Eman \u010ci\u010dku\u0161i\u0107.docx",
+    "Freelancer Agreement Sanjin _SIGNED_mb_signed.pdf",
+    "Freelancer Agreement Marc.docx",
+    "Shareholders Agreement Applied Psychometrics GmbH",
+    "Shareholders Agreement Applied Psychometrics GmbH - For Commenting",
+    "AppliedPsychometrics_VSOP_Terms_of_Options",
+    "Freelance Contract - Applied Psychometrics UG template.docx",
+    "applied_psychometrics_freelance_contract_adapted.docx",
+    "Confidentiality, Data Protection & Responsible Data Handling Agreement",
+    "Ismar Fazlic Confidentiality, Data Protection & Responsible Data Handling Agreement",
+    "Copy of Confidentiality, Data Protection & Responsible Data Handling Agreement",
+  ])("keeps %j out", (name) => {
+    expect(isLegalInstrument(name)).toBe(true);
+  });
+
+  it.each([
+    // The team's working norms, not an instrument. Plural is the whole difference, and
+    // an earlier draft of this rule buried it.
+    "Development Agreements.md",
+    "Development_Agreements.pdf",
+    // Analysis ABOUT law, which is exactly what we want found.
+    "DE_Dating_App_Legal_Compliance_Strategiepapier_Final.pdf",
+    "EN_Dating_App_Legal_Compliance_Strategic_Paper_EN.pdf",
+    "Legal_Compliance_Summary_EU_DE.pdf",
+    // Ordinary documents that merely contain a matching word.
+    "32 - Recommendations",
+    "ShowUp_Epic_1_Backend_Foundation_Report.docx",
+    "LoveIQ_Market_Analysis_Competitive_Matrix_EN",
+  ])("leaves %j alone", (name) => {
+    expect(isLegalInstrument(name)).toBe(false);
+  });
+
+  it("spares a MEETING about a contract, which is a discussion and not the instrument", () => {
+    expect(
+      isLegalInstrument("Eman <> Mark - Contract Sync - 2026/09/09 16:01 WEST - Notes by Gemini")
+    ).toBe(false);
+  });
+
+  it("still excludes a contract whose name happens to mention notes", () => {
+    // Guards the meeting carve-out from becoming a way through: only Gemini's own
+    // "Notes by Gemini" suffix spares a file, not the word "notes".
+    expect(isLegalInstrument("Freelancer Agreement Marc - notes.docx")).toBe(true);
+  });
+
+  it("is empty-safe", () => {
+    expect(isLegalInstrument(undefined)).toBe(false);
+    expect(isLegalInstrument("   ")).toBe(false);
+  });
+});
+
 describe("isJobApplication", () => {
   /**
    * The real filenames. Fifteen external candidates' CVs were sitting in a corpus the
