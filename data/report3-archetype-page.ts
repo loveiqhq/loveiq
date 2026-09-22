@@ -168,11 +168,15 @@ export const REPORT_V4_CORE_ARCHETYPE_LEDE: readonly Report3Run[] = [
 ];
 
 /**
- * Part II · "Snapshot of the <Archetype>" — 1:763 / 55:1700.
+ * Part II · "Snapshot of the <Archetype>" — 1:763 / panel 316:250.
  *
- * Five claim-and-body rows. V4 draws every row OPEN (55:1701 "Row 1 — open"
- * through 55:1749), where V3's equivalent was a single-open accordion — see
- * V4Snapshot for why that is a separate component rather than a prop.
+ * Five claim-and-body rows. The frame delivers every row CLOSED (316:251 "Row 1 —
+ * closed" through 316:295), so it draws only the claims; the bodies appear on
+ * expand. See V4Snapshot for why this is a separate component from V3's.
+ *
+ * The claims read impersonally rather than in the second person — "Desire ignites
+ * fast and fades faster." rather than "Your desire ignites…" — matching 316:250
+ * and the SNAPSHOTS block of "3 Highest Scoring Archetypes+Core Archetype".
  */
 export interface Report3SnapshotRow {
   claim: string;
@@ -183,23 +187,23 @@ export interface Report3SnapshotRow {
 export const REPORT_V4_SNAPSHOT: Readonly<Record<string, readonly Report3SnapshotRow[]>> = {
   "Spark Seeker": [
     {
-      claim: "Your desire ignites fast and fades faster.",
+      claim: "Desire ignites fast and fades faster.",
       body: "Desire can fade, but it can also be rebuilt. Learning what brings it back is a skill you can practice. \nA drop in desire does not automatically mean something is wrong with you or your relationship.",
     },
     {
-      claim: "You initiate playfully; partners hear a demand.",
+      claim: "Playful initiation might be heard by partners as a demand.",
       body: "A playful tease can land as pressure for others, leaving them feeling expected to respond while you experience their hesitation as rejection. When neither of you names what happened, a small misread can quickly turn into distance.",
     },
     {
-      claim: "Predictability switches your desire off fastest.",
+      claim: "Predictability switches desire off fastest.",
       body: "When things feel too familiar, desire can fade.  \nOften, a small shift in setting, mood, or routine is enough to bring the spark back.",
     },
     {
-      claim: "Restraint is your biggest mind-vs-body split.",
+      claim: "Restraint is the biggest mind-vs-body split.",
       body: "The idea of being restrained may feel exciting in fantasy but leave the spark seeker feeling trapped in practice. A fantasy does not need to become reality to be valid or meaningful.",
     },
     {
-      claim: "Uncertainty is your rarest strength.",
+      claim: "Uncertainty is the rarest strength.",
       body: "What shuts many people down can spark curiosity. Not knowing what comes next often feels less like a threat and more like an invitation to play.",
     },
   ],

@@ -2950,13 +2950,13 @@
   padding: 10px 0 20px 5.502px;
   width: 360.781px;
 }
-/* 55:1700 — one white panel with a violet hairline and a single offset shadow,
+/* 316:250 — one white panel with a violet hairline and a single centred shadow,
  * against V3's washed, ramp-coloured card. */
 .rv3 .rv4-snap__panel {
   background: #fff;
   border: 1px solid rgba(168, 85, 247, 0.4);
   border-radius: 26px;
-  box-shadow: 20px 22px 54px -20px rgba(103, 60, 120, 0.3);
+  box-shadow: 0 22px 54px -20px rgba(103, 60, 120, 0.3);
   overflow: clip;
   padding: 26px 22px 24px;
   width: 361px;
@@ -2971,7 +2971,7 @@
   align-items: flex-start;
   width: 100%;
 }
-/* 55:1702 — a 3px rail the frame leaves empty in the delivered state. */
+/* 316:252 — a 3px rail the frame leaves empty in the delivered state. */
 .rv3 .rv4-snap__edge {
   align-self: stretch;
   flex-shrink: 0;
@@ -3006,9 +3006,24 @@
   line-height: 25.6px;
   min-width: 0;
 }
-.rv3 .rv4-snap__chev {
-  color: var(--rv3-muted);
+/* 316:258 "Control / Disc" — a 34px disc around the chevron. The fill is
+ * --rv3-violet at 10%; the glyph is the same violet at full strength. */
+.rv3 .rv4-snap__disc {
+  align-items: center;
+  background: rgba(121, 95, 200, 0.1);
+  border-radius: 17px;
+  display: flex;
   flex-shrink: 0;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+/* 316:259 — an 18px box. The path inside measures 8.44 x 4.22 under a 3px round
+ * stroke, so it is drawn to those numbers rather than reused from the 24-unit
+ * chevrons elsewhere in the report. */
+.rv3 .rv4-snap__chev {
+  color: var(--rv3-violet);
+  display: block;
   height: 18px;
   transition: transform 260ms ease;
   width: 18px;
@@ -3018,7 +3033,7 @@
   height: 100%;
   width: 100%;
 }
-/* Delivered open, so the chevron points up until a row is closed. */
+/* Delivered closed, so the chevron points down until a row is opened. */
 .rv3 .rv4-snap__row.is-open .rv4-snap__chev {
   transform: rotate(180deg);
 }

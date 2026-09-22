@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import V4Part1 from "@features/report/ui/v3/V4Part1";
 import V4Part2 from "@features/report/ui/v3/V4Part2";
@@ -102,10 +102,39 @@ describe("V4Part2", () => {
     expect(container.querySelector(".rv4-snap")).toBeInTheDocument();
   });
 
-  it("delivers all five snapshot rows open, as the frame draws them", () => {
+  it("delivers all five snapshot rows CLOSED, as 316:250 draws them", () => {
     const { container } = renderPart2();
     expect(container.querySelectorAll(".rv4-snap__row")).toHaveLength(5);
-    expect(container.querySelectorAll(".rv4-snap__row.is-open")).toHaveLength(5);
+    expect(container.querySelectorAll(".rv4-snap__row.is-open")).toHaveLength(0);
+    // The frame measures 484px precisely because it carries no body copy at rest:
+    // five 86px rows, four 1px dividers, and the 26/24 padding.
+    expect(container.querySelectorAll(".rv4-snap__body")).toHaveLength(0);
+    // 316:257 "Lock slot" — every row carries the 34px disc, open or closed.
+    expect(container.querySelectorAll(".rv4-snap__disc")).toHaveLength(5);
+  });
+
+  it("opens snapshot rows independently — V4 is not a single-open accordion", () => {
+    const { container } = renderPart2();
+    const claims = container.querySelectorAll<HTMLButtonElement>(".rv4-snap__claimrow");
+    fireEvent.click(claims[0]!);
+    fireEvent.click(claims[2]!);
+    expect(container.querySelectorAll(".rv4-snap__row.is-open")).toHaveLength(2);
+    expect(container.querySelectorAll(".rv4-snap__body")).toHaveLength(2);
+    expect(claims[0]!.getAttribute("aria-expanded")).toBe("true");
+    expect(claims[1]!.getAttribute("aria-expanded")).toBe("false");
+    // Clicking an open row closes it again, and only it.
+    fireEvent.click(claims[0]!);
+    expect(container.querySelectorAll(".rv4-snap__row.is-open")).toHaveLength(1);
+  });
+
+  it("states the snapshot claims impersonally, as 316:250 sets them", () => {
+    renderPart2();
+    // Not "Your desire ignites…" — the frame and the SNAPSHOTS source dropped the
+    // second person, so a claim reads as an observation rather than an accusation.
+    expect(screen.getByText("Desire ignites fast and fades faster.")).toBeInTheDocument();
+    for (const row of REPORT_V4_SNAPSHOT["Spark Seeker"]!) {
+      expect(row.claim).not.toMatch(/(Your|You)/);
+    }
   });
 
   it("omits the summary and snapshot for an archetype Mark has not written", () => {
