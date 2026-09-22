@@ -16,7 +16,10 @@ import {
 import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
 import { isReportPurchasePlan, type ReportAccessPlan } from "@features/report/server/access";
-import { buildLearnMoreForReader } from "@features/report/server/contentGating";
+import {
+  buildLearnMoreForReader,
+  isLearnMoreArticleLocked,
+} from "@features/report/server/contentGating";
 import { buildPreviewQuotes } from "./previewQuotes";
 import ReportV4PreviewClient from "./ReportV4PreviewClient";
 
@@ -72,7 +75,14 @@ export default async function ReportV4PreviewPage({
       accessPlan={accessPlan}
       accessPlanLabel={accessPlan ?? "no purchase"}
       quotes={buildPreviewQuotes()}
-      typicalBeliefs={buildTypicalBeliefs(ARCHETYPE)}
+      typicalBeliefs={buildTypicalBeliefs(ARCHETYPE, {
+        // The same gate the article runs through, so the chapter body and the
+        // "Go deeper" card below it can never disagree about who has paid.
+        locked: isLearnMoreArticleLocked({
+          article: { chapterId: "typical_beliefs" },
+          accessPlan,
+        }),
+      })}
     />
   );
 }

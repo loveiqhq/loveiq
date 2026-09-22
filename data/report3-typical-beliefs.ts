@@ -230,18 +230,56 @@ export const TYPICAL_BELIEFS_CHALLENGES: readonly Report3Block[] = [
  */
 export interface Report3TypicalBeliefsView {
   intro: readonly Report3Block[];
-  panels: Report3BeliefPanels;
+  panels: { turns: readonly Report3BeliefTurnView[]; sun: readonly string[] };
+  /**
+   * Index of the first LOCKED row in both panels, or null when the chapter is
+   * open. 381:222 turns rows 1 to 3 and marks row 4 onwards "at rest (p=0) ·
+   * LOCKED" under a 5px layer blur; 381:362 blurs its own rows 4 to 10 to match.
+   * One number drives both, because the frame uses one boundary.
+   */
+  lockedFrom: number | null;
   challengesTitle: string;
   challenges: readonly Report3Block[];
 }
 
-/** Server-side assembly. Returns null for an archetype nobody has written yet. */
-export function buildTypicalBeliefs(archetype: string): Report3TypicalBeliefsView | null {
+/** A turn as the reader receives it. */
+export interface Report3BeliefTurnView {
+  shadow: string;
+  /**
+   * THE SEAM. Withheld on a locked row, which can never turn and so would never
+   * show it — sending it anyway would put the paid half of every gated pair into
+   * the page for nothing. The blurred shadow belief stays, because the frame draws
+   * it and it is what the wall is advertising.
+   */
+  shift: string | null;
+}
+
+/** 381:222 turns three rows before the wall. */
+export const TYPICAL_BELIEFS_FREE_ROWS = 3;
+
+/**
+ * Server-side assembly. Returns null for an archetype nobody has written yet.
+ *
+ * `locked` is decided by the caller, from the same gate every other section runs
+ * through, so nothing in the V4 tree ever sees an access plan.
+ */
+export function buildTypicalBeliefs(
+  archetype: string,
+  { locked = false }: { locked?: boolean } = {}
+): Report3TypicalBeliefsView | null {
   const panels = REPORT_V4_TYPICAL_BELIEFS[archetype];
   if (!panels) return null;
+  const lockedFrom = locked ? TYPICAL_BELIEFS_FREE_ROWS : null;
   return {
     intro: TYPICAL_BELIEFS_INTRO,
-    panels,
+    panels: {
+      turns: panels.turns.map((turn, i) => ({
+        shadow: turn.shadow,
+        shift: lockedFrom !== null && i >= lockedFrom ? null : turn.shift,
+      })),
+      sun: panels.sun,
+    },
+    lockedFrom,
     challengesTitle: TYPICAL_BELIEFS_CHALLENGES_TITLE,
     challenges: TYPICAL_BELIEFS_CHALLENGES,
   };

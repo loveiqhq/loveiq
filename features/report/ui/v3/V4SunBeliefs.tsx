@@ -19,15 +19,24 @@ const PANEL_TITLE = "Typical sun beliefs";
 
 interface Props {
   sun: readonly string[];
+  /**
+   * Index of the first blurred row, or null when the chapter is open. 381:362
+   * leaves its first three rows clear and blurs 4 to 10 at 5px, the same boundary
+   * the coral panel uses.
+   */
+  lockedFrom?: number | null;
 }
 
-const V4SunBeliefs: FC<Props> = ({ sun }) => (
+const V4SunBeliefs: FC<Props> = ({ sun, lockedFrom = null }) => (
   <section className="rv4-sun" data-node-id="368:5623" data-name="Typical sun beliefs">
     <h4 className="rv4-sun__head">{PANEL_TITLE}</h4>
 
     <ul className="rv4-sun__list">
-      {sun.map((belief) => (
-        <li key={belief} className="rv4-sun__row">
+      {sun.map((belief, i) => (
+        <li
+          key={belief}
+          className={`rv4-sun__row${lockedFrom !== null && i >= lockedFrom ? " is-locked" : ""}`}
+        >
           <span className="rv4-sun__tick" aria-hidden="true">
             <svg viewBox="0 0 9 9" fill="none">
               <path

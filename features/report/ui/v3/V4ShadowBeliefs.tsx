@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FC } from "react";
-import type { Report3BeliefTurn } from "@/data/report3-typical-beliefs";
+import type { Report3BeliefTurnView } from "@/data/report3-typical-beliefs";
 
 /**
  * "Typical shadow beliefs" — Figma 368:5482, the coral panel in the Typical
@@ -46,15 +46,18 @@ const PANEL_TITLE = "Typical shadow beliefs";
 const SHIFT_LABEL = "THE SHIFT";
 
 interface Props {
-  turns: readonly Report3BeliefTurn[];
+  turns: readonly Report3BeliefTurnView[];
   /**
-   * Rows past this index never turn and are handed to the caller to blur — the
-   * paywalled frame animates the first three and gates the rest. Defaults to all.
+   * Index of the first LOCKED row, or null when the chapter is open. 381:222 turns
+   * rows 1 to 3 and marks row 4 onwards "at rest (p=0) · LOCKED" under a 5px layer
+   * blur, which is why one number does both jobs: a locked row never turns AND is
+   * blurred. Its shift has already been withheld by the server.
    */
-  animatedCount?: number;
+  lockedFrom?: number | null;
 }
 
-const V4ShadowBeliefs: FC<Props> = ({ turns, animatedCount = turns.length }) => {
+const V4ShadowBeliefs: FC<Props> = ({ turns, lockedFrom = null }) => {
+  const animatedCount = lockedFrom ?? turns.length;
   const rowsRef = useRef<(HTMLLIElement | null)[]>([]);
   const [turned, setTurned] = useState<ReadonlySet<number>>(new Set());
   const queued = useRef(false);
@@ -111,7 +114,9 @@ const V4ShadowBeliefs: FC<Props> = ({ turns, animatedCount = turns.length }) => 
               ref={(el) => {
                 rowsRef.current[i] = el;
               }}
-              className={`rv4-turn__row${isTurned ? " is-turned" : ""}`}
+              className={`rv4-turn__row${isTurned ? " is-turned" : ""}${
+                lockedFrom !== null && i >= lockedFrom ? " is-locked" : ""
+              }`}
             >
               {/* 368:5557 */}
               <div className="rv4-turn__belief">
@@ -130,25 +135,29 @@ const V4ShadowBeliefs: FC<Props> = ({ turns, animatedCount = turns.length }) => 
                 <p className="rv4-turn__text">{turn.shadow}</p>
               </div>
 
-              {/* 368:5562 — in the DOM at every scroll position, collapsed until
-               * the row turns, so it is read aloud either way. */}
-              <div className="rv4-turn__shift">
-                <div className="rv4-turn__shift-inner">
-                  <span className="rv4-turn__shift-label">
-                    <svg className="rv4-turn__shift-check" viewBox="0 0 9 9" fill="none">
-                      <path
-                        d="M1.4 4.8L3.5 6.9L7.6 2.1"
-                        stroke="currentColor"
-                        strokeWidth="1.4"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                    {SHIFT_LABEL}
-                  </span>
-                  <p className="rv4-turn__shift-text">{turn.shift}</p>
+              {/* 368:5562 — in the DOM at every scroll position, collapsed until the
+               * row turns, so it is read aloud either way. Absent entirely on a
+               * locked row: the server withheld it, and a row that can never turn
+               * would never have shown it. */}
+              {turn.shift !== null ? (
+                <div className="rv4-turn__shift">
+                  <div className="rv4-turn__shift-inner">
+                    <span className="rv4-turn__shift-label">
+                      <svg className="rv4-turn__shift-check" viewBox="0 0 9 9" fill="none">
+                        <path
+                          d="M1.4 4.8L3.5 6.9L7.6 2.1"
+                          stroke="currentColor"
+                          strokeWidth="1.4"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      {SHIFT_LABEL}
+                    </span>
+                    <p className="rv4-turn__shift-text">{turn.shift}</p>
+                  </div>
                 </div>
-              </div>
+              ) : null}
             </li>
           );
         })}

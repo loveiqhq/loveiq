@@ -17,6 +17,7 @@ import { buildTypicalBeliefs, REPORT_V4_TYPICAL_BELIEFS } from "@/data/report3-t
 
 const V3_CSS = readFileSync(join(__dirname, "..", "ui", "v3", "reportV3.css"), "utf8");
 const VIEW = buildTypicalBeliefs("Spark Seeker")!;
+const LOCKED = buildTypicalBeliefs("Spark Seeker", { locked: true })!;
 
 /** Where every row's top sits, in viewport coordinates. */
 let rowTop = 9999;
@@ -110,11 +111,77 @@ describe("the turn — 368:5482", () => {
     expect(screen.getByText(VIEW.panels.turns[9]!.shift)).toBeInTheDocument();
   });
 
-  it("stops animating past animatedCount — the paywalled frame turns three", () => {
-    const { container } = render(<V4ShadowBeliefs turns={VIEW.panels.turns} animatedCount={3} />);
+  it("turns nothing past the wall, however far the reader scrolls", () => {
+    const { container } = render(
+      <V4ShadowBeliefs turns={LOCKED.panels.turns} lockedFrom={LOCKED.lockedFrom} />
+    );
     rowTop = 100;
     fireEvent.scroll(window);
     expect(container.querySelectorAll(".rv4-turn__row.is-turned")).toHaveLength(3);
+  });
+});
+
+describe("the paywalled chapter — 348:213", () => {
+  it("turns the first three rows and locks the other seven", () => {
+    // 381:222: krow/1-3 are "turned (p=1)", krow/4-10 "at rest (p=0) · LOCKED".
+    const { container } = render(<V4TypicalBeliefs view={LOCKED} />);
+    expect(container.querySelectorAll(".rv4-turn__row")).toHaveLength(10);
+    expect(container.querySelectorAll(".rv4-turn__row.is-locked")).toHaveLength(7);
+    const locked = [...container.querySelectorAll(".rv4-turn__row")].map((el) =>
+      el.classList.contains("is-locked")
+    );
+    expect(locked).toEqual([false, false, false, true, true, true, true, true, true, true]);
+  });
+
+  it("locks the sun panel at the same row, as 381:362 draws it", () => {
+    const { container } = render(<V4TypicalBeliefs view={LOCKED} />);
+    expect(container.querySelectorAll(".rv4-sun__row")).toHaveLength(10);
+    expect(container.querySelectorAll(".rv4-sun__row.is-locked")).toHaveLength(7);
+  });
+
+  it("withholds the shift on every locked row of the coral panel", () => {
+    const { container } = render(<V4TypicalBeliefs view={LOCKED} />);
+    // Three shifts survive, one per turned row. The other seven never left the
+    // server: a locked row cannot turn, so its shift had no visual job and would
+    // have been pure leak.
+    expect(container.querySelectorAll(".rv4-turn__shift-text")).toHaveLength(3);
+    const coral = container.querySelector(".rv4-turn")!;
+    for (const turn of VIEW.panels.turns.slice(3)) {
+      expect(coral.textContent).not.toContain(turn.shift);
+    }
+  });
+
+  it("still ships the sun list in full, because the frame blurs it rather than cutting it", () => {
+    // Worth stating plainly: 381:362 draws its locked rows as REAL text under a
+    // 5px blur, so those seven sun beliefs are in the DOM and the blur is a paint
+    // effect — LockedPreviewImage.tsx:6-12 says as much about every CSS blur here.
+    // That is the design as drawn. Withholding them would leave seven empty rows,
+    // which is a design decision rather than an implementation one.
+    const { container } = render(<V4TypicalBeliefs view={LOCKED} />);
+    const green = container.querySelector(".rv4-sun")!;
+    for (const belief of VIEW.panels.sun) expect(green.textContent).toContain(belief);
+  });
+
+  it("keeps both panels at full height, so the wall costs no room", () => {
+    const { container } = render(<V4TypicalBeliefs view={LOCKED} />);
+    expect(container.querySelectorAll(".rv4-turn__row")).toHaveLength(10);
+    expect(container.querySelectorAll(".rv4-sun__row")).toHaveLength(10);
+  });
+
+  it("holds Common challenges open for four blocks, then blurs the rest", () => {
+    const { container } = render(<V4TypicalBeliefs view={LOCKED} />);
+    // 348:221 draws the subheading and three paragraphs sharp before 348:332.
+    expect(screen.getByText("When spontaneity becomes proof of desire")).toBeInTheDocument();
+    const gated = container.querySelector(".rv4-tb__gated");
+    expect(gated).not.toBeNull();
+    expect(gated!.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("blurs nothing at all for a reader who has paid", () => {
+    const { container } = render(<V4TypicalBeliefs view={VIEW} />);
+    expect(container.querySelectorAll(".is-locked")).toHaveLength(0);
+    expect(container.querySelector(".rv4-tb__gated")).toBeNull();
+    expect(container.querySelectorAll(".rv4-turn__shift-text")).toHaveLength(10);
   });
 });
 
