@@ -210,6 +210,7 @@ import {
   docToRows,
   ingestDrive,
   isPersonalDataExport,
+  isPrivateLegalMatter,
   isJobApplication,
   isVendorBilling,
   sheetTabsWithRows,
@@ -1455,6 +1456,75 @@ describe("personal-data exports are refused", () => {
  * all 814 Drive documents rather than from imagination — the last title rule written
  * blind would have deleted two research papers.
  */
+describe("docToRows refuses a private legal filing", () => {
+  /**
+   * THE REFUSAL, NOT THE PREDICATE. `isPrivateLegalMatter` could be perfectly tested and
+   * never called — which is exactly what happened to the vendor-invoice and CV rules
+   * once, with 1,482 tests green while the walk indexed both.
+   *
+   * Returning no rows also keeps the file out of the walk's written-id set, so the sweep
+   * removes whatever was indexed before the guard existed.
+   */
+  const file = { id: "f1", name: "00_Uebersicht_aktualisiert", modifiedTime: STAMP };
+
+  it("writes nothing for a document that names a court", () => {
+    const text = "Übersicht\n\nKlageschrift beim Amtsgericht eingereicht am 12.01.2026.";
+    expect(docToRows(file as never, text, STAMP)).toHaveLength(0);
+  });
+
+  it("still writes an ordinary document, so the test above is a filter and not a wall", () => {
+    const text = "Übersicht\n\nDie Roadmap für Q4 steht: Report 2.0 und die neue Landing.";
+    expect(docToRows(file as never, text, STAMP).length).toBeGreaterThan(0);
+  });
+
+  it("still writes a compliance paper that cites the same statutes", () => {
+    const text =
+      "Legal Compliance\n\nNach § 13 TMG und § 823 BGB ergeben sich folgende Pflichten " +
+      "für Dating-Apps in Deutschland, die wir im Produkt abbilden müssen.";
+    expect(docToRows(file as never, text, STAMP).length).toBeGreaterThan(0);
+  });
+});
+
+describe("isPrivateLegalMatter", () => {
+  /**
+   * The line is: citing a statute is ANALYSIS, naming a court is a PROCEEDING.
+   *
+   * Measured 2026-09-22 across all 798 Drive documents — the litigation carried 2 to 4
+   * court words each and the three legal-compliance strategy papers carried zero, while
+   * BOTH cite the same German statutes. A rule built on "§ 823 BGB" would have taken the
+   * compliance papers with the lawsuit.
+   */
+  /**
+   * ONE WORD PER CASE, on purpose. The first version of this table put several
+   * proceeding words in each sentence, so dropping any single word from the pattern left
+   * all four green — the table proved the pattern matched SOMETHING, never that it
+   * matched each thing it names.
+   */
+  it.each([
+    ["amtsgericht", "Der Termin wurde vom Amtsgericht auf den 3. März gelegt."],
+    ["landgericht", "Die Sache geht in zweiter Instanz an das Landgericht."],
+    ["klageschrift", "Anbei die Klageschrift zur Durchsicht."],
+    ["strafanzeige", "Wir haben am Montag Strafanzeige erstattet."],
+    ["räumungsklage", "Die Räumungsklage ist eingereicht."],
+    ["prozesskostenhilfe", "Der Antrag auf Prozesskostenhilfe läuft."],
+    ["staatsanwaltschaft", "Die Staatsanwaltschaft hat das Verfahren eröffnet."],
+    ["zwangsvollstreckung", "Nächster Schritt wäre die Zwangsvollstreckung."],
+  ])("refuses a filing on %s alone", (_word, text) => {
+    expect(isPrivateLegalMatter(text)).toBe(true);
+  });
+
+  it.each([
+    // Analysis about law. These are three real documents that must stay findable.
+    "Nach § 13 TMG und § 823 BGB ergeben sich für Dating-Apps folgende Pflichten.",
+    "Legal compliance summary for the EU and Germany: GDPR Art. 6, § 25 TTDSG.",
+    "Our terms of use were reviewed against consumer-protection law in Q2.",
+    // Ordinary product text that happens to be German.
+    "Die Nutzer sehen ihr Ergebnis direkt nach dem Test.",
+  ])("leaves analysis alone: %j", (text) => {
+    expect(isPrivateLegalMatter(text)).toBe(false);
+  });
+});
+
 describe("isLegalInstrument", () => {
   it.each([
     "Freelancer Agreement_Fatih.docx",
@@ -1469,6 +1539,12 @@ describe("isLegalInstrument", () => {
     "Confidentiality, Data Protection & Responsible Data Handling Agreement",
     "Ismar Fazlic Confidentiality, Data Protection & Responsible Data Handling Agreement",
     "Copy of Confidentiality, Data Protection & Responsible Data Handling Agreement",
+    // Drive URL-encoded the spaces AND truncated "Agreement" to "Agree", so the
+    // undecoded name read as an ordinary file and this one was indexed.
+    "Confidentiality,%20Data%20Protection%20&%20Responsible%20Data%20Handling%20Agree.pdf",
+    // The German originals of what the English rule already excludes.
+    "Gesellschaftsvertrag_20260112_1156_UVZ-Nr. 39_2026.pdf",
+    "20260112_1156_Liste der Gesellschafter der Applied Pyschometrics UG.pdf",
   ])("keeps %j out", (name) => {
     expect(isLegalInstrument(name)).toBe(true);
   });

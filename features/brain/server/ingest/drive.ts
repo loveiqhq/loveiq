@@ -780,6 +780,39 @@ export function isPersonalDataExport(text: string): boolean {
   return false;
 }
 
+/**
+ * A FILING IN SOMEONE'S PRIVATE LEGAL PROCEEDING.
+ *
+ * The 2026-09-21 widening pulled a colleague's personal landlord dispute and a criminal
+ * complaint into the corpus: 23 documents, 81 chunks, one owner — an eviction case
+ * numbered 00 to 09, a Klageschrift, a Strafanzeige, an evidence schedule. None of it is
+ * about LoveIQ, and all of it is about named third parties.
+ *
+ * A FILENAME RULE CANNOT COVER THIS and that is why the check is on the text. The case
+ * folder is numbered rather than named — the files run 00 to 09 with terse German
+ * suffixes, an overview, a demand, a draft, a checklist — so the documents that say
+ * least about themselves are exactly the ones a title pattern misses.
+ *
+ * DRIVE ONLY. Never apply this to mail. Measured 2026-09-22: 45 gmail chunks contain
+ * "Amtsgericht" or "Landgericht" and NOT ONE is litigation — 24 are plainly the German
+ * register footer every company must carry in its email signature ("Amtsgericht
+ * Charlottenburg HRB 282986"), and zero contain a proceeding word. The same rule that is
+ * clean on 798 Drive documents would have refused 45 ordinary business threads.
+ *
+ * Measured against every Drive document before shipping: 23 selected, all one owner, and
+ * NOT ONE of the three legal-compliance strategy papers — which cite the same statutes a
+ * lawsuit does, and are exactly what we want found. Citing a statute is analysis; naming
+ * a court is a proceeding.
+ *
+ * The durable fix is not code: a private matter should not sit in a Drive the service
+ * account can read. This stops it being indexed meanwhile.
+ */
+const PRIVATE_LEGAL_MATTER =
+  /\b(amtsgericht|landgericht|klageschrift|strafanzeige|r(ä|ae)umungsklage|prozesskostenhilfe|staatsanwaltschaft|zwangsvollstreckung)\b/i;
+export function isPrivateLegalMatter(text: string): boolean {
+  return PRIVATE_LEGAL_MATTER.test(text);
+}
+
 export function docToRows(file: DriveFile, text: string, stampedAt: string): BrainRow[] {
   const name = (file.name ?? "").trim();
   if (!file.id || !name) return [];
@@ -793,6 +826,14 @@ export function docToRows(file: DriveFile, text: string, stampedAt: string): Bra
     logger.warn(
       { file: name },
       "brain-ingest drive: refusing a file that is a list of people, not a document"
+    );
+    return [];
+  }
+
+  if (isPrivateLegalMatter(text)) {
+    logger.warn(
+      { file: name },
+      "brain-ingest drive: refusing a filing in a private legal proceeding"
     );
     return [];
   }
@@ -1149,6 +1190,7 @@ export async function ingestDrive(
    *  so `docs=` minus the chunks it produced is an arithmetic identity, not a mystery. */
   let emptyDocs = 0;
   let refusedDocs = 0;
+  let legalMatterDocs = 0;
   /** Produced no rows for a reason that is NOT the people-list refusal (no id, no name). */
   let unusableDocs = 0;
   let complete = listed.complete;
@@ -1210,6 +1252,7 @@ export async function ingestDrive(
       // is the exact complaint these counters exist to answer.
       if (produced.length === 0) {
         if (isPersonalDataExport(text)) refusedDocs += 1;
+        else if (isPrivateLegalMatter(text)) legalMatterDocs += 1;
         else unusableDocs += 1;
       }
       rows.push(...produced);
@@ -1340,6 +1383,7 @@ export async function ingestDrive(
       (colleagues.refused > 0 ? ` colleaguesRefused=${colleagues.refused}` : "") +
       (emptyDocs > 0 ? ` empty=${emptyDocs}` : "") +
       (refusedDocs > 0 ? ` refusedAsPeopleList=${refusedDocs}` : "") +
+      (legalMatterDocs > 0 ? ` refusedAsLegalMatter=${legalMatterDocs}` : "") +
       (unusableDocs > 0 ? ` unusable=${unusableDocs}` : "") +
       (exportFailures.length > 0
         ? ` exportFailed=${exportFailures.length}:${exportFailures.slice(0, 3).join(",")}`

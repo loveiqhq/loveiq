@@ -260,9 +260,14 @@ export const MEETING_NOTE_NAME = /notes by gemini/i;
  * rather than merely unfetched, which is how the vendor invoices left.
  */
 const LEGAL_INSTRUMENT =
-  /(agreement|contract)([ _.]|$)|vsop|terms[ _]of[ _]options|articles of association/i;
+  /(agreement|contract)([ _.]|$)|confidentiality,? data protection|vsop|terms[ _]of[ _]options|articles of association|gesellschaftsvertrag|gesellschafter/i;
 export function isLegalInstrument(name?: string): boolean {
-  const n = (name ?? "").trim();
+  // Percent-decoded first. One data-protection agreement reached the corpus with its
+  // spaces URL-encoded by Drive, which also left the word "Agreement" truncated — so
+  // the rule read the name as an ordinary file and indexed it. Decoding is the fix;
+  // matching on the truncated stem instead would have caught every "Agreed plan" in
+  // the Drive.
+  const n = (name ?? "").replace(/%20/g, " ").trim();
   // A meeting ABOUT a contract is a record of a discussion, not the instrument.
   if (MEETING_NOTE_NAME.test(n)) return false;
   // No `if (!n) return false` guard: it was there and it was dead — neither regex can
