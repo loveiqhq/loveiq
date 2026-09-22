@@ -12,6 +12,7 @@ import logger from "@shared/observability/logger";
 import { loadPeople } from "@features/brain/server/people";
 import { splitBody } from "./notion";
 import {
+  isLegalInstrument,
   chunkPage,
   recordSweep,
   shouldSweep,
@@ -96,7 +97,10 @@ const MAX_TOLERATED_THREAD_FAILURES = 25;
 // or a spec as a docx was invisible while the thread around it read as complete.
 // Without the bump this reaches only threads that happen to change: a thread is
 // refetched on a historyId move, and an old thread's history never moves again.
-export const GMAIL_BUILDER_VERSION = 7;
+// v8: attachments that are signed legal instruments are no longer read. Same reason
+// the bump was needed for v7 and in the other direction — an old thread's history
+// never moves, so without this the contract already indexed would stay indexed.
+export const GMAIL_BUILDER_VERSION = 8;
 
 /**
  * Mailboxes to read. `me` is whoever the credential belongs to.
@@ -531,7 +535,14 @@ export function attachmentRefs(thread: GmailThread): AttachmentRef[] {
       filename &&
       attachmentId &&
       ATTACHMENT_MIMES.has(mimeType) &&
-      size <= MAX_ATTACHMENT_BYTES
+      size <= MAX_ATTACHMENT_BYTES &&
+      // The same rule the Drive walk applies, because the same contract arrives both
+      // ways. Excluding it from Drive alone left 58 chunks of the freelance contract
+      // and the shareholders agreement readable through the mailbox, attached to
+      // "Welcome to the Team" and to a forward of it. The covering message stays —
+      // that Mark sent Eman a contract on 2026-09-09 is a real thing to remember; the
+      // instrument itself does not come with it.
+      !isLegalInstrument(filename)
     ) {
       out.push({ messageId, attachmentId, filename, mimeType, size });
     }

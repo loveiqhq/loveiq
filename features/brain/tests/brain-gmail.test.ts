@@ -590,6 +590,50 @@ describe("attachmentRefs — attachments are content, and none were read", () =>
     expect(attachmentRefs(nested as never)).toHaveLength(1);
   });
 
+  /**
+   * THE SAME CONTRACT ARRIVES BOTH WAYS.
+   *
+   * Excluding signed instruments from the Drive walk alone left 58 chunks of the
+   * freelance contract and the shareholders agreement readable through the mailbox —
+   * attached to "Applied Psychometrics - Freelance Contract - Welcome to the Team",
+   * to a forward of it, and to a thread called simply "Freelance Contract". Measured
+   * 2026-09-22, after the Drive half had already shipped.
+   *
+   * The COVERING MESSAGE stays, and that distinction is the whole design: "Hey
+   * Brother, Attached is the new contract" is a real thing for the brain to remember.
+   * The instrument hanging off it is not.
+   */
+  it("never reads an attached contract, while keeping the message that carried it", () => {
+    const thread = {
+      id: "t1",
+      messages: [
+        {
+          id: "m1",
+          payload: {
+            parts: [
+              part({ filename: "Freelancer Agreement_Fatih.docx" }),
+              part({ attachmentId: "att2", filename: "Shareholders Agreement.pdf" }),
+              part({
+                attachmentId: "att3",
+                filename: "AppliedPsychometrics_VSOP_Terms_of_Options.pdf",
+              }),
+              // The positive control. Without it a run that read NO attachment at all
+              // would pass this test just as well.
+              part({ attachmentId: "att4", filename: "Q3 roadmap.pdf" }),
+            ],
+          },
+        },
+      ],
+    };
+    const refs = attachmentRefs(thread as never);
+    expect(refs.map((r) => r.filename)).toEqual(["Q3 roadmap.pdf"]);
+  });
+
+  it("still reads a meeting note that happens to discuss a contract", () => {
+    const note = part({ filename: "Contract Sync - 2026/09/09 - Notes by Gemini.pdf" });
+    expect(attachmentRefs(withParts([note]) as never)).toHaveLength(1);
+  });
+
   it("ignores a format there is no reader for", () => {
     const img = part({ mimeType: "image/png", filename: "logo.png" });
     expect(attachmentRefs(withParts([img]) as never)).toHaveLength(0);

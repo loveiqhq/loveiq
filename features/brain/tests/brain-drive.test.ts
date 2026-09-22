@@ -211,10 +211,12 @@ import {
   ingestDrive,
   isPersonalDataExport,
   isJobApplication,
-  isLegalInstrument,
   isVendorBilling,
   sheetTabsWithRows,
 } from "@features/brain/server/ingest/drive";
+// The predicate lives in `upsert` rather than here: `drive` imports `gmail`, so the
+// mailbox walk cannot import it back, and the same contract arrives both ways.
+import { isLegalInstrument } from "@features/brain/server/ingest/upsert";
 
 const STAMP = "2026-08-28T04:47:00.000Z";
 const FILE = {

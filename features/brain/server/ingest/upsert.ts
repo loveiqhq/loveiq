@@ -216,6 +216,61 @@ export function redactUrlSecrets(text: string): string {
   return text.replace(SECRET_PARAM_RE, "$1[redacted]").replace(BARE_SECRET_RE, "[redacted]");
 }
 
+/**
+ * Gemini names every note "… - Notes by Gemini", which is the only reliable marker on
+ * the file itself. Shared so the classifier below and the row builder cannot drift
+ * apart — the classifier MUST spare a meeting, and it would not if the two diverged.
+ */
+export const MEETING_NOTE_NAME = /notes by gemini/i;
+
+/**
+ * A SIGNED LEGAL INSTRUMENT — the company's contracts and colleagues' own terms.
+ *
+ * Widening the Drive walk on 2026-09-21 made eighteen of these searchable: five named
+ * people's freelance agreements, both copies of the shareholders agreement, the VSOP
+ * option terms, eight per-person confidentiality and data-protection agreements, and
+ * two freelance contract templates. Between them, thirty chunks carry monetary terms —
+ * so anyone who can query the brain could read a named colleague's rate, or the cap
+ * table, by asking in prose.
+ *
+ * Eman's call, 2026-09-22, and consistent with the one made about CVs two days
+ * earlier: somebody's contract is their business, not company knowledge. The audience
+ * is the same team that can already open the shared Drive, so this is about what is
+ * easy to stumble into rather than about a leak — which is why it is a decision and
+ * not an incident.
+ *
+ * WHAT IT DELIBERATELY SPARES, each verified against all 814 Drive documents:
+ *
+ *  - Meeting notes. "Eman <> Mark - Contract Sync" is people TALKING about a contract,
+ *    which is exactly the kind of thing the brain exists to remember.
+ *  - The plural. "Development Agreements.md" is the development team's working norms
+ *    ("one clearly responsible leader … 2-week time-boxed sprints") and is real
+ *    operational knowledge. An instrument is "an Agreement"; a list of norms is
+ *    "Agreements".
+ *  - Analysis about law. The dating-app legal-compliance strategy papers (German and
+ *    English) and the EU/DE compliance summary are papers we want found, and carry
+ *    neither word in their titles, so they were never at risk — checked, not assumed.
+ *
+ * Measured before shipping: 18 of 814 documents, 197 of 12,452 chunks (1.58%), with
+ * every near miss inspected by hand.
+ *
+ * REVERSIBLE, like the CV rule: delete this function and its call and the next walk
+ * puts them back. The rows already indexed go on their own — the filter runs before
+ * `toFetch`/`touch`/`deferred`, so an excluded document looks ABSENT to the sweep
+ * rather than merely unfetched, which is how the vendor invoices left.
+ */
+const LEGAL_INSTRUMENT =
+  /(agreement|contract)([ _.]|$)|vsop|terms[ _]of[ _]options|articles of association/i;
+export function isLegalInstrument(name?: string): boolean {
+  const n = (name ?? "").trim();
+  // A meeting ABOUT a contract is a record of a discussion, not the instrument.
+  if (MEETING_NOTE_NAME.test(n)) return false;
+  // No `if (!n) return false` guard: it was there and it was dead — neither regex can
+  // match an empty string, so deleting the line changed nothing and no test could tell.
+  // A line that cannot change an outcome is not a guard, it just reads like one.
+  return LEGAL_INSTRUMENT.test(n);
+}
+
 /** The credential kind found in this text, or null. */
 export function credentialKind(text: string): string | null {
   for (const [kind, pattern] of CREDENTIAL_PATTERNS) {
