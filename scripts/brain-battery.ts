@@ -340,6 +340,13 @@ const KNOWN_RED: Record<string, string> = {
   "decision-pivot":
     "the meeting record it wants is crowded out by `decision` chunks, which went from 48 " +
     "to 82 when the miner was repaired. Threshold was tuned at 48.",
+  "ga4-brand":
+    "the brand campaign stopped running on 2026-08-31, so only August records name it. " +
+    "Its month chunk scores 1.692 and the CURRENT partial month scores 1.724 — grainCap " +
+    "gives the single ga4:month slot to the winner, and 0.03 decides it. Measured " +
+    "2026-09-22: five other historical-analytics questions return their record at #1, so " +
+    "this is not a current-period bias, and narrowing to sources:[ga4] finds it at #1. " +
+    "Re-tuning global ranking on a 0.03 margin would risk the other 228 probes.",
   "cm-marcus-line":
     "a pressure gauge, not a regression signal: reddens on corpus growth, recovers on " +
     "shrinkage. Measured 2026-09-21 — the answer is #2 WITHIN `doc` at 2.00 against " +
