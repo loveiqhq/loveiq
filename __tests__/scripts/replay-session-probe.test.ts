@@ -175,6 +175,35 @@ describe("replaying the reader's own route", () => {
     expect(PROBE).not.toMatch(/sessionId\.replace\(/);
   });
 
+  it("will not call a run clean when nothing could be examined", () => {
+    /**
+     * The lock and overlay checks are suppressed whenever a dialog is open,
+     * because a locked page behind a modal is correct. On this report that is
+     * nearly always: scrolling opens the paywall by itself and it stays open.
+     * Measured on four real sessions — 0, 0, 0 and 0 checkable route steps,
+     * while the probe printed "clean". That clean was clean because nothing
+     * could be seen, and MUTATE=1 on a scroll-only route was invisible three
+     * runs out of three.
+     */
+    expect(PROBE).toMatch(/MIN_EXAMINED/);
+    expect(PROBE).toMatch(/examined = routeCheckable \+ tapsPresent/);
+    expect(PROBE).toMatch(/examined < MIN_EXAMINED/);
+    // And the counter must not mix the two step kinds: deriving checkable as
+    // routeDone - suppressed produced -14, -23, -27, because inspect() also
+    // runs after dead taps.
+    expect(PROBE).toMatch(/!isTap && !seen\.suppressed/);
+    expect(PROBE).not.toMatch(/routeDone - suppressed/);
+  });
+
+  it("injects a defect each kind of check can see", () => {
+    // The scroll lock alone flipped Android and not iOS: WebKit has no CDP so
+    // the gesture check is skipped, and the lock check is suppressed by the
+    // open paywall. MUTATE then exited 0 while carrying its own defect.
+    expect(PROBE).toMatch(/pointer-events/);
+    expect(PROBE).toMatch(/aria-disabled/);
+    expect(PROBE).toMatch(/setInterval/);
+  });
+
   it("keeps the three-way exit contract", () => {
     for (const code of ["process.exit(0)", "process.exit(1)", "process.exit(3)"]) {
       expect(PROBE, `${code} is missing`).toContain(code);
