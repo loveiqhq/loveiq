@@ -13,7 +13,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { describe, expect, it, afterAll, beforeAll } from "vitest";
 
@@ -244,5 +244,32 @@ describe("when gh refuses", () => {
     expect(out).toBeNull();
     expect(log).not.toContain("::error");
     expect(log).toContain("a pull request already exists");
+  });
+});
+
+describe("the reproduction PR must not run the repo's own gate", () => {
+  const SRC = readFileSync(resolve(process.cwd(), "scripts/lib/replay-pr.mjs"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:])\/\/.*$/gm, "$1");
+
+  it("bypasses husky on both the commit and the push", () => {
+    /**
+     * `.husky/pre-push` runs lint, typecheck, the whole test suite and
+     * docs:check. That fired inside a probe run, for a commit adding one JSON
+     * file — and FAILED, because the verifier step exports SUPABASE_URL,
+     * SUPABASE_SERVICE_ROLE_KEY and SLACK_BOT_TOKEN, and eleven tests behave
+     * differently with real credentials present. A reproduced defect died at
+     * "error: failed to push some refs" and the run stayed green.
+     */
+    expect(SRC).toMatch(/"commit",\s*"--no-verify"/);
+    expect(SRC).toMatch(/git\("push", "--no-verify", "origin", branch\)/);
+  });
+
+  it("reports a reason that is actually the reason", () => {
+    // `.split("\n")[0]` printed a BABEL note for a push failure: whatever ran
+    // first owns the top of stderr, and the real error is far below it.
+    expect(SRC).toMatch(/reverse\(\)\.find/);
+    expect(SRC).toMatch(/\^\(error\|fatal\|remote:\|gh:\|GraphQL:\|!\)/);
+    expect(SRC).not.toMatch(/why\.split\("\\n"\)\[0\]/);
   });
 });
