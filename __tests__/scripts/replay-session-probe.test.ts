@@ -224,32 +224,26 @@ describe("replaying the reader's own route", () => {
     expect(PROBE).toMatch(/if \(nowOpen\) return \{ faults: \[\], suppressed: true \}/);
   });
 
-  it("does not call the end of the page a dead scroll", () => {
+  it("no longer accuses a page of being unscrollable", () => {
     /**
-     * It pushed down a fixed 400px. Once the reader's route reaches
-     * scroll_depth_100 the page is resting at its end, 400 more moves nothing,
-     * and the probe called that "a real finger could not scroll the page" —
-     * which the verifier turned into "Reproduced in production on Pixel 7" for
-     * a reader whose only crime was reading to the bottom. Three times in one
-     * CI run, and NOT locally, because locally the steps had not driven the
-     * page as far.
+     * The gesture check is gone on its own record: 0 true findings, 3 false
+     * positives, every one posted as "Reproduced in production" — a paywall
+     * mid-animation, a reader who had read to the bottom, and then a third
+     * cause that still fired in CI on session 01a0c4c6 while that same session
+     * ran clean locally eight times.
      *
-     * It is the same benign case the $dead_swipe investigation identified: a
-     * swipe at the end of a page moves nothing, and on /survey alone that
-     * would have been ~100 false findings a week.
+     * Each fix was a guess testable only in CI fifteen minutes later. What it
+     * was for is covered by the lock-state check, deterministically and on
+     * every engine, and that is the check MUTATE=1 trips.
      */
-    expect(PROBE).toMatch(/roomBelow/);
-    expect(PROBE).toMatch(/roomAbove/);
-    expect(PROBE).toMatch(/state\.roomBelow > 120 \? 400 : state\.roomAbove > 120 \? -400 : 0/);
-    // And it must not scroll at all when there is nowhere to go.
-    expect(PROBE).toMatch(/if \(dy !== 0\)/);
+    expect(PROBE).not.toMatch(/faults\.push\("a real finger could not scroll/);
+    expect(PROBE).toMatch(/the page was locked with no dialog open/);
   });
 
-  it("the shared helper says whether there was anywhere to scroll", () => {
-    // Fixed once where every caller routes through, rather than in the probe
-    // that happened to be bitten. device-matrix.mjs had the same
-    // `moved <= 0 -> dead` reading; it is not a gate probe so it could not post
-    // a finding, but the trap was shared and is now unavailable.
+  it("keeps the room helper, because another probe still reads moved <= 0", () => {
+    // device-matrix.mjs makes the same `moved <= 0 -> dead` reading twice. It
+    // is not a gate probe so it cannot post a finding, but the trap should stay
+    // unavailable to whatever gets written next.
     expect(TOUCH).toMatch(/hadRoom/);
     expect(TOUCH).toMatch(/dy >= 0 \? room\.below > 0 : room\.above > 0/);
     for (const m of MATRIX.match(/if \(t2?\.[a-zA-Z]+ && t2?\.moved <= 0\)/g) ?? []) {
