@@ -3736,3 +3736,70 @@
 .rv3 .rv4-prose__list.is-ordered {
   list-style: decimal;
 }
+
+/* ══ Back to top — the floating control for a long expanded section ══
+ *
+ * Not a Figma node: asked for in the 2026-09-22 sync and built from the Ignite
+ * panel's chrome so it reads as part of this report. See V4BackToTop.tsx.
+ *
+ * The anchor is sticky and zero-height, the same trick `.rv4-chrome` uses to pin
+ * the header without taking part in the flow — it keeps the button inside the
+ * 393px column instead of the browser viewport, which is what `position: fixed`
+ * would have given the preview. */
+.rv3 .rv4-backtop {
+  bottom: 20px;
+  height: 0;
+  overflow: visible;
+  position: sticky;
+  z-index: 4;
+}
+/* Absolute against the zero-height anchor, so `bottom: 0` seats the button just
+ * above the sticky line rather than hanging below it. */
+.rv3 .rv4-backtop__btn {
+  align-items: center;
+  background: #fff;
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  border-radius: 9999px;
+  bottom: 0;
+  box-shadow: 0 10px 28px -8px rgba(103, 60, 120, 0.34);
+  color: var(--rv3-violet);
+  cursor: pointer;
+  display: flex;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  gap: 6px;
+  letter-spacing: -0.17px;
+  line-height: 20px;
+  opacity: 0;
+  padding: 9px 16px 9px 11px;
+  pointer-events: none;
+  position: absolute;
+  right: 16px;
+  transform: translateY(6px);
+  transition:
+    opacity 200ms ease,
+    transform 200ms ease;
+}
+.rv3 .rv4-backtop[data-visible="true"] .rv4-backtop__btn {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+/* The 316:259 chevron, turned up. */
+.rv3 .rv4-backtop__chev {
+  display: block;
+  height: 18px;
+  width: 18px;
+}
+.rv3 .rv4-backtop__chev svg {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv4-backtop__btn {
+    transition: none;
+  }
+}
