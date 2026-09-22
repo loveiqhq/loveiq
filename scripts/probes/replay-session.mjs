@@ -346,11 +346,17 @@ async function inspect(page, cdp) {
         covering.push(`${el.tagName.toLowerCase()}.${String(el.className || "").split(" ")[0]}`);
       }
     }
+    const doc = document.documentElement;
     return {
       dialogOpen,
       locked: body.overflow === "hidden" || body.position === "fixed",
       covering,
-      scrollable: document.documentElement.scrollHeight > window.innerHeight + 100,
+      scrollable: doc.scrollHeight > window.innerHeight + 100,
+      // Which way there is still room to go. A page resting at its end cannot
+      // scroll further, and that is not a defect — it is the single commonest
+      // reason a real swipe moves nothing (see the $dead_swipe write-up).
+      roomBelow: doc.scrollHeight - (window.scrollY + window.innerHeight),
+      roomAbove: window.scrollY,
     };
   });
 
@@ -368,11 +374,29 @@ async function inspect(page, cdp) {
   if (state.covering.length > 0 && !state.dialogOpen) {
     faults.push(`${state.covering.join(", ")} covers the page with no dialog open`);
   }
+  /**
+   * SCROLL WHERE THERE IS ROOM, or do not claim anything.
+   *
+   * This pushed down by a fixed 400px. After the reader's route reaches
+   * `scroll_depth_100` the page is resting at its end, 400 more moves nothing,
+   * and the probe called that "a real finger could not scroll the page" — then
+   * the verifier turned it into "❗ Reproduced in production on Pixel 7" for a
+   * reader whose only crime was reading to the bottom. It fired three times in
+   * one CI run, on scroll_depth_50, _75 and _100, and it did NOT fire locally,
+   * because locally those steps had not driven the page as far.
+   *
+   * It is also the benign case our own $dead_swipe investigation had already
+   * identified: a swipe at the end of a page moves nothing, and on /survey that
+   * alone would have produced ~100 false findings a week.
+   */
   if (state.scrollable && !state.dialogOpen) {
-    const { moved, real } = await touchScroll(cdp, page, 400);
-    // WebKit has no CDP, so a moved page there proves nothing about a finger.
-    // The lock-state check above is what covers iOS; see touch.mjs.
-    if (real && moved <= 0) faults.push("a real finger could not scroll the page");
+    const dy = state.roomBelow > 120 ? 400 : state.roomAbove > 120 ? -400 : 0;
+    if (dy !== 0) {
+      const { moved, real } = await touchScroll(cdp, page, dy);
+      // WebKit has no CDP, so a moved page there proves nothing about a finger.
+      // The lock-state check above is what covers iOS; see touch.mjs.
+      if (real && moved === 0) faults.push("a real finger could not scroll the page");
+    }
   }
 
   /**

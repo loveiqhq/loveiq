@@ -222,6 +222,27 @@ describe("replaying the reader's own route", () => {
     expect(PROBE).toMatch(/if \(nowOpen\) return \{ faults: \[\], suppressed: true \}/);
   });
 
+  it("does not call the end of the page a dead scroll", () => {
+    /**
+     * It pushed down a fixed 400px. Once the reader's route reaches
+     * scroll_depth_100 the page is resting at its end, 400 more moves nothing,
+     * and the probe called that "a real finger could not scroll the page" —
+     * which the verifier turned into "Reproduced in production on Pixel 7" for
+     * a reader whose only crime was reading to the bottom. Three times in one
+     * CI run, and NOT locally, because locally the steps had not driven the
+     * page as far.
+     *
+     * It is the same benign case the $dead_swipe investigation identified: a
+     * swipe at the end of a page moves nothing, and on /survey alone that
+     * would have been ~100 false findings a week.
+     */
+    expect(PROBE).toMatch(/roomBelow/);
+    expect(PROBE).toMatch(/roomAbove/);
+    expect(PROBE).toMatch(/state\.roomBelow > 120 \? 400 : state\.roomAbove > 120 \? -400 : 0/);
+    // And it must not scroll at all when there is nowhere to go.
+    expect(PROBE).toMatch(/if \(dy !== 0\)/);
+  });
+
   it("keeps the three-way exit contract", () => {
     for (const code of ["process.exit(0)", "process.exit(1)", "process.exit(3)"]) {
       expect(PROBE, `${code} is missing`).toContain(code);
