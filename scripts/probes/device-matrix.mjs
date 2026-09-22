@@ -424,7 +424,9 @@ async function runDevice(browser, deviceName, engine) {
     if (cdp) {
       const t = await touchScroll(cdp, page, 600);
       result.notes.touchScroll = t;
-      if (t.moved <= 0) fail("TOUCH_SCROLL_DEAD", `finger gesture moved ${t.moved}px`);
+      // `hadRoom` guards the page-end case: a report already at its bottom
+      // moves 0 for a correct reason. See touch.mjs.
+      if (t.hadRoom && t.moved <= 0) fail("TOUCH_SCROLL_DEAD", `finger gesture moved ${t.moved}px`);
     }
     const afterScroll = await page.evaluate(SCROLL_HEALTH);
     result.notes.afterScroll = afterScroll;
@@ -614,7 +616,7 @@ async function runDevice(browser, deviceName, engine) {
     if (cdp) {
       const t2 = await touchScroll(cdp, page, 800);
       result.notes.unlockedTouchScroll = t2;
-      if (t2.moved <= 0) fail("UNLOCKED_TOUCH_SCROLL_DEAD", `moved ${t2.moved}px`);
+      if (t2.hadRoom && t2.moved <= 0) fail("UNLOCKED_TOUCH_SCROLL_DEAD", `moved ${t2.moved}px`);
     }
     // walk to the bottom the way a reader would, and make sure nothing dies there
     await page.evaluate(async () => {

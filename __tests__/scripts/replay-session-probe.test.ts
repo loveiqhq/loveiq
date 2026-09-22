@@ -34,6 +34,8 @@ const read = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8");
 const VERIFIER = strip(read("scripts/verify-ux-findings.mjs"));
 const HARNESS = strip(read("scripts/verify-probe-falsifiability.mjs"));
 const PROBE = strip(read("scripts/probes/replay-session.mjs"));
+const TOUCH = strip(read("scripts/probes/touch.mjs"));
+const MATRIX = strip(read("scripts/probes/device-matrix.mjs"));
 
 describe("replaying the reader's own route", () => {
   it("names a probe that exists", () => {
@@ -241,6 +243,19 @@ describe("replaying the reader's own route", () => {
     expect(PROBE).toMatch(/state\.roomBelow > 120 \? 400 : state\.roomAbove > 120 \? -400 : 0/);
     // And it must not scroll at all when there is nowhere to go.
     expect(PROBE).toMatch(/if \(dy !== 0\)/);
+  });
+
+  it("the shared helper says whether there was anywhere to scroll", () => {
+    // Fixed once where every caller routes through, rather than in the probe
+    // that happened to be bitten. device-matrix.mjs had the same
+    // `moved <= 0 -> dead` reading; it is not a gate probe so it could not post
+    // a finding, but the trap was shared and is now unavailable.
+    expect(TOUCH).toMatch(/hadRoom/);
+    expect(TOUCH).toMatch(/dy >= 0 \? room\.below > 0 : room\.above > 0/);
+    for (const m of MATRIX.match(/if \(t2?\.[a-zA-Z]+ && t2?\.moved <= 0\)/g) ?? []) {
+      expect(m).toContain("hadRoom");
+    }
+    expect(MATRIX).not.toMatch(/if \(t2?\.moved <= 0\)/);
   });
 
   it("keeps the three-way exit contract", () => {
