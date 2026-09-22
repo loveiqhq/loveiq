@@ -352,11 +352,6 @@ async function inspect(page, cdp) {
       locked: body.overflow === "hidden" || body.position === "fixed",
       covering,
       scrollable: doc.scrollHeight > window.innerHeight + 100,
-      // Which way there is still room to go. A page resting at its end cannot
-      // scroll further, and that is not a defect — it is the single commonest
-      // reason a real swipe moves nothing (see the $dead_swipe write-up).
-      roomBelow: doc.scrollHeight - (window.scrollY + window.innerHeight),
-      roomAbove: window.scrollY,
     };
   });
 
@@ -375,30 +370,29 @@ async function inspect(page, cdp) {
     faults.push(`${state.covering.join(", ")} covers the page with no dialog open`);
   }
   /**
-   * SCROLL WHERE THERE IS ROOM, or do not claim anything.
+   * THE GESTURE CHECK IS GONE, ON ITS OWN RECORD: 0 true findings, 3 false
+   * positives, all three of them posted as "Reproduced in production".
    *
-   * This pushed down by a fixed 400px. After the reader's route reaches
-   * `scroll_depth_100` the page is resting at its end, 400 more moves nothing,
-   * and the probe called that "a real finger could not scroll the page" — then
-   * the verifier turned it into "❗ Reproduced in production on Pixel 7" for a
-   * reader whose only crime was reading to the bottom. It fired three times in
-   * one CI run, on scroll_depth_50, _75 and _100, and it did NOT fire locally,
-   * because locally those steps had not driven the page as far.
+   *   1. a paywall mid-animation locks the body before its root counts as
+   *      visible, so the page is legitimately immovable and no dialog is seen;
+   *   2. a fixed 400px push at `scroll_depth_100` moves nothing because the
+   *      page is resting at its end — a reader who read to the bottom;
+   *   3. and after guards for both, it still fired on session 01a0c4c6 in CI
+   *      while that same session ran clean locally eight times.
    *
-   * It is also the benign case our own $dead_swipe investigation had already
-   * identified: a swipe at the end of a page moves nothing, and on /survey that
-   * alone would have produced ~100 false findings a week.
+   * Each fix was a guess I could only test fifteen minutes later in CI, which
+   * is not a way to converge. It was also structurally weak: skipped entirely
+   * on WebKit (no CDP, see touch.mjs) and suppressed whenever a dialog is open,
+   * which on this report is nearly always, since scrolling opens the paywall.
+   *
+   * What it was meant to catch — a page a finger cannot move — is covered by
+   * the lock-state check above, deterministically and on every engine. That is
+   * the check MUTATE=1 trips. `touchScroll`'s `hadRoom` stays, because
+   * device-matrix.mjs still reads `moved <= 0` and the trap should remain
+   * unavailable.
+   *
+   * Do not reinstate this without a way to reproduce a failure locally.
    */
-  if (state.scrollable && !state.dialogOpen) {
-    const dy = state.roomBelow > 120 ? 400 : state.roomAbove > 120 ? -400 : 0;
-    if (dy !== 0) {
-      const { moved, real } = await touchScroll(cdp, page, dy);
-      // WebKit has no CDP, so a moved page there proves nothing about a finger.
-      // The lock-state check above is what covers iOS; see touch.mjs.
-      if (real && moved === 0) faults.push("a real finger could not scroll the page");
-    }
-  }
-
   /**
    * ASK AGAIN BEFORE ACCUSING ANYONE. The state above is a snapshot, and a
    * paywall that is OPENING locks the body before its root is visible enough to
