@@ -6,6 +6,7 @@ import {
 } from "@/data/report3-archetype-page";
 import type { Report3CardCopy } from "@/data/report3-archetype-card";
 import type { V4LearnMoreByChapter } from "@/data/report3-learn-more";
+import type { Report3TypicalBeliefsView } from "@/data/report3-typical-beliefs";
 import type { ArchetypeName } from "@features/report/server/archetypeSlug";
 import V4ChapterPart from "./V4ChapterPart";
 import V4Part1 from "./V4Part1";
@@ -33,6 +34,8 @@ interface Props {
   learnMore?: V4LearnMoreByChapter;
   /** Opens the paywall from a gated article. */
   onUnlock?: () => void;
+  /** Part III's Typical Beliefs chapter body, read on the server. */
+  typicalBeliefs?: Report3TypicalBeliefsView | null;
 }
 
 const V4Report: FC<Props> = ({
@@ -42,6 +45,7 @@ const V4Report: FC<Props> = ({
   initialDeckIndex = 0,
   learnMore,
   onUnlock,
+  typicalBeliefs,
 }) => (
   <div className="rv4-report" data-node-id="1:165" data-name="Report V4 - MOBILE">
     <V4ReportChrome />
@@ -55,7 +59,12 @@ const V4Report: FC<Props> = ({
         card={card}
         initialDeckIndex={initialDeckIndex}
       />
-      <V4ChapterPart archetype={archetype} learnMore={learnMore} onUnlock={onUnlock} />
+      <V4ChapterPart
+        archetype={archetype}
+        learnMore={learnMore}
+        onUnlock={onUnlock}
+        typicalBeliefs={typicalBeliefs}
+      />
       <V4ChapterPart
         archetype={archetype}
         partIndex={3}

@@ -44,6 +44,11 @@ const PREMIUM_DATA_MODULES = [
   // contentGating.ts does that cut — so a client component importing the module
   // directly would hand over the whole thing and make the cut pointless.
   "@/data/report3-learn-more",
+  // Added 2026-09-22. The Typical Beliefs chapter body (Figma 304:256) — its prose
+  // and both belief panels. It is paid copy for the same reason the article is, and
+  // the paywalled frame gates most of it, so a client component importing the module
+  // would hand over the seven turn rows the wall is supposed to withhold.
+  "@/data/report3-typical-beliefs",
 ];
 
 const PROJECT_ROOT = join(__dirname, "..", "..");

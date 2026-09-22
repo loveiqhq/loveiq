@@ -1,5 +1,6 @@
 import { Fragment, type FC } from "react";
 import type { Report3Chapter } from "@/data/report3-archetype-page";
+import type { Report3TypicalBeliefsView } from "@/data/report3-typical-beliefs";
 import {
   CHAPTER_COPY_PLACEHOLDER,
   PART_INTRO_PLACEHOLDER,
@@ -10,6 +11,7 @@ import {
 import type { V4LearnMoreByChapter } from "@/data/report3-learn-more";
 import V4Chapter from "./V4Chapter";
 import V4LearnMore from "./V4LearnMore";
+import V4TypicalBeliefs from "./V4TypicalBeliefs";
 import V4PartHeading from "./V4PartHeading";
 
 /**
@@ -54,6 +56,11 @@ interface Props {
   learnMore?: V4LearnMoreByChapter;
   /** Opens the paywall. Handed straight to the article's gate band. */
   onUnlock?: () => void;
+  /**
+   * The Typical Beliefs chapter body, read on the server. Only Part III carries
+   * one; every other part leaves it undefined.
+   */
+  typicalBeliefs?: Report3TypicalBeliefsView | null;
 }
 
 const V4ChapterPart: FC<Props> = ({
@@ -63,6 +70,7 @@ const V4ChapterPart: FC<Props> = ({
   trailingSeparator = false,
   learnMore,
   onUnlock,
+  typicalBeliefs,
 }) => (
   <section className="rv4-partblock" data-node-id="1:849" data-name="Chapter part">
     {/* 1:850 */}
@@ -93,7 +101,14 @@ const V4ChapterPart: FC<Props> = ({
             defaultOpen={Boolean(entry)}
           >
             {entry ? (
-              <V4LearnMore article={entry.article} locked={entry.locked} onUnlock={onUnlock} />
+              <>
+                {/* 304:256 sits ABOVE the article in 1:849: the chapter body
+                 * first, then "Go deeper & learn more". */}
+                {c.id === "typical_beliefs" && typicalBeliefs ? (
+                  <V4TypicalBeliefs view={typicalBeliefs} />
+                ) : null}
+                <V4LearnMore article={entry.article} locked={entry.locked} onUnlock={onUnlock} />
+              </>
             ) : undefined}
           </V4Chapter>
         </Fragment>
