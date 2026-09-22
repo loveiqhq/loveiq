@@ -2947,8 +2947,9 @@
   font-weight: 500;
   line-height: 21.6px;
   margin: 0;
+  max-width: 360.781px;
   padding: 10px 0 20px 5.502px;
-  width: 360.781px;
+  width: 100%;
 }
 /* 316:250 — one white panel with a violet hairline and a single centred shadow,
  * against V3's washed, ramp-coloured card. */
@@ -2957,9 +2958,14 @@
   border: 1px solid rgba(168, 85, 247, 0.4);
   border-radius: 26px;
   box-shadow: 0 22px 54px -20px rgba(103, 60, 120, 0.3);
+  /* 361 is what the 393 frame leaves between its 16px gutters, so it is a CEILING
+   * and not a width. A phone narrower than 393 — 375, or 360 on most Android —
+   * would otherwise push the panel past the viewport and scroll the page
+   * sideways, which is what Mark found on his phone. */
+  max-width: 361px;
   overflow: clip;
   padding: 26px 22px 24px;
-  width: 361px;
+  width: 100%;
 }
 .rv3 .rv4-snap__divider {
   background: rgba(22, 16, 33, 0.08);
@@ -3814,8 +3820,10 @@
 .rv3 .rv4-turn,
 .rv3 .rv4-sun {
   border-radius: 20px;
+  /* A ceiling, not a width — see the note on .rv4-snap__panel. */
+  max-width: 361px;
   overflow: clip;
-  width: 361px;
+  width: 100%;
 }
 .rv3 .rv4-turn {
   background:
@@ -3837,9 +3845,12 @@
   border-radius: 50%;
   filter: blur(34px);
   height: 132px;
-  left: 251px;
   opacity: 0.62;
   position: absolute;
+  /* 368:5483 sits at left 251 in a 361-wide panel, so it overhangs the right edge
+   * by 22. Anchoring to that edge keeps the clipped crescent identical however
+   * wide the panel actually is. */
+  right: -22px;
   top: -26px;
   width: 132px;
 }
