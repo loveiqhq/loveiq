@@ -50,7 +50,9 @@ import {
 import {
   buildDigestMessage,
   contradiction,
+  buildScorecardMessage,
   fetchScannerDrift,
+  fetchScannerScores,
   fetchDailyStats,
   fetchFindings,
   fetchCoverageStats,
@@ -59,7 +61,12 @@ import {
   MAX_POSTS_PER_RUN,
 } from "@features/ux-review/server/review";
 import { UX_SCANNERS } from "@features/ux-review/server/scanners";
-import { reportingDay, reportingHour } from "@shared/time/reporting-day";
+import {
+  isoWeekKey,
+  isReportingMonday,
+  reportingDay,
+  reportingHour,
+} from "@shared/time/reporting-day";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -81,6 +88,8 @@ const LOOP_BUDGET_MS = 18_000;
  * an hour earlier without anyone changing it.
  */
 const DIGEST_HOUR_BERLIN = 9;
+/** The window the scorecard reports on. Matches score.mjs --ledger's default. */
+const SCORECARD_DAYS = 30;
 
 export async function GET(request: Request) {
   if (!verifyCronAuth(request)) {
@@ -282,6 +291,48 @@ export async function GET(request: Request) {
           blocks: fitted.blocks,
         });
         await markSlackAlertDelivered("ux_review_digest", "daily", dayKey);
+      }
+    }
+
+    /**
+     * The scorecard, which was built and then wired to nothing.
+     *
+     * `buildScorecardMessage` has existed since the ledger landed and its only
+     * caller was its own test — the numbers were computed every Monday into a
+     * CI log that nobody opens. How well the watchers are doing is the one
+     * question this whole system exists to answer, and it was the one nobody
+     * was being told.
+     *
+     * WEEKLY, not daily. Precision over a 30-day window barely moves between
+     * one day and the next, and a number that repeats unchanged every morning
+     * is a number people stop reading. Monday, in the same hour as the digest,
+     * so it arrives beside the summary rather than as a second interruption.
+     *
+     * OPS, not the survey channel: this is about the watchers, not about a
+     * reader. The digest is where reader-facing news goes.
+     *
+     * Claimed on the ISO week, so a retry or a second run on Monday cannot
+     * post it twice.
+     */
+    if (reportingHour() >= DIGEST_HOUR_BERLIN && isReportingMonday()) {
+      const weekKey = isoWeekKey();
+      if (await tryClaimSlackAlert("ux_review_scorecard", "weekly", weekKey)) {
+        const scores = await fetchScannerScores(SCORECARD_DAYS);
+        // Null means the ledger could not be read. A scorecard of nothing reads
+        // exactly like a quiet week, which is the shape this repo keeps paying
+        // for — so say nothing rather than say zero.
+        if (scores && scores.length > 0) {
+          const { text, blocks } = buildScorecardMessage(scores, SCORECARD_DAYS);
+          const fitted = fitBlocks(blocks, text);
+          await notifySlack({
+            channel: "ops",
+            kind: "ux_review_scorecard",
+            username: "ux_review",
+            text,
+            blocks: fitted.blocks,
+          });
+          await markSlackAlertDelivered("ux_review_scorecard", "weekly", weekKey);
+        }
       }
     }
 

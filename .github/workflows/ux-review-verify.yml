@@ -194,7 +194,30 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
       - name: Self-test the finding classifier
-        run: npx tsx scripts/verify-ux-findings.mjs --selftest
+        # The exit code alone is not enough. An imported module that calls
+        # process.exit(0) at import time ends the run BEFORE this selftest
+        # executes, and the step passes having checked nothing — observed
+        # 2026-09-21. So assert the marker only this selftest can print.
+        run: |
+          set -o pipefail
+          npx tsx scripts/verify-ux-findings.mjs --selftest | tee /tmp/selftest.log
+          grep -q "verify-ux-findings selftest ok" /tmp/selftest.log \
+            || { echo "::error::the classifier selftest did not run"; exit 1; }
+
+      - name: Self-test the ledger scorer
+        # Neither of these ran anywhere until 2026-09-21. They cover whether a
+        # `clear` counts as evidence at all — the thing the scanner scores are
+        # built on — and two live mutations of that logic survived every check
+        # this repo had. Each asserts its OWN marker for the same reason as
+        # above: "selftest ok" is printed by hogql.mjs on import.
+        run: |
+          set -o pipefail
+          node scripts/lib/claim-scoped-probes.mjs --selftest | tee /tmp/csp.log
+          grep -q "claim-scoped-probes selftest ok" /tmp/csp.log \
+            || { echo "::error::the claim-scoping selftest did not run"; exit 1; }
+          node scripts/replay-bench/score.mjs --selftest | tee /tmp/score.log
+          grep -q "replay-bench score selftest ok" /tmp/score.log \
+            || { echo "::error::the scorer selftest did not run"; exit 1; }
 
       - name: Verify findings
         # The flag is chosen in SHELL, from an env var, rather than interpolated into the

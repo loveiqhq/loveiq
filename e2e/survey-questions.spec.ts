@@ -118,8 +118,30 @@ async function answerAndAdvance(page: Page, q: SurveyQuestion, nextHeading: stri
   try {
     await next.waitFor({ state: "visible", timeout: 1200 });
   } catch {
-    await page.getByRole("button", { name: /next/i }).click();
-    await next.waitFor({ state: "visible", timeout: 5000 });
+    /**
+     * THE CLICK IS A NUDGE. THE HEADING IS THE ASSERTION.
+     *
+     * Two different situations are indistinguishable at this point: a question that
+     * genuinely needs Next (open, multiple), and an auto-advance that was merely slow.
+     * 1200ms is 350ms of auto-advance plus headroom, and a cold Desktop Firefox on a
+     * CI runner spends more than that on the first transition.
+     *
+     * In the slow-auto-advance case the page is already moving, so Next is sliding out
+     * from under the cursor and `.click()` fails its "visible, enabled and STABLE"
+     * check — measured on Desktop Firefox, flaky on 2026-09-21's first CI run and an
+     * outright failure on the next. That is a flake, not a defect: the survey did
+     * exactly what it should. Letting a failed nudge fail the test is what made this
+     * the only genuinely unreliable spec in the suite.
+     *
+     * So the nudge is best-effort and the heading below is what decides. A question
+     * that really did need Next and really did not advance still fails here, because
+     * the heading never arrives.
+     */
+    await page
+      .getByRole("button", { name: /next/i })
+      .click({ timeout: 4000 })
+      .catch(() => {});
+    await next.waitFor({ state: "visible", timeout: 8000 });
   }
 }
 

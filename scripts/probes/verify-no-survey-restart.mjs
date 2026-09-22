@@ -31,7 +31,30 @@ const TOKEN = process.env.REPORT_TOKEN ?? "rpt_a9LY0Obbla1FVsclJ1nM";
 // come back as 1. See scripts/probes/README.md.
 let bad = 0;
 let unmeasured = 0;
-for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) {
+/**
+ * Hoisted so the summary can count what actually ran.
+ *
+ * The summary line was `${2 - bad}/2 devices`, a hardcoded denominator from
+ * when the default list was the only list. `devicesForSession()` sends ONE
+ * device whenever the reader's viewport never changed — which is most sessions
+ * — so a clean single-device run reported "2/2 devices" and a verdict quoting
+ * it claimed evidence from a device that was never launched.
+ */
+const DEVICE_LIST = (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro")
+  .split(",")
+  .map((n) => n.trim())
+  .filter(Boolean);
+for (const name of DEVICE_LIST) {
+  // `devices[unknown]` is undefined and `newContext({ ...undefined })` is a
+  // plain desktop window — no touch, no phone width, no error. The run would
+  // pass and be quoted as evidence about a phone. verify-survey-loop.mjs
+  // already refuses this; the two probes share a criterion, so they share the
+  // guard.
+  if (!devices[name]) {
+    console.log(`${name}: UNKNOWN DEVICE — INCONCLUSIVE`);
+    unmeasured += 1;
+    continue;
+  }
   const engine = /iphone|ipad/i.test(name) ? webkit : chromium;
   const browser = await engine.launch();
   const ctx = await browser.newContext({ ...devices[name], locale: "en-US" });
@@ -124,7 +147,10 @@ for (const name of (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro").split(",")) 
   await browser.close();
 }
 
-console.log(`\n${2 - bad}/2 devices: a valid report offers no way back to the survey`);
+console.log(
+  `\n${DEVICE_LIST.length - bad}/${DEVICE_LIST.length} devices: ` +
+    `a valid report offers no way back to the survey`
+);
 if (bad > 0) {
   console.log(`\nFAIL (${bad})`);
   process.exit(1);

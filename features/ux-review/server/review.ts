@@ -583,7 +583,19 @@ export async function fetchScannerScores(days = 30): Promise<ScannerScore[] | nu
  */
 export function buildScorecardMessage(
   scores: readonly ScannerScore[],
-  days = 30
+  days = 30,
+  /**
+   * Which challengers are actually RUNNING. Defaults to git, which is the
+   * source of truth; passed explicitly by tests so the live-trial behaviour can
+   * still be exercised when none happens to be running today.
+   *
+   * A parameter rather than a module read because the alternative was deleting
+   * the three tests that pin what a live trial looks like — and those describe
+   * the case this message exists for.
+   */
+  liveChallengerNames: ReadonlySet<string> = new Set(
+    UX_SCANNERS.filter((sc) => sc.role === "challenger").map((sc) => sc.name)
+  )
 ): { text: string; blocks: SlackBlock[] } {
   const n = (s: ScannerScore) => s.right + s.wrong;
   const pct = (s: ScannerScore) => (n(s) === 0 ? "n/a" : `${Math.round((s.right / n(s)) * 100)}%`);
@@ -591,7 +603,22 @@ export function buildScorecardMessage(
   const right = live.reduce((a, s) => a + s.right, 0);
   const total = live.reduce((a, s) => a + n(s), 0);
 
-  const lines = scores.map((s) => {
+  const liveChallengers = liveChallengerNames;
+
+  /**
+   * A RETIRED challenger is dropped from the list entirely.
+   *
+   * Its rows are history, and this message answers "how good are the checks
+   * NOW". Leaving it in printed "The report — new version being tested — 0 of 1
+   * held up" for a scanner deleted from PostHog days earlier. The headline
+   * already excludes challengers from its total, so listing one was
+   * inconsistent as well as untrue.
+   */
+  const listed = scores.filter(
+    (s) => !isChallengerScanner(s.scanner) || liveChallengers.has(s.scanner)
+  );
+
+  const lines = listed.map((s) => {
     /**
      * A challenger shares its champion's plain name — `plainScanner` maps both
      * "LoveIQ report UX" and "LoveIQ report UX (challenger: …)" to "The report"
@@ -624,7 +651,9 @@ export function buildScorecardMessage(
    * prevent.
    */
   const MIN = 30;
+  // Only a LIVE trial is a trial in progress — see `listed` above.
   for (const c of scores.filter((s) => isChallengerScanner(s.scanner))) {
+    if (!liveChallengers.has(c.scanner)) continue;
     const base = c.scanner.replace(/ \(challenger[^)]*\)$/, "");
     const champ = scores.find((s) => s.scanner === base);
     if (!champ) continue;
@@ -1055,6 +1084,59 @@ export const CLAIM_EVIDENCE: ReadonlyArray<{
  */
 export function isSafeSessionId(sessionId: string): boolean {
   return /^[A-Za-z0-9-]{1,64}$/.test(sessionId);
+}
+
+/**
+ * The reader's OWN report token, so a probe can open the report they saw.
+ *
+ * Every report probe opens one hardcoded internal report, because nothing ever
+ * passed a token. So a probe's answer is about a different reader's report than
+ * the one the finding is about — which is most of why 26 of 27 probes return
+ * the same verdict whoever raised the claim.
+ *
+ * SAFE TO PASS, AND THIS REPOSITORY IS PUBLIC, so the handling matters:
+ *  - it travels in the child process ENV, which Actions does not print;
+ *  - the caller emits `::add-mask::` first, so GitHub redacts it from every
+ *    subsequent log line even if a probe echoes a URL;
+ *  - `redactReportToken` already strips it from probe output before anything is
+ *    stored in `ux_finding` or posted to Slack.
+ *
+ * Only what PERSISTS is redacted. The probe needs the real token inside the run
+ * or it cannot open the report at all, which is the entire point.
+ *
+ * Returns null when the reader has no report yet — a survey-only session — and
+ * the probe then keeps its own default rather than being handed a guess.
+ */
+export async function reportTokenForSession(sessionId: string): Promise<string | null> {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key || !isSafeSessionId(sessionId)) return null;
+  const headers = { apikey: key, Authorization: `Bearer ${key}` };
+  try {
+    const subRes = await fetchWithTimeout(
+      `${url}/rest/v1/survey_submission?select=id&posthog_session_id=eq.${encodeURIComponent(sessionId)}&limit=2`,
+      { headers, timeoutMs: 8_000 }
+    );
+    if (!subRes.ok) return null;
+    const subs = (await subRes.json()) as Array<{ id: number }>;
+    warnIfTruncated(subs, 2, "report token: survey_submission");
+    const submissionId = subs[0]?.id;
+    if (typeof submissionId !== "number") return null;
+
+    const tokRes = await fetchWithTimeout(
+      `${url}/rest/v1/report_access_token?select=token,revoked_at` +
+        `&survey_submission_id=eq.${submissionId}&revoked_at=is.null&order=created_at.desc&limit=2`,
+      { headers, timeoutMs: 8_000 }
+    );
+    if (!tokRes.ok) return null;
+    const toks = (await tokRes.json()) as Array<{ token: string | null }>;
+    warnIfTruncated(toks, 2, "report token: report_access_token");
+    const token = toks[0]?.token;
+    // Shape-checked before it becomes part of a URL a probe navigates to.
+    return typeof token === "string" && /^rpt_[A-Za-z0-9]{8,}$/.test(token) ? token : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

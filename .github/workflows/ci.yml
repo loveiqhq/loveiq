@@ -237,9 +237,39 @@ jobs:
           NEXT_PUBLIC_RECAPTCHA_SITE_KEY: dummy
 
   e2e:
-    name: End-to-end (Playwright)
+    name: E2E ${{ matrix.project }}
     runs-on: ubuntu-latest
     needs: [lint]
+    # ONE ENGINE PER RUNNER, and this is a fix for a measured cause rather than a
+    # preference. On a single runner the five projects shared 4 workers across 4 vCPUs,
+    # and the tests that lost that fight were always the same ones: the 59-question
+    # survey walk on Desktop Firefox (failed both attempts twice) and the report pricing
+    # modal on both WebKit engines. Neither is a product defect — the suite carries 28
+    # waits of 5s or less, tuned on a laptop, and a starved engine simply misses them.
+    #
+    # Bumping those 28 numbers was the other option and was rejected: it treats the
+    # symptom, and next week a different 5s wait is the one that loses. Splitting by
+    # project gives each engine a whole runner at 2 workers, removes the contention, and
+    # is FASTER in wall-clock than the 13-16 minutes the single job took, because the
+    # shards run at the same time. Actions minutes are free on a public repo, so the
+    # extra runners cost nothing.
+    #
+    # fail-fast is off deliberately: when an engine breaks you want to know whether the
+    # others broke too, not just which one reported first.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: Desktop Chrome
+            browser: chromium
+          - project: Desktop Firefox
+            browser: firefox
+          - project: Desktop Safari
+            browser: webkit
+          - project: Mobile Chrome
+            browser: chromium
+          - project: Mobile Safari
+            browser: webkit
     # CLAUDE.md has said "E2E belongs in CI, NOT pre-push" since before this job
     # existed, and until 2026-09-21 nothing ran it — the suite was green on
     # 2026-08-31 and nobody would have known if it stopped being.
@@ -258,8 +288,8 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ hashFiles('package-lock.json') }}
-      - run: npx playwright install --with-deps chromium firefox webkit
+          key: playwright-${{ matrix.browser }}-${{ hashFiles('package-lock.json') }}
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
       #
       # NO DATABASE CREDENTIALS, DELIBERATELY, and this is the whole reason the job
       # is safe to run on every push.
@@ -301,7 +331,7 @@ jobs:
       # `visual-regression.yml` is the job that owns generating and committing those.
       # Running them here compares Linux renders against whatever the last person
       # committed from their laptop.
-      - run: npx playwright test --grep-invert "Visual Regression"
+      - run: npx playwright test --project="${{ matrix.project }}" --workers=2 --grep-invert "Visual Regression"
         env:
           NEXT_PUBLIC_SITE_URL: http://localhost:3000
           NEXT_PUBLIC_RECAPTCHA_SITE_KEY: dummy
@@ -312,7 +342,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: failure()
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.project }}
           path: playwright-report/
           retention-days: 7
 
