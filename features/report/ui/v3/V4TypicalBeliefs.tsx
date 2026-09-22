@@ -24,29 +24,52 @@ import V4SunBeliefs from "./V4SunBeliefs";
  * So the copy runs full width here too.
  */
 
+/**
+ * How much of "Common challenges" stays clear behind the wall. 348:221 draws the
+ * subheading and three paragraphs sharp, then carries a 5px layer blur on every
+ * block from 348:332 down.
+ */
+const CHALLENGES_FREE_BLOCKS = 4;
+
 interface Props {
   view: Report3TypicalBeliefsView;
-  /**
-   * How many turn rows animate before the rest are gated. The paywalled frame
-   * animates three; the open chapter animates all ten.
-   */
-  animatedCount?: number;
 }
 
-const V4TypicalBeliefs: FC<Props> = ({ view, animatedCount }) => (
-  <div className="rv4-tb" data-node-id="304:256" data-name="Expanded Chapter — Typical Beliefs">
-    <V4Prose blocks={view.intro} />
+const V4TypicalBeliefs: FC<Props> = ({ view }) => {
+  const locked = view.lockedFrom !== null;
+  const freeChallenges = locked
+    ? view.challenges.slice(0, CHALLENGES_FREE_BLOCKS)
+    : view.challenges;
+  const gatedChallenges = locked ? view.challenges.slice(CHALLENGES_FREE_BLOCKS) : [];
 
-    <V4ShadowBeliefs turns={view.panels.turns} animatedCount={animatedCount} />
-    <V4SunBeliefs sun={view.panels.sun} />
+  return (
+    <div
+      className={`rv4-tb${locked ? " is-locked" : ""}`}
+      data-node-id={locked ? "348:213" : "304:256"}
+      data-name="Expanded Chapter — Typical Beliefs"
+    >
+      <V4Prose blocks={view.intro} />
 
-    {/* 304:378 — the chapter's only H2, and the only 18px heading in the frame. */}
-    <h3 className="rv4-tb__h2" data-node-id="304:379">
-      {view.challengesTitle}
-    </h3>
+      <V4ShadowBeliefs turns={view.panels.turns} lockedFrom={view.lockedFrom} />
+      <V4SunBeliefs sun={view.panels.sun} lockedFrom={view.lockedFrom} />
 
-    <V4Prose blocks={view.challenges} />
-  </div>
-);
+      {/* 304:378 — the chapter's only H2, and the only 18px heading in the frame. */}
+      <h3 className="rv4-tb__h2" data-node-id="304:379">
+        {view.challengesTitle}
+      </h3>
+
+      <V4Prose blocks={freeChallenges} />
+
+      {gatedChallenges.length > 0 ? (
+        /* 348:332 onwards. The mask ramps the blurred copy in over two lines
+         * rather than cutting to it, which is Mark's "Fade first 2 lines of next
+         * paragraph" on 1935708032. */
+        <div className="rv4-tb__gated" aria-hidden="true" inert>
+          <V4Prose blocks={gatedChallenges} />
+        </div>
+      ) : null}
+    </div>
+  );
+};
 
 export default V4TypicalBeliefs;

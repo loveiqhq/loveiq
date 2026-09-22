@@ -4052,3 +4052,31 @@
 .rv3 .rv4-tb .rv4-sun {
   margin-bottom: 16px;
 }
+
+/* ══ Typical Beliefs — the paywalled chapter, 348:213 ════════════════
+ *
+ * 381:222 turns rows 1 to 3 and marks row 4 onward "at rest (p=0) · LOCKED" under
+ * a 5px layer blur; 381:362 blurs its own rows 4 to 10 at the same boundary. The
+ * panels keep their full height either way — the wall changes what can be read,
+ * not how much room the chapter takes. */
+.rv3 .rv4-turn__row.is-locked,
+.rv3 .rv4-sun__row.is-locked {
+  filter: blur(5px);
+  user-select: none;
+}
+/* 348:332 down: every block of "Common challenges" past the subheading and its
+ * first three paragraphs. The mask ramps the copy in over two 25.6px lines rather
+ * than cutting to it — Mark's "Fade first 2 lines of next paragraph". */
+.rv3 .rv4-tb__gated {
+  filter: blur(5px);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 51.2px);
+  mask-image: linear-gradient(180deg, transparent 0, #000 51.2px);
+  pointer-events: none;
+  user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv4-turn__row.is-locked {
+    transition: none;
+  }
+}
