@@ -25,6 +25,20 @@ import { pathToFileURL } from "node:url";
 export const CLAIM_SCOPED_PROBES = new Set(["verify-dead-click-target.mjs"]);
 
 /**
+ * Claim-scoped through the SESSION rather than through a tapped element.
+ *
+ * `replay-session.mjs` reads this reader's own ordered event stream and
+ * performs it. Two findings on two sessions therefore get two different runs,
+ * which is the whole test for membership — its answer can differ, so a clean
+ * one is evidence rather than a constant.
+ *
+ * Separate from CLAIM_SCOPED_PROBES because that set is appended only when our
+ * telemetry recorded a click target, and this one needs no such thing: every
+ * finding has a session.
+ */
+export const SESSION_REPLAY_PROBES = new Set(["replay-session.mjs"]);
+
+/**
  * Did this run include a probe that could have disagreed?
  *
  * Two sources, in order:
@@ -41,7 +55,9 @@ export const CLAIM_SCOPED_PROBES = new Set(["verify-dead-click-target.mjs"]);
 export const clearIsGroundTruth = (finding) =>
   Array.isArray(finding?.probe_runs) &&
   finding.probe_runs.some((r) =>
-    r?.claimScoped === undefined ? CLAIM_SCOPED_PROBES.has(r?.file) : r.claimScoped === true
+    r?.claimScoped === undefined
+      ? CLAIM_SCOPED_PROBES.has(r?.file) || SESSION_REPLAY_PROBES.has(r?.file)
+      : r.claimScoped === true
   );
 
 /**

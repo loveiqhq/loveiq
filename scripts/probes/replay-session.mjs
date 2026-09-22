@@ -14,13 +14,22 @@
  * every step that the page is still usable.
  *
  * IT REPLAYS THE ROUTE, NOT THE PERSON. The steps come from their session; the
- * page is OUR internal report. Driving a customer's own token would open their
- * private report in an automated browser and write report_session and
- * analytics rows attributed to them. The defects this looks for — a dead
- * scroll, an overlay over the text, a thrown error — are page mechanics, so
- * the substitution costs nothing. It does mean a fault specific to one
- * archetype's content will not reproduce; point REPLAY_TOKEN at a matching
- * report when that is the claim.
+ * page is OUR internal report.
+ *
+ * Not for privacy — six probes in this corpus already open the reader's own
+ * report and the verifier hands them the token deliberately. The reason is
+ * VOLUME. Those probes load a page and assert; this one performs the whole
+ * visit, nine to twelve route steps plus up to thirty-six taps, and every one
+ * of those emits analytics: scroll_depth, locked_card_price_shown,
+ * paywall_dismissed. Against a reader's own report that lands in the same
+ * tables the scanners and the funnel read, so the pipeline would be measuring
+ * its own replays. The probe cookie does not cover it either — it suppresses
+ * one `report_session` row and nothing on the analytics_event path.
+ *
+ * The defects this looks for — a dead scroll, an overlay over the text, a
+ * thrown error — are page mechanics, so the substitution costs little. It does
+ * mean a fault specific to one archetype's content will not reproduce; point
+ * REPLAY_TOKEN at a matching report when that is the claim.
  *
  * WHAT IT ASSERTS, after every step:
  *   - the page still scrolls with a real finger, with no dialog open
@@ -34,6 +43,15 @@
  *
  *   SESSION_ID=01a0c4c6-… node scripts/probes/replay-session.mjs
  *   MUTATE=1 SESSION_ID=… node scripts/probes/replay-session.mjs   # must FAIL
+ *
+ * MUTATE CANNOT FLIP EVERY SESSION, and that is a fact about the session rather
+ * than a hole in the probe. It flips one that has either a route step with no
+ * dialog open, or a recorded tap whose selector contains a control. A session
+ * that scrolled (opening the paywall, which stays open) and then tapped only
+ * prose — `h2`, `p`, `div.report-prose` — offers nothing of either kind, so
+ * there is no defect of the kind this probe detects to inject. Session
+ * 01a0bc7d is exactly that and stays at 0; 01a09bfd and 01a0bf3d flip. Pick a
+ * session with taps on controls when using MUTATE as a check.
  *
  * Exit 0 clean, 1 the defect reproduced, 3 could not measure.
  */
@@ -61,15 +79,51 @@ const PROJECT = "244778";
 const MIN_REPLAYED_SHARE = 2 / 3;
 
 /**
+ * And a minimum ABSOLUTE number of steps, because a share cannot see this.
+ *
+ * Measured over 30 days of report sessions: 450 of 688 have no route steps at
+ * all (the probe already exits 3 on those), and another 99 have one or two.
+ * **80% sit at two or fewer.** A one-step session scores share 1.0 and would
+ * print "clean — the reader's own route reproduces nothing", which is a clean
+ * verdict earned by a single scroll. Worse, this probe is registered as
+ * claim-scoped, so that verdict counts as EVIDENCE in the scorer — the exact
+ * "a clear that could not have disagreed" failure the rest of this pipeline
+ * exists to stop.
+ *
+ * Three is where a sequence starts to mean anything, and it still leaves 139
+ * sessions a month replayable — about five a day against a budget of two per
+ * run.
+ *
+ * This withholds a CLEAN verdict only. A fault found while following two steps
+ * is still reported, because the faults check runs first: finding a defect on a
+ * short route is real, declaring a short route defect-free is not.
+ */
+const MIN_ROUTE_STEPS = 3;
+
+/**
+ * How many things must have been genuinely examined before a clean run counts.
+ * A route step with no dialog open, or a recorded tap target that exists here —
+ * either is a real look at this reader's session. Three is the same bar as a
+ * route, for the same reason: fewer than that is a page load, not a visit.
+ */
+const MIN_EXAMINED = 3;
+
+/**
  * Events that describe a step we can actually perform on the page.
  *
- * `locked_card_price_shown` is deliberately NOT here. It fires once on mount
- * behind a one-shot ref when a price is rendered — an impression, not an
- * action, with nothing to tap. Treating it as a step failed on 6 of 6 sessions
- * and quietly cost every run a point of route coverage.
+ * Two events are deliberately NOT here, both because they are not things the
+ * reader DID:
+ *
+ *  - `locked_card_price_shown` fires once on mount behind a one-shot ref when a
+ *    price renders. Nothing to tap; it failed on 6 of 6 sessions and quietly
+ *    cost every run a point of route coverage.
+ *  - `$pageview` is already where we are, and re-navigating would discard the
+ *    state the sequence has built up. Performing it was a no-op that always
+ *    succeeded, so it padded the denominator with steps that could not fail —
+ *    4 of the first session's 9 "route steps" were free passes, which is a
+ *    coverage figure flattering itself.
  */
 const REPLAYABLE = new Set([
-  "$pageview",
   "scroll_depth_25",
   "scroll_depth_50",
   "scroll_depth_75",
@@ -89,12 +143,25 @@ function fail(msg) {
   process.exit(3);
 }
 
+/**
+ * The same allowlist every other per-session lookup here uses.
+ *
+ * The first version stripped quotes out of the id before interpolating it,
+ * which is escapable: a TRAILING BACKSLASH escapes the closing quote, and
+ * `SESSION_ID='x\\'` produced "unterminated string literal" from PostHog — the
+ * input had reached the SQL. It failed safe, but only by accident. An allowlist
+ * cannot be escaped, and `isSafeSessionId` in review.ts is the same rule; it is
+ * restated rather than imported because that file is TypeScript with `@shared`
+ * aliases and this probe runs under plain `node`.
+ */
+const isSafeSessionId = (id) => /^[A-Za-z0-9-]{1,64}$/.test(String(id));
+
 async function sessionPath(sessionId) {
   const rows = await hogQuery(
     `SELECT event, timestamp, properties.$viewport_width, properties.$os,
             properties.target_selector, properties.$current_url
        FROM events
-      WHERE properties.$session_id = '${sessionId.replace(/'/g, "")}'
+      WHERE properties.$session_id = '${sessionId}'
         AND timestamp > now() - INTERVAL 45 DAY
       ORDER BY timestamp ASC
       LIMIT 2000`,
@@ -110,12 +177,29 @@ async function sessionPath(sessionId) {
   }));
 }
 
-/** The reader's own screen, not ours — a layout defect is width-specific. */
+/**
+ * The reader's own screen, not ours — a layout defect is width-specific.
+ *
+ * The SESSION's own events win over the verifier's `DEVICES`, which is the
+ * opposite of every other probe here and is deliberate. `DEVICES` is derived
+ * from the finding's viewport width alone; these events carry the width AND
+ * the operating system, so they can tell an iPhone from an Android at the same
+ * width and pick the right engine. `DEVICES` is still read when the session
+ * says nothing, because an input that is passed and silently ignored is how a
+ * probe ends up running a list nobody chose while its verdict claims otherwise.
+ */
 function deviceFor(steps) {
   const explicit = process.env.DEVICE;
   if (explicit) return explicit;
   const ios = steps.some((s) => /ios|mac/i.test(s.os));
   const width = steps.map((s) => s.vw).find((w) => w > 0) ?? 0;
+  if (width === 0 && !ios) {
+    const passed = (process.env.DEVICES ?? "")
+      .split(",")
+      .map((d) => d.trim())
+      .filter(Boolean);
+    if (passed.length > 0) return passed[0];
+  }
   if (ios) return width >= 760 ? "iPad Mini" : "iPhone 15 Pro";
   return width >= 760 ? "Galaxy Tab S4" : "Pixel 7";
 }
@@ -175,8 +259,6 @@ const DONE = { tapped: true, exists: true };
 
 async function perform(step, page, cdp) {
   switch (step.event) {
-    case "$pageview":
-      return DONE; // already there; a second navigation would discard the state
     case "scroll_depth_25":
     case "scroll_depth_50":
     case "scroll_depth_75":
@@ -264,38 +346,124 @@ async function inspect(page, cdp) {
         covering.push(`${el.tagName.toLowerCase()}.${String(el.className || "").split(" ")[0]}`);
       }
     }
+    const doc = document.documentElement;
     return {
       dialogOpen,
       locked: body.overflow === "hidden" || body.position === "fixed",
       covering,
-      scrollable: document.documentElement.scrollHeight > window.innerHeight + 100,
+      scrollable: doc.scrollHeight > window.innerHeight + 100,
     };
   });
 
   const faults = [];
   // A lock with a dialog open is the CORRECT behaviour — that is how a modal
   // stops the page behind it moving. Only a lock with nothing open is a fault.
+  //
+  // Which means an open dialog SUPPRESSES every check below, and the caller has
+  // to know that: scrolling this report opens the paywall on its own, it is
+  // never dismissed unless the reader's route says so, and from that moment a
+  // clean run is clean because nothing could be seen. Measured with MUTATE=1 on
+  // a scroll-only route: the injected scroll lock was invisible, three runs out
+  // of three.
   if (state.locked && !state.dialogOpen) faults.push("the page was locked with no dialog open");
   if (state.covering.length > 0 && !state.dialogOpen) {
     faults.push(`${state.covering.join(", ")} covers the page with no dialog open`);
   }
-  if (state.scrollable && !state.dialogOpen) {
-    const { moved, real } = await touchScroll(cdp, page, 400);
-    // WebKit has no CDP, so a moved page there proves nothing about a finger.
-    // The lock-state check above is what covers iOS; see touch.mjs.
-    if (real && moved <= 0) faults.push("a real finger could not scroll the page");
+  /**
+   * THE GESTURE CHECK IS GONE, ON ITS OWN RECORD: 0 true findings, 3 false
+   * positives, all three of them posted as "Reproduced in production".
+   *
+   *   1. a paywall mid-animation locks the body before its root counts as
+   *      visible, so the page is legitimately immovable and no dialog is seen;
+   *   2. a fixed 400px push at `scroll_depth_100` moves nothing because the
+   *      page is resting at its end — a reader who read to the bottom;
+   *   3. and after guards for both, it still fired on session 01a0c4c6 in CI
+   *      while that same session ran clean locally eight times.
+   *
+   * Each fix was a guess I could only test fifteen minutes later in CI, which
+   * is not a way to converge. It was also structurally weak: skipped entirely
+   * on WebKit (no CDP, see touch.mjs) and suppressed whenever a dialog is open,
+   * which on this report is nearly always, since scrolling opens the paywall.
+   *
+   * What it was meant to catch — a page a finger cannot move — is covered by
+   * the lock-state check above, deterministically and on every engine. That is
+   * the check MUTATE=1 trips. `touchScroll`'s `hadRoom` stays, because
+   * device-matrix.mjs still reads `moved <= 0` and the trap should remain
+   * unavailable.
+   *
+   * Do not reinstate this without a way to reproduce a failure locally.
+   */
+  /**
+   * ASK AGAIN BEFORE ACCUSING ANYONE. The state above is a snapshot, and a
+   * paywall that is OPENING locks the body before its root is visible enough to
+   * count as shown — mid-animation it is still `opacity: 0`. In that window
+   * `dialogOpen` reads false while the page is legitimately immovable, and
+   * every check here fires on correct behaviour.
+   *
+   * That is not hypothetical. The first CI run of this probe reported
+   *
+   *     CONFIRM 01a0c4c6…  D1  ❗ Reproduced in production on Pixel 7 —
+   *     after scroll_depth_50/75/100: a real finger could not scroll the page
+   *
+   * on a session where scrolling had simply opened the paywall. It was a dry
+   * run, so it went nowhere; on a live run that posts "Reproduced in
+   * production" under a real reader's submission, which is the single worst
+   * thing this pipeline can do.
+   *
+   * Re-reading costs one evaluate and only ever REMOVES an accusation.
+   */
+  if (faults.length > 0) {
+    const nowOpen = await page.evaluate(() => {
+      const shown = (n) => {
+        if (!n) return false;
+        const cs = getComputedStyle(n);
+        if (cs.display === "none" || cs.visibility === "hidden") return false;
+        const r = n.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      };
+      return [
+        ...document.querySelectorAll(
+          '[role="dialog"]:not([hidden]), .report-pricing-modal, .share-report-modal'
+        ),
+      ].some(shown);
+    });
+    // Deliberately NOT checking opacity here: a dialog mid-fade is open enough
+    // to explain a locked page, and the point of the second look is to forgive.
+    if (nowOpen) return { faults: [], suppressed: true };
   }
-  return faults;
+
+  return { faults, suppressed: state.dialogOpen };
 }
 
-if (!SESSION_ID) fail("SESSION_ID is not set — nothing to replay. INCONCLUSIVE");
-if (!process.env.POSTHOG_API_KEY) fail("POSTHOG_API_KEY is not set — INCONCLUSIVE");
+/**
+ * A route supplied directly, instead of read from PostHog.
+ *
+ * Two things need this. The contract check in
+ * verify-probe-falsifiability.mjs points every gate probe at a refused
+ * connection and requires exit 3 — but without a route this probe exits 3 at
+ * its first guard, before it ever tries to reach the site, so the check would
+ * pass while testing nothing. And a unit test cannot query PostHog at all.
+ *
+ *   REPLAY_STEPS=scroll_depth_25,report_chapter_menu_opened
+ */
+const scriptedSteps = (process.env.REPLAY_STEPS ?? "")
+  .split(",")
+  .map((e) => e.trim())
+  .filter(Boolean)
+  .map((event) => ({ event, ts: "", vw: 0, os: "", selector: "", url: "" }));
 
 let all;
-try {
-  all = await sessionPath(SESSION_ID);
-} catch (err) {
-  fail(`could not read the session (${String(err).slice(0, 120)}) — INCONCLUSIVE`);
+if (scriptedSteps.length > 0) {
+  all = scriptedSteps;
+} else {
+  if (!SESSION_ID) fail("SESSION_ID is not set — nothing to replay. INCONCLUSIVE");
+  if (!isSafeSessionId(SESSION_ID)) fail(`SESSION_ID is not a session id — INCONCLUSIVE`);
+  if (!process.env.POSTHOG_API_KEY) fail("POSTHOG_API_KEY is not set — INCONCLUSIVE");
+  try {
+    all = await sessionPath(SESSION_ID);
+  } catch (err) {
+    fail(`could not read the session (${String(err).slice(0, 120)}) — INCONCLUSIVE`);
+  }
 }
 const steps = all.filter((s) => REPLAYABLE.has(s.event));
 if (steps.length === 0) {
@@ -306,7 +474,9 @@ const deviceName = deviceFor(steps);
 if (!devices[deviceName]) fail(`unknown device ${deviceName} — INCONCLUSIVE`);
 const engine = /iphone|ipad/i.test(deviceName) ? webkit : chromium;
 
-console.log(`replaying ${steps.length} step(s) from ${SESSION_ID} on ${deviceName}`);
+console.log(
+  `replaying ${steps.length} step(s) from ${SESSION_ID || "REPLAY_STEPS"} on ${deviceName}`
+);
 
 const browser = await engine.launch();
 const ctx = await browser.newContext({ ...devices[deviceName], locale: "en-US" });
@@ -317,35 +487,48 @@ page.on("pageerror", (e) => thrown.push(String(e).slice(0, 160)));
 
 if (process.env.MUTATE === "1") {
   /**
-   * Strand the scroll lock, which is the defect class this exists to catch.
+   * TWO defects, because one was not visible to every session.
    *
-   * On an INTERVAL, not once. A one-shot paint is stripped the moment React
-   * hydrates and re-renders the body, and a mutation that the app quietly
-   * undoes reports PASS while claiming to have injected a defect — this
-   * corpus has shipped that mistake twice.
+   * The scroll lock alone flipped Android sessions and not iOS ones, and the
+   * reason is structural rather than flaky: WebKit exposes no CDP, so the
+   * "a real finger could not scroll" check is skipped there by design, and the
+   * lock check is suppressed whenever a dialog is open — which on this report
+   * is most of the time, because scrolling opens the paywall by itself. On
+   * session 01a0bc7d (iPhone 15 Pro) MUTATE=1 therefore exited 0: the probe
+   * passed while carrying an injected defect, which is the failure this mode
+   * exists to rule out.
+   *
+   * So it also disables every control. That is what the dead-tap check looks
+   * for — a control a finger cannot use under a point the reader tapped — and
+   * that check is suppressed by neither the engine nor an open dialog.
+   *
+   * On an INTERVAL, not once: a one-shot paint is stripped the moment React
+   * hydrates and re-renders, and a mutation the app quietly undoes reports PASS
+   * while claiming to have injected a defect. This corpus has shipped that
+   * mistake twice.
    */
   await page.addInitScript(() => {
     setInterval(() => {
       document.body.style.setProperty("overflow", "hidden", "important");
+      for (const el of document.querySelectorAll("button,a[href],input,[role='button']")) {
+        el.setAttribute("aria-disabled", "true");
+        el.style.setProperty("pointer-events", "none", "important");
+      }
     }, 200);
   });
 }
 
-/**
- * Two denominators, because they answer different questions.
- *
- * ROUTE steps are the shape of the visit — where they scrolled, what they
- * opened, what they dismissed. Those must be followed for a clean verdict to
- * mean anything, and they are what the threshold gates on.
- *
- * RECORDED DEAD TAPS are content: the reader tapped `span.is-filled` on THEIR
- * report, and most such selectors name something that is not on ours. Failing
- * to find one says nothing about the page's health, so folding it into the
- * same fraction would drag every run to inconclusive — measured at 42% against
- * the route's 90% on the first session tried.
- */
 let routeTotal = 0;
 let routeDone = 0;
+/**
+ * ROUTE steps inspected with no dialog open — the only ones where a clean
+ * answer means anything.
+ *
+ * Counted here rather than derived as `routeDone - suppressed`, which was wrong
+ * and loudly so: `inspect()` also runs after dead taps, so subtracting a count
+ * that spans both kinds from a count that spans one produced -14, -23, -27.
+ */
+let routeCheckable = 0;
 let tapsPresent = 0;
 let tapsTried = 0;
 const faults = [];
@@ -397,9 +580,10 @@ try {
       console.log(`  ${i + 1}. ${step.event} — ok`);
     }
 
-    const found = await inspect(page, cdp);
-    for (const f of found) faults.push(`after ${step.event}: ${f}`);
-    if (found.length) console.log(`      ${found.join("; ")}`);
+    const seen = await inspect(page, cdp);
+    if (!isTap && !seen.suppressed) routeCheckable += 1;
+    for (const f of seen.faults) faults.push(`after ${step.event}: ${f}`);
+    if (seen.faults.length) console.log(`      ${seen.faults.join("; ")}`);
   }
 } catch (err) {
   console.log(`exception: ${String(err).slice(0, 200)}`);
@@ -412,7 +596,8 @@ for (const t of thrown) faults.push(`the page threw: ${t}`);
 
 const share = routeTotal === 0 ? 0 : routeDone / routeTotal;
 console.log(
-  `\nfollowed ${routeDone} of ${routeTotal} route step(s); ` +
+  `\nfollowed ${routeDone} of ${routeTotal} route step(s), ` +
+    `${routeCheckable} of them checkable; ` +
     `${tapsPresent} of ${tapsTried} recorded dead tap(s) exist on this report`
 );
 
@@ -420,12 +605,44 @@ if (faults.length > 0) {
   console.log(`REPRODUCED:\n  ${[...new Set(faults)].join("\n  ")}`);
   process.exit(1);
 }
-if (share < MIN_REPLAYED_SHARE) {
+/**
+ * A CLEAN VERDICT NEEDS SOMETHING TO HAVE BEEN EXAMINED, and the two kinds of
+ * check here are examined under very different conditions.
+ *
+ * The lock and overlay checks are suppressed whenever a dialog is open, because
+ * a locked page behind a modal is CORRECT. On this report that is nearly always:
+ * scrolling opens the paywall by itself and it stays open unless the reader's
+ * own route dismisses it, so on four real sessions measured 2026-09-22 the
+ * checkable route steps were 0, 0, 0 and 0. Those runs had been printing
+ * "clean — the reader's own route reproduces nothing", which was clean because
+ * nothing could be seen. With MUTATE=1 on a scroll-only route the injected
+ * scroll lock was invisible three times out of three.
+ *
+ * The dead-tap check has no such problem: it asks whether a disabled control
+ * sits under a point the reader actually tapped, which an open dialog does not
+ * forgive. Those same four sessions examined 15, 23, 26 and 29 real elements.
+ *
+ * So the bar is on what was ACTUALLY examined, from either source. A run that
+ * examined nothing says so.
+ */
+const examined = routeCheckable + tapsPresent;
+if (examined < MIN_EXAMINED) {
+  console.log(
+    `only ${examined} thing(s) could be examined — ${routeCheckable} route step(s) with no ` +
+      `dialog open, ${tapsPresent} recorded tap(s) present here. A clean run on that is not ` +
+      `evidence. INCONCLUSIVE`
+  );
+  process.exit(3);
+}
+if (routeTotal >= MIN_ROUTE_STEPS && share < MIN_REPLAYED_SHARE) {
   console.log(
     `only ${Math.round(share * 100)}% of the route could be followed — ` +
       `a clean run here is not evidence. INCONCLUSIVE`
   );
   process.exit(3);
 }
-console.log("clean — the reader's own route reproduces nothing");
+console.log(
+  `clean — nothing reproduced across ${routeCheckable} checkable route step(s) ` +
+    `and ${tapsPresent} of the reader's own tap targets`
+);
 process.exit(0);

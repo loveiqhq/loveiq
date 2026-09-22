@@ -21,6 +21,18 @@ export async function touchScroll(cdp, page, dy = 500, opts = {}) {
     x: Math.floor(window.innerWidth / 2),
     y: Math.floor(window.innerHeight * 0.6),
   }));
+  /**
+   * How far there was to go, so a caller can tell "could not move" from
+   * "nowhere to move". Without this every caller re-derives it or, more often,
+   * does not: a fixed push at the END of a page moves 0, and `moved <= 0` then
+   * reads as a dead scroll. replay-session.mjs shipped exactly that and the
+   * verifier turned it into "Reproduced in production" for a reader who had
+   * simply read to the bottom.
+   */
+  const room = await page.evaluate(() => ({
+    below: document.documentElement.scrollHeight - (window.scrollY + window.innerHeight),
+    above: window.scrollY,
+  }));
   const before = await page.evaluate(() => window.scrollY);
   if (cdp) {
     await cdp.send("Input.synthesizeScrollGesture", {
@@ -42,7 +54,10 @@ export async function touchScroll(cdp, page, dy = 500, opts = {}) {
   }
   await page.waitForTimeout(opts.settle ?? 450);
   const after = await page.evaluate(() => window.scrollY);
-  return { before, after, moved: after - before, real: !!cdp };
+  // `hadRoom` is about the direction actually requested: a page at its end has
+  // no room below, and asking it to go further down proves nothing.
+  const hadRoom = dy >= 0 ? room.below > 0 : room.above > 0;
+  return { before, after, moved: after - before, real: !!cdp, hadRoom, room };
 }
 
 /** Scroll with real gestures until the selector is on screen (or we give up). */

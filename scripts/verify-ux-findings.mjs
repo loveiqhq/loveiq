@@ -48,7 +48,7 @@ import { hogQuery } from "./lib/hogql.mjs";
 // Shared with scripts/replay-bench/score.mjs, which runs under plain node and
 // cannot import this file. That module documents what earns a probe a place in
 // the set, and why an unscoped `clear` is not evidence about anyone.
-import { CLAIM_SCOPED_PROBES } from "./lib/claim-scoped-probes.mjs";
+import { CLAIM_SCOPED_PROBES, SESSION_REPLAY_PROBES } from "./lib/claim-scoped-probes.mjs";
 
 /**
  * Probes that OPEN A REPORT, and are therefore claim-scoped once they are given
@@ -335,7 +335,7 @@ export function classify(reasoning) {
  * understand WIDTHS use them; the rest ignore the variable and run their own
  * device list, which is still better than refusing to check.
  */
-function runProbe(file, viewport, clickTarget, reportToken) {
+function runProbe(file, viewport, clickTarget, reportToken, sessionId) {
   /**
    * Recorded on the run, not inferred later from the file name: whether this
    * probe was actually handed something the scanner claimed. Without the click
@@ -349,7 +349,8 @@ function runProbe(file, viewport, clickTarget, reportToken) {
    */
   const claimScoped =
     (CLAIM_SCOPED_PROBES.has(file) && Boolean(clickTarget)) ||
-    (REPORT_TOKEN_PROBES.has(file) && Boolean(reportToken));
+    (REPORT_TOKEN_PROBES.has(file) && Boolean(reportToken)) ||
+    (SESSION_REPLAY_PROBES.has(file) && Boolean(sessionId));
   const widths = viewport
     ? [...new Set([viewport.min, viewport.max].filter((w) => w >= 200 && w <= 2000))].join(",")
     : "";
@@ -376,6 +377,9 @@ function runProbe(file, viewport, clickTarget, reportToken) {
         ...(clickTarget
           ? { URL_PATH: clickTarget.pathname, TARGET_SELECTOR: clickTarget.selector }
           : {}),
+        // The session whose route is being replayed. Only replay-session.mjs
+        // reads it; passed unconditionally because every finding has one.
+        ...(sessionId ? { SESSION_ID: sessionId } : {}),
         /**
          * This reader's own report. Absent for a survey-only session, and the
          * probe then keeps its hardcoded internal default rather than opening
@@ -1210,6 +1214,23 @@ console.log(
 const PROBE_BUDGET = Number(process.env.PROBE_BUDGET ?? 10);
 
 /**
+ * How many findings one run may REPLAY, on top of its ordinary probes.
+ *
+ * Small because a replay is expensive — it performs the reader's whole visit,
+ * ninety seconds to two minutes of real browser — and PROBE_BUDGET already
+ * allows ten findings against a 25-minute workflow timeout. Replaying every
+ * one would add up to twenty minutes and blow it.
+ *
+ * Spent where it answers something. A replay only runs when the ordinary
+ * probes came back CLEAN, which is the case the report scanner is stuck in:
+ * 0 confirmed in 45, every probe clean, and no way to tell "nothing is wrong"
+ * from "nothing we run can see it". A finding already reproduced needs no
+ * second opinion.
+ */
+const REPLAY_BUDGET = Number(process.env.REPLAY_BUDGET ?? 2);
+let replaysLeft = REPLAY_BUDGET;
+
+/**
  * How many draft pull requests one run may open.
  *
  * The per-branch check in replay-pr.mjs stops the SAME reproduction opening a
@@ -1497,7 +1518,23 @@ for (const [
   const reportToken = await reportTokenForSession(sessionId);
   if (reportToken) console.log(`::add-mask::${reportToken}`);
 
-  const results = probeFiles.map((f) => runProbe(f, viewport, clickTarget, reportToken));
+  const results = probeFiles.map((f) => runProbe(f, viewport, clickTarget, reportToken, sessionId));
+
+  /**
+   * THE READER'S OWN ROUTE, when nothing else found anything.
+   *
+   * Every probe above drives a path we chose. A defect that only appears part
+   * way through this reader's particular sequence is not something they can
+   * reach, so their agreement is weaker evidence than it looks — and a run
+   * where they all pass is exactly where that matters.
+   *
+   * Needs a report: the replay drives the report page, so a survey-only
+   * session has no route for it to follow.
+   */
+  if (replaysLeft > 0 && reportToken && !results.some((r) => !r.passed && !r.inconclusive)) {
+    replaysLeft -= 1;
+    results.push(runProbe("replay-session.mjs", viewport, clickTarget, reportToken, sessionId));
+  }
 
   /**
    * OUR OWN LOG, asked whether the thing actually happened.
@@ -1617,8 +1654,23 @@ for (const [
       `depend on a device we do not emulate.`;
   }
 
+  /**
+   * NAME THE PROBES, because a verdict without them cannot be read.
+   *
+   * The whole argument of this pipeline is that a `clear` only means something
+   * when a probe could have disagreed — and the run log printed `CLEAR` with no
+   * indication of what produced it, so the one thing you need in order to
+   * believe or disbelieve a line was the thing it left out. A run that was
+   * supposed to replay the reader's route and quietly did not looks identical
+   * to one that did.
+   *
+   * Claim-scoped probes are marked, since that is the distinction that decides
+   * whether the verdict is evidence or a constant.
+   */
+  const ran = results.map((r) => `${r.file}${r.claimScoped ? "*" : ""}`).join(" ");
   console.log(
-    `${reproduced ? "CONFIRM" : inconclusive ? "UNKNOWN" : "CLEAR  "} ${sessionId}  ${criterion.id}`
+    `${reproduced ? "CONFIRM" : inconclusive ? "UNKNOWN" : "CLEAR  "} ${sessionId}  ${criterion.id}` +
+      `  [${ran || "no probes"}]`
   );
   // A challenger is being measured, not consulted. Its verdict is recorded and
   // scored; it does not appear under a reader's submission, because a prompt on

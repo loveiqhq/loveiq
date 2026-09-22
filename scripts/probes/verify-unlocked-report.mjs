@@ -13,6 +13,20 @@
  * for. That is the most expensive defect this product can have and it was the
  * one surface with no coverage at all.
  *
+ * IF THIS EVER REPORTS A PAID REPORT AS LOCKED, check the token before the
+ * product. The probe cannot tell a re-lock REGRESSION from this particular
+ * report being legitimately re-locked — a refund or a dispute sets
+ * `payment_status` away from `succeeded` and re-locks it correctly, and the
+ * probe would then report the site as broken. One query settles it:
+ *
+ *     SELECT pr.payment_status FROM report_access_token rat
+ *     LEFT JOIN personal_report pr ON pr.survey_submission_id = rat.survey_submission_id
+ *     WHERE rat.token = 'rpt_HmQip3ZENUerTMsjrc1X';
+ *
+ * Still `succeeded` and not revoked as of 2026-09-22. If it is not, point
+ * UNLOCKED_REPORT_TOKEN at another paid internal report rather than chasing a
+ * regression that is not there.
+ *
  * The token is an internal `ec@loveiq.org` report with
  * `payment_status: succeeded` and three unlocked archetypes — the same class of
  * internal account the locked default already uses, so this adds no customer
