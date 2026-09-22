@@ -1,8 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useId, useState, type CSSProperties, type FC } from "react";
+import { useId, useRef, useState, type CSSProperties, type FC } from "react";
 import type { Report3LearnMoreView } from "@/data/report3-learn-more";
+import V4BackToTop from "./V4BackToTop";
 import V4PremiumCard from "./V4PremiumCard";
 import V4Prose from "./V4Prose";
 
@@ -26,6 +27,12 @@ import V4Prose from "./V4Prose";
  * splitArticleForReader in contentGating.ts), and `gated: null` renders the same
  * window, fade, link and card at the same height with nothing inside. So the
  * component never decides what may be read; it only decides how it looks.
+ *
+ * ON THE BACK-TO-TOP CONTROL. Expanded, 153:2260 is 11,624px — about eleven phone
+ * screens — and the only way back to the collapse control was to flick upwards for
+ * several seconds. V4BackToTop appears once the card head has passed a screen above
+ * the fold and returns the reader to it. It is mounted only while open, because
+ * closed the card is 341px and there is nothing to come back from.
  */
 
 /**
@@ -55,6 +62,7 @@ interface Props {
 const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen = false }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const bodyId = useId();
+  const sectionRef = useRef<HTMLElement>(null);
 
   const openPaywall = () => {
     // `.rv4-doc` runs on copyable non-prod deploys, so a drag that ends inside
@@ -65,6 +73,7 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
 
   return (
     <section
+      ref={sectionRef}
       className={`rv4-learn${isOpen ? " is-open" : ""}`}
       data-node-id={isOpen ? (locked ? "153:2280" : "153:2260") : "153:2240"}
       data-name="Go deeper & learn more"
@@ -134,6 +143,8 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
           </>
         )}
       </div>
+
+      {isOpen ? <V4BackToTop targetRef={sectionRef} /> : null}
     </section>
   );
 };
