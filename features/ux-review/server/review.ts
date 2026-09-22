@@ -19,6 +19,8 @@ import logger from "@shared/observability/logger";
 import { escapeSlack, type SlackBlock } from "@shared/observability/slack";
 import { context, header, linkButton, section } from "@shared/observability/slack-blocks";
 
+import { reportingDay } from "@shared/time/reporting-day";
+
 import { UX_REVIEW_MIN_CONFIDENCE, UX_SCANNERS } from "./scanners";
 
 /**
@@ -581,6 +583,35 @@ export async function fetchScannerScores(days = 30): Promise<ScannerScore[] | nu
  *
  * Pure, so it can be rendered and read before it is ever sent.
  */
+/**
+ * Decisions with a date, surfaced in the message that carries their evidence.
+ *
+ * The last stopping rule we set — "30 findings or four weeks" for the
+ * observation-only challenger — was unreachable, and we only noticed because
+ * somebody went looking. A rule nobody is reminded of fails the same way as a
+ * rule that cannot be met: the date passes, the trial keeps running, and the
+ * scanner it was meant to judge quietly stays on the bill.
+ *
+ * So the deadline rides on the WEEKLY SCORECARD, which already prints the very
+ * number the decision turns on ("Taps that did nothing — 0 of 19 held up").
+ * Nothing new to remember, nothing new to schedule, and no separate alert to
+ * go stale.
+ *
+ * Remove an entry once the decision is made — an overdue line that never stops
+ * appearing is how people learn to skim the message.
+ */
+export const DUE_DECISIONS: ReadonlyArray<{ due: string; what: string }> = [
+  {
+    due: "2026-09-28",
+    what:
+      "*Decision due: the dead-click check.* It has been on probation for a week " +
+      "since we fixed what it was being fed. First question is mechanical — are " +
+      "blocked controls showing up in our own records at all? If they are and it " +
+      "still finds nothing real, switch it off. See the stopping rule in " +
+      "`features/ux-review/server/scanners.ts`.",
+  },
+];
+
 export function buildScorecardMessage(
   scores: readonly ScannerScore[],
   days = 30,
@@ -595,7 +626,9 @@ export function buildScorecardMessage(
    */
   liveChallengerNames: ReadonlySet<string> = new Set(
     UX_SCANNERS.filter((sc) => sc.role === "challenger").map((sc) => sc.name)
-  )
+  ),
+  /** Injected so a deadline can be tested on both sides of its date. */
+  now: Date = new Date()
 ): { text: string; blocks: SlackBlock[] } {
   const n = (s: ScannerScore) => s.right + s.wrong;
   const pct = (s: ScannerScore) => (n(s) === 0 ? "n/a" : `${Math.round((s.right / n(s)) * 100)}%`);
@@ -668,6 +701,15 @@ export function buildScorecardMessage(
               ` ${champ.contradicted}. A person decides what happens next.`
       )
     );
+  }
+
+  // Compared as ISO dates, not timestamps: the deadline is a DAY, and a
+  // `new Date("2026-09-28")` is midnight UTC, which is already 02:00 on the
+  // 28th in Berlin. Comparing the strings keeps the boundary where the reader
+  // thinks it is and needs no timezone reasoning at all.
+  const today = reportingDay(now);
+  for (const d of DUE_DECISIONS) {
+    if (today >= d.due) blocks.push(section(d.what));
   }
 
   blocks.push(
