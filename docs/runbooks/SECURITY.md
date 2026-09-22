@@ -497,6 +497,55 @@ the existing rows were scrubbed. The probe still gets the real path inside the
 run, so reproduction on the reader's own report is unaffected; only what
 PERSISTS is redacted.
 
+**Closed 2026-09-21, and the reason the first pass missed it:** that audit
+checked the table it had just built. `analytics_event.metadata` had been storing
+the same credential since **2026-05-22** — 2,424 rows across `scroll_depth_25`,
+`_50`, `_75`, `_100` and `rage_click`, still writing daily — because
+`trackScrollDepth`/`trackRageClick` call `persistAnalyticsEvent` with
+`pathname`, and `pathname` is `location.pathname + location.search`. Nothing
+analytical was lost by redacting it: every row already carries
+`survey_submission_id`. `ux_finding.probe_runs[].tail` held one too, one column
+over from the `url_path` that had just been fixed —
+`verify-dead-click-target.mjs` prints "what this reader tapped at /report/rpt_…"
+and that line is stored verbatim. `brain_query.args` held four.
+
+**Two shapes, not one.** 403 of the 2,424 carry the token as a QUERY PARAMETER
+(`/checkout?plan=…&token=rpt_…`), not in a `/report/` path. A guard keyed on
+`/report/` cleans 2,021 rows, leaves 403 and every future checkout event, and
+reports success. `shared/format/redact-report-token.ts` handles the path form
+first (keeping the `/report/<redacted>` shape the digest reads) and then matches
+the credential itself anywhere else. Every token in `report_access_token` is
+exactly `rpt_` plus 20 alphanumerics, 2,114 of 2,114.
+
+**Enumerate, do not re-check.** The way to answer "where is this credential" is
+to sweep every `text`/`jsonb` column in the schema, not to revisit the table the
+last fix named. Doing that found eight places. Three were incidental and are now
+closed; the other five are FUNCTIONAL and must not be scrubbed:
+
+| where                                     | rows  | why it is there                             |
+| ----------------------------------------- | ----- | ------------------------------------------- |
+| `report_access_token.token`               | 2,114 | the token table itself                      |
+| `personal_report.url`                     | 2,099 | the report's own address                    |
+| `report_price_quote.metadata.reportToken` | 6,584 | pricing locks + nurture promos key off it   |
+| `payment.metadata.reportToken`            | 388   | how fulfilment knows which report to unlock |
+| `payment_webhook_event.event_data`        | 389   | Stripe's own payload, kept for replay/audit |
+
+Re-run the sweep any time:
+
+```sql
+do $$ declare r record; n bigint; begin
+  create temp table if not exists tok(t text, c text, hits bigint); delete from tok;
+  for r in select c.table_name t, c.column_name col from information_schema.columns c
+    join information_schema.tables tb on tb.table_name=c.table_name and tb.table_schema=c.table_schema
+    where c.table_schema='public' and tb.table_type='BASE TABLE'
+      and c.data_type in ('text','character varying','jsonb','json') loop
+    begin execute format('select count(*) from public.%I where %I::text ~ ''rpt_[A-Za-z0-9]{8,}''', r.t, r.col) into n;
+      if n > 0 then insert into tok values (r.t, r.col, n); end if;
+    exception when others then null; end;
+  end loop; end $$;
+select * from tok order by hits desc;
+```
+
 **NOT closed, and deliberately stated rather than quietly left:** PostHog holds
 the same URLs — 3,041 events in seven days with a live token in
 `$current_url`, plus the replay's own rrweb stream. A `sanitize_properties`

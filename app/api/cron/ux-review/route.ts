@@ -349,9 +349,15 @@ export async function GET(request: Request) {
           channel: "ops",
           kind: "ux_review_drift",
           username: "ops_alerts",
+          // The closing hint has to match the problem. "scanners.ts is the
+          // source of truth" is the fix for a drifted prompt and means nothing
+          // for an empty credit pool, which is a billing ceiling in PostHog and
+          // not something this repo can set.
           text:
-            `:warning: Scanner ${escapeSlack(drift.scannerName)} — ${escapeSlack(drift.detail)}. ` +
-            `features/ux-review/server/scanners.ts is the source of truth.`,
+            `:warning: ${drift.reason === "quota" ? "" : "Scanner "}${escapeSlack(drift.scannerName)} — ${escapeSlack(drift.detail)}. ` +
+            (drift.reason === "quota"
+              ? `Raise the limit in PostHog, or the scanners stay stopped.`
+              : `features/ux-review/server/scanners.ts is the source of truth.`),
         });
         await markSlackAlertDelivered("ux_review_drift", key, dayKey);
       }

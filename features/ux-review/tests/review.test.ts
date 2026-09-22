@@ -6,22 +6,29 @@ import { resolve } from "node:path";
 import logger from "@shared/observability/logger";
 
 import {
+  ALL_SCANNERS,
   buildDigestMessage,
-  contradiction,
+  buildScorecardMessage,
+  checkVisionQuota,
   compareScanners,
-  fetchSessionEvents,
-  isSafeSessionId,
-  sessionClickTarget,
-  sessionViewport,
+  contradiction,
   fetchCoverageStats,
   fetchDailyStats,
+  fetchFindings,
+  fetchScannerDrift,
+  fetchSessionEvents,
   fetchVerificationStats,
   isChallengerScanner,
-  warnIfTruncated,
-  buildScorecardMessage,
-  fetchFindings,
+  isSafeSessionId,
   recordingLink,
+  sessionClickTarget,
+  sessionViewport,
+  biggestIndexDrop,
+  stripEchoedCriterion,
+  SURVEY_RESTART_MIN_DROP,
   type UxFinding,
+  type VisionQuota,
+  warnIfTruncated,
 } from "../server/review";
 import { UX_REVIEW_MIN_CONFIDENCE, UX_SCANNERS } from "../server/scanners";
 
@@ -1006,5 +1013,272 @@ describe("the scanner scorecard", () => {
 
   it("says so plainly when there is nothing to report", () => {
     expect(render([])).toContain("No checks have been scored yet");
+  });
+});
+
+/**
+ * The credit pool is a ceiling above every scanner's own, and nothing watched
+ * it. `sync-vision-scanners.ts` reads the endpoint and is run by no workflow,
+ * so it only ever spoke when a human already suspected something.
+ *
+ * When the pool empties all four scanners stop at once: nothing observes, no
+ * findings are raised, and the daily digest reports a quiet day. A dark
+ * pipeline and a good day are the same message, which is why this is worth an
+ * alert rather than a dashboard.
+ */
+describe("checkVisionQuota", () => {
+  /** The real payload on 2026-09-21, which must NOT fire. */
+  const HEALTHY: VisionQuota = {
+    credit_limit: 7500,
+    credits_used: 1919,
+    remaining: 5581,
+    exhausted: false,
+    period_start: "2026-09-14T13:24:06Z",
+    period_end: "2026-10-14T13:24:06Z",
+    projected_monthly_credits: 3490,
+  } as VisionQuota;
+
+  it("says nothing on the real, healthy pool", () => {
+    // 3,490/month over 23 remaining days needs ~2,676 of the 5,581 left.
+    expect(checkVisionQuota(HEALTHY, new Date("2026-09-21T16:00:00Z"))).toEqual([]);
+  });
+
+  it("warns before the pool empties, not after", () => {
+    const tight = { ...HEALTHY, remaining: 900 };
+    const drift = checkVisionQuota(tight, new Date("2026-09-21T16:00:00Z"));
+    expect(drift).toHaveLength(1);
+    expect(drift[0].reason).toBe("quota");
+    expect(drift[0].scannerName).toBe(ALL_SCANNERS);
+    // Says what happens, not just that a number is low — the person reading it
+    // in Slack has to know a quiet digest would be the symptom.
+    expect(drift[0].detail).toMatch(/every scanner|scanner.*stop/i);
+  });
+
+  it("is loud when it has already happened", () => {
+    const drift = checkVisionQuota({ ...HEALTHY, exhausted: true, remaining: 0 });
+    expect(drift).toHaveLength(1);
+    expect(drift[0].detail).toMatch(/exhausted/);
+  });
+
+  it("uses PostHog's projection, not credits-used over elapsed time", () => {
+    /**
+     * A BACKFILL wrecks the naive rate. On 2026-09-21 the pool had burned 1,919
+     * credits in 7 days — ~8,200/month extrapolated — against a real projection
+     * of 3,490, because 170 sessions were re-observed by hand. Deriving the
+     * rate from credits_used would have alerted every day after any backfill.
+     */
+    expect(checkVisionQuota(HEALTHY, new Date("2026-09-21T16:00:00Z"))).toEqual([]);
+    // Same pool, PostHog projecting a genuinely unaffordable rate.
+    expect(
+      checkVisionQuota(
+        { ...HEALTHY, projected_monthly_credits: 12000 },
+        new Date("2026-09-21T16:00:00Z")
+      )
+    ).toHaveLength(1);
+  });
+
+  it("stays silent on anything it cannot read", () => {
+    // A field it does not understand is not evidence of a problem. This alert
+    // is only worth having if it is never noise.
+    for (const bad of [
+      {},
+      { remaining: 100 },
+      { projected_monthly_credits: 5000 },
+      { remaining: 100, projected_monthly_credits: 5000 },
+      { remaining: 100, projected_monthly_credits: 5000, period_end: "not-a-date" },
+      { remaining: 100, projected_monthly_credits: 0, period_end: "2026-10-14T13:24:06Z" },
+      // Period already over: it is about to roll over, not about to fail.
+      { remaining: 1, projected_monthly_credits: 5000, period_end: "2026-09-01T00:00:00Z" },
+    ] as VisionQuota[]) {
+      expect(checkVisionQuota(bad, new Date("2026-09-21T16:00:00Z"))).toEqual([]);
+    }
+  });
+});
+
+/**
+ * WIRED IN, not merely present.
+ *
+ * `checkVisionQuota` passed every one of its own tests while being called by
+ * nothing: deleting it from `fetchScannerDrift` left the suite green. The cron
+ * only ever calls `fetchScannerDrift`, so a quota check it does not reach is a
+ * function with tests and no effect.
+ */
+describe("fetchScannerDrift reaches the quota", () => {
+  const OK_SCANNERS = UX_SCANNERS.map((s) => ({
+    name: s.name,
+    enabled: true,
+    scanner_version: s.scannerVersion,
+    scanner_config: { prompt: s.prompt },
+    limit_reached: false,
+  }));
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.POSTHOG_API_KEY;
+  });
+
+  it("reports an exhausted pool through the call the cron makes", async () => {
+    process.env.POSTHOG_API_KEY = "test-key";
+    vi.stubGlobal("fetch", async (url: string) => ({
+      ok: true,
+      status: 200,
+      json: async () =>
+        String(url).includes("/vision/quota/")
+          ? { exhausted: true, remaining: 0 }
+          : { results: OK_SCANNERS },
+    }));
+
+    const drift = await fetchScannerDrift();
+    // Every scanner matches git, so the ONLY thing that can be here is the quota.
+    expect(drift).toHaveLength(1);
+    expect(drift[0].reason).toBe("quota");
+    expect(drift[0].scannerName).toBe(ALL_SCANNERS);
+  });
+
+  it("still reports prompt drift when the quota read fails", async () => {
+    // An unreadable quota must not swallow the check that was already working.
+    process.env.POSTHOG_API_KEY = "test-key";
+    const drifted = OK_SCANNERS.map((s, i) =>
+      i === 0 ? { ...s, scanner_config: { prompt: "something else entirely" } } : s
+    );
+    vi.stubGlobal("fetch", async (url: string) =>
+      String(url).includes("/vision/quota/")
+        ? { ok: false, status: 500, json: async () => ({}) }
+        : { ok: true, status: 200, json: async () => ({ results: drifted }) }
+    );
+
+    const drift = await fetchScannerDrift();
+    expect(drift.map((d) => d.reason)).toContain("prompt");
+  });
+});
+
+/**
+ * THE WORST ERROR THIS SYSTEM CAN MAKE, with the finding it actually cost us.
+ *
+ * Every prompt asks the model to name which condition it matched, so findings
+ * routinely close with "This matches condition #2 (A LOOP: … the paywall and
+ * checkout return them to the report …)". That sentence is the CRITERION, not a
+ * claim about the reader, and the refusal gate was matching `checkout` inside
+ * it.
+ *
+ * Session 01a0bd47 was refuted with "the recording describes reaching checkout"
+ * while its body claimed only that the reader was returned to the survey. Our
+ * own survey_behavior_event log records a 56-question index drop in that
+ * session — the loop was real, and the one real loop this pipeline has observed
+ * was filed as the scanner lying.
+ */
+describe("the criterion the scanner echoes back is not a claim", () => {
+  /** Verbatim from ux_finding 01a0bd47, the finding this cost. */
+  const REAL_LOOP =
+    "The user completed the LoveIQ questionnaire, reached the report page, and " +
+    "later encountered a loop where clicking to unlock or view the report returned " +
+    "them to the survey assessment to take it again, repeating the flow multiple " +
+    "times before ending up back on the report page. This matches condition #2 " +
+    "(A LOOP: a control returns the user to the survey, or the paywall and " +
+    "checkout return them to the report without unlocking anything).";
+
+  const SEEN = new Set(["report_viewed", "survey_completed", "$pageview"]);
+
+  it("no longer refutes the real loop on a word from its own criterion", () => {
+    expect(contradiction(REAL_LOOP, SEEN)).toBeNull();
+  });
+
+  it("still refutes a press the body actually claims", () => {
+    // The other half. This finding says, in its own words, that the reader
+    // pressed Unlock — and no unlock event exists. That refutation is correct
+    // and must survive, or the fix has simply switched the gate off.
+    const REAL_REFUTATION =
+      "While viewing the report, they clicked the 'Unlock full report' button, " +
+      "which triggered a loading state and redirected back to the report page " +
+      "without unlocking the content. This matches condition 2 (A LOOP: the " +
+      "paywall and checkout return them to the report without unlocking anything).";
+    expect(contradiction(REAL_REFUTATION, SEEN)).toMatch(/unlock click/);
+  });
+
+  it("strips only the echo, and only from the end", () => {
+    expect(stripEchoedCriterion("A happened. This matches condition #2 (B).")).toBe("A happened. ");
+    expect(stripEchoedCriterion("A happened. this meets condition 4 (B).")).toBe("A happened. ");
+    // No echo — untouched, so a finding that never quotes its criterion is
+    // graded on its whole text exactly as before.
+    expect(stripEchoedCriterion("The user reached checkout and saw an error.")).toBe(
+      "The user reached checkout and saw an error."
+    );
+    // The word "condition" alone is not an echo; readers have conditions.
+    expect(stripEchoedCriterion("Their condition improved after checkout.")).toBe(
+      "Their condition improved after checkout."
+    );
+  });
+
+  it("keeps a claim that mentions checkout BEFORE the echo", () => {
+    // Stripping must not become a way to smuggle a false claim past the gate:
+    // a body that genuinely describes checkout is still refutable.
+    const claimsCheckout =
+      "The user reached the Stripe checkout and it failed. This matches condition 2 (A LOOP).";
+    expect(contradiction(claimsCheckout, SEEN)).toMatch(/reaching checkout/);
+  });
+});
+
+/**
+ * Our own log, asked whether the thing actually happened.
+ *
+ * `contradiction()` can only ever say NO. Nothing could say yes, so a claim the
+ * instrumentation independently witnessed was graded exactly like one it had
+ * never heard of — and telling those apart is the whole precision problem.
+ *
+ * Measured over 30 days: 3 of 755 survey sessions show an index drop, all of
+ * them 56-58 questions, against 0 of the 38 L1 findings the probes cleared.
+ * Run live against the session whose loop we wrongly refuted: {drop: 56,
+ * steps: 114}.
+ */
+describe("biggestIndexDrop", () => {
+  const seq = (...ix: Array<number | null>) => ix.map((question_index) => ({ question_index }));
+
+  it("sees a restart", () => {
+    expect(biggestIndexDrop(seq(0, 20, 56, 0))).toEqual({ drop: 56, steps: 4 });
+  });
+
+  it("ignores ordinary backwards navigation", () => {
+    // A Back button moves ONE question. Reporting that as a restart would make
+    // the witness fire on almost every session and mean nothing.
+    expect(biggestIndexDrop(seq(5, 4, 5, 6))).toBeNull();
+    expect(biggestIndexDrop(seq(9, 8, 7))).toBeNull();
+  });
+
+  it("ignores a monotonic run and an empty log", () => {
+    expect(biggestIndexDrop(seq(0, 1, 2, 3))).toBeNull();
+    expect(biggestIndexDrop([])).toBeNull();
+  });
+
+  it("skips nulls rather than reading them as question zero", () => {
+    // One bad write would otherwise manufacture a 56-question drop out of
+    // nothing, and this witness exists to be trusted when it fires.
+    expect(biggestIndexDrop(seq(56, null, 55))).toBeNull();
+    expect(biggestIndexDrop(seq(null, null))).toBeNull();
+  });
+
+  it("reports the LARGEST drop, not the last", () => {
+    expect(biggestIndexDrop(seq(60, 0, 3, 2))?.drop).toBe(60);
+  });
+
+  it("holds the threshold well below anything observed", () => {
+    // Every real case in production was 56 or more; the bar is 5. Raising it
+    // above the smallest real restart would silence the witness entirely.
+    expect(SURVEY_RESTART_MIN_DROP).toBeLessThan(56);
+    expect(biggestIndexDrop(seq(SURVEY_RESTART_MIN_DROP, 0))).not.toBeNull();
+    expect(biggestIndexDrop(seq(SURVEY_RESTART_MIN_DROP - 1, 0))).toBeNull();
+  });
+});
+
+describe("the verifier consults the witness", () => {
+  it("runs it for the journey criteria and no others", () => {
+    // A restart says nothing about a covered heading, and a witness wired to
+    // every criterion would add a claim-scoped PASS to findings it cannot
+    // speak to — which is exactly the false evidence this whole change is
+    // about removing.
+    const src = readFileSync(resolve(process.cwd(), "scripts/verify-ux-findings.mjs"), "utf8");
+    expect(src).toMatch(/RESTART_WITNESS_CRITERIA = new Set\(\["L1", "B1"\]\)/);
+    expect(src).toMatch(/if \(RESTART_WITNESS_CRITERIA\.has\(criterion\.id\)\)/);
+    // Recorded as claim-scoped, which is what makes a `clear` mean anything.
+    expect(src).toMatch(/file: "survey-behaviour-log"[\s\S]{0,200}claimScoped: true/);
   });
 });

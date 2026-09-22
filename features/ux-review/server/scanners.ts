@@ -242,23 +242,49 @@ export const UX_SCANNERS: readonly UxScanner[] = [
     role: "champion",
     triggerEvent: "dead_click",
     samplingMode: "focused",
-    estimatedMonthlyCredits: 1474,
+    // Measured, not guessed: 238 observations over 30 days to 2026-09-21 at 2
+    // credits each on the lite model. The old 1,474 was ~3x the truth and fed
+    // UX_REVIEW_ESTIMATED_MONTHLY_CREDITS, which is the figure an operator
+    // agreed to. PostHog's own `projected_monthly_credits` is authoritative;
+    // this is the repo's cross-check against it.
+    estimatedMonthlyCredits: 476,
     creditLimit: 1600,
-    scannerVersion: 2,
+    scannerVersion: 3,
     prompt: [
-      "This recording contains at least one dead click on loveiq.org — a tap on something",
-      "our instrumentation judged non-interactive. Most are readers tapping ordinary text,",
-      "which is NOT a defect. Decide whether this one had a visible cause.",
+      "This recording contains at least one dead click on loveiq.org — a tap that our",
+      "instrumentation judged did nothing. Decide whether it had a visible cause.",
+      "",
+      "THE EVENT TELLS YOU WHICH KIND IT IS. Read the dead_click event properties:",
+      "- reason=disabled_control — the reader tapped a real control that was switched",
+      "  off. This is the case worth reporting. It includes controls the browser could",
+      "  not even deliver the tap to, which look and read exactly like live ones.",
+      "- reason=non_interactive — the tap was on text, an image or a container. This is",
+      "  a reader resting a thumb, and it is the large majority of these events.",
+      "- repeat_count=3 means they tapped the same thing again and again rather than",
+      "  once. Someone who keeps trying expected it to work; that is the strongest",
+      "  evidence available to you, and a single tap is the weakest.",
+      "",
+      "PostHog's own $dead_click is in the same session and is defined differently:",
+      "a click after which the page did not change at all for three seconds. It sees",
+      "one case ours cannot — a control that is fully enabled and simply broken —",
+      "so it is worth checking when the tap was on something that should have",
+      "worked. It is also far noisier, so treat it as corroboration, never as the",
+      "reason on its own.",
       "",
       CORRECT_LOOKS_LIKE,
       "",
       "Answer YES only when the thing tapped genuinely invited the tap and did nothing:",
+      "- It is a disabled control that gives no explanation of what would enable it, and",
+      "  nothing on screen tells the reader what to do to make it work.",
       "- It is styled as a control — a button, card, row, icon, price or link — or the",
       "  cursor changes over it, and nothing happened.",
       "- On-screen copy told the user to do it (for example an instruction to swipe, flip",
       "  or tap something) and that action does nothing.",
-      "- It is a disabled control that gives no explanation of what would enable it.",
       "- The tap was swallowed by something invisible sitting on top of the target.",
+      "",
+      "A disabled control is NOT automatically a defect. A Next button that is off until",
+      "the question is answered is working as intended — say NO unless the screen fails",
+      "to make that obvious, or they tapped it repeatedly, which means it was not.",
       "",
       DO_NOT_FLAG,
       "HARD RULE: if the thing tapped is a paragraph, a heading, an image, a badge or",
@@ -271,8 +297,40 @@ export const UX_SCANNERS: readonly UxScanner[] = [
   },
 ];
 
-/** Verdict/confidence bar a finding must clear before it reaches Slack. */
+/**
+ * A FLOOR, NOT A QUALITY FILTER, and it is important nobody mistakes it again.
+ *
+ * Measured 2026-09-21 over every finding in the ledger:
+ *
+ *     confidence  findings  wrong when checkable
+ *     1.0             16            100%
+ *     0.9            120             92%
+ *     0.8              1              —
+ *
+ * Every finding the scanners have ever produced scores 0.8 or above — they do
+ * not express doubt — so this bar has never excluded one. And confidence is
+ * INVERSELY related to correctness here: the 1.0 group is wrong more often than
+ * the 0.9 group. Raising the bar cannot improve precision; it would only start
+ * discarding findings at the end that is marginally more accurate.
+ *
+ * It is kept as a floor against a future model that does emit low confidence,
+ * not because it is doing anything today. The checks that actually separate a
+ * real finding from a narration are the refusal gate (`contradiction()`), the
+ * corroborators (`surveyRestartWitness`, our own dead_click events) and
+ * claim-scoping in the verifier — see features/ux-review/AGENT_README.md.
+ *
+ * `scanners.test.ts` fails if this is raised above 0.8, because doing so would
+ * be a plausible and entirely counterproductive reaction to a low precision
+ * number.
+ */
 export const UX_REVIEW_MIN_CONFIDENCE = 0.7;
+
+/**
+ * The highest bar the measurement supports. See above: the whole population
+ * sits at 0.8-1.0, so anything above this silently discards findings without
+ * improving precision.
+ */
+export const UX_REVIEW_MAX_DEFENSIBLE_CONFIDENCE = 0.8;
 
 /**
  * Measured monthly spend of the PERMANENT fleet — champions only.

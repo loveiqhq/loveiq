@@ -108,8 +108,107 @@ export function recordingLink(sessionId: string): string {
 export interface ScannerDrift {
   scannerName: string;
   /** What is wrong, so the alert can say it rather than imply it. */
-  reason: "missing" | "disabled" | "version" | "prompt" | "limit";
+  reason: "missing" | "disabled" | "version" | "prompt" | "limit" | "quota";
   detail: string;
+}
+
+/** The subset of `GET /vision/quota/` the burn-rate check needs. */
+export interface VisionQuota {
+  credit_limit?: number;
+  credits_used?: number;
+  remaining?: number;
+  exhausted?: boolean;
+  period_end?: string;
+  projected_monthly_credits?: number;
+}
+
+/** Name used for a project-level alert, which belongs to no single scanner. */
+export const ALL_SCANNERS = "(every scanner)";
+
+/**
+ * The credit pool is watched by NOTHING, and running it dry stops all four.
+ *
+ * `compareScanners` catches a scanner that hit its OWN `creditLimit`. The
+ * PROJECT pool is a separate ceiling — 7,500 credits per period — and when it
+ * empties every scanner stops at once. Nothing observes the recordings, no
+ * findings are raised, the verifier has nothing to verify, and the daily digest
+ * reports a quiet day. The pipeline going dark looks exactly like a day with no
+ * problems, which is the worst failure shape this system has.
+ *
+ * `scripts/sync-vision-scanners.ts` reads this endpoint and is run by no
+ * workflow, so it only tells you when a human already suspected something.
+ *
+ * TWO conditions, deliberately:
+ *  - `exhausted` — already stopped, say so loudly.
+ *  - burn-through — at PostHog's OWN projected rate the pool empties before the
+ *    period resets. Their projection is used rather than credits_used/elapsed
+ *    because a BACKFILL inflates the latter badly: 1,919 credits were used in
+ *    the first 7 days of the current period, which extrapolates to ~8,200/month
+ *    against a true projection of 3,490.
+ *
+ * Returns [] on anything it does not understand — a field it cannot read is not
+ * evidence of a problem, and this alert is only useful if it is never noise.
+ */
+export function checkVisionQuota(quota: VisionQuota, now: Date = new Date()): ScannerDrift[] {
+  if (quota.exhausted === true) {
+    return [
+      {
+        scannerName: ALL_SCANNERS,
+        reason: "quota",
+        detail:
+          "the PostHog Vision credit pool is exhausted, so every scanner has stopped " +
+          "observing — recordings are piling up unwatched and a quiet digest means " +
+          "nothing is looking, not that nothing is wrong",
+      },
+    ];
+  }
+
+  const remaining = quota.remaining;
+  const projected = quota.projected_monthly_credits;
+  const periodEnd = quota.period_end ? Date.parse(quota.period_end) : NaN;
+  if (
+    typeof remaining !== "number" ||
+    typeof projected !== "number" ||
+    !Number.isFinite(periodEnd) ||
+    projected <= 0
+  ) {
+    return [];
+  }
+
+  const daysLeft = (periodEnd - now.getTime()) / 86_400_000;
+  // A period that has already ended is about to roll over; nothing to warn about.
+  if (daysLeft <= 0) return [];
+  const needed = (projected / 30) * daysLeft;
+  if (needed <= remaining) return [];
+
+  const runsOutInDays = remaining / (projected / 30);
+  return [
+    {
+      scannerName: ALL_SCANNERS,
+      reason: "quota",
+      detail:
+        `the PostHog Vision credit pool runs out in about ${Math.floor(runsOutInDays)} day(s) ` +
+        `— ${remaining} credits left, ${Math.round(daysLeft)} day(s) until the period resets, ` +
+        `and the projected rate needs ${Math.round(needed)}. When it empties every scanner ` +
+        `stops and the digest goes quiet without saying why`,
+    },
+  ];
+}
+
+/** Read the project credit pool. Empty on any failure — never a false alarm. */
+export async function fetchVisionQuotaDrift(): Promise<ScannerDrift[]> {
+  const key = process.env.POSTHOG_API_KEY;
+  if (!key) return [];
+  try {
+    const res = await fetchWithTimeout(
+      `https://eu.posthog.com/api/projects/${PROJECT}/vision/quota/`,
+      { headers: { Authorization: `Bearer ${key}` }, timeoutMs: 8000 }
+    );
+    if (!res.ok) return [];
+    return checkVisionQuota((await res.json()) as VisionQuota);
+  } catch {
+    return [];
+  }
 }
 
 /** The subset of PostHog's scanner record this comparison needs. */
@@ -225,7 +324,10 @@ export async function fetchScannerDrift(): Promise<ScannerDrift[]> {
     // reporting all four as missing on a bad read would be the false alarm this
     // alert exists to avoid.
     if (!Array.isArray(payload.results)) return [];
-    return compareScanners(payload.results);
+    // Concatenated here so the cron's alert loop, its per-(scanner, reason)
+    // dedupe and its Slack path all cover the quota without a second code path.
+    // Independent awaits: an unreadable quota must not suppress prompt drift.
+    return [...compareScanners(payload.results), ...(await fetchVisionQuotaDrift())];
   } catch {
     return [];
   }
@@ -1037,6 +1139,152 @@ export async function reportTokenForSession(sessionId: string): Promise<string |
   }
 }
 
+/**
+ * The scanner quotes its own criterion back, and the refusal gate read it.
+ *
+ * Every prompt ends by asking the model to name which condition it matched, so
+ * a finding routinely closes with "This matches condition #2 (A LOOP: a control
+ * returns the user to the survey, or the paywall and checkout return them to
+ * the report without unlocking anything)". That trailing sentence is the
+ * CRITERION, not a claim about the reader — and CLAIM_EVIDENCE matched the word
+ * `checkout` inside it.
+ *
+ * It cost us the only real loop this pipeline has ever observed. Session
+ * 01a0bd47 was refuted with "the recording describes reaching checkout, but the
+ * session has none of checkout_started, begin_checkout…" while the body of the
+ * finding claimed no such thing — it said the reader was returned to the survey
+ * to take it again. Our own `survey_behavior_event` log independently records a
+ * 56-question index drop in that session: the loop was real, and we suppressed
+ * it. Two of the 24 refutations fire on a word that appears ONLY here.
+ *
+ * A false refutation is the worst error this system can make. A missed defect
+ * waits for the next reader to hit it; a refuted one is recorded as the scanner
+ * lying and nobody looks again.
+ */
+export const stripEchoedCriterion = (reasoning: string): string =>
+  reasoning.replace(/\bthis\s+(?:matches|meets|satisfies)\s+condition\b[\s\S]*$/i, "");
+
+/**
+ * Did the survey ACTUALLY restart? Our own log knows, and nothing asked it.
+ *
+ * `contradiction()` can only ever say no. There was no way for our own data to
+ * say YES, so a claim the instrumentation independently witnessed was graded
+ * exactly like one it had never heard of — and the pipeline's whole precision
+ * problem is that it cannot tell those apart.
+ *
+ * `survey_behavior_event` records `question_index` per transition. A reader
+ * sent back to the start leaves a DROP in that sequence. Measured over 30 days:
+ * 3 of 755 survey sessions show one, all of them 56-58 questions, against 0 of
+ * the 38 L1 findings the probes cleared. Specific, and it is our own data
+ * rather than a narration.
+ *
+ * NOT USED AS A REFUTER, deliberately, and this was tested rather than assumed:
+ * of the two L1 findings a probe genuinely reproduced, only ONE shows a drop.
+ * A restart that begins a fresh forward run leaves no drop at all, so absence
+ * proves nothing and "no drop, therefore no loop" would have suppressed a
+ * confirmed defect. It only ever adds evidence.
+ *
+ * THE BRIDGE: `ux_finding.session_id` is PostHog's; `survey_behavior_event`
+ * keys on the app's own survey session. `survey_submission` carries both, and
+ * 99 of 137 findings join through it.
+ */
+export interface SurveyRestartWitness {
+  /** Largest backwards jump in question_index, in questions. */
+  drop: number;
+  /** Recorded transitions in the session, so a thin log is visible as thin. */
+  steps: number;
+}
+
+/**
+ * A back button moves one question. Anything larger had no control to do it,
+ * and every case observed in production was 56 or more. Five is far below what
+ * was seen and far above what a stray double-fire could produce.
+ */
+export const SURVEY_RESTART_MIN_DROP = 5;
+
+/**
+ * The witness for one SURVEY session, which is the id the behaviour log keys on.
+ *
+ * Split out because two callers need it and they must not drift: the witness
+ * below, which starts from a PostHog session because that is what a finding
+ * carries, and the detector in scripts/verify-ux-findings.mjs, which starts
+ * from the survey session because the defect it hunts is often in a session
+ * PostHog never recorded.
+ */
+export async function restartForSurveySession(
+  surveySessionId: string
+): Promise<SurveyRestartWitness | null> {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key || !isSafeSessionId(surveySessionId)) return null;
+  try {
+    const evRes = await fetchWithTimeout(
+      `${url}/rest/v1/survey_behavior_event?select=question_index,event_time,id` +
+        `&session_id=eq.${encodeURIComponent(surveySessionId)}&order=event_time.asc,id.asc&limit=2000`,
+      {
+        headers: { apikey: key, Authorization: `Bearer ${key}` },
+        timeoutMs: 8_000,
+      }
+    );
+    if (!evRes.ok) return null;
+    const rows = (await evRes.json()) as Array<{ question_index: number | null }>;
+    warnIfTruncated(rows, 2000, "restart witness: survey_behavior_event");
+    return biggestIndexDrop(rows);
+  } catch {
+    return null;
+  }
+}
+
+export async function surveyRestartWitness(
+  sessionId: string
+): Promise<SurveyRestartWitness | null> {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key || !isSafeSessionId(sessionId)) return null;
+  const headers = { apikey: key, Authorization: `Bearer ${key}` };
+  try {
+    const subRes = await fetchWithTimeout(
+      `${url}/rest/v1/survey_submission?select=session_id&posthog_session_id=eq.${encodeURIComponent(sessionId)}&limit=2`,
+      { headers, timeoutMs: 8_000 }
+    );
+    if (!subRes.ok) return null;
+    const subs = (await subRes.json()) as Array<{ session_id: string | null }>;
+    // Two, not one, so the guard has something real to say: a second row means
+    // two submissions share a PostHog session, and the witness would then be
+    // reading whichever one PostgREST happened to return first. That is a data
+    // anomaly worth hearing about rather than a limit to silence.
+    warnIfTruncated(subs, 2, "restart witness: survey_submission");
+    const surveySession = subs[0]?.session_id;
+    if (!surveySession) return null;
+    return restartForSurveySession(surveySession);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Pure, so the shape of the evidence can be tested without a database.
+ *
+ * Nulls are skipped rather than treated as zero: a missing index is a row we
+ * cannot place, and reading it as question 0 would manufacture a 56-question
+ * drop out of one bad write.
+ */
+export function biggestIndexDrop(
+  rows: ReadonlyArray<{ question_index: number | null }>
+): SurveyRestartWitness | null {
+  let prev: number | null = null;
+  let drop = 0;
+  let steps = 0;
+  for (const row of rows) {
+    const index = row.question_index;
+    if (typeof index !== "number" || !Number.isFinite(index)) continue;
+    steps += 1;
+    if (prev !== null && index < prev) drop = Math.max(drop, prev - index);
+    prev = index;
+  }
+  return drop >= SURVEY_RESTART_MIN_DROP ? { drop, steps } : null;
+}
+
 /** The reason our telemetry contradicts this claim, or null. */
 export function contradiction(
   reasoning: string,
@@ -1055,8 +1303,11 @@ export function contradiction(
   // describes an unlock click, but the session has none"), then "Reproduced in
   // production" at 17:40. The caller now knows which happened and says so.
   if (events === null || events.size === 0) return null;
+  // Matched against what the model SAID HAPPENED, with the criterion it echoed
+  // back removed. See stripEchoedCriterion.
+  const claimed = stripEchoedCriterion(reasoning);
   for (const rule of CLAIM_EVIDENCE) {
-    if (!rule.claim.test(reasoning)) continue;
+    if (!rule.claim.test(claimed)) continue;
     if (rule.requireAny.some((e) => events.has(e))) continue;
     return `the recording describes ${rule.describes}, but the session has none of ${rule.requireAny.join(", ")}`;
   }
