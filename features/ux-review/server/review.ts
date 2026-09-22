@@ -542,6 +542,83 @@ export interface ScannerScore {
  * Challengers are NOT filtered here, unlike everywhere else in this file: the
  * scorecard is the one place whose entire purpose is to compare them.
  */
+/**
+ * How often a reader taps the thing that takes their money and nothing happens.
+ *
+ * WHY THIS IS A NUMBER AND NOT A FINDING. The obvious move was to widen the
+ * dead-click lane's selector allowlist to the paywall's own containers. That
+ * lane hands each group to `verify-dead-click-target.mjs`, which asks "is a
+ * DISABLED control under this point" — and a pricing card with no handler has
+ * no disabled control, so all 319 of these would have come back `clear`. Three
+ * hundred clean verdicts about a surface that is losing sales is worse than
+ * silence: it is the "a clear that could not have disagreed" failure this
+ * pipeline exists to stop, at scale.
+ *
+ * So it is counted, not adjudicated. The number is the argument; what to do
+ * about it — make the card tappable, or decide it is fine — is a product call
+ * that wants evidence rather than three hundred tickets.
+ *
+ * Measured 2026-09-22 over 30 days: 319 taps across 30 selectors, all of them
+ * on the pricing modal, the premium overlay or the locked preview. One of them
+ * is on video — a reader tapped `article.report-pricing-card`, nothing
+ * happened, and they dismissed the paywall three seconds later and left.
+ */
+export interface PaywallDeadTaps {
+  taps: number;
+  sessions: number;
+  top: Array<{ selector: string; taps: number }>;
+}
+
+export async function fetchPaywallDeadTaps(days = 30): Promise<PaywallDeadTaps | null> {
+  const key = process.env.POSTHOG_API_KEY;
+  if (!key) return null;
+  /**
+   * Matched on the BEM block, not on a loose substring. `unlock` alone would
+   * also catch the unlock button itself, which is a real control that works,
+   * and counting it here would inflate the number with successes.
+   */
+  const query = `
+    SELECT toString(properties.target_selector) AS sel,
+           count() AS taps,
+           uniq(properties.$session_id) AS sessions
+    FROM events
+    WHERE event = 'dead_click'
+      AND timestamp > now() - INTERVAL ${Math.max(1, Math.floor(days))} DAY
+      AND (
+        position(toString(properties.target_selector), 'report-pricing-card') > 0
+        OR position(toString(properties.target_selector), 'report-pricing-modal') > 0
+        OR position(toString(properties.target_selector), 'report-premium-overlay') > 0
+        OR position(toString(properties.target_selector), 'report-locked-preview') > 0
+        OR position(toString(properties.target_selector), 'report-sticky-unlock') > 0
+      )
+    GROUP BY sel
+    ORDER BY taps DESC
+    LIMIT 50
+  `;
+  try {
+    const res = await fetchWithTimeout(`https://eu.posthog.com/api/projects/${PROJECT}/query/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ query: { kind: "HogQLQuery", query } }),
+      timeoutMs: 12_000,
+    });
+    if (!res.ok) return null;
+    const payload = (await res.json()) as { results?: unknown[][]; error?: unknown };
+    if (payload.error) return null;
+    const rows = payload.results ?? [];
+    return {
+      taps: rows.reduce((n, r) => n + (Number(r[1]) || 0), 0),
+      // The max across selectors, not the sum: one reader tapping four parts of
+      // the same card is one reader, and adding them would report more people
+      // than there were.
+      sessions: rows.reduce((n, r) => Math.max(n, Number(r[2]) || 0), 0),
+      top: rows.slice(0, 3).map((r) => ({ selector: String(r[0] || ""), taps: Number(r[1]) || 0 })),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchScannerScores(days = 30): Promise<ScannerScore[] | null> {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -628,7 +705,9 @@ export function buildScorecardMessage(
     UX_SCANNERS.filter((sc) => sc.role === "challenger").map((sc) => sc.name)
   ),
   /** Injected so a deadline can be tested on both sides of its date. */
-  now: Date = new Date()
+  now: Date = new Date(),
+  /** Null when PostHog could not be read — the line is then omitted, never guessed at. */
+  paywallTaps: PaywallDeadTaps | null = null
 ): { text: string; blocks: SlackBlock[] } {
   const n = (s: ScannerScore) => s.right + s.wrong;
   const pct = (s: ScannerScore) => (n(s) === 0 ? "n/a" : `${Math.round((s.right / n(s)) * 100)}%`);
@@ -707,6 +786,20 @@ export function buildScorecardMessage(
   // `new Date("2026-09-28")` is midnight UTC, which is already 02:00 on the
   // 28th in Berlin. Comparing the strings keeps the boundary where the reader
   // thinks it is and needs no timezone reasoning at all.
+  if (paywallTaps && paywallTaps.taps > 0) {
+    const worst = paywallTaps.top[0];
+    blocks.push(
+      section(
+        `*People tapping the paywall and getting nothing: ${paywallTaps.taps} taps* over the ` +
+          `same ${days} days, up to ${paywallTaps.sessions} readers on a single element` +
+          (worst ? ` — most often \`${escapeSlack(worst.selector)}\` (${worst.taps})` : "") +
+          `. These are not scanner findings and nothing re-tested them: the pricing card is not ` +
+          `clickable, so there is no broken control to reproduce. It is a count of readers who ` +
+          `tried to buy and were not given a way to.`
+      )
+    );
+  }
+
   const today = reportingDay(now);
   for (const d of DUE_DECISIONS) {
     if (today >= d.due) blocks.push(section(d.what));
