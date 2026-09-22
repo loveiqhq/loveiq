@@ -14,6 +14,7 @@ import {
   REPORT_V4_PART6_CHAPTERS,
 } from "@/data/report3-archetype-page";
 import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
+import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
 import { isReportPurchasePlan, type ReportAccessPlan } from "@features/report/server/access";
 import { buildLearnMoreForReader } from "@features/report/server/contentGating";
 import { buildPreviewQuotes } from "./previewQuotes";
@@ -71,6 +72,7 @@ export default async function ReportV4PreviewPage({
       accessPlan={accessPlan}
       accessPlanLabel={accessPlan ?? "no purchase"}
       quotes={buildPreviewQuotes()}
+      typicalBeliefs={buildTypicalBeliefs(ARCHETYPE)}
     />
   );
 }

@@ -3803,3 +3803,252 @@
     transition: none;
   }
 }
+
+/* ══ Typical Beliefs — the two belief panels ════════════════════════
+ *
+ * 368:5482 (coral, animated) and 368:5623 (green, static). Identical metrics in
+ * two hues: head 54, rows 61 at rest, an 8px list foot and a 29px card foot. A
+ * panel of ten resting rows is 701px, which is exactly what the green one
+ * measures; the coral one is 1026 in the frame because five of its rows are drawn
+ * turned, at 126 each. See V4ShadowBeliefs.tsx for the turn itself. */
+.rv3 .rv4-turn,
+.rv3 .rv4-sun {
+  border-radius: 20px;
+  overflow: clip;
+  width: 361px;
+}
+.rv3 .rv4-turn {
+  background:
+    linear-gradient(180deg, rgba(194, 84, 47, 0.11) 0%, rgba(194, 84, 47, 0.03) 100%), #fff;
+  border: 1px solid rgba(194, 84, 47, 0.26);
+  box-shadow: 0 6px 14px -8px rgba(194, 84, 47, 0.34);
+  position: relative;
+}
+.rv3 .rv4-sun {
+  background:
+    linear-gradient(180deg, rgba(46, 125, 91, 0.11) 0%, rgba(46, 125, 91, 0.03) 100%), #fff;
+  border: 1px solid rgba(46, 125, 91, 0.26);
+  box-shadow: 0 6px 14px -8px rgba(46, 125, 91, 0.34);
+}
+/* 368:5483 — a 132px coral ellipse blurred to 34 and bled off the top-right
+ * corner. The panel clips it, which is where its crescent shape comes from. */
+.rv3 .rv4-turn__blob {
+  background: rgba(194, 84, 47, 0.34);
+  border-radius: 50%;
+  filter: blur(34px);
+  height: 132px;
+  left: 251px;
+  opacity: 0.62;
+  position: absolute;
+  top: -26px;
+  width: 132px;
+}
+.rv3 .rv4-turn__head,
+.rv3 .rv4-sun__head {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.14px;
+  line-height: 22.4px;
+  margin: 0;
+  padding: 16px 16px 15px;
+  position: relative;
+}
+.rv3 .rv4-turn__head {
+  color: #c2542f;
+}
+.rv3 .rv4-sun__head {
+  color: #2e7d5b;
+}
+.rv3 .rv4-turn__list,
+.rv3 .rv4-sun__list {
+  list-style: none;
+  margin: 0;
+  padding: 0 16px 8px;
+  position: relative;
+}
+.rv3 .rv4-turn__row {
+  border-top: 1px solid rgba(194, 84, 47, 0.15);
+  display: flex;
+  flex-direction: column;
+  padding: 11px 0;
+}
+.rv3 .rv4-sun__row {
+  align-items: flex-start;
+  border-top: 1px solid rgba(46, 125, 91, 0.15);
+  display: flex;
+  gap: 11px;
+  padding: 11px 0;
+}
+.rv3 .rv4-turn__belief {
+  align-items: flex-start;
+  display: flex;
+  gap: 11px;
+}
+.rv3 .rv4-turn__tick,
+.rv3 .rv4-sun__tick {
+  align-items: center;
+  border-radius: 999px;
+  display: flex;
+  flex-shrink: 0;
+  height: 20px;
+  justify-content: center;
+  position: relative;
+  width: 20px;
+}
+.rv3 .rv4-turn__tick {
+  background: rgba(194, 84, 47, 0.16);
+  transition: background-color 420ms ease;
+}
+.rv3 .rv4-sun__tick {
+  background: rgba(46, 125, 91, 0.16);
+  color: #2e7d5b;
+}
+.rv3 .rv4-sun__tick svg {
+  height: 9px;
+  width: 9px;
+}
+/* 368:5572 — the minus is a 5.625 x 1.275 bar, not a glyph. */
+.rv3 .rv4-turn__minus {
+  background: #c2542f;
+  border-radius: 0.6px;
+  height: 1.275px;
+  transition: opacity 420ms ease;
+  width: 5.625px;
+}
+.rv3 .rv4-turn__check {
+  color: #2e7d5b;
+  height: 9px;
+  left: 50%;
+  opacity: 0;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  transition: opacity 420ms ease;
+  width: 9px;
+}
+.rv3 .rv4-turn__text,
+.rv3 .rv4-turn__shift-text,
+.rv3 .rv4-sun__text {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-style: italic;
+  font-weight: 400;
+  line-height: 19.2px;
+  margin: 0;
+}
+/* The strike is always declared and starts transparent. A line-through cannot be
+ * drawn part-way across a wrapped line, but its colour can fade, which is what the
+ * frame's half-crossed row is showing. */
+.rv3 .rv4-turn__text {
+  color: var(--rv3-ink);
+  text-decoration-color: transparent;
+  text-decoration-line: line-through;
+  text-decoration-thickness: 1px;
+  transition:
+    color 420ms ease,
+    opacity 420ms ease,
+    text-decoration-color 420ms ease;
+}
+.rv3 .rv4-sun__text,
+.rv3 .rv4-turn__shift-text {
+  color: #2e7d5b;
+}
+.rv3 .rv4-turn__row.is-turned .rv4-turn__tick {
+  background: rgba(46, 125, 91, 0.16);
+}
+.rv3 .rv4-turn__row.is-turned .rv4-turn__minus {
+  opacity: 0;
+}
+.rv3 .rv4-turn__row.is-turned .rv4-turn__check {
+  opacity: 1;
+}
+.rv3 .rv4-turn__row.is-turned .rv4-turn__text {
+  color: #c2542f;
+  opacity: 0.72;
+  text-decoration-color: currentColor;
+}
+/* 0fr to 1fr rather than a max-height guess: the shift is two lines for some rows
+ * and one for others, and the row must land on the frame's 126px either way. */
+.rv3 .rv4-turn__shift {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  padding-left: 31px;
+  transition:
+    grid-template-rows 420ms ease,
+    opacity 420ms ease;
+}
+.rv3 .rv4-turn__row.is-turned .rv4-turn__shift {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+/* The 9px row gap lives here, inside the collapsing box, so a resting row is 61px
+ * and not 70. */
+.rv3 .rv4-turn__shift-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  overflow: hidden;
+  padding-top: 9px;
+}
+.rv3 .rv4-turn__shift-label {
+  align-items: center;
+  color: #2e7d5b;
+  display: flex;
+  font-size: 10px;
+  font-weight: 800;
+  gap: 5px;
+  letter-spacing: 1.3px;
+  line-height: 12px;
+}
+.rv3 .rv4-turn__shift-check {
+  flex-shrink: 0;
+  height: 9px;
+  width: 9px;
+}
+.rv3 .rv4-turn__foot,
+.rv3 .rv4-sun__foot {
+  height: 29px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv4-turn__tick,
+  .rv3 .rv4-turn__minus,
+  .rv3 .rv4-turn__check,
+  .rv3 .rv4-turn__text,
+  .rv3 .rv4-turn__shift {
+    transition: none;
+  }
+}
+
+/* ══ Typical Beliefs chapter — 304:256 ═══════════════════════════════
+ * 304:264 is a 361-wide column, padded 20 top and bottom, spacing its children
+ * 16 apart. The prose already carries that 16 as a bottom margin, so only the
+ * panels need it added. */
+.rv3 .rv4-tb {
+  display: flex;
+  flex-direction: column;
+  padding: 20px 0;
+  width: 100%;
+}
+/* The chapter sets body copy larger than the learn-more article does: 16/25.6 in
+ * --rv3-copy, against the article's 14/22.4 in near-black. */
+.rv3 .rv4-tb .rv4-prose__p {
+  color: var(--rv3-copy);
+  font-size: 16px;
+  line-height: 25.6px;
+}
+/* 304:379 — Lora Bold 18/21.6, the only 18px heading anywhere in the frame. */
+.rv3 .rv4-tb__h2 {
+  color: var(--rv3-ink);
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 21.6px;
+  margin: 0 0 14px;
+  padding-top: 10px;
+}
+.rv3 .rv4-tb .rv4-turn,
+.rv3 .rv4-tb .rv4-sun {
+  margin-bottom: 16px;
+}
