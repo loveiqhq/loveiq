@@ -833,12 +833,18 @@ Two consequences worth keeping in view rather than rediscovering:
   (`DAILY_ENABLED = false`) because the 09:00 conversion digest already carries the
   decisions and the two would print the same figures twice.
 
-- **Add retention for unbounded telemetry tables** not yet covered:
-  `survey_behavior_event`, `report_session` (holds IP/UA — privacy angle),
-  `funnel_event`, `booking_event` (holds invitee email/name in `raw` — privacy
-  angle; `calendly_webhook_event` was dropped with the Calendly removal on
-  2026-09-14). Decide windows when
-  enabling the purge above.
+- **Add retention for unbounded telemetry tables** not yet covered.
+  **Windows decided 2026-09-21; the switch stays off until the purge cron above
+  is enabled as a whole.** Storage is not the driver for any of this — these
+  tables together are ~53 MB against an 8.35 GB volume that is 82% free — so the
+  only reason to trim is personal data, and the windows follow from that:
+
+  | table                   | decision                                                                           | why                                                                                                                                                                                                                                                                                                   |
+  | ----------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `report_session`        | **Anonymise at 90 days**: set `ip_address` and `user_agent` to NULL, keep the row. | The only table here holding an IP, and it is joined to `user_id`. The row itself is the visit record the digest and funnel count, so deleting it would silently rewrite history; the two personal columns have no analytical use after 90 days.                                                       |
+  | `survey_behavior_event` | **No purge.**                                                                      | 138k rows / 29 MB of question indices and timings, no direct identifiers. It is also load-bearing now: the survey-restart witness reads it, and it is the only signal that catches a defect in a session with NO recording — two of the three real restarts ever found had no PostHog session at all. |
+  | `funnel_event`          | 180 days, alongside the tracking events.                                           | 45k rows, no direct identifiers.                                                                                                                                                                                                                                                                      |
+  | `booking_event`         | 180 days.                                                                          | Holds invitee name and email in `raw`; the privacy angle, not the size (144 kB). `calendly_webhook_event` was dropped with the Calendly removal on 2026-09-14.                                                                                                                                        |
 
 ---
 

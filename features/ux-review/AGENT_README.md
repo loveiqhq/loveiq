@@ -200,6 +200,20 @@ The machinery stays: role, suppression, the shared probe outcome, the pairing in
 the scorecard. The next experiment uses it, and the tests prove the rules
 without needing one to be running.
 
+**The fix writer stays dispatch-only, decided 2026-09-21.**
+
+`generate-fix.yml` has run 11 times, all by hand, and produced exactly one pull
+request. That reads like a broken tool and is not: `prove-fix.mjs` rejected the
+other ten because the fix did not survive being built and re-probed. A
+generator whose output is accepted 9% of the time is behaving correctly, and
+the right response to a 91% rejection rate is not to automate it — firing it at
+every finding would turn that rate into a queue of pull requests nobody reads.
+
+The one that was accepted deleted the assertion that would have caught it,
+which is now a hard gate ("a fix may add assertions, never delete them"). Idle
+cost is zero, so there is nothing to retire: a person decides a defect is worth
+fixing, then asks for one.
+
 **Belongs:** scanner prompts and their pinned versions, reading observations,
 refuting them against our telemetry, the digest.
 

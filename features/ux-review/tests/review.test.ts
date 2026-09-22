@@ -7,6 +7,7 @@ import logger from "@shared/observability/logger";
 
 import {
   ALL_SCANNERS,
+  DUE_DECISIONS,
   buildDigestMessage,
   buildScorecardMessage,
   checkVisionQuota,
@@ -1009,6 +1010,34 @@ describe("the scanner scorecard", () => {
       new Set(["LoveIQ report UX (challenger: observation only)"])
     );
     expect(out.text).toContain("1 of 10");
+  });
+
+  it("raises a dated decision on the day, not before", () => {
+    /**
+     * The last stopping rule we set was unreachable and we only noticed because
+     * somebody went looking. A rule nobody is reminded of fails the same way:
+     * the date passes and the thing it was meant to judge stays on the bill.
+     */
+    const rows = [sc("LoveIQ dead-click cause", 0, 19)];
+    const on = (day: string) =>
+      JSON.stringify(
+        buildScorecardMessage(rows, 30, new Set(), new Date(`${day}T12:00:00Z`)).blocks
+      );
+    expect(on("2026-09-27")).not.toContain("Decision due");
+    expect(on("2026-09-28")).toContain("Decision due");
+    // And it keeps asking until somebody removes the entry.
+    expect(on("2026-10-05")).toContain("Decision due");
+  });
+
+  it("every dated decision has a real date and something to decide", () => {
+    // A malformed date sorts wrong against the ISO day string and would either
+    // never fire or fire immediately — both silent.
+    expect(DUE_DECISIONS.length).toBeGreaterThan(0);
+    for (const d of DUE_DECISIONS) {
+      expect(d.due, `${d.due} is not an ISO day`).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(Number.isNaN(new Date(d.due).getTime())).toBe(false);
+      expect(d.what.length).toBeGreaterThan(40);
+    }
   });
 
   it("says so plainly when there is nothing to report", () => {
