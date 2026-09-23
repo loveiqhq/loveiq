@@ -104,9 +104,20 @@ describe("V3DimensionDeck", () => {
 
   it("shows the chapter link on peeking cards only", () => {
     const { container } = renderCard();
-    // 15:1175 is hidden="true" on the focused card in every variant frame.
-    expect(container.querySelectorAll(".rv3-deck__more")).toHaveLength(3);
-    expect(container.querySelector(".rv3-deck__card.is-focused .rv3-deck__more")).toBeNull();
+    // 15:1175 is hidden="true" on the focused card in every variant frame — and
+    // `hidden` is how this is done, rather than unmounting. Removing a node from
+    // inside a mandatory-snap scroller mid-gesture makes the browser re-resolve
+    // its snap target, which showed up in review as the deck snapping back.
+    const footers = container.querySelectorAll(".rv3-deck__more");
+    expect(footers).toHaveLength(4);
+    expect(container.querySelector(".rv3-deck__card.is-focused .rv3-deck__more")).toHaveAttribute(
+      "hidden"
+    );
+    expect(
+      [...container.querySelectorAll(".rv3-deck__card.is-peeking .rv3-deck__more")].filter((f) =>
+        f.hasAttribute("hidden")
+      )
+    ).toHaveLength(0);
   });
 
   it("marks the active indicator bar and gives every bar an accessible name", () => {
@@ -138,10 +149,16 @@ describe("reportV3.css contracts", () => {
     // Match the block that actually names the deck rather than the last one in the
     // file: reportV3.css has several reduced-motion blocks and gains more as the V4
     // page lands, so "the last one" is not a stable way to find this rule.
+    // Match on the block's own first rule, not on "a chunk that mentions the deck
+    // somewhere": the plain string split runs each chunk to the NEXT
+    // reduced-motion block, so an earlier one sweeps up every ordinary
+    // `.rv3-deck__*` rule that follows it and matches by accident.
     const blocks = V3_CSS.split("@media (prefers-reduced-motion: reduce)").slice(1);
-    const deckBlock = blocks.find((b) => b.includes(".rv3-deck__track"));
-    expect(deckBlock, "no reduced-motion block mentions .rv3-deck__track").toBeDefined();
+    const deckBlock = blocks.find((b) => b.slice(0, b.indexOf("}")).includes(".rv3-deck__track"));
+    expect(deckBlock, "no reduced-motion block opens on .rv3-deck__track").toBeDefined();
     expect(deckBlock).toContain("transition: none");
+    // The focused/peeking geometry now transitions, so it has to stop here too.
+    expect(deckBlock!.slice(0, deckBlock!.indexOf("}"))).toContain(".rv3-deck__inner");
   });
 });
 

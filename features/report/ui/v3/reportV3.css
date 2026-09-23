@@ -2156,14 +2156,9 @@
   gap: 12px;
   height: 345px;
   padding: 14px 0 6px 22px;
-  transition: transform 380ms cubic-bezier(0.22, 1, 0.36, 1);
   width: max-content;
-  will-change: transform;
 }
 /* While a finger is down the track tracks the finger 1:1, with no easing. */
-.rv3 .rv3-deck__viewport.is-dragging .rv3-deck__track {
-  transition: none;
-}
 
 .rv3 .rv3-deck__card {
   flex-shrink: 0;
@@ -2171,17 +2166,34 @@
   position: relative;
   width: 268px;
 }
+/* BOTH STATES ARE ABSOLUTE. They used not to be: the focused card sat in normal
+ * flow and the peeking card was `position: absolute`, so every change of active
+ * card pulled one card out of the track's layout and pushed another back in. The
+ * track re-flowed mid-scroll and the card visibly jumped — the "pops up really
+ * weird" in review. Same layout mode on both means the geometry can simply
+ * transition between the frame's two boxes.
+ *
+ * Not a `transform: scale`, and a test pins that: the frames set the peeking
+ * body at 12px against the focused card's 14px, so a uniform scale would carry
+ * the type with it. */
 .rv3 .rv3-deck__inner {
   display: flex;
   flex-direction: column;
+  position: absolute;
   transition:
     background 220ms ease,
-    opacity 220ms ease;
+    opacity 220ms ease,
+    inset 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 260ms ease;
 }
 /* Focused — 15:1161 */
 .rv3 .rv3-deck__card.is-focused .rv3-deck__inner {
   background: #fff;
   border-radius: 18px;
+  left: 0;
+  top: 0;
   box-shadow:
     0 2px 6px 0 rgba(22, 16, 33, 0.06),
     0 30px 60px 0 rgba(213, 69, 28, 0.28);
@@ -2761,13 +2773,20 @@
   text-align: center;
   width: 91px;
 }
+/* 1:434 draws this 10/16 and LEFT under a CENTRED 12/19.2 title, which is what
+ * made the middle tile read as misaligned — its body wraps differently from the
+ * other two, so a left edge that agrees on one card disagrees on the next. Both
+ * are centred now, and the size goes to 12: Mark found 10px illegible on his
+ * phone, and the 2026-09-23 sync aligned that 10px is too small across every
+ * design. The hierarchy survives on weight (600 against 400) and colour, which is
+ * how the frame separates them anyway. */
 .rv3 .rv3-method.is-v4 .rv3-src__body {
   color: var(--rv3-muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 400;
-  line-height: 16px;
+  line-height: 19.2px;
   margin: 0;
-  text-align: left;
+  text-align: center;
   width: 91px;
 }
 
@@ -3295,9 +3314,18 @@
   cursor: default;
   overflow-x: auto;
   overflow-y: hidden;
+  /* Stops a swipe past either end chaining to the page, and on iOS to the
+   * edge-back gesture. globals.css:3161 already does this for the other carousel. */
+  overscroll-behavior-x: contain;
   scroll-padding-inline-start: 22px;
   scroll-snap-type: x mandatory;
   scrollbar-width: none;
+  /* eb8fb068 removed `touch-action: pan-y`, which had blocked horizontal swipe
+   * outright, and left the property at its default. The browser then had to
+   * work out the direction of every gesture from its first few pixels, which
+   * costs a beat of hesitation before the deck moves. Naming both axes we want
+   * removes the guess without re-blocking anything. */
+  touch-action: pan-x pinch-zoom;
 }
 .rv3 .rv3-deck__viewport::-webkit-scrollbar {
   display: none;
