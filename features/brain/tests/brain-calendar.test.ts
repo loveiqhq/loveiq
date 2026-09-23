@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@shared/observability/logger", () => ({
@@ -9,6 +10,7 @@ import {
   eventDay,
   eventToRows,
   isWorthIndexing,
+  eventsToConfirm,
 } from "@features/brain/server/ingest/calendar";
 
 const STAMP = "2026-08-31T00:00:00.000Z";
@@ -235,5 +237,76 @@ describe("the attendee list is capped, the count is not", () => {
     const meta = row.meta as { attendees: string[]; attendeeCount: number };
     expect(meta.attendees).toHaveLength(5);
     expect(meta.attendeeCount).toBe(5);
+  });
+});
+
+describe("eventsToConfirm — which stored meetings survive the sweep", () => {
+  /**
+   * Cancelled events are not listed by the Calendar API, so a meeting cancelled after it
+   * was indexed was never rewritten and was confirmed forever — the brain kept calling it
+   * scheduled. Inside the window, from a calendar we read, not listed means gone.
+   */
+  const WINDOW = { from: "2025-08-19", to: "2027-01-21" };
+  const k = (mailbox: string | null, current = true) => ({ current, mailbox });
+  const confirm = (
+    known: Array<[string, { current: boolean; mailbox: string | null }]>,
+    written: string[] = [],
+    read = ["ec@loveiq.org"]
+  ) => eventsToConfirm(new Map(known), new Set(written), new Set(read), WINDOW);
+
+  it("drops a meeting inside the window that the walk no longer lists", () => {
+    expect(confirm([["event:abc:2026-09-25", k("ec@loveiq.org")]])).toEqual([]);
+  });
+
+  it("keeps history from before the window, which nothing re-reads", () => {
+    expect(confirm([["event:old:2025-06-01", k("ec@loveiq.org")]])).toEqual([
+      "event:old:2025-06-01",
+    ]);
+  });
+
+  it("keeps a meeting from a calendar whose token failed, so one refusal deletes nothing", () => {
+    expect(confirm([["event:abc:2026-09-25", k("mb@loveiq.org")]])).toEqual([
+      "event:abc:2026-09-25",
+    ]);
+  });
+
+  it("keeps a row it cannot attribute, and one whose id carries no day", () => {
+    expect(
+      confirm([
+        ["event:abc:2026-09-25", k(null)],
+        ["event:nodate", k("ec@loveiq.org")],
+      ]).sort()
+    ).toEqual(["event:abc:2026-09-25", "event:nodate"]);
+  });
+
+  it("leaves a two-day margin at the window's edges for time-zone slop", () => {
+    expect(confirm([["event:edge:2025-08-20", k("ec@loveiq.org")]])).toEqual([
+      "event:edge:2025-08-20",
+    ]);
+    expect(confirm([["event:inside:2025-08-22", k("ec@loveiq.org")]])).toEqual([]);
+  });
+
+  it("never confirms a stale-version row, and never confirms what it just wrote", () => {
+    expect(confirm([["event:stale:2025-06-01", k("ec@loveiq.org", false)]])).toEqual([]);
+    expect(
+      confirm(
+        [
+          ["event:new:2026-09-25", k("ec@loveiq.org")],
+          ["event:new:2026-09-25#2", k("ec@loveiq.org")],
+        ],
+        ["event:new:2026-09-25"]
+      )
+    ).toEqual([]);
+  });
+
+  it("is what the walk actually hands to the touch", () => {
+    // A pure function nothing calls is decoration.
+    const src = fs.readFileSync("features/brain/server/ingest/calendar.ts", "utf8");
+    expect(src).toMatch(/touchChunks\(\s*SOURCE,\s*eventsToConfirm\(/);
+    // And `read` is the calendars that ANSWERED: every calendar asked would let one
+    // refused token delete that person's meetings.
+    expect(src).toMatch(
+      /const read = new Set\(boxes\.filter\(\(m\) => !failures\.includes\(m\)\)\)/
+    );
   });
 });

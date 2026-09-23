@@ -243,9 +243,55 @@ async function calGet(token: string, path: string): Promise<Record<string, unkno
 }
 
 /** source_id -> whether the row is on the current builder version. */
-async function knownEvents(): Promise<Map<string, boolean>> {
+/** What a stored calendar row tells the keep decision: its builder version and whose it is. */
+export interface KnownEvent {
+  current: boolean;
+  mailbox: string | null;
+}
+
+/**
+ * The stored rows to CONFIRM — keep through the sweep — after a walk.
+ *
+ * A row outside the listing window is history: nothing re-reads it, so it is kept. A row
+ * INSIDE the window, from a calendar this walk actually read, that the walk did not write
+ * is not history — it is a meeting that was cancelled, deleted or moved, or one now
+ * refused (an interview, since 2026-09-23). The Calendar API does not list cancelled
+ * events by default, so before this a meeting cancelled after it was indexed was never
+ * rewritten, was confirmed forever, and the brain went on describing it as scheduled.
+ *
+ * `read` is the calendars that answered, NOT every calendar asked: up to ten token
+ * failures leave the walk complete, and `walkedScopes` includes those mailboxes, so their
+ * rows must still be confirmed or one refused token would delete a person's meetings.
+ * A two-day margin at each edge of the window absorbs time-zone slop in the day the id
+ * carries; an id with no day is confirmed, as before.
+ */
+export function eventsToConfirm(
+  known: Map<string, KnownEvent>,
+  writtenIds: Set<string>,
+  read: ReadonlySet<string>,
+  window: { from: string; to: string }
+): string[] {
+  const rewritten = new Set([...writtenIds].map((id) => id.split("#")[0]));
+  const shift = (day: string, days: number) =>
+    new Date(Date.parse(`${day}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+  const inside = { from: shift(window.from, 2), to: shift(window.to, -2) };
+  return [...known.entries()]
+    .filter(([id, k]) => {
+      if (writtenIds.has(id)) return false;
+      const base = id.split("#")[0] ?? id;
+      if (rewritten.has(base)) return false;
+      if (!k.current) return false;
+      const day = /:(\d{4}-\d{2}-\d{2})$/.exec(base)?.[1];
+      const inWindow = day !== undefined && day >= inside.from && day <= inside.to;
+      if (inWindow && k.mailbox && read.has(k.mailbox)) return false;
+      return true;
+    })
+    .map(([id]) => id);
+}
+
+async function knownEvents(): Promise<Map<string, KnownEvent>> {
   const { supabaseFetch } = await import("@features/admin/server/supabase");
-  const out = new Map<string, boolean>();
+  const out = new Map<string, KnownEvent>();
   for (let offset = 0; offset < 100_000; offset += 1000) {
     const res = await supabaseFetch(
       `/rest/v1/brain_chunk?select=source_id,meta&source=eq.${SOURCE}` +
@@ -255,10 +301,15 @@ async function knownEvents(): Promise<Map<string, boolean>> {
     // truncated map reads as "nothing indexed" and the sweep deletes the difference.
     const batch = await chunkPage<{
       source_id?: string;
-      meta?: { v?: number };
+      meta?: { v?: number; mailbox?: string | null };
     }>("calendar", res);
     for (const r of batch) {
-      if (r.source_id) out.set(r.source_id, r.meta?.v === CALENDAR_BUILDER_VERSION);
+      if (r.source_id) {
+        out.set(r.source_id, {
+          current: r.meta?.v === CALENDAR_BUILDER_VERSION,
+          mailbox: typeof r.meta?.mailbox === "string" ? r.meta.mailbox : null,
+        });
+      }
     }
     if (batch.length < 1000) break;
   }
@@ -356,7 +407,6 @@ export async function ingestCalendar(
 
   const written = await upsertChunks(rows);
   const writtenIds = new Set(rows.map((r) => r.source_id));
-  const rewritten = new Set([...writtenIds].map((id) => id.split("#")[0]));
   // Sweeping about once a day instead of every run: the touch it needs rewrites
   // four indexes per row, and a deleted source document can wait a day to be
   // noticed. See shouldSweep.
@@ -368,15 +418,13 @@ export async function ingestCalendar(
   // exactly the disk IO this change exists to remove. Recording the attempt first
   // is what the comment on recordSweep already claimed the code did.
   if (sweeping) await recordSweep(SOURCE);
+  const read = new Set(boxes.filter((m) => !failures.includes(m)));
   const touched = await touchChunks(
     SOURCE,
-    [...known.entries()]
-      .filter(([id, current]) => {
-        if (writtenIds.has(id)) return false;
-        if (rewritten.has(id.split("#")[0] ?? id)) return false;
-        return current;
-      })
-      .map(([id]) => id),
+    eventsToConfirm(known, writtenIds, read, {
+      from: timeMin.slice(0, 10),
+      to: timeMax.slice(0, 10),
+    }),
     stampedAt,
     sweeping
   );
