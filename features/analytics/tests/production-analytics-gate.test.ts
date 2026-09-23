@@ -149,6 +149,17 @@ describe("production analytics gate", () => {
     expect(client).toMatch(/disable_surveys:\s*true/);
   });
 
+  it("says whether the page could scroll when a swipe moved nothing", () => {
+    // 1 in 7 report sessions logs a $dead_swipe and nothing says why. The page's
+    // state rides on the event itself; the behaviour is proven in a real browser,
+    // this only stops the wiring from quietly going away.
+    const client = readFileSync(join(process.cwd(), "instrumentation-client.ts"), "utf8");
+    expect(client).toContain("before_send:");
+    const hook = client.slice(client.indexOf("before_send:"), client.indexOf("before_send:") + 400);
+    expect(hook).toMatch(/"\$dead_swipe"[\s\S]*scrollState\(\)/);
+    expect(hook).toMatch(/return event;/);
+  });
+
   it("stays within four preconnect hints", () => {
     /**
      * Preconnect hints past about four cost more in contention than they save, so this

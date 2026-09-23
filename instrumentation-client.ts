@@ -1,6 +1,7 @@
 import posthog from "posthog-js";
 import { isProductionSite } from "@shared/env/is-non-prod-deploy";
 import { POSTHOG_PROXY_PATH, POSTHOG_UI_HOST } from "@shared/analytics/posthog-proxy";
+import { scrollState } from "@shared/ui/body-scroll-lock";
 
 const projectToken = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
 const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
@@ -85,5 +86,20 @@ if (!projectToken || !host) {
      * PERSONS by environment is not what this gives you.
      */
     loaded: (ph) => ph.register({ deploy_env: resolveDeployEnv() }),
+    /**
+     * A `$dead_swipe` says a swipe moved nothing, never why; `scrollState()` says
+     * whether we had frozen the page, the reader was zoomed in, or at the end.
+     * Wrapped so a failure to describe the page can never drop the event itself.
+     */
+    before_send: (event) => {
+      if (event?.event === "$dead_swipe") {
+        try {
+          Object.assign(event.properties, scrollState());
+        } catch {
+          // The event without its context is still worth having.
+        }
+      }
+      return event;
+    },
   });
 }

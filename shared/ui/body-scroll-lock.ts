@@ -88,6 +88,42 @@ export function unlockBodyScroll(): void {
   restoreScroll(restore.scrollY);
 }
 
+/**
+ * Why the page might not have moved, stamped onto every `$dead_swipe`
+ * (instrumentation-client.ts).
+ *
+ * 1 in 7 report sessions has logged one since 2026-08-28 and the cause is still
+ * open: none happened with the paywall open, and 75% came before the reader had
+ * reached it. The event says a swipe moved nothing and never why. These are
+ * the candidates that do not show in a recording:
+ *
+ *  - `scroll_lock_depth` — overlays holding this lock right now;
+ *  - `page_frozen` — the page CANNOT scroll, whoever did it. Computed, not
+ *    inline, so a class-based or third-party lock counts too. Frozen with depth
+ *    0 is a stranded lock: something wrote these styles outside this module,
+ *    which is exactly how the chapter menu froze the report until 2026-09-23;
+ *  - `zoom` — above 1, a swipe pans the pinch-zoomed view, which fires no
+ *    scroll event at all;
+ *  - `scroll_y` / `scroll_room_below` — 0 room means the reader was at the end.
+ *
+ * Read when PostHog sends the event, about a second after the swipe. A lock or a
+ * zoom that persists is still there; one that lasted less than that is missed.
+ */
+export function scrollState(): Record<string, number | boolean> {
+  const html = getComputedStyle(document.documentElement);
+  const body = getComputedStyle(document.body);
+  const hides = (overflow: string) => overflow === "hidden" || overflow === "clip";
+  return {
+    scroll_lock_depth: depth,
+    page_frozen: hides(html.overflowY) || hides(body.overflowY) || body.position === "fixed",
+    zoom: Math.round((window.visualViewport?.scale ?? 1) * 100) / 100,
+    scroll_y: Math.round(window.scrollY),
+    scroll_room_below: Math.round(
+      document.documentElement.scrollHeight - window.innerHeight - window.scrollY
+    ),
+  };
+}
+
 /** Test-only reset so one spec's leak can't bleed into the next. */
 export function __resetBodyScrollLockForTests(): void {
   depth = 0;
