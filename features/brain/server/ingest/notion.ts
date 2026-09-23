@@ -740,13 +740,19 @@ export async function ingestNotion(
     }
 
     let text = "";
+    fetched += 1;
     try {
       text = await pageText(token, item.raw.id as string, isOutOfTime);
     } catch (err) {
       logger.warn({ err, page: item.raw.id }, "brain-ingest notion: page content unreadable");
       complete = false;
+      // NOT written with an empty body. That row would carry the page's current edit
+      // time and builder version, so every later run would read it as unchanged and
+      // never fetch the text again: a transient Notion error erased the content until
+      // somebody edited the page. Unwritten, it is deferred below like any page the
+      // clock did not reach, keeps its stored copy, and is retried next run.
+      continue;
     }
-    fetched += 1;
 
     const row = item.dbTitle
       ? taskToRow(item.raw, stampedAt, item.dbTitle, text)
