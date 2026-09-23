@@ -34,7 +34,9 @@ describe("plans pop-up trigger", () => {
     // the pop-up sat on the FIRST paywalled chapter that could not happen: no card was
     // ever on screen before it fired. Now that it waits for Attachment, the two
     // half-shown chapters come first, so the first card arms the clock instead.
-    expect(SOURCE).toContain('document.querySelector(".report-premium-overlay")');
+    // V4's in-flow "Premium content" card (.rv4-premium, the Typical Beliefs gate)
+    // counts as that first offer too — whichever comes first in the page.
+    expect(SOURCE).toContain('document.querySelector(".report-premium-overlay, .rv4-premium")');
     const block = SOURCE.slice(SOURCE.indexOf("const firstOfferCard"));
     expect(block.slice(0, 900)).toMatch(/notifyPaywallReached\(\)/);
     // ...and it is torn down with the rest of the effect.

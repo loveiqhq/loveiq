@@ -151,15 +151,65 @@ describe("the paywalled chapter — 348:213", () => {
     }
   });
 
-  it("still ships the sun list in full, because the frame blurs it rather than cutting it", () => {
-    // Worth stating plainly: 381:362 draws its locked rows as REAL text under a
-    // 5px blur, so those seven sun beliefs are in the DOM and the blur is a paint
-    // effect — LockedPreviewImage.tsx:6-12 says as much about every CSS blur here.
-    // That is the design as drawn. Withholding them would leave seven empty rows,
-    // which is a design decision rather than an implementation one.
+  it("ships the rows under the full blur scrambled, and only the ramp row for real", () => {
+    // 381:362 draws its locked rows blurred at full length, and a CSS blur is paint
+    // only — LockedPreviewImage.tsx:6-12 says as much. So the server scrambles every
+    // row that is only ever seen under the full blur (Fatih's call, 2026-09-23): same
+    // shape, no content. Row 4 is the ramp, legible at the light end, and stays real.
     const { container } = render(<V4TypicalBeliefs view={LOCKED} />);
     const green = container.querySelector(".rv4-sun")!;
-    for (const belief of VIEW.panels.sun) expect(green.textContent).toContain(belief);
+    VIEW.panels.sun.forEach((belief, i) => {
+      if (i <= 3) expect(green.textContent).toContain(belief);
+      else expect(green.textContent).not.toContain(belief);
+    });
+    const coral = container.querySelector(".rv4-turn")!;
+    VIEW.panels.turns.forEach((turn, i) => {
+      if (i <= 3) expect(coral.textContent).toContain(turn.shadow);
+      else expect(coral.textContent).not.toContain(turn.shadow);
+    });
+  });
+
+  it("puts the gradient lock on both panels, and only when locked", () => {
+    // Figma comments, 2026-09-22: the lock sits on top of VISUALS only — the two
+    // belief panels, never the blurred prose.
+    const locked = render(<V4TypicalBeliefs view={LOCKED} />);
+    expect(locked.container.querySelectorAll(".rv4-lockbadge")).toHaveLength(2);
+    expect(locked.container.querySelectorAll(".rv4-tb__gate .rv4-lockbadge")).toHaveLength(0);
+    cleanup();
+    const open = render(<V4TypicalBeliefs view={VIEW} />);
+    expect(open.container.querySelectorAll(".rv4-lockbadge")).toHaveLength(0);
+  });
+
+  it("keeps the locked rows out of reach and the lock itself reachable", () => {
+    const { container } = render(<V4TypicalBeliefs view={LOCKED} />);
+    for (const list of container.querySelectorAll(
+      ".rv4-turn__list.is-locked, .rv4-sun__list.is-locked"
+    )) {
+      expect(list.getAttribute("aria-hidden")).toBe("true");
+      expect(list.hasAttribute("inert")).toBe(true);
+    }
+    // The click owner is NOT inert — an inert element takes no pointer events.
+    for (const group of container.querySelectorAll(".rv4-tb-lock")) {
+      expect(group.hasAttribute("inert")).toBe(false);
+    }
+    expect(screen.getAllByRole("button", { name: "Unlock the full report" })).toHaveLength(2);
+  });
+
+  it("opens the paywall once from every locked surface", () => {
+    const onUnlock = vi.fn();
+    const { container } = render(<V4TypicalBeliefs view={LOCKED} onUnlock={onUnlock} />);
+    const targets = [
+      ...screen.getAllByRole("button", { name: "Unlock the full report" }),
+      container.querySelector(".rv4-turn__lock")!,
+      container.querySelector(".rv4-sun__lock")!,
+      container.querySelector(".rv4-tb__gate")!,
+      screen.getByRole("button", { name: "Unlock full report" }),
+    ];
+    for (const target of targets) {
+      onUnlock.mockClear();
+      fireEvent.click(target);
+      expect(onUnlock).toHaveBeenCalledTimes(1);
+    }
   });
 
   it("keeps both panels at full height, so the wall costs no room", () => {
@@ -168,20 +218,33 @@ describe("the paywalled chapter — 348:213", () => {
     expect(container.querySelectorAll(".rv4-sun__row")).toHaveLength(10);
   });
 
-  it("holds Common challenges open for four blocks, then blurs the rest", () => {
+  it("holds Common challenges open for four blocks, then ramps into the blur", () => {
     const { container } = render(<V4TypicalBeliefs view={LOCKED} />);
-    // 348:221 draws the subheading and three paragraphs sharp before 348:332.
+    // 348:221 draws the subheading and three paragraphs sharp; the next block is the
+    // ramp and everything after it sits under the full blur, with the card on it.
     expect(screen.getByText("When spontaneity becomes proof of desire")).toBeInTheDocument();
+    expect(screen.getByText("But the belief changes its meaning.")).toBeInTheDocument();
     const gated = container.querySelector(".rv4-tb__gated");
     expect(gated).not.toBeNull();
     expect(gated!.getAttribute("aria-hidden")).toBe("true");
+    expect(gated!.hasAttribute("inert")).toBe(true);
+    // The ramp is real copy; the rest arrived scrambled.
+    expect(container.querySelector(".rv4-tb__ramp")!.textContent).toContain(
+      "For the Spark Seeker, planning may begin to feel like evidence"
+    );
+    expect(container.querySelector(".rv4-tb__blurred")!.textContent).not.toContain(
+      "When being wanted becomes evidence of worth"
+    );
+    expect(container.querySelectorAll(".rv4-tb__gate .rv4-premium")).toHaveLength(1);
   });
 
   it("blurs nothing at all for a reader who has paid", () => {
     const { container } = render(<V4TypicalBeliefs view={VIEW} />);
     expect(container.querySelectorAll(".is-locked")).toHaveLength(0);
     expect(container.querySelector(".rv4-tb__gated")).toBeNull();
+    expect(container.querySelector(".rv4-premium")).toBeNull();
     expect(container.querySelectorAll(".rv4-turn__shift-text")).toHaveLength(10);
+    expect(screen.getByText("When being wanted becomes evidence of worth")).toBeInTheDocument();
   });
 });
 
@@ -228,8 +291,33 @@ describe("reportV3.css — belief panel contracts", () => {
     );
   });
 
-  it("puts the row's 9px gap inside the collapsing box, so a resting row is 61px", () => {
-    expect(block(".rv3 .rv4-turn__shift-inner {")).toContain("padding-top: 9px");
+  it("puts the row's 9px gap inside the clipped content, so a resting row is 61px", () => {
+    // As padding on the collapsing box itself it never collapsed — a 0fr track still
+    // holds its item's padding — so resting rows measured 70.4. The last word on the
+    // inner box is padding 0, and the 9px is the label's margin, inside the clip.
+    const inner = block(".rv3 .rv4-turn__shift-inner {");
+    expect(inner.lastIndexOf("padding-top: 0")).toBeGreaterThan(
+      inner.lastIndexOf("padding-top: 9px")
+    );
+    expect(block(".rv3 .rv4-turn__shift-label {")).toContain("margin-top: 9px");
+  });
+
+  it("blurs locked rows at Figma's radius 5 (CSS 2.5px), with the ramp row left to the overlay", () => {
+    expect(block(".rv3 .rv4-turn__row.is-locked.is-blurred,")).toContain("filter: blur(2.5px)");
+    // The old uniform 5px is switched off for every locked row first.
+    const locked = block(".rv3 .rv4-turn__row.is-locked,");
+    expect(locked).toContain("filter: none");
+    expect(block(".rv3 .rv4-turn__ramp {")).toContain("--rv4-band: 50.8%");
+    expect(block(".rv3 .rv4-sun__ramp {")).toContain("--rv4-band: 65.6%");
+  });
+
+  it("stacks the progressive blur to 2.5px, sigmas in quadrature", () => {
+    const sigmas = [1, 2, 3].map((n) =>
+      parseFloat(
+        block(`.rv3 .rv4-pblur > span:nth-child(${n}) {`).match(/--rv4-pb:\s*([\d.]+)px/)![1]!
+      )
+    );
+    expect(Math.sqrt(sigmas.reduce((sum, s) => sum + s * s, 0))).toBeCloseTo(2.5, 1);
   });
 
   /**
@@ -245,6 +333,9 @@ describe("reportV3.css — belief panel contracts", () => {
       expect(css).toContain("width: 100%");
       expect(css).not.toContain("  width: 361px;");
     }
+    // Inside the chapter the panels fill the column on tablet and desktop, like the
+    // prose around them — Figma has no desktop frames to hold them at 361.
+    expect(block(".rv3 .rv4-tb .rv4-turn,")).toContain("max-width: none");
   });
 
   it("anchors the blob to the panel edge, so the crescent survives a narrow phone", () => {

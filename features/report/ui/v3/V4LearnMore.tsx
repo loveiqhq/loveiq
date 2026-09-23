@@ -6,6 +6,7 @@ import type { Report3LearnMoreView } from "@/data/report3-learn-more";
 import V4BackToTop from "./V4BackToTop";
 import V4PremiumCard from "./V4PremiumCard";
 import V4Prose from "./V4Prose";
+import { guardedUnlock } from "./v4Unlock";
 
 /**
  * "Go deeper & learn more" — the long-form article inside a chapter.
@@ -51,7 +52,7 @@ const TEASER_BLOCKS = 2;
  * 230:282 sets "Reading time:" in Light and the value in Bold, so the eyebrow is
  * split at its first colon. Copy without a colon renders as one run.
  */
-const splitEyebrow = (text: string): [string, string] => {
+export const splitEyebrow = (text: string): [string, string] => {
   const colon = text.indexOf(":");
   return colon < 0 ? [text, ""] : [text.slice(0, colon + 1), text.slice(colon + 1).trim()];
 };
@@ -74,12 +75,9 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
   const sectionRef = useRef<HTMLElement>(null);
   const [eyebrowLabel, eyebrowValue] = splitEyebrow(article.eyebrow);
 
-  const openPaywall = () => {
-    // `.rv4-doc` runs on copyable non-prod deploys, so a drag that ends inside
-    // the card must not open the paywall. Same guard as PremiumOverlay.tsx:146.
-    if (typeof window !== "undefined" && window.getSelection()?.toString()) return;
-    onUnlock?.();
-  };
+  // `.rv4-doc` runs on copyable non-prod deploys, so a drag that ends inside the
+  // card must not open the paywall — see v4Unlock.ts.
+  const openPaywall = guardedUnlock(onUnlock);
 
   return (
     <section
