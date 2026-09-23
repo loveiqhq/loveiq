@@ -11,6 +11,7 @@ import {
   markSlackAlertDelivered,
   tryClaimSlackAlert,
 } from "@shared/observability/slack-alert-dedup";
+import { checkRateLimit } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 
 export const runtime = "nodejs";
@@ -272,6 +273,20 @@ export async function POST(request: Request) {
       logger.warn("SLACK_BRAIN_BOT_TOKEN not set — cannot reply");
       await finishQuestion(claim.id, { error: "slack bot token missing" });
       return;
+    }
+
+    // Still limited per asker. Each reply is a Slack post, so a loop or a spammer must not
+    // be able to turn this door into a megaphone, model call or not.
+    if (userId) {
+      const perUser = await checkRateLimit(userId, {
+        bucket: "brain-question",
+        limit: 10,
+        windowMs: 5 * 60_000,
+      });
+      if (!perUser.allowed) {
+        await finishQuestion(claim.id, { error: "per-user rate limited" });
+        return;
+      }
     }
 
     const posted = await postBrainReply({ channel, threadTs, text: CLAUDE_REDIRECT });

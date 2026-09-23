@@ -6,6 +6,7 @@ const mockClaimQuestion = vi.fn();
 const mockFinishQuestion = vi.fn();
 const mockQuestionsToday = vi.fn();
 const mockPostBrainReply = vi.fn();
+const mockRateLimit = vi.fn(async () => ({ allowed: true }));
 
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -34,6 +35,10 @@ async function flush(): Promise<void> {
 vi.mock("@features/brain/server/slack", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@features/brain/server/slack")>()),
   postBrainReply: (...args: unknown[]) => mockPostBrainReply(...args),
+}));
+
+vi.mock("@shared/http/ratelimit", () => ({
+  checkRateLimit: (...args: unknown[]) => mockRateLimit(...(args as [])),
 }));
 
 vi.mock("@features/brain/server/answer", () => ({
@@ -288,6 +293,22 @@ describe("POST /api/slack/events", () => {
     const res = await POST(makeRequest(body));
     expect(res.status).toBe(200);
     expect(mockPostBrainReply).not.toHaveBeenCalled();
+  });
+
+  /** Each reply is a Slack post: a loop or a spammer must not make the bot post without end. */
+  it("stops replying to one person past the rate limit", async () => {
+    mockRateLimit.mockResolvedValueOnce({ allowed: false });
+    const body = eventEnvelope({
+      type: "app_mention",
+      user: "U1",
+      channel: "C1",
+      ts: "1700000000.1",
+      text: "<@UBOT> again",
+    });
+    await POST(makeRequest(body));
+    await flush();
+    expect(mockPostBrainReply).not.toHaveBeenCalled();
+    expect(mockFinishQuestion).toHaveBeenCalledWith(1, { error: "per-user rate limited" });
   });
 
   it("ignores an empty question rather than spending a request on it", async () => {
