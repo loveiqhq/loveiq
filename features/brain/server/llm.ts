@@ -31,6 +31,38 @@ import logger from "@shared/observability/logger";
 const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/";
 const DEFAULT_MODEL = "gemini-3.6-flash";
 
+/**
+ * CLAUDE SPEAKS ITS OWN SHAPE.
+ *
+ * Anthropic's OpenAI-compatible endpoint would accept the request below as it stands,
+ * but Anthropic documents it as "not considered a long-term or production-ready
+ * solution", so a base URL on api.anthropic.com gets the native Messages API: still one
+ * POST and no SDK. Switching provider stays an env change and no deploy: point
+ * BRAIN_LLM_BASE_URL at Anthropic's v1 base, put a Claude key in BRAIN_LLM_KEY, and
+ * optionally name the model in BRAIN_LLM_MODEL (`.env.example` has the exact values).
+ *
+ * Thinking is on by default on Claude 5 models and its tokens count toward max_tokens,
+ * and the docs never say temperature may be combined with it. So the Claude request
+ * carries no temperature, no thinking config and no reasoning_effort (the model's own
+ * defaults), and a bigger budget than the OpenAI path, so the answer still has room
+ * after the thinking.
+ */
+const CLAUDE_DEFAULT_MODEL = "claude-sonnet-5";
+const CLAUDE_MAX_TOKENS = 8000;
+const CLAUDE_API_VERSION = "2023-06-01";
+
+export function isClaudeBase(baseUrl: string): boolean {
+  try {
+    return new URL(baseUrl).hostname === "api.anthropic.com";
+  } catch {
+    return false;
+  }
+}
+
+function llmBaseUrl(): string {
+  return (process.env.BRAIN_LLM_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
+}
+
 // Generation runs after the Slack ack, not inside it, so this can be generous.
 // Still bounded: a hung request holds the function open until the platform kills
 // it, losing the reply entirely. Set well above the observed worst case — a
@@ -124,7 +156,10 @@ export function isLlmConfigured(): boolean {
 }
 
 export function llmModel(): string {
-  return process.env.BRAIN_LLM_MODEL || DEFAULT_MODEL;
+  return (
+    process.env.BRAIN_LLM_MODEL ||
+    (isClaudeBase(llmBaseUrl()) ? CLAUDE_DEFAULT_MODEL : DEFAULT_MODEL)
+  );
 }
 
 /**
@@ -163,24 +198,35 @@ export async function complete(
   const key = process.env.BRAIN_LLM_KEY;
   if (!key) return { ok: false, reason: "unconfigured" };
 
-  const baseUrl = (process.env.BRAIN_LLM_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
+  const baseUrl = llmBaseUrl();
+  const claude = isClaudeBase(baseUrl);
 
   let res: Response;
   try {
-    res = await fetchWithTimeout(`${baseUrl}/chat/completions`, {
+    res = await fetchWithTimeout(claude ? `${baseUrl}/messages` : `${baseUrl}/chat/completions`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: llmModel(),
-        messages,
-        temperature: TEMPERATURE,
-        max_tokens: MAX_TOKENS,
-        stream: false,
-        ...(reasoningEffort() ? { reasoning_effort: reasoningEffort() } : {}),
-      }),
+      headers: claude
+        ? {
+            "x-api-key": key,
+            "anthropic-version": CLAUDE_API_VERSION,
+            "Content-Type": "application/json",
+          }
+        : {
+            Authorization: `Bearer ${key}`,
+            "Content-Type": "application/json",
+          },
+      body: JSON.stringify(
+        claude
+          ? claudeBody(messages)
+          : {
+              model: llmModel(),
+              messages,
+              temperature: TEMPERATURE,
+              max_tokens: MAX_TOKENS,
+              stream: false,
+              ...(reasoningEffort() ? { reasoning_effort: reasoningEffort() } : {}),
+            }
+      ),
       timeoutMs,
     });
   } catch (err) {
@@ -235,7 +281,8 @@ export async function complete(
    * such promise. Collapsing the two is the mistake this file spends its comments
    * undoing elsewhere.
    */
-  if (res.status === 503 || res.status === 502 || res.status === 504) {
+  // 529 is Anthropic's `overloaded_error`; no other provider here uses it.
+  if (res.status === 503 || res.status === 502 || res.status === 504 || res.status === 529) {
     const detail = (await res.text().catch(() => "")).slice(0, 300);
     logger.warn({ status: res.status, detail }, "brain llm is overloaded, worth retrying");
     return {
@@ -255,21 +302,15 @@ export async function complete(
     return { ok: false, reason: "error", detail: `HTTP ${res.status}` };
   }
 
-  const json = (await res.json().catch(() => null)) as {
-    choices?: Array<{ message?: { content?: unknown }; finish_reason?: string }>;
-  } | null;
-
-  const content = json?.choices?.[0]?.message?.content;
-  const finishReason = json?.choices?.[0]?.finish_reason;
+  const { content, finishReason, hasOutput } = claude
+    ? claudeOutput(await res.json().catch(() => null))
+    : openAiOutput(await res.json().catch(() => null));
   if (typeof content !== "string" || !content.trim()) {
     // A thinking model that spends its whole budget reasoning answers 200 with an
     // EMPTY message and finish_reason "length" — not an error status. Naming that
     // separately matters because the fix is a bigger `max_tokens` or a lower
     // reasoning effort, not a retry.
-    logger.error(
-      { hasChoices: Boolean(json?.choices?.length), finish: finishReason },
-      "brain llm returned no content"
-    );
+    logger.error({ hasOutput, finish: finishReason }, "brain llm returned no content");
     return {
       ok: false,
       reason: "error",
@@ -289,4 +330,56 @@ export async function complete(
     logger.warn({ chars: content.length }, "brain llm answer was truncated by the token budget");
   }
   return { ok: true, text: content.trim(), truncated: finishReason === "length" };
+}
+
+/** Messages API body: system messages hoisted into `system`, the rest as turns. */
+function claudeBody(messages: LlmMessage[]) {
+  const system = messages
+    .filter((m) => m.role === "system")
+    .map((m) => m.content)
+    .join("\n\n");
+  return {
+    model: llmModel(),
+    max_tokens: CLAUDE_MAX_TOKENS,
+    ...(system ? { system } : {}),
+    messages: messages
+      .filter((m) => m.role !== "system")
+      .map((m) => ({ role: m.role, content: m.content })),
+  };
+}
+
+interface ModelOutput {
+  content: unknown;
+  /** Normalised to the OpenAI vocabulary, so "length" means the budget ran out. */
+  finishReason?: string;
+  hasOutput: boolean;
+}
+
+function openAiOutput(raw: unknown): ModelOutput {
+  const json = raw as {
+    choices?: Array<{ message?: { content?: unknown }; finish_reason?: string }>;
+  } | null;
+  return {
+    content: json?.choices?.[0]?.message?.content,
+    finishReason: json?.choices?.[0]?.finish_reason,
+    hasOutput: Boolean(json?.choices?.length),
+  };
+}
+
+/** Text blocks only: thinking blocks precede the answer and are not part of it. */
+function claudeOutput(raw: unknown): ModelOutput {
+  const json = raw as {
+    content?: Array<{ type?: string; text?: unknown }>;
+    stop_reason?: string;
+  } | null;
+  const blocks = json?.content ?? [];
+  const text = blocks
+    .filter((b) => b.type === "text" && typeof b.text === "string")
+    .map((b) => b.text as string)
+    .join("");
+  return {
+    content: text,
+    finishReason: json?.stop_reason === "max_tokens" ? "length" : json?.stop_reason,
+    hasOutput: blocks.length > 0,
+  };
 }
