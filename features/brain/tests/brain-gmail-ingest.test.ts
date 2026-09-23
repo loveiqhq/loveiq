@@ -676,6 +676,39 @@ describe("recruiting mail the subject does not give away", () => {
     ).toBe(true);
   });
 
+  it("refuses applications whose subject says nothing, found by asking the brain", () => {
+    expect(
+      isRecruitingThread(
+        "Fwd: MSc in Psychology – Research Opportunities",
+        "I have attached my CV for your consideration."
+      )
+    ).toBe(true);
+    expect(
+      isRecruitingThread(
+        "Fwd: LinkedIn job - product position",
+        "Not sure if it is filled, but I still decided to apply."
+      )
+    ).toBe(true);
+    expect(
+      isRecruitingThread("Application", "as you will see in my résumé, I am early in my career")
+    ).toBe(true);
+    expect(
+      isRecruitingThread(
+        "Notes: 30 min with Mark (Jane)",
+        "Send assessment: Provide the recruitment assessment to the candidate."
+      )
+    ).toBe(true);
+  });
+
+  it("keeps a team sync that merely mentions a candidate", () => {
+    expect(
+      isRecruitingThread(
+        "Notes: LoveIQ Sync",
+        "Follow up candidate: contact the applicant who completed the assessment."
+      )
+    ).toBe(false);
+  });
+
   it("keeps a thread with the same subject that is not about a candidate", () => {
     // The sixth "Follow-up :)" is a letter about the Academic Board.
     expect(
@@ -848,7 +881,9 @@ describe("a thread records whether we were writing or being written at", () => {
     const personal = rows([
       msg(
         "Someone <someone@gmail.com>",
-        "I would like to apply for the growth role you advertised, my CV is attached below."
+        // Not an application: those are refused outright since 2026-09-23, and this
+        // case is about the sender's domain, not about what they sent.
+        "Following up on the partnership idea we discussed, happy to set up a call next week."
       ),
     ]);
     expect(personal[0]?.meta.correspondents).toBe("external");

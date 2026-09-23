@@ -304,9 +304,19 @@ export function standingExclusionsQuery(): string {
  * are looking to fill a long-term position", and offer and contract emails that set out a
  * named person's pay for a probation period. Measured across every indexed thread, the
  * two added phrases select exactly six, all of them one of those.
+ *
+ * And again after asking the brain directly, the only test that counts: three
+ * applications still came back — a CV forwarded from hr@ under "MSc in Psychology –
+ * Research Opportunities", an application under "LinkedIn job - product position", and
+ * the emailed Gemini recap of a candidate call whose Drive copy was already refused. An
+ * applicant's own words ("attached my CV", "decided to apply") and the recap's
+ * "recruitment assessment" select exactly those four threads across all mail.
+ *
+ * No trailing word boundary: in a JavaScript regex without the u flag "é" is not a word
+ * character, so `résumé\b` can never match "résumé " and the clause would be dead.
  */
 const RECRUITING_BODY =
-  /\b(application ta(sk|ks)|applicant task|candidate task|fill a (long-term |full-time |part-time )?(position|role)|probation(ary)? (time|period))\b/i;
+  /\b(application ta(sk|ks)|applicant task|candidate task|fill a (long-term |full-time |part-time )?(position|role)|probation(ary)? (time|period)|attached (is )?my (cv|resume|résumé)|my (cv|resume|résumé) (is )?attached|(see|find) (on|in) my (cv|resume|résumé)|decided to apply|recruitment assessment)/i;
 export function isRecruitingThread(subject: string, text: string): boolean {
   return RECRUITING_BODY.test(subject) || RECRUITING_BODY.test(text);
 }
