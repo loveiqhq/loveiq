@@ -33,6 +33,7 @@ const QUOTE = {
 } as never;
 
 const assign = vi.fn();
+const replace = vi.fn();
 let originalLocation: Location;
 
 beforeEach(() => {
@@ -40,7 +41,7 @@ beforeEach(() => {
   originalLocation = window.location;
   Object.defineProperty(window, "location", {
     configurable: true,
-    value: { ...originalLocation, assign },
+    value: { ...originalLocation, assign, replace },
   });
 });
 
@@ -226,5 +227,43 @@ describe("startReportCheckout", () => {
 
     expect(result?.status).toBe("error");
     expect(assign).not.toHaveBeenCalled();
+  });
+
+  /**
+   * On Safari the open pricing modal owns a duplicate same-URL history entry
+   * (useCloseOnBack). Stripe must REPLACE it: pushed on top, it left the
+   * duplicate behind, and after an abandoned checkout the reader needed an
+   * extra back press to leave the report, which is served no-store and so is
+   * reloaded onto that leftover entry.
+   */
+  it("replaces the pricing modal's own history entry instead of stacking on it", async () => {
+    respond({ enabled: true, url: "https://checkout.stripe.com/c/pay/cs_2" });
+    window.history.pushState({ __loveiqOverlay: "pricing" }, "");
+    try {
+      await startReportCheckout({
+        archetype: null,
+        plan: "full_report",
+        quote: QUOTE,
+        reportSessionId: null,
+        token: "rpt_x",
+      });
+    } finally {
+      window.history.replaceState(null, "");
+    }
+    expect(replace).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/cs_2");
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it("pushes as it always has when no overlay owns the entry", async () => {
+    respond({ enabled: true, url: "https://checkout.stripe.com/c/pay/cs_3" });
+    await startReportCheckout({
+      archetype: null,
+      plan: "full_report",
+      quote: QUOTE,
+      reportSessionId: null,
+      token: "rpt_x",
+    });
+    expect(assign).toHaveBeenCalledWith("https://checkout.stripe.com/c/pay/cs_3");
+    expect(replace).not.toHaveBeenCalled();
   });
 });
