@@ -38,6 +38,58 @@ describe("shippedEntries", () => {
     expect(out[0].pr).toBe(266);
   });
 
+  /**
+   * A PULL REQUEST'S OWN COMMITS DID NOT "REACH MAIN" ONE BY ONE. GitHub lists every
+   * commit reachable from main, so each branch commit came back beside the merge that
+   * brought it in, each with its own For Marcus line: 66 "changes" for one day, measured
+   * on production. Only main's first-parent history is what landed.
+   */
+  it("lists only main's own history, not the commits inside a merged pull request", () => {
+    const out = shippedEntries([
+      {
+        sha: "m2",
+        parents: [{ sha: "m1" }, { sha: "b2" }],
+        commit: {
+          message: "merge: two (#2)\n\nFor Marcus: Second change.",
+          committer: { date: "2026-09-23T21:00:00Z" },
+        },
+      },
+      {
+        sha: "b2",
+        parents: [{ sha: "m1" }],
+        commit: {
+          message: "fix: part of two\n\nFor Marcus: A branch commit inside two.",
+          committer: { date: "2026-09-23T20:00:00Z" },
+        },
+      },
+      {
+        sha: "m1",
+        parents: [{ sha: "d0" }, { sha: "b1" }],
+        commit: {
+          message: "merge: one (#1)\n\nFor Marcus: First change.",
+          committer: { date: "2026-09-23T19:00:00Z" },
+        },
+      },
+      {
+        sha: "b1",
+        parents: [{ sha: "d0" }],
+        commit: {
+          message: "fix: part of one\n\nFor Marcus: A branch commit inside one.",
+          committer: { date: "2026-09-23T18:00:00Z" },
+        },
+      },
+      {
+        sha: "d0",
+        parents: [{ sha: "x" }],
+        commit: {
+          message: "fix: pushed straight to main\n\nFor Marcus: A direct commit.",
+          committer: { date: "2026-09-23T17:00:00Z" },
+        },
+      },
+    ]);
+    expect(out.map((e) => e.text)).toEqual(["Second change.", "First change.", "A direct commit."]);
+  });
+
   it("keeps a direct commit to main, which has no pull request number", () => {
     const out = shippedEntries([branch("Hotfix for the paywall.", "2026-09-20")]);
     expect(out).toEqual([
