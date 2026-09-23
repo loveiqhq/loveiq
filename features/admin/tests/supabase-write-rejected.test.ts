@@ -133,3 +133,45 @@ describe("a write PostgREST refused", () => {
     expect(JSON.stringify(mockError.mock.calls[0])).toContain("502");
   });
 });
+
+describe("an RPC is a call, not a write", () => {
+  afterEach(() => {
+    mockError.mockClear();
+    mockWarn.mockClear();
+    mockFetch.mockClear();
+  });
+
+  /**
+   * PostgREST makes both a POST, so this reported
+   *
+   *     write REJECTED — the row was not written and no error was thrown
+   *
+   * for `POST /rest/v1/rpc/get_conversion_funnel` returning 404. That is
+   * PGRST202 — no function matches the arguments — on a READ-ONLY analysis
+   * function: the caller sent `{days: 7}` where it wants
+   * `{since_ts, utm_filter}`. Nothing was written and nothing was lost, and the
+   * alert sent somebody looking for a dropped row that never existed.
+   */
+  it("does not claim a row was lost when a function call was refused", async () => {
+    respond(404, JSON.stringify({ code: "PGRST202", message: "no function matches" }));
+    await supabaseFetch("/rest/v1/rpc/get_conversion_funnel", {
+      method: "POST",
+      body: JSON.stringify({ days: 7 }),
+    });
+    expect(mockError).toHaveBeenCalledTimes(1);
+    const logged = JSON.stringify(mockError.mock.calls[0]);
+    expect(logged, "the failure is still reported").toContain("REFUSED");
+    expect(logged).toContain("PGRST202");
+    expect(logged, "and the caller can see it was a call").toContain('"kind":"rpc"');
+    // The part that matters.
+    expect(logged).not.toContain("the row was not written");
+  });
+
+  it("still says a row was lost when a table write is rejected", async () => {
+    respond(400, JSON.stringify({ code: "42703" }));
+    await supabaseFetch("/rest/v1/analytics_event", { method: "POST", body: "{}" });
+    const logged = JSON.stringify(mockError.mock.calls[0]);
+    expect(logged).toContain("the row was not written");
+    expect(logged).toContain('"kind":"write"');
+  });
+});
