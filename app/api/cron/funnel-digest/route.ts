@@ -593,13 +593,15 @@ async function buildDropoutChartBlock(
  * DELETED 2026-09-19: "Reactivation email performance".
  *
  * Removed at the team's request while trimming the weekly message to the charts
- * people act on. Its `purchased` half was never trustworthy anyway — checkout
- * does not stamp `payment.metadata.promoStage`, so that column read 0 whatever
- * the emails did, which is a documented gap rather than a result.
+ * people act on. (An earlier version of this note said checkout never stamps
+ * `payment.metadata.promoStage`. It does — `app/api/stripe/checkout-session` — and
+ * the `purchased` zero is real: as of 2026-09-23 the four checkouts that carried
+ * a 72h code were all cancelled.)
  *
- * `fetchNurturePerformance` and `get_nurture_performance` stay: the data is
- * correct and worth having when someone looks at the sequence deliberately.
- * This removes the weekly picture, not the source.
+ * `fetchNurturePerformance` and `get_nurture_performance` stay, and since
+ * 2026-09-23 the function measures the live stage: until then it counted five
+ * retired stages by the row-modified date. This removes the weekly picture, not
+ * the source.
  */
 
 // -----------------------------------------------------------------------------

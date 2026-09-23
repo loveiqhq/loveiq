@@ -1323,8 +1323,8 @@ export async function fetchDropoutFunnelByArm(
 
 /**
  * Chart 8 source. Per reactivation-email stage: sent + purchased window totals.
- * Null on RPC failure. purchased may be 0 until checkout stamps
- * payment.metadata.promoStage (documented gap).
+ * Null on RPC failure. `purchased` counts succeeded, non-test payments whose
+ * `metadata.promoStage` names the stage; checkout stamps it.
  */
 export async function fetchNurturePerformance(
   sinceIso: string,
