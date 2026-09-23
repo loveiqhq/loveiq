@@ -826,9 +826,18 @@ const PRIVATE_LEGAL_MATTER =
  * Measured against all 813 Drive documents when it was written: the two rules together
  * select 23, every one of them from the same matter and one owner, and NOT ONE of the
  * three legal-compliance strategy papers, which are analysis we want found.
+ *
+ * TENANCY VOCABULARY WAS ADDED AFTER A THIRD ROUND, and the reason is the lesson. Naming
+ * document TYPES — Kündigung, Mahnung, Abmahnung — leaves a tail, because the same matter
+ * also produces an inspection note and a memo on why the other side's arguments fail, and
+ * those are named after their subject rather than their type. Two more slipped through
+ * and had to be deleted by hand. Words about renting a flat are the subject itself, so
+ * they close the tail rather than chase it: measured across every Drive document they
+ * select exactly those two, both the same owner, and a sexual-wellbeing company has no
+ * legitimate paperwork about tenants, service charges or notice for personal use.
  */
 const PRIVATE_LEGAL_NAME =
-  /(klageschrift|klage_|r(ä|ae)umungsklage|strafanzeige|beweismittel|zahlungsaufforderung|mahnung|abmahnung|k(ü|ue)ndigung|nutzungsentsch|wohnungs(ü|ue)bergabe|inspektionsank|r(ä|ae)umungsauffor|konzept_r(ä|ae)umung|niederlegung_gesch)/i;
+  /(klageschrift|klage_|r(ä|ae)umungsklage|strafanzeige|beweismittel|zahlungsaufforderung|mahnung|abmahnung|k(ü|ue)ndigung|nutzungsentsch|wohnungs(ü|ue)bergabe|inspektionsank|r(ä|ae)umungsauffor|konzept_r(ä|ae)umung|niederlegung_gesch|wohnung|mieter|vermieter|nebenkosten|eigenbedarf|untermiet|mietvertrag)/i;
 
 export function isPrivateLegalMatter(text: string, name?: string): boolean {
   if (name && PRIVATE_LEGAL_NAME.test(name)) return true;

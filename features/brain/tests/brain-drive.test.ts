@@ -1597,6 +1597,10 @@ describe("isPrivateLegalMatter", () => {
     "07_Wohnungsuebergabeprotokoll",
     "Kuendigungsschreiben_Boerner_AQVC",
     "Niederlegung_Geschäftsführeramt_AQVC_Management_GmbH_überarbeitet",
+    // Named after their SUBJECT rather than their type, which is why naming document
+    // types alone left a tail and these two needed a third round of deletion.
+    "Wohnungsinspektion_Realini",
+    "Warum die gängigen Mieter Gegenargumente nicht durchgreifen.docx",
   ])("refuses %j on its NAME, with no court named in the text", (name) => {
     // Body deliberately innocuous: the name is doing all the work here.
     expect(isPrivateLegalMatter("Sehr geehrte Damen und Herren, anbei das Schreiben.", name)).toBe(
