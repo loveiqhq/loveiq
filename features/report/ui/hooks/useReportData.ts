@@ -98,6 +98,8 @@ export interface ReportData {
    * content has not been scaled to yet, which is what ReportPage falls back on.
    */
   typicalBeliefs: import("@/data/report3-typical-beliefs").Report3TypicalBeliefsView | null;
+  /** The "Go deeper & learn more" article closing that chapter, already gated. */
+  typicalBeliefsArticle: import("@/data/report3-learn-more").V4LearnMoreState | null;
   /**
    * Report 2.0 Attachment Style copy for the primary archetype, resolved
    * server-side and locked-aware. Universal slots (gate.hook, eyebrow, edu.*,

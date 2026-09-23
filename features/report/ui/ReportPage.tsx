@@ -68,7 +68,9 @@ import AttachmentPatternsSection, {
 import AcceleratorsSection, { type AccelCopy } from "./sections/AcceleratorsSection";
 import BeliefsSection, { type BeliefsCopy } from "./sections/BeliefsSection";
 import V4TypicalBeliefs from "./v3/V4TypicalBeliefs";
+import V4LearnMore from "./v3/V4LearnMore";
 import type { Report3TypicalBeliefsView } from "@/data/report3-typical-beliefs";
+import type { V4LearnMoreState } from "@/data/report3-learn-more";
 import ConfidenceSection, {
   type ConfidenceCopy,
   type ConfidenceStrip,
@@ -405,6 +407,8 @@ interface ReportExperienceProps {
   beliefsCopy: BeliefsCopy | null;
   /** Report 3.0's Typical Beliefs chapter; null until the archetype is scaled. */
   typicalBeliefs: Report3TypicalBeliefsView | null;
+  /** The "Go deeper & learn more" article that closes that chapter. */
+  typicalBeliefsArticle: V4LearnMoreState | null;
   attachmentCopy: AttachmentCopy | null;
   attachmentFamily: string | null;
   attachmentPlane: AttachmentPlane | null;
@@ -495,6 +499,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   snapshotCopy,
   findingsCopy,
   typicalBeliefs,
+  typicalBeliefsArticle,
   beliefsCopy,
   attachmentCopy,
   attachmentFamily,
@@ -1791,7 +1796,18 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                          * archetype has no Report 3.0 copy yet — 13 of the 14 —
                          * so no reader meets an empty chapter while it scales. */}
                         {isV4 && typicalBeliefs && hasArchetypeCopy ? (
-                          <V4TypicalBeliefs view={typicalBeliefs} />
+                          <>
+                            <V4TypicalBeliefs view={typicalBeliefs} />
+                            {/* 153:2260 closes the chapter. Its gate band opens the
+                             * same pricing modal every other locked section does. */}
+                            {typicalBeliefsArticle ? (
+                              <V4LearnMore
+                                article={typicalBeliefsArticle.article}
+                                locked={typicalBeliefsArticle.locked}
+                                onUnlock={() => unlockSection(section)}
+                              />
+                            ) : null}
+                          </>
                         ) : (
                           <BeliefsSection
                             archetype={viewArchetype}
@@ -2841,6 +2857,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           findingsCopy={data.findingsCopy ?? null}
           beliefsCopy={data.beliefsCopy ?? null}
           typicalBeliefs={data.typicalBeliefs ?? null}
+          typicalBeliefsArticle={data.typicalBeliefsArticle ?? null}
           attachmentCopy={data.attachmentCopy ?? null}
           attachmentFamily={data.attachmentFamily ?? null}
           attachmentPlane={data.attachmentPlane ?? null}
