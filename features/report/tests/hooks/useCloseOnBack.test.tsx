@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook } from "@testing-library/react";
 
 import { useCloseOnBack } from "@features/report/ui/hooks/useCloseOnBack";
-import { OVERLAY_ENTRY_KEY } from "@shared/ui/overlay-history";
+import {
+  OVERLAY_ENTRY_KEY,
+  __resetOverlayHistoryForTests,
+  afterOverlayEntryGone,
+} from "@shared/ui/overlay-history";
 
 /**
  * Back closes the open overlay instead of leaving the report.
@@ -14,106 +18,158 @@ import { OVERLAY_ENTRY_KEY } from "@shared/ui/overlay-history";
  * the history stack honest either side of it.
  */
 
-/** history.back() in jsdom is asynchronous, like a real traversal. */
+/** Resolves on the next popstate — history.back() in jsdom is asynchronous. */
 const traversal = () =>
   new Promise<void>((resolve) =>
     window.addEventListener("popstate", () => resolve(), { once: true })
   );
+/** Lets the deferred release (a microtask) run. */
+const settle = () => act(async () => {});
+const onEntry = () => Boolean(window.history.state?.[OVERLAY_ENTRY_KEY]);
 
-const onEntry = (id: string) => window.history.state?.[OVERLAY_ENTRY_KEY] === id;
-
+beforeEach(() => __resetOverlayHistoryForTests());
 afterEach(async () => {
   cleanup();
-  // Leave the next test a clean stack: unwind anything a test left on top.
-  while (window.history.state?.[OVERLAY_ENTRY_KEY]) {
+  // A spy left behind by a failed assertion would count the next test's calls.
+  vi.restoreAllMocks();
+  __resetOverlayHistoryForTests();
+  // Leave the next test a clean stack.
+  while (onEntry()) {
     const done = traversal();
     window.history.back();
     await done;
   }
 });
 
-describe("useCloseOnBack — history entry (Safari, Firefox)", () => {
+describe("useCloseOnBack — the shared history entry (Safari)", () => {
   it("adds one entry while open and closes when back takes it off", async () => {
     const close = vi.fn();
     const before = window.history.length;
-    const { rerender } = renderHook(({ open }) => useCloseOnBack(open, close, "pricing"), {
+    const { rerender } = renderHook(({ open }) => useCloseOnBack(open, close), {
       initialProps: { open: true },
     });
     expect(window.history.length).toBe(before + 1);
-    expect(onEntry("pricing")).toBe(true);
+    expect(onEntry()).toBe(true);
 
     const done = traversal();
     act(() => window.history.back());
     await done;
     expect(close).toHaveBeenCalledTimes(1);
 
-    // The close that back caused must not go back a second time: that would
-    // take the reader off the report, which is the bug.
+    // The close that back caused must not go back again: that would take the
+    // reader off the report, which is the bug.
     const back = vi.spyOn(window.history, "back");
     rerender({ open: false });
+    await settle();
     expect(back).not.toHaveBeenCalled();
     back.mockRestore();
   });
 
-  it("takes its entry back off when closed another way", async () => {
+  it("takes the entry back off when closed another way, without closing anything", async () => {
     const close = vi.fn();
-    const { rerender } = renderHook(({ open }) => useCloseOnBack(open, close, "pricing"), {
+    const { rerender } = renderHook(({ open }) => useCloseOnBack(open, close), {
       initialProps: { open: true },
     });
-    expect(onEntry("pricing")).toBe(true);
-
-    // The close button, the backdrop or Escape: the parent flips `open`.
     const done = traversal();
     rerender({ open: false });
+    await settle();
     await done;
-    expect(onEntry("pricing")).toBe(false);
-    // It closed itself; back had nothing to do with it.
+    expect(onEntry()).toBe(false);
+    // Its own history.back() landing is not the reader pressing back.
     expect(close).not.toHaveBeenCalled();
   });
 
-  it("never goes back once another page's entry is on top", () => {
-    const close = vi.fn();
-    const { rerender } = renderHook(({ open }) => useCloseOnBack(open, close, "pricing"), {
+  it("never goes back once another page's entry is on top", async () => {
+    const { rerender } = renderHook(({ open }) => useCloseOnBack(open, vi.fn()), {
       initialProps: { open: true },
     });
-    // A navigation while open: the router pushes the new page's entry.
     window.history.pushState({ __NA: true }, "", "/elsewhere");
     const back = vi.spyOn(window.history, "back");
     rerender({ open: false });
+    await settle();
     expect(back).not.toHaveBeenCalled();
     back.mockRestore();
     window.history.replaceState(null, "", "/");
   });
 
-  it("ignores a forward press back onto its own entry", async () => {
-    const close = vi.fn();
-    renderHook(() => useCloseOnBack(true, close, "pricing"));
-    // A second entry of ours on top, then back onto the first of ours: still ours.
-    window.history.pushState({ [OVERLAY_ENTRY_KEY]: "pricing" }, "");
-    const done = traversal();
-    act(() => window.history.back());
-    await done;
-    expect(onEntry("pricing")).toBe(true);
-    expect(close).not.toHaveBeenCalled();
-  });
-
-  it("closes only the overlay whose entry went", async () => {
-    const closePricing = vi.fn();
+  /**
+   * "Share report" in the chapter menu closes the menu and opens the share
+   * modal in one tap. The entry must change hands, not be popped and pushed:
+   * an asynchronous pop landing after the new push closed the new overlay.
+   */
+  it("hands the entry from one overlay to the next in the same tap", async () => {
+    const closeMenu = vi.fn();
     const closeShare = vi.fn();
-    renderHook(() => useCloseOnBack(true, closePricing, "pricing"));
-    renderHook(() => useCloseOnBack(true, closeShare, "share"));
-    // share's entry is on top; back takes it off and lands on pricing's.
+    const before = window.history.length;
+    const { rerender } = renderHook(
+      ({ menu, share }) => {
+        useCloseOnBack(menu, closeMenu);
+        useCloseOnBack(share, closeShare);
+      },
+      { initialProps: { menu: true, share: false } }
+    );
+    const back = vi.spyOn(window.history, "back");
+    rerender({ menu: false, share: true });
+    await settle();
+    expect(back, "no pop for a hand-off").not.toHaveBeenCalled();
+    expect(window.history.length, "and no second entry").toBe(before + 1);
+    back.mockRestore();
+
     const done = traversal();
     act(() => window.history.back());
     await done;
     expect(closeShare).toHaveBeenCalledTimes(1);
-    expect(closePricing).not.toHaveBeenCalled();
+    expect(closeMenu).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A chapter link in the menu: the fragment navigation must REPLACE the
+   * menu's entry. Pushed on top it left a dead back press behind; racing the
+   * menu's release it undid the jump.
+   */
+  it("lets a navigation take the entry's place instead of stacking on it", async () => {
+    const { rerender } = renderHook(({ open }) => useCloseOnBack(open, vi.fn()), {
+      initialProps: { open: true },
+    });
+    const lengthWithEntry = window.history.length;
+    const done = traversal();
+    afterOverlayEntryGone(() => {
+      window.location.hash = "attachment_style";
+    });
+    rerender({ open: false });
+    await settle();
+    await done;
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(window.location.hash).toBe("#attachment_style");
+    expect(onEntry()).toBe(false);
+    // Back from the chapter returns to the entry beneath the menu's: no dead press.
+    expect(window.history.length).toBe(lengthWithEntry);
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("runs a navigation straight away when there is no entry to step around", () => {
+    const navigate = vi.fn();
+    afterOverlayEntryGone(navigate);
+    expect(navigate).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a forward press back onto the entry", async () => {
+    const close = vi.fn();
+    renderHook(() => useCloseOnBack(true, close));
+    // Another entry of ours on top, then back onto the first: still ours.
+    window.history.pushState({ [OVERLAY_ENTRY_KEY]: true }, "");
+    const done = traversal();
+    act(() => window.history.back());
+    await done;
+    expect(onEntry()).toBe(true);
+    expect(close).not.toHaveBeenCalled();
   });
 
   it("does nothing while closed", () => {
-    const close = vi.fn();
     const before = window.history.length;
-    renderHook(() => useCloseOnBack(false, close, "pricing"));
+    renderHook(() => useCloseOnBack(false, vi.fn()));
     expect(window.history.length).toBe(before);
   });
 });
@@ -125,7 +181,7 @@ describe("useCloseOnBack — history entry (Safari, Firefox)", () => {
  * with it, and the modal opens on scroll, which is not an interaction. A
  * history entry there would be skipped and back would still leave the report.
  */
-describe("useCloseOnBack — CloseWatcher (Chromium)", () => {
+describe("useCloseOnBack — CloseWatcher (Chromium, Firefox)", () => {
   const watchers: Array<{ onclose: (() => void) | null; destroyed: boolean }> = [];
   class FakeCloseWatcher {
     onclose: (() => void) | null = null;
@@ -149,7 +205,7 @@ describe("useCloseOnBack — CloseWatcher (Chromium)", () => {
     withWatcher();
     const close = vi.fn();
     const before = window.history.length;
-    renderHook(() => useCloseOnBack(true, close, "pricing"));
+    renderHook(() => useCloseOnBack(true, close));
     expect(watchers).toHaveLength(1);
     expect(window.history.length).toBe(before);
     act(() => watchers[0]!.onclose?.());
@@ -159,7 +215,7 @@ describe("useCloseOnBack — CloseWatcher (Chromium)", () => {
   it("stops watching once closed, and never touches history", () => {
     withWatcher();
     const back = vi.spyOn(window.history, "back");
-    const { rerender } = renderHook(({ open }) => useCloseOnBack(open, vi.fn(), "pricing"), {
+    const { rerender } = renderHook(({ open }) => useCloseOnBack(open, vi.fn()), {
       initialProps: { open: true },
     });
     rerender({ open: false });
@@ -170,7 +226,7 @@ describe("useCloseOnBack — CloseWatcher (Chromium)", () => {
 
   it("creates nothing while closed", () => {
     withWatcher();
-    renderHook(() => useCloseOnBack(false, vi.fn(), "pricing"));
+    renderHook(() => useCloseOnBack(false, vi.fn()));
     expect(watchers).toHaveLength(0);
   });
 });

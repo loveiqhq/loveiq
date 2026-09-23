@@ -260,3 +260,143 @@ test.describe("Back closes the paywall", () => {
     await expect(page).toHaveURL(/\/about$/);
   });
 });
+
+/**
+ * The chapter menu on phones gets the same treatment, and is the harder case:
+ * it hands off inside a single tap. A chapter link closes it and jumps; "Share
+ * report" closes it and opens the share modal. On Safari one history entry
+ * serves whichever overlay is open (shared/ui/overlay-history.ts), and these
+ * pin that neither hand-off costs the reader a back press or undoes a jump.
+ */
+for (const [arm, query] of [
+  ["V1", ""],
+  ["2.0", "?v2=1"],
+] as const) {
+  test.describe(`Back closes the chapter menu (${arm})`, () => {
+    test.skip(
+      ({ isMobile }) => !isMobile,
+      "The chapter menu exists only below the desktop breakpoint."
+    );
+
+    const menu = (page: Page) => page.locator("#report-chapter-drawer");
+    const openMenu = async (page: Page) => {
+      await page.locator(".report-chapter-pill__btn").first().tap();
+      await expect(menu(page)).toBeVisible();
+    };
+
+    test("back closes the menu and the reader stays where they were", async ({ page }) => {
+      await openReport(page, { query });
+      const scrollY = await page.evaluate(() => window.scrollY);
+      await openMenu(page);
+
+      await pressBack(page);
+
+      await expect(menu(page)).toHaveCount(0);
+      await expectStillOnTheReport(page);
+      expect(Math.abs((await page.evaluate(() => window.scrollY)) - scrollY)).toBeLessThanOrEqual(
+        4
+      );
+    });
+
+    test("a chapter jump still works, back returns from it, and the next back leaves", async ({
+      page,
+    }) => {
+      await openReport(page, { query });
+      const before = await page.evaluate(() => window.scrollY);
+      await openMenu(page);
+      const link = menu(page).locator(".report-chapter-panel__item").nth(4);
+      const target = (await link.getAttribute("href"))!.slice(1);
+      await link.tap();
+
+      await expect(menu(page)).toHaveCount(0);
+      await expect(page).toHaveURL(new RegExp(`#${target}$`));
+      await expect
+        .poll(() =>
+          page.evaluate((id) => document.getElementById(id)!.getBoundingClientRect().top, target)
+        )
+        .toBeLessThan(400);
+
+      // Let the smooth scroll finish, as a reader does before pressing back.
+      // Pressed mid-animation, Chromium lets the scroll run on and skips the
+      // restore — its own behaviour for any smooth fragment jump, on the live
+      // report too, not something the menu does.
+      await expect
+        .poll(async () => {
+          const a = await page.evaluate(() => window.scrollY);
+          await page.waitForTimeout(200);
+          return a === (await page.evaluate(() => window.scrollY));
+        })
+        .toBe(true);
+
+      // Back undoes the jump, exactly as it did before the menu handled back...
+      await page.goBack();
+      await expect(page).toHaveURL(new RegExp(`${REPORT}(\\?[^#]*)?$`));
+      await expect.poll(() => page.evaluate(() => window.scrollY)).toBeLessThanOrEqual(before + 4);
+      // ...and the next back leaves. A jump stacked on the menu's own entry
+      // left a dead press here.
+      await page.goBack();
+      await expect(page).toHaveURL(/\/about$/);
+    });
+
+    test("Share in the menu opens the share modal, and back closes it", async ({ page }) => {
+      await openReport(page, { query, overrides: { accessPlan: "full_report" } });
+      await openMenu(page);
+      await menu(page).locator(".report-sidebar__btn", { hasText: "Share" }).tap();
+      const share = page.locator(".report-share-modal");
+      // Handed over in one tap: an entry per overlay would have closed this at once.
+      await expect(share).toHaveAttribute("data-state", "open");
+      await page.waitForTimeout(600);
+      await expect(share).toHaveAttribute("data-state", "open");
+
+      await pressBack(page);
+
+      await expect(share).toHaveAttribute("data-state", "closed");
+      await expectStillOnTheReport(page);
+      await page.goBack();
+      await expect(page).toHaveURL(/\/about$/);
+    });
+
+    /**
+     * Menu -> Share -> close must leave the page scrollable. The V1 menu wrote
+     * `body.overflow` itself; the share modal's lock snapshotted that `hidden`
+     * and restored it on close, and touch scrolling was dead for the rest of the
+     * visit.
+     */
+    test("sharing from the menu does not leave the page scroll-locked", async ({ page }) => {
+      await openReport(page, { query, overrides: { accessPlan: "full_report" } });
+      await openMenu(page);
+      await menu(page).locator(".report-sidebar__btn", { hasText: "Share" }).tap();
+      const share = page.locator(".report-share-modal");
+      await expect(share).toHaveAttribute("data-state", "open");
+      // Until the menu has finished closing, as it has for any real reader:
+      // closed sooner, the menu's own clean-up ran last and hid the strand.
+      await expect(menu(page)).toHaveCount(0);
+      await page.keyboard.press("Escape");
+      await expect(share).toHaveAttribute("data-state", "closed");
+      await expect
+        .poll(() =>
+          page.evaluate(() =>
+            [
+              document.body.style.overflow,
+              document.body.style.position,
+              document.documentElement.style.overflow,
+            ].join("|")
+          )
+        )
+        .toBe("||");
+    });
+
+    test("closing the menu with its button leaves no extra step in history", async ({ page }) => {
+      await openReport(page, { query });
+      await openMenu(page);
+      await menu(page).getByRole("button", { name: "Close chapter menu" }).tap();
+      await expect(menu(page)).toHaveCount(0);
+      await expect
+        .poll(() => page.evaluate(() => Boolean(window.history.state?.__loveiqOverlay)))
+        .toBe(false);
+
+      await page.goBack();
+      await expect(page).toHaveURL(/\/about$/);
+    });
+  });
+}

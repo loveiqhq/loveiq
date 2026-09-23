@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef } from "react";
 
-import { OVERLAY_ENTRY_KEY } from "@shared/ui/overlay-history";
+import { acquireOverlayEntry } from "@shared/ui/overlay-history";
 
 /** Not in TypeScript's DOM library yet. Chromium 126+ and current Firefox; not Safari. */
 interface CloseWatcherLike {
@@ -36,10 +36,11 @@ type CloseWatcherConstructor = new () => CloseWatcherLike;
  * interaction first. Escape on desktop is a close request too, but the modal's
  * own handler cancels it, so it still closes once, as "escape".
  *
- * Everywhere else (Safari) one same-URL history entry sits on top
- * while open, so back consumes it: the browser fires `popstate` and we close.
- * Closed any other way, the entry is taken back off, so the next back press
- * leaves the report as it always did. Same URL on purpose: Next's router copies
+ * Everywhere else (Safari) one same-URL history entry sits on top while any
+ * overlay is open, so back consumes it: the browser fires `popstate` and the
+ * innermost one closes. Closed any other way, the entry is taken back off, so
+ * the next back press leaves the report as it always did. The entry is shared
+ * and handed between overlays by shared/ui/overlay-history.ts. Same URL on purpose: Next's router copies
  * its own state into the entry, so the traversal is a same-page restore rather
  * than a reload, and PostHog records a `$pageview` only when the path changes.
  *
@@ -50,7 +51,7 @@ type CloseWatcherConstructor = new () => CloseWatcherLike;
  * leftover duplicate would cost an extra back press after an abandoned
  * checkout.
  */
-export function useCloseOnBack(open: boolean, close: () => void, id: string): void {
+export function useCloseOnBack(open: boolean, close: () => void): void {
   const closeRef = useRef(close);
   useEffect(() => {
     closeRef.current = close;
@@ -74,22 +75,8 @@ export function useCloseOnBack(open: boolean, close: () => void, id: string): vo
       return () => watcher.destroy();
     }
 
-    window.history.pushState({ [OVERLAY_ENTRY_KEY]: id }, "");
-    const onPopState = () => {
-      // Still on our entry — a forward press, or another overlay's entry going.
-      if (window.history.state?.[OVERLAY_ENTRY_KEY] === id) return;
-      closeRef.current();
-    };
-    window.addEventListener("popstate", onPopState);
-    return () => {
-      window.removeEventListener("popstate", onPopState);
-      // Only our own entry, and only while it is on top. After back it is
-      // already gone; after a navigation the top entry belongs to the new page,
-      // and going back from there would undo the reader's navigation instead of
-      // tidying up after the overlay.
-      if (window.history.state?.[OVERLAY_ENTRY_KEY] === id) {
-        window.history.back();
-      }
-    };
-  }, [open, id]);
+    // Safari: the shared entry (shared/ui/overlay-history.ts), which also
+    // copes with one overlay handing off to another in a single tap.
+    return acquireOverlayEntry(() => closeRef.current());
+  }, [open]);
 }
