@@ -413,11 +413,13 @@ jobs:
           echo "ERROR: /api/health did not return fresh 200 within ~6 minutes"
           exit 1
 
-  # Branch-protection stand-in (detective). Required status checks / rulesets are
-  # a paid feature on this plan, so a red commit CAN land on main (web merge, or
-  # `git push --no-verify` past the pre-push gate) and auto-deploy via Vercel.
-  # This job pings Slack the instant the gate jobs fail on main so it can be
-  # reverted fast. Preventive layer = .husky/pre-push; see docs/runbooks/SECURITY.md.
+  # Detective layer behind branch protection. Since 2026-09-19 `main` requires a pull
+  # request with green Lint, Test and Build — but admins bypass it by design
+  # (enforce_admins: false, see docs/runbooks/SECURITY.md), and several jobs below are
+  # not required checks, so a red commit CAN still land on main and auto-deploy via
+  # Vercel. This job pings Slack the instant the gate jobs fail on main so it can be
+  # reverted fast. (An earlier version of this comment said protection was a paid
+  # feature on this plan; it is free on a public repository.)
   # Reuses SLACK_COMMITS_WEBHOOK_URL (already configured for slack-commits.yml) so
   # no extra secret is needed — failures post to the commits channel.
   notify-failure:
