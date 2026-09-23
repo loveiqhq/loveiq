@@ -94,6 +94,11 @@ export interface ReportData {
    */
   beliefsCopy: import("../sections/BeliefsSection").BeliefsCopy | null;
   /**
+   * Report 3.0's Typical Beliefs chapter, for `?v4=1`. NULL for any archetype the
+   * content has not been scaled to yet, which is what ReportPage falls back on.
+   */
+  typicalBeliefs: import("@/data/report3-typical-beliefs").Report3TypicalBeliefsView | null;
+  /**
    * Report 2.0 Attachment Style copy for the primary archetype, resolved
    * server-side and locked-aware. Universal slots (gate.hook, eyebrow, edu.*,
    * learn.*) are always present; the per-archetype result/row-values/insight/
