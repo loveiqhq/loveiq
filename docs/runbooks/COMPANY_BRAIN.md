@@ -33,6 +33,15 @@ message. It replies in a thread, and every answer lists the sources it used.
   here. Of the 184 files shared in Slack, 148 are images, so for most of them the
   file name is all there will ever be.
 
+### Ready-made prompts
+
+In claude.ai and Claude Code the brain offers five prompts to pick, so nobody has to
+know which tool answers what: **Catch me up**, **KPI check**, **Review this chapter**,
+**What needs me** and **Record a decision**. They live in
+`features/brain/server/prompts.ts` and are served over MCP `prompts/list` and
+`prompts/get`. Each one ends with the house rules (short, plain, every fact linked),
+and a test fails if a prompt names a tool that does not exist.
+
 ### Attachments and files, and where the edges are
 
 Added 2026-09-19, after a spreadsheet that was indexed, counted and reconciled
