@@ -502,9 +502,14 @@ checked the table it had just built. `analytics_event.metadata` had been storing
 the same credential since **2026-05-22** — 2,424 rows across `scroll_depth_25`,
 `_50`, `_75`, `_100` and `rage_click`, still writing daily — because
 `trackScrollDepth`/`trackRageClick` call `persistAnalyticsEvent` with
-`pathname`, and `pathname` is `location.pathname + location.search`. Nothing
-analytical was lost by redacting it: every row already carries
-`survey_submission_id`. `ux_finding.probe_runs[].tail` held one too, one column
+`pathname`, and `pathname` carries `location.search`. Nothing analytical was
+lost by redacting it: every row already carries `survey_submission_id`. (Since
+2026-09-23 campaign and ad-click parameters — `utm_*`, `gclid`, `gbraid` and
+the rest — are stripped from `pathname` in the browser, in
+`shared/observability/uxSignals.ts`: they identify one person's ad click and
+their search words, and the dead-control probe was replaying them against
+production. The token is still redacted on the server, not there, for the
+reason above.) `ux_finding.probe_runs[].tail` held one too, one column
 over from the `url_path` that had just been fixed —
 `verify-dead-click-target.mjs` prints "what this reader tapped at /report/rpt_…"
 and that line is stored verbatim. `brain_query.args` held four.
@@ -516,6 +521,13 @@ reports success. `shared/format/redact-report-token.ts` handles the path form
 first (keeping the `/report/<redacted>` shape the digest reads) and then matches
 the credential itself anywhere else. Every token in `report_access_token` is
 exactly `rpt_` plus 20 alphanumerics, 2,114 of 2,114.
+
+**Scrub after the guard is live, not before.** The 2026-09-21 scrub ran the day
+before its guard reached production (PR #240, merged 2026-09-22 09:42 UTC), so
+the ten rows written in between — 21 Sep 19:01 to 22 Sep 06:57 UTC, every one a
+live `/report/rpt_…` — kept their tokens until the sweep below found them on
+2026-09-23. They are scrubbed. A scrub proves the table was clean at that
+moment; only the sweep, re-run after the deploy, proves it stayed clean.
 
 **Enumerate, do not re-check.** The way to answer "where is this credential" is
 to sweep every `text`/`jsonb` column in the schema, not to revisit the table the

@@ -22,7 +22,7 @@
  * this exits non-zero when one is missing instead of reporting success.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 // Imported, not restated. The cron posts findings and this verifies them; two
 // copies of "does our telemetry contradict this claim" would drift the day one
@@ -58,6 +58,20 @@ import { CLAIM_SCOPED_PROBES, SESSION_REPLAY_PROBES } from "./lib/claim-scoped-p
  * this file read REPORT_TOKEN" is not observable from here, and a wrong guess
  * marks a canonical-page pass as evidence about a reader.
  */
+/**
+ * The probes a tap criterion lists that only ever open /report/<token>, so
+ * have nothing to say about a tap anywhere else (see probesFor). Measured, not
+ * guessed: each references the report and never reads URL_PATH or opens
+ * /survey. The selftest re-derives that from the files in both directions, so
+ * a probe that changes what it opens, or a new report-only probe added to D1
+ * or V1, fails CI instead of quietly judging the wrong page.
+ */
+const REPORT_ONLY_PROBES = new Set([
+  "verify-cta-visibility.mjs",
+  "verify-paywall-card-tap.mjs",
+  "verify-tap-targets.mjs",
+]);
+
 const REPORT_TOKEN_PROBES = new Set([
   "verify-no-survey-restart.mjs",
   "verify-survey-loop.mjs",
@@ -92,6 +106,64 @@ const FINDINGS_FETCH_LIMIT = Number(process.env.FINDINGS_FETCH_LIMIT ?? 500);
 const OWN_EVENT_FETCH_LIMIT = Number(process.env.OWN_EVENT_FETCH_LIMIT ?? 500);
 
 const CLICK_TARGET_CRITERIA = new Set(["D1", "V1"]);
+
+/**
+ * Which probes judge a finding: the criterion's own, less any that answer
+ * about a page the reader was not on, plus the one keyed to what they tapped.
+ * Pure, so the selftest can pin every branch without a browser.
+ */
+function probesFor(criterion, clickTarget) {
+  /**
+   * A PROBE MUST ANSWER ABOUT THE PAGE THE CLAIM IS ON.
+   *
+   * D1 ("dead control") lists two probes, and both open the REPORT and test its
+   * paywall. Of the 46 D1 findings from 2026-09-17 to 2026-09-23, 41 were dead
+   * taps on /survey — mostly our own dead_click events on the survey's buttons —
+   * and every one was judged partly by whether the report's pricing card opens.
+   * 39 came back "could not reproduce", which says nothing about the survey. Two
+   * came back INCONCLUSIVE because the report probes found no sticky unlock bar
+   * on Desktop Chrome, and one of those reached Slack as "needs a human" while
+   * both checks that looked at the reader's actual tap had passed.
+   *
+   * So for the criteria whose subject IS the tapped element, report-only probes
+   * are dropped when the tap was somewhere else. `verify-dead-click-target.mjs`
+   * is still appended below and judges the reader's own element on their own
+   * page, which is what D1 asks. When the page is unknown nothing is dropped:
+   * that would remove the only probes some findings have.
+   *
+   * Keyed on the session, never on the scanner's text. A second finding for the
+   * same session and criterion inherits the first one's answer (pairKey, in the
+   * main loop), which is only sound while the probe set depends on nothing a
+   * scanner wrote.
+   */
+  const tapWasOffReport =
+    CLICK_TARGET_CRITERIA.has(criterion.id) &&
+    clickTarget !== null &&
+    !clickTarget.pathname.startsWith("/report");
+  const probeFiles = criterion.probes.filter(
+    (f) => !(tapWasOffReport && REPORT_ONLY_PROBES.has(f))
+  );
+
+  /**
+   * One probe is added by the SESSION rather than by the criterion.
+   *
+   * `verify-dead-click-target.mjs` checks the element this reader actually
+   * tapped, so it is only meaningful when our own telemetry recorded one. It is
+   * appended rather than listed in CRITERIA because a criterion-level entry
+   * would run it for every finding, and for the sessions with no click event it
+   * would return "could not measure" — which would drag an otherwise clean
+   * verdict down to inconclusive on findings it has nothing to say about.
+   */
+  if (clickTarget && CLICK_TARGET_CRITERIA.has(criterion.id)) {
+    // Spread from the set rather than naming the file again. The two used to be
+    // separate literals, and a probe added to one and not the other is invisible:
+    // either it runs but never stamps claimScoped, or it stamps a flag for a probe
+    // that never runs. Both end as `clear` rows the scorer sets aside, which reads
+    // as a healthy, filling ledger.
+    probeFiles.push(...CLAIM_SCOPED_PROBES);
+  }
+  return probeFiles;
+}
 
 /**
  * Criteria where "did the survey actually restart" is the question.
@@ -861,6 +933,74 @@ if (process.argv.includes("--selftest")) {
     process.exitCode = 1;
   }
 
+  /**
+   * PROBE ROUTING, one case per branch of probesFor().
+   *
+   * The defect was a /survey dead tap judged by probes that open the report.
+   * Each case is a branch that, if it regressed, either brings those back or
+   * silently takes away the only probe a finding has.
+   */
+  const d1 = CRITERIA.find((c) => c.id === "D1");
+  const c1 = CRITERIA.find((c) => c.id === "C1");
+  const tapProbes = [...CLAIM_SCOPED_PROBES];
+  const routes = [
+    ["D1, tap on /survey", d1, { pathname: "/survey", selector: "button.a" }, tapProbes],
+    [
+      "D1, tap on /report",
+      d1,
+      { pathname: "/report/x", selector: "div.a" },
+      [...d1.probes, ...tapProbes],
+    ],
+    ["D1, no tap recorded", d1, null, d1.probes],
+    ["C1 is not about the tap", c1, { pathname: "/survey", selector: "p.a" }, c1.probes],
+  ];
+  for (const [name, criterion, target, want] of routes) {
+    const got = probesFor(criterion, target);
+    if (got.join() !== want.join()) {
+      console.error(
+        `selftest FAIL (routing: ${name}): ${got.join(", ")}, wanted ${want.join(", ")}`
+      );
+      process.exitCode = 1;
+    }
+  }
+  /**
+   * The list, checked against what the files do rather than trusted.
+   *
+   * A member that starts reading URL_PATH or opening /survey would be dropped
+   * for exactly the findings it can now answer. A report-only probe added to a
+   * tap criterion without joining the list would run on survey taps again. And
+   * a member no tap criterion lists is dead weight nobody would notice.
+   */
+  const probeCode = (file) =>
+    readFileSync(new URL(file, probeDir), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
+  const opensOnlyTheReport = (file) => {
+    const code = probeCode(file);
+    return code.includes("/report") && !code.includes("URL_PATH") && !code.includes("/survey");
+  };
+  const tapCriteriaProbes = new Set(
+    CRITERIA.filter((c) => CLICK_TARGET_CRITERIA.has(c.id)).flatMap((c) => c.probes)
+  );
+  for (const file of REPORT_ONLY_PROBES) {
+    if (
+      !existsSync(new URL(file, probeDir)) ||
+      !opensOnlyTheReport(file) ||
+      !tapCriteriaProbes.has(file)
+    ) {
+      console.error(
+        `selftest FAIL (report-only): ${file} is missing, opens another page, or is unused`
+      );
+      process.exitCode = 1;
+    }
+  }
+  for (const file of tapCriteriaProbes) {
+    if (!REPORT_ONLY_PROBES.has(file) && opensOnlyTheReport(file)) {
+      console.error(`selftest FAIL (report-only): a tap criterion lists ${file}, not in the set`);
+      process.exitCode = 1;
+    }
+  }
+
   // Computed LAST, after every check. `bad` counts only classifier failures;
   // the claim, session-id and exit-code checks signal through process.exitCode,
   // and a bare process.exit(0) discards them — which it did, silently, until
@@ -1483,25 +1623,7 @@ for (const [
     console.log(`  (no dead_click/rage_click target for ${sessionId}; that probe is skipped)`);
   }
 
-  /**
-   * One probe is added by the SESSION rather than by the criterion.
-   *
-   * `verify-dead-click-target.mjs` checks the element this reader actually
-   * tapped, so it is only meaningful when our own telemetry recorded one. It is
-   * appended rather than listed in CRITERIA because a criterion-level entry
-   * would run it for every finding, and for the sessions with no click event it
-   * would return "could not measure" — which would drag an otherwise clean
-   * verdict down to inconclusive on findings it has nothing to say about.
-   */
-  const probeFiles = [...criterion.probes];
-  if (clickTarget && CLICK_TARGET_CRITERIA.has(criterion.id)) {
-    // Spread from the set rather than naming the file again. The two used to be
-    // separate literals, and a probe added to one and not the other is invisible:
-    // either it runs but never stamps claimScoped, or it stamps a flag for a probe
-    // that never runs. Both end as `clear` rows the scorer sets aside, which reads
-    // as a healthy, filling ledger.
-    probeFiles.push(...CLAIM_SCOPED_PROBES);
-  }
+  const probeFiles = probesFor(criterion, clickTarget);
 
   /**
    * This reader's own report, masked before it is used.

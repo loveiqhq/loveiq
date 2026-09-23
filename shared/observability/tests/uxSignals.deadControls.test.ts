@@ -172,6 +172,54 @@ describe("dead-click detection on controls that look live", () => {
   });
 
   /**
+   * The page, not the ad click that brought them.
+   *
+   * `pathname` is what the dead-control check opens and what the ledger
+   * stores, and it carried the whole query string: a Google Ads landing
+   * arrived with the visitor's `gclid` and the words they searched.
+   */
+  it("drops ad-click and campaign parameters but keeps the ones that change the page", () => {
+    window.history.replaceState({}, "", "/survey?utm_term=my+search&gclid=abc&v2=1&gad_source=1");
+    try {
+      reset();
+      document.body.innerHTML = `<p class="copy">Some copy</p>`;
+      tap(document.querySelector("p")!);
+      expect(tracked.dead.mock.calls[0][0].pathname).toBe("/survey?v2=1");
+    } finally {
+      window.history.replaceState({}, "", "/");
+      reset();
+    }
+  });
+
+  /**
+   * The selector has to be one a browser will accept.
+   *
+   * It is handed to `querySelectorAll` by the dead-control check, and Tailwind
+   * class names are not CSS identifiers. `text-[14px]` opens an attribute
+   * selector and `mt-3.5` reads as a second class named `5`, so the check threw,
+   * answered "could not measure", and never looked at the control. jsdom has no
+   * `CSS`, so a spec-shaped escape is installed for the duration — enough for
+   * these inputs, where it matches what browsers return.
+   */
+  it("escapes class and id so the selector finds the element it names", () => {
+    const g = globalThis as unknown as { CSS?: { escape(v: string): string } };
+    const saved = g.CSS;
+    g.CSS = { escape: (v) => v.replace(/[^a-zA-Z0-9_-]/g, "\\$&") };
+    try {
+      document.body.innerHTML = `<button id="step.2" class="text-[14px] mt-3.5" disabled>Next</button>`;
+      const button = document.querySelector("button")!;
+      tap(button);
+      const [selector] = selectors();
+      expect(selector).toBe("button#step\\.2.text-\\[14px\\]");
+      expect([...document.querySelectorAll(selector)]).toEqual([button]);
+      // Without the escape the same selector is not CSS at all.
+      expect(() => document.querySelectorAll("button.text-[14px]")).toThrow();
+    } finally {
+      g.CSS = saved;
+    }
+  });
+
+  /**
    * Volume stays bounded, but a reader who KEPT TRYING is now visible.
    *
    * Firing once per (pageview, selector) made "tapped once" and "tapped

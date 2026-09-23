@@ -65,9 +65,23 @@ const INTERACTIVE_SELECTOR =
   "a, button, [role=button], [tabindex]:not([tabindex='-1']), input, select, textarea, label, summary, [contenteditable='true'], [onclick]";
 const SELECTOR_MAX_LEN = 120;
 
+/**
+ * Campaign and ad-click parameters: they identify one person's ad click and the
+ * words they searched, and never change what the page shows. They used to ride
+ * along in `pathname`, so the dead-control check replayed a real visitor's
+ * `gclid` against production and `ux_finding.url_path` stored their search
+ * term. Everything else is kept, because some of it does change the page — the
+ * report's `?v2=1` arm, for one — and a probe sent to the wrong arm judges a
+ * page the reader never saw.
+ */
+const TRACKING_PARAM = /^(utm_|gad_|gclid$|gbraid$|wbraid$|fbclid$|msclkid$|matchtype$|network$)/i;
+
 function getPathname(): string {
   if (typeof location === "undefined") return "/";
-  return location.pathname + location.search;
+  const params = new URLSearchParams(location.search);
+  for (const key of [...params.keys()]) if (TRACKING_PARAM.test(key)) params.delete(key);
+  const query = params.toString();
+  return location.pathname + (query ? `?${query}` : "");
 }
 
 function freshState(): NonNullable<Window["__loveiqUxSignalsState"]> {
@@ -93,6 +107,20 @@ function ensureState(): NonNullable<Window["__loveiqUxSignalsState"]> {
 }
 
 /**
+ * A class or id as CSS will read it.
+ *
+ * Tailwind class names are not CSS identifiers: `sm:hidden`, `text-[14px]` and
+ * `mt-3.5` all make `querySelectorAll` throw. 471 of 13,133 dead and rage taps
+ * in the 30 days to 2026-09-23 carried one, 16 of them on a real button — the
+ * tap the dead-control check is sent to test first — and it could not parse
+ * the selector, so it answered "could not measure" about a control that may
+ * well have been dead. Every browser this runs in has `CSS.escape`; the
+ * fallback exists for jsdom, which has no `CSS` at all.
+ */
+const cssIdent = (value: string): string =>
+  typeof CSS !== "undefined" && typeof CSS.escape === "function" ? CSS.escape(value) : value;
+
+/**
  * Build a compact, anonymized CSS selector for a target. Walks up to the
  * nearest meaningful ancestor (button / link / role) and joins tag + id +
  * one class. Caps at 120 chars to avoid bloating analytics_event metadata.
@@ -105,12 +133,12 @@ function selectorFor(target: EventTarget | null): string {
 
   const parts: string[] = [];
   parts.push(anchor.tagName.toLowerCase());
-  if (anchor.id) parts.push(`#${anchor.id}`);
+  if (anchor.id) parts.push(`#${cssIdent(anchor.id)}`);
   const className =
     typeof anchor.className === "string" && anchor.className
       ? anchor.className.split(/\s+/)[0]
       : "";
-  if (className) parts.push(`.${className}`);
+  if (className) parts.push(`.${cssIdent(className)}`);
   return parts.join("").slice(0, SELECTOR_MAX_LEN) || "unknown";
 }
 
