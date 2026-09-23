@@ -3994,7 +3994,11 @@ async function callTool(
     // The total, so a truncated answer is never mistaken for the whole picture —
     // the same silent-cap bug that made list_sources report 307 commits instead
     // of 1,448.
-    const total = res.headers.get("content-range")?.split("/")[1] ?? null;
+    // NOT for an rpc. Its content-range counts the function's result ROWS, and a
+    // json-returning function is one row however long its array is: get_cohort_analysis
+    // answered `[]` as "0 rows returned, 1 match. Raise limit or page with offset", and
+    // this tool refuses limit and offset on an rpc. Only a table read has a real total.
+    const total = isRpc ? null : (res.headers.get("content-range")?.split("/")[1] ?? null);
     // BEFORE rendering, so no path can print a raw value: the rpc branch and the table
     // branch both land here, which is why the gate is at the render step rather than in
     // the two request builders.
@@ -4010,8 +4014,12 @@ async function callTool(
       `${shown} rows returned` +
       (total ? `, ${total} match` : "") +
       (dropped > 0
-        ? `. ${dropped} more were fetched but did not fit the character ceiling, so ` +
-          `page with offset=${offset + shown} — offset=${offset + rows.length} would SKIP them.`
+        ? isRpc
+          ? `. ${dropped} more were fetched but did not fit the character ceiling. An rpc takes ` +
+            `no offset, so narrow the function's own parameters (a shorter date range, say) ` +
+            `to see them.`
+          : `. ${dropped} more were fetched but did not fit the character ceiling, so ` +
+            `page with offset=${offset + shown} — offset=${offset + rows.length} would SKIP them.`
         : more
           ? `. ${
               limit >= MAX_PRODUCT_ROWS

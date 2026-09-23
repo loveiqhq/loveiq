@@ -3387,6 +3387,63 @@ describe("/api/mcp", () => {
      * `personal_report.archetype`, `report_price_quote.created_at`) or a guessed function
      * argument, and each cost a second round trip to list_product_tables to recover.
      */
+    /**
+     * AN RPC HAS NO PAGES. Its content-range counts the function's result rows, and a
+     * json-returning function is ONE row however long its array is: get_cohort_analysis
+     * answered `[]` and the tool said "0 rows returned, 1 match. Raise limit or page with
+     * offset", advice this very tool refuses on an rpc.
+     */
+    it("reports no total and no paging advice for an rpc, whose count is not a row count", async () => {
+      mockSupabaseFetch.mockImplementation(
+        async (_path: string, init?: { headers?: Record<string, string> }) => {
+          if (init?.headers?.Accept === "application/openapi+json") {
+            return { ok: true, headers: new Headers(), json: async () => OPENAPI };
+          }
+          return {
+            ok: true,
+            status: 200,
+            headers: new Headers({ "content-range": "0-0/1" }),
+            json: async () => [],
+            text: async () => "[]",
+          };
+        }
+      );
+      const r = await call({
+        table: "rpc/get_conversion_funnel",
+        params: { since_ts: "2026-09-01T00:00:00Z" },
+      });
+      expect(r.content[0].text).toContain("0 rows returned.");
+      expect(r.content[0].text).not.toMatch(/match|Raise limit|offset/);
+    });
+
+    it("tells an rpc caller to narrow the function's own parameters when rows do not fit", async () => {
+      const big = Array.from({ length: 60 }, (_, i) => ({
+        day: `2026-09-${String((i % 28) + 1).padStart(2, "0")}`,
+        note: "x".repeat(2000),
+      }));
+      mockSupabaseFetch.mockImplementation(
+        async (_path: string, init?: { headers?: Record<string, string> }) => {
+          if (init?.headers?.Accept === "application/openapi+json") {
+            return { ok: true, headers: new Headers(), json: async () => OPENAPI };
+          }
+          return {
+            ok: true,
+            status: 200,
+            headers: new Headers({ "content-range": `0-59/60` }),
+            json: async () => big,
+            text: async () => "",
+          };
+        }
+      );
+      const r = await call({
+        table: "rpc/get_conversion_funnel",
+        params: { since_ts: "2026-09-01T00:00:00Z" },
+      });
+      expect(r.content[0].text).toMatch(/did not fit/);
+      expect(r.content[0].text).toMatch(/narrow the function's own parameters/);
+      expect(r.content[0].text).not.toMatch(/page with offset/);
+    });
+
     it("names the real columns when a query guesses one that does not exist", async () => {
       wire(
         { code: "42703", message: "column payment.plan does not exist" },
