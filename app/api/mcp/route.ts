@@ -1983,6 +1983,27 @@ const PRIVATE_COLUMN = new RegExp(
 );
 
 /**
+ * THE DENYLIST IS SNAKE_CASE AND JSONB IS NOT.
+ *
+ * `PRIVATE_COLUMN` is anchored as `^(?:.*_)?(?:ip|user_agent|…)$`, which needs an
+ * underscore before the suffix. Postgres columns have one; the camelCase keys inside a
+ * jsonb column do not. Measured 2026-09-23 on a single `payment` row: `ip_address` and
+ * `user_agent` were masked as the header promised, `reportToken` inside `metadata` was
+ * redacted by the value rule — and the SAME ROW printed `requestIp` as 109.175.96.167 and
+ * `requestUserAgent` as the full device string, in plaintext, because neither name has an
+ * underscore in front of the part that matters.
+ *
+ * That is worse than not masking at all: the result header tells the caller those two
+ * fields are private, so a reader has been told the opposite of what happened.
+ *
+ * Normalising the key covers every camelCase duplicate at once, including ones nobody has
+ * added yet, rather than naming `requestIp` and waiting for `clientIp` to appear.
+ */
+function snakeCase(key: string): string {
+  return key.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
+}
+
+/**
  * A STABLE TAG, not a blank.
  *
  * `[redacted]` would break the analysis this tool is for: "do these three payments
@@ -2023,7 +2044,7 @@ function redactPrivateColumns(rows: unknown[]): { rows: unknown[]; redacted: str
     const copy: Record<string, unknown> = { ...(value as Record<string, unknown>) };
     for (const key of Object.keys(copy)) {
       if (copy[key] === null || copy[key] === undefined) continue;
-      if (PRIVATE_COLUMN.test(key)) {
+      if (PRIVATE_COLUMN.test(key) || PRIVATE_COLUMN.test(snakeCase(key))) {
         hit.add(key);
         copy[key] = privateTag(copy[key]);
         continue;

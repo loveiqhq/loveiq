@@ -2911,6 +2911,46 @@ describe("/api/mcp", () => {
         }
       });
 
+      /**
+       * THE DENYLIST IS SNAKE_CASE. JSONB IS NOT.
+       *
+       * `PRIVATE_COLUMN` needs an underscore before the suffix — `request_ip` matches,
+       * `requestIp` does not, and jsonb keys are camelCase. Measured live 2026-09-23 on
+       * ONE `payment` row: the top-level `ip_address` and `user_agent` were masked and
+       * `metadata.reportToken` was caught by the value rule, while the SAME ROW printed
+       * `metadata.requestIp` as a real address and `requestUserAgent` as the full device
+       * string, in plaintext, under a header telling the reader they were protected.
+       *
+       * Being told the opposite of what happened is worse than no mask at all.
+       */
+      it("masks the camelCase duplicates inside jsonb, not only the snake_case columns", async () => {
+        wire([
+          {
+            id: 1,
+            ip_address: "109.175.96.167",
+            user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X)",
+            amount: 14.99,
+            metadata: {
+              requestIp: "109.175.96.167",
+              requestUserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X)",
+              customerEmail: "buyer@example.com",
+              pricingSessionId: "ps_keepme",
+            },
+          },
+        ]);
+        const text = (await call({ table: "payment", limit: 1 })).content[0].text;
+        expect(text).not.toContain("109.175.96.167");
+        expect(text).not.toContain("iPhone OS 18_7");
+        expect(text).not.toContain("buyer@example.com");
+        // The same value still tags identically whichever spelling carried it, so
+        // "is this the same person" survives.
+        const tags = [...text.matchAll(/\[private #([0-9a-f]{4})\]/g)].map((m) => m[1]);
+        expect(new Set(tags).size).toBeLessThan(tags.length);
+        // And a business identifier that merely LOOKS camelCase is untouched.
+        expect(text).toContain("ps_keepme");
+        expect(text).toContain("14.99");
+      });
+
       it("keeps the business columns, so the answer is still usable", async () => {
         wire(ROWS);
         const text = (await call({ table: "payment", limit: 3 })).content[0].text;
