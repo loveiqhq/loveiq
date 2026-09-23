@@ -1468,6 +1468,21 @@ describe("docToRows refuses a private legal filing", () => {
    */
   const file = { id: "f1", name: "00_Uebersicht_aktualisiert", modifiedTime: STAMP };
 
+  /**
+   * THE NAME MUST REACH THE PREDICATE, and this test exists because it did not.
+   *
+   * Mutating the call site from `isPrivateLegalMatter(text, name)` back to
+   * `isPrivateLegalMatter(text)` left all 187 tests green — the name half was covered by
+   * nine predicate tests and called by nothing. That is the same failure the
+   * vendor-invoice and CV rules had once: a predicate nothing passes the right argument
+   * to is decoration.
+   */
+  it("writes nothing for a document whose NAME is a legal matter, text innocuous", () => {
+    const file = { id: "f9", name: "05b_Kündigung_wegen_Eigenbedarf", modifiedTime: STAMP };
+    const text = "Sehr geehrte Damen und Herren,\n\nanbei das Schreiben. Mit freundlichen Grüßen.";
+    expect(docToRows(file as never, text, STAMP)).toHaveLength(0);
+  });
+
   it("writes nothing for a document that names a court", () => {
     const text = "Übersicht\n\nKlageschrift beim Amtsgericht eingereicht am 12.01.2026.";
     expect(docToRows(file as never, text, STAMP)).toHaveLength(0);
@@ -1563,6 +1578,50 @@ describe("isPrivateLegalMatter", () => {
     ["zwangsvollstreckung", "Nächster Schritt wäre die Zwangsvollstreckung."],
   ])("refuses a filing on %s alone", (_word, text) => {
     expect(isPrivateLegalMatter(text)).toBe(true);
+  });
+
+  /**
+   * THE NAME HALF. These nine are real documents from the same private tenancy matter that
+   * walked back into the corpus AFTER the content rule shipped, because a notice to quit
+   * names no court. The content rule reported `refusedAsLegalMatter=12` throughout and was
+   * telling the truth about twelve other documents — which is how half-done work passes
+   * for finished.
+   */
+  it.each([
+    "05b_Kündigung_wegen_Eigenbedarf",
+    "05_Hilfsweise_Kuendigung_Nutzungsentschädigung",
+    "00a_Inspektionsankuendigung",
+    "02_Zahlungsaufforderung",
+    "03_Mahnung",
+    "04_Abmahnung_Zahlungsverzug",
+    "07_Wohnungsuebergabeprotokoll",
+    "Kuendigungsschreiben_Boerner_AQVC",
+    "Niederlegung_Geschäftsführeramt_AQVC_Management_GmbH_überarbeitet",
+  ])("refuses %j on its NAME, with no court named in the text", (name) => {
+    // Body deliberately innocuous: the name is doing all the work here.
+    expect(isPrivateLegalMatter("Sehr geehrte Damen und Herren, anbei das Schreiben.", name)).toBe(
+      true
+    );
+  });
+
+  it.each([
+    "Q4 roadmap",
+    "LoveIQ_Market_Analysis_Competitive_Matrix_EN",
+    "Legal_Compliance_Summary_EU_DE.pdf",
+    "Development Agreements.md",
+    "Report Section Properties",
+  ])("leaves %j alone on its name", (name) => {
+    expect(isPrivateLegalMatter("An ordinary working document about the product.", name)).toBe(
+      false
+    );
+  });
+
+  it("still refuses on the TEXT when the name says nothing", () => {
+    // The control for the other half: without it, a name-only rule would pass the set
+    // above while losing everything the content rule was added for.
+    expect(
+      isPrivateLegalMatter("Die Klageschrift ging beim Amtsgericht ein.", "00_Uebersicht")
+    ).toBe(true);
   });
 
   it.each([

@@ -809,7 +809,29 @@ export function isPersonalDataExport(text: string): boolean {
  */
 const PRIVATE_LEGAL_MATTER =
   /\b(amtsgericht|landgericht|klageschrift|strafanzeige|r(ä|ae)umungsklage|prozesskostenhilfe|staatsanwaltschaft|zwangsvollstreckung)\b/i;
-export function isPrivateLegalMatter(text: string): boolean {
+/**
+ * THE OTHER HALF, AND IT IS THE HALF THAT LEAKED.
+ *
+ * The rule above reads the TEXT and looks for a court, which catches a filing. It does
+ * not catch the letters AROUND a filing — a notice to quit, a payment demand, a formal
+ * warning, a handover protocol, a resignation. Those name no court because no court is
+ * involved yet, so nine documents and 21 chunks of the same private tenancy matter walked
+ * straight back in after the content rule shipped on 2026-09-22 and had to be deleted by
+ * hand a second time.
+ *
+ * I had this pattern already. It was used for the one-off deletion and never added to the
+ * ingest, which is exactly the shape of half-done work that looks finished — the run log
+ * said `refusedAsLegalMatter=12` and was telling the truth about twelve OTHER documents.
+ *
+ * Measured against all 813 Drive documents when it was written: the two rules together
+ * select 23, every one of them from the same matter and one owner, and NOT ONE of the
+ * three legal-compliance strategy papers, which are analysis we want found.
+ */
+const PRIVATE_LEGAL_NAME =
+  /(klageschrift|klage_|r(ä|ae)umungsklage|strafanzeige|beweismittel|zahlungsaufforderung|mahnung|abmahnung|k(ü|ue)ndigung|nutzungsentsch|wohnungs(ü|ue)bergabe|inspektionsank|r(ä|ae)umungsauffor|konzept_r(ä|ae)umung|niederlegung_gesch)/i;
+
+export function isPrivateLegalMatter(text: string, name?: string): boolean {
+  if (name && PRIVATE_LEGAL_NAME.test(name)) return true;
   return PRIVATE_LEGAL_MATTER.test(text);
 }
 
@@ -857,7 +879,7 @@ export function docToRows(file: DriveFile, text: string, stampedAt: string): Bra
     return [];
   }
 
-  if (isPrivateLegalMatter(text)) {
+  if (isPrivateLegalMatter(text, name)) {
     logger.warn(
       { file: name },
       "brain-ingest drive: refusing a filing in a private legal proceeding"
@@ -1286,7 +1308,7 @@ export async function ingestDrive(
       // is the exact complaint these counters exist to answer.
       if (produced.length === 0) {
         if (isPersonalDataExport(text)) refusedDocs += 1;
-        else if (isPrivateLegalMatter(text)) legalMatterDocs += 1;
+        else if (isPrivateLegalMatter(text, file.name)) legalMatterDocs += 1;
         else unusableDocs += 1;
       }
       rows.push(...produced);
