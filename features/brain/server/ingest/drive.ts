@@ -79,17 +79,18 @@ const MAX_PAGES = 20;
 // v5: v4 titled every document neutrally. Two classes are now marked ON THE TITLE —
 // copy we wrote in a customer's voice, and the example figures in a KPI definition
 // table — and the mark is what stops the brain quoting either as measured fact. Same
-// trap as v4 and I walked into it: the mark is applied at WRITE time, so without this
-// bump it reaches only documents somebody happens to edit, which for `Testimonials`
-// and `KPI Framework` is never. Measured 2026-09-23 after shipping the mark: 0 chunks
-// in the whole corpus carried it.
+// trap as v4: the mark is applied at WRITE time, so without this bump it reaches only
+// documents somebody happens to edit — or knew to delete by hand, which covers the
+// three documents we found and none we did not.
 //
-// DELETING THE CHUNKS IS NOT A SUBSTITUTE, which is the other half of the lesson. It
-// looks equivalent — an absent document is unknown, and unknown means refetch — and it
-// silently was not: three documents deleted to force exactly this refetch were still
-// absent a full cycle later, and nothing in `written=13 complete=true` said so. A
-// version bump is the mechanism that exists for this; a hand deletion is a wager on
-// the listing still containing the file.
+// A CORRECTION, kept because the wrong version shipped in this comment first. It said
+// deleting a document's chunks does not force a refetch, citing three deleted
+// documents still absent "a full cycle later". The cycle it cited started at 08:52:25
+// and the deletion ran at 09:02:31 — the run was ten minutes older than the thing it
+// was supposed to show. Two of the three were back and marked by 13:52. Deleting DOES
+// force a refetch (absent means unknown, unknown means fetch); what it cannot do is
+// reach the documents nobody thought to delete. Check a run's start time against the
+// action before reading its counters as evidence.
 export const DRIVE_BUILDER_VERSION = 5;
 
 const DOC_MIME = "application/vnd.google-apps.document";
