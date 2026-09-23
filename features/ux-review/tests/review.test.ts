@@ -805,10 +805,19 @@ describe("the digest ignores challenger scanners", () => {
     expect(v?.undelivered).toBe(0);
   });
 
-  it("does not count a challenger-only observation as coverage", async () => {
-    // Coverage exists to expose a gap. A challenger can be deleted tomorrow,
-    // so counting its observations would report a reader as watched when the
-    // scanner that speaks to the team never opened the recording.
+  it("counts only the survey scanner, not whichever scanner happened to look", async () => {
+    /**
+     * Coverage exists to expose a gap, and "watched by ANY scanner" hid one.
+     * The rage-click scanner is comprehensive and sees everything it is given,
+     * so a finisher it looked at counted as covered while the survey and
+     * report scanners had skipped them — the worst session of 2026-09-23 (65
+     * dead taps and a rage click) was "watched" by this measure and by nothing
+     * that could describe it. That kept a 31-52% throttle invisible for five
+     * days after it had been correctly diagnosed.
+     *
+     * Naming the survey scanner exactly is strictly stronger than the old
+     * challenger exclusion: it rules out challengers AND every other scanner.
+     */
     let hogql = "";
     vi.stubGlobal("fetch", async (_url: string, init: { body?: string }) => {
       const body = String(init?.body ?? "");
@@ -825,10 +834,12 @@ describe("the digest ignores challenger scanners", () => {
     vi.stubEnv("SUPABASE_URL", "https://test.supabase.co");
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service_key");
     await fetchCoverageStats();
-    // By convention, not by a name list: a retired challenger leaves
-    // scanners.ts while its events stay in PostHog for another month.
-    expect(hogql, "the coverage query must exclude challengers").toMatch(/NOT LIKE/);
-    expect(hogql).toMatch(/\(challenger/);
+    expect(hogql, "coverage must name the survey scanner").toMatch(
+      /scanner_name\)\s*=\s*'LoveIQ survey UX'/
+    );
+    // And must not fall back to admitting any non-challenger scanner, which is
+    // exactly how the rage-click scanner's 100% masked everyone else's.
+    expect(hogql, "coverage must not count whichever scanner looked").not.toMatch(/NOT LIKE/);
   });
 });
 
@@ -1155,6 +1166,37 @@ describe("the scanner scorecard", () => {
       buildScorecardMessage(rows, 30, new Set(), new Date("2026-09-22T09:00:00Z"), null).blocks
     );
     expect(out).not.toContain("tapping the paywall");
+  });
+
+  it("shows each check's coverage against the event that starts it", () => {
+    /**
+     * The daily coverage number could not see a throttle on the report
+     * scanner, and "watched by any scanner" let the one comprehensive scanner
+     * stand in for the other three. Measured 2026-09-23: report 63%, survey
+     * 69%, dead-click 48% — 270 recordings a week never analysed, for five
+     * days after the throttle had been correctly diagnosed.
+     */
+    const rows = [sc("LoveIQ report UX", 1, 44)];
+    const coverage = [
+      { scanner: "LoveIQ report UX", triggered: 121, watched: 76 },
+      { scanner: "LoveIQ rage-click cause", triggered: 33, watched: 33 },
+    ];
+    const out = JSON.stringify(
+      buildScorecardMessage(rows, 30, new Set(), new Date("2026-09-22T09:00:00Z"), null, coverage)
+        .blocks
+    );
+    expect(out).toContain("watched 76 of 121 (63%)");
+    // A throttle is flagged; a complete one is not.
+    expect(out).toMatch(/63%\) ⚠/);
+    expect(out).not.toMatch(/100%\) ⚠/);
+  });
+
+  it("omits coverage rather than printing numbers nobody measured", () => {
+    const out = JSON.stringify(
+      buildScorecardMessage([sc("LoveIQ report UX", 1, 44)], 30, new Set(), new Date(), null, null)
+        .blocks
+    );
+    expect(out).not.toContain("Did each check watch");
   });
 
   it("says so plainly when there is nothing to report", () => {

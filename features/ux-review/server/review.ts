@@ -462,7 +462,7 @@ export interface VerificationStat {
 export interface CoverageStat {
   /** Submissions in the window that carry a PostHog session id. */
   submissions: number;
-  /** Of those, how many any scanner opened a recording for. */
+  /** Of those, how many the SURVEY scanner opened a recording for — not "any scanner". */
   observed: number;
 }
 
@@ -482,6 +482,21 @@ export interface CoverageStat {
  * decision rather than a bug — but one nobody could see from here, because
  * a digest that only counts findings looks identical whether coverage is 33%
  * or 100%.
+ *
+ * WHAT HAPPENED NEXT, because it is the part worth learning from. That
+ * diagnosis was right, and the response was a re-queue plus this metric —
+ * built to count a finisher as watched if ANY scanner looked. The rage-click
+ * scanner is the one comprehensive scanner and sees everything it is given,
+ * so the number came back healthy and the throttle stayed in place for five
+ * more days. Measured 2026-09-23 against each scanner's own trigger: report
+ * 63%, survey 69%, dead-click 48% — 270 recordings a week that existed and
+ * were never analysed. The "spend decision" was $9.52 a month, and nobody had
+ * made it; it had simply defaulted to throttled.
+ *
+ * Report and survey are comprehensive now (see SAMPLING in scanners.ts). This
+ * counts the survey scanner specifically, and the weekly scorecard carries
+ * per-scanner coverage against each scanner's own trigger, so a throttle
+ * cannot hide behind the one scanner that is never throttled again.
  *
  * Returns null when it cannot be read, and the digest says so, for the same
  * reason the verification line does: a missing number must not read as a
@@ -520,12 +535,27 @@ export async function fetchCoverageStats(): Promise<CoverageStat | null> {
      * sessions its champion already saw — and wrong in exactly the direction
      * that hides a gap, which is the failure this figure exists to expose.
      */
+    /**
+     * WATCHED BY THE SURVEY SCANNER, not by any scanner.
+     *
+     * This counted a finisher as watched if ANY production scanner had opened
+     * their recording. The rage-click scanner is comprehensive and sees every
+     * session it is given, so a reader it happened to look at counted as
+     * covered while the scanners that actually look for survey and report
+     * defects had skipped them. On 2026-09-23 the worst session of the week —
+     * 65 dead taps and a rage click — was "watched" by this measure and by
+     * nothing that could have described what went wrong.
+     *
+     * Every finisher started the survey, so the survey scanner is the one
+     * whose coverage this population can honestly report. Per-scanner coverage
+     * against each scanner's OWN trigger is on the weekly scorecard.
+     */
     const observed = await sessionQuery(
       `SELECT count(DISTINCT properties.session_id) FROM events
        WHERE event = '$recording_observed'
          AND timestamp > now() - INTERVAL 10 DAY
          AND properties.session_id IN (${inList})
-         AND toString(properties.scanner_name) NOT LIKE '% (challenger%'`
+         AND toString(properties.scanner_name) = 'LoveIQ survey UX'`
     );
     if (observed === null) return null;
     return { submissions: ids.length, observed: Number(observed[0]?.[0]) || 0 };
@@ -642,6 +672,72 @@ export async function fetchPaywallDeadTaps(days = 30): Promise<PaywallDeadTaps |
   }
 }
 
+/**
+ * Did each scanner watch the sessions it exists for?
+ *
+ * Measured against the scanner's OWN trigger — `report_viewed` for the report
+ * scanner, `dead_click` for the dead-click one — because that is the only
+ * population whose coverage means anything. The daily digest's finisher count
+ * could not see a throttle on the report scanner at all, and "watched by any
+ * scanner" let the one comprehensive scanner stand in for the other three.
+ *
+ * The last six hours are excluded: PostHog opens a recording ~38 minutes after
+ * it ends and sweeps every five, so the newest sessions are always still
+ * pending and would read as misses that are not.
+ */
+export interface ScannerCoverage {
+  scanner: string;
+  triggered: number;
+  watched: number;
+}
+
+export async function fetchScannerCoverage(days = 7): Promise<ScannerCoverage[] | null> {
+  const key = process.env.POSTHOG_API_KEY;
+  if (!key) return null;
+  const window = Math.max(1, Math.floor(days));
+  const run = async (query: string): Promise<unknown[][] | null> => {
+    const res = await fetchWithTimeout(`https://eu.posthog.com/api/projects/${PROJECT}/query/`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ query: { kind: "HogQLQuery", query } }),
+      timeoutMs: 12_000,
+    });
+    if (!res.ok) return null;
+    const payload = (await res.json()) as { results?: unknown[][]; error?: unknown };
+    return payload.error ? null : (payload.results ?? []);
+  };
+  try {
+    const out: ScannerCoverage[] = [];
+    for (const sc of UX_SCANNERS.filter((s) => s.role !== "challenger")) {
+      // Both sides filtered to the same trigger window, so "watched" can only
+      // count sessions that were eligible in the first place.
+      const rows = await run(`
+        SELECT
+          uniq(toString(properties.$session_id)) AS triggered,
+          uniqIf(toString(properties.$session_id), toString(properties.$session_id) IN (
+            SELECT toString(properties.session_id) FROM events
+            WHERE event = '$recording_observed'
+              AND toString(properties.scanner_name) = '${sc.name.replace(/'/g, "")}'
+              AND timestamp > now() - INTERVAL ${window + 1} DAY
+          )) AS watched
+        FROM events
+        WHERE event = '${sc.triggerEvent.replace(/'/g, "")}'
+          AND timestamp > now() - INTERVAL ${window} DAY
+          AND timestamp < now() - INTERVAL 6 HOUR
+        LIMIT 1`);
+      if (!rows) return null;
+      out.push({
+        scanner: sc.name,
+        triggered: Number(rows[0]?.[0]) || 0,
+        watched: Number(rows[0]?.[1]) || 0,
+      });
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchScannerScores(days = 30): Promise<ScannerScore[] | null> {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -730,7 +826,9 @@ export function buildScorecardMessage(
   /** Injected so a deadline can be tested on both sides of its date. */
   now: Date = new Date(),
   /** Null when PostHog could not be read — the line is then omitted, never guessed at. */
-  paywallTaps: PaywallDeadTaps | null = null
+  paywallTaps: PaywallDeadTaps | null = null,
+  /** Same: null omits the block rather than printing a coverage nobody measured. */
+  coverage: ScannerCoverage[] | null = null
 ): { text: string; blocks: SlackBlock[] } {
   const n = (s: ScannerScore) => s.right + s.wrong;
   const pct = (s: ScannerScore) => (n(s) === 0 ? "n/a" : `${Math.round((s.right / n(s)) * 100)}%`);
@@ -820,6 +918,29 @@ export function buildScorecardMessage(
           `the locked overlay, the blurred preview, the pricing card — carry no handler, so ` +
           `there is no broken control to reproduce. It is a count of readers who reached for ` +
           `the paywall and were not given a way through it.`
+      )
+    );
+  }
+
+  if (coverage && coverage.some((c) => c.triggered > 0)) {
+    /**
+     * Below 90% is worth a person's attention; above it is lag and ineligible
+     * recordings (too short, no recording). A comprehensive scanner sits at or
+     * near 100%, so a number in the sixties is a throttle, not noise.
+     */
+    const lines = coverage
+      .filter((c) => c.triggered > 0)
+      .map((c) => {
+        const pct = Math.round((c.watched / c.triggered) * 100);
+        return (
+          `• ${plainScanner(c.scanner)} — watched ${c.watched} of ${c.triggered} (${pct}%)` +
+          (pct < 90 ? " ⚠" : "")
+        );
+      });
+    blocks.push(
+      section(
+        `*Did each check watch the sessions it is for?* Last 7 days, against the event that ` +
+          `starts each one:\n${lines.join("\n")}`
       )
     );
   }
