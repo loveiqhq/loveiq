@@ -689,6 +689,55 @@ describe("ingestDrive", () => {
     expect(deletedIds()).not.toContain("doc:1AbCdEf#2");
   });
 
+  /**
+   * A FAILED EXPORT IS AN OUTAGE, NOT A DECISION.
+   *
+   * `reached` exists so that a file read and deliberately not indexed (empty, refused)
+   * can be swept. A file whose export THREW was never read at all, but it was in
+   * `reached` too, so the daily sweep deleted its stored copy: a transient Google 5xx on
+   * sweep day emptied a live document for an hour, and a file that always fails to export
+   * (over the export size limit) lost its content every day for good.
+   */
+  describe("the sweep and a failed export", () => {
+    const v = () => (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    const keep = ["1Keep1", "1Keep2", "1Keep3"].map((id) => ({ ...FILE, id }));
+    function seed() {
+      files = [FILE, ...keep];
+      existing = [
+        // Stale version, so this run re-fetches it.
+        { source_id: "doc:1AbCdEf", meta: { edited: FILE.modifiedTime, v: v() - 1 } },
+        ...keep.map((f) => ({
+          source_id: `doc:${f.id}`,
+          meta: { edited: f.modifiedTime, v: v() },
+        })),
+      ];
+    }
+    const swept = () =>
+      dbCalls.filter((c) => c.method === "POST" && c.path.includes("brain_sweep_state")).length > 0;
+
+    it("keeps the stored copy of a document whose export failed on the sweep run", async () => {
+      seed();
+      exportFails = true;
+      exportFailStatus = 403;
+      await ingestDrive(STAMP);
+      expect(swept()).toBe(true);
+      expect(deletedIds()).not.toContain("doc:1AbCdEf");
+    });
+
+    // The control: the same run DOES remove a document that was read and turned out empty.
+    it("still sweeps a document that was read and turned out empty", async () => {
+      seed();
+      exportOverrides["1AbCdEf"] = "";
+      try {
+        await ingestDrive(STAMP);
+      } finally {
+        delete exportOverrides["1AbCdEf"];
+      }
+      expect(swept()).toBe(true);
+      expect(deletedIds()).toContain("doc:1AbCdEf");
+    });
+  });
+
   it("DOES sweep when the listing was complete", async () => {
     // The control for the test below. Without it, "no sweep" proves nothing —
     // an earlier version of that test passed only because a failed listing
