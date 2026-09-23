@@ -1253,16 +1253,18 @@ the 15-minute lane where it could starve the cheap sources of their clock.
 
 #### Reading EVERYONE's mail needs domain-wide delegation
 
-Today this reads one mailbox: whoever the credential belongs to. A user OAuth token
-can only ever reach its own mail, whatever scope it carries — that is a property of
-the token, not a configuration mistake.
+Since 2026-08-30 this reads every mailbox the Workspace directory lists, not only the
+credential's own. A user OAuth token can only ever reach its own mail, whatever scope
+it carries, so the walk uses **domain-wide delegation**: the service account is
+authorised, in the Admin console, to impersonate users in the domain. When the
+directory cannot be read, the walk falls back to the comma-separated
+`GMAIL_MAILBOXES` list rather than treating "no answer" as "nobody works here".
 
-The Workspace mechanism for reading colleagues' mail is **domain-wide delegation**:
-the service account is authorised, in the Admin console, to impersonate users in the
-domain. `GMAIL_MAILBOXES` already accepts a comma-separated list, so switching it on
-is configuration rather than a rewrite.
+Two mailboxes are never walked, whatever the directory says: `hr@` (job applications,
+with CVs attached) and `hello@` (what customers write to us privately; excluded
+2026-09-23). See `NEVER_INDEX_MAILBOXES` in `features/brain/server/ingest/gmail.ts`.
 
-It is worth deciding deliberately. The corpus is undifferentiated, so anything
+It was worth deciding deliberately. The corpus is undifferentiated, so anything
 indexed from anyone's mailbox becomes answerable to anyone who can ask the brain.
 That follows the open-access decision already taken for Notion and Slack, but email
 is the first source whose sharing boundary was drawn by the SENDER rather than by

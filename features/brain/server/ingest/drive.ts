@@ -383,17 +383,17 @@ async function listDocs(
  * because reading a colleague's whole Drive also reaches documents that are theirs
  * rather than the company's. That trade was put to the owner and the answer was to
  * index everything, so the rule is now the same one the admin walk uses: the file
- * types below, not trashed, minus the three exclusions every listed file passes
- * through in `ingestDrive` — `SKIP_FILE_IDS`, `isVendorBilling` and
- * `isJobApplication`.
+ * types below, not trashed, minus the exclusions every listed file passes through in
+ * `ingestDrive`: `SKIP_FILE_IDS`, `isVendorBilling`, `isJobApplication` and
+ * `isLegalInstrument` by name, and `isPrivateLegalMatter` by content once read.
  *
- * WHAT THAT MEANS IN PRACTICE, so nobody is surprised by it. The set now reachable
- * includes a shareholders agreement, employee option terms and a confidential
- * information memorandum — deliberate — and also a colleague's landlord dispute:
- * eviction demand, dunning letters, deposit settlement. Those last are a person's
- * private affairs that happen to sit in a work Drive. They are in scope under the
- * decision above; if that is reconsidered, `SKIP_FILE_IDS` is the mechanism, which
- * is exactly why it is an explicit id list rather than a rule.
+ * WHAT THAT MEANS IN PRACTICE, as of 2026-09-23. When this widened, the reachable set
+ * included a shareholders agreement, employee option terms, a confidential information
+ * memorandum and a colleague's landlord dispute. The agreement and the option terms are
+ * now refused by `isLegalInstrument` (2026-09-22), the tenancy matter by
+ * `isPrivateLegalMatter` (2026-09-22/23). The memorandum is still in by the decision
+ * above; `SKIP_FILE_IDS` is the mechanism if that is reconsidered, which is why it is
+ * an explicit id list rather than a rule.
  *
  * CVs stay out regardless — `isJobApplication` is applied to this listing too, and a
  * test drives a colleague's CV through the whole walk to prove it.
