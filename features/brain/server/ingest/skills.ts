@@ -2,6 +2,7 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
 import { archetypeContent } from "@/data/report-archetypes";
 import { sweepStale, upsertChunks, type BrainRow, type IngestResult } from "./upsert";
+import { splitBody } from "./notion";
 
 /**
  * How LoveIQ does its own work, written where the team can actually reach it.
@@ -38,7 +39,7 @@ interface PromptDoc {
  * and strip the part suffix, or the skill points people at "part 10 of 29" as though that
  * were the document's name.
  */
-export function collapseToDocuments(rows: PromptDoc[], max = 20): PromptDoc[] {
+export function collapseToDocuments(rows: PromptDoc[], max = 40): PromptDoc[] {
   const seen = new Set<string>();
   const out: PromptDoc[] = [];
   for (const r of rows) {
@@ -49,6 +50,10 @@ export function collapseToDocuments(rows: PromptDoc[], max = 20): PromptDoc[] {
       .replace(/^Drive:\s*/i, "")
       .replace(/\s*\(part \d+ of \d+\)\s*$/i, "")
       .trim();
+    // A Drive "Copy of X" is a scratch duplicate of a prompt already listed. Measured
+    // 2026-09-23: four of the twenty slots went to copies while nine real prompts —
+    // `Typical_Beliefs_Chapter_Prompt` among them — were cut off alphabetically.
+    if (/^copy of\b/i.test(title)) continue;
     out.push({ source_id: `drive/${base}`, title: title || base });
     if (out.length >= max) break;
   }
@@ -163,9 +168,9 @@ export function buildSkillRows(stampedAt: string, prompts: PromptDoc[]): BrainRo
   const body = [
     "HOW WE WRITE A REPORT CHAPTER AT LOVEIQ",
     "",
-    "Start by reading the team's own prompt document for the chapter you are writing. These",
-    "are live and edited, so read them rather than working from anything remembered:",
-    promptLines,
+    "Start by reading the team's own prompt document for the chapter you are writing — they",
+    "are listed at the end of this skill. They are live and edited, so read them rather than",
+    "working from anything remembered.",
     "",
     "A CHAPTER IS NOT A BLANK PAGE.",
     `It is one of ${v.chapters} chapters written ${v.archetypes} times, once per archetype. Read what`,
@@ -208,22 +213,44 @@ export function buildSkillRows(stampedAt: string, prompts: PromptDoc[]): BrainRo
     "A draft goes into a Google Doc for a human to edit, never anywhere a reader sees. Say in",
     "the document that it is a draft, and name the prompt and the archetype it was written",
     "from, so the next person can tell what it was measured against.",
+    "",
+    "THE TEAM'S PROMPT DOCUMENTS, one per chapter:",
+    promptLines,
   ].join("\n");
 
-  return [
-    {
-      source: SOURCE,
-      source_id: "write-a-report-chapter",
-      title:
-        "How we write a report chapter at LoveIQ — house voice, chapter structure, " +
-        "review protocol, and how to draft one",
-      url: null,
-      body,
-      meta: { skill: "write-a-report-chapter", chapters: v.chapters, archetypes: v.archetypes },
-      updated_at: stampedAt,
-      period_end: null,
+  /**
+   * SPLIT, DO NOT LET THE WRITE PATH TRUNCATE.
+   *
+   * `upsertChunks` cuts every body at 2,400 characters. This skill runs to about 5,000,
+   * and it used to open with the list of prompt documents — so for its whole life the
+   * stored row was the list and nothing else, cut off mid-link, with every rule below it
+   * gone. The tests stayed green because their fixture had one prompt.
+   *
+   * Rules first, pointers last, split on paragraph boundaries by the shared splitter.
+   * Still ONE DOCUMENT to the reader: every part carries `meta.part`, which is what
+   * `brain_search` collapses on, so a search returns the best-matching part once and
+   * `fetch_document` returns them all in order.
+   */
+  const title =
+    "How we write a report chapter at LoveIQ — house voice, chapter structure, " +
+    "review protocol, and how to draft one";
+  const parts = splitBody(body);
+  return parts.map((text, i) => ({
+    source: SOURCE,
+    source_id: i === 0 ? "write-a-report-chapter" : `write-a-report-chapter#${i + 1}`,
+    title: parts.length > 1 ? `${title} (part ${i + 1} of ${parts.length})` : title,
+    url: null,
+    body: text,
+    meta: {
+      skill: "write-a-report-chapter",
+      chapters: v.chapters,
+      archetypes: v.archetypes,
+      part: i + 1,
+      parts: parts.length,
     },
-  ];
+    updated_at: stampedAt,
+    period_end: null,
+  }));
 }
 
 export async function ingestSkills(stampedAt: string): Promise<IngestResult> {

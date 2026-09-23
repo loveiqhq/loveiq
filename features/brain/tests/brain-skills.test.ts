@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { BODY_LIMIT } from "@features/brain/server/ingest/notion";
 import {
   buildSkillRows,
   collapseToDocuments,
@@ -7,6 +8,27 @@ import {
 } from "@features/brain/server/ingest/skills";
 
 const prompts = [{ source_id: "drive/doc:ABC", title: "2. Chapter_Prompt" }];
+
+/** The skill is one DOCUMENT stored as parts; read it the way fetch_document does. */
+const whole = (list: typeof prompts) =>
+  buildSkillRows("2026-09-15T00:00:00Z", list)
+    .map((r) => r.body)
+    .join("\n\n");
+
+/**
+ * The shape the corpus really holds: 29 prompt documents, four of them Drive "Copy of"
+ * duplicates. The one-prompt fixture above is why the truncation went unnoticed.
+ */
+const realistic = [
+  ...Array.from({ length: 25 }, (_, i) => ({
+    source_id: `doc:P${i}`,
+    title: `Drive: ${String(i + 1).padStart(2, "0")}_Typical_Chapter_${i}_Prompt (part 1 of 3)`,
+  })),
+  ...Array.from({ length: 4 }, (_, i) => ({
+    source_id: `doc:C${i}`,
+    title: `Drive: Copy of ${String(i + 1).padStart(2, "0")}_Typical_Chapter_${i}_Prompt`,
+  })),
+];
 
 describe("finding the team's prompt documents", () => {
   it("collapses a document's parts BEFORE capping, not after", () => {
@@ -98,20 +120,20 @@ describe("the chapter skill", () => {
 
   it("POINTS AT the live prompt documents rather than copying them", () => {
     // A copy taken today is a stale copy tomorrow — the failure check-mcp-claims exists for.
-    const body = buildSkillRows("2026-09-15T00:00:00Z", prompts)[0]!.body;
+    const body = whole(prompts);
     expect(body).toContain('fetch_document("drive/doc:ABC")');
     expect(body).toContain("2. Chapter_Prompt");
   });
 
   it("still ships something useful when no prompt document is found", () => {
     // An empty prompt list must not produce a skill that reads as though none exist.
-    const body = buildSkillRows("2026-09-15T00:00:00Z", [])[0]!.body;
+    const body = whole([]);
     expect(body).toMatch(/search Drive/i);
     expect(body).toContain("A CHAPTER IS NOT A BLANK PAGE");
   });
 
   it("carries the rules a newcomer would otherwise have to be told twice", () => {
-    const body = buildSkillRows("2026-09-15T00:00:00Z", prompts)[0]!.body;
+    const body = whole(prompts);
     // Standing notes from the strategy lead, not stylistic opinions.
     expect(body).toMatch(/core motivations do not belong in the beliefs chapter/i);
     // Who is allowed to accept a change.
@@ -120,10 +142,49 @@ describe("the chapter skill", () => {
     expect(body).toMatch(/never anywhere a reader sees/i);
   });
 
-  it("is one chunk, because the question is 'how do we write a chapter'", () => {
-    const rows = buildSkillRows("2026-09-15T00:00:00Z", prompts);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.source).toBe("skill");
-    expect(rows[0]!.period_end).toBeNull();
+  it("is one DOCUMENT, because the question is 'how do we write a chapter'", () => {
+    // Stored as parts, but every part names its place: `brain_search` collapses a
+    // document on `meta.part`, so a search returns it once, and fetch_document
+    // reassembles the parts in order from the shared id.
+    const rows = buildSkillRows("2026-09-15T00:00:00Z", collapseToDocuments(realistic));
+    expect(rows.length).toBeGreaterThan(1);
+    rows.forEach((r, i) => {
+      expect(r.source).toBe("skill");
+      expect(r.period_end).toBeNull();
+      expect(r.source_id).toBe(
+        i === 0 ? "write-a-report-chapter" : `write-a-report-chapter#${i + 1}`
+      );
+      expect(r.meta).toMatchObject({ part: i + 1, parts: rows.length });
+    });
+  });
+
+  /**
+   * THE WRITE PATH CUTS EVERY BODY AT 2,400 CHARACTERS, and it cut this one.
+   *
+   * The skill opened with the prompt list, so the stored row was the list and nothing
+   * else — cut off mid-link, every rule below it gone — while every test stayed green on
+   * a one-prompt fixture. Checked against the list the corpus actually holds.
+   */
+  it("fits every part under the write-path cap, with the rules intact", () => {
+    const rows = buildSkillRows("2026-09-15T00:00:00Z", collapseToDocuments(realistic));
+    for (const r of rows) expect(r.body.length).toBeLessThanOrEqual(BODY_LIMIT);
+    const body = rows.map((r) => r.body).join("\n\n");
+    expect(body).toMatch(/core motivations do not belong in the beliefs chapter/i);
+    expect(body).toMatch(/never anywhere a reader sees/i);
+    expect(body).toMatch(/Sanjin/);
+    // Every real prompt is pointed at, not the first twenty alphabetically.
+    for (let i = 0; i < 25; i++) expect(body).toContain(`fetch_document("drive/doc:P${i}")`);
+  });
+
+  it("puts the rules before the pointers, so the first part is the method", () => {
+    const [first] = buildSkillRows("2026-09-15T00:00:00Z", collapseToDocuments(realistic));
+    expect(first!.body).toContain("A CHAPTER IS NOT A BLANK PAGE");
+    expect(first!.body).not.toContain('fetch_document("drive/doc:P0")');
+  });
+
+  it("drops Drive 'Copy of' duplicates instead of spending slots on them", () => {
+    const docs = collapseToDocuments(realistic);
+    expect(docs).toHaveLength(25);
+    expect(docs.some((d) => /copy of/i.test(d.title))).toBe(false);
   });
 });
