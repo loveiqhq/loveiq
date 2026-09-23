@@ -239,6 +239,10 @@ export interface PriorDecision {
   /** Read out of meeting notes rather than written down by a person. Rendered, because
    *  the interjection is where a false positive is most expensive. */
   mined?: boolean;
+  /** `meta.superseded_by`, when a later decision explicitly replaced this one. */
+  supersededBy?: string | null;
+  /** How many decisions on the same `meta.topic` are dated later, and the newest date. */
+  laterOnTopic?: { count: number; newest: string } | null;
 }
 
 /**
@@ -260,6 +264,63 @@ const PROPOSES =
 
 export function proposesSomething(question: string): boolean {
   return PROPOSES.test(question);
+}
+
+/**
+ * "THIS MAY ALREADY BE SETTLED" HAS TO KNOW WHAT IT DOES NOT KNOW.
+ *
+ * The block above asserts settledness, and on 2026-09-22 it asserted it about a decision
+ * that had been reversed: asked whether the survey is free or paid, it produced "split the
+ * survey into a short free section and a detailed section after the paywall" (2026-08-04)
+ * as the settled answer. The experiment was removed — the survey is 65 free questions with
+ * the paywall on the REPORT, and the live counts say so plainly (2,121 submissions against
+ * 395 payments). A reader following that block would have restated a dead decision as
+ * current policy, which is the most expensive thing this feature can do.
+ *
+ * `superseded_by` already exists and `renderSources` already prints a SUPERSEDED banner for
+ * it — but of 117 decisions exactly one pair carries it, and both of those were written by
+ * hand. The 91 MINED ones never get it, because nothing compares a newly mined decision
+ * against what it might replace.
+ *
+ * So this does not claim supersession it cannot prove. It states a fact and lets the
+ * reader judge: how many decisions on the same topic are dated LATER than this one. For
+ * the survey case that is four, newest 2026-08-28, which is exactly the prompt to go and
+ * look. Deliberately NOT a filter and NOT a demotion — a later decision on a topic very
+ * often refines rather than reverses, and guessing which would be the same overreach in
+ * the other direction.
+ *
+ * Costs one extra query per interjection, already inside the caller's try/catch, and
+ * returns the decisions unchanged if it fails: this is an addition to a result that is
+ * complete without it.
+ */
+async function withLaterOnTopic(
+  found: Array<PriorDecision & { topic: string | null }>
+): Promise<PriorDecision[]> {
+  const topics = [...new Set(found.map((d) => d.topic).filter((t): t is string => Boolean(t)))];
+  if (topics.length === 0) return found;
+  try {
+    const list = topics.map((t) => `"${t.replace(/"/g, "")}"`).join(",");
+    const res = await supabaseFetch(
+      `/rest/v1/brain_chunk?select=period_end,meta&source=eq.decision` +
+        `&meta->>topic=in.(${encodeURIComponent(list)})&order=period_end.desc&limit=1000`
+    );
+    if (!res.ok) return found;
+    const all = (await res.json()) as Array<{
+      period_end: string | null;
+      meta: { topic?: string };
+    }>;
+    return found.map((d) => {
+      if (!d.topic || !d.decidedOn) return d;
+      const later = all.filter(
+        (r) => r.meta?.topic === d.topic && (r.period_end ?? "") > (d.decidedOn ?? "")
+      );
+      return later.length === 0
+        ? d
+        : { ...d, laterOnTopic: { count: later.length, newest: later[0]!.period_end ?? "" } };
+    });
+  } catch {
+    return found;
+  }
 }
 
 export async function priorDecisions(question: string): Promise<PriorDecision[]> {
@@ -285,14 +346,23 @@ export async function priorDecisions(question: string): Promise<PriorDecision[]>
       // always read it off the same rows.
       meta: Record<string, unknown> | null;
     }>;
-    return rows
+    const found = rows
       .filter((r) => Number(r.score) >= PRIOR_DECISION_FLOOR)
       .map((r) => ({
         sourceId: r.source_id,
         title: r.title,
         decidedOn: r.period_end,
         mined: (r.meta as { origin?: unknown } | null)?.origin === "mined",
+        supersededBy:
+          typeof (r.meta as { superseded_by?: unknown } | null)?.superseded_by === "string"
+            ? ((r.meta as { superseded_by: string }).superseded_by ?? null)
+            : null,
+        topic:
+          typeof (r.meta as { topic?: unknown } | null)?.topic === "string"
+            ? (r.meta as { topic: string }).topic
+            : null,
       }));
+    return await withLaterOnTopic(found);
   } catch (err) {
     // Never allowed to cost the answer. This is an addition to a result that is already
     // complete without it.
@@ -370,6 +440,41 @@ export async function recentDecisions(limit = 8): Promise<PriorDecision[]> {
   }
 }
 
+/**
+ * WHAT THIS DECISION DOES NOT KNOW ABOUT ITSELF, on both blocks that print decisions.
+ *
+ * Measured 2026-09-22: asked whether the survey is free or paid, the "may already be
+ * settled" interjection produced "Split the survey into a short free section and a
+ * detailed section after the paywall" (2026-08-04) as the settled answer. That experiment
+ * was removed — the survey is free and the paywall is on the REPORT, and the live counts
+ * say so plainly, 2,121 submissions against 395 payments. A reader following the banner
+ * would have restated a dead decision as current policy.
+ *
+ * `superseded_by` already existed and `renderSources` already printed a banner for it, but
+ * of 117 decisions exactly one pair carried it and both were written by hand. The 91 mined
+ * ones never get it, because nothing compares a newly mined decision against what it might
+ * replace.
+ *
+ * So the second line claims no supersession it cannot prove. It states a countable fact —
+ * how many decisions on the same topic are dated later — and lets the reader judge. A
+ * later decision on a topic very often refines rather than reverses, and asserting
+ * reversal would be the same overreach in the other direction.
+ *
+ * Shared by both renderers on purpose: the first draft patched only one of them, because
+ * the two lines it replaced were identical and `String.replace` takes the first.
+ */
+function staleness(d: PriorDecision): string {
+  return (
+    (d.supersededBy
+      ? `\n    SUPERSEDED by decision/${d.supersededBy} — read that one instead.`
+      : "") +
+    (d.laterOnTopic
+      ? `\n    ${d.laterOnTopic.count} later decision${d.laterOnTopic.count > 1 ? "s" : ""}` +
+        ` on this topic, newest ${d.laterOnTopic.newest} — check before treating this as current.`
+      : "")
+  );
+}
+
 /** The browse block, prepended when the question asked for a list rather than a match. */
 export function renderRecentDecisions(found: PriorDecision[]): string {
   if (found.length === 0) return "";
@@ -378,7 +483,8 @@ export function renderRecentDecisions(found: PriorDecision[]): string {
       (d) =>
         `  • ${d.decidedOn ?? "undated"}  ${String(d.title ?? "(untitled)").replace(/^Decision:\s*/, "")}` +
         `${d.mined ? " — reconstructed from call notes, not written down by a person" : ""}` +
-        `\n    id: decision/${d.sourceId}`
+        `\n    id: decision/${d.sourceId}` +
+        staleness(d)
     )
     .join("\n");
   return (
@@ -405,7 +511,8 @@ export function renderPriorDecisions(found: PriorDecision[]): string {
         // A mined decision is the notes' account of what was settled, not a person
         // writing it down. Unmarked, this block would assert the stronger of the two.
         `${d.mined ? " — reconstructed from call notes, not written down by a person" : ""}` +
-        `\n    id: decision/${d.sourceId}`
+        `\n    id: decision/${d.sourceId}` +
+        staleness(d)
     )
     .join("\n");
   return (

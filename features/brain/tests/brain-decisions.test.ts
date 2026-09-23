@@ -195,6 +195,79 @@ describe("noticing that something was already decided", () => {
     expect(out).not.toMatch(/this is settled|has been decided already, do not/i);
   });
 
+  /**
+   * THE BANNER ASSERTS SETTLEDNESS, SO IT HAS TO SAY WHAT IT DOES NOT KNOW.
+   *
+   * Measured 2026-09-22: asked whether the survey is free or paid, this block produced
+   * "Split the survey into a short free section and a detailed section after the paywall"
+   * (2026-08-04) as the settled answer. That experiment was removed — the survey is free
+   * and the paywall is on the REPORT, and the live counts say so plainly (2,121
+   * submissions against 395 payments). A reader following the banner would have restated
+   * a dead decision as current policy.
+   *
+   * `superseded_by` already existed and `renderSources` already printed a banner for it,
+   * but of 117 decisions exactly one pair carried it and both were written by hand. The
+   * 91 mined ones never get it.
+   */
+  it("says so when a decision has been explicitly superseded", () => {
+    const out = renderPriorDecisions([
+      {
+        sourceId: "decision:2026-09-19-old",
+        title: "Decision: Survey Started counts drafts past question one",
+        decidedOn: "2026-09-19",
+        supersededBy: "decision:2026-09-19-new",
+      },
+    ]);
+    expect(out).toContain("SUPERSEDED by decision/decision:2026-09-19-new");
+  });
+
+  /**
+   * A FACT, NOT A CLAIM OF SUPERSESSION. A later decision on a topic very often refines
+   * rather than reverses, so asserting reversal would be the same overreach in the other
+   * direction. This states the count and lets the reader judge.
+   */
+  it("warns when later decisions exist on the same topic", () => {
+    const out = renderPriorDecisions([
+      {
+        sourceId: "decision:2026-08-04-abc",
+        title: "Decision: Split the survey at a paywall",
+        decidedOn: "2026-08-04",
+        laterOnTopic: { count: 4, newest: "2026-08-28" },
+      },
+    ]);
+    expect(out).toContain("4 later decisions on this topic, newest 2026-08-28");
+    expect(out).toMatch(/check before treating this as current/);
+    // Never claims the later ones reversed it.
+    expect(out).not.toMatch(/reversed|no longer applies|superseded by/i);
+  });
+
+  it("says nothing extra when a decision is current and alone on its topic", () => {
+    // The control. Without it, a renderer that printed the warning unconditionally
+    // would pass both tests above.
+    const out = renderPriorDecisions([
+      {
+        sourceId: "decision:2026-09-09-abc",
+        title: "Decision: Keep one shared credential",
+        decidedOn: "2026-09-09",
+      },
+    ]);
+    expect(out).not.toMatch(/later decision/);
+    expect(out).not.toMatch(/SUPERSEDED/);
+  });
+
+  it("uses the singular for exactly one later decision", () => {
+    const out = renderPriorDecisions([
+      {
+        sourceId: "decision:2026-08-04-abc",
+        title: "Decision: Split the survey at a paywall",
+        decidedOn: "2026-08-04",
+        laterOnTopic: { count: 1, newest: "2026-08-28" },
+      },
+    ]);
+    expect(out).toContain("1 later decision on this topic");
+    expect(out).not.toContain("1 later decisions");
+  });
+
   it("strips the stored title prefix, which the heading already says", () => {
     const out = renderPriorDecisions([
       {
