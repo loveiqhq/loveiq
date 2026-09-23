@@ -597,10 +597,19 @@ export function pageToRow(
  * reading information; a key pasted into every LLM prompt that retrieves it is a
  * different thing.
  */
-const ALWAYS_EXCLUDED = ["github token"];
+const ALWAYS_EXCLUDED = [
+  "github token",
+  // Job applicants (owner's decision, 2026-09-23): the Candidates database holds named
+  // people's applications, six of them marked "Rejected - decline pending" — rejections
+  // the candidates had not yet been told. The pipeline page names who is still waiting.
+  // Excluded by row, not by skipping the database, so the database stays a walked scope
+  // and the sweep removes what is already stored.
+  "candidates: ",
+  "notion: hiring pipeline",
+];
 
 /** Titles the team has chosen to keep out, lowercased, from NOTION_EXCLUDE_TITLES. */
-function excludedTitles(): string[] {
+export function excludedTitles(): string[] {
   return [
     ...ALWAYS_EXCLUDED,
     ...(process.env.NOTION_EXCLUDE_TITLES ?? "")

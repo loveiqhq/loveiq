@@ -34,6 +34,18 @@ describe("isWorthIndexing — a calendar is mostly not meetings", () => {
     expect(isWorthIndexing(meeting())).toBe(true);
   });
 
+  it("drops a candidate interview, which names the candidate and invites them", () => {
+    // Real title shapes from the calendar, 2026-09-23.
+    expect(
+      isWorthIndexing(meeting({ summary: "Jane Doe & Marcus Börner - Growth Lead Interview" }))
+    ).toBe(false);
+    expect(isWorthIndexing(meeting({ summary: "Jane Doe - Design Intern Interview" }))).toBe(false);
+  });
+
+  it("keeps a user-research interview, which is company knowledge", () => {
+    expect(isWorthIndexing(meeting({ summary: "User interview — participant 4" }))).toBe(true);
+  });
+
   it("drops blocked-out time with no guests and no agenda", () => {
     // "Focus time", "Lunch", "Gym" — answering a question with one of these is noise.
     expect(

@@ -276,6 +276,55 @@ export function isLegalInstrument(name?: string): boolean {
   return LEGAL_INSTRUMENT.test(n);
 }
 
+/**
+ * RECRUITING MATERIAL, judged by name: a CV, a list of applicants, interview notes.
+ *
+ * The owner's decision (2026-09-20, widened 2026-09-23): job applicants' personal data
+ * does not belong in a corpus the whole team can search through a tool that answers in
+ * prose. Moved here from drive.ts so every path that reads a named file applies the same
+ * rule — Drive documents, Gmail attachments, Slack uploads, calendar titles — because
+ * excluding a CV from Drive while indexing the same CV as an email attachment is the
+ * "one document, three ingest paths" failure the legal-instrument rule already hit.
+ *
+ * History: fifteen named CVs (23 chunks) were indexed until 2026-09-20, when the CV
+ * clause went in. Measured across every indexed Drive document on 2026-09-23, the two new
+ * clauses select exactly four applicant spreadsheets and three interview notes, and
+ * nothing else. "Interview" is carved out when the name says it is research, so a
+ * user-research session is not mistaken for a hiring one.
+ *
+ * A KNOWN EDGE, recorded in the tests rather than fixed: a document ABOUT screening CVs
+ * that leads with the word ("CV screening process") is dropped too, because a real CV
+ * leads with it identically. An earlier comment claimed the opposite; the test was right.
+ *
+ * REVERSIBLE, and a decision rather than a defect: to let the brain answer who applied
+ * for a role, delete this function and its calls.
+ */
+const JOB_APPLICATION = /(^|[_\s(-])(cv|resume|résumé|lebenslauf)([_\s).\d-]|$)/i;
+const APPLICANTS = /\bapplicants?\b/i;
+const INTERVIEW = /\binterview\b/i;
+const RESEARCH_INTERVIEW = /\b(user|customer|research|participant|podcast|press)\b/i;
+export function isJobApplication(name?: string): boolean {
+  const n = (name ?? "").trim();
+  if (JOB_APPLICATION.test(n) || APPLICANTS.test(n)) return true;
+  return INTERVIEW.test(n) && !RESEARCH_INTERVIEW.test(n);
+}
+
+/**
+ * A RECRUITING CONVERSATION, judged by what the meeting notes say about themselves.
+ *
+ * Needed because the name is not enough: candidate calls are booked through a generic
+ * "30 min with Mark (<name>)" slot that also carries partner and domain conversations.
+ * Gemini's own summary names a hiring call as one — "recruitment discussion", "candidate
+ * fit". Measured 2026-09-23 across every Drive document: these phrases select exactly the
+ * five candidate interviews. "Hiring decision" was tried and rejected: it also selected
+ * two team syncs that merely discussed hiring, and a whole sync must not be refused.
+ */
+const RECRUITING_CONVERSATION =
+  /(recruitment (discussion|interview|conversation|call)|candidate('s)? (qualifications|fit|suitability|background)|evaluation of (the )?candidate|interview(ed)? (for|of) (the|a) (position|role))/i;
+export function isRecruitingConversation(text: string): boolean {
+  return RECRUITING_CONVERSATION.test(text);
+}
+
 /** The credential kind found in this text, or null. */
 export function credentialKind(text: string): string | null {
   for (const [kind, pattern] of CREDENTIAL_PATTERNS) {

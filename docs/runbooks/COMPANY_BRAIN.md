@@ -202,12 +202,33 @@ the rule at once and no ingester has to remember it:
   for one hour, so before 2026-09-09 a link mailed at :05 was searchable at :11 with
   most of its life left. 41 already-indexed chunks were redacted in place.
 
+Beyond the write path, some material is kept out **by decision, in every path it can
+arrive by**, because excluding a document from one ingester while another indexes the
+same thing is the failure this corpus has hit more than once:
+
+- **Job applicants** (decided 2026-09-20, widened 2026-09-23) — CVs, applicant lists,
+  interview notes and candidate calls, application mail and CV attachments, the
+  Candidates database and hiring pipeline in Notion, the `#hr` Slack channel, the `hr@`
+  mailbox, and interview events in the calendar. Material _about_ hiring — role
+  descriptions, the hiring guide — stays. One rule, `isJobApplication` in
+  `features/brain/server/ingest/upsert.ts`, is shared by Drive, Gmail attachments,
+  Slack uploads and calendar titles; Gmail also excludes recruiting subjects at the
+  listing so an excluded thread is never fetched at all.
+- **Legal instruments and private legal matters** — contracts, the shareholders'
+  agreement and similar, by name in Drive and as attachments in Gmail and Slack.
+
+Excluding something removes what was already stored on the next complete sweep; until
+2026-09-23 that was true of Drive but not of Gmail, whose keep-set ignored whether a
+thread was still listed.
+
 The live half has its own gate. `query_product_data` masks 21 private columns —
 emails, names, IP addresses, report and share tokens, `sexual_orientation`,
 `password_hash`, verbatim survey answers — replacing each value with a stable
 `[private #xxxx]` tag. Filtering and counting on those columns still work, and the same
 underlying value always shows the same tag, so rows can be correlated without any
-identity being pasted into a prompt. `*_key` columns (`metric_key`, `week_key`,
+identity being pasted into a prompt. The same names are matched in camelCase inside
+jsonb columns (`metadata.requestIp`, `metadata.requestUserAgent`): until 2026-09-23 only
+the snake_case column was masked while its copy in the metadata printed in full. `*_key` columns (`metric_key`, `week_key`,
 `chart_key` and eleven more) are deliberately NOT masked: they are business
 identifiers, and masking them would break the KPI tables to protect nothing.
 

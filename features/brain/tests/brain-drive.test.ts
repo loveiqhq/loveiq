@@ -1798,6 +1798,71 @@ describe("isJobApplication", () => {
   it("drops a document named like a CV but about screening them", () => {
     expect(isJobApplication("CV screening process.docx")).toBe(true);
   });
+
+  /** The real ones, measured 2026-09-23: four applicant sheets, three interview notes. */
+  it.each([
+    "Chief of Staff - Applicants",
+    "Copy of Growth Lead Applicants",
+    "Design Intern Applicants",
+    "Growth Lead Applicants",
+    "Notes - Interview LoveIQ Jane Doe",
+    "Jane Growth Interview - 2026/03/19 17:00 CET - Notes by Gemini",
+    "Jane <> Mark Interview - 2026/09/07 14:58 CEST - Notes by Gemini",
+  ])("drops %s", (name) => {
+    expect(isJobApplication(name)).toBe(true);
+  });
+
+  it.each([
+    "User Interview - participant 3",
+    "Customer interview synthesis",
+    "Hiring Guide",
+    "30 min with Mark (Jane Doe) - 2026/09/14 15:29 CEST - Notes by Gemini",
+  ])("keeps %s", (name) => {
+    expect(isJobApplication(name)).toBe(false);
+  });
+});
+
+describe("docToRows refuses notes from a candidate interview", () => {
+  /**
+   * The booking slot is generic — "30 min with Mark (<name>)" also carries partner and
+   * domain conversations — so the NAME cannot tell. Gemini's summary can: it calls a
+   * hiring call a "recruitment discussion" and records "candidate fit". Tested at the
+   * call site, because a predicate nothing calls is decoration.
+   */
+  const note = {
+    id: "n1",
+    name: "30 min with Mark (Jane Doe) - 2026/09/21 17:27 WEST - Notes by Gemini",
+    modifiedTime: STAMP,
+  };
+
+  it("writes nothing for a recruitment discussion", () => {
+    const text =
+      "Summary\n\nThe recruitment discussion covered company vision, with an evaluation of candidate qualifications and fit.";
+    expect(docToRows(note as never, text, STAMP)).toHaveLength(0);
+  });
+
+  it("still writes a call in the same slot about the product", () => {
+    const text =
+      "Summary\n\nDiscussed biometric tracking, psychometrics and family-systems frameworks for the next assessment.";
+    expect(docToRows(note as never, text, STAMP).length).toBeGreaterThan(0);
+  });
+
+  it("still writes a team sync that merely mentions hiring", () => {
+    const sync = {
+      id: "n2",
+      name: "LoveIQ Sync - 2026/08/05 16:30 CEST - Notes by Gemini",
+      modifiedTime: STAMP,
+    };
+    const text =
+      "Summary\n\nWe agreed to make a hiring decision on the growth role next week and to ship Report 2.0.";
+    expect(docToRows(sync as never, text, STAMP).length).toBeGreaterThan(0);
+  });
+
+  it("applies only to meeting notes, not to any document using the phrase", () => {
+    const doc = { id: "d1", name: "Recruiting playbook", modifiedTime: STAMP };
+    const text = "How we run a recruitment interview: assess candidate fit against the role.";
+    expect(docToRows(doc as never, text, STAMP).length).toBeGreaterThan(0);
+  });
 });
 
 describe("isVendorBilling", () => {

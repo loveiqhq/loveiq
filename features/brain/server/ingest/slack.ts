@@ -3,6 +3,7 @@ import logger from "@shared/observability/logger";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { splitBody } from "./notion";
 import {
+  isJobApplication,
   isLegalInstrument,
   chunkPage,
   recordSweep,
@@ -59,7 +60,9 @@ import {
  *
  * Names, not ids, because a channel can be recreated and the intent follows the name.
  */
-const NEVER_INDEX = new Set(["email-inbox"]);
+// `hr` is the recruiting channel: it names and assesses candidates (owner's decision,
+// 2026-09-23). `purgeDenylistedChannels` removes what is already stored on the next run.
+const NEVER_INDEX = new Set(["email-inbox", "hr"]);
 
 /**
  * Remove anything already indexed from a channel that is now on the denylist.
@@ -340,7 +343,8 @@ export function readableFiles(m: SlackMessage): NonNullable<SlackMessage["files"
       // carrying the signed agreement in full, one of them with a colleague's home
       // address. `renderMessage` still NAMES the upload, so the channel still records
       // that a document was shared and signed; only its contents stop being read.
-      !isLegalInstrument(f.name)
+      !isLegalInstrument(f.name) &&
+      !isJobApplication(f.name)
   );
 }
 

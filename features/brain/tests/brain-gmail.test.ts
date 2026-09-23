@@ -631,6 +631,19 @@ describe("attachmentRefs — attachments are content, and none were read", () =>
     expect(refs.map((r) => r.filename)).toEqual(["Q3 roadmap.pdf"]);
   });
 
+  it("never reads a CV attached to an email, with a positive control beside it", () => {
+    // Applicants' CVs arrive as attachments in every mailbox that forwards them —
+    // Drive's rule alone left this door open (2026-09-23).
+    const refs = attachmentRefs(
+      withParts([
+        part({ attachmentId: "a1", filename: "CV_Jane_Doe.pdf" }),
+        part({ attachmentId: "a2", filename: "Lebenslauf.pdf" }),
+        part({ attachmentId: "a3", filename: "Q3 roadmap.pdf" }),
+      ]) as never
+    );
+    expect(refs.map((r) => r.filename)).toEqual(["Q3 roadmap.pdf"]);
+  });
+
   it("still reads a meeting note that happens to discuss a contract", () => {
     const note = part({ filename: "Contract Sync - 2026/09/09 - Notes by Gemini.pdf" });
     expect(attachmentRefs(withParts([note]) as never)).toHaveLength(1);

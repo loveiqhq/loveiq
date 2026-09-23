@@ -21,6 +21,8 @@ import {
   upsertChunks,
   type BrainRow,
   type IngestResult,
+  isJobApplication,
+  isRecruitingConversation,
 } from "./upsert";
 
 /**
@@ -943,6 +945,13 @@ export function docToRows(file: DriveFile, text: string, stampedAt: string): Bra
     );
     return [];
   }
+
+  // A candidate interview, recognised by Gemini's own summary. Meeting notes only: the
+  // phrases are a hiring call's self-description, not a topic any document may mention.
+  if (MEETING_NOTE_NAME.test(name) && isRecruitingConversation(text)) {
+    logger.warn({ file: name }, "brain-ingest drive: refusing notes from a candidate interview");
+    return [];
+  }
   const edited = file.modifiedTime ?? file.createdTime ?? null;
   const owner = file.owners?.[0]?.emailAddress ?? null;
 
@@ -1199,25 +1208,11 @@ export function isVendorBilling(name?: string, mimeType?: string): boolean {
 }
 
 /**
- * A JOB APPLICATION. Somebody else's personal data, not company knowledge.
- *
- * Fifteen were indexed — named CVs and résumés of external candidates, 23 chunks —
- * searchable by anyone on the team through a tool that answers in prose. Nothing about
- * how LoveIQ works is in any of them, so the corpus loses nothing by their going, and
- * the direction to err in with a stranger's personal data is out.
- *
- * A RULE, NOT AN ID LIST, for the same reason billing is: recruiting keeps happening,
- * so a list of ids is stale by the next applicant. Anchored at word boundaries so
- * "CV screening process" or a file merely mentioning a résumé is untouched; measured
- * across all 705 Drive documents, it matched those fifteen and produced no near miss.
- *
- * REVERSIBLE, and a decision rather than a defect: if the team wants to ask the brain
- * who applied for a role, delete this function and its call. Recorded 2026-09-20.
+ * A JOB APPLICATION. The rule lives in `upsert.ts` now, so Gmail attachments, Slack
+ * uploads and calendar titles apply the same one; re-exported for the callers and tests
+ * that import it from here. History and the known edge are recorded there.
  */
-const JOB_APPLICATION = /(^|[_\s(-])(cv|resume|résumé|lebenslauf)([_\s).\d-]|$)/i;
-export function isJobApplication(name?: string): boolean {
-  return JOB_APPLICATION.test((name ?? "").trim());
-}
+export { isJobApplication };
 
 export async function ingestDrive(
   stampedAt: string,
@@ -1307,6 +1302,7 @@ export async function ingestDrive(
   let emptyDocs = 0;
   let refusedDocs = 0;
   let legalMatterDocs = 0;
+  let recruitingDocs = 0;
   /** Produced no rows for a reason that is NOT the people-list refusal (no id, no name). */
   let unusableDocs = 0;
   let complete = listed.complete;
@@ -1369,6 +1365,8 @@ export async function ingestDrive(
       if (produced.length === 0) {
         if (isPersonalDataExport(text)) refusedDocs += 1;
         else if (isPrivateLegalMatter(text, file.name)) legalMatterDocs += 1;
+        else if (MEETING_NOTE_NAME.test(String(file.name ?? "")) && isRecruitingConversation(text))
+          recruitingDocs += 1;
         else unusableDocs += 1;
       }
       rows.push(...produced);
@@ -1500,6 +1498,7 @@ export async function ingestDrive(
       (emptyDocs > 0 ? ` empty=${emptyDocs}` : "") +
       (refusedDocs > 0 ? ` refusedAsPeopleList=${refusedDocs}` : "") +
       (legalMatterDocs > 0 ? ` refusedAsLegalMatter=${legalMatterDocs}` : "") +
+      (recruitingDocs > 0 ? ` refusedAsRecruiting=${recruitingDocs}` : "") +
       (unusableDocs > 0 ? ` unusable=${unusableDocs}` : "") +
       (exportFailures.length > 0
         ? ` exportFailed=${exportFailures.length}:${exportFailures.slice(0, 3).join(",")}`

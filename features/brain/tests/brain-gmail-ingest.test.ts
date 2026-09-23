@@ -70,6 +70,8 @@ let listingOk = true;
 let failingThreadIds: string[] = [];
 /** RAW gmail thread ids whose FETCH returns a one-line stub, which threadToRows refuses. */
 let stubThreadIds: string[] = [];
+/** RAW gmail thread ids whose FETCH returns a candidate's application task. */
+let recruitingBodyIds: string[] = [];
 /** Threads the listing returns. */
 let listedThreads: Array<{ id: string; historyId: string }> = [];
 /** source_id -> whether touchChunks was asked to confirm it. */
@@ -95,7 +97,9 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
       }
       const text = stubThreadIds.includes(id)
         ? "ok"
-        : "A real conversation with enough text to clear the stub filter. ".repeat(3);
+        : recruitingBodyIds.includes(id)
+          ? "Thanks for the call. As aligned, here is the Application Task for the role. ".repeat(2)
+          : "A real conversation with enough text to clear the stub filter. ".repeat(3);
       return {
         ok: true,
         status: 200,
@@ -141,7 +145,9 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
 import { decodeEntities } from "@shared/format/html-escape";
 import {
   GMAIL_BUILDER_VERSION,
+  RECRUITING_SUBJECT_TERMS,
   ingestGmail,
+  isRecruitingThread,
   messageText,
 } from "@features/brain/server/ingest/gmail";
 
@@ -151,6 +157,7 @@ beforeEach(() => {
   listingOk = true;
   failingThreadIds = [];
   stubThreadIds = [];
+  recruitingBodyIds = [];
   listedThreads = [];
   touchedIds = [];
   deletedIds.length = 0;
@@ -582,10 +589,98 @@ describe("subject exclusions must reach the Gmail listing query", () => {
     expect(listingQuery()).toContain("-in:spam");
   });
 
-  it("sends no subject exclusion at all when none is configured", async () => {
+  it("adds nothing beyond the always-on recruiting terms when none is configured", async () => {
     delete process.env.GMAIL_EXCLUDE_SUBJECTS;
     await ingestGmail("2026-08-30T00:00:00.000Z", () => false, null);
-    expect(listingQuery()).not.toContain("-subject:");
+    const terms = [...listingQuery().matchAll(/-subject:("[^"]+"|\S+)/g)].map((m) =>
+      m[1]!.replace(/"/g, "")
+    );
+    expect(terms.length).toBeGreaterThan(0);
+    for (const t of terms) expect(RECRUITING_SUBJECT_TERMS).toContain(t);
+  });
+
+  /**
+   * JOB APPLICATIONS STAY OUT (owner's decision, 2026-09-23), at the listing so an
+   * excluded thread is neither fetched nor kept. The wiring is what matters: a term list
+   * nobody sends is the 2026-09-06 failure above.
+   */
+  it("sends every recruiting term in the query the walk actually makes", async () => {
+    await ingestGmail("2026-09-23T00:00:00.000Z", () => false, null);
+    const q = listingQuery();
+    for (const t of ["application", "applicants", "internship", "interview", "cv", "candidate"]) {
+      expect(q).toContain(`-subject:${t}`);
+    }
+    expect(q).toContain('-subject:"design intern follow up"');
+  });
+});
+
+describe("recruiting mail the subject does not give away", () => {
+  it("refuses a thread whose body carries a candidate's application task", () => {
+    expect(
+      isRecruitingThread("Follow-up :)", "Hey :) As aligned, here is the Application Task.")
+    ).toBe(true);
+    expect(
+      isRecruitingThread("Follow-up :)", "Application Taks — Chief of Staff (Internship)")
+    ).toBe(true);
+  });
+
+  it("refuses such a thread in the walk, and sweeps what it had stored", async () => {
+    // At the call site, not only the predicate: a rule nothing calls is decoration.
+    const current = (id: string) => ({
+      source_id: `thread:${id}`,
+      meta: { v: GMAIL_BUILDER_VERSION, mailbox: "me", historyId: "9" },
+    });
+    listedThreads = [
+      ...["k1", "k2", "k3", "k4"].map((id) => ({ id, historyId: "9" })),
+      { id: "task", historyId: "10" },
+    ];
+    existing = [...["k1", "k2", "k3", "k4"].map(current), current("task")];
+    recruitingBodyIds = ["task"];
+    await ingestGmail("2026-09-23T00:00:00.000Z", () => false, null);
+    expect(deletedIds).toContain("thread:task");
+    expect(deletedIds).not.toContain("thread:k1");
+  });
+
+  it("keeps a thread with the same subject that is not about a candidate", () => {
+    // The sixth "Follow-up :)" is a letter about the Academic Board.
+    expect(
+      isRecruitingThread(
+        "Follow-up :)",
+        "Lieber Konrad, anbei das Manifest unseres Academic Boards."
+      )
+    ).toBe(false);
+  });
+});
+
+describe("a never-index mailbox is neither walked nor kept", () => {
+  const listed = (id: string) => ({ id, historyId: "9" });
+  const row = (id: string, mailbox: string) => ({
+    source_id: `thread:${id}`,
+    meta: { v: GMAIL_BUILDER_VERSION, mailbox, historyId: "9" },
+  });
+
+  it("never lists threads from it, even when it is configured", async () => {
+    process.env.GMAIL_MAILBOXES = "me@loveiq.org,hr@loveiq.org";
+    await ingestGmail("2026-09-23T00:00:00.000Z", () => false, null);
+    expect(
+      fetchedUrls.some(
+        (u) => u.includes(encodeURIComponent("hr@loveiq.org")) || u.includes("/users/hr@")
+      )
+    ).toBe(false);
+  });
+
+  it("sweeps what it already stored, unlike a mailbox that merely stopped being walked", async () => {
+    process.env.GMAIL_MAILBOXES = "me@loveiq.org";
+    listedThreads = ["k1", "k2", "k3", "k4"].map(listed);
+    existing = [
+      ...["k1", "k2", "k3", "k4"].map((id) => row(id, "me@loveiq.org")),
+      row("cv-thread", "hr@loveiq.org"),
+      row("departed", "philipp.leonhard@loveiq.org"),
+    ];
+    await ingestGmail("2026-09-23T00:00:00.000Z", () => false, null);
+    expect(deletedIds).toContain("thread:cv-thread");
+    // The control: history from an offboarded colleague is still kept.
+    expect(deletedIds).not.toContain("thread:departed");
   });
 });
 

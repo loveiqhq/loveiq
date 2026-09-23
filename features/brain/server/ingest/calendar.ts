@@ -28,6 +28,7 @@ import {
   upsertChunks,
   type BrainRow,
   type IngestResult,
+  isJobApplication,
 } from "./upsert";
 
 const SOURCE = "calendar";
@@ -111,6 +112,8 @@ export function eventDay(e: CalEvent): string | null {
 export function isWorthIndexing(e: CalEvent): boolean {
   if (e.status === "cancelled") return false;
   if (!e.summary?.trim()) return false;
+  // A candidate interview names the candidate in its title and invites them by address.
+  if (isJobApplication(e.summary)) return false;
   const humans = (e.attendees ?? []).filter((a) => !a.resource);
   const hasAgenda = (e.description ?? "").trim().length > 0;
   return humans.length > 1 || hasAgenda;

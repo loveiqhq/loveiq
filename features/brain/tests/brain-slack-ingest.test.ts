@@ -493,6 +493,13 @@ describe("uploads — a file-only message used to vanish entirely", () => {
     expect(renderMessage({ user: "U1", ts: "1", text: "  ", files: [] }, names)).toBeNull();
   });
 
+  it("never reads a CV someone uploaded, the third door for applicants' data", () => {
+    expect(readableFiles({ files: [file({ name: "CV_Jane_Doe.pdf" })] })).toHaveLength(0);
+    expect(readableFiles({ files: [file({ name: "Growth Lead Applicants.pdf" })] })).toHaveLength(
+      0
+    );
+  });
+
   it("would read a pdf but not a screenshot", () => {
     expect(readableFiles({ files: [file()] })).toHaveLength(1);
     expect(readableFiles({ files: [file({ filetype: "png", name: "image.png" })] })).toHaveLength(

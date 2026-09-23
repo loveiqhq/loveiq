@@ -12,6 +12,7 @@ import logger from "@shared/observability/logger";
 import { loadPeople } from "@features/brain/server/people";
 import { splitBody } from "./notion";
 import {
+  isJobApplication,
   isLegalInstrument,
   chunkPage,
   recordSweep,
@@ -239,6 +240,56 @@ export async function domainMailboxes(oidcToken?: string | null): Promise<string
  */
 const EXCLUDE =
   "-in:spam -in:trash -in:chats -category:promotions -category:social -category:forums";
+
+/**
+ * RECRUITING MAIL, kept out at the LISTING (owner's decision, 2026-09-23).
+ *
+ * Applications, CVs, interview invitations and candidate follow-ups hold named
+ * applicants' personal data. Measured 2026-09-23: 85 such threads across the walked
+ * mailboxes, and every subject carrying "interview" was a hiring interview — none was
+ * press. At the listing rather than after the fetch because a thread refused after
+ * fetching is fetched again on every run; excluded here it costs nothing.
+ *
+ * The cost is deliberate and recorded: a future non-hiring subject with one of these
+ * words — a grant "application", say — would be excluded too. Words, not ids, because
+ * recruiting keeps happening. Generic vocabulary, so it can live in the public repo,
+ * unlike the environment-configured terms above.
+ */
+export const RECRUITING_SUBJECT_TERMS = [
+  "application",
+  "applications",
+  "apication", // sic — a real subject line, typo and all
+  "applicant",
+  "applicants",
+  "internship",
+  "interview",
+  "cv",
+  "candidate",
+  "bewerbung",
+  "design intern follow up",
+];
+export function recruitingQuery(): string {
+  return RECRUITING_SUBJECT_TERMS.map((t) =>
+    t.includes(" ") ? ` -subject:"${t}"` : ` -subject:${t}`
+  ).join("");
+}
+
+/**
+ * The backstop, for recruiting mail whose SUBJECT says nothing: five of the six
+ * "Follow-up :)" threads carry a candidate's application task in the body, and the sixth
+ * — an Academic Board letter — shares the subject exactly. Only the body separates them.
+ */
+const RECRUITING_BODY = /\b(application ta(sk|ks)|applicant task|candidate task)\b/i;
+export function isRecruitingThread(subject: string, text: string): boolean {
+  return RECRUITING_BODY.test(subject) || RECRUITING_BODY.test(text);
+}
+
+/**
+ * Mailboxes that are never company knowledge. Unlike `GMAIL_EXCLUDE_MAILBOXES` — which
+ * stops reading a mailbox but keeps its history — a mailbox here is also removed from the
+ * corpus: `hr@` held 16 threads, 15 of them job applications with CVs attached.
+ */
+export const NEVER_INDEX_MAILBOXES = new Set(["hr@loveiq.org"]);
 
 /**
  * Subjects to keep out of the corpus entirely, as Gmail `-subject:` terms.
@@ -542,7 +593,8 @@ export function attachmentRefs(thread: GmailThread): AttachmentRef[] {
       // "Welcome to the Team" and to a forward of it. The covering message stays —
       // that Mark sent Eman a contract on 2026-09-09 is a real thing to remember; the
       // instrument itself does not come with it.
-      !isLegalInstrument(filename)
+      !isLegalInstrument(filename) &&
+      !isJobApplication(filename)
     ) {
       out.push({ messageId, attachmentId, filename, mimeType, size });
     }
@@ -652,6 +704,7 @@ export function threadToRows(
   if (lines.length === 0) return [];
   const joined = lines.join(" ").replace(/\s+/g, " ").trim();
   if (lines.length === 1 && joined.length < MIN_STUB_CHARS) return [];
+  if (isRecruitingThread(subject, joined)) return [];
 
   const participants = [
     ...new Set(
@@ -808,7 +861,9 @@ export async function ingestGmail(
    * would list no mailboxes, write nothing, and let the sweep delete the corpus.
    */
   const discovered = await domainMailboxes(oidcToken);
-  const boxes = excludeMailboxes(discovered && discovered.length > 0 ? discovered : mailboxes());
+  const boxes = excludeMailboxes(
+    discovered && discovered.length > 0 ? discovered : mailboxes()
+  ).filter((m) => !NEVER_INDEX_MAILBOXES.has(m.trim().toLowerCase()));
 
   const known = await knownThreads();
   /**
@@ -881,7 +936,7 @@ export async function ingestGmail(
       const listed = await gmailGet(
         token,
         mailbox,
-        `/threads?maxResults=${PAGE_SIZE}&q=${encodeURIComponent(EXCLUDE + excludeSubjects())}` +
+        `/threads?maxResults=${PAGE_SIZE}&q=${encodeURIComponent(EXCLUDE + recruitingQuery() + excludeSubjects())}` +
           (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "")
       );
       if (!listed) {
@@ -991,6 +1046,8 @@ export async function ingestGmail(
          * An unattributable row (no mailbox in `meta`) is kept for the same
          * reason — absence of evidence is not evidence of deletion.
          */
+        // Never-index mailboxes are not history, they are a decision: not kept.
+        if (have.mailbox && NEVER_INDEX_MAILBOXES.has(have.mailbox.toLowerCase())) return false;
         if (!have.mailbox || !walked.has(have.mailbox)) return true;
         // Never confirm a stale-version row FROM A MAILBOX WE DID WALK. It was
         // either dropped from the source or is no longer something we would index
