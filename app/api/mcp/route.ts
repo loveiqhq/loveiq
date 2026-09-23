@@ -1827,6 +1827,26 @@ async function productSchema(): Promise<Map<string, string[]> | null> {
 }
 
 /**
+ * THE FIX, NOT ONLY THE FAULT. Most real query_product_data failures in `brain_query`
+ * since 2026-09-09 were a guessed column (`payment.plan`, `personal_report.archetype`,
+ * `report_price_quote.created_at`) or a guessed function argument, and every one cost a
+ * second round trip to list_product_tables. The schema is already in hand here, so the
+ * error names what does exist. Only for those two codes: any other failure is not about
+ * the shape of the query, and a column list would send the reader the wrong way.
+ */
+function schemaHint(detail: string, table: string, spec: Map<string, string[]> | null): string {
+  const known = spec?.get(table);
+  if (!known?.length) return "";
+  if (/"code"\s*:\s*"42703"/.test(detail)) {
+    return `\n\n${table} has these columns: ${known.join(", ")}.`;
+  }
+  if (table.startsWith("rpc/") && /"code"\s*:\s*"PGRST202"/.test(detail)) {
+    return `\n\n${table} takes ${known.join(", ")} — pass them in \`params\` (a trailing ! is required).`;
+  }
+  return "";
+}
+
+/**
  * The stored-id prefix every part of one document shares, and how its parts are
  * suffixed. Three shapes, because three ingesters chose differently.
  */
@@ -3497,7 +3517,9 @@ async function callTool(
     const DAYISH = /^\d{4}-\d{2}-\d{2}$/;
     const since = typeof args.since === "string" ? args.since.trim() : "";
     const until = typeof args.until === "string" ? args.until.trim() : "";
-    if ((since || until) && args.days !== undefined) {
+    // `!= null`, not `!== undefined`: a client that sends every optional field fills the
+    // unset ones with null, and `{ days: null, since }` was refused as "not both".
+    if ((since || until) && args.days != null) {
       return textResult(
         "Give `days` OR a `since`/`until` range, not both — they answer the same " +
           "question two different ways and there is no sensible way to combine them.",
@@ -3928,7 +3950,10 @@ async function callTool(
     const res = await supabaseFetch(path, init);
     if (!res.ok) {
       const detail = (await res.text().catch(() => "")).slice(0, 400);
-      return textResult(`Query failed (${res.status}): ${detail}`, true);
+      return textResult(
+        `Query failed (${res.status}): ${detail}${schemaHint(detail, table, spec)}`,
+        true
+      );
     }
     const rows = (await res.json().catch(() => null)) as unknown;
     if (!Array.isArray(rows)) {
@@ -4030,14 +4055,16 @@ async function callTool(
      */
     let pathNote = "";
     const baseTail = svc.base.replace(/\/+$/, "").split("/").pop() ?? "";
-    if (/^v\d+$/i.test(baseTail)) {
+    // `api` joined the versions on evidence: 2026-09-23, PostHog asked for
+    // `/api/projects/244778/` against a base that already ends `/api`, and got a bare 404.
+    if (/^(v\d+|api)$/i.test(baseTail)) {
       const duplicated = new RegExp(`^/${baseTail}(?=/|$)`, "i");
       if (duplicated.test(path)) {
         const was = path;
         path = path.replace(duplicated, "") || "/";
         pathNote =
           `\n\nNote: ${key}'s base URL already ends with /${baseTail}, so "${was}" was ` +
-          `read as "${path}". Leave the version off the path next time.`;
+          `read as "${path}". Leave /${baseTail} off the path next time.`;
       }
     }
     // The host is fixed by the registry; these checks stop the PATH from
