@@ -337,9 +337,15 @@ const KNOWN_RED: Record<string, string> = {
   "record-beats-transcript":
     "red since 2026-09-20: no meeting SUMMARY chunk mentions pricing, so only transcripts " +
     "match at all. Two fixes measured and rejected — see the comment on the probe.",
-  "decision-pivot":
-    "the meeting record it wants is crowded out by `decision` chunks, which went from 48 " +
-    "to 82 when the miner was repaired. Threshold was tuned at 48.",
+  "dr-record-label":
+    "red since 2026-09-23, and the cause is the known first-pass slot rule, not missing " +
+    "content: the answering meeting summary ranks #2 at 2.52 through the real MCP path at " +
+    "limit 20, but at limit 12 every one of twelve sources takes its guaranteed first-pass " +
+    "slot — down to a glossary entry at 1.73 — and the second drive row is cut. It tipped " +
+    "when the chapter skill stopped being truncated and began matching ordinary words. The " +
+    "fix belongs in selectDiverse's first pass and must be measured on a settled corpus, " +
+    "after the Drive v5 rebuild finishes (see the grainless-slot note: the obvious fix was " +
+    "measured worse and reverted).",
   "ga4-brand":
     "the brand campaign stopped running on 2026-08-31, so only August records name it. " +
     "Its month chunk scores 1.692 and the CURRENT partial month scores 1.724 — grainCap " +
@@ -1027,10 +1033,15 @@ function sourceCoverageProbes(live: LiveCounts): RetrievalProbe[] {
       sources: ["slack"],
       meta: { channel: "bugs-issues" },
     }),
-    P("slack-hr-channel", "what is discussed in the hr channel", topSource("slack"), {
-      sources: ["slack"],
-      meta: { channel: "hr" },
-    }),
+    // #hr is excluded since 2026-09-23 (job applicants, owner's decision): asked directly,
+    // it must return nothing. See `hr-excluded` below for why it used to be asserted open.
+    P(
+      "slack-hr-channel",
+      "what is discussed in the hr channel",
+      (h) =>
+        h.length ? [`#hr is excluded but returned ${h.length}: ${h.map(describe).join(", ")}`] : [],
+      { sources: ["slack"], meta: { channel: "hr" } }
+    ),
     P("notion-literature", "what literature and research papers do we track", topSource("notion"), {
       sources: ["notion"],
     }),
@@ -2384,11 +2395,18 @@ function adversarialProbes(): RetrievalProbe[] {
      * Access is deliberately open — the owner's decision, recorded in CLAUDE.md. These
      * assert the policy holds rather than that content is blocked, and exist so a
      * future change to that policy is a deliberate, visible break rather than a drift.
+     *
+     * ONE SUCH BREAK, MADE DELIBERATELY ON 2026-09-23. `#hr` is the recruiting channel —
+     * it names and assesses job candidates, who are outsiders — and the later, narrower
+     * owner decision keeps applicants' data out of the corpus in every path. So the probe
+     * that asserted it open now asserts it closed. Team compensation discussion is NOT
+     * part of that decision and stays asserted open by `comp-reachable`.
      */
     P(
-      "hr-reachable",
+      "hr-excluded",
       "what is discussed in the hr channel",
-      nonEmpty(1),
+      (h) =>
+        h.length ? [`#hr is excluded but returned ${h.length}: ${h.map(describe).join(", ")}`] : [],
       { sources: ["slack"], meta: { channel: "hr" } },
       4
     ),

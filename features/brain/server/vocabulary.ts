@@ -118,6 +118,12 @@ const HOUSE_TERMS: Array<[RegExp, string]> = [
     /\b(?:where (?:does|do|is)|which (?:file|module))\b[^.]{0,20}\blogger\b/i,
     "import observability",
   ],
+  // A NAME THE TRANSCRIBER GETS WRONG. Gemini's meeting notes write our engineer Fatih as
+  // "Fatty" — 22 times across 8 chunks on 2026-09-23, including the recap of the meeting
+  // that decided to hire him — and none of those chunks contains "Fatih", so a question
+  // about him by name could not reach them. Only the name triggers it; the corpus's
+  // other "fatty" (fatty acids, in the research sources) is demoted there already.
+  [/\bfatih\b/i, "Fatty"],
 ];
 
 /**
