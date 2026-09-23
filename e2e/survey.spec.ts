@@ -28,8 +28,21 @@ test.describe("Survey — Intro screen", () => {
       .first()
       .click();
     // Intro transition takes 1200ms — wait for slide 1 heading to appear
+    /**
+     * FIFTEEN SECONDS BECAUSE THIS IS SETUP, NOT THE ASSERTION.
+     *
+     * Getting to slide 1 is the precondition for the two keyboard tests below; the thing
+     * under test is what an arrow key does once we are there. On 2026-09-23 this wait
+     * timed out on Desktop Safari in CI — 75 passed, this one failed, and it failed
+     * HERE rather than on the arrow-key expectation, so nothing about the behaviour was
+     * in question. WebKit is the slowest engine in the matrix and the slide has an
+     * entrance transition.
+     *
+     * Waiting longer asserts exactly the same condition. If the slide genuinely never
+     * renders, this still fails — ten seconds later, with the same message.
+     */
     await expect(page.getByRole("heading", { name: /quality in → magic out/i })).toBeVisible({
-      timeout: 5000,
+      timeout: 15_000,
     });
   });
 });
