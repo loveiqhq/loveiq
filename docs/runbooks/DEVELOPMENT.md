@@ -232,6 +232,54 @@ Proving a candidate on its own, without generating anything:
 FIX_REF=my-branch PROBE=verify-survey-loop.mjs node scripts/prove-fix.mjs
 ```
 
+## Reading a Supabase failure alert
+
+Every write through `supabaseFetch` is checked, and a non-2xx is logged at
+`error` — which mirrors to the ops Slack channel. Two things about that alert
+are worth knowing before you go looking for a lost row.
+
+**A 409 is not a failure.** It is how idempotency is expressed: a replayed
+Stripe webhook hits the unique constraint on
+`payment_webhook_event.stripe_event_id` and is refused on purpose. Logged at
+`warn`, so it stays out of Slack.
+
+**An RPC is a call, not a write.** PostgREST expresses both a table insert and
+a database function call as a `POST`, and every analysis function in this
+codebase (`get_conversion_funnel` and the rest of the analysis RPCs) is reached that
+way. A failed function call reports
+
+    supabase: a database function call was REFUSED — nothing was written
+
+and carries `kind=rpc`. A refused INSERT reports "the row was not written" and
+carries `kind=write`. Before 2026-09-23 both said the second thing, and a
+mistyped report query was chased for an hour as data loss.
+
+**`PGRST202` means the arguments did not match**, not that the function is
+missing. `get_conversion_funnel` takes `(since_ts, utm_filter)`; a caller
+sending `{days: 7}` gets a 404 while the function sits there perfectly healthy.
+Check the signature before assuming a migration was skipped:
+
+```sql
+select proname, pg_get_function_identity_arguments(oid)
+from pg_proc where proname = 'the_function';
+```
+
+**The alert carries the identifiers you need.** `path`, `method`, `status`,
+`code` and `kind` are appended to the Slack line from an allowlist — objects
+are never expanded, because a payload is where an email or a report token
+hides. If you need more than that, Supabase's own gateway log has the request:
+
+```sql
+select log_attributes['request.path'] as path,
+       toInt32OrZero(log_attributes['response.status_code']) as status,
+       count() as n
+from logs
+where source = 'edge_logs'
+  and log_attributes['request.method'] in ('POST','PATCH','PUT','DELETE')
+  and toInt32OrZero(log_attributes['response.status_code']) >= 400
+group by path, status order by n desc limit 25;
+```
+
 ## Related Docs
 
 - [README.md](../../README.md)
