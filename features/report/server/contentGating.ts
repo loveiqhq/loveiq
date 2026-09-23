@@ -501,9 +501,10 @@ function trimToWindow(gated: readonly Report3Block[]): Report3Block[] {
  * Hand a reader only the article they are entitled to.
  *
  * Unlocked readers get every block, in the order the expanded frame draws them.
- * Locked readers get the free portion plus only the paid blocks the 580px window
- * can show, the last word-clipped — `gatedBlockCount` still reports the full paid
- * length, so nothing downstream has to infer how much was withheld.
+ * Locked readers get the free portion plus only the paid blocks the gated window
+ * (LOCKED_ARTICLE_WINDOW_PX) can show, the last word-clipped — `gatedBlockCount`
+ * still reports the full paid length, so nothing downstream has to infer how much
+ * was withheld.
  */
 export function splitArticleForReader(
   article: Report3LearnMoreArticle,
