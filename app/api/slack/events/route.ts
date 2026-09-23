@@ -1,11 +1,5 @@
 import { NextResponse } from "next/server";
-import { answerQuestion } from "@features/brain/server/answer";
-import {
-  claimQuestion,
-  finishQuestion,
-  questionsToday,
-  DAILY_QUESTION_LIMIT,
-} from "@features/brain/server/log";
+import { claimQuestion, finishQuestion } from "@features/brain/server/log";
 import {
   isBrainSlackConfigured,
   postBrainReply,
@@ -17,20 +11,34 @@ import {
   markSlackAlertDelivered,
   tryClaimSlackAlert,
 } from "@shared/observability/slack-alert-dedup";
-import { checkRateLimit } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// Retrieval plus a model call runs after the 200 below, not inside it. The
-// function must stay alive for that work, so the budget covers it.
+// The channel ingest runs after the 200 below, not inside it. The function must
+// stay alive for that work, so the budget covers it.
 export const maxDuration = 60;
+
+/**
+ * QUESTIONS ARE ANSWERED IN CLAUDE NOW, not here.
+ *
+ * Decided 2026-09-23: the brain lives in claude.ai and Claude Code, where it has every
+ * tool, links every source and offers ready-made prompts. This Slack door answered one
+ * question between 28 August and that day, against 1,647 calls through Claude, and each
+ * answer spent a free-tier model request. A mention or a DM now gets this pointer and no
+ * model call. Channel messages are still indexed below, which is unchanged.
+ */
+export const CLAUDE_REDIRECT =
+  "I answer questions in Claude now, not in Slack. Open claude.ai or Claude Code with the " +
+  "LoveIQ brain connector and ask there: it searches everything we have, links every " +
+  'source, and has ready-made prompts like "Catch me up" and "What needs me".';
 
 /**
  * POST /api/slack/events
  *
- * The company brain's front door. Someone @-mentions the bot in a channel or DMs
- * it; this answers in-thread from LoveIQ's own docs, commits and Jira.
+ * Slack's side of the company brain. A public channel message is pushed here and
+ * indexed; a mention or a DM gets a one-line pointer to Claude, where questions are
+ * answered (see CLAUDE_REDIRECT).
  *
  * Auth is the Slack request signature -- no CSRF, no rate-limit middleware, same
  * posture as the Stripe, Calendly and Resend webhooks. Safe to deploy before the
@@ -266,61 +274,9 @@ export async function POST(request: Request) {
       return;
     }
 
-    // Per-asker limit. The daily quota alone is a SHARED pool, so one person (or
-    // one runaway integration) could burn the whole team's day in a few minutes,
-    // and every question costs a corpus search plus a model call.
-    if (userId) {
-      const perUser = await checkRateLimit(userId, {
-        bucket: "brain-question",
-        limit: 10,
-        windowMs: 5 * 60_000,
-      });
-      if (!perUser.allowed) {
-        await postBrainReply({
-          channel,
-          threadTs,
-          text: "That's a lot of questions at once — give me a few minutes to catch up, then ask again.",
-        });
-        await finishQuestion(claim.id, { error: "per-user rate limited" });
-        return;
-      }
-    }
-
-    // Fails OPEN when the count cannot be read: refusing to answer because a
-    // bookkeeping query failed is worse than briefly overrunning the quota.
-    const asked = await questionsToday();
-    if (asked !== null && asked >= DAILY_QUESTION_LIMIT) {
-      await postBrainReply({
-        channel,
-        threadTs,
-        text: `We've used up today's free model quota (${DAILY_QUESTION_LIMIT} questions). It resets at midnight UTC.`,
-      });
-      await finishQuestion(claim.id, { error: "daily quota exceeded" });
-      return;
-    }
-
-    const answer = await answerQuestion({ question });
-    let posted = await postBrainReply({
-      channel,
-      threadTs,
-      text: answer.text,
-      blocks: answer.blocks,
-    });
-
-    // The answer is already paid for with a scarce model request, and the most
-    // likely reason Slack refused it is `invalid_blocks` -- the block payload is
-    // built from model markdown by a regex transform. Retrying as plain text
-    // delivers a slightly uglier answer instead of silence.
-    if (!posted) {
-      logger.warn({ eventId }, "brain: block post failed, retrying as plain text");
-      posted = await postBrainReply({ channel, threadTs, text: answer.text });
-    }
-
+    const posted = await postBrainReply({ channel, threadTs, text: CLAUDE_REDIRECT });
     await finishQuestion(claim.id, {
-      sourceCount: answer.sources.length,
-      latencyMs: answer.latencyMs,
-      error: posted ? (answer.status === "answered" ? null : answer.status) : "slack post failed",
-      answer: answer.text,
+      error: posted ? "redirected to Claude" : "slack post failed",
     });
   });
 

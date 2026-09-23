@@ -47,7 +47,7 @@ vi.mock("@features/brain/server/log", () => ({
   DAILY_QUESTION_LIMIT: 220,
 }));
 
-import { POST } from "@/app/api/slack/events/route";
+import { CLAUDE_REDIRECT, POST } from "@/app/api/slack/events/route";
 import {
   stripMention,
   verifySlackSignature,
@@ -186,7 +186,7 @@ describe("POST /api/slack/events", () => {
     delete process.env.SLACK_BRAIN_SIGNING_SECRET;
     const res = await POST(makeRequest("{}"));
     expect(res.status).toBe(503);
-    expect(mockAnswerQuestion).not.toHaveBeenCalled();
+    expect(mockPostBrainReply).not.toHaveBeenCalled();
   });
 
   it("returns 401 on a bad signature", async () => {
@@ -202,7 +202,7 @@ describe("POST /api/slack/events", () => {
     await expect(res.json()).resolves.toEqual({ challenge: "abc123" });
   });
 
-  it("answers an app_mention in-thread", async () => {
+  it("points an app_mention to Claude, in-thread, without a model call", async () => {
     const body = eventEnvelope({
       type: "app_mention",
       user: "U1",
@@ -213,14 +213,14 @@ describe("POST /api/slack/events", () => {
     const res = await POST(makeRequest(body));
     expect(res.status).toBe(200);
     await flush();
-    expect(mockAnswerQuestion).toHaveBeenCalledWith({ question: "why is the purge off" });
-    expect(mockFinishQuestion).toHaveBeenCalled();
+    expect(mockAnswerQuestion).not.toHaveBeenCalled();
     expect(mockPostBrainReply).toHaveBeenCalledWith(
-      expect.objectContaining({ channel: "C1", threadTs: "1700000000.1" })
+      expect.objectContaining({ channel: "C1", threadTs: "1700000000.1", text: CLAUDE_REDIRECT })
     );
+    expect(mockFinishQuestion).toHaveBeenCalledWith(1, { error: "redirected to Claude" });
   });
 
-  it("answers a direct message", async () => {
+  it("points a direct message to Claude", async () => {
     const body = eventEnvelope({
       type: "message",
       channel_type: "im",
@@ -231,9 +231,9 @@ describe("POST /api/slack/events", () => {
     });
     await POST(makeRequest(body));
     await flush();
-    expect(mockAnswerQuestion).toHaveBeenCalledWith({
-      question: "how does the nurture sequence work",
-    });
+    expect(mockPostBrainReply).toHaveBeenCalledWith(
+      expect.objectContaining({ channel: "D1", text: CLAUDE_REDIRECT })
+    );
   });
 
   it("ignores its own reply, so the bot cannot loop against its own quota", async () => {
@@ -248,7 +248,7 @@ describe("POST /api/slack/events", () => {
     const res = await POST(makeRequest(body));
     expect(res.status).toBe(200);
     expect(mockClaimQuestion).not.toHaveBeenCalled();
-    expect(mockAnswerQuestion).not.toHaveBeenCalled();
+    expect(mockPostBrainReply).not.toHaveBeenCalled();
   });
 
   it("ignores message subtypes like edits and joins", async () => {
@@ -261,7 +261,7 @@ describe("POST /api/slack/events", () => {
       text: "edited",
     });
     await POST(makeRequest(body));
-    expect(mockAnswerQuestion).not.toHaveBeenCalled();
+    expect(mockPostBrainReply).not.toHaveBeenCalled();
   });
 
   it("ignores a channel message that does not mention the bot", async () => {
@@ -273,7 +273,7 @@ describe("POST /api/slack/events", () => {
       text: "just chatting",
     });
     await POST(makeRequest(body));
-    expect(mockAnswerQuestion).not.toHaveBeenCalled();
+    expect(mockPostBrainReply).not.toHaveBeenCalled();
   });
 
   it("does not answer a retried delivery twice", async () => {
@@ -287,36 +287,7 @@ describe("POST /api/slack/events", () => {
     });
     const res = await POST(makeRequest(body));
     expect(res.status).toBe(200);
-    expect(mockAnswerQuestion).not.toHaveBeenCalled();
-  });
-
-  it("refuses to spend a model request once the daily quota is gone", async () => {
-    mockQuestionsToday.mockResolvedValue(221);
-    const body = eventEnvelope({
-      type: "app_mention",
-      user: "U1",
-      channel: "C1",
-      ts: "1700000000.1",
-      text: "<@UBOT> anything",
-    });
-    await POST(makeRequest(body));
-    await flush();
-    expect(mockAnswerQuestion).not.toHaveBeenCalled();
-    expect(mockFinishQuestion).toHaveBeenCalledWith(1, { error: "daily quota exceeded" });
-  });
-
-  it("still answers when the quota count cannot be read (fails open)", async () => {
-    mockQuestionsToday.mockResolvedValue(null);
-    const body = eventEnvelope({
-      type: "app_mention",
-      user: "U1",
-      channel: "C1",
-      ts: "1700000000.1",
-      text: "<@UBOT> anything",
-    });
-    await POST(makeRequest(body));
-    await flush();
-    expect(mockAnswerQuestion).toHaveBeenCalled();
+    expect(mockPostBrainReply).not.toHaveBeenCalled();
   });
 
   it("ignores an empty question rather than spending a request on it", async () => {
@@ -404,7 +375,9 @@ describe("push-based ingest: a public channel message is corpus, not a question"
     );
     expect(deferred).not.toBeNull();
     await flush();
-    expect(mockAnswerQuestion).toHaveBeenCalled();
+    expect(mockPostBrainReply).toHaveBeenCalledWith(
+      expect.objectContaining({ text: CLAUDE_REDIRECT })
+    );
   });
 });
 
@@ -447,7 +420,7 @@ describe("the workspace gate reads WHO SPOKE, not who the envelope was addressed
   it("refuses a question from a foreign speaker in a shared channel", async () => {
     await POST(makeRequest(mention({ user_team: THEIRS })));
     await flush();
-    expect(mockAnswerQuestion).not.toHaveBeenCalled();
+    expect(mockPostBrainReply).not.toHaveBeenCalled();
     expect(mockPostBrainReply).not.toHaveBeenCalled();
   });
 
@@ -455,14 +428,16 @@ describe("the workspace gate reads WHO SPOKE, not who the envelope was addressed
     // Positive control: without this the gate could deny everything and still pass.
     await POST(makeRequest(mention({ user_team: OURS })));
     await flush();
-    expect(mockAnswerQuestion).toHaveBeenCalledWith({ question: "what is each person paid" });
+    expect(mockPostBrainReply).toHaveBeenCalledWith(
+      expect.objectContaining({ text: CLAUDE_REDIRECT })
+    );
   });
 
   it("reads `team` and `source_team` too, which older payloads carry instead", async () => {
     await POST(makeRequest(mention({ team: THEIRS })));
     await POST(makeRequest(mention({ source_team: THEIRS })));
     await flush();
-    expect(mockAnswerQuestion).not.toHaveBeenCalled();
+    expect(mockPostBrainReply).not.toHaveBeenCalled();
   });
 
   it("fails CLOSED when no team field is present at all", async () => {
@@ -484,7 +459,7 @@ describe("the workspace gate reads WHO SPOKE, not who the envelope was addressed
       )
     );
     await flush();
-    expect(mockAnswerQuestion).not.toHaveBeenCalled();
+    expect(mockPostBrainReply).not.toHaveBeenCalled();
   });
 
   it("refuses to INGEST a channel message from a foreign speaker", async () => {
