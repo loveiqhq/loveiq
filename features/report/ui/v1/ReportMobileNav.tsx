@@ -3,6 +3,9 @@
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState, type FC } from "react";
 import { trackSectionNavigated } from "@features/analytics/client";
+import { lockBodyScroll, unlockBodyScroll } from "@shared/ui/body-scroll-lock";
+import { afterOverlayEntryGone } from "@shared/ui/overlay-history";
+import { useCloseOnBack } from "../hooks/useCloseOnBack";
 import { ReferFriendIcon, ShareReportIcon } from "../ReportActionIcons";
 import type { AccessTier, DisplayReportSection } from "../reportTitles";
 
@@ -137,15 +140,50 @@ const ReportMobileNav: FC<Props> = ({
     }, DRAWER_CLOSE_DURATION_MS);
   }, []);
 
-  // Body-scroll lock active for the full mount lifetime (open + closing) so
-  // the page doesn't jump during the exit animation.
+  // Back closes the menu instead of leaving the report, as it does the paywall.
+  useCloseOnBack(drawerOpen, closeDrawer);
+
+  /**
+   * A chapter tap jumps AFTER the menu has closed, not during.
+   *
+   * The menu locks the page with `position: fixed` (the shared lock), and a
+   * jump made while it is pinned is undone when the lock lets go and puts the
+   * reader back where they were. That is how the 2.0 menu's chapter links had
+   * been dead on production — the target still ~6,100px away after the tap, on
+   * Chromium and WebKit — while V1's worked only because its menu bypassed the
+   * shared lock, which is what stranded scrolling after "Share report".
+   *
+   * On Safari the menu's own history entry has normally been released by the
+   * time it has closed, so the jump takes its place and back from the chapter
+   * returns to where the reader was, with the next back leaving as it always
+   * did. `afterOverlayEntryGone` still waits if some overlay's entry is on top
+   * at that moment, so the jump never stacks on one.
+   */
+  const pendingJumpRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (phase !== "closed" || !pendingJumpRef.current) return;
+    const target = pendingJumpRef.current;
+    pendingJumpRef.current = null;
+    afterOverlayEntryGone(() => {
+      window.location.hash = target;
+    });
+  }, [phase]);
+
+  /**
+   * Body-scroll lock for the full mount lifetime (open + closing) so the page
+   * doesn't jump during the exit animation — through the SHARED lock.
+   *
+   * This menu used to write `body.style.overflow` itself. "Share report" closes
+   * it and opens the share modal in one tap; the modal's lock snapshotted the
+   * menu's `hidden` as the page's resting state and restored it on close, so
+   * after sharing, touch scrolling was dead for the rest of the visit (checked
+   * on Chromium and WebKit: `overflow: hidden` left behind). The shared lock is
+   * reference-counted precisely so overlapping overlays cannot strand it.
+   */
   useEffect(() => {
     if (!drawerMounted) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
+    lockBodyScroll();
+    return unlockBodyScroll;
   }, [drawerMounted]);
 
   useEffect(() => {
@@ -326,12 +364,16 @@ const ReportMobileNav: FC<Props> = ({
                       .filter(Boolean)
                       .join(" ")}
                     style={{ animationDelay: `${delayIdx * 24}ms` }}
-                    onClick={() => {
+                    onClick={(event) => {
                       trackSectionNavigated({
                         section_id: section.id,
                         source: "mobile_drawer",
                       });
                       onSectionClick?.(section.id);
+                      // The jump happens once the menu has let go of the page —
+                      // see pendingJumpRef.
+                      event.preventDefault();
+                      pendingJumpRef.current = section.id;
                       closeDrawer();
                     }}
                   >

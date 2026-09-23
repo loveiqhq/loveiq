@@ -2506,8 +2506,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const closeShareModal = useCallback(() => setIsShareModalOpen(false), []);
   // Back closes whichever of these is open instead of leaving the report — see
   // useCloseOnBack for the readers it was losing.
-  useCloseOnBack(isPricingModalOpen, closePricingModal, "pricing");
-  useCloseOnBack(isShareModalOpen, closeShareModal, "share");
+  useCloseOnBack(isPricingModalOpen, closePricingModal);
+  useCloseOnBack(isShareModalOpen, closeShareModal);
   const openPricingModal = useCallback(
     (archetype?: string | null) => {
       // Scope the modal to the archetype the user is currently upgrading. If
