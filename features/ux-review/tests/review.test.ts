@@ -363,6 +363,22 @@ describe("sessionClickTarget picks the control, not the loudest paragraph", () =
     vi.unstubAllGlobals();
   });
 
+  it("returns the page without the ad click that brought them", async () => {
+    // This pathname is both what the probe opens and what the ledger stores.
+    // The tracker stopped sending these on 2026-09-23; PostHog keeps the older
+    // events for 30 days.
+    process.env.POSTHOG_API_KEY = "test-key";
+    vi.stubGlobal("fetch", async () => ({
+      ok: true,
+      json: async () => ({
+        results: [["/?utm_term=my%20search&gclid=Cj0&v2=1", "button.flex-1", 1, 1]],
+      }),
+    }));
+    const got = await sessionClickTarget("01a0bd3c-4aa9-7c07-887c-7be13e4da753");
+    expect(got?.pathname).toBe("/?v2=1");
+    vi.unstubAllGlobals();
+  });
+
   it("still returns decoration when that is all the session has", async () => {
     process.env.POSTHOG_API_KEY = "test-key";
     vi.stubGlobal("fetch", async () => ({

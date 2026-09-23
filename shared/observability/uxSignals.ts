@@ -32,6 +32,7 @@
  * can reset it from the React layer when the pathname changes.
  */
 
+import { withoutTrackingParams } from "@shared/url/utm";
 import {
   trackDeadClick,
   trackRageClick,
@@ -65,23 +66,10 @@ const INTERACTIVE_SELECTOR =
   "a, button, [role=button], [tabindex]:not([tabindex='-1']), input, select, textarea, label, summary, [contenteditable='true'], [onclick]";
 const SELECTOR_MAX_LEN = 120;
 
-/**
- * Campaign and ad-click parameters: they identify one person's ad click and the
- * words they searched, and never change what the page shows. They used to ride
- * along in `pathname`, so the dead-control check replayed a real visitor's
- * `gclid` against production and `ux_finding.url_path` stored their search
- * term. Everything else is kept, because some of it does change the page — the
- * report's `?v2=1` arm, for one — and a probe sent to the wrong arm judges a
- * page the reader never saw.
- */
-const TRACKING_PARAM = /^(utm_|gad_|gclid$|gbraid$|wbraid$|fbclid$|msclkid$|matchtype$|network$)/i;
-
+/** The page, not the ad click that brought them — see `withoutTrackingParams`. */
 function getPathname(): string {
   if (typeof location === "undefined") return "/";
-  const params = new URLSearchParams(location.search);
-  for (const key of [...params.keys()]) if (TRACKING_PARAM.test(key)) params.delete(key);
-  const query = params.toString();
-  return location.pathname + (query ? `?${query}` : "");
+  return withoutTrackingParams(location.pathname + location.search);
 }
 
 function freshState(): NonNullable<Window["__loveiqUxSignalsState"]> {

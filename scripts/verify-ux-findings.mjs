@@ -44,6 +44,7 @@ import { AUTO_PR_CRITERIA, openReproductionPr } from "./lib/replay-pr.mjs";
 import { devicesForSession } from "./lib/session-devices.mjs";
 import { redactReportToken } from "./lib/redact-report-token.mjs";
 import { UX_SCANNERS } from "../features/ux-review/server/scanners.ts";
+import { withoutTrackingParams } from "../shared/url/utm.ts";
 import { hogQuery } from "./lib/hogql.mjs";
 // Shared with scripts/replay-bench/score.mjs, which runs under plain node and
 // cannot import this file. That module documents what earns a probe a place in
@@ -1230,7 +1231,9 @@ if (EXCEPTION_FINDINGS.length === OWN_EVENT_FETCH_LIMIT) {
 
 /** Only one per session: the same reader tapping the same dead thing is one defect. */
 const seenSessions = new Set(findings.map((f) => String(f[1])));
-for (const [sid, path, sel, n] of OWN_EVENT_FINDINGS) {
+for (const [sid, rawPath, sel, n] of OWN_EVENT_FINDINGS) {
+  // Older events still carry the ad click's parameters; see withoutTrackingParams.
+  const path = withoutTrackingParams(String(rawPath));
   if (seenSessions.has(String(sid))) continue;
   seenSessions.add(String(sid));
   findings.push([

@@ -20,6 +20,7 @@ import { escapeSlack, type SlackBlock } from "@shared/observability/slack";
 import { context, header, linkButton, section } from "@shared/observability/slack-blocks";
 
 import { reportingDay } from "@shared/time/reporting-day";
+import { withoutTrackingParams } from "@shared/url/utm";
 
 import { UX_REVIEW_MIN_CONFIDENCE, UX_SCANNERS } from "./scanners";
 
@@ -1788,7 +1789,10 @@ export async function sessionClickTarget(
   // "unknown" is what selectorFor() emits when it cannot describe the target.
   // Passing it to a probe would be passing a guess.
   if (!pathname.startsWith("/") || !selector || selector === "unknown") return null;
-  return { pathname, selector, clicks: Number(row?.[2] ?? 0) };
+  // Stripped here, where both the probe's URL_PATH and ux_finding.url_path come
+  // from: the tracker stopped sending them on 2026-09-23, but PostHog keeps the
+  // older events for 30 days and this reads them.
+  return { pathname: withoutTrackingParams(pathname), selector, clicks: Number(row?.[2] ?? 0) };
 }
 
 export async function sessionViewport(
