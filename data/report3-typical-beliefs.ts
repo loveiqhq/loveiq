@@ -106,6 +106,7 @@ export const REPORT_V4_TYPICAL_BELIEFS: Readonly<Record<string, Report3BeliefPan
  * own `t`/`b`/`i`/`p`/`h` module-private, and widening that file's surface for a
  * second consumer buys nothing. */
 
+import { scrambleLockedText } from "@features/report/server/scrambleLockedText";
 import type { Report3Block } from "./report3-learn-more";
 import type { Report3Run } from "./report3-archetype-page";
 
@@ -178,7 +179,7 @@ export const TYPICAL_BELIEFS_CHALLENGES: readonly Report3Block[] = [
   ),
   p(
     t(
-      "The problem is not the preference for spontaneity. Spontaneity genuinely may be one of the Spark Seeker’s strongest ways desire comes alive. "
+      "The problem is not the preference for spontaneity. Spontaneity genuinely may be one of the Spark Seeker's strongest ways desire comes alive. "
     ),
     b(
       "The difficulty begins when spontaneity stops being a preference and starts becoming proof: if desire does not appear naturally and effortlessly, it can begin to feel less real."
@@ -209,7 +210,7 @@ export const TYPICAL_BELIEFS_CHALLENGES: readonly Report3Block[] = [
   ),
   p(
     t(
-      "The Spark Seeker may increase pursuit to see whether the response returns, test the chemistry through flirtation, or lose interest when the expected energy does not come back. Yet the partner’s reduced initiation may reflect exhaustion, stress, medication, distraction, or changes in desire that say very little about attraction."
+      "The Spark Seeker may increase pursuit to see whether the response returns, test the chemistry through flirtation, or lose interest when the expected energy does not come back. Yet the partner's reduced initiation may reflect exhaustion, stress, medication, distraction, or changes in desire that say very little about attraction."
     )
   ),
   p(
@@ -217,10 +218,113 @@ export const TYPICAL_BELIEFS_CHALLENGES: readonly Report3Block[] = [
       "The more supportive belief does not require pretending that being desired is unimportant. It makes a more precise distinction: "
     ),
     i(
-      "“Being desired is deeply pleasurable to me, but another person’s momentary desire is not a reliable measurement of my value or attractiveness.”"
+      "“Being desired is deeply pleasurable to me, but another person's momentary desire is not a reliable measurement of my value or attractiveness.”"
     )
   ),
 ];
+
+/* ─── "Try this & see what shifts" ───────────────────────────────────────────
+ * 374:238 (open), 374:258 (open & gated), 374:217 (closed). The practice that
+ * closes the chapter body — the "how to improve" section the team placed after
+ * the paywall blur (decision 2026-09-21), with its own gating.
+ *
+ * Copy is 374:257 verbatim, the runs decoded from its character style
+ * overrides. Steps one to five open on a bold lead; step six ("Finally, test
+ * the new belief through experience.") is regular in both 374:257 and 375:220,
+ * so it is regular here too — flagged for Mark rather than "fixed". */
+
+export const TYPICAL_BELIEFS_PRACTICE_EYEBROW = "Practice time: ~15 min.";
+export const TYPICAL_BELIEFS_PRACTICE_TITLE = "Try this & see what shifts";
+
+export const TYPICAL_BELIEFS_PRACTICE: readonly Report3Block[] = [
+  p(
+    t(
+      "The goal is not to eliminate shadow beliefs or replace them with artificially positive ones. It is to notice when an automatic interpretation has quietly turned into a fact."
+    )
+  ),
+  p(t("A simple process can help.")),
+  p(
+    b("Separate the event from its meaning."),
+    t(" First describe what actually happened without interpretation. "),
+    i("“My partner has initiated less this week.”"),
+    t(" Then ask: "),
+    i("“What did I decide that meant?”"),
+    t(" The answer might be "),
+    i("“They are losing interest.”"),
+    t(" That second sentence is where the belief becomes visible.")
+  ),
+  p(
+    b("Name the rule underneath it."),
+    t(
+      " Once you notice the interpretation, ask what belief might lie underneath. If the thought is "
+    ),
+    i("“They had to tell me what they wanted, so I must be bad at this,”"),
+    t(" the belief might be "),
+    i("“A good sexual partner should just know what to do.”"),
+    t(" Or if asking for reassurance feels uncomfortable, the belief might be "),
+    i("“If I were truly desirable, I would not need to ask.”"),
+    t(
+      " Putting the belief into a clear sentence makes it much easier to examine instead of simply reacting to it."
+    )
+  ),
+  p(
+    b("Ask where the belief came from."),
+    t(
+      " It may reflect past relationships, cultural messages, family attitudes, romantic ideals, pornography, media, or simply repeated experience. Understanding the origin does not make a belief disappear, but it helps distinguish what feels familiar from what is necessarily true."
+    )
+  ),
+  p(
+    b("Test the interpretation."),
+    t(
+      " Ask whether the belief explains every realistic version of the situation. Can attraction remain strong while spontaneous desire decreases? Can planned sex become intensely erotic? Can a familiar partner still produce novelty? Have you ever wanted someone while being too tired, distracted, or stressed to initiate?"
+    )
+  ),
+  p(
+    b("Rewrite the belief without erasing the preference."),
+    t(" Effective reframing is not "),
+    i("“Routine is exciting”"),
+    t(
+      " if routine genuinely is not especially exciting for the Spark Seeker. It is something more accurate: "
+    ),
+    i(
+      "“Novelty strongly activates my desire, but novelty is not the only evidence that desire exists.”"
+    )
+  ),
+  p(
+    t(
+      "Finally, test the new belief through experience. Instead of waiting for pursuit, ask for more flirting. Instead of treating planning as the opposite of spontaneity, use planning to create anticipation. Instead of assuming familiar sex needs a completely new experience, change one element and notice whether curiosity returns."
+    )
+  ),
+  p(
+    b(
+      "The goal is not for the Spark Seeker to want less spark, but to stop treating its presence or absence as a verdict."
+    ),
+    t(
+      " A quieter period does not automatically mean desire is gone or something is wrong with the relationship. Spark can also be created through anticipation, attention and play. When excitement becomes something that can be cultivated rather than constantly tested, it can remain a source of energy without becoming a measure of how much desire, attraction, or connection is left."
+    )
+  ),
+];
+
+/**
+ * A gated passage as the reader receives it — the split is made HERE, on the
+ * server, so the browser never decides where the wall falls.
+ *
+ * Unlocked: everything in `free`, `ramp` null, `rest` empty.
+ * Locked: `free` is readable; `ramp` is the block the blur fades in over, real
+ * copy because the light end of the ramp is legible; `rest` sits under the full
+ * blur and is scrambled (see scrambleLockedText) — same shape, no content.
+ */
+export interface Report3GatedCopy {
+  free: readonly Report3Block[];
+  ramp: Report3Block | null;
+  rest: readonly Report3Block[];
+}
+
+export interface Report3PracticeView extends Report3GatedCopy {
+  eyebrow: string;
+  title: string;
+  locked: boolean;
+}
 
 /**
  * What the chapter component receives. Assembled on the server and handed down as
@@ -234,12 +338,14 @@ export interface Report3TypicalBeliefsView {
   /**
    * Index of the first LOCKED row in both panels, or null when the chapter is
    * open. 381:222 turns rows 1 to 3 and marks row 4 onwards "at rest (p=0) ·
-   * LOCKED" under a 5px layer blur; 381:362 blurs its own rows 4 to 10 to match.
-   * One number drives both, because the frame uses one boundary.
+   * LOCKED"; 381:362 blurs its own rows 4 to 10 to match. One number drives both,
+   * because the frame uses one boundary. Row `lockedFrom` itself is the ramp row
+   * (progressive blur, real copy); every row after it is scrambled.
    */
   lockedFrom: number | null;
   challengesTitle: string;
-  challenges: readonly Report3Block[];
+  challenges: Report3GatedCopy;
+  practice: Report3PracticeView;
 }
 
 /** A turn as the reader receives it. */
@@ -258,10 +364,55 @@ export interface Report3BeliefTurnView {
 export const TYPICAL_BELIEFS_FREE_ROWS = 3;
 
 /**
+ * 348:221 keeps "Common challenges"' subheading and its first three paragraphs
+ * sharp; the fourth block ("For the Spark Seeker, planning…") is the one the
+ * blur ramps in over.
+ */
+export const TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS = 4;
+
+/** 374:264 keeps the first two practice paragraphs sharp; the third ramps. */
+export const TYPICAL_BELIEFS_PRACTICE_FREE_BLOCKS = 2;
+
+const scrambleBlock = (block: Report3Block): Report3Block => {
+  if (block.kind === "heading") return { ...block, text: scrambleLockedText(block.text) };
+  if (block.kind === "list") {
+    return {
+      ...block,
+      items: block.items.map((runs) =>
+        runs.map((run) => ({ ...run, text: scrambleLockedText(run.text) }))
+      ),
+    };
+  }
+  return {
+    ...block,
+    runs: block.runs.map((run) => ({ ...run, text: scrambleLockedText(run.text) })),
+  };
+};
+
+/** Splits a passage at `freeBlocks`: clear, ramp, then scrambled rest. */
+const gate = (
+  blocks: readonly Report3Block[],
+  freeBlocks: number,
+  locked: boolean
+): Report3GatedCopy =>
+  locked
+    ? {
+        free: blocks.slice(0, freeBlocks),
+        ramp: blocks[freeBlocks] ?? null,
+        rest: blocks.slice(freeBlocks + 1).map(scrambleBlock),
+      }
+    : { free: blocks, ramp: null, rest: [] };
+
+/**
  * Server-side assembly. Returns null for an archetype nobody has written yet.
  *
  * `locked` is decided by the caller, from the same gate every other section runs
  * through, so nothing in the V4 tree ever sees an access plan.
+ *
+ * A locked reader receives: every free block and row verbatim; the ramp block and
+ * ramp row verbatim (legible through the light end of the blur); no shift for any
+ * locked row; and SCRAMBLED copy for everything that is only ever shown under the
+ * full blur. Nothing paid past the ramp leaves the server.
  */
 export function buildTypicalBeliefs(
   archetype: string,
@@ -270,17 +421,24 @@ export function buildTypicalBeliefs(
   const panels = REPORT_V4_TYPICAL_BELIEFS[archetype];
   if (!panels) return null;
   const lockedFrom = locked ? TYPICAL_BELIEFS_FREE_ROWS : null;
+  const underFullBlur = (i: number) => lockedFrom !== null && i > lockedFrom;
   return {
     intro: TYPICAL_BELIEFS_INTRO,
     panels: {
       turns: panels.turns.map((turn, i) => ({
-        shadow: turn.shadow,
+        shadow: underFullBlur(i) ? scrambleLockedText(turn.shadow) : turn.shadow,
         shift: lockedFrom !== null && i >= lockedFrom ? null : turn.shift,
       })),
-      sun: panels.sun,
+      sun: panels.sun.map((belief, i) => (underFullBlur(i) ? scrambleLockedText(belief) : belief)),
     },
     lockedFrom,
     challengesTitle: TYPICAL_BELIEFS_CHALLENGES_TITLE,
-    challenges: TYPICAL_BELIEFS_CHALLENGES,
+    challenges: gate(TYPICAL_BELIEFS_CHALLENGES, TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS, locked),
+    practice: {
+      eyebrow: TYPICAL_BELIEFS_PRACTICE_EYEBROW,
+      title: TYPICAL_BELIEFS_PRACTICE_TITLE,
+      locked,
+      ...gate(TYPICAL_BELIEFS_PRACTICE, TYPICAL_BELIEFS_PRACTICE_FREE_BLOCKS, locked),
+    },
   };
 }

@@ -84,6 +84,43 @@ export const REPORT_V3_CHAPTER_BY_ID: ReadonlyMap<string, ReportV3Chapter> = new
   REPORT_V3_CHAPTERS.map((c) => [c.id, c])
 );
 
+const v3Chapter = (id: string): ReportV3Chapter => {
+  const chapter = REPORT_V3_CHAPTER_BY_ID.get(id);
+  if (!chapter) throw new Error(`reportV3Nav: no V3 chapter "${id}"`);
+  return chapter;
+};
+
+/**
+ * Report V4 (`?v4=1`) moves ONE chapter: Typical Beliefs opens the "How your
+ * archetype works" part, ahead of Accelerators & Brakes — the team's chapter
+ * sequence (2026-09-14) and Figma 1:849 both put it first. Fatih's call,
+ * 2026-09-23.
+ *
+ * The same 21 ids as V3, so every filter keyed on the order still holds, and the
+ * part is renumbered so the V3 eyebrows the other chapters still carry keep
+ * counting up (Accelerators & Brakes reads 2.2). `?v3=1` keeps REPORT_V3_CHAPTERS
+ * exactly as it was. The wider Part III-VI regrouping Figma draws is not done.
+ */
+export const REPORT_V4_CHAPTERS: readonly ReportV3Chapter[] = [
+  { ...v3Chapter("typical_beliefs"), number: "2.1" },
+  { ...v3Chapter("typical_arousal_accelerators_turn_ons_of_the_core_archetype"), number: "2.2" },
+  ...REPORT_V3_CHAPTERS.filter(
+    (c) =>
+      c.id !== "typical_beliefs" &&
+      c.id !== "typical_arousal_accelerators_turn_ons_of_the_core_archetype"
+  ),
+];
+
+/** Body order for V4 — V3's, with Typical Beliefs first in its part. */
+export const REPORT_V4_SECTION_ORDER: readonly string[] = [
+  "core_archetype",
+  ...REPORT_V4_CHAPTERS.map((c) => c.id),
+];
+
+export const REPORT_V4_CHAPTER_BY_ID: ReadonlyMap<string, ReportV3Chapter> = new Map(
+  REPORT_V4_CHAPTERS.map((c) => [c.id, c])
+);
+
 export interface ReportV3PartDivider {
   /** "Part I" … "Part V". */
   part: string;
@@ -146,7 +183,7 @@ const V3_PART_LABELS: Record<string, string> = {
   "5": "Your edges",
 };
 
-export const REPORT_V3_NAV_PARTS: readonly ReportV3NavPart[] = [
+const navPartsFrom = (chapters: readonly ReportV3Chapter[]): readonly ReportV3NavPart[] => [
   {
     part: "Part I",
     label: "Your constellation",
@@ -158,14 +195,21 @@ export const REPORT_V3_NAV_PARTS: readonly ReportV3NavPart[] = [
   ...["2", "3", "4", "5"].map((p) => ({
     part: `Part ${{ "2": "II", "3": "III", "4": "IV", "5": "V" }[p]}`,
     label: V3_PART_LABELS[p] as string,
-    items: REPORT_V3_CHAPTERS.filter((c) => c.number.startsWith(`${p}.`)).map((c) => ({
-      label: c.title,
-      id: c.id,
-      // Partnership has no row of its own in report-general.ts; it shares
-      // Libido's gate, exactly as it does in V1.
-      ...(c.id === "challenges_in_partnership"
-        ? { gateId: "libido_challenges_in_relationships" }
-        : {}),
-    })),
+    items: chapters
+      .filter((c) => c.number.startsWith(`${p}.`))
+      .map((c) => ({
+        label: c.title,
+        id: c.id,
+        // Partnership has no row of its own in report-general.ts; it shares
+        // Libido's gate, exactly as it does in V1.
+        ...(c.id === "challenges_in_partnership"
+          ? { gateId: "libido_challenges_in_relationships" }
+          : {}),
+      })),
   })),
 ];
+
+export const REPORT_V3_NAV_PARTS: readonly ReportV3NavPart[] = navPartsFrom(REPORT_V3_CHAPTERS);
+
+/** The same nav in V4's body order, so the drawer lists Typical Beliefs first too. */
+export const REPORT_V4_NAV_PARTS: readonly ReportV3NavPart[] = navPartsFrom(REPORT_V4_CHAPTERS);

@@ -11,6 +11,7 @@ import {
 import type { V4LearnMoreByChapter } from "@/data/report3-learn-more";
 import V4Chapter from "./V4Chapter";
 import V4LearnMore from "./V4LearnMore";
+import V4TryThis from "./V4TryThis";
 import V4TypicalBeliefs from "./V4TypicalBeliefs";
 import V4PartHeading from "./V4PartHeading";
 
@@ -84,6 +85,9 @@ const V4ChapterPart: FC<Props> = ({
 
     {chapters.map((c) => {
       const entry = c.id ? learnMore?.[c.id] : undefined;
+      // Typical Beliefs brings its own body (304:256), so its row drops the
+      // generic 356px / 20px-padding treatment — the body pads itself.
+      const beliefs = c.id === "typical_beliefs" && entry ? typicalBeliefs : null;
       return (
         <Fragment key={c.id ?? c.title}>
           {/* 1:858 / 1:861 / 1:872 / 1:883 / 1:894 */}
@@ -99,13 +103,18 @@ const V4ChapterPart: FC<Props> = ({
                   : TEASER_PLACEHOLDER
             }
             defaultOpen={Boolean(entry)}
+            bare={Boolean(beliefs)}
           >
             {entry ? (
               <>
                 {/* 304:256 sits ABOVE the article in 1:849: the chapter body
-                 * first, then "Go deeper & learn more". */}
-                {c.id === "typical_beliefs" && typicalBeliefs ? (
-                  <V4TypicalBeliefs view={typicalBeliefs} />
+                 * first, then the practice (374:238), then "Go deeper & learn
+                 * more". All three share the host's paywall. */}
+                {beliefs ? (
+                  <>
+                    <V4TypicalBeliefs view={beliefs} onUnlock={onUnlock} />
+                    <V4TryThis practice={beliefs.practice} onUnlock={onUnlock} />
+                  </>
                 ) : null}
                 <V4LearnMore article={entry.article} locked={entry.locked} onUnlock={onUnlock} />
               </>

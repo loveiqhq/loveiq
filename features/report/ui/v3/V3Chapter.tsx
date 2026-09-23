@@ -1,7 +1,11 @@
 "use client";
 
 import { createContext, useContext, useState, type FC, type ReactNode } from "react";
-import { REPORT_V3_CHAPTER_BY_ID, type ReportV3Chapter } from "./reportV3Nav";
+import {
+  REPORT_V3_CHAPTER_BY_ID,
+  REPORT_V4_CHAPTER_BY_ID,
+  type ReportV3Chapter,
+} from "./reportV3Nav";
 
 /**
  * V3 chapter chrome — Figma 10439:181 (eyebrow) + 10439:190 (title button).
@@ -22,9 +26,27 @@ export function useIsV3(): boolean {
   return useContext(V3ModeContext);
 }
 
-/** The chapter meta for a section id, or null if it is not a numbered chapter. */
-export function getV3Chapter(sectionId: string): ReportV3Chapter | null {
-  return REPORT_V3_CHAPTER_BY_ID.get(sectionId) ?? null;
+/**
+ * Report V4 rides on V3 mode (`?v4=1` implies V3), so it is announced on top of
+ * it rather than instead of it. It exists for the few places whose ORDER differs —
+ * the chapter nav and the numbers in the V3 eyebrows — see REPORT_V4_CHAPTERS.
+ */
+const V4ModeContext = createContext(false);
+
+export const V4ModeProvider: FC<{ children: ReactNode }> = ({ children }) => (
+  <V4ModeContext.Provider value={true}>{children}</V4ModeContext.Provider>
+);
+
+export function useIsV4(): boolean {
+  return useContext(V4ModeContext);
+}
+
+/**
+ * The chapter meta for a section id, or null if it is not a numbered chapter.
+ * `v4` reads V4's numbering, where Typical Beliefs and Accelerators & Brakes swap.
+ */
+export function getV3Chapter(sectionId: string, v4 = false): ReportV3Chapter | null {
+  return (v4 ? REPORT_V4_CHAPTER_BY_ID : REPORT_V3_CHAPTER_BY_ID).get(sectionId) ?? null;
 }
 
 /** Lucide `book-open`, stroke #795FC8. Figma draws it at 0.9917 stroke inside a

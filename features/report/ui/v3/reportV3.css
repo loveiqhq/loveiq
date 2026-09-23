@@ -4323,3 +4323,555 @@
     transition: none;
   }
 }
+
+/* ══ Typical Beliefs — the V4 build, 2026-09-23 ═══════════════════════════════
+ * Figma 304:256 (open), 348:213 (paywalled), 374:217 / 374:238 / 374:258 (the
+ * practice card). Appended per this file's contract: the chapter and panel rules
+ * above stay where they are, and what follows refines them. In the live report
+ * the chapter now sits in V4Chapter rather than `.rv3-chapter`, so none of the V3
+ * suffix restyles (1653-1731) or its overflow clip (612-615) reach it any more. */
+
+/* ── Chapter row discs — 304:260 open, 1:866 closed ─────────────────────────────
+ * Figma redrew the "Control / Disc": OPEN is a white disc with a 1.5px violet ring
+ * and the chevron pointing up; CLOSED is the 10% lavender disc pointing down. The
+ * rule at 2568 turned the closed disc upside down; this re-points both, and the
+ * ring is an inset shadow so it takes no room. */
+.rv3 .rv4-chapter:not(.is-open) .rv4-chapter__chev {
+  transform: none;
+}
+.rv3 .rv4-chapter.is-open .rv4-chapter__chev {
+  background: #fff;
+  box-shadow: inset 0 0 0 1.5px var(--rv3-violet);
+}
+.rv3 .rv4-chapter__chev svg {
+  transition: transform 260ms ease;
+}
+.rv3 .rv4-chapter.is-open .rv4-chapter__chev svg {
+  transform: rotate(180deg);
+}
+
+/* A chapter that brings its own body (V4Chapter `bare`). No 356 column, gap or
+ * padding — 304:264 pads itself — and `width: auto` rather than 100%, so the
+ * full-bleed cards' own `calc(100% + 32px)` is not out-ranked. Its children stay
+ * mounted while collapsed; `hidden` must beat the body's `display: flex`. */
+.rv3 .rv4-chapter__body.is-bare {
+  display: block;
+  gap: 0;
+  padding: 0;
+}
+.rv3 .rv4-chapter__body.is-bare > * {
+  width: auto;
+}
+.rv3 .rv4-chapter__body[hidden] {
+  display: none;
+}
+/* 374:238 is 1535 tall around a 1511 card: 24px from the practice to the article.
+ * The live "Does this resonate?" row follows the article at the body's 16. */
+.rv3 .rv4-chapter__body.is-bare > .rv4-learn {
+  margin-top: 24px;
+}
+.rv3 .rv4-chapter__body.is-bare > .rv4-rating {
+  padding-top: 16px;
+}
+
+/* ── Chapter prose — 304:264 ────────────────────────────────────────────────── */
+/* The frame's paragraphs are 356 wide in the 361 column, and those 5px decide its
+ * line breaks, so they are kept. Bold runs are ink, not copy grey. */
+.rv3 .rv4-tb .rv4-prose__p {
+  margin-right: 5px;
+}
+.rv3 .rv4-tb .rv4-prose__p strong {
+  color: var(--rv3-ink);
+}
+/* 304:277 / 304:380 / 304:396 — an H3 sits 10px down its frame and 16 above the
+ * next block, where the article's subheadings run 26 / 14. */
+.rv3 .rv4-tb .rv4-prose__h {
+  margin-bottom: 16.8px;
+  padding-top: 10px;
+}
+.rv3 .rv4-tb .rv4-prose__p:has(+ .rv4-prose__h) {
+  margin-bottom: 16px;
+}
+/* 304:378 → 304:380: 48px from the H2's text to the H3's. */
+.rv3 .rv4-tb__h2 {
+  margin-bottom: 16.4px;
+}
+.rv3 .rv4-tb > :last-child,
+.rv3 .rv4-tb__blurred > :last-child {
+  margin-bottom: 0;
+}
+
+/* ── The belief panels ──────────────────────────────────────────────────────── */
+/* Figma has no desktop frames. Inside the chapter the panels fill the column on
+ * tablet and desktop, like the prose around them and the Summary above; 361 stays
+ * the ceiling everywhere else. */
+.rv3 .rv4-tb .rv4-turn,
+.rv3 .rv4-tb .rv4-sun {
+  max-width: none;
+}
+/* 368:5624 — the green panel has its own blurred blob, the twin of 368:5483. */
+.rv3 .rv4-sun {
+  position: relative;
+}
+.rv3 .rv4-sun__blob {
+  background: rgba(46, 125, 91, 0.34);
+  border-radius: 50%;
+  filter: blur(34px);
+  height: 132px;
+  opacity: 0.62;
+  position: absolute;
+  right: -22px;
+  top: -26px;
+  width: 132px;
+}
+/* 368:5629 — a sun row centres its tick on the belief (counterAxisAlignItems
+ * CENTER); the coral row pins its tick to the first line. */
+.rv3 .rv4-sun__row {
+  align-items: center;
+}
+/* 368:5627 / 368:5633 — the green panel's title is #23503f and its beliefs #1d3a2f,
+ * darker than the #2e7d5b the coral panel's shift text uses. */
+.rv3 .rv4-sun__head {
+  color: #23503f;
+}
+.rv3 .rv4-sun__text {
+  color: #1d3a2f;
+}
+/* 368:5501 — a turned belief is #a8705c, solid. The crossing row's #5f403e
+ * (368:5549) is exactly halfway from ink to it, which the colour transition draws
+ * on its own. */
+.rv3 .rv4-turn__row.is-turned .rv4-turn__text {
+  color: #a8705c;
+  opacity: 1;
+}
+/* The 9px between a belief and its shift. As padding on the collapsing box it never
+ * collapsed — a 0fr track still holds its item's padding, so a resting row measured
+ * 70.4 against the frame's 61 (and a resting panel 816 against 701). As the label's
+ * margin it sits inside the clipped content instead: 61 at rest, 126 turned. */
+.rv3 .rv4-turn__shift-inner {
+  padding-top: 0;
+}
+.rv3 .rv4-turn__shift-label {
+  margin-top: 9px;
+}
+/* Figma's strokes are INSIDE: the panel's 1px border and each row's 1px top rule
+ * sit within the frame's 701 and 61, where CSS adds them on top — and the frame
+ * rounds each 22.4 / 38.4 text box up to 23 / 39. Taking both back out of the
+ * padding puts the text where the frame does (16px into the panel, 11px into a
+ * row) and lands a resting panel on 701 and a row on 61. */
+.rv3 .rv4-turn__head,
+.rv3 .rv4-sun__head {
+  padding: 15px 16px 15.6px;
+}
+.rv3 .rv4-turn__row,
+.rv3 .rv4-sun__row {
+  padding: 10px 0 11.6px;
+}
+.rv3 .rv4-turn__foot,
+.rv3 .rv4-sun__foot {
+  height: 28px;
+}
+
+/* ── Locked panels — 381:222 / 381:362 ────────────────────────────────────────
+ * Row `lockedFrom` is the ramp: the blur fades in over its top 50.8% (coral) /
+ * 65.6% (green) and holds below. The rows after it sit under Figma's radius 5,
+ * which is CSS 2.5px — not the 5px above, which doubled it. */
+.rv3 .rv4-turn__row.is-locked,
+.rv3 .rv4-sun__row.is-locked {
+  filter: none;
+  user-select: none;
+}
+.rv3 .rv4-turn__row.is-locked.is-blurred,
+.rv3 .rv4-sun__row.is-locked.is-blurred {
+  filter: blur(2.5px);
+}
+.rv3 .rv4-turn__row.is-ramp,
+.rv3 .rv4-sun__row.is-ramp {
+  position: relative;
+}
+.rv3 .rv4-turn__ramp {
+  --rv4-band: 50.8%;
+}
+.rv3 .rv4-sun__ramp {
+  --rv4-band: 65.6%;
+}
+/* The free rows and the locked rows are two lists; the 8px list foot belongs
+ * after the last row only. */
+.rv3 .rv4-turn.is-locked > .rv4-turn__list:not(.is-locked),
+.rv3 .rv4-sun.is-locked > .rv4-sun__list:not(.is-locked) {
+  padding-bottom: 0;
+}
+/* The locked rows' group owns the click and positions the lock — inside the group,
+ * because rows 1-3 grow from 61 to 126px as they turn. */
+.rv3 .rv4-tb-lock {
+  cursor: pointer;
+  position: relative;
+}
+.rv3 .rv4-turn__lock {
+  --rv4-lock-top: 100px;
+}
+.rv3 .rv4-sun__lock {
+  --rv4-lock-top: 111px;
+}
+/* 441:5956 "Lock / Gradient Brand" — the gradient runs between the handles at
+ * 14.6% and 85.4% of the diagonal, so its stops are placed there. */
+.rv3 .rv4-lockbadge {
+  align-items: center;
+  background: linear-gradient(135deg, #fb683e 14.6%, #e88c8c 51.4%, #ac88ed 85.4%);
+  border: 0;
+  border-radius: 24px;
+  box-shadow: 0 4px 12px rgba(168, 90, 76, 0.3);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  height: 48px;
+  justify-content: center;
+  left: 50%;
+  padding: 0;
+  position: absolute;
+  top: var(--rv4-lock-top, 100px);
+  transform: translateX(-50%);
+  width: 48px;
+  z-index: 1;
+}
+.rv3 .rv4-lockbadge svg {
+  display: block;
+  height: 22px;
+  width: 22px;
+}
+.rv3 .rv4-lockbadge:focus-visible {
+  outline: 2px solid var(--rv3-violet);
+  outline-offset: 2px;
+}
+
+/* ── Progressive blur — the ramp into every paywall ───────────────────────────
+ * 411:5694's technique, generalised: three stacked backdrop layers, each faded in
+ * over a third of the band. Stacked blurs add in quadrature, so 0.8 / 1.39 /
+ * 1.92px land on 2.5px (Figma radius 5) at the band's foot and hold there below
+ * it. `--rv4-band` is the ramp's length, a percentage of the element or a length.
+ * Only ever laid over the ramp block — everything past it takes a plain filter,
+ * which is cheaper on phones and doubles as the fallback. */
+.rv3 .rv4-pblur {
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+.rv3 .rv4-pblur > span {
+  -webkit-backdrop-filter: blur(var(--rv4-pb));
+  backdrop-filter: blur(var(--rv4-pb));
+  inset: 0;
+  -webkit-mask-image: linear-gradient(180deg, transparent var(--rv4-pf), #000 var(--rv4-pt));
+  mask-image: linear-gradient(180deg, transparent var(--rv4-pf), #000 var(--rv4-pt));
+  position: absolute;
+}
+.rv3 .rv4-pblur > span:nth-child(1) {
+  --rv4-pb: 0.8px;
+  --rv4-pf: 0px;
+  --rv4-pt: calc(var(--rv4-band, 76px) / 3);
+}
+.rv3 .rv4-pblur > span:nth-child(2) {
+  --rv4-pb: 1.39px;
+  --rv4-pf: calc(var(--rv4-band, 76px) / 3);
+  --rv4-pt: calc(var(--rv4-band, 76px) * 2 / 3);
+}
+.rv3 .rv4-pblur > span:nth-child(3) {
+  --rv4-pb: 1.92px;
+  --rv4-pf: calc(var(--rv4-band, 76px) * 2 / 3);
+  --rv4-pt: var(--rv4-band, 76px);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .rv3 .rv4-pblur {
+    display: none;
+  }
+  .rv3 .rv4-turn__row.is-ramp,
+  .rv3 .rv4-sun__row.is-ramp,
+  .rv3 .rv4-tb__ramp,
+  .rv3 .rv4-try__ramp {
+    filter: blur(1.25px);
+  }
+}
+
+/* ── The chapter's gated prose — 348:221 ──────────────────────────────────────
+ * The subheading and three paragraphs stay sharp; the next block ramps in over
+ * four 25.6px lines (Mark: "have all paywall go through progression of 4 lines");
+ * everything after sits under the full blur to the end of the chapter, with the
+ * Premium card 87px in. The old uniform blur and two-line opacity mask are
+ * switched off here. */
+.rv3 .rv4-tb__gated {
+  filter: none;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+.rv3 .rv4-tb__gate {
+  cursor: pointer;
+  position: relative;
+}
+.rv3 .rv4-tb__ramp {
+  --rv4-band: 102.4px;
+  position: relative;
+}
+.rv3 .rv4-tb__blurred {
+  filter: blur(2.5px);
+}
+.rv3 .rv4-tb__gate .rv4-premium {
+  top: 87px;
+}
+
+/* ══ "Try this & see what shifts" — 374:217 / 374:238 / 374:258 ═══════════════
+ * The practice card. Full-bleed like "Go deeper" (392 wide in a 393 frame), in the
+ * frame's gold: a 14% → 3% wash, a 60% hairline, radius 27. Padding is the frame's
+ * own 18 / 22 around a 1px centred stroke. */
+.rv3 .rv4-try {
+  background: linear-gradient(180deg, rgba(230, 182, 92, 0.14) 0%, rgba(230, 182, 92, 0.03) 100%);
+  border: 1px solid rgba(230, 182, 92, 0.6);
+  border-radius: 27px;
+  margin-inline: calc(var(--rv3-gutter) * -1);
+  padding: 18px 22px 20px;
+  position: relative;
+  width: calc(100% + var(--rv3-gutter) * 2);
+}
+/* 374:217 is 343 tall: 40px from the teaser's foot to the card's edge. */
+.rv3 .rv4-try:not(.is-open) {
+  padding-bottom: 39px;
+}
+/* 374:221 — "Practice time:" in Light, the value in Bold. */
+.rv3 .rv4-try__eyebrow {
+  color: #2e7d5b;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 12px;
+  margin: 0;
+  text-transform: uppercase;
+}
+.rv3 .rv4-try__eyebrow-label {
+  font-weight: 300;
+}
+/* 374:224 — 51px, but a MINIMUM: on a 320 phone the title wraps to two lines and
+ * the row grows instead of running into the copy. */
+.rv3 .rv4-try__button {
+  align-items: flex-start;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 8px;
+  min-height: 51px;
+  padding: 11px 0 0;
+  text-align: left;
+  width: 100%;
+}
+/* 374:225 */
+.rv3 .rv4-try__chip {
+  align-items: center;
+  background: rgba(230, 182, 92, 0.16);
+  border-radius: 9px;
+  color: #b28a3c;
+  display: flex;
+  flex: none;
+  height: 29px;
+  justify-content: center;
+  width: 29px;
+}
+.rv3 .rv4-try__chip svg {
+  display: block;
+  height: 17px;
+  width: 17px;
+}
+/* 374:230 */
+.rv3 .rv4-try__label {
+  color: #7a4e12;
+  flex: 1 1 auto;
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.24px;
+  line-height: 24px;
+  min-width: 0;
+}
+/* 374:232 closed — gold at 10%, chevron down; 374:253 open — white, a 1.5px gold
+ * ring, chevron up. */
+.rv3 .rv4-try__chev {
+  align-items: center;
+  background: rgba(178, 138, 60, 0.1);
+  border-radius: 17px;
+  color: #b28a3c;
+  display: flex;
+  flex: none;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+.rv3 .rv4-try__chev svg {
+  display: block;
+  height: 15px;
+  transition: transform 0.18s ease;
+  width: 15px;
+}
+.rv3 .rv4-try.is-open .rv4-try__chev {
+  background: #fff;
+  box-shadow: inset 0 0 0 1.5px #b28a3c;
+}
+.rv3 .rv4-try.is-open .rv4-try__chev svg {
+  transform: rotate(180deg);
+}
+.rv3 .rv4-try__body {
+  padding-top: 4px;
+}
+/* 374:257 is 358 wide at x=22 in the 392 card, so it runs 12px into the right
+ * padding — the same load-bearing slop the article has, since it sets the line
+ * breaks. Capped at 358 so tablet and desktop keep the frame's measure. */
+.rv3 .rv4-try .rv4-prose__p {
+  width: min(358px, calc(100% + 12px));
+}
+.rv3 .rv4-try__body > :last-child,
+.rv3 .rv4-try__blurred > :last-child {
+  margin-bottom: 0;
+}
+/* 375:270 — the closed teaser: a 218px box, faded over its last three lines the way
+ * Mark coloured them (#7e7e7e / #b5b5b5 / #e5e5e5), and the pill overlapping its foot
+ * by 10.5px, centred on the 358 column as 452:295 is. */
+.rv3 .rv4-try__closed {
+  position: relative;
+  width: min(358px, calc(100% + 12px));
+}
+.rv3 .rv4-try__teaser {
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    #000 0%,
+    #000 69%,
+    rgba(0, 0, 0, 0.5) 74%,
+    rgba(0, 0, 0, 0.29) 84%,
+    rgba(0, 0, 0, 0.1) 95%,
+    rgba(0, 0, 0, 0.05) 100%
+  );
+  mask-image: linear-gradient(
+    180deg,
+    #000 0%,
+    #000 69%,
+    rgba(0, 0, 0, 0.5) 74%,
+    rgba(0, 0, 0, 0.29) 84%,
+    rgba(0, 0, 0, 0.1) 95%,
+    rgba(0, 0, 0, 0.05) 100%
+  );
+  max-height: 218px;
+  overflow: hidden;
+}
+.rv3 .rv4-try__teaser .rv4-prose__p {
+  width: auto;
+}
+/* 452:295 "Show all pill" — Mark's standard 163x32 teaser CTA, in the card's brown. */
+.rv3 .rv4-try__open {
+  align-items: center;
+  background: #fff;
+  border: 1.5px solid #8f5e16;
+  border-radius: 999px;
+  bottom: -10.5px;
+  box-sizing: border-box;
+  color: #8f5e16;
+  cursor: pointer;
+  display: flex;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 700;
+  height: 32px;
+  justify-content: center;
+  left: 50%;
+  line-height: 12px;
+  padding: 10px 22px;
+  position: absolute;
+  text-transform: uppercase;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  width: 163px;
+}
+/* 374:258 — the gated practice. The third paragraph ramps over its full height
+ * (411:5690); the rest is under the full blur (375:220) with the card 88px in. */
+.rv3 .rv4-try__gate {
+  cursor: pointer;
+  position: relative;
+}
+/* As wide as its paragraph, which runs 12px into the card's right padding — or the
+ * overlay would stop short and leave the ends of lines sharp. */
+.rv3 .rv4-try__ramp {
+  --rv4-band: 100%;
+  position: relative;
+  width: min(358px, calc(100% + 12px));
+}
+.rv3 .rv4-try__ramp .rv4-prose__p {
+  width: auto;
+}
+.rv3 .rv4-try__rest {
+  position: relative;
+}
+.rv3 .rv4-try__blurred {
+  filter: blur(2.5px);
+}
+.rv3 .rv4-try__rest .rv4-premium {
+  top: 88px;
+}
+
+/* ── "Go deeper" inside this chapter ─────────────────────────────────────────── */
+/* 153:2274 — the open disc is white with a 1.5px violet ring (the image already
+ * turns on open). */
+.rv3 .rv4-learn.is-open .rv4-learn__chev {
+  background: #fff;
+  box-shadow: inset 0 0 0 1.5px #795fc8;
+}
+/* 153:2247 — 51px as a minimum, so the label can wrap on a narrow phone. */
+.rv3 .rv4-learn__button {
+  height: auto;
+  min-height: 51px;
+}
+/* The open article keeps its 358 measure (3928-3945) but never runs past the card:
+ * 12px into the right padding at most, which is exactly 358 at 393. */
+.rv3 .rv4-learn .rv4-prose__p,
+.rv3 .rv4-learn .rv4-prose__h,
+.rv3 .rv4-learn .rv4-prose__list {
+  width: min(358px, calc(100% + 12px));
+}
+/* 153:2257 — Mark evened the teaser's padding, so it now runs the card's own
+ * content width (347). Its paragraphs follow, or the 358 rule would clip them. */
+.rv3 .rv4-learn__teaser {
+  width: 100%;
+}
+.rv3 .rv4-learn__teaser .rv4-prose__p,
+.rv3 .rv4-learn__teaser .rv4-prose__h,
+.rv3 .rv4-learn__teaser .rv4-prose__list {
+  width: auto;
+}
+/* The gated window clips at its own width, which was the card's content box — so it
+ * cut the last 12px off every blurred line. It, the blur laid over it and the fade
+ * now span the article's 358 measure instead. */
+.rv3 .rv4-learn__gated,
+.rv3 .rv4-learn__blur,
+.rv3 .rv4-learn__fade {
+  right: auto;
+  width: min(358px, calc(100% + 12px));
+}
+.rv3 .rv4-learn__gated .rv4-prose__p,
+.rv3 .rv4-learn__gated .rv4-prose__h,
+.rv3 .rv4-learn__gated .rv4-prose__list {
+  width: auto;
+}
+
+/* ── The Premium card on small phones ────────────────────────────────────────
+ * 330 wide is 42px more than a 320 phone's column, and its height is fixed with
+ * overflow clipped — so it narrows to the viewport less the gutters, and below 362
+ * its side padding comes in far enough for "14-day money-back guarantee" to stay on
+ * one line and the CTA in view. */
+.rv3 .rv4-premium {
+  width: min(330px, calc(100vw - 32px));
+}
+@media (max-width: 361px) {
+  .rv3 .rv4-premium {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .rv3 .rv4-premium__guarantee {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}

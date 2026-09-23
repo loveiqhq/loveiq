@@ -31,7 +31,7 @@ import {
   RETIRED_REPORT_SECTION_IDS,
 } from "./reportNav";
 import ReportMobileNav from "./ReportMobileNav";
-import { V3ModeProvider } from "./v3/V3Chapter";
+import { V3ModeProvider, V4ModeProvider } from "./v3/V3Chapter";
 import V3Intro from "./v3/V3Intro";
 import V4Part1 from "./v3/V4Part1";
 import V3ArchetypeCard from "./v3/V3ArchetypeCard";
@@ -57,6 +57,7 @@ import {
   REPORT_V3_NAV_PARTS,
   REPORT_V3_PART_DIVIDER_BY_SECTION,
   REPORT_V3_SECTION_ORDER,
+  REPORT_V4_SECTION_ORDER,
 } from "./v3/reportV3Nav";
 import ReportPricingModal from "./ReportPricingModal";
 import ReportStickyUnlockBar from "./ReportStickyUnlockBar";
@@ -82,7 +83,9 @@ import AttachmentPatternsSection, {
 } from "./sections/AttachmentPatternsSection";
 import AcceleratorsSection, { type AccelCopy } from "./sections/AcceleratorsSection";
 import BeliefsSection, { type BeliefsCopy } from "./sections/BeliefsSection";
+import V4Chapter from "./v3/V4Chapter";
 import V4TypicalBeliefs from "./v3/V4TypicalBeliefs";
+import V4TryThis from "./v3/V4TryThis";
 import V4LearnMore from "./v3/V4LearnMore";
 import type { Report3TypicalBeliefsView } from "@/data/report3-typical-beliefs";
 import type { V4LearnMoreState } from "@/data/report3-learn-more";
@@ -1868,6 +1871,47 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       isPremium: section.isPremium,
                       sectionId: section.id,
                     });
+                    // Report 3.0 swaps this chapter for Figma 304:256 (348:213 when
+                    // locked): the V4 chapter row, then the chapter body, the
+                    // practice (374:238) and "Go deeper & learn more" (153:2260).
+                    // It sits in V4Chapter rather than ReportSection's V3 chrome —
+                    // the frame draws no "Chapter 2.2" eyebrow, and the V3 chapter's
+                    // suffix restyles and its overflow clip both broke the cards.
+                    // All three blocks open the same pricing modal every other
+                    // locked section does. It falls back to V2's section whenever
+                    // the archetype has no Report 3.0 copy yet — 13 of the 14 — so
+                    // no reader meets an empty chapter while it scales.
+                    if (isV4 && typicalBeliefs && hasArchetypeCopy) {
+                      const unlockBeliefs = () => unlockSection(section);
+                      return (
+                        <Fragment key={section.id}>
+                          {/* 1:858 — 44px between the part heading and its first
+                           * chapter. */}
+                          <div className="rv4-sep" aria-hidden="true" data-node-id="1:858" />
+                          <V4Chapter
+                            sectionId={section.id}
+                            title="Typical Beliefs"
+                            archetype={viewArchetype}
+                            defaultOpen
+                            bare
+                            feedback={feedbackWidget}
+                          >
+                            <V4TypicalBeliefs view={typicalBeliefs} onUnlock={unlockBeliefs} />
+                            <V4TryThis
+                              practice={typicalBeliefs.practice}
+                              onUnlock={unlockBeliefs}
+                            />
+                            {typicalBeliefsArticle ? (
+                              <V4LearnMore
+                                article={typicalBeliefsArticle.article}
+                                locked={typicalBeliefsArticle.locked}
+                                onUnlock={unlockBeliefs}
+                              />
+                            ) : null}
+                          </V4Chapter>
+                        </Fragment>
+                      );
+                    }
                     return (
                       <ReportSection
                         key={section.id}
@@ -1876,38 +1920,17 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                         sectionId={section.id}
                         title=""
                       >
-                        {/* Report 3.0 swaps this chapter for 304:256, and 348:213
-                         * when locked. It falls back to V2's section whenever the
-                         * archetype has no Report 3.0 copy yet — 13 of the 14 —
-                         * so no reader meets an empty chapter while it scales. */}
-                        {isV4 && typicalBeliefs && hasArchetypeCopy ? (
-                          <>
-                            <V4TypicalBeliefs view={typicalBeliefs} />
-                            {/* 153:2260 closes the chapter. Its gate band opens the
-                             * same pricing modal every other locked section does. */}
-                            {typicalBeliefsArticle ? (
-                              <V4LearnMore
-                                article={typicalBeliefsArticle.article}
-                                locked={typicalBeliefsArticle.locked}
-                                onUnlock={() => unlockSection(section)}
-                              />
-                            ) : null}
-                          </>
-                        ) : (
-                          <BeliefsSection
-                            archetype={viewArchetype}
-                            copy={hasArchetypeCopy ? beliefsCopy : null}
-                            isUnlocked={isBeliefsUnlocked}
-                            onUnlock={() => unlockSection(section)}
-                            quote={fullReportQuote}
-                            sectionTitle={title}
-                            tier={
-                              isSectionIncludedInEssentials(section.id)
-                                ? "essentials"
-                                : "full_report"
-                            }
-                          />
-                        )}
+                        <BeliefsSection
+                          archetype={viewArchetype}
+                          copy={hasArchetypeCopy ? beliefsCopy : null}
+                          isUnlocked={isBeliefsUnlocked}
+                          onUnlock={() => unlockSection(section)}
+                          quote={fullReportQuote}
+                          sectionTitle={title}
+                          tier={
+                            isSectionIncludedInEssentials(section.id) ? "essentials" : "full_report"
+                          }
+                        />
                       </ReportSection>
                     );
                   }
@@ -2099,7 +2122,9 @@ const ReportExperience: FC<ReportExperienceProps> = ({
 
                 // V4 renumbers every part: "Welcome" is Part I, so what V3 calls
                 // Part I is Part II here. Falling through to the V3 map below is
-                // what gave the report two Part I's.
+                // what gave the report two Part I's — and since V4 also moves
+                // Typical Beliefs ahead of Accelerators & Brakes, A&B has a V3 key
+                // but no V4 one. So under V4 it is the V4 heading or nothing.
                 const v4PartHeading = isV4
                   ? REPORT_V4_PART_DIVIDER_BY_SECTION[section.id]
                   : undefined;
@@ -2112,7 +2137,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     ) : null}
                     <V4PartHeading heading={v4PartHeading} />
                   </>
-                ) : partDivider ? (
+                ) : partDivider && !isV4 ? (
                   isV3 ? (
                     <V3PartDivider
                       eyebrow={partDivider.part}
@@ -2252,7 +2277,14 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   // V3 mode is announced via context so `ReportSection` — the one wrapper all 28
   // render branches share — can swap its chrome for the numbered-chapter
   // accordion without the variant being threaded through every call site.
-  return isV3 ? <V3ModeProvider>{experience}</V3ModeProvider> : experience;
+  // V4 rides on V3 mode and announces itself on top of it, for the chapter nav
+  // and the eyebrow numbers, whose order differs (REPORT_V4_CHAPTERS).
+  if (!isV3) return experience;
+  return (
+    <V3ModeProvider>
+      {isV4 ? <V4ModeProvider>{experience}</V4ModeProvider> : experience}
+    </V3ModeProvider>
+  );
 };
 
 const ReportPage: FC<ReportPageProps> = ({ token }) => {
@@ -2552,7 +2584,9 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // before it, so a reader meets the paywall earlier than the pop-up fires. Whichever
     // arrives first reports it; `notifyPaywallReached` is idempotent, so the pop-up
     // reporting it again later is a no-op.
-    const firstOfferCard = document.querySelector(".report-premium-overlay");
+    // V4's in-flow "Premium content" card (.rv4-premium) counts too — whichever
+    // offer comes first in the page.
+    const firstOfferCard = document.querySelector(".report-premium-overlay, .rv4-premium");
     let cardObserver: IntersectionObserver | null = null;
     if (firstOfferCard) {
       cardObserver = new IntersectionObserver(
@@ -2911,7 +2945,12 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   // V3 un-retires "Arousal, Desire & Pleasure" (chapter 3.3), which the 2.0
   // redesign folded away — so the retired set is narrowed to whatever V3 does
   // not explicitly ask for.
-  const sectionOrder = isV3 ? REPORT_V3_SECTION_ORDER : REPORT_SECTION_ORDER;
+  // V4 runs V3's order with Typical Beliefs moved to the front of its part.
+  const sectionOrder = isV4
+    ? REPORT_V4_SECTION_ORDER
+    : isV3
+      ? REPORT_V3_SECTION_ORDER
+      : REPORT_SECTION_ORDER;
   const resolvedSections = allSections
     .filter(
       (section) =>

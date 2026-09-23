@@ -54,13 +54,15 @@ export const REPORT_V4_PARTS: readonly Report3PartHeading[] = [
  *
  * V4 puts "Welcome" in front as Part I, so everything V3 called Part I is Part II
  * here, and so on down. Borrowing the V3 map left the report with two Part I's.
- * The keys still follow V2's section order: V4 also reorders Parts III–VI (Typical
- * Beliefs opens III, Accelerators & Brakes moves to IV), which lands with each
- * part's chapters rather than here.
+ *
+ * Part III is keyed on Typical Beliefs because V4 moves that chapter to the front
+ * of the part (REPORT_V4_CHAPTERS, Fatih's call on 2026-09-23). The rest of Figma's
+ * Parts III–VI regrouping (Accelerators & Brakes into IV, and so on) is not done,
+ * so the other keys still follow V3's order.
  */
 export const REPORT_V4_PART_DIVIDER_BY_SECTION: Readonly<Record<string, Report3PartHeading>> = {
   core_archetype: REPORT_V4_PARTS[1]!,
-  typical_arousal_accelerators_turn_ons_of_the_core_archetype: REPORT_V4_PARTS[2]!,
+  typical_beliefs: REPORT_V4_PARTS[2]!,
   libido_challenges_in_relationships: REPORT_V4_PARTS[3]!,
   attachment_style: REPORT_V4_PARTS[4]!,
   typical_sexual_fantasy_amp_practice_tendencies: REPORT_V4_PARTS[5]!,

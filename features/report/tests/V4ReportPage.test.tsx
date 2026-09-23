@@ -306,8 +306,15 @@ describe("Report V4 copy", () => {
 describe("reportV3.css — V4 contracts", () => {
   it("leaves the V3 chapter untouched and adds a separate V4 row", () => {
     expect(V3_CSS).toContain(".rv3 .rv4-chapter__button");
-    // The V3 accordion still rotates on open; V4 inverts it, per the frames.
+    // The V4 disc (304:260 open, 1:866 closed): open is white with a 1.5px violet
+    // ring and the chevron turned UP; closed is the 10% lavender disc pointing down.
     expect(V3_CSS).toContain(".rv3 .rv4-chapter:not(.is-open) .rv4-chapter__chev");
+    expect(V3_CSS).toMatch(
+      /\.rv3 \.rv4-chapter\.is-open \.rv4-chapter__chev \{[^}]*box-shadow: inset 0 0 0 1\.5px var\(--rv3-violet\)/
+    );
+    expect(V3_CSS).toMatch(
+      /\.rv3 \.rv4-chapter\.is-open \.rv4-chapter__chev svg \{[^}]*transform: rotate\(180deg\)/
+    );
   });
 
   it("scopes every V4 card override under .rv3-method.is-v4", () => {
