@@ -1191,6 +1191,22 @@ describe("the scanner scorecard", () => {
     expect(out).not.toMatch(/100%\) ⚠/);
   });
 
+  it("says a scanner is sampled on purpose instead of warning about it every week", () => {
+    // Dead-click stays focused because comprehensive would pass its credit cap.
+    // A weekly ⚠ for a decision already made is the warning people learn to skip.
+    const deliberate = UX_SCANNERS.find(
+      (s) => s.role !== "challenger" && s.samplingMode !== "comprehensive"
+    );
+    expect(deliberate).toBeDefined();
+    const out = JSON.stringify(
+      buildScorecardMessage([sc("LoveIQ report UX", 1, 44)], 30, new Set(), new Date(), null, [
+        { scanner: deliberate!.name, triggered: 350, watched: 168 },
+      ]).blocks
+    );
+    expect(out).toContain("watched 168 of 350 (48%) — sampled on purpose");
+    expect(out).not.toMatch(/48%\) ⚠/);
+  });
+
   it("omits coverage rather than printing numbers nobody measured", () => {
     const out = JSON.stringify(
       buildScorecardMessage([sc("LoveIQ report UX", 1, 44)], 30, new Set(), new Date(), null, null)

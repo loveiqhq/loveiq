@@ -808,6 +808,35 @@ export const DUE_DECISIONS: ReadonlyArray<{ due: string; what: string }> = [
   },
 ];
 
+/**
+ * The Monday scorecard exactly as the cron sends it.
+ *
+ * `scripts/preview-slack-message.mts --scorecard` calls this too, so the page
+ * you look at before a change ships IS the message that goes out. It used to
+ * call `buildScorecardMessage(scores, 30)` itself, which left out the paywall
+ * line and the coverage block — the preview showed a message nobody would ever
+ * receive, and would have hidden exactly the change it was run to check.
+ *
+ * Null when the ledger cannot be read or is empty: a scorecard of nothing reads
+ * exactly like a quiet week, so the caller says nothing rather than zero. The
+ * paywall and coverage reads are independent — either failing omits its block
+ * and never suppresses the scorecard.
+ */
+export async function buildWeeklyScorecard(
+  days = 30
+): Promise<{ scores: ScannerScore[]; text: string; blocks: SlackBlock[] } | null> {
+  const [scores, paywallTaps, coverage] = await Promise.all([
+    fetchScannerScores(days),
+    fetchPaywallDeadTaps(days),
+    fetchScannerCoverage(7),
+  ]);
+  if (!scores || scores.length === 0) return null;
+  return {
+    scores,
+    ...buildScorecardMessage(scores, days, undefined, undefined, paywallTaps, coverage),
+  };
+}
+
 export function buildScorecardMessage(
   scores: readonly ScannerScore[],
   days = 30,
@@ -927,15 +956,25 @@ export function buildScorecardMessage(
      * Below 90% is worth a person's attention; above it is lag and ineligible
      * recordings (too short, no recording). A comprehensive scanner sits at or
      * near 100%, so a number in the sixties is a throttle, not noise.
+     *
+     * Except where the throttle is the decision. A scanner scanners.ts samples
+     * on purpose to stay inside its credit cap would carry a warning every
+     * Monday, and a warning that always fires teaches people to skip the ones
+     * that mean something. It says so instead, and the number stays visible.
      */
+    const sampledOnPurpose = new Set(
+      UX_SCANNERS.filter((sc) => sc.samplingMode !== "comprehensive").map((sc) => sc.name)
+    );
     const lines = coverage
       .filter((c) => c.triggered > 0)
       .map((c) => {
         const pct = Math.round((c.watched / c.triggered) * 100);
-        return (
-          `• ${plainScanner(c.scanner)} — watched ${c.watched} of ${c.triggered} (${pct}%)` +
-          (pct < 90 ? " ⚠" : "")
-        );
+        const note = sampledOnPurpose.has(c.scanner)
+          ? " — sampled on purpose, to stay in budget"
+          : pct < 90
+            ? " ⚠"
+            : "";
+        return `• ${plainScanner(c.scanner)} — watched ${c.watched} of ${c.triggered} (${pct}%)${note}`;
       });
     blocks.push(
       section(

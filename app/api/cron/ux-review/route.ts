@@ -50,11 +50,8 @@ import {
 import {
   buildDigestMessage,
   contradiction,
-  buildScorecardMessage,
+  buildWeeklyScorecard,
   fetchScannerDrift,
-  fetchPaywallDeadTaps,
-  fetchScannerCoverage,
-  fetchScannerScores,
   fetchDailyStats,
   fetchFindings,
   fetchCoverageStats,
@@ -319,24 +316,12 @@ export async function GET(request: Request) {
     if (reportingHour() >= DIGEST_HOUR_BERLIN && isReportingMonday()) {
       const weekKey = isoWeekKey();
       if (await tryClaimSlackAlert("ux_review_scorecard", "weekly", weekKey)) {
-        const [scores, paywallTaps, coverage] = await Promise.all([
-          fetchScannerScores(SCORECARD_DAYS),
-          // Independent: an unreadable PostHog must not suppress the scorecard.
-          fetchPaywallDeadTaps(SCORECARD_DAYS),
-          fetchScannerCoverage(7),
-        ]);
         // Null means the ledger could not be read. A scorecard of nothing reads
         // exactly like a quiet week, which is the shape this repo keeps paying
         // for — so say nothing rather than say zero.
-        if (scores && scores.length > 0) {
-          const { text, blocks } = buildScorecardMessage(
-            scores,
-            SCORECARD_DAYS,
-            undefined,
-            undefined,
-            paywallTaps,
-            coverage
-          );
+        const scorecard = await buildWeeklyScorecard(SCORECARD_DAYS);
+        if (scorecard) {
+          const { text, blocks } = scorecard;
           const fitted = fitBlocks(blocks, text);
           await notifySlack({
             channel: "ops",
