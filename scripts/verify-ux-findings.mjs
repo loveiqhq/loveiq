@@ -178,6 +178,16 @@ function probesFor(criterion, clickTarget) {
 const RESTART_WITNESS_CRITERIA = new Set(["L1", "B1"]);
 
 /**
+ * Evidence that is OUR OWN RECORD of what happened to this reader, not a probe.
+ *
+ * A probe re-performs a defect on an emulated phone; these read what our own
+ * events logged at the time. The verdict says which one confirmed a finding,
+ * because "Reproduced in production on Pixel 7" over a finding nothing re-ran
+ * on a Pixel 7 is a claim the evidence does not support.
+ */
+const OWN_RECORD_EVIDENCE = new Set(["survey-behaviour-log", "paywall-exit-log"]);
+
+/**
  * Scanners whose findings are an EXPERIMENT and must not speak to the team.
  *
  * A challenger observes the same recordings as its champion so the two can be
@@ -1867,10 +1877,13 @@ for (const [
     : "";
   let verdict;
   if (reproduced) {
+    const failing = results.filter((r) => !r.passed && !r.inconclusive);
     verdict =
-      `❗ *Reproduced in production${at}* — ${criterion.label} (${criterion.id}). ` +
-      results
-        .filter((r) => !r.passed && !r.inconclusive)
+      (failing.every((r) => OWN_RECORD_EVIDENCE.has(r.file))
+        ? `❗ *Confirmed by our own records* — `
+        : `❗ *Reproduced in production${at}* — `) +
+      `${criterion.label} (${criterion.id}). ` +
+      failing
         /**
          * "failed" is probe grammar — a probe that fails has reproduced the
          * defect. The survey-log witness is not a probe and does not fail: it
@@ -1879,9 +1892,7 @@ for (const [
          * of sentence that makes a team stop trusting the channel.
          */
         .map((r) =>
-          r.file === "survey-behaviour-log" || r.file === "paywall-exit-log"
-            ? `${r.tail}`
-            : `\`${r.file}\` failed: ${r.tail}`
+          OWN_RECORD_EVIDENCE.has(r.file) ? `${r.tail}` : `\`${r.file}\` failed: ${r.tail}`
         )
         .join(" ") +
       (prUrl ? ` Draft PR with the reproduction: ${prUrl}` : "");
