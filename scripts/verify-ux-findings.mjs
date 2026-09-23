@@ -1194,6 +1194,14 @@ const RESTART_FINDINGS = await ownSurveyRestarts(LOOKBACK_HOURS);
  *  - Third-party sources (gtm.js, clarity.js and friends) are somebody else's
  *    bug in somebody else's script.
  *  - `handled` exceptions were caught by our own code on purpose.
+ *  - An error with NO frame in our bundle is not ours, whatever it says. The
+ *    vendor list above can only exclude sources it names, so an exception with
+ *    no source file at all passed as "our own code": 6 of the 12 sessions with
+ *    an unhandled error in the 30 days to 2026-09-23 had none — Microsoft's
+ *    link scanner ("Object Not Found Matching Id:1, MethodName:update"),
+ *    injected `<anonymous>` code on Chromebooks — and every one reached Slack
+ *    as "needs a human". Our bundles are served from `/_next/`, so at least one
+ *    frame must be.
  *
  * Grouped by type and message so one finding is a CLASS, not an instance —
  * twenty-four SecurityErrors in a session are one problem.
@@ -1217,6 +1225,7 @@ const EXCEPTION_FINDINGS = await posthog(`
     AND toString(properties.$exception_sources) NOT LIKE '%hotjar%'
     AND toString(properties.$exception_sources) NOT LIKE '%cookieyes%'
     AND toString(properties.$exception_sources) NOT LIKE '%trustpilot%'
+    AND position(toString(properties.$exception_sources), '/_next/') > 0
   GROUP BY sid, path, typ, val
   ORDER BY n DESC
   LIMIT ${OWN_EVENT_FETCH_LIMIT}
