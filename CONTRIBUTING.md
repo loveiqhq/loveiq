@@ -24,6 +24,8 @@ See [DEVELOPMENT.md](docs/runbooks/DEVELOPMENT.md) for env vars, troubleshooting
 
 The CI docs-impact gate blocks PRs that change `app/api/admin`, `app/admin`, `features/admin`, public API routes, `proxy.ts`, `shared/http/csrf.ts`, `shared/http/ratelimit.ts`, package/env files, or workflow/docs scripts without either markdown changes or a checked `No doc impact` box.
 
+It judges the PR's own changes (`git diff <base>...HEAD`) and is safe to run locally: `PR_BODY="$(cat body.md)" bash scripts/check-docs-impact.sh origin/main`. Until 2026-09-23 it fetched `main` with `--depth=1`, which made a local clone shallow (breaking `git rebase` in every worktree sharing it) and, whenever `main` had moved, compared whole trees so other people's merged changes counted as the PR's.
+
 ## Commit Conventions
 
 Use [Conventional Commits](https://www.conventionalcommits.org/):

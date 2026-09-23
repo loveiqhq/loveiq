@@ -14,9 +14,24 @@ set -euo pipefail
 BASE_REF="${1:-origin/main}"
 PR_BODY="${PR_BODY:-}"
 
-git fetch origin main --depth=1 2>/dev/null || true
+# A FULL fetch, never --depth=1. A shallow fetch marks main's tip as having no
+# parents, which (1) breaks the three-dot diff below whenever main has moved
+# since this branch's base, so it fell back to comparing whole TREES and every
+# change merged to main since then counted as this PR's (a false failure on
+# PR #253, and a false pass for any PR whose base carried someone else's doc
+# edit); and (2) run locally, made the shared clone shallow, which broke
+# `git rebase` in every worktree beside it — blamed for weeks on "another
+# terminal".
+git fetch origin main 2>/dev/null || true
 
-CHANGED_FILES=$(git diff --name-only "$BASE_REF"...HEAD 2>/dev/null || git diff --name-only "$BASE_REF" HEAD 2>/dev/null || echo "")
+if CHANGED_FILES=$(git diff --name-only "$BASE_REF"...HEAD 2>/dev/null); then
+  :
+else
+  # No merge base with the base ref. Say so: the tree comparison below also
+  # counts changes that landed on the base side, which is a different check.
+  echo "[docs-impact] no merge base with $BASE_REF; comparing trees instead" >&2
+  CHANGED_FILES=$(git diff --name-only "$BASE_REF" HEAD 2>/dev/null || echo "")
+fi
 
 if [ -z "$CHANGED_FILES" ]; then
   echo "[docs-impact] No changed files detected. Nothing to check."
