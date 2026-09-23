@@ -1,0 +1,149 @@
+import { NextResponse } from "next/server";
+import { getReport2Section } from "@/data/report2";
+import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
+import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
+import {
+  buildArchetypeContentForUser,
+  buildPracticeTendenciesForUser,
+  splitArticleForReader,
+  stripLockedEduBodyFromPayload,
+} from "@features/report/server/contentGating";
+import { isSectionUnlockedForPlan, isReportPurchasePlan } from "@features/report/server/access";
+import type { ReportAccessPlan } from "@features/report/server/access";
+import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
+import { buildPreviewQuotes } from "@/app/report-v4-preview/previewQuotes";
+
+/**
+ * A report with no reader behind it — for looking at the design on a laptop.
+ *
+ * WHY THIS EXISTS. /api/report answers for a real person: it resolves a token or
+ * session to a survey_submission, reads their scoring_result, and gates the copy
+ * against what they bought. That makes it impossible to open the report on a
+ * machine with no database — which is every developer machine, since staging got
+ * its own Supabase on 2026-09-21 and .env.local is not pointed at it.
+ *
+ * It is also the wrong dependency for the job. Checking a layout at 360px does not
+ * need anyone's real answers; it needs the page. The whole report body already
+ * lives in this repository — report-practice-tendencies.ts alone is 9,015 lines —
+ * and the database only supplies WHO you are. So this route invents the who and
+ * lets every other line of the real report render itself.
+ *
+ * WHAT MAKES IT SAFE. It never touches the database, so it cannot read or write a
+ * real person's answers, and there is no token to forge. It 404s on production by
+ * the same NEXT_PUBLIC_SITE_URL check app/report-v4-preview/page.tsx uses. And it
+ * is additive: /api/report is untouched, so a reader with a real report reaches
+ * exactly the code they reached yesterday.
+ *
+ * WHAT IS FAKE. The archetype, the percentages and the name. Nothing else —
+ * the copy, the gating, the prices and the components are the real ones, through
+ * the same helpers the real route calls.
+ */
+
+/** Matches app/report-v4-preview/page.tsx. Staging and local yes, production no. */
+function isProduction(): boolean {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
+  return /\/\/(www\.)?loveiq\.org\b/.test(siteUrl) && !siteUrl.includes("staging");
+}
+
+/** The frame's own numbers, so the constellation has something plausible to draw. */
+const PREVIEW_PERCENTAGES: Record<string, number> = {
+  "Spark Seeker": 43.4,
+  "Explorer of Edges": 39.5,
+  "Emotional Voyeur": 36.2,
+};
+
+export async function GET(request: Request) {
+  if (isProduction()) {
+    return NextResponse.json({ error: "Not found." }, { status: 404 });
+  }
+
+  const url = new URL(request.url);
+
+  const requested = url.searchParams.get("archetype") ?? "Spark Seeker";
+  // ReportPage forwards the raw ?archetype= slug, so match on letters alone:
+  // "spark-seeker" and "Spark Seeker" both reduce to "sparkseeker".
+  const flatten = (v: string) => v.toLowerCase().replace(/[^a-z]/g, "");
+  const archetype =
+    KNOWN_ARCHETYPES.find((a) => flatten(a) === flatten(requested)) ?? "Spark Seeker";
+
+  const planParam = url.searchParams.get("plan") ?? "";
+  const accessPlan: ReportAccessPlan = isReportPurchasePlan(planParam) ? planParam : null;
+
+  // A paid preview owns its own archetype, exactly as a real purchase does.
+  const unlockedArchetypes = accessPlan ? [archetype] : [];
+  const archetypeTiers: Record<string, "essentials" | "full_report"> = accessPlan
+    ? { [archetype]: accessPlan === "essentials" ? "essentials" : "full_report" }
+    : {};
+  // eslint-disable-next-line security/detect-object-injection -- archetype is resolved from KNOWN_ARCHETYPES above, never raw input.
+  const archetypeTier = archetypeTiers[archetype] ?? null;
+
+  const unlocked = (sectionId: string, isPremium = true) =>
+    isSectionUnlockedForPlan({ accessPlan, archetypeTier, isPremium, sectionId });
+
+  const beliefsUnlocked = unlocked("typical_beliefs");
+  const beliefsSection = getReport2Section(archetype, "beliefs");
+
+  const payload = stripLockedEduBodyFromPayload({
+    submissionId: null,
+    accessPlan,
+    userName: "Preview",
+    userEmail: null,
+    ownerFirstName: null,
+    ownerToken: null,
+    viewMode: "owner" as const,
+    primaryArchetype: archetype,
+    contentArchetype: archetype,
+    // eslint-disable-next-line security/detect-object-injection -- as above.
+    percentages: { ...PREVIEW_PERCENTAGES, [archetype]: PREVIEW_PERCENTAGES[archetype] ?? 43.4 },
+    reportDate: new Date().toISOString(),
+    diagnostics: null,
+    snapshotAnswers: { currentSexualSatisfaction: 3, importanceOfSex: 5 },
+    pricingQuotes: buildPreviewQuotes(),
+    unlockedArchetypes,
+    archetypeTiers,
+
+    // The report body, through the same two helpers the real route uses — so a
+    // section that is gated here is gated there, for the same reason.
+    archetypeContent: buildArchetypeContentForUser(accessPlan, unlockedArchetypes),
+    practiceTendencies: buildPracticeTendenciesForUser(
+      accessPlan,
+      unlockedArchetypes,
+      archetypeTiers
+    ),
+
+    beliefsCopy: {
+      "edu.eyebrow": beliefsSection["edu.eyebrow"] ?? null,
+      "edu.teaser": beliefsSection["edu.teaser"] ?? null,
+      "edu.body.p1": beliefsSection["edu.body.p1"] ?? null,
+      "edu.body.p2": beliefsSection["edu.body.p2"] ?? null,
+      "edu.body.p3": beliefsSection["edu.body.p3"] ?? null,
+      "body.p1": beliefsUnlocked ? (beliefsSection["body.p1"] ?? null) : null,
+      keep: Array.from(
+        { length: beliefsUnlocked ? 9 : 5 },
+        (_, i) => beliefsSection[`keep.${i + 1}`] ?? null
+      ),
+      loosen: Array.from({ length: beliefsUnlocked ? 10 : 3 }, (_, i) => ({
+        belief: beliefsSection[`loosen.${i + 1}.belief`] ?? null,
+        shift: beliefsSection[`loosen.${i + 1}.shift`] ?? null,
+      })),
+      "learn.eyebrow": beliefsSection["learn.eyebrow"] ?? null,
+      "learn.body": beliefsSection["learn.body"] ?? null,
+      locked: !beliefsUnlocked,
+    },
+
+    // Report 3.0, gated identically to the chapter it replaces.
+    typicalBeliefs: buildTypicalBeliefs(archetype, { locked: !beliefsUnlocked }),
+    typicalBeliefsArticle: REPORT_V4_LEARN_MORE.typical_beliefs
+      ? {
+          article: splitArticleForReader(REPORT_V4_LEARN_MORE.typical_beliefs, !beliefsUnlocked),
+          locked: !beliefsUnlocked,
+        }
+      : null,
+  });
+
+  // No caching: the answer changes with every ?archetype= and ?plan=, and it is
+  // never worth a CDN hop on a route that does no work.
+  return NextResponse.json(payload, {
+    headers: { "Cache-Control": "no-store" },
+  });
+}

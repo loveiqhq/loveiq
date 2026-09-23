@@ -2241,6 +2241,11 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // Raw slug on purpose — the server validates it against the archetypes this
     // reader has actually paid for and resolves the report copy for that one.
     archetypeSlug: searchParams.get("archetype"),
+    // `?preview=1` renders the report from the repository's own copy, with no
+    // database behind it — see app/api/report/preview/route.ts. It 404s on
+    // production, and /api/report is untouched either way.
+    preview: searchParams.get("preview") === "1",
+    previewPlan: searchParams.get("plan"),
   });
   // Pass both identifiers — the hook prefers whichever is present and the API
   // resolves the user server-side. Token is the durable identifier (works

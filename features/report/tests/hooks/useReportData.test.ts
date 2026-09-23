@@ -17,6 +17,59 @@ describe("useReportData", () => {
     vi.restoreAllMocks();
   });
 
+  describe("preview mode", () => {
+    /**
+     * `?preview=1` is what makes the report openable on a machine with no
+     * Supabase credentials — staging got its own database on 2026-09-21, so a
+     * developer laptop has none. Checking a layout at 360px needs the page, not
+     * anyone's real answers.
+     */
+    it("asks the preview endpoint, and needs no session or token to do it", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ primaryArchetype: "Spark Seeker", percentages: {} }),
+      });
+      globalThis.fetch = mockFetch as unknown as typeof globalThis.fetch;
+
+      const { result } = renderHook(() =>
+        useReportData({
+          sessionId: null,
+          token: null,
+          preview: true,
+          previewPlan: "full_report",
+          archetypeSlug: "spark-seeker",
+        })
+      );
+
+      await waitFor(() => expect(result.current.status).toBe("success"));
+
+      const url = String(mockFetch.mock.calls[0]?.[0] ?? "");
+      expect(url).toContain("/api/report/preview");
+      expect(url).toContain("archetype=spark-seeker");
+      expect(url).toContain("plan=full_report");
+      // The real endpoint must not be touched: it would 404 without an identifier
+      // anyway, and the point is that nothing about the live path changes.
+      expect(url).not.toContain("/api/report?");
+    });
+
+    it("leaves the real endpoint alone when preview is off", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ primaryArchetype: "Emotional Voyeur", percentages: {} }),
+      });
+      globalThis.fetch = mockFetch as unknown as typeof globalThis.fetch;
+
+      const { result } = renderHook(() => useReportData({ token: "rpt_abcdefghij0123456789" }));
+
+      await waitFor(() => expect(result.current.status).toBe("success"));
+      const url = String(mockFetch.mock.calls[0]?.[0] ?? "");
+      expect(url).toContain("/api/report?");
+      expect(url).not.toContain("/preview");
+    });
+  });
+
   it("returns a missing status when no report session id exists", () => {
     const { result } = renderHook(() => useReportData({ sessionId: null }));
 
