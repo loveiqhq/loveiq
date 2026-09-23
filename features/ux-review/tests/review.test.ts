@@ -15,6 +15,7 @@ import {
   contradiction,
   fetchCoverageStats,
   fetchDailyStats,
+  fetchPaywallDeadTaps,
   fetchFindings,
   fetchScannerDrift,
   fetchSessionEvents,
@@ -1056,6 +1057,104 @@ describe("the scanner scorecard", () => {
       expect(Number.isNaN(new Date(d.due).getTime())).toBe(false);
       expect(d.what.length).toBeGreaterThan(40);
     }
+  });
+
+  it("does not report more readers than there were", async () => {
+    /**
+     * One reader tapping four parts of the same card is ONE reader. Summing
+     * the per-selector session counts would have said four, and the headline
+     * of this line is how many people are stuck.
+     */
+    vi.stubEnv("POSTHOG_API_KEY", "phx_test");
+    let sent = "";
+    vi.stubGlobal("fetch", async (_url: string, init: { body: string }) => {
+      sent = JSON.parse(init.body).query.query;
+      return {
+        ok: true,
+        json: async () => ({
+          results: [
+            ["div.report-premium-overlay", 56, 20],
+            ["img.report-locked-preview__img", 35, 18],
+            ["article.report-pricing-card", 9, 20],
+          ],
+        }),
+      };
+    });
+    const got = await fetchPaywallDeadTaps(30);
+    vi.unstubAllGlobals();
+
+    expect(got?.taps, "taps are a total").toBe(100);
+    expect(got?.sessions, "readers are a maximum, not a sum").toBe(20);
+    // And it must ask only about the paywall's own surfaces.
+    expect(sent).toContain("report-pricing-card");
+    expect(sent).toContain("report-premium-overlay");
+    expect(sent).toContain("dead_click");
+  });
+
+  it("counts readers who tapped the paywall and got nothing", () => {
+    /**
+     * Deliberately a NUMBER, not findings. Widening the dead-click lane's
+     * allowlist to these selectors would hand all 327 to
+     * verify-dead-click-target.mjs, which asks whether a DISABLED control sits
+     * under the point — and these elements carry no handler at all, so every
+     * one would come back `clear`. Three hundred clean verdicts about a surface
+     * losing sales is worse than silence.
+     */
+    const rows = [sc("LoveIQ report UX", 1, 44)];
+    const taps = {
+      taps: 327,
+      sessions: 55,
+      top: [{ selector: "div.report-premium-overlay", taps: 56 }],
+    };
+    const out = JSON.stringify(
+      buildScorecardMessage(rows, 30, new Set(), new Date("2026-09-22T09:00:00Z"), taps).blocks
+    );
+    expect(out).toContain("327");
+    expect(out).toContain("55");
+    expect(out).toContain("report-premium-overlay");
+  });
+
+  it("omits the paywall line rather than guessing when PostHog is unreadable", () => {
+    // null means the read failed. Printing 0 would report "nobody is stuck"
+    // from a failure, which is the direction that hides the problem.
+    const rows = [sc("LoveIQ report UX", 1, 44)];
+    const out = JSON.stringify(
+      buildScorecardMessage(rows, 30, new Set(), new Date("2026-09-22T09:00:00Z"), null).blocks
+    );
+    expect(out).not.toContain("tapping the paywall");
+  });
+
+  it("counts readers who tapped the paywall and got nothing", () => {
+    /**
+     * Deliberately a NUMBER, not findings. Widening the dead-click lane's
+     * allowlist to these selectors would hand all 327 to
+     * verify-dead-click-target.mjs, which asks whether a DISABLED control sits
+     * under the point — and these elements carry no handler at all, so every
+     * one would come back `clear`. Three hundred clean verdicts about a surface
+     * losing sales is worse than silence.
+     */
+    const rows = [sc("LoveIQ report UX", 1, 44)];
+    const taps = {
+      taps: 327,
+      sessions: 55,
+      top: [{ selector: "div.report-premium-overlay", taps: 56 }],
+    };
+    const out = JSON.stringify(
+      buildScorecardMessage(rows, 30, new Set(), new Date("2026-09-22T09:00:00Z"), taps).blocks
+    );
+    expect(out).toContain("327");
+    expect(out).toContain("55");
+    expect(out).toContain("report-premium-overlay");
+  });
+
+  it("omits the paywall line rather than guessing when PostHog is unreadable", () => {
+    // null means the read failed. Printing 0 would report "nobody is stuck"
+    // from a failure, which is the direction that hides the problem.
+    const rows = [sc("LoveIQ report UX", 1, 44)];
+    const out = JSON.stringify(
+      buildScorecardMessage(rows, 30, new Set(), new Date("2026-09-22T09:00:00Z"), null).blocks
+    );
+    expect(out).not.toContain("tapping the paywall");
   });
 
   it("says so plainly when there is nothing to report", () => {
