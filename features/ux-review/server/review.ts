@@ -816,9 +816,10 @@ export function buildScorecardMessage(
         `*People tapping the paywall and getting nothing: ${paywallTaps.taps} taps* over the ` +
           `same ${days} days, up to ${paywallTaps.sessions} readers on a single element` +
           (worst ? ` — most often \`${escapeSlack(worst.selector)}\` (${worst.taps})` : "") +
-          `. These are not scanner findings and nothing re-tested them: the pricing card is not ` +
-          `clickable, so there is no broken control to reproduce. It is a count of readers who ` +
-          `tried to buy and were not given a way to.`
+          `. Nothing re-tested these and they are not scanner findings: the tapped elements — ` +
+          `the locked overlay, the blurred preview, the pricing card — carry no handler, so ` +
+          `there is no broken control to reproduce. It is a count of readers who reached for ` +
+          `the paywall and were not given a way through it.`
       )
     );
   }
