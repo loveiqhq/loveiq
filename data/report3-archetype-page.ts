@@ -57,11 +57,16 @@ export const REPORT_V4_WHAT_SHAPED =
  * Part 1 · closing paragraph after the science deck — 1:479 / 1:480.
  *
  * NOT duplicated here on purpose: `V3Methodology` already ships these exact three
- * paragraphs as its outro (10392:18726), typo and all — the frame reads "clear clear
- * and understandable patterns", a duplicated word that predates this work. V4 draws
- * them without the bold runs, which `V3Methodology`'s `chrome="deck"` handles.
+ * paragraphs as its outro (10392:18726). V4 draws them without the bold runs, which
+ * `V3Methodology`'s `chrome="deck"` handles.
  *
- * NOTE for Mark: "clear clear" is in both the frame and the shipped V3 report.
+ * The line used to read "clear clear and understandable patterns" — a duplicated
+ * word transcribed faithfully from the frame and left alone, with a note asking
+ * Mark about it. He found it on his phone instead, on the Notion card "Review New
+ * Report Elements in Staging Environment", and fixed the frame himself
+ * (Figma comment 1937155741, "Tiny spelling mistake with 2x 'clear'. Fixed.").
+ * Copying a typo out of a design and writing a note about it is not the same as
+ * asking, so: ask, or fix it.
  */
 
 /* ───────────────────────── Part II ───────────────────────── */

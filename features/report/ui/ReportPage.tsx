@@ -33,6 +33,7 @@ import {
 import ReportMobileNav from "./ReportMobileNav";
 import { V3ModeProvider } from "./v3/V3Chapter";
 import V3Intro from "./v3/V3Intro";
+import V4Part1 from "./v3/V4Part1";
 import V3EndSummary from "./v3/V3EndSummary";
 import V3Methodology from "./v3/V3Methodology";
 import V3PartDivider from "./v3/V3PartDivider";
@@ -973,7 +974,14 @@ const ReportExperience: FC<ReportExperienceProps> = ({
             />
 
             <div className="report-content">
-              {isV3 ? (
+              {/* Part I — Welcome. V4 draws 1:168: a part heading, the
+               * Introduction and "What shaped this report" as two open chapters,
+               * then the science deck. V3 opens straight into the intro and the
+               * methodology block instead. Everything below this line is V2's,
+               * under either flag. */}
+              {isV4 ? (
+                <V4Part1 />
+              ) : isV3 ? (
                 <>
                   <V3Intro />
                   <V3Methodology />

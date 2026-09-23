@@ -259,11 +259,10 @@ const V3Methodology: FC<Props> = ({ chrome = "full" }) => {
       </div>
 
       {/* 10392:18726 / V4 1:480. Same three paragraphs either way; V4 draws them
-       * without the bold runs, so "deck" emits them plain. The duplicated word in
-       * the first line is the copy as written — flagged to Mark, not corrected. */}
+       * without the bold runs, so "deck" emits them plain. */}
       <div className="rv3-prose rv3-method__outro" data-node-id="10392:18726">
         <p>
-          We translate this knowledge into clear clear and understandable patterns that people can
+          We translate this knowledge into clear and understandable patterns that people can
           recognise in themselves.
         </p>
         {chrome === "deck" ? (
