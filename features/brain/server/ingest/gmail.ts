@@ -312,6 +312,46 @@ export function isRecruitingThread(subject: string, text: string): boolean {
 }
 
 /**
+ * A TRUSTPILOT REVIEW, titled as what it is.
+ *
+ * Every review notification arrives with the same subject — "You've got a new 5-star
+ * review" — and `brain_search` collapses Gmail rows that share a title, so three of the
+ * four reviews could never be returned by any search, including one that said
+ * "Trustpilot". The title now carries the stars, the date and the review's opening words,
+ * so each is its own document and matches how people ask. The reviewer's name stays in
+ * the body only.
+ *
+ * AND LABELLED, because findable is not the same as honest. On 2026-09-18 the team said
+ * in its WhatsApp group that the reviews so far came from friends. Reviews received up to
+ * that day are marked so, on the title that every search result shows, so a question
+ * about what customers think is not answered with friends' praise. Later reviews carry no
+ * such mark; whether they are customers is for whoever reads them to judge.
+ */
+const TRUSTPILOT_REVIEW =
+  /left a new (\d)-star review of [^:]{1,60}:\s*([\s\S]{1,600}?)\s*See this review/i;
+const FRIENDS_REVIEWS_UNTIL = "2026-09-18";
+export function trustpilotReviewTitle(
+  subject: string,
+  text: string,
+  day: string | null
+): string | null {
+  if (!/\bnew \d-star review\b/i.test(subject)) return null;
+  const m = TRUSTPILOT_REVIEW.exec(text);
+  if (!m) return null;
+  const opening = m[2]!.replace(/\s+/g, " ").trim();
+  const firstSentence = (
+    opening.match(/^.{1,90}?[.!?](?=\s|$)/)?.[0] ?? opening.slice(0, 90)
+  ).trim();
+  const early = day !== null && day <= FRIENDS_REVIEWS_UNTIL;
+  return (
+    `Trustpilot review of LoveIQ, ${m[1]} stars${day ? `, ${day}` : ""}: "${firstSentence}"` +
+    (early
+      ? " [one of the first reviews, which the team says came from friends, not customers]"
+      : "")
+  );
+}
+
+/**
  * Mailboxes that are never company knowledge. Unlike `GMAIL_EXCLUDE_MAILBOXES` — which
  * stops reading a mailbox but keeps its history — a mailbox here is also removed from the
  * corpus.
@@ -748,7 +788,7 @@ export function threadToRows(
     ),
   ].slice(0, 8);
 
-  const title = `Email: ${subject}`;
+  const title = trustpilotReviewTitle(subject, joined, day) ?? `Email: ${subject}`;
   const base: BrainRow = {
     source: SOURCE,
     source_id: `thread:${thread.id}`,

@@ -17,6 +17,7 @@ import {
   MAX_ATTACHMENT_BYTES,
   isBulkMail,
   excludeSubjects,
+  trustpilotReviewTitle,
 } from "@features/brain/server/ingest/gmail";
 
 const b64 = (s: string) =>
@@ -149,6 +150,80 @@ const thread = {
     },
   ],
 };
+
+describe("a Trustpilot review is its own document, and says whose it is", () => {
+  /**
+   * Every notification shares one subject, and search collapses Gmail rows that share a
+   * title — so three of four reviews were unreachable by any question. The team said on
+   * 2026-09-18 that the reviews so far came from friends; those carry the mark.
+   */
+  const review = (day: string, internalDate: string, text: string) => ({
+    id: `tp-${day}`,
+    historyId: "1",
+    messages: [
+      {
+        id: `m-${day}`,
+        internalDate,
+        payload: {
+          headers: [
+            { name: "Subject", value: "You've got a new 5-star review" },
+            { name: "From", value: "Trustpilot <noreply@trustpilot.com>" },
+          ],
+          mimeType: "text/plain",
+          body: {
+            data: b64(
+              `DORIEN VM LEFT A NEW REVIEW\n\nHI EMAN,\n\nDorien VM just left a new 5-star review of loveiq.org:\n\n${text}\n\nSee this review and reply\n[https://example.test/r]`
+            ),
+          },
+        },
+      },
+    ],
+  });
+
+  it("titles each review distinctly, through threadToRows", () => {
+    const a = threadToRows(
+      review("2026-06-10", "1781049600000", "Spot-on results. I know myself better."),
+      "me",
+      "s"
+    )[0]!;
+    const b = threadToRows(
+      review("2026-06-12", "1781222400000", "Questions I would never ask myself."),
+      "me",
+      "s"
+    )[0]!;
+    expect(a.title).toMatch(
+      /^Trustpilot review of LoveIQ, 5 stars, 2026-06-10: "Spot-on results\."/
+    );
+    expect(b.title).not.toBe(a.title);
+  });
+
+  it("marks the early reviews as the team described them, and later ones not at all", () => {
+    const early = trustpilotReviewTitle(
+      "You've got a new 5-star review",
+      "x left a new 5-star review of loveiq.org: Great. See this review",
+      "2026-06-12"
+    );
+    const later = trustpilotReviewTitle(
+      "You've got a new 5-star review",
+      "x left a new 5-star review of loveiq.org: Great. See this review",
+      "2026-10-02"
+    );
+    expect(early).toMatch(/friends, not customers/);
+    expect(later).not.toMatch(/friends/);
+  });
+
+  it("leaves other Trustpilot mail and the reviewer's name out of it", () => {
+    expect(
+      trustpilotReviewTitle(
+        "Your weekly Trustpilot summary",
+        "left a new 5-star review of loveiq.org: x See this review",
+        "2026-06-12"
+      )
+    ).toBeNull();
+    const t = threadToRows(review("2026-06-10", "1781049600000", "Spot-on."), "me", "s")[0]!.title;
+    expect(t).not.toMatch(/Dorien/i);
+  });
+});
 
 describe("threadToRows — one chunk per THREAD", () => {
   it("keeps the exchange together, in order, with who said what", () => {
