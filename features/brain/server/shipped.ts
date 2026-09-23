@@ -12,6 +12,7 @@ import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 
 export interface ShippedCommit {
   sha?: string;
+  parents?: Array<{ sha?: string }>;
   commit?: { message?: string; author?: { date?: string }; committer?: { date?: string } };
 }
 
@@ -23,7 +24,25 @@ export interface ShippedEntry {
 }
 
 /**
- * One entry per distinct "For Marcus:" line, newest first, as GitHub lists them.
+ * main's first-parent chain, newest first: what actually landed, one merge or direct
+ * commit at a time. GitHub lists every commit REACHABLE from main, which includes each
+ * pull request's own commits, and every one of those carries its own For Marcus line:
+ * 66 "changes" for one day on production. Null when there is no graph to walk.
+ */
+function firstParentShas(commits: ShippedCommit[]): Set<string> | null {
+  if (!commits[0]?.parents) return null;
+  const bySha = new Map(commits.map((c) => [c.sha ?? "", c]));
+  const chain = new Set<string>();
+  let cur: ShippedCommit | undefined = commits[0];
+  while (cur?.sha && !chain.has(cur.sha)) {
+    chain.add(cur.sha);
+    cur = bySha.get(cur.parents?.[0]?.sha ?? "");
+  }
+  return chain;
+}
+
+/**
+ * One entry per distinct "For Marcus:" line on main's own history, newest first.
  *
  * A merge commit and the branch commit it brings in carry the SAME line, and the merge is
  * newer, so the first occurrence is kept: it is the one with the pull request number.
@@ -31,7 +50,9 @@ export interface ShippedEntry {
 export function shippedEntries(commits: ShippedCommit[]): ShippedEntry[] {
   const seen = new Set<string>();
   const out: ShippedEntry[] = [];
+  const onMain = firstParentShas(commits);
   for (const c of commits) {
+    if (onMain && !onMain.has(c.sha ?? "")) continue;
     const message = c.commit?.message ?? "";
     const line = message
       .split("\n")
