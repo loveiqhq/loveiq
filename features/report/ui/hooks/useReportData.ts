@@ -287,6 +287,14 @@ interface ReportIdentifier {
   sessionId?: string | null;
   token?: string | null;
   /**
+   * `?preview=1` — answer from the repository's own copy instead of the database,
+   * so the report opens on a machine that has no Supabase credentials. Design and
+   * responsiveness work needs the page, not anyone's real answers.
+   */
+  preview?: boolean;
+  /** `?plan=` in preview mode: which purchase to pretend the reader made. */
+  previewPlan?: string | null;
+  /**
    * Optional override for the pricing session id — threaded from the offer
    * email CTA (?pricingSessionId=...). When provided it takes precedence over
    * the per-report session id read from local storage so the recipient lands
@@ -318,8 +326,12 @@ async function parseErrorResponse(res: Response): Promise<ReportRequestError> {
 }
 
 export function useReportData(identifier: ReportIdentifier) {
-  const { sessionId, token, pricingSessionIdOverride, archetypeSlug } = identifier;
-  const hasIdentifier = !!(sessionId || token);
+  const { sessionId, token, pricingSessionIdOverride, archetypeSlug, preview, previewPlan } =
+    identifier;
+  // A preview needs no identifier: there is no reader to identify. Without this
+  // the effect never runs on a machine with no session and no token, which is
+  // every machine the preview exists for.
+  const hasIdentifier = preview || !!(sessionId || token);
 
   const [state, setState] = useState<{
     data: ReportData | null;
@@ -361,7 +373,17 @@ export function useReportData(identifier: ReportIdentifier) {
           params.set("archetype", archetypeSlug);
         }
 
-        const res = await fetch(`/api/report?${params.toString()}`, {
+        // `?preview=1` answers from static copy instead of the database — see
+        // app/api/report/preview/route.ts. Nothing else in this hook changes, so
+        // the page downstream cannot tell the difference, which is the point.
+        const endpoint = preview
+          ? `/api/report/preview?${new URLSearchParams({
+              archetype: archetypeSlug ?? "",
+              plan: previewPlan ?? "",
+            }).toString()}`
+          : `/api/report?${params.toString()}`;
+
+        const res = await fetch(endpoint, {
           headers: { "x-csrf-token": csrfToken },
           cache: "no-store",
         });
@@ -432,7 +454,16 @@ export function useReportData(identifier: ReportIdentifier) {
     return () => {
       cancelled = true;
     };
-  }, [sessionId, token, hasIdentifier, pricingSessionIdOverride, archetypeSlug, state.refreshKey]);
+  }, [
+    sessionId,
+    token,
+    hasIdentifier,
+    pricingSessionIdOverride,
+    archetypeSlug,
+    state.refreshKey,
+    preview,
+    previewPlan,
+  ]);
 
   const retry = () => setState((prev) => ({ ...prev, refreshKey: prev.refreshKey + 1 }));
 
