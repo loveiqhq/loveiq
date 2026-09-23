@@ -1,12 +1,14 @@
 # Company Brain — runbook
 
-> Ask a question in Slack, get an answer from LoveIQ's own documentation, git
-> history and business numbers, with a link to every source.
+> Ask in Claude (claude.ai or Claude Code) and get an answer from everything LoveIQ
+> writes down and its live systems, with a link to every source.
 
 ## For everyone: how to use it
 
-Mention `@LoveIQ Brain` in a channel it has been invited to, or send it a direct
-message. It replies in a thread, and every answer lists the sources it used.
+Ask in Claude, with the LoveIQ brain connector: claude.ai, Claude Desktop or Claude
+Code (setup under "Connecting Claude to it" below). Every answer lists the sources it
+used. Slack is no longer a place to ask: since 2026-09-23 a mention of `@LoveIQ Brain` or
+a DM gets a one-line pointer to Claude, while channel messages are still indexed.
 
 **It is good at** (all measured against the real corpus):
 
