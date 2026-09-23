@@ -18,6 +18,7 @@ import {
   isBulkMail,
   excludeSubjects,
   trustpilotReviewTitle,
+  tidyEmailText,
 } from "@features/brain/server/ingest/gmail";
 
 const b64 = (s: string) =>
@@ -222,6 +223,51 @@ describe("a Trustpilot review is its own document, and says whose it is", () => 
     ).toBeNull();
     const t = threadToRows(review("2026-06-10", "1781049600000", "Spot-on."), "me", "s")[0]!.title;
     expect(t).not.toMatch(/Dorien/i);
+  });
+});
+
+describe("tidyEmailText — an HTML email is mostly blank space until tidied", () => {
+  /**
+   * Measured 2026-09-23: 3,007 of 9,194 Gmail chunks were more than half whitespace and
+   * zero-width characters — a Figma notification is 1,358 spaces, 140 non-breaking spaces,
+   * 136 carriage returns and 130 zero-width non-joiners around a one-line comment.
+   */
+  it("removes zero-width padding, collapses spacing, and keeps paragraph breaks", () => {
+    const raw =
+      "96 \r\n \r\n   \u00a0 \u200c \u200c \u200c\r\n\r\n\r\n\r\n  Mark left a comment  \r\n\r\n\r\n@Eman ship the survey design.\u00a0\u00a0";
+    expect(tidyEmailText(raw)).toBe("96\n\nMark left a comment\n\n@Eman ship the survey design.");
+  });
+
+  it("leaves ordinary prose alone", () => {
+    const prose = "Should we go to 39.99?\n\nYes, from Monday.";
+    expect(tidyEmailText(prose)).toBe(prose);
+  });
+
+  it("is what threadToRows stores, so the tidy reaches the corpus", () => {
+    const noisy = {
+      id: "tn",
+      messages: [
+        {
+          id: "mn",
+          internalDate: "1787900000000",
+          payload: {
+            headers: [
+              { name: "Subject", value: "Mark left a comment in LoveIQ" },
+              { name: "From", value: "Mark via Figma <comments@figma.com>" },
+            ],
+            mimeType: "text/plain",
+            body: {
+              data: b64(
+                "\u200c \u200c \u200c\r\n\r\n\r\n\r\n   Can we please ship these changes in the survey design today.   \r\n\r\n\r\n"
+              ),
+            },
+          },
+        },
+      ],
+    };
+    const [row] = threadToRows(noisy, "me", "stamp");
+    expect(row!.body).not.toMatch(/\u200c|\u00a0|\r|\n{3,}| {2,}/);
+    expect(row!.body).toContain("Can we please ship these changes in the survey design today.");
   });
 });
 

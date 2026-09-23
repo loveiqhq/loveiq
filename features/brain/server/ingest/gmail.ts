@@ -101,7 +101,13 @@ const MAX_TOLERATED_THREAD_FAILURES = 25;
 // v8: attachments that are signed legal instruments are no longer read. Same reason
 // the bump was needed for v7 and in the other direction — an old thread's history
 // never moves, so without this the contract already indexed would stay indexed.
-export const GMAIL_BUILDER_VERSION = 8;
+// v9: message and attachment text is tidied before chunking — zero-width preheader
+// padding, non-breaking spaces, CRLF and runs of blank lines removed. Measured
+// 2026-09-23: 3,007 of 9,194 chunks were more than half whitespace and zero-width
+// characters, 36.5% of all Gmail text against ~15% for ordinary prose, so a chunk held
+// half its content and a search result spent its budget on blank space. A bump because
+// an unchanged thread is never re-read, so nothing already stored would be re-rendered.
+export const GMAIL_BUILDER_VERSION = 9;
 
 /**
  * Mailboxes to read. `me` is whoever the credential belongs to.
@@ -756,6 +762,23 @@ export async function threadAttachmentText(
   return parts.join("\n\n");
 }
 
+/**
+ * Email text as text. HTML mail — notification templates especially — renders to runs of
+ * spaces and non-breaking spaces, CRLF line ends, and zero-width non-joiners (the
+ * invisible "preheader" padding), none of which carries meaning and all of which counts
+ * against the 2,400-character chunk. Line breaks between paragraphs are kept; everything
+ * else collapses.
+ */
+export function tidyEmailText(text: string): string {
+  return text
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u200B-\u200D\u2060\uFEFF\u034F\u00AD]/g, "")
+    .replace(/[ \t\u00A0]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export function threadToRows(
   thread: GmailThread,
   mailbox: string,
@@ -783,7 +806,7 @@ export function threadToRows(
     const from = person(header(m, "From"));
     const date = Number(m.internalDate ?? 0);
     const stamp = date ? new Date(date).toISOString().slice(0, 10) : "";
-    const text = stripQuoted(messageText(m.payload));
+    const text = tidyEmailText(stripQuoted(messageText(m.payload)));
     if (!text) continue;
     lines.push(`${from}${stamp ? ` (${stamp})` : ""}: ${text}`);
   }
@@ -809,7 +832,7 @@ export function threadToRows(
       `Between: ${participants.join(", ")}`,
       "",
       ...lines,
-      ...(attachments ? ["", attachments] : []),
+      ...(attachments ? ["", tidyEmailText(attachments)] : []),
     ].join("\n"),
     meta: {
       kind: "gmail-thread",
