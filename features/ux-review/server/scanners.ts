@@ -134,14 +134,55 @@ not visible — do not name a button you did not watch being pressed.
  * the verdicts are rows in `ux_finding`, both keyed by scanner name. The
  * champion/challenger machinery stays — the next experiment will use it.
  */
+/**
+ * SAMPLING: WHY TWO OF THE FOCUSED SCANNERS ARE NOW COMPREHENSIVE (2026-09-23).
+ *
+ * `focused` does not mean "every session, carefully". PostHog documents it as
+ * keeping "only the top sessions by surfacing score" — its own, generic
+ * opinion of which recordings are interesting. It does not know that our
+ * `dead_click` and `rage_click` events mean a reader is stuck.
+ *
+ * Measured over seven days, excluding the last six hours for lag, against
+ * each scanner's OWN trigger:
+ *
+ *     scanner       trigger fired   watched   skipped WITH a recording
+ *     report UX         121           76 (63%)          38
+ *     survey UX         253          174 (69%)          74
+ *     dead-click        350          168 (48%)         158
+ *     rage-click         33           33 (100%) — the only comprehensive one
+ *
+ * 270 recordings a week that existed and were never analysed. The worst
+ * session of the week — 65 dead taps and a rage click on the report, then
+ * gone — was passed over by the report, survey and dead-click scanners alike.
+ * PostHog's surfacing score did not rate it.
+ *
+ * PostHog's own estimate for the change, at the 2-credit model:
+ *
+ *     report UX    558 -> 806  credits/month   (+$2.48)   cap 900  — fits
+ *     survey UX   1414 -> 2118 credits/month   (+$7.04)   cap 2300 — fits
+ *     dead-click  1380 -> 2494 credits/month   (+$11.14)  cap 1600 — would NOT
+ *
+ * Dead-click stays focused. Comprehensive would blow its own cap mid-month —
+ * and a capped scanner silently skips everything after that, so it would end
+ * up watching fewer sessions, not more. It is also on probation until
+ * 2026-09-28 with 0 confirmed findings in 23; doubling the input to a scanner
+ * that is 95% noise is the wrong way round. Decide it at the probation review.
+ *
+ * Why the coverage number in the digest never showed any of this: it counted
+ * only survey FINISHERS, and it counted a session as watched if ANY scanner
+ * looked. The rage-click scanner sees everything it is given, so almost every
+ * finisher looked covered while the scanner that looks for report defects
+ * missed a third of them. See fetchCoverageStats.
+ */
 export const UX_SCANNERS: readonly UxScanner[] = [
   {
     id: "01a0a00e-1714-742d-baaf-567b5ca225f0",
     name: "LoveIQ survey UX",
     role: "champion",
     triggerEvent: "survey_started",
-    samplingMode: "focused",
-    estimatedMonthlyCredits: 2160,
+    // COMPREHENSIVE, not focused — see SAMPLING below the scanner list.
+    samplingMode: "comprehensive",
+    estimatedMonthlyCredits: 2118,
     creditLimit: 2300,
     scannerVersion: 2,
     prompt: [
@@ -174,8 +215,9 @@ export const UX_SCANNERS: readonly UxScanner[] = [
     name: "LoveIQ report UX",
     role: "champion",
     triggerEvent: "report_viewed",
-    samplingMode: "focused",
-    estimatedMonthlyCredits: 822,
+    // COMPREHENSIVE, not focused — see SAMPLING below the scanner list.
+    samplingMode: "comprehensive",
+    estimatedMonthlyCredits: 806,
     creditLimit: 900,
     scannerVersion: 2,
     prompt: [

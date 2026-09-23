@@ -53,10 +53,9 @@ import { adCostByDay } from "../features/brain/server/ingest/analytics";
 import { reportingDay, reportingDayStart } from "../shared/time/reporting-day";
 import {
   buildDigestMessage as buildUxReviewDigest,
-  buildScorecardMessage,
+  buildWeeklyScorecard,
   fetchCoverageStats,
   fetchDailyStats as fetchUxDailyStats,
-  fetchScannerScores,
   fetchVerificationStats,
 } from "../features/ux-review/server/review";
 import {
@@ -325,18 +324,18 @@ async function previewUxReview(): Promise<void> {
 async function previewScorecard(): Promise<void> {
   requireEnv("SUPABASE_URL");
   console.log("reading the 30-day scanner scorecard from PRODUCTION (read-only)...");
-  const scores = await fetchScannerScores(30);
-  if (!scores) {
+  // The cron's own builder, so this page is the message that goes out.
+  const msg = await buildWeeklyScorecard(30);
+  if (!msg) {
     console.error("the ledger could not be read — nothing to preview");
     process.exit(2);
   }
-  for (const s of scores) {
+  for (const s of msg.scores) {
     console.log(
       `  ${s.scanner}: ${s.right} right, ${s.wrong} wrong, ${s.contradicted} contradicted`
     );
   }
 
-  const msg = buildScorecardMessage(scores, 30);
   const out = join(OUT_DIR, "slack-preview-scorecard.html");
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(

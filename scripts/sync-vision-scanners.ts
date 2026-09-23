@@ -77,7 +77,13 @@ function body(scanner: UxScanner, forCreate: boolean) {
 
 async function main(): Promise<void> {
   const existing = (await call("/vision/scanners/")) as {
-    results: Array<{ id: string; name: string; scanner_config?: { prompt?: string } }>;
+    results: Array<{
+      id: string;
+      name: string;
+      scanner_config?: { prompt?: string };
+      sampling_mode?: string;
+      credit_limit?: number | null;
+    }>;
   };
   const byName = new Map(existing.results.map((s) => [s.name, s]));
 
@@ -113,11 +119,33 @@ async function main(): Promise<void> {
       }
       continue;
     }
-    if (live.scanner_config?.prompt === scanner.prompt) {
-      console.log(`ok        ${scanner.name}  (prompt matches)`);
+    /**
+     * EVERY FIELD THIS FILE PINS, not just the prompt.
+     *
+     * This compared the prompt and nothing else, so a scanner was "ok" as long
+     * as its wording matched git — and `samplingMode` and `creditLimit`, which
+     * scanners.ts also pins and `body()` also sends, could sit out of step with
+     * PostHog forever. Nothing had drifted when this was found (2026-09-23);
+     * it was found because the first change to a non-prompt field — moving two
+     * scanners off `focused`, which was skipping a third of their sessions —
+     * dry-ran as "ok (prompt matches)" and would have merged as a no-op.
+     *
+     * The convergence check in sync-vision-scanners.yml re-runs this dry, so it
+     * now verifies every field landed rather than only the prompt.
+     */
+    const drifted: string[] = [];
+    if (live.scanner_config?.prompt !== scanner.prompt) drifted.push("prompt");
+    if (live.sampling_mode !== scanner.samplingMode) {
+      drifted.push(`sampling_mode ${live.sampling_mode} -> ${scanner.samplingMode}`);
+    }
+    if (live.credit_limit !== scanner.creditLimit) {
+      drifted.push(`credit_limit ${live.credit_limit} -> ${scanner.creditLimit}`);
+    }
+    if (drifted.length === 0) {
+      console.log(`ok        ${scanner.name}  (prompt, sampling and cap all match)`);
       continue;
     }
-    console.log(`${APPLY ? "UPDATE" : "would update"}  ${scanner.name}  (prompt drifted from git)`);
+    console.log(`${APPLY ? "UPDATE" : "would update"}  ${scanner.name}  (${drifted.join("; ")})`);
     if (APPLY) {
       await call(`/vision/scanners/${live.id}/`, {
         method: "PATCH",
