@@ -146,6 +146,25 @@ async function warnIfWriteRejected(path: string, method: string, res: Response):
    * Still logged, at warn: visible when reading logs, not mirrored to Slack
    * (only levels 50/60 are).
    */
+  /**
+   * AN RPC IS A CALL, NOT A WRITE, and PostgREST makes both a POST.
+   *
+   * This told us on 2026-09-23:
+   *
+   *     api_5xx — supabase: write REJECTED — the row was not written and no
+   *     error was thrown
+   *
+   * The request was `POST /rest/v1/rpc/get_conversion_funnel` returning 404 —
+   * PGRST202, "no function matches these arguments". `get_conversion_funnel`
+   * is a read-only analysis function and the caller had passed `{days: 7}`
+   * where it wants `{since_ts, utm_filter}`. Nothing was being written, so
+   * nothing was lost; the alert described data loss and sent someone looking
+   * for a dropped row that never existed.
+   *
+   * Every one of our analysis functions is reached this way, so the wording
+   * has to tell a failed CALL apart from a refused INSERT.
+   */
+  const isRpc = path.startsWith("/rest/v1/rpc/");
   const level = res.status === 409 ? "warn" : "error";
   let code: string | undefined;
   let message: string | undefined;
@@ -157,10 +176,20 @@ async function warnIfWriteRejected(path: string, method: string, res: Response):
     // Non-JSON body (an HTML error page, or empty). The status alone still locates it.
   }
   logger[level](
-    { path: path.split("?")[0], method, status: res.status, code, message },
+    {
+      path: path.split("?")[0],
+      method,
+      status: res.status,
+      code,
+      message,
+      kind: isRpc ? "rpc" : "write",
+    },
     level === "warn"
       ? "supabase: write refused as a duplicate — expected when a unique constraint is doing idempotency"
-      : "supabase: write REJECTED — the row was not written and no error was thrown"
+      : isRpc
+        ? "supabase: a database function call was REFUSED — nothing was written; " +
+          "PGRST202 means no function matches the arguments sent"
+        : "supabase: write REJECTED — the row was not written and no error was thrown"
   );
 }
 
