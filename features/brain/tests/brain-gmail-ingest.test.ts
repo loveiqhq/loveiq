@@ -68,6 +68,8 @@ vi.mock("@features/admin/server/supabase", () => ({
 let listingOk = true;
 /** RAW gmail thread ids whose FETCH fails, while the listing still names them. */
 let failingThreadIds: string[] = [];
+/** RAW gmail thread ids whose FETCH returns a one-line stub, which threadToRows refuses. */
+let stubThreadIds: string[] = [];
 /** Threads the listing returns. */
 let listedThreads: Array<{ id: string; historyId: string }> = [];
 /** source_id -> whether touchChunks was asked to confirm it. */
@@ -91,6 +93,9 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
       if (failingThreadIds.includes(id)) {
         return { ok: false, status: 404, text: async () => '{"error":{"code":404}}' };
       }
+      const text = stubThreadIds.includes(id)
+        ? "ok"
+        : "A real conversation with enough text to clear the stub filter. ".repeat(3);
       return {
         ok: true,
         status: 200,
@@ -107,11 +112,7 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
                   { name: "From", value: "Marcus <marcus@loveiq.org>" },
                 ],
                 mimeType: "text/plain",
-                body: {
-                  data: Buffer.from(
-                    "A real conversation with enough text to clear the stub filter. ".repeat(3)
-                  ).toString("base64"),
-                },
+                body: { data: Buffer.from(text).toString("base64") },
               },
             },
           ],
@@ -149,6 +150,7 @@ beforeEach(() => {
   touchedCount = 0;
   listingOk = true;
   failingThreadIds = [];
+  stubThreadIds = [];
   listedThreads = [];
   touchedIds = [];
   deletedIds.length = 0;
@@ -356,7 +358,9 @@ describe("the sweep may only judge mailboxes it actually walked", () => {
   });
 
   beforeEach(() => {
-    listedThreads = [thread(1)];
+    // k1-k4 are LISTED: a current row stands for a thread that still exists, and one
+    // that is no longer listed is exactly what the sweep is for (see the next block).
+    listedThreads = [thread(1), ...["k1", "k2", "k3", "k4"].map((id) => ({ id, historyId: "9" }))];
     existing = [
       // The offboarded colleague: stale version, mailbox nobody walks any more.
       { source_id: "thread:gone-box", meta: { v: 1, mailbox: "philipp.leonhard@loveiq.org" } },
@@ -387,6 +391,61 @@ describe("the sweep may only judge mailboxes it actually walked", () => {
     existing.push({ source_id: "thread:no-box", meta: { v: 1 } });
     await ingestGmail("2026-09-06T00:00:00.000Z", () => false, null);
     expect(deletedIds).not.toContain("thread:no-box");
+  });
+});
+
+describe("a current row is kept only while its thread is still listed", () => {
+  /**
+   * THE PROMISE THE KEEP-SET NEVER KEPT.
+   *
+   * `excludeSubjects` and CLAUDE.md both say an excluded thread is swept because it is
+   * never listed: "sweepMissing keeps anything in `seen`". The keep-set never looked at
+   * `seen` — it kept every current-version row from a walked mailbox, listed or not — so
+   * an exclusion only ever took effect when a builder bump made the old rows stale.
+   */
+  const current = (id: string) => ({
+    source_id: `thread:${id}`,
+    meta: { v: GMAIL_BUILDER_VERSION, mailbox: "me", historyId: "9" },
+  });
+  const listed = (id: string) => ({ id, historyId: "9" });
+
+  beforeEach(() => {
+    // Enough listed, current threads that the orphans stay a minority, so the majority
+    // guard cannot make any of these pass by refusing to sweep at all.
+    listedThreads = ["k1", "k2", "k3", "k4", "k5"].map(listed);
+    existing = ["k1", "k2", "k3", "k4", "k5"].map(current);
+  });
+
+  it("sweeps a current row whose thread is no longer listed", async () => {
+    // Deleted upstream, or newly excluded by subject: either way, not listed.
+    existing.push(current("vanished"));
+    await ingestGmail("2026-09-23T00:00:00.000Z", () => false, null);
+    expect(deletedIds).toContain("thread:vanished");
+  });
+
+  it("sweeps a current row whose thread was re-read and refused", async () => {
+    // Listed, fetched because its history moved, and no longer something we index.
+    listedThreads.push({ id: "refused", historyId: "10" });
+    stubThreadIds = ["refused"];
+    existing.push(current("refused"));
+    await ingestGmail("2026-09-23T00:00:00.000Z", () => false, null);
+    expect(deletedIds).toContain("thread:refused");
+  });
+
+  it("keeps a current, listed, unchanged thread without re-reading it", async () => {
+    // The positive control: the common case must neither be swept nor re-fetched.
+    await ingestGmail("2026-09-23T00:00:00.000Z", () => false, null);
+    expect(deletedIds).not.toContain("thread:k1");
+    expect(fetchedUrls.some((u) => /\/threads\/k1\?format=full/.test(u))).toBe(false);
+  });
+
+  it("still keeps a listed thread whose re-read failed", async () => {
+    // A 404 between listing and fetch is not evidence of deletion.
+    listedThreads.push({ id: "flaky", historyId: "10" });
+    failingThreadIds = ["flaky"];
+    existing.push(current("flaky"));
+    await ingestGmail("2026-09-23T00:00:00.000Z", () => false, null);
+    expect(deletedIds).not.toContain("thread:flaky");
   });
 });
 

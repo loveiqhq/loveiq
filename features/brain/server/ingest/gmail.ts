@@ -854,6 +854,12 @@ export async function ingestGmail(
   const failedMailboxes: string[] = [];
   /** Threads we listed but could not re-read this run. Protected from the sweep. */
   const failedThreads = new Set<string>();
+  /**
+   * Threads we listed, re-read, and deliberately did not index — a stub, or anything
+   * `threadToRows` refuses. Reaching a thread and deciding against it is a decision, so
+   * its old rows belong to the sweep; this is the Drive ingester's `reached` rule.
+   */
+  const refusedThreads = new Set<string>();
 
   for (const mailbox of boxes) {
     const token = await tokenFor(mailbox);
@@ -913,7 +919,9 @@ export async function ingestGmail(
         fetched += 1;
         const attached = await threadAttachmentText(token, mailbox, full, isOutOfTime);
         if (attached) attachmentsRead += 1;
-        rows.push(...threadToRows(full, mailbox, stampedAt, people, attached));
+        const built = threadToRows(full, mailbox, stampedAt, people, attached);
+        if (built.length === 0) refusedThreads.add(id);
+        rows.push(...built);
       }
 
       pageToken = (listed.nextPageToken as string) ?? "";
@@ -987,7 +995,16 @@ export async function ingestGmail(
         // Never confirm a stale-version row FROM A MAILBOX WE DID WALK. It was
         // either dropped from the source or is no longer something we would index
         // (a stub, under v2); either way it belongs to the sweep, not the keep set.
-        return have.current;
+        //
+        // AND A CURRENT ROW ONLY IF THIS WALK STILL LISTED ITS THREAD, and did not
+        // refuse it on re-reading. The doc comments on `excludeSubjects` and CLAUDE.md
+        // both promise that "sweepMissing keeps anything in `seen`" — so an excluded or
+        // deleted thread, never listed, is swept. This line never consulted `seen`, before
+        // or after the 2026-08-31 refactor: any current-version row was kept, listed or
+        // not. Exclusions only ever took effect when a builder bump happened to make the
+        // old rows stale. Found 2026-09-23 while excluding job applications, which would
+        // otherwise have stayed indexed until the next unrelated bump.
+        return have.current && seen.has(base) && !refusedThreads.has(base);
       })
       .map(([id]) => id))();
   const touched = confirmed.length;

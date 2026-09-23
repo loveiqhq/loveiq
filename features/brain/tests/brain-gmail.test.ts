@@ -366,7 +366,9 @@ describe("a stale-version row must never be confirmed", () => {
     const src = await import("node:fs").then((fs) =>
       fs.readFileSync("features/brain/server/ingest/gmail.ts", "utf8")
     );
-    expect(src).toMatch(/return have\.current;/);
+    // `have.current` must stay a conjunct of the keep decision: extra conditions may
+    // narrow it (listed this run, not refused — 2026-09-23), never replace it.
+    expect(src).toMatch(/return have\.current(?:\s*&&[^;]+)?;/);
     // The second assertion here used to grep for the COMMENT above that line, which
     // could only ever detect a rewording — and did, on 2026-09-06. The behaviour it
     // was standing in for is now proven directly, under mutation, by
