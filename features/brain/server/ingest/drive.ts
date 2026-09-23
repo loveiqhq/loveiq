@@ -1396,6 +1396,10 @@ export async function ingestDrive(
       // reads them -- which is the same reasoning that put the ids here at all.
       const why = err instanceof Error ? err.message : String(err);
       exportFailures.push(`${file.id}(${why.slice(0, 60)})`);
+      // NOT reached: nothing was read, so nothing was decided. Left in `reached`, the
+      // daily sweep deleted the stored copy of a live document on a transient 5xx, and
+      // for a file that always fails to export, every day for good.
+      reached.delete(`doc:${file.id}`);
     }
   }
 
