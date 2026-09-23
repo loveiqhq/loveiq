@@ -1326,6 +1326,22 @@ export async function ingestDrive(
   }
 
   /**
+   * NEWEST FIRST, because the loop below stops at the clock and so ORDER decides what
+   * waits. In listing order a builder bump queued every rebuild ahead of documents
+   * nobody had indexed yet: "KPI Framework", edited 2026-09-17 and readable to this
+   * walk, was still absent on 2026-09-23 with 233 older files ahead of it for the v5
+   * rebuild. New and edited files carry recent timestamps, so they now go out in the
+   * next run; a version-only rebuild of an old file waits, which costs little because
+   * its stored copy stays searchable until then.
+   *
+   * ponytail: a recent file that never yields rows (empty, refused) is re-fetched
+   * first every run. Bounded by how few of those there are; store a tombstone if that
+   * ever shows up as `stopped=time-budget` with nothing new written.
+   */
+  const recency = (f: DriveFile) => f.modifiedTime ?? f.createdTime ?? "";
+  toFetch.sort((a, b) => recency(b).localeCompare(recency(a)));
+
+  /**
    * The files this run actually GOT TO, whatever came of them.
    *
    * Not the same as "produced rows". A document that was read and turned out empty,

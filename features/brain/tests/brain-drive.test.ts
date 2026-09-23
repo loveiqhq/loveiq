@@ -651,6 +651,25 @@ describe("ingestDrive", () => {
     expect(httpCalls.filter((u) => u.includes("/export?")).length).toBeGreaterThan(0);
   });
 
+  /**
+   * The fetch loop stops at the clock, so ORDER decides what waits. In listing order a
+   * builder bump queued every rebuild ahead of documents nobody had indexed at all:
+   * "KPI Framework", edited 2026-09-17 and readable to the walk, was still absent on
+   * 2026-09-23 with 233 older files ahead of it in the v5 rebuild.
+   */
+  it("fetches a document nobody has indexed before one that only needs rebuilding", async () => {
+    const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
+    const OLD = { ...FILE, id: "1OldRebuild", modifiedTime: "2026-06-01T00:00:00.000Z" };
+    const NEW = { ...FILE, id: "1NeverIndexed", modifiedTime: "2026-09-17T07:19:36.742Z" };
+    files = [OLD, NEW]; // the listing hands over the rebuild first
+    existing = [{ source_id: "doc:1OldRebuild", meta: { edited: OLD.modifiedTime, v: v - 1 } }];
+    // Room for exactly one export: the clock runs out the moment one has happened.
+    await ingestDrive(STAMP, () => httpCalls.some((u) => u.includes("/export?")));
+    const exported = httpCalls.filter((u) => u.includes("/export?"));
+    expect(exported).toHaveLength(1);
+    expect(exported[0]).toContain("1NeverIndexed");
+  });
+
   it("re-exports when the document changed", async () => {
     const v = (docToRows(FILE, "x", STAMP)[0].meta as { v: number }).v;
     existing = [{ source_id: "doc:1AbCdEf", meta: { edited: "2026-08-01T00:00:00.000Z", v } }];
