@@ -189,6 +189,12 @@ describe("findings synthesised from our own error reports", () => {
     for (const vendor of ["gtm.js", "clarity", "googletagmanager", "facebook", "hotjar"]) {
       expect(block, `${vendor} must be excluded`).toContain(vendor);
     }
+    // At least one frame in our own bundle. Excluding named vendors cannot
+    // exclude an error with no source at all — bots and injected code, 6 of 12
+    // sessions in 30 days, each posted as "needs a human".
+    expect(block).toMatch(
+      /position\(toString\(properties\.\$exception_sources\), '\/_next\/'\) > 0/
+    );
     // Grouped so one finding is a CLASS, not one of 24 instances.
     expect(block).toContain("GROUP BY sid, path, typ, val");
   });
