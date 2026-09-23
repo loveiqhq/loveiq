@@ -413,14 +413,32 @@ describe("compareScanners", () => {
     expect(drift[0]).toMatchObject({ scannerName: pinned.name, reason: "prompt" });
   });
 
-  it("catches a version that moved in either direction", () => {
-    expect(compareScanners(live({ scanner_version: pinned.scannerVersion + 1 }))[0]).toMatchObject({
-      reason: "version",
-    });
+  it("catches a version that moved in either direction, when the prompt moved too", () => {
+    const edited = { scanner_config: { prompt: `${pinned.prompt}\nsomething somebody typed` } };
+    const reasons = (v: number) =>
+      compareScanners(live({ scanner_version: v, ...edited })).map((d) => d.reason);
+    expect(reasons(pinned.scannerVersion + 1)).toContain("version");
     // A rollback was invisible before: the old check only fired on live > pinned.
-    expect(compareScanners(live({ scanner_version: pinned.scannerVersion - 1 }))[0]).toMatchObject({
-      reason: "version",
-    });
+    expect(reasons(pinned.scannerVersion - 1)).toContain("version");
+  });
+
+  it("does not cry version drift when the prompt is byte-identical", () => {
+    /**
+     * `scannerVersion` is hand-written in scanners.ts and PostHog increments
+     * its own counter on every apply. Since sync-vision-scanners.yml began
+     * applying on push to main, every merge moves PostHog one ahead — so this
+     * fired "PostHog is at version 5, git pins 3" on 2026-09-23 with all four
+     * prompts identical. A daily alert about a repository that is exactly
+     * right is how people learn to ignore the channel.
+     */
+    const drifts = compareScanners(live({ scanner_version: pinned.scannerVersion + 2 }));
+    expect(drifts.map((d) => d.reason)).not.toContain("version");
+    // And the check that actually matters is untouched.
+    expect(
+      compareScanners(
+        live({ scanner_config: { prompt: `${pinned.prompt} edited in the PostHog UI` } })
+      ).map((d) => d.reason)
+    ).toContain("prompt");
   });
 
   it("catches a scanner that is disabled or gone", () => {

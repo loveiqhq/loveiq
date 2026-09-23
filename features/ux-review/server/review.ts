@@ -266,9 +266,32 @@ export function compareScanners(live: readonly LiveScanner[]): ScannerDrift[] {
         detail: "it is disabled in PostHog, so it observes nothing — silent, not noisy",
       });
     }
+    const livePromptForVersion = (found.scanner_config?.prompt ?? "").trim();
+    /**
+     * VERSION DRIFT ONLY MATTERS WHEN THE PROMPT ALSO DIFFERS.
+     *
+     * `scannerVersion` is a hand-written literal here, and PostHog increments
+     * its own counter on every apply. Since sync-vision-scanners.yml started
+     * applying on push to main (2026-09-21), every merge that touches a prompt
+     * moves PostHog one ahead of git — so this fired
+     *
+     *     PostHog is at version 5, git pins 3
+     *
+     * on 2026-09-23 with all four prompts byte-identical. An alert that fires
+     * every day for a repository that is exactly right teaches people to
+     * ignore the channel, and this one is about the criteria we apply to real
+     * readers.
+     *
+     * The counter was a tripwire for "somebody edited the prompt in PostHog's
+     * UI". The prompt comparison below detects that directly and cannot be
+     * fooled by a bumped counter, so the version is reported only as
+     * corroboration when the text genuinely differs.
+     */
     if (
       typeof found.scanner_version === "number" &&
-      found.scanner_version !== pinned.scannerVersion
+      found.scanner_version !== pinned.scannerVersion &&
+      livePromptForVersion &&
+      livePromptForVersion !== pinned.prompt.trim()
     ) {
       drift.push({
         scannerName: pinned.name,
