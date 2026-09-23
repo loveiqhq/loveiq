@@ -22,6 +22,8 @@ import {
   fetchVerificationStats,
   isChallengerScanner,
   isSafeSessionId,
+  PAYWALL_EXIT_TAP_WINDOW_MS,
+  paywallLeftOpen,
   recordingLink,
   sessionClickTarget,
   sessionViewport,
@@ -1015,6 +1017,22 @@ describe("the scanner scorecard", () => {
     );
   });
 
+  it("gives each of our own lanes its own name, never a scanner's", () => {
+    // "our own survey log" contains "survey" and read as "The survey", the same
+    // words as the survey scanner's line; error reports read as taps.
+    const out = render([
+      sc("LoveIQ survey UX", 2, 30),
+      sc("our own survey log", 1, 0),
+      sc("our own error reports", 0, 1),
+      sc("our own paywall events", 1, 0),
+    ]);
+    expect(out.match(/The survey/g)?.length).toBe(1);
+    expect(out).toContain("Survey restarts our own records caught");
+    expect(out).toContain("Errors our own code reported");
+    expect(out).toContain("Readers sent out of their report with the paywall open");
+    expect(out).not.toContain("Taps our own code recorded");
+  });
+
   it("uses no internal names", () => {
     // "our own dead_click events" is the scanner_name in the database. It is
     // not a phrase for a message written for someone who does not read code.
@@ -1494,6 +1512,87 @@ describe("biggestIndexDrop", () => {
     expect(SURVEY_RESTART_MIN_DROP).toBeLessThan(56);
     expect(biggestIndexDrop(seq(SURVEY_RESTART_MIN_DROP, 0))).not.toBeNull();
     expect(biggestIndexDrop(seq(SURVEY_RESTART_MIN_DROP - 1, 0))).toBeNull();
+  });
+});
+
+/**
+ * Back took 7 readers out of their report with the paywall open in the 30 days
+ * before #258, and the only trace any check kept was a scanner's invented unlock
+ * click, refuted. These pin what counts as that exit — and, as importantly, the
+ * ordinary exits that must NOT count, because every hit is reported as a
+ * regression in a reader's own thread.
+ */
+describe("paywallLeftOpen", () => {
+  const S = "01a0bf3d-df1f-72e1-b6a3-03654a44d06d";
+  type Row = readonly [string, number, string, string];
+  const at = (sec: number) => 1_790_000_000_000 + sec * 1000;
+  const report = (sec: number, sid = S): Row => [sid, at(sec), "$pageview", "/report/rpt_x1"];
+  const page = (sec: number, path: string, sid = S): Row => [sid, at(sec), "$pageview", path];
+  const ev = (sec: number, event: string, sid = S): Row => [sid, at(sec), event, ""];
+
+  it("finds Back leaving the report while the paywall is open", () => {
+    const rows = [report(0), ev(40, "price_shown"), page(90, "/survey")];
+    expect(paywallLeftOpen(rows)).toEqual([{ sessionId: S, to: "/survey" }]);
+  });
+
+  it("does not count leaving after the paywall was closed", () => {
+    const rows = [
+      report(0),
+      ev(40, "price_shown"),
+      ev(50, "paywall_dismissed"),
+      page(90, "/survey"),
+    ];
+    expect(paywallLeftOpen(rows)).toEqual([]);
+  });
+
+  it("does not count a page change a tap caused", () => {
+    // A link in the page, not the back button.
+    const tapped = [report(0), ev(40, "price_shown"), ev(88, "$autocapture"), page(90, "/about")];
+    expect(paywallLeftOpen(tapped)).toEqual([]);
+    const longAgo = PAYWALL_EXIT_TAP_WINDOW_MS / 1000 + 1;
+    const stale = [
+      report(0),
+      ev(40, "price_shown"),
+      ev(90 - longAgo, "$autocapture"),
+      page(90, "/"),
+    ];
+    expect(paywallLeftOpen(stale)).toEqual([{ sessionId: S, to: "/" }]);
+  });
+
+  it("sees a paywall re-opened by a tap, which price_shown never logs twice", () => {
+    const rows = [
+      report(0),
+      ev(40, "price_shown"),
+      ev(50, "paywall_dismissed"),
+      ev(60, "paywall_initiated"),
+      page(90, "/survey"),
+    ];
+    expect(paywallLeftOpen(rows)).toEqual([{ sessionId: S, to: "/survey" }]);
+  });
+
+  it("ignores a reload or another report, and a paywall seen off the report", () => {
+    expect(paywallLeftOpen([report(0), ev(40, "price_shown"), report(90)])).toEqual([]);
+    expect(paywallLeftOpen([page(0, "/survey"), ev(40, "price_shown"), page(90, "/")])).toEqual([]);
+    // Reloaded: the modal starts shut, so a later exit is an ordinary one.
+    expect(
+      paywallLeftOpen([report(0), ev(40, "price_shown"), report(60), page(90, "/survey")])
+    ).toEqual([]);
+  });
+
+  it("keeps sessions apart and reports each once", () => {
+    const T = "01a0cafe-0000-7000-8000-000000000000";
+    const rows = [
+      report(0),
+      ev(40, "price_shown"),
+      page(90, "/survey"),
+      report(100),
+      ev(110, "price_shown"),
+      page(200, "/"),
+      // Another reader: the first one's open paywall must not carry over.
+      page(0, "/about", T),
+      page(95, "/survey", T),
+    ];
+    expect(paywallLeftOpen(rows)).toEqual([{ sessionId: S, to: "/survey" }]);
   });
 });
 

@@ -31,6 +31,7 @@ import {
   contradiction,
   fetchSessionEvents,
   isSafeSessionId,
+  paywallLeftOpen,
   sessionClickTarget,
   reportTokenForSession,
   sessionViewport,
@@ -807,6 +808,12 @@ if (process.argv.includes("--selftest")) {
     ["Text was readable through the blur meant to hide it.", "A1"],
     ["A section never rendered and left a blank area.", "M1"],
     ["The user was looped back to the survey start.", "L1"],
+    // The paywall-exit lane's own sentence: it must reach L1 or every one is a gap.
+    [
+      "A reader was sent back to /survey from their report while the paywall was still open, " +
+        "with no tap before it: the back button left the report instead of closing the paywall.",
+      "L1",
+    ],
   ];
   const claimCases = [
     // The real 2026-09-14 fabrication: an unlock click in a session with none.
@@ -1180,6 +1187,56 @@ async function ownSurveyRestarts(lookbackHours) {
 const RESTART_FINDINGS = await ownSurveyRestarts(LOOKBACK_HOURS);
 
 /**
+ * READERS BACK TOOK OUT OF THEIR REPORT WITH THE PAYWALL OPEN.
+ *
+ * Found by hand on 2026-09-23 and by nothing here: 7 readers in 30 days, all
+ * flagged by a scanner as "looped back to the survey", every one refuted for
+ * the unlock click it invented. The outcome was real and no check asked about
+ * it. #258 made Back close the paywall, so each of these is now a regression —
+ * on a device, or in an in-app browser, the end-to-end tests do not emulate.
+ *
+ * The events are the evidence: the paywall was open and the page changed with
+ * no tap before it. `paywallLeftOpen` (review.ts) decides, and is unit tested.
+ *
+ * Twice the lookback for EVENTS, because the report pageview that makes an exit
+ * an exit can come well before the paywall opens; only the sessions are bounded
+ * by the lookback. PostHog caps a query at 50,000 rows, which a backfill wider
+ * than about two weeks will reach — the check below says so rather than
+ * silently reading a truncated window.
+ */
+const PAYWALL_EXIT_FETCH_LIMIT = 50_000;
+const PAYWALL_EXIT_ROWS = await posthog(`
+  SELECT toString($session_id) AS sid,
+         toUnixTimestamp64Milli(timestamp) AS at,
+         event,
+         toString(properties.$pathname) AS path
+  FROM events
+  WHERE timestamp > now() - INTERVAL ${LOOKBACK_HOURS * 2} HOUR
+    AND event IN ('$pageview', '$autocapture', 'price_shown', 'paywall_initiated', 'paywall_dismissed')
+    AND $session_id IN (
+      SELECT $session_id FROM events
+      WHERE event IN ('price_shown', 'paywall_initiated')
+        AND timestamp > now() - INTERVAL ${LOOKBACK_HOURS} HOUR
+    )
+  ORDER BY sid, at
+  LIMIT ${PAYWALL_EXIT_FETCH_LIMIT}
+`);
+if (PAYWALL_EXIT_ROWS.length === PAYWALL_EXIT_FETCH_LIMIT) {
+  console.log(
+    `::error::paywall-exit query returned exactly ${PAYWALL_EXIT_FETCH_LIMIT} rows — ` +
+      `the oldest sessions are being dropped. Narrow LOOKBACK_HOURS.`
+  );
+}
+const PAYWALL_EXITS = paywallLeftOpen(
+  PAYWALL_EXIT_ROWS.map(([sid, at, event, path]) => [
+    String(sid),
+    Number(at),
+    String(event),
+    String(path),
+  ])
+);
+
+/**
  * Unhandled exceptions in OUR OWN code, which nothing has ever looked at.
  *
  * `$exception` carries the type, the message and the source file, and 33
@@ -1258,12 +1315,30 @@ for (const [sid, rawPath, sel, n] of OWN_EVENT_FINDINGS) {
   ]);
 }
 
+/**
+ * A SCANNER'S FLAG MUST NOT SUPPRESS OUR OWN EVIDENCE.
+ *
+ * `seenSessions` starts with every session a scanner flagged. That is right for
+ * the dead-click lane above, and it was wrong for the two lanes below, which
+ * record the OUTCOME itself. The scanner's finding meets the refusal gate
+ * first, and the report scanner invents an unlock click in most of what it
+ * writes — so the session was refuted, and the restart our own log recorded
+ * for it was never looked at. 01a0bbf7's 56-question restart was filed as the
+ * scanner lying exactly this way.
+ *
+ * So these two dedupe only against each other. They rank first and route to
+ * the same criterion, so a scanner finding for the same session that survives
+ * the gate inherits their answer (pairKey) instead of posting a second verdict.
+ */
+const ownOutcomeSessions = new Set();
+
 for (const r of RESTART_FINDINGS) {
   // `submission:<id>` when the session was never recorded. threadFor()
   // understands both, so a reader whose session PostHog never saw still gets
   // the finding under their own entry.
   const sid = r.posthog_session_id ? String(r.posthog_session_id) : `submission:${r.id}`;
-  if (seenSessions.has(sid)) continue;
+  if (ownOutcomeSessions.has(sid)) continue;
+  ownOutcomeSessions.add(sid);
   seenSessions.add(sid);
   findings.push([
     `own-survey-restart:${r.session_id}`,
@@ -1277,6 +1352,24 @@ for (const r of RESTART_FINDINGS) {
       (r.posthog_session_id
         ? "."
         : " — this session was never recorded, so no scanner could see it."),
+    1,
+    0,
+  ]);
+}
+
+for (const x of PAYWALL_EXITS) {
+  if (ownOutcomeSessions.has(x.sessionId)) continue;
+  ownOutcomeSessions.add(x.sessionId);
+  seenSessions.add(x.sessionId);
+  findings.push([
+    `own-paywall-exit:${x.sessionId}`,
+    x.sessionId,
+    "our own paywall events",
+    // Phrased so classify() routes it to L1 ("sent back to"). The path is
+    // redacted because a share link carries a report token in its path too.
+    `A reader was sent back to ${redactReportToken(x.to)} from their report while the paywall ` +
+      `was still open, with no tap before it: the back button left the report instead of ` +
+      `closing the paywall. Recorded by our own instrumentation, not inferred from a recording.`,
     1,
     0,
   ]);
@@ -1308,6 +1401,8 @@ for (const r of RESTART_FINDINGS) {
 const rank = (f) => {
   const source = String(f[2]);
   if (source === "our own survey log") return 2;
+  // Every one is a defect by construction: the paywall was open when Back left.
+  if (source === "our own paywall events") return 2;
   return source.startsWith("our own") ? 1 : 0;
 };
 findings.sort((a, b) => rank(b) - rank(a));
@@ -1336,6 +1431,7 @@ console.log(
   `${findings.length} finding(s) in the last ${LOOKBACK_HOURS}h ` +
     `(${OWN_EVENT_FINDINGS.length} from our own dead_click events, ` +
     `${RESTART_FINDINGS.length} from our own survey log, ` +
+    `${PAYWALL_EXITS.length} from our own paywall events, ` +
     `${EXCEPTION_FINDINGS.length} from our own error reports — all probed first)`
 );
 
@@ -1655,6 +1751,23 @@ for (const [
   const results = probeFiles.map((f) => runProbe(f, viewport, clickTarget, reportToken, sessionId));
 
   /**
+   * The paywall lane's evidence is the defect itself, recorded when it
+   * happened: no probe can re-perform one reader's Back press on one phone.
+   * Added before the replay so a confirmed finding does not spend one.
+   */
+  if (String(observationId).startsWith("own-paywall-exit:")) {
+    results.push({
+      file: "paywall-exit-log",
+      passed: false,
+      inconclusive: false,
+      claimScoped: true,
+      tail:
+        "Our own events record the paywall still open when the page changed, with no tap " +
+        "before it — Back took the reader out of their report instead of closing the paywall.",
+    });
+  }
+
+  /**
    * THE READER'S OWN ROUTE, when nothing else found anything.
    *
    * Every probe above drives a path we chose. A defect that only appears part
@@ -1766,7 +1879,9 @@ for (const [
          * of sentence that makes a team stop trusting the channel.
          */
         .map((r) =>
-          r.file === "survey-behaviour-log" ? `${r.tail}` : `\`${r.file}\` failed: ${r.tail}`
+          r.file === "survey-behaviour-log" || r.file === "paywall-exit-log"
+            ? `${r.tail}`
+            : `\`${r.file}\` failed: ${r.tail}`
         )
         .join(" ") +
       (prUrl ? ` Draft PR with the reproduction: ${prUrl}` : "");

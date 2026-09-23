@@ -230,3 +230,99 @@ describe("findings synthesised from our own error reports", () => {
     expect(SRC).toMatch(/EXCEPTION_FINDINGS\.length === OWN_EVENT_FETCH_LIMIT/);
   });
 });
+
+/**
+ * Back took 7 readers out of their report with the paywall open in the 30 days
+ * before #258. Every one was flagged by a scanner, refuted for an invented
+ * unlock click, and never looked at again. This lane records the outcome itself.
+ */
+describe("findings synthesised from our own paywall events", () => {
+  const query = /const PAYWALL_EXIT_ROWS = await posthog\(`([\s\S]*?)`\);/.exec(SRC)?.[1] ?? "";
+
+  it("reads the events that open and close the paywall, and the page changes", () => {
+    expect(query, "the paywall-exit query is missing").not.toBe("");
+    for (const event of [
+      "$pageview",
+      "$autocapture",
+      "price_shown",
+      "paywall_initiated",
+      "paywall_dismissed",
+    ]) {
+      expect(query).toContain(`'${event}'`);
+    }
+    // The pure, unit-tested detector decides — not a second copy of it here.
+    expect(SRC).toContain("const PAYWALL_EXITS = paywallLeftOpen(");
+  });
+
+  it("bounds the sessions by the lookback and the events by twice it", () => {
+    // The report pageview that makes an exit an exit comes before the paywall.
+    expect(query).toContain("INTERVAL ${LOOKBACK_HOURS * 2} HOUR");
+    expect(query).toMatch(
+      /event IN \('price_shown', 'paywall_initiated'\)\s+AND timestamp > now\(\) - INTERVAL \$\{LOOKBACK_HOURS\} HOUR/
+    );
+    expect(query).toMatch(/ORDER BY sid, at\s+LIMIT \$\{PAYWALL_EXIT_FETCH_LIMIT\}\s*$/);
+    expect(SRC).toMatch(/PAYWALL_EXIT_ROWS\.length === PAYWALL_EXIT_FETCH_LIMIT/);
+  });
+
+  it("phrases them so the classifier routes them to the loop criterion, unrefuted", async () => {
+    // The sentence the code BUILDS, reassembled from its template pieces — a
+    // copy typed into this test would keep passing after the real one changed.
+    const push = /"our own paywall events",([\s\S]*?)\n\s*1,\n\s*0,\n\s*\]\);/.exec(SRC)?.[1] ?? "";
+    const pieces = [...push.matchAll(/`([^`]*)`/g)].map((m) => m[1]);
+    expect(pieces.length, "the paywall-exit sentence was not found").toBeGreaterThan(0);
+    const sentence = pieces.join("").replace("${redactReportToken(x.to)}", "/survey");
+    expect(sentence).not.toContain("${");
+
+    const l1 = /id: "L1",[\s\S]*?match:\s*(\/.+?\/[a-z]*),/.exec(SRC)?.[1];
+    expect(l1, "L1's match regex was not found in the source").toBeTruthy();
+    const [, body, flags] = /^\/(.*)\/([a-z]*)$/.exec(l1!)!;
+    expect(new RegExp(body, flags).test(sentence), `L1 no longer matches: ${sentence}`).toBe(true);
+    // It names no press, so the refusal gate has nothing to refute.
+    const { contradiction } = await import("../../features/ux-review/server/review");
+    expect(contradiction(sentence, new Set(["report_viewed", "price_shown"]))).toBeNull();
+  });
+
+  it("gives each one a stable id and redacts where the reader landed", () => {
+    expect(SRC).toContain("`own-paywall-exit:${x.sessionId}`");
+    expect(SRC).toContain("${redactReportToken(x.to)}");
+  });
+
+  it("counts our own record of the exit as the evidence, before any replay", () => {
+    const witness = SRC.indexOf('file: "paywall-exit-log"');
+    const replay = SRC.indexOf('results.push(runProbe("replay-session.mjs"');
+    expect(witness, "the paywall-exit evidence is missing").toBeGreaterThan(0);
+    expect(witness, "a confirmed exit must not spend a replay").toBeLessThan(replay);
+    expect(SRC).toMatch(
+      /file: "paywall-exit-log",\s*passed: false,\s*inconclusive: false,\s*claimScoped: true,/
+    );
+    expect(SRC).toMatch(/r\.file === "survey-behaviour-log" \|\| r\.file === "paywall-exit-log"/);
+    expect(SRC).toMatch(/if \(source === "our own paywall events"\) return 2;/);
+    // Attached to exactly the findings this lane creates: the same id prefix.
+    const prefix = /`(own-paywall-exit:)\$\{x\.sessionId\}`/.exec(SRC)?.[1];
+    expect(prefix).toBe("own-paywall-exit:");
+    expect(SRC).toContain(`String(observationId).startsWith("${prefix}")`);
+  });
+
+  it("is never suppressed because a scanner flagged the same session", () => {
+    /**
+     * `seenSessions` starts with every scanner-flagged session, and a scanner's
+     * finding meets the refusal gate first. Keyed on it, the outcome our own
+     * records hold was dropped whenever the scanner's story was refuted — which
+     * is how 01a0bbf7's real 56-question restart was filed as the scanner lying.
+     */
+    const restartLoop = /for \(const r of RESTART_FINDINGS\) \{([\s\S]*?)\n\}/.exec(SRC)?.[1] ?? "";
+    const exitLoop = /for \(const x of PAYWALL_EXITS\) \{([\s\S]*?)\n\}/.exec(SRC)?.[1] ?? "";
+    for (const [name, loop] of [
+      ["restart", restartLoop],
+      ["paywall", exitLoop],
+    ] as const) {
+      expect(loop, `${name} loop not found`).not.toBe("");
+      expect(loop, `${name} lane must not skip scanner sessions`).not.toMatch(
+        /seenSessions\.has\(/
+      );
+      expect(loop).toMatch(/if \(ownOutcomeSessions\.has\((sid|x\.sessionId)\)\) continue;/);
+    }
+    // And they still go first, so a scanner finding on the session inherits their answer.
+    expect(SRC).toMatch(/findings\.sort\(\(a, b\) => rank\(b\) - rank\(a\)\)/);
+  });
+});
