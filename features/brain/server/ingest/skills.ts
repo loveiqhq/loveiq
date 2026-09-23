@@ -52,7 +52,7 @@ export function collapseToDocuments(rows: PromptDoc[], max = 40): PromptDoc[] {
       .trim();
     // A Drive "Copy of X" is a scratch duplicate of a prompt already listed. Measured
     // 2026-09-23: four of the twenty slots went to copies while nine real prompts —
-    // `Typical_Beliefs_Chapter_Prompt` among them — were cut off alphabetically.
+    // the beliefs chapter's among them — were cut off alphabetically.
     if (/^copy of\b/i.test(title)) continue;
     out.push({ source_id: `drive/${base}`, title: title || base });
     if (out.length >= max) break;
