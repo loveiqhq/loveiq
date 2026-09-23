@@ -299,17 +299,19 @@ protected branches are free on every GitHub plan — and the organisation is on
 
 **What is enabled on `main` now:**
 
-|                        |                         |
-| ---------------------- | ----------------------- |
-| Force pushes           | **blocked**             |
-| Branch deletion        | **blocked**             |
-| Required PR review     | not enabled — see below |
-| Required status checks | not enabled — see below |
+|                        |                                                             |
+| ---------------------- | ----------------------------------------------------------- |
+| Force pushes           | **blocked**                                                 |
+| Branch deletion        | **blocked**                                                 |
+| Required pull request  | **required** (0 approvals) — enabled 2026-09-19, see below  |
+| Required status checks | **`Lint`, `Test`, `Build`** — enabled 2026-09-19            |
+| Admin bypass           | allowed (`enforce_admins: false`), deliberately — see below |
 
 Verified by attempting both against an identically-configured throwaway branch:
 `remote rejected … (protected branch hook declined)`.
 
-**Why the other two are deliberately off.** Requiring a pull request or a green
+**Why the other two were off until 2026-09-19** (kept as history; both are on now —
+the table above is the current state). Requiring a pull request or a green
 status check also blocks direct pushes, and `main` takes around twenty a day from
 several people and agent sessions. Turning it on mid-stream would stop everyone
 working, so it is staged rather than skipped: it is the prerequisite for letting
