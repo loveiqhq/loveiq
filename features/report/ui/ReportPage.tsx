@@ -34,6 +34,11 @@ import ReportMobileNav from "./ReportMobileNav";
 import { V3ModeProvider } from "./v3/V3Chapter";
 import V3Intro from "./v3/V3Intro";
 import V4Part1 from "./v3/V4Part1";
+import V3ArchetypeCard from "./v3/V3ArchetypeCard";
+import V4Snapshot from "./v3/V4Snapshot";
+import { report3ArchetypeCard } from "@/data/report3-archetype-card";
+import type { ArchetypeName } from "@features/report/server/archetypeSlug";
+import { REPORT_V4_SNAPSHOT } from "@/data/report3-archetype-page";
 import V3EndSummary from "./v3/V3EndSummary";
 import V3Methodology from "./v3/V3Methodology";
 import V3PartDivider from "./v3/V3PartDivider";
@@ -1058,7 +1063,19 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           sectionId={section.id}
                           title={title}
                         >
-                          <CoreArchetypeSection matchScore={matchScore} theme={theme} />
+                          {/* 15:815. V2's hero is a different card entirely — it
+                           * has no dimension deck, which is the whole middle of
+                           * the frame. Falls back to V2's whenever the archetype
+                           * has no Report 3.0 card copy. */}
+                          {isV4 && report3ArchetypeCard[viewArchetype] ? (
+                            <V3ArchetypeCard
+                              archetype={viewArchetype as ArchetypeName}
+                              matchStrength={matchScore}
+                              copy={report3ArchetypeCard[viewArchetype]!}
+                            />
+                          ) : (
+                            <CoreArchetypeSection matchScore={matchScore} theme={theme} />
+                          )}
                         </ReportSection>
                         {/* "What this means for you" (Figma 8719:8865). Part I's
                           child order is HERO → SUMMARY → SNAPSHOT, so this sits
@@ -1095,7 +1112,18 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                             <h2 className="rv3-snapshot-heading" data-node-id="10392:19225">
                               Snapshot &mdash; of the {viewArchetype}
                             </h2>
-                            <V3SnapshotIgnite copy={findingsCopy} />
+                            {/* 316:250. V3's accordion opens one row at a time and
+                             * carries its own washes; the frame delivers every row
+                             * closed inside one white panel. Falls back to V3's
+                             * when the archetype has no snapshot rows yet. */}
+                            {isV4 && REPORT_V4_SNAPSHOT[viewArchetype] ? (
+                              <V4Snapshot
+                                archetype={viewArchetype}
+                                rows={REPORT_V4_SNAPSHOT[viewArchetype]!}
+                              />
+                            ) : (
+                              <V3SnapshotIgnite copy={findingsCopy} />
+                            )}
                             <SnapshotCompare copy={snapshotCopy} thirdRowViz="dots" />
                             <div className="rv3-chapter__feedback">
                               {renderFeedback("findings", "Five things this report found")}

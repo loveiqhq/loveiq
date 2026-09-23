@@ -46,7 +46,9 @@ const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) =>
   useEffect(() => {
     const el = viewportRef.current;
     if (!el) return;
-    const onScroll = () => {
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
       const cards = el.querySelectorAll<HTMLElement>("[data-deck-card]");
       if (!cards.length) return;
       // At maximum scroll the last card cannot reach the snap edge — the track's
@@ -69,8 +71,19 @@ const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) =>
       });
       setActive(nearest);
     };
+    // Coalesced into one animation frame. `measure` reads six rects and the
+    // scroll metrics; running that on every scroll event — a touch flick fires
+    // far more than one per frame — forces a synchronous layout each time, which
+    // is most of what "clunky" was. React bails out when `nearest` is unchanged,
+    // so a re-render still only happens when the card actually changes.
+    const onScroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(measure);
+    };
     el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
   }, []);
 
   // Open on the requested card without animating past the others. Assigning
@@ -143,15 +156,18 @@ const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) =>
                   {/* 15:1152. Peeking cards only — the focused card hides this block in
                    * every variant frame (15:1175 carries hidden="true"). Kept out of the
                    * DOM rather than visually hidden so it is not read out either. */}
-                  {!isFocused && (
-                    <footer className="rv3-deck__more">
-                      <span className="rv3-deck__more-label">Learn more in chapter:</span>
-                      <span className="rv3-deck__more-item">
-                        <span className="rv3-deck__bullet" aria-hidden="true" />
-                        <span className="rv3-deck__chapter">{d.chapterLabel}</span>
-                      </span>
-                    </footer>
-                  )}
+                  {/* `hidden` rather than unmounted: removing a node from inside a
+                   * `scroll-snap-type: x mandatory` scroller mid-gesture makes the
+                   * browser re-resolve its snap target, which is visible as a
+                   * snap-back. Hidden is still out of the accessibility tree, so
+                   * it is not read out either. */}
+                  <footer className="rv3-deck__more" hidden={isFocused}>
+                    <span className="rv3-deck__more-label">Learn more in chapter:</span>
+                    <span className="rv3-deck__more-item">
+                      <span className="rv3-deck__bullet" aria-hidden="true" />
+                      <span className="rv3-deck__chapter">{d.chapterLabel}</span>
+                    </span>
+                  </footer>
                 </div>
               </article>
             );
