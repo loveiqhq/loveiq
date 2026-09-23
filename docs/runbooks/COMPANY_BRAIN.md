@@ -215,7 +215,13 @@ same thing is the failure this corpus has hit more than once:
   Slack uploads and calendar titles; Gmail also excludes recruiting subjects at the
   listing so an excluded thread is never fetched at all.
 - **Legal instruments and private legal matters** — contracts, the shareholders'
-  agreement and similar, by name in Drive and as attachments in Gmail and Slack.
+  agreement and similar, by name in Drive, as attachments in Gmail and Slack, and as
+  email bodies by subject (the SHA draft thread, freelance-contract and
+  salary-and-contract emails). A meeting _about_ a contract stays: compensation
+  discussion is inside the open-access decision, the instrument is not.
+- **Customer mail** — the `hello@` mailbox customers write to, for the same reason
+  `#email-inbox`, which forwards it, is never read: what a customer writes to us
+  privately is not indexed.
 
 Excluding something removes what was already stored on the next complete sweep; until
 2026-09-23 that was true of Drive but not of Gmail, whose keep-set ignored whether a

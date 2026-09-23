@@ -212,6 +212,15 @@ async function markMined(sourceId: string, found: number): Promise<void> {
  * the whole corpus. That salience is an accident of automation, not a decision anybody
  * made.
  *
+ * WHAT THIS DOES AND DOES NOT DO, measured 2026-09-23 because an earlier reading of this
+ * comment promised more. It keeps the figure out of TITLE-ONLY surfaces — the recent- and
+ * prior-decision blocks, `browse_context` — where a list of titles would otherwise read as
+ * a pay table. It does not stop a search for "compensation" ranking the record first, and
+ * search prints the body, figure included: the word stays in the title, which is right,
+ * because "what did we decide about Eman's rate" must still find it. Under the open-access
+ * decision that is intended — the body is the record. If the goal ever becomes keeping an
+ * individual's pay out of search, the record has to go, not its title.
+ *
  * Deterministic, like the verbatim-quote gate beside it: a prompt instruction is a
  * request, and this needs to hold on every row. Only fires when all three are true — a
  * roster name, pay or equity language, and an actual figure — so a decision that merely

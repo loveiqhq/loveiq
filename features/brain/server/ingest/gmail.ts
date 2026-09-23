@@ -268,10 +268,30 @@ export const RECRUITING_SUBJECT_TERMS = [
   "bewerbung",
   "design intern follow up",
 ];
-export function recruitingQuery(): string {
-  return RECRUITING_SUBJECT_TERMS.map((t) =>
-    t.includes(" ") ? ` -subject:"${t}"` : ` -subject:${t}`
-  ).join("");
+/**
+ * CONTRACT TEXT ARRIVING AS MAIL. The legal-instrument rule keeps the shareholders'
+ * agreement and individual contracts out of Drive and out of attachments by name; the
+ * same text also arrives as email bodies — a clause-by-clause critique of the SHA draft,
+ * Docs comment notifications quoting it word for word, freelance contract and
+ * salary-and-contract emails setting out a named person's terms. Same documents, a
+ * fourth path. Measured 2026-09-23: these terms select exactly those threads plus the
+ * sharing notifications for the agreement, and no meeting notes: a meeting ABOUT a
+ * contract stays, as it does in Drive, because compensation discussion is inside the
+ * open-access decision and the instrument is not.
+ */
+export const CONTRACT_SUBJECT_TERMS = [
+  "sha",
+  "shareholders",
+  "gesellschaftervertrag",
+  "freelance contract",
+  "salary contract",
+];
+
+/** Every standing listing exclusion, as Gmail `-subject:` terms. */
+export function standingExclusionsQuery(): string {
+  return [...RECRUITING_SUBJECT_TERMS, ...CONTRACT_SUBJECT_TERMS]
+    .map((t) => (t.includes(" ") ? ` -subject:"${t}"` : ` -subject:${t}`))
+    .join("");
 }
 
 /**
@@ -294,9 +314,18 @@ export function isRecruitingThread(subject: string, text: string): boolean {
 /**
  * Mailboxes that are never company knowledge. Unlike `GMAIL_EXCLUDE_MAILBOXES` — which
  * stops reading a mailbox but keeps its history — a mailbox here is also removed from the
- * corpus: `hr@` held 16 threads, 15 of them job applications with CVs attached.
+ * corpus.
+ *
+ * - `hr@` held 16 threads, 15 of them job applications with CVs attached.
+ * - `hello@` is the address customers write to. The line this system does not move
+ *   (CLAUDE.md, "Who can see what"; the `#email-inbox` note in slack.ts) is that what a
+ *   customer writes to us privately is not indexed — and `#email-inbox` was excluded on
+ *   2026-09-14 precisely because it forwards this address, while the mailbox itself went
+ *   on being walked. Measured 2026-09-23: cancellations and revocations, a contract
+ *   dispute naming a minor, a debt claim, feedback, replies to report emails, contact-form
+ *   submissions, and vendor cold pitches — nothing a teammate needs from the brain.
  */
-export const NEVER_INDEX_MAILBOXES = new Set(["hr@loveiq.org"]);
+export const NEVER_INDEX_MAILBOXES = new Set(["hr@loveiq.org", "hello@loveiq.org"]);
 
 /**
  * Subjects to keep out of the corpus entirely, as Gmail `-subject:` terms.
@@ -943,7 +972,7 @@ export async function ingestGmail(
       const listed = await gmailGet(
         token,
         mailbox,
-        `/threads?maxResults=${PAGE_SIZE}&q=${encodeURIComponent(EXCLUDE + recruitingQuery() + excludeSubjects())}` +
+        `/threads?maxResults=${PAGE_SIZE}&q=${encodeURIComponent(EXCLUDE + standingExclusionsQuery() + excludeSubjects())}` +
           (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "")
       );
       if (!listed) {

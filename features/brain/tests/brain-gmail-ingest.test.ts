@@ -144,6 +144,7 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
 
 import { decodeEntities } from "@shared/format/html-escape";
 import {
+  CONTRACT_SUBJECT_TERMS,
   GMAIL_BUILDER_VERSION,
   RECRUITING_SUBJECT_TERMS,
   ingestGmail,
@@ -589,14 +590,15 @@ describe("subject exclusions must reach the Gmail listing query", () => {
     expect(listingQuery()).toContain("-in:spam");
   });
 
-  it("adds nothing beyond the always-on recruiting terms when none is configured", async () => {
+  it("adds nothing beyond the standing terms when none is configured", async () => {
     delete process.env.GMAIL_EXCLUDE_SUBJECTS;
     await ingestGmail("2026-08-30T00:00:00.000Z", () => false, null);
     const terms = [...listingQuery().matchAll(/-subject:("[^"]+"|\S+)/g)].map((m) =>
       m[1]!.replace(/"/g, "")
     );
     expect(terms.length).toBeGreaterThan(0);
-    for (const t of terms) expect(RECRUITING_SUBJECT_TERMS).toContain(t);
+    for (const t of terms)
+      expect([...RECRUITING_SUBJECT_TERMS, ...CONTRACT_SUBJECT_TERMS]).toContain(t);
   });
 
   /**
@@ -611,6 +613,21 @@ describe("subject exclusions must reach the Gmail listing query", () => {
       expect(q).toContain(`-subject:${t}`);
     }
     expect(q).toContain('-subject:"design intern follow up"');
+  });
+
+  /**
+   * CONTRACT TEXT AS MAIL — the shareholders' agreement and individual contracts, the
+   * documents the legal-instrument rule keeps out of Drive and attachments, arriving as
+   * email bodies. A meeting ABOUT a contract is not excluded: "Contract Sync" stays.
+   */
+  it("sends the contract terms, and does not send a bare 'contract'", async () => {
+    await ingestGmail("2026-09-23T00:00:00.000Z", () => false, null);
+    const q = listingQuery();
+    expect(q).toContain("-subject:sha");
+    expect(q).toContain("-subject:shareholders");
+    expect(q).toContain('-subject:"freelance contract"');
+    expect(q).toContain('-subject:"salary contract"');
+    expect(q).not.toMatch(/-subject:contract\b/);
   });
 });
 
@@ -675,6 +692,19 @@ describe("a never-index mailbox is neither walked nor kept", () => {
   const row = (id: string, mailbox: string) => ({
     source_id: `thread:${id}`,
     meta: { v: GMAIL_BUILDER_VERSION, mailbox, historyId: "9" },
+  });
+
+  it("never walks the customer inbox either", async () => {
+    // hello@ is where customers write; #email-inbox, which forwards it, was excluded on
+    // 2026-09-14 while the mailbox itself went on being walked.
+    process.env.GMAIL_MAILBOXES = "me@loveiq.org,hello@loveiq.org";
+    await ingestGmail("2026-09-23T00:00:00.000Z", () => false, null);
+    expect(
+      fetchedUrls.some((u) => u.includes("hello%40loveiq.org") || u.includes("hello@loveiq.org"))
+    ).toBe(false);
+    expect(
+      fetchedUrls.some((u) => u.includes("me%40loveiq.org") || u.includes("me@loveiq.org"))
+    ).toBe(true);
   });
 
   it("never lists threads from it, even when it is configured", async () => {
