@@ -210,6 +210,7 @@ import {
   docToRows,
   ingestDrive,
   isAuthoredMarketingCopy,
+  isIllustrativeFigures,
   isPersonalDataExport,
   isPrivateLegalMatter,
   isJobApplication,
@@ -1549,6 +1550,57 @@ describe("authored marketing copy", () => {
     );
     expect(rows[0]!.title).toBe("Drive: Q4 roadmap");
     expect((rows[0]!.meta as Record<string, unknown>).authored).toBeUndefined();
+  });
+});
+
+describe("KPI definition tables carry example figures, not measurements", () => {
+  /**
+   * `KPI Framework` still has its own column headers and they settle it:
+   *   Layer, KPI, EXAMPLE, Source, Owner, Definition, Formula / Calculation, Why it matters
+   * The value column is named Example. `Business Case` is the same table with that header
+   * lost to chunking, which is why parts 4 and 5 read as measurements: EUR 11,400 revenue,
+   * 600 paid reports, 30% survey-to-paid, NPS 8.6. Actuals are EUR 704.91 and 41, and NPS
+   * is not measured at all.
+   */
+  it.each([
+    "Layer, KPI, Example, Source, Owner, Definition, Formula / Calculation, Why it matters",
+    "Advertisement spent, €2,000.00, Growth, Σ channel spend, Formula/Calculation",
+  ])("recognises the definition-table header: %j", (text) => {
+    expect(isIllustrativeFigures(text)).toBe(true);
+  });
+
+  it.each([
+    // "Why it matters" alone appears in 24 Drive documents, most of them report copy.
+    // It was rejected as a signal for exactly this reason and must not mark anything.
+    "Why it matters: readers who feel understood come back.",
+    "Revenue to date is EUR 704.91 across 41 paid reports.",
+    "The Q4 roadmap covers Report 3.0 and the new landing page.",
+  ])("does not mark ordinary text: %j", (text) => {
+    expect(isIllustrativeFigures(text)).toBe(false);
+  });
+
+  it("marks every part, because the header is in part 1 and the figures are in part 4", () => {
+    const rows = docToRows(
+      { id: "bc1", name: "Business Case", modifiedTime: STAMP } as never,
+      "Formula / Calculation\n\n" + "Gross Contribution, EUR 9,400.00. ".repeat(300),
+      STAMP
+    );
+    expect(rows.length).toBeGreaterThan(1);
+    for (const r of rows) {
+      expect(r.title).toContain("[example figures from a KPI definition table, not measured]");
+      expect((r.meta as Record<string, unknown>).illustrative).toBe(true);
+    }
+  });
+
+  it("leaves a document of real figures alone", () => {
+    // The control: a marker applied unconditionally would pass the test above.
+    const rows = docToRows(
+      { id: "bc2", name: "Cost sheet audit", modifiedTime: STAMP } as never,
+      "Software and tooling came to EUR 1,175 in September.",
+      STAMP
+    );
+    expect(rows[0]!.title).toBe("Drive: Cost sheet audit");
+    expect((rows[0]!.meta as Record<string, unknown>).illustrative).toBeUndefined();
   });
 });
 

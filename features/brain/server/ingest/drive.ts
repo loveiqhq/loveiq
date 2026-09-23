@@ -871,6 +871,39 @@ export function isAuthoredMarketingCopy(text: string): boolean {
   return AUTHORED_MARKETING.test(text);
 }
 
+/**
+ * A KPI DEFINITION TABLE. THE NUMBERS IN IT ARE EXAMPLES.
+ *
+ * `Business Case` and `KPI Framework` are the same table, and `KPI Framework` still
+ * carries its own column headers:
+ *
+ *   Layer, KPI, EXAMPLE, Source, Owner, Definition, Formula / Calculation, Why it matters
+ *
+ * The value column is literally named Example. €2,000.00 beside "Advertisement spent" is
+ * an illustration of the metric, not a measurement of it — and the giveaway is that
+ * 56.00% appears as BOTH the report-reopen rate and the refer-a-friend rate, which no
+ * real pair of metrics does.
+ *
+ * Chunking is what makes this dangerous. The header lands in part 1 and the rows in parts
+ * 4 and 5, so a search returning those alone hands back €11,400 revenue, 600 paid reports,
+ * a 30% survey-to-paid conversion and an NPS of 8.6, formatted as a table, dated, and with
+ * nothing marking them as a plan. Actuals are EUR 704.91 and 41 reports; we do not measure
+ * NPS at all. Every one of those numbers is wrong in the flattering direction, which is
+ * the worst way for a number to be wrong.
+ *
+ * Keyed on the `Formula / Calculation` column header rather than on a filename or a tone,
+ * because that header is the thing that makes it a definition table. Measured across every
+ * Drive document: it selects exactly those two, both the same owner. "Why it matters"
+ * alone was rejected as a signal — it appears in 24 documents, most of them report copy.
+ *
+ * Marked, not excluded. A business case is a real document the team should find; it just
+ * must not be quotable as what happened.
+ */
+const KPI_DEFINITION_TABLE = /formula\s*\/\s*calculation/i;
+export function isIllustrativeFigures(text: string): boolean {
+  return KPI_DEFINITION_TABLE.test(text);
+}
+
 export function docToRows(file: DriveFile, text: string, stampedAt: string): BrainRow[] {
   const name = (file.name ?? "").trim();
   if (!file.id || !name) return [];
@@ -928,9 +961,11 @@ export function docToRows(file: DriveFile, text: string, stampedAt: string): Bra
   // part of a split document carries. Putting it only in `meta` would leave the part that
   // actually holds the invented quotes looking exactly like customer words.
   const authored = isAuthoredMarketingCopy(text);
+  const illustrative = isIllustrativeFigures(text);
   const title =
     (isMeetingNote ? `Meeting notes: ${name}` : `Drive: ${name}`) +
-    (authored ? " [copy we wrote ourselves, not customer words]" : "");
+    (authored ? " [copy we wrote ourselves, not customer words]" : "") +
+    (illustrative ? " [example figures from a KPI definition table, not measured]" : "");
 
   const base: BrainRow = {
     source: SOURCE,
@@ -941,6 +976,7 @@ export function docToRows(file: DriveFile, text: string, stampedAt: string): Bra
     meta: {
       kind: isMeetingNote ? "meeting-notes" : "drive-doc",
       ...(authored ? { authored: true } : {}),
+      ...(illustrative ? { illustrative: true } : {}),
       v: DRIVE_BUILDER_VERSION,
       owner,
       created: file.createdTime ?? null,
