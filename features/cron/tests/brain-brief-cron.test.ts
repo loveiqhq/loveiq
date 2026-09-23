@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@shared/observability/logger", () => ({
@@ -119,13 +120,39 @@ describe("/api/cron/brain-brief", () => {
 
 describe("a day this job failed must be recoverable", () => {
   /**
-   * The schedule only ever asks for YESTERDAY, so a day the job fails is lost forever.
+   * The schedule only ever asks for YESTERDAY, so a day the job fails was lost forever
+   * until the 08:10 retry firing (below) existed.
    * That happened on the very first run: 2026-08-31 06:11 died on a 45s model timeout
    * and 2026-08-30's brief was never posted, with nothing able to retry it.
    *
    * `?day=` closes that, guarded: same cron bearer as everything else, and no future
    * dates. The per-day claim still applies, so a replay cannot double-post.
    */
+  /**
+   * A FAILED DAY GETS A SECOND CHANCE, AND ONLY A FAILED ONE.
+   *
+   * `claim_slack_alert` is a lease: an UNDELIVERED claim older than 10 minutes can be
+   * taken again, a delivered one never. So a second daily firing retries exactly the
+   * days that failed and no-ops on the rest. Measured 2026-09-23: the 06:10 run hit two
+   * 503s five seconds apart and the 2026-09-22 brief was lost, because nothing came
+   * back. A tidy-up that merges the two hours back into one would silently undo this.
+   */
+  it("fires twice a day, further apart than the claim lease", () => {
+    const vercel = JSON.parse(fs.readFileSync("vercel.json", "utf8")) as {
+      crons: Array<{ path: string; schedule: string }>;
+    };
+    const entry = vercel.crons.find((c) => c.path === "/api/cron/brain-brief");
+    expect(entry, "brain-brief must be scheduled").toBeDefined();
+    const [, hourField, dom, month, dow] = entry!.schedule.split(" ");
+    expect([dom, month, dow]).toEqual(["*", "*", "*"]);
+    const hours = hourField.split(",").map(Number);
+    expect(hours.length).toBeGreaterThanOrEqual(2);
+    // Both firings must ask for the SAME "yesterday", so they share one UTC day.
+    expect(hours.every((h) => Number.isInteger(h) && h >= 0 && h <= 23)).toBe(true);
+    const gapsMinutes = hours.slice(1).map((h, i) => (h - hours[i]) * 60);
+    expect(Math.min(...gapsMinutes)).toBeGreaterThan(10);
+  });
+
   const dayReq = (d: string) => new Request(`https://www.loveiq.org/api/cron/brain-brief?day=${d}`);
 
   it("builds the brief for an explicitly requested past day", async () => {

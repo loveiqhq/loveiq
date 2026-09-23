@@ -52,7 +52,7 @@
     },
     {
       "path": "/api/cron/brain-brief",
-      "schedule": "10 6 * * *"
+      "schedule": "10 6,8 * * *"
     },
     {
       "path": "/api/cron/brain-calendar",

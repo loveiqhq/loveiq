@@ -115,8 +115,12 @@ export async function buildDailyBrief(day: string): Promise<DailyBrief | null> {
    *
    * The caller claims the day's alert slot BEFORE calling this, and only marks it
    * delivered on success or on a deliberate quiet day. So a throw here leaves the
-   * claim unmarked and the schedule — which only ever asks for yesterday — never
-   * comes back for it. Measured 2026-09-21 by correlating `slack_alert_sent` with
+   * claim unmarked — and until 2026-09-23 the schedule, which only ever asks for
+   * yesterday, never came back for it. It now fires at 06:10 AND 08:10 UTC:
+   * `claim_slack_alert` re-grants an undelivered claim once it is 10 minutes old, so
+   * the second firing is a real retry after a failure and a no-op after a delivery.
+   * Two hours outlasts an overload; the five seconds below did not (2026-09-23: two
+   * 503s, 8.4s apart, and the 2026-09-22 brief was lost). Measured 2026-09-21 by correlating `slack_alert_sent` with
    * `cron_run`: exactly two briefs were never delivered, 2026-09-09 and 2026-09-14,
    * and they are exactly the two days the model refused. Both briefs are gone.
    *
