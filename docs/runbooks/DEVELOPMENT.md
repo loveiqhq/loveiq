@@ -232,6 +232,30 @@ Proving a candidate on its own, without generating anything:
 FIX_REF=my-branch PROBE=verify-survey-loop.mjs node scripts/prove-fix.mjs
 ```
 
+## Every probe must be run by something
+
+`scripts/probes/` holds ~27 Playwright probes. A probe is only a check if
+something invokes it, and there are exactly three things that can:
+
+- a **criterion** in `scripts/verify-ux-findings.mjs` (`probes: [...]`), which
+  runs it against a real finding;
+- a **`runProbe()` call site** in that file, for probes attached to the session
+  rather than the criterion — `verify-probe-falsifiability.mjs` discovers these
+  too, so they get the 0/1/3 contract check for free;
+- a **step in `.github/workflows/probe-guard.yml`**, for standing checks that
+  are not tied to a finding.
+
+`__tests__/scripts/every-probe-runs-somewhere.test.ts` fails if a probe is
+reachable from none of them. It carries a `KNOWN_ORPHANS` list of nine that
+already ran nowhere when the check was written; that list may only shrink, and
+every name on it is verified to still exist and still be uninvoked, so a stale
+entry cannot quietly forgive a probe.
+
+This is the fourth thing in this repository found running nowhere —
+`sync-vision-scanners.ts` was in no workflow, three CI lanes skipped on an unset
+secret, and the auto-PR flag had never once executed. The symptom is always a
+green tree with nothing behind it, so the rule is worth the test.
+
 ## Reading a Supabase failure alert
 
 Every write through `supabaseFetch` is checked, and a non-2xx is logged at

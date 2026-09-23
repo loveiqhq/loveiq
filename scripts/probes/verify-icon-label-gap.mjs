@@ -37,12 +37,16 @@
  *   node scripts/probes/verify-icon-label-gap.mjs
  *   MUTATE=1 node scripts/probes/verify-icon-label-gap.mjs   # must FAIL
  *
- * MUTATE PROVES NOTHING TODAY, and that is worth saying rather than hiding:
- * the probe already exits 1 against production because the defect is REAL, so
- * both modes agree for different reasons. Once the gap is restored the clean
- * run goes green — simulated by nudging the icon to
- * `left: calc(50% - 95px)`, which gives 13px and clears the bar — and MUTATE
- * becomes a real falsifiability check again. Re-run it then.
+ * MUTATE MUST MUTATE THE THING THAT MAKES THE SPACE. The first version zeroed
+ * `margin` and forced `position: static` — which is what the defect looked
+ * like BEFORE it was fixed, when the icon was absolutely positioned. The fix
+ * creates the spacing with flex `gap`, so that mutation became a no-op the
+ * moment it shipped: with the padlock repaired on production, `MUTATE=1`
+ * exited 0 while claiming to inject a defect. It zeroes `gap` now, and flips
+ * three runs out of three.
+ *
+ * Verified against production 2026-09-23 after the fix deployed:
+ * clean 0, MUTATE 1 (x3), unreachable 3.
  *
  * Exit 0 clean, 1 the defect reproduced, 3 could not measure.
  */
@@ -98,9 +102,21 @@ for (const name of DEVICE_LIST) {
        */
       await page.addInitScript(() => {
         setInterval(() => {
-          for (const i of document.querySelectorAll("button img, button svg, a img, a svg")) {
-            i.style.setProperty("margin", "0", "important");
-            i.style.setProperty("position", "static", "important");
+          for (const ctl of document.querySelectorAll("button, a[href], [role='button']")) {
+            if (!ctl.querySelector("img, svg")) continue;
+            // GAP, not margin. The first version zeroed `margin` and set
+            // `position: static` — which was how the defect looked BEFORE it
+            // was fixed, when the icon was absolutely positioned. The fix
+            // creates the spacing with flex `gap`, so that mutation became a
+            // no-op the moment it shipped and MUTATE=1 exited 0 while claiming
+            // to inject a defect. Zero everything that can hold two flex
+            // children apart.
+            ctl.style.setProperty("gap", "0", "important");
+            ctl.style.setProperty("column-gap", "0", "important");
+            for (const i of ctl.querySelectorAll("img, svg")) {
+              i.style.setProperty("margin", "0", "important");
+              i.style.setProperty("padding", "0", "important");
+            }
           }
         }, 200);
       });
