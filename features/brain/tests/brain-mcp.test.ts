@@ -67,7 +67,7 @@ vi.mock("@shared/http/ratelimit", () => ({
 
 import { flushAfterResponse } from "@shared/http/after-response";
 import { recordToolCall } from "@features/brain/server/log";
-import { POST, TOOLS } from "@/app/api/mcp/route";
+import { outrankingHeldBack, POST, TOOLS } from "@/app/api/mcp/route";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CorpusUnavailableError } from "@features/brain/server/retrieve";
@@ -522,6 +522,34 @@ describe("/api/mcp", () => {
       contentScore: (over.score as number | undefined) ?? 3.4,
       periodEnd: "2026-09-01",
       ...over,
+    });
+
+    /**
+     * THE WIRING, not the helper: a notice nothing calls is decoration, and a mutation
+     * removing the call left every helper test green.
+     */
+    it("names a held-back row that outranks the page, in the tool's own output", async () => {
+      mockSupabaseFetch.mockResolvedValue({
+        ok: true,
+        headers: new Headers(),
+        json: async () => [],
+      });
+      mockRetrieve.mockImplementation(
+        async (_q: unknown, _limit: unknown, _opts: unknown, shaping: Record<string, unknown>) => {
+          shaping.heldBack = new Map([["drive", 1]]);
+          shaping.heldBackBest = new Map([["drive", { sourceId: "doc:113TF", score: 2.52 }]]);
+          return [
+            chunk({ score: 2.66, source: "drive", sourceId: "doc:strategy" }),
+            chunk({ score: 1.73, sourceId: "task:weak" }),
+          ];
+        }
+      );
+      const text = String(
+        (await (await call({ query: "what is the record label strategy for therapists" })).json())
+          .result.content[0].text
+      );
+      expect(text).toContain("HELD BACK BY THE PER-SOURCE CAP");
+      expect(text).toContain("drive/doc:113TF @2.52 — outranks 1 of the 2 shown");
     });
 
     it("lifts a decision out of the results when it ranks with them", async () => {
@@ -4780,5 +4808,44 @@ describe("record_decision decided_by alias", () => {
     ).then((x) => x.json().then((b) => b.result));
     expect(r.isError).toBe(true);
     expect(JSON.stringify(r)).toContain("decided_by");
+  });
+});
+
+describe("outrankingHeldBack — what the cap left out, when it was better", () => {
+  const shaping = {
+    heldBack: new Map([
+      ["drive", 1],
+      ["gmail", 4],
+    ]),
+    heldBackBest: new Map([
+      ["drive", { sourceId: "doc:113TF", score: 2.52 }],
+      ["gmail", { sourceId: "thread:abc", score: 1.5 }],
+    ]),
+  };
+  const shown = [2.66, 2.48, 2.29, 2.23, 2.05, 1.98, 1.93, 1.73].map((score) => ({ score }));
+
+  it("names a held-back row that outranks something shown, by id and score", () => {
+    const text = outrankingHeldBack(shaping, shown);
+    expect(text).toContain("drive/doc:113TF @2.52");
+    expect(text).toMatch(/outranks 7 of the 8 shown/);
+  });
+
+  it("leaves out a held-back row that outranks nothing shown", () => {
+    expect(outrankingHeldBack(shaping, shown)).not.toContain("thread:abc");
+  });
+
+  it("says nothing when no held-back row beats the page", () => {
+    expect(outrankingHeldBack({ heldBackBest: shaping.heldBackBest }, [{ score: 3 }])).toBe("");
+  });
+
+  it("carries no title — this text sits outside the untrusted-data fences", () => {
+    // Only ids and scores: a title can be an email subject written by anyone.
+    const text = outrankingHeldBack(shaping, shown);
+    expect(
+      text
+        .split("\n")
+        .filter((l) => l.startsWith("  •"))
+        .every((l) => /^  • \S+\/\S+ @\d+\.\d{2} — outranks \d+ of the \d+ shown$/.test(l))
+    ).toBe(true);
   });
 });

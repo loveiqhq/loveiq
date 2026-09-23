@@ -277,6 +277,14 @@ export interface RetrieveShaping {
   /** Source -> how many of its matches were cut to make room for other sources. */
   heldBack?: Map<string, number>;
   /**
+   * Source -> its best-scoring row among those cut. A count says "drive had one more";
+   * this says the one more scored 2.52 when the page went down to 1.73, which is the
+   * difference between a reader shrugging and a reader fetching it. Measured 2026-09-23:
+   * the answer to "what is the record label strategy for therapists" was exactly such a
+   * row, and four attempts to fix the ranking itself each broke other questions.
+   */
+  heldBackBest?: Map<string, { sourceId: string; score: number }>;
+  /**
    * How many candidates were dropped as another part or occurrence of something already
    * in the list.
    *
@@ -557,8 +565,14 @@ export async function retrieve(
   const cut = deferred.slice(backfilled);
   if (cut.length > 0) {
     const byySource = new Map<string, number>();
-    for (const row of cut) byySource.set(row.source, (byySource.get(row.source) ?? 0) + 1);
+    const best = new Map<string, { sourceId: string; score: number }>();
+    for (const row of cut) {
+      byySource.set(row.source, (byySource.get(row.source) ?? 0) + 1);
+      // `cut` is in score order, so the first row seen per source is its best.
+      if (!best.has(row.source)) best.set(row.source, { sourceId: row.sourceId, score: row.score });
+    }
     shaping.heldBack = byySource;
+    shaping.heldBackBest = best;
   }
 
   const page = offset > 0 ? picked.slice(offset) : picked;
