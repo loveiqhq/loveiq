@@ -160,6 +160,21 @@ function hardSplit(text) {
  * this repo's AGENT_README files yield dozens of 300-char fragments and the
  * chunk that ranks first rarely holds the whole answer.
  */
+/**
+ * A MARKDOWN TABLE ROW WITHOUT ITS PADDING.
+ *
+ * Prettier pads every row of a table to the width of its widest cell, so one long cell
+ * turns every row into kilobytes of spaces. Measured 2026-09-23: the doc source was 37%
+ * whitespace against ~15% for prose, and `docs/api.md`'s route table — one cell of about
+ * a thousand characters — was stored as 55+ chunks, each ~98% spaces holding a single
+ * row. The padding is presentation for a human reading the raw file; to a search index it
+ * is noise that also splits the table apart. Only lines that are table rows are touched.
+ */
+export function tidyTableRow(line) {
+  if (!/^\s*\|.*\|\s*$/.test(line)) return line;
+  return line.replace(/ {2,}/g, " ").replace(/-{4,}/g, "---").trim();
+}
+
 export function chunkMarkdown(path, text) {
   const lines = text.split(/\r?\n/);
   const segments = [];
@@ -190,7 +205,7 @@ export function chunkMarkdown(path, text) {
       heading = text_;
       continue;
     }
-    buf.push(line);
+    buf.push(tidyTableRow(line));
   }
   flushSegment();
 
@@ -580,6 +595,27 @@ if (process.argv.includes("--self-check")) {
   const all = chunks.map((c) => c.body).join("\n");
   if (!all.includes(lede)) {
     console.error(`self-check FAILED: the opening line was dropped (${chunks.length} chunk(s))`);
+    process.exit(1);
+  }
+  // A padded table must shed its padding, and a line that is not a table must not.
+  const padded = `| Route${" ".repeat(900)}| Methods${" ".repeat(20)}|`;
+  if (tidyTableRow(padded) !== "| Route | Methods |") {
+    console.error(
+      `self-check FAILED: table padding survived: ${tidyTableRow(padded).length} chars`
+    );
+    process.exit(1);
+  }
+  if (tidyTableRow("    indented   code") !== "    indented   code") {
+    console.error("self-check FAILED: a non-table line was rewritten");
+    process.exit(1);
+  }
+  // ...and the chunker must actually apply it, not merely have it.
+  const tableDoc = chunkMarkdown(
+    "docs/PROBE3.md",
+    `## Routes\n\n| Route${" ".repeat(900)}| Methods |\n| ${"-".repeat(900)} | --- |\n| /api/x${" ".repeat(900)}| GET |\n`
+  );
+  if (tableDoc.some((c) => / {10,}|-{10,}/.test(c.body))) {
+    console.error("self-check FAILED: chunkMarkdown kept a table's padding");
     process.exit(1);
   }
   // And a normal doc must still split rather than collapsing into one chunk.
