@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __resetBodyScrollLockForTests,
   lockBodyScroll,
+  scrollState,
   unlockBodyScroll,
 } from "@shared/ui/body-scroll-lock";
 
@@ -115,5 +116,67 @@ describe("body scroll lock", () => {
     expect(bodyStyle()).toBe("");
     lockBodyScroll();
     expect(document.body.style.position).toBe("fixed");
+  });
+});
+
+/**
+ * What a `$dead_swipe` carries about the page. The question it exists to answer
+ * is "did WE stop that swipe", so the case that matters is a frozen page with
+ * no overlay holding the lock — the chapter-menu bug fixed on 2026-09-23.
+ */
+describe("scrollState", () => {
+  beforeEach(() => {
+    __resetBodyScrollLockForTests();
+    document.documentElement.setAttribute("style", "");
+    document.body.setAttribute("style", "");
+    vi.stubGlobal("scrollTo", vi.fn());
+    Object.defineProperty(window, "scrollY", { value: 0, writable: true, configurable: true });
+  });
+
+  afterEach(() => {
+    __resetBodyScrollLockForTests();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("reports a free page as free", () => {
+    expect(scrollState()).toMatchObject({ scroll_lock_depth: 0, page_frozen: false, zoom: 1 });
+  });
+
+  it("reports the lock while an overlay holds it", () => {
+    lockBodyScroll();
+    lockBodyScroll();
+    expect(scrollState()).toMatchObject({ scroll_lock_depth: 2, page_frozen: true });
+  });
+
+  it("reports a page frozen by someone else as frozen with nothing holding it", () => {
+    // What V1's chapter menu did: wrote the body style itself, outside this lock.
+    document.body.style.position = "fixed";
+    expect(scrollState()).toMatchObject({ scroll_lock_depth: 0, page_frozen: true });
+  });
+
+  it("counts a hidden vertical overflow on either element", () => {
+    document.documentElement.style.overflowY = "hidden";
+    expect(scrollState().page_frozen).toBe(true);
+    document.documentElement.style.overflowY = "";
+    document.body.style.overflowY = "clip";
+    expect(scrollState().page_frozen).toBe(true);
+  });
+
+  it("is free again once the last overlay lets go", () => {
+    lockBodyScroll();
+    unlockBodyScroll();
+    expect(scrollState()).toMatchObject({ scroll_lock_depth: 0, page_frozen: false });
+  });
+
+  it("reports pinch zoom and how much page is left", () => {
+    vi.stubGlobal("visualViewport", { scale: 2.345 });
+    Object.defineProperty(window, "scrollY", { value: 1200, writable: true, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 800, configurable: true });
+    Object.defineProperty(document.documentElement, "scrollHeight", {
+      value: 2000,
+      configurable: true,
+    });
+    expect(scrollState()).toMatchObject({ zoom: 2.35, scroll_y: 1200, scroll_room_below: 0 });
   });
 });
