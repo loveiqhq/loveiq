@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { googleCredentialShape, readVercelOidcToken } from "@shared/http/google-oauth";
+import { PROMPTS, renderPrompt } from "@features/brain/server/prompts";
 import { renderSources } from "@features/brain/server/answer";
 import { openNotices, renderOpenNotices } from "@features/brain/server/notice";
 import { relatedContext, renderRelated } from "@features/brain/server/related";
@@ -4774,7 +4775,7 @@ export async function POST(request: Request) {
   if (method === "initialize") {
     return result(id, {
       protocolVersion: PROTOCOL_VERSION,
-      capabilities: { tools: {} },
+      capabilities: { tools: {}, prompts: {} },
       serverInfo: { name: "loveiq-brain", version: "1.0.0" },
       instructions: MCP_INSTRUCTIONS,
     });
@@ -4782,6 +4783,33 @@ export async function POST(request: Request) {
 
   if (method === "ping") return result(id, {});
   if (method === "tools/list") return result(id, { tools: TOOLS });
+
+  // Ready-made prompts claude.ai and Claude Code offer to pick. See features/brain/server/prompts.ts.
+  if (method === "prompts/list") {
+    return result(id, {
+      prompts: PROMPTS.map((p) => ({
+        name: p.name,
+        title: p.title,
+        description: p.description,
+        arguments: p.arguments.map((a) => ({
+          name: a.name,
+          description: a.description,
+          required: Boolean(a.required),
+        })),
+      })),
+    });
+  }
+  if (method === "prompts/get") {
+    const rendered = renderPrompt(
+      typeof params.name === "string" ? params.name : "",
+      (params.arguments ?? {}) as Record<string, unknown>
+    );
+    if ("error" in rendered) return rpcError(id, -32602, rendered.error);
+    return result(id, {
+      description: rendered.description,
+      messages: [{ role: "user", content: { type: "text", text: rendered.text } }],
+    });
+  }
 
   if (method === "tools/call") {
     const name = typeof params.name === "string" ? params.name : "";

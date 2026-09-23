@@ -162,6 +162,88 @@ describe("/api/mcp", () => {
       expect(body.result.serverInfo.name).toBe("loveiq-brain");
     });
 
+    /**
+     * READY-MADE PROMPTS. claude.ai and Claude Code offer these to pick, so nobody has to
+     * know which tool answers "what needs me". Asserted by name, exactly, for the same
+     * reason the tool list is: a prompt that disappears is unreachable and nothing else
+     * would notice.
+     */
+    describe("prompts", () => {
+      const call = async (method: string, params?: unknown) =>
+        (await POST(rpc({ jsonrpc: "2.0", id: 7, method, params }))).json();
+
+      it("advertises prompts at initialize", async () => {
+        const body = await call("initialize");
+        expect(body.result.capabilities.prompts).toBeDefined();
+      });
+
+      it("lists the five prompts, each with its arguments", async () => {
+        const body = await call("prompts/list");
+        const prompts = body.result.prompts as Array<{
+          name: string;
+          arguments: Array<{ name: string; required: boolean }>;
+        }>;
+        expect(prompts.map((p) => p.name)).toEqual([
+          "catch_me_up",
+          "kpi_check",
+          "review_chapter",
+          "what_needs_me",
+          "record_decision",
+        ]);
+        const needs = prompts.find((p) => p.name === "what_needs_me")!;
+        expect(needs.arguments).toEqual([
+          expect.objectContaining({ name: "person", required: true }),
+        ]);
+      });
+
+      it("renders a prompt as one user message with the arguments filled in", async () => {
+        const body = await call("prompts/get", {
+          name: "what_needs_me",
+          arguments: { person: "Mark Oldenburg" },
+        });
+        expect(body.result.messages).toHaveLength(1);
+        expect(body.result.messages[0].role).toBe("user");
+        expect(body.result.messages[0].content.type).toBe("text");
+        expect(body.result.messages[0].content.text).toContain('"people": "Mark Oldenburg"');
+      });
+
+      it("refuses a missing required argument as invalid params, naming it", async () => {
+        const body = await call("prompts/get", { name: "what_needs_me", arguments: {} });
+        expect(body.error.code).toBe(-32602);
+        expect(body.error.message).toMatch(/needs `person`/);
+      });
+
+      it("refuses an unknown prompt and lists the real ones", async () => {
+        const body = await call("prompts/get", { name: "nope" });
+        expect(body.error.code).toBe(-32602);
+        expect(body.error.message).toMatch(/catch_me_up/);
+      });
+
+      /** A prompt that names a renamed tool would send every caller to a dead end. */
+      it("names only tools that exist", async () => {
+        const tools = new Set(
+          ((await call("tools/list")).result.tools as Array<{ name: string }>).map((t) => t.name)
+        );
+        const list = (await call("prompts/list")).result.prompts as Array<{
+          name: string;
+          arguments: Array<{ name: string; required: boolean }>;
+        }>;
+        for (const p of list) {
+          const args = Object.fromEntries(p.arguments.map((a) => [a.name, "x"]));
+          const text = (await call("prompts/get", { name: p.name, arguments: args })).result
+            .messages[0].content.text as string;
+          const named = text.match(/\b[a-z]+(?:_[a-z]+)+\b/g) ?? [];
+          const toolish = named.filter((w) =>
+            /^(search|browse|fetch|count|get|list|query|record|show|post|send|write|related)_/.test(
+              w
+            )
+          );
+          expect(toolish.length).toBeGreaterThan(0);
+          for (const t of toolish) expect(tools.has(t), `${p.name} names ${t}`).toBe(true);
+        }
+      });
+    });
+
     it("lists exactly the seventeen tools, each with a schema", async () => {
       // Asserted exactly, not with toContain: a tool that disappears from the list
       // is unreachable to every connected Claude, and nothing else would notice.
