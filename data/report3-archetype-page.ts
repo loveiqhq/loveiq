@@ -28,13 +28,19 @@ export interface Report3PartHeading {
   accent: string;
   /** Part I renders its accent in near-black rather than violet — 1:174. */
   tone?: "violet" | "ink";
+  /**
+   * Set the lead in italic as well. Only Part II does this: 1:486 draws "Your" in
+   * italic ink beside the violet "Constellation", where Part III's 1:852 keeps "How
+   * your archetype" upright.
+   */
+  leadItalic?: true;
 }
 
 export const REPORT_V4_PARTS: readonly Report3PartHeading[] = [
   // 1:169 — no introduction paragraph, and the accent is near-black, not violet.
   { eyebrow: "Part I", lead: "", accent: "Welcome", tone: "ink" },
   // 1:486
-  { eyebrow: "Part II", lead: "Your ", accent: "Constellation" },
+  { eyebrow: "Part II", lead: "Your ", accent: "Constellation", leadItalic: true },
   // 1:856 / 1:857
   { eyebrow: "Part III", lead: "How your archetype ", accent: "works" },
   { eyebrow: "Part IV", lead: "Your Erotic ", accent: "Engine" },
@@ -42,32 +48,92 @@ export const REPORT_V4_PARTS: readonly Report3PartHeading[] = [
   { eyebrow: "Part VI", lead: "Your ", accent: "edges" },
 ];
 
-/** Part 1 · Introduction — 1:175 / 1:184. Paragraph breaks as the frame sets them. */
-export const REPORT_V4_INTRODUCTION: readonly string[] = [
-  "Thank you for your trust, and congratulations on having the courage to look inward.",
-  "Many people grow up absorbing narratives about sexuality that create shame, confusion, or a sense of being “wrong”.  At LoveIQ, we offer you a different lens with evidence-based insights rooted in compassion, context, and self-acceptance.",
-  "This report won't tell you who you are.\nInstead, it will help you understand why certain patterns feel familiar, why certain challenges keep repeating, and exactly what you can do, starting today, to move forward.",
+/**
+ * The part headings the live report draws under `?v4=1`, keyed by the first section
+ * of each part — the same keys as `REPORT_V3_PART_DIVIDER_BY_SECTION`.
+ *
+ * V4 puts "Welcome" in front as Part I, so everything V3 called Part I is Part II
+ * here, and so on down. Borrowing the V3 map left the report with two Part I's.
+ * The keys still follow V2's section order: V4 also reorders Parts III–VI (Typical
+ * Beliefs opens III, Accelerators & Brakes moves to IV), which lands with each
+ * part's chapters rather than here.
+ */
+export const REPORT_V4_PART_DIVIDER_BY_SECTION: Readonly<Record<string, Report3PartHeading>> = {
+  core_archetype: REPORT_V4_PARTS[1]!,
+  typical_arousal_accelerators_turn_ons_of_the_core_archetype: REPORT_V4_PARTS[2]!,
+  libido_challenges_in_relationships: REPORT_V4_PARTS[3]!,
+  attachment_style: REPORT_V4_PARTS[4]!,
+  typical_sexual_fantasy_amp_practice_tendencies: REPORT_V4_PARTS[5]!,
+};
+
+/*
+ * Part I copy — re-read from the frame on 2026-09-23, after Mark rewrote all three
+ * blocks and added bold runs. A "\n" inside a run is a line break the frame sets
+ * mid-paragraph; `V4Runs` renders it as <br>.
+ */
+
+/** Part 1 · Introduction — 1:175 / 1:184. */
+export const REPORT_V4_INTRODUCTION: readonly (readonly Report3Run[])[] = [
+  [
+    { text: "Thank you for your trust and " },
+    { weight: 700, text: "congratulations on having the courage to look inward." },
+  ],
+  [
+    {
+      text: "Many people grow up absorbing narratives about sexuality that create shame, confusion, or a sense of being “wrong.”\nWe offer you a different lens, with evidence-based insights rooted in compassion, context, and self-acceptance.",
+    },
+  ],
+  [
+    {
+      text: "This report will help you understand why certain patterns feel familiar, why certain challenges keep repeating, ",
+    },
+    { weight: 700, text: "and what you can do, starting today, to improve." },
+  ],
 ];
 
 /** Part 1 · "What shaped this report" — 1:185 / 1:194. */
-export const REPORT_V4_WHAT_SHAPED =
-  "To support  self-understanding, we combined insights from multiple disciplines such as  neuroscience, psychology and relationship research alongside insights from decades of therapeutic  experience.";
+export const REPORT_V4_WHAT_SHAPED: readonly Report3Run[] = [
+  { text: "To support self-understanding, we combine " },
+  { weight: 700, text: "insights from multiple disciplines" },
+  {
+    text: " such as neuroscience, psychology, and relationship research, alongside decades of therapeutic experience.",
+  },
+];
 
 /**
  * Part 1 · closing paragraph after the science deck — 1:479 / 1:480.
  *
- * NOT duplicated here on purpose: `V3Methodology` already ships these exact three
- * paragraphs as its outro (10392:18726). V4 draws them without the bold runs, which
- * `V3Methodology`'s `chrome="deck"` handles.
+ * `V3Methodology` renders this under `chrome="deck"`. It used to reuse its own V3
+ * outro there, stripped of bold, because the frame drew these three paragraphs plain
+ * with V3's wording; the frame now carries its own wording AND bold runs, so V4
+ * keeps its own copy and the live V3 outro is untouched.
  *
- * The line used to read "clear clear and understandable patterns" — a duplicated
- * word transcribed faithfully from the frame and left alone, with a note asking
- * Mark about it. He found it on his phone instead, on the Notion card "Review New
- * Report Elements in Staging Environment", and fixed the frame himself
- * (Figma comment 1937155741, "Tiny spelling mistake with 2x 'clear'. Fixed.").
- * Copying a typo out of a design and writing a note about it is not the same as
- * asking, so: ask, or fix it.
+ * The line once read "clear clear and understandable patterns" — a duplicated word
+ * copied faithfully out of the frame with a note beside it. Mark found it on his
+ * phone and fixed the frame himself (Figma comment 1937155741). Copying a typo out
+ * of a design and writing a note about it is not the same as asking, so: ask, or fix.
  */
+export const REPORT_V4_CLOSING: readonly (readonly Report3Run[])[] = [
+  [
+    {
+      text: "We translate this knowledge into clear, understandable patterns that people can recognise in themselves.",
+    },
+  ],
+  [
+    { text: "This report is a " },
+    { weight: 700, text: "psychometric approximation" },
+    { text: ". It does not describe you in a fixed or absolute way, but highlights " },
+    {
+      weight: 700,
+      text: "tendencies, patterns, and possible directions in your personality and sexual identity.",
+    },
+  ],
+  [
+    { text: "With that in mind, it's time to dive into your " },
+    { weight: 700, text: "personalised report" },
+    { text: "." },
+  ],
+];
 
 /* ───────────────────────── Part II ───────────────────────── */
 

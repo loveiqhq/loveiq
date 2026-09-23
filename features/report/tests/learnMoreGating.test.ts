@@ -59,7 +59,7 @@ describe("splitArticleForReader", () => {
       expect(locked.gated!.length).toBeLessThanOrEqual(locked.gatedBlockCount);
     });
 
-    it("FILLS the 580px window — the regression that motivated the budget", () => {
+    it("FILLS the blurred window — the regression that motivated the budget", () => {
       expect(estimateBlocksPx(locked.gated!)).toBeGreaterThanOrEqual(LOCKED_ARTICLE_WINDOW_PX);
     });
 

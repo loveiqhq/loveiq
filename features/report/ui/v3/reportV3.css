@@ -1897,7 +1897,9 @@
   --rv3-name-ink: #d63200; /* archetype name; already used by .report-snapshot-compare__rail */
   --rv3-peach: #faf6f4; /* peeking card ground */
   --rv3-quiet: #9a96a6; /* peeking card sub-label */
-  --rv3-scale: #9c95a3; /* inactive meter step */
+  /* inactive meter step — faded further on Mark's request (15:942 / 15:944 fill
+   * rgb(181,181,181)), so only the orange level reads. */
+  --rv3-scale: #b5b5b5;
 }
 
 .rv3 .rv3-sr {
@@ -2099,16 +2101,24 @@
   gap: 5px;
   grid-template-columns: repeat(3, 1fr);
 }
+/* Mark's update (Figma thread 1937167646, "Updated. @Eman"): the bars sit further
+ * in from the card's edges — three 104px tracks, 10px apart, centred in the 349px
+ * row, so 8.5px in from each side of it. Fractions still, so a narrower phone
+ * shrinks them rather than clipping; at the frame's 393 they measure 104. The
+ * labels keep their 113px columns below. */
 .rv3 .rv3-arch__meter-bars {
+  gap: 10px;
+  padding-inline: 8.5px;
   padding-top: 9px;
 }
 .rv3 .rv3-arch__meter-scale {
   padding-top: 7px;
 }
+/* 15:933 — a 6px track; the 7px fill inside it is clipped to 6. */
 .rv3 .rv3-arch__seg {
   background: var(--rv3-hairline);
   border-radius: 99px;
-  height: 7px;
+  height: 6px;
 }
 .rv3 .rv3-arch__seg.is-on {
   background: linear-gradient(to right, var(--rv3-arch-accent), var(--rv3-arch-deep));
@@ -2338,45 +2348,6 @@
   width: 216.2px;
 }
 
-/* "LEARN MORE in CHAPTER:" — 15:1152, peeking cards only. */
-.rv3 .rv3-deck__more {
-  border-top: 1px solid rgba(22, 16, 33, 0.05);
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  height: 56px;
-  padding-top: 13px;
-  width: 216.2px;
-}
-.rv3 .rv3-deck__more-label {
-  color: var(--rv3-muted);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 1.0218px;
-  line-height: 16px;
-  text-transform: uppercase;
-}
-.rv3 .rv3-deck__more-item {
-  align-items: center;
-  display: flex;
-  gap: 7px;
-}
-.rv3 .rv3-deck__bullet {
-  background: var(--rv3-deck-accent);
-  display: block;
-  flex-shrink: 0;
-  height: 13px;
-  mask: url("/report/v3/dimensions/chapter-bullet.svg") center / contain no-repeat;
-  -webkit-mask: url("/report/v3/dimensions/chapter-bullet.svg") center / contain no-repeat;
-  width: 13px;
-}
-.rv3 .rv3-deck__chapter {
-  color: var(--rv3-ink);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 19.2px;
-}
-
 /* Page indicator — 15:1231. Four bars across 359 - 44 = 315, gap 5 => 75 each. */
 .rv3 .rv3-deck__dots {
   align-items: center;
@@ -2511,6 +2482,10 @@
   color: var(--rv3-violet);
   font-style: italic;
 }
+/* 1:486 — Part II sets its lead ("Your") in italic ink too. */
+.rv3 .rv4-part__title > span.is-italic {
+  font-style: italic;
+}
 /* 1:174 — Part I's accent is near-black, not violet. */
 .rv3 .rv4-part__title.is-ink > span:last-child {
   color: #191a1b;
@@ -2537,6 +2512,13 @@
   text-align: left;
   width: 100%;
 }
+/* A non-collapsible chapter (Part I): the same row geometry as the button, with
+ * nothing to press. */
+.rv3 .rv4-chapter__head {
+  display: flex;
+  padding: 11px 0 0;
+  width: 100%;
+}
 .rv3 .rv4-chapter__title {
   color: var(--rv3-ink);
   flex: 330 0 0;
@@ -2560,19 +2542,25 @@
 .rv3 .rv4-chapter__archetype {
   color: var(--rv3-name-ink);
 }
+/* 1:175 / 1:185 now seat the chevron in a 34px lavender disc beside the title —
+ * the same disc as the Snapshot rows (316:259) — where the older frame drew a bare
+ * 15px glyph 8px below the cap height. */
 .rv3 .rv4-chapter__chev {
+  align-items: center;
+  background: rgba(121, 95, 200, 0.1);
+  border-radius: 17px;
   color: var(--rv3-violet);
+  display: flex;
   flex-shrink: 0;
-  height: 15px;
-  /* Sits 8px below the title's cap height, per the Icon:margin box at 1:866. */
-  margin-top: 8px;
+  height: 34px;
+  justify-content: center;
   transition: transform 260ms ease;
-  width: 15px;
+  width: 34px;
 }
 .rv3 .rv4-chapter__chev svg {
   display: block;
-  height: 100%;
-  width: 100%;
+  height: 15px;
+  width: 15px;
 }
 /* Inverted from the usual accordion convention, and from `.rv3-chapter`, because
  * that is what the frames draw: the EXPANDED chapter (1:189) has no rotation and
@@ -2641,6 +2629,32 @@
 .rv3 .rv4-partblock > .rv4-closing {
   margin-inline: var(--rv3-gutter);
   width: 361px;
+}
+
+/* ── The live report under ?v4=1 ─────────────────────────────────────
+ * Figma draws V4 at 393 with 16px gutters: a 361 column. The V2 skeleton pads
+ * twice — .report-shell's 1rem, then .report-content's 16px — so the report ran
+ * in a 329 column, and every V4 block built to 361 overflowed it: the
+ * Introduction ran off the right edge taking its chevron with it, the source
+ * tiles squeezed to unequal widths, and the archetype card clipped its own "%".
+ * Dropping the shell's side padding leaves .report-content's 16px as the only
+ * gutter. The blocks' own 16px (`.rv4-col`, the part-block margins) exists for
+ * the standalone preview, which has no .report-content; inside the report it
+ * would double the gutter, so it goes to zero. Scoped to `.rv4`, so the live V3
+ * report keeps its layout. */
+@media (max-width: 1279px) {
+  .rv4 .report-shell {
+    padding-inline: 0;
+  }
+  .rv4 .report-content .rv4-col {
+    padding-inline: 0;
+  }
+  .rv4 .report-content .rv4-partblock > .rv4-part,
+  .rv4 .report-content .rv4-partblock > .rv4-chapter,
+  .rv4 .report-content .rv4-partblock > .rv4-closing {
+    margin-inline: 0;
+    width: 100%;
+  }
 }
 /* Figma sets paragraph spacing with an empty line rather than a margin, so the
  * gap between blocks is exactly one 25.6px line (1:184, 1:480). */
@@ -2732,7 +2746,42 @@
 .rv3 .rv3-method.is-v4 .rv3-sci__list {
   gap: 5.502px;
 }
+/* 1:195's own geometry, measured from the frame at 2x: the first card starts 18.5
+ * into the section, the pager sits 58 below the cards, the source tiles 29 below
+ * the pager, and the closing paragraph 23 below the tiles. V3's spacing left the
+ * deck 38 down — its 32px margin is for the "WHERE THIS COMES FROM" header that
+ * deck mode drops — and the pager crowded the cards. */
+.rv3 .rv3-method.is-v4 .rv3-sci {
+  margin-top: 12.5px;
+}
+.rv3 .rv3-method.is-v4 .rv3-src {
+  padding-top: 29px;
+}
+.rv3 .rv3-method.is-v4 .rv3-method__outro {
+  padding-top: 23px;
+}
+/* 1:195's pager: 6px dots on a 12px pitch, the active one a 16px pill in the
+ * coral→orchid wash the source-card tiles carry. V3's is 4px dots and a solid
+ * coral pill. */
+.rv3 .rv3-method.is-v4 .rv3-sci__dots {
+  gap: 6px;
+  padding-top: 49px;
+}
+.rv3 .rv3-method.is-v4 .rv3-sci__dots span {
+  height: 6px;
+  width: 6px;
+}
+.rv3 .rv3-method.is-v4 .rv3-sci__dots span.is-active {
+  background: linear-gradient(to right, #fe6839, #c36ddf);
+  width: 16px;
+}
 
+/* 1:425 — three equal 115px tiles. Plain `1fr` is minmax(auto, 1fr), so an
+ * unbreakable word ("Foundational") widened its own column and left the third
+ * tile wider than the other two. */
+.rv3 .rv3-method.is-v4 .rv3-src {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
 /* 1:425 — source card: white, hairline border, 14px radius, centred title. */
 .rv3 .rv3-method.is-v4 .rv3-src__card {
   align-items: center;
@@ -2774,24 +2823,31 @@
   font-weight: 600;
   line-height: 19.2px;
   margin: 0 0 7.33px;
+  /* Two lines reserved, as 1:195 lays them out: "Clinical models" fits on one
+   * line where the other two titles wrap, and without the reserve its body starts
+   * a line higher than theirs — which is what made the middle tile read as out of
+   * line with the rest. */
+  min-height: 38.4px;
   text-align: center;
-  width: 91px;
+  /* 91px is the text width Figma measured inside a 115px card. The card here is
+   * a grid cell, so on any phone narrower than the frame the fixed width
+   * overflows and the three tiles stop agreeing. 100% centres in whatever the
+   * cell actually is, which is the same result at 393 and holds as it shrinks. */
+  width: 100%;
 }
-/* 1:434 draws this 10/16 and LEFT under a CENTRED 12/19.2 title, which is what
- * made the middle tile read as misaligned — its body wraps differently from the
- * other two, so a left edge that agrees on one card disagrees on the next. Both
- * are centred now, and the size goes to 12: Mark found 10px illegible on his
- * phone, and the 2026-09-23 sync aligned that 10px is too small across every
- * design. The hierarchy survives on weight (600 against 400) and colour, which is
- * how the frame separates them anyway. */
+/* 1:434 — LEFT under the CENTRED title, as the frame draws it. With the tiles
+ * equal and the titles reserving two lines, the three bodies share one top edge
+ * and one inset. Size stays at 12 rather than the frame's 10: Mark found 10px
+ * illegible on his phone, and the 2026-09-23 sync agreed 10px is too small
+ * across every design. */
 .rv3 .rv3-method.is-v4 .rv3-src__body {
   color: var(--rv3-muted);
   font-size: 12px;
   font-weight: 400;
   line-height: 19.2px;
   margin: 0;
-  text-align: center;
-  width: 91px;
+  text-align: left;
+  width: 100%;
 }
 
 /* 1:202 — V4's Article is 212x230 against V3's 212.22x276. Figma still fixes the
@@ -2805,8 +2861,12 @@
 /* ══ Report V4 · Part II ═══════════════════════════════════════════ */
 
 /* ── "Core Archetype" heading — 1:576, 361x148 ───────────────────── */
+/* 1:576 insets its text ~5.5px from the column — unlike 1:493's heading, which is
+ * flush — the same inset the Summary Chapter's copy carries. Both lines start at
+ * that inset and fill the column, rather than being centred at the frame's fixed
+ * 360.781 / 356 widths, which overflowed on any phone narrower than 393. */
 .rv3 .rv4-corehead {
-  align-items: center;
+  align-items: flex-start;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -2823,7 +2883,7 @@
   line-height: 24px;
   margin: 0;
   padding-top: 10px;
-  width: 360.781px;
+  width: 100%;
 }
 .rv3 .rv4-corehead__accent {
   color: var(--rv3-name-ink);
@@ -2834,7 +2894,7 @@
   font-weight: 400;
   line-height: 25.6px;
   margin: 0;
-  width: 356px;
+  width: 100%;
 }
 
 /* ── "Does this resonate?" — 1:833 / 1:747 ───────────────────────── */
@@ -2896,6 +2956,14 @@
 /* 1:847 — the frame's own 44px tail, which is why the block measures 70. */
 .rv3 .rv4-rating__tail {
   height: 44px;
+  width: 100%;
+}
+/* The live report's "Does this resonate?" widget in the rating's place: it posts to
+ * /api/report-feedback, which the local-only V4Rating does not. Right-aligned like
+ * 1:560 / 1:747. */
+.rv3 .rv4-rating__live {
+  display: flex;
+  justify-content: flex-end;
   width: 100%;
 }
 
@@ -3100,12 +3168,13 @@
   margin: 0;
   width: 328px;
 }
-/* 1:496 — the frame separates the two paragraphs with a blank line. */
+/* 1:496 — the frame separates the two paragraphs with a blank line. 33px from the
+ * heading: measured against the frame at 2x, 17 left the lede 16px too high. */
 .rv3 .rv4-top3__lede {
   display: flex;
   flex-direction: column;
   gap: 25.6px;
-  padding-top: 17px;
+  padding-top: 33px;
   width: 356px;
 }
 .rv3 .rv4-top3__lede p {
@@ -3114,6 +3183,27 @@
   font-weight: 400;
   line-height: 25.6px;
   margin: 0;
+}
+/* 1:497 — V4 draws the three rows straight on the page: no outer card, border or
+ * shadow, and no rules between rows; only the lead row keeps its tinted panel.
+ * The card's 17px side padding stays, because that is where the frame insets the
+ * rows. V3's own card (`?v3=1`) is untouched. */
+.rv3 .rv4-top3 .rv3-top3 {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  /* Measured against the frame at 2x: the lead row sits 16px lower under the lede,
+   * and the rating 16px further below the last row, than V3's card spacing gave. */
+  margin: 16px 0;
+}
+.rv3 .rv4-top3 .rv3-top3__row + .rv3-top3__row {
+  border-top: 0;
+}
+/* 1:493 ends 9px below its rating row, where "Core Archetype" (1:576) begins; the
+ * rating's usual 44px tail runs past the frame's edge into empty space there. */
+.rv3 .rv4-top3 .rv4-rating__tail {
+  height: 9px;
 }
 
 /* The preview iframe's own document: the report column at its true 393 width. */
@@ -3170,8 +3260,13 @@
  * live `?v3=1` report keeps rendering in Manrope until that is a deliberate call.
  *
  * This is not cosmetic: Manrope is the wider face, so Part I's Introduction was
- * wrapping two lines long against the frame. */
-.rv3.rv4-doc {
+ * wrapping two lines long against the frame.
+ *
+ * `.rv3.rv4` is the live report under `?v4=1`, which is the page Fatih ships;
+ * `.rv4-doc` alone left it in Manrope while only the standalone preview got the
+ * specced face. */
+.rv3.rv4-doc,
+.rv3.rv4 {
   --font-sans: var(--font-jakarta);
 }
 
@@ -3324,12 +3419,14 @@
   scroll-padding-inline-start: 22px;
   scroll-snap-type: x mandatory;
   scrollbar-width: none;
-  /* eb8fb068 removed `touch-action: pan-y`, which had blocked horizontal swipe
-   * outright, and left the property at its default. The browser then had to
-   * work out the direction of every gesture from its first few pixels, which
-   * costs a beat of hesitation before the deck moves. Naming both axes we want
-   * removes the guess without re-blocking anything. */
-  touch-action: pan-x pinch-zoom;
+  /* Both axes. `pan-x pinch-zoom` left out pan-y, so a thumb that landed on the
+   * deck — 360px, a third of a phone screen — could not scroll the PAGE at all:
+   * measured with real touch events, a vertical swipe on the deck moved the page
+   * 0px against 235px on the text above it. That was the "clunky on phone" in
+   * Mark's review. With both axes allowed the browser reads the direction from
+   * the gesture, as every native carousel does. (eb8fb068 had removed a bare
+   * `pan-y`, which blocked the horizontal swipe instead.) */
+  touch-action: pan-x pan-y pinch-zoom;
 }
 .rv3 .rv3-deck__viewport::-webkit-scrollbar {
   display: none;
@@ -3359,7 +3456,10 @@
   border: 1px solid rgba(157, 138, 215, 0.22);
   border-radius: 27px;
   margin-inline: calc(var(--rv3-gutter) * -1);
-  padding: 18.5px 22.5px 0.5px;
+  /* 153:2243 — 22px each side, which Mark evened up so the text sits centred, and
+   * 20.5px under the teaser: the card grew from 339 to 359 for "a bit of padding
+   * to the bottom of the element". */
+  padding: 18.5px 22.5px 20.5px;
   position: relative;
   width: calc(100% + var(--rv3-gutter) * 2);
 }
@@ -3374,6 +3474,10 @@
   line-height: 12px;
   margin: 0;
   text-transform: uppercase;
+}
+/* 230:282 — "Reading time:" in Light, the value in Bold. */
+.rv3 .rv4-learn__eyebrow-label {
+  font-weight: 300;
 }
 
 /* 153:2247 — a FIXED 51px, not content height. The chip is 29px and sits 11px
@@ -3419,11 +3523,17 @@
   letter-spacing: -0.24px;
   line-height: 24px;
 }
-/* 153:2255 — 15px, sitting 8px below the label's cap height. */
+/* 299:242 "Control / Disc" — the chevron now sits in a 34px lavender disc, the same
+ * disc the chapters and the Snapshot rows use. */
 .rv3 .rv4-learn__chev {
-  display: block;
+  align-items: center;
+  background: rgba(121, 95, 200, 0.1);
+  border-radius: 17px;
+  display: flex;
   flex: none;
-  padding-top: 8px;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
 }
 .rv3 .rv4-learn__chev img {
   display: block;
@@ -3472,8 +3582,7 @@
   overflow: hidden;
 }
 
-/* 153:2259 and 230:238 — the same centred link, over the fade in both states. */
-.rv3 .rv4-learn__open,
+/* 230:238 — "Show More", the centred link over the gated fade. */
 .rv3 .rv4-learn__showmore {
   background: none;
   border: 0;
@@ -3494,9 +3603,32 @@
   transform: translateX(-50%);
   white-space: nowrap;
 }
-/* Flush with the card's bottom edge: 314 + 25 = the 339 the frame measures. */
+/* 456:261 — Mark's standardised CTA for every "Go deeper & learn more" teaser:
+ * a 163x32 outlined pill (22/10 padding, 1.5px #561dbd, white), 10px bold caps,
+ * centred over the fade with its bottom 18.5px above the teaser's end. */
 .rv3 .rv4-learn__open {
-  bottom: 0;
+  align-items: center;
+  background: #fff;
+  border: 1.5px solid #561dbd;
+  border-radius: 999px;
+  bottom: 18.5px;
+  box-sizing: border-box;
+  color: #561dbd;
+  cursor: pointer;
+  display: flex;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 700;
+  height: 32px;
+  justify-content: center;
+  left: 50%;
+  line-height: 12px;
+  padding: 10px 22px;
+  position: absolute;
+  text-transform: uppercase;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  width: 163px;
 }
 
 /* ── article body — 153:2277 ─────────────────────────────────────────────── */
@@ -3507,6 +3639,26 @@
   font-weight: 400;
   line-height: 22.4px;
   margin: 0 0 16px;
+}
+
+/* In the live report this card sits inside a V3 chapter, whose restyle rules match
+ * V1 markup by class SUFFIX — `[class$="__eyebrow"]` and `[class$="__body"] p` —
+ * and so also caught the reading time (16px, 800, tracked, grey instead of 10px
+ * green) and every article paragraph (16/25.6 grey instead of 14/22.4 black).
+ * Those two are the only matches, closed or open, locked or not. They live above
+ * this file's append-only line, so the card re-asserts its own type here instead,
+ * at 0,4,0 against their 0,3,1. */
+.rv3 .rv3-chapter .rv4-learn .rv4-learn__eyebrow {
+  color: #2e7d5b;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 12px;
+}
+.rv3 .rv3-chapter .rv4-learn .rv4-prose__p {
+  color: #000;
+  font-size: 14px;
+  line-height: 22.4px;
 }
 .rv3 .rv4-prose__p strong,
 .rv3 .rv4-prose__list strong {
@@ -3562,11 +3714,59 @@
  * decoration over a bounded leak budget, never the control; see
  * LOCKED_ARTICLE_GATED_BLOCKS in contentGating.ts. */
 .rv3 .rv4-learn__gated {
-  filter: blur(2.5px);
-  max-height: 580px;
-  min-height: 580px;
+  /* 656 = the 76px progressive band (411:5694) + the 580px window (170:231).
+   * Kept equal to LOCKED_ARTICLE_WINDOW_PX in contentGating.ts. */
+  max-height: 656px;
+  min-height: 656px;
   overflow: clip;
   user-select: none;
+}
+/* PROGRESSIVE BLUR — 411:5694 ramps the blur from 0 at the top of the gated copy
+ * to Figma radius 5 (CSS 2.5px) 76px down, where 170:231 holds it at 2.5px for
+ * the rest of the window; readable copy eases into the paywall instead of
+ * hitting a hard edge. Three stacked backdrop layers, each faded in over a third
+ * of the band. Stacked blurs compound (sigmas add in quadrature), so the layers
+ * are 0.8 / 1.39 / 1.92px to land on 0.8 / 1.6 / 2.5px at each third. The
+ * copy itself carries no filter; the layers blur it from above. */
+.rv3 .rv4-learn__blur {
+  height: 656px;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 16px;
+}
+.rv3 .rv4-learn__blur > span {
+  -webkit-backdrop-filter: blur(var(--rv4-blur));
+  backdrop-filter: blur(var(--rv4-blur));
+  inset: 0;
+  -webkit-mask-image: linear-gradient(180deg, transparent var(--rv4-from), #000 var(--rv4-to));
+  mask-image: linear-gradient(180deg, transparent var(--rv4-from), #000 var(--rv4-to));
+  position: absolute;
+}
+.rv3 .rv4-learn__blur > span:nth-child(1) {
+  --rv4-blur: 0.8px;
+  --rv4-from: 0px;
+  --rv4-to: 25px;
+}
+.rv3 .rv4-learn__blur > span:nth-child(2) {
+  --rv4-blur: 1.39px;
+  --rv4-from: 25px;
+  --rv4-to: 51px;
+}
+.rv3 .rv4-learn__blur > span:nth-child(3) {
+  --rv4-blur: 1.92px;
+  --rv4-from: 51px;
+  --rv4-to: 76px;
+}
+/* No backdrop-filter: fall back to the old uniform blur on the copy itself. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .rv3 .rv4-learn__gated {
+    filter: blur(2.5px);
+  }
+  .rv3 .rv4-learn__blur {
+    display: none;
+  }
 }
 /* 230:236 — fades to #fcfbfe, which is the card's own gradient at its foot. */
 .rv3 .rv4-learn__fade {

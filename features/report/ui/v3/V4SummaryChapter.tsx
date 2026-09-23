@@ -1,4 +1,4 @@
-import type { FC } from "react";
+import type { FC, ReactNode } from "react";
 import type { Report3Summary } from "@/data/report3-archetype-page";
 import V4Rating from "./V4Rating";
 import V4Runs from "./V4Runs";
@@ -19,9 +19,14 @@ import V4Runs from "./V4Runs";
 interface Props {
   archetype: string;
   summary: Report3Summary;
+  /**
+   * Replaces the rating row. The live report passes its own "Does this resonate?"
+   * widget, which posts to /api/report-feedback; `V4Rating` only records locally.
+   */
+  feedback?: ReactNode;
 }
 
-const V4SummaryChapter: FC<Props> = ({ archetype, summary }) => (
+const V4SummaryChapter: FC<Props> = ({ archetype, summary, feedback }) => (
   <section className="rv4-summary" data-node-id="1:736" data-name="Summary Chapter">
     <div className="rv4-summary__inner">
       <h2 className="rv4-summary__heading" data-node-id="1:739">
@@ -44,8 +49,16 @@ const V4SummaryChapter: FC<Props> = ({ archetype, summary }) => (
       {/* 1:745 */}
       <div className="rv4-summary__sep" aria-hidden="true" />
 
-      {/* 1:747 — the 361-wide rating, not the part-level 393 one. */}
-      <V4Rating label={`Summary of the ${archetype}`} width={361} />
+      {/* 1:747 — the 361-wide rating, not the part-level 393 one. A live widget
+       * takes the same geometry: right-aligned row, then the frame's 44px tail. */}
+      {feedback ? (
+        <div className="rv4-rating">
+          <div className="rv4-rating__live">{feedback}</div>
+          <div className="rv4-rating__tail" aria-hidden="true" />
+        </div>
+      ) : (
+        <V4Rating label={`Summary of the ${archetype}`} width={361} />
+      )}
     </div>
   </section>
 );

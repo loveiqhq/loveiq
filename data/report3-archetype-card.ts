@@ -34,9 +34,6 @@ export interface Report3Dimension {
   /** The verdict, set in Lora, e.g. "Charming". */
   value: string;
   body: string;
-  /** Chapter the peeking card points at. `id` must exist in `reportV3Nav`. */
-  chapterLabel: string;
-  chapterId: string;
 }
 
 export interface Report3CardCopy {
@@ -62,6 +59,9 @@ export const report3ArchetypeCard: Readonly<Record<string, Report3CardCopy>> = {
       value: "Pleasure & play",
       body: "Sex is about a sense of aliveness, not milestones. The moment it starts feeling like a duty, sex loses its point.",
     },
+    // Supportive sentences as reworked by Sanjin and approved by Mark on
+    // 2026-09-23 (Figma thread 1937163962, "Good! Please make the changes"),
+    // re-read from 15:1136 / 15:1236 / 15:1336.
     dimensions: [
       {
         key: "communication",
@@ -69,26 +69,20 @@ export const report3ArchetypeCard: Readonly<Record<string, Report3CardCopy>> = {
         subtitle: "how desire gets spoken",
         value: "Charming",
         body: "Words are part of the foreplay and so is a little tease. Charm and whit are ways attraction is built and intimacy is initiated.",
-        chapterLabel: "Love Language",
-        chapterId: "love_language",
       },
       {
         key: "initiation",
         title: "Initiation",
         subtitle: "who makes the first move",
         value: "Active",
-        body: "You make the first move often, and the move itself is part of the pleasure. Being wanted back is the reward, not the goal.",
-        chapterLabel: "Initiation Style",
-        chapterId: "initiation_style",
+        body: "You make the first move often, and the move itself is part of the pleasure. What matters most is feeling that your interest is met with genuine enthusiasm.",
       },
       {
         key: "attachment",
         title: "Attachment",
         subtitle: "how closeness is held",
         value: "Avoidant / secure",
-        body: "Closeness is comfortable while it stays voluntary. When it starts to feel owed, you get light on your feet and slip sideways.",
-        chapterLabel: "Attachment Style",
-        chapterId: "attachment_style",
+        body: "Closeness is comfortable while it stays voluntary. When it starts to feel owed, you may begin to pull back or create some distance.",
       },
       {
         key: "power",
@@ -96,8 +90,6 @@ export const report3ArchetypeCard: Readonly<Record<string, Report3CardCopy>> = {
         subtitle: "who takes the lead",
         value: "Switch",
         body: "You will take the lead or hand it over, and the choosing is the turn-on. What you avoid is a position that never moves.",
-        chapterLabel: "Power Orientation",
-        chapterId: "power_orientation",
       },
     ],
     meters: [

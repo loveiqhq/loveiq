@@ -11,7 +11,7 @@ import V4Prose from "./V4Prose";
  * "Go deeper & learn more" — the long-form article inside a chapter.
  *
  * One component, three states, all drawn in Figma:
- *   153:2240  closed          teaser clamped to 240px, faded, "Read full article"
+ *   153:2240  closed          teaser clamped to 240px, faded, "Read the full article" pill
  *   153:2260  expanded        the whole article, no gate
  *   153:2280  expanded+gated  free copy, then a blurred 580px window, a fade,
  *                             "Show More", and the Premium content card over it
@@ -47,6 +47,15 @@ import V4Prose from "./V4Prose";
  */
 const TEASER_BLOCKS = 2;
 
+/**
+ * 230:282 sets "Reading time:" in Light and the value in Bold, so the eyebrow is
+ * split at its first colon. Copy without a colon renders as one run.
+ */
+const splitEyebrow = (text: string): [string, string] => {
+  const colon = text.indexOf(":");
+  return colon < 0 ? [text, ""] : [text.slice(0, colon + 1), text.slice(colon + 1).trim()];
+};
+
 interface Props {
   article: Report3LearnMoreView;
   /**
@@ -63,6 +72,7 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const bodyId = useId();
   const sectionRef = useRef<HTMLElement>(null);
+  const [eyebrowLabel, eyebrowValue] = splitEyebrow(article.eyebrow);
 
   const openPaywall = () => {
     // `.rv4-doc` runs on copyable non-prod deploys, so a drag that ends inside
@@ -80,7 +90,15 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
     >
       {/* 230:282 — the layer is named "Adding the right new input genuinely works
        * for you"; the text is the reading time. Names in this file are stale. */}
-      <p className="rv4-learn__eyebrow">{article.eyebrow}</p>
+      <p className="rv4-learn__eyebrow">
+        {eyebrowValue ? (
+          <>
+            <span className="rv4-learn__eyebrow-label">{eyebrowLabel}</span> {eyebrowValue}
+          </>
+        ) : (
+          eyebrowLabel
+        )}
+      </p>
 
       {/* 153:2247 */}
       <button
@@ -94,6 +112,7 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
           <Image src="/report/v3/learn/chip-book.svg" alt="" width={17} height={17} unoptimized />
         </span>
         <span className="rv4-learn__label">{article.label}</span>
+        {/* 299:242 "Control / Disc" — the chevron in a 34px lavender disc. */}
         <span className="rv4-learn__chev" aria-hidden="true">
           <Image src="/report/v3/learn/chevron.svg" alt="" width={15} height={15} unoptimized />
         </span>
@@ -113,9 +132,10 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
             >
               <V4Prose blocks={article.free.slice(0, TEASER_BLOCKS)} />
             </div>
-            {/* 153:2259 — sits over the fade, 25px above the card's bottom edge. */}
+            {/* 456:261 "Show all pill — article" — Mark's standardised CTA for every
+             * Go deeper teaser: a 163x32 outlined pill over the fade. */}
             <button type="button" className="rv4-learn__open" onClick={() => setIsOpen(true)}>
-              Read full article
+              Read the full article
             </button>
           </>
         ) : (
@@ -130,6 +150,12 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
                 <div className="rv4-learn__gated" aria-hidden="true" inert>
                   {article.gated ? <V4Prose blocks={article.gated} /> : null}
                 </div>
+                {/* 411:5694 + 170:231 — the progressive blur, laid over the copy. */}
+                <span className="rv4-learn__blur" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </span>
                 <span className="rv4-learn__fade" aria-hidden="true" />
                 {/* 230:238 — cannot reveal anything, so it opens the paywall too. */}
                 <button type="button" className="rv4-learn__showmore">

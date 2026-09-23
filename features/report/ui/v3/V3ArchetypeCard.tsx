@@ -41,6 +41,9 @@ const V3ArchetypeCard: FC<Props> = ({ archetype, matchStrength, copy, initialDec
   const presentation = archetypePresentation[archetype];
   const accent = presentation?.iconBg ?? "#ff6a3d";
   const accentDeep = presentation?.dotColor ?? "#f97316";
+  // The frame prints a whole number here ("43%") even where the top-three list
+  // beside it prints one decimal ("43.4%"). The bar keeps the exact value.
+  const matchLabel = Math.round(matchStrength);
 
   return (
     <section
@@ -62,7 +65,7 @@ const V3ArchetypeCard: FC<Props> = ({ archetype, matchStrength, copy, initialDec
               Match Strength
             </span>
             <span className="rv3-arch__match-value" data-node-id="15:824">
-              {matchStrength}%
+              {matchLabel}%
             </span>
           </div>
           {/* 15:826 / 15:827 — 8px track, gradient fill. */}
@@ -70,7 +73,7 @@ const V3ArchetypeCard: FC<Props> = ({ archetype, matchStrength, copy, initialDec
             className="rv3-arch__bar"
             data-node-id="15:826"
             role="img"
-            aria-label={`Match strength ${matchStrength} percent`}
+            aria-label={`Match strength ${matchLabel} percent`}
           >
             <span
               className="rv3-arch__bar-fill"

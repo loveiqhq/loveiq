@@ -1,4 +1,4 @@
-import type { FC } from "react";
+import type { FC, ReactNode } from "react";
 import {
   REPORT_V4_TOP_THREE,
   REPORT_V4_TOP_THREE_HEADING,
@@ -18,7 +18,20 @@ import V4Runs from "./V4Runs";
  * the live `?v3=1` report uses is left exactly as it is.
  */
 
-const V4TopThreeSection: FC = () => (
+interface Props {
+  /**
+   * The reader's archetype percentages. Defaults to the frame's own 43.4 / 39.5 /
+   * 36.2, which is what the standalone preview shows.
+   */
+  percentages?: Record<string, number>;
+  /**
+   * Replaces the rating row. The live report passes its own "Does this resonate?"
+   * widget, which posts to /api/report-feedback; `V4Rating` only records locally.
+   */
+  feedback?: ReactNode;
+}
+
+const V4TopThreeSection: FC<Props> = ({ percentages = REPORT_V4_TOP_THREE, feedback }) => (
   <section
     className="rv4-top3"
     data-node-id="1:493"
@@ -35,10 +48,18 @@ const V4TopThreeSection: FC = () => (
       ))}
     </div>
 
-    <V3TopThree percentages={REPORT_V4_TOP_THREE} />
+    <V3TopThree percentages={percentages} />
 
-    {/* 1:560 */}
-    <V4Rating label={REPORT_V4_TOP_THREE_HEADING} width={361} />
+    {/* 1:560 — a live widget takes the rating's geometry: right-aligned row, then
+     * the frame's 44px tail. */}
+    {feedback ? (
+      <div className="rv4-rating">
+        <div className="rv4-rating__live">{feedback}</div>
+        <div className="rv4-rating__tail" aria-hidden="true" />
+      </div>
+    ) : (
+      <V4Rating label={REPORT_V4_TOP_THREE_HEADING} width={361} />
+    )}
   </section>
 );
 

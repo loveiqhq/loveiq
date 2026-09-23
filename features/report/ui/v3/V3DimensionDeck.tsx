@@ -71,17 +71,28 @@ const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) =>
       });
       setActive(nearest);
     };
-    // Coalesced into one animation frame. `measure` reads six rects and the
-    // scroll metrics; running that on every scroll event — a touch flick fires
-    // far more than one per frame — forces a synchronous layout each time, which
-    // is most of what "clunky" was. React bails out when `nearest` is unchanged,
-    // so a re-render still only happens when the card actually changes.
-    const onScroll = () => {
+    // Measured once the swipe SETTLES, not while it is moving. Changing the
+    // active card swaps a card between the focused and peeking designs — size,
+    // type, background, shadow — and doing that mid-gesture, under a moving
+    // finger and a running snap, is what still read as clunky after the scroll
+    // work was coalesced. `scrollend` fires once the snap lands; browsers
+    // without it (Safari) get the same moment from a short quiet period.
+    let settle = 0;
+    const onSettled = () => {
+      if (settle) window.clearTimeout(settle);
+      settle = 0;
       if (!frame) frame = window.requestAnimationFrame(measure);
     };
+    const onScroll = () => {
+      if (settle) window.clearTimeout(settle);
+      settle = window.setTimeout(onSettled, 120);
+    };
     el.addEventListener("scroll", onScroll, { passive: true });
+    el.addEventListener("scrollend", onSettled);
     return () => {
       el.removeEventListener("scroll", onScroll);
+      el.removeEventListener("scrollend", onSettled);
+      if (settle) window.clearTimeout(settle);
       if (frame) window.cancelAnimationFrame(frame);
     };
   }, []);
@@ -152,22 +163,9 @@ const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) =>
 
                   <p className="rv3-deck__value">{d.value}</p>
                   <p className="rv3-deck__body">{d.body}</p>
-
-                  {/* 15:1152. Peeking cards only — the focused card hides this block in
-                   * every variant frame (15:1175 carries hidden="true"). Kept out of the
-                   * DOM rather than visually hidden so it is not read out either. */}
-                  {/* `hidden` rather than unmounted: removing a node from inside a
-                   * `scroll-snap-type: x mandatory` scroller mid-gesture makes the
-                   * browser re-resolve its snap target, which is visible as a
-                   * snap-back. Hidden is still out of the accessibility tree, so
-                   * it is not read out either. */}
-                  <footer className="rv3-deck__more" hidden={isFocused}>
-                    <span className="rv3-deck__more-label">Learn more in chapter:</span>
-                    <span className="rv3-deck__more-item">
-                      <span className="rv3-deck__bullet" aria-hidden="true" />
-                      <span className="rv3-deck__chapter">{d.chapterLabel}</span>
-                    </span>
-                  </footer>
+                  {/* No "Learn more in chapter" link on any card: the body is followed
+                   * by blank space, as 15:1136 / 15:1236 / 15:1336 draw it. Removed on
+                   * Fatih's instruction, 2026-09-23. */}
                 </div>
               </article>
             );

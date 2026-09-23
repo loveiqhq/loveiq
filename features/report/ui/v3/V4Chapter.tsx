@@ -42,11 +42,39 @@ interface Props {
    */
   children?: ReactNode;
   defaultOpen?: boolean;
+  /**
+   * `false` renders the chapter permanently open, with a plain heading and no
+   * toggle or chevron. Part I is not collapsible — Fatih's call on 2026-09-23 —
+   * so its two chapters always show their copy.
+   */
+  collapsible?: boolean;
 }
 
-const V4Chapter: FC<Props> = ({ title, archetype, teaser, children, defaultOpen = false }) => {
+const V4Chapter: FC<Props> = ({
+  title,
+  archetype,
+  teaser,
+  children,
+  defaultOpen = false,
+  collapsible = true,
+}) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const bodyId = useId();
+
+  if (!collapsible) {
+    return (
+      <section
+        className="rv4-chapter is-open is-static"
+        data-node-id="1:175"
+        data-name="Chapter H1 + Copy"
+      >
+        <div className="rv4-chapter__head">
+          <h3 className={`rv4-chapter__title${archetype ? " has-suffix" : ""}`}>{title}</h3>
+        </div>
+        <div className="rv4-chapter__body">{children}</div>
+      </section>
+    );
+  }
 
   return (
     <section

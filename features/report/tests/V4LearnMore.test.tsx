@@ -5,7 +5,10 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import V4LearnMore from "@features/report/ui/v3/V4LearnMore";
 import V4ChapterPart from "@features/report/ui/v3/V4ChapterPart";
-import { splitArticleForReader } from "@features/report/server/contentGating";
+import {
+  LOCKED_ARTICLE_WINDOW_PX,
+  splitArticleForReader,
+} from "@features/report/server/contentGating";
 import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import type { Report3Block, V4LearnMoreByChapter } from "@/data/report3-learn-more";
 import {
@@ -45,10 +48,14 @@ afterEach(cleanup);
 
 describe("V4LearnMore — closed (153:2240)", () => {
   it("draws the eyebrow, the Lora label and the read link", () => {
-    render(<V4LearnMore article={ARTICLE} />);
-    expect(screen.getByText("Reading time: ~15 min.")).toBeTruthy();
+    const { container } = render(<V4LearnMore article={ARTICLE} />);
+    // 230:282 sets the label in Light and the value in Bold, so it is two runs.
+    expect(container.querySelector(".rv4-learn__eyebrow")?.textContent).toBe(
+      "Reading time: ~15 min."
+    );
+    expect(container.querySelector(".rv4-learn__eyebrow-label")?.textContent).toBe("Reading time:");
     expect(screen.getByText("Go deeper & learn more")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Read full article" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Read the full article" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Go deeper/ }).getAttribute("aria-expanded")).toBe(
       "false"
     );
@@ -66,12 +73,12 @@ describe("V4LearnMore — closed (153:2240)", () => {
     const { container } = render(<V4LearnMore article={ARTICLE} locked />);
     expect(container.querySelector(".rv4-premium")).toBeNull();
     expect(container.querySelector(".rv4-learn__gate")).toBeNull();
-    expect(screen.getByRole("button", { name: "Read full article" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Read the full article" })).toBeTruthy();
   });
 
   it("opens from either the header button or the read link", () => {
     const { container } = render(<V4LearnMore article={ARTICLE} />);
-    fireEvent.click(screen.getByRole("button", { name: "Read full article" }));
+    fireEvent.click(screen.getByRole("button", { name: "Read the full article" }));
     expect(container.querySelector(".rv4-learn")?.className).toContain("is-open");
   });
 });
@@ -259,12 +266,24 @@ describe("reportV3.css — learn-more contracts", () => {
 
   it("clamps the blurred window to a FIXED height, both ways", () => {
     // The min and max must match, or a stripped payload collapses the window and
-    // the locked layout stops matching the unlocked one.
+    // the locked layout stops matching the unlocked one. 656 = the 76px
+    // progressive band (411:5694) + the 580px window (170:231), and it must equal
+    // the server's LOCKED_ARTICLE_WINDOW_PX.
     const css = rule(".rv3 .rv4-learn__gated {");
-    expect(css).toContain("filter: blur(2.5px)");
-    expect(css).toContain("max-height: 580px");
-    expect(css).toContain("min-height: 580px");
+    expect(css).toContain(`max-height: ${LOCKED_ARTICLE_WINDOW_PX}px`);
+    expect(css).toContain(`min-height: ${LOCKED_ARTICLE_WINDOW_PX}px`);
     expect(css).toContain("overflow: clip");
+  });
+
+  it("ramps the blur in over the first 76px, then holds Figma's radius 5", () => {
+    // 411:5694 is a PROGRESSIVE layer blur (0 -> 5 over 76px); 170:231 holds 5.
+    // Three backdrop layers whose sigmas add in quadrature to CSS 2.5px.
+    const layers = [1, 2, 3].map((n) => rule(`.rv3 .rv4-learn__blur > span:nth-child(${n}) {`));
+    const sigmas = layers.map((css) => parseFloat(css.match(/--rv4-blur:\s*([\d.]+)px/)![1]!));
+    expect(Math.sqrt(sigmas.reduce((sum, s) => sum + s * s, 0))).toBeCloseTo(2.5, 1);
+    expect(layers[2]).toContain("--rv4-to: 76px");
+    // Without backdrop-filter the copy falls back to the old uniform blur.
+    expect(V3_CSS).toMatch(/@supports not \(\(backdrop-filter[\s\S]*?filter: blur\(2\.5px\)/);
   });
 
   it("draws the fade exactly as 230:236 does", () => {
