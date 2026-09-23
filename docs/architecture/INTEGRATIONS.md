@@ -148,7 +148,15 @@
 
 **Incoming:**
 
-- Not applicable (no payment or external webhooks)
+Three routes receive them. Each verifies a signature before doing any work, and each
+is idempotent on a replay:
+
+- `app/api/stripe/webhook/route.ts` — payment lifecycle, refunds and disputes. Signed
+  with `STRIPE_WEBHOOK_SECRET`; a disputed payment re-locks the report.
+- `app/api/resend/webhook/route.ts` — email delivery, bounces and complaints. Svix
+  signature, `RESEND_WEBHOOK_SECRET`.
+- `app/api/slack/events/route.ts` — inbound Slack events for the company brain. Slack
+  signing secret plus a workspace check, so another workspace's events are refused.
 
 **Outgoing:**
 

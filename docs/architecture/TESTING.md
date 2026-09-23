@@ -134,7 +134,9 @@ test.beforeEach(async ({ page }) => {
 - `reuseExistingServer: !process.env.CI` — reuses running local server
 
 **Pre-push hook rule:**
-E2E tests must NOT be in pre-push hooks. Pre-push runs only `npm test` (Vitest). The full E2E suite (`npm run test:e2e`, 5 browser projects) is run locally.
+E2E tests must NOT be in pre-push hooks — they take 3–6 minutes and pre-push has to stay fast enough that nobody reaches for `--no-verify`. Pre-push runs only `npm test` (Vitest).
+
+The full E2E suite runs **in CI**, as a five-way matrix (one browser project per runner, `--workers=2`, `fail-fast: false`) on every push to `main` — see the `e2e` job in `.github/workflows/ci.yml`. Run it locally with `npm run test:e2e` when you have touched UI.
 
 **CI job:** `.github/workflows/visual-regression.yml` ("Playwright visual regression")
 
