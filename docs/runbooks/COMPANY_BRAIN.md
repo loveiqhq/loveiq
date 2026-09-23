@@ -349,7 +349,7 @@ When registering any callback — Resend, Stripe, Slack — paste the `www`
 host, then confirm rows actually arrive. An endpoint that returns 401 to an
 unsigned probe proves it is deployed, not that it is reachable by the sender.
 
-**Seventeen tools, in three groups.** Twelve read, five write. The write ones act
+**Eighteen tools, in three groups.** Thirteen read, five write. The write ones act
 immediately and are described at the bottom of this section — a teammate who reads
 only the first table will not know the brain can send an email.
 
@@ -363,6 +363,7 @@ only the first table will not know the brain can send an email.
 | `list_sources`           | What the corpus holds and how fresh each source is — call this first when an answer looks stale                                                                                 |
 | `count_context`          | How many, and broken down by source, month or person. Search ranks and caps at 30, so it can never answer "how many" — this reads the whole corpus                              |
 | `browse_context`         | Everything matching a filter, in date order and without ranking: every meeting note, every open task, everything learned since Tuesday. Use when you want a list, not an answer |
+| `what_shipped`           | What changed, as the plain-English "For Marcus:" line every change to main carries, newest first, with date and pull request. Read live from GitHub, never indexed              |
 
 **You can narrow, and it is usually better than rewording.** `search_company_context`
 takes `sources` and `exclude_sources`, `since` / `until`, and `meta` for indexed
