@@ -36,9 +36,10 @@ import V3Intro from "./v3/V3Intro";
 import V4Part1 from "./v3/V4Part1";
 import V3ArchetypeCard from "./v3/V3ArchetypeCard";
 import V4Snapshot from "./v3/V4Snapshot";
+import V4SummaryChapter from "./v3/V4SummaryChapter";
 import { report3ArchetypeCard } from "@/data/report3-archetype-card";
 import type { ArchetypeName } from "@features/report/server/archetypeSlug";
-import { REPORT_V4_SNAPSHOT } from "@/data/report3-archetype-page";
+import { REPORT_V4_SNAPSHOT, REPORT_V4_SUMMARY } from "@/data/report3-archetype-page";
 import V3EndSummary from "./v3/V3EndSummary";
 import V3Methodology from "./v3/V3Methodology";
 import V3PartDivider from "./v3/V3PartDivider";
@@ -1077,6 +1078,24 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                             <CoreArchetypeSection matchScore={matchScore} theme={theme} />
                           )}
                         </ReportSection>
+                        {/* 1:736 — the Summary Chapter, 393x1486 of copy that sits
+                         * between the archetype card and everything after it. Report
+                         * 2.0 RETIRED its own `summary` section (reportNav.ts:113),
+                         * so nothing rendered here at all and the card ran straight
+                         * into the next block. Omitted rather than faked for an
+                         * archetype nobody has written one for. */}
+                        {isV4 && REPORT_V4_SUMMARY[viewArchetype] ? (
+                          <ReportSection
+                            primaryArchetype={viewArchetype}
+                            sectionId="summary_v4"
+                            title=""
+                          >
+                            <V4SummaryChapter
+                              archetype={viewArchetype}
+                              summary={REPORT_V4_SUMMARY[viewArchetype]!}
+                            />
+                          </ReportSection>
+                        ) : null}
                         {/* "What this means for you" (Figma 8719:8865). Part I's
                           child order is HERO → SUMMARY → SNAPSHOT, so this sits
                           between the card and Your Snapshot. Free + universal;
@@ -1109,9 +1128,14 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                             data-report-section="true"
                             className="report-section is-visible rv3-snap"
                           >
-                            <h2 className="rv3-snapshot-heading" data-node-id="10392:19225">
-                              Snapshot &mdash; of the {viewArchetype}
-                            </h2>
+                            {/* V4Snapshot draws its own heading (1:766), so this
+                             * one would be the second "Snapshot of the …" on the
+                             * page. V3's accordion has none, and still needs it. */}
+                            {isV4 && REPORT_V4_SNAPSHOT[viewArchetype] ? null : (
+                              <h2 className="rv3-snapshot-heading" data-node-id="10392:19225">
+                                Snapshot &mdash; of the {viewArchetype}
+                              </h2>
+                            )}
                             {/* 316:250. V3's accordion opens one row at a time and
                              * carries its own washes; the frame delivers every row
                              * closed inside one white panel. Falls back to V3's

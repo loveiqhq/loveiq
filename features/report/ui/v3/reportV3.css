@@ -2089,11 +2089,15 @@
   line-height: 22.4px;
   padding: 3.36px 0 0 19px;
 }
+/* 15:926 draws three 113px columns, which is 349px of fixed track inside a card
+ * that clips its overflow — so HIGH, the last label, was cut in half at 393 and
+ * lost outright on anything narrower. Equal fractions instead: the same layout at
+ * the frame's width, and it keeps all three labels whole as the phone shrinks. */
 .rv3 .rv3-arch__meter-bars,
 .rv3 .rv3-arch__meter-scale {
   display: grid;
   gap: 5px;
-  grid-template-columns: repeat(3, 113px);
+  grid-template-columns: repeat(3, 1fr);
 }
 .rv3 .rv3-arch__meter-bars {
   padding-top: 9px;
