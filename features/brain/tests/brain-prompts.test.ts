@@ -7,6 +7,11 @@ describe("renderPrompt", () => {
     expect("text" in r && r.text).toContain("since seven days ago");
   });
 
+  it("asks what shipped through what_shipped when catching someone up", () => {
+    const r = renderPrompt("catch_me_up", { since: "2026-09-16" });
+    expect("text" in r && r.text).toContain("What shipped: what_shipped for the period");
+  });
+
   it("puts the period into the KPI check, and paywall conversion first", () => {
     const r = renderPrompt("kpi_check", { since: "2026-09-01", until: "2026-09-22" });
     expect("text" in r && r.text).toContain("since 2026-09-01, until 2026-09-22");
