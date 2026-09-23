@@ -813,6 +813,33 @@ export function isPrivateLegalMatter(text: string): boolean {
   return PRIVATE_LEGAL_MATTER.test(text);
 }
 
+/**
+ * COPY WE WROTE OURSELVES, WEARING A CUSTOMER'S VOICE.
+ *
+ * The Drive sheet `Testimonials` has two sections: `## Strategically Created` — thirty
+ * first-person quotes written by a copywriter, every `Given by User Name` cell blank —
+ * and `## Authentic by Users`, which holds one. Chunking puts the heading in part 1 and
+ * the quotes in parts 2 to 4, so a search that returns part 4 alone hands the reader
+ * fluent praise with NOTHING marking it as invented. Asked what customers say about the
+ * report, that is exactly what comes back.
+ *
+ * Detected on the TEXT, not the filename, so a rename does not defeat it, and on an
+ * explicit self-label rather than a guess about tone — we are trusting the document's own
+ * word for it. Measured 2026-09-23 across every Drive document: it matches that one file.
+ * That is not a vacuous guard; it is a precise one, and it fires on the document that
+ * caused the problem. The near misses are four sets of meeting notes DISCUSSING
+ * testimonials, which say "sample testimonial" in passing and must not be marked.
+ *
+ * Marked rather than excluded, deliberately. The sheet is a real working document and the
+ * team should be able to find it; what it must not do is pass for customer voice. Same
+ * treatment the `report` source already gives shipped copy with `kind: "shipped"`.
+ */
+const AUTHORED_MARKETING =
+  /##\s*strategically created|written by (us|a copywriter)|not (a )?real (customer|user)/i;
+export function isAuthoredMarketingCopy(text: string): boolean {
+  return AUTHORED_MARKETING.test(text);
+}
+
 export function docToRows(file: DriveFile, text: string, stampedAt: string): BrainRow[] {
   const name = (file.name ?? "").trim();
   if (!file.id || !name) return [];
@@ -866,7 +893,13 @@ export function docToRows(file: DriveFile, text: string, stampedAt: string): Bra
    * Drive documents keep the neutral prefix rather than being mislabelled.
    */
   const isMeetingNote = MEETING_NOTE_NAME.test(name);
-  const title = isMeetingNote ? `Meeting notes: ${name}` : `Drive: ${name}`;
+  // On the TITLE, because a title is the one field every search result shows and every
+  // part of a split document carries. Putting it only in `meta` would leave the part that
+  // actually holds the invented quotes looking exactly like customer words.
+  const authored = isAuthoredMarketingCopy(text);
+  const title =
+    (isMeetingNote ? `Meeting notes: ${name}` : `Drive: ${name}`) +
+    (authored ? " [copy we wrote ourselves, not customer words]" : "");
 
   const base: BrainRow = {
     source: SOURCE,
@@ -876,6 +909,7 @@ export function docToRows(file: DriveFile, text: string, stampedAt: string): Bra
     body: [name, text].filter(Boolean).join("\n\n"),
     meta: {
       kind: isMeetingNote ? "meeting-notes" : "drive-doc",
+      ...(authored ? { authored: true } : {}),
       v: DRIVE_BUILDER_VERSION,
       owner,
       created: file.createdTime ?? null,

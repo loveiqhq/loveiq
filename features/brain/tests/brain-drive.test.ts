@@ -209,6 +209,7 @@ vi.mock("unpdf", () => ({
 import {
   docToRows,
   ingestDrive,
+  isAuthoredMarketingCopy,
   isPersonalDataExport,
   isPrivateLegalMatter,
   isJobApplication,
@@ -1482,6 +1483,57 @@ describe("docToRows refuses a private legal filing", () => {
       "Legal Compliance\n\nNach § 13 TMG und § 823 BGB ergeben sich folgende Pflichten " +
       "für Dating-Apps in Deutschland, die wir im Produkt abbilden müssen.";
     expect(docToRows(file as never, text, STAMP).length).toBeGreaterThan(0);
+  });
+});
+
+describe("authored marketing copy", () => {
+  /**
+   * The harm is specific and measured: the `Testimonials` sheet holds thirty
+   * copywriter-written first-person quotes under `## Strategically Created` and one real
+   * one under `## Authentic by Users`. Chunking puts the heading in part 1 and the quotes
+   * in parts 2-4, so a search returning part 4 alone hands back invented praise with
+   * nothing marking it.
+   */
+  it.each([
+    "## Strategically Created\n\n1. This changed how I see myself.",
+    "These were written by a copywriter for the landing page.",
+    "Placeholder — not a real customer, do not attribute.",
+  ])("recognises copy that says it is ours: %j", (text) => {
+    expect(isAuthoredMarketingCopy(text)).toBe(true);
+  });
+
+  it.each([
+    // Four sets of meeting notes say this in passing and must NOT be marked.
+    "Mark asked for a sample testimonial to show the layout.",
+    "We should collect more reviews from real users.",
+    "The Hite Report summary discusses example quotes from respondents.",
+  ])("leaves a document merely DISCUSSING testimonials alone: %j", (text) => {
+    expect(isAuthoredMarketingCopy(text)).toBe(false);
+  });
+
+  it("marks the title, so every part of a split document carries it", () => {
+    const rows = docToRows(
+      { id: "t1", name: "Testimonials", modifiedTime: STAMP } as never,
+      "## Strategically Created\n\n" + "Quote text. ".repeat(400),
+      STAMP
+    );
+    expect(rows.length).toBeGreaterThan(1);
+    // EVERY part, not just the one holding the heading — that is the whole defect.
+    for (const r of rows) {
+      expect(r.title).toContain("[copy we wrote ourselves, not customer words]");
+      expect((r.meta as Record<string, unknown>).authored).toBe(true);
+    }
+  });
+
+  it("leaves an ordinary document's title untouched", () => {
+    // The control: without it, a marker applied unconditionally would pass the test above.
+    const rows = docToRows(
+      { id: "t2", name: "Q4 roadmap", modifiedTime: STAMP } as never,
+      "The roadmap for Q4 is Report 3.0 and the new landing.",
+      STAMP
+    );
+    expect(rows[0]!.title).toBe("Drive: Q4 roadmap");
+    expect((rows[0]!.meta as Record<string, unknown>).authored).toBeUndefined();
   });
 });
 
