@@ -1118,18 +1118,31 @@ function placeOf(urlPath: string | null): string {
  * code. An unknown name falls through unchanged rather than being dropped, so
  * adding a scanner cannot silently remove a line from this message.
  */
+/**
+ * Our own lanes by name, checked before the scanners' keywords.
+ *
+ * They were one rule, `includes("our own")`, placed AFTER `includes("survey")`
+ * — so "our own survey log" read as "The survey", the same words as the survey
+ * scanner's line in the Monday scorecard with different numbers, and "our own
+ * error reports" read as taps. The first came from "our own dead_click events",
+ * which reached the scorecard as that raw string: an internal name in a message
+ * written for someone who does not read the code.
+ */
+const OWN_LANE_LABELS = new Map([
+  ["our own dead_click events", "Taps our own code recorded"],
+  ["our own survey log", "Survey restarts our own records caught"],
+  ["our own error reports", "Errors our own code reported"],
+  ["our own paywall events", "Readers sent out of their report with the paywall open"],
+]);
+
 function plainScanner(name: string): string {
   const n = name.toLowerCase();
   // Every caller, not just the digest: a nameless scanner is still a real
   // observation and must be reported, but never as an empty bullet.
   if (!n.trim() || n === "unknown") return "An unnamed check";
+  if (n.startsWith("our own")) return OWN_LANE_LABELS.get(n) ?? "Found in our own records";
   if (n.includes("survey")) return "The survey";
   if (n.includes("report")) return "The report";
-  // Findings synthesised from our OWN dead_click events rather than from a model
-  // watching a recording. It reached the scorecard as the raw string
-  // "our own dead_click events" — an internal name in a message written for
-  // someone who does not read the code.
-  if (n.includes("our own")) return "Taps our own code recorded";
   if (n.includes("dead-click")) return "Taps that did nothing";
   if (n.includes("rage-click")) return "Repeated frustrated tapping";
   return name;
@@ -1617,6 +1630,63 @@ export function biggestIndexDrop(
     prev = index;
   }
   return drop >= SURVEY_RESTART_MIN_DROP ? { drop, steps } : null;
+}
+
+/**
+ * Readers the back button took OUT of their report while the paywall was open.
+ *
+ * Found by hand on 2026-09-23, not by this pipeline: 7 readers in 30 days
+ * pressed Android back with the pricing modal up and landed on /survey. The
+ * scanners saw it — "looped back to the survey" — and every one was refuted,
+ * correctly, for the unlock click it invented. The outcome was real and nothing
+ * checked it. #258 made back close the modal, so each of these is now a
+ * regression, on a device or in a browser the end-to-end tests do not emulate.
+ *
+ * Open = `price_shown` (logged once per quote, so a RE-open is invisible to it)
+ * or `paywall_initiated` (a tap that opens it). Closed = `paywall_dismissed`.
+ * A page change with no tap in the window before it is Back, not a control.
+ *
+ * Rows are `[session, epoch ms, event, pathname]` sorted by session, then time.
+ * One exit per session: the first is the finding.
+ */
+export interface PaywallExit {
+  sessionId: string;
+  /** Where the reader landed. */
+  to: string;
+}
+
+export const PAYWALL_EXIT_TAP_WINDOW_MS = 8_000;
+
+export function paywallLeftOpen(
+  rows: ReadonlyArray<readonly [string, number, string, string]>
+): PaywallExit[] {
+  const out: PaywallExit[] = [];
+  let session = "";
+  let onReport = false;
+  let open = false;
+  let lastTap = -Infinity;
+  for (const [sid, at, event, path] of rows) {
+    if (sid !== session) {
+      session = sid;
+      onReport = false;
+      open = false;
+      lastTap = -Infinity;
+    }
+    if (out.at(-1)?.sessionId === sid) continue;
+    if (event === "$autocapture") lastTap = at;
+    else if (event === "price_shown" || event === "paywall_initiated") open = true;
+    else if (event === "paywall_dismissed") open = false;
+    else if (event === "$pageview") {
+      const isReport = path.startsWith("/report/");
+      if (onReport && open && !isReport && at - lastTap > PAYWALL_EXIT_TAP_WINDOW_MS) {
+        out.push({ sessionId: sid, to: path });
+      }
+      // A new page, or the same report reloaded: the modal starts shut.
+      onReport = isReport;
+      open = false;
+    }
+  }
+  return out;
 }
 
 /** The reason our telemetry contradicts this claim, or null. */
