@@ -1631,7 +1631,7 @@ export const EXTERNAL_SERVICES: Record<
     envKeys: ["GITHUB_TOKEN"],
     auth: { kind: "token" },
     optional: true,
-    note: "Issues, pull requests, reviews, releases and workflow runs for loveiqhq/loveiq. The repository is public, so this works with no credential; a token only raises the rate limit.",
+    note: "Issues, pull requests, reviews, releases and workflow runs for loveiqhq/loveiq — and the CURRENT CONTENTS OF ANY FILE in the repository via /repos/loveiqhq/loveiq/contents/<path>, returned as text. The indexed corpus holds only the Markdown documentation, so this is how to read what the code and config actually say: vercel.json for which crons run and when, .github/workflows/ci.yml for what CI checks, proxy.ts for the security headers, any source file. Always the live main branch, never a stale copy. The repository is public, so this works with no credential; a token only raises the rate limit.",
   },
   vercel: {
     base: "https://api.vercel.com",
@@ -2001,6 +2001,29 @@ const PRIVATE_COLUMN = new RegExp(
  */
 function snakeCase(key: string): string {
   return key.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
+}
+
+/**
+ * A REPOSITORY FILE, AS TEXT.
+ *
+ * GitHub's contents endpoint returns a file base64-encoded, and a model cannot read four
+ * kilobytes of base64 reliably — so `vercel.json`, the CI workflows and every source file
+ * were technically reachable and practically invisible, while the corpus indexes only
+ * Markdown. The brain answered "which crons run" from documentation that had drifted (it
+ * named 13 jobs; 22 are scheduled). Decoding here makes the live file the answer.
+ *
+ * Only a single-file response is decoded; a directory listing is already readable JSON.
+ * URL secrets are masked like every other text this server returns.
+ */
+export function decodeGithubFile(parsed: unknown): string | null {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const f = parsed as Record<string, unknown>;
+  if (f.type !== "file" || f.encoding !== "base64" || typeof f.content !== "string") return null;
+  const text = Buffer.from(f.content.replace(/\s+/g, ""), "base64").toString("utf8");
+  const header =
+    `File: ${String(f.path ?? f.name ?? "")} on main — ${String(f.size ?? text.length)} bytes, ` +
+    `sha ${String(f.sha ?? "").slice(0, 12)}${f.html_url ? `\nurl: ${String(f.html_url)}` : ""}`;
+  return `${header}\n\n${redactUrlSecrets(text)}`;
 }
 
 /**
@@ -4112,6 +4135,10 @@ async function callTool(
     let externalRedacted: string[] = [];
     try {
       const parsed: unknown = JSON.parse(text);
+      const file = key === "github" ? decodeGithubFile(parsed) : null;
+      if (file) {
+        return textResult(`${UNTRUSTED_DATA_PREAMBLE}${pathNote}\n\n${file}`);
+      }
       const { rows: safe, redacted } = redactPrivateColumns([parsed]);
       if (redacted.length > 0) {
         payload = JSON.stringify(safe[0]);

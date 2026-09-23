@@ -3831,6 +3831,51 @@ describe("/api/mcp", () => {
       delete process.env.GITHUB_TOKEN;
     });
 
+    /**
+     * A REPOSITORY FILE COMES BACK AS TEXT. GitHub base64-encodes file contents, and the
+     * corpus indexes only Markdown — so vercel.json and the CI workflows were reachable
+     * in principle and unreadable in practice, and "which crons run" was answered from a
+     * README that named 13 of 22.
+     */
+    it("decodes a file's contents so the config can actually be read", async () => {
+      const body = '{"crons":[{"path":"/api/cron/brain-brief","schedule":"10 6,8 * * *"}]}';
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            type: "file",
+            encoding: "base64",
+            path: "vercel.json",
+            size: body.length,
+            sha: "4a10cf71f8007739e605",
+            content: Buffer.from(body)
+              .toString("base64")
+              .replace(/(.{60})/g, "$1\n"),
+          }),
+      });
+      const r = await call({
+        service: "github",
+        path: "/repos/loveiqhq/loveiq/contents/vercel.json",
+      });
+      expect(r.isError).toBeFalsy();
+      expect(r.content[0]!.text).toContain('"schedule":"10 6,8 * * *"');
+      expect(r.content[0]!.text).toContain("File: vercel.json on main");
+      expect(r.content[0]!.text).toMatch(/UNTRUSTED DATA/);
+    });
+
+    it("leaves a directory listing as the JSON it already is", async () => {
+      const listing = JSON.stringify([
+        { type: "file", name: "ci.yml", path: ".github/workflows/ci.yml" },
+      ]);
+      mockFetch.mockResolvedValue({ ok: true, status: 200, text: async () => listing });
+      const r = await call({
+        service: "github",
+        path: "/repos/loveiqhq/loveiq/contents/.github/workflows",
+      });
+      expect(r.content[0]!.text).toContain('"name":"ci.yml"');
+    });
+
     it("reports an upstream error instead of an empty result", async () => {
       mockFetch.mockResolvedValue({
         ok: false,
