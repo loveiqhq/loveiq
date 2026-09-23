@@ -1159,6 +1159,8 @@ export const trackRageClick = (params: {
   target_selector: string;
   click_count: number;
   window_ms: number;
+  /** Set when the tap was inside a locked paywall surface (`data-paywall-locked`). */
+  paywall_locked?: string;
 }) => {
   track("rage_click", params);
   persistAnalyticsEvent("rage_click", params);
@@ -1179,6 +1181,8 @@ export const trackDeadClick = (params: {
    * reader who kept trying from a thumb resting on a paragraph.
    */
   repeat_count?: number;
+  /** Set when the tap was inside a locked paywall surface (`data-paywall-locked`). */
+  paywall_locked?: string;
 }) => track("dead_click", params);
 
 export const trackTabHidden = (params: { pathname: string; visible_ms: number }) =>

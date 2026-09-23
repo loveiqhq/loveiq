@@ -380,6 +380,10 @@ const ArchetypeBreakdownListSection: FC<Props> = ({
             <li
               key={name}
               style={rowStyle}
+              // Invisible. Lets a tap on a locked row be counted as a tap on the
+              // paywall: the tracker records only a tag and one class, and that
+              // is the same for a locked row and an unlocked one.
+              data-paywall-locked={isRowUnlocked ? undefined : "archetype-row"}
               className={`archetype-breakdown__row group px-[12px] pb-[15px] pt-[14px] transition-colors duration-200 hover:bg-[rgba(22,16,33,0.02)] ${
                 isLast ? "" : "border-b border-[rgba(22,16,33,0.1)]"
               }`}

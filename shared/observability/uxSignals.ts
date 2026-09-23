@@ -131,6 +131,22 @@ function selectorFor(target: EventTarget | null): string {
 }
 
 /**
+ * The locked paywall surface a tap landed in, if any — from `data-paywall-locked`
+ * on the surface. The selector alone cannot say: a locked archetype row and an
+ * unlocked one share every class, and a tap on the name inside either is just
+ * `h3.font-serif`. 64 taps on those rows in 30 days could not be told apart.
+ */
+function paywallLockedAt(node: Element | null): string | undefined {
+  return node?.closest?.("[data-paywall-locked]")?.getAttribute("data-paywall-locked") ?? undefined;
+}
+
+/** Only when there is one: an absent key, never `paywall_locked: undefined`. */
+function lockedField(node: Element | null): { paywall_locked?: string } {
+  const locked = paywallLockedAt(node);
+  return locked ? { paywall_locked: locked } : {};
+}
+
+/**
  * Why a tap counted as dead, kept because the two are not the same finding.
  *
  * `disabled_control` is the high-signal case: something that looks live, a
@@ -307,6 +323,7 @@ export function installUxSignals(): void {
         target_selector: selectorFor(node),
         click_count: recent.length,
         window_ms: RAGE_WINDOW_MS,
+        ...lockedField(node),
       });
     }
 
@@ -339,6 +356,7 @@ export function installUxSignals(): void {
           target_selector: selector,
           reason: dead.reason,
           repeat_count: seen,
+          ...lockedField(dead.element),
         });
       }
     }

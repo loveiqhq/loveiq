@@ -1116,6 +1116,14 @@ describe("the scanner scorecard", () => {
     expect(sent).toContain("report-pricing-card");
     expect(sent).toContain("report-premium-overlay");
     expect(sent).toContain("dead_click");
+    // Marked locked surfaces count too — and COALESCED: HogQL makes
+    // `x != ''` true for a missing property, which matched every dead tap on
+    // the site (12,842 in 30 days where the paywall had 330).
+    // In the FILTER, not just the grouping: the same expression labels the
+    // group in the SELECT, so matching the whole query would pass without it.
+    const where = sent.split(/\bWHERE\b/)[1] ?? "";
+    expect(where).toMatch(/coalesce\(toString\(properties\.paywall_locked\), ''\) != ''/);
+    expect(sent).not.toMatch(/(?<!coalesce\()toString\(properties\.paywall_locked\) != ''/);
   });
 
   it("counts readers who tapped the paywall and got nothing", () => {
