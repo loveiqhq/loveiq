@@ -848,8 +848,9 @@ export async function GET(request: Request) {
      *
      * Same gate as beliefsCopy, so the chapter body and the "Go deeper" article
      * below it can never disagree about who has paid. Locked readers receive the
-     * first three turns in full and the remaining seven WITHOUT their shift — see
-     * buildTypicalBeliefs.
+     * first three turns in full and the remaining seven WITHOUT their shift, and
+     * everything they only ever see under the full blur — rows 5-10, and the prose
+     * past each ramp — arrives scrambled. See buildTypicalBeliefs.
      */
     const typicalBeliefs = buildTypicalBeliefs(contentArchetype, {
       locked: !beliefsUnlocked,
@@ -862,8 +863,8 @@ export async function GET(request: Request) {
      * Gated on `beliefsUnlocked` like the chapter above it rather than through
      * isLearnMoreArticleLocked, because that helper resolves the identical
      * typical_beliefs section and this way the two cannot drift apart. A locked
-     * reader gets only the paid blocks the 580px window can show; the rest never
-     * leaves here.
+     * reader gets only the paid blocks the gated window (LOCKED_ARTICLE_WINDOW_PX)
+     * can show; the rest never leaves here.
      *
      * The article itself is archetype-agnostic, but it ships only alongside the
      * chapter it belongs to — see the swap in ReportPage. Half a redesigned
