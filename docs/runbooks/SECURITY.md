@@ -505,11 +505,12 @@ the same credential since **2026-05-22** — 2,424 rows across `scroll_depth_25`
 `pathname`, and `pathname` carries `location.search`. Nothing analytical was
 lost by redacting it: every row already carries `survey_submission_id`. (Since
 2026-09-23 campaign and ad-click parameters — `utm_*`, `gclid`, `gbraid` and
-the rest — are stripped from `pathname` in the browser, in
-`shared/observability/uxSignals.ts`: they identify one person's ad click and
-their search words, and the dead-control probe was replaying them against
-production. The token is still redacted on the server, not there, for the
-reason above.) `ux_finding.probe_runs[].tail` held one too, one column
+the rest — are stripped by `withoutTrackingParams` in `shared/url/utm.ts`: in
+the browser before the tap tracker sends `pathname`, and again where the
+verifier reads a tap (`sessionClickTarget`), because PostHog keeps the older
+events for 30 days. They identify one person's ad click and their search
+words, and the dead-control probe was replaying them against production. The
+token is still redacted on the server, not there, for the reason above.) `ux_finding.probe_runs[].tail` held one too, one column
 over from the `url_path` that had just been fixed —
 `verify-dead-click-target.mjs` prints "what this reader tapped at /report/rpt_…"
 and that line is stored verbatim. `brain_query.args` held four.
