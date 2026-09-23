@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { googleCredentialShape, readVercelOidcToken } from "@shared/http/google-oauth";
 import { PROMPTS, renderPrompt } from "@features/brain/server/prompts";
+import { fetchShipped, shippedEntries } from "@features/brain/server/shipped";
 import { renderSources } from "@features/brain/server/answer";
 import { openNotices, renderOpenNotices } from "@features/brain/server/notice";
 import { relatedContext, renderRelated } from "@features/brain/server/related";
@@ -1493,6 +1494,24 @@ export const TOOLS = [
           type: "string",
           description: "A name from this tool's own listing, e.g. 'landing-white'. Omit to list.",
         },
+      },
+    },
+  },
+  {
+    name: "what_shipped",
+    title: "What changed, in plain English",
+    annotations: { readOnlyHint: true, openWorldHint: true },
+    description:
+      'What changed in the product and in this brain, as the plain-English "For Marcus:" ' +
+      "line every change to main carries, newest first, with its date and pull request. Read " +
+      "live from the repository, so today's merges are there. Use it for 'what changed this " +
+      "week', 'what shipped since Friday' or 'did X go live'. It is the non-technical summary; " +
+      "the pull request on GitHub has the detail.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        since: { type: "string", description: "First day, YYYY-MM-DD. Default: seven days ago." },
+        until: { type: "string", description: "Last day, YYYY-MM-DD, inclusive. Default: today." },
       },
     },
   },
@@ -4334,6 +4353,45 @@ async function callTool(
     return imageResult(outcome.text, [{ data: outcome.data, mimeType: outcome.mimeType }]);
   }
 
+  if (name === "what_shipped") {
+    const day = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+    const since =
+      day(args.since) ?? new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
+    const until = day(args.until);
+    for (const [key, val] of [
+      ["since", since],
+      ["until", until],
+    ] as const) {
+      // A day, not a timestamp: the value is spliced into GitHub's `since` as <day>T00:00:00Z.
+      if (val !== null && (!/^\d{4}-\d{2}-\d{2}$/.test(val) || badDateMessage(key, val))) {
+        return textResult(`\`${key}\` must be a day like 2026-09-16 — "${val}" is not one.`, true);
+      }
+    }
+    const read = await fetchShipped(since, until);
+    if (!read.ok) {
+      return textResult(
+        `GitHub answered ${read.status}, so the list could not be read. That is not the same as ` +
+          `nothing having shipped. ${read.detail}`,
+        true
+      );
+    }
+    const entries = shippedEntries(read.commits);
+    const period = `between ${since} and ${until ?? "today"}`;
+    if (entries.length === 0) {
+      return textResult(
+        `${UNTRUSTED_DATA_PREAMBLE}\n\nNo change with a "For Marcus:" line reached main ${period} ` +
+          `(${read.commits.length} commits read).`
+      );
+    }
+    return textResult(
+      `${UNTRUSTED_DATA_PREAMBLE}\n\n${entries.length} changes reached main ${period}, newest first:\n\n` +
+        entries.map((e) => `${e.date} · ${e.pr ? `#${e.pr}` : e.sha} · ${e.text}`).join("\n") +
+        (read.truncated
+          ? "\n\nOnly the newest 300 commits were read; narrow since/until to see older changes."
+          : "")
+    );
+  }
+
   if (name === "list_sources") {
     // A FIXED SOURCE LIST, AND EXACT COUNTS.
     //
@@ -4610,6 +4668,8 @@ export const MCP_INSTRUCTIONS =
   "one). Use list_product_tables then query_product_data, and " +
   "prefer an rpc/get_* analysis function when one fits — those encode the business " +
   "logic already.\n\n" +
+  'WHAT CHANGED, in plain English: what_shipped lists the "For Marcus:" line of every change ' +
+  "that reached main, newest first, read live from the repository.\n\n" +
   "OUTSIDE SERVICES, read live: query_external_service reaches Stripe, Resend, " +
   "Slack, GitHub, Vercel, Figma, Trustpilot, Clarity and PostHog. list_sources " +
   "prints which are reachable on this deployment and exactly what each exposes, " +

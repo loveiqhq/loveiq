@@ -244,7 +244,76 @@ describe("/api/mcp", () => {
       });
     });
 
-    it("lists exactly the seventeen tools, each with a schema", async () => {
+    /**
+     * WHAT SHIPPED, read live from GitHub and never indexed: commits were dropped from the
+     * index on 2026-09-09 for drowning founder questions, and this must not bring them back.
+     */
+    describe("what_shipped", () => {
+      const commit = (pr: number, line: string, date: string) => ({
+        sha: `c${pr}0000000`,
+        commit: {
+          message: `merge: x (#${pr})\n\nFor Marcus: ${line}`,
+          committer: { date: `${date}T12:00:00Z` },
+        },
+      });
+      const call = async (args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 8,
+                method: "tools/call",
+                params: { name: "what_shipped", arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+
+      it("lists each change's plain-English line with its date and pull request", async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => [
+            commit(266, "Docs now match.", "2026-09-23"),
+            commit(265, "Fewer dead ends.", "2026-09-22"),
+          ],
+          text: async () => "",
+        });
+        const r = await call({ since: "2026-09-20" });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0].text).toContain("2 changes reached main between 2026-09-20 and today");
+        expect(r.content[0].text).toContain("2026-09-23 · #266 · Docs now match.");
+        expect(r.content[0].text).toMatch(/^UNTRUSTED DATA/);
+        expect(String(mockFetch.mock.calls.at(-1)![0])).toContain(
+          "sha=main&per_page=100&page=1&since=2026-09-20T00:00:00Z"
+        );
+      });
+
+      it("says the list could not be read when GitHub fails, rather than that nothing shipped", async () => {
+        mockFetch.mockResolvedValueOnce({
+          ok: false,
+          status: 403,
+          text: async () => "rate limit",
+          json: async () => ({}),
+        });
+        const r = await call({});
+        expect(r.isError).toBe(true);
+        expect(r.content[0].text).toMatch(
+          /GitHub answered 403.*not the same as nothing having shipped/
+        );
+      });
+
+      it("refuses a date that is not a day, before asking GitHub", async () => {
+        const before = mockFetch.mock.calls.length;
+        const r = await call({ since: "last friday" });
+        expect(r.isError).toBe(true);
+        expect(r.content[0].text).toMatch(/must be a day like/);
+        expect(mockFetch.mock.calls.length).toBe(before);
+      });
+    });
+
+    it("lists exactly the eighteen tools, each with a schema", async () => {
       // Asserted exactly, not with toContain: a tool that disappears from the list
       // is unreachable to every connected Claude, and nothing else would notice.
       const body = await (await POST(rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }))).json();
@@ -265,6 +334,7 @@ describe("/api/mcp", () => {
         "related_context",
         "show_design",
         "show_page",
+        "what_shipped",
         "list_sources",
       ]);
       for (const t of body.result.tools) expect(t.inputSchema.type).toBe("object");
@@ -343,6 +413,7 @@ describe("/api/mcp", () => {
         "send_email",
         "show_design",
         "show_page",
+        "what_shipped",
         "write_to_google_doc",
         "write_to_notion",
       ]);

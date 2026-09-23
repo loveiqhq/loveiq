@@ -46,8 +46,9 @@ export const PROMPTS: BrainPrompt[] = [
       '1. Decisions: browse_context with sources ["decision"] and that since date. Say who decided and what was rejected.\n' +
       '2. What is new: browse_context with order "recently_learned" and learned_since that date; skim for what matters, not everything.\n' +
       '3. Numbers: get_business_numbers for the period with compare_to "previous". Lead with paywall conversion, which is the core goal.\n' +
-      '4. Anything noticed: browse_context with sources ["notice"].\n' +
-      "5. What is waiting on someone: open Notion tasks past their due date.\n\n" +
+      "4. What shipped: what_shipped for the period, in the plain words each change was summarised in.\n" +
+      '5. Anything noticed: browse_context with sources ["notice"].\n' +
+      "6. What is waiting on someone: open Notion tasks past their due date.\n\n" +
       HOUSE_RULES,
   },
   {
