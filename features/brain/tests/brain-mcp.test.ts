@@ -3228,6 +3228,46 @@ describe("/api/mcp", () => {
       expect(r.content[0].text).toMatch(/Query failed \(400\)/);
     });
 
+    /**
+     * THE FIX, NOT ONLY THE FAULT. Most real query_product_data failures in
+     * `brain_query` since 2026-09-09 were a guessed column (`payment.plan`,
+     * `personal_report.archetype`, `report_price_quote.created_at`) or a guessed function
+     * argument, and each cost a second round trip to list_product_tables to recover.
+     */
+    it("names the real columns when a query guesses one that does not exist", async () => {
+      wire(
+        { code: "42703", message: "column payment.plan does not exist" },
+        { ok: false, status: 400 }
+      );
+      const r = await call({ table: "payment", select: "id,plan" });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toContain(
+        "payment has these columns: id, amount, created_date_time"
+      );
+    });
+
+    it("names a function's real arguments when it is called with the wrong ones", async () => {
+      wire(
+        { code: "PGRST202", message: "Could not find the function" },
+        { ok: false, status: 404 }
+      );
+      const r = await call({ table: "rpc/get_conversion_funnel", params: { days_back: 4000 } });
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toContain(
+        "rpc/get_conversion_funnel takes since_ts!: timestamp with time zone, utm_filter: text"
+      );
+    });
+
+    it("adds no schema hint to an error that is not about a missing column or argument", async () => {
+      wire(
+        { code: "22P02", message: "invalid input syntax for type bigint" },
+        { ok: false, status: 400 }
+      );
+      const r = await call({ table: "payment", filters: ["id=eq.x"] });
+      expect(r.content[0].text).toMatch(/Query failed \(400\)/);
+      expect(r.content[0].text).not.toMatch(/has these columns|takes /);
+    });
+
     it("lists tables with their columns, and narrows on match", async () => {
       wire([]);
       const all = await call({}, "list_product_tables");
@@ -3670,18 +3710,26 @@ describe("/api/mcp", () => {
     });
 
     /**
-     * NARROW ON PURPOSE: a version segment, not any repeated segment.
+     * WIDENED ON EVIDENCE, to `/api` and no further.
      *
-     * PostHog's base ends `/api`, so `/api/projects/...` doubles in exactly the same
-     * way — and is deliberately left alone, because no logged call has ever made that
-     * mistake and a rule that strips any repeated leading segment can eat a real
-     * endpoint named after its service. Widen it when there is evidence, not before.
-     * This test is what makes the narrowness deliberate rather than accidental.
+     * This stayed narrow until a logged call made the mistake: on 2026-09-23 a caller
+     * asked PostHog for `/api/projects/244778/`, the base already ends `/api`, and the
+     * doubled path came back as a bare 404 that reads like a missing project. Only the
+     * base's own last segment is removed, and only when it is a version or `api` — a
+     * segment that merely starts the same way is a different endpoint and stays.
      */
-    it("does not strip a repeated segment that is not a version", async () => {
+    it("does not send /api twice when the base already ends with it", async () => {
       process.env.POSTHOG_API_KEY = "phx_test_value";
-      await call({ service: "posthog", path: "/api/projects/1/events" });
-      expect(mockFetch.mock.calls[0]![0]).toBe("https://eu.posthog.com/api/api/projects/1/events");
+      const r = await call({ service: "posthog", path: "/api/projects/1/events" });
+      expect(mockFetch.mock.calls[0]![0]).toBe("https://eu.posthog.com/api/projects/1/events");
+      expect(r.content[0]!.text).toMatch(/already ends with \/api/);
+      delete process.env.POSTHOG_API_KEY;
+    });
+
+    it("does not strip a segment that only starts like the base's", async () => {
+      process.env.POSTHOG_API_KEY = "phx_test_value";
+      await call({ service: "posthog", path: "/apis/1" });
+      expect(mockFetch.mock.calls[0]![0]).toBe("https://eu.posthog.com/api/apis/1");
       delete process.env.POSTHOG_API_KEY;
     });
 
@@ -4202,6 +4250,18 @@ describe("/api/mcp", () => {
       const r = await call({ days: 30 });
       expect(r.isError).toBe(true);
       expect(r.content[0].text).toMatch(/fault in the query/);
+    });
+
+    /**
+     * `null` IS ABSENT. Some clients send every optional field and fill the unset ones
+     * with null; `{ days: null, since }` was refused as "days OR since, not both".
+     */
+    it("treats `days: null` as absent, so a client that sends every field still gets its range", async () => {
+      const since = new Date(Date.now() - 10 * 86_400_000).toISOString().slice(0, 10);
+      const until = new Date(Date.now() - 5 * 86_400_000).toISOString().slice(0, 10);
+      const r = await call({ days: null, since, until });
+      expect(r.isError).toBeFalsy();
+      expect(r.content[0].text).toContain(since);
     });
 
     it.each([
