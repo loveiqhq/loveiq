@@ -47,6 +47,7 @@ import {
 import { getCsrfToken } from "@shared/http/csrf-client";
 import { useReportData, type ReportRequestError } from "./hooks/useReportData";
 import { useSectionFeedback, type FeedbackPayload } from "./hooks/useSectionFeedback";
+import { useCloseOnBack } from "./hooks/useCloseOnBack";
 import { resolveReportSections, type DisplayReportSection } from "./reportTitles";
 import { getReportTheme, getReportThemeStyle } from "./reportTheme";
 import AttachmentPatternsSection, {
@@ -2503,6 +2504,10 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     setIsShareModalOpen(true);
   }, [accessPlan]);
   const closeShareModal = useCallback(() => setIsShareModalOpen(false), []);
+  // Back closes whichever of these is open instead of leaving the report — see
+  // useCloseOnBack for the readers it was losing.
+  useCloseOnBack(isPricingModalOpen, closePricingModal, "pricing");
+  useCloseOnBack(isShareModalOpen, closeShareModal, "share");
   const openPricingModal = useCallback(
     (archetype?: string | null) => {
       // Scope the modal to the archetype the user is currently upgrading. If

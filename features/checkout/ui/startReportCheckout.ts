@@ -6,6 +6,7 @@ import {
   getReportPricingSessionId,
 } from "@features/survey/ui/hooks/surveySession";
 import { getCsrfToken } from "@shared/http/csrf-client";
+import { isOnOverlayEntry } from "@shared/ui/overlay-history";
 import { getGaMeasurementContext } from "@features/analytics/client";
 import type { ReportPurchasePlanId } from "@features/checkout/server/reportPurchase";
 import {
@@ -139,7 +140,20 @@ export async function startReportCheckout({
     }
 
     posthog.capture("checkout_started", { currency: quote.currency, plan });
-    window.location.assign(json.url);
+    /**
+     * Replace, not push, when the entry on top is the pricing modal's own.
+     *
+     * On Safari the open modal sits on a duplicate, same-URL entry so the back
+     * button can close it (useCloseOnBack), and the report is served no-store,
+     * so it never survives in the back-forward cache. Pushing Stripe on top left
+     * that duplicate behind: back from an abandoned checkout reloaded the report
+     * onto it, and the next back reloaded the report again instead of leaving —
+     * measured on WebKit. Replacing it leaves history as it was before the modal
+     * opened. Everywhere else there is no such entry, and this is the assign()
+     * it has always been.
+     */
+    if (isOnOverlayEntry()) window.location.replace(json.url);
+    else window.location.assign(json.url);
     return null;
   } catch {
     return { status: "error", message: "We couldn't reach Stripe right now. Please try again." };
