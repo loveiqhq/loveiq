@@ -1894,6 +1894,33 @@ function documentParts(source: string, rawId: string): { base: string; sep: "#" 
 }
 
 /** Part number from `meta.part`, defaulting to 1 for a document's first chunk. */
+
+/**
+ * A PART OLDER THAN ITS OWN FIRST PART IS LEFT OVER FROM A LONGER VERSION.
+ *
+ * A document that shrinks on rewrite (a builder bump, an edited thread) keeps its old
+ * extra parts until the daily sweep removes them, up to about twenty hours. Reassembled,
+ * they spliced stale text onto the current version: on 2026-09-23 a gmail thread whose
+ * current form is one part read back as "parts 1-1 of 32". Every part of one write lands
+ * with or after its first part, so a part written well before part 1 is not current.
+ * Only reading changes: nothing is deleted here, and the sweep still owns deletion.
+ */
+const LEFTOVER_SLACK_MS = 10 * 60_000;
+
+export function dropLeftoverParts(
+  parts: Array<Record<string, unknown>>,
+  base: string
+): Array<Record<string, unknown>> {
+  const first = parts.find((r) => String(r.source_id ?? "") === base);
+  const firstAt = Date.parse(String(first?.updated_at ?? ""));
+  if (!Number.isFinite(firstAt)) return parts;
+  return parts.filter((r) => {
+    if (r === first) return true;
+    const at = Date.parse(String(r.updated_at ?? ""));
+    return !Number.isFinite(at) || at >= firstAt - LEFTOVER_SLACK_MS;
+  });
+}
+
 function partNumber(row: Record<string, unknown>): number {
   const meta = (row.meta ?? {}) as Record<string, unknown>;
   const n = Number(meta.part);
@@ -2848,7 +2875,7 @@ async function callTool(
     let matchedTotal: number | null = null;
     try {
       const res = await supabaseFetch(
-        `/rest/v1/brain_chunk?select=source,source_id,title,url,body,meta,period_end` +
+        `/rest/v1/brain_chunk?select=source,source_id,title,url,body,meta,period_end,updated_at` +
           `&source=eq.${encodeURIComponent(src)}` +
           // ORDERED. PostgREST returns rows in whatever order the plan produced, and the
           // sort below could not repair it while every part reported number 1.
@@ -2873,12 +2900,15 @@ async function callTool(
 
     // `like` is a prefix match and `_` is a single-character wildcard in it, so the
     // real membership test happens here rather than in the query.
-    const parts = rows
-      .filter((r) => {
-        const sid = String(r.source_id ?? "");
-        return sid === base || (sep !== null && sid.startsWith(base + sep));
-      })
-      .sort((a, b) => partNumber(a) - partNumber(b));
+    const parts = dropLeftoverParts(
+      rows
+        .filter((r) => {
+          const sid = String(r.source_id ?? "");
+          return sid === base || (sep !== null && sid.startsWith(base + sep));
+        })
+        .sort((a, b) => partNumber(a) - partNumber(b)),
+      base
+    );
 
     if (parts.length === 0) {
       return textResult(

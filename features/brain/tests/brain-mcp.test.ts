@@ -1200,6 +1200,95 @@ describe("/api/mcp", () => {
       expect(JSON.stringify(r)).toContain("hello");
     });
 
+    /**
+     * A PART OLDER THAN ITS OWN FIRST PART IS LEFT OVER. A document that shrinks on
+     * rewrite keeps its old extra parts until the daily sweep, and reassembling them
+     * spliced stale text onto the current version: on 2026-09-23 a gmail thread whose
+     * current form is one part read back as "parts 1-1 of 32".
+     */
+    it("leaves out parts written before the document's current first part", async () => {
+      const at = (iso: string) => ({ updated_at: iso });
+      mockSupabaseFetch.mockImplementation(async (path: string) => {
+        if (String(path).startsWith("/rest/v1/brain_query")) {
+          return { ok: true, headers: new Headers(), json: async () => [] };
+        }
+        return {
+          ok: true,
+          headers: new Headers({ "content-range": "0-2/3" }),
+          json: async () => [
+            {
+              source: "gmail",
+              source_id: "thread:ab",
+              title: "T",
+              url: null,
+              body: "NEW ONE",
+              meta: {},
+              ...at("2026-09-23T20:11:30Z"),
+            },
+            {
+              source: "gmail",
+              source_id: "thread:ab#2",
+              title: "T (part 2 of 2)",
+              url: null,
+              body: "NEW TWO",
+              meta: { part: 2 },
+              ...at("2026-09-23T20:11:31Z"),
+            },
+            {
+              source: "gmail",
+              source_id: "thread:ab#3",
+              title: "T (part 3 of 9)",
+              url: null,
+              body: "STALE THREE",
+              meta: { part: 3 },
+              ...at("2026-09-20T03:00:00Z"),
+            },
+          ],
+        };
+      });
+      const r = await call({ id: "gmail/thread:ab" });
+      const text = JSON.stringify(r);
+      expect(text).toContain("NEW ONE");
+      expect(text).toContain("NEW TWO");
+      expect(text).not.toContain("STALE THREE");
+      expect(text).toContain("of 2");
+    });
+
+    it("keeps every part of a document written in one go, however old", async () => {
+      mockSupabaseFetch.mockImplementation(async (path: string) => {
+        if (String(path).startsWith("/rest/v1/brain_query")) {
+          return { ok: true, headers: new Headers(), json: async () => [] };
+        }
+        return {
+          ok: true,
+          headers: new Headers({ "content-range": "0-1/2" }),
+          json: async () => [
+            {
+              source: "drive",
+              source_id: "doc:x",
+              title: "D",
+              url: null,
+              body: "PART ONE",
+              meta: {},
+              updated_at: "2026-06-01T10:00:00Z",
+            },
+            {
+              source: "drive",
+              source_id: "doc:x#2",
+              title: "D (part 2 of 2)",
+              url: null,
+              body: "PART TWO",
+              meta: { part: 2 },
+              updated_at: "2026-06-01T10:00:02Z",
+            },
+          ],
+        };
+      });
+      const text = JSON.stringify(await call({ id: "drive/doc:x" }));
+      expect(text).toContain("PART ONE");
+      expect(text).toContain("PART TWO");
+    });
+
     it("still refuses an argument that is a different MEANING, not a different name", async () => {
       // The control. If this ever passes, the alias has become a hole: a filter
       // accepted and dropped returns a wider answer that reads like a narrow one.
