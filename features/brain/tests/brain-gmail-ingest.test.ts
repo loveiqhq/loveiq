@@ -641,6 +641,24 @@ describe("recruiting mail the subject does not give away", () => {
     expect(deletedIds).not.toContain("thread:k1");
   });
 
+  it("refuses a follow-up that names the task after the role, and an offer with pay terms", () => {
+    expect(
+      isRecruitingThread(
+        "Follow-up :)",
+        "We are looking to fill a long-term position as Growth Lead."
+      )
+    ).toBe(true);
+    expect(
+      isRecruitingThread(
+        "Great call :)",
+        "Offer: 1.000 € per month invoiced during the probation time."
+      )
+    ).toBe(true);
+    expect(
+      isRecruitingThread("Contract", "EUR 1,000/month during the 3-month probation period")
+    ).toBe(true);
+  });
+
   it("keeps a thread with the same subject that is not about a candidate", () => {
     // The sixth "Follow-up :)" is a letter about the Academic Board.
     expect(

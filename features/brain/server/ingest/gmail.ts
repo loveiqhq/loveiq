@@ -278,8 +278,15 @@ export function recruitingQuery(): string {
  * The backstop, for recruiting mail whose SUBJECT says nothing: five of the six
  * "Follow-up :)" threads carry a candidate's application task in the body, and the sixth
  * — an Academic Board letter — shares the subject exactly. Only the body separates them.
+ *
+ * Widened the same day, after the cleanup query found what the first version missed: two
+ * candidate follow-ups that name the task after the role ("Growth Lead Task") under "we
+ * are looking to fill a long-term position", and offer and contract emails that set out a
+ * named person's pay for a probation period. Measured across every indexed thread, the
+ * two added phrases select exactly six, all of them one of those.
  */
-const RECRUITING_BODY = /\b(application ta(sk|ks)|applicant task|candidate task)\b/i;
+const RECRUITING_BODY =
+  /\b(application ta(sk|ks)|applicant task|candidate task|fill a (long-term |full-time |part-time )?(position|role)|probation(ary)? (time|period))\b/i;
 export function isRecruitingThread(subject: string, text: string): boolean {
   return RECRUITING_BODY.test(subject) || RECRUITING_BODY.test(text);
 }
