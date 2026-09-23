@@ -24,6 +24,54 @@ const SLACK_MIRROR_ENABLED =
  * mention the brain in passing is not rerouted. A miss is harmless: the message lands in
  * `ops` exactly as it does today.
  */
+/**
+ * The keys worth waking someone for, and ONLY those.
+ *
+ * Every alert reached Slack as the message alone, because the context object —
+ * the first argument to `logger.error({ … }, "…")` — was read to check
+ * `slack: false` and then thrown away. So
+ *
+ *     :rotating_light: api_5xx — supabase: write REJECTED — the row was not
+ *     written and no error was thrown
+ *
+ * arrived with no way to tell WHICH write. That message comes from
+ * `warnIfWriteRejected`, which logs `path`, `method`, `status` and `code`
+ * beside it; none of it was forwarded, and on 2026-09-23 that cost an hour of
+ * guessing at candidate tables without finding the row.
+ *
+ * AN ALLOWLIST, not a dump. Log context routinely carries a reader's email, a
+ * report token or a Stripe id, and Slack is a wider audience than the log
+ * store. These are diagnostic identifiers with no personal data in them;
+ * anything else stays where it was.
+ */
+const ALERT_CONTEXT_KEYS = [
+  "path",
+  "method",
+  "status",
+  "code",
+  "table",
+  "event_type",
+  "scanner",
+  "cron",
+  "job",
+  "route",
+  "reason",
+] as const;
+
+export function diagnosticSuffix(ctx: Record<string, unknown> | null): string {
+  if (!ctx) return "";
+  const parts: string[] = [];
+  for (const k of ALERT_CONTEXT_KEYS) {
+    const v = ctx[k];
+    if (v === undefined || v === null || v === "") continue;
+    // Primitives only: an object here would be a payload, and a payload is
+    // exactly the thing that carries somebody's data.
+    if (typeof v === "object") continue;
+    parts.push(`${k}=${String(v).slice(0, 80)}`);
+  }
+  return parts.length ? ` · ${parts.join(" ")}` : "";
+}
+
 export function isBrainMessage(msg: string): boolean {
   return /^(brain[-_: ]|mcp )/i.test(msg);
 }
@@ -108,7 +156,7 @@ const logger = pino({
           void notifySlack({
             channel,
             kind,
-            text: `:rotating_light: *${kind}* — ${msg}`,
+            text: `:rotating_light: *${kind}* — ${msg}${diagnosticSuffix(ctx)}`,
             username: "ops_alerts",
           }).catch(() => {});
         }
