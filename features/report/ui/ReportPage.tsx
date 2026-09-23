@@ -347,6 +347,8 @@ interface ReportPageProps {
 interface ReportExperienceProps {
   /** `?v3=1` — render the mobile-first V3 chrome instead of V1. */
   isV3: boolean;
+  /** `?v4=1` — V2's report with the Report 3.0 components swapped in. */
+  isV4: boolean;
   accessPlan: ReportAccessPlan;
   archetypeTiers: Record<string, "essentials" | "full_report">;
   devParam: string | null;
@@ -457,6 +459,7 @@ const FEEDBACK_SUPPRESSED_SECTION_IDS = new Set(["core_archetype"]);
 
 const ReportExperience: FC<ReportExperienceProps> = ({
   isV3,
+  isV4,
   accessPlan,
   archetypeTiers,
   devParam,
@@ -826,7 +829,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       id="main-content"
       ref={mainContentRef}
       tabIndex={-1}
-      className={`report-page${doesAccessPlanCover(accessPlan, "full_report") ? "" : " report-experience--sticky-pad"}${copyable ? " report-page--copyable" : ""}${isV3 ? " rv3" : ""}`}
+      className={`report-page${doesAccessPlanCover(accessPlan, "full_report") ? "" : " report-experience--sticky-pad"}${copyable ? " report-page--copyable" : ""}${isV3 ? " rv3" : ""}${isV4 ? " rv4" : ""}`}
       style={getReportThemeStyle(theme)}
       /**
        * Copy, right-click and drag are blocked on the LIVE site only. The report
@@ -2128,7 +2131,29 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   // `?v3=1` renders the mobile-first V3 chrome. Opt-in while it is being built,
   // so the same token can be compared against the live report side by side.
   const v3Param = searchParams.get("v3");
-  const isV3 = v3Param === "1" || v3Param === "true";
+
+  /**
+   * `?v4=1` — Report 3.0, the build due this week.
+   *
+   * It is a COPY OF V2, not a new report. Aligned at the sync of 2026-09-23:
+   * "the new report staging version will be built by duplicating the V2 report
+   * and substituting redesigned components rather than editing the base V2
+   * directly." An earlier attempt built the frame from scratch against Figma
+   * 1:165, and Mark's verdict on staging was that it "feels empty rather than
+   * serving as an upgrade to the V2 base" — it drew placeholders where V2
+   * already had a working report.
+   *
+   * So the flag changes nothing on its own. Every section still renders exactly
+   * as V2 draws it, and a redesigned component replaces one only where it is
+   * swapped in explicitly — the same thing `isV3` already does for
+   * core_archetype, the_importance_of_sexuality and curiosity_level.
+   */
+  const v4Param = searchParams.get("v4");
+  const isV4 = v4Param === "1" || v4Param === "true";
+
+  // V4 takes the V3 chrome underneath it for the same reason V3 takes V2: the
+  // mobile-first shell is what the redesigned components are drawn against.
+  const isV3 = isV4 || v3Param === "1" || v3Param === "true";
 
   /**
    * Which report the reader gets. V1 — the pre-2.0 report — is the DEFAULT for
@@ -2518,9 +2543,10 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // `?v2=1` has to survive archetype navigation, or anyone comparing the two
     // reports silently falls back to V1 on the first tile they click.
     if (showReportV2) params.set("v2", "1");
+    if (isV4) params.set("v4", "1");
     const qs = params.toString();
     return qs ? `${pathname}?${qs}` : pathname;
-  }, [devParam, pathname, showReportV2]);
+  }, [devParam, isV4, pathname, showReportV2]);
 
   const handleUnlockArchetype = useCallback(
     (name: string) => {
@@ -2537,6 +2563,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         params.set("archetype", slug);
         if (devParam) params.set("dev_session", devParam);
         if (showReportV2) params.set("v2", "1");
+        if (isV4) params.set("v4", "1");
         router.push(`${pathname}?${params.toString()}`);
       };
 
@@ -2553,6 +2580,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     },
     [
       devParam,
+      isV4,
       pathname,
       primaryArchetypeFromData,
       returnToPrimaryHref,
@@ -2765,6 +2793,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
         <ReportExperience
           key={`${token ?? "browser"}:${sessionId ?? "anon"}`}
           isV3={isV3}
+          isV4={isV4}
           submissionId={data.submissionId ?? null}
           devParam={devParam}
           accessPlan={data.accessPlan}
