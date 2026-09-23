@@ -2004,6 +2004,44 @@ function snakeCase(key: string): string {
 }
 
 /**
+ * HELD BACK, BUT BETTER THAN SOMETHING SHOWN.
+ *
+ * The per-source cap reserves a slot for every kind of evidence, so a strong second row
+ * from one source can be cut while a weak row from another is shown: measured
+ * 2026-09-23, the answer to "what is the record label strategy for therapists" scored
+ * 2.52 and was held back while rows at 1.73-1.98 kept their slots. Four ranking fixes
+ * were measured and each broke other questions — the reservation protects which rows
+ * are CHOSEN, and anything admitting a stronger row pushes the reserved ones down the
+ * score-sorted page. So the page stays as it is and the notice says what was left out.
+ *
+ * Ids and scores only, never titles: this text sits outside the per-source fences, and
+ * a title can be an email subject written by anyone. An id is enough to fetch it.
+ */
+export function outrankingHeldBack(
+  shaping: RetrieveShaping,
+  shown: Array<{ score: number }>
+): string {
+  if (!shaping.heldBackBest || shown.length === 0) return "";
+  const worth = [...shaping.heldBackBest.entries()]
+    .map(([source, r]) => ({ source, ...r, beats: shown.filter((c) => c.score < r.score).length }))
+    .filter((r) => r.beats > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+  if (worth.length === 0) return "";
+  return (
+    `\nHeld back yet scoring above rows shown — fetch_document these if the question needs ` +
+    `more than the page gives:\n` +
+    worth
+      .map(
+        (r) =>
+          `  • ${r.source}/${r.sourceId} @${r.score.toFixed(2)} — outranks ${r.beats} of the ` +
+          `${shown.length} shown`
+      )
+      .join("\n")
+  );
+}
+
+/**
  * A REPOSITORY FILE, AS TEXT.
  *
  * GitHub's contents endpoint returns a file base64-encoded, and a model cannot read four
@@ -2698,7 +2736,8 @@ async function callTool(
           .join(", ") +
         `. One source is not allowed to fill the whole result. If that is the source you ` +
         `want, ask again with sources:["${[...shaping.heldBack.keys()][0]}"] and you will ` +
-        `get them.`
+        `get them.` +
+        outrankingHeldBack(shaping, chunks)
       : "";
 
     return textResult(

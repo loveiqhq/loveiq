@@ -338,14 +338,19 @@ const KNOWN_RED: Record<string, string> = {
     "red since 2026-09-20: no meeting SUMMARY chunk mentions pricing, so only transcripts " +
     "match at all. Two fixes measured and rejected — see the comment on the probe.",
   "dr-record-label":
-    "red since 2026-09-23, and the cause is the known first-pass slot rule, not missing " +
-    "content: the answering meeting summary ranks #2 at 2.52 through the real MCP path at " +
-    "limit 20, but at limit 12 every one of twelve sources takes its guaranteed first-pass " +
-    "slot — down to a glossary entry at 1.73 — and the second drive row is cut. It tipped " +
-    "when the chapter skill stopped being truncated and began matching ordinary words. The " +
-    "fix belongs in selectDiverse's first pass and must be measured on a settled corpus, " +
-    "after the Drive v5 rebuild finishes (see the grainless-slot note: the obvious fix was " +
-    "measured worse and reverted).",
+    "red since 2026-09-23, and it is the first-pass slot rule, not missing content: the " +
+    "answering meeting summary scores 2.52 behind a drive doc at 2.66, the drive bucket is " +
+    "taken, and weaker single-row sources keep reserved slots. FOUR ranking fixes are now " +
+    "measured and rejected; the latest, a relevance floor on reserved slots, fixed this and " +
+    "dc-env-purge but broke ga4-campaign, ga4-channels and decision-pricing, identically on " +
+    "two runs. The reservation protects which rows are CHOSEN, not where they SIT: the page " +
+    "is sorted by score, so any rule admitting a stronger second row from one source pushes " +
+    "the reserved rows down. The tool now names the held-back row by id and score instead.",
+  "dc-env-purge":
+    "red again 2026-09-23, same class as dr-record-label: the answering CLAUDE.md section " +
+    "is the third doc row and doc holds one reserved slot. Proven at three limits " +
+    "(2026-09-19); narrowing to sources:[doc] returns it at #3. See dr-record-label for why " +
+    "the ranking is left alone.",
   "ga4-brand":
     "the brand campaign stopped running on 2026-08-31, so only August records name it. " +
     "Its month chunk scores 1.692 and the CURRENT partial month scores 1.724 — grainCap " +

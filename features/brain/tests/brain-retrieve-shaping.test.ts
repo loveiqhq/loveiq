@@ -57,6 +57,37 @@ describe("what the per-source cap cut", () => {
     expect(shaping.heldBack?.get("ga4")).toBeGreaterThan(0);
   });
 
+  /**
+   * THE SHAPE THAT HID AN ANSWER, measured 2026-09-23 on "what is the record label
+   * strategy for therapists": one source with two strong rows, and enough single-row
+   * sources that each takes a reserved slot. The second strong row is cut while weaker
+   * rows are shown — so the shaping must name it, with its score, not just count it.
+   */
+  it("names the best row the cap cut, with its score", async () => {
+    wire([
+      row("drive", 0, 2.66),
+      row("drive", 1, 2.52), // the answer
+      ...[
+        "notion",
+        "slack",
+        "decision",
+        "whatsapp",
+        "gmail",
+        "plan",
+        "clarity",
+        "people",
+        "doc",
+        "skill",
+        "domain",
+      ].map((src, i) => row(src, 0, 2.48 - i * 0.07)),
+    ]);
+    const shaping: RetrieveShaping = {};
+    const out = await retrieve("anything", 12, {}, shaping);
+    expect(out.map((r) => r.sourceId)).not.toContain("drive:1");
+    expect(shaping.heldBackBest?.get("drive")).toEqual({ sourceId: "drive:1", score: 2.52 });
+    expect(Math.min(...out.map((r) => r.score))).toBeLessThan(2.52);
+  });
+
   /** Silence must mean "nothing was cut", not "nobody looked". */
   it("says nothing when the result is the whole picture", async () => {
     wire([row("commit", 1, 2), row("drive", 2, 1)]);
