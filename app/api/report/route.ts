@@ -21,6 +21,7 @@ import {
   stripLockedEduBodyFromPayload,
 } from "@features/report/server/contentGating";
 import { getReport2Section, getReport2Config } from "@/data/report2";
+import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
 import { getAttachmentPlaneForFamily } from "@/data/report2-attachment-planes";
 import { getRewardProfile } from "@/data/report2-reward";
 import { archetypeSlug as report2ArchetypeSlug } from "@/data/report2-config";
@@ -833,6 +834,24 @@ export async function GET(request: Request) {
       "learn.body": beliefsSection["learn.body"] ?? null,
       locked: !beliefsUnlocked,
     };
+
+    /**
+     * Report 3.0's Typical Beliefs chapter — Figma 304:256, and 348:213 locked.
+     *
+     * Rides beside beliefsCopy rather than replacing it, because `?v4=1` is a COPY
+     * of V2 and every section it does not swap still renders V2's. This is NULL for
+     * any archetype Mark and Sanjin have not written yet, which is the signal
+     * ReportPage falls back on: 13 of the 14 keep the V2 section until the content
+     * is scaled, so no reader ever meets an empty chapter.
+     *
+     * Same gate as beliefsCopy, so the chapter body and the "Go deeper" article
+     * below it can never disagree about who has paid. Locked readers receive the
+     * first three turns in full and the remaining seven WITHOUT their shift — see
+     * buildTypicalBeliefs.
+     */
+    const typicalBeliefs = buildTypicalBeliefs(contentArchetype, {
+      locked: !beliefsUnlocked,
+    });
 
     // Report 2.0 Attachment Style section copy — a Part II, essentials-tier
     // PREMIUM section (section 8). The universal slots (`eyebrow`,
@@ -1686,6 +1705,7 @@ export async function GET(request: Request) {
         snapshotCopy,
         findingsCopy,
         beliefsCopy,
+        typicalBeliefs,
         attachmentCopy,
         attachmentFamily,
         attachmentPlane,

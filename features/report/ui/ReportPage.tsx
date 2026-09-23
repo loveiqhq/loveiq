@@ -67,6 +67,8 @@ import AttachmentPatternsSection, {
 } from "./sections/AttachmentPatternsSection";
 import AcceleratorsSection, { type AccelCopy } from "./sections/AcceleratorsSection";
 import BeliefsSection, { type BeliefsCopy } from "./sections/BeliefsSection";
+import V4TypicalBeliefs from "./v3/V4TypicalBeliefs";
+import type { Report3TypicalBeliefsView } from "@/data/report3-typical-beliefs";
 import ConfidenceSection, {
   type ConfidenceCopy,
   type ConfidenceStrip,
@@ -401,6 +403,8 @@ interface ReportExperienceProps {
   snapshotCopy: SnapshotCopy | null;
   findingsCopy: FindingsCopy | null;
   beliefsCopy: BeliefsCopy | null;
+  /** Report 3.0's Typical Beliefs chapter; null until the archetype is scaled. */
+  typicalBeliefs: Report3TypicalBeliefsView | null;
   attachmentCopy: AttachmentCopy | null;
   attachmentFamily: string | null;
   attachmentPlane: AttachmentPlane | null;
@@ -490,6 +494,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   snapshot,
   snapshotCopy,
   findingsCopy,
+  typicalBeliefs,
   beliefsCopy,
   attachmentCopy,
   attachmentFamily,
@@ -1781,17 +1786,27 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                         sectionId={section.id}
                         title=""
                       >
-                        <BeliefsSection
-                          archetype={viewArchetype}
-                          copy={hasArchetypeCopy ? beliefsCopy : null}
-                          isUnlocked={isBeliefsUnlocked}
-                          onUnlock={() => unlockSection(section)}
-                          quote={fullReportQuote}
-                          sectionTitle={title}
-                          tier={
-                            isSectionIncludedInEssentials(section.id) ? "essentials" : "full_report"
-                          }
-                        />
+                        {/* Report 3.0 swaps this chapter for 304:256, and 348:213
+                         * when locked. It falls back to V2's section whenever the
+                         * archetype has no Report 3.0 copy yet — 13 of the 14 —
+                         * so no reader meets an empty chapter while it scales. */}
+                        {isV4 && typicalBeliefs && hasArchetypeCopy ? (
+                          <V4TypicalBeliefs view={typicalBeliefs} />
+                        ) : (
+                          <BeliefsSection
+                            archetype={viewArchetype}
+                            copy={hasArchetypeCopy ? beliefsCopy : null}
+                            isUnlocked={isBeliefsUnlocked}
+                            onUnlock={() => unlockSection(section)}
+                            quote={fullReportQuote}
+                            sectionTitle={title}
+                            tier={
+                              isSectionIncludedInEssentials(section.id)
+                                ? "essentials"
+                                : "full_report"
+                            }
+                          />
+                        )}
                       </ReportSection>
                     );
                   }
@@ -2825,6 +2840,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           snapshotCopy={data.snapshotCopy ?? null}
           findingsCopy={data.findingsCopy ?? null}
           beliefsCopy={data.beliefsCopy ?? null}
+          typicalBeliefs={data.typicalBeliefs ?? null}
           attachmentCopy={data.attachmentCopy ?? null}
           attachmentFamily={data.attachmentFamily ?? null}
           attachmentPlane={data.attachmentPlane ?? null}
