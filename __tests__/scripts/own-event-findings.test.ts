@@ -143,7 +143,10 @@ describe("findings synthesised from our own survey log", () => {
      * independently confirmed", which is the kind of sentence that makes a team
      * stop trusting the channel.
      */
-    expect(SRC).toMatch(/r\.file === "survey-behaviour-log"/);
+    expect(SRC).toMatch(
+      /OWN_RECORD_EVIDENCE = new Set\(\["survey-behaviour-log", "paywall-exit-log"\]\)/
+    );
+    expect(SRC).toMatch(/OWN_RECORD_EVIDENCE\.has\(r\.file\) \? `\$\{r\.tail\}`/);
     expect(SRC).toContain("Our own survey log records the reader jumping back");
     // And the submission key is not truncated by a slice meant for UUIDs.
     expect(SRC).toMatch(/unrecorded \? sessionId : sessionId\.slice\(0, 13\)/);
@@ -295,7 +298,7 @@ describe("findings synthesised from our own paywall events", () => {
     expect(SRC).toMatch(
       /file: "paywall-exit-log",\s*passed: false,\s*inconclusive: false,\s*claimScoped: true,/
     );
-    expect(SRC).toMatch(/r\.file === "survey-behaviour-log" \|\| r\.file === "paywall-exit-log"/);
+    expect(SRC).toMatch(/OWN_RECORD_EVIDENCE = new Set\(\[[^\]]*"paywall-exit-log"/);
     expect(SRC).toMatch(/if \(source === "our own paywall events"\) return 2;/);
     // Attached to exactly the findings this lane creates: the same id prefix.
     const prefix = /`(own-paywall-exit:)\$\{x\.sessionId\}`/.exec(SRC)?.[1];
@@ -324,5 +327,23 @@ describe("findings synthesised from our own paywall events", () => {
     }
     // And they still go first, so a scanner finding on the session inherits their answer.
     expect(SRC).toMatch(/findings\.sort\(\(a, b\) => rank\(b\) - rank\(a\)\)/);
+  });
+});
+
+describe("a confirmed finding says what confirmed it", () => {
+  it("never claims a re-test on a phone when only our own records confirmed it", () => {
+    /**
+     * The dry run for the paywall lane printed "Reproduced in production on
+     * Pixel 7, matched to this reader's 411px screen" over a finding no probe
+     * had reproduced: the Pixel 7 was where the unrelated L1 probes ran, and
+     * they passed. The evidence was the reader's own record.
+     */
+    const block = /if \(reproduced\) \{([\s\S]*?)\} else if \(inconclusive\)/.exec(SRC)?.[1] ?? "";
+    expect(block, "the reproduced verdict was not found").not.toBe("");
+    expect(block).toMatch(/failing\.every\(\(r\) => OWN_RECORD_EVIDENCE\.has\(r\.file\)\)/);
+    expect(block).toContain("❗ *Confirmed by our own records* — ");
+    expect(block).toContain("❗ *Reproduced in production${at}* — ");
+    // The device claim sits only on the probe branch.
+    expect(block.indexOf("${at}")).toBeGreaterThan(block.indexOf("Confirmed by our own records"));
   });
 });
