@@ -172,6 +172,23 @@ describe("dead-click detection on controls that look live", () => {
   });
 
   /**
+   * A tap inside a locked paywall surface says so, and anywhere else says nothing.
+   * The key is ABSENT rather than undefined outside one, so the event shape of
+   * every other dead tap is unchanged.
+   */
+  it("names the locked paywall surface a tap landed in", () => {
+    document.body.innerHTML = `<ol><li class="archetype-breakdown__row" data-paywall-locked="archetype-row"><h3 class="font-serif">Explorer of Edges</h3></li><li class="archetype-breakdown__row"><h3 class="font-serif">Loyal Ritualist</h3></li></ol>`;
+    const [locked, open] = [...document.querySelectorAll("h3")];
+    tap(locked!);
+    // Same selector, so without a reset the per-pageview dedupe swallows the second.
+    reset();
+    tap(open!);
+    const [inLocked, inOpen] = tracked.dead.mock.calls.map(([p]) => p);
+    expect(inLocked.paywall_locked).toBe("archetype-row");
+    expect("paywall_locked" in inOpen).toBe(false);
+  });
+
+  /**
    * The page, not the ad click that brought them.
    *
    * `pathname` is what the dead-control check opens and what the ledger

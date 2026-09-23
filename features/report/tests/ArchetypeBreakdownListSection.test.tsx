@@ -166,6 +166,30 @@ describe("ArchetypeBreakdownListSection", () => {
     ).toHaveLength(2);
   });
 
+  /**
+   * Invisible, and the only way a tap on a locked row can be counted as a tap
+   * on the paywall: the tracker records a tag and one class, and a tap on the
+   * name inside a locked row reads `h3.font-serif` exactly as it does on an
+   * unlocked one.
+   */
+  it("marks locked rows for the tap tracker, and only locked rows", () => {
+    const { container } = render(
+      <ArchetypeBreakdownListSection
+        percentages={basePercentages}
+        primaryArchetype="Authority Conductor"
+        ranking={baseRanking}
+        unlockedArchetypes={new Set(["Loyal Ritualist"])}
+        accessPlan="essentials"
+        onUnlock={vi.fn()}
+        onPurchaseFullReport={vi.fn()}
+      />
+    );
+    const rows = [...container.querySelectorAll("li.archetype-breakdown__row")];
+    const row = (name: string) => rows.find((li) => li.textContent?.includes(name));
+    expect(row("Loyal Ritualist")?.getAttribute("data-paywall-locked")).toBeNull();
+    expect(row("Explorer of Edges")?.getAttribute("data-paywall-locked")).toBe("archetype-row");
+  });
+
   it("treats every archetype as unlocked when accessPlan is all_reports", () => {
     render(
       <ArchetypeBreakdownListSection

@@ -631,15 +631,28 @@ export async function fetchPaywallDeadTaps(days = 30): Promise<PaywallDeadTaps |
    * also catch the unlock button itself, which is a real control that works,
    * and counting it here would inflate the number with successes.
    */
+  /**
+   * A locked surface marked with `data-paywall-locked` counts too, grouped under
+   * its marker: a tap on the name inside a locked archetype row is recorded as
+   * `h3.font-serif`, the same as on an unlocked one, so the selector cannot be
+   * what identifies it.
+   *
+   * COALESCED on purpose. HogQL makes `x != ''` TRUE when x is NULL — a missing
+   * property — so without it every dead tap on the site matched: 12,842 taps in
+   * 30 days where the paywall had 330.
+   */
   const query = `
-    SELECT toString(properties.target_selector) AS sel,
+    SELECT if(coalesce(toString(properties.paywall_locked), '') != '',
+              concat('locked ', toString(properties.paywall_locked)),
+              toString(properties.target_selector)) AS sel,
            count() AS taps,
            uniq(properties.$session_id) AS sessions
     FROM events
     WHERE event = 'dead_click'
       AND timestamp > now() - INTERVAL ${Math.max(1, Math.floor(days))} DAY
       AND (
-        position(toString(properties.target_selector), 'report-pricing-card') > 0
+        coalesce(toString(properties.paywall_locked), '') != ''
+        OR position(toString(properties.target_selector), 'report-pricing-card') > 0
         OR position(toString(properties.target_selector), 'report-pricing-modal') > 0
         OR position(toString(properties.target_selector), 'report-premium-overlay') > 0
         OR position(toString(properties.target_selector), 'report-locked-preview') > 0
@@ -945,7 +958,8 @@ export function buildScorecardMessage(
           `same ${days} days, up to ${paywallTaps.sessions} readers on a single element` +
           (worst ? ` — most often \`${escapeSlack(worst.selector)}\` (${worst.taps})` : "") +
           `. Nothing re-tested these and they are not scanner findings: the tapped elements — ` +
-          `the locked overlay, the blurred preview, the pricing card — carry no handler, so ` +
+          `the locked overlay, the blurred preview, the pricing card, a locked archetype row — ` +
+          `carry no handler, so ` +
           `there is no broken control to reproduce. It is a count of readers who reached for ` +
           `the paywall and were not given a way through it.`
       )
