@@ -22,6 +22,8 @@ import {
 } from "@features/report/server/contentGating";
 import { getReport2Section, getReport2Config } from "@/data/report2";
 import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
+import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
+import { splitArticleForReader } from "@features/report/server/contentGating";
 import { getAttachmentPlaneForFamily } from "@/data/report2-attachment-planes";
 import { getRewardProfile } from "@/data/report2-reward";
 import { archetypeSlug as report2ArchetypeSlug } from "@/data/report2-config";
@@ -852,6 +854,27 @@ export async function GET(request: Request) {
     const typicalBeliefs = buildTypicalBeliefs(contentArchetype, {
       locked: !beliefsUnlocked,
     });
+
+    /**
+     * The "Go deeper & learn more" article that closes the same chapter — Figma
+     * 153:2260, and 153:2280 locked.
+     *
+     * Gated on `beliefsUnlocked` like the chapter above it rather than through
+     * isLearnMoreArticleLocked, because that helper resolves the identical
+     * typical_beliefs section and this way the two cannot drift apart. A locked
+     * reader gets only the paid blocks the 580px window can show; the rest never
+     * leaves here.
+     *
+     * The article itself is archetype-agnostic, but it ships only alongside the
+     * chapter it belongs to — see the swap in ReportPage. Half a redesigned
+     * chapter under V2's section would read worse than either on its own.
+     */
+    const typicalBeliefsArticle = REPORT_V4_LEARN_MORE.typical_beliefs
+      ? {
+          article: splitArticleForReader(REPORT_V4_LEARN_MORE.typical_beliefs, !beliefsUnlocked),
+          locked: !beliefsUnlocked,
+        }
+      : null;
 
     // Report 2.0 Attachment Style section copy — a Part II, essentials-tier
     // PREMIUM section (section 8). The universal slots (`eyebrow`,
@@ -1706,6 +1729,7 @@ export async function GET(request: Request) {
         findingsCopy,
         beliefsCopy,
         typicalBeliefs,
+        typicalBeliefsArticle,
         attachmentCopy,
         attachmentFamily,
         attachmentPlane,
