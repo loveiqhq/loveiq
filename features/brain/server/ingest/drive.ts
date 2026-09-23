@@ -76,7 +76,21 @@ const MAX_PAGES = 20;
 // bump the fix is inert on all of them: a file is refetched only when its
 // `modifiedTime` moves, and "Business Case" has not been edited since 2026-09-16,
 // so the tab nobody could find would have stayed missing until somebody typed in it.
-export const DRIVE_BUILDER_VERSION = 4;
+// v5: v4 titled every document neutrally. Two classes are now marked ON THE TITLE —
+// copy we wrote in a customer's voice, and the example figures in a KPI definition
+// table — and the mark is what stops the brain quoting either as measured fact. Same
+// trap as v4 and I walked into it: the mark is applied at WRITE time, so without this
+// bump it reaches only documents somebody happens to edit, which for `Testimonials`
+// and `KPI Framework` is never. Measured 2026-09-23 after shipping the mark: 0 chunks
+// in the whole corpus carried it.
+//
+// DELETING THE CHUNKS IS NOT A SUBSTITUTE, which is the other half of the lesson. It
+// looks equivalent — an absent document is unknown, and unknown means refetch — and it
+// silently was not: three documents deleted to force exactly this refetch were still
+// absent a full cycle later, and nothing in `written=13 complete=true` said so. A
+// version bump is the mechanism that exists for this; a hand deletion is a wager on
+// the listing still containing the file.
+export const DRIVE_BUILDER_VERSION = 5;
 
 const DOC_MIME = "application/vnd.google-apps.document";
 const SHEET_MIME = "application/vnd.google-apps.spreadsheet";
