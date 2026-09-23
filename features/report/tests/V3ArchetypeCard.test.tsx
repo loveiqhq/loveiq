@@ -102,22 +102,12 @@ describe("V3DimensionDeck", () => {
     expect(container.querySelectorAll("[data-deck-card]")).toHaveLength(4);
   });
 
-  it("shows the chapter link on peeking cards only", () => {
+  it("draws no 'Learn more in chapter' link on any card", () => {
     const { container } = renderCard();
-    // 15:1175 is hidden="true" on the focused card in every variant frame — and
-    // `hidden` is how this is done, rather than unmounting. Removing a node from
-    // inside a mandatory-snap scroller mid-gesture makes the browser re-resolve
-    // its snap target, which showed up in review as the deck snapping back.
-    const footers = container.querySelectorAll(".rv3-deck__more");
-    expect(footers).toHaveLength(4);
-    expect(container.querySelector(".rv3-deck__card.is-focused .rv3-deck__more")).toHaveAttribute(
-      "hidden"
-    );
-    expect(
-      [...container.querySelectorAll(".rv3-deck__card.is-peeking .rv3-deck__more")].filter((f) =>
-        f.hasAttribute("hidden")
-      )
-    ).toHaveLength(0);
+    // Removed 2026-09-23: every card ends on its body and blank space, as the
+    // deck components (15:1136 / 15:1236 / 15:1336) draw them.
+    expect(container.querySelectorAll(".rv3-deck__more")).toHaveLength(0);
+    expect(container.textContent).not.toMatch(/learn more in chapter/i);
   });
 
   it("marks the active indicator bar and gives every bar an accessible name", () => {
@@ -171,12 +161,13 @@ describe("report3ArchetypeCard", () => {
     expect(missing).toHaveLength(13);
   });
 
-  it("points every chapter link at a dimension the report actually has", () => {
-    expect(copy.dimensions.map((d) => d.chapterId)).toEqual([
-      "love_language",
-      "initiation_style",
-      "attachment_style",
-      "power_orientation",
-    ]);
+  it("carries the supportive sentences Mark approved on 2026-09-23", () => {
+    const body = (key: string) => copy.dimensions.find((d) => d.key === key)?.body;
+    expect(body("initiation")).toBe(
+      "You make the first move often, and the move itself is part of the pleasure. What matters most is feeling that your interest is met with genuine enthusiasm."
+    );
+    expect(body("attachment")).toBe(
+      "Closeness is comfortable while it stays voluntary. When it starts to feel owed, you may begin to pull back or create some distance."
+    );
   });
 });

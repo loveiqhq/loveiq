@@ -54,7 +54,12 @@ const V4Part2: FC<Props> = ({ archetype, matchStrength, card, initialDeckIndex =
         <V4TopThreeSection />
       </div>
 
-      <V4CoreArchetypeHeading />
+      {/* 1:576 — in the same gutter column as 1:493 above and 15:815 below. It
+       * was the only block in Part II outside `.rv4-col`, which is why its text
+       * sat a few px right of the cards on either side of it. */}
+      <div className="rv4-col">
+        <V4CoreArchetypeHeading />
+      </div>
 
       {/* 15:815 — built and verified in the previous pass. */}
       <div className="rv4-col">

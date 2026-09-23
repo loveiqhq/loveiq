@@ -1,4 +1,4 @@
-import { Fragment, type FC } from "react";
+import type { FC } from "react";
 import {
   REPORT_V4_INTRODUCTION,
   REPORT_V4_PARTS,
@@ -7,6 +7,7 @@ import {
 import V3Methodology from "./V3Methodology";
 import V4Chapter from "./V4Chapter";
 import V4PartHeading from "./V4PartHeading";
+import V4Runs from "./V4Runs";
 
 /**
  * Part I — Welcome. Figma 1:168, 393x1723.
@@ -26,33 +27,26 @@ import V4PartHeading from "./V4PartHeading";
  * rather than guessed at.
  */
 
-/** The frame breaks a few paragraphs mid-block; keep those breaks. */
-const withLineBreaks = (text: string) =>
-  text.split("\n").map((line, i) => (
-    <Fragment key={i}>
-      {i > 0 ? <br /> : null}
-      {line}
-    </Fragment>
-  ));
-
 const V4Part1: FC = () => (
   <section className="rv4-partblock" data-node-id="1:168" data-name="Part 1 - Welcome">
     <V4PartHeading heading={REPORT_V4_PARTS[0]!} lead />
 
-    {/* 1:175 */}
-    <V4Chapter title="Introduction" defaultOpen>
+    {/* 1:175 — nothing in Part I collapses, so no toggle. */}
+    <V4Chapter title="Introduction" collapsible={false}>
       <div className="rv4-copy">
-        {REPORT_V4_INTRODUCTION.map((para, i) => (
+        {REPORT_V4_INTRODUCTION.map((runs, i) => (
           <p className="rv3-prose" key={i}>
-            {withLineBreaks(para)}
+            <V4Runs runs={runs} />
           </p>
         ))}
       </div>
     </V4Chapter>
 
     {/* 1:185 */}
-    <V4Chapter title="What shaped this report" defaultOpen>
-      <p className="rv3-prose">{REPORT_V4_WHAT_SHAPED}</p>
+    <V4Chapter title="What shaped this report" collapsible={false}>
+      <p className="rv3-prose">
+        <V4Runs runs={REPORT_V4_WHAT_SHAPED} />
+      </p>
     </V4Chapter>
 
     {/* 1:195 — the card deck, source cards and closing paragraph. `chrome="deck"`

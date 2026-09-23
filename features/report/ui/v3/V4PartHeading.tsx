@@ -34,7 +34,7 @@ interface Props {
 }
 
 const V4PartHeading: FC<Props> = ({ heading, intro, lead: hasLead = false }) => {
-  const { eyebrow, lead, accent, tone } = heading;
+  const { eyebrow, lead, accent, tone, leadItalic } = heading;
   const withIntro = intro !== undefined;
 
   return (
@@ -48,9 +48,10 @@ const V4PartHeading: FC<Props> = ({ heading, intro, lead: hasLead = false }) => 
         {/* 1:173 / 1:856 */}
         <p className="rv4-part__eyebrow">{eyebrow}</p>
         {/* 1:174 / 1:857 — the lead is upright, the accent italic. The split is the
-         * designer's and is not simply the last word ("Your " + "Constellation"). */}
+         * designer's and is not simply the last word ("Your " + "Constellation").
+         * Part II (1:486) is the exception: its lead is italic too. */}
         <h2 className={`rv4-part__title${tone === "ink" ? " is-ink" : ""}`}>
-          {lead ? <span>{lead}</span> : null}
+          {lead ? <span className={leadItalic ? "is-italic" : undefined}>{lead}</span> : null}
           <span>{accent}</span>
         </h2>
         {withIntro ? <p className="rv4-part__intro rv3-prose">{intro}</p> : null}

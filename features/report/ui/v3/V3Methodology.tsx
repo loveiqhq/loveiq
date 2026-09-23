@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties, type FC } from "react";
+import { REPORT_V4_CLOSING } from "@/data/report3-archetype-page";
+import V4Runs from "./V4Runs";
 
 /**
  * "WHAT SHAPED THIS REPORT / Methodology" — Figma 10392:18465.
@@ -258,25 +260,24 @@ const V3Methodology: FC<Props> = ({ chrome = "full" }) => {
         ))}
       </div>
 
-      {/* 10392:18726 / V4 1:480. Same three paragraphs either way; V4 draws them
-       * without the bold runs, so "deck" emits them plain. */}
-      <div className="rv3-prose rv3-method__outro" data-node-id="10392:18726">
-        <p>
-          We translate this knowledge into clear and understandable patterns that people can
-          recognise in themselves.
-        </p>
+      {/* 10392:18726 / V4 1:480. V4 carries its own wording and bold runs now
+       * (REPORT_V4_CLOSING); the V3 outro below is the live `?v3=1` copy. */}
+      <div
+        className="rv3-prose rv3-method__outro"
+        data-node-id={chrome === "deck" ? "1:480" : "10392:18726"}
+      >
         {chrome === "deck" ? (
-          <>
-            <p>
-              This report is a psychometric approximation.
-              <br />
-              It does not describe you in a fixed or absolute way, but highlights tendencies,
-              patterns, and possible directions of your personality and sexual identity.
+          REPORT_V4_CLOSING.map((runs, i) => (
+            <p key={i}>
+              <V4Runs runs={runs} />
             </p>
-            <p>With that in mind, it&rsquo;s time to dive into your personalized LoveIQ report.</p>
-          </>
+          ))
         ) : (
           <>
+            <p>
+              We translate this knowledge into clear and understandable patterns that people can
+              recognise in themselves.
+            </p>
             <p>
               This report is a <strong>psychometric approximation.</strong> It does not describe you
               in a fixed or absolute way, but highlights{" "}
@@ -293,7 +294,11 @@ const V3Methodology: FC<Props> = ({ chrome = "full" }) => {
         )}
       </div>
 
-      <div className="rv3-method__rule" aria-hidden="true" data-node-id="10392:18729" />
+      {/* 10392:18729 is V3's. V4 draws its hairline at the top of Part II instead
+       * (1:484), directly above the part heading, not under this paragraph. */}
+      {chrome === "full" ? (
+        <div className="rv3-method__rule" aria-hidden="true" data-node-id="10392:18729" />
+      ) : null}
     </section>
   );
 };

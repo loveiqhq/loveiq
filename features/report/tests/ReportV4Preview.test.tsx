@@ -70,7 +70,7 @@ const modalState = (c: HTMLElement) =>
  * exist once the reader has asked for the article.
  */
 const expandFirstCard = () =>
-  fireEvent.click(screen.getAllByRole("button", { name: "Read full article" })[0]!);
+  fireEvent.click(screen.getAllByRole("button", { name: "Read the full article" })[0]!);
 
 describe("/report-v4-preview — the paywall is live", () => {
   it("keeps the pricing modal shut until something asks for it", () => {

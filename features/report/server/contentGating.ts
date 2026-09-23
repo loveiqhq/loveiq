@@ -264,18 +264,26 @@ const ARTICLE_GAP_BEFORE_HEADING_PX = 26;
 const ARTICLE_GAP_AFTER_HEADING_PX = 14;
 const ARTICLE_LIST_ITEM_GAP_PX = 8;
 
-/** Mirrors `.rv4-learn__gated`'s matching min/max-height in reportV3.css. */
-export const LOCKED_ARTICLE_WINDOW_PX = 580;
+/**
+ * Mirrors `.rv4-learn__gated`'s matching min/max-height in reportV3.css.
+ *
+ * 656 = the 580px uniformly blurred window (170:231) plus the 76px band above it
+ * (411:5694) where the blur ramps up from nothing — the progressive blur Mark
+ * asked for, which Figma draws as three more lines of the same gated copy. The
+ * window grew by exactly that band, so a locked reader is sent about three more
+ * lines than before and still nothing past what the window shows.
+ */
+export const LOCKED_ARTICLE_WINDOW_PX = 656;
 
 /**
  * One line of slack above the window.
  *
- * Derived, not chosen: for Typical Beliefs the three whole blocks leave the fold
- * at 518.4px, so one line of over-fill asks for ceil((580 - 518.4 + 22.4) / 22.4)
- * = 4 lines = 200 characters — exactly the hand-tuned tail that was checked
- * against Figma before this loop existed. Beyond one line the tolerance is
- * structural and free anyway: the 63px fade and the card covering 90-281px hide a
- * small shortfall, so paying for more margin in leaked characters buys nothing.
+ * Derived, not chosen: one line of over-fill is the hand-tuned tail that was
+ * checked against Figma before this loop existed (for Typical Beliefs at the old
+ * 580px window: ceil((580 - 518.4 + 22.4) / 22.4) = 4 lines = 200 characters).
+ * Beyond one line the tolerance is structural and free anyway: the 63px fade and
+ * the card covering 90-281px hide a small shortfall, so paying for more margin in
+ * leaked characters buys nothing.
  */
 export const LOCKED_ARTICLE_OVERFILL_PX = ARTICLE_LINE_PX;
 

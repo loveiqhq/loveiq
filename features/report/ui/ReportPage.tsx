@@ -35,11 +35,19 @@ import { V3ModeProvider } from "./v3/V3Chapter";
 import V3Intro from "./v3/V3Intro";
 import V4Part1 from "./v3/V4Part1";
 import V3ArchetypeCard from "./v3/V3ArchetypeCard";
+import V4CoreArchetypeHeading from "./v3/V4CoreArchetypeHeading";
+import V4PartHeading from "./v3/V4PartHeading";
 import V4Snapshot from "./v3/V4Snapshot";
 import V4SummaryChapter from "./v3/V4SummaryChapter";
+import V4TopThreeSection from "./v3/V4TopThreeSection";
 import { report3ArchetypeCard } from "@/data/report3-archetype-card";
 import type { ArchetypeName } from "@features/report/server/archetypeSlug";
-import { REPORT_V4_SNAPSHOT, REPORT_V4_SUMMARY } from "@/data/report3-archetype-page";
+import {
+  REPORT_V4_PART_DIVIDER_BY_SECTION,
+  REPORT_V4_SNAPSHOT,
+  REPORT_V4_SUMMARY,
+  REPORT_V4_TOP_THREE_HEADING,
+} from "@/data/report3-archetype-page";
 import V3EndSummary from "./v3/V3EndSummary";
 import V3Methodology from "./v3/V3Methodology";
 import V3PartDivider from "./v3/V3PartDivider";
@@ -1069,48 +1077,65 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                            * the frame. Falls back to V2's whenever the archetype
                            * has no Report 3.0 card copy. */}
                           {isV4 && report3ArchetypeCard[viewArchetype] ? (
-                            <V3ArchetypeCard
-                              archetype={viewArchetype as ArchetypeName}
-                              matchStrength={matchScore}
-                              copy={report3ArchetypeCard[viewArchetype]!}
-                            />
+                            <>
+                              {/* 1:576 — "Core Archetype" + its lede, which the
+                               * frame draws immediately above the card. It was
+                               * built for the V4 shell (V4Part2) and never
+                               * swapped into the live report, so this ran from
+                               * the top-three list straight into the card. */}
+                              <V4CoreArchetypeHeading />
+                              <V3ArchetypeCard
+                                archetype={viewArchetype as ArchetypeName}
+                                matchStrength={matchScore}
+                                copy={report3ArchetypeCard[viewArchetype]!}
+                              />
+                            </>
                           ) : (
                             <CoreArchetypeSection matchScore={matchScore} theme={theme} />
                           )}
                         </ReportSection>
-                        {/* 1:736 — the Summary Chapter, 393x1486 of copy that sits
-                         * between the archetype card and everything after it. Report
-                         * 2.0 RETIRED its own `summary` section (reportNav.ts:113),
-                         * so nothing rendered here at all and the card ran straight
-                         * into the next block. Omitted rather than faked for an
-                         * archetype nobody has written one for. */}
                         {isV4 && REPORT_V4_SUMMARY[viewArchetype] ? (
+                          /* 1:736 — V4's Summary Chapter IN PLACE OF V2's "What
+                           * this means for you", never beside it: both are titled
+                           * "Summary of the <archetype>", so rendering the two
+                           * stacked the summary twice. The frame's text box
+                           * (1:742) is 356x1280, which is this six-paragraph
+                           * copy at 16/25.6; V2's is roughly a third of that. Its
+                           * rating posts under `summary`, a real section id —
+                           * `means_for_you` is not, so the API rejects it. */
                           <ReportSection
                             primaryArchetype={viewArchetype}
-                            sectionId="summary_v4"
+                            sectionId="summary"
                             title=""
                           >
                             <V4SummaryChapter
                               archetype={viewArchetype}
                               summary={REPORT_V4_SUMMARY[viewArchetype]!}
+                              feedback={renderFeedback(
+                                "summary",
+                                `Summary of the ${viewArchetype}`
+                              )}
                             />
                           </ReportSection>
-                        ) : null}
-                        {/* "What this means for you" (Figma 8719:8865). Part I's
-                          child order is HERO → SUMMARY → SNAPSHOT, so this sits
-                          between the card and Your Snapshot. Free + universal;
-                          renders nothing for archetypes with no verified copy. */}
-                        <ReportSection
-                          primaryArchetype={viewArchetype}
-                          sectionId="means_for_you"
-                          title=""
-                          feedbackWidget={renderFeedback(
-                            "means_for_you",
-                            "What this means for you"
-                          )}
-                        >
-                          <MeansForYouSection archetype={viewArchetype} />
-                        </ReportSection>
+                        ) : (
+                          /* "What this means for you" (Figma 8719:8865). Part I's
+                            child order is HERO → SUMMARY → SNAPSHOT, so this sits
+                            between the card and Your Snapshot. Free + universal;
+                            renders nothing for archetypes with no verified copy.
+                            Also V4's fallback for the 13 archetypes with no V4
+                            summary written yet. */
+                          <ReportSection
+                            primaryArchetype={viewArchetype}
+                            sectionId="means_for_you"
+                            title=""
+                            feedbackWidget={renderFeedback(
+                              "means_for_you",
+                              "What this means for you"
+                            )}
+                          >
+                            <MeansForYouSection archetype={viewArchetype} />
+                          </ReportSection>
+                        )}
                         {/* V3's Part I runs HERO -> "Summary of the <archetype>"
                           -> Snapshot, where Snapshot is the Ignite accordion
                           (which IS the five findings) plus "How you compare".
@@ -2072,7 +2097,22 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                   );
                 })();
 
-                const dividerNode = partDivider ? (
+                // V4 renumbers every part: "Welcome" is Part I, so what V3 calls
+                // Part I is Part II here. Falling through to the V3 map below is
+                // what gave the report two Part I's.
+                const v4PartHeading = isV4
+                  ? REPORT_V4_PART_DIVIDER_BY_SECTION[section.id]
+                  : undefined;
+                const dividerNode = v4PartHeading ? (
+                  <>
+                    {/* 1:484 — Part II opens on a hairline sitting directly above
+                     * its heading. */}
+                    {section.id === "core_archetype" ? (
+                      <div className="rv4-rule" aria-hidden="true" data-node-id="1:484" />
+                    ) : null}
+                    <V4PartHeading heading={v4PartHeading} />
+                  </>
+                ) : partDivider ? (
                   isV3 ? (
                     <V3PartDivider
                       eyebrow={partDivider.part}
@@ -2087,8 +2127,16 @@ const ReportExperience: FC<ReportExperienceProps> = ({
 
                 // Part I in V3 carries the top-3 card and the Snapshot accordion
                 // between the divider and the Core Archetype chapter.
+                // V4 (1:493) wraps the same list in its heading, a two-paragraph
+                // lede and a rating. Its rating posts under `core_archetype`, whose
+                // own widget is suppressed, so it is the only one on the page.
                 const v3PartOneExtras =
-                  isV3 && section.id === "core_archetype" ? (
+                  isV4 && section.id === "core_archetype" ? (
+                    <V4TopThreeSection
+                      percentages={percentages}
+                      feedback={renderFeedback("core_archetype", REPORT_V4_TOP_THREE_HEADING)}
+                    />
+                  ) : isV3 && section.id === "core_archetype" ? (
                     <V3TopThree percentages={percentages} />
                   ) : null;
 
