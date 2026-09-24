@@ -104,7 +104,20 @@ function appendedProbes() {
   ].filter((f) => !f.startsWith("_"));
 }
 
-const gateProbes = [...new Set([...[...probes.values()].flat(), ...appendedProbes()])].sort();
+/**
+ * Probes the daily probe-guard job runs directly. They are gates too — the
+ * job fails on their exit 1 — so they owe the same contract, and until
+ * 2026-09-24 nothing held them to it: this list was read from the verifier
+ * alone, so verify-icon-label-gap, shipped the day before, was never checked.
+ */
+function guardProbes() {
+  const src = readFileSync(".github/workflows/probe-guard.yml", "utf8");
+  return [...src.matchAll(/scripts\/probes\/(verify-[\w-]+\.mjs)/g)].map((m) => m[1]);
+}
+
+const gateProbes = [
+  ...new Set([...[...probes.values()].flat(), ...appendedProbes(), ...guardProbes()]),
+].sort();
 
 let contractBreaches = 0;
 for (const file of gateProbes) {

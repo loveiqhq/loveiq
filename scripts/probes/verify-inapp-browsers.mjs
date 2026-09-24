@@ -12,9 +12,22 @@
  *   - the sticky unlock CTA is reachable by a real tap
  *   - the pricing modal opens with real prices
  *   - the checkout POST carries plan + quoteId + report context
- *   - which device class the server assigned (pricing depends on it)
+ *   - nothing overflows sideways at the shorter viewport
+ *
+ * It used to print "server-class=Desktop" for every surface, which read like a
+ * pricing bug and was not one: a report's price is fixed at its FIRST quote, so
+ * the internal report answers with whatever device first priced it. Removed
+ * rather than explained on every run.
+ *
+ * Exit 0 clean, 1 a surface is broken, 3 could not measure (the report never
+ * rendered, the page errored). Until 2026-09-24 it exited 0 on everything,
+ * FAIL lines included, and ran from nowhere — see scripts/probes/README.md.
+ *
+ *   MUTATE=1   lay an invisible strip over the bottom of the page, where the
+ *              sticky unlock sits: the reachability check must fail (exit 1).
  */
-import { chromium, webkit, devices } from "playwright";
+import { chromium, webkit } from "playwright";
+import { stagingCookies } from "./staging-cookie.mjs";
 import { touchScroll } from "./touch.mjs";
 
 const ORIGIN = process.env.REPORT_ORIGIN ?? "https://www.loveiq.org";
@@ -61,6 +74,8 @@ const SURFACES = [
   },
 ];
 
+let bad = 0;
+let unmeasured = 0;
 for (const s of SURFACES) {
   const browser = await (s.engine === "webkit" ? webkit : chromium).launch();
   const ctx = await browser.newContext({
@@ -71,6 +86,17 @@ for (const s of SURFACES) {
     hasTouch: true,
     locale: "en-US",
   });
+  await ctx.addCookies(stagingCookies(ORIGIN)).catch(() => {});
+  if (process.env.MUTATE === "1") {
+    await ctx.addInitScript(() =>
+      addEventListener("DOMContentLoaded", () => {
+        const strip = document.createElement("div");
+        strip.style.cssText =
+          "position:fixed;left:0;right:0;bottom:0;height:120px;z-index:2147483647;background:transparent";
+        document.body.appendChild(strip);
+      })
+    );
+  }
   const page = await ctx.newPage();
   let posted = null;
   await page.route("**/api/stripe/checkout-session", (route) => {
@@ -87,10 +113,17 @@ for (const s of SURFACES) {
 
   const problems = [];
   try {
-    await page.goto(`${ORIGIN}/report/${TOKEN}`, {
+    const response = await page.goto(`${ORIGIN}/report/${TOKEN}`, {
       waitUntil: "domcontentloaded",
       timeout: 90_000,
     });
+    // WebKit does not throw on a refused connection: it shows its own error
+    // page and returns no response, and the render wait below then burned 90s
+    // per surface — long enough for the contract check to kill the run, which
+    // Playwright's shutdown turns into exit 1, a claimed defect.
+    if (!response || response.status() >= 400) {
+      throw new Error(`the report did not load (${response ? response.status() : "no response"})`);
+    }
     await page
       .waitForSelector(".report-status-card__spinner", { state: "detached", timeout: 90_000 })
       .catch(() => {});
@@ -104,24 +137,15 @@ for (const s of SURFACES) {
       )
       .then(() => true)
       .catch(() => false);
-    if (!rendered) problems.push("report never rendered");
+    if (!rendered) {
+      // Nothing was measured, which is not the same as something being broken.
+      console.log(`INCONCLUSIVE ${s.name}: the report never rendered`);
+      unmeasured += 1;
+      await ctx.close();
+      await browser.close();
+      continue;
+    }
     await page.waitForTimeout(2000);
-
-    // What device class did the server assign? Pricing multiplies by it.
-    const quote = await page.evaluate(async () => {
-      const t = location.pathname.split("/").pop();
-      const r = await fetch(`/api/report?token=${t}`, { cache: "no-store" });
-      if (!r.ok) return { httpError: r.status };
-      const j = await r.json();
-      const q = j.pricingQuotes?.full_report;
-      return q
-        ? {
-            deviceType: q.deviceType ?? q.device_type ?? null,
-            price: q.currentPriceCents,
-            cluster: q.pricingClusterId,
-          }
-        : { noQuote: true };
-    });
 
     await page
       .locator(".cky-btn-accept")
@@ -149,6 +173,7 @@ for (const s of SURFACES) {
         topEl: top ? top.tagName : null,
       };
     });
+    if (!reach.visible) problems.push("no sticky unlock CTA on screen");
     if (reach.visible && !reach.reaches) problems.push(`sticky CTA blocked by ${reach.topEl}`);
     if (reach.visible && reach.h < 44) problems.push(`sticky CTA only ${reach.h}px tall`);
 
@@ -196,16 +221,27 @@ for (const s of SURFACES) {
     );
     if (hOverflow > 1) problems.push(`${hOverflow}px horizontal overflow`);
 
+    if (problems.length) bad += 1;
     console.log(
       `${problems.length ? "FAIL" : "PASS"} ${s.name.padEnd(22)} ${s.vp.width}x${s.vp.height}  ` +
-        `server-class=${quote.deviceType ?? JSON.stringify(quote)} price=${quote.price ?? "?"} ` +
         `stickyH=${reach.h ?? "-"} prices=${prices.join("/") || "-"} ` +
         `payload=${posted ? `${posted.plan}` : "none"}` +
         (problems.length ? `\n     problems: ${problems.join("; ")}` : "")
     );
   } catch (e) {
-    console.log(`ERROR ${s.name}: ${String(e.message).split("\n")[0].slice(0, 120)}`);
+    // A page that would not load or a browser that died measured nothing.
+    console.log(`INCONCLUSIVE ${s.name}: ${String(e.message).split("\n")[0].slice(0, 120)}`);
+    unmeasured += 1;
   }
   await ctx.close();
   await browser.close();
 }
+
+console.log(
+  bad
+    ? `\nFAIL (1) — ${bad} in-app surface(s) broken`
+    : unmeasured
+      ? `\nINCONCLUSIVE (3) — ${unmeasured} surface(s) could not be measured, not a pass`
+      : `\n${SURFACES.length}/${SURFACES.length} in-app surfaces: report, sticky unlock, prices and checkout all work`
+);
+process.exitCode = bad ? 1 : unmeasured ? 3 : 0;

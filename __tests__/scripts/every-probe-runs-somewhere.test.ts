@@ -47,17 +47,12 @@ const invokers = [
  * wiring it up is the point. The count is asserted so the list cannot quietly
  * grow.
  */
-const KNOWN_ORPHANS = new Set([
-  "verify-consent-fix.mjs",
-  "verify-country-class-live.mjs",
-  "verify-deadzone-opens.mjs",
-  "verify-featured-card.mjs",
-  "verify-inapp-browsers.mjs",
-  "verify-map-row.mjs",
-  "verify-practice-info.mjs",
-  "verify-price-exposure-row.mjs",
-  "verify-survey-no-storage.mjs",
-]);
+/**
+ * Empty since 2026-09-24. Each of the nine was run against production and
+ * then wired (verify-inapp-browsers, in probe-guard.yml), replaced by an
+ * end-to-end test (the storage one) or deleted. A new probe must be wired.
+ */
+const KNOWN_ORPHANS = new Set<string>([]);
 
 describe("every probe is run by something", () => {
   const probes = readdirSync(resolve(root, "scripts/probes"))
@@ -92,6 +87,6 @@ describe("every probe is run by something", () => {
         `${orphan} IS invoked now — remove it from KNOWN_ORPHANS`
       ).toBe(false);
     }
-    expect(KNOWN_ORPHANS.size, "the orphan list grew; wire the new probe up instead").toBe(9);
+    expect(KNOWN_ORPHANS.size, "the orphan list grew; wire the new probe up instead").toBe(0);
   });
 });
