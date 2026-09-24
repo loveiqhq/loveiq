@@ -175,9 +175,13 @@ describe("readMetric and isJump", () => {
    * ordinary. A move up is measured against the quiet days, so the next spike still shows.
    */
   it("measures a move up against the quiet days, so a spiky month does not hide the next spike", () => {
-    const s = build((i) => ({
-      visitors: i === 29 ? 600 : i % 2 ? 300 + 50 * ((i - 1) / 2) : 190 + (i % 10),
-    }));
+    // Shaped like September: traffic climbing from 250 to 400, with a spike every few days.
+    const month = [
+      250, 260, 240, 300, 280, 900, 270, 265, 610, 255, 300, 720, 290, 310, 915, 320, 300, 914, 330,
+      310, 340, 600, 350, 360, 599, 370, 380, 400,
+    ];
+    // One shared spread puts 600 at z 3.4, inside the range; the quiet side puts it at 4.6.
+    const s = build((i) => ({ visitors: i === 29 ? 600 : (month[i - 1] ?? 250) }));
     const r = readMetric(metric("visitors"), s, LAST)!;
     expect(isJump(r)).toBe(true);
     expect(r.low).toBeLessThan(r.usual);
