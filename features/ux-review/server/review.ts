@@ -1602,7 +1602,7 @@ export async function restartForSurveySession(
   if (!url || !key || !isSafeSessionId(surveySessionId)) return null;
   try {
     const evRes = await fetchWithTimeout(
-      `${url}/rest/v1/survey_behavior_event?select=question_index,event_time,id` +
+      `${url}/rest/v1/survey_behavior_event?select=question_index,event_time,direction,id` +
         `&session_id=eq.${encodeURIComponent(surveySessionId)}&order=event_time.asc,id.asc&limit=2000`,
       {
         headers: { apikey: key, Authorization: `Bearer ${key}` },
@@ -1652,18 +1652,45 @@ export async function surveyRestartWitness(
  * cannot place, and reading it as question 0 would manufacture a 56-question
  * drop out of one bad write.
  */
+/**
+ * A reader who comes BACK is not a reader who was SENT back.
+ *
+ * On 2026-09-24 submission 2199 read as a 56-question restart: the log ends
+ * `complete` at question 56 at 06:30, then two `abandon` rows at question 0 at
+ * 17:39 — the reader returning in a new session eleven hours later, landing on
+ * the intro and leaving. Every real restart in 45 days (1781, 1793, 2141)
+ * dropped on a `forward` row within 7-16 minutes: the reader was taken back
+ * into the survey and started moving. So a drop carried only by an `abandon`
+ * row long after the previous one is a return visit, and does not count. One
+ * right after the previous row still does: that is what a regression of the
+ * 2026-09-17 back-button fix would look like.
+ */
+export const SURVEY_RESTART_MAX_GAP_MS = 60 * 60_000;
+
 export function biggestIndexDrop(
-  rows: ReadonlyArray<{ question_index: number | null }>
+  rows: ReadonlyArray<{
+    question_index: number | null;
+    event_time?: string | null;
+    direction?: string | null;
+  }>
 ): SurveyRestartWitness | null {
   let prev: number | null = null;
+  let prevAt: number | null = null;
   let drop = 0;
   let steps = 0;
   for (const row of rows) {
     const index = row.question_index;
     if (typeof index !== "number" || !Number.isFinite(index)) continue;
     steps += 1;
-    if (prev !== null && index < prev) drop = Math.max(drop, prev - index);
+    const at = row.event_time ? Date.parse(row.event_time) : NaN;
+    const returnVisit =
+      row.direction === "abandon" &&
+      prevAt !== null &&
+      Number.isFinite(at) &&
+      at - prevAt > SURVEY_RESTART_MAX_GAP_MS;
+    if (prev !== null && index < prev && !returnVisit) drop = Math.max(drop, prev - index);
     prev = index;
+    if (Number.isFinite(at)) prevAt = at;
   }
   return drop >= SURVEY_RESTART_MIN_DROP ? { drop, steps } : null;
 }
