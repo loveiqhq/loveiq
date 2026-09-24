@@ -170,6 +170,19 @@ describe("readMetric and isJump", () => {
     expect(isJump(small)).toBe(false);
   });
 
+  /**
+   * The 2026-09-24 case: a month of spikes widened one shared spread until a bot day read as
+   * ordinary. A move up is measured against the quiet days, so the next spike still shows.
+   */
+  it("measures a move up against the quiet days, so a spiky month does not hide the next spike", () => {
+    const s = build((i) => ({
+      visitors: i === 29 ? 600 : i % 2 ? 300 + 50 * ((i - 1) / 2) : 190 + (i % 10),
+    }));
+    const r = readMetric(metric("visitors"), s, LAST)!;
+    expect(isJump(r)).toBe(true);
+    expect(r.low).toBeLessThan(r.usual);
+  });
+
   it("keeps a noisy metric's big-looking move inside its range", () => {
     // Swinging 100/300 every day: 300 today is +50%, and entirely ordinary for it.
     const s = build((i) => ({ visitors: i === 29 ? 300 : i % 2 ? 100 : 300 }));

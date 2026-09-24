@@ -143,6 +143,17 @@ export const METRICS: Metric[] = [
     },
   },
   {
+    id: "engaged_rate",
+    label: "Share of GA4 sessions that engage",
+    rate: {
+      num: (d) => d.ga4?.engaged ?? null,
+      den: (d) => d.ga4?.sessions ?? null,
+      numLabel: "engaged sessions",
+      denLabel: "GA4 sessions",
+      minDen: 50,
+    },
+  },
+  {
     id: "paid_rate",
     label: "Share of report openers who pay",
     rate: {
@@ -210,7 +221,16 @@ export function readMetric(
   const base = before.map((d) => valueOf(m, d)).filter((v): v is number => v !== null);
   if (base.length < MIN_BASELINE) return null;
   const usual = median(base);
-  const mad = median(base.map((v) => Math.abs(v - usual)));
+  /**
+   * TWO SPREADS, ONE PER SIDE. A move up is measured against how the days BELOW the usual
+   * varied, and a move down against the days above it. With one spread, a month with a
+   * spike every few days widened the range for everything: on 2026-09-24, 663 visitors with
+   * 4% of GA4 sessions engaged read as ordinary, because seven of the 28 days before it were
+   * spikes too. The quiet side of the baseline is what "usual" actually looks like.
+   */
+  const side = (keep: (v: number) => boolean) =>
+    median(base.filter(keep).map((v) => Math.abs(v - usual)));
+  const mad = value >= usual ? side((v) => v <= usual) : side((v) => v >= usual);
   let floor = Math.sqrt(Math.max(usual, 1));
   let extra: Partial<Reading> = {};
   if (m.rate) {
@@ -232,8 +252,8 @@ export function readMetric(
     day,
     value,
     usual,
-    low: Math.max(0, usual - 2 * spread),
-    high: usual + 2 * spread,
+    low: Math.max(0, usual - 2 * Math.max(1.4826 * side((v) => v >= usual), floor)),
+    high: usual + 2 * Math.max(1.4826 * side((v) => v <= usual), floor),
     z: (value - usual) / spread,
     ...extra,
   };
