@@ -5168,3 +5168,33 @@
 .rv3 .rv4-learn:not(.is-open) {
   padding-bottom: var(--rv4-closed-pb, 20.5px);
 }
+
+/* ══ Chapter title — a suffixed title's lines · 310:224 / 1:865 ══════════════
+ * Figma spaces each line of a mixed-size paragraph by that line's OWN height: a
+ * line of suffix alone ("Spark Seeker") has its baseline 16.8 under the title's.
+ * CSS stacks whole line boxes, so it also kept the 5.616 the 24px run's 28.8 box
+ * reaches below its baseline: "Spark Seeker" sat 2.34 low and the head came out
+ * 68.6 against the frame's 55. So the title keeps no strut (line-height 0), the
+ * 24px run keeps its 28.8, the suffix runs give no box of their own, and each word
+ * is a 16.8 box (11.184 over its baseline once its top comes in 2.34, 3.276
+ * under) — CSS sizes a line by an inline-block's margin box, so the pulled-in top
+ * is what the line sees, while the glyphs stay where they are.
+ * One line: 23.184 + 5.616 = 28.8, as before. Two: 23.184 + 16.8 + 3.276 = 43.26,
+ * which the frame rounds up to its 44 box — the 0.74 below. (Scoped to the button:
+ * the static head renders no runs.) */
+.rv3 .rv4-chapter__button .rv4-chapter__title.has-suffix {
+  line-height: 0;
+  padding-bottom: 0.74px;
+}
+.rv3 .rv4-chapter__title.has-suffix .rv4-chapter__name {
+  line-height: 28.8px;
+}
+.rv3 .rv4-chapter__title.has-suffix .rv4-chapter__of,
+.rv3 .rv4-chapter__title.has-suffix .rv4-chapter__archetype {
+  line-height: 0;
+}
+.rv3 .rv4-chapter__word {
+  display: inline-block;
+  line-height: 16.8px;
+  margin-top: -2.34px;
+}

@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import V4Chapter from "@features/report/ui/v3/V4Chapter";
@@ -87,5 +89,60 @@ describe("V4Chapter", () => {
     const path = container.querySelector(".rv4-chapter__chev path")!;
     expect(path.getAttribute("d")).toBe("M3.28125 5.625L7.5 9.84375L11.7188 5.625");
     expect(path.getAttribute("stroke-width")).toBe("3");
+  });
+});
+
+/**
+ * A suffixed title as the frame sets it (310:224 / 1:865 / 304:259).
+ *
+ * The space before "- of the" belongs to the 24px run ("Accelerator & Brakes "), so
+ * the suffix starts a 24px space after the title, not a 14px one (3px further right).
+ *
+ * And a wrapped title spaces its lines as Figma does: each line sits its OWN height
+ * below the one above, so a line of suffix alone ("Spark Seeker") has its baseline
+ * 16.8 under the title's. CSS stacks whole line boxes instead, which left the 24px
+ * run's leading above that line: "Spark Seeker" 2.34 low and the head 68.6 against
+ * the frame's 55. Each suffix word is a 16.8 box with its top pulled in by exactly
+ * that leading, and the title keeps no strut of its own.
+ */
+describe("V4Chapter — the suffixed title's runs (310:224)", () => {
+  const renderAb = () =>
+    render(<V4Chapter title="Accelerator & Brakes" archetype="Spark Seeker" />).container;
+
+  it("keeps the space before the suffix in the 24px run", () => {
+    const c = renderAb();
+    expect(c.querySelector(".rv4-chapter__name")!.textContent).toBe("Accelerator & Brakes ");
+    expect(c.querySelector(".rv4-chapter__of")!.textContent).toBe("- of the ");
+    expect(c.querySelector(".rv4-chapter__title")!.textContent).toBe(
+      "Accelerator & Brakes - of the Spark Seeker"
+    );
+  });
+
+  it("boxes each suffix word on its own, so the suffix still wraps between words", () => {
+    const words = [...renderAb().querySelectorAll(".rv4-chapter__word")].map((w) => w.textContent);
+    expect(words).toEqual(["-", "of", "the", "Spark", "Seeker"]);
+  });
+
+  it("sets each line at its own height", () => {
+    const css = readFileSync(join(__dirname, "..", "ui", "v3", "reportV3.css"), "utf8");
+    const block = (selector: string) => {
+      const at = css.indexOf(selector);
+      expect(at, `${selector} missing`).toBeGreaterThan(-1);
+      return css.slice(at, css.indexOf("}", at));
+    };
+    const title = block(".rv3 .rv4-chapter__button .rv4-chapter__title.has-suffix {");
+    expect(title).toContain("line-height: 0;");
+    // 23.184 + 16.8 + 3.276 = 43.26, which the frame rounds up to its 44 box.
+    expect(title).toContain("padding-bottom: 0.74px;");
+    expect(block(".rv3 .rv4-chapter__title.has-suffix .rv4-chapter__name {")).toContain(
+      "line-height: 28.8px;"
+    );
+    expect(block(".rv3 .rv4-chapter__title.has-suffix .rv4-chapter__of,")).toContain(
+      "line-height: 0;"
+    );
+    const word = block(".rv3 .rv4-chapter__word {");
+    expect(word).toContain("display: inline-block;");
+    expect(word).toContain("line-height: 16.8px;");
+    expect(word).toContain("margin-top: -2.34px;");
   });
 });

@@ -152,8 +152,10 @@ describe("V4ChapterPart", () => {
   it("renders five chapters, each suffixed with the archetype", () => {
     const { container } = renderPart3();
     expect(container.querySelectorAll(".rv4-chapter")).toHaveLength(5);
-    expect(container.querySelectorAll(".rv4-chapter__archetype")).toHaveLength(5);
-    expect(screen.getAllByText("Spark Seeker")).toHaveLength(5);
+    // The name is set a word per box (310:224), so it is read off the suffix whole.
+    expect(
+      [...container.querySelectorAll(".rv4-chapter__archetype")].map((el) => el.textContent)
+    ).toEqual(Array(5).fill("Spark Seeker"));
   });
 
   it("renders the frame's placeholders rather than inventing copy", () => {
