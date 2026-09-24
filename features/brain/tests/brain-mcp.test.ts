@@ -534,7 +534,10 @@ describe("/api/mcp", () => {
 
       it("refuses a day that is not one, a day to come, and a metric that does not exist", async () => {
         expect((await call({ day: "2026-09-31" })).isError).toBe(true);
-        expect((await call({ day: "2999-01-01" })).isError).toBe(true);
+        mockRollup.mockResolvedValue(rollup(null));
+        const future = await call({ day: "2999-01-01" });
+        expect(future.isError).toBe(true);
+        expect(future.content[0]!.text).toBe("2999-01-01 has not happened yet.");
         const r = await call({ metric: "cvr" });
         expect(r.isError).toBe(true);
         expect(r.content[0]!.text).toContain("visitor_cvr");

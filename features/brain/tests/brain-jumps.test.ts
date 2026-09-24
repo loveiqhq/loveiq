@@ -178,6 +178,13 @@ describe("readMetric and isJump", () => {
     expect(isJump(r)).toBe(false);
   });
 
+  it("does not let a dead-flat count turn a small rise into a jump", () => {
+    // Twenty surveys every day: thirty is a real share and over the floor, but within the
+    // day-to-day noise of twenty.
+    const s = build((i) => ({ submissions: i === 29 ? 30 : 20 }));
+    expect(isJump(readMetric(metric("submissions"), s, LAST)!)).toBe(false);
+  });
+
   it("does not let a dead-flat rate turn a small wobble into a jump", () => {
     // 14% every day; 20% on 200 visitors is within the noise of 200 visitors.
     const s = build((i) => ({ starts: i === 29 ? 40 : 28 }));
