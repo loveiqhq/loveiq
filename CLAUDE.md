@@ -465,6 +465,7 @@ colors: {
 - **Sans:** Manrope (`--font-sans`, class `font-sans`)
 - **Serif:** Lora (`--font-serif`, class `font-serif`)
 - Headings default to serif, body to sans
+- Both are self-hosted from `public/fonts` through `app/fonts.css`, not `next/font/google`: a build must never depend on downloading fonts (it failed CI more than once). To change a font, add new content-hashed files rather than overwriting, because `/fonts` is cached as immutable.
 
 ### Utility Classes
 
