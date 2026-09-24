@@ -56,6 +56,7 @@ import {
 } from "@features/brain/server/copy-gate";
 import { allChapters } from "@features/brain/server/voice";
 import { buildContextPack } from "@features/brain/server/context-pack";
+import { meetingPromises, renderPromises } from "@features/brain/server/promises";
 import { promptDocs } from "@features/brain/server/ingest/skills";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { scheduleAfterResponse } from "@shared/http/after-response";
@@ -1576,6 +1577,32 @@ export const TOOLS = [
       properties: {
         chapter: { type: "string", enum: allChapters(), description: "e.g. 'motivation'." },
         archetype: { type: "string", enum: allArchetypes(), description: "e.g. 'Spark Seeker'." },
+      },
+    },
+  },
+  {
+    name: "meeting_promises",
+    title: "What people promised in meetings",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      'Every next step agreed in a recorded meeting, read by code off the "Next steps" list the ' +
+      "meeting notes end with, grouped by who owns it, with the meeting, its day and a link. Use " +
+      "it for 'what did I promise this week', 'what is Mark waiting on from meetings' or 'what did " +
+      "we agree on Tuesday'. It lists promises and does not know which are done: nothing is " +
+      "checked against Notion.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        since: {
+          type: "string",
+          description: "First day, YYYY-MM-DD. Default: fourteen days ago.",
+        },
+        until: { type: "string", description: "Last day, YYYY-MM-DD, inclusive. Default: today." },
+        person: {
+          type: "string",
+          description:
+            "Full name as on the roster, e.g. 'Mark Oldenburg'. Adds what was given to the whole group.",
+        },
       },
     },
   },
@@ -4519,6 +4546,30 @@ async function callTool(
     return textResult(pack);
   }
 
+  if (name === "meeting_promises") {
+    const day = (v: unknown) =>
+      typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() : null;
+    if ((args.since && !day(args.since)) || (args.until && !day(args.until))) {
+      return textResult("since and until must be days like 2026-09-01.", true);
+    }
+    const since =
+      day(args.since) ?? new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
+    const person =
+      typeof args.person === "string" && args.person.trim() ? args.person.trim() : null;
+    const r = await meetingPromises(since, day(args.until));
+    if (!r.ok) {
+      return textResult(
+        `The meeting notes could not be read (status ${r.status}). This is an outage, not an empty week.`,
+        true
+      );
+    }
+    stats.sourceCount = new Set(r.promises.map((p) => p.id)).size;
+    return textResult(
+      `Next steps from meetings since ${since}${args.until ? ` until ${day(args.until)}` : ""}.\n\n` +
+        renderPromises(r.promises, person)
+    );
+  }
+
   if (name === "what_shipped") {
     const day = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
     const since =
@@ -4834,6 +4885,8 @@ export const MCP_INSTRUCTIONS =
   "one). Use list_product_tables then query_product_data, and " +
   "prefer an rpc/get_* analysis function when one fits — those encode the business " +
   "logic already.\n\n" +
+  "WHO PROMISED WHAT: meeting_promises lists every next step agreed in a recorded meeting, by " +
+  "owner, read off the notes by code.\n\n" +
   'WHAT CHANGED, in plain English: what_shipped lists the "For Marcus:" line of every change ' +
   "that reached main, newest first, read live from the repository.\n\n" +
   "REPORT COPY: get_context_pack gives exactly what one chapter for one archetype needs before " +

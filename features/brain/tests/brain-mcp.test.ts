@@ -326,6 +326,86 @@ describe("/api/mcp", () => {
       });
     });
 
+    describe("meeting_promises", () => {
+      const call = async (args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 11,
+                method: "tools/call",
+                params: { name: "meeting_promises", arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+
+      it("groups each meeting's next steps by owner, with the meeting and a link", async () => {
+        mockSupabaseFetch.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => [
+            {
+              source_id: "doc:abc#2",
+              title:
+                "Meeting notes: LoveIQ Sync - 2026/09/24 11:59 CEST - Notes by Gemini (part 2 of 3)",
+              url: "https://docs.google.com/document/d/abc/edit",
+              period_end: "2026-09-24",
+              body:
+                "Summary text.\nNext steps\n* [Mark Oldenburg, Sanjin Kacevac] Finalize Content: Finalize the chapter.\n" +
+                "* [Eman Cickusic] Fix Tagging: Investigate tagging in Figma.\n\nWant to see more?",
+            },
+          ],
+        });
+        const r = await call({ since: "2026-09-20", person: "Mark Oldenburg" });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.text).toContain("Mark Oldenburg (1):");
+        expect(r.content[0]!.text).toContain(
+          "- 2026-09-24 LoveIQ Sync: Finalize Content: Finalize the chapter. (https://docs.google.com/document/d/abc/edit)"
+        );
+        expect(r.content[0]!.text).not.toContain("Fix Tagging");
+        expect(r.content[0]!.text).toContain("Not checked against Notion");
+      });
+
+      /** Measured 2026-09-24: 17 notes carry the list in two parts, so 4 of 767 items came twice. */
+      it("lists an item once when two parts of the same notes carry it", async () => {
+        const part = (sid: string) => ({
+          source_id: sid,
+          title: "Meeting notes: LoveIQ Sync - 2026/09/24 11:59 CEST - Notes by Gemini",
+          url: null,
+          period_end: "2026-09-24",
+          body: "Next steps\n* [Eman Cickusic] Fix Tagging: Investigate tagging in Figma.",
+        });
+        mockSupabaseFetch.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => [part("doc:abc"), part("doc:abc#2")],
+        });
+        const r = await call({ since: "2026-09-20" });
+        expect(r.content[0]!.text.match(/Fix Tagging/g)).toHaveLength(1);
+      });
+
+      it("reports an unreadable corpus as an outage, not an empty week", async () => {
+        mockSupabaseFetch.mockResolvedValueOnce({
+          ok: false,
+          status: 503,
+          headers: new Headers(),
+          json: async () => ({}),
+        });
+        const r = await call({});
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toMatch(/outage, not an empty week/);
+      });
+
+      it("refuses a date that is not a day", async () => {
+        const r = await call({ since: "last week" });
+        expect(r.isError).toBe(true);
+      });
+    });
+
     describe("what_shipped", () => {
       const commit = (pr: number, line: string, date: string) => ({
         sha: `c${pr}0000000`,
@@ -391,7 +471,7 @@ describe("/api/mcp", () => {
       });
     });
 
-    it("lists exactly the twenty tools, each with a schema", async () => {
+    it("lists exactly the twenty-one tools, each with a schema", async () => {
       // Asserted exactly, not with toContain: a tool that disappears from the list
       // is unreachable to every connected Claude, and nothing else would notice.
       const body = await (await POST(rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }))).json();
@@ -415,6 +495,7 @@ describe("/api/mcp", () => {
         "what_shipped",
         "check_copy",
         "get_context_pack",
+        "meeting_promises",
         "list_sources",
       ]);
       for (const t of body.result.tools) expect(t.inputSchema.type).toBe("object");
@@ -5169,6 +5250,9 @@ describe("the runbook's tool count is the real one", () => {
     18: "Eighteen",
     19: "Nineteen",
     20: "Twenty",
+    21: "Twenty-one",
+    22: "Twenty-two",
+    23: "Twenty-three",
   };
 
   it("matches what the server actually exposes", () => {
