@@ -34,3 +34,36 @@ export function scannersByTrigger(scannerList) {
   }
   return byTrigger;
 }
+
+/**
+ * The scanners that still owe this reader a look.
+ *
+ * A reader used to count as covered the moment ANY scanner opened them. The
+ * rage-click scanner opens everything it is given, so on 2026-09-24 five
+ * finishers with 11 to 65 dead taps each (submissions 2115, 2131, 2150, 2176,
+ * 2183) had been opened by it alone: skipped by the survey and report scanners
+ * while those were throttled, and never sent back, while the digest told
+ * Marcus that unwatched readers "are not lost". The digest had already been
+ * narrowed to the survey scanner on 2026-09-23; this was the other half.
+ *
+ * A comprehensive scanner is meant to see every session its trigger matches,
+ * so any one it skipped is owed. A focused scanner skips by design, which is a
+ * spend decision, so it is owed only a reader nothing else opened, as before.
+ *
+ * @param {number[]} counts  trigger counts, in the order of `triggers`
+ * @param {string[]} triggers
+ * @param {Map<string, Array<object>>} byTrigger  from scannersByTrigger()
+ * @param {Set<string>} seenBy  ids of the scanners that observed this session
+ * @returns {Array<object>} each owed scanner once
+ */
+export function owedScanners(counts, triggers, byTrigger, seenBy) {
+  const owed = new Map();
+  triggers.forEach((t, i) => {
+    if ((counts[i] ?? 0) === 0) return;
+    for (const sc of byTrigger.get(t) ?? []) {
+      if (seenBy.has(sc.id)) continue;
+      if (sc.sampling_mode === "comprehensive" || seenBy.size === 0) owed.set(sc.id, sc);
+    }
+  });
+  return [...owed.values()];
+}

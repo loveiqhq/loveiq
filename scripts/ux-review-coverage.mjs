@@ -44,7 +44,7 @@
  * means the misses were re-queued successfully — see the note at that branch.
  */
 import { hogQuery } from "./lib/hogql.mjs";
-import { scannersByTrigger } from "./lib/scanners-by-trigger.mjs";
+import { owedScanners, scannersByTrigger } from "./lib/scanners-by-trigger.mjs";
 
 const PROJECT = "244778";
 
@@ -166,11 +166,26 @@ if (subs.length === 0) {
   process.exit(0);
 }
 
+/**
+ * Read in both modes now: which scanner owes a reader a look depends on each
+ * scanner's trigger and sampling mode, so the list decides what a miss IS.
+ */
+const scannerRes = await fetch(`https://eu.posthog.com/api/projects/${PROJECT}/vision/scanners/`, {
+  headers: { Authorization: `Bearer ${need("POSTHOG_API_KEY")}` },
+});
+if (!scannerRes.ok) {
+  console.error(`could not list scanners: ${scannerRes.status}`);
+  process.exit(2);
+}
+const byTrigger = scannersByTrigger(
+  ((await scannerRes.json()).results ?? []).filter((sc) => sc.enabled !== false)
+);
+
 const inList = subs.map((s) => `'${s.posthog_session_id}'`).join(",");
 const window = `INTERVAL ${DAYS + 3} DAY`;
 
 const [observedRows, recordedRows, triggerRows] = await Promise.all([
-  hog(`SELECT DISTINCT toString(properties.session_id) FROM events
+  hog(`SELECT DISTINCT toString(properties.session_id), toString(properties.scanner_id) FROM events
        WHERE event='$recording_observed' AND timestamp > now() - ${window}
          AND properties.session_id IN (${inList})`),
   hog(`SELECT DISTINCT session_id FROM raw_session_replay_events
@@ -180,111 +195,108 @@ const [observedRows, recordedRows, triggerRows] = await Promise.all([
        GROUP BY 1`),
 ]);
 
-const observed = new Set(observedRows.map((r) => String(r[0])));
+const observedBy = new Map();
+for (const [sid, scannerId] of observedRows) {
+  observedBy.set(String(sid), (observedBy.get(String(sid)) ?? new Set()).add(String(scannerId)));
+}
 const recorded = new Set(recordedRows.map((r) => String(r[0])));
 const triggers = new Map(triggerRows.map((r) => [String(r[0]), r.slice(1).map(Number)]));
 
 const misses = [];
 let noRecording = 0;
 let noTrigger = 0;
-// Counted over `subs`, not `observed.size`. The observed SET covers every
+// Counted over `subs`, not `observedBy.size`. The observed set covers every
 // session a scanner opened, including visitors who never finished a survey, so
 // printing its size next to the per-submission tallies made the four rows fail
 // to add up to the total and invited the reader to hunt for a missing case.
 let seen = 0;
 for (const s of subs) {
   const sid = s.posthog_session_id;
-  if (observed.has(sid)) {
-    seen += 1;
-    continue;
-  }
-  if (!recorded.has(sid)) {
+  const seenBy = observedBy.get(sid) ?? new Set();
+  const counts = triggers.get(sid) ?? [];
+  if (seenBy.size === 0 && !recorded.has(sid)) {
     noRecording += 1;
     continue;
   }
-  const counts = triggers.get(sid) ?? [];
-  if (counts.every((n) => n === 0)) {
+  if (seenBy.size === 0 && counts.every((n) => n === 0)) {
     noTrigger += 1;
     continue;
   }
-  misses.push({ sid, submissionId: s.id, at: s.created_date_time, counts });
+  // Opened by SOME scanner is not opened by the right one: see owedScanners().
+  const missing = owedScanners(counts, TRIGGERS, byTrigger, seenBy);
+  if (missing.length === 0) {
+    seen += 1;
+    continue;
+  }
+  misses.push({ sid, submissionId: s.id, at: s.created_date_time, counts, missing });
 }
 
-console.log(`submissions in the last ${DAYS} days : ${subs.length}`);
-console.log(`  observed by a scanner            : ${seen}`);
-console.log(`  no recording (not a miss)        : ${noRecording}`);
-console.log(`  recording but no trigger event   : ${noTrigger}`);
-console.log(`  MISSED — could have been seen    : ${misses.length}\n`);
+console.log(`submissions in the last ${DAYS} days    : ${subs.length}`);
+console.log(`  opened by every scanner that owed it : ${seen}`);
+console.log(`  no recording (not a miss)            : ${noRecording}`);
+console.log(`  recording but no trigger event       : ${noTrigger}`);
+console.log(`  MISSED by a scanner that owed a look : ${misses.length}\n`);
 
 for (const m of misses) {
   const detail = TRIGGERS.map((t, i) => `${t}=${m.counts[i] ?? 0}`).join(" ");
   console.log(`  ${m.sid}  submission ${m.submissionId}  ${String(m.at).slice(0, 16)}`);
   console.log(`      ${detail}`);
+  console.log(`      never opened by: ${m.missing.map((sc) => sc.name).join(", ")}`);
 }
 
 if (misses.length > 0) {
   console.log(
-    `\n${misses.length} finished reader(s) had a recording and a trigger and were never opened.`
+    `\n${misses.length} finished reader(s) had a recording, a trigger and a scanner that never opened them.`
   );
 
   if (!process.argv.includes("--enqueue")) {
-    console.log(`Re-run with --enqueue to send them back to the scanners that match.`);
+    console.log(`Re-run with --enqueue to send them back to the scanners that owe them a look.`);
     process.exit(1);
   }
-
-  const scannerRes = await fetch(
-    `https://eu.posthog.com/api/projects/${PROJECT}/vision/scanners/`,
-    { headers: { Authorization: `Bearer ${need("POSTHOG_API_KEY")}` } }
-  );
-  if (!scannerRes.ok) {
-    console.error(`could not list scanners: ${scannerRes.status}`);
-    process.exit(2);
-  }
-  const scannerList = (await scannerRes.json()).results ?? [];
-
-  const byTrigger = scannersByTrigger(scannerList);
 
   let queued = 0;
   let failed = 0;
   // Oldest reader first, so a standing backlog drains from the end that is
-  // closest to expiring rather than being re-queued newest-first forever.
-  const ordered = [...misses].sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  // closest to expiring rather than being re-queued newest-first forever. Capped
+  // per OBSERVATION, as MAX_ENQUEUE says: one reader can owe three scanners.
+  const ordered = misses
+    .flatMap((m) => m.missing.map((sc) => ({ ...m, sc })))
+    .sort((a, b) => String(a.at).localeCompare(String(b.at)));
   const batch = ordered.slice(0, MAX_ENQUEUE);
   const held = ordered.length - batch.length;
   for (const m of batch) {
-    for (const [i, trigger] of TRIGGERS.entries()) {
-      if ((m.counts[i] ?? 0) === 0) continue;
-      for (const sc of byTrigger.get(trigger) ?? []) {
-        const res = await fetch(
-          `https://eu.posthog.com/api/projects/${PROJECT}/vision/scanners/${sc.id}/observe/`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${need("POSTHOG_API_KEY")}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ session_id: m.sid }),
-          }
-        );
-        const ok = res.ok;
-        if (ok) queued += 1;
-        else failed += 1;
-        const body = await res.text();
-        // The workflow id is the only handle on queued work, so print it.
-        const detail = ok
-          ? ` ${String(JSON.parse(body || "{}").workflow_id ?? "").slice(-13)}`
-          : ` — ${body.slice(0, 120)}`;
-        console.log(
-          `  ${ok ? "queued " : "FAILED "} ${m.sid.slice(0, 13)} -> ${sc.name.padEnd(24)} (${trigger})${detail}`
-        );
+    const { sc } = m;
+    const trigger = TRIGGERS.find((t) => (byTrigger.get(t) ?? []).includes(sc)) ?? "?";
+    const res = await fetch(
+      `https://eu.posthog.com/api/projects/${PROJECT}/vision/scanners/${sc.id}/observe/`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${need("POSTHOG_API_KEY")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ session_id: m.sid }),
       }
-    }
+    );
+    const ok = res.ok;
+    if (ok) queued += 1;
+    else failed += 1;
+    const body = await res.text();
+    // The workflow id is the only handle on queued work, so print it.
+    const detail = ok
+      ? ` ${String(JSON.parse(body || "{}").workflow_id ?? "").slice(-13)}`
+      : ` — ${body.slice(0, 120)}`;
+    console.log(
+      `  ${ok ? "queued " : "FAILED "} ${m.sid.slice(0, 13)} -> ${sc.name.padEnd(24)} (${trigger})${detail}`
+    );
   }
   console.log(`\n${queued} observation(s) queued, ${failed} failed.`);
   // Printed, never swallowed: a standing backlog has to be visible or the run
   // looks identical whether it caught up or fell further behind.
   if (held > 0) {
-    console.log(`${held} reader(s) held for the next run (cap ${MAX_ENQUEUE}) — oldest go first.`);
+    console.log(
+      `${held} observation(s) held for the next run (cap ${MAX_ENQUEUE}) — oldest go first.`
+    );
   }
   /**
    * Exit 0 when the gap was CLOSED, not when there was no gap.
@@ -298,5 +310,5 @@ if (misses.length > 0) {
   if (failed > 0) process.exit(2);
   process.exit(0);
 }
-console.log("every finished reader with a recording was opened by a scanner.");
+console.log("every finished reader with a recording was opened by every scanner that owed it.");
 process.exit(0);

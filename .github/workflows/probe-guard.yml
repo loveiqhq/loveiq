@@ -313,14 +313,15 @@ jobs:
             exit 1
           fi
 
-      # Which finished readers no scanner ever opened. The digest says how many;
-      # this names which, and only counts one as missed if it HAD a recording and
-      # a trigger event — a reader who declined recording is not a miss.
+      # Which finished readers a scanner that owed them a look never opened. The
+      # digest says how many; this names which, and only counts one as missed if
+      # it HAD a recording and a trigger event — a reader who declined recording
+      # is not a miss.
       #
-      # Exit 1 is reported, not failed: misses are a PostHog-side sweep gap we
-      # cannot re-queue without the 'replay_scanner:write' scope, so failing on
-      # it would be a permanently red job. Exit 2 and above is a real error.
-      - name: Name the finished readers no scanner opened
+      # Exit 1 is reported, not failed: the three-hourly verify workflow
+      # re-queues these, so a miss here is a backlog draining rather than a
+      # regression. Exit 2 and above is a real error.
+      - name: Name the finished readers a scanner owed a look
         env:
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
