@@ -60,6 +60,17 @@ vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: (...a: unknown[]) => mockFetch(...(a as [])),
 }));
 
+const mockQueueResearch = vi.fn();
+vi.mock("@features/brain/server/night-shift", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/brain/server/night-shift")>()),
+  queueResearch: (...a: unknown[]) => mockQueueResearch(...a),
+}));
+const mockWhatsNew = vi.fn();
+vi.mock("@features/brain/server/whats-new", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/brain/server/whats-new")>()),
+  whatsNew: (...a: unknown[]) => mockWhatsNew(...a),
+}));
+
 vi.mock("@shared/http/ratelimit", () => ({
   checkRateLimit: (...a: unknown[]) => mockRateLimit(...(a as [])),
   getClientIp: () => "1.2.3.4",
@@ -461,6 +472,134 @@ describe("/api/mcp", () => {
       });
     });
 
+    describe("queue_research and whats_new", () => {
+      const call = async (name: string, args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 13,
+                method: "tools/call",
+                params: { name, arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+      beforeEach(() => {
+        mockQueueResearch.mockReset();
+        mockWhatsNew.mockReset();
+      });
+
+      it("queues a question with who asked and why, and says when the answer comes", async () => {
+        mockQueueResearch.mockResolvedValue({
+          ok: true,
+          id: "research:2026-09-25-abc",
+          status: "queued",
+        });
+        const r = await call("queue_research", {
+          question: "What does the research say about attachment and satisfaction?",
+          asked_by: "Mark Oldenburg",
+          why: "Chapter 3",
+        });
+        expect(r.isError).toBeFalsy();
+        expect(mockQueueResearch).toHaveBeenCalledWith({
+          question: "What does the research say about attachment and satisfaction?",
+          askedBy: "Mark Oldenburg",
+          why: "Chapter 3",
+        });
+        expect(r.content[0]!.text).toMatch(
+          /^Queued as research\/research:2026-09-25-abc\. The Night Shift starts at 02:30/
+        );
+      });
+
+      it("refuses a question too short to research", async () => {
+        const r = await call("queue_research", { question: "pricing?" });
+        expect(r.isError).toBe(true);
+        expect(mockQueueResearch).not.toHaveBeenCalled();
+      });
+
+      it("points at the answer that already exists instead of queuing it again", async () => {
+        mockQueueResearch.mockResolvedValue({
+          ok: true,
+          id: "research:2026-09-20-x",
+          status: "done",
+          existing: true,
+        });
+        const r = await call("queue_research", {
+          question: "What do our competitors charge for a report?",
+        });
+        expect(r.content[0]!.text).toBe(
+          "Already answered: research/research:2026-09-20-x. Read it with fetch_document."
+        );
+      });
+
+      it("says the queue is full, and what is in it", async () => {
+        mockQueueResearch.mockResolvedValue({
+          ok: false,
+          full: [
+            {
+              sourceId: "research:2026-09-24-a",
+              question: "First question here?",
+              askedBy: null,
+              askedOn: "2026-09-24",
+              why: null,
+            },
+          ],
+        });
+        const r = await call("queue_research", {
+          question: "What do our competitors charge for a report?",
+        });
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toContain(
+          "- First question here? (research/research:2026-09-24-a)"
+        );
+      });
+
+      it("says nothing was written when queuing fails", async () => {
+        mockQueueResearch.mockRejectedValue(new Error("down"));
+        const r = await call("queue_research", {
+          question: "What do our competitors charge for a report?",
+        });
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toBe("Could not queue that question. Nothing was written.");
+      });
+
+      it("lists what is new over the last day by default", async () => {
+        mockWhatsNew.mockResolvedValue({
+          ok: true,
+          waiting: 0,
+          items: [
+            {
+              source: "notice",
+              id: "notice/n1",
+              title: "Unusual numbers on Wednesday",
+              at: "2026-09-25T07:05",
+            },
+          ],
+        });
+        const r = await call("whats_new", {});
+        const since = Date.parse(mockWhatsNew.mock.calls[0]![0] as string);
+        expect(Date.now() - since).toBeGreaterThan(23 * 3_600_000);
+        expect(Date.now() - since).toBeLessThan(25 * 3_600_000);
+        expect(r.content[0]!.text).toContain(
+          "- 2026-09-25 07:05 noticed: Unusual numbers on Wednesday (notice/n1)"
+        );
+      });
+
+      it("takes a day or a time for since, refuses anything else, and reports an outage as one", async () => {
+        mockWhatsNew.mockResolvedValue({ ok: true, waiting: null, items: [] });
+        await call("whats_new", { since: "2026-09-20" });
+        expect(mockWhatsNew.mock.calls[0]![0]).toBe("2026-09-20T00:00:00.000Z");
+        expect((await call("whats_new", { since: "last week" })).isError).toBe(true);
+        expect((await call("whats_new", { since: "2026-09-31" })).isError).toBe(true);
+        mockWhatsNew.mockResolvedValue({ ok: false, status: 503 });
+        const r = await call("whats_new", {});
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toMatch(/outage, not a quiet day/);
+      });
+    });
+
     describe("explain_change", () => {
       const call = async (args: Record<string, unknown>) =>
         (
@@ -628,6 +767,7 @@ describe("/api/mcp", () => {
         "write_to_notion",
         "send_email",
         "write_to_google_doc",
+        "queue_research",
         "count_context",
         "browse_context",
         "get_business_numbers",
@@ -639,12 +779,28 @@ describe("/api/mcp", () => {
         "show_page",
         "what_shipped",
         "explain_change",
+        "whats_new",
         "check_copy",
         "get_context_pack",
         "meeting_promises",
         "list_sources",
       ]);
       for (const t of body.result.tools) expect(t.inputSchema.type).toBe("object");
+    });
+
+    /**
+     * THE NIGHT SHIFT'S AGENT SEES ONLY WHAT READS. Its allow-list and deny-list are written
+     * out by hand in night-shift.ts, so a new tool must land on one of them: every writing
+     * tool denied by name, and every tool it may use one that exists and changes nothing.
+     */
+    it("keeps the Night Shift's researcher to read-only tools, with every writing tool denied", async () => {
+      const { RESEARCH_TOOLS, WRITE_TOOLS } = await import("@features/brain/server/night-shift");
+      const byName = new Map(TOOLS.map((t) => [t.name, t]));
+      for (const t of RESEARCH_TOOLS) {
+        expect(byName.get(t)?.annotations?.readOnlyHint, t).toBe(true);
+      }
+      const writes = TOOLS.filter((t) => t.annotations?.readOnlyHint !== true).map((t) => t.name);
+      expect([...WRITE_TOOLS].sort()).toEqual([...writes].sort());
     });
 
     it("declares exactly the writing tools it means to, and annotates them honestly", async () => {
@@ -671,6 +827,7 @@ describe("/api/mcp", () => {
         "write_to_notion",
         "send_email",
         "write_to_google_doc",
+        "queue_research",
       ]);
       /**
        * EXACTLY ONE TOOL IS DESTRUCTIVE, and it is the one whose effect nobody can undo.
@@ -5400,6 +5557,7 @@ describe("the runbook's tool count is the real one", () => {
     21: "Twenty-one",
     22: "Twenty-two",
     23: "Twenty-three",
+    24: "Twenty-four",
   };
 
   it("matches what the server actually exposes", () => {

@@ -87,6 +87,9 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   // run looks exactly like a quiet one, and the corpus it feeds goes stale invisibly —
   // research cards do not announce their own age.
   "brain-evidence": 26 * 3_600_000,
+  // Nightly, in GitHub Actions. It records a run whether or not anything was queued, so a
+  // missing night means the job did not fire, and questions are waiting on it.
+  "brain-night-shift": 26 * 3_600_000,
 };
 
 /**

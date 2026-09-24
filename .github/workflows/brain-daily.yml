@@ -1,6 +1,7 @@
 name: Company Brain daily jobs
 
-# The two brain crons that need a language model run here instead of on Vercel.
+# The brain crons that need a language model run here instead of on Vercel: the brief,
+# the decision miner, and the Night Shift that answers questions queued with queue_research.
 #
 # THE MODEL IS THE TEAM SUBSCRIPTION, NOT AN API KEY. Only the `claude` binary may use it:
 # `claude setup-token` mints CLAUDE_CODE_OAUTH_TOKEN, billed against the plan we already
@@ -11,7 +12,7 @@ name: Company Brain daily jobs
 # Times are UTC, and GitHub can start a scheduled run late. Nothing here is time-critical:
 # the brief's second firing exists precisely so that one late or failed run is retried.
 
-run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.job || (github.event.schedule == '25 8 * * *' && 'brain-mine' || 'brain-brief') }}
+run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.job || (github.event.schedule == '25 8 * * *' && 'brain-mine' || github.event.schedule == '30 0 * * *' && 'brain-night-shift' || 'brain-brief') }}
 
 on:
   schedule:
@@ -20,12 +21,14 @@ on:
     - cron: "10 6,8 * * *"
     # The decision miner, after the brief's retry.
     - cron: "25 8 * * *"
+    # The Night Shift, 02:30 in Berlin: the research queued in the day, answered by morning.
+    - cron: "30 0 * * *"
   workflow_dispatch:
     inputs:
       job:
         description: "Which job to run"
         type: choice
-        options: [brain-brief, brain-mine]
+        options: [brain-brief, brain-mine, brain-night-shift]
       query:
         description: "Optional query string, e.g. ?day=2026-09-22 or ?limit=3"
         required: false
@@ -41,13 +44,14 @@ permissions:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The Night Shift answers up to three questions of up to 20 minutes each.
+    timeout-minutes: ${{ (github.event.schedule == '30 0 * * *' || inputs.job == 'brain-night-shift') && 75 || 20 }}
     env:
-      JOB: ${{ github.event_name == 'workflow_dispatch' && inputs.job || (github.event.schedule == '25 8 * * *' && 'brain-mine' || 'brain-brief') }}
+      JOB: ${{ github.event_name == 'workflow_dispatch' && inputs.job || (github.event.schedule == '25 8 * * *' && 'brain-mine' || github.event.schedule == '30 0 * * *' && 'brain-night-shift' || 'brain-brief') }}
     # One of each job at a time. Overlap would be harmless (the brief's day claim and the
     # miner's tombstones both dedupe), but it would spend the seat's allowance twice.
     concurrency:
-      group: brain-daily-${{ github.event_name == 'workflow_dispatch' && inputs.job || (github.event.schedule == '25 8 * * *' && 'brain-mine' || 'brain-brief') }}
+      group: brain-daily-${{ github.event_name == 'workflow_dispatch' && inputs.job || (github.event.schedule == '25 8 * * *' && 'brain-mine' || github.event.schedule == '30 0 * * *' && 'brain-night-shift' || 'brain-brief') }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -69,6 +73,8 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           SLACK_BRAIN_WEBHOOK_URL: ${{ secrets.SLACK_BRAIN_WEBHOOK_URL }}
+          # The Night Shift's researcher reads the brain over MCP with this bearer.
+          LOVEIQ_MCP_TOKEN: ${{ secrets.LOVEIQ_MCP_TOKEN }}
           # The routes run only when this names production (isProdCronHost), so it is
           # pinned here rather than read from a secret.
           NEXT_PUBLIC_SITE_URL: https://loveiq.org
@@ -85,7 +91,9 @@ jobs:
           # nothing (notifySlack skips an unset channel and the day is still marked done),
           # and a green run that did nothing is the failure this corpus keeps relearning.
           missing=""
-          for v in SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY CLAUDE_CODE_OAUTH_TOKEN SLACK_BRAIN_WEBHOOK_URL; do
+          need="SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY CLAUDE_CODE_OAUTH_TOKEN SLACK_BRAIN_WEBHOOK_URL"
+          [ "$JOB" = "brain-night-shift" ] && need="$need LOVEIQ_MCP_TOKEN"
+          for v in $need; do
             [ -n "${!v:-}" ] || missing="$missing $v"
           done
           if [ -n "$missing" ]; then
@@ -95,6 +103,7 @@ jobs:
           case "$JOB" in
             brain-brief) npx tsx scripts/brain-cron.ts brain-brief $DRY_RUN "$QUERY" ;;
             brain-mine) npx tsx scripts/brain-cron.ts brain-mine "$QUERY" ;;
+            brain-night-shift) npx tsx scripts/brain-cron.ts brain-night-shift ;;
             *) echo "::error::Unknown job: $JOB"; exit 2 ;;
           esac | tee /tmp/brain-job.log
 
@@ -119,7 +128,7 @@ jobs:
           # The job's one-line result (status, and the route's reason), when it got that far.
           result=$(grep -h '^{"status"' /tmp/brain-job.log 2>/dev/null | tail -1 | cut -c1-300 || true)
           # A usage limit is the one failure with a known fix, so it pings the seat's owner.
-          # The token is Eman's own seat by his choice (2026-09-24); if limits keep stopping
+          # The token is Eman's own seat by their choice (2026-09-24); if limits keep stopping
           # these jobs it moves to teamwork@ (COMPANY_BRAIN.md, "Whose seat").
           hint=""
           if grep -qiE "hit your .*limit|usage limit|rate_limited" /tmp/brain-job.log 2>/dev/null; then
