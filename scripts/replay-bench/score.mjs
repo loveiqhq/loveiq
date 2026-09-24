@@ -23,7 +23,7 @@ import { hogQuery } from "../lib/hogql.mjs";
 import { championChallengerPairs } from "../lib/challenger-pairs.mjs";
 // One list, two callers. See scripts/lib/claim-scoped-probes.mjs for what
 // earns a probe a place in it and why an unscoped `clear` is not evidence.
-import { clearIsGroundTruth } from "../lib/claim-scoped-probes.mjs";
+import { clearIsGroundTruth, replayAlone } from "../lib/claim-scoped-probes.mjs";
 
 const PROJECT = "244778";
 const MIN_PRECISION = 0.8;
@@ -81,14 +81,23 @@ export function score(rows) {
  *
  * Every row is a YES, by construction: the ledger is written from findings the
  * scanner already flagged. See the recall note at the call site.
+ *
+ * A person's label outranks the probe: #282 was reproduced, closed as wrong,
+ * and scored here as the scanner being right. And a reproduction only the
+ * route replay made is set aside until someone labels it, as everywhere else.
  */
 export function ledgerRows(findings) {
-  return findings.map((f) => ({
-    ...f,
-    expect: f.outcome === "reproduced" ? "yes" : "no",
-    verdict: "yes",
-    unchecked: f.outcome === "clear" && !clearIsGroundTruth(f),
-  }));
+  return findings.map((f) => {
+    const label = f.outcome === "reproduced" ? f.human_label : null;
+    return {
+      ...f,
+      expect: (label ? label === "agree" : f.outcome === "reproduced") ? "yes" : "no",
+      verdict: "yes",
+      unchecked:
+        (f.outcome === "clear" && !clearIsGroundTruth(f)) ||
+        (f.outcome === "reproduced" && !label && replayAlone(f.probe_runs)),
+    };
+  });
 }
 
 /** "0.20", or "n/a" when the figure is undefined rather than perfect. */
@@ -136,10 +145,24 @@ if (process.argv.includes("--selftest")) {
     [{ outcome: "clear", probe_runs: [{ file: "a.mjs" }, { claimScoped: true }] }, true],
   ];
   const gtOk = gt.every(([row, want]) => ledgerRows([row])[0].unchecked === !want);
-  // A reproduction is evidence regardless, so it must never be set aside.
+  // A reproduction is evidence regardless, so it must never be set aside...
   const reproducedNeverUnchecked =
     ledgerRows([{ outcome: "reproduced" }])[0].unchecked === false &&
     ledgerRows([{ outcome: "contradicted" }])[0].unchecked === false;
+  // ...unless only the replay made it and nobody has looked, and a person's
+  // label decides it either way.
+  const replay = [{ file: "replay-session.mjs", passed: false, inconclusive: false }];
+  const [held, ruledOut, agreed] = ledgerRows([
+    { outcome: "reproduced", probe_runs: replay },
+    { outcome: "reproduced", probe_runs: replay, human_label: "disagree" },
+    { outcome: "reproduced", probe_runs: replay, human_label: "agree" },
+  ]);
+  const personDecides =
+    held.unchecked === true &&
+    ruledOut.unchecked === false &&
+    ruledOut.expect === "no" &&
+    agreed.unchecked === false &&
+    agreed.expect === "yes";
   /**
    * The bug this replaced, stated as an assertion: an unscoped `clear` fed to
    * score() is expect:no/verdict:yes, i.e. a false positive. Filtering it out
@@ -165,11 +188,12 @@ if (process.argv.includes("--selftest")) {
     fmtScore(0.2) === "0.20" &&
     gtOk &&
     reproducedNeverUnchecked &&
+    personDecides &&
     filterMatters;
   console.log(
     ok
       ? "replay-bench score selftest ok"
-      : `selftest FAILED: ${JSON.stringify({ s, empty, gtOk, reproducedNeverUnchecked, filterMatters })}`
+      : `selftest FAILED: ${JSON.stringify({ s, empty, gtOk, reproducedNeverUnchecked, personDecides, filterMatters })}`
   );
   process.exit(ok ? 0 : 1);
 }
@@ -216,7 +240,7 @@ if (process.argv.includes("--ledger")) {
       // probe_runs carries `claimScoped`. Omit it and clearIsGroundTruth() reads
       // undefined for every row, so every `clear` falls to unchecked and the
       // scorer silently measures nothing — the failure this whole change is about.
-      `,probe_runs` +
+      `,probe_runs,human_label` +
       `&outcome=in.(reproduced,clear,contradicted)&created_at=gte.${since}&limit=1000`,
     { headers: { apikey: key, Authorization: `Bearer ${key}` } }
   );
@@ -276,7 +300,9 @@ if (process.argv.includes("--ledger")) {
         (e.contradicted ? `, ${e.contradicted} refuted by our own events` : "") +
         // Named, not hidden. A scanner scored on 2 of 70 findings looks precise
         // or hopeless depending on a number you cannot see otherwise.
-        (e.unchecked ? `, ${e.unchecked} not checked by any claim-scoped probe` : "")
+        (e.unchecked
+          ? `, ${e.unchecked} not counted (no claim-scoped probe, or the replay alone)`
+          : "")
     );
   }
 
@@ -324,7 +350,7 @@ if (process.argv.includes("--ledger")) {
     `\nprecision ${fmtScore(ls.precision)} (bar ${MIN_PRECISION}) · ` +
       `right ${ls.tp} wrong ${ls.fp}` +
       (lRows.length - scoredRows.length > 0
-        ? ` · ${lRows.length - scoredRows.length} not counted (no claim-scoped probe ran)`
+        ? ` · ${lRows.length - scoredRows.length} not counted (no claim-scoped probe ran, or only the replay confirmed it)`
         : "") +
       ` · ` +
       `recall n/a — the ledger holds only findings the scanner flagged, so a miss cannot appear in it`

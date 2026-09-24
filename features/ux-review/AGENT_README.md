@@ -83,8 +83,11 @@ SELECT criterion, outcome, count(*) FROM ux_finding GROUP BY 1, 2 ORDER BY 1, 3 
 SELECT outcome, round(avg(confidence)::numeric, 3), count(*) FROM ux_finding
 WHERE confidence IS NOT NULL GROUP BY 1;
 
--- verdicts that reached nobody, and which criteria keep arriving uncheckable
-SELECT count(*) FILTER (WHERE NOT delivered) AS undelivered,
+-- verdicts that were meant for a thread and found none, and which criteria keep
+-- arriving uncheckable. A clear or a contradiction is never posted (#238), so a
+-- bare NOT delivered counts every one of them as "reached nobody".
+SELECT count(*) FILTER (WHERE NOT delivered AND (outcome = 'inconclusive'
+         OR (outcome = 'gap' AND criterion IS NOT NULL))) AS undelivered,
        count(*) FILTER (WHERE outcome = 'gap') AS no_probe FROM ux_finding;
 ```
 
@@ -124,7 +127,12 @@ must never read as a healthy one.
 
 `human_label` is deliberately null until someone says: a merged reproduction PR
 means the claim was real, a closed one means it was not, and that is ground truth
-nobody has to curate.
+nobody has to curate. It outranks the probe everywhere it is read: the digest
+reports a `disagree` as "ruled out when a person looked" rather than as a
+confirmed problem, and the scorecard scores the scanner by it. A confirmation
+the route replay made ALONE opens no PR and posts nothing (see
+`confirmedByReplayAlone`), so nobody labels it by merging; whoever looks sets
+`human_label` on the row by hand.
 
 **One place applies the prompts, and it is main.** The daily cron ALERTS on
 drift between PostHog and `scanners.ts` and nothing ever closed it —
