@@ -59,6 +59,8 @@ const ReportMobileNav: FC<Props> = ({
   const pillButtonRef = useRef<HTMLButtonElement>(null);
   const panelPillButtonRef = useRef<HTMLButtonElement>(null);
   const wasDrawerOpenRef = useRef(false);
+  /** The chapter tapped in the drawer, waiting for the drawer to let go of the page. */
+  const pendingSectionRef = useRef<string | null>(null);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [phase, setPhase] = useState<DrawerPhase>("closed");
@@ -158,6 +160,26 @@ const ReportMobileNav: FC<Props> = ({
     lockBodyScroll();
     return unlockBodyScroll;
   }, [drawerMounted]);
+
+  // A chapter link's own jump happens while that lock still holds the page
+  // (`position: fixed`), so it lands on nothing, and releasing the lock then puts
+  // the reader back where they opened the drawer. So the drawer goes to the chapter
+  // itself once it has closed. React runs the lock effect's cleanup (the release)
+  // before this effect in the same commit, so the page is free by now.
+  //
+  // A jump, not the page's smooth scroll: a smooth scroll fixes its destination as
+  // it starts, and content it passes can still grow (Report V4's Typical Beliefs
+  // rows turn open as they cross the screen), so it stopped short of the chapter.
+  // After a jump, scroll anchoring holds the chapter in place while that settles.
+  useEffect(() => {
+    if (phase !== "closed") return;
+    const id = pendingSectionRef.current;
+    if (!id) return;
+    pendingSectionRef.current = null;
+    document
+      .getElementById(id)
+      ?.scrollIntoView({ block: "start", behavior: "instant" as ScrollBehavior });
+  }, [phase]);
 
   useEffect(() => {
     if (!drawerOpen) return;
@@ -345,6 +367,7 @@ const ReportMobileNav: FC<Props> = ({
                             source: "mobile_drawer",
                           });
                           onSectionClick?.(item.id);
+                          pendingSectionRef.current = item.id;
                           closeDrawer();
                         }}
                       >
