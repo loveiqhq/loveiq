@@ -866,13 +866,17 @@ allow it only in the unmodified binary, never in our own API calls. Vercel has n
 `BRAIN_LLM_CLI=claude`. The day claim, the `cron_run` row, the Slack post and the stall
 watch behave exactly as they did on Vercel.
 
-- **Whose seat.** Automated runs share that seat's five-hour and weekly limits with its
-  owner's own Claude use. On 2026-09-19 `generate-fix` stopped on "You've hit your session
-  limit", which is why the token should belong to a seat nobody works in all day
-  (teamwork@). A limit hit is reported as `rate_limited` and the job stops for the day.
+- **Whose seat.** Eman's own Premium seat, by his choice (2026-09-24). Automated runs share
+  its five-hour and weekly limits with his own Claude use, though at about fifteen short
+  calls a day they take little. A limit hit is reported as `rate_limited`, the job stops for
+  the day, and the #brain alert pings the seat's owner (repository variable
+  `CLAUDE_TOKEN_OWNER_SLACK_ID`). If that happens more than once or twice, move the token
+  to the teamwork@ seat, which nobody works in all day. On 2026-09-19 `generate-fix` stopped
+  on "You've hit your session limit" for exactly this reason.
 - **Replacing the token.** Run `claude setup-token` signed in as the seat's owner, then
   `gh secret set CLAUDE_CODE_OAUTH_TOKEN -R loveiqhq/loveiq`. `generate-fix` uses the same
-  secret.
+  secret. Then point the ping at whoever should hear about a limit:
+  `gh variable set CLAUDE_TOKEN_OWNER_SLACK_ID -R loveiqhq/loveiq --body <Slack member id>`.
 - **Secrets it needs.** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
   `CLAUDE_CODE_OAUTH_TOKEN`, `SLACK_BRAIN_WEBHOOK_URL`. The run fails when any is missing:
   without the brain webhook the brief would be marked delivered into nothing. Any failure

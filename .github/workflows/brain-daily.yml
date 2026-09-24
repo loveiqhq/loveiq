@@ -107,6 +107,9 @@ jobs:
         if: failure()
         env:
           SLACK_BRAIN_WEBHOOK_URL: ${{ secrets.SLACK_BRAIN_WEBHOOK_URL }}
+          # Slack member id of whoever's seat CLAUDE_CODE_OAUTH_TOKEN belongs to (a repository
+          # variable, not a secret). Change it whenever the token changes hands.
+          TOKEN_OWNER: ${{ vars.CLAUDE_TOKEN_OWNER_SLACK_ID }}
         run: |
           set -euo pipefail
           if [ -z "${SLACK_BRAIN_WEBHOOK_URL:-}" ]; then
@@ -115,6 +118,15 @@ jobs:
           fi
           # The job's one-line result (status, and the route's reason), when it got that far.
           result=$(grep -h '^{"status"' /tmp/brain-job.log 2>/dev/null | tail -1 | cut -c1-300 || true)
-          text=":brain: ${JOB} failed in GitHub Actions. ${result:-It did not get as far as running.} ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          # A usage limit is the one failure with a known fix, so it pings the seat's owner.
+          # The token is Eman's own seat by his choice (2026-09-24); if limits keep stopping
+          # these jobs it moves to teamwork@ (COMPANY_BRAIN.md, "Whose seat").
+          hint=""
+          if grep -qiE "hit your .*limit|usage limit|rate_limited" /tmp/brain-job.log 2>/dev/null; then
+            owner="the seat"
+            if [ -n "${TOKEN_OWNER:-}" ]; then owner="<@${TOKEN_OWNER}>'s seat"; fi
+            hint=" The Claude usage limit on ${owner} stopped it. If this keeps happening, move CLAUDE_CODE_OAUTH_TOKEN to the teamwork@ seat (COMPANY_BRAIN.md, \"Whose seat\")."
+          fi
+          text=":brain: ${JOB} failed in GitHub Actions.${hint} ${result:-It did not get as far as running.} ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           jq -n --arg text "$text" '{text: $text}' |
             curl -sS --fail -X POST -H 'Content-type: application/json' --data @- "$SLACK_BRAIN_WEBHOOK_URL"
