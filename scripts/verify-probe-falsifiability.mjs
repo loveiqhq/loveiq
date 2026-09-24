@@ -175,6 +175,20 @@ console.log("");
  */
 const PROBE_ENV = {
   "verify-dead-click-target.mjs": { URL_PATH: "/survey", TARGET_SELECTOR: "main" },
+  /**
+   * The replay needs a ROUTE, or it exits 3 before touching the site — so its
+   * MUTATE could never show, and this check failed on its first run
+   * (2026-09-24), three days after the replay was added. The route must also
+   * leave something checkable: on the LOCKED internal report any real scroll
+   * past 25% opens the paywall, and a lock behind an open dialog is correct,
+   * so every step was suppressed and clean and mutated both said 3. The PAID
+   * internal report (verify-unlocked-report.mjs) has no paywall: clean exits
+   * 0 on three checkable steps, MUTATE exits 1 every time.
+   */
+  "replay-session.mjs": {
+    REPLAY_TOKEN: "rpt_HmQip3ZENUerTMsjrc1X",
+    REPLAY_STEPS: "scroll_depth_25,scroll_depth_50,scroll_depth_75",
+  },
 };
 
 const targets = [];
