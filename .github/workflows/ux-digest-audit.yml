@@ -1,0 +1,73 @@
+name: UX digest — does it tell the truth
+
+# Every probe checks the product. This checks the daily UX digest: each claim of
+# the one actually delivered, re-asked over its own 24 hours from a source it
+# did not use (the survey tables, GitHub, PostHog). Why it exists, and what it
+# does not check: features/ux-review/server/digest-audit.ts.
+
+on:
+  schedule:
+    # 08:53 UTC: after the digest in both summer (07:17 UTC) and winter
+    # (08:17 UTC), since it posts at the first run after 09:00 in Berlin.
+    - cron: "53 8 * * *"
+  workflow_dispatch:
+    inputs:
+      post:
+        description: "Post a false claim to Slack (off = check and print only)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ux-digest-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+
+      # A check that cannot fail reads exactly like one that passed. MUTATE=1
+      # overstates the digest's finisher count by one on live data; anything
+      # but exit 1 means the audit has stopped being able to say no.
+      - name: The audit can still say no
+        env:
+          MUTATE: "1"
+        run: |
+          set +e
+          npx tsx scripts/audit-ux-digest.mjs
+          code=$?
+          set -e
+          if [ "$code" -ne 1 ]; then
+            echo "::error::with a false claim injected the audit exited $code, not 1"
+            exit 1
+          fi
+
+      # Exit 1 fails the run AND posts the disagreement; exit 3 (a source could
+      # not be read) fails it without posting, because "could not check" must
+      # never read as "every claim held".
+      - name: Re-ask every claim of the last digest
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_COMMITS_WEBHOOK_URL }}
+          POST: ${{ github.event_name == 'schedule' || inputs.post }}
+        run: |
+          if [ "$POST" = "true" ]; then
+            npx tsx scripts/audit-ux-digest.mjs --post
+          else
+            npx tsx scripts/audit-ux-digest.mjs
+          fi

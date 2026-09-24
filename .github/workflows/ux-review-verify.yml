@@ -103,6 +103,11 @@ jobs:
       # — the workflow id is derived from (scanner, session) — so re-running
       # cannot double-charge.
       #
+      # PER (SESSION, SCANNER), since 2026-09-24. It re-queued only readers
+      # watched by NOTHING, and the rage-click scanner opens everything it is
+      # given, so 40 finishers in 14 days (one with 65 dead taps) sat opened by
+      # it alone and were never sent back to the survey and report scanners.
+      #
       # THE WINDOW WAS TWO DAYS, and that was wrong. The reasoning was that a
       # short window avoids "reaching back over recordings that have already
       # expired", but nothing expires that fast: measured 2026-09-20, PostHog
@@ -115,7 +120,7 @@ jobs:
       # instead, by MAX_ENQUEUE, so a standing backlog drains over successive
       # runs oldest-reader-first rather than firing hundreds of observations at
       # once. The held count is printed on every run.
-      - name: Re-queue recordings no scanner opened
+      - name: Re-queue recordings a scanner owed a look
         run: npx tsx scripts/ux-review-coverage.mjs --enqueue
         env:
           POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}

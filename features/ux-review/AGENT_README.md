@@ -15,6 +15,10 @@ the team is told.
   summary (`fetchDailyStats`, `buildDigestMessage`), and compares the live
   scanners against the ones pinned in git (`fetchScannerDrift`,
   `compareScanners`).
+- `server/digest-audit.ts` — re-asks each claim of the last digest that was
+  delivered, over its own 24 hours, from a source the digest did not use.
+  Run daily at 08:53 UTC by `.github/workflows/ux-digest-audit.yml` through
+  `scripts/audit-ux-digest.mjs`.
 
 **The one rule that shapes everything: a verdict is not a finding.**
 
@@ -207,6 +211,18 @@ belongs. The survey scanner holds the only 2 confirmed findings in the system.
 The machinery stays: role, suppression, the shared probe outcome, the pairing in
 the scorecard. The next experiment uses it, and the tests prove the rules
 without needing one to be running.
+
+**The digest has a probe too, since 2026-09-24.** Rendering the next morning's
+digest from live data found four false things it would have said: a
+confirmation a person had closed as wrong, "19 had no survey entry" when 9 had
+none, and unwatched readers "not lost" when no survey or report scanner had ever
+opened them, the week's worst sessions among them. Every one passed its tests.
+`ux-digest-audit.yml` now re-asks those claims daily against the survey tables,
+GitHub and PostHog: exit 1 fails the run and posts the disagreement to the
+commits channel, exit 3 fails it without posting. It re-computes with today's
+code over the digest's window, so it checks the logic the digest runs, not the
+text Slack received; and it cannot see a posted reply inside its thread, since
+the only Slack token CI holds can write but not read.
 
 **The fix writer stays dispatch-only, decided 2026-09-21.**
 

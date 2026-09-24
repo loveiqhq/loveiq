@@ -445,6 +445,9 @@ export interface ReproducedFinding {
   fromOwnRecords: boolean;
   /** Only the route replay saw it: recorded, listed here, not posted. See below. */
   heldForAPerson?: boolean;
+  /** Which reader and which pull request, so digest-audit.ts can re-ask each claim. */
+  sessionId?: string | null;
+  prUrl?: string | null;
 }
 
 /**
@@ -486,6 +489,8 @@ export interface VerificationStat {
   duplicate: number;
   /** Verdicts the verifier posts (inconclusive, a named gap) that found no thread. */
   undelivered: number;
+  /** The sessions behind `undelivered`, for digest-audit.ts. */
+  undeliveredSessions: string[];
   /** Reproduced, then ruled out by a person (its pull request was closed). */
   overturned: number;
   total: number;
@@ -495,6 +500,8 @@ export interface VerificationStat {
 export interface CoverageStat {
   /** Submissions in the window that carry a PostHog session id. */
   submissions: number;
+  /** Finishers in the window with no recording to watch, said out loud. */
+  unrecorded?: number;
   /** Of those, how many the SURVEY scanner opened a recording for — not "any scanner". */
   observed: number;
 }
@@ -535,17 +542,24 @@ export interface CoverageStat {
  * reason the verification line does: a missing number must not read as a
  * healthy one.
  */
-export async function fetchCoverageStats(): Promise<CoverageStat | null> {
+export async function fetchCoverageStats(at = Date.now()): Promise<CoverageStat | null> {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const posthogKey = process.env.POSTHOG_API_KEY;
   if (!url || !key || !posthogKey) return null;
 
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  // `at` is the digest's own moment, so digest-audit.ts can re-ask its window.
+  const since = new Date(at - 24 * 60 * 60 * 1000).toISOString();
+  const until = new Date(at).toISOString();
   try {
+    /**
+     * EVERY finisher, then split. Reading only rows with a session id made
+     * "X of the Y people who finished the survey" quietly mean "of those with
+     * a recording": 405 of 434 over 30 days on 2026-09-24.
+     */
     const res = await fetchWithTimeout(
       `${url}/rest/v1/survey_submission?select=posthog_session_id` +
-        `&created_date_time=gte.${since}&posthog_session_id=not.is.null&limit=500`,
+        `&created_date_time=gte.${since}&created_date_time=lt.${until}&limit=500`,
       { headers: { apikey: key, Authorization: `Bearer ${key}` }, timeoutMs: 8_000 }
     );
     if (!res.ok) return null;
@@ -554,7 +568,8 @@ export async function fetchCoverageStats(): Promise<CoverageStat | null> {
     const ids = rows
       .map((r) => r.posthog_session_id)
       .filter((id): id is string => id !== null && isSafeSessionId(id));
-    if (ids.length === 0) return { submissions: 0, observed: 0 };
+    const unrecorded = rows.length - ids.length;
+    if (ids.length === 0) return { submissions: 0, observed: 0, unrecorded };
 
     // Same id guard as every other per-session lookup here: these are
     // interpolated into HogQL.
@@ -591,7 +606,7 @@ export async function fetchCoverageStats(): Promise<CoverageStat | null> {
          AND toString(properties.scanner_name) = 'LoveIQ survey UX'`
     );
     if (observed === null) return null;
-    return { submissions: ids.length, observed: Number(observed[0]?.[0]) || 0 };
+    return { submissions: ids.length, observed: Number(observed[0]?.[0]) || 0, unrecorded };
   } catch {
     return null;
   }
@@ -1092,16 +1107,17 @@ export function buildScorecardMessage(
   return { text: `Recording checks — ${right} of ${total} held up over ${days} days.`, blocks };
 }
 
-export async function fetchVerificationStats(): Promise<VerificationStat | null> {
+export async function fetchVerificationStats(at = Date.now()): Promise<VerificationStat | null> {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
 
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const since = new Date(at - 24 * 60 * 60 * 1000).toISOString();
+  const until = new Date(at).toISOString();
   try {
     const res = await fetchWithTimeout(
-      `${url}/rest/v1/ux_finding?select=outcome,delivered,criterion,url_path,scanner_name,probe_runs,session_id,human_label` +
-        `&created_at=gte.${since}&limit=500`,
+      `${url}/rest/v1/ux_finding?select=outcome,delivered,criterion,url_path,scanner_name,probe_runs,` +
+        `session_id,human_label,pr_url&created_at=gte.${since}&created_at=lt.${until}&limit=500`,
       {
         headers: { apikey: key, Authorization: `Bearer ${key}` },
         timeoutMs: 8_000,
@@ -1117,6 +1133,7 @@ export async function fetchVerificationStats(): Promise<VerificationStat | null>
       scanner_name?: string | null;
       session_id?: string | null;
       human_label?: string | null;
+      pr_url?: string | null;
     }>;
     /**
      * Production rows only. The digest reports what the CURRENT fleet
@@ -1138,6 +1155,7 @@ export async function fetchVerificationStats(): Promise<VerificationStat | null>
       contradicted: 0,
       duplicate: 0,
       undelivered: 0,
+      undeliveredSessions: [],
       overturned: 0,
       total: rows.length,
     };
@@ -1153,7 +1171,7 @@ export async function fetchVerificationStats(): Promise<VerificationStat | null>
      * thread gets one message, so per row it read as a second person.
      */
     const confirmed = new Map<string, ReproducedFinding & { label: string | null }>();
-    const unposted = new Map<string, boolean>();
+    const unposted = new Map<string, { none: boolean; sessionId: string | null }>();
     rows.forEach((row, i) => {
       // An explicit list, not `outcome in tally`: `in` walks the prototype
       // chain, so an outcome of "constructor" or "toString" would pass the
@@ -1168,6 +1186,7 @@ export async function fetchVerificationStats(): Promise<VerificationStat | null>
         if (seen) {
           seen.delivered ||= delivered;
           seen.label ??= row.human_label ?? null;
+          seen.prUrl ??= row.pr_url ?? null;
         } else
           confirmed.set(k, {
             criterion: row.criterion ?? null,
@@ -1176,12 +1195,15 @@ export async function fetchVerificationStats(): Promise<VerificationStat | null>
             fromOwnRecords: (row.scanner_name ?? "").includes("our own"),
             heldForAPerson: confirmedByReplayAlone(row.probe_runs),
             label: row.human_label ?? null,
+            sessionId: row.session_id ?? null,
+            prUrl: row.pr_url ?? null,
           });
       }
       // What the verifier posts: an inconclusive, and a gap it could name. A
       // claim no criterion recognised is recorded as a gap and never posted.
       if (row.outcome === "inconclusive" || (row.outcome === "gap" && row.criterion)) {
-        unposted.set(k, (unposted.get(k) ?? true) && !delivered);
+        const u = unposted.get(k) ?? { none: true, sessionId: row.session_id ?? null };
+        unposted.set(k, { ...u, none: u.none && !delivered });
       }
     });
     /**
@@ -1195,7 +1217,9 @@ export async function fetchVerificationStats(): Promise<VerificationStat | null>
       else tally.reproducedItems.push({ ...f, heldForAPerson: f.heldForAPerson && !label });
     }
     tally.reproduced = tally.reproducedItems.length;
-    tally.undelivered = [...unposted.values()].filter(Boolean).length;
+    const nowhere = [...unposted.values()].filter((u) => u.none);
+    tally.undelivered = nowhere.length;
+    tally.undeliveredSessions = nowhere.flatMap((u) => (u.sessionId ? [u.sessionId] : []));
     return tally;
   } catch {
     return null;
@@ -1271,8 +1295,16 @@ function plainScanner(name: string): string {
 
 function coverageLine(c: CoverageStat | null): string {
   if (!c) return "*How much we watched:* could not read the coverage figures.";
+  // Said, not folded in: nobody can watch a recording that does not exist, so
+  // these are neither "watched" nor "queued for another look".
+  const unrecorded = c.unrecorded
+    ? ` ${c.unrecorded} more finished with no recording to watch.`
+    : "";
   if (c.submissions === 0)
-    return "*How much we watched:* nobody finished the survey in the last 24 hours.";
+    return c.unrecorded
+      ? `*How much we watched:* nothing. The ${c.unrecorded} ${c.unrecorded === 1 ? "person" : "people"} ` +
+          `who finished the survey had no recording to watch.`
+      : "*How much we watched:* nobody finished the survey in the last 24 hours.";
   const pct = Math.round((c.observed / c.submissions) * 100);
   const missed = c.submissions - c.observed;
   /**
@@ -1292,11 +1324,12 @@ function coverageLine(c: CoverageStat | null): string {
    */
   return (
     `*How much we watched:* ${c.observed} of the ${c.submissions} people who finished ` +
-    `the survey (${pct}%).` +
+    `the survey${c.unrecorded ? " with a recording" : ""} (${pct}%).` +
     (missed > 0
       ? ` The other ${missed} had not been watched when this was written — ` +
         `they are queued automatically for another look, so they are not lost.`
-      : " Everyone was watched.")
+      : " Everyone was watched.") +
+    unrecorded
   );
 }
 
@@ -1945,7 +1978,7 @@ export async function fetchSessionEvents(sessionId: string): Promise<Set<string>
  */
 const HOG_ROW_CAP = 50_000;
 
-async function sessionQuery(query: string): Promise<unknown[][] | null> {
+export async function sessionQuery(query: string): Promise<unknown[][] | null> {
   const key = process.env.POSTHOG_API_KEY;
   if (!key) return null;
   // Anchored at the end: a LIMIT inside a subquery says nothing about the outer
