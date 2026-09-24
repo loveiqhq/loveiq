@@ -17,11 +17,13 @@ import {
   fetchDailyStats,
   fetchPaywallDeadTaps,
   fetchFindings,
+  fetchScannerCoverage,
   fetchScannerDrift,
   fetchSessionEvents,
   fetchVerificationStats,
   isChallengerScanner,
   isSafeSessionId,
+  MIN_WATCHABLE_ACTIVE_MS,
   PAYWALL_EXIT_TAP_WINDOW_MS,
   paywallLeftOpen,
   recordingLink,
@@ -1220,8 +1222,8 @@ describe("the scanner scorecard", () => {
      */
     const rows = [sc("LoveIQ report UX", 1, 44)];
     const coverage = [
-      { scanner: "LoveIQ report UX", triggered: 121, watched: 76 },
-      { scanner: "LoveIQ rage-click cause", triggered: 33, watched: 33 },
+      { scanner: "LoveIQ report UX", triggered: 121, watchable: 121, watched: 76 },
+      { scanner: "LoveIQ rage-click cause", triggered: 33, watchable: 33, watched: 33 },
     ];
     const out = JSON.stringify(
       buildScorecardMessage(rows, 30, new Set(), new Date("2026-09-22T09:00:00Z"), null, coverage)
@@ -1242,11 +1244,52 @@ describe("the scanner scorecard", () => {
     expect(deliberate).toBeDefined();
     const out = JSON.stringify(
       buildScorecardMessage([sc("LoveIQ report UX", 1, 44)], 30, new Set(), new Date(), null, [
-        { scanner: deliberate!.name, triggered: 350, watched: 168 },
+        { scanner: deliberate!.name, triggered: 350, watchable: 350, watched: 168 },
       ]).blocks
     );
     expect(out).toContain("watched 168 of 350 (48%) — sampled on purpose");
     expect(out).not.toMatch(/48%\) ⚠/);
+  });
+
+  it("reads triggered, watchable and watched in that order, with one join", async () => {
+    // The query was untested. Its three columns are positional, and swapping
+    // two reads as a scanner watching more than it could, or less than it did.
+    vi.stubEnv("POSTHOG_API_KEY", "phx_test");
+    const sent: string[] = [];
+    vi.stubGlobal("fetch", async (_url: string, init: { body: string }) => {
+      sent.push(JSON.parse(init.body).query.query);
+      return { ok: true, json: async () => ({ results: [[15, 12, 11]] }) };
+    });
+    const got = await fetchScannerCoverage(7);
+    vi.unstubAllGlobals();
+
+    expect(got?.[0]).toMatchObject({ triggered: 15, watchable: 12, watched: 11 });
+    const q = sent[0] ?? "";
+    expect(q).toContain("LEFT JOIN");
+    expect(q).toContain("raw_session_replay_events");
+    expect(q.match(/active_ms >= 5000/g)?.length, "both counts use the bar").toBe(2);
+    // Recordings read once, not once per count: that timed out at the gateway.
+    expect(q.match(/raw_session_replay_events/g)?.length).toBe(1);
+    expect(MIN_WATCHABLE_ACTIVE_MS).toBe(5000);
+  });
+
+  it("does not count a recording too short to watch as a miss", () => {
+    /**
+     * Since survey and report went comprehensive, every session they skipped
+     * had under 5 seconds of activity or no recording, and those are 19% of a
+     * week's report sessions. Counted as misses, a scanner watching everything
+     * it could read 78% with a ⚠, every Monday.
+     */
+    const out = JSON.stringify(
+      buildScorecardMessage([sc("LoveIQ report UX", 1, 44)], 30, new Set(), new Date(), null, [
+        { scanner: "LoveIQ report UX", triggered: 15, watchable: 12, watched: 12 },
+        { scanner: "LoveIQ survey UX", triggered: 23, watchable: 22, watched: 16 },
+      ]).blocks
+    );
+    expect(out).toContain("watched 12 of 12 (100%); 3 more too short or not recorded");
+    expect(out).not.toMatch(/100%\) ⚠/);
+    // A real miss among the watchable ones is still flagged.
+    expect(out).toContain("watched 16 of 22 (73%) ⚠; 1 more too short or not recorded");
   });
 
   it("omits coverage rather than printing numbers nobody measured", () => {

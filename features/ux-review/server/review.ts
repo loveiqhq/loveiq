@@ -699,9 +699,26 @@ export async function fetchPaywallDeadTaps(days = 30): Promise<PaywallDeadTaps |
  * it ends and sweeps every five, so the newest sessions are always still
  * pending and would read as misses that are not.
  */
+/**
+ * A recording with less activity than this is never watched, by any scanner.
+ *
+ * Measured 2026-09-24, once survey and report had gone comprehensive (#253):
+ * every session they skipped had under 5 seconds of activity (2.0, 2.9, 4.6,
+ * 4.6s) or no recording at all, and every session they watched had 12.6s or
+ * more. PostHog does not even record an ineligible observation for them. Over a
+ * week that is 19% of report sessions — so counting them as misses put a
+ * permanent ⚠ on a scanner that was watching everything it could, which is the
+ * warning people learn to skip.
+ */
+export const MIN_WATCHABLE_ACTIVE_MS = 5_000;
+
 export interface ScannerCoverage {
   scanner: string;
+  /** Sessions that fired the scanner's trigger event. */
   triggered: number;
+  /** Of those, recorded with at least MIN_WATCHABLE_ACTIVE_MS of activity. */
+  watchable: number;
+  /** Of the watchable, the ones this scanner observed. */
   watched: number;
 }
 
@@ -724,26 +741,42 @@ export async function fetchScannerCoverage(days = 7): Promise<ScannerCoverage[] 
     const out: ScannerCoverage[] = [];
     for (const sc of UX_SCANNERS.filter((s) => s.role !== "challenger")) {
       // Both sides filtered to the same trigger window, so "watched" can only
-      // count sessions that were eligible in the first place.
+      // count sessions that were eligible in the first place. One join to the
+      // recordings, restricted to the triggered sessions: reading them twice
+      // through IN-subqueries timed out at PostHog's gateway on the survey.
+      // A LEFT JOIN fills a missing recording with 0 activity, not NULL, so an
+      // unrecorded session lands below the bar with the too-short ones.
       const rows = await run(`
         SELECT
-          uniq(toString(properties.$session_id)) AS triggered,
-          uniqIf(toString(properties.$session_id), toString(properties.$session_id) IN (
+          count() AS triggered,
+          countIf(active_ms >= ${MIN_WATCHABLE_ACTIVE_MS}) AS watchable,
+          countIf(active_ms >= ${MIN_WATCHABLE_ACTIVE_MS} AND sid IN (
             SELECT toString(properties.session_id) FROM events
             WHERE event = '$recording_observed'
               AND toString(properties.scanner_name) = '${sc.name.replace(/'/g, "")}'
               AND timestamp > now() - INTERVAL ${window + 1} DAY
           )) AS watched
-        FROM events
-        WHERE event = '${sc.triggerEvent.replace(/'/g, "")}'
-          AND timestamp > now() - INTERVAL ${window} DAY
-          AND timestamp < now() - INTERVAL 6 HOUR
+        FROM (
+          SELECT t.sid AS sid, sum(r.active_milliseconds) AS active_ms
+          FROM (
+            SELECT DISTINCT toString(properties.$session_id) AS sid FROM events
+            WHERE event = '${sc.triggerEvent.replace(/'/g, "")}'
+              AND timestamp > now() - INTERVAL ${window} DAY
+              AND timestamp < now() - INTERVAL 6 HOUR
+          ) AS t
+          LEFT JOIN (
+            SELECT session_id, active_milliseconds FROM raw_session_replay_events
+            WHERE min_first_timestamp > now() - INTERVAL ${window + 1} DAY
+          ) AS r ON r.session_id = t.sid
+          GROUP BY t.sid
+        )
         LIMIT 1`);
       if (!rows) return null;
       out.push({
         scanner: sc.name,
         triggered: Number(rows[0]?.[0]) || 0,
-        watched: Number(rows[0]?.[1]) || 0,
+        watchable: Number(rows[0]?.[1]) || 0,
+        watched: Number(rows[0]?.[2]) || 0,
       });
     }
     return out;
@@ -966,7 +999,7 @@ export function buildScorecardMessage(
     );
   }
 
-  if (coverage && coverage.some((c) => c.triggered > 0)) {
+  if (coverage && coverage.some((c) => c.watchable > 0)) {
     /**
      * Below 90% is worth a person's attention; above it is lag and ineligible
      * recordings (too short, no recording). A comprehensive scanner sits at or
@@ -981,15 +1014,18 @@ export function buildScorecardMessage(
       UX_SCANNERS.filter((sc) => sc.samplingMode !== "comprehensive").map((sc) => sc.name)
     );
     const lines = coverage
-      .filter((c) => c.triggered > 0)
+      .filter((c) => c.watchable > 0)
       .map((c) => {
-        const pct = Math.round((c.watched / c.triggered) * 100);
+        const pct = Math.round((c.watched / c.watchable) * 100);
         const note = sampledOnPurpose.has(c.scanner)
           ? " — sampled on purpose, to stay in budget"
           : pct < 90
             ? " ⚠"
             : "";
-        return `• ${plainScanner(c.scanner)} — watched ${c.watched} of ${c.triggered} (${pct}%)${note}`;
+        // Shown, not hidden: a jump here means readers stopped being recorded.
+        const unwatchable = c.triggered - c.watchable;
+        const short = unwatchable > 0 ? `; ${unwatchable} more too short or not recorded` : "";
+        return `• ${plainScanner(c.scanner)} — watched ${c.watched} of ${c.watchable} (${pct}%)${note}${short}`;
       });
     blocks.push(
       section(
