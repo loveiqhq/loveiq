@@ -199,6 +199,11 @@ jobs:
           fi
 
       - name: Probes do not claim defects that are not defects
+        env:
+          # The replay case reads its reader's route from PostHog. Without the
+          # key it exits 3, which this check accepts — so it would pass while
+          # checking nothing.
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
         run: node scripts/probes/precision-check.mjs
 
   falsifiability:

@@ -341,6 +341,9 @@ async function inspect(page, cdp) {
     for (const el of document.querySelectorAll("div,section,aside")) {
       const cs = getComputedStyle(el);
       if (cs.position !== "fixed" || cs.visibility === "hidden" || cs.opacity === "0") continue;
+      // The consent banner's layers are its own business and have their own
+      // daily guard; one stood in for "covers the page" in CI on 2026-09-24.
+      if (el.closest("[class^='cky-'], [class*=' cky-']")) continue;
       const r = el.getBoundingClientRect();
       if (r.width >= window.innerWidth * 0.95 && r.height >= window.innerHeight * 0.95) {
         covering.push(`${el.tagName.toLowerCase()}.${String(el.className || "").split(" ")[0]}`);
@@ -481,6 +484,20 @@ console.log(
 const browser = await engine.launch();
 const ctx = await browser.newContext({ ...devices[deviceName], locale: "en-US" });
 await ctx.addCookies(stagingCookies(ORIGIN)).catch(() => {});
+/**
+ * Checkout is stubbed, as every other report probe stubs it. This one did not,
+ * and a replayed tap on a bare "svg" landed on an unlock control: each such run
+ * started a LIVE Stripe checkout for the internal report (14 abandoned sessions
+ * on it by 2026-09-24), marked its quote checkout-started, and then judged
+ * Stripe's loading screen as "covering the page".
+ */
+await ctx.route("**/api/stripe/checkout-session", (route) =>
+  route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ enabled: false, reason: "checkout_disabled", message: "stubbed" }),
+  })
+);
 const page = await ctx.newPage();
 const thrown = [];
 page.on("pageerror", (e) => thrown.push(String(e).slice(0, 160)));
@@ -578,6 +595,22 @@ try {
       }
       routeDone += 1;
       console.log(`  ${i + 1}. ${step.event} — ok`);
+    }
+
+    /**
+     * A step that took the page somewhere else ends the replay. Everything
+     * after it would be judged on a page that is not ours — a foreign loading
+     * screen covering the viewport reads exactly like a stranded overlay — and
+     * the steps that remain were not followed, so they count against coverage.
+     */
+    const at = new URL(page.url()).pathname;
+    if (!at.startsWith("/report/")) {
+      const left = steps.slice(i + 1).filter((s) => s.event !== "dead_click").length;
+      routeTotal += left;
+      console.log(
+        `  ${i + 1}. the page left the report (for ${at}); ${left} route step(s) not replayable`
+      );
+      break;
     }
 
     const seen = await inspect(page, cdp);

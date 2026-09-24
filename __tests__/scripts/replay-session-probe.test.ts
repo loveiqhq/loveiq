@@ -286,3 +286,54 @@ describe("replaying the reader's own route", () => {
     expect(PROBE).toMatch(/MIN_REPLAYED_SHARE = /);
   });
 });
+
+/**
+ * 2026-09-24: the replay opened the pipeline's first reproduction PR (#282) and
+ * posted "Reproduced in production" under a reader whose only "dead taps" were
+ * on prose. Three separate faults, each pinned here.
+ */
+describe("the replay never operates what it did not mean to tap", () => {
+  it("stubs checkout, as every other report probe does", () => {
+    // A replayed tap on a bare "svg" landed on an unlock control and started a
+    // LIVE Stripe checkout for the internal report (14 abandoned sessions).
+    expect(PROBE).toMatch(/ctx\.route\("\*\*\/api\/stripe\/checkout-session"/);
+    expect(PROBE).toContain('reason: "checkout_disabled"');
+  });
+
+  it("stops at the step that leaves the report, and counts the rest as not followed", () => {
+    // Stripe's loading screen covering the viewport read as a stranded overlay.
+    const loop = PROBE.slice(PROBE.indexOf("for (const [i, step] of steps.entries())"));
+    const leave = loop.indexOf('if (!at.startsWith("/report/"))');
+    expect(leave, "no leave-the-report check in the step loop").toBeGreaterThan(0);
+    expect(leave, "it must run before the page is inspected").toBeLessThan(
+      loop.indexOf("const seen = await inspect(page, cdp)")
+    );
+    expect(loop.slice(leave, leave + 400)).toMatch(/routeTotal \+= left;[\s\S]*break;/);
+  });
+
+  it("does not press a point something else covers", () => {
+    const body = TOUCH.slice(TOUCH.indexOf("export async function realTap"));
+    const guard = body.indexOf("if (!probe.reaches) return { tapped: false, ...probe };");
+    expect(guard, "realTap presses whatever is on top").toBeGreaterThan(0);
+    expect(guard).toBeLessThan(body.indexOf("page.touchscreen.tap("));
+  });
+
+  it("recognises the consent banner by CookieYes's own class names, not a substring", async () => {
+    // `[class*='cky']` matches "sti-cky": the report's sticky unlock bar and its
+    // main wrapper counted as the banner, and 1 of a reader's 41 taps resolved.
+    for (const src of [TOUCH, PROBE, MATRIX]) expect(src).not.toContain("[class*='cky']");
+    const selector = /closest\("(\[class\^='cky-'\], \[class\*=' cky-'\])"\)/.exec(TOUCH)?.[1];
+    expect(selector, "the exact CookieYes selector is not in touch.mjs").toBeTruthy();
+
+    const { JSDOM } = await import("jsdom");
+    const { document } = new JSDOM(
+      `<main class="report-page report-page--sticky"><div class="report-sticky-unlock"><p id="ours">ours</p></div></main>` +
+        `<div class="cky-consent-container"><p class="cky-title" id="banner">banner</p></div>`
+    ).window;
+    const first = [...document.querySelectorAll("p")].find((el) => !el.closest(selector!));
+    expect(first?.id).toBe("ours");
+    expect(document.getElementById("banner")!.closest(selector!)).not.toBeNull();
+    // ...and the old substring would have excluded ours.
+    expect(document.getElementById("ours")!.closest("[class*='cky']")).not.toBeNull();
+  });
+});
