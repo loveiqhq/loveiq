@@ -54,36 +54,39 @@ const V4PremiumCard: FC<Props> = ({ variant = "standard", nodeId }) => (
       <h3 className="rv4-premium__title">Premium content</h3>
     </div>
 
-    {/* 153:2309 */}
-    <div className="rv4-premium__guarantee">
-      <span className="rv4-premium__shield" aria-hidden="true">
-        <Image
-          className="rv4-premium__shield-bg"
-          src="/report/v3/learn/guarantee-shield.svg"
-          alt=""
-          width={29}
-          height={29}
-          unoptimized
-        />
-        <Image
-          className="rv4-premium__shield-tick"
-          src="/report/v3/learn/guarantee-check.svg"
-          alt=""
-          width={9}
-          height={14}
-          unoptimized
-        />
-      </span>
-      <span className="rv4-premium__guarantee-text">
-        <span className="rv4-premium__guarantee-head">{COPY[variant].head}</span>
-        <span className="rv4-premium__guarantee-sub">{COPY[variant].sub}</span>
-      </span>
-    </div>
+    {/* 153:2308 / 314:316 — the guarantee box and the button, 11.512 apart. */}
+    <div className="rv4-premium__offer">
+      {/* 153:2309 */}
+      <div className="rv4-premium__guarantee">
+        <span className="rv4-premium__shield" aria-hidden="true">
+          <Image
+            className="rv4-premium__shield-bg"
+            src="/report/v3/learn/guarantee-shield.svg"
+            alt=""
+            width={29}
+            height={29}
+            unoptimized
+          />
+          <Image
+            className="rv4-premium__shield-tick"
+            src="/report/v3/learn/guarantee-check.svg"
+            alt=""
+            width={9}
+            height={14}
+            unoptimized
+          />
+        </span>
+        <span className="rv4-premium__guarantee-text">
+          <span className="rv4-premium__guarantee-head">{COPY[variant].head}</span>
+          <span className="rv4-premium__guarantee-sub">{COPY[variant].sub}</span>
+        </span>
+      </div>
 
-    {/* 153:2320 */}
-    <button type="button" className="rv4-premium__cta">
-      Unlock full report
-    </button>
+      {/* 153:2320 */}
+      <button type="button" className="rv4-premium__cta">
+        Unlock full report
+      </button>
+    </div>
   </div>
 );
 

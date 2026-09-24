@@ -87,3 +87,73 @@ describe("reportV3.css — the guarantee variant", () => {
     );
   });
 });
+
+/**
+ * Every Premium card frame — 153:2301, 348:373, 314:309 — renders its 0.719px stroke
+ * in a gradient style ("Logo Gradient Temporary") that the export flattens to its
+ * #fe6839 fallback: orange on the left, pink across the top, violet down the right.
+ * The card is a 0.719x scale of the V2 paywall card (8005:735), whose border is that
+ * gradient, so the same paint is laid over the base rule.
+ */
+describe("reportV3.css — the card's gradient stroke", () => {
+  const strokeRule = () => {
+    const at = V3_CSS.indexOf(".rv3 .rv4-premium {", V3_CSS.indexOf("Premium card — the stroke"));
+    expect(at, "the stroke block is missing").toBeGreaterThan(-1);
+    return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+  };
+
+  it("paints the border as 8005:735's orange-to-violet gradient", () => {
+    const css = strokeRule();
+    expect(css).toContain("border-color: transparent;");
+    expect(css).toContain("linear-gradient(#fff, #fff) padding-box");
+    expect(css).toContain(
+      "linear-gradient(120deg, #fe6839 0%, #c167cf 52%, #8887f6 100%) border-box"
+    );
+  });
+});
+
+/**
+ * Where the frames put the card's contents (153:2301 / 314:309, card-relative).
+ * The guarantee box and the button share one frame (153:2308 / 314:316) spaced
+ * 11.512 apart — the card's own 15 only separates the heading from that frame.
+ * Figma's strokes are inside and its text boxes round up (19.2 → 20, 22.4 → 23,
+ * 28.8 → 29), so the button lands at 148.35 (article) / 151.35 (chapter body).
+ */
+describe("V4PremiumCard — the offer frame (153:2308 / 314:316)", () => {
+  it("groups the guarantee box and the button", () => {
+    const { container } = render(<V4PremiumCard variant="guarantee" />);
+    const offer = container.querySelector(".rv4-premium > .rv4-premium__offer")!;
+    expect([...offer.children].map((c) => c.className)).toEqual([
+      "rv4-premium__guarantee",
+      "rv4-premium__cta",
+    ]);
+  });
+
+  it("spaces them as the frame does, with its strokes inside and its text boxes whole", () => {
+    const rule = (selector: string, from = 0) => {
+      const at = V3_CSS.indexOf(selector, from);
+      expect(at, `${selector} missing`).toBeGreaterThan(-1);
+      return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+    };
+    const from = V3_CSS.indexOf("Premium card — the stroke");
+    expect(rule(".rv3 .rv4-premium {", from)).toContain("padding: 14.39px 31.657px 0;");
+    expect(rule(".rv3 .rv4-premium__head {", from)).toContain("min-height: 29px;");
+    expect(rule(".rv3 .rv4-premium__offer {", from)).toContain("gap: 11.512px;");
+    const box = rule(".rv3 .rv4-premium__guarantee {", from);
+    expect(box).toContain("padding-top: 20.146px;");
+    expect(box).toContain("padding-bottom: 20.146px;");
+    expect(rule(".rv3 .rv4-premium__guarantee-head {", from)).toContain("min-height: 20px;");
+    expect(rule(".rv3 .rv4-premium--guarantee .rv4-premium__guarantee-head {", from)).toContain(
+      "min-height: 23px;"
+    );
+  });
+
+  it("draws the button without the glow no frame renders", () => {
+    // 153:2321 / 314:329 carry a shadow on a transparent layer, and all three card
+    // frames render nothing under the button — while the badge's glow does render.
+    const from = V3_CSS.indexOf("Premium card — the stroke");
+    const at = V3_CSS.indexOf(".rv3 .rv4-premium__cta {", from);
+    expect(at, "the button rule is missing").toBeGreaterThan(-1);
+    expect(V3_CSS.slice(at, V3_CSS.indexOf("}", at))).toContain("box-shadow: none;");
+  });
+});

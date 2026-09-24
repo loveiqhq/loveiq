@@ -5198,3 +5198,58 @@
   line-height: 16.8px;
   margin-top: -2.34px;
 }
+
+/* ══ Premium card — the stroke · 153:2301 / 348:373 / 314:309 ══════════════
+ * Every card frame renders its 0.719px stroke in a gradient style ("Logo Gradient
+ * Temporary") that the export flattens to the #fe6839 above: orange on the left,
+ * pink across the top, violet down the right. The card is a 0.719x scale of the V2
+ * paywall card (8005:735), whose border is exactly that gradient — painted, as
+ * there, as a border-box layer under a white padding-box one so the corners stay
+ * crisp.
+ *
+ * The frame's strokes are also INSIDE, where CSS adds them, so the card's is taken
+ * out of its padding and the guarantee box's out of its own; and the text boxes
+ * the frame rounds up (28.8 → 29, 19.2 → 20, 22.4 → 23) are held at their whole
+ * heights. With the box and the button grouped 11.512 apart as 153:2308 / 314:316
+ * group them, the button lands at 148.35 / 151.35 as drawn, where it sat 4.9 /
+ * 5.67 low. */
+.rv3 .rv4-premium {
+  background:
+    linear-gradient(#fff, #fff) padding-box,
+    linear-gradient(120deg, #fe6839 0%, #c167cf 52%, #8887f6 100%) border-box;
+  border-color: transparent;
+  padding: 14.39px 31.657px 0;
+}
+.rv3 .rv4-premium__head {
+  min-height: 29px;
+}
+.rv3 .rv4-premium__offer {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 11.512px;
+  width: 100%;
+}
+.rv3 .rv4-premium__guarantee {
+  padding-bottom: 20.146px;
+  padding-top: 20.146px;
+}
+.rv3 .rv4-premium__guarantee-head {
+  min-height: 20px;
+}
+.rv3 .rv4-premium--guarantee .rv4-premium__guarantee-head {
+  min-height: 23px;
+}
+/* 153:2321 / 314:329 hang the button's glow on a transparent layer, and none of the
+ * three card frames renders it — white under the button — while the badge's glow
+ * above does render and stays. */
+.rv3 .rv4-premium__cta {
+  box-shadow: none;
+}
+/* The small-phone side padding above, less the same stroke. */
+@media (max-width: 361px) {
+  .rv3 .rv4-premium {
+    padding-left: 11.281px;
+    padding-right: 11.281px;
+  }
+}
