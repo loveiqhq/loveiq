@@ -66,10 +66,11 @@ const CLAUDE_API_VERSION = "2023-06-01";
  * code, which is why this is a subprocess and not a different header on the fetch below.
  * Vercel has no `claude` binary, so this lane only works where one is installed.
  *
- * One turn, text in and text out: no tools, no MCP servers, no settings, our own system
- * prompt in place of Claude Code's, run from an empty directory so nothing in a checkout
- * (CLAUDE.md, hooks, .mcp.json) loads. Measured 2026-09-24: 537 input tokens for a
- * one-line prompt, 3s end to end, so none of Claude Code's own context comes along.
+ * One turn, text in and text out: no tools, no MCP servers, no user settings, our own
+ * system prompt in place of Claude Code's, run from an empty directory so nothing in a
+ * checkout (CLAUDE.md, hooks, .mcp.json) loads. Measured 2026-09-24 on a laptop: 514
+ * input tokens for a one-word prompt, 3s end to end. Letting user settings load as well
+ * (plugins, hooks, output styles) made the same call 10,645 tokens.
  */
 const CLI_DEFAULT_MODEL = "sonnet";
 
