@@ -516,6 +516,20 @@ const LEFTOVER_LOOKUP = 25;
 
 const quoted = (id: string) => `"${id.replace(/"/g, '""')}"`;
 
+/**
+ * Does this source hold ANY numbered part? One row read, not a page. An answer that cannot be
+ * read counts as yes, so a failed check falls back to the full lookup rather than skipping it.
+ */
+async function hasNumberedParts(source: string): Promise<boolean> {
+  const res = await supabaseFetch(
+    `/rest/v1/brain_chunk?select=source_id&source=eq.${encodeURIComponent(source)}` +
+      `&source_id=like.*%23*&limit=1`
+  );
+  if (!res.ok) return true;
+  const rows = (await res.json().catch(() => null)) as unknown[] | null;
+  return !Array.isArray(rows) || rows.length > 0;
+}
+
 /** The stored ids of these documents, or null when they could not be read. */
 async function storedPartIds(source: string, bases: string[]): Promise<string[] | null> {
   // The base itself exactly, and its numbered parts by prefix. The prefix over-selects
@@ -553,6 +567,11 @@ async function dropLeftoverParts(rows: BrainRow[]): Promise<number> {
   let dropped = 0;
   try {
     for (const [source, written] of writtenBySource) {
+      // No numbered part stored for this source, this write's included (it has landed by
+      // now): no document of it has ever had a second part, so none can have one left over.
+      // Skips the lookups for analytics, ga4, gsc and the other one-row-per-thing sources,
+      // which were most of brain-fast's writes and added ~6s a run (measured 2026-09-24).
+      if (!(await hasNumberedParts(source))) continue;
       const bases = [...new Set([...written].map(partBase))];
       for (let i = 0; i < bases.length; i += LEFTOVER_LOOKUP) {
         const stored = await storedPartIds(source, bases.slice(i, i + LEFTOVER_LOOKUP));
