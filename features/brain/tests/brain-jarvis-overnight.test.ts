@@ -70,11 +70,22 @@ describe("jarvis-overnight session hook", () => {
     expect(out.hookSpecificOutput.additionalContext).toContain("not from the user");
   });
 
-  it("prints nothing without a token, when nothing is new, or when the brain fails", async () => {
+  it("sends nothing and prints nothing without a token, even when there is news", async () => {
+    let requests = 0;
+    const url = await serve(() => {
+      requests += 1;
+      return result(
+        "New since x, newest first:\n- 2026-09-25 07:05 noticed: Something (notice/n1)"
+      );
+    });
+    expect(await run({ BRAIN_MCP_URL: url })).toBe("");
+    expect(requests).toBe(0);
+  });
+
+  it("prints nothing when nothing is new, or when the brain cannot be reached", async () => {
     const url = await serve(() =>
       result("Nothing new since 2026-09-24: no notices, research answers or decisions.")
     );
-    expect(await run({ BRAIN_MCP_URL: url })).toBe("");
     expect(await run({ BRAIN_MCP_URL: url, LOVEIQ_MCP_TOKEN: "t" })).toBe("");
     expect(await run({ BRAIN_MCP_URL: "http://127.0.0.1:9/api/mcp", LOVEIQ_MCP_TOKEN: "t" })).toBe(
       ""
