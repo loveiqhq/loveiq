@@ -146,7 +146,15 @@ describe("a confirmation the replay made alone", () => {
 
 describe("what the digest and the scorecard count", () => {
   const ledger = (rows: Array<Record<string, unknown>>) => {
-    vi.stubGlobal("fetch", async () => ({ ok: true, json: async () => rows }));
+    // Answers like PostgREST: only the columns the query names. A stub that
+    // returns every column cannot notice one dropped from select=, which is
+    // how a label would silently stop counting.
+    vi.stubGlobal("fetch", async (url: string) => {
+      const cols = new URL(String(url)).searchParams.get("select")?.split(",") ?? [];
+      const project = (r: Record<string, unknown>) =>
+        Object.fromEntries(cols.filter((c) => c in r).map((c) => [c, r[c]]));
+      return { ok: true, json: async () => rows.map(project) };
+    });
     vi.stubEnv("SUPABASE_URL", "https://test.supabase.co");
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service_key");
   };
@@ -205,6 +213,21 @@ describe("what the digest and the scorecard count", () => {
     const v = await fetchVerificationStats();
     expect(v?.reproduced).toBe(2);
     expect(v?.reproducedItems.map((f) => f.delivered)).toEqual([true, true]);
+  });
+
+  it("marks a confirmation only the replay made as waiting for a person", async () => {
+    ledger([
+      {
+        outcome: "reproduced",
+        delivered: false,
+        session_id: "a",
+        criterion: "D1",
+        scanner_name: S,
+        probe_runs: replayOnly,
+      },
+    ]);
+    const v = await fetchVerificationStats();
+    expect(v?.reproducedItems[0].heldForAPerson).toBe(true);
   });
 
   it("drops a confirmation a person ruled out, and says so", async () => {
