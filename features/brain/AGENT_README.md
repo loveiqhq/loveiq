@@ -17,6 +17,9 @@ Claude Code) is the door people use; the operator's guide is
 - `server/embed.ts` — query embeddings through the `brain-embed` edge function.
 - `server/llm.ts`, `answer.ts`, `brief.ts`, `decisions.ts` — the server-side model call, the
   daily brief, and the decision miner's helpers.
+- `server/copy-gate.ts` — the Copy Gate behind `check_copy`: the report-copy rules (em dashes,
+  machine-written phrases, absolute claims, reading level, lines that fit every archetype or
+  repeat another chapter) plus `voice.ts`'s per-chapter checks, run on a draft or on shipped copy.
 - `server/notice.ts`, `related.ts`, `people.ts`, `periods.ts`, `reconcile.ts`, `voice.ts`,
   `vocabulary.ts` — proactive notices, "what else was going on", one name per colleague,
   date handling, the compute-twice reconciler, and the house-voice checks.

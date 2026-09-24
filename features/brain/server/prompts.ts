@@ -86,9 +86,11 @@ export const PROMPTS: BrainPrompt[] = [
     ],
     render: ({ draft, archetype }) =>
       `Review this report chapter${archetype ? ` for the ${archetype}` : ""} before it goes to Mark.\n\n` +
-      "If it is a link or a drive/doc id, read it with fetch_document first. Then compare it with how we write: " +
+      "If it is a link or a drive/doc id, read it with fetch_document first. " +
+      "Then run check_copy on the text, with its chapter and archetype when you can tell them: it checks the wording " +
+      "rules in code and quotes each offending sentence. Fix everything under MUST FIX. Then compare it with how we write: " +
       'search_company_context with sources ["skill", "report", "domain"] for the chapter rules and the text we already ship.\n\n' +
-      "Check, and quote each problem line with a concrete fix:\n" +
+      "Check what check_copy cannot, and quote each problem line with a concrete fix:\n" +
       "- Plain words an eight-year-old could follow, and no fluff.\n" +
       "- No em dashes and nothing that reads as AI-written.\n" +
       '- Talks about the archetype, not "you", when describing how someone thinks or behaves.\n' +

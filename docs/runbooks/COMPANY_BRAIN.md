@@ -357,21 +357,22 @@ When registering any callback — Resend, Stripe, Slack — paste the `www`
 host, then confirm rows actually arrive. An endpoint that returns 401 to an
 unsigned probe proves it is deployed, not that it is reachable by the sender.
 
-**Eighteen tools, in three groups.** Thirteen read, five write. The write ones act
+**Nineteen tools, in three groups.** Fourteen read, five write. The write ones act
 immediately and are described at the bottom of this section — a teammate who reads
 only the first table will not know the brain can send an email.
 
 **History — the indexed corpus:**
 
-| Tool                     | For                                                                                                                                                                             |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `search_company_context` | Anything written down — a decision, a Notion page or database row, a call note, a past month's numbers. Each hit carries a `relevance:` score, a `date:` and an `id:`           |
-| `fetch_document`         | One document in full, reassembled from every part it was split into. Takes the `id:` from a search line; search only ever shows a document's single best-scoring part           |
-| `get_business_numbers`   | Exact daily funnel/revenue/ad-spend rows to compute with                                                                                                                        |
-| `list_sources`           | What the corpus holds and how fresh each source is — call this first when an answer looks stale                                                                                 |
-| `count_context`          | How many, and broken down by source, month or person. Search ranks and caps at 30, so it can never answer "how many" — this reads the whole corpus                              |
-| `browse_context`         | Everything matching a filter, in date order and without ranking: every meeting note, every open task, everything learned since Tuesday. Use when you want a list, not an answer |
-| `what_shipped`           | What changed, as the plain-English "For Marcus:" line every change to main carries, newest first, with date and pull request. Read live from GitHub, never indexed              |
+| Tool                     | For                                                                                                                                                                                                                                                                                                                        |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `search_company_context` | Anything written down — a decision, a Notion page or database row, a call note, a past month's numbers. Each hit carries a `relevance:` score, a `date:` and an `id:`                                                                                                                                                      |
+| `fetch_document`         | One document in full, reassembled from every part it was split into. Takes the `id:` from a search line; search only ever shows a document's single best-scoring part                                                                                                                                                      |
+| `get_business_numbers`   | Exact daily funnel/revenue/ad-spend rows to compute with                                                                                                                                                                                                                                                                   |
+| `list_sources`           | What the corpus holds and how fresh each source is — call this first when an answer looks stale                                                                                                                                                                                                                            |
+| `count_context`          | How many, and broken down by source, month or person. Search ranks and caps at 30, so it can never answer "how many" — this reads the whole corpus                                                                                                                                                                         |
+| `browse_context`         | Everything matching a filter, in date order and without ranking: every meeting note, every open task, everything learned since Tuesday. Use when you want a list, not an answer                                                                                                                                            |
+| `what_shipped`           | What changed, as the plain-English "For Marcus:" line every change to main carries, newest first, with date and pull request. Read live from GitHub, never indexed                                                                                                                                                         |
+| `check_copy`             | Report copy against the house rules, with the sentence behind each finding: em dashes, machine-written phrases, absolute claims, reading level, length, lines that fit every archetype or repeat another chapter, and the chapter's shipped voice. Leave out `text` and name a chapter and archetype to audit what shipped |
 
 **You can narrow, and it is usually better than rewording.** `search_company_context`
 takes `sources` and `exclude_sources`, `since` / `until`, and `meta` for indexed

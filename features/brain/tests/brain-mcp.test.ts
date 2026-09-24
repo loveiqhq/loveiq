@@ -248,6 +248,53 @@ describe("/api/mcp", () => {
      * WHAT SHIPPED, read live from GitHub and never indexed: commits were dropped from the
      * index on 2026-09-09 for drowning founder questions, and this must not bring them back.
      */
+    describe("check_copy", () => {
+      const call = async (args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 9,
+                method: "tools/call",
+                params: { name: "check_copy", arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+
+      it("checks a draft and quotes the sentence behind each finding", async () => {
+        const r = await call({
+          text: "They always want more — it is truly at the core of who they are.",
+          chapter: "motivation",
+          archetype: "Spark Seeker",
+        });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.text).toMatch(/^Copy check, motivation \/ Spark Seeker:/);
+        expect(r.content[0]!.text).toContain("MUST FIX");
+        expect(r.content[0]!.text).toContain("[em-dash]");
+        expect(r.content[0]!.text).toContain('"They always want more — it is truly');
+      });
+
+      it("audits the shipped copy when no text is given", async () => {
+        const r = await call({ chapter: "motivation", archetype: "Spark Seeker" });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.text).toMatch(/^Copy check, the shipped motivation for Spark Seeker:/);
+      });
+
+      it("names the valid choices instead of guessing a misspelt chapter", async () => {
+        const r = await call({ text: "Some text here.", chapter: "motivations" });
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toContain("motivation,");
+      });
+
+      it("asks for text, or both chapter and archetype, rather than checking nothing", async () => {
+        const r = await call({ chapter: "motivation" });
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toMatch(/Pass `text`/);
+      });
+    });
+
     describe("what_shipped", () => {
       const commit = (pr: number, line: string, date: string) => ({
         sha: `c${pr}0000000`,
@@ -313,7 +360,7 @@ describe("/api/mcp", () => {
       });
     });
 
-    it("lists exactly the eighteen tools, each with a schema", async () => {
+    it("lists exactly the nineteen tools, each with a schema", async () => {
       // Asserted exactly, not with toContain: a tool that disappears from the list
       // is unreachable to every connected Claude, and nothing else would notice.
       const body = await (await POST(rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }))).json();
@@ -335,6 +382,7 @@ describe("/api/mcp", () => {
         "show_design",
         "show_page",
         "what_shipped",
+        "check_copy",
         "list_sources",
       ]);
       for (const t of body.result.tools) expect(t.inputSchema.type).toBe("object");

@@ -48,6 +48,13 @@ import {
   DelegationNotGranted,
   GoogleDocRefusal,
 } from "@features/brain/server/act/gdoc";
+import {
+  allArchetypes,
+  checkCopy,
+  renderCopyReport,
+  shippedCopy,
+} from "@features/brain/server/copy-gate";
+import { allChapters } from "@features/brain/server/voice";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
@@ -1512,6 +1519,41 @@ export const TOOLS = [
       properties: {
         since: { type: "string", description: "First day, YYYY-MM-DD. Default: seven days ago." },
         until: { type: "string", description: "Last day, YYYY-MM-DD, inclusive. Default: today." },
+      },
+    },
+  },
+  {
+    name: "check_copy",
+    title: "Check report copy against the house rules",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "Checks report copy against the rules set for every chapter, in code, and prints the " +
+      "sentence behind each finding: no em dashes, no phrases that read as machine-written, no " +
+      "absolute claims, a plain reading level, length against the shipped chapter, no line that " +
+      "would fit every archetype, no line lifted from another chapter, and the chapter's own " +
+      "shipped voice (person, sentence length, headings). Pass `text` for a draft, with its " +
+      "`chapter` and `archetype` when known. Leave `text` out and pass both to audit the copy " +
+      "that already shipped. It checks wording, not meaning: whether a claim is backed by " +
+      "research still needs reading.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        text: {
+          type: "string",
+          description:
+            "The draft, as plain text or HTML. For a Google Doc or corpus id, read it with " +
+            "fetch_document first and pass the text.",
+        },
+        chapter: {
+          type: "string",
+          enum: allChapters(),
+          description: "Which report chapter it is, e.g. 'motivation'.",
+        },
+        archetype: {
+          type: "string",
+          enum: allArchetypes(),
+          description: "Which archetype it is written for, e.g. 'Spark Seeker'.",
+        },
       },
     },
   },
@@ -4393,6 +4435,42 @@ async function callTool(
     return imageResult(outcome.text, [{ data: outcome.data, mimeType: outcome.mimeType }]);
   }
 
+  if (name === "check_copy") {
+    const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+    const chapter = str(args.chapter);
+    const archetype = str(args.archetype);
+    if (chapter && !allChapters().includes(chapter)) {
+      return textResult(`No chapter "${chapter}". Chapters: ${allChapters().join(", ")}.`, true);
+    }
+    if (archetype && !allArchetypes().includes(archetype)) {
+      return textResult(
+        `No archetype "${archetype}". Archetypes: ${allArchetypes().join(", ")}.`,
+        true
+      );
+    }
+    let text = typeof args.text === "string" ? args.text : "";
+    let label = [chapter, archetype].filter(Boolean).join(" / ") || "draft";
+    if (!text.trim()) {
+      const shipped = chapter && archetype ? shippedCopy(chapter, archetype) : null;
+      if (!shipped) {
+        return textResult(
+          "Pass `text` to check a draft, or leave it out and pass both `chapter` and " +
+            "`archetype` to audit the copy that already shipped.",
+          true
+        );
+      }
+      text = shipped;
+      label = `the shipped ${chapter} for ${archetype}`;
+    }
+    stats.sourceCount = 1;
+    return textResult(
+      renderCopyReport(
+        checkCopy({ text, chapter: chapter || undefined, archetype: archetype || undefined }),
+        label
+      )
+    );
+  }
+
   if (name === "what_shipped") {
     const day = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
     const since =
@@ -4710,6 +4788,9 @@ export const MCP_INSTRUCTIONS =
   "logic already.\n\n" +
   'WHAT CHANGED, in plain English: what_shipped lists the "For Marcus:" line of every change ' +
   "that reached main, newest first, read live from the repository.\n\n" +
+  "REPORT COPY: check_copy runs the house rules on a chapter draft (em dashes, machine-written " +
+  "phrases, absolute claims, reading level, lines that fit every archetype) before it goes to " +
+  "Mark, and audits the shipped copy the same way.\n\n" +
   "OUTSIDE SERVICES, read live: query_external_service reaches Stripe, Resend, " +
   "Slack, GitHub, Vercel, Figma, Trustpilot, Clarity and PostHog. list_sources " +
   "prints which are reachable on this deployment and exactly what each exposes, " +
