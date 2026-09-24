@@ -55,6 +55,8 @@ import {
   shippedCopy,
 } from "@features/brain/server/copy-gate";
 import { allChapters } from "@features/brain/server/voice";
+import { buildContextPack } from "@features/brain/server/context-pack";
+import { promptDocs } from "@features/brain/server/ingest/skills";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
@@ -1554,6 +1556,26 @@ export const TOOLS = [
           enum: allArchetypes(),
           description: "Which archetype it is written for, e.g. 'Spark Seeker'.",
         },
+      },
+    },
+  },
+  {
+    name: "get_context_pack",
+    title: "Everything needed to write one chapter, and no more",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "Exactly what writing one report chapter for one archetype needs, inside a fixed size, so a " +
+      "draft is not buried in loosely related material: the chapter's own rules (person, sentence " +
+      "length, headings, counted off what shipped, plus the house rules), the text as shipped, the " +
+      "same chapter for another archetype as a model, who the archetype is, research cards to draw " +
+      "on, and the team's prompt documents for the chapter. Use it before drafting or rewriting a " +
+      "chapter, then check_copy on the result.",
+    inputSchema: {
+      type: "object",
+      required: ["chapter", "archetype"],
+      properties: {
+        chapter: { type: "string", enum: allChapters(), description: "e.g. 'motivation'." },
+        archetype: { type: "string", enum: allArchetypes(), description: "e.g. 'Spark Seeker'." },
       },
     },
   },
@@ -4471,6 +4493,32 @@ async function callTool(
     );
   }
 
+  if (name === "get_context_pack") {
+    const chapter = typeof args.chapter === "string" ? args.chapter.trim() : "";
+    const archetype = typeof args.archetype === "string" ? args.archetype.trim() : "";
+    if (!allChapters().includes(chapter) || !allArchetypes().includes(archetype)) {
+      return textResult(
+        `Name a chapter and an archetype. Chapters: ${allChapters().join(", ")}. ` +
+          `Archetypes: ${allArchetypes().join(", ")}.`,
+        true
+      );
+    }
+    const pack = await buildContextPack(
+      { chapter, archetype },
+      {
+        promptDocs,
+        findEvidence: async (query) =>
+          (await retrieve(query, 3, { sources: ["evidence"] })).map((c) => ({
+            id: `${c.source}/${c.sourceId}`,
+            title: c.title ?? c.sourceId,
+            body: c.body,
+          })),
+      }
+    );
+    stats.sourceCount = 1;
+    return textResult(pack);
+  }
+
   if (name === "what_shipped") {
     const day = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
     const since =
@@ -4788,7 +4836,8 @@ export const MCP_INSTRUCTIONS =
   "logic already.\n\n" +
   'WHAT CHANGED, in plain English: what_shipped lists the "For Marcus:" line of every change ' +
   "that reached main, newest first, read live from the repository.\n\n" +
-  "REPORT COPY: check_copy runs the house rules on a chapter draft (em dashes, machine-written " +
+  "REPORT COPY: get_context_pack gives exactly what one chapter for one archetype needs before " +
+  "drafting, and check_copy runs the house rules on the draft (em dashes, machine-written " +
   "phrases, absolute claims, reading level, lines that fit every archetype) before it goes to " +
   "Mark, and audits the shipped copy the same way.\n\n" +
   "OUTSIDE SERVICES, read live: query_external_service reaches Stripe, Resend, " +

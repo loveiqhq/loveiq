@@ -177,7 +177,7 @@ describe("/api/mcp", () => {
         expect(body.result.capabilities.prompts).toBeDefined();
       });
 
-      it("lists the five prompts, each with its arguments", async () => {
+      it("lists the six prompts, each with its arguments", async () => {
         const body = await call("prompts/list");
         const prompts = body.result.prompts as Array<{
           name: string;
@@ -187,6 +187,7 @@ describe("/api/mcp", () => {
           "catch_me_up",
           "kpi_check",
           "review_chapter",
+          "draft_chapter",
           "what_needs_me",
           "record_decision",
         ]);
@@ -295,6 +296,36 @@ describe("/api/mcp", () => {
       });
     });
 
+    describe("get_context_pack", () => {
+      const call = async (args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 10,
+                method: "tools/call",
+                params: { name: "get_context_pack", arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+
+      it("builds a pack for a chapter and an archetype, even with research unreachable", async () => {
+        const r = await call({ chapter: "motivation", archetype: "Spark Seeker" });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.text).toMatch(/^# Context pack: motivation for the Spark Seeker/);
+        expect(r.content[0]!.text).toContain('## Rules for "motivation"');
+        expect(r.content[0]!.text).toContain("## This chapter as shipped for the Spark Seeker");
+      });
+
+      it("refuses a name it does not know and lists the valid ones", async () => {
+        const r = await call({ chapter: "motivation", archetype: "Spark Seekers" });
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toContain("Spark Seeker,");
+      });
+    });
+
     describe("what_shipped", () => {
       const commit = (pr: number, line: string, date: string) => ({
         sha: `c${pr}0000000`,
@@ -360,7 +391,7 @@ describe("/api/mcp", () => {
       });
     });
 
-    it("lists exactly the nineteen tools, each with a schema", async () => {
+    it("lists exactly the twenty tools, each with a schema", async () => {
       // Asserted exactly, not with toContain: a tool that disappears from the list
       // is unreachable to every connected Claude, and nothing else would notice.
       const body = await (await POST(rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" }))).json();
@@ -383,6 +414,7 @@ describe("/api/mcp", () => {
         "show_page",
         "what_shipped",
         "check_copy",
+        "get_context_pack",
         "list_sources",
       ]);
       for (const t of body.result.tools) expect(t.inputSchema.type).toBe("object");

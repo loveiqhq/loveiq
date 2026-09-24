@@ -37,6 +37,23 @@ describe("renderPrompt", () => {
     }
   });
 
+  /**
+   * The chapter pipeline in one prompt: a narrow pack, the checker until clean, a person's OK,
+   * and the draft keeps its own provenance (Marcus: store the prompt with the chapter).
+   */
+  it("drafts a chapter from its pack, checks it, waits for an OK and records how it was made", () => {
+    const r = renderPrompt("draft_chapter", { chapter: "beliefs", archetype: "Spark Seeker" });
+    const text = "text" in r ? r.text : "";
+    expect(text).toContain('get_context_pack with chapter "beliefs" and archetype "Spark Seeker"');
+    expect(text).toContain('Run check_copy on the draft with chapter "beliefs"');
+    expect(text).toMatch(/wait for my OK/);
+    expect(text).toContain('"How this was made"');
+    expect(text.indexOf("get_context_pack")).toBeLessThan(text.indexOf("check_copy"));
+    expect(renderPrompt("draft_chapter", { chapter: "beliefs" })).toEqual({
+      error: expect.stringMatching(/needs `archetype`/),
+    });
+  });
+
   it("asks before recording a decision, never records one on its own", () => {
     const r = renderPrompt("record_decision", { decision: "Ship the paywall blur" });
     expect("text" in r && r.text).toMatch(/wait for my OK before recording/);
