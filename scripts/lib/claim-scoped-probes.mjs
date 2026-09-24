@@ -39,6 +39,20 @@ export const CLAIM_SCOPED_PROBES = new Set(["verify-dead-click-target.mjs"]);
 export const SESSION_REPLAY_PROBES = new Set(["replay-session.mjs"]);
 
 /**
+ * Was the replay the only thing that confirmed it? Such a row waits for a
+ * person rather than counting as the scanner being right.
+ *
+ * The twin of `confirmedByReplayAlone` in features/ux-review/server/review.ts,
+ * restated because score.mjs runs under plain node and cannot import
+ * TypeScript. __tests__/scripts/replay-bench-score.test.ts holds the two to
+ * one answer.
+ */
+export function replayAlone(runs) {
+  const failed = (runs ?? []).filter((r) => r.passed === false && !r.inconclusive);
+  return failed.length > 0 && failed.every((r) => SESSION_REPLAY_PROBES.has(r.file));
+}
+
+/**
  * Did this run include a probe that could have disagreed?
  *
  * Two sources, in order:
