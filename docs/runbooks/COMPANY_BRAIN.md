@@ -159,6 +159,12 @@ with zero rows tells the model to search something that cannot answer.
 Both are idempotent and both sweep rows they did not rewrite, guarded by the
 write count **of their own source** so an empty run can never wipe a source.
 
+A document that is rewritten SHORTER does not wait for the sweep: `upsertChunks`
+deletes the parts its new version no longer has in the same write (`leftoverParts`,
+since 2026-09-24). Only documents that write produced are looked at, so a read that
+failed or was skipped deletes nothing. WhatsApp numbers its parts differently and
+is still left to the sweep.
+
 Git commits are **not** a source either, since 2026-09-09. They were 1,795 chunks —
 7.5% of the corpus — and the `[skip ci]`/dependabot noise in them consistently
 outranked real answers, while everything a commit explained is also in the

@@ -478,7 +478,113 @@ export async function upsertChunks(rows: BrainRow[]): Promise<number> {
   const withheld = unique.filter(
     (r) => (r.meta as { withheld?: unknown } | undefined)?.withheld
   ).length;
+  // Only after every batch landed: a write that failed threw above and deletes nothing.
+  await dropLeftoverParts(unique);
   return written - withheld;
+}
+
+/** `thread:abc#3` -> `thread:abc`. An id with no numeric part suffix is its own base. */
+export function partBase(sourceId: string): string {
+  return sourceId.replace(/#\d+$/, "");
+}
+
+/**
+ * The stored rows of a rewritten document that its new version did not write.
+ *
+ * WHY THIS EXISTS. A document that re-chunks SHORTER leaves its old tail behind, and
+ * until now only the daily sweep removed it, so for up to a day search could return a
+ * part of a version that no longer exists: after the gmail v9 rebuild there were 1,986
+ * such parts. `fetch_document` already hides them (`dropLeftoverParts` in the route);
+ * search, browse and the brief could not.
+ *
+ * The rule is "stored minus written, per document", which holds for every numbering the
+ * sources use: part 1 on the bare id with `#2…#N` after it (gmail, drive, notion), and a
+ * document that grew from one part to several or shrank back. It is safe because every
+ * caller of `upsertChunks` passes all the parts of a document in ONE call (checked for
+ * each of them on 2026-09-24): the parts written here are the complete new version, so
+ * anything else stored under the same base is from an older one. A document this call did
+ * not write is never looked at, so a failed or skipped read deletes nothing, as the sweep's
+ * rules require.
+ */
+export function leftoverParts(stored: Iterable<string>, written: ReadonlySet<string>): string[] {
+  const bases = new Set([...written].map(partBase));
+  return [...stored].filter((id) => !written.has(id) && bases.has(partBase(id)));
+}
+
+/** Documents looked up per request. Pages of 1,000 ids are read until one comes back short. */
+const LEFTOVER_LOOKUP = 25;
+
+const quoted = (id: string) => `"${id.replace(/"/g, '""')}"`;
+
+/** The stored ids of these documents, or null when they could not be read. */
+async function storedPartIds(source: string, bases: string[]): Promise<string[] | null> {
+  // The base itself exactly, and its numbered parts by prefix. The prefix over-selects
+  // (another id that starts the same way, and LIKE's `_` wildcard); `leftoverParts`
+  // filters exactly, so an extra row read is never an extra row deleted.
+  const or = bases
+    .flatMap((b) => [`source_id.eq.${quoted(b)}`, `source_id.like.${quoted(`${b}#*`)}`])
+    .join(",");
+  const out: string[] = [];
+  for (let offset = 0; offset < 100_000; offset += 1000) {
+    const res = await supabaseFetch(
+      `/rest/v1/brain_chunk?select=source_id&source=eq.${encodeURIComponent(source)}` +
+        `&or=(${encodeURIComponent(or)})&order=source_id.asc&limit=1000&offset=${offset}`
+    );
+    if (!res.ok) return null;
+    const batch = (await res.json().catch(() => null)) as Array<{ source_id?: string }> | null;
+    if (!Array.isArray(batch)) return null;
+    for (const r of batch) if (r?.source_id) out.push(r.source_id);
+    if (batch.length < 1000) break;
+  }
+  return out;
+}
+
+/**
+ * Delete the leftover parts of the documents just written. Never throws: the write
+ * already succeeded, and anything this misses the daily sweep still removes.
+ */
+async function dropLeftoverParts(rows: BrainRow[]): Promise<number> {
+  const writtenBySource = new Map<string, Set<string>>();
+  for (const r of rows) {
+    const ids = writtenBySource.get(r.source) ?? new Set<string>();
+    ids.add(r.source_id);
+    writtenBySource.set(r.source, ids);
+  }
+  let dropped = 0;
+  try {
+    for (const [source, written] of writtenBySource) {
+      const bases = [...new Set([...written].map(partBase))];
+      for (let i = 0; i < bases.length; i += LEFTOVER_LOOKUP) {
+        const stored = await storedPartIds(source, bases.slice(i, i + LEFTOVER_LOOKUP));
+        if (!stored) {
+          logger.warn({ source }, "brain: could not look up leftover parts; the sweep will");
+          return dropped;
+        }
+        const leftovers = leftoverParts(stored, written);
+        for (let j = 0; j < leftovers.length; j += 100) {
+          const list = leftovers
+            .slice(j, j + 100)
+            .map(quoted)
+            .join(",");
+          const res = await supabaseFetch(
+            `/rest/v1/brain_chunk?source=eq.${encodeURIComponent(source)}` +
+              `&source_id=in.(${encodeURIComponent(list)})`,
+            { method: "DELETE", headers: { Prefer: "return=minimal" } }
+          );
+          if (!res.ok) {
+            logger.warn({ source, status: res.status }, "brain: leftover-part delete failed");
+            return dropped;
+          }
+          dropped += Math.min(100, leftovers.length - j);
+        }
+      }
+    }
+  } catch (err) {
+    logger.warn({ err }, "brain: leftover-part cleanup stopped; the sweep will finish it");
+  }
+  if (dropped > 0)
+    logger.info({ dropped }, "brain: removed leftover parts of re-chunked documents");
+  return dropped;
 }
 
 /**
