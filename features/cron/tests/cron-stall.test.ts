@@ -15,8 +15,25 @@ import {
   findStalledCrons,
   UNWATCHED_CRONS,
 } from "@features/cron/server/cron-stall";
+import { brainDailySchedules } from "./brain-daily-schedule";
 
 const NOW = Date.parse("2026-08-29T12:00:00Z");
+
+/**
+ * Every cron something schedules: vercel.json's, plus the brain jobs GitHub Actions runs
+ * because they need the `claude` binary. Those still write cron_run rows, so they are
+ * watched exactly like the rest.
+ */
+async function scheduledCrons(): Promise<string[]> {
+  const fs = await import("node:fs");
+  const vercel = JSON.parse(fs.readFileSync("vercel.json", "utf8")) as {
+    crons?: Array<{ path: string }>;
+  };
+  return [
+    ...(vercel.crons ?? []).map((c) => c.path.replace("/api/cron/", "")),
+    ...Object.keys(brainDailySchedules()),
+  ];
+}
 const ok = (started_at: string | null) =>
   ({
     ok: true,
@@ -60,18 +77,14 @@ describe("findStalledCrons", () => {
   });
 });
 
-describe("the watch list must not drift from vercel.json", () => {
+describe("the watch list must not drift from what is scheduled", () => {
   /**
    * A cron added to vercel.json but not here is unwatched, which is precisely the
    * blind spot this module exists to close — and it would be invisible, because an
    * unwatched cron looks identical to a healthy one.
    */
   it("every scheduled cron is either watched or explicitly unwatched", async () => {
-    const fs = await import("node:fs");
-    const vercel = JSON.parse(fs.readFileSync("vercel.json", "utf8")) as {
-      crons?: Array<{ path: string }>;
-    };
-    const scheduled = (vercel.crons ?? []).map((c) => c.path.replace("/api/cron/", ""));
+    const scheduled = await scheduledCrons();
     expect(scheduled.length).toBeGreaterThan(0);
     for (const cron of scheduled) {
       expect(
@@ -82,11 +95,7 @@ describe("the watch list must not drift from vercel.json", () => {
   });
 
   it("does not watch a cron that is not scheduled at all", async () => {
-    const fs = await import("node:fs");
-    const vercel = JSON.parse(fs.readFileSync("vercel.json", "utf8")) as {
-      crons?: Array<{ path: string }>;
-    };
-    const scheduled = new Set((vercel.crons ?? []).map((c) => c.path.replace("/api/cron/", "")));
+    const scheduled = new Set(await scheduledCrons());
     for (const cron of Object.keys(CRON_MAX_AGE_MS)) {
       expect(scheduled.has(cron), `"${cron}" is watched but no longer scheduled`).toBe(true);
     }

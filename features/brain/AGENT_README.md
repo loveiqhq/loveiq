@@ -34,6 +34,9 @@ Claude Code) is the door people use; the operator's guide is
 - **Repository docs ingestion.** `scripts/brain-ingest-repo.mjs` runs in the `brain-ingest`
   GitHub Action on push, because only there is the checkout on disk. Git commits and Jira
   are no longer sources.
+- **The brief and miner schedules.** `brain-daily.yml` runs them in GitHub Actions through
+  `scripts/brain-cron.ts`, because the model is `claude -p` on the Team subscription
+  (`BRAIN_LLM_CLI`) and Vercel has no `claude` binary. They are not in `vercel.json`.
 - **Live state.** Payments, email delivery, PostHog, Stripe, Vercel and the product
   database are read at ask time through tools, never indexed: an indexed state is a stale
   state. DATED history is the exception (`analytics`, `ga4`, `gsc`), because "1,000 visits

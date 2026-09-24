@@ -1,5 +1,5 @@
-import fs from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { brainDailySchedules } from "./brain-daily-schedule";
 
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -138,12 +138,8 @@ describe("a day this job failed must be recoverable", () => {
    * back. A tidy-up that merges the two hours back into one would silently undo this.
    */
   it("fires twice a day, further apart than the claim lease", () => {
-    const vercel = JSON.parse(fs.readFileSync("vercel.json", "utf8")) as {
-      crons: Array<{ path: string; schedule: string }>;
-    };
-    const entry = vercel.crons.find((c) => c.path === "/api/cron/brain-brief");
-    expect(entry, "brain-brief must be scheduled").toBeDefined();
-    const [, hourField, dom, month, dow] = entry!.schedule.split(" ");
+    // GitHub Actions schedules it now (it needs the `claude` binary), not vercel.json.
+    const [, hourField, dom, month, dow] = brainDailySchedules()["brain-brief"].split(" ");
     expect([dom, month, dow]).toEqual(["*", "*", "*"]);
     const hours = hourField.split(",").map(Number);
     expect(hours.length).toBeGreaterThanOrEqual(2);

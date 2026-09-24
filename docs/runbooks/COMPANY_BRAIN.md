@@ -854,6 +854,38 @@ attribute condition rejects; the log names all three. A 403 from
 federation fails the code falls back to the refresh token and still impersonates, so
 a stale pool config degrades to the previous path rather than to no access.
 
+### The brief and the miner run in GitHub Actions, on the Team subscription
+
+`brain-brief` (06:10 and 08:10 UTC) and `brain-mine` (08:25 UTC) are the two crons that
+need a language model, and since 2026-09-24 the model is the Claude Team plan we already
+pay for rather than an API key. Only the `claude` binary may use a subscription:
+`claude setup-token` mints a one-year `CLAUDE_CODE_OAUTH_TOKEN`, and Anthropic's terms
+allow it only in the unmodified binary, never in our own API calls. Vercel has no
+`claude` binary, so `.github/workflows/brain-daily.yml` runs both jobs:
+`scripts/brain-cron.ts` calls the same route handlers in-process with
+`BRAIN_LLM_CLI=claude`. The day claim, the `cron_run` row, the Slack post and the stall
+watch behave exactly as they did on Vercel.
+
+- **Whose seat.** Automated runs share that seat's five-hour and weekly limits with its
+  owner's own Claude use. On 2026-09-19 `generate-fix` stopped on "You've hit your session
+  limit", which is why the token should belong to a seat nobody works in all day
+  (teamwork@). A limit hit is reported as `rate_limited` and the job stops for the day.
+- **Replacing the token.** Run `claude setup-token` signed in as the seat's owner, then
+  `gh secret set CLAUDE_CODE_OAUTH_TOKEN -R loveiqhq/loveiq`. `generate-fix` uses the same
+  secret.
+- **Secrets it needs.** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
+  `CLAUDE_CODE_OAUTH_TOKEN`, `SLACK_BRAIN_WEBHOOK_URL`. The run fails when any is missing:
+  without the brain webhook the brief would be marked delivered into nothing. Any failure
+  posts one line to the brain channel with a link to the run.
+  `SLACK_OPS_WEBHOOK_URL` is deliberately absent: it is marked sensitive in Vercel and cannot
+  be read back out, so the logger's own mirror to Slack stays off here and nothing is
+  reported twice.
+- **Previewing a brief.** Run the workflow by hand with `dry_run` ticked, or locally
+  `BRAIN_LLM_CLI=claude npx tsx --env-file=.env.local scripts/brain-cron.ts brain-brief --dry-run "?day=YYYY-MM-DD"`.
+  It prints the brief without claiming the day or posting it.
+- **Replaying a lost day.** Run the workflow with `job: brain-brief` and
+  `query: ?day=YYYY-MM-DD`. The claim still prevents a double post.
+
 ### The two jobs that run on a laptop, not on Vercel
 
 WhatsApp and the embedding backfill are driven by launchd agents on Eman's machine,
@@ -1481,10 +1513,11 @@ carried 356 passages of explicit decision language that nobody had promoted to a
 Those are the numbers that motivated this job, not a current count; the current one is
 `count_context` with `sources:["decision"]`.
 
-`/api/cron/brain-mine` reads eight meetings a night and writes what was **settled** in
-them as ordinary decision records. Steady state is about 0.5 meetings a day, so eight is
-roughly 16x headroom and drains a backlog on its own — the initial 121 take about a
-fortnight, because the model runs on a free tier that is rate-limited by request.
+`/api/cron/brain-mine` reads up to twelve meetings a night and writes what was **settled** in
+them as ordinary decision records. Steady state is about 0.5 meetings a day, so that is
+ample headroom and drains a backlog on its own. The cap dates from Gemini's free tier,
+which allowed twenty requests a day; since 2026-09-24 the miner runs on the Team
+subscription in GitHub Actions (see "The brief and the miner run in GitHub Actions").
 
 **Every mined record says it was reconstructed.** The server's instructions promise that a
 decision record is "deliberate rather than reconstructed from a transcript", so mining

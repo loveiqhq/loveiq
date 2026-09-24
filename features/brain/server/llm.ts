@@ -1,3 +1,7 @@
+import { spawn } from "node:child_process";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
 
@@ -50,6 +54,28 @@ const DEFAULT_MODEL = "gemini-3.6-flash";
 const CLAUDE_DEFAULT_MODEL = "claude-sonnet-5";
 const CLAUDE_MAX_TOKENS = 8000;
 const CLAUDE_API_VERSION = "2023-06-01";
+
+/**
+ * CLAUDE CODE AS THE MODEL, ON THE TEAM SUBSCRIPTION WE ALREADY PAY FOR.
+ *
+ * `BRAIN_LLM_CLI=claude` sends every call through the `claude -p` binary instead of an
+ * HTTP API. In GitHub Actions (`.github/workflows/brain-daily.yml`) that binary signs in
+ * with CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`, so the brief and the miner cost
+ * nothing beyond a Team seat; on a laptop it uses whoever is logged in. The token is for
+ * the unmodified binary only: Anthropic's terms forbid sending it to the API from our own
+ * code, which is why this is a subprocess and not a different header on the fetch below.
+ * Vercel has no `claude` binary, so this lane only works where one is installed.
+ *
+ * One turn, text in and text out: no tools, no MCP servers, no settings, our own system
+ * prompt in place of Claude Code's, run from an empty directory so nothing in a checkout
+ * (CLAUDE.md, hooks, .mcp.json) loads. Measured 2026-09-24: 537 input tokens for a
+ * one-line prompt, 3s end to end, so none of Claude Code's own context comes along.
+ */
+const CLI_DEFAULT_MODEL = "sonnet";
+
+function cliBinary(): string | null {
+  return process.env.BRAIN_LLM_CLI?.trim() || null;
+}
 
 export function isClaudeBase(baseUrl: string): boolean {
   try {
@@ -152,13 +178,17 @@ export function parseRetryAfterMs(header: string | null, body: string): number |
 }
 
 export function isLlmConfigured(): boolean {
-  return Boolean(process.env.BRAIN_LLM_KEY);
+  return Boolean(process.env.BRAIN_LLM_KEY || cliBinary());
 }
 
 export function llmModel(): string {
   return (
     process.env.BRAIN_LLM_MODEL ||
-    (isClaudeBase(llmBaseUrl()) ? CLAUDE_DEFAULT_MODEL : DEFAULT_MODEL)
+    (cliBinary()
+      ? CLI_DEFAULT_MODEL
+      : isClaudeBase(llmBaseUrl())
+        ? CLAUDE_DEFAULT_MODEL
+        : DEFAULT_MODEL)
   );
 }
 
@@ -195,6 +225,9 @@ export async function complete(
    */
   timeoutMs: number = TIMEOUT_MS
 ): Promise<LlmResult> {
+  const cli = cliBinary();
+  if (cli) return cliComplete(cli, messages, timeoutMs);
+
   const key = process.env.BRAIN_LLM_KEY;
   if (!key) return { ok: false, reason: "unconfigured" };
 
@@ -382,4 +415,120 @@ function claudeOutput(raw: unknown): ModelOutput {
     finishReason: json?.stop_reason === "max_tokens" ? "length" : json?.stop_reason,
     hasOutput: blocks.length > 0,
   };
+}
+
+/** Made once per process: an empty directory, so no project context loads. */
+let cliCwd: string | null = null;
+
+/** One call through `claude -p`. See CLI_DEFAULT_MODEL for why a subprocess. */
+function cliComplete(
+  binary: string,
+  messages: LlmMessage[],
+  timeoutMs: number
+): Promise<LlmResult> {
+  const system = messages
+    .filter((m) => m.role === "system")
+    .map((m) => m.content)
+    .join("\n\n");
+  const prompt = messages
+    .filter((m) => m.role !== "system")
+    .map((m) => m.content)
+    .join("\n\n");
+  const effort = reasoningEffort();
+  const args = [
+    "-p",
+    "--output-format",
+    "json",
+    "--model",
+    llmModel(),
+    "--tools",
+    "",
+    "--strict-mcp-config",
+    "--setting-sources",
+    "project",
+    "--disable-slash-commands",
+    "--no-session-persistence",
+    ...(system ? ["--system-prompt", system] : []),
+    ...(effort ? ["--effort", effort] : []),
+  ];
+  cliCwd ??= mkdtempSync(join(tmpdir(), "brain-llm-"));
+  const cwd = cliCwd;
+
+  return new Promise((resolve) => {
+    // stderr ignored rather than piped: an unread pipe that fills up blocks the child, and
+    // every failure is printed as JSON on stdout anyway.
+    const child = spawn(binary, args, { cwd, stdio: ["pipe", "pipe", "ignore"] });
+    let stdout = "";
+    // Resolves on the timer, not on the child's exit: Claude Code handles SIGTERM itself
+    // (it exits 143 after running its SessionEnd hooks), so the exit can lag the kill.
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      resolve({ ok: false, reason: "error", detail: `no answer within ${timeoutMs} ms` });
+    }, timeoutMs);
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => (stdout += chunk));
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      logger.error({ err }, "brain llm: the claude CLI did not start");
+      resolve({ ok: false, reason: "error", detail: "the claude CLI did not start" });
+    });
+    child.on("close", () => {
+      clearTimeout(timer);
+      resolve(cliOutcome(stdout));
+    });
+    // A child that never started closes its stdin, and writing to it then raises EPIPE as
+    // an unhandled 'error' event. The 'error' handler above already reports the failure.
+    child.stdin.on("error", () => {});
+    child.stdin.end(prompt);
+  });
+}
+
+/**
+ * What `claude -p --output-format json` printed, as an LlmResult.
+ *
+ * Measured 2026-09-24 on v2.1.281: EVERY outcome prints one JSON object on stdout, errors
+ * included. A failure carries `is_error: true`, the message in `result` and the HTTP status
+ * in `api_error_status` (404 for an unknown model, null for "Not logged in"), while
+ * `subtype` still reads "success", so `is_error` is the only field that separates them.
+ */
+export function cliOutcome(stdout: string): LlmResult {
+  let json: {
+    is_error?: unknown;
+    result?: unknown;
+    stop_reason?: unknown;
+    api_error_status?: unknown;
+  } | null = null;
+  try {
+    json = JSON.parse(stdout);
+  } catch {
+    json = null;
+  }
+  if (!json || typeof json !== "object") {
+    logger.error({ chars: stdout.length }, "brain llm: the claude CLI printed no result");
+    return { ok: false, reason: "error", detail: "the claude CLI printed no result" };
+  }
+  const text = typeof json.result === "string" ? json.result : "";
+  if (json.is_error) {
+    const detail = text.slice(0, 300) || "the claude CLI reported an error";
+    logger.warn({ status: json.api_error_status, detail }, "brain llm: the claude CLI failed");
+    /**
+     * A SUBSCRIPTION LIMIT RESETS IN HOURS, so it is reported as the daily kind: no caller
+     * should wait for it. Claude Code has already retried a passing 429 itself before it
+     * gives up and prints this. The words are matched as well as the status because the
+     * one seen in production, "You've hit your session limit · resets 9:40pm (UTC)"
+     * (generate-fix, 2026-09-19), was only ever read as text.
+     */
+    if (json.api_error_status === 429 || /hit your .*limit|usage limit/i.test(text)) {
+      return { ok: false, reason: "rate_limited", detail, dailyQuota: true };
+    }
+    if (json.api_error_status === 529 || /overloaded/i.test(text)) {
+      return { ok: false, reason: "overloaded", detail, retryAfterMs: OVERLOAD_RETRY_MS };
+    }
+    return { ok: false, reason: "error", detail };
+  }
+  if (!text.trim()) {
+    logger.error({}, "brain llm: the claude CLI returned no content");
+    return { ok: false, reason: "error", detail: "empty completion" };
+  }
+  return { ok: true, text: text.trim(), truncated: json.stop_reason === "max_tokens" };
 }

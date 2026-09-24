@@ -1,0 +1,120 @@
+name: Company Brain daily jobs
+
+# The two brain crons that need a language model run here instead of on Vercel.
+#
+# THE MODEL IS THE TEAM SUBSCRIPTION, NOT AN API KEY. Only the `claude` binary may use it:
+# `claude setup-token` mints CLAUDE_CODE_OAUTH_TOKEN, billed against the plan we already
+# pay for (the same secret generate-fix.yml uses). Vercel has no `claude` binary; this
+# runner does. scripts/brain-cron.ts calls the same route handlers Vercel used to, so the
+# day claim, the cron_run row, the Slack post and the stall watch behave exactly as before.
+#
+# Times are UTC, and GitHub can start a scheduled run late. Nothing here is time-critical:
+# the brief's second firing exists precisely so that one late or failed run is retried.
+
+run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.job || (github.event.schedule == '25 8 * * *' && 'brain-mine' || 'brain-brief') }}
+
+on:
+  schedule:
+    # The brief. 08:10 is the retry: claim_slack_alert re-grants an undelivered day once
+    # its claim is ten minutes old, so after a delivery the second run is a no-op.
+    - cron: "10 6,8 * * *"
+    # The decision miner, after the brief's retry.
+    - cron: "25 8 * * *"
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Which job to run"
+        type: choice
+        options: [brain-brief, brain-mine]
+      query:
+        description: "Optional query string, e.g. ?day=2026-09-22 or ?limit=3"
+        required: false
+        default: ""
+      dry_run:
+        description: "brain-brief only: print the brief in the log instead of posting it"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      JOB: ${{ github.event_name == 'workflow_dispatch' && inputs.job || (github.event.schedule == '25 8 * * *' && 'brain-mine' || 'brain-brief') }}
+    # One of each job at a time. Overlap would be harmless (the brief's day claim and the
+    # miner's tombstones both dedupe), but it would spend the seat's allowance twice.
+    concurrency:
+      group: brain-daily-${{ github.event_name == 'workflow_dispatch' && inputs.job || (github.event.schedule == '25 8 * * *' && 'brain-mine' || 'brain-brief') }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "20"
+          cache: npm
+
+      # The routes import the app's own modules, so the app's dependencies are needed.
+      - run: npm ci
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Run the job
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          SLACK_BRAIN_WEBHOOK_URL: ${{ secrets.SLACK_BRAIN_WEBHOOK_URL }}
+          # The routes run only when this names production (isProdCronHost), so it is
+          # pinned here rather than read from a secret.
+          NEXT_PUBLIC_SITE_URL: https://loveiq.org
+          # The mode Vercel runs the routes in: plain JSON logs, production code paths.
+          NODE_ENV: production
+          BRAIN_LLM_CLI: claude
+          # Inputs travel through the environment: `${{ }}` inside `run:` is substituted
+          # before bash sees it, so a quote in the query would be command execution.
+          QUERY: ${{ inputs.query }}
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: |
+          set -o pipefail
+          # FAIL, do not skip. Without the Slack webhook the brief is "delivered" into
+          # nothing (notifySlack skips an unset channel and the day is still marked done),
+          # and a green run that did nothing is the failure this corpus keeps relearning.
+          missing=""
+          for v in SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY CLAUDE_CODE_OAUTH_TOKEN SLACK_BRAIN_WEBHOOK_URL; do
+            [ -n "${!v:-}" ] || missing="$missing $v"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing"
+            exit 1
+          fi
+          case "$JOB" in
+            brain-brief) npx tsx scripts/brain-cron.ts brain-brief $DRY_RUN "$QUERY" ;;
+            brain-mine) npx tsx scripts/brain-cron.ts brain-mine "$QUERY" ;;
+            *) echo "::error::Unknown job: $JOB"; exit 2 ;;
+          esac | tee /tmp/brain-job.log
+
+      # Every failure, whatever stopped it: a missing secret, a failed install, the model
+      # refusing, or a miner run that read nothing. The route also writes the details to
+      # cron_run. This is the only alert: the logger's own mirror to Slack needs
+      # SLACK_OPS_WEBHOOK_URL, a Vercel secret marked sensitive that cannot be read back
+      # out, so the mirror is off here and a failure is never reported twice.
+      - name: Tell the brain channel the job failed
+        if: failure()
+        env:
+          SLACK_BRAIN_WEBHOOK_URL: ${{ secrets.SLACK_BRAIN_WEBHOOK_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SLACK_BRAIN_WEBHOOK_URL:-}" ]; then
+            echo "::warning::SLACK_BRAIN_WEBHOOK_URL is not set, so this failure alerts nobody"
+            exit 0
+          fi
+          # The job's one-line result (status, and the route's reason), when it got that far.
+          result=$(grep -h '^{"status"' /tmp/brain-job.log 2>/dev/null | tail -1 | cut -c1-300 || true)
+          text=":brain: ${JOB} failed in GitHub Actions. ${result:-It did not get as far as running.} ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          jq -n --arg text "$text" '{text: $text}' |
+            curl -sS --fail -X POST -H 'Content-type: application/json' --data @- "$SLACK_BRAIN_WEBHOOK_URL"
