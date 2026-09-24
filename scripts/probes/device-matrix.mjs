@@ -378,7 +378,11 @@ async function runDevice(browser, deviceName, engine) {
           visible: true,
           reaches: !!top && (top === n || n.contains(top)),
           topEl: top ? `${top.tagName}.${String(top.className || "").split(" ")[0]}` : null,
-          blockedByConsent: !!(top && top.closest && top.closest("[class*='cky']")),
+          blockedByConsent: !!(
+            top &&
+            top.closest &&
+            top.closest("[class^='cky-'], [class*=' cky-']")
+          ),
           size: { w: Math.round(r.width), h: Math.round(r.height) },
         };
       });

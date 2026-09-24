@@ -21,17 +21,29 @@
     {
       "probe": "verify-dead-click-target.mjs",
       "why": "A tap on a paragraph is not a defect — the scanner prompt's HARD RULE says so and the probe is supposed to agree. 807 of 827 sessions with a dead_click are exactly this.",
-      "env": { "URL_PATH": "/survey", "TARGET_SELECTOR": "p.font-sans", "DEVICES": "Pixel 7" }
+      "env": {
+        "URL_PATH": "/survey",
+        "TARGET_SELECTOR": "p.font-sans",
+        "DEVICES": "Pixel 7"
+      }
     },
     {
       "probe": "verify-dead-click-target.mjs",
       "why": "The consent gate's 'I agree' is disabled until both boxes are ticked. That is correct, and the button now says why via aria-describedby. A blocked control that explains itself is not a dead end. THIS IS THE CASE THAT WAS WRONG.",
-      "env": { "URL_PATH": "/survey", "TARGET_SELECTOR": "button.flex-1", "DEVICES": "Pixel 7" }
+      "env": {
+        "URL_PATH": "/survey",
+        "TARGET_SELECTOR": "button.flex-1",
+        "DEVICES": "Pixel 7"
+      }
     },
     {
       "probe": "verify-dead-click-target.mjs",
       "why": "A live, reachable control on the survey intro.",
-      "env": { "URL_PATH": "/survey", "TARGET_SELECTOR": "button.mt-10", "DEVICES": "Pixel 7" }
+      "env": {
+        "URL_PATH": "/survey",
+        "TARGET_SELECTOR": "button.mt-10",
+        "DEVICES": "Pixel 7"
+      }
     },
     {
       "probe": "verify-dead-click-target.mjs",
@@ -45,12 +57,23 @@
     {
       "probe": "verify-survey-loop.mjs",
       "why": "Finishing the survey and pressing back shows the 'already finished' screen. Fixed 2026-09-17 and must stay fixed.",
-      "env": { "DEVICES": "Pixel 7" }
+      "env": {
+        "DEVICES": "Pixel 7"
+      }
     },
     {
       "probe": "verify-no-survey-restart.mjs",
       "why": "A valid report must never offer 'Take the survey' as the only way forward.",
-      "env": { "DEVICES": "Pixel 7" }
+      "env": {
+        "DEVICES": "Pixel 7"
+      }
+    },
+    {
+      "probe": "replay-session.mjs",
+      "why": "A reader whose only dead taps were on prose. On 2026-09-24 the replay pressed whatever covered their taps, followed an unlock control out to Stripe, and called Stripe's loading screen a stranded overlay: the pipeline's first reproduction PR (#282), posted under this reader. It must stay clean.",
+      "env": {
+        "SESSION_ID": "01a0d20f-82c6-7307-bf60-d8530c2599fc"
+      }
     }
   ]
 }
