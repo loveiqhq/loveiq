@@ -1,0 +1,70 @@
+name: Cloud session setup still works
+
+# The "loveiq probes" Claude cloud environment runs scripts/cloud-environment-setup.sh
+# on a fresh Ubuntu 24.04 VM as root, then every session runs
+# scripts/cloud-session-start.sh. Nothing else would notice either breaking
+# until someone asked Claude to run a probe. This runs both on a bare
+# ubuntu:24.04 as root, then one probe on each engine against the live site.
+# docs/runbooks/CLOUD_SESSIONS.md.
+
+on:
+  pull_request:
+    paths:
+      - "scripts/cloud-*.sh"
+      - ".claude/settings.json"
+      - "package-lock.json"
+      - ".github/workflows/cloud-setup-smoke.yml"
+  schedule:
+    # Weekly: the Playwright download hosts and Ubuntu's packages move on their own.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    container: ubuntu:24.04
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: /opt/ms-playwright
+    steps:
+      # A bare image lacks what the cloud VM ships with: git, certificates and
+      # the build tools npm needs for native modules.
+      - name: What the cloud VM has and a bare image does not
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates curl git xz-utils build-essential python3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "20"
+
+      # The environment refuses to cache a script that runs past about five minutes.
+      - name: The environment's setup script, as the cloud runs it
+        run: timeout 300 bash scripts/cloud-environment-setup.sh
+
+      - name: The session hook reports a ready session
+        env:
+          CLAUDE_CODE_REMOTE: "true"
+        run: |
+          out=$(CLAUDE_PROJECT_DIR="$PWD" bash scripts/cloud-session-start.sh)
+          echo "$out"
+          case "$out" in
+            *"are ready"*) ;;
+            *) echo "::error::the session hook did not report a ready session"; exit 1 ;;
+          esac
+
+      # 0 is clean and 1 is a finding: both mean the browsers ran. 3 means the
+      # probe could not measure, which is the failure this job exists to catch.
+      - name: A probe runs on Chromium and WebKit
+        run: |
+          set +e
+          npx tsx scripts/probes/verify-consent-banner-clearance.mjs
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ] && [ "$code" -ne 1 ]; then
+            echo "::error::the probe could not measure in the cloud setup (exit $code)"
+            exit 1
+          fi
