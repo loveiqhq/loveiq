@@ -101,6 +101,36 @@ export const PROMPTS: BrainPrompt[] = [
       HOUSE_RULES,
   },
   {
+    name: "draft_chapter",
+    title: "Draft a chapter",
+    description:
+      "Draft one report chapter for one archetype from a context pack, check it, and put it in a Google Doc for review.",
+    arguments: [
+      { name: "chapter", description: "Which chapter, e.g. motivation.", required: true },
+      { name: "archetype", description: "Which archetype, e.g. Spark Seeker.", required: true },
+      {
+        name: "brief",
+        description: "What should change, if this is a rewrite rather than a first draft.",
+      },
+    ],
+    render: ({ chapter, archetype, brief }) =>
+      `Draft the "${chapter}" chapter for the ${archetype}.${brief ? ` What should change: ${brief}` : ""}\n\n` +
+      `1. get_context_pack with chapter "${chapter}" and archetype "${archetype}". Work from that and nothing wider: ` +
+      "it holds the chapter's rules, the current text, a model from another archetype, who this archetype is, " +
+      "research to draw on and the team's prompt documents.\n" +
+      "2. Read the prompt document it names for this chapter with fetch_document and follow it.\n" +
+      "3. Write the draft. Back every scientific claim with a research card from the pack or flag it.\n" +
+      `4. Run check_copy on the draft with chapter "${chapter}" and archetype "${archetype}". Fix everything under MUST FIX and ` +
+      "whatever under WORTH FIXING you can, then run it again.\n" +
+      "5. Show me the draft and the final check, and wait for my OK. Then put it in a Google Doc with write_to_google_doc, " +
+      "titled as a DRAFT and naming the chapter, the archetype and the prompt document used.\n" +
+      '6. At the end of that same document, add a section headed "How this was made": the model you are, today\'s date, who ' +
+      "asked, the prompt document's id, the brief, the ids of the research cards you used, and the final check_copy summary " +
+      "line. It lives with the draft in its folder, so anyone can later ask which prompt and material produced this chapter " +
+      "and get a real answer.\n\n" +
+      HOUSE_RULES,
+  },
+  {
     name: "what_needs_me",
     title: "What needs me",
     description: "Everything waiting on one person, most urgent first, with a link to each.",

@@ -24,7 +24,7 @@ import { splitBody } from "./notion";
  */
 const SOURCE = "skill";
 
-interface PromptDoc {
+export interface PromptDoc {
   source_id: string;
   title: string;
 }
@@ -79,7 +79,7 @@ export function isTruncated(rowCount: number, limit = PROMPT_ROW_LIMIT): boolean
   return rowCount >= limit;
 }
 
-async function promptDocs(): Promise<PromptDoc[]> {
+export async function promptDocs(): Promise<PromptDoc[]> {
   const res = await supabaseFetch(
     `/rest/v1/brain_chunk?select=source_id,title&source=eq.drive` +
       `&title=ilike.*prompt*&order=title&limit=${PROMPT_ROW_LIMIT}`
