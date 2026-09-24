@@ -22,6 +22,8 @@ Claude Code) is the door people use; the operator's guide is
   repeat another chapter) plus `voice.ts`'s per-chapter checks, run on a draft or on shipped copy.
 - `server/context-pack.ts` — `get_context_pack`: only what drafting one chapter for one archetype
   needs, inside a fixed size (Mark: "be crazy careful with the context window").
+- `server/promises.ts` — `meeting_promises`: every "Next steps" item in the meeting notes, parsed
+  by code and grouped by owner. Lists promises only; nothing is matched against Notion.
 - `server/notice.ts`, `related.ts`, `people.ts`, `periods.ts`, `reconcile.ts`, `voice.ts`,
   `vocabulary.ts` — proactive notices, "what else was going on", one name per colleague,
   date handling, the compute-twice reconciler, and the house-voice checks.

@@ -144,8 +144,8 @@ export const PROMPTS: BrainPrompt[] = [
     render: ({ person }) =>
       `What is waiting on ${person}? Most urgent first.\n\n` +
       `1. Open Notion tasks: browse_context with sources ["notion"] and meta {"state": "open", "people": "${person}"}. Overdue first.\n` +
-      `2. Asks from meetings: search_company_context with meta {"people": ["${person}"], "section": "summary"} and a since date two weeks back; ` +
-      'pull the "Next steps" lines that name them.\n' +
+      `2. Asks from meetings: meeting_promises with person "${person}" and a since date two weeks back. It reads every ` +
+      'meeting\'s "Next steps" list by code, so nothing is skipped; drop what their open tasks or your own reading show is done.\n' +
       `3. Asks hidden in comments: search sources ["gmail"] for Figma and Google Docs comment mails from the last two weeks that ask ${person} to do something.\n\n` +
       "One line per item: what, where (direct link), since when. Nothing that is already done.\n\n" +
       HOUSE_RULES,
