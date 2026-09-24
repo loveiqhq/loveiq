@@ -76,6 +76,7 @@ const verified = (over: Record<string, unknown> = {}) => ({
   contradicted: 0,
   duplicate: 0,
   undelivered: 0,
+  undeliveredSessions: [] as string[],
   overturned: 0,
   total: 0,
   ...over,
