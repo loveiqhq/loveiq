@@ -136,6 +136,21 @@ describe("upsertChunks removes leftover parts", () => {
     expect(deleted()).toEqual([]);
   });
 
+  /** analytics, ga4, gsc: one row per thing, never a second part, so nothing to look up. */
+  it("skips the lookups for a source that has never had a numbered part", async () => {
+    stored = [];
+    await upsertChunks([row("daily:2026-09-24", "analytics"), row("weekly:2026-W39", "analytics")]);
+    const lookups = calls.filter((c) => c.method === "GET" && c.path.includes("or="));
+    expect(lookups).toEqual([]);
+    expect(deleted()).toEqual([]);
+  });
+
+  it("does the full lookup when the check for numbered parts cannot be read", async () => {
+    lookupOk = false;
+    await upsertChunks([row("daily:2026-09-24", "analytics")]);
+    expect(calls.some((c) => c.method === "GET" && c.path.includes("or="))).toBe(true);
+  });
+
   it("reads every page of stored ids before judging", async () => {
     // 1,000 unrelated rows fill the first page; the stale part is only on the second.
     stored = [X, ...Array.from({ length: 1000 }, (_, i) => `thread:other${i}`), `${X}#2`];
