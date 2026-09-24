@@ -170,6 +170,28 @@ describe("readMetric and isJump", () => {
     expect(isJump(small)).toBe(false);
   });
 
+  it("keeps a noisy metric's big-looking move inside its range", () => {
+    // Swinging 100/300 every day: 300 today is +50%, and entirely ordinary for it.
+    const s = build((i) => ({ visitors: i === 29 ? 300 : i % 2 ? 100 : 300 }));
+    const r = readMetric(metric("visitors"), s, LAST)!;
+    expect(r.value - r.usual).toBeGreaterThanOrEqual(60);
+    expect(isJump(r)).toBe(false);
+  });
+
+  it("does not let a dead-flat rate turn a small wobble into a jump", () => {
+    // 14% every day; 20% on 200 visitors is within the noise of 200 visitors.
+    const s = build((i) => ({ starts: i === 29 ? 40 : 28 }));
+    expect(isJump(readMetric(metric("start_rate"), s, LAST)!)).toBe(false);
+  });
+
+  it("needs a rate to move by a real share, however many visitors there were", () => {
+    // 5,000 visitors a day makes 14% to 16% very unusual, but a seventh is not worth a word.
+    const s = build((i) => ({ visitors: 5000, starts: i === 29 ? 800 : 700 }));
+    const r = readMetric(metric("start_rate"), s, LAST)!;
+    expect(Math.abs(r.z)).toBeGreaterThan(3.5);
+    expect(isJump(r)).toBe(false);
+  });
+
   it("is not thrown off by one earlier spike, which widens nothing", () => {
     const s = build((i) => ({ visitors: i === 10 ? 3000 : i === 29 ? 600 : 200 }));
     const r = readMetric(metric("visitors"), s, LAST)!;
@@ -256,6 +278,32 @@ describe("explainDay", () => {
       "The extra traffic barely engages: 5% of GA4 sessions were engaged against a usual 24%, which fits bots or a misfiring tag better than real interest."
     );
     expect(evidence[0]).toBe("Engaged GA4 sessions 5% (usual 24%), new users 98% (usual 93%)");
+  });
+
+  it("says nothing is likely on a day where nothing moved", () => {
+    expect(
+      explainDay(
+        build(() => ({})),
+        LAST,
+        NONE
+      ).likely
+    ).toEqual([]);
+  });
+
+  it("does not call extra traffic bots when it engages as usual", () => {
+    const s = build((i) =>
+      i === 29
+        ? { visitors: 700, ga4: { sessions: 600, engaged: 150, users: 600, newUsers: 560 } }
+        : {}
+    );
+    expect(explainDay(s, LAST, NONE).likely.join(" ")).not.toMatch(/barely engages/);
+  });
+
+  it("says nothing about one system when both saw the jump", () => {
+    const s = build((i) =>
+      i === 29 ? { visitors: 700, ga4: { sessions: 600, engaged: 150 } } : {}
+    );
+    expect(explainDay(s, LAST, NONE).likely.join(" ")).not.toMatch(/Only/);
   });
 
   it("does not blame engagement when traffic did not go up", () => {
@@ -394,6 +442,27 @@ describe("noticeJumps", () => {
     expect(input.kind).toBe("number-watch");
     expect(input.detail).toContain('Most of it is traffic source "direct"');
     expect(input.detail).toMatch(/None of this proves a cause/);
+  });
+
+  it("does not repeat a level that was already unusual the day before", async () => {
+    mockRollup.mockResolvedValue(
+      Array.from({ length: 60 }, (_, i) => {
+        const day = new Date(Date.UTC(2026, 8, 24) - i * 86_400_000).toISOString().slice(0, 10);
+        const high = day === "2026-09-23" || day === "2026-09-22";
+        return {
+          day,
+          unique_visitors: high ? 900 : 200,
+          survey_starts: 28,
+          submissions: 10,
+          report_opens: 12,
+          reports_paid: 0,
+          top_sources: {},
+        };
+      })
+    );
+    const record = vi.fn();
+    expect(await noticeJumps(new Date("2026-09-24T08:05:00Z"), record)).toBe(0);
+    expect(record).not.toHaveBeenCalled();
   });
 
   it("stays quiet outside the morning window, before GA4 has settled on yesterday", async () => {
