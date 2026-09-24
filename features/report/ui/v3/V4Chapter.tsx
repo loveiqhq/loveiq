@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type FC, type ReactNode } from "react";
+import { Fragment, useId, useState, type FC, type ReactNode } from "react";
 
 /**
  * Chapter row — Report V4.
@@ -73,6 +73,21 @@ interface Props {
   bare?: boolean;
 }
 
+/**
+ * The suffix, one box per word (310:224 / 1:865). Figma sets a line of suffix alone
+ * its own 16.8 below the title's baseline, where CSS would stack it under the 24px
+ * run's whole line box; a word box lets reportV3.css pull its top in by exactly the
+ * leading the two overlap. Per word, not per run, because the frame breaks inside
+ * the suffix ("… of the / Spark Seeker", "… Spark / Seeker").
+ */
+const Words: FC<{ text: string }> = ({ text }) =>
+  text.split(" ").map((word, i) => (
+    <Fragment key={i}>
+      {i > 0 ? " " : null}
+      <span className="rv4-chapter__word">{word}</span>
+    </Fragment>
+  ));
+
 /** 304:263 / 1:866 — the 15px chevron, stroke 3, drawn pointing down. */
 const Chevron: FC = () => (
   <svg viewBox="0 0 15 15" fill="none">
@@ -141,14 +156,21 @@ const V4Chapter: FC<Props> = ({
         aria-controls={bodyId}
         onClick={() => setIsOpen((v) => !v)}
       >
+        {/* The space before the suffix is the 24px run's, as the frame sets it. */}
         <h3 className={`rv4-chapter__title${archetype ? " has-suffix" : ""}`}>
-          {title}
           {archetype ? (
             <>
-              <span className="rv4-chapter__of"> - of the </span>
-              <span className="rv4-chapter__archetype">{archetype}</span>
+              <span className="rv4-chapter__name">{`${title} `}</span>
+              <span className="rv4-chapter__of">
+                <Words text="- of the" />{" "}
+              </span>
+              <span className="rv4-chapter__archetype">
+                <Words text={archetype} />
+              </span>
             </>
-          ) : null}
+          ) : (
+            title
+          )}
         </h3>
         {/* 1:867 / 304:261 — "Control / Disc". */}
         <span className="rv4-chapter__chev" aria-hidden="true">
