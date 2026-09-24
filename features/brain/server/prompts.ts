@@ -145,9 +145,34 @@ export const PROMPTS: BrainPrompt[] = [
       `What is waiting on ${person}? Most urgent first.\n\n` +
       `1. Open Notion tasks: browse_context with sources ["notion"] and meta {"state": "open", "people": "${person}"}. Overdue first.\n` +
       `2. Asks from meetings: meeting_promises with person "${person}" and a since date two weeks back. It reads every ` +
-      'meeting\'s "Next steps" list by code, so nothing is skipped; drop what their open tasks or your own reading show is done.\n' +
+      'meeting\'s "Next steps" list by code and shows the board task each one matches. Drop the ones whose task is Done, ' +
+      "and name the ones on no board: nobody is tracking those.\n" +
       `3. Asks hidden in comments: search sources ["gmail"] for Figma and Google Docs comment mails from the last two weeks that ask ${person} to do something.\n\n` +
       "One line per item: what, where (direct link), since when. Nothing that is already done.\n\n" +
+      HOUSE_RULES,
+  },
+  {
+    name: "track_promises",
+    title: "Put meeting promises on the board",
+    description:
+      "Find the next steps agreed in meetings that no Notion board task tracks, and add the ones you approve.",
+    arguments: [
+      {
+        name: "since",
+        description: "First day to cover, YYYY-MM-DD. Leave empty for the last seven days.",
+      },
+      { name: "person", description: "Only this person's promises (full name), plus the group's." },
+    ],
+    render: ({ since, person }) =>
+      `Which promises from our meetings${person ? ` for ${person}` : ""} since ${since || "seven days ago"} ` +
+      "are not on the Notion board?\n\n" +
+      `1. meeting_promises with since ${since || "the date seven days ago"}${person ? ` and person "${person}"` : ""}.\n` +
+      '2. List the items marked "not on the board", by owner, one line each with the meeting and its link. Leave out ' +
+      "anything plainly done or overtaken since, and say why.\n" +
+      '3. For each one worth tracking, draft a write_to_notion call: parent "Board", a short task name as the title, ' +
+      'Status "Backlog", a Due Date only if the meeting named one, and the owner, meeting and link in the content ' +
+      "(owners cannot be set as a property).\n" +
+      "4. Show me the drafts and wait for my OK. Create only the ones I approve, and give me each link.\n\n" +
       HOUSE_RULES,
   },
   {

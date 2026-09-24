@@ -177,7 +177,7 @@ describe("/api/mcp", () => {
         expect(body.result.capabilities.prompts).toBeDefined();
       });
 
-      it("lists the six prompts, each with its arguments", async () => {
+      it("lists the seven prompts, each with its arguments", async () => {
         const body = await call("prompts/list");
         const prompts = body.result.prompts as Array<{
           name: string;
@@ -189,6 +189,7 @@ describe("/api/mcp", () => {
           "review_chapter",
           "draft_chapter",
           "what_needs_me",
+          "track_promises",
           "record_decision",
         ]);
         const needs = prompts.find((p) => p.name === "what_needs_me")!;
@@ -341,32 +342,88 @@ describe("/api/mcp", () => {
           ).json()
         ).result as { content: Array<{ text: string }>; isError?: boolean };
 
+      const ok = (body: unknown) => ({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => body,
+      });
+      const down = { ok: false, status: 503, headers: new Headers(), json: async () => ({}) };
+      /** The notes and the board are read in parallel, so answer each by its path. */
+      const serve = (notes: unknown, board: unknown) =>
+        mockSupabaseFetch.mockImplementation(async (path: string) =>
+          path.includes("database=eq.Board") ? board : notes
+        );
+      afterEach(() => mockSupabaseFetch.mockReset());
+
+      const notes = [
+        {
+          source_id: "doc:abc#2",
+          title:
+            "Meeting notes: LoveIQ Sync - 2026/09/24 11:59 CEST - Notes by Gemini (part 2 of 3)",
+          url: "https://docs.google.com/document/d/abc/edit",
+          period_end: "2026-09-24",
+          body:
+            "Summary text.\nNext steps\n* [Mark Oldenburg, Sanjin Kacevac] Finalize Content: Finalize the chapter.\n" +
+            "* [Eman Cickusic] Fix Tagging: Investigate tagging failures in Figma frames.\n\nWant to see more?",
+        },
+      ];
+      const board = [
+        {
+          title: "Notion task: Figma frames tagging failures",
+          url: "https://app.notion.com/p/tagging",
+          meta: { status: "Eman - WIP", state: "open", due: "2026-09-20", database: "Board" },
+        },
+        ...Array.from({ length: 60 }, (_, n) => ({
+          title: `Notion task: filler item ${n}`,
+          url: null,
+          meta: { status: "Backlog", state: "idea" },
+        })),
+      ];
+
       it("groups each meeting's next steps by owner, with the meeting and a link", async () => {
-        mockSupabaseFetch.mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: new Headers(),
-          json: async () => [
-            {
-              source_id: "doc:abc#2",
-              title:
-                "Meeting notes: LoveIQ Sync - 2026/09/24 11:59 CEST - Notes by Gemini (part 2 of 3)",
-              url: "https://docs.google.com/document/d/abc/edit",
-              period_end: "2026-09-24",
-              body:
-                "Summary text.\nNext steps\n* [Mark Oldenburg, Sanjin Kacevac] Finalize Content: Finalize the chapter.\n" +
-                "* [Eman Cickusic] Fix Tagging: Investigate tagging in Figma.\n\nWant to see more?",
-            },
-          ],
-        });
+        serve(ok(notes), ok(board));
         const r = await call({ since: "2026-09-20", person: "Mark Oldenburg" });
         expect(r.isError).toBeFalsy();
         expect(r.content[0]!.text).toContain("Mark Oldenburg (1):");
         expect(r.content[0]!.text).toContain(
-          "- 2026-09-24 LoveIQ Sync: Finalize Content: Finalize the chapter. (https://docs.google.com/document/d/abc/edit)"
+          "- 2026-09-24 LoveIQ Sync: Finalize Content: Finalize the chapter. (https://docs.google.com/document/d/abc/edit) → not on the board"
         );
         expect(r.content[0]!.text).not.toContain("Fix Tagging");
+      });
+
+      it("shows the board task an item matches, with its status and whether it is overdue", async () => {
+        serve(ok(notes), ok(board));
+        const text = (await call({ since: "2026-09-20" })).content[0]!.text;
+        expect(text).toContain(
+          '→ board: "Figma frames tagging failures" (Eman - WIP, due 2026-09-20, overdue) https://app.notion.com/p/tagging'
+        );
+        expect(text).toMatch(
+          /On the Notion board: 1 of 2 \(0 done, 1 not done\)\. Not on the board: 1\./
+        );
+        const boardReads = mockSupabaseFetch.mock.calls.filter(([path]) =>
+          String(path).includes("database=eq.Board")
+        );
+        expect(boardReads).toHaveLength(1);
+      });
+
+      it("still lists the promises when the board cannot be read, and says they are unchecked", async () => {
+        serve(ok(notes), down);
+        const r = await call({ since: "2026-09-20" });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.text).toContain("The Notion board could not be read (status 503)");
         expect(r.content[0]!.text).toContain("Not checked against Notion");
+        expect(r.content[0]!.text).not.toContain("→");
+      });
+
+      it("still lists the promises when reading the board throws", async () => {
+        mockSupabaseFetch.mockImplementation(async (path: string) => {
+          if (path.includes("database=eq.Board")) throw new Error("network");
+          return ok(notes);
+        });
+        const r = await call({ since: "2026-09-20" });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.text).toContain("could not be read");
       });
 
       /** Measured 2026-09-24: 17 notes carry the list in two parts, so 4 of 767 items came twice. */
@@ -378,23 +435,13 @@ describe("/api/mcp", () => {
           period_end: "2026-09-24",
           body: "Next steps\n* [Eman Cickusic] Fix Tagging: Investigate tagging in Figma.",
         });
-        mockSupabaseFetch.mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: new Headers(),
-          json: async () => [part("doc:abc"), part("doc:abc#2")],
-        });
+        serve(ok([part("doc:abc"), part("doc:abc#2")]), ok(board));
         const r = await call({ since: "2026-09-20" });
         expect(r.content[0]!.text.match(/Fix Tagging/g)).toHaveLength(1);
       });
 
       it("reports an unreadable corpus as an outage, not an empty week", async () => {
-        mockSupabaseFetch.mockResolvedValueOnce({
-          ok: false,
-          status: 503,
-          headers: new Headers(),
-          json: async () => ({}),
-        });
+        serve(down, ok(board));
         const r = await call({});
         expect(r.isError).toBe(true);
         expect(r.content[0]!.text).toMatch(/outage, not an empty week/);

@@ -23,7 +23,8 @@ Claude Code) is the door people use; the operator's guide is
 - `server/context-pack.ts` — `get_context_pack`: only what drafting one chapter for one archetype
   needs, inside a fixed size (Mark: "be crazy careful with the context window").
 - `server/promises.ts` — `meeting_promises`: every "Next steps" item in the meeting notes, parsed
-  by code and grouped by owner. Lists promises only; nothing is matched against Notion.
+  by code and grouped by owner, each looked up on the Notion board by `boardMatcher` (owner, then
+  rare shared words). The `track_promises` prompt drafts board tasks for the untracked ones.
 - `server/notice.ts`, `related.ts`, `people.ts`, `periods.ts`, `reconcile.ts`, `voice.ts`,
   `vocabulary.ts` — proactive notices, "what else was going on", one name per colleague,
   date handling, the compute-twice reconciler, and the house-voice checks.
