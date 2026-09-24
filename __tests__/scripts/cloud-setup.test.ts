@@ -1,34 +1,39 @@
 import { describe, expect, it } from "vitest";
 
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const read = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8");
-
-/**
- * The cloud environment keeps its own pasted copy of the setup script, so the
- * pin in the file is the one reminder that a Playwright upgrade has to be
- * pasted there too. Behaviour is checked for real by cloud-setup-smoke.yml.
- */
-describe("the Claude cloud environment setup", () => {
-  it("fetches the browser builds for the Playwright the repo installs", () => {
-    const lock = JSON.parse(read("package-lock.json"));
-    const installed = lock.packages["node_modules/@playwright/test"].version;
-    const pinned = /playwright@(\d+\.\d+\.\d+)/.exec(
-      read("scripts/cloud-environment-setup.sh")
-    )?.[1];
-    expect(pinned, "bump the pin, then paste the script into the environment again").toBe(
-      installed
-    );
+const run = (script: string, remote: string) =>
+  spawnSync("bash", [resolve(process.cwd(), script)], {
+    env: { ...process.env, CLAUDE_CODE_REMOTE: remote },
+    encoding: "utf8",
   });
 
-  it("runs the session hook in the cloud only, and on every start and resume", () => {
-    const hooks = JSON.parse(read(".claude/settings.json")).hooks.SessionStart;
-    expect(JSON.stringify(hooks)).toContain("scripts/cloud-session-start.sh");
+/**
+ * Both scripts run on every laptop too: the hook through .claude/settings.json,
+ * the setup whenever someone types it. Outside a Claude cloud session they
+ * must do nothing, because the setup runs npm ci, apt and certutil. The cloud
+ * behaviour is checked for real by cloud-setup-smoke.yml.
+ */
+describe("the Claude cloud session scripts", () => {
+  it("the session hook is silent on a laptop and points the cloud at the setup", () => {
+    expect(run("scripts/cloud-session-start.sh", "").stdout).toBe("");
+    const cloud = run("scripts/cloud-session-start.sh", "true");
+    expect(cloud.status).toBe(0);
+    expect(cloud.stdout).toContain("bash scripts/cloud-probes-setup.sh");
+  });
+
+  it("the probe setup refuses to run outside the cloud, before touching anything", () => {
+    const local = run("scripts/cloud-probes-setup.sh", "");
+    expect(local.status).toBe(1);
+    expect(local.stdout).toContain("for Claude cloud sessions only");
+  });
+
+  it("runs the hook on every start and resume", () => {
+    const hooks = JSON.parse(readFileSync(resolve(process.cwd(), ".claude/settings.json"), "utf8"))
+      .hooks.SessionStart;
     expect(hooks[0].matcher).toBe("startup|resume");
-    // Local sessions run it too; the first thing it does is leave.
-    expect(read("scripts/cloud-session-start.sh")).toMatch(
-      /^\[ "\$CLAUDE_CODE_REMOTE" = "true" \] \|\| exit 0$/m
-    );
+    expect(JSON.stringify(hooks)).toContain("scripts/cloud-session-start.sh");
   });
 });
