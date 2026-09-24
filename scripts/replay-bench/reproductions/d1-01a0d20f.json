@@ -1,0 +1,18 @@
+{
+  "criterion": "D1",
+  "label": "dead control",
+  "session_id": "01a0d20f-82c6-7307-bf60-d8530c2599fc",
+  "recording": "https://eu.posthog.com/project/244778/replay/01a0d20f-82c6-7307-bf60-d8530c2599fc",
+  "viewport": {
+    "min": 411,
+    "max": 411,
+    "os": "Android"
+  },
+  "probes": [
+    {
+      "file": "replay-session.mjs",
+      "output": "followed 4 of 4 route step(s), 4 of them checkable; 35 of 41 recorded dead tap(s) exist on this report | REPRODUCED: |   after dead_click: div.cky-consent-container covers the page with no dialog open"
+    }
+  ],
+  "reproduced": true
+}
