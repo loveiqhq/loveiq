@@ -63,6 +63,18 @@ import {
   renderPromises,
 } from "@features/brain/server/promises";
 import { promptDocs } from "@features/brain/server/ingest/skills";
+import {
+  isJump,
+  jumpsOn,
+  loadAround,
+  loadSeries,
+  METRICS,
+  NOT_PROOF,
+  readMetric,
+  renderDay,
+  renderMetric,
+  type Reading,
+} from "@features/brain/server/jumps";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
@@ -1527,6 +1539,34 @@ export const TOOLS = [
       properties: {
         since: { type: "string", description: "First day, YYYY-MM-DD. Default: seven days ago." },
         until: { type: "string", description: "Last day, YYYY-MM-DD, inclusive. Default: today." },
+      },
+    },
+  },
+  {
+    name: "explain_change",
+    title: "Why a number jumped",
+    annotations: { readOnlyHint: true, openWorldHint: true },
+    description:
+      "Whether a day's numbers were outside their usual range, and where each move came from, " +
+      "from our own data: visitors (our count and GA4), surveys started and finished, reports " +
+      "opened and paid, and the rates between them, each against the 28 days before. A move is " +
+      "split by traffic source or GA4 channel, a rate into its two halves (a conversion that " +
+      "'doubled' because traffic halved says so), and the day is checked for engagement, GA4 " +
+      "against our own count, ad spend and campaigns, and what shipped or was decided. Use it " +
+      "before trusting or explaining any jump: 'why did visitors spike on the 17th', 'is this " +
+      "CVR real', 'what moved yesterday'. The likely causes are fixed rules over numbers, not " +
+      "a guess, and the answer says none of it is proof.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        day: { type: "string", description: "The day, YYYY-MM-DD. Default: yesterday." },
+        metric: {
+          type: "string",
+          enum: METRICS.map((m) => m.id),
+          description:
+            "One metric to explain whether or not it was unusual. Leave empty to list every metric " +
+            "that was outside its usual range that day.",
+        },
       },
     },
   },
@@ -4588,6 +4628,68 @@ async function callTool(
     );
   }
 
+  if (name === "explain_change") {
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const today = new Date().toISOString().slice(0, 10);
+    const day = typeof args.day === "string" && args.day.trim() ? args.day.trim() : yesterday;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !isRealDate(day)) {
+      return textResult(`\`day\` must be a real day like 2026-09-17, not "${day}".`, true);
+    }
+    if (day > today) return textResult(`${day} has not happened yet.`, true);
+    const metricId = typeof args.metric === "string" ? args.metric.trim() : "";
+    const metric = metricId ? METRICS.find((m) => m.id === metricId) : undefined;
+    if (metricId && !metric) {
+      return textResult(
+        `No metric called "${metricId}". It is one of: ${METRICS.map((m) => m.id).join(", ")}.`,
+        true
+      );
+    }
+    let series;
+    try {
+      series = await loadSeries(day);
+    } catch {
+      return textResult(
+        "The daily numbers could not be read right now. This is an outage, not a quiet day.",
+        true
+      );
+    }
+    const partial = day === today ? "Today is still going, so its numbers are partial.\n\n" : "";
+    if (metric) {
+      const reading = readMetric(metric, series, day);
+      if (!reading) {
+        return textResult(
+          `${metric.label} has no reading for ${day}: either nothing was counted that day or there ` +
+            `are fewer than two weeks of comparable days before it.`
+        );
+      }
+      stats.sourceCount = 1;
+      return textResult(
+        partial +
+          `${isJump(reading) ? "Outside its usual range" : "Within its usual range"} on ${day}.\n\n` +
+          renderDay(day, [reading], series, await loadAround(day)) +
+          `\n\n${NOT_PROOF}`
+      );
+    }
+    const jumps = jumpsOn(series, day);
+    stats.sourceCount = jumps.length;
+    if (jumps.length === 0) {
+      const lines = METRICS.map((m) => readMetric(m, series, day))
+        .filter((x): x is Reading => x !== null)
+        .map((x) => `- ${renderMetric(x, series).split("\n")[0]}`);
+      return textResult(
+        partial +
+          `Nothing on ${day} was outside its usual range (each metric against the 28 days before).` +
+          (lines.length ? `\n\n${lines.join("\n")}` : "")
+      );
+    }
+    return textResult(
+      partial +
+        `${jumps.length} unusual on ${day}.\n\n` +
+        renderDay(day, jumps, series, await loadAround(day)) +
+        `\n\n${NOT_PROOF}`
+    );
+  }
+
   if (name === "what_shipped") {
     const day = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
     const since =
@@ -4905,6 +5007,9 @@ export const MCP_INSTRUCTIONS =
   "logic already.\n\n" +
   "WHO PROMISED WHAT: meeting_promises lists every next step agreed in a recorded meeting, by " +
   "owner, read off the notes by code, and whether the Notion board tracks it.\n\n" +
+  "WHY A NUMBER MOVED: explain_change says whether a day's numbers were outside their usual " +
+  "range and splits each move by source, channel, engagement, ad spend and what shipped, before " +
+  "anyone explains a jump from memory.\n\n" +
   'WHAT CHANGED, in plain English: what_shipped lists the "For Marcus:" line of every change ' +
   "that reached main, newest first, read live from the repository.\n\n" +
   "REPORT COPY: get_context_pack gives exactly what one chapter for one archetype needs before " +

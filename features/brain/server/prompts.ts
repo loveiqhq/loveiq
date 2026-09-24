@@ -66,9 +66,9 @@ export const PROMPTS: BrainPrompt[] = [
       "Show visits, surveys started and finished, reports opened, paid reports, revenue and ad spend, each with the change. " +
       'Paywall views and checkouts are not in get_business_numbers: find them with list_product_tables (match "paywall", then ' +
       '"checkout") and query_product_data, and name the table you used. Paywall conversion first, it is the core goal. ' +
-      "For any number that moved a lot, look for the likely " +
-      "cause before calling it real: deploys (query_external_service vercel), channel mix (ga4 records), and decisions or experiments " +
-      "in that window. Say where each number comes from, and whether a rate is step-to-step or cumulative.\n\n" +
+      "For any day where a number moved a lot, run explain_change for that day before calling it " +
+      "real: it splits the move by source, channel, engagement, ad spend and what shipped, and says when a rate moved " +
+      "because its denominator did. Say where each number comes from, and whether a rate is step-to-step or cumulative.\n\n" +
       HOUSE_RULES,
   },
   {

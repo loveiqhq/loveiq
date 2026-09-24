@@ -461,6 +461,96 @@ describe("/api/mcp", () => {
       });
     });
 
+    describe("explain_change", () => {
+      const call = async (args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 12,
+                method: "tools/call",
+                params: { name: "explain_change", arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+
+      /** Sixty days ending today, newest first as the database returns them. */
+      const rollup = (spike: string | null) =>
+        Array.from({ length: 60 }, (_, i) => {
+          const day = new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10);
+          return {
+            day,
+            unique_visitors: day === spike ? 900 : 200,
+            survey_starts: 28,
+            submissions: 10,
+            report_opens: 12,
+            reports_paid: 0,
+            top_sources: { direct: day === spike ? 860 : 160, google: 40 },
+          };
+        });
+      const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+
+      beforeEach(() => {
+        mockSupabaseFetch.mockResolvedValue({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => [],
+        });
+        mockFetch.mockResolvedValue({ ok: true, status: 200, json: async () => [] });
+      });
+      afterEach(() => {
+        mockSupabaseFetch.mockReset();
+        mockFetch.mockReset();
+        mockRollup.mockReset();
+      });
+
+      it("finds yesterday's jump by default and says where it came from, and that it is not proof", async () => {
+        mockRollup.mockResolvedValue(rollup(yesterday));
+        const r = await call({});
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.text).toMatch(new RegExp(`^\\d+ unusual on ${yesterday}\\.`));
+        expect(r.content[0]!.text).toContain("Visitors (our own count): 900 against a usual 200");
+        expect(r.content[0]!.text).toContain(
+          'Most of it is traffic source "direct": +700 of the +700.'
+        );
+        expect(r.content[0]!.text).toMatch(/None of this proves a cause/);
+      });
+
+      it("says a quiet day was quiet, with where each metric sat", async () => {
+        mockRollup.mockResolvedValue(rollup(null));
+        const text = (await call({ day: yesterday })).content[0]!.text;
+        expect(text).toMatch(/^Nothing on .* was outside its usual range/);
+        expect(text).toContain("- Visitors (our own count): 200 against a usual 200");
+      });
+
+      it("explains one metric on request, saying whether it was unusual", async () => {
+        mockRollup.mockResolvedValue(rollup(null));
+        const text = (await call({ day: yesterday, metric: "visitors" })).content[0]!.text;
+        expect(text).toMatch(/^Within its usual range on /);
+      });
+
+      it("refuses a day that is not one, a day to come, and a metric that does not exist", async () => {
+        expect((await call({ day: "2026-09-31" })).isError).toBe(true);
+        mockRollup.mockResolvedValue(rollup(null));
+        const future = await call({ day: "2999-01-01" });
+        expect(future.isError).toBe(true);
+        expect(future.content[0]!.text).toBe("2999-01-01 has not happened yet.");
+        const r = await call({ metric: "cvr" });
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toContain("visitor_cvr");
+      });
+
+      it("reports unreadable numbers as an outage, not a quiet day", async () => {
+        mockRollup.mockRejectedValue(new Error("down"));
+        const r = await call({});
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toMatch(/outage, not a quiet day/);
+      });
+    });
+
     describe("what_shipped", () => {
       const commit = (pr: number, line: string, date: string) => ({
         sha: `c${pr}0000000`,
@@ -548,6 +638,7 @@ describe("/api/mcp", () => {
         "show_design",
         "show_page",
         "what_shipped",
+        "explain_change",
         "check_copy",
         "get_context_pack",
         "meeting_promises",
@@ -624,6 +715,7 @@ describe("/api/mcp", () => {
           .map((t) => t.name)
           .sort()
       ).toEqual([
+        "explain_change",
         "post_to_slack",
         "query_external_service",
         "send_email",
