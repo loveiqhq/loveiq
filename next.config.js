@@ -150,6 +150,12 @@ const nextConfig = {
         source: "/:path*.svg",
         headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
       },
+      {
+        // Self-hosted fonts (app/fonts.css). Content-hashed names, so a new font is a new
+        // file; the same caching next/font gave them under /_next/static.
+        source: "/fonts/:path*.woff2",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
     ];
   },
 };

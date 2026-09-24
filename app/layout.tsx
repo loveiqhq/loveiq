@@ -1,8 +1,9 @@
 import "./globals.css";
+import "./fonts.css";
 import Script from "next/script";
 import type { Metadata, Viewport } from "next";
-import { Lora, Manrope } from "next/font/google";
 import { headers } from "next/headers";
+import { preload } from "react-dom";
 import SmoothScroll from "@shared/ui/SmoothScroll";
 import { NonceProvider } from "@shared/ui/NonceProvider";
 import ConsentBannerOffset from "@shared/ui/ConsentBannerOffset";
@@ -19,20 +20,15 @@ import { isProductionSite } from "@shared/env/is-non-prod-deploy";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://www.loveiq.org";
 
-const manrope = Manrope({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700", "800"],
-  variable: "--font-sans",
-  display: "swap",
-});
-
-const lora = Lora({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  style: ["normal", "italic"],
-  variable: "--font-serif",
-  display: "swap",
-});
+/**
+ * The latin files of Manrope and Lora, preloaded as `next/font/google` preloaded them.
+ * The fonts themselves are self-hosted: see app/fonts.css for why.
+ */
+const PRELOADED_FONTS = [
+  "/fonts/manrope-latin.e310b55a.woff2",
+  "/fonts/lora-normal-latin.6b102ab3.woff2",
+  "/fonts/lora-italic-latin.3d536d49.woff2",
+];
 
 // Stable knowledge-graph id so WebSite/SoftwareApplication (here) and the
 // per-page Person nodes (homepage advisors, /about team) all reconcile to one
@@ -181,6 +177,9 @@ const trustpilotBusinessUnitId =
     : null;
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  for (const href of PRELOADED_FONTS) {
+    preload(href, { as: "font", type: "font/woff2", crossOrigin: "" });
+  }
   const headersList = await headers();
   const nonce = headersList.get("x-nonce") || "";
 
@@ -196,7 +195,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   }
 
   return (
-    <html lang="en" className={`${manrope.variable} ${lora.variable}`}>
+    <html lang="en">
       <head>
         <link rel="preconnect" href="https://cdn-cookieyes.com" />
         {/* The PostHog preconnect that used to sit here is GONE, and its 300 ms is
