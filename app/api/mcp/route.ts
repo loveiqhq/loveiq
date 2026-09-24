@@ -1898,12 +1898,14 @@ function documentParts(source: string, rawId: string): { base: string; sep: "#" 
 /**
  * A PART OLDER THAN ITS OWN FIRST PART IS LEFT OVER FROM A LONGER VERSION.
  *
- * A document that shrinks on rewrite (a builder bump, an edited thread) keeps its old
- * extra parts until the daily sweep removes them, up to about twenty hours. Reassembled,
- * they spliced stale text onto the current version: on 2026-09-23 a gmail thread whose
- * current form is one part read back as "parts 1-1 of 32". Every part of one write lands
- * with or after its first part, so a part written well before part 1 is not current.
- * Only reading changes: nothing is deleted here, and the sweep still owns deletion.
+ * A document that shrinks on rewrite (a builder bump, an edited thread) used to keep its
+ * old extra parts until the daily sweep, up to about twenty hours. Reassembled, they
+ * spliced stale text onto the current version: on 2026-09-23 a gmail thread whose current
+ * form is one part read back as "parts 1-1 of 32". Since 2026-09-24 `upsertChunks` deletes
+ * them in the same write (`leftoverParts`), so this is the second line: it still covers
+ * WhatsApp's own `-N` numbering, which the write path leaves to the sweep. Every part of
+ * one write lands with or after its first part, so a part written well before part 1 is
+ * not current. Only reading changes here: nothing is deleted.
  */
 const LEFTOVER_SLACK_MS = 10 * 60_000;
 
