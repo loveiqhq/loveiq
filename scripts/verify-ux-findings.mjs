@@ -259,7 +259,7 @@ export const CRITERIA = [
     // classifier missing them is the expensive gap. Every alternative below is
     // taken verbatim from an observation we have actually seen.
     match:
-      /loop(ed|s|ing)? back|a loop where|back (to|at) the (survey |questionnaire )?(start|beginning)|beginning of the survey|(returned|sent|taken|redirected)( \w+){0,2} back to|returned to (an )?earlier|reset(s|ting)? back|start(ed)? (the survey )?(over|from scratch)|re-?initiali[sz]ed|already completed|first (introduction |intro )?screen|initial question/i,
+      /loop(ed|s|ing)?( \w+){0,2} back|a loop where|restart(ed|s)? from the (beginning|start)|reset(s|ting)?( \w+){0,2} to an earlier|back (to|at) the (survey |questionnaire )?(start|beginning)|beginning of the survey|(returned|sent|taken|redirected)( \w+){0,2} back to|returned to (an )?earlier|reset(s|ting)? back|start(ed)? (the survey )?(over|from scratch)|re-?initiali[sz]ed|already completed|first (introduction |intro )?screen|initial question/i,
     /**
      * TWO SURFACES, and until 2026-09-17 only one had a probe.
      *
@@ -818,6 +818,12 @@ if (process.argv.includes("--selftest")) {
     ["Text was readable through the blur meant to hide it.", "A1"],
     ["A section never rendered and left a blank area.", "M1"],
     ["The user was looped back to the survey start.", "L1"],
+    // Verbatim from the four findings nothing could check (all loop claims): the
+    // pattern wanted "looped back" adjacent and knew no "restarted from".
+    ["At, the survey restarted from the beginning, dropping the user back.", "L1"],
+    ["At, the view resets entirely to an earlier preparation screen previously shown at.", "L1"],
+    ["the application looped them back to the exact same 'Before we begin' consent screen", "L1"],
+    ["the paywall or navigation looped the user back into taking the survey again", "L1"],
     // The paywall-exit lane's own sentence: it must reach L1 or every one is a gap.
     [
       "A reader was sent back to /survey from their report while the paywall was still open, " +
