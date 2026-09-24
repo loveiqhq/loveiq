@@ -28,6 +28,7 @@ import { existsSync, readFileSync } from "node:fs";
 // copies of "does our telemetry contradict this claim" would drift the day one
 // of them was tuned. Run under tsx so this TypeScript module is importable.
 import {
+  confirmedByReplayAlone,
   contradiction,
   fetchSessionEvents,
   isSafeSessionId,
@@ -1844,6 +1845,8 @@ for (const [
   const inconclusive = results.some((r) => r.inconclusive);
   // A probe that could not measure has NOT reproduced anything.
   const reproduced = results.some((r) => !r.passed && !r.inconclusive);
+  // Recorded and named in the digest, but not posted and no PR: see review.ts.
+  const heldForAPerson = reproduced && confirmedByReplayAlone(results);
   if (reproduced) confirmed += 1;
 
   // A reproduced defect on a narrow criterion becomes a draft PR carrying the
@@ -1852,7 +1855,7 @@ for (const [
   // the workflow's own dry_run path would still push a branch and open a PR,
   // because it sets UX_REVIEW_OPEN_PR=1 for both branches of its if.
   let prUrl = null;
-  if (reproduced && !DRY_RUN && !CLASSIFY_ONLY && !isChallenger(scannerName)) {
+  if (reproduced && !heldForAPerson && !DRY_RUN && !CLASSIFY_ONLY && !isChallenger(scannerName)) {
     if (prsOpened >= MAX_PRS_PER_RUN) {
       prsSkipped += 1;
       console.log(
@@ -1955,7 +1958,7 @@ for (const [
    * `inconclusive` still posts: that one is a request for a human, not a
    * result, and there have been two of them in total.
    */
-  const speaks = reproduced || inconclusive;
+  const speaks = (reproduced && !heldForAPerson) || inconclusive;
   const sent =
     isChallenger(scannerName) || !speaks ? "suppressed" : await deliverVerdict(sessionId, verdict);
   // One reason, not two. The second branch had no challenger test, so every
@@ -1967,7 +1970,9 @@ for (const [
     console.log(
       isChallenger(scannerName)
         ? `  (challenger — recorded in ux_finding, not posted)`
-        : `  (could not reproduce — recorded in ux_finding, not posted)`
+        : heldForAPerson
+          ? `  (HELD — only the route replay saw it; recorded for a person to check, not posted, no PR)`
+          : `  (could not reproduce — recorded in ux_finding, not posted)`
     );
   }
   if (sent !== "failed") await markVerified(observationId);

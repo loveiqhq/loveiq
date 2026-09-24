@@ -443,6 +443,36 @@ export interface ReproducedFinding {
    * "an AI noticed it and a probe agreed".
    */
   fromOwnRecords: boolean;
+  /** Only the route replay saw it: recorded, listed here, not posted. See below. */
+  heldForAPerson?: boolean;
+}
+
+/**
+ * THE REPLAY HAS NOT EARNED A READER'S THREAD YET.
+ *
+ * Every other probe answers a narrow question with a known precision; the
+ * replay answers "did anything go wrong anywhere on this reader's route",
+ * which is exactly where a new edge case becomes a message under a real
+ * person's name. Its record to 2026-09-24: 16 recorded runs, 15 clean and one
+ * alarm — the only time it alone confirmed anything it had pressed the wrong
+ * element, followed an unlock out to Stripe and judged Stripe's loading screen
+ * (PR #282, labelled `disagree`). So a confirmation that rests on the replay
+ * ALONE is still recorded as reproduced and still named in the daily digest,
+ * but it is neither posted into the reader's thread nor turned into a pull
+ * request until a person has looked. Lift this once it has been right.
+ */
+export function confirmedByReplayAlone(
+  runs:
+    | ReadonlyArray<{
+        file?: string | null;
+        passed?: boolean | null;
+        inconclusive?: boolean | null;
+      }>
+    | null
+    | undefined
+): boolean {
+  const failed = (runs ?? []).filter((r) => r.passed === false && !r.inconclusive);
+  return failed.length > 0 && failed.every((r) => r.file === "replay-session.mjs");
 }
 
 export interface VerificationStat {
@@ -454,8 +484,10 @@ export interface VerificationStat {
   gap: number;
   contradicted: number;
   duplicate: number;
-  /** Verdicts that reached no human: the session had no submission thread. */
+  /** Verdicts the verifier posts (inconclusive, a named gap) that found no thread. */
   undelivered: number;
+  /** Reproduced, then ruled out by a person (its pull request was closed). */
+  overturned: number;
   total: number;
 }
 
@@ -793,18 +825,29 @@ export async function fetchScannerScores(days = 30): Promise<ScannerScore[] | nu
   const LIMIT = 5000;
   try {
     const res = await fetchWithTimeout(
-      `${url}/rest/v1/ux_finding?select=outcome,scanner_name` +
+      `${url}/rest/v1/ux_finding?select=outcome,scanner_name,` +
+        `probe_runs,human_label` +
         `&outcome=in.(reproduced,clear,contradicted)&created_at=gte.${since}&limit=${LIMIT}`,
       { headers: { apikey: key, Authorization: `Bearer ${key}` }, timeoutMs: 8_000 }
     );
     if (!res.ok) return null;
-    const rows = (await res.json()) as Array<{ outcome?: string; scanner_name?: string | null }>;
+    const rows = (await res.json()) as Array<{
+      outcome?: string;
+      scanner_name?: string | null;
+      probe_runs?: Array<{ file?: string; passed?: boolean; inconclusive?: boolean }> | null;
+      human_label?: string | null;
+    }>;
     warnIfTruncated(rows, LIMIT, "scorecard: ux_finding");
     const by = new Map<string, ScannerScore>();
     for (const r of rows) {
+      // A person's label outranks the probe (#282 was reproduced, closed as
+      // wrong, and scored as right). Unlabelled, a confirmation the replay made
+      // alone is not judged yet: scored, it could keep a scanner off probation.
+      const label = r.outcome === "reproduced" ? r.human_label : null;
+      if (!label && r.outcome === "reproduced" && confirmedByReplayAlone(r.probe_runs)) continue;
       const name = String(r.scanner_name ?? "unknown");
       const e = by.get(name) ?? { scanner: name, right: 0, wrong: 0, contradicted: 0 };
-      if (r.outcome === "reproduced") e.right += 1;
+      if (label ? label === "agree" : r.outcome === "reproduced") e.right += 1;
       else e.wrong += 1;
       if (r.outcome === "contradicted") e.contradicted += 1;
       by.set(name, e);
@@ -1057,7 +1100,7 @@ export async function fetchVerificationStats(): Promise<VerificationStat | null>
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   try {
     const res = await fetchWithTimeout(
-      `${url}/rest/v1/ux_finding?select=outcome,delivered,criterion,url_path,scanner_name` +
+      `${url}/rest/v1/ux_finding?select=outcome,delivered,criterion,url_path,scanner_name,probe_runs,session_id,human_label` +
         `&created_at=gte.${since}&limit=500`,
       {
         headers: { apikey: key, Authorization: `Bearer ${key}` },
@@ -1068,9 +1111,12 @@ export async function fetchVerificationStats(): Promise<VerificationStat | null>
     const allRows = (await res.json()) as Array<{
       outcome?: string;
       delivered?: boolean;
+      probe_runs?: Array<{ file?: string; passed?: boolean; inconclusive?: boolean }> | null;
       criterion?: string | null;
       url_path?: string | null;
       scanner_name?: string | null;
+      session_id?: string | null;
+      human_label?: string | null;
     }>;
     /**
      * Production rows only. The digest reports what the CURRENT fleet
@@ -1092,25 +1138,64 @@ export async function fetchVerificationStats(): Promise<VerificationStat | null>
       contradicted: 0,
       duplicate: 0,
       undelivered: 0,
+      overturned: 0,
       total: rows.length,
     };
-    for (const row of rows) {
+    /**
+     * ONLY A VERDICT THAT WAS GOING TO BE POSTED CAN HAVE HAD NOWHERE TO GO.
+     *
+     * Since #238 a "did not happen again" and a contradiction are recorded and
+     * never posted, so their `delivered` is false whoever the reader was.
+     * Counted here they made the 2026-09-24 digest say "19 of these had no
+     * survey entry" when 9 had none. And one reader and problem is one verdict:
+     * a second scanner that flagged the same session for the same thing
+     * inherits the first one's probe result, undelivered by design because the
+     * thread gets one message, so per row it read as a second person.
+     */
+    const confirmed = new Map<string, ReproducedFinding & { label: string | null }>();
+    const unposted = new Map<string, boolean>();
+    rows.forEach((row, i) => {
       // An explicit list, not `outcome in tally`: `in` walks the prototype
       // chain, so an outcome of "constructor" or "toString" would pass the
       // guard and turn a counter into NaN. The CHECK constraint makes that
       // unreachable from our own writes, which is exactly why it would survive
       // review — the list costs nothing and does not depend on that staying true.
       if (OUTCOMES.includes(row.outcome as Outcome)) tally[row.outcome as Outcome] += 1;
+      const k = row.session_id ? `${row.session_id}|${row.criterion}` : `row ${i}`;
+      const delivered = row.delivered !== false;
       if (row.outcome === "reproduced") {
-        tally.reproducedItems.push({
-          criterion: row.criterion ?? null,
-          urlPath: row.url_path ?? null,
-          delivered: row.delivered !== false,
-          fromOwnRecords: (row.scanner_name ?? "").includes("our own"),
-        });
+        const seen = confirmed.get(k);
+        if (seen) {
+          seen.delivered ||= delivered;
+          seen.label ??= row.human_label ?? null;
+        } else
+          confirmed.set(k, {
+            criterion: row.criterion ?? null,
+            urlPath: row.url_path ?? null,
+            delivered,
+            fromOwnRecords: (row.scanner_name ?? "").includes("our own"),
+            heldForAPerson: confirmedByReplayAlone(row.probe_runs),
+            label: row.human_label ?? null,
+          });
       }
-      if (row.delivered === false) tally.undelivered += 1;
+      // What the verifier posts: an inconclusive, and a gap it could name. A
+      // claim no criterion recognised is recorded as a gap and never posted.
+      if (row.outcome === "inconclusive" || (row.outcome === "gap" && row.criterion)) {
+        unposted.set(k, (unposted.get(k) ?? true) && !delivered);
+      }
+    });
+    /**
+     * A person's word outranks the probe. #282 was reproduced, posted, then
+     * closed as wrong, and the next morning's digest would still have led with
+     * it as a problem confirmed on a real phone. Labelled either way, it is no
+     * longer waiting for a person.
+     */
+    for (const { label, ...f } of confirmed.values()) {
+      if (label === "disagree") tally.overturned += 1;
+      else tally.reproducedItems.push({ ...f, heldForAPerson: f.heldForAPerson && !label });
     }
+    tally.reproduced = tally.reproducedItems.length;
+    tally.undelivered = [...unposted.values()].filter(Boolean).length;
     return tally;
   } catch {
     return null;
@@ -1233,13 +1318,15 @@ function confirmedBlock(v: VerificationStat | null): string {
    */
   const groups = new Map<
     string,
-    { what: string; where: string; n: number; undelivered: number; own: number }
+    { what: string; where: string; n: number; undelivered: number; own: number; held: boolean }
   >();
   for (const f of v.reproducedItems) {
     const what = (f.criterion && PLAIN_CRITERION[f.criterion]) ?? "something did not work";
     const where = placeOf(f.urlPath);
-    const k = `${where}|${what}`;
-    const g = groups.get(k) ?? { what, where, n: 0, undelivered: 0, own: 0 };
+    // Its own line: "not posted" means something different for these.
+    const held = f.heldForAPerson === true;
+    const k = `${where}|${what}|${held}`;
+    const g = groups.get(k) ?? { what, where, n: 0, undelivered: 0, own: 0, held };
     g.n += 1;
     if (!f.delivered) g.undelivered += 1;
     if (f.fromOwnRecords) g.own += 1;
@@ -1248,8 +1335,9 @@ function confirmedBlock(v: VerificationStat | null): string {
   const all = [...groups.values()].sort((a, b) => b.n - a.n);
   const lines = all.slice(0, 5).map((g) => {
     const who = g.n === 1 ? "" : ` (${g.n} people)`;
-    const posted =
-      g.undelivered === 0
+    const posted = g.held
+      ? "Only our automatic replay could make it happen again, so nothing was posted: it needs a person to check."
+      : g.undelivered === 0
         ? g.n === 1
           ? "Posted in that person's thread."
           : "Posted in their threads."
@@ -1281,6 +1369,7 @@ function dismissedLine(v: VerificationStat | null): string {
   // answered" is the kind of thing that makes a reader trust the rest less.
   const were = (n: number) => (n === 1 ? "was" : "were");
   const parts = [
+    v.overturned && `${v.overturned} ${were(v.overturned)} ruled out when a person looked`,
     v.clear && `${v.clear} did not happen again when we re-tested`,
     v.contradicted && `${v.contradicted} ${were(v.contradicted)} contradicted by our own records`,
     v.inconclusive && `${v.inconclusive} could not be tested`,

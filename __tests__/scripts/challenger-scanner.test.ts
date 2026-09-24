@@ -78,7 +78,11 @@ describe("the challenger scanner", () => {
 
 describe("the verifier keeps a challenger out of the channel", () => {
   it("never opens a pull request for one", () => {
-    expect(SRC).toMatch(/reproduced && !DRY_RUN && !CLASSIFY_ONLY && !isChallenger\(scannerName\)/);
+    // By intent, like the delivery test below: the guard grew a second reason
+    // to stay quiet (a replay-only confirmation) and the challenger must stay in it.
+    const guard = SRC.split("\n").find((l) => /^\s*if \(reproduced && .*!DRY_RUN/.test(l));
+    expect(guard, "the pull-request guard must exist").toBeTruthy();
+    expect(guard).toMatch(/!CLASSIFY_ONLY && !isChallenger\(scannerName\)/);
   });
 
   it("never posts its verdict into a reader's thread", () => {
@@ -251,7 +255,9 @@ describe("only a real finding reaches a reader's thread", () => {
 
   it("posts a reproduction, and an honest could-not-check", () => {
     // `inconclusive` is a request for a human, not a result — it stays.
-    expect(SRC).toMatch(/const speaks = reproduced \|\| inconclusive;/);
+    // (A reproduction the replay made alone waits for a person: see
+    // replay-session-probe.test.ts.)
+    expect(SRC).toMatch(/const speaks = \(reproduced && !heldForAPerson\) \|\| inconclusive;/);
   });
 
   it("does not post a could-not-reproduce", () => {

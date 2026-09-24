@@ -337,3 +337,17 @@ describe("the replay never operates what it did not mean to tap", () => {
     expect(document.getElementById("ours")!.closest("[class*='cky']")).not.toBeNull();
   });
 });
+
+describe("a replay-only confirmation waits for a person", () => {
+  it("is neither posted into the reader's thread nor turned into a pull request", () => {
+    expect(VERIFIER).toContain(
+      "const heldForAPerson = reproduced && confirmedByReplayAlone(results);"
+    );
+    expect(VERIFIER).toMatch(/if \(reproduced && !heldForAPerson && !DRY_RUN/);
+    expect(VERIFIER).toContain("const speaks = (reproduced && !heldForAPerson) || inconclusive;");
+    // Held BEFORE the pull request is opened, not after.
+    expect(VERIFIER.indexOf("const heldForAPerson")).toBeLessThan(
+      VERIFIER.indexOf("openReproductionPr({")
+    );
+  });
+});

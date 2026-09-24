@@ -132,6 +132,13 @@ route exits 3. Route steps and recorded dead taps are counted separately,
 because a selector naming content that is not on our report says nothing about
 the page's health — folding them together dragged coverage from 90% to 52%.
 
+**It cannot speak alone yet.** A finding confirmed by the replay and nothing
+else is recorded as reproduced and named in the daily digest, but it is not
+posted under the reader and opens no pull request until a person has looked.
+Its record when that was decided (2026-09-24): 16 runs, 15 clean, and the one
+solo confirmation was wrong (#282). Lift the hold in `confirmedByReplayAlone`
+once it has been right.
+
 ## Lessons paid for already — don't relearn them
 
 - **Wait for content, not for the spinner.** Sampling mid-load reported healthy

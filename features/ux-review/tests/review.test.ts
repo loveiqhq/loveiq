@@ -12,6 +12,7 @@ import {
   buildScorecardMessage,
   checkVisionQuota,
   compareScanners,
+  confirmedByReplayAlone,
   contradiction,
   fetchCoverageStats,
   fetchDailyStats,
@@ -19,6 +20,7 @@ import {
   fetchFindings,
   fetchScannerCoverage,
   fetchScannerDrift,
+  fetchScannerScores,
   fetchSessionEvents,
   fetchVerificationStats,
   isChallengerScanner,
@@ -74,8 +76,180 @@ const verified = (over: Record<string, unknown> = {}) => ({
   contradicted: 0,
   duplicate: 0,
   undelivered: 0,
+  overturned: 0,
   total: 0,
   ...over,
+});
+
+describe("a confirmation the replay made alone", () => {
+  const run = (file: string, passed: boolean, inconclusive = false) => ({
+    file,
+    passed,
+    inconclusive,
+  });
+
+  it("is held only when the replay is the one thing that failed", () => {
+    expect(confirmedByReplayAlone([run("replay-session.mjs", false)])).toBe(true);
+    expect(
+      confirmedByReplayAlone([
+        run("verify-dead-click-target.mjs", true),
+        run("replay-session.mjs", false),
+      ])
+    ).toBe(true);
+    // Another probe, or our own records, agreeing is not "alone".
+    expect(
+      confirmedByReplayAlone([
+        run("verify-dead-click-target.mjs", false),
+        run("replay-session.mjs", false),
+      ])
+    ).toBe(false);
+    expect(confirmedByReplayAlone([run("paywall-exit-log", false)])).toBe(false);
+    expect(confirmedByReplayAlone([run("replay-session.mjs", false, true)])).toBe(false);
+    expect(confirmedByReplayAlone([])).toBe(false);
+    expect(confirmedByReplayAlone(null)).toBe(false);
+  });
+
+  it("is named in the digest as waiting for a person, never as posted", () => {
+    const { blocks } = buildDigestMessage(
+      [{ scanner: "LoveIQ report UX", observed: 9, yes: 1 }],
+      verified({
+        reproduced: 2,
+        total: 2,
+        reproducedItems: [
+          {
+            criterion: "D1",
+            urlPath: "/survey",
+            delivered: false,
+            fromOwnRecords: true,
+            heldForAPerson: true,
+          },
+          {
+            criterion: "D1",
+            urlPath: "/survey",
+            delivered: true,
+            fromOwnRecords: true,
+            heldForAPerson: false,
+          },
+        ],
+      }),
+      covered()
+    );
+    const text = JSON.stringify(blocks);
+    expect(text).toContain(
+      "Only our automatic replay could make it happen again, so nothing was posted: it needs a person to check."
+    );
+    // The held one is its own line, so the posted one still says it was posted.
+    expect(text).toContain("Posted in that person's thread.");
+    expect(text).not.toContain("had no survey entry to post under");
+  });
+});
+
+describe("what the digest and the scorecard count", () => {
+  const ledger = (rows: Array<Record<string, unknown>>) => {
+    vi.stubGlobal("fetch", async () => ({ ok: true, json: async () => rows }));
+    vi.stubEnv("SUPABASE_URL", "https://test.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service_key");
+  };
+  const replayOnly = [{ file: "replay-session.mjs", passed: false, inconclusive: false }];
+  const S = "LoveIQ report UX";
+
+  it("says 'no survey entry' only of verdicts that were going to be posted", async () => {
+    // 2026-09-24: the digest said 19 when 9 had none. A clear or a
+    // contradiction is never posted, so its `delivered` says nothing about a thread.
+    ledger([
+      { outcome: "clear", delivered: false, session_id: "a", criterion: "D1", scanner_name: S },
+      { outcome: "contradicted", delivered: false, session_id: "b", scanner_name: S },
+      {
+        outcome: "inconclusive",
+        delivered: false,
+        session_id: "c",
+        criterion: "D1",
+        scanner_name: S,
+      },
+      { outcome: "gap", delivered: false, session_id: "d", criterion: "X9", scanner_name: S },
+      // A claim no criterion recognised: recorded as a gap, never posted.
+      { outcome: "gap", delivered: false, session_id: "f", criterion: null, scanner_name: S },
+      // The same reader and problem from a second scanner: its thread got one
+      // message, from the first row.
+      {
+        outcome: "inconclusive",
+        delivered: true,
+        session_id: "e",
+        criterion: "D1",
+        scanner_name: S,
+      },
+      {
+        outcome: "inconclusive",
+        delivered: false,
+        session_id: "e",
+        criterion: "D1",
+        scanner_name: "x",
+      },
+    ]);
+    const v = await fetchVerificationStats();
+    expect(v?.undelivered).toBe(2);
+  });
+
+  it("counts one reader and problem once, however many scanners saw it", async () => {
+    ledger([
+      { outcome: "reproduced", delivered: true, session_id: "a", criterion: "D1", scanner_name: S },
+      {
+        outcome: "reproduced",
+        delivered: false,
+        session_id: "a",
+        criterion: "D1",
+        scanner_name: "x",
+      },
+      { outcome: "reproduced", delivered: true, session_id: "b", criterion: "D1", scanner_name: S },
+    ]);
+    const v = await fetchVerificationStats();
+    expect(v?.reproduced).toBe(2);
+    expect(v?.reproducedItems.map((f) => f.delivered)).toEqual([true, true]);
+  });
+
+  it("drops a confirmation a person ruled out, and says so", async () => {
+    // #282: reproduced, posted, closed as wrong. The next digest would have
+    // led with it as a problem confirmed on a real phone.
+    ledger([
+      {
+        outcome: "reproduced",
+        delivered: true,
+        session_id: "a",
+        criterion: "D1",
+        scanner_name: S,
+        human_label: "disagree",
+        probe_runs: replayOnly,
+      },
+      {
+        outcome: "reproduced",
+        delivered: false,
+        session_id: "b",
+        criterion: "D1",
+        scanner_name: S,
+        human_label: "agree",
+        probe_runs: replayOnly,
+      },
+    ]);
+    const v = await fetchVerificationStats();
+    expect(v?.overturned).toBe(1);
+    expect(v?.reproduced).toBe(1);
+    // A person agreed, so it is no longer waiting for one.
+    expect(v?.reproducedItems[0].heldForAPerson).toBe(false);
+    const { blocks } = buildDigestMessage([], v!, covered());
+    expect(JSON.stringify(blocks)).toContain("1 was ruled out when a person looked");
+  });
+
+  it("scores a scanner by a person's label, and not at all on the replay's word alone", async () => {
+    ledger([
+      { outcome: "reproduced", scanner_name: S, human_label: "disagree", probe_runs: replayOnly },
+      { outcome: "reproduced", scanner_name: S, probe_runs: replayOnly },
+      { outcome: "reproduced", scanner_name: S, human_label: "agree", probe_runs: replayOnly },
+      { outcome: "reproduced", scanner_name: S },
+      { outcome: "clear", scanner_name: S },
+    ]);
+    const [score] = (await fetchScannerScores()) ?? [];
+    expect(score).toMatchObject({ scanner: S, right: 2, wrong: 2 });
+  });
 });
 
 describe("buildDigestMessage", () => {
