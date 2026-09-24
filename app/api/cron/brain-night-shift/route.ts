@@ -52,7 +52,7 @@ export async function GET(request: Request) {
   try {
     const result = await runNightShift();
     const agentFailed = result.error !== null;
-    status = agentFailed ? "error" : "success";
+    if (agentFailed) status = "error";
     detail =
       `queued=${result.queued} answered=${result.answered} failed=${result.failed}` +
       (result.limited ? " stopped=rate_limited" : "") +
