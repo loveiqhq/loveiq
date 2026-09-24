@@ -14,9 +14,24 @@ vi.mock("@shared/http/google-oauth", () => ({
 
 let existing: Array<{ source_id: string; meta: Record<string, unknown> }> = [];
 let touchedCount = 0;
+/** The refusal log: what earlier runs read and refused, and what this run records. */
+let refusalRows: Array<{ source_id: string; version: string }> = [];
+let refusalLogOk = true;
+const refusalWrites: Array<Record<string, unknown>> = [];
 vi.mock("@features/admin/server/supabase", () => ({
   supabaseFetch: vi.fn(async (path: string, init?: RequestInit) => {
     const method = (init?.method ?? "GET").toUpperCase();
+    if (path.includes("/brain_refusal_log")) {
+      if (method === "POST") {
+        refusalWrites.push(
+          ...(JSON.parse(String(init?.body ?? "[]")) as Array<Record<string, unknown>>)
+        );
+        return { ok: true, status: 201, headers: new Headers(), json: async () => [] };
+      }
+      return refusalLogOk
+        ? { ok: true, status: 200, headers: new Headers(), json: async () => refusalRows }
+        : { ok: false, status: 404, headers: new Headers(), json: async () => ({}) };
+    }
     // sweepMissing's paged id listing -- `select=source_id&` (with the ampersand)
     // distinguishes it from knownThreads' `select=source_id,meta`.
     if (method === "GET" && /select=source_id&/.test(path)) {
@@ -155,6 +170,9 @@ import {
 beforeEach(() => {
   existing = [];
   touchedCount = 0;
+  refusalRows = [];
+  refusalLogOk = true;
+  refusalWrites.length = 0;
   listingOk = true;
   failingThreadIds = [];
   stubThreadIds = [];
@@ -978,5 +996,82 @@ describe("the entity map covers what the corpus actually contains", () => {
     expect(decodeEntities("Order&zwnj;&zwnj;confirmed")).toBe(
       "Ordconfirmed".replace("Ord", "Order")
     );
+  });
+});
+
+describe("a refused thread is not fetched again until it changes", () => {
+  /**
+   * A thread `threadToRows` refuses stores nothing in brain_chunk, so nothing told the next
+   * run it had already been read: about a hundred threads were fetched, attachments and
+   * all, on every hourly run, only to be refused again.
+   */
+  const current = (id: string) => ({
+    source_id: `thread:${id}`,
+    meta: { v: GMAIL_BUILDER_VERSION, mailbox: "me", historyId: "9" },
+  });
+  const fetched = (id: string) => fetchedUrls.some((u) => u.includes(`/threads/${id}?format=full`));
+  const refusedAt = (historyId: string, v = GMAIL_BUILDER_VERSION) => `${v}:${historyId}`;
+
+  beforeEach(() => {
+    // Listed, current threads keep the orphans a minority, so the sweep's majority guard
+    // cannot make a sweep assertion pass by refusing to sweep at all.
+    listedThreads = ["k1", "k2", "k3", "k4", "k5"].map((id) => ({ id, historyId: "9" }));
+    existing = ["k1", "k2", "k3", "k4", "k5"].map(current);
+    stubThreadIds = ["stub"];
+  });
+
+  it("records a thread it read and refused, at the historyId the listing gave", async () => {
+    listedThreads.push({ id: "stub", historyId: "77" });
+    await ingestGmail("2026-09-24T00:00:00.000Z", () => false, null);
+    expect(fetched("stub")).toBe(true);
+    expect(refusalWrites).toEqual([
+      expect.objectContaining({
+        source: "gmail",
+        source_id: "thread:stub",
+        version: refusedAt("77"),
+      }),
+    ]);
+  });
+
+  it("skips it while unchanged, and still treats it as refused for the sweep", async () => {
+    listedThreads.push({ id: "stub", historyId: "77" });
+    refusalRows = [{ source_id: "thread:stub", version: refusedAt("77") }];
+    // An indexed version from before it was refused: skipping the fetch must not keep it.
+    existing.push(current("stub"));
+    await ingestGmail("2026-09-24T00:00:00.000Z", () => false, null);
+    expect(fetched("stub")).toBe(false);
+    expect(deletedIds).toContain("thread:stub");
+  });
+
+  it("reads it again once a new message moves its history", async () => {
+    listedThreads.push({ id: "stub", historyId: "78" });
+    refusalRows = [{ source_id: "thread:stub", version: refusedAt("77") }];
+    await ingestGmail("2026-09-24T00:00:00.000Z", () => false, null);
+    expect(fetched("stub")).toBe(true);
+    expect(refusalWrites).toEqual([expect.objectContaining({ version: refusedAt("78") })]);
+  });
+
+  it("reads it again after a builder bump, because the rules may have changed", async () => {
+    listedThreads.push({ id: "stub", historyId: "77" });
+    refusalRows = [
+      { source_id: "thread:stub", version: refusedAt("77", GMAIL_BUILDER_VERSION - 1) },
+    ];
+    await ingestGmail("2026-09-24T00:00:00.000Z", () => false, null);
+    expect(fetched("stub")).toBe(true);
+  });
+
+  it("never records a fetch that failed: an outage is not a decision", async () => {
+    listedThreads.push({ id: "flaky", historyId: "5" });
+    failingThreadIds = ["flaky"];
+    await ingestGmail("2026-09-24T00:00:00.000Z", () => false, null);
+    expect(refusalWrites.map((r) => r.source_id)).not.toContain("thread:flaky");
+  });
+
+  it("re-reads everything when the log cannot be read, exactly as before it existed", async () => {
+    listedThreads.push({ id: "stub", historyId: "77" });
+    refusalRows = [{ source_id: "thread:stub", version: refusedAt("77") }];
+    refusalLogOk = false;
+    await ingestGmail("2026-09-24T00:00:00.000Z", () => false, null);
+    expect(fetched("stub")).toBe(true);
   });
 });
