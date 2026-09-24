@@ -107,6 +107,11 @@ export const REPORT_V4_TYPICAL_BELIEFS: Readonly<Record<string, Report3BeliefPan
  * second consumer buys nothing. */
 
 import { scrambleLockedText } from "@features/report/server/scrambleLockedText";
+import {
+  gate,
+  type Report3GatedCopy,
+  type Report3PracticeView,
+} from "@features/report/server/gatedCopy";
 import type { Report3Block } from "./report3-learn-more";
 import type { Report3Run } from "./report3-archetype-page";
 
@@ -306,25 +311,11 @@ export const TYPICAL_BELIEFS_PRACTICE: readonly Report3Block[] = [
 ];
 
 /**
- * A gated passage as the reader receives it — the split is made HERE, on the
- * server, so the browser never decides where the wall falls.
- *
- * Unlocked: everything in `free`, `ramp` null, `rest` empty.
- * Locked: `free` is readable; `ramp` is the block the blur fades in over, real
- * copy because the light end of the ramp is legible; `rest` sits under the full
- * blur and is scrambled (see scrambleLockedText) — same shape, no content.
+ * The gated-passage and practice shapes now live with the split itself, in
+ * features/report/server/gatedCopy.ts, which Accelerator & Brakes shares. Re-exported
+ * so this module's importers keep one place to take a chapter's types from.
  */
-export interface Report3GatedCopy {
-  free: readonly Report3Block[];
-  ramp: Report3Block | null;
-  rest: readonly Report3Block[];
-}
-
-export interface Report3PracticeView extends Report3GatedCopy {
-  eyebrow: string;
-  title: string;
-  locked: boolean;
-}
+export type { Report3GatedCopy, Report3PracticeView };
 
 /**
  * What the chapter component receives. Assembled on the server and handed down as
@@ -372,36 +363,6 @@ export const TYPICAL_BELIEFS_CHALLENGES_FREE_BLOCKS = 4;
 
 /** 374:264 keeps the first two practice paragraphs sharp; the third ramps. */
 export const TYPICAL_BELIEFS_PRACTICE_FREE_BLOCKS = 2;
-
-const scrambleBlock = (block: Report3Block): Report3Block => {
-  if (block.kind === "heading") return { ...block, text: scrambleLockedText(block.text) };
-  if (block.kind === "list") {
-    return {
-      ...block,
-      items: block.items.map((runs) =>
-        runs.map((run) => ({ ...run, text: scrambleLockedText(run.text) }))
-      ),
-    };
-  }
-  return {
-    ...block,
-    runs: block.runs.map((run) => ({ ...run, text: scrambleLockedText(run.text) })),
-  };
-};
-
-/** Splits a passage at `freeBlocks`: clear, ramp, then scrambled rest. */
-const gate = (
-  blocks: readonly Report3Block[],
-  freeBlocks: number,
-  locked: boolean
-): Report3GatedCopy =>
-  locked
-    ? {
-        free: blocks.slice(0, freeBlocks),
-        ramp: blocks[freeBlocks] ?? null,
-        rest: blocks.slice(freeBlocks + 1).map(scrambleBlock),
-      }
-    : { free: blocks, ramp: null, rest: [] };
 
 /**
  * Server-side assembly. Returns null for an archetype nobody has written yet.
