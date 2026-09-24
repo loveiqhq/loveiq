@@ -416,6 +416,14 @@ describe("/api/mcp", () => {
         expect(r.content[0]!.text).not.toContain("→");
       });
 
+      /** An error whose body happens to be a list must not read as an empty board. */
+      it("treats a failed board read as unread even when its body is a list", async () => {
+        serve(ok(notes), { ok: false, status: 500, headers: new Headers(), json: async () => [] });
+        const text = (await call({ since: "2026-09-20" })).content[0]!.text;
+        expect(text).toContain("The Notion board could not be read (status 500)");
+        expect(text).not.toContain("not on the board");
+      });
+
       it("still lists the promises when reading the board throws", async () => {
         mockSupabaseFetch.mockImplementation(async (path: string) => {
           if (path.includes("database=eq.Board")) throw new Error("network");
