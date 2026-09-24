@@ -340,6 +340,24 @@ export async function runResearchAgent(req: ResearchRequest): Promise<LlmResult>
   }
 }
 
+/**
+ * The notice for an answer: its first real paragraph, not its first line. Answers open with a
+ * "## Answer" heading, and the first live notice (2026-09-24) carried only that heading.
+ */
+export function answerNotice(req: ResearchRequest, text: string): NoticeInput {
+  const lead =
+    text
+      .replace(/^#{1,6} .*$/gm, "")
+      .split(/\n\s*\n/)
+      .map((p) => p.trim())
+      .find(Boolean) ?? "";
+  return {
+    headline: `Night Shift answered: ${req.question}`.slice(0, 200),
+    detail: `${lead.slice(0, 600)}\n\nThe full answer, with its sources: fetch_document research/${req.sourceId}`,
+    kind: "night-shift",
+  };
+}
+
 export interface NightShiftResult {
   queued: number;
   answered: number;
@@ -392,12 +410,7 @@ export async function runNightShift(
     }
     if (result.ok && citesSources(result.text)) {
       await deps.write(answerRows(req, result.text, researchModel(), deps.now()));
-      const lead = result.text.split(/\n\s*\n/)[0]!.slice(0, 600);
-      await deps.notice({
-        headline: `Night Shift answered: ${req.question}`.slice(0, 200),
-        detail: `${lead}\n\nThe full answer, with its sources: fetch_document research/${req.sourceId}`,
-        kind: "night-shift",
-      });
+      await deps.notice(answerNotice(req, result.text));
       out.answered += 1;
       continue;
     }

@@ -17,6 +17,7 @@ vi.mock("@features/brain/server/llm", async (importOriginal) => ({
 }));
 
 import {
+  answerNotice,
   answerRows,
   citesSources,
   failedRow,
@@ -108,6 +109,21 @@ describe("rows", () => {
       /^The Night Shift could not answer this on 2026-09-25: the answer cited no sources/
     );
     expect(row.body).toContain("queue_research");
+  });
+});
+
+describe("answerNotice", () => {
+  /** The first live answer (2026-09-24) opened with "## Answer", and its notice said only that. */
+  it("leads with the first real paragraph, not a heading", () => {
+    const n = answerNotice(
+      req(),
+      "## Answer\n\nPublished research supports a head start.\n\n## What we found\n\n- A [https://x.org]."
+    );
+    expect(n.detail).toBe(
+      "Published research supports a head start.\n\nThe full answer, with its sources: " +
+        "fetch_document research/research:2026-09-24-abcdef1234"
+    );
+    expect(n.headline).toBe(`Night Shift answered: ${req().question}`);
   });
 });
 
