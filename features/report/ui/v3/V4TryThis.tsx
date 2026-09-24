@@ -1,16 +1,17 @@
 "use client";
 
-import { useId, useState, type FC } from "react";
+import { useId, useState, type CSSProperties, type FC } from "react";
 import type { Report3Block } from "@/data/report3-learn-more";
-import type { Report3PracticeView } from "@/data/report3-typical-beliefs";
+import type { Report3PracticeView } from "@features/report/server/gatedCopy";
 import { splitEyebrow } from "./V4LearnMore";
 import V4PremiumCard from "./V4PremiumCard";
 import V4Prose from "./V4Prose";
 import { guardedUnlock } from "./v4Unlock";
 
 /**
- * "Try this & see what shifts" — the practice card that closes the Typical
- * Beliefs chapter body, above "Go deeper & learn more".
+ * "Try this & see what shifts" — the practice card that closes a chapter body,
+ * above "Go deeper & learn more": Typical Beliefs' (374:217 / 374:238 / 374:258)
+ * and Accelerator & Brakes' (377:221 / 374:304 / 375:221).
  *
  * One component, three states, all drawn in Figma:
  *   374:217  closed          teaser clamped to 218px, faded, "Read the full practice" pill
@@ -29,6 +30,12 @@ import { guardedUnlock } from "./v4Unlock";
  * (clear), `ramp` (the block the blur fades in over — real copy, and also the tail
  * of the teaser) and `rest`, which it has already scrambled: same shape under the
  * blur, no content. This component decides how that looks, never what may be read.
+ *
+ * PER CHAPTER. The frames differ in a handful of numbers — the node ids, the closed
+ * teaser's box (218 vs 224), how far the blur fades in over the ramp, and where the
+ * Premium card floats — so those arrive as props and become custom properties whose
+ * CSS fallbacks are Typical Beliefs' values. A chapter whose frame re-breaks its
+ * teaser sends that teaser in `practice.teaser`.
  */
 
 /**
@@ -79,9 +86,37 @@ interface Props {
   /** Opens the paywall. Omitted in contexts where it would be inert. */
   onUnlock?: () => void;
   defaultOpen?: boolean;
+  /** The frame's node for each state; Typical Beliefs' when omitted. */
+  nodeIds?: { closed: string; open: string; gated: string };
+  /** The closed teaser's box (377:242: 224). CSS falls back to 218. */
+  teaserHeightPx?: number;
+  /** How far the blur fades in over the ramp (375:221: four lines). CSS: 100%. */
+  rampBandPx?: number;
+  /**
+   * The open copy's drop below the button — 374:304 / 375:221 set it 8px down where
+   * the closed teaser, and every Typical Beliefs state, sets it 4px. CSS: 4.
+   */
+  openPaddingTopPx?: number;
+  /**
+   * The Premium card's top, measured from the gate — for a ramp whose tail runs on
+   * under the full blur in the same paragraph, where the rest starts too late to
+   * measure from. Omitted, the card sits in the rest, 88px in (Typical Beliefs).
+   */
+  premiumTopPx?: number;
 }
 
-const V4TryThis: FC<Props> = ({ practice, onUnlock, defaultOpen = false }) => {
+const TYPICAL_BELIEFS_NODES = { closed: "374:217", open: "374:238", gated: "374:258" };
+
+const V4TryThis: FC<Props> = ({
+  practice,
+  onUnlock,
+  defaultOpen = false,
+  nodeIds = TYPICAL_BELIEFS_NODES,
+  teaserHeightPx,
+  rampBandPx,
+  openPaddingTopPx,
+  premiumTopPx,
+}) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const bodyId = useId();
   const [eyebrowLabel, eyebrowValue] = splitEyebrow(practice.eyebrow);
@@ -89,12 +124,20 @@ const V4TryThis: FC<Props> = ({ practice, onUnlock, defaultOpen = false }) => {
   const all = [...free, ...(ramp ? [ramp] : []), ...rest];
   // A ramp only ever arrives for a locked reader; unlocked, everything is `free`.
   const gatedRamp = practice.locked ? ramp : null;
+  const cardInGate = premiumTopPx !== undefined;
+  const geometry: Record<string, string> = {
+    ...(teaserHeightPx !== undefined ? { "--rv4-try-teaser-h": `${teaserHeightPx}px` } : {}),
+    ...(rampBandPx !== undefined ? { "--rv4-try-band": `${rampBandPx}px` } : {}),
+    ...(openPaddingTopPx !== undefined ? { "--rv4-try-open-pt": `${openPaddingTopPx}px` } : {}),
+    ...(cardInGate ? { "--rv4-try-premium-top": `${premiumTopPx}px` } : {}),
+  };
 
   return (
     <section
       className={`rv4-try${isOpen ? " is-open" : ""}`}
-      data-node-id={isOpen ? (gatedRamp ? "374:258" : "374:238") : "374:217"}
-      data-name="Try this & see what shifts"
+      data-node-id={isOpen ? (gatedRamp ? nodeIds.gated : nodeIds.open) : nodeIds.closed}
+      data-name={practice.title}
+      style={Object.keys(geometry).length ? (geometry as CSSProperties) : undefined}
     >
       {/* 374:221 — "Practice time:" in Light, the value in Bold. */}
       <p className="rv4-try__eyebrow">
@@ -130,7 +173,7 @@ const V4TryThis: FC<Props> = ({ practice, onUnlock, defaultOpen = false }) => {
         {!isOpen ? (
           <div className="rv4-try__closed">
             <div className="rv4-try__teaser">
-              <V4Prose blocks={teaserOf(all)} />
+              <V4Prose blocks={practice.teaser ?? teaserOf(all)} />
             </div>
             {/* 452:295 "Show all pill" — Mark's standard 163x32 teaser CTA. */}
             <button type="button" className="rv4-try__open" onClick={() => setIsOpen(true)}>
@@ -158,8 +201,10 @@ const V4TryThis: FC<Props> = ({ practice, onUnlock, defaultOpen = false }) => {
                   <V4Prose blocks={rest} />
                 </div>
                 {/* 374:280 */}
-                <V4PremiumCard />
+                {cardInGate ? null : <V4PremiumCard />}
               </div>
+              {/* 375:243 — measured from the gate; see `premiumTopPx`. */}
+              {cardInGate ? <V4PremiumCard /> : null}
             </div>
           </>
         ) : (

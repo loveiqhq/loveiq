@@ -12,12 +12,17 @@ import {
 import { REPORT_V4_PART_DIVIDER_BY_SECTION, REPORT_V4_PARTS } from "@/data/report3-archetype-page";
 
 /**
- * Report V4 moves Typical Beliefs to the front of "How your archetype works" —
- * the team's chapter sequence (2026-09-14) and Figma 1:849. `?v3=1` keeps V3's own
- * order untouched.
+ * Report V4 regroups two chapters against V3, both as Figma draws them:
+ * - Typical Beliefs opens "How your archetype works" (the team's chapter sequence,
+ *   2026-09-14, and Figma 1:849).
+ * - Accelerator & Brakes opens "Your erotic engine" (Figma 334:521 / 1:982, and the
+ *   Notion content roadmap's "Part IV - Your Erotic Engine, Order 1"). Fatih's call,
+ *   2026-09-23.
+ * `?v3=1` keeps V3's own order untouched.
  */
 
 const REPORT_PAGE = readFileSync(join(__dirname, "..", "ui", "ReportPage.tsx"), "utf8");
+const AB = "typical_arousal_accelerators_turn_ons_of_the_core_archetype";
 
 describe("the V4 chapter order", () => {
   it("has exactly V3's ids, so every order-keyed filter still holds", () => {
@@ -25,41 +30,73 @@ describe("the V4 chapter order", () => {
     expect(REPORT_V4_SECTION_ORDER).toHaveLength(REPORT_V3_SECTION_ORDER.length);
   });
 
-  it("opens the part with Typical Beliefs, then Accelerators & Brakes", () => {
-    expect(REPORT_V4_SECTION_ORDER.slice(0, 3)).toEqual([
+  it("opens 'How your archetype works' with Typical Beliefs, and closes it before A&B", () => {
+    expect(REPORT_V4_SECTION_ORDER.slice(0, 7)).toEqual([
       "core_archetype",
       "typical_beliefs",
-      "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
+      "core_insecurities",
+      "confidence_level",
+      "power_orientation",
+      AB,
+      "libido_challenges_in_relationships",
     ]);
-    expect(REPORT_V4_CHAPTERS.slice(0, 2).map((c) => [c.id, c.number])).toEqual([
+  });
+
+  it("numbers each part from 1 in body order, with A&B as 3.1", () => {
+    expect(REPORT_V4_CHAPTERS.slice(0, 7).map((c) => [c.id, c.number])).toEqual([
       ["typical_beliefs", "2.1"],
-      ["typical_arousal_accelerators_turn_ons_of_the_core_archetype", "2.2"],
+      ["core_insecurities", "2.2"],
+      ["confidence_level", "2.3"],
+      ["power_orientation", "2.4"],
+      [AB, "3.1"],
+      ["libido_challenges_in_relationships", "3.2"],
+      ["biochemical_reward_system_dynamics", "3.3"],
     ]);
+    // Every part counts 1, 2, 3 … with no gaps or repeats, so the V3 eyebrows the
+    // other chapters still carry keep counting up.
+    const byPart = new Map<string, number[]>();
+    for (const c of REPORT_V4_CHAPTERS) {
+      const [part, n] = c.number.split(".");
+      byPart.set(part!, [...(byPart.get(part!) ?? []), Number(n)]);
+    }
+    for (const numbers of byPart.values()) {
+      expect(numbers).toEqual(numbers.map((_, i) => i + 1));
+    }
+  });
+
+  it("titles the chapter as the frame does, in V4 only", () => {
+    expect(REPORT_V4_CHAPTERS.find((c) => c.id === AB)!.title).toBe("Accelerator & Brakes");
+    expect(REPORT_V3_CHAPTERS.find((c) => c.id === AB)!.title).toBe("Accelerators & Brakes");
   });
 
   it("leaves V3's own order and numbering alone", () => {
     expect(REPORT_V3_CHAPTERS.slice(0, 2).map((c) => [c.id, c.number])).toEqual([
-      ["typical_arousal_accelerators_turn_ons_of_the_core_archetype", "2.1"],
+      [AB, "2.1"],
       ["typical_beliefs", "2.2"],
     ]);
+    expect(
+      REPORT_V3_CHAPTERS.find((c) => c.id === "libido_challenges_in_relationships")!.number
+    ).toBe("3.1");
   });
 
   it("lists the nav in the same order as the body", () => {
-    const v4Part = REPORT_V4_NAV_PARTS[1]!.items.map((i) => i.id);
-    expect(v4Part.slice(0, 2)).toEqual([
+    expect(REPORT_V4_NAV_PARTS[1]!.items.map((i) => i.id)).toEqual([
       "typical_beliefs",
-      "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
+      "core_insecurities",
+      "confidence_level",
+      "power_orientation",
     ]);
-    expect(REPORT_V3_NAV_PARTS[1]!.items[0]!.id).toBe(
-      "typical_arousal_accelerators_turn_ons_of_the_core_archetype"
-    );
+    expect(REPORT_V4_NAV_PARTS[2]!.items.slice(0, 2).map((i) => [i.id, i.label])).toEqual([
+      [AB, "Accelerator & Brakes"],
+      ["libido_challenges_in_relationships", "Libido Challenges"],
+    ]);
+    expect(REPORT_V3_NAV_PARTS[1]!.items[0]!.id).toBe(AB);
   });
 
-  it("keys Part III's heading on its new first chapter", () => {
+  it("keys each V4 part heading on the part's new first chapter", () => {
     expect(REPORT_V4_PART_DIVIDER_BY_SECTION.typical_beliefs).toBe(REPORT_V4_PARTS[2]);
-    expect(
-      REPORT_V4_PART_DIVIDER_BY_SECTION.typical_arousal_accelerators_turn_ons_of_the_core_archetype
-    ).toBeUndefined();
+    expect(REPORT_V4_PART_DIVIDER_BY_SECTION[AB]).toBe(REPORT_V4_PARTS[3]);
+    expect(REPORT_V4_PART_DIVIDER_BY_SECTION.libido_challenges_in_relationships).toBeUndefined();
     // Every V4 heading key comes in body order, one per part.
     const keys = Object.keys(REPORT_V4_PART_DIVIDER_BY_SECTION);
     const positions = keys.map((k) => REPORT_V4_SECTION_ORDER.indexOf(k));
@@ -67,9 +104,26 @@ describe("the V4 chapter order", () => {
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
   });
 
+  it("sets Part IV's heading as 1:990 does: 'Your' upright, 'erotic engine' in the accent", () => {
+    expect(REPORT_V4_PARTS[3]).toMatchObject({
+      eyebrow: "Part IV",
+      lead: "Your ",
+      accent: "erotic engine",
+    });
+  });
+
+  it("swaps Accelerator & Brakes' V4 chapter in, behind the 44px separator 1:991", () => {
+    // The branch mirrors Typical Beliefs': V4 only, and only where the chapter is
+    // written for the archetype on screen — every other reader keeps V2's section.
+    expect(REPORT_PAGE).toMatch(/if \(isV4 && accelerators && hasAccelCopy\)/);
+    expect(REPORT_PAGE).toContain('data-node-id="1:991"');
+    expect(REPORT_PAGE).toMatch(/<V4Accelerators\s+view=\{accelerators\}/);
+    expect(REPORT_PAGE).toMatch(/title="Accelerator & Brakes"/);
+  });
+
   it("never falls back to a V3 part heading under V4", () => {
-    // Accelerators & Brakes still has a V3 key; without this guard a V3 "Part II"
-    // heading would render between Typical Beliefs and it.
+    // V3 keys its own dividers on other chapters; without this guard a V3 heading
+    // would render inside V4's parts.
     expect(REPORT_PAGE).toContain(") : partDivider && !isV4 ? (");
     expect(REPORT_PAGE).toMatch(/const sectionOrder = isV4\s*\?\s*REPORT_V4_SECTION_ORDER/);
   });

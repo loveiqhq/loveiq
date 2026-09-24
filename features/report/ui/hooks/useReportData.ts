@@ -101,6 +101,13 @@ export interface ReportData {
   /** The "Go deeper & learn more" article closing that chapter, already gated. */
   typicalBeliefsArticle: import("@/data/report3-learn-more").V4LearnMoreState | null;
   /**
+   * Report 3.0's Accelerator & Brakes chapter, for `?v4=1`. NULL for any archetype
+   * the content has not been scaled to yet, which is what ReportPage falls back on.
+   */
+  accelerators: import("@/data/report3-accelerators").Report3AcceleratorsView | null;
+  /** The "Go deeper & learn more" article closing that chapter, already gated. */
+  acceleratorsArticle: import("@/data/report3-learn-more").V4LearnMoreState | null;
+  /**
    * Report 2.0 Attachment Style copy for the primary archetype, resolved
    * server-side and locked-aware. Universal slots (gate.hook, eyebrow, edu.*,
    * learn.*) are always present; the per-archetype result/row-values/insight/

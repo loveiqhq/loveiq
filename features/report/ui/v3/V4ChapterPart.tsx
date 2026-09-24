@@ -1,6 +1,7 @@
 import { Fragment, type FC } from "react";
 import type { Report3Chapter } from "@/data/report3-archetype-page";
 import type { Report3TypicalBeliefsView } from "@/data/report3-typical-beliefs";
+import type { Report3AcceleratorsView } from "@/data/report3-accelerators";
 import {
   CHAPTER_COPY_PLACEHOLDER,
   PART_INTRO_PLACEHOLDER,
@@ -13,6 +14,7 @@ import V4Chapter from "./V4Chapter";
 import V4LearnMore from "./V4LearnMore";
 import V4TryThis from "./V4TryThis";
 import V4TypicalBeliefs from "./V4TypicalBeliefs";
+import V4Accelerators from "./V4Accelerators";
 import V4PartHeading from "./V4PartHeading";
 
 /**
@@ -62,6 +64,11 @@ interface Props {
    * one; every other part leaves it undefined.
    */
   typicalBeliefs?: Report3TypicalBeliefsView | null;
+  /**
+   * Accelerator & Brakes' chapter body (310:221), read on the server like
+   * `typicalBeliefs`. Part IV renders it above the chapter's article.
+   */
+  accelerators?: Report3AcceleratorsView | null;
 }
 
 const V4ChapterPart: FC<Props> = ({
@@ -72,6 +79,7 @@ const V4ChapterPart: FC<Props> = ({
   learnMore,
   onUnlock,
   typicalBeliefs,
+  accelerators,
 }) => (
   <section className="rv4-partblock" data-node-id="1:849" data-name="Chapter part">
     {/* 1:850 */}
@@ -88,6 +96,11 @@ const V4ChapterPart: FC<Props> = ({
       // Typical Beliefs brings its own body (304:256), so its row drops the
       // generic 356px / 20px-padding treatment — the body pads itself.
       const beliefs = c.id === "typical_beliefs" && entry ? typicalBeliefs : null;
+      // The literal id, because client code cannot import values from the paid module.
+      const accel =
+        c.id === "typical_arousal_accelerators_turn_ons_of_the_core_archetype" && entry
+          ? accelerators
+          : null;
       return (
         <Fragment key={c.id ?? c.title}>
           {/* 1:858 / 1:861 / 1:872 / 1:883 / 1:894 */}
@@ -103,7 +116,7 @@ const V4ChapterPart: FC<Props> = ({
                   : TEASER_PLACEHOLDER
             }
             defaultOpen={Boolean(entry)}
-            bare={Boolean(beliefs)}
+            bare={Boolean(beliefs || accel)}
           >
             {entry ? (
               <>
@@ -116,6 +129,7 @@ const V4ChapterPart: FC<Props> = ({
                     <V4TryThis practice={beliefs.practice} onUnlock={onUnlock} />
                   </>
                 ) : null}
+                {accel ? <V4Accelerators view={accel} onUnlock={onUnlock} /> : null}
                 <V4LearnMore article={entry.article} locked={entry.locked} onUnlock={onUnlock} />
               </>
             ) : undefined}

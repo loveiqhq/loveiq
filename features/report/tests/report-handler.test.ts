@@ -572,3 +572,107 @@ describe("GET /api/report", () => {
     expect(json.pricingQuotes?.full_report?.currentPriceCents).toBe(2749);
   });
 });
+
+/**
+ * Report 3.0's Accelerator & Brakes chapter at the HTTP boundary — what the route
+ * actually ships. Gated on the same `accelUnlocked` as V2's `accelCopy`, so a
+ * locked Spark Seeker receives the chapter with nothing paid past the wall, a paid
+ * one receives all of it, and an archetype nobody has written yet receives null.
+ */
+describe("GET /api/report — Accelerator & Brakes (Report 3.0)", () => {
+  const AB_PROBES = [
+    "Control and possessiveness",
+    "Spontaneity and controlled unpredictability",
+    "A suggestive message on Wednesday",
+    "Respect brakes that are protecting something real.",
+  ];
+
+  const queueSubmission = (primary: string) => {
+    mockFetchWithTimeout
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            id: 55,
+            user_id: 77,
+            created_date_time: "2026-04-07T22:23:16.851299+00:00",
+            app_user: { first_name: "Eman", email: "eman@example.com" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            primary_archetype: primary,
+            v5_primary_archetype: primary,
+            percentages: { [primary]: 43 },
+            v5_percentages: { [primary]: 43 },
+            diagnostics: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] });
+  };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    process.env.SUPABASE_URL = "https://test.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-key";
+    mockGetClientIp.mockReturnValue("1.2.3.4");
+    vi.mocked(getReportPriceQuotesForContext).mockResolvedValue(null);
+    vi.mocked(recordReportSessionView).mockResolvedValue(undefined);
+    mockIsFeatureEnabled.mockResolvedValue(true);
+    allowCsrf();
+    allowRateLimit();
+  });
+
+  it("ships a locked Spark Seeker the chapter with nothing paid past the wall", async () => {
+    vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({
+      accessPlan: null,
+      archetypeTiers: {},
+      personalReportId: 99,
+      unlockedArchetypeColumn: [],
+    });
+    queueSubmission("Spark Seeker");
+    const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.accelerators.lockedFrom).toBe(2);
+    expect(json.accelerators.practice.locked).toBe(true);
+    expect(json.acceleratorsArticle.locked).toBe(true);
+    const body = JSON.stringify(json);
+    for (const probe of AB_PROBES) expect(body, probe).not.toContain(probe);
+  });
+
+  it("ships a paid Spark Seeker every word", async () => {
+    vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({
+      accessPlan: "full_report",
+      archetypeTiers: {},
+      personalReportId: 99,
+      unlockedArchetypeColumn: [],
+    });
+    queueSubmission("Spark Seeker");
+    const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"));
+    const json = await res.json();
+    expect(json.accelerators.lockedFrom).toBeNull();
+    expect(json.acceleratorsArticle.locked).toBe(false);
+    const body = JSON.stringify(json);
+    for (const probe of AB_PROBES) expect(body, probe).toContain(probe);
+  });
+
+  it("ships null for an archetype without Report 3.0 copy, so V2's section stays", async () => {
+    vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({
+      accessPlan: null,
+      archetypeTiers: {},
+      personalReportId: 99,
+      unlockedArchetypeColumn: [],
+    });
+    queueSubmission("Emotional Voyeur");
+    const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"));
+    const json = await res.json();
+    expect(json.accelerators).toBeNull();
+    expect(json.acceleratorsArticle).toBeNull();
+    expect(json.accelCopy).not.toBeNull();
+  });
+});

@@ -78,6 +78,16 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
   // `.rv4-doc` runs on copyable non-prod deploys, so a drag that ends inside the
   // card must not open the paywall — see v4Unlock.ts.
   const openPaywall = guardedUnlock(onUnlock);
+  // 235:234 moves the pill and trims the card's foot; each falls back in CSS to the
+  // other articles' values, so their cards carry no inline style.
+  const closedGeometry: Record<string, string> = {
+    ...(article.teaserPillBottomPx !== undefined
+      ? { "--rv4-pill-bottom": `${article.teaserPillBottomPx}px` }
+      : {}),
+    ...(article.closedPaddingBottomPx !== undefined
+      ? { "--rv4-closed-pb": `${article.closedPaddingBottomPx}px` }
+      : {}),
+  };
 
   return (
     <section
@@ -85,6 +95,7 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
       className={`rv4-learn${isOpen ? " is-open" : ""}`}
       data-node-id={isOpen ? (locked ? "153:2280" : "153:2260") : "153:2240"}
       data-name="Go deeper & learn more"
+      style={Object.keys(closedGeometry).length ? (closedGeometry as CSSProperties) : undefined}
     >
       {/* 230:282 — the layer is named "Adding the right new input genuinely works
        * for you"; the text is the reading time. Names in this file are stale. */}
@@ -128,7 +139,7 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
                   : undefined
               }
             >
-              <V4Prose blocks={article.free.slice(0, TEASER_BLOCKS)} />
+              <V4Prose blocks={article.teaser ?? article.free.slice(0, TEASER_BLOCKS)} />
             </div>
             {/* 456:261 "Show all pill — article" — Mark's standardised CTA for every
              * Go deeper teaser: a 163x32 outlined pill over the fade. */}

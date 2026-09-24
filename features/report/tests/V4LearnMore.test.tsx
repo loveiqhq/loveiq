@@ -313,3 +313,51 @@ describe("reportV3.css — learn-more contracts", () => {
     expect(untouched).not.toContain("rv4-prose");
   });
 });
+
+/**
+ * Accelerator & Brakes' closed card, 235:234 — the same 359px card as the others,
+ * but its teaser is the frame's own copy (240:239 breaks after "A low sex drive."
+ * and "becomes possible.", where the article runs on) in an 11-line box, with the
+ * pill 16px higher (41.5px above the box's foot) and 13.5px under it.
+ */
+describe("V4LearnMore — Accelerator & Brakes closed (235:234)", () => {
+  const AB_ID = "typical_arousal_accelerators_turn_ons_of_the_core_archetype";
+  const AB_LOCKED = splitArticleForReader(REPORT_V4_LEARN_MORE[AB_ID]!, true);
+  const AB_OPEN = splitArticleForReader(REPORT_V4_LEARN_MORE[AB_ID]!, false);
+
+  it("shows the frame's own teaser, broken where 240:239 breaks it", () => {
+    const { container } = render(<V4LearnMore article={AB_LOCKED} locked />);
+    const paras = container.querySelectorAll(".rv4-learn__teaser .rv4-prose__p");
+    expect(paras).toHaveLength(1);
+    expect(paras[0]!.querySelectorAll("br")).toHaveLength(2);
+    expect(paras[0]!.textContent).toContain("You can fantasise throughout the day");
+    expect(paras[0]!.textContent!.trim().endsWith("lose that arousal the")).toBe(true);
+  });
+
+  it("gives a locked and an unlocked reader the same teaser", () => {
+    expect(AB_LOCKED.teaser).toEqual(AB_OPEN.teaser);
+    expect(AB_LOCKED.teaser).toBeDefined();
+  });
+
+  it("carries 235:234's geometry as custom properties", () => {
+    const { container } = render(<V4LearnMore article={AB_OPEN} />);
+    const card = container.querySelector<HTMLElement>(".rv4-learn")!;
+    const teaser = container.querySelector<HTMLElement>(".rv4-learn__teaser")!;
+    expect(teaser.style.getPropertyValue("--rv4-teaser-h")).toBe("247px");
+    expect(card.style.getPropertyValue("--rv4-pill-bottom")).toBe("41.5px");
+    expect(card.style.getPropertyValue("--rv4-closed-pb")).toBe("13.5px");
+  });
+
+  it("leaves Typical Beliefs' closed card exactly as it was", () => {
+    const { container } = render(<V4LearnMore article={ARTICLE} />);
+    expect(container.querySelector(".rv4-learn")!.hasAttribute("style")).toBe(false);
+    expect(container.querySelectorAll(".rv4-learn__teaser .rv4-prose__p").length).toBeGreaterThan(
+      0
+    );
+  });
+
+  it("reads the new custom properties with the old values as fallbacks", () => {
+    expect(V3_CSS).toContain("bottom: var(--rv4-pill-bottom, 18.5px)");
+    expect(V3_CSS).toContain("padding-bottom: var(--rv4-closed-pb, 20.5px)");
+  });
+});

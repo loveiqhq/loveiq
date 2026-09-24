@@ -40,9 +40,19 @@ export interface Report3LearnMoreArticle {
    * The closed state's clamp. The frame draws TEN LINES of copy; whether that
    * measures 240px or 224px depends only on whether a paragraph gap happens to
    * land inside them, and CSS cannot count lines across sibling paragraphs.
-   * Defaults to 240; Accelerator & Brakes sets 224 (235:234 is 323 tall, not 339).
+   * Defaults to 240; Accelerator & Brakes' own teaser needs 247 (eleven lines).
    */
   teaserHeightPx?: number;
+  /**
+   * The closed card's copy, when the frame sets its own rather than the article's
+   * opening blocks — 235:234's 240:239 breaks lines where the article runs on.
+   * Free copy: every reader receives it, locked or not.
+   */
+  teaser?: readonly Report3Block[];
+  /** The pill's bottom, this far above the teaser box's foot. CSS default 18.5. */
+  teaserPillBottomPx?: number;
+  /** The closed card's padding under the teaser. CSS default 20.5. */
+  closedPaddingBottomPx?: number;
   /**
    * The WHOLE article, exactly as the expanded frame draws it.
    *
@@ -70,6 +80,9 @@ export interface Report3LearnMoreView {
   eyebrow: string;
   label: string;
   teaserHeightPx?: number;
+  teaser?: readonly Report3Block[];
+  teaserPillBottomPx?: number;
+  closedPaddingBottomPx?: number;
   free: readonly Report3Block[];
   /**
    * THE SEAM. The paid remainder a locked reader is allowed to glimpse behind the
@@ -1350,9 +1363,22 @@ export const REPORT_V4_LEARN_MORE: Readonly<Record<string, Report3LearnMoreArtic
     chapterId: "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
     eyebrow: "Reading time: ~12 min.",
     label: "Go deeper & learn more",
-    // 235:234 is 323 tall, not 339: its opening block runs past ten lines, so no
-    // paragraph gap falls inside the clamp.
-    teaserHeightPx: 224,
+    // 235:234 is now the standard 359px card. Its teaser, 240:239, is the frame's own
+    // copy: broken after "A low sex drive." and "becomes possible." where the article
+    // runs on, and spelled "fantasise" where the article has "fantasize" (flagged for
+    // Mark). Eleven lines (247px), the pill 41.5px above the box's foot — sitting on
+    // the first faded line — and 13.5px of card under it. The copy stops where the
+    // frame's does; the rest of the sentence is clipped there anyway.
+    teaser: [
+      p(
+        t(
+          "Sexual desire is often talked about as if you simply have more or less of it. A high libido. A low libido. A strong sex drive. A low sex drive. \nBut real sexuality is rarely that simple. You can be intensely attracted to someone and still struggle to become aroused. You can fantasise throughout the day and feel strangely blank when sex actually becomes possible. \nYou can love your partner, enjoy sex once it begins, and almost never feel an urge to initiate it. Or you can become aroused quickly but lose that arousal the"
+        )
+      ),
+    ],
+    teaserHeightPx: 247,
+    teaserPillBottomPx: 41.5,
+    closedPaddingBottomPx: 13.5,
     blocks: ACCELERATOR_BRAKES_BLOCKS,
     // 240:240 opens on the heading "The patterns underneath desire".
     paywallAt: 17,

@@ -2425,7 +2425,9 @@
       rgba(157, 138, 215, 0) 71%
     );
   height: 226px;
-  left: 14px;
+  /* 1:172 sits 14px in from a 361px stage — kept as the same offset from its
+   * centre, so the glow stays centred when a narrow phone shrinks the column. */
+  left: calc(50% - 166.5px);
   position: absolute;
   top: -33.39px;
   width: 332px;
@@ -2452,7 +2454,8 @@
   color: var(--rv3-violet-ink);
   font-size: 12px;
   font-weight: 600;
-  left: 178.66px;
+  /* 178.66 of 361, as an offset from the centre (see the glow above). */
+  left: calc(50% - 1.84px);
   letter-spacing: 2.6px;
   line-height: 19.2px;
   margin: 0;
@@ -2468,7 +2471,8 @@
   font-family: var(--font-serif);
   font-size: 20px;
   font-weight: 400;
-  left: 180.45px;
+  /* 180.45 of 361, as an offset from the centre. */
+  left: calc(50% - 0.05px);
   letter-spacing: -0.47px;
   line-height: 24px;
   margin: 0;
@@ -4874,4 +4878,293 @@
     padding-left: 12px;
     padding-right: 12px;
   }
+}
+
+/* ══ Premium card, chapter-body copy — 348:373 (Typical Beliefs) / 314:309 (A&B) ══
+ * The body gates set "14-day money-back" in bold 14/22.4 over "Guaranteed, no
+ * questions asked." (the article and practice gates keep 153:2301's 12/19.2
+ * "…guarantee" / "No questions asked."). The taller line grows the guarantee box
+ * 36 → 39px inside the same fixed 191px card, and 314:321 draws the tick 14.625px
+ * tall against 153:2313's 13.5. */
+.rv3 .rv4-premium--guarantee .rv4-premium__guarantee-head {
+  font-size: 14px;
+  line-height: 22.4px;
+}
+.rv3 .rv4-premium--guarantee .rv4-premium__shield-tick {
+  height: 14.625px;
+}
+
+/* ══ Accelerator & Brakes — trigger cards · 386:219 / 386:317, paywalled 386:416 / 386:444 ══
+ * One card, two tones: coral brakes, green accelerators. Every tint is the tone at
+ * a fixed alpha, so the tone is carried as an RGB triple.
+ *
+ * Figma draws strokes INSIDE the frame, so the 1px card border, the header's rule
+ * and each row's rule are folded into the padding: 361 x 661 / 642 at 393 as drawn.
+ * Figma also rounds a text box up to the whole pixel (22.4 → 23, 38.4 → 39), which
+ * the title's min-height and the 0.6px under each explanation reproduce, so rows
+ * land at the frame's 107 / 126. */
+.rv3 .rv4-trig--brake {
+  --trig: 194, 84, 47;
+  --trig-fill: 0.45;
+}
+.rv3 .rv4-trig--accel {
+  --trig: 46, 125, 91;
+  --trig-fill: 0.5;
+}
+.rv3 .rv4-trig {
+  background: rgba(var(--trig), 0.04);
+  border: 1px solid rgba(var(--trig), 0.24);
+  border-radius: 20px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  width: 100%;
+}
+/* 386:220 — px 15 / py 14 in the frame, less the card's 1px border and its own. */
+.rv3 .rv4-trig__head {
+  align-items: center;
+  background: rgba(var(--trig), 0.11);
+  border-bottom: 1px solid rgba(var(--trig), 0.2);
+  display: flex;
+  gap: 11px;
+  padding: 13px 14px;
+}
+/* 386:221 — a 26px tile; the 16px icon sits at 4,4 inside its 1px border. */
+.rv3 .rv4-trig__badge {
+  background: rgba(var(--trig), 0.14);
+  border: 1px solid rgba(var(--trig), 0.26);
+  border-radius: 9px;
+  box-sizing: border-box;
+  flex: none;
+  height: 26px;
+  position: relative;
+  width: 26px;
+}
+.rv3 .rv4-trig__badge img {
+  display: block;
+  height: 16px;
+  left: 4px;
+  position: absolute;
+  top: 4px;
+  width: 16px;
+}
+.rv3 .rv4-trig__label {
+  color: rgb(var(--trig));
+  flex: 1 1 0;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.56px;
+  line-height: 19.2px;
+  margin: 0;
+  min-width: 0;
+}
+/* 386:226 — the tone fades out down the list over white; pt 2 / pb 14 / px 15. */
+.rv3 .rv4-trig__rows {
+  background-color: #fff;
+  background-image: linear-gradient(180deg, rgba(var(--trig), 0.1) 0%, rgba(var(--trig), 0) 100%);
+  padding: 2px 14px 13px;
+}
+.rv3 .rv4-trig__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+/* 452:225 — py 13, gap 4, a 1px rule under every row but the card's last. */
+.rv3 .rv4-trig__row {
+  border-bottom: 1px solid rgba(var(--trig), 0.14);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 13px 0;
+}
+.rv3 .rv4-trig__row.is-last {
+  border-bottom: 0;
+}
+.rv3 .rv4-trig__title {
+  color: #161021;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 22.4px;
+  margin: 0;
+  min-height: 23px;
+}
+.rv3 .rv4-trig__sub {
+  color: #8f8a9c;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 19.2px;
+  margin: 0;
+  padding-bottom: 0.6px;
+}
+/* 469:225 */
+.rv3 .rv4-trig__scale {
+  display: block;
+  height: 10px;
+  position: relative;
+}
+.rv3 .rv4-trig__track {
+  background: rgba(22, 16, 33, 0.07);
+  border-radius: 1px;
+  height: 2px;
+  left: 0;
+  position: absolute;
+  top: 4px;
+  width: 100%;
+}
+.rv3 .rv4-trig__fill {
+  background: rgba(var(--trig), var(--trig-fill));
+  border-radius: 1px;
+  height: 2px;
+  left: 0;
+  position: absolute;
+  top: 4px;
+  width: var(--fill);
+}
+.rv3 .rv4-trig__knob {
+  background: rgb(var(--trig));
+  border-radius: 3px;
+  height: 6px;
+  left: calc(var(--fill) - 3px);
+  position: absolute;
+  top: 2px;
+  width: 6px;
+}
+/* 386:416 / 386:444 — rows 3-5 blurred uniformly (the frame's 2px), the badge
+ * 96px / 99px below the first blurred row's top, centred (157 of 361). */
+.rv3 .rv4-trig__row.is-locked {
+  filter: blur(2px);
+}
+.rv3 .rv4-trig--brake .rv4-trig__lock {
+  --rv4-lock-top: 96px;
+}
+.rv3 .rv4-trig--accel .rv4-trig__lock {
+  --rv4-lock-top: 99px;
+}
+
+/* ══ "Try this & see what shifts" — per-chapter numbers ═══════════════════════
+ * Accelerator & Brakes draws the same card (377:221 / 374:304 / 375:221) with its
+ * own teaser box (224 against 218), a ramp that fades in over four lines, open copy
+ * set 8px under the button (its closed teaser, like all of Typical Beliefs, 4px),
+ * and the Premium card measured from the gate. V4TryThis sets these as custom
+ * properties; each falls back to Typical Beliefs' value, so its card is unchanged.
+ * The pill keeps 200.5px into the paragraph and the closed card 343 tall either
+ * way. */
+.rv3 .rv4-try__teaser {
+  max-height: var(--rv4-try-teaser-h, 218px);
+}
+.rv3 .rv4-try__open {
+  bottom: calc(var(--rv4-try-teaser-h, 218px) - 228.5px);
+}
+.rv3 .rv4-try:not(.is-open) {
+  padding-bottom: calc(257px - var(--rv4-try-teaser-h, 218px));
+}
+.rv3 .rv4-try__ramp {
+  --rv4-band: var(--rv4-try-band, 100%);
+}
+.rv3 .rv4-try__gate > .rv4-premium {
+  top: var(--rv4-try-premium-top, 148px);
+}
+.rv3 .rv4-try.is-open .rv4-try__body {
+  padding-top: var(--rv4-try-open-pt, 4px);
+}
+
+/* ══ Accelerator & Brakes — the chapter body · 310:229, paywalled 314:219 ══════
+ * A 361 column, 20px down from the chapter head, its blocks 16 apart — and the
+ * practice card and the article follow at the same 16 (Typical Beliefs puts 24
+ * before its article). Body copy is 16/25.6 in --rv3-copy; unlike Typical Beliefs,
+ * the frame leaves its bold runs in the paragraph's own colour. */
+.rv3 .rv4-ab {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 20px;
+  width: 100%;
+}
+.rv3 .rv4-ab .rv4-prose__p {
+  color: var(--rv3-copy);
+  font-size: 16px;
+  line-height: 25.6px;
+}
+/* 310:231 is 356 wide in the 361 column, and those 5px set its line breaks. */
+.rv3 .rv4-ab__intro .rv4-prose__p {
+  margin-right: 5px;
+}
+.rv3 .rv4-ab__intro > :last-child,
+.rv3 .rv4-ab__challenges > :last-child,
+.rv3 .rv4-ab__blurred > :last-child {
+  margin-bottom: 0;
+}
+/* 311:410 / 311:412 — across the full 361. */
+.rv3 .rv4-ab__lead {
+  color: var(--rv3-copy);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 25.6px;
+  margin: 0;
+}
+/* 312:211 — padded 10 down, its paragraphs across the full 361. */
+.rv3 .rv4-ab__challenges {
+  padding-top: 10px;
+}
+/* 312:212's H2 — Lora Bold 18/21.6, 14 above the first paragraph. The H2 and the
+ * paragraphs are ONE text node in the frame, and Figma sets each line its own height
+ * below the one above: the first paragraph line sits 14 + 25.6 = 39.6 under the H2's
+ * baseline. CSS stacks the H2's 4.212 of leading below its baseline and the
+ * paragraph's 19.2 above (Lora 1.006/0.274, Plus Jakarta 1.04/0.24), 2.19 less —
+ * so the 14 carries it: 1219 as drawn, where it came out 1216.8. */
+.rv3 .rv4-ab__h2 {
+  color: var(--rv3-ink);
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 21.6px;
+  margin: 0 0 16.19px;
+}
+/* 314:307 — the ramp fades in over two 25.6px lines; everything after is blurred
+ * 2.5px (Figma radius 5) to the end of the section, with the card 82px below the
+ * ramp's top (197 into the section). The frame builds this from three stacked text
+ * nodes with spacer lines, which runs the section to 1228; the open layout stays
+ * under the blur instead, so nothing moves when the reader unlocks. */
+.rv3 .rv4-ab__gate {
+  cursor: pointer;
+  position: relative;
+}
+.rv3 .rv4-ab__ramp {
+  --rv4-band: 51.2px;
+  position: relative;
+}
+.rv3 .rv4-ab__blurred {
+  filter: blur(2.5px);
+}
+.rv3 .rv4-ab__gate .rv4-premium {
+  top: 82px;
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .rv3 .rv4-ab__ramp {
+    filter: blur(1.25px);
+  }
+}
+/* 310:229's 16px continues to the practice card and the article. */
+.rv3 .rv4-ab + .rv4-try {
+  margin-top: 16px;
+}
+.rv3 .rv4-chapter__body.is-bare > .rv4-ab ~ .rv4-learn {
+  margin-top: 16px;
+}
+
+/* ══ "Go deeper" closed card — per-article pill and foot · 235:234 ═════════════
+ * Accelerator & Brakes' 359px card sets an eleven-line teaser (247) with the pill
+ * 41.5px above the box's foot, on the first faded line, and 13.5px under it. The
+ * values arrive on the card; the fallbacks are 153:2240's, so the other articles
+ * are unchanged. */
+.rv3 .rv4-learn__open {
+  bottom: var(--rv4-pill-bottom, 18.5px);
+}
+.rv3 .rv4-learn:not(.is-open) {
+  padding-bottom: var(--rv4-closed-pb, 20.5px);
 }
