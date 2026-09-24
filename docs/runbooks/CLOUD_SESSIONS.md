@@ -49,9 +49,13 @@ can do:
 
 - **Runs:** every probe that only reads the live site (the `probe-guard.yml`
   set and the auto-PR set), `npm test`, lint.
-- **Reads a finding:** through the loveiq-brain connector, table `ux_finding`
-  (`session_id`, `criterion`, `devices`, `viewport_min`/`viewport_max`,
-  `url_path`, `target_selector`). The session passes those to the probe.
+- **Reads a finding:** not from the repo's `loveiq-brain` server. `.mcp.json`
+  sends `Bearer ${LOVEIQ_MCP_TOKEN}`, the token is (rightly) not in the
+  environment, and the server answers 401. Paste the finding's session id,
+  devices and page into the session, or enable your own claude.ai loveiq-brain
+  connector for the session, which uses your login rather than a shared key
+  (table `ux_finding`: `session_id`, `criterion`, `devices`,
+  `viewport_min`/`viewport_max`, `url_path`, `target_selector`).
 - **Does not run:** `scripts/verify-ux-findings.mjs`, `replay-session.mjs` from
   a session id (it reads PostHog), and anything that writes the ledger or posts
   to Slack.
