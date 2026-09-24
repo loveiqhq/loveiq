@@ -1,18 +1,26 @@
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 const mockRecordCronRun = vi.fn();
+const mockTimer = vi.fn();
 vi.mock("@shared/observability/slack-alert-dedup", () => ({
   verifyCronAuth: (req: Request) => req.headers.get("authorization") === "Bearer s",
-  startCronTimer: () => async () => undefined,
+  startCronTimer: (...a: unknown[]) => {
+    mockTimer(...a);
+    return async () => undefined;
+  },
   recordCronRun: (...a: unknown[]) => mockRecordCronRun(...a),
 }));
 const mockProdHost = vi.fn(() => true);
 vi.mock("@shared/http/is-prod-cron-host", () => ({ isProdCronHost: () => mockProdHost() }));
 const mockRun = vi.fn();
-vi.mock("@features/brain/server/night-shift", () => ({ runNightShift: () => mockRun() }));
+vi.mock("@features/brain/server/night-shift", () => ({
+  runNightShift: () => mockRun(),
+  NIGHT_BUDGET_SEC: 3600,
+}));
 
 import { GET } from "@/app/api/cron/brain-night-shift/route";
 
@@ -80,6 +88,20 @@ describe("GET /api/cron/brain-night-shift", () => {
     expect(mockRecordCronRun.mock.calls[0]![2]).toBe("error");
     expect(mockRecordCronRun.mock.calls[0]![3]).toBe(
       "queued=3 answered=0 failed=0 stopped=rate_limited error=You've hit your session limit"
+    );
+  });
+
+  /** Reviewed 2026-09-25: a 300s budget posted "investigate slowness" on every real night. */
+  it("measures slowness against the night's real budget, not the Vercel ceiling", async () => {
+    mockRun.mockResolvedValue({ queued: 1, answered: 1, failed: 0, limited: false, error: null });
+    await call();
+    expect(mockTimer).toHaveBeenCalledWith("brain-night-shift", 3600);
+  });
+
+  it("is reported to the brain channel when the job is cancelled or times out, not only when it fails", () => {
+    const workflow = readFileSync(".github/workflows/brain-daily.yml", "utf8");
+    expect(workflow).toMatch(
+      /name: Tell the brain channel the job failed\n(?:\s+#.*\n)*\s+if: failure\(\) \|\| cancelled\(\)/
     );
   });
 

@@ -277,6 +277,16 @@ describe("runNightShift", () => {
 
   beforeEach(() => mockSupabaseFetch.mockReset());
 
+  /** Reviewed 2026-09-25: a job killed mid-question left it "running" for ever, holding a slot. */
+  it("takes a question a dead run left running before the queued ones", async () => {
+    mockSupabaseFetch.mockResolvedValueOnce(ok(queued(1)));
+    const d = deps(async () => ({ ok: true, text: "Answer [https://example.com]." }));
+    await runNightShift(d);
+    const path = String(mockSupabaseFetch.mock.calls[0]![0]);
+    expect(path).toContain("meta->>status=in.(running,queued)");
+    expect(path).toContain("order=updated_at.asc");
+  });
+
   it("does nothing, and says so, when nothing is queued", async () => {
     mockSupabaseFetch.mockResolvedValueOnce(ok([]));
     const d = deps(vi.fn());

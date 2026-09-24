@@ -113,12 +113,15 @@ jobs:
       # SLACK_OPS_WEBHOOK_URL, a Vercel secret marked sensitive that cannot be read back
       # out, so the mirror is off here and a failure is never reported twice.
       - name: Tell the brain channel the job failed
-        if: failure()
+        # cancelled() too: a job killed at its timeout skips failure() steps, writes no
+        # cron_run row (the route's finally never runs) and would otherwise alert nobody.
+        if: failure() || cancelled()
         env:
           SLACK_BRAIN_WEBHOOK_URL: ${{ secrets.SLACK_BRAIN_WEBHOOK_URL }}
           # Slack member id of whoever's seat CLAUDE_CODE_OAUTH_TOKEN belongs to (a repository
           # variable, not a secret). Change it whenever the token changes hands.
           TOKEN_OWNER: ${{ vars.CLAUDE_TOKEN_OWNER_SLACK_ID }}
+          JOB_STATUS: ${{ job.status }}
         run: |
           set -euo pipefail
           if [ -z "${SLACK_BRAIN_WEBHOOK_URL:-}" ]; then
@@ -136,6 +139,8 @@ jobs:
             if [ -n "${TOKEN_OWNER:-}" ]; then owner="<@${TOKEN_OWNER}>'s seat"; fi
             hint=" The Claude usage limit on ${owner} stopped it. If this keeps happening, move CLAUDE_CODE_OAUTH_TOKEN to the teamwork@ seat (COMPANY_BRAIN.md, \"Whose seat\")."
           fi
-          text=":brain: ${JOB} failed in GitHub Actions.${hint} ${result:-It did not get as far as running.} ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          how="failed"
+          if [ "${JOB_STATUS:-}" = "cancelled" ]; then how="was stopped before it finished (cancelled or timed out)"; fi
+          text=":brain: ${JOB} ${how} in GitHub Actions.${hint} ${result:-It did not get as far as running.} ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           jq -n --arg text "$text" '{text: $text}' |
             curl -sS --fail -X POST -H 'Content-type: application/json' --data @- "$SLACK_BRAIN_WEBHOOK_URL"

@@ -32,6 +32,8 @@ export const MAX_QUEUED = 5;
 export const PER_NIGHT = 3;
 const MAX_TURNS = 40;
 const RESEARCH_TIMEOUT_MS = 20 * 60 * 1000;
+/** The whole night's ceiling: every question may use its full time. The route's slowness alarm uses this. */
+export const NIGHT_BUDGET_SEC = (PER_NIGHT * RESEARCH_TIMEOUT_MS) / 1000;
 
 export type ResearchStatus = "queued" | "running" | "done" | "failed";
 
@@ -390,7 +392,13 @@ const DEFAULT_DEPS: NightShiftDeps = {
 export async function runNightShift(
   deps: NightShiftDeps = DEFAULT_DEPS
 ): Promise<NightShiftResult> {
-  const queue = await researchInState(["queued"], PER_NIGHT);
+  /**
+   * A question still "running" when a night starts was being answered when the last run
+   * died (a job timeout, a runner crash, a cancel): runs never overlap, one concurrency
+   * group per job. Taken first (oldest), or it would hold a queue slot and look in flight
+   * for ever, since queue_research treats "running" as already on its way.
+   */
+  const queue = await researchInState(["running", "queued"], PER_NIGHT);
   const out: NightShiftResult = {
     queued: queue.length,
     answered: 0,

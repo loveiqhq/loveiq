@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { runNightShift } from "@features/brain/server/night-shift";
+import { NIGHT_BUDGET_SEC, runNightShift } from "@features/brain/server/night-shift";
 import { cliBinary } from "@features/brain/server/llm";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
 import {
@@ -11,7 +11,8 @@ import logger from "@shared/observability/logger";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 300;
+// Only ever answers 503 on Vercel; the real ceiling is NIGHT_BUDGET_SEC, in GitHub Actions.
+export const maxDuration = 60;
 
 /**
  * GET /api/cron/brain-night-shift
@@ -43,7 +44,9 @@ export async function GET(request: Request) {
   }
 
   const startedAtMs = Date.now();
-  const checkSlow = startCronTimer("brain-night-shift", maxDuration);
+  // The night's real budget, not the Vercel ceiling: one real question takes minutes, and a
+  // 300s budget would post "investigate slowness" on every ordinary night.
+  const checkSlow = startCronTimer("brain-night-shift", NIGHT_BUDGET_SEC);
   let status: "success" | "error" = "success";
   let detail: string | undefined;
   try {
