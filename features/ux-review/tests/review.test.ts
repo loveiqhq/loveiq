@@ -27,10 +27,12 @@ import {
   PAYWALL_EXIT_TAP_WINDOW_MS,
   paywallLeftOpen,
   recordingLink,
+  restartForSurveySession,
   sessionClickTarget,
   sessionViewport,
   biggestIndexDrop,
   stripEchoedCriterion,
+  SURVEY_RESTART_MAX_GAP_MS,
   SURVEY_RESTART_MIN_DROP,
   type UxFinding,
   type VisionQuota,
@@ -1547,6 +1549,69 @@ describe("biggestIndexDrop", () => {
 
   it("reports the LARGEST drop, not the last", () => {
     expect(biggestIndexDrop(seq(60, 0, 3, 2))?.drop).toBe(60);
+  });
+
+  it("does not count a return visit as a restart", () => {
+    // Submission 2199: finished at 06:30, then opened the intro again at 17:39
+    // in a new session and left. Two abandon rows at question 0, no movement.
+    const done = Array.from({ length: 57 }, (_, i) => ({
+      question_index: i,
+      event_time: `2026-09-24T06:${String(17 + Math.floor(i / 5)).padStart(2, "0")}:00Z`,
+      direction: i === 56 ? "complete" : "forward",
+    }));
+    const back = (t: string) => ({ question_index: 0, event_time: t, direction: "abandon" });
+    expect(
+      biggestIndexDrop([...done, back("2026-09-24T17:39:28Z"), back("2026-09-24T17:39:32Z")])
+    ).toBeNull();
+  });
+
+  it("still counts landing on the start right after finishing", () => {
+    // What a regression of the 2026-09-17 back-button fix would look like, even
+    // if the reader leaves at once instead of answering again.
+    const rows = [
+      { question_index: 55, event_time: "2026-09-24T06:30:48Z", direction: "forward" },
+      { question_index: 56, event_time: "2026-09-24T06:30:53Z", direction: "complete" },
+      { question_index: 0, event_time: "2026-09-24T06:34:10Z", direction: "abandon" },
+    ];
+    expect(biggestIndexDrop(rows)?.drop).toBe(56);
+  });
+
+  it("counts a real restart however long the gap", () => {
+    // 2141 (01a0bbf7): taken back to question 0 and answered everything again.
+    const rows = [
+      { question_index: 56, event_time: "2026-09-19T23:35:00Z", direction: "complete" },
+      { question_index: 0, event_time: "2026-09-20T09:00:00Z", direction: "forward" },
+      { question_index: 1, event_time: "2026-09-20T09:00:05Z", direction: "forward" },
+    ];
+    expect(biggestIndexDrop(rows)?.drop).toBe(56);
+    expect(SURVEY_RESTART_MAX_GAP_MS).toBe(60 * 60_000);
+  });
+
+  it("reads the direction and time it needs from the database", async () => {
+    // Without `direction` in the select every row is undefined there, the
+    // return-visit rule never fires, and submission 2199 reads as a restart
+    // again with every in-memory test still green.
+    vi.stubEnv("SUPABASE_URL", "https://db.test");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-key");
+    let asked = "";
+    vi.stubGlobal("fetch", async (u: string) => {
+      asked = u;
+      return {
+        ok: true,
+        json: async () => [
+          { question_index: 55, event_time: "2026-09-24T06:30:48Z", direction: "forward" },
+          { question_index: 56, event_time: "2026-09-24T06:30:53Z", direction: "complete" },
+          { question_index: 0, event_time: "2026-09-24T17:39:28Z", direction: "abandon" },
+        ],
+      };
+    });
+    const got = await restartForSurveySession("sess-2199");
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    expect(asked).toMatch(/select=[^&]*question_index/);
+    expect(asked).toMatch(/select=[^&]*event_time/);
+    expect(asked).toMatch(/select=[^&]*direction/);
+    expect(got, "a return visit came back as a restart through the fetch path").toBeNull();
   });
 
   it("holds the threshold well below anything observed", () => {
