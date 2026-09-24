@@ -28,8 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/scripts/cloud-session-start.sh",
-            "timeout": 600
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/scripts/cloud-session-start.sh"
           }
         ]
       }

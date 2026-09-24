@@ -1,10 +1,11 @@
 name: Cloud session setup still works
 
-# The "loveiq probes" Claude cloud environment runs scripts/cloud-environment-setup.sh
-# on a fresh Ubuntu 24.04 VM as root, then every session runs
-# scripts/cloud-session-start.sh. Nothing else would notice either breaking
-# until someone asked Claude to run a probe. This runs both on a bare
-# ubuntu:24.04 as root, then one probe on each engine against the live site.
+# A Claude cloud session in the "loveiq probes" environment runs
+# scripts/cloud-probes-setup.sh (root, Ubuntu 24.04) before its first probe.
+# Nothing else would notice that script breaking until someone asked Claude to
+# run a probe. This runs it on a bare ubuntu:24.04 as root, then one probe on
+# each engine against the live site. It cannot reproduce the cloud's security
+# proxy, so the certificate step is proven in a real session instead; see
 # docs/runbooks/CLOUD_SESSIONS.md.
 
 on:
@@ -27,8 +28,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     container: ubuntu:24.04
-    env:
-      PLAYWRIGHT_BROWSERS_PATH: /opt/ms-playwright
     steps:
       # A bare image lacks what the cloud VM ships with: git, certificates and
       # the build tools npm needs for native modules.
@@ -41,19 +40,20 @@ jobs:
         with:
           node-version: "20"
 
-      # The environment refuses to cache a script that runs past about five minutes.
-      - name: The environment's setup script, as the cloud runs it
-        run: timeout 300 bash scripts/cloud-environment-setup.sh
+      - name: The session hook tells Claude how to get ready
+        env:
+          CLAUDE_CODE_REMOTE: "true"
+        run: bash scripts/cloud-session-start.sh | grep -q "cloud-probes-setup.sh"
 
-      - name: The session hook reports a ready session
+      - name: The probe setup, as a cloud session runs it
         env:
           CLAUDE_CODE_REMOTE: "true"
         run: |
-          out=$(CLAUDE_PROJECT_DIR="$PWD" bash scripts/cloud-session-start.sh)
-          echo "$out"
+          out=$(timeout 600 bash scripts/cloud-probes-setup.sh 2>&1) || { echo "$out" | tail -40; exit 1; }
+          echo "$out" | tail -8
           case "$out" in
-            *"are ready"*) ;;
-            *) echo "::error::the session hook did not report a ready session"; exit 1 ;;
+            *"cloud-probes-setup: ready"*) ;;
+            *) echo "::error::the setup did not end ready"; exit 1 ;;
           esac
 
       # 0 is clean and 1 is a finding: both mean the browsers ran. 3 means the
