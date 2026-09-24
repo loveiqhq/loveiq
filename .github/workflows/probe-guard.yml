@@ -170,6 +170,34 @@ jobs:
             exit 1
           fi
 
+      - name: The report still works inside in-app browsers
+        env:
+          REPORT_ORIGIN: ${{ inputs.origin }}
+          STAGING_PASSWORD: ${{ secrets.STAGING_PASSWORD }}
+        # Instagram, TikTok and Facebook open our links in their own browser,
+        # with their own user agent and a viewport shortened by their chrome,
+        # and that is where paid social traffic lands. Nothing else checks it:
+        # this probe existed since 2026-09-09, ran from nowhere, and exited 0
+        # even on its own FAIL lines until 2026-09-24.
+        run: |
+          set +e
+          if [ -n "$REPORT_ORIGIN" ]; then
+            npx tsx scripts/probes/verify-inapp-browsers.mjs
+          else
+            env -u REPORT_ORIGIN npx tsx scripts/probes/verify-inapp-browsers.mjs
+          fi
+          code=$?
+          set -e
+          if [ "$code" -eq 1 ]; then
+            echo "::error::the report is broken inside an in-app browser"
+            exit 1
+          elif [ "$code" -eq 3 ]; then
+            echo "::warning::probe could not measure — not a pass, investigate"
+          elif [ "$code" -ne 0 ]; then
+            echo "::error::probe exited $code"
+            exit 1
+          fi
+
       - name: Probes do not claim defects that are not defects
         run: node scripts/probes/precision-check.mjs
 

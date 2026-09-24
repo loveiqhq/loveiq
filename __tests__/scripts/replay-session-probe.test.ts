@@ -132,6 +132,26 @@ describe("replaying the reader's own route", () => {
     expect(PROBE).toMatch(/process\.env\.REPLAY_STEPS/);
   });
 
+  it("the weekly MUTATE run gives it a route with something checkable", () => {
+    /**
+     * Without a route it exits 3 before touching the site, so its MUTATE could
+     * never show: the weekly falsifiability job failed on its first run. And on
+     * the LOCKED report every scroll past 25% opens the paywall, which
+     * suppresses every check (a lock behind a dialog is correct) — clean and
+     * mutated both said 3. The paid internal report has no paywall.
+     */
+    const env = /"replay-session\.mjs":\s*\{([\s\S]*?)\}/.exec(HARNESS)?.[1] ?? "";
+    expect(env, "PROBE_ENV has no entry for replay-session.mjs").not.toBe("");
+    const steps = /REPLAY_STEPS:\s*"([^"]+)"/.exec(env)?.[1]?.split(",") ?? [];
+    const minSteps = Number(/MIN_ROUTE_STEPS = (\d+)/.exec(PROBE)?.[1]);
+    expect(steps.length, "fewer steps than the probe will judge").toBeGreaterThanOrEqual(minSteps);
+    const unlocked = /UNLOCKED_REPORT_TOKEN \?\? "(rpt_[A-Za-z0-9]+)"/.exec(
+      read("scripts/probes/verify-unlocked-report.mjs")
+    )?.[1];
+    expect(unlocked).toBeTruthy();
+    expect(env).toContain(`REPLAY_TOKEN: "${unlocked}"`);
+  });
+
   it("does not treat an impression as a step the reader took", () => {
     // `locked_card_price_shown` fires once on mount behind a one-shot ref when
     // a price renders. There is nothing to tap, so it failed on 6 of 6 sessions

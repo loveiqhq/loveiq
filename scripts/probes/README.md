@@ -82,16 +82,10 @@ of a defect either.
 | File                                  | The defect it caught                                                                                                                                                                                                   |
 | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `replay-session.mjs`                  | Follows THIS reader's recorded route — their scrolls, drawer, paywall taps — on a device matched to their screen, checking after every step that the page still scrolls, nothing threw and no overlay covers the text. |
-| `verify-consent-fix.mjs`              | The cookie banner (316px, z-index 9999999) covered the bottom-pinned unlock CTA. 0/6 devices could tap it.                                                                                                             |
 | `verify-tap-targets.mjs`              | A 34px CTA, below the 44px minimum.                                                                                                                                                                                    |
-| `verify-deadzone-opens.mjs`           | Locked blocks that swallowed taps instead of opening the paywall.                                                                                                                                                      |
-| `verify-map-row.mjs`                  | Tapping the Insight Map row's TEXT did nothing — 97 dead clicks. Taps the text well clear of the pill and requires the modal.                                                                                          |
-| `verify-practice-info.mjs`            | The practice-table ⓘ opened a note that could not be closed.                                                                                                                                                           |
 | `verify-paywall-closes.mjs`           | Whether ONE tap on ✕ dismisses the paywall and it stays dismissed.                                                                                                                                                     |
 | `audit-paywall-layout.mjs`            | White gap before each paywall, and legible text under an overlay meant to hide it (A1). Exits 0/1/3.                                                                                                                   |
-| `verify-price-exposure-row.mjs`       | Asserts the durable `analytics_event` row, not the client event — the client half was never broken, so asserting on it would pass either way.                                                                          |
-| `verify-survey-no-storage.mjs`        | Safari private mode / in-app WebViews that THROW on every storage access.                                                                                                                                              |
-| `verify-inapp-browsers.mjs`           | Instagram / Facebook WebViews.                                                                                                                                                                                         |
+| `verify-inapp-browsers.mjs`           | Instagram / TikTok / Facebook WebViews: UA, the shorter viewport, sticky unlock, prices, checkout POST. Exits 0/1/3, `MUTATE=1`; runs daily in probe-guard.                                                            |
 | `verify-reaches-bottom.mjs`           | Whether a finger can actually reach the end of the report.                                                                                                                                                             |
 | `device-matrix.mjs`                   | The full locked-report → paywall → checkout walk across every phone.                                                                                                                                                   |
 | `verify-checkout-error-copy.mjs`      | Whether a raw internal error string ever reaches a reader mid-checkout (E1).                                                                                                                                           |
@@ -102,9 +96,7 @@ of a defect either.
 | `verify-paywall-card-tap.mjs`         | Tapping the paywall card body — not just its button — opens pricing (D1).                                                                                                                                              |
 | `verify-locked-preview-tap.mjs`       | Tapping a blurred locked preview opens that chapter's paywall (D1).                                                                                                                                                    |
 | `verify-input-zoom.mjs`               | iOS auto-zoom from an input under 16px (Z1).                                                                                                                                                                           |
-| `verify-featured-card.mjs`            | The featured card's body taps do something, clear of its inner link.                                                                                                                                                   |
 | `verify-stage-carousel-swipe.mjs`     | A real finger drag moves the stage carousel.                                                                                                                                                                           |
-| `verify-country-class-live.mjs`       | The country input computes ≥16px under the real production stylesheet.                                                                                                                                                 |
 | `audit-visual.mjs`                    | Overflow, unpainted images, scroll-locked overflow (M1). Exits 0/1/3 — no longer a print-only audit.                                                                                                                   |
 | `console-audit.mjs`                   | Every console error and failed request, unfiltered. The one that really does always exit 0, which is why no criterion lists it.                                                                                        |
 | `verify-consent-banner-clearance.mjs` | The 316px consent banner made the survey's Continue button unreachable at ANY scroll on 3 of 4 phones (V1/C1).                                                                                                         |
@@ -150,12 +142,14 @@ the page's health — folding them together dragged coverage from 90% to 52%.
   test, hit-test instead of tapping.
 - **Hit-test ownership is `el === n || n.contains(el)`.** The reverse counts
   ancestors and inflates a 34px control to "61px tappable".
-- **An inconclusive run is a FAILURE, never a pass.** Seven probes here still
-  always exit 0 and so report nothing at all (`audit-paywall-layout`,
-  `audit-visual`, `console-audit`, `verify-country-class-live`,
-  `verify-deadzone-opens`, `verify-inapp-browsers`, `verify-practice-info`);
-  they are audits, and must not be cited as gates. The rest report
-  `INCONCLUSIVE` rather than staying silent.
+- **An inconclusive run is a FAILURE, never a pass.** One probe here always
+  exits 0 by design (`console-audit`): it is an audit and must not be cited as
+  a gate. Everything else reports `INCONCLUSIVE` (exit 3) rather than staying
+  silent. On 2026-09-24 eight probes that ran from nowhere were deleted after a
+  production run: three were duplicated by wired probes, three could no longer
+  reach their subject (two of those still exited 0), one crashed without
+  `.env.local`, and the storage one had rotted into failing with storage
+  WORKING — it is now an end-to-end test (`e2e/survey-questions.spec.ts`).
 - **One probe point passes by luck.** Use a lattice: a `::after` hit-area worked
   on Chromium and did nothing on WebKit, and only a 25-point grid caught it.
 - **Headless browsers are suppressed in PostHog by design**, and localhost is
