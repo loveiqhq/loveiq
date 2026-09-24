@@ -197,6 +197,8 @@ describe("what the digest and the scorecard count", () => {
     ]);
     const v = await fetchVerificationStats();
     expect(v?.undelivered).toBe(2);
+    // Named, so the digest audit can ask each reader's thread.
+    expect(v?.undeliveredSessions).toEqual(["c", "d"]);
   });
 
   it("counts one reader and problem once, however many scanners saw it", async () => {
@@ -214,6 +216,7 @@ describe("what the digest and the scorecard count", () => {
     const v = await fetchVerificationStats();
     expect(v?.reproduced).toBe(2);
     expect(v?.reproducedItems.map((f) => f.delivered)).toEqual([true, true]);
+    expect(v?.reproducedItems.map((f) => f.sessionId)).toEqual(["a", "b"]);
   });
 
   it("marks a confirmation only the replay made as waiting for a person", async () => {
@@ -1060,6 +1063,30 @@ describe("the digest ignores challenger scanners", () => {
     // And must not fall back to admitting any non-challenger scanner, which is
     // exactly how the rage-click scanner's 100% masked everyone else's.
     expect(hogql, "coverage must not count whichever scanner looked").not.toMatch(/NOT LIKE/);
+  });
+
+  it("says a finisher with no recording, rather than dropping them from 'finished'", async () => {
+    // 405 of 434 finishers over 30 days had a recording on 2026-09-24; the
+    // other 29 were silently not "people who finished the survey".
+    vi.stubGlobal("fetch", async (_url: string, init: { body?: string }) =>
+      String(init?.body ?? "").includes("HogQLQuery")
+        ? { ok: true, json: async () => ({ results: [[1]] }) }
+        : {
+            ok: true,
+            json: async () => [
+              { posthog_session_id: "01a0b000-0000-7000-8000-000000000000" },
+              { posthog_session_id: null },
+            ],
+          }
+    );
+    vi.stubEnv("POSTHOG_API_KEY", "phx_test");
+    vi.stubEnv("SUPABASE_URL", "https://test.supabase.co");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service_key");
+    const c = await fetchCoverageStats();
+    expect(c).toEqual({ submissions: 1, observed: 1, unrecorded: 1 });
+    const text = JSON.stringify(buildDigestMessage([], null, c).blocks);
+    expect(text).toContain("1 of the 1 people who finished the survey with a recording (100%)");
+    expect(text).toContain("1 more finished with no recording to watch.");
   });
 });
 

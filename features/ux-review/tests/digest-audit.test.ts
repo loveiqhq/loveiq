@@ -133,7 +133,10 @@ describe("the digest audit", () => {
 
   it("holds 'not lost' to the readers still unwatched a day later", () => {
     const f = facts({ stillUnwatched: [{ submissionId: 2183, sessionId: "x" }] });
-    expect(failed(f)[0].detail).toMatch(/\(submissions 2183\)$/);
+    expect(failed(f).map((c) => c.detail)).toEqual([
+      "1 who finished a day or more ago, with a recording, were never opened by the survey " +
+        "scanner (submissions 2183)",
+    ]);
   });
 });
 
