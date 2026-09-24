@@ -5253,3 +5253,15 @@
     padding-right: 11.281px;
   }
 }
+
+/* ══ Chapter anchors — where a chapter reached from the drawer lands ═════════
+ * The floating chrome covers the top 136px (the header 8-56, the chapter pill
+ * 80-136; V4BackToTop.tsx), and the V4 and V3 chapter rows carried no scroll
+ * margin, so a chapter reached from the drawer set its title under the bar. This
+ * is the same 144 V4BackToTop scrolls to; V2's sections inside V4 move from 128 to
+ * match. V4 only: ?v3=1 keeps its own. */
+.rv3.rv4 .rv4-chapter,
+.rv3.rv4 .rv3-chapter,
+.rv3.rv4 .report-section {
+  scroll-margin-top: 144px;
+}
