@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getReport2Section } from "@/data/report2";
 import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
+import { buildAccelerators } from "@/data/report3-accelerators";
 import {
   buildArchetypeContentForUser,
   buildPracticeTendenciesForUser,
@@ -82,6 +83,11 @@ export async function GET(request: Request) {
 
   const beliefsUnlocked = unlocked("typical_beliefs");
   const beliefsSection = getReport2Section(archetype, "beliefs");
+  const accelUnlocked = unlocked("typical_arousal_accelerators_turn_ons_of_the_core_archetype");
+  const accelSection = getReport2Section(archetype, "accel");
+  const accelerators = buildAccelerators(archetype, { locked: !accelUnlocked });
+  const accelArticle =
+    REPORT_V4_LEARN_MORE.typical_arousal_accelerators_turn_ons_of_the_core_archetype;
 
   const payload = stripLockedEduBodyFromPayload({
     submissionId: null,
@@ -139,6 +145,29 @@ export async function GET(request: Request) {
           locked: !beliefsUnlocked,
         }
       : null,
+
+    // V2's Accelerators & Brakes copy, exactly as the real route builds it. Without
+    // it the V2 section rendered nothing under ?preview=1, leaving the chapter an
+    // empty head for every archetype still on V2.
+    accelCopy: {
+      "edu.eyebrow": accelSection["edu.eyebrow"] ?? null,
+      "edu.teaser": accelSection["edu.teaser"] ?? null,
+      "edu.body.p1": accelSection["edu.body.p1"] ?? null,
+      "edu.body.p2": accelSection["edu.body.p2"] ?? null,
+      "edu.body.p3": accelSection["edu.body.p3"] ?? null,
+      takeaway: accelUnlocked ? (accelSection.takeaway ?? null) : null,
+      "learn.eyebrow": accelSection["learn.eyebrow"] ?? null,
+      "learn.body": accelSection["learn.body"] ?? null,
+      locked: !accelUnlocked,
+    },
+
+    // Report 3.0's Accelerator & Brakes, gated identically to the chapter it
+    // replaces, and its article only alongside it.
+    accelerators,
+    acceleratorsArticle:
+      accelerators && accelArticle
+        ? { article: splitArticleForReader(accelArticle, !accelUnlocked), locked: !accelUnlocked }
+        : null,
   });
 
   // No caching: the answer changes with every ?archetype= and ?plan=, and it is

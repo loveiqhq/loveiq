@@ -43,7 +43,8 @@ export const REPORT_V4_PARTS: readonly Report3PartHeading[] = [
   { eyebrow: "Part II", lead: "Your ", accent: "Constellation", leadItalic: true },
   // 1:856 / 1:857
   { eyebrow: "Part III", lead: "How your archetype ", accent: "works" },
-  { eyebrow: "Part IV", lead: "Your Erotic ", accent: "Engine" },
+  // 1:990 — "Your " upright in ink, "erotic engine" in the accent, lower-case.
+  { eyebrow: "Part IV", lead: "Your ", accent: "erotic engine" },
   { eyebrow: "Part V", lead: "How You ", accent: "connect" },
   { eyebrow: "Part VI", lead: "Your ", accent: "edges" },
 ];
@@ -55,15 +56,16 @@ export const REPORT_V4_PARTS: readonly Report3PartHeading[] = [
  * V4 puts "Welcome" in front as Part I, so everything V3 called Part I is Part II
  * here, and so on down. Borrowing the V3 map left the report with two Part I's.
  *
- * Part III is keyed on Typical Beliefs because V4 moves that chapter to the front
- * of the part (REPORT_V4_CHAPTERS, Fatih's call on 2026-09-23). The rest of Figma's
- * Parts III–VI regrouping (Accelerators & Brakes into IV, and so on) is not done,
- * so the other keys still follow V3's order.
+ * Part III is keyed on Typical Beliefs and Part IV on Accelerator & Brakes, because
+ * V4 moves each of those chapters to the front of its part (REPORT_V4_CHAPTERS;
+ * Fatih's calls on 2026-09-23, as Figma 1:849 and 334:521 draw them). The rest of
+ * Figma's Parts III–VI regrouping is not done, so the other keys still follow V3's
+ * order.
  */
 export const REPORT_V4_PART_DIVIDER_BY_SECTION: Readonly<Record<string, Report3PartHeading>> = {
   core_archetype: REPORT_V4_PARTS[1]!,
   typical_beliefs: REPORT_V4_PARTS[2]!,
-  libido_challenges_in_relationships: REPORT_V4_PARTS[3]!,
+  typical_arousal_accelerators_turn_ons_of_the_core_archetype: REPORT_V4_PARTS[3]!,
   attachment_style: REPORT_V4_PARTS[4]!,
   typical_sexual_fantasy_amp_practice_tendencies: REPORT_V4_PARTS[5]!,
 };

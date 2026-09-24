@@ -49,6 +49,11 @@ const PREMIUM_DATA_MODULES = [
   // the paywalled frame gates most of it, so a client component importing the module
   // would hand over the seven turn rows the wall is supposed to withhold.
   "@/data/report3-typical-beliefs",
+  // Added 2026-09-23. The Accelerator & Brakes chapter body (Figma 310:221) — its
+  // prose, both trigger cards, "Common challenges" and the practice. The paywalled
+  // frame (314:211) blurs rows 3-5 and most of the prose, so a client component
+  // importing the module would hand over exactly what the wall withholds.
+  "@/data/report3-accelerators",
 ];
 
 const PROJECT_ROOT = join(__dirname, "..", "..");

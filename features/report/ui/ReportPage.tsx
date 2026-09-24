@@ -86,8 +86,10 @@ import BeliefsSection, { type BeliefsCopy } from "./sections/BeliefsSection";
 import V4Chapter from "./v3/V4Chapter";
 import V4TypicalBeliefs from "./v3/V4TypicalBeliefs";
 import V4TryThis from "./v3/V4TryThis";
+import V4Accelerators from "./v3/V4Accelerators";
 import V4LearnMore from "./v3/V4LearnMore";
 import type { Report3TypicalBeliefsView } from "@/data/report3-typical-beliefs";
+import type { Report3AcceleratorsView } from "@/data/report3-accelerators";
 import type { V4LearnMoreState } from "@/data/report3-learn-more";
 import ConfidenceSection, {
   type ConfidenceCopy,
@@ -431,6 +433,10 @@ interface ReportExperienceProps {
   attachmentFamily: string | null;
   attachmentPlane: AttachmentPlane | null;
   accelCopy: AccelCopy | null;
+  /** Report 3.0's Accelerator & Brakes chapter; null until the archetype is scaled. */
+  accelerators: Report3AcceleratorsView | null;
+  /** The "Go deeper & learn more" article that closes that chapter. */
+  acceleratorsArticle: V4LearnMoreState | null;
   insecuritiesCopy: InsecuritiesCopy | null;
   insecurityCueFamily: string | null;
   insecurityGraph: InsecurityGraph | null;
@@ -523,6 +529,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   attachmentFamily,
   attachmentPlane,
   accelCopy,
+  accelerators,
+  acceleratorsArticle,
   insecuritiesCopy,
   insecurityCueFamily,
   insecurityGraph,
@@ -1936,6 +1944,42 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                   }
 
                   if (section.sectionNumber === 23) {
+                    // Report 3.0 swaps this chapter for Figma 310:221 (314:211 when
+                    // locked), the chapter that opens Part IV "Your erotic engine":
+                    // the V4 chapter row, the body with its two trigger cards and
+                    // the practice (377:221), then "Go deeper & learn more"
+                    // (235:234). Like Typical Beliefs it sits in V4Chapter, not
+                    // ReportSection's V3 chrome, and only where the chapter is
+                    // written for the archetype on screen — every other reader keeps
+                    // V2's section below. Every locked surface opens the same
+                    // pricing modal.
+                    const hasAccelCopy = viewArchetype === contentArchetype;
+                    if (isV4 && accelerators && hasAccelCopy) {
+                      const unlockAccel = () => unlockSection(section);
+                      return (
+                        <Fragment key={section.id}>
+                          <div className="rv4-sep" aria-hidden="true" data-node-id="1:991" />
+                          <V4Chapter
+                            sectionId={section.id}
+                            title="Accelerator & Brakes"
+                            archetype={viewArchetype}
+                            defaultOpen
+                            bare
+                            feedback={feedbackWidget}
+                          >
+                            <V4Accelerators view={accelerators} onUnlock={unlockAccel} />
+                            {acceleratorsArticle ? (
+                              <V4LearnMore
+                                article={acceleratorsArticle.article}
+                                locked={acceleratorsArticle.locked}
+                                onUnlock={unlockAccel}
+                              />
+                            ) : null}
+                          </V4Chapter>
+                        </Fragment>
+                      );
+                    }
+
                     // Report 2.0 "Accelerators & Brakes" — a Part II, essentials-
                     // tier PREMIUM section. Gating is resolved SERVER-SIDE: a
                     // locked client's accelCopy carries only the universal
@@ -2122,9 +2166,10 @@ const ReportExperience: FC<ReportExperienceProps> = ({
 
                 // V4 renumbers every part: "Welcome" is Part I, so what V3 calls
                 // Part I is Part II here. Falling through to the V3 map below is
-                // what gave the report two Part I's — and since V4 also moves
-                // Typical Beliefs ahead of Accelerators & Brakes, A&B has a V3 key
-                // but no V4 one. So under V4 it is the V4 heading or nothing.
+                // what gave the report two Part I's — and since V4 also opens two
+                // parts with different chapters (Typical Beliefs, Accelerator &
+                // Brakes), V3 keys fall where V4 has none. So under V4 it is the
+                // V4 heading or nothing.
                 const v4PartHeading = isV4
                   ? REPORT_V4_PART_DIVIDER_BY_SECTION[section.id]
                   : undefined;
@@ -3014,6 +3059,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           attachmentFamily={data.attachmentFamily ?? null}
           attachmentPlane={data.attachmentPlane ?? null}
           accelCopy={data.accelCopy ?? null}
+          accelerators={data.accelerators ?? null}
+          acceleratorsArticle={data.acceleratorsArticle ?? null}
           insecuritiesCopy={data.insecuritiesCopy ?? null}
           insecurityCueFamily={data.insecurityCueFamily ?? null}
           insecurityGraph={data.insecurityGraph ?? null}

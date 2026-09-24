@@ -515,6 +515,15 @@ export function splitArticleForReader(
     eyebrow: article.eyebrow,
     label: article.label,
     teaserHeightPx: article.teaserHeightPx,
+    // The closed card's own copy and geometry, when the frame sets them (235:234).
+    // Free copy, so it travels to a locked reader unchanged.
+    ...(article.teaser ? { teaser: article.teaser } : {}),
+    ...(article.teaserPillBottomPx !== undefined
+      ? { teaserPillBottomPx: article.teaserPillBottomPx }
+      : {}),
+    ...(article.closedPaddingBottomPx !== undefined
+      ? { closedPaddingBottomPx: article.closedPaddingBottomPx }
+      : {}),
     free,
     gated,
     gatedBlockCount: gated.length,

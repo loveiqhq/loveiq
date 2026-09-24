@@ -43,7 +43,8 @@ export function useIsV4(): boolean {
 
 /**
  * The chapter meta for a section id, or null if it is not a numbered chapter.
- * `v4` reads V4's numbering, where Typical Beliefs and Accelerators & Brakes swap.
+ * `v4` reads V4's numbering, where Typical Beliefs opens its part and Accelerator
+ * & Brakes opens the next (REPORT_V4_CHAPTERS).
  */
 export function getV3Chapter(sectionId: string, v4 = false): ReportV3Chapter | null {
   return (v4 ? REPORT_V4_CHAPTER_BY_ID : REPORT_V3_CHAPTER_BY_ID).get(sectionId) ?? null;

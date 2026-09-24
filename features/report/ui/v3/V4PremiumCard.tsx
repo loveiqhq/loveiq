@@ -19,10 +19,33 @@ import type { FC } from "react";
  * The geometry is a uniform x0.71941 scale of a larger original — 0.719 was 1px,
  * 17.268 was 24, 162.604 was 226 — so the fractional numbers are the design, not
  * rounding noise, and are kept as drawn.
+ *
+ * TWO COPIES. The article and practice gates draw 153:2301 — "14-day money-back
+ * guarantee" / "No questions asked." The chapter-body gates draw another: 348:373
+ * (Typical Beliefs) and 314:309 (Accelerator & Brakes) set "14-day money-back" in
+ * bold 14/22.4 over "Guaranteed, no questions asked.", which makes the guarantee
+ * box 3px taller inside the same 330x191 card. Fatih's call, 2026-09-23: each gate
+ * as its frame draws it.
  */
 
-const V4PremiumCard: FC = () => (
-  <div className="rv4-premium" data-node-id="153:2301" data-name="Premium content card">
+interface Props {
+  /** "guarantee" is the chapter-body copy (348:373 / 314:309). */
+  variant?: "standard" | "guarantee";
+  /** The frame's own node, when a chapter's card has one. */
+  nodeId?: string;
+}
+
+const COPY = {
+  standard: { head: "14-day money-back guarantee", sub: "No questions asked.", node: "153:2301" },
+  guarantee: { head: "14-day money-back", sub: "Guaranteed, no questions asked.", node: "314:309" },
+} as const;
+
+const V4PremiumCard: FC<Props> = ({ variant = "standard", nodeId }) => (
+  <div
+    className={`rv4-premium${variant === "guarantee" ? " rv4-premium--guarantee" : ""}`}
+    data-node-id={nodeId ?? COPY[variant].node}
+    data-name="Premium content card"
+  >
     {/* 153:2303 */}
     <div className="rv4-premium__head">
       <span className="rv4-premium__badge" aria-hidden="true">
@@ -52,8 +75,8 @@ const V4PremiumCard: FC = () => (
         />
       </span>
       <span className="rv4-premium__guarantee-text">
-        <span className="rv4-premium__guarantee-head">14-day money-back guarantee</span>
-        <span className="rv4-premium__guarantee-sub">No questions asked.</span>
+        <span className="rv4-premium__guarantee-head">{COPY[variant].head}</span>
+        <span className="rv4-premium__guarantee-sub">{COPY[variant].sub}</span>
       </span>
     </div>
 

@@ -15,6 +15,7 @@ import {
 } from "@/data/report3-archetype-page";
 import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
+import { buildAccelerators } from "@/data/report3-accelerators";
 import { isReportPurchasePlan, type ReportAccessPlan } from "@features/report/server/access";
 import {
   buildLearnMoreForReader,
@@ -80,6 +81,12 @@ export default async function ReportV4PreviewPage({
         // "Go deeper" card below it can never disagree about who has paid.
         locked: isLearnMoreArticleLocked({
           article: { chapterId: "typical_beliefs" },
+          accessPlan,
+        }),
+      })}
+      accelerators={buildAccelerators(ARCHETYPE, {
+        locked: isLearnMoreArticleLocked({
+          article: { chapterId: "typical_arousal_accelerators_turn_ons_of_the_core_archetype" },
           accessPlan,
         }),
       })}

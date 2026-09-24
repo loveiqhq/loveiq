@@ -7,6 +7,7 @@ import {
 import type { Report3CardCopy } from "@/data/report3-archetype-card";
 import type { V4LearnMoreByChapter } from "@/data/report3-learn-more";
 import type { Report3TypicalBeliefsView } from "@/data/report3-typical-beliefs";
+import type { Report3AcceleratorsView } from "@/data/report3-accelerators";
 import type { ArchetypeName } from "@features/report/server/archetypeSlug";
 import V4ChapterPart from "./V4ChapterPart";
 import V4Part1 from "./V4Part1";
@@ -36,6 +37,8 @@ interface Props {
   onUnlock?: () => void;
   /** Part III's Typical Beliefs chapter body, read on the server. */
   typicalBeliefs?: Report3TypicalBeliefsView | null;
+  /** Part IV's Accelerator & Brakes chapter body, read on the server. */
+  accelerators?: Report3AcceleratorsView | null;
 }
 
 const V4Report: FC<Props> = ({
@@ -46,6 +49,7 @@ const V4Report: FC<Props> = ({
   learnMore,
   onUnlock,
   typicalBeliefs,
+  accelerators,
 }) => (
   <div className="rv4-report" data-node-id="1:165" data-name="Report V4 - MOBILE">
     <V4ReportChrome />
@@ -71,6 +75,7 @@ const V4Report: FC<Props> = ({
         chapters={REPORT_V4_PART4_CHAPTERS}
         learnMore={learnMore}
         onUnlock={onUnlock}
+        accelerators={accelerators}
       />
       <V4ChapterPart
         archetype={archetype}

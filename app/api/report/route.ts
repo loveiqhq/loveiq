@@ -22,6 +22,7 @@ import {
 } from "@features/report/server/contentGating";
 import { getReport2Section, getReport2Config } from "@/data/report2";
 import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
+import { buildAccelerators } from "@/data/report3-accelerators";
 import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { splitArticleForReader } from "@features/report/server/contentGating";
 import { getAttachmentPlaneForFamily } from "@/data/report2-attachment-planes";
@@ -962,6 +963,36 @@ export async function GET(request: Request) {
       locked: !accelUnlocked,
     };
 
+    /**
+     * Report 3.0's Accelerator & Brakes chapter — Figma 310:221, and 314:211 locked.
+     *
+     * Rides beside accelCopy rather than replacing it, as typicalBeliefs rides beside
+     * beliefsCopy: `?v4=1` is a copy of V2, and this is NULL for any archetype whose
+     * chapter is not written yet, which is the signal ReportPage keeps V2's section
+     * on. Same gate as accelCopy. A locked reader receives rows 1-2 of each card, the
+     * intro and the free paragraphs verbatim, each ramp paragraph real only through
+     * its fade band, and everything past it scrambled — see buildAccelerators.
+     */
+    const accelerators = buildAccelerators(contentArchetype, { locked: !accelUnlocked });
+
+    /**
+     * The "Go deeper & learn more" article closing the same chapter — Figma 235:254,
+     * and 235:317 locked. Gated on `accelUnlocked` like the chapter, so the two can
+     * never disagree about who has paid, and shipped only alongside the chapter it
+     * belongs to, so the thirteen archetypes still on V2's section carry none of it.
+     */
+    const acceleratorsArticle =
+      accelerators &&
+      REPORT_V4_LEARN_MORE.typical_arousal_accelerators_turn_ons_of_the_core_archetype
+        ? {
+            article: splitArticleForReader(
+              REPORT_V4_LEARN_MORE.typical_arousal_accelerators_turn_ons_of_the_core_archetype,
+              !accelUnlocked
+            ),
+            locked: !accelUnlocked,
+          }
+        : null;
+
     // Report 2.0 Core Insecurities section copy — a Part II, essentials-tier
     // PREMIUM section (section 9). The universal slots (`practical.label`,
     // `learn.*`) are always shipped. The per-archetype
@@ -1735,6 +1766,8 @@ export async function GET(request: Request) {
         attachmentFamily,
         attachmentPlane,
         accelCopy,
+        accelerators,
+        acceleratorsArticle,
         insecuritiesCopy,
         insecurityCueFamily,
         insecurityGraph,

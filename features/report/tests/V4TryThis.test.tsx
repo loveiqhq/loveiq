@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import V4TryThis from "@features/report/ui/v3/V4TryThis";
 import { buildTypicalBeliefs, TYPICAL_BELIEFS_PRACTICE } from "@/data/report3-typical-beliefs";
+import { buildAccelerators } from "@/data/report3-accelerators";
 
 /**
  * "Try this & see what shifts" — Figma 374:217 (closed), 374:238 (open) and
@@ -159,5 +160,80 @@ describe("reportV3.css — practice card contracts", () => {
 
   it("never lets the 358px measure run past the card", () => {
     expect(rule(".rv3 .rv4-try .rv4-prose__p {")).toContain("width: min(358px, calc(100% + 12px))");
+  });
+});
+
+/**
+ * The same card closing Accelerator & Brakes — 377:221 closed, 374:304 open, 375:221
+ * open & gated. Its teaser box is 224 (377:242, against Typical Beliefs' 218) in the
+ * same 343 card, and its ramp fades in over four lines. Both open frames set the copy
+ * 8px under the button where the closed teaser (and all of Typical Beliefs) sits 4px
+ * under it. The Premium card sits 171.4px under the clear first paragraph, as 375:243
+ * does: 155px below the gate, because the ramp paragraph's tail runs on under the full
+ * blur in the same paragraph, so the rest starts too late to measure from.
+ */
+describe("V4TryThis — Accelerator & Brakes (377:221 / 374:304 / 375:221)", () => {
+  const AB_OPEN = buildAccelerators("Spark Seeker")!.practice;
+  const AB_LOCKED = buildAccelerators("Spark Seeker", { locked: true })!.practice;
+  const AB = {
+    nodeIds: { closed: "377:221", open: "374:304", gated: "375:221" },
+    teaserHeightPx: 224,
+    rampBandPx: 89.6,
+    openPaddingTopPx: 8,
+    premiumTopPx: 155,
+  } as const;
+
+  it("shows the frame's own teaser, broken as 377:242 is, identical for every reader", () => {
+    const snapshot = (el: HTMLElement) => el.innerHTML.replace(/ (id|aria-controls)="[^"]*"/g, "");
+    const open = render(<V4TryThis practice={AB_OPEN} {...AB} />).container;
+    const teaser = open.querySelectorAll(".rv4-try__teaser .rv4-prose__p");
+    expect(teaser).toHaveLength(1);
+    // A blank line after the lead, and a fresh line before "A playful message".
+    expect(teaser[0]!.querySelectorAll("br")).toHaveLength(3);
+    expect(open.querySelector(".rv4-try")!.getAttribute("data-node-id")).toBe("377:221");
+    const unlocked = snapshot(open);
+    cleanup();
+    expect(snapshot(render(<V4TryThis practice={AB_LOCKED} {...AB} />).container)).toBe(unlocked);
+  });
+
+  it("carries its geometry as custom properties on the card", () => {
+    const { container } = render(<V4TryThis practice={AB_OPEN} {...AB} />);
+    const card = container.querySelector<HTMLElement>(".rv4-try")!;
+    expect(card.style.getPropertyValue("--rv4-try-teaser-h")).toBe("224px");
+    expect(card.style.getPropertyValue("--rv4-try-band")).toBe("89.6px");
+    expect(card.style.getPropertyValue("--rv4-try-open-pt")).toBe("8px");
+    expect(card.style.getPropertyValue("--rv4-try-premium-top")).toBe("155px");
+  });
+
+  it("opens onto all seven paragraphs", () => {
+    const { container } = render(<V4TryThis practice={AB_OPEN} {...AB} defaultOpen />);
+    expect(container.querySelector(".rv4-try")!.getAttribute("data-node-id")).toBe("374:304");
+    expect(container.querySelectorAll(".rv4-prose__p")).toHaveLength(7);
+  });
+
+  it("gates after one paragraph and floats the card from the gate, not the rest", () => {
+    const { container } = render(<V4TryThis practice={AB_LOCKED} {...AB} defaultOpen />);
+    expect(container.querySelector(".rv4-try")!.getAttribute("data-node-id")).toBe("375:221");
+    expect(container.querySelectorAll(".rv4-try__body > .rv4-prose__p")).toHaveLength(1);
+    const ramp = container.querySelector(".rv4-try__ramp")!;
+    expect(ramp.textContent).toContain("making it harder to respond?”");
+    expect(ramp.textContent).not.toContain("Sometimes the solution is to add an accelerator.");
+    expect(container.querySelectorAll(".rv4-try__blurred .rv4-prose__p")).toHaveLength(5);
+    expect(container.querySelectorAll(".rv4-try__gate > .rv4-premium")).toHaveLength(1);
+    expect(container.querySelector(".rv4-try__rest .rv4-premium")).toBeNull();
+  });
+
+  it("leaves Typical Beliefs' card without any of them", () => {
+    const { container } = render(<V4TryThis practice={OPEN} />);
+    expect(container.querySelector(".rv4-try")!.hasAttribute("style")).toBe(false);
+  });
+
+  it("reads each custom property with Typical Beliefs' value as the fallback", () => {
+    expect(V3_CSS).toContain("max-height: var(--rv4-try-teaser-h, 218px)");
+    expect(V3_CSS).toContain("bottom: calc(var(--rv4-try-teaser-h, 218px) - 228.5px)");
+    expect(V3_CSS).toContain("padding-bottom: calc(257px - var(--rv4-try-teaser-h, 218px))");
+    expect(V3_CSS).toContain("--rv4-band: var(--rv4-try-band, 100%)");
+    expect(V3_CSS).toContain("top: var(--rv4-try-premium-top, 148px)");
+    expect(V3_CSS).toContain("padding-top: var(--rv4-try-open-pt, 4px)");
   });
 });

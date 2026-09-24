@@ -75,8 +75,8 @@ const V4TypicalBeliefs: FC<Props> = ({ view, onUnlock }) => {
               <V4Prose blocks={rest} />
             </div>
           </div>
-          {/* 348:373 */}
-          <V4PremiumCard />
+          {/* 348:373 — the chapter-body copy of the card, as the frame draws it. */}
+          <V4PremiumCard variant="guarantee" nodeId="348:373" />
         </div>
       ) : null}
     </div>

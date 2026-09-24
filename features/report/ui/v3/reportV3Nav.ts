@@ -91,27 +91,46 @@ const v3Chapter = (id: string): ReportV3Chapter => {
 };
 
 /**
- * Report V4 (`?v4=1`) moves ONE chapter: Typical Beliefs opens the "How your
- * archetype works" part, ahead of Accelerators & Brakes — the team's chapter
- * sequence (2026-09-14) and Figma 1:849 both put it first. Fatih's call,
- * 2026-09-23.
+ * Report V4 (`?v4=1`) moves TWO chapters to the front of a part, both as Figma
+ * draws them (Fatih's calls, 2026-09-23):
+ * - Typical Beliefs opens "How your archetype works" — the team's chapter sequence
+ *   (2026-09-14) and Figma 1:849 both put it first.
+ * - Accelerator & Brakes opens "Your erotic engine" — Figma 334:521 (1:982) and the
+ *   Notion content roadmap ("Part IV - Your Erotic Engine", order 1). The frame
+ *   titles it in the singular, so V4 does too; V3 keeps its own title.
  *
- * The same 21 ids as V3, so every filter keyed on the order still holds, and the
- * part is renumbered so the V3 eyebrows the other chapters still carry keep
- * counting up (Accelerators & Brakes reads 2.2). `?v3=1` keeps REPORT_V3_CHAPTERS
- * exactly as it was. The wider Part III-VI regrouping Figma draws is not done.
+ * The same 21 ids as V3, so every filter keyed on the order still holds, and each
+ * part is renumbered in its new order so the V3 eyebrows the other chapters still
+ * carry keep counting up (Libido Challenges reads 3.2). The nav groups chapters by
+ * that number, so the renumbering is also what moves A&B into the erotic-engine
+ * part of the drawer. `?v3=1` keeps REPORT_V3_CHAPTERS exactly as it was. The rest
+ * of Figma's Part III-VI regrouping is not done.
  */
-export const REPORT_V4_CHAPTERS: readonly ReportV3Chapter[] = [
-  { ...v3Chapter("typical_beliefs"), number: "2.1" },
-  { ...v3Chapter("typical_arousal_accelerators_turn_ons_of_the_core_archetype"), number: "2.2" },
-  ...REPORT_V3_CHAPTERS.filter(
-    (c) =>
-      c.id !== "typical_beliefs" &&
-      c.id !== "typical_arousal_accelerators_turn_ons_of_the_core_archetype"
-  ),
+const V4_PART_OPENERS: readonly { id: string; part: string; title?: string }[] = [
+  { id: "typical_beliefs", part: "2" },
+  {
+    id: "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
+    part: "3",
+    title: "Accelerator & Brakes",
+  },
 ];
 
-/** Body order for V4 — V3's, with Typical Beliefs first in its part. */
+const partOf = (chapter: ReportV3Chapter): string => chapter.number.split(".")[0]!;
+
+export const REPORT_V4_CHAPTERS: readonly ReportV3Chapter[] = [
+  ...new Set(REPORT_V3_CHAPTERS.map(partOf)),
+].flatMap((part) => {
+  const openers = V4_PART_OPENERS.filter((o) => o.part === part).map((o) => ({
+    ...v3Chapter(o.id),
+    ...(o.title ? { title: o.title } : {}),
+  }));
+  const rest = REPORT_V3_CHAPTERS.filter(
+    (c) => partOf(c) === part && !V4_PART_OPENERS.some((o) => o.id === c.id)
+  );
+  return [...openers, ...rest].map((c, i) => ({ ...c, number: `${part}.${i + 1}` }));
+});
+
+/** Body order for V4 — V3's, with Typical Beliefs and Accelerator & Brakes each first in its part. */
 export const REPORT_V4_SECTION_ORDER: readonly string[] = [
   "core_archetype",
   ...REPORT_V4_CHAPTERS.map((c) => c.id),
@@ -211,5 +230,5 @@ const navPartsFrom = (chapters: readonly ReportV3Chapter[]): readonly ReportV3Na
 
 export const REPORT_V3_NAV_PARTS: readonly ReportV3NavPart[] = navPartsFrom(REPORT_V3_CHAPTERS);
 
-/** The same nav in V4's body order, so the drawer lists Typical Beliefs first too. */
+/** The same nav in V4's body order, so the drawer lists both moved chapters first too. */
 export const REPORT_V4_NAV_PARTS: readonly ReportV3NavPart[] = navPartsFrom(REPORT_V4_CHAPTERS);
