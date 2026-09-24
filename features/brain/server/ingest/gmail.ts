@@ -923,6 +923,67 @@ async function knownThreads(): Promise<
   return out;
 }
 
+/**
+ * Threads read and deliberately NOT indexed, with the version they were refused at.
+ *
+ * A refused thread (a stub, a job application, a legal instrument) stores nothing in
+ * brain_chunk, so `knownThreads` has no historyId for it and every run fetched it again:
+ * about a hundred threads an hour, each a full fetch plus its attachments, re-deciding what
+ * was already decided. The version is the builder version plus the thread's historyId, so
+ * a new message or a change to the rules gets it read again.
+ *
+ * Fails OPEN, unlike `knownThreads`: an unreadable log only means re-reading everything,
+ * exactly as before it existed.
+ */
+async function knownRefusals(): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  for (let offset = 0; offset < 100_000; offset += 1000) {
+    const res = await supabaseFetch(
+      `/rest/v1/brain_refusal_log?select=source_id,version&source=eq.${SOURCE}` +
+        `&order=source_id.asc&limit=1000&offset=${offset}`
+    );
+    const batch = res.ok
+      ? ((await res.json().catch(() => null)) as Array<{
+          source_id?: string;
+          version?: string;
+        }> | null)
+      : null;
+    if (!Array.isArray(batch)) {
+      logger.warn({ status: res.status }, "brain-ingest gmail: refusal log unreadable, re-reading");
+      return new Map();
+    }
+    for (const r of batch) if (r.source_id && r.version) out.set(r.source_id, r.version);
+    if (batch.length < 1000) break;
+  }
+  return out;
+}
+
+const refusalVersion = (historyId: string) => `${GMAIL_BUILDER_VERSION}:${historyId}`;
+
+/** Remember this run's refusals. A failure costs one more re-read next run, nothing else. */
+async function recordRefusals(refused: Map<string, string>, stampedAt: string): Promise<void> {
+  const rows = [...refused].map(([source_id, historyId]) => ({
+    source: SOURCE,
+    source_id,
+    version: refusalVersion(historyId),
+    refused_at: stampedAt,
+  }));
+  for (let i = 0; i < rows.length; i += 500) {
+    const res = await supabaseFetch("/rest/v1/brain_refusal_log?on_conflict=source,source_id", {
+      method: "POST",
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify(rows.slice(i, i + 500)),
+    });
+    if (!res.ok) {
+      logger.warn(
+        { status: res.status, refused: rows.length },
+        "brain-ingest gmail: could not record refused threads; they will be read again next run"
+      );
+      return;
+    }
+  }
+}
+
 export async function ingestGmail(
   stampedAt: string,
   isOutOfTime: () => boolean = () => false,
@@ -975,6 +1036,7 @@ export async function ingestGmail(
   ).filter((m) => !NEVER_INDEX_MAILBOXES.has(m.trim().toLowerCase()));
 
   const known = await knownThreads();
+  const refusedBefore = await knownRefusals();
   /**
    * The people registry, once for the whole walk.
    *
@@ -1024,6 +1086,10 @@ export async function ingestGmail(
    * its old rows belong to the sweep; this is the Drive ingester's `reached` rule.
    */
   const refusedThreads = new Set<string>();
+  /** Refused on THIS run's read, with the historyId the listing gave: the log's new rows. */
+  const newlyRefused = new Map<string, string>();
+  /** Refused before and unchanged since, so not fetched at all. */
+  let refusedUnchanged = 0;
 
   for (const mailbox of boxes) {
     const token = await tokenFor(mailbox);
@@ -1063,6 +1129,13 @@ export async function ingestGmail(
         // thread costs one listing entry and no fetch at all.
         const have = known.get(id);
         if (have?.current && have.historyId && have.historyId === t.historyId) continue;
+        // Read before and refused, and unchanged since: the same decision, for free. Still
+        // a refusal as far as the sweep is concerned, so rows it has from before are not kept.
+        if (t.historyId && refusedBefore.get(id) === refusalVersion(t.historyId)) {
+          refusedThreads.add(id);
+          refusedUnchanged += 1;
+          continue;
+        }
         if (isOutOfTime()) {
           stop(`time-budget@${mailbox}:p${page}:mid-page`);
           break;
@@ -1084,7 +1157,10 @@ export async function ingestGmail(
         const attached = await threadAttachmentText(token, mailbox, full, isOutOfTime);
         if (attached) attachmentsRead += 1;
         const built = threadToRows(full, mailbox, stampedAt, people, attached);
-        if (built.length === 0) refusedThreads.add(id);
+        if (built.length === 0) {
+          refusedThreads.add(id);
+          if (t.historyId) newlyRefused.set(id, t.historyId);
+        }
         rows.push(...built);
       }
 
@@ -1104,6 +1180,9 @@ export async function ingestGmail(
   }
 
   const written = await upsertChunks(rows);
+  // Only successful reads reach `newlyRefused`: a fetch that failed is never recorded as a
+  // decision, so it is simply fetched again (see "an outage is not a decision").
+  await recordRefusals(newlyRefused, stampedAt);
   /**
    * Mailboxes this run walked — the only ones the sweep may judge.
    *
@@ -1194,6 +1273,7 @@ export async function ingestGmail(
       unreachable: failedMailboxes,
       listed: seen.size,
       fetched,
+      refusedUnchanged,
       written,
       touched,
       complete,
@@ -1209,6 +1289,7 @@ export async function ingestGmail(
   const detail =
     `boxes=${boxes.length}${discovered ? "" : "(directory unavailable, fell back)"} ` +
     `listed=${seen.size} fetched=${fetched} written=${written} kept=${touched} ` +
+    (refusedUnchanged > 0 ? `refused_unchanged=${refusedUnchanged} ` : "") +
     (attachmentsRead > 0 ? `attachments=${attachmentsRead} ` : "") +
     `swept=${swept} complete=${complete}` +
     (stopReason ? ` stopped=${stopReason}` : "") +
