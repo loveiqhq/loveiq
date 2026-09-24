@@ -41,6 +41,14 @@ vi.mock("@shared/observability/slack", () => ({
   escapeSlack: (s: string) => s,
 }));
 
+const notices: Array<{ headline: string; detail: string; kind: string }> = [];
+vi.mock("@features/brain/server/notice", () => ({
+  recordNotice: async (n: { headline: string; detail: string; kind: string }) => {
+    notices.push(n);
+    return true;
+  },
+}));
+
 import { GET } from "@/app/api/cron/brain-brief/route";
 
 const req = () => new Request("https://www.loveiq.org/api/cron/brain-brief");
@@ -56,6 +64,7 @@ beforeEach(() => {
     day: "",
   };
   posted.length = 0;
+  notices.length = 0;
   marked.length = 0;
   recorded.length = 0;
 });
@@ -66,6 +75,22 @@ describe("/api/cron/brain-brief", () => {
     expect(res.status).toBe(200);
     expect(posted).toHaveLength(1);
     expect(posted[0]?.text).toContain("39.99");
+  });
+
+  /** Where the team reads: the same brief as a notice Jarvis serves in Claude. */
+  it("writes the brief as a notice beside the post, and none on a quiet day", async () => {
+    const day = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    await GET(req());
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toMatchObject({
+      headline: `What the brain noticed on ${day}`,
+      kind: "brain-brief",
+    });
+    expect(notices[0]!.detail).toContain("Pricing moved to 39.99");
+    brief = null;
+    notices.length = 0;
+    await GET(req());
+    expect(notices).toHaveLength(0);
   });
 
   /**

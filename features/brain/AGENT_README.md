@@ -22,6 +22,11 @@ Claude Code) is the door people use; the operator's guide is
   repeat another chapter) plus `voice.ts`'s per-chapter checks, run on a draft or on shipped copy.
 - `server/context-pack.ts` — `get_context_pack`: only what drafting one chapter for one archetype
   needs, inside a fixed size (Mark: "be crazy careful with the context window").
+- `server/night-shift.ts` — the Night Shift: `queue_research` writes a `research` record, and the
+  nightly `brain-night-shift` job (GitHub Actions) answers it with Claude Code, the brain's read-only
+  tools over MCP (`RESEARCH_TOOLS`) and the web; every writing tool is denied (`WRITE_TOOLS`).
+- `server/whats-new.ts` — `whats_new`: notices, research answers and decisions since a time. Also
+  what `scripts/jarvis-overnight.mjs` (a SessionStart hook) shows when a Claude Code session starts.
 - `server/jumps.ts` — `explain_change` and the daily "Unusual numbers" notice: each metric against its
   28-day median and spread, the move split by source, channel and rate halves, and day-level rules
   (engagement, GA4 against our count, spend, campaigns, shipped, decided). No model writes a cause.

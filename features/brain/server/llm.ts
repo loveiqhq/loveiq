@@ -74,7 +74,7 @@ const CLAUDE_API_VERSION = "2023-06-01";
  */
 const CLI_DEFAULT_MODEL = "sonnet";
 
-function cliBinary(): string | null {
+export function cliBinary(): string | null {
   return process.env.BRAIN_LLM_CLI?.trim() || null;
 }
 
@@ -453,8 +453,21 @@ function cliComplete(
     ...(effort ? ["--effort", effort] : []),
   ];
   cliCwd ??= mkdtempSync(join(tmpdir(), "brain-llm-"));
-  const cwd = cliCwd;
+  return runClaude(binary, args, prompt, timeoutMs, cliCwd);
+}
 
+/**
+ * Run the `claude` binary once with `input` on stdin and read its one JSON result. Shared
+ * by the single completion above and the Night Shift's research agent, which differ only
+ * in their arguments.
+ */
+export function runClaude(
+  binary: string,
+  args: string[],
+  input: string,
+  timeoutMs: number,
+  cwd: string
+): Promise<LlmResult> {
   return new Promise((resolve) => {
     // stderr ignored rather than piped: an unread pipe that fills up blocks the child, and
     // every failure is printed as JSON on stdout anyway.
@@ -480,7 +493,7 @@ function cliComplete(
     // A child that never started closes its stdin, and writing to it then raises EPIPE as
     // an unhandled 'error' event. The 'error' handler above already reports the failure.
     child.stdin.on("error", () => {});
-    child.stdin.end(prompt);
+    child.stdin.end(input);
   });
 }
 

@@ -63,6 +63,8 @@ import {
   renderPromises,
 } from "@features/brain/server/promises";
 import { promptDocs } from "@features/brain/server/ingest/skills";
+import { PER_NIGHT, queueResearch } from "@features/brain/server/night-shift";
+import { renderWhatsNew, whatsNew } from "@features/brain/server/whats-new";
 import {
   isJump,
   jumpsOn,
@@ -426,6 +428,9 @@ export const SOURCES_FOR_TEST = [
   // when ga4 and analytics can only answer "where". Listed here in the commit that creates
   // the first chunk, per the `jira` rule below.
   "clarity",
+  // Questions queued with `queue_research` and the Night Shift's cited answers to them,
+  // one record per question. Listed here in the commit that creates the first one.
+  "research",
 ];
 // `jira` is deliberately absent. The 1,037 issues in loveiq.atlassian.net are real
 // and actively updated, but `JIRA_API_TOKEN` has never been set, so the corpus holds
@@ -576,7 +581,7 @@ const CLIENT_INJECTED_ARGS = new Set(["__unparsedToolInput", "truncated"]);
  * second when the first is true is the kind of confident wrong statement this file
  * exists to avoid.
  */
-const WRITTEN_SOURCES = new Set(["decision", "notice"]);
+const WRITTEN_SOURCES = new Set(["decision", "notice", "research"]);
 
 /** Tools whose results carry pixels, and so are rate-limited far more tightly. */
 const IMAGE_TOOLS = new Set(["show_design", "show_page"]);
@@ -1088,6 +1093,39 @@ export const TOOLS = [
     },
   },
   {
+    name: "queue_research",
+    title: "Queue a question for the Night Shift",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      // Asking the same question again returns the one already queued or answered.
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    description:
+      "Hand a research question to the Night Shift, which answers it overnight and puts a cited " +
+      "answer in the brain by morning: our own records and live numbers first, then the web and " +
+      "published papers. For questions worth more than a quick answer: 'what does the research say " +
+      "about X', 'how do competitors price Y', 'what do we know about Z across everything we have'. " +
+      "The answer arrives as a research record and a notice, and whats_new lists it. Asking the same " +
+      "question again returns the one already queued or answered, and only a few can wait at once.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        question: { type: "string", description: "The question, as a full sentence." },
+        asked_by: {
+          type: "string",
+          description: "Who is asking, as their full name, so the answer says who it is for.",
+        },
+        why: {
+          type: "string",
+          description: "What the answer is for, when that helps the research.",
+        },
+      },
+      required: ["question"],
+    },
+  },
+  {
     name: "count_context",
     title: "Count what we hold, and break it down",
     annotations: { readOnlyHint: true, openWorldHint: false },
@@ -1566,6 +1604,25 @@ export const TOOLS = [
           description:
             "One metric to explain whether or not it was unusual. Leave empty to list every metric " +
             "that was outside its usual range that day.",
+        },
+      },
+    },
+  },
+  {
+    name: "whats_new",
+    title: "What is new since you last looked",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "What the brain produced on its own since a time, newest first, one line each with its id: " +
+      "notices (unusual numbers, the daily brief, reconciliation gaps), the Night Shift's research " +
+      "answers, and decisions recorded, plus how many questions still wait for tonight. Use it when " +
+      "someone asks what is new or what they missed, or opens a conversation without a question.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        since: {
+          type: "string",
+          description: "A day (YYYY-MM-DD) or an ISO time. Default: the last 24 hours.",
         },
       },
     },
@@ -4628,6 +4685,81 @@ async function callTool(
     );
   }
 
+  if (name === "queue_research") {
+    const question = typeof args.question === "string" ? args.question.trim() : "";
+    if (question.length < 15 || question.length > 1500) {
+      return textResult(
+        "Write the question as one full sentence, between 15 and 1,500 characters, so the Night " +
+          "Shift knows exactly what to find out.",
+        true
+      );
+    }
+    const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 500) : null);
+    let outcome;
+    try {
+      outcome = await queueResearch({ question, askedBy: str(args.asked_by), why: str(args.why) });
+    } catch (err) {
+      logger.error({ err }, "brain: could not queue a research question");
+      return textResult("Could not queue that question. Nothing was written.", true);
+    }
+    stats.sourceCount = 1;
+    if (!outcome.ok) {
+      return textResult(
+        `The Night Shift queue is full: ${outcome.full.length} questions are waiting, and it answers ` +
+          `the oldest ${PER_NIGHT} each night.\n` +
+          outcome.full.map((q) => `- ${q.question} (research/${q.sourceId})`).join("\n") +
+          "\n\nAsk again tomorrow.",
+        true
+      );
+    }
+    if ("existing" in outcome) {
+      return textResult(
+        outcome.status === "done"
+          ? `Already answered: research/${outcome.id}. Read it with fetch_document.`
+          : `Already ${outcome.status === "running" ? "being researched" : "queued"}: research/${outcome.id}. ` +
+              "The answer will be in the brain by morning."
+      );
+    }
+    return textResult(
+      `Queued as research/${outcome.id}. The Night Shift starts at 02:30 Berlin time; by morning ` +
+        "the answer is in the brain with its sources, fetch_document reads it, and whats_new lists it."
+    );
+  }
+
+  if (name === "whats_new") {
+    const raw = typeof args.since === "string" ? args.since.trim() : "";
+    let since = new Date(Date.now() - 86_400_000);
+    if (raw) {
+      const parsed = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+        ? isRealDate(raw)
+          ? new Date(`${raw}T00:00:00Z`)
+          : null
+        : new Date(raw);
+      if (!parsed || Number.isNaN(parsed.getTime())) {
+        return textResult(
+          `\`since\` must be a day like 2026-09-24 or an ISO time, not "${raw}".`,
+          true
+        );
+      }
+      since = parsed;
+    }
+    const r = await whatsNew(since.toISOString());
+    if (!r.ok) {
+      return textResult(
+        `The brain could not be read (status ${r.status}). This is an outage, not a quiet day.`,
+        true
+      );
+    }
+    stats.sourceCount = r.items.length;
+    return textResult(
+      renderWhatsNew(
+        r.items,
+        r.waiting,
+        raw || `${since.toISOString().slice(0, 16).replace("T", " ")} UTC`
+      )
+    );
+  }
+
   if (name === "explain_change") {
     const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
     const today = new Date().toISOString().slice(0, 10);
@@ -4835,6 +4967,8 @@ async function callTool(
         return " · written directly by record_decision and by the decision miner, not ingested — a gap here means nothing was recorded, not that a job failed";
       if (source === "notice")
         return " · written by the jobs that watch for moves, not ingested — a gap here means nothing was worth noticing, not that a job failed";
+      if (source === "research")
+        return " · written by queue_research and answered by the nightly Night Shift, not ingested — a gap here means nobody queued a question";
       const cron = CRON_FOR_SOURCE[source];
       if (!cron) return "";
       const run = lastRun.get(cron);
@@ -5007,6 +5141,11 @@ export const MCP_INSTRUCTIONS =
   "logic already.\n\n" +
   "WHO PROMISED WHAT: meeting_promises lists every next step agreed in a recorded meeting, by " +
   "owner, read off the notes by code, and whether the Notion board tracks it.\n\n" +
+  "WHAT IS NEW: whats_new lists what the brain produced on its own since a time: notices, the " +
+  "Night Shift's research answers and decisions. Call it when someone asks what is new or what " +
+  "they missed.\n\n" +
+  "NIGHT SHIFT: queue_research hands a question worth real research to an overnight run that " +
+  "answers it with sources by morning, from our own records and the web.\n\n" +
   "WHY A NUMBER MOVED: explain_change says whether a day's numbers were outside their usual " +
   "range and splits each move by source, channel, engagement, ad spend and what shipped, before " +
   "anyone explains a jump from memory.\n\n" +

@@ -358,7 +358,7 @@ When registering any callback — Resend, Stripe, Slack — paste the `www`
 host, then confirm rows actually arrive. An endpoint that returns 401 to an
 unsigned probe proves it is deployed, not that it is reachable by the sender.
 
-**Twenty-two tools, in three groups.** Seventeen read, five write. The write ones act
+**Twenty-four tools, in three groups.** Eighteen read, six write. The write ones act
 immediately and are described at the bottom of this section — a teammate who reads
 only the first table will not know the brain can send an email.
 
@@ -374,6 +374,7 @@ only the first table will not know the brain can send an email.
 | `browse_context`         | Everything matching a filter, in date order and without ranking: every meeting note, every open task, everything learned since Tuesday. Use when you want a list, not an answer                                                                                                                                                                                                                                                                                             |
 | `what_shipped`           | What changed, as the plain-English "For Marcus:" line every change to main carries, newest first, with date and pull request. Read live from GitHub, never indexed                                                                                                                                                                                                                                                                                                          |
 | `explain_change`         | Whether a day's numbers were outside their usual range (each against the 28 days before, median and spread) and where each move came from: traffic source or GA4 channel, the two halves of a rate, engagement, GA4 against our own count, ad spend and campaigns, what shipped and what was decided. The likely causes are fixed rules over numbers, never a model's guess. The anomaly watcher writes yesterday's unusual numbers as a notice between 07:00 and 11:00 UTC |
+| `whats_new`              | What the brain produced on its own since a time (default the last 24 hours): notices, the Night Shift's research answers and decisions, newest first with ids, plus how many questions still wait for tonight. The door for "what's new", and what the Claude Code session hook shows at startup                                                                                                                                                                            |
 | `check_copy`             | Report copy against the house rules, with the sentence behind each finding: em dashes, machine-written phrases, absolute claims, reading level, length, lines that fit every archetype or repeat another chapter, and the chapter's shipped voice. Leave out `text` and name a chapter and archetype to audit what shipped                                                                                                                                                  |
 | `get_context_pack`       | Exactly what drafting one chapter for one archetype needs, inside a fixed size: the chapter's rules, the shipped text, another archetype's version as a model, who the archetype is, research cards and the matching prompt documents. The `draft_chapter` prompt chains it with `check_copy` and a Google Doc that ends with a "How this was made" section (model, date, who asked, prompt document, research used, final check), so the draft carries its own provenance  |
 | `meeting_promises`       | Every next step agreed in a recorded meeting, read by code off the notes' "Next steps" list, grouped by owner with the meeting, its day and a link. Each item is looked up on the Notion board (owner first, then rare shared words) and shows the matching task's status, due date and link, or "not on the board"; about nine in ten matches were right on a month of real promises, and the answer says a match can be wrong                                             |
@@ -524,13 +525,14 @@ These are not drafts-for-approval. There is no confirmation step, by design — 
 permission for every write makes the thing useless. Every call is recorded in
 `brain_query` with its full arguments, so anything wrong is visible and reversible.
 
-| Tool                  | What it does                                                                                                                                                                        |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `record_decision`     | Writes down what was decided, by whom, and what it supersedes. The highest-value one: decisions are otherwise reconstructed from whoever happened to record a call                  |
-| `post_to_slack`       | Posts or replies in any channel the bot is in. Cannot be unsent                                                                                                                     |
-| `write_to_notion`     | Creates a page or a task                                                                                                                                                            |
-| `write_to_google_doc` | Creates a Doc, or appends to one                                                                                                                                                    |
-| `send_email`          | **Drafts by default.** It sends only when explicitly passed `send: true` — the one write that leaves the company and cannot be recalled, so it is the one that needs the extra word |
+| Tool                  | What it does                                                                                                                                                                                                                                   |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `record_decision`     | Writes down what was decided, by whom, and what it supersedes. The highest-value one: decisions are otherwise reconstructed from whoever happened to record a call                                                                             |
+| `post_to_slack`       | Posts or replies in any channel the bot is in. Cannot be unsent                                                                                                                                                                                |
+| `write_to_notion`     | Creates a page or a task                                                                                                                                                                                                                       |
+| `write_to_google_doc` | Creates a Doc, or appends to one                                                                                                                                                                                                               |
+| `queue_research`      | Hand a question to the Night Shift, which answers it overnight with sources, from our own records and the web. Deduplicated (the same question returns the one queued or answered) and capped at five waiting. Writes only a `research` record |
+| `send_email`          | **Drafts by default.** It sends only when explicitly passed `send: true` — the one write that leaves the company and cannot be recalled, so it is the one that needs the extra word                                                            |
 
 **Why `record_decision` matters more than it looks.** Decision records are the thing
 the brain exists for and, measured 2026-09-12 before the miner first ran, the thing it had
@@ -877,8 +879,8 @@ allow it only in the unmodified binary, never in our own API calls. Vercel has n
 `BRAIN_LLM_CLI=claude`. The day claim, the `cron_run` row, the Slack post and the stall
 watch behave exactly as they did on Vercel.
 
-- **Whose seat.** Eman's own Premium seat, by his choice (2026-09-24). Automated runs share
-  its five-hour and weekly limits with his own Claude use, though at about fifteen short
+- **Whose seat.** Eman's own Premium seat, by their choice (2026-09-24). Automated runs share
+  its five-hour and weekly limits with their own Claude use, though at about fifteen short
   calls a day they take little. A limit hit is reported as `rate_limited`, the job stops for
   the day, and the #brain alert pings the seat's owner (repository variable
   `CLAUDE_TOKEN_OWNER_SLACK_ID`). If that happens more than once or twice, move the token
@@ -900,6 +902,45 @@ watch behave exactly as they did on Vercel.
   It prints the brief without claiming the day or posting it.
 - **Replaying a lost day.** Run the workflow with `job: brain-brief` and
   `query: ?day=YYYY-MM-DD`. The claim still prevents a double post.
+
+### The Night Shift: research queued in the day, answered by morning
+
+`queue_research` (plan item A16) writes a question as a `research` record with status
+`queued`. At 00:30 UTC `brain-daily.yml` runs `brain-night-shift`, which answers up to
+three, oldest first, each through Claude Code on the Team subscription with the brain's
+read-only tools over MCP (`LOVEIQ_MCP_TOKEN`, a repository secret) and the web. Nothing
+that writes is available to it: `RESEARCH_TOOLS` and `WRITE_TOOLS` in
+`features/brain/server/night-shift.ts` are the allow and deny lists, and a test fails if
+a new writing tool is on neither.
+
+- **What comes back.** The answer replaces the question in the same record (the first
+  three to five sentences answer it, then findings with a source beside each, then what
+  could not be found), so it is searchable and `fetch_document research/<id>` reads it. A
+  notice announces it, so Jarvis brings it up with the next question anyone asks, and
+  `whats_new` lists it.
+- **An answer without a source is not kept.** It is marked failed with the reason and the
+  asker is told; ask again to retry. A usage limit puts the question back in the queue for
+  the next night and stops spending the seat.
+- **Model.** The `sonnet` alias. `BRAIN_RESEARCH_MODEL=opus` in the workflow buys deeper
+  research at a higher cost to the seat's allowance.
+- **Running it by hand.** Run the workflow with `job: brain-night-shift`. `cron_run` records
+  `queued=N answered=N failed=N`, and says "error" only when the agent itself failed.
+
+### Brought to you in Claude: the proactive layer
+
+What the brain notices on its own reaches people in Claude, not only in a Slack channel
+(plan item C8):
+
+- **Notices.** The daily brief, yesterday's unusual numbers (`explain_change`, written by
+  the anomaly watcher between 07:00 and 11:00 UTC), reconciliation gaps and the Night
+  Shift's answers are all `notice` records. The newest are prepended to search results for
+  24 hours, so the next person who asks Jarvis anything sees them.
+- **`whats_new`.** One call lists everything produced since a time. The "Catch me up"
+  prompt starts with it.
+- **Claude Code.** `scripts/jarvis-overnight.mjs`, a SessionStart hook in
+  `.claude/settings.json`, shows what is new since yesterday when a session starts. It
+  runs only for someone with `LOVEIQ_MCP_TOKEN` in their environment or `.env.local`, and
+  prints nothing on any error or after five seconds.
 
 ### The two jobs that run on a laptop, not on Vercel
 
