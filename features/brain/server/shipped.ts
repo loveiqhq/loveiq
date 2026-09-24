@@ -54,12 +54,22 @@ export function shippedEntries(commits: ShippedCommit[]): ShippedEntry[] {
   for (const c of commits) {
     if (onMain && !onMain.has(c.sha ?? "")) continue;
     const message = c.commit?.message ?? "";
-    const line = message
-      .split("\n")
-      .map((l) => l.trim())
-      .filter((l) => /^for marcus:/i.test(l))
-      .at(-1);
-    const text = line?.replace(/^for marcus:\s*/i, "").trim();
+    /**
+     * THE WHOLE PARAGRAPH, not its first line. Older commits wrapped the line at 80
+     * columns, so reading one line cut "When someone taps a button on our site and nothing
+     * happens, we" off mid-sentence. It runs to the next blank line or the end.
+     */
+    const lines = message.split("\n").map((l) => l.trim());
+    let at = -1;
+    lines.forEach((l, i) => {
+      if (/^for marcus:/i.test(l)) at = i;
+    });
+    const para: string[] = [];
+    for (let i = at; at >= 0 && i < lines.length && lines[i]; i++) para.push(lines[i]!);
+    const text = para
+      .join(" ")
+      .replace(/^for marcus:\s*/i, "")
+      .trim();
     if (!text || seen.has(text)) continue;
     seen.add(text);
     const pr = /\(#(\d+)\)\s*$/.exec(message.split("\n")[0] ?? "");

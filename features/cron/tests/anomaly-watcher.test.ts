@@ -31,6 +31,11 @@ vi.mock("@features/admin/server/alerts", () => ({
   buildAnomalySnapshot: (...args: unknown[]) => mockBuildAnomaly(...args),
 }));
 
+const mockNoticeJumps = vi.fn();
+vi.mock("@features/brain/server/jumps", () => ({
+  noticeJumps: (...args: unknown[]) => mockNoticeJumps(...args),
+}));
+
 import { GET } from "@/app/api/cron/anomaly-watcher/route";
 
 function makeReq() {
@@ -67,6 +72,7 @@ describe("GET /api/cron/anomaly-watcher", () => {
     mockBuildAnomaly.mockReset();
     mockVerifyAuth.mockReset().mockReturnValue(true);
     mockIsProdCronHost.mockReset().mockReturnValue(true);
+    mockNoticeJumps.mockReset().mockResolvedValue(0);
   });
 
   it("returns 401 when cron auth fails", async () => {
@@ -146,5 +152,23 @@ describe("GET /api/cron/anomaly-watcher", () => {
     expect(body.deferred).toBe(5);
     expect(body.riskItems).toBe(15);
     expect(mockNotifySlack).toHaveBeenCalledTimes(10);
+  });
+
+  it("scans for unusual numbers and reports how many it wrote up, without posting to Slack", async () => {
+    mockBuildAnomaly.mockResolvedValue(snapshotWith([]));
+    mockNoticeJumps.mockResolvedValue(2);
+    const body = await (await GET(makeReq())).json();
+    expect(mockNoticeJumps).toHaveBeenCalledTimes(1);
+    expect(mockNoticeJumps.mock.calls[0]![0]).toBeInstanceOf(Date);
+    expect(body.jumps).toBe(2);
+    expect(mockNotifySlack).not.toHaveBeenCalled();
+  });
+
+  it("does not fail its real job when the number scan throws", async () => {
+    mockBuildAnomaly.mockResolvedValue(snapshotWith([]));
+    mockNoticeJumps.mockRejectedValue(new Error("rollup down"));
+    const res = await GET(makeReq());
+    expect(res.status).toBe(200);
+    expect((await res.json()).jumps).toBe(0);
   });
 });

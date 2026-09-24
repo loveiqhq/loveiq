@@ -28,6 +28,24 @@ describe("shippedEntries", () => {
     ]);
   });
 
+  /** Older commits wrapped the line at 80 columns; the first line alone cut it mid-sentence. */
+  it("reads a wrapped For Marcus paragraph whole, and stops at the next blank line", () => {
+    const out = shippedEntries([
+      {
+        sha: "w1234567",
+        commit: {
+          message:
+            "fix: x\n\nFor Marcus: When someone taps a button and nothing happens, we\n" +
+            "now notice it the same day.\n\nSigned-off-by: someone",
+          committer: { date: "2026-09-17T10:00:00Z" },
+        },
+      },
+    ]);
+    expect(out[0]!.text).toBe(
+      "When someone taps a button and nothing happens, we now notice it the same day."
+    );
+  });
+
   /** A merge and the branch commit it brings in carry the same line; the merge has the PR. */
   it("lists a change once, keeping the merge that names its pull request", () => {
     const out = shippedEntries([
