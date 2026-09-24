@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { brainDailySchedules } from "./brain-daily-schedule";
 
 /**
  * A cron killed at its Vercel ceiling writes NO `cron_run` row.
@@ -135,19 +136,14 @@ describe("an alert dedup key must name the cron that owns it", () => {
  * The invariant is not "08:10" but "after the reset in BOTH DST states", because the
  * Pacific offset moves and a slot that clears the reset in July can fall behind it in
  * December. Asserted here rather than in a comment nobody re-reads.
+ *
+ * Moot while the model is the Claude subscription (`BRAIN_LLM_CLI`), whose limits are
+ * rolling windows rather than a Pacific day. Kept because the Gemini lane still exists,
+ * and the schedule, now in brain-daily.yml, still satisfies it.
  */
 describe("brain-mine runs on a fresh Gemini quota", () => {
-  const crons = (
-    JSON.parse(readFileSync("vercel.json", "utf8")) as {
-      crons: Array<{ path: string; schedule: string }>;
-    }
-  ).crons;
-
   it("is scheduled after midnight Pacific in both summer and winter", () => {
-    const mine = crons.find((c) => c.path === "/api/cron/brain-mine");
-    expect(mine, "brain-mine must be scheduled at all").toBeDefined();
-
-    const [minute, hour] = mine!.schedule.split(" ");
+    const [minute, hour] = brainDailySchedules()["brain-mine"].split(" ");
     expect(`${hour}:${minute}`).toMatch(/^\d+:\d+$/);
 
     // A July date is PDT (UTC-7); a December date is PST (UTC-8). Both must land on the

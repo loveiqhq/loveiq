@@ -23,7 +23,8 @@ import logger from "@shared/observability/logger";
  * Maximum age of the newest run before a cron counts as stalled, per cron name.
  * Roughly 2-3x the schedule, so one missed tick is tolerated and two are not.
  * Kept explicit rather than parsed from vercel.json, which is not readable at
- * runtime — a test asserts this map and vercel.json's cron list stay in step.
+ * runtime — a test asserts this map stays in step with vercel.json's cron list and the
+ * brain jobs .github/workflows/brain-daily.yml runs (they need the `claude` binary).
  */
 export const CRON_MAX_AGE_MS: Record<string, number> = {
   "survey-paused": 3 * 3_600_000,

@@ -63,16 +63,20 @@ jobs:
           node scripts/brain-ingest-repo.mjs
 
       # Without this the only signal is a red tick nobody is watching for.
-      - name: Tell ops the brain stopped refreshing
+      #
+      # To the brain channel. This read SLACK_OPS_WEBHOOK_URL, which was never a repository
+      # secret (it lives in Vercel, marked sensitive, and cannot be read back out), so until
+      # 2026-09-24 every failure took the skip branch below and alerted nobody.
+      - name: Tell the brain channel the brain stopped refreshing
         if: failure()
         env:
-          SLACK_OPS_WEBHOOK_URL: ${{ secrets.SLACK_OPS_WEBHOOK_URL }}
+          SLACK_BRAIN_WEBHOOK_URL: ${{ secrets.SLACK_BRAIN_WEBHOOK_URL }}
         run: |
           set -euo pipefail
-          if [ -z "${SLACK_OPS_WEBHOOK_URL:-}" ]; then
-            echo "no ops webhook configured; skipping notification"
+          if [ -z "${SLACK_BRAIN_WEBHOOK_URL:-}" ]; then
+            echo "::warning::SLACK_BRAIN_WEBHOOK_URL is not set, so this failure alerts nobody"
             exit 0
           fi
-          curl -sS -X POST -H 'Content-type: application/json' \
+          curl -sS --fail -X POST -H 'Content-type: application/json' \
             --data "{\"text\":\":brain: Company-brain repo ingest FAILED on ${GITHUB_SHA:0:7}. The repo documentation in the brain is now frozen until this is fixed — it will keep answering from stale data without looking broken. ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" \
-            "$SLACK_OPS_WEBHOOK_URL"
+            "$SLACK_BRAIN_WEBHOOK_URL"
