@@ -45,6 +45,31 @@ describe("the people roster", () => {
     expect(written().body).toContain("Chief Technology Officer (CTO)");
   });
 
+  /** Measured 2026-09-24: the names in a longer role became "(CEOMBSK)" and "(OMOMB)". */
+  it("abbreviates only the leading title, never the names in the rest of the role", async () => {
+    roster([
+      {
+        canonical: "Mark Oldenburg",
+        kind: "person",
+        active: true,
+        role: "Chief Executive Officer; owns design decisions together with Marcus Börner and Sanjin Kacevac",
+        role_confidence: "confirmed",
+      },
+      {
+        canonical: "Sanjin Kacevac",
+        kind: "person",
+        active: true,
+        role: "Owns design decisions together with Mark Oldenburg and Marcus Börner",
+        role_confidence: "confirmed",
+      },
+    ]);
+    await ingestPeople(STAMP);
+    expect(written().body).toContain("Chief Executive Officer (CEO); owns design decisions");
+    expect(written().body).toContain("together with Marcus Börner and Sanjin Kacevac\n");
+    expect(written().body).toContain("together with Mark Oldenburg and Marcus Börner\n");
+    expect(written().body).not.toMatch(/\((?:CEOMBSK|OMOMB)\)/);
+  });
+
   it("does not invent an acronym for a one-word role", async () => {
     roster([
       {

@@ -48,15 +48,22 @@ export async function ingestPeople(stampedAt: string): Promise<IngestResult> {
    * only the expanded form ranked 1st for "who is the CEO" (carried by the semantic
    * arm alone) and MISSED "who is the CTO" entirely, because those three letters
    * appeared nowhere in it.
+   *
+   * ONLY THE LEADING TITLE, AND RIGHT AFTER IT. It used to take every capitalised word up
+   * to a comma and append the result, which was fine while a role was only a title. On
+   * 2026-09-24 the roles gained who owns design decisions: the names in that sentence
+   * became initials, "(CEOMBSK)", and an acronym at the end of it read as belonging to the
+   * last name mentioned.
    */
-  const acronym = (role: string): string => {
-    const initials = role
-      .replace(/,.*$/, "")
+  const withInitials = (role: string): string => {
+    const title = /^[A-Z][\w-]*(?:\s+[A-Z][\w-]*)+/.exec(role)?.[0] ?? "";
+    const initials = title
       .split(/\s+/)
-      .filter((w) => /^[A-Z]/.test(w))
       .map((w) => w[0])
       .join("");
-    return initials.length >= 2 && !role.includes(initials) ? ` (${initials})` : "";
+    return initials.length >= 2 && !role.includes(initials)
+      ? role.replace(title, `${title} (${initials})`)
+      : role;
   };
 
   const line = (p: PersonRow): string => {
@@ -66,7 +73,7 @@ export async function ingestPeople(stampedAt: string): Promise<IngestResult> {
       p.role_confidence === "unconfirmed"
         ? " (reported with a caveat — treat as unconfirmed and say so)"
         : "";
-    return `- ${p.canonical}: ${p.role}${acronym(p.role)}${caveat}${here}`;
+    return `- ${p.canonical}: ${withInitials(p.role)}${caveat}${here}`;
   };
 
   const current = people.filter((p) => p.active !== false);
