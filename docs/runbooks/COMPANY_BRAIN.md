@@ -37,9 +37,10 @@ a DM gets a one-line pointer to Claude, while channel messages are still indexed
 
 ### Ready-made prompts
 
-In claude.ai and Claude Code the brain offers five prompts to pick, so nobody has to
-know which tool answers what: **Catch me up**, **KPI check**, **Review this chapter**,
-**What needs me** and **Record a decision**. They live in
+In claude.ai and Claude Code the brain offers ready-made prompts to pick, so nobody has
+to know which tool answers what: **Catch me up**, **KPI check**, **Review this chapter**,
+**Draft a chapter**, **What needs me**, **Put meeting promises on the board** and
+**Record a decision**. They live in
 `features/brain/server/prompts.ts` and are served over MCP `prompts/list` and
 `prompts/get`. Each one ends with the house rules (short, plain, every fact linked),
 and a test fails if a prompt names a tool that does not exist.
@@ -374,7 +375,7 @@ only the first table will not know the brain can send an email.
 | `what_shipped`           | What changed, as the plain-English "For Marcus:" line every change to main carries, newest first, with date and pull request. Read live from GitHub, never indexed                                                                                                                                                                                                                                                                                                         |
 | `check_copy`             | Report copy against the house rules, with the sentence behind each finding: em dashes, machine-written phrases, absolute claims, reading level, length, lines that fit every archetype or repeat another chapter, and the chapter's shipped voice. Leave out `text` and name a chapter and archetype to audit what shipped                                                                                                                                                 |
 | `get_context_pack`       | Exactly what drafting one chapter for one archetype needs, inside a fixed size: the chapter's rules, the shipped text, another archetype's version as a model, who the archetype is, research cards and the matching prompt documents. The `draft_chapter` prompt chains it with `check_copy` and a Google Doc that ends with a "How this was made" section (model, date, who asked, prompt document, research used, final check), so the draft carries its own provenance |
-| `meeting_promises`       | Every next step agreed in a recorded meeting, read by code off the notes' "Next steps" list, grouped by owner with the meeting, its day and a link. Lists promises; nothing is checked against Notion                                                                                                                                                                                                                                                                      |
+| `meeting_promises`       | Every next step agreed in a recorded meeting, read by code off the notes' "Next steps" list, grouped by owner with the meeting, its day and a link. Each item is looked up on the Notion board (owner first, then rare shared words) and shows the matching task's status, due date and link, or "not on the board"; about nine in ten matches were right on a month of real promises, and the answer says a match can be wrong                                            |
 
 **You can narrow, and it is usually better than rewording.** `search_company_context`
 takes `sources` and `exclude_sources`, `since` / `until`, and `meta` for indexed

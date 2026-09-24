@@ -56,7 +56,12 @@ import {
 } from "@features/brain/server/copy-gate";
 import { allChapters } from "@features/brain/server/voice";
 import { buildContextPack } from "@features/brain/server/context-pack";
-import { meetingPromises, renderPromises } from "@features/brain/server/promises";
+import {
+  boardMatcher,
+  boardTasks,
+  meetingPromises,
+  renderPromises,
+} from "@features/brain/server/promises";
 import { promptDocs } from "@features/brain/server/ingest/skills";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { scheduleAfterResponse } from "@shared/http/after-response";
@@ -1588,8 +1593,9 @@ export const TOOLS = [
       'Every next step agreed in a recorded meeting, read by code off the "Next steps" list the ' +
       "meeting notes end with, grouped by who owns it, with the meeting, its day and a link. Use " +
       "it for 'what did I promise this week', 'what is Mark waiting on from meetings' or 'what did " +
-      "we agree on Tuesday'. It lists promises and does not know which are done: nothing is " +
-      "checked against Notion.",
+      "we agree on Tuesday'. Each item is looked up on the Notion board by owner and shared words, " +
+      "and shows the matching task with its status, due date and link, or that nothing on the board " +
+      "matches it: an untracked promise is the thing to act on.",
     inputSchema: {
       type: "object",
       properties: {
@@ -4556,17 +4562,29 @@ async function callTool(
       day(args.since) ?? new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
     const person =
       typeof args.person === "string" && args.person.trim() ? args.person.trim() : null;
-    const r = await meetingPromises(since, day(args.until));
+    const [r, board] = await Promise.all([
+      meetingPromises(since, day(args.until)),
+      boardTasks().catch(() => ({ ok: false as const, status: 0 })),
+    ]);
     if (!r.ok) {
       return textResult(
         `The meeting notes could not be read (status ${r.status}). This is an outage, not an empty week.`,
         true
       );
     }
+    // The board is an addition: unreadable, the promises still list, marked as unchecked.
+    let promises = r.promises;
+    if (board.ok) {
+      const match = boardMatcher(board.tasks);
+      promises = r.promises.map((p) => ({ ...p, task: match(p) }));
+    }
     stats.sourceCount = new Set(r.promises.map((p) => p.id)).size;
     return textResult(
       `Next steps from meetings since ${since}${args.until ? ` until ${day(args.until)}` : ""}.\n\n` +
-        renderPromises(r.promises, person)
+        (board.ok
+          ? ""
+          : `The Notion board could not be read (status ${board.status}), so nothing below is checked against it.\n\n`) +
+        renderPromises(promises, person)
     );
   }
 
@@ -4886,7 +4904,7 @@ export const MCP_INSTRUCTIONS =
   "prefer an rpc/get_* analysis function when one fits — those encode the business " +
   "logic already.\n\n" +
   "WHO PROMISED WHAT: meeting_promises lists every next step agreed in a recorded meeting, by " +
-  "owner, read off the notes by code.\n\n" +
+  "owner, read off the notes by code, and whether the Notion board tracks it.\n\n" +
   'WHAT CHANGED, in plain English: what_shipped lists the "For Marcus:" line of every change ' +
   "that reached main, newest first, read live from the repository.\n\n" +
   "REPORT COPY: get_context_pack gives exactly what one chapter for one archetype needs before " +
