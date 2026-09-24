@@ -233,6 +233,11 @@ describe("readMetric and isJump", () => {
     ).toBeNull();
   });
 
+  it("never gives a rate a range past 100%", () => {
+    const s = build((i) => ({ submissions: i === 29 ? 5 : i % 2 ? 27 : 12 }));
+    expect(readMetric(metric("finish_rate"), s, LAST)!.high).toBeLessThanOrEqual(1);
+  });
+
   it("reads a rate only when its denominator is big enough", () => {
     const low = build((i) => ({ visitors: i === 29 ? 30 : 200 }));
     expect(readMetric(metric("start_rate"), low, LAST)).toBeNull();
@@ -338,11 +343,15 @@ describe("explainDay", () => {
   it("says when only GA4 saw a jump, and when only our own count did", () => {
     const ga4Only = build((i) => (i === 29 ? { ga4: { sessions: 700 } } : {}));
     expect(
-      explainDay(ga4Only, LAST, NONE).likely.some((l) => l.startsWith("Only GA4 saw it"))
+      explainDay(ga4Only, LAST, NONE).likely.some((l) =>
+        l.startsWith("Only GA4 saw the traffic jump")
+      )
     ).toBe(true);
     const oursOnly = build((i) => (i === 29 ? { visitors: 700 } : {}));
     expect(
-      explainDay(oursOnly, LAST, NONE).likely.some((l) => l.startsWith("Only our own count saw it"))
+      explainDay(oursOnly, LAST, NONE).likely.some((l) =>
+        l.startsWith("Only our own count saw the traffic jump")
+      )
     ).toBe(true);
   });
 

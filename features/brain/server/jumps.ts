@@ -253,7 +253,10 @@ export function readMetric(
     value,
     usual,
     low: Math.max(0, usual - 2 * Math.max(1.4826 * side((v) => v >= usual), floor)),
-    high: usual + 2 * Math.max(1.4826 * side((v) => v <= usual), floor),
+    high: Math.min(
+      m.rate ? 1 : Infinity,
+      usual + 2 * Math.max(1.4826 * side((v) => v <= usual), floor)
+    ),
     z: (value - usual) / spread,
     ...extra,
   };
@@ -535,12 +538,12 @@ export function explainDay(
     );
     if (Math.abs(cs) >= 1 && Math.abs(co) < 0.3 * Math.abs(cs)) {
       likely.push(
-        `Only GA4 saw it (sessions ${change(theirs.value, theirs.usual)}, our own count ${change(ours.value, ours.usual)}). ` +
+        `Only GA4 saw the traffic jump (sessions ${change(theirs.value, theirs.usual)}, our own count ${change(ours.value, ours.usual)}). ` +
           `Look at the GA4 side first: a tag change, or bots that run GA4 but never reach our pages.`
       );
     } else if (Math.abs(co) >= 1 && Math.abs(cs) < 0.3 * Math.abs(co)) {
       likely.push(
-        `Only our own count saw it (visitors ${change(ours.value, ours.usual)}, GA4 sessions ${change(theirs.value, theirs.usual)}). ` +
+        `Only our own count saw the traffic jump (visitors ${change(ours.value, ours.usual)}, GA4 sessions ${change(theirs.value, theirs.usual)}). ` +
           `GA4 misses visitors who decline cookies, so check consent and our counter first.`
       );
     }
