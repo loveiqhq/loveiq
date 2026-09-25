@@ -6643,10 +6643,11 @@ html {
 .rv3 .rv4-fvr + .rv4-try:not(.is-open) {
   padding-bottom: 29px;
 }
-/* 334:1137 sets "Go deeper" straight under the practice card, where Typical Beliefs'
- * frame leaves 24 and A&B's 16. */
+/* "Go deeper" 16.2 under the practice card: the card ends 16 above 441:6168's foot
+ * and the article starts 0.175 into 244:258 (Mark, 1941885039, 25.09 — the report
+ * had them flush). Typical Beliefs' frame leaves 24 and A&B's 16. */
 .rv3 .rv4-chapter__body.is-bare > .rv4-fvr ~ .rv4-learn {
-  margin-top: 0;
+  margin-top: 16.2px;
 }
 
 /* ══ "Go deeper" — an article's own gate · 482:6479 (Fantasy vs. Reality) ══════════
