@@ -1,12 +1,12 @@
 name: Health Monitor
 
+# Daily at 08:41 UTC too, to catch non-deploy outages: started by Vercel's clock
+# (features/cron/server/github-jobs.ts), not a `schedule:`, which GitHub starts
+# hours late for this repo.
 on:
   push:
     branches: [main, staging]
-  schedule:
-    # Also runs every day at 8:00 AM UTC to catch non-deploy outages
-    - cron: "0 8 * * *"
-  workflow_dispatch: # Allow manual trigger from GitHub Actions UI
+  workflow_dispatch: # The clock, or a manual trigger from the Actions tab
 
 # Keyed on ref so main and staging health checks never cancel each other; a
 # newer push to the same target supersedes an in-flight check (it re-probes).

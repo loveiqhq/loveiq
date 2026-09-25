@@ -16,6 +16,8 @@ import {
   GITHUB_WORKFLOW,
   UNWATCHED_CRONS,
 } from "@features/cron/server/cron-stall";
+import { CLOCK_WORKFLOWS } from "@features/cron/server/github-jobs";
+
 import { brainDailySchedules } from "./brain-daily-schedule";
 
 const NOW = Date.parse("2026-08-29T12:00:00Z");
@@ -46,7 +48,9 @@ function githubRecordedCrons(fs: typeof import("node:fs")): Array<[string, strin
   const found: Array<[string, string]> = [];
   for (const file of fs.readdirSync(".github/workflows")) {
     const yml = fs.readFileSync(`.github/workflows/${file}`, "utf8");
-    if (!/^\s*schedule:/m.test(yml)) continue;
+    // Scheduled either by GitHub or by Vercel's clock (start-github-jobs).
+    const clock = (CLOCK_WORKFLOWS as readonly string[]).includes(file);
+    if (!clock && !/^\s*schedule:/m.test(yml)) continue;
     for (const m of yml.matchAll(/record-cron-run\.mjs ([a-z0-9-]+)/g)) found.push([m[1], file]);
   }
   return found;
@@ -86,17 +90,23 @@ describe("findStalledCrons", () => {
     expect(describeStall(stalled[0])).toMatch(/expected and will clear/);
   });
 
-  it("tells the reader to start a GitHub job by hand, and names its workflow", () => {
-    // GitHub starts this repo's schedules hours late and drops some, so a quiet GitHub
-    // job is usually the scheduler, and "not firing" alone sends the reader to debug it.
+  it("tells the reader where a quiet GitHub job is started, and to start it by hand", () => {
+    // "Not firing" alone sends the reader to debug the job. For one Vercel's clock starts,
+    // the clock or its token is the likelier cause; for one on GitHub's own schedule, the
+    // scheduler, which runs this repo's jobs hours late.
     const stall = {
       cron: "ux-review-verify",
       lastRunAt: "2026-08-29T05:00:00Z",
-      ageMs: 10 * 3_600_000,
-      maxAgeMs: 9 * 3_600_000,
+      ageMs: 4 * 3_600_000,
+      maxAgeMs: 3 * 3_600_000,
     };
-    expect(describeStall(stall)).toMatch(/\(ux-review-verify\.yml\).*start it by hand/);
+    expect(describeStall(stall)).toMatch(
+      /\(ux-review-verify\.yml, via start-github-jobs\).*GITHUB_DISPATCH_TOKEN.*start it by hand/
+    );
     expect(describeStall({ ...stall, lastRunAt: null, ageMs: null })).toMatch(/start it by hand/);
+    expect(describeStall({ ...stall, cron: "brain-brief" })).toMatch(
+      /\(brain-daily\.yml\) and runs this repo's schedules hours late.*start it by hand/
+    );
     expect(describeStall({ ...stall, cron: "brain-fast" })).not.toMatch(/GitHub/);
   });
 
@@ -125,11 +135,16 @@ describe("the watch list must not drift from what is scheduled", () => {
     }
   });
 
-  it("gives a GitHub job more room than the gaps GitHub leaves on an ordinary day", () => {
-    // Measured 2026-09-14..25: the verifier's longest gap between scheduled runs was 7.9h,
-    // and a third passed 6h. The audit's first slot to its last the next day is ~29h.
-    expect(CRON_MAX_AGE_MS["ux-review-verify"]).toBeGreaterThan(7.9 * 3_600_000);
-    expect(CRON_MAX_AGE_MS["ux-digest-audit"]).toBeGreaterThan(29 * 3_600_000);
+  it("gives a job the clock starts room for two missed starts, and no more", () => {
+    // Hourly starts: two missed is two hours, and a limit much looser than that would sit
+    // on a stopped clock for most of a day. The audit starts at 08:41 and 10:41 daily.
+    const hour = 3_600_000;
+    for (const cron of ["start-github-jobs", "ux-review-verify"]) {
+      expect(CRON_MAX_AGE_MS[cron], cron).toBeGreaterThanOrEqual(2 * hour);
+      expect(CRON_MAX_AGE_MS[cron], cron).toBeLessThanOrEqual(6 * hour);
+    }
+    expect(CRON_MAX_AGE_MS["ux-digest-audit"]).toBeGreaterThan(24 * hour);
+    expect(CRON_MAX_AGE_MS["ux-digest-audit"]).toBeLessThanOrEqual(30 * hour);
   });
 
   it("names the workflow of every job GitHub starts, and of nothing else", async () => {

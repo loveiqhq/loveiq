@@ -1,5 +1,6 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
 import logger from "@shared/observability/logger";
+import { CLOCK_WORKFLOWS } from "./github-jobs";
 
 /**
  * Watchdog for crons that stop firing.
@@ -33,6 +34,9 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   "payment-fulfillment-sweep": 2 * 3_600_000,
   "security-storm-detector": 3_600_000,
   "anomaly-watcher": 3 * 3_600_000,
+  // Hourly: starts the GitHub jobs below on time. Three hours is two missed starts, and
+  // those jobs' own limits would follow within the hour.
+  "start-github-jobs": 3 * 3_600_000,
   // Every 30 minutes, so 90 minutes of silence is two missed ticks — the same
   // window the route itself looks back over.
   "ux-review": 90 * 60_000,
@@ -99,24 +103,23 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   "brain-battery-retrieval": 8 * 24 * 3_600_000,
   "brain-battery-mcp": 8 * 24 * 3_600_000,
   /**
-   * GITHUB-SCHEDULED. GitHub starts this repo's schedules 4.5 to 5.5 hours late and
-   * drops some: from 2026-09-14 the verifier ran 4-6 times a day on an 8-a-day cron.
-   * Both record their SCHEDULED runs (scripts/record-cron-run.mjs), so a hand-started run
-   * cannot hide a dead schedule. Each limit sits just above the longest gap GitHub
-   * leaves on an ordinary day, so an alert means more than its usual drops. The
-   * verifier's 49 gaps from 2026-09-14 to 09-25 peaked at 7.9h and 16 were over 6h, so
-   * the 6h this started with would have alerted most days. The audit's three slots span
-   * four hours, so its first slot one day and its last the next, with the two between
-   * dropped, is about 29h and still ordinary.
+   * GitHub jobs that Vercel's clock starts (features/cron/server/github-jobs.ts). Both
+   * record the runs the clock started (scripts/record-cron-run.mjs), so a hand-started
+   * run cannot hide a stopped clock. Tight again because the starts are on time: under
+   * GitHub's own schedule the verifier's gaps reached 7.9h (49 gaps, 2026-09-14 to
+   * 09-25) and these were 9h and 32h. The verifier starts hourly, so three hours is two
+   * missed runs; the audit at 08:41 and 10:41, so a day and two hours is both missed.
    */
-  "ux-review-verify": 9 * 3_600_000,
-  "ux-digest-audit": 32 * 3_600_000,
+  "ux-review-verify": 3 * 3_600_000,
+  "ux-digest-audit": 26 * 3_600_000,
 };
 
 /**
- * Watched jobs that GitHub Actions starts, and the workflow that starts them. When one
- * goes quiet the likeliest cause is GitHub's scheduler, not the job, and the remedy is to
- * start it by hand, so the alert says where. A test keeps this in step with the workflows.
+ * Watched jobs that run in GitHub Actions, and their workflow. Most are started by
+ * Vercel's clock (CLOCK_WORKFLOWS), so when one goes quiet the clock or its token is the
+ * likeliest cause; the brain's still use GitHub's schedule, which runs hours late. Either
+ * way the remedy is to start it by hand, so the alert says where. A test keeps this in
+ * step with the workflows.
  */
 export const GITHUB_WORKFLOW: Record<string, string> = {
   "brain-brief": "brain-daily.yml",
@@ -191,10 +194,15 @@ export async function findStalledCrons(nowMs: number = Date.now()): Promise<Stal
 export function describeStall(s: StalledCron): string {
   const hours = (ms: number) => `${(ms / 3_600_000).toFixed(1)}h`;
   const workflow = GITHUB_WORKFLOW[s.cron];
-  const github = workflow
-    ? `GitHub Actions starts it (${workflow}) and runs this repo's schedules hours late, ` +
-      `sometimes not at all: start it by hand from the Actions tab if it cannot wait.`
-    : null;
+  const byClock = (CLOCK_WORKFLOWS as readonly string[]).includes(workflow ?? "");
+  const github = !workflow
+    ? null
+    : byClock
+      ? `Vercel's clock starts it in GitHub Actions (${workflow}, via start-github-jobs): ` +
+        `check that cron's last run and its GITHUB_DISPATCH_TOKEN, or start it by hand ` +
+        `from the Actions tab.`
+      : `GitHub Actions starts it (${workflow}) and runs this repo's schedules hours late, ` +
+        `sometimes not at all: start it by hand from the Actions tab if it cannot wait.`;
   if (s.lastRunAt === null) {
     return (
       `*${s.cron}* has NEVER recorded a run. If it was deployed within the last ` +
