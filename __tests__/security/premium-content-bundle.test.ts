@@ -59,6 +59,11 @@ const PREMIUM_DATA_MODULES = [
   // paywalled frame (305:350) blurs everything past paragraph 5, so a client
   // component importing the module would hand over exactly what the wall withholds.
   "@/data/report3-partnership",
+  // Added 2026-09-25. The Fantasy vs. Reality chapter (Figma 304:281) — its prose,
+  // "Common challenges" and the practice. The paywalled frame (305:217) blurs
+  // "Common challenges" whole and most of the practice, so a client component
+  // importing the module would hand over exactly what the wall withholds.
+  "@/data/report3-fantasy",
 ];
 
 const PROJECT_ROOT = join(__dirname, "..", "..");
