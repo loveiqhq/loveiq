@@ -6039,3 +6039,33 @@ html {
     transition: none;
   }
 }
+
+/* ── Locked, not-yet-designed chapters — Figma comments 1940141608, 1939992442 ─────
+ * "Blurred with the icon and the Unlock CTA": three paragraphs of filler under the
+ * full blur (2.5px, Figma's radius 5, as Fantasy vs. Reality's locked copy 305:228)
+ * with the chapter-body Premium card 87px into the text, as Typical Beliefs' gate sets
+ * it. The block owns the click. It sits in a V3 chapter body, so the filler is set in
+ * spans, its type re-asserted, rather than meeting the body's <p> catch-all. */
+.rv3.rv4 .rv4-lockch {
+  cursor: pointer;
+  padding: 20px 0 24px;
+  position: relative;
+}
+.rv3.rv4 .rv4-lockch__text {
+  display: flex;
+  filter: blur(2.5px);
+  flex-direction: column;
+  gap: 16px;
+  user-select: none;
+}
+.rv3.rv4 .rv3-chapter .rv4-lockch__line {
+  color: var(--rv3-copy);
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 25.6px;
+}
+.rv3.rv4 .rv4-lockch .rv4-premium {
+  top: 107px;
+}

@@ -32,6 +32,7 @@ import {
 } from "./reportNav";
 import ReportMobileNav from "./ReportMobileNav";
 import { V3ModeProvider, V4ModeProvider } from "./v3/V3Chapter";
+import { V4ChapterLockProvider } from "./v3/V4ChapterLock";
 import V3Intro from "./v3/V3Intro";
 import V4Part1 from "./v3/V4Part1";
 import V3ArchetypeCard from "./v3/V3ArchetypeCard";
@@ -43,6 +44,7 @@ import V4TopThreeSection from "./v3/V4TopThreeSection";
 import { report3ArchetypeCard } from "@/data/report3-archetype-card";
 import type { ArchetypeName } from "@features/report/server/archetypeSlug";
 import {
+  REPORT_V4_DESIGNED_CHAPTER_IDS,
   REPORT_V4_PART_DIVIDER_BY_SECTION,
   REPORT_V4_SUMMARY,
   REPORT_V4_TOP_THREE_HEADING,
@@ -2394,7 +2396,28 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   if (!isV3) return experience;
   return (
     <V3ModeProvider>
-      {isV4 ? <V4ModeProvider>{experience}</V4ModeProvider> : experience}
+      {isV4 ? (
+        <V4ModeProvider>
+          {/* Locked chapters Figma has not designed yet show the blurred block and
+           * the Premium card (Figma 1940141608). Who is locked is the nav badges'
+           * answer — the same gate the sections and the server use; the designed
+           * chapters keep their own gating. */}
+          <V4ChapterLockProvider
+            value={{
+              isLocked: (id) =>
+                !REPORT_V4_DESIGNED_CHAPTER_IDS.has(id) && navAccessById.get(id) === "locked",
+              unlock: (id) => {
+                const section = resolvedSections.find((s) => s.id === id);
+                if (section) unlockSection(section);
+              },
+            }}
+          >
+            {experience}
+          </V4ChapterLockProvider>
+        </V4ModeProvider>
+      ) : (
+        experience
+      )}
     </V3ModeProvider>
   );
 };

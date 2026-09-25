@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { cleanup, fireEvent, render } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import V3Chapter, { V3ModeProvider, V4ModeProvider } from "@features/report/ui/v3/V3Chapter";
 import type { ReportV3Chapter } from "@features/report/ui/v3/reportV3Nav";
 
@@ -240,5 +240,84 @@ describe("V3Chapter — opened from a nudge", () => {
     expect(button.getAttribute("aria-expanded")).toBe("false");
     act(() => openV4Chapter("core_insecurities"));
     expect(button.getAttribute("aria-expanded")).toBe("false");
+  });
+});
+
+/**
+ * Locked, not-yet-designed chapters — Mark: "when opening the remaining chapters,
+ * they should all be blurred with the icon and the Unlock CTA" (Figma 1940141608,
+ * 1939992442). Under V4 a V3 chapter the reader has not unlocked shows blurred filler
+ * with the chapter-body Premium card instead of its V2 section.
+ */
+describe("V3Chapter under V4 — locked, not yet designed", () => {
+  const renderLocked = async (
+    lockedId: string,
+    unlock = (_id: string) => {},
+    chapter: ReportV3Chapter = INSECURITIES
+  ) => {
+    const { V4ChapterLockProvider } = await import("@features/report/ui/v3/V4ChapterLock");
+    return render(
+      <V3ModeProvider>
+        <V4ModeProvider>
+          <V4ChapterLockProvider value={{ isLocked: (id: string) => id === lockedId, unlock }}>
+            <V3Chapter
+              chapter={chapter}
+              sectionId={chapter.id}
+              archetype="Spark Seeker"
+              feedbackWidget={<span className="fb">Does this resonate?</span>}
+            >
+              <p className="body">chapter body</p>
+            </V3Chapter>
+          </V4ChapterLockProvider>
+        </V4ModeProvider>
+      </V3ModeProvider>
+    );
+  };
+
+  it("draws the blurred block and the Premium card instead of the section, with no feedback", async () => {
+    const { container } = await renderLocked("core_insecurities");
+    const block = container.querySelector(".rv4-lockch")!;
+    expect(block).not.toBeNull();
+    expect(container.querySelector(".body")).toBeNull();
+    expect(container.querySelector(".fb")).toBeNull();
+    const text = block.querySelector(".rv4-lockch__text")!;
+    expect(text.getAttribute("aria-hidden")).toBe("true");
+    expect(text.hasAttribute("inert")).toBe(true);
+    // Filler, not copy — and no <p>, which the V3 body catch-all would restyle.
+    expect(text.querySelectorAll("p")).toHaveLength(0);
+    expect(text.querySelectorAll(".rv4-lockch__line").length).toBe(3);
+    expect(block.querySelector(".rv4-premium")).toHaveClass("rv4-premium--guarantee");
+  });
+
+  it("opens the paywall once, for this chapter, from anywhere on it", async () => {
+    const unlock = vi.fn();
+    const { container } = await renderLocked("core_insecurities", unlock);
+    fireEvent.click(container.querySelector(".rv4-lockch__text")!);
+    expect(unlock).toHaveBeenCalledTimes(1);
+    expect(unlock).toHaveBeenLastCalledWith("core_insecurities");
+    fireEvent.click(container.querySelector(".rv4-lockch .rv4-premium button")!);
+    expect(unlock).toHaveBeenCalledTimes(2);
+  });
+
+  it("leaves an unlocked chapter's section alone", async () => {
+    const { container } = await renderLocked("confidence_level");
+    expect(container.querySelector(".rv4-lockch")).toBeNull();
+    expect(container.querySelector(".body")).not.toBeNull();
+  });
+
+  it("counts every chapter but the four Figma has designed — Reward System has no row at all", async () => {
+    const { REPORT_V4_DESIGNED_CHAPTER_IDS } = await import("@/data/report3-archetype-page");
+    expect([...REPORT_V4_DESIGNED_CHAPTER_IDS].sort()).toEqual([
+      "challenges_in_partnership",
+      "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
+      "typical_beliefs",
+      "typical_sexual_fantasy_amp_practice_tendencies",
+    ]);
+  });
+
+  it("appends its CSS below the frozen top of reportV3.css", () => {
+    const at = V3_CSS.indexOf(".rv4-lockch");
+    expect(at).toBeGreaterThan(0);
+    expect(V3_CSS.slice(0, at).split("\n").length).toBeGreaterThan(1884);
   });
 });

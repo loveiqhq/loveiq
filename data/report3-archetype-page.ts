@@ -446,6 +446,22 @@ export const REPORT_V4_UNSUFFIXED_CHAPTER_IDS: ReadonlySet<string> = new Set(
   ].flatMap((c) => (c.suffix === false && c.id ? [c.id] : []))
 );
 
+/**
+ * The chapters Figma has designed — its expanded rows (`body: "chapter"`). Every
+ * other chapter the live V4 report draws is not designed yet: the "[Teaser Text]"
+ * rows, and V3 chapters the frames have no row for at all (Reward System). Under V4
+ * a locked one of those shows blurred filler and the Premium card (V4ChapterLock);
+ * these keep their own gating.
+ */
+export const REPORT_V4_DESIGNED_CHAPTER_IDS: ReadonlySet<string> = new Set(
+  [
+    ...REPORT_V4_PART3_CHAPTERS,
+    ...REPORT_V4_PART4_CHAPTERS,
+    ...REPORT_V4_PART5_CHAPTERS,
+    ...REPORT_V4_PART6_CHAPTERS,
+  ].flatMap((c) => (c.body === "chapter" && c.id ? [c.id] : []))
+);
+
 /** The chapters whose head breaks before its suffix (`suffixBreak` above). */
 export const REPORT_V4_SUFFIX_BREAK_IDS: ReadonlySet<string> = new Set(
   [

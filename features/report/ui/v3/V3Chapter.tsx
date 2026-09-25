@@ -12,6 +12,7 @@ import {
 } from "./reportV3Nav";
 import { V4ChapterChevron, V4ChapterTitle } from "./V4ChapterHead";
 import { useOnV4OpenChapter } from "./v4OpenChapter";
+import { useV4ChapterLock, V4LockedChapter } from "./V4ChapterLock";
 
 /**
  * V3 chapter chrome — Figma 10439:181 (eyebrow) + 10439:190 (title button).
@@ -111,6 +112,9 @@ const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget, ar
     useCallback(() => setIsOpen(true), []),
     isV4
   );
+  // A locked chapter Figma has not designed yet shows the blurred block (V4 only —
+  // no provider exists outside it).
+  const lock = useV4ChapterLock(sectionId);
 
   if (isV4) {
     // Typical Beliefs' head (V4ChapterHead), not V3's: no book icon, chapter number
@@ -144,13 +148,19 @@ const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget, ar
         <div className="rv3-chapter__body" id={bodyId} inert={!isOpen}>
           <div>
             <div className="rv3-chapter__body-inner">
-              {children}
-              {feedbackWidget ? (
-                <div className="rv4-rating">
-                  <div className="rv4-rating__live">{feedbackWidget}</div>
-                  <div className="rv4-rating__tail" aria-hidden="true" />
-                </div>
-              ) : null}
+              {lock ? (
+                <V4LockedChapter onUnlock={lock.unlock} />
+              ) : (
+                <>
+                  {children}
+                  {feedbackWidget ? (
+                    <div className="rv4-rating">
+                      <div className="rv4-rating__live">{feedbackWidget}</div>
+                      <div className="rv4-rating__tail" aria-hidden="true" />
+                    </div>
+                  ) : null}
+                </>
+              )}
             </div>
           </div>
         </div>
