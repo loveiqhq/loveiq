@@ -25,8 +25,8 @@ repo's scheduled runs 4.5 to 5.5 hours after their cron time and drops some (fro
 2026-09-14 the UX verifier ran 4-6 times a day on an 8-a-day cron; see
 docs/runbooks/COMPANY_BRAIN.md for the measurement). A job that is never started cannot
 report its own absence, so `ux-review-verify.yml` and `ux-digest-audit.yml` end with
-`scripts/record-cron-run.mjs <name>` on scheduled runs, and `server/cron-stall.ts` alerts
-#ops when one goes quiet (6 h and 26 h). The stall test counts a GitHub job only if its
+`scripts/record-cron-run.mjs <name>` on scheduled runs, and `server/cron-stall.ts`
+alerts #ops when one goes quiet (6 h and 26 h). The stall test counts a GitHub job only if its
 workflow both has a schedule and records under that name. For a job GitHub starts, the
 alert names its workflow (`GITHUB_WORKFLOW`), because the fix is usually to start it by
 hand, not to debug it.
