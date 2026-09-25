@@ -2407,9 +2407,14 @@
 .rv3 .rv4-part--lead {
   padding-top: 56px;
 }
+/* The 226px glow (1:172) runs 44.6px past the stage's foot, where its violet is still
+ * at 4%; clipped there, it ended on a hard line (Mark, 25.09: "give it more room").
+ * It fades out in the gap below instead, as Figma draws it. Only the sides clip: on
+ * a 320px phone the 332px glow is wider than the column. */
 .rv3 .rv4-part__stage {
   height: 148px;
-  overflow: clip;
+  overflow-x: clip;
+  overflow-y: visible;
   position: relative;
   width: 100%;
 }

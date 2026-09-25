@@ -30,4 +30,15 @@ describe("reportV3.css — the part heading stays centred on every phone", () =>
     expect(rule(".rv3 .rv4-part__eyebrow {")).toContain("left: calc(50% - 1.84px)");
     expect(rule(".rv3 .rv4-part__title {")).toContain("left: calc(50% - 0.05px)");
   });
+
+  // Review 25.09, Mark: "The gradient of the parts is cut off on the bottom, give it
+  // more room." The 226px glow runs 44.6px past the 148px stage (1:172 at -33.39), and
+  // the stage clipped it there, while its violet was still at 4%. Figma lets it spill
+  // into the gap below; only the sides stay clipped, so a 320px phone cannot scroll.
+  it("lets the glow fade out below the stage, clipping only its sides", () => {
+    const stage = rule(".rv3 .rv4-part__stage {");
+    expect(stage).toContain("overflow-x: clip;");
+    expect(stage).toContain("overflow-y: visible;");
+    expect(stage).not.toMatch(/overflow: clip;/);
+  });
 });
