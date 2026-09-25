@@ -100,11 +100,8 @@ const pairKey = (a: string, b: string) => [a, b].sort().join("|");
 /** JSON out of a model's answer, or null. Seen live: a JavaScript expression inside it. */
 export function parseJson(raw: string): unknown {
   const body = raw.replace(/^\s*```(?:json)?/i, "").replace(/```\s*$/, "");
-  const start = body.indexOf("{");
-  const end = body.lastIndexOf("}");
-  if (start < 0 || end <= start) return null;
   try {
-    return JSON.parse(body.slice(start, end + 1));
+    return JSON.parse(body.slice(body.indexOf("{"), body.lastIndexOf("}") + 1));
   } catch {
     return null;
   }

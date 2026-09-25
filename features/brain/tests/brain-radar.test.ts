@@ -558,6 +558,10 @@ describe("listing", () => {
     const list = (await openConflicts(null))!;
     expect(list.map((c) => c.later)).toEqual([NOTION]);
     expect(await openConflicts("pricing")).toEqual([]);
+    // Between nightly syncs a decision can be superseded; its pair is no longer listed.
+    db.chunks.find((c) => c.source_id === NOTION)!.meta.superseded_by = "decision:2026-09-20-new";
+    expect(await openConflicts(null)).toEqual([]);
+    delete db.chunks.find((c) => c.source_id === NOTION)!.meta.superseded_by;
     const text = renderConflicts(list, null);
     expect(text).toContain("1 pair of recorded decisions that may not both stand");
     expect(text).toContain("tooling:\n- They may give different answers: Two tools.");

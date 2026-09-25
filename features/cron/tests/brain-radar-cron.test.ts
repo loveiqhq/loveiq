@@ -13,7 +13,7 @@ vi.mock("@shared/http/is-prod-cron-host", () => ({ isProdCronHost: () => mockPro
 const mockConfigured = vi.fn(() => true);
 vi.mock("@features/brain/server/llm", () => ({
   complete: vi.fn(),
-  isLlmConfigured: () => mockConfigured(),
+  cliBinary: () => (mockConfigured() ? "claude" : null),
 }));
 const mockNotice = vi.fn();
 vi.mock("@features/brain/server/notice", () => ({

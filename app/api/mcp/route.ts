@@ -32,6 +32,7 @@ import {
   type RetrieveShaping,
 } from "@features/brain/server/retrieve";
 import {
+  disputesOf,
   looksLikeDecisionBrowse,
   priorDecisions,
   recentDecisions,
@@ -3084,6 +3085,13 @@ async function callTool(
             sourceId: c.sourceId,
             title: c.title,
             decidedOn: c.periodEnd,
+            // The same warnings the lookup path carries, so a decision reads the same
+            // whether it ranked into the results or had to be looked up.
+            supersededBy:
+              typeof (c.meta as { superseded_by?: unknown } | null)?.superseded_by === "string"
+                ? ((c.meta as { superseded_by: string }).superseded_by ?? null)
+                : null,
+            disputedBy: disputesOf(c.meta as Record<string, unknown> | null),
           }))
         : /**
            * THE LOOKUP RUNS EVEN ON A WEAK MATCH, which is the opposite of what this did.

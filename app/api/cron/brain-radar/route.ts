@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { complete, isLlmConfigured } from "@features/brain/server/llm";
+import { cliBinary, complete } from "@features/brain/server/llm";
 import { recordNotice } from "@features/brain/server/notice";
 import { runRadar } from "@features/brain/server/radar";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -33,9 +33,14 @@ export async function GET(request: Request) {
   if (!isProdCronHost()) {
     return NextResponse.json({ skipped: true, reason: "non-prod-cron-host" });
   }
-  if (!isLlmConfigured()) {
+  // Claude only, through the Team subscription's binary (BRAIN_LLM_CLI), like the Night
+  // Shift: Jarvis's model is Claude, so the older API-key lane is refused, not used.
+  if (!cliBinary()) {
     return NextResponse.json(
-      { ok: false, error: "No model is configured (BRAIN_LLM_CLI or BRAIN_LLM_KEY)." },
+      {
+        ok: false,
+        error: "BRAIN_LLM_CLI is not set: the decision radar runs in GitHub Actions only.",
+      },
       { status: 503 }
     );
   }

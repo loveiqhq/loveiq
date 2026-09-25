@@ -1428,6 +1428,32 @@ describe("/api/mcp", () => {
       expect(text).toContain("drive/doc:113TF @2.52 — outranks 1 of the 2 shown");
     });
 
+    it("carries a ranked-in decision's warnings into the decision block", async () => {
+      mockRetrieve.mockResolvedValue([
+        chunk(),
+        chunk({
+          source: "decision",
+          sourceId: "decision:2026-05-15-jira",
+          title: "Decision: Require Jira tickets",
+          score: 3.38,
+          periodEnd: "2026-05-15",
+          meta: {
+            superseded_by: "decision:2026-09-20-notion",
+            disputed_by: [
+              { id: "decision:2026-09-03-b", on: "2026-09-03", kind: "unclear", why: "Two tools." },
+            ],
+          },
+        }),
+      ]);
+      const text = (await (await call({ query: "should we switch to Jira tickets" })).json()).result
+        .content[0].text;
+      const block = text.slice(0, text.indexOf("HOW TO READ THESE"));
+      expect(block).toContain("SUPERSEDED by decision/decision:2026-09-20-notion");
+      expect(block).toContain(
+        "MAY CONFLICT with decision/decision:2026-09-03-b (2026-09-03): Two tools."
+      );
+    });
+
     it("lifts a decision out of the results when it ranks with them", async () => {
       mockRetrieve.mockResolvedValue([
         chunk(),
