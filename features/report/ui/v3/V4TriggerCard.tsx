@@ -3,6 +3,7 @@
 import Image from "next/image";
 import type { CSSProperties, FC } from "react";
 import type { Report3TriggerRow } from "@/data/report3-accelerators";
+import { useRevealOnView } from "../hooks/useRevealOnView";
 import V4LockBadge from "./V4LockBadge";
 import { guardedUnlock } from "./v4Unlock";
 
@@ -24,6 +25,11 @@ import { guardedUnlock } from "./v4Unlock";
  * its own and bubbles to it — the same seam as V4ShadowBeliefs).
  *
  * The chrome text lives here, never in the paid module.
+ *
+ * THE REVEAL is 2.0's (review 24.09: "bring back the animation from V2 Report"):
+ * AcceleratorsSection's chart grows each fill from nothing, 70ms behind the row
+ * above, and lands each knob once its fill has reached it. Same hook, same
+ * timings (reportV3.css, "A&B trigger scales"); `--row` is the stagger.
  */
 
 type Tone = "brake" | "accel";
@@ -66,12 +72,16 @@ const RowScale: FC<{ fill: number }> = ({ fill }) => (
   </span>
 );
 
-const Row: FC<{ row: Report3TriggerRow; locked: boolean; last: boolean }> = ({
+const Row: FC<{ row: Report3TriggerRow; locked: boolean; last: boolean; index: number }> = ({
   row,
   locked,
   last,
+  index,
 }) => (
-  <li className={`rv4-trig__row${locked ? " is-locked" : ""}${last ? " is-last" : ""}`}>
+  <li
+    className={`rv4-trig__row${locked ? " is-locked" : ""}${last ? " is-last" : ""}`}
+    style={{ "--row": index } as CSSProperties}
+  >
     <p className="rv4-trig__title">{row.label}</p>
     <p className="rv4-trig__sub">{row.subtext}</p>
     <RowScale fill={row.fill} />
@@ -82,6 +92,7 @@ const V4TriggerCard: FC<Props> = ({ tone, rows, lockedFrom = null, onUnlock }) =
   const locked = lockedFrom !== null && lockedFrom < rows.length;
   const clear = locked ? rows.slice(0, lockedFrom) : rows;
   const blurred = locked ? rows.slice(lockedFrom) : [];
+  const [chartRef, revealed] = useRevealOnView<HTMLDivElement>();
   // Scrambled rows are not stable keys, so rows are keyed by position.
   return (
     <section
@@ -95,17 +106,29 @@ const V4TriggerCard: FC<Props> = ({ tone, rows, lockedFrom = null, onUnlock }) =
         </span>
         <h4 className="rv4-trig__label">{LABEL[tone]}</h4>
       </div>
-      <div className="rv4-trig__rows">
+      <div ref={chartRef} className={`rv4-trig__rows rv4-reveal${revealed ? " is-revealed" : ""}`}>
         <ul className="rv4-trig__list">
           {clear.map((row, index) => (
-            <Row key={index} row={row} locked={false} last={!locked && index === rows.length - 1} />
+            <Row
+              key={index}
+              row={row}
+              locked={false}
+              last={!locked && index === rows.length - 1}
+              index={index}
+            />
           ))}
         </ul>
         {locked ? (
           <div className="rv4-tb-lock rv4-trig__lock" onClick={guardedUnlock(onUnlock)}>
             <ul className="rv4-trig__list is-locked" aria-hidden="true" inert>
               {blurred.map((row, index) => (
-                <Row key={index} row={row} locked last={index === blurred.length - 1} />
+                <Row
+                  key={index}
+                  row={row}
+                  locked
+                  last={index === blurred.length - 1}
+                  index={clear.length + index}
+                />
               ))}
             </ul>
             <V4LockBadge />
