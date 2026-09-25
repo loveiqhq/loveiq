@@ -2518,6 +2518,7 @@ async function runRetrievalBattery(only: string | null): Promise<BatteryResult> 
   const failedProbes: RetrievalProbe[] = [];
   const recoveredProbes: RetrievalProbe[] = [];
   const knownFlaky: RetrievalProbe[] = [];
+  let outage = false;
   for (const p of probes) {
     let { hits, issues, ms } = await run(p);
     let firstIssues: string[] = [];
@@ -2548,6 +2549,7 @@ async function runRetrievalBattery(only: string | null): Promise<BatteryResult> 
     if (recovered || (issues.length && !knownWhy)) failing.push(p.kind);
     if (!issues.length && firstIssues.length) flakyKinds.push(p.kind);
     if (!recovered && issues.length && !knownWhy) failedProbes.push(p);
+    if (issues.some((i) => i.startsWith("retrieval threw"))) outage = true;
     if (recovered) recoveredProbes.push(p);
     if (knownWhy && !issues.length && firstIssues.length) knownFlaky.push(p);
 
@@ -2577,6 +2579,15 @@ async function runRetrievalBattery(only: string | null): Promise<BatteryResult> 
    * apart, never clean.
    */
   if (failedProbes.length || recoveredProbes.length || knownFlaky.length) {
+    // An outage is not a wrong answer either. Three timeouts open the Supabase circuit
+    // breaker for 30 s, and every probe in that window "fails" with "Circuit open": one
+    // slow moment turned into nine failures in a sweep on 2026-09-25. Wait the breaker
+    // out before re-checking, so only a corpus that STAYS unreachable is recorded as such.
+    if (outage) {
+      console.log("\nwaiting 35s for the corpus connection to recover before re-checking");
+      await new Promise((r) => setTimeout(r, 35_000));
+    }
+    // After the outage wait, so that wait cannot carry the re-check into the next rewrite.
     await outsideRewrite();
     for (const p of failedProbes) {
       if ((await run(p)).issues.length) continue;
