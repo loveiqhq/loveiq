@@ -3603,13 +3603,14 @@
  * hitting a hard edge. Three stacked backdrop layers, each faded in over a third
  * of the band. Stacked blurs compound (sigmas add in quadrature), so the layers
  * are 0.8 / 1.39 / 1.92px to land on 0.8 / 1.6 / 2.5px at each third. The
- * copy itself carries no filter; the layers blur it from above. */
+ * copy itself carries no filter; the layers blur it from above. They overhang the
+ * copy 8px a side, as the ramps' do (.rv4-pblur), so its edge blurs too. */
 .rv3 .rv4-learn__blur {
   height: 656px;
-  left: 0;
+  left: -8px;
   pointer-events: none;
   position: absolute;
-  right: 0;
+  right: -8px;
   top: 16px;
 }
 .rv3 .rv4-learn__blur > span {
@@ -4429,9 +4430,12 @@
  * 1.92px land on 2.5px (Figma radius 5) at the band's foot and hold there below
  * it. `--rv4-band` is the ramp's length, a percentage of the element or a length.
  * Only ever laid over the ramp block — everything past it takes a plain filter,
- * which is cheaper on phones and doubles as the fallback. */
+ * which is cheaper on phones and doubles as the fallback.
+ * A backdrop filter samples only its own box, so the layers overhang the text 8px a
+ * side (over 3x the 2.5px they build to): flush with it, every blurred line began on
+ * a hard cut, and WebKit repeated the edge pixels into a darker seam (Sanjin, 25.09). */
 .rv3 .rv4-pblur {
-  inset: 0;
+  inset: 0 -8px;
   pointer-events: none;
   position: absolute;
 }
