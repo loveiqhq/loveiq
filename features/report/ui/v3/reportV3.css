@@ -6258,14 +6258,19 @@ html {
   min-height: 39px;
   text-transform: uppercase;
 }
-/* 639:319 — centred on the whole cell, each line with its trailing space, the info
- * mark set absolute at the cell's top right (72.11, 8.56). */
+/* 639:319 — each line centred on the whole cell, the info mark set absolute at the
+ * cell's top right (72.11, 8.56). Figma centres a line on its letters and the gaps
+ * between them; CSS counts the tracking after the last letter too, which the first
+ * line matches (the space it breaks at follows) and the last cancels. */
 .rv3 .rv4-fvt__col--score {
   position: relative;
   text-align: center;
 }
 .rv3 .rv4-fvt__col-line {
   display: block;
+}
+.rv3 .rv4-fvt__col-line + .rv4-fvt__col-line {
+  margin-right: -0.8px;
 }
 .rv3 .rv4-fvt__cols .rv4-fvt__mark {
   height: 9.89px;
@@ -6350,12 +6355,15 @@ html {
   min-width: 0;
   text-align: center;
 }
+/* The margin gives back the tracking CSS adds after the digit, which Figma leaves
+ * out of the width it centres. */
 .rv3 .rv4-fvt__num {
   font-family: var(--font-serif);
   font-size: 18px;
   font-weight: 700;
   letter-spacing: -0.58px;
   line-height: 21.6px;
+  margin-right: 0.58px;
   padding-bottom: 0.4px;
 }
 .rv3 .rv4-fvt__score--pull .rv4-fvt__num {
@@ -6413,7 +6421,8 @@ html {
 }
 /* 639:498 / 639:2099 — a white pill 31 tall, a 1.5px coral → rose → violet outline
  * and its 10/12 bold caps in the same gradient; Figma's handles, in CSS stops. The
- * hit area is 44 tall. */
+ * height is set, not summed: Chromium floors a 1.5px border to 1, which would take
+ * a pixel off it. The hit area is 44 tall. */
 .rv3 .rv4-fvt__pill {
   align-items: center;
   background:
@@ -6426,6 +6435,7 @@ html {
   font-family: var(--font-sans);
   font-size: 10px;
   font-weight: 700;
+  height: 31px;
   justify-content: center;
   line-height: 12px;
   padding: 7.5px 20.5px 8.5px;
