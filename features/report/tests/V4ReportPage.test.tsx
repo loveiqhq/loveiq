@@ -86,10 +86,12 @@ describe("V3Methodology chrome", () => {
 
   it("uses V4's shortened questions only in V4", () => {
     render(<V3Methodology chrome="deck" />);
-    expect(screen.getByText("Why does safety change what you want?")).toBeInTheDocument();
+    expect(
+      screen.getByText("How does emotional security shape desire and intimacy?")
+    ).toBeInTheDocument();
     cleanup();
     render(<V3Methodology />);
-    expect(screen.queryByText("Why does safety change what you want?")).toBeNull();
+    expect(screen.queryByText("How does emotional security shape desire and intimacy?")).toBeNull();
   });
 });
 
@@ -391,5 +393,83 @@ describe("V3Methodology source tiles in the live report (review 24.09)", () => {
     expect(title).toContain("display: flex");
     expect(title).toContain("align-items: center");
     expect(title).toContain("justify-content: center");
+  });
+});
+
+// Mark, 2026-09-24 (comment 1939890558 on 493:7082): "We have updated some of the
+// support texts in the tiles, changed the order (swapped Attachment research and
+// Relationship research) and changed both of their chapters, and updated the Therapy
+// room text."
+describe("V3Methodology science deck in V4 (493:7082)", () => {
+  it("runs the seven tiles in the frame's order, with its questions and chapters", () => {
+    const { container } = render(<V3Methodology chrome="deck" />);
+    const cards = [...container.querySelectorAll(".rv3-sci__card")].map((c) => [
+      c.querySelector(".rv3-sci__title")!.textContent,
+      c.querySelector(".rv3-sci__q")!.textContent,
+      [...c.querySelectorAll(".rv3-sci__list li")].map((li) => li.textContent),
+    ]);
+    expect(cards).toEqual([
+      [
+        "Neuroscience",
+        "What happens in the brain when you feel desire?",
+        ["Reward System", "Arousal Style", "Energy & Risk"],
+      ],
+      [
+        "Psychology",
+        "Which beliefs about sex do you hold that you never chose?",
+        ["Typical Beliefs", "Core Insecurities"],
+      ],
+      [
+        "Relationship research",
+        "How does desire endure in long-term relationships?",
+        ["Love Language", "Challenges in Partnership"],
+      ],
+      ["Sexology", "How does arousal actually work?", ["Initiation Style", "Fantasy vs. Reality"]],
+      [
+        "Behavioral science",
+        "Why habits beat intentions?",
+        ["Accelerators & Brakes", "Libido Challenges"],
+      ],
+      [
+        "Attachment research",
+        "How does emotional security shape desire and intimacy?",
+        ["Attachment Style"],
+      ],
+      [
+        "Therapy rooms",
+        "What have decades of clinical practice taught us about desire and intimacy?",
+        ["Reading Recommendations"],
+      ],
+    ]);
+  });
+
+  it("leaves the live ?v3=1 deck as it was", () => {
+    const { container } = render(<V3Methodology />);
+    const titles = [...container.querySelectorAll(".rv3-sci__title")].map((t) => t.textContent);
+    expect(titles[2]).toBe("Attachment research");
+    expect(titles[5]).toBe("Relationship research");
+  });
+});
+
+// Mark, 2026-09-24 (reply 1939904226): "Also update the alignment and spacing of the
+// 'Read more in chapter' + the chapters". 493:7082 pins each card's list to its foot:
+// 248px cards, "Read more in chapter" on one line across all seven, chapters 5.5 apart.
+describe("reportV3.css — V4 science card alignment (493:7082)", () => {
+  const last = (selector: string) => {
+    const at = V3_CSS.lastIndexOf(selector);
+    expect(at, selector).toBeGreaterThan(-1);
+    return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+  };
+
+  it("sizes the card as drawn and pins the list to its foot", () => {
+    expect(last(".rv3 .rv3-method.is-v4 .rv3-sci__card {")).toMatch(/height:\s*248px/);
+    expect(last(".rv3 .rv3-method.is-v4 .rv3-sci__label {")).toMatch(/margin-top:\s*auto/);
+  });
+
+  it("sets the chapters 5.5px apart, 5.5px under the label", () => {
+    const list = last(".rv3 .rv3-method.is-v4 .rv3-sci__list {");
+    expect(list).toMatch(/gap:\s*5\.5px/);
+    expect(list).toMatch(/margin-top:\s*-9\.5px/);
+    expect(list).toMatch(/min-height:\s*71px/);
   });
 });

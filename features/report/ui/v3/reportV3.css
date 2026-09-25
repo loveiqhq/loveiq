@@ -5396,3 +5396,31 @@
   text-align: center;
   text-wrap: balance;
 }
+
+/* ══ V4 science cards — the chapter list pinned to the foot · review 24.09 ════════
+ * "Also update the alignment and spacing of the 'Read more in chapter' + the
+ * chapters" (Mark, 1939904226). 493:7082 draws each card 248 tall, space-between:
+ * the question at the top and a 92.5px block at the foot — the label, 5.5 below it
+ * the 20px chapter rows 5.5 apart — so "Read more in chapter" sits on one line
+ * across all seven cards however long the question runs. */
+.rv3 .rv3-method.is-v4 .rv3-sci__card {
+  height: 248px;
+}
+.rv3 .rv3-method.is-v4 .rv3-sci__label {
+  margin-top: auto;
+}
+/* Therapy rooms' three-line question fills the frame's budget exactly, and the card
+ * box here rounds about a pixel taller than Figma's (its stroke counts inside the
+ * padding), which pushed that one label 2px below the other six. */
+.rv3 .rv3-method.is-v4 .rv3-sci__q {
+  margin-bottom: -2px;
+}
+.rv3 .rv3-method.is-v4 .rv3-sci__list {
+  gap: 5.5px;
+  /* The card's own 15px gap stands between label and list; the frame sets 5.5. */
+  margin-top: -9.5px;
+  min-height: 71px;
+}
+.rv3 .rv3-method.is-v4 .rv3-sci__list li {
+  min-height: 20px;
+}
