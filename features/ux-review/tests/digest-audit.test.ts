@@ -151,3 +151,24 @@ describe("the message when a claim was false", () => {
     expect(text).toContain("<https://github.com/run/1|The full check>");
   });
 });
+
+describe("the not-lost check's population", () => {
+  /**
+   * The digest counts every finisher; this check only looked at those whose
+   * finishing visit fired survey_started, so a reader who resumed in a new
+   * session (submission 2222, 2026-09-25) was promised "not lost" and never
+   * checked. Comments stripped so the explanation above cannot satisfy it.
+   */
+  it("is every finisher with a recording, not only visits that fired survey_started", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync("features/ux-review/server/digest-audit.ts", "utf8");
+    const start = src.indexOf("async function stillUnwatched(");
+    expect(start, "stillUnwatched must exist").toBeGreaterThan(-1);
+    const body = src
+      .slice(start, src.indexOf("\n}\n", start))
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/.*$/gm, "");
+    expect(body).toContain("raw_session_replay_events");
+    expect(body).not.toContain("survey_started");
+  });
+});

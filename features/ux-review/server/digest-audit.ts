@@ -225,8 +225,11 @@ async function prState(url: string): Promise<PrState> {
 }
 
 /**
- * Finishers one to fourteen days old, with a recording worth watching and a
- * `survey_started`, whom the survey scanner never opened. A day is the grace
+ * Finishers one to fourteen days old, with a recording worth watching, whom
+ * the survey scanner never opened. Not only those whose visit fired
+ * `survey_started`: a reader who resumes in a new session finishes in a visit
+ * the scanner's query never matches, the digest still counts them, and the
+ * re-queue owes them (asFinisher). A day is the grace
  * for PostHog's own lag and the hourly re-queue; fourteen is how far the
  * re-queue reaches, so past that the promise was never made.
  */
@@ -258,11 +261,6 @@ async function stillUnwatched(env: Env, at: number) {
          WHERE min_first_timestamp > now() - INTERVAL 17 DAY AND session_id IN (${inList})
          GROUP BY session_id
        ) AS r
-       INNER JOIN (
-         SELECT DISTINCT toString($session_id) AS sid FROM events
-         WHERE event = 'survey_started' AND timestamp > now() - INTERVAL 17 DAY
-           AND $session_id IN (${inList})
-       ) AS s ON s.sid = r.sid
        WHERE r.active >= ${MIN_WATCHABLE_ACTIVE_MS}`
     ),
   ]);
