@@ -351,3 +351,21 @@ describe("a replay-only confirmation waits for a person", () => {
     );
   });
 });
+
+describe("the replay comes back from a checkout it started", () => {
+  it("presses the layer's own button before judging the page, and only then", () => {
+    /**
+     * 2026-09-25: the stub answers "disabled", the page shows its own status
+     * layer with "Back to your report", and the replay reported that layer as
+     * covering the page: its second false confirmation, held for a person and
+     * ruled out. Proven against a locked report: after Unlock the layer reads
+     * "stubbed / Back to your report", and pressing its button clears it.
+     */
+    const handoff = PROBE.indexOf('page.locator(".report-checkout-handoff")');
+    expect(handoff, "the replay must look for the checkout layer").toBeGreaterThan(-1);
+    expect(PROBE.slice(handoff, handoff + 400)).toMatch(/handoff\.locator\("button"\)/);
+    // After the leave-the-report check and before the page is judged.
+    expect(PROBE.indexOf('startsWith("/report/")')).toBeLessThan(handoff);
+    expect(handoff).toBeLessThan(PROBE.indexOf("const seen = await inspect(page, cdp);"));
+  });
+});

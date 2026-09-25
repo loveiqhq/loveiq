@@ -67,3 +67,38 @@ export function owedScanners(counts, triggers, byTrigger, seenBy) {
   });
   return [...owed.values()];
 }
+
+/**
+ * What to do about a (session, scanner) pair that is still owed a look, given
+ * that scanner's latest PostHog observation of the session, if any.
+ *
+ * PostHog keeps ONE observation per pair and `/observe/` does nothing once it
+ * exists, even a failed one. Every miss used to go to `/observe/`: it answered
+ * 202 and nothing ran, so readers sat "re-queued" for a week behind failures
+ * from 2026-09-18 ("infra_transient: Activity task timed out"). A temporary
+ * failure is retried through its own endpoint; a permanent one is reported,
+ * not resent forever.
+ *
+ * @param {{id?: string, status?: string, error_reason?: string} | null | undefined} existing
+ * @returns {{action: "observe"} | {action: "retry", id: string} | {action: "wait" | "give-up", reason: string}}
+ */
+export function requeueAction(existing) {
+  if (!existing) return { action: "observe" };
+  const status = String(existing.status ?? "");
+  const reason = String(existing.error_reason ?? "");
+  if (status === "failed") {
+    // Read from PostHog's own reasons on 2026-09-25: every failure then was
+    // infra_transient (35) or provider_transient (2), plus one internal_error
+    // saying "Queries are a little too busy right now". The category can be
+    // wrong; the words cannot.
+    const temporary =
+      /_transient$/.test(reason.split(":")[0]) || /too busy|timed out/i.test(reason);
+    return temporary && existing.id
+      ? { action: "retry", id: existing.id }
+      : { action: "give-up", reason: reason || "failed" };
+  }
+  if (status === "ineligible") return { action: "give-up", reason: reason || "ineligible" };
+  if (status === "succeeded")
+    return { action: "wait", reason: "succeeded; its event has not landed yet" };
+  return { action: "wait", reason: status || "in progress" };
+}

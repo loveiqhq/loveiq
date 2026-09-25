@@ -224,6 +224,16 @@ code over the digest's window, so it checks the logic the digest runs, not the
 text Slack received; and it cannot see a posted reply inside its thread, since
 the only Slack token CI holds can write but not read.
 
+**The re-queue reads what PostHog did, since 2026-09-25.** PostHog keeps one
+observation per (scanner, session) and `/observe/` does nothing once it exists,
+even a failed one. For a week the re-queue printed "30 queued, 0 failed" while
+39 readers sat behind temporary failures from 2026-09-18 ("Activity task timed
+out", "Queries are a little too busy"). `requeueAction()` in
+`scripts/lib/scanners-by-trigger.mjs` now reads the pair's latest observation:
+never tried is observed, a temporary failure is retried through
+`/observations/{id}/retry/`, a permanent one is printed and left alone. Only a
+queue or a retry spends `MAX_ENQUEUE`.
+
 **The fix writer stays dispatch-only, decided 2026-09-21.**
 
 `generate-fix.yml` has run 11 times, all by hand, and produced exactly one pull

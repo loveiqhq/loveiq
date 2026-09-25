@@ -613,6 +613,35 @@ try {
       break;
     }
 
+    /**
+     * A checkout this replay started. The stub above answers "disabled", so the
+     * page shows its own status layer (.report-checkout-handoff, role=status)
+     * with a "Back to your report" button: where a reader is after coming back
+     * from Stripe, not a stranded overlay. Judged as one, it was the replay's
+     * second false confirmation (2026-09-25, a tender-devotee report; held for
+     * a person and ruled out). Press the button the reader would, then carry
+     * on. A layer that never offers the button, a spinner stuck on "Taking you
+     * to secure checkout", stays on the page and is still reported below.
+     */
+    const handoff = page.locator(".report-checkout-handoff");
+    if ((await handoff.count()) > 0) {
+      const back = handoff.locator("button");
+      if (
+        await back
+          .first()
+          .click({ timeout: 5000 })
+          .then(
+            () => true,
+            () => false
+          )
+      ) {
+        await page.waitForTimeout(300);
+        console.log(
+          `      (checkout declined by the stub; back on the report, as the reader came back)`
+        );
+      }
+    }
+
     const seen = await inspect(page, cdp);
     if (!isTap && !seen.suppressed) routeCheckable += 1;
     for (const f of seen.faults) faults.push(`after ${step.event}: ${f}`);

@@ -44,7 +44,7 @@
  * means the misses were re-queued successfully — see the note at that branch.
  */
 import { hogQuery } from "./lib/hogql.mjs";
-import { owedScanners, scannersByTrigger } from "./lib/scanners-by-trigger.mjs";
+import { owedScanners, requeueAction, scannersByTrigger } from "./lib/scanners-by-trigger.mjs";
 
 const PROJECT = "244778";
 
@@ -254,50 +254,76 @@ if (misses.length > 0) {
     process.exit(1);
   }
 
-  let queued = 0;
-  let failed = 0;
   // Oldest reader first, so a standing backlog drains from the end that is
-  // closest to expiring rather than being re-queued newest-first forever. Capped
-  // per OBSERVATION, as MAX_ENQUEUE says: one reader can owe three scanners.
+  // closest to expiring rather than being re-queued newest-first forever.
   const ordered = misses
     .flatMap((m) => m.missing.map((sc) => ({ ...m, sc })))
     .sort((a, b) => String(a.at).localeCompare(String(b.at)));
-  const batch = ordered.slice(0, MAX_ENQUEUE);
-  const held = ordered.length - batch.length;
-  for (const m of batch) {
+  const api = `https://eu.posthog.com/api/projects/${PROJECT}/vision/scanners`;
+  const auth = { Authorization: `Bearer ${need("POSTHOG_API_KEY")}` };
+  const counts = { observe: 0, retry: 0, wait: 0, "give-up": 0, refused: 0 };
+  let held = 0;
+  for (const m of ordered) {
+    // The cap bounds the work PostHog is asked to do, so only a queue or a
+    // retry spends it. Counting every pair would let old pairs that failed for
+    // good take all 30 slots, first in line, on every run.
+    if (counts.observe + counts.retry >= MAX_ENQUEUE) {
+      held += 1;
+      continue;
+    }
     const { sc } = m;
     const trigger = TRIGGERS.find((t) => (byTrigger.get(t) ?? []).includes(sc)) ?? "?";
+    const label = `${m.sid.slice(0, 13)} -> ${sc.name.padEnd(24)} (${trigger})`;
+    const listed = await fetch(`${api}/${sc.id}/observations/?session_id=${m.sid}`, {
+      headers: auth,
+    });
+    if (!listed.ok) {
+      counts.refused += 1;
+      console.log(`  FAILED   ${label} — could not read its observations (${listed.status})`);
+      continue;
+    }
+    const latest = ((await listed.json()).results ?? []).sort((a, b) =>
+      String(b.created_at).localeCompare(String(a.created_at))
+    )[0];
+    const next = requeueAction(latest);
+    if (next.action === "wait" || next.action === "give-up") {
+      counts[next.action] += 1;
+      console.log(
+        `  ${next.action === "wait" ? "waiting " : "given up"} ${label} — ${next.reason}`
+      );
+      continue;
+    }
     const res = await fetch(
-      `https://eu.posthog.com/api/projects/${PROJECT}/vision/scanners/${sc.id}/observe/`,
+      next.action === "retry"
+        ? `${api}/${sc.id}/observations/${next.id}/retry/`
+        : `${api}/${sc.id}/observe/`,
       {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${need("POSTHOG_API_KEY")}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ session_id: m.sid }),
+        headers: { ...auth, "Content-Type": "application/json" },
+        body: JSON.stringify(next.action === "retry" ? {} : { session_id: m.sid }),
       }
     );
-    const ok = res.ok;
-    if (ok) queued += 1;
-    else failed += 1;
     const body = await res.text();
+    if (res.ok) counts[next.action] += 1;
+    else counts.refused += 1;
     // The workflow id is the only handle on queued work, so print it.
-    const detail = ok
+    const detail = res.ok
       ? ` ${String(JSON.parse(body || "{}").workflow_id ?? "").slice(-13)}`
       : ` — ${body.slice(0, 120)}`;
-    console.log(
-      `  ${ok ? "queued " : "FAILED "} ${m.sid.slice(0, 13)} -> ${sc.name.padEnd(24)} (${trigger})${detail}`
-    );
+    const verb = !res.ok ? "FAILED  " : next.action === "retry" ? "retried " : "queued  ";
+    console.log(`  ${verb} ${label}${detail}`);
   }
-  console.log(`\n${queued} observation(s) queued, ${failed} failed.`);
+  console.log(
+    `\n${counts.observe} queued, ${counts.retry} retried after a temporary PostHog failure, ` +
+      `${counts.wait} still in progress, ${counts["give-up"]} failed for good in PostHog, ` +
+      `${counts.refused} refused.`
+  );
   // Printed, never swallowed: a standing backlog has to be visible or the run
   // looks identical whether it caught up or fell further behind.
   if (held > 0) {
-    console.log(
-      `${held} observation(s) held for the next run (cap ${MAX_ENQUEUE}) — oldest go first.`
-    );
+    console.log(`${held} pair(s) held for the next run (cap ${MAX_ENQUEUE}) — oldest go first.`);
   }
+  const failed = counts.refused;
   /**
    * Exit 0 when the gap was CLOSED, not when there was no gap.
    *
