@@ -5363,3 +5363,27 @@
     transition: none;
   }
 }
+
+/* ══ The three source tiles — review 24.09 ══════════════════════════════════════
+ * "The supportive text underneath the headlines 'Clinical models' render weird in
+ * staging. Probably because the elements dont have enough space." 1:434 sets it at
+ * 10/16 in a 91px column; at the agreed 12/19.2 (10px was found illegible) that
+ * column broke it into ragged four-line blocks at 393 and six at 320, left-aligned
+ * under a centred title, and "Foundational" ran into the card's edge at 320.
+ * So the text takes more of the tile — 7px a side at 320 (the least that clears
+ * "Foundational", 76px wide), the frame's 11.5 from 523px up — and sets centred and
+ * balanced under its title. The two lines every title reserves stay, so the three
+ * bodies keep one top edge; a one-line title now sits in the middle of them rather
+ * than leaving a band under itself. Live report only; the preview keeps the frame. */
+.rv3.rv4 .rv3-method.is-v4 .rv3-src__card {
+  padding-inline: clamp(7px, 2.2vw, 11.5px);
+}
+.rv3.rv4 .rv3-method.is-v4 .rv3-src__title {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+}
+.rv3.rv4 .rv3-method.is-v4 .rv3-src__body {
+  text-align: center;
+  text-wrap: balance;
+}
