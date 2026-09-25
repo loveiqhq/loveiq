@@ -6650,7 +6650,9 @@ html {
 /* A chip 32.8 tall: 6.77 + 1.13 of padding and stroke around a 16.96 line, 14.67 +
  * 1.13 at the sides. The stroke is painted inside, not laid out as a border:
  * Chromium floors a fractional border to a whole pixel, which would take a quarter
- * pixel off every chip. */
+ * pixel off every chip. The line is 17: Chromium rounds Manrope's content area to
+ * 17 and floors the 0.02 it overhangs a 16.96 line to a whole pixel, which set the
+ * label 1.23px high. */
 .rv3 .rv4-fvm__chip {
   background: #fff;
   border: 0;
@@ -6663,7 +6665,7 @@ html {
   font-size: 12.4131px;
   font-weight: 700;
   height: 32.7985px;
-  line-height: 16.9563px;
+  line-height: 17px;
   padding: 0 15.7985px;
   transition:
     background 180ms ease,

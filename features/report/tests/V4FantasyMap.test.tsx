@@ -362,7 +362,10 @@ describe("reportV3.css — the fantasy map (696:4393 / 368:3481)", () => {
     expect(chip).toContain('font-family: var(--rv4-manrope, "Manrope"), sans-serif');
     expect(chip).toContain("font-size: 12.4131px");
     expect(chip).toContain("font-weight: 700");
-    expect(chip).toContain("line-height: 16.9563px");
+    // 17, not Figma's 16.9563: Chromium rounds Manrope to a 17px content area and
+    // floors the 0.02px it overhangs a 16.9563 line to a whole pixel, which raised
+    // the label 1.23px (measured 25.09).
+    expect(chip).toContain("line-height: 17px");
     expect(chip).toContain("color: #6b6678");
     const on = ruleOf(".rv3 .rv4-fvm__chip.is-active");
     expect(on).toContain("background: #161021");
