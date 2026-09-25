@@ -87,11 +87,13 @@ import V4TypicalBeliefs from "./v3/V4TypicalBeliefs";
 import V4TryThis from "./v3/V4TryThis";
 import V4Accelerators from "./v3/V4Accelerators";
 import V4Partnership from "./v3/V4Partnership";
+import V4Fantasy from "./v3/V4Fantasy";
 import V4LearnMore from "./v3/V4LearnMore";
 import type { Report3TypicalBeliefsView } from "@/data/report3-typical-beliefs";
 import type { Report3AcceleratorsView } from "@/data/report3-accelerators";
 import type { Report3PartnershipView } from "@/data/report3-partnership";
 import type { V4LearnMoreState } from "@/data/report3-learn-more";
+import type { Report3FantasyView } from "@/data/report3-fantasy";
 import ConfidenceSection, {
   type ConfidenceCopy,
   type ConfidenceStrip,
@@ -462,6 +464,10 @@ interface ReportExperienceProps {
   powerCopy: PowerCopy | null;
   fantasyCopy: FantasyCopy | null;
   fantasyDots: FantasyMapDot[] | null;
+  /** Report 3.0's Fantasy vs. Reality chapter; null keeps V2's section. */
+  fantasy: Report3FantasyView | null;
+  /** The "Go deeper & learn more" article that closes that chapter. */
+  fantasyArticle: V4LearnMoreState | null;
   curiosityCopy: CuriosityCopy | null;
   relationshipFit: Record<string, number> | null;
   lovelangCopy: LoveLanguageCopy | null;
@@ -557,6 +563,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   powerCopy,
   fantasyCopy,
   fantasyDots,
+  fantasy,
+  fantasyArticle,
   curiosityCopy,
   relationshipFit,
   lovelangCopy,
@@ -2038,6 +2046,46 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // isn't duplicated. Only the primary archetype gets a fantasy
                     // copy block; browsing another archetype renders the tables only.
                     const hasArchetypeCopy = viewArchetype === contentArchetype;
+                    // V4 names the chapter "Fantasy vs. Reality", as its head does,
+                    // on V2's section too; ?v3=1 keeps the section's own title.
+                    const fantasyFeedback =
+                      isV4 && feedbackWidget
+                        ? renderFeedback(section.id, "Fantasy vs. Reality")
+                        : feedbackWidget;
+
+                    // Report 3.0 swaps this chapter for Figma 304:281 (305:217 when
+                    // locked), the chapter that opens Part VI "Your edges": the V4
+                    // chapter row, the body with the fantasy table, the practice
+                    // (441:6422) and "Go deeper & learn more" (368:5450). Only where
+                    // the chapter is written for the archetype on screen; every other
+                    // reader keeps V2's section below. Every locked surface opens the
+                    // same pricing modal, through this section's full-report gate.
+                    if (isV4 && fantasy && hasArchetypeCopy) {
+                      const unlockFantasy = () => unlockSection(section);
+                      return (
+                        <Fragment key={section.id}>
+                          <div className="rv4-sep" aria-hidden="true" data-node-id="1:1146" />
+                          <V4Chapter
+                            sectionId={section.id}
+                            title="Fantasy vs. Reality"
+                            archetype={viewArchetype}
+                            defaultOpen
+                            bare
+                            feedback={fantasyFeedback}
+                          >
+                            <V4Fantasy view={fantasy} onUnlock={unlockFantasy} />
+                            {fantasyArticle ? (
+                              <V4LearnMore
+                                article={fantasyArticle.article}
+                                locked={fantasyArticle.locked}
+                                onUnlock={unlockFantasy}
+                              />
+                            ) : null}
+                          </V4Chapter>
+                        </Fragment>
+                      );
+                    }
+
                     const isBackendUnlocked = isSectionUnlockedForPlan({
                       accessPlan,
                       archetypeTier: viewArchetypeTier,
@@ -2049,7 +2097,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     return (
                       <ReportSection
                         key={section.id}
-                        feedbackWidget={feedbackWidget}
+                        feedbackWidget={fantasyFeedback}
                         primaryArchetype={viewArchetype}
                         sectionId={section.id}
                         title=""
@@ -3171,6 +3219,8 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           powerCopy={data.powerCopy ?? null}
           fantasyCopy={data.fantasyCopy ?? null}
           fantasyDots={data.fantasyDots ?? null}
+          fantasy={data.fantasy ?? null}
+          fantasyArticle={data.fantasyArticle ?? null}
           curiosityCopy={data.curiosityCopy ?? null}
           relationshipFit={data.relationshipFit ?? null}
           lovelangCopy={data.lovelangCopy ?? null}
