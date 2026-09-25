@@ -244,9 +244,62 @@ for (const m of misses) {
   console.log(`      never opened by: ${m.missing.map((sc) => sc.name).join(", ")}`);
 }
 
-if (misses.length > 0) {
+/**
+ * READERS WHO LEFT, too. Everything above starts from survey_submission, so it
+ * only ever sees people who FINISHED. Measured 2026-09-25 over 7 days: PostHog's
+ * "comprehensive" sweep never even tried 48 of 253 watchable survey sessions and
+ * 13 of 111 report sessions, mostly people who left partway: the ones the
+ * scanners exist for, and nothing sent them back. For each comprehensive
+ * scanner, a session that fired its trigger, has 10s of activity (PostHog's
+ * own minimum; MIN_WATCHABLE_ACTIVE_MS in review.ts, held equal by a test),
+ * ended six hours ago and was never opened by it is
+ * owed a look, exactly as a finisher is. Focused scanners skip by design.
+ */
+const STARTER_DAYS = Number(process.env.STARTER_DAYS ?? 7);
+const finisherSids = new Set(subs.map((s) => s.posthog_session_id));
+const starters = [];
+for (const [trigger, scanners] of byTrigger) {
+  if (!/^[$a-z_]+$/.test(trigger)) continue; // interpolated into HogQL below
+  for (const sc of scanners) {
+    if (sc.sampling_mode !== "comprehensive" || !SAFE_ID.test(String(sc.id))) continue;
+    const rows = await hog(`SELECT t.sid, t.at FROM (
+        SELECT toString($session_id) AS sid, min(timestamp) AS at FROM events
+        WHERE event = '${trigger}' AND timestamp > now() - INTERVAL ${STARTER_DAYS} DAY
+          AND timestamp < now() - INTERVAL 6 HOUR
+        GROUP BY sid
+      ) AS t
+      INNER JOIN (
+        SELECT session_id AS sid, sum(active_milliseconds) AS active FROM raw_session_replay_events
+        WHERE min_first_timestamp > now() - INTERVAL ${STARTER_DAYS + 1} DAY
+        GROUP BY session_id
+      ) AS r ON r.sid = t.sid
+      WHERE r.active >= 10000 AND t.sid NOT IN (
+        SELECT DISTINCT toString(properties.session_id) FROM events
+        WHERE event = '$recording_observed' AND timestamp > now() - INTERVAL ${STARTER_DAYS + 2} DAY
+          AND toString(properties.scanner_id) = '${sc.id}'
+      )
+      LIMIT 1000`);
+    if (rows.length >= 1000) {
+      console.error(
+        `${sc.name}: 1000 unwatched sessions, the query's cap; the rest wait for later runs`
+      );
+    }
+    for (const [sid, at] of rows) {
+      // Finishers are handled above, with their own rule for focused scanners.
+      if (!SAFE_ID.test(String(sid)) || finisherSids.has(sid)) continue;
+      starters.push({ sid: String(sid), at: new Date(at).toISOString(), sc });
+    }
+  }
+}
+console.log(
+  `readers who did not finish, never opened by a scanner that watches everything ` +
+    `(last ${STARTER_DAYS} days): ${starters.length}`
+);
+
+if (misses.length > 0 || starters.length > 0) {
   console.log(
-    `\n${misses.length} finished reader(s) had a recording, a trigger and a scanner that never opened them.`
+    `\n${misses.length} finished reader(s) and ${starters.length} (session, scanner) pair(s) ` +
+      `for readers who left had a recording, a trigger and a scanner that never opened them.`
   );
 
   if (!process.argv.includes("--enqueue")) {
@@ -256,9 +309,12 @@ if (misses.length > 0) {
 
   // Oldest reader first, so a standing backlog drains from the end that is
   // closest to expiring rather than being re-queued newest-first forever.
-  const ordered = misses
-    .flatMap((m) => m.missing.map((sc) => ({ ...m, sc })))
-    .sort((a, b) => String(a.at).localeCompare(String(b.at)));
+  const ordered = [
+    ...misses.flatMap((m) =>
+      m.missing.map((sc) => ({ ...m, at: new Date(m.at).toISOString(), sc }))
+    ),
+    ...starters,
+  ].sort((a, b) => a.at.localeCompare(b.at));
   const api = `https://eu.posthog.com/api/projects/${PROJECT}/vision/scanners`;
   const auth = { Authorization: `Bearer ${need("POSTHOG_API_KEY")}` };
   const counts = { observe: 0, retry: 0, wait: 0, "give-up": 0, refused: 0 };

@@ -1494,10 +1494,11 @@ describe("the scanner scorecard", () => {
     const q = sent[0] ?? "";
     expect(q).toContain("LEFT JOIN");
     expect(q).toContain("raw_session_replay_events");
-    expect(q.match(/active_ms >= 5000/g)?.length, "both counts use the bar").toBe(2);
+    expect(q.match(/active_ms >= 10000/g)?.length, "both counts use the bar").toBe(2);
     // Recordings read once, not once per count: that timed out at the gateway.
     expect(q.match(/raw_session_replay_events/g)?.length).toBe(1);
-    expect(MIN_WATCHABLE_ACTIVE_MS).toBe(5000);
+    // PostHog's stated minimum ("min is 10s"), not a sample's guess.
+    expect(MIN_WATCHABLE_ACTIVE_MS).toBe(10_000);
   });
 
   it("does not count a recording too short to watch as a miss", () => {
