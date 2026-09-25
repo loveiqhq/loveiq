@@ -6494,15 +6494,15 @@ html {
 }
 
 /* ══ Fantasy vs. Reality · the chapter body — Figma 304:290, 305:217 locked ══════════
- * A 361 column, 20px down from the chapter head, its parts flush: the intro (304:291,
- * a 356px box), a 44px space, the table, another 44, "Common challenges" (368:1920).
- * Body copy is 16/25.6 in --rv3-copy, bold runs in ink. The frame's last paragraph
- * ends in a line separator (U+2028), which gives the text node one more, empty line:
- * 334:1137 draws the practice card 45.6px under the last line, not 20. As drawn. */
+ * A 361 column, 20px down from the chapter head, its parts 44 apart: the intro
+ * (304:291, a 356px box), the map, the table, "Common challenges" (368:1920), and a
+ * last 44 (696:6060) with the column's 20 under it before the practice card — Mark's
+ * separators before the "Try this" cards, which also took out the line separator
+ * that used to end the text node. Body copy is 16/25.6 in --rv3-copy, bold in ink. */
 .rv3 .rv4-fvr {
   display: flex;
   flex-direction: column;
-  padding: 20px 0 45.6px;
+  padding: 20px 0;
   width: 100%;
 }
 .rv3 .rv4-fvr .rv4-prose__p {
