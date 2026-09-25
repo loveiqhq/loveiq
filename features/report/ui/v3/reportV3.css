@@ -5834,3 +5834,77 @@ html {
     transition: none;
   }
 }
+
+/* ── Challenges in Partnerships · the chapter body — Figma 38:1679, 305:358 locked ──
+ * A 361 column, 20px down from the chapter head and 20 above its foot, its four parts
+ * 16 apart: the prose (38:1681, a 356px box), the loop, a 44px rule and the result
+ * paragraph. The practice card follows as the body's next sibling, flush, as 399:240
+ * sits straight under 38:1672. Body copy is 16/25.6 in --rv3-copy. */
+.rv3 .rv4-cip {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 0;
+  width: 100%;
+}
+.rv3 .rv4-cip .rv4-prose__p {
+  color: var(--rv3-copy);
+  font-size: 16px;
+  line-height: 25.6px;
+  margin-right: 5px;
+}
+.rv3 .rv4-cip__text > :last-child,
+.rv3 .rv4-cip__blurred > :last-child,
+.rv3 .rv4-cip__closing-text > :last-child {
+  margin-bottom: 0;
+}
+/* 38:1681 sets "Common challenges" inline — Lora Bold 18/21.6 with the text node's
+ * 16px paragraph spacing either side — where the article's subheading is 16/19.2
+ * with 26 before it. */
+.rv3 .rv4-cip .rv4-prose__h {
+  font-size: 18px;
+  line-height: 21.6px;
+  margin: 0 0 16px;
+}
+.rv3 .rv4-cip .rv4-prose__p:has(+ .rv4-prose__h) {
+  margin-bottom: 16px;
+}
+/* 305:462 — the ramp fades in over ~105px (the progressive blur ends 5.2% down
+ * 305:361's 2032px box, about four lines); the rest sits under the full blur at full
+ * length, so nothing moves when the reader unlocks; the card floats 282px in. */
+.rv3 .rv4-cip__gate {
+  cursor: pointer;
+  position: relative;
+}
+.rv3 .rv4-cip__ramp {
+  --rv4-band: 105px;
+  position: relative;
+}
+.rv3 .rv4-cip__blurred {
+  filter: blur(2.5px);
+}
+.rv3 .rv4-cip__gate .rv4-premium {
+  top: 282px;
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .rv3 .rv4-cip__ramp {
+    filter: blur(1.25px);
+  }
+}
+/* 659:234 — the result under the full blur. The wrapper owns the click: the
+ * paragraph inside is inert, and a tap on inert content lands on its ancestor. */
+.rv3 .rv4-cip__closing.is-blurred {
+  cursor: pointer;
+  filter: blur(2.5px);
+  user-select: none;
+}
+.rv3 .rv4-cip + .rv4-try {
+  margin-top: 0;
+}
+/* 399:259 — the practice's three questions: 21px in, flush, 8px above what follows. */
+.rv3 .rv4-cip + .rv4-try .rv4-prose__list {
+  margin: 0 0 8px;
+}
+.rv3 .rv4-cip + .rv4-try .rv4-prose__list li {
+  margin-bottom: 0;
+}
