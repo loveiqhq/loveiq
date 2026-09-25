@@ -503,10 +503,12 @@ const decoyFor = (word: string, next: () => number): string | null => {
   for (let tries = 0; tries < DECOY_TRIES; tries++) {
     const candidate = pool[Math.floor(next() * pool.length)]!;
     let clash = false;
-    for (let i = 0; i < candidate.length && !clash; i++) clash = candidate[i] === lower[i];
+    for (let i = 0; i < candidate.length && !clash; i++) {
+      clash = candidate.charAt(i) === lower.charAt(i);
+    }
     if (clash) continue;
     const cased = [...candidate]
-      .map((ch, i) => (word[i] !== lower[i] ? ch.toUpperCase() : ch))
+      .map((ch, i) => (word.charAt(i) !== lower.charAt(i) ? ch.toUpperCase() : ch))
       .join("");
     const gap = Math.abs(widthOf(cased) - target);
     if (gap < bestGap) {
