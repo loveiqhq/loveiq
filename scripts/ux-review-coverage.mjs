@@ -54,7 +54,7 @@ const PROJECT = "244778";
  * Every read here can fail — an expired PostHog key, a 503, a Supabase
  * timeout — and an unhandled rejection exits 1, which is exactly what this
  * script uses to mean "misses found". A caller reading the code cannot tell
- * the difference, and in the three-hourly workflow a dead key would look like
+ * the difference, and in the hourly workflow a dead key would look like
  * an ordinary day with a few unwatched recordings. 2 means could-not-measure.
  */
 // BOTH events: this module uses top-level await, and Node reports a throw
@@ -328,7 +328,7 @@ if (misses.length > 0) {
    * Exit 0 when the gap was CLOSED, not when there was no gap.
    *
    * The read-only mode exits 1 on a miss, which is right for a check. But
-   * --enqueue is a remediation, and it runs unattended every three hours: if
+   * --enqueue is a remediation, and it runs unattended every hour: if
    * finding-and-fixing misses failed the job, the workflow would be red on
    * every normal day and nobody would look at it by the second week. A real
    * failure — a refused enqueue — still exits 2.

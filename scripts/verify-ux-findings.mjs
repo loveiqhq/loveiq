@@ -547,7 +547,7 @@ const probeRunRows = (results) =>
 /**
  * Claim a finding so it is verified exactly once.
  *
- * The schedule (every 3h) and the lookback (6h) overlap deliberately, so a run
+ * The schedule (hourly) and the lookback (6h) overlap deliberately, so a run
  * that fails or a finding that lands late is still picked up. Without a claim
  * that same overlap posts every verdict to the thread twice — the reason this
  * exists. Reuses `slack_alert_sent`, the table the cron already dedupes on, via
@@ -621,7 +621,7 @@ async function deliverVerdict(sessionId, verdict) {
  *
  * claim_slack_alert inserts with delivered = FALSE and hands the claim back to
  * ANY caller once claimed_at is older than ten minutes. Without this companion
- * the claim never becomes permanent, so the three-hourly workflow — whose
+ * the claim never becomes permanent, so the hourly workflow — whose
  * lookback deliberately spans two runs — re-claimed every finding, re-ran its
  * probes (ten minutes of real browser time each) and posted a SECOND, possibly
  * contradictory, reply into the same reader's thread. The overlap exists to
@@ -1471,7 +1471,7 @@ console.log(
  * A deferred finding IS already claimed by this point, and what returns it is
  * the two-phase commit: `claim_slack_alert` writes `delivered = FALSE` and
  * hands the claim to the next caller once it is more than ten minutes old. This
- * workflow runs every three hours, so the claim is always stale by then and the
+ * workflow runs every hour, so the claim is always stale by then and the
  * finding comes back. That ten-minute window is load-bearing — raise it above
  * the schedule interval and every deferred finding is skipped forever instead.
  * The count is printed rather than swallowed, so a standing backlog is visible.

@@ -9,14 +9,17 @@ name: UX review — verify findings
 
 on:
   schedule:
-    # Every 3 hours at :41 — off the :00/:30 marks every other workflow lands on,
-    # and far enough apart that a finding is verified within one working morning
-    # without re-running probes against production all day.
-    - cron: "41 */3 * * *"
-    # Monday morning, for the weekly scanner scoring step below. The 3-hourly
-    # cron does not fire at this exact minute-and-hour combination, so the two
-    # never collide.
-    - cron: "41 9 * * 1"
+    # Hourly at :41, off the :00/:30 marks every other workflow lands on.
+    # It was every three hours until 2026-09-25, and GitHub drops and
+    # delays scheduled runs: from 2026-09-14 this cron ran 4-6 times a day
+    # instead of 8, each 90-150 minutes late, so the re-queue drained at half
+    # speed and findings waited half a day. Runs take 3-12 minutes, the
+    # concurrency group below never overlaps them, and Actions minutes are free
+    # on a public repository, so a dropped run now costs an hour, not three.
+    - cron: "41 * * * *"
+    # Monday morning, for the weekly scanner scoring step below. At :11, so the
+    # hourly :41 cron never fires in the same minute and doubles the run.
+    - cron: "11 10 * * 1"
   workflow_dispatch:
     inputs:
       lookback_hours:
@@ -146,7 +149,7 @@ jobs:
       # workflow. Failing the verify run for it would stop findings being
       # verified over a number nobody can fix from here.
       - name: Score the scanners (weekly)
-        if: github.event.schedule == '41 9 * * 1' || github.event_name == 'workflow_dispatch'
+        if: github.event.schedule == '11 10 * * 1' || github.event_name == 'workflow_dispatch'
         # BOTH sources, and the second is the one that survives.
         #
         # The fixtures are seven hand-curated recordings that EXPIRE 2026-09-28

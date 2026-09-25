@@ -318,7 +318,7 @@ jobs:
       # it HAD a recording and a trigger event — a reader who declined recording
       # is not a miss.
       #
-      # Exit 1 is reported, not failed: the three-hourly verify workflow
+      # Exit 1 is reported, not failed: the hourly verify workflow
       # re-queues these, so a miss here is a backlog draining rather than a
       # regression. Exit 2 and above is a real error.
       - name: Name the finished readers a scanner owed a look

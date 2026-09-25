@@ -15,6 +15,10 @@ import {
   digestAuditMessage,
   gatherDigestFacts,
 } from "../features/ux-review/server/digest-audit.ts";
+import {
+  markSlackAlertDelivered,
+  tryClaimSlackAlert,
+} from "../shared/observability/slack-alert-dedup.ts";
 
 const bad = process.argv.slice(2).filter((a) => a !== "--post");
 if (bad.length > 0) {
@@ -52,13 +56,26 @@ if (failed.length > 0 && process.argv.includes("--post") && process.env.MUTATE !
     failed,
     host && repo && run ? `${host}/${repo}/actions/runs/${run}` : undefined
   );
+  /**
+   * ONCE PER DIGEST. The workflow runs this three times a day because GitHub
+   * drops scheduled runs (the first day, 2026-09-25, it never ran at 08:53),
+   * so the post is claimed first. A failed post leaves the claim undelivered,
+   * and the next run may take it again after ten minutes.
+   */
+  const key =
+    "facts" in got
+      ? new Date(got.facts.at).toISOString()
+      : `missing:${new Date().toISOString().slice(0, 10)}`;
   if (!hook) console.log("SLACK_WEBHOOK_URL not set — nothing posted.");
-  else {
+  else if (!(await tryClaimSlackAlert("ux_digest_audit", "digest", key))) {
+    console.log("this digest's disagreement was already posted — not posting again");
+  } else {
     const res = await fetch(hook, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
     });
+    if (res.ok) await markSlackAlertDelivered("ux_digest_audit", "digest", key);
     console.log(res.ok ? "posted the disagreement to Slack" : `Slack refused: ${res.status}`);
   }
 }

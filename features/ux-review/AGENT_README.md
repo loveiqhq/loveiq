@@ -34,7 +34,7 @@ ordinary text, and the model broke both. The gate has to sit outside the model.
 
 So a finding earns a Slack post only by being **reproduced in a real browser at
 the viewport the session reported** — `scripts/verify-ux-findings.mjs`, on a
-three-hourly schedule in CI. `app/api/cron/ux-review/route.ts` collects and posts
+hourly schedule in CI. `app/api/cron/ux-review/route.ts` collects and posts
 one summary a day; it cannot open a browser, so it publishes no findings.
 
 **Two windows, and neither may be set from the schedule.** Both were, and both
