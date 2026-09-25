@@ -65,6 +65,13 @@ vi.mock("@features/brain/server/night-shift", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@features/brain/server/night-shift")>()),
   queueResearch: (...a: unknown[]) => mockQueueResearch(...a),
 }));
+const mockOpenConflicts = vi.fn();
+const mockSettle = vi.fn();
+vi.mock("@features/brain/server/radar", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/brain/server/radar")>()),
+  openConflicts: (...a: unknown[]) => mockOpenConflicts(...a),
+  settleConflict: (...a: unknown[]) => mockSettle(...a),
+}));
 const mockFileCrm = vi.fn();
 vi.mock("@features/brain/server/crm-calls", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@features/brain/server/crm-calls")>()),
@@ -488,6 +495,81 @@ describe("/api/mcp", () => {
       it("refuses a date that is not a day", async () => {
         const r = await call({ since: "last week" });
         expect(r.isError).toBe(true);
+      });
+    });
+
+    describe("decision_conflicts and settle_decision_conflict", () => {
+      const call = async (name: string, args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 17,
+                method: "tools/call",
+                params: { name, arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+      beforeEach(() => {
+        mockOpenConflicts.mockReset().mockResolvedValue([]);
+        mockSettle.mockReset().mockResolvedValue({ ok: true, text: "Settled." });
+      });
+
+      it("lists the open conflicts, for one topic when asked, and says when it cannot read", async () => {
+        expect((await call("decision_conflicts", {})).content[0]!.text).toBe(
+          "No open conflicts between recorded decisions."
+        );
+        await call("decision_conflicts", { topic: " tooling " });
+        expect(mockOpenConflicts).toHaveBeenLastCalledWith("tooling");
+        mockOpenConflicts.mockResolvedValue(null);
+        expect((await call("decision_conflicts", {})).isError).toBe(true);
+      });
+
+      it("settles only with both ids, a valid keep and who decided, and passes the answer on", async () => {
+        expect(
+          (await call("settle_decision_conflict", { later: "b", keep: "later", settled_by: "E" }))
+            .isError
+        ).toBe(true);
+        expect(
+          (
+            await call("settle_decision_conflict", {
+              earlier: "a",
+              later: "b",
+              keep: "neither",
+              settled_by: "E",
+            })
+          ).isError
+        ).toBe(true);
+        expect(
+          (await call("settle_decision_conflict", { earlier: "a", later: "b", keep: "later" }))
+            .isError
+        ).toBe(true);
+        expect(mockSettle).not.toHaveBeenCalled();
+        const r = await call("settle_decision_conflict", {
+          earlier: " a ",
+          later: "b",
+          keep: "later",
+          settled_by: "Eman Cickusic",
+          note: " Notion it is ",
+        });
+        expect(r.content[0]!.text).toBe("Settled.");
+        expect(mockSettle).toHaveBeenCalledWith({
+          a: "a",
+          b: "b",
+          keep: "later",
+          actor: "Eman Cickusic",
+          note: "Notion it is",
+        });
+        mockSettle.mockResolvedValue({ ok: false, error: "Already settled." });
+        const refused = await call("settle_decision_conflict", {
+          earlier: "a",
+          later: "b",
+          keep: "both",
+          settled_by: "E",
+        });
+        expect(refused).toMatchObject({ isError: true, content: [{ text: "Already settled." }] });
       });
     });
 
@@ -936,6 +1018,7 @@ describe("/api/mcp", () => {
         "write_to_google_doc",
         "queue_research",
         "file_call_notes",
+        "settle_decision_conflict",
         "count_context",
         "browse_context",
         "get_business_numbers",
@@ -948,6 +1031,7 @@ describe("/api/mcp", () => {
         "what_shipped",
         "explain_change",
         "comment_asks",
+        "decision_conflicts",
         "brain_health",
         "whats_new",
         "check_copy",
@@ -999,6 +1083,7 @@ describe("/api/mcp", () => {
         "write_to_google_doc",
         "queue_research",
         "file_call_notes",
+        "settle_decision_conflict",
       ]);
       /**
        * EXACTLY ONE TOOL IS DESTRUCTIVE, and it is the one whose effect nobody can undo.
@@ -1341,6 +1426,32 @@ describe("/api/mcp", () => {
       );
       expect(text).toContain("HELD BACK BY THE PER-SOURCE CAP");
       expect(text).toContain("drive/doc:113TF @2.52 — outranks 1 of the 2 shown");
+    });
+
+    it("carries a ranked-in decision's warnings into the decision block", async () => {
+      mockRetrieve.mockResolvedValue([
+        chunk(),
+        chunk({
+          source: "decision",
+          sourceId: "decision:2026-05-15-jira",
+          title: "Decision: Require Jira tickets",
+          score: 3.38,
+          periodEnd: "2026-05-15",
+          meta: {
+            superseded_by: "decision:2026-09-20-notion",
+            disputed_by: [
+              { id: "decision:2026-09-03-b", on: "2026-09-03", kind: "unclear", why: "Two tools." },
+            ],
+          },
+        }),
+      ]);
+      const text = (await (await call({ query: "should we switch to Jira tickets" })).json()).result
+        .content[0].text;
+      const block = text.slice(0, text.indexOf("HOW TO READ THESE"));
+      expect(block).toContain("SUPERSEDED by decision/decision:2026-09-20-notion");
+      expect(block).toContain(
+        "MAY CONFLICT with decision/decision:2026-09-03-b (2026-09-03): Two tools."
+      );
     });
 
     it("lifts a decision out of the results when it ranks with them", async () => {
@@ -5734,6 +5845,8 @@ describe("the runbook's tool count is the real one", () => {
     25: "Twenty-five",
     26: "Twenty-six",
     27: "Twenty-seven",
+    28: "Twenty-eight",
+    29: "Twenty-nine",
   };
 
   it("matches what the server actually exposes", () => {

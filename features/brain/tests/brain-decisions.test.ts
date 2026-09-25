@@ -15,7 +15,9 @@ vi.mock("@shared/observability/slack", () => ({ notifySlack: vi.fn(async () => u
 
 import {
   buildDecisionRow,
+  disputesOf,
   looksLikeDecisionBrowse,
+  markSuperseded,
   priorDecisions,
   proposesSomething,
   recordDecision,
@@ -468,5 +470,91 @@ describe("looksLikeDecisionBrowse", () => {
     "what did we ship last week",
   ])("does not fire on %j, which is not about decisions at all", (q) => {
     expect(looksLikeDecisionBrowse(q)).toBe(false);
+  });
+});
+
+describe("the decision radar's marks", () => {
+  const mark = {
+    id: "decision:2026-09-03-b",
+    on: "2026-09-03",
+    kind: "unclear",
+    why: "Two tools named.",
+  };
+
+  it("reads well-formed marks off the meta and ignores anything else", () => {
+    expect(disputesOf({ disputed_by: [mark, { id: 1 }, null, "x"] })).toEqual([mark]);
+    expect(disputesOf({ disputed_by: "nope" })).toEqual([]);
+    expect(disputesOf(null)).toEqual([]);
+  });
+
+  it("warns in the decision block, as a question for a person", () => {
+    const out = renderPriorDecisions([
+      {
+        sourceId: "decision:2026-05-15-a",
+        title: "Decision: Require Jira tickets",
+        decidedOn: "2026-05-15",
+        disputedBy: [mark],
+      },
+    ]);
+    expect(out).toContain(
+      "MAY CONFLICT with decision/decision:2026-09-03-b (2026-09-03): Two tools named. Nobody has settled which stands"
+    );
+  });
+
+  it("carries the marks through the prior-decision lookup", async () => {
+    mockSupabaseFetch.mockReset().mockResolvedValue({
+      ok: true,
+      json: async () => [
+        {
+          source_id: "decision:2026-05-15-a",
+          title: "Decision: Require Jira tickets",
+          period_end: "2026-05-15",
+          score: 2.4,
+          meta: { disputed_by: [mark] },
+        },
+      ],
+    });
+    const found = await priorDecisions("should we switch to Jira tickets");
+    expect(found[0]!.disputedBy).toEqual([mark]);
+  });
+});
+
+describe("markSuperseded", () => {
+  beforeEach(() => {
+    mockSupabaseFetch.mockReset();
+  });
+
+  it("marks the older record and says how many it marked", async () => {
+    mockSupabaseFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ id: 7, meta: { topic: "tooling" } }],
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+    expect(
+      await markSuperseded("decision/decision:2026-05-15-a", "decision:2026-09-03-b", "2026-09-26")
+    ).toBe(1);
+    const [path, init] = mockSupabaseFetch.mock.calls[1]!;
+    expect(String(path)).toBe("/rest/v1/brain_chunk?id=eq.7");
+    expect(JSON.parse((init as { body: string }).body)).toEqual({
+      meta: {
+        topic: "tooling",
+        superseded_by: "decision:2026-09-03-b",
+        superseded_on: "2026-09-26",
+      },
+    });
+  });
+
+  it("throws when it cannot read or cannot write, so a caller never half-finishes", async () => {
+    mockSupabaseFetch.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) });
+    await expect(markSuperseded("decision:x", "decision:y", "2026-09-26")).rejects.toThrow(
+      /could not read/
+    );
+    mockSupabaseFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ id: 7, meta: {} }] })
+      .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) });
+    await expect(markSuperseded("decision:x", "decision:y", "2026-09-26")).rejects.toThrow(
+      /could not mark/
+    );
   });
 });

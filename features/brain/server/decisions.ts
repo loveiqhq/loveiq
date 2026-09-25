@@ -4,6 +4,7 @@ import { supabaseFetch } from "@features/admin/server/supabase";
 import { upsertChunks, type BrainRow } from "@features/brain/server/ingest/upsert";
 import { notifySlack, escapeSlack } from "@shared/observability/slack";
 import logger from "@shared/observability/logger";
+import type { DisputeMark } from "@features/brain/server/radar";
 
 /**
  * Writing a decision down, as a first-class searchable record.
@@ -107,6 +108,38 @@ export function buildDecisionRow(input: DecisionInput, now: Date): BrainRow {
   };
 }
 
+/**
+ * Mark a decision as replaced by another, on the older record itself: `superseded_by` and
+ * `superseded_on` in its meta, which search, fetch_document and the decision blocks all
+ * print. Shared by record_decision and the decision radar's settle, so a replaced
+ * decision reads the same whichever way it was replaced. Returns how many records it
+ * marked (0: no such decision), and throws when a read or a write fails, so a caller
+ * that must not half-finish can tell.
+ */
+export async function markSuperseded(
+  olderId: string,
+  byId: string,
+  onDay: string
+): Promise<number> {
+  const older = olderId.trim().replace(/^decision\//, "");
+  const res = await supabaseFetch(
+    `/rest/v1/brain_chunk?select=id,meta&source=eq.decision&source_id=eq.${encodeURIComponent(older)}`
+  );
+  if (!res.ok) throw new Error(`could not read decision ${older} (${res.status})`);
+  const rows = (await res.json()) as Array<{ id: number; meta: Record<string, unknown> | null }>;
+  for (const old of rows) {
+    const patched = await supabaseFetch(`/rest/v1/brain_chunk?id=eq.${old.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+      body: JSON.stringify({
+        meta: { ...(old.meta ?? {}), superseded_by: byId, superseded_on: onDay },
+      }),
+    });
+    if (!patched.ok) throw new Error(`could not mark decision ${older} (${patched.status})`);
+  }
+  return rows.length;
+}
+
 /** The date the row describes, which is the decision's own date and not today's. */
 const decidedOnOf = (row: { period_end?: string | null }): string =>
   row.period_end ?? new Date().toISOString().slice(0, 10);
@@ -146,32 +179,13 @@ export async function recordDecision(
   if (input.supersedes) {
     const older = input.supersedes.trim().replace(/^decision\//, "");
     try {
-      const res = await supabaseFetch(
-        `/rest/v1/brain_chunk?select=id,meta&source=eq.decision&source_id=eq.${encodeURIComponent(older)}`
-      );
-      const rows = res.ok
-        ? ((await res.json()) as Array<{ id: number; meta: Record<string, unknown> | null }>)
-        : [];
-      if (rows.length === 0) {
+      if ((await markSuperseded(older, row.source_id, decidedOnOf(row))) === 0) {
         // Said out loud rather than swallowed: a typo'd id means the new decision
         // claims to replace something that does not exist, and nobody would know.
         logger.warn(
           { supersedes: older, by: row.source_id },
           "brain: a decision claims to supersede an id that is not in the corpus"
         );
-      }
-      for (const old of rows) {
-        await supabaseFetch(`/rest/v1/brain_chunk?id=eq.${old.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
-          body: JSON.stringify({
-            meta: {
-              ...(old.meta ?? {}),
-              superseded_by: row.source_id,
-              superseded_on: decidedOnOf(row),
-            },
-          }),
-        });
       }
     } catch (err) {
       logger.warn({ err, supersedes: older }, "brain: could not mark the superseded decision");
@@ -243,6 +257,19 @@ export interface PriorDecision {
   supersededBy?: string | null;
   /** How many decisions on the same `meta.topic` are dated later, and the newest date. */
   laterOnTopic?: { count: number; newest: string } | null;
+  /** `meta.disputed_by`: open conflicts the decision radar found and nobody has settled. */
+  disputedBy?: DisputeMark[];
+}
+
+/** The radar's marks off a record's meta; anything malformed is left out. */
+export function disputesOf(meta: Record<string, unknown> | null): DisputeMark[] {
+  const raw = meta?.disputed_by;
+  return Array.isArray(raw)
+    ? raw.filter(
+        (m): m is DisputeMark =>
+          typeof m?.id === "string" && typeof m?.why === "string" && typeof m?.on === "string"
+      )
+    : [];
 }
 
 /**
@@ -361,6 +388,7 @@ export async function priorDecisions(question: string): Promise<PriorDecision[]>
           typeof (r.meta as { topic?: unknown } | null)?.topic === "string"
             ? (r.meta as { topic: string }).topic
             : null,
+        disputedBy: disputesOf(r.meta),
       }));
     return await withLaterOnTopic(found);
   } catch (err) {
@@ -431,6 +459,7 @@ export async function recentDecisions(limit = 8): Promise<PriorDecision[]> {
       title: r.title,
       decidedOn: r.period_end,
       mined: (r.meta as { origin?: unknown } | null)?.origin === "mined",
+      disputedBy: disputesOf(r.meta),
     }));
   } catch (err) {
     // Same rule as the prior-decision lookup: an addition to a result that is already
@@ -471,7 +500,15 @@ function staleness(d: PriorDecision): string {
     (d.laterOnTopic
       ? `\n    ${d.laterOnTopic.count} later decision${d.laterOnTopic.count > 1 ? "s" : ""}` +
         ` on this topic, newest ${d.laterOnTopic.newest} — check before treating this as current.`
-      : "")
+      : "") +
+    // The decision radar's open findings: a question for a person, said as one.
+    (d.disputedBy ?? [])
+      .map(
+        (m) =>
+          `\n    MAY CONFLICT with decision/${m.id}${m.on ? ` (${m.on})` : ""}: ${m.why}` +
+          " Nobody has settled which stands; decision_conflicts lists it."
+      )
+      .join("")
   );
 }
 

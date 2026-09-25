@@ -44,7 +44,8 @@ export const PROMPTS: BrainPrompt[] = [
     render: ({ since }) =>
       `Catch me up on LoveIQ since ${since || "seven days ago"}.\n\n` +
       "1. What the brain produced on its own: whats_new with that since date (notices, Night Shift research, decisions). Lead with anything unusual.\n" +
-      '2. Decisions: browse_context with sources ["decision"] and that since date. Say who decided and what was rejected.\n' +
+      '2. Decisions: browse_context with sources ["decision"] and that since date. Say who decided and what was rejected. ' +
+      "Then decision_conflicts: name any pair still waiting for someone to say which stands.\n" +
       '3. What else is new: browse_context with order "recently_learned" and learned_since that date; skim for what matters, not everything.\n' +
       '4. Numbers: get_business_numbers for the period with compare_to "previous". Lead with paywall conversion, which is the core goal. For a day that jumped, explain_change.\n' +
       "5. What shipped: what_shipped for the period, in the plain words each change was summarised in.\n" +
