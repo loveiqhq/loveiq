@@ -97,7 +97,7 @@ const V4Partnership: FC<Props> = ({ view, onUnlock }) => {
         onUnlock={onUnlock}
         nodeIds={{ closed: "399:219", open: "399:240", gated: "399:260" }}
         teaserHeightPx={240}
-        premiumTopPx={141}
+        premiumTopPx={147.5}
       />
     </>
   );

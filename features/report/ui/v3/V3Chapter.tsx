@@ -1,7 +1,10 @@
 "use client";
 
 import { createContext, useContext, useState, type FC, type ReactNode } from "react";
-import { REPORT_V4_UNSUFFIXED_CHAPTER_IDS } from "@/data/report3-archetype-page";
+import {
+  REPORT_V4_SUFFIX_BREAK_IDS,
+  REPORT_V4_UNSUFFIXED_CHAPTER_IDS,
+} from "@/data/report3-archetype-page";
 import {
   REPORT_V3_CHAPTER_BY_ID,
   REPORT_V4_CHAPTER_BY_ID,
@@ -125,6 +128,7 @@ const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget, ar
           <V4ChapterTitle
             title={chapter.title}
             archetype={REPORT_V4_UNSUFFIXED_CHAPTER_IDS.has(sectionId) ? undefined : archetype}
+            breakBeforeSuffix={REPORT_V4_SUFFIX_BREAK_IDS.has(sectionId)}
           />
           <V4ChapterChevron />
         </button>

@@ -27,6 +27,15 @@ const NAV_LABEL_BY_ID = new Map<string, string>(
   REPORT_NAV_PARTS.flatMap((part) => part.items.map((item) => [item.id, item.label] as const))
 );
 
+// V4 names some chapters its own way ("Challenges in Partnerships", Fatih 2026-09-24),
+// so its pill reads V4's drawer first and V1's for every id that drawer doesn't list.
+const NAV_LABEL_BY_ID_V4 = new Map<string, string>([
+  ...NAV_LABEL_BY_ID,
+  ...REPORT_V4_NAV_PARTS.flatMap((part) =>
+    part.items.map((item) => [item.id, item.label] as const)
+  ),
+]);
+
 const PILL_SCROLL_THRESHOLD = 15;
 const PILL_HIDE_BREAKPOINT = 1280;
 const DRAWER_CLOSE_DURATION_MS = 220;
@@ -71,8 +80,8 @@ const ReportMobileNav: FC<Props> = ({
   const drawerClosing = phase === "closing";
 
   const activeChapter = useMemo(
-    () => NAV_LABEL_BY_ID.get(activeSectionId) ?? "Overview",
-    [activeSectionId]
+    () => (isV4 ? NAV_LABEL_BY_ID_V4 : NAV_LABEL_BY_ID).get(activeSectionId) ?? "Overview",
+    [activeSectionId, isV4]
   );
 
   // Pill scroll-hide. Intentionally no `drawerOpen` dep — guards the same

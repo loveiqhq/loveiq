@@ -37,12 +37,19 @@ const Chevron: FC = () => (
 /**
  * The chapter title, with its "- of the <Archetype>" suffix when `archetype` is set.
  * The space before the suffix is the 24px run's, as the frame sets it.
+ * `breakBeforeSuffix` puts the suffix on its own line, where the frame breaks it
+ * (REPORT_V4_SUFFIX_BREAK_IDS).
  */
-export const V4ChapterTitle: FC<{ title: string; archetype?: string }> = ({ title, archetype }) => (
+export const V4ChapterTitle: FC<{
+  title: string;
+  archetype?: string;
+  breakBeforeSuffix?: boolean;
+}> = ({ title, archetype, breakBeforeSuffix = false }) => (
   <h3 className={`rv4-chapter__title${archetype ? " has-suffix" : ""}`}>
     {archetype ? (
       <>
         <span className="rv4-chapter__name">{`${title} `}</span>
+        {breakBeforeSuffix ? <br /> : null}
         <span className="rv4-chapter__of">
           <Words text="- of the" />{" "}
         </span>

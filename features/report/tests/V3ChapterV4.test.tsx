@@ -166,3 +166,50 @@ describe("the V4 chapter rhythm (reportV3.css)", () => {
     );
   });
 });
+
+describe("V3Chapter under V4 — the suffix on its own line where the frame breaks it", () => {
+  it("breaks Curiosity & Relationship Form and Initiation Style (38:1686, 1:1028), not the rest", () => {
+    const heads = (["curiosity_level", "initiation_style", "love_language"] as const).map((id) => {
+      const { container, unmount } = renderV4({ id, number: "4.4", title: id });
+      const hasBreak = container.querySelector(".rv4-chapter__title br") !== null;
+      unmount();
+      return hasBreak;
+    });
+    expect(heads).toEqual([true, true, false]);
+  });
+});
+
+/**
+ * Three V2 elements wait for `.report-section.is-visible` alone (report.css
+ * 21135-21163) — Partnership's rows and Curiosity's fit dots and structure items —
+ * and a V3 chapter never carries that class, so under V4 they sat at opacity 0 even
+ * for a reader who had paid (measured on the preview: op=0, translateY 5px). They now
+ * build in as their chapter opens, on their own transitions.
+ */
+describe("V2 rows inside a V4 chapter build in as it opens", () => {
+  const rule = (selector: string) => {
+    const at = V3_CSS.indexOf(`${selector} {`);
+    if (at < 0) throw new Error(`no rule for ${selector}`);
+    return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+  };
+
+  it("reveals Partnership's rows and Curiosity's structure items", () => {
+    const reveal = rule(
+      ".rv3.rv4 .rv3-chapter.is-open .report-partnership__row,\n.rv3.rv4 .rv3-chapter.is-open .report-curiosity__struct-item"
+    );
+    expect(reveal).toContain("opacity: 1");
+    expect(reveal).toContain("transform: translateY(0)");
+  });
+
+  it("pops Curiosity's fit dots to full size", () => {
+    const reveal = rule(".rv3.rv4 .rv3-chapter.is-open .report-curiosity__fit-dot");
+    expect(reveal).toContain("opacity: 1");
+    expect(reveal).toContain("transform: scale(1)");
+  });
+
+  it("is appended below the frozen top of reportV3.css", () => {
+    const at = V3_CSS.indexOf(".rv3.rv4 .rv3-chapter.is-open .report-partnership__row");
+    expect(at).toBeGreaterThan(0);
+    expect(V3_CSS.slice(0, at).split("\n").length).toBeGreaterThan(1884);
+  });
+});

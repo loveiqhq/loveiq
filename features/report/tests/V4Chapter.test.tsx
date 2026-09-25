@@ -146,3 +146,39 @@ describe("V4Chapter — the suffixed title's runs (310:224)", () => {
     expect(word).toContain("margin-top: -2.34px;");
   });
 });
+
+/**
+ * Three heads put their suffix on a line of its own however short the name is —
+ * Challenges in Partnerships (38:1675) and Curiosity & Relationship Form (38:1686)
+ * with a U+2028 line separator, Initiation Style (1:1028) with a line feed. Left to
+ * wrap, "Initiation Style - of the Spark Seeker" fits one 319px line.
+ */
+describe("V4 chapter heads — the suffix on its own line where the frame breaks it", () => {
+  it("names exactly the three chapters Figma breaks", async () => {
+    const { REPORT_V4_SUFFIX_BREAK_IDS } = await import("@/data/report3-archetype-page");
+    expect([...REPORT_V4_SUFFIX_BREAK_IDS].sort()).toEqual([
+      "challenges_in_partnership",
+      "curiosity_level",
+      "initiation_style",
+    ]);
+  });
+
+  it("breaks before the suffix for those chapters, and only those", () => {
+    const { container } = render(
+      <>
+        <V4Chapter
+          title="Challenges in Partnerships"
+          archetype="Spark Seeker"
+          sectionId="challenges_in_partnership"
+        />
+        <V4Chapter title="Typical Beliefs" archetype="Spark Seeker" sectionId="typical_beliefs" />
+      </>
+    );
+    const [cip, tb] = [...container.querySelectorAll(".rv4-chapter__title")];
+    const br = cip!.querySelector("br")!;
+    expect(br).not.toBeNull();
+    expect(br.previousElementSibling).toHaveClass("rv4-chapter__name");
+    expect(br.nextElementSibling).toHaveClass("rv4-chapter__of");
+    expect(tb!.querySelector("br")).toBeNull();
+  });
+});
