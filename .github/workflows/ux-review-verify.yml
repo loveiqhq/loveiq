@@ -143,7 +143,7 @@ jobs:
       # credits, and nothing has ever run it — it existed as a package script
       # and appeared in no workflow. Weekly rather than every run: it reads
       # fixture observations that are written once and never change, so running
-      # it eight times a day would report the same numbers eight times a day.
+      # it every hour would report the same numbers every hour.
       #
       # `continue-on-error` on purpose. It exits non-zero when the scanners are
       # BELOW BAR, which is their standing state (precision 0.20, recall 0.50
