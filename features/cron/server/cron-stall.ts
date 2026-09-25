@@ -90,6 +90,16 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   // Nightly, in GitHub Actions. It records a run whether or not anything was queued, so a
   // missing night means the job did not fire, and questions are waiting on it.
   "brain-night-shift": 26 * 3_600_000,
+  /**
+   * GITHUB-SCHEDULED, and GitHub drops scheduled runs: from 2026-09-14 the verifier ran
+   * 4-6 times a day on an 8-a-day cron, and the digest audit's first run never happened.
+   * Both record their SCHEDULED runs (scripts/record-cron-run.mjs), so a hand-started run
+   * cannot hide a dead schedule. The verifier is hourly, so six hours is six missed runs
+   * in a row, not an ordinary drop; the audit runs three times a day, so 26 hours means
+   * all three were dropped.
+   */
+  "ux-review-verify": 6 * 3_600_000,
+  "ux-digest-audit": 26 * 3_600_000,
 };
 
 /**
