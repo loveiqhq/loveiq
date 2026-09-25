@@ -18,6 +18,11 @@ describe("renderPrompt", () => {
     expect("text" in r && r.text).toMatch(/Paywall conversion first/);
   });
 
+  it("asks for the person's own comment asks in what needs them", () => {
+    const r = renderPrompt("what_needs_me", { person: "Mark" });
+    expect("text" in r && r.text).toContain('comment_asks with person "Mark"');
+  });
+
   it("trims arguments and treats whitespace as missing", () => {
     const r = renderPrompt("record_decision", { decision: "   " });
     expect(r).toEqual({ error: expect.stringMatching(/needs `decision`/) });

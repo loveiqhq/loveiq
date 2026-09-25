@@ -291,6 +291,17 @@ describe("the corpus reads", () => {
     ]);
   });
 
+  it("keeps a renamed file's newest name, the first one read", async () => {
+    mockSupabaseFetch.mockResolvedValueOnce(
+      ok([
+        { body: "https://www.figma.com/design/VpDMMtuN0JkxlMxQZDg86k/Report-3.0" },
+        { body: "https://www.figma.com/design/VpDMMtuN0JkxlMxQZDg86k/Report-2.0-draft" },
+      ])
+    );
+    expect([...(await figmaFiles())!]).toEqual([["VpDMMtuN0JkxlMxQZDg86k", "Report 3.0"]]);
+    expect(String(mockSupabaseFetch.mock.calls[0]![0])).toContain("order=period_end.desc");
+  });
+
   it("reads every page, so a busy corpus never drops the oldest links, and fails whole", async () => {
     const page = Array.from({ length: 1000 }, () => ({ body: "nothing here" }));
     mockSupabaseFetch
@@ -421,6 +432,18 @@ describe("commentAsks", () => {
     expect(r2.asks.find((a) => a.app === "Google Docs")!.text).not.toContain("Shared externally");
   });
 
+  it("leaves out a Google ask to oneself", async () => {
+    const self = ASSIGNED.replace(
+      "Marcus Börner (mb@loveiq.org)",
+      "Eman Cickusic (ec@loveiq.org)"
+    ).replace("Marcus Börner (Google Docs) (", "Eman Cickusic (Google Docs) (");
+    const r = await commentAsks(
+      "2026-09-01",
+      deps({ googleThreads: async () => [{ mailbox: "ec@loveiq.org", text: self }] })
+    );
+    expect(r.asks.filter((a) => a.app === "Google Docs")).toEqual([]);
+  });
+
   it("counts a mention of someone on the roster who has never commented in these files", async () => {
     const r = await commentAsks(
       "2026-09-01",
@@ -523,6 +546,25 @@ describe("renderAsks", () => {
       "Marcus Börner: 0 open of 1 shown"
     );
     expect(renderAsks(result, "Sanjin Kacevac", true)).toContain("→ resolved");
+  });
+
+  it("matches a full name exactly, so one Marcus is not another", () => {
+    const r = {
+      gaps: [],
+      asks: [ask({ person: "Marcus Börner" }), ask({ person: "Marcus Weber", text: "other" })],
+    };
+    const out = renderAsks(r, "Marcus Börner", false);
+    expect(out).toContain("Marcus Börner: 1 open of 1 shown");
+    expect(out).not.toContain("Marcus Weber");
+    expect(renderAsks(r, "marcus", false)).toContain("Marcus Weber");
+  });
+
+  it("leaves a deleted comment out unless resolved ones are asked for", () => {
+    const r = { gaps: [], asks: [ask({}), ask({ status: "gone", text: "deleted one" })] };
+    const out = renderAsks(r, null, false);
+    expect(out).not.toContain("deleted one");
+    expect(out).toContain("Resolved or deleted, left out: 1.");
+    expect(renderAsks(r, null, true)).toContain("deleted one");
   });
 
   it("says when nothing is open, or nothing was asked, and appends what was not read", () => {
