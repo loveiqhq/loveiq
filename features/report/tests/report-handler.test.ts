@@ -676,3 +676,110 @@ describe("GET /api/report — Accelerator & Brakes (Report 3.0)", () => {
     expect(json.accelCopy).not.toBeNull();
   });
 });
+
+/**
+ * Report 3.0's Fantasy vs. Reality chapter at the HTTP boundary. Gated on the same
+ * `fantasyUnlocked` as V2's `fantasyCopy` (section 27, full report only), so a
+ * locked Spark Seeker receives the chapter with nothing paid past the wall, a paid
+ * one receives all of it, and an archetype nobody has written yet receives null.
+ */
+describe("GET /api/report — Fantasy vs. Reality (Report 3.0)", () => {
+  // "Common challenges" and the practice past its ramp: only ever seen blurred.
+  const FVR_PROBES = [
+    "Imagine being watched. In fantasy, the attention is flattering",
+    "Reality cannot assume any of it.",
+    "Finally, think in terms of translation rather than reproduction.",
+    "A fantasy does not have to become reality to improve reality.",
+  ];
+
+  const queueSubmission = (primary: string) => {
+    mockFetchWithTimeout
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            id: 55,
+            user_id: 77,
+            created_date_time: "2026-04-07T22:23:16.851299+00:00",
+            app_user: { first_name: "Eman", email: "eman@example.com" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            primary_archetype: primary,
+            v5_primary_archetype: primary,
+            percentages: { [primary]: 43 },
+            v5_percentages: { [primary]: 43 },
+            diagnostics: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] });
+  };
+
+  const withPlan = (accessPlan: "essentials" | "full_report" | null) =>
+    vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({
+      accessPlan,
+      archetypeTiers: {},
+      personalReportId: 99,
+      unlockedArchetypeColumn: [],
+    });
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    process.env.SUPABASE_URL = "https://test.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-key";
+    mockGetClientIp.mockReturnValue("1.2.3.4");
+    vi.mocked(getReportPriceQuotesForContext).mockResolvedValue(null);
+    vi.mocked(recordReportSessionView).mockResolvedValue(undefined);
+    mockIsFeatureEnabled.mockResolvedValue(true);
+    allowCsrf();
+    allowRateLimit();
+  });
+
+  it("ships a locked Spark Seeker the chapter with nothing paid past the wall", async () => {
+    withPlan(null);
+    queueSubmission("Spark Seeker");
+    const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.fantasy.locked).toBe(true);
+    expect(json.fantasy.table.locked).toBe(true);
+    expect(json.fantasy.practice.locked).toBe(true);
+    expect(json.fantasyArticle.locked).toBe(true);
+    expect(json.fantasyCopy.locked).toBe(true);
+    const body = JSON.stringify(json);
+    for (const probe of FVR_PROBES) expect(body, probe).not.toContain(probe);
+  });
+
+  it("keeps it locked on essentials — it is a full-report chapter", async () => {
+    withPlan("essentials");
+    queueSubmission("Spark Seeker");
+    const json = await (await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"))).json();
+    expect(json.fantasy.locked).toBe(true);
+    expect(json.fantasyArticle.locked).toBe(true);
+  });
+
+  it("ships a paid Spark Seeker every word", async () => {
+    withPlan("full_report");
+    queueSubmission("Spark Seeker");
+    const json = await (await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"))).json();
+    expect(json.fantasy.locked).toBe(false);
+    expect(json.fantasyArticle.locked).toBe(false);
+    expect(json.fantasyCopy.locked).toBe(false);
+    const body = JSON.stringify(json);
+    for (const probe of FVR_PROBES) expect(body, probe).toContain(probe);
+  });
+
+  it("ships null for an archetype without Report 3.0 copy, so V2's section stays", async () => {
+    withPlan(null);
+    queueSubmission("Emotional Voyeur");
+    const json = await (await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"))).json();
+    expect(json.fantasy).toBeNull();
+    expect(json.fantasyArticle).toBeNull();
+    expect(json.fantasyCopy).not.toBeNull();
+  });
+});

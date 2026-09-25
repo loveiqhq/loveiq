@@ -4,6 +4,7 @@ import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
 import { buildAccelerators } from "@/data/report3-accelerators";
 import { buildPartnership } from "@/data/report3-partnership";
+import { buildFantasy } from "@/data/report3-fantasy";
 import {
   buildArchetypeContentForUser,
   buildPracticeTendenciesForUser,
@@ -12,6 +13,7 @@ import {
 } from "@features/report/server/contentGating";
 import { isSectionUnlockedForPlan, isReportPurchasePlan } from "@features/report/server/access";
 import { buildPartnershipCopy } from "@features/report/server/partnershipCopy";
+import { buildFantasyCopy } from "@features/report/server/fantasyCopy";
 import type { ReportAccessPlan } from "@features/report/server/access";
 import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
 import { buildPreviewQuotes } from "@/app/report-v4-preview/previewQuotes";
@@ -108,6 +110,11 @@ export async function GET(request: Request) {
   // Challenges in Partnership shares Libido's full-report gate, as on the real route.
   const partnershipUnlocked = unlocked("libido_challenges_in_relationships");
   const { partnershipCopy, partnershipLoop } = buildPartnershipCopy(archetype, partnershipUnlocked);
+  // Fantasy vs. Reality — section 27, full report only, as on the real route.
+  const fantasyUnlocked = unlocked("typical_sexual_fantasy_amp_practice_tendencies");
+  const { fantasyCopy, fantasyDots } = buildFantasyCopy(archetype, fantasyUnlocked);
+  const fantasy = buildFantasy(archetype, { locked: !fantasyUnlocked });
+  const fantasyArticle = REPORT_V4_LEARN_MORE.typical_sexual_fantasy_amp_practice_tendencies;
 
   const payload = stripLockedEduBodyFromPayload({
     submissionId: null,
@@ -202,6 +209,23 @@ export async function GET(request: Request) {
     // Report 3.0's Challenges in Partnerships, gated identically to the chapter it
     // replaces.
     partnership: buildPartnership(archetype, { locked: !partnershipUnlocked }),
+
+    // V2's Fantasy vs. Reality copy and map dots, through the real route's own
+    // builder, so V4's fallback for the thirteen archetypes still on V2 is not an
+    // empty head in the preview.
+    fantasyCopy,
+    fantasyDots,
+
+    // Report 3.0's Fantasy vs. Reality, gated identically to the chapter it
+    // replaces, and its article only alongside it.
+    fantasy,
+    fantasyArticle:
+      fantasy && fantasyArticle
+        ? {
+            article: splitArticleForReader(fantasyArticle, !fantasyUnlocked),
+            locked: !fantasyUnlocked,
+          }
+        : null,
   });
 
   // No caching: the answer changes with every ?archetype= and ?plan=, and it is

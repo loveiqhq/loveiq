@@ -241,6 +241,14 @@ export interface ReportData {
   fantasyCopy: import("../sections/FantasySection").FantasyCopy | null;
   fantasyDots: import("@features/report/server/fantasyMap").FantasyMapDot[] | null;
   /**
+   * Report 3.0's Fantasy vs. Reality chapter, for `?v4=1`. NULL for any archetype
+   * the content has not been scaled to yet, which is what ReportPage falls back on
+   * (V2's section, fed by fantasyCopy above).
+   */
+  fantasy: import("@/data/report3-fantasy").Report3FantasyView | null;
+  /** The "Go deeper & learn more" article closing that chapter, already gated. */
+  fantasyArticle: import("@/data/report3-learn-more").V4LearnMoreState | null;
+  /**
    * Report 2.0 Curiosity & Relationship Form copy for the primary archetype,
    * resolved server-side. Universal slots (`gate.hook`, `edu.*` incl. the
    * `edu.struct.N` structure list, `learn.*`) are always present; `takeaway` and
