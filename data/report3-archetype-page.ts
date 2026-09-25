@@ -244,46 +244,53 @@ export const REPORT_V4_CORE_ARCHETYPE_LEDE: readonly Report3Run[] = [
 ];
 
 /**
- * Part II · "Snapshot of the <Archetype>" — 1:763 / panel 316:250.
+ * Part II · "What you will discover" — Figma 1:763: the H2 1:766 over the chapter
+ * nudges panel 663:1089, which replaced the Snapshot's five claims (316:250).
  *
- * Five claim-and-body rows. The frame delivers every row CLOSED (316:251 "Row 1 —
- * closed" through 316:295), so it draws only the claims; the bodies appear on
- * expand. See V4Snapshot for why this is a separate component from V3's.
- *
- * The claims read impersonally rather than in the second person — "Desire ignites
- * fast and fades faster." rather than "Your desire ignites…" — matching 316:250
- * and the SNAPSHOTS block of "3 Highest Scoring Archetypes+Core Archetype".
+ * One row per chapter the report leads with, in the frame's order. The copy is the
+ * same for every archetype — each row is a way into a chapter, not a finding — so it
+ * renders for all fourteen. The questions are 663:1089's; the support lines are
+ * 663:1126's (Typical Beliefs, the one row the frame draws open) and the hidden
+ * all-open state 662:233's for the other three. Each row's part, number and title
+ * come from V4's chapter order (V4ChapterNudges), so they follow it if it moves.
  */
-export interface Report3SnapshotRow {
-  claim: string;
-  /** "\n" where the frame sets an explicit line break inside the body. */
-  body: string;
+export interface Report3Nudge {
+  /** The chapter it opens — an id in REPORT_V4_CHAPTERS. */
+  id: string;
+  /** Lora Medium 18.5/26.5, shown open or closed. */
+  question: string;
+  /** Plus Jakarta 14/22.4, shown with "Read full chapter" when the row is open. */
+  support: string;
 }
 
-export const REPORT_V4_SNAPSHOT: Readonly<Record<string, readonly Report3SnapshotRow[]>> = {
-  "Spark Seeker": [
-    {
-      claim: "Desire ignites fast and fades faster.",
-      body: "Desire can fade, but it can also be rebuilt. Learning what brings it back is a skill you can practice. \nA drop in desire does not automatically mean something is wrong with you or your relationship.",
-    },
-    {
-      claim: "Playful initiation might be heard by partners as a demand.",
-      body: "A playful tease can land as pressure for others, leaving them feeling expected to respond while you experience their hesitation as rejection. When neither of you names what happened, a small misread can quickly turn into distance.",
-    },
-    {
-      claim: "Predictability switches desire off fastest.",
-      body: "When things feel too familiar, desire can fade.  \nOften, a small shift in setting, mood, or routine is enough to bring the spark back.",
-    },
-    {
-      claim: "Restraint is the biggest mind-vs-body split.",
-      body: "The idea of being restrained may feel exciting in fantasy but leave the spark seeker feeling trapped in practice. A fantasy does not need to become reality to be valid or meaningful.",
-    },
-    {
-      claim: "Uncertainty is the rarest strength.",
-      body: "What shuts many people down can spark curiosity. Not knowing what comes next often feels less like a threat and more like an invitation to play.",
-    },
-  ],
-};
+export const REPORT_V4_NUDGES_HEADING = "What you will discover";
+
+export const REPORT_V4_NUDGES: readonly Report3Nudge[] = [
+  {
+    id: "typical_beliefs",
+    question: "Which of your rules about sex did you never actually agree to?",
+    support:
+      "A short list of the beliefs most people are carrying, and a way to check which ones are yours.",
+  },
+  {
+    id: "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
+    question: "What switches your desire off fastest?",
+    support:
+      "The conditions that shut you down, and which of them you can change before the weekend.",
+  },
+  {
+    id: "challenges_in_partnership",
+    question: "What do your partners hear that you never said?",
+    support:
+      "How your usual way of asking lands on the other side, and one sentence that makes it clearer.",
+  },
+  {
+    id: "typical_sexual_fantasy_amp_practice_tendencies",
+    question: "Why does the thing you fantasise about lose its heat in real life?",
+    support:
+      "How to tell which fantasies are built for your head and which are worth trying out loud.",
+  },
+];
 
 /**
  * Part II · the three highest-scoring archetypes — 1:493.

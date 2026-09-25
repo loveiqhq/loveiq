@@ -1,8 +1,9 @@
 "use client";
 
-import { useId, useState, type FC, type ReactNode } from "react";
+import { useCallback, useId, useState, type FC, type ReactNode } from "react";
 import { REPORT_V4_SUFFIX_BREAK_IDS } from "@/data/report3-archetype-page";
 import { V4ChapterChevron, V4ChapterTitle } from "./V4ChapterHead";
+import { useOnV4OpenChapter } from "./v4OpenChapter";
 
 /**
  * Chapter row — Report V4.
@@ -91,6 +92,11 @@ const V4Chapter: FC<Props> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const bodyId = useId();
+  // Part II's nudges open a chapter by its section id (v4OpenChapter).
+  useOnV4OpenChapter(
+    sectionId,
+    useCallback(() => setIsOpen(true), [])
+  );
   const anchor = sectionId ? { id: sectionId, "data-report-section": "true" } : {};
   const rating = feedback ? (
     <div className="rv4-rating">

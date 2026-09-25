@@ -213,3 +213,32 @@ describe("V2 rows inside a V4 chapter build in as it opens", () => {
     expect(V3_CSS.slice(0, at).split("\n").length).toBeGreaterThan(1884);
   });
 });
+
+describe("V3Chapter — opened from a nudge", () => {
+  it("opens under V4 when its section is asked for", async () => {
+    const { act } = await import("@testing-library/react");
+    const { openV4Chapter } = await import("@features/report/ui/v3/v4OpenChapter");
+    const { container } = renderV4();
+    const button = container.querySelector(".rv4-chapter__button")!;
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    act(() => openV4Chapter("core_insecurities"));
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("ignores it in ?v3=1, whose chapters start open and have no nudges", async () => {
+    const { act } = await import("@testing-library/react");
+    const { openV4Chapter } = await import("@features/report/ui/v3/v4OpenChapter");
+    const { container } = render(
+      <V3ModeProvider>
+        <V3Chapter chapter={INSECURITIES} sectionId="core_insecurities">
+          <p>body</p>
+        </V3Chapter>
+      </V3ModeProvider>
+    );
+    const button = container.querySelector(".rv3-chapter__button")!;
+    fireEvent.click(button);
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    act(() => openV4Chapter("core_insecurities"));
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+  });
+});

@@ -37,14 +37,13 @@ import V4Part1 from "./v3/V4Part1";
 import V3ArchetypeCard from "./v3/V3ArchetypeCard";
 import V4CoreArchetypeHeading from "./v3/V4CoreArchetypeHeading";
 import V4PartHeading from "./v3/V4PartHeading";
-import V4Snapshot from "./v3/V4Snapshot";
+import V4ChapterNudges from "./v3/V4ChapterNudges";
 import V4SummaryChapter from "./v3/V4SummaryChapter";
 import V4TopThreeSection from "./v3/V4TopThreeSection";
 import { report3ArchetypeCard } from "@/data/report3-archetype-card";
 import type { ArchetypeName } from "@features/report/server/archetypeSlug";
 import {
   REPORT_V4_PART_DIVIDER_BY_SECTION,
-  REPORT_V4_SNAPSHOT,
   REPORT_V4_SUMMARY,
   REPORT_V4_TOP_THREE_HEADING,
 } from "@/data/report3-archetype-page";
@@ -1169,29 +1168,23 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                             data-report-section="true"
                             className="report-section is-visible rv3-snap"
                           >
-                            {/* V4Snapshot draws its own heading (1:766), so this
-                             * one would be the second "Snapshot of the …" on the
-                             * page. V3's accordion has none, and still needs it. */}
-                            {isV4 && REPORT_V4_SNAPSHOT[viewArchetype] ? null : (
+                            {/* V4 draws Figma 1:763's "What you will discover" over
+                             * the chapter nudges (663:1089), which replaced the
+                             * Snapshot for every archetype — the rows are ways into
+                             * chapters, not findings — and bring their own heading.
+                             * V3 keeps its heading and Ignite accordion. */}
+                            {isV4 ? null : (
                               <h2 className="rv3-snapshot-heading" data-node-id="10392:19225">
                                 Snapshot &mdash; of the {viewArchetype}
                               </h2>
                             )}
-                            {/* 316:250. V3's accordion opens one row at a time and
-                             * carries its own washes; the frame delivers every row
-                             * closed inside one white panel. Falls back to V3's
-                             * when the archetype has no snapshot rows yet. */}
-                            {isV4 && REPORT_V4_SNAPSHOT[viewArchetype] ? (
-                              <V4Snapshot
-                                archetype={viewArchetype}
-                                rows={REPORT_V4_SNAPSHOT[viewArchetype]!}
-                              />
-                            ) : (
-                              <V3SnapshotIgnite copy={findingsCopy} />
-                            )}
+                            {isV4 ? <V4ChapterNudges /> : <V3SnapshotIgnite copy={findingsCopy} />}
                             <SnapshotCompare copy={snapshotCopy} thirdRowViz="dots" />
                             <div className="rv3-chapter__feedback">
-                              {renderFeedback("findings", "Five things this report found")}
+                              {renderFeedback(
+                                "findings",
+                                isV4 ? "What you will discover" : "Five things this report found"
+                              )}
                             </div>
                           </section>
                         ) : null}

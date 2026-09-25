@@ -19,7 +19,6 @@ import {
   REPORT_V4_PART6_CHAPTERS,
   missingReport3Summary,
   REPORT_V4_PARTS,
-  REPORT_V4_SNAPSHOT,
   TEASER_PLACEHOLDER,
 } from "@/data/report3-archetype-page";
 
@@ -107,50 +106,18 @@ describe("V4Part2", () => {
     expect(container.querySelector(".rv4-corehead")).toBeInTheDocument();
     expect(container.querySelector(".rv3-arch")).toBeInTheDocument();
     expect(container.querySelector(".rv4-summary")).toBeInTheDocument();
-    expect(container.querySelector(".rv4-snap")).toBeInTheDocument();
+    // 1:763 — "What you will discover" over the chapter nudges, where the Snapshot was.
+    expect(container.querySelector(".rv4-nudges")).toBeInTheDocument();
+    expect(container.querySelector(".rv4-snap")).toBeNull();
   });
 
-  it("delivers all five snapshot rows CLOSED, as 316:250 draws them", () => {
-    const { container } = renderPart2();
-    expect(container.querySelectorAll(".rv4-snap__row")).toHaveLength(5);
-    expect(container.querySelectorAll(".rv4-snap__row.is-open")).toHaveLength(0);
-    // The frame measures 484px precisely because it carries no body copy at rest:
-    // five 86px rows, four 1px dividers, and the 26/24 padding.
-    expect(container.querySelectorAll(".rv4-snap__body")).toHaveLength(0);
-    // 316:257 "Lock slot" — every row carries the 34px disc, open or closed.
-    expect(container.querySelectorAll(".rv4-snap__disc")).toHaveLength(5);
-  });
-
-  it("opens snapshot rows independently — V4 is not a single-open accordion", () => {
-    const { container } = renderPart2();
-    const claims = container.querySelectorAll<HTMLButtonElement>(".rv4-snap__claimrow");
-    fireEvent.click(claims[0]!);
-    fireEvent.click(claims[2]!);
-    expect(container.querySelectorAll(".rv4-snap__row.is-open")).toHaveLength(2);
-    expect(container.querySelectorAll(".rv4-snap__body")).toHaveLength(2);
-    expect(claims[0]!.getAttribute("aria-expanded")).toBe("true");
-    expect(claims[1]!.getAttribute("aria-expanded")).toBe("false");
-    // Clicking an open row closes it again, and only it.
-    fireEvent.click(claims[0]!);
-    expect(container.querySelectorAll(".rv4-snap__row.is-open")).toHaveLength(1);
-  });
-
-  it("states the snapshot claims impersonally, as 316:250 sets them", () => {
-    renderPart2();
-    // Not "Your desire ignites…" — the frame and the SNAPSHOTS source dropped the
-    // second person, so a claim reads as an observation rather than an accusation.
-    expect(screen.getByText("Desire ignites fast and fades faster.")).toBeInTheDocument();
-    for (const row of REPORT_V4_SNAPSHOT["Spark Seeker"]!) {
-      expect(row.claim).not.toMatch(/(Your|You)/);
-    }
-  });
-
-  it("omits the summary and snapshot for an archetype Mark has not written", () => {
+  it("omits the summary for an archetype Mark has not written, but keeps the nudges", () => {
     const { container } = render(
       <V4Part2 archetype="Quiet Withdrawer" matchStrength={12} card={card} />
     );
     expect(container.querySelector(".rv4-summary")).toBeNull();
-    expect(container.querySelector(".rv4-snap")).toBeNull();
+    // The nudges are ways into chapters, the same for every archetype.
+    expect(container.querySelectorAll(".rv4-nudges__row")).toHaveLength(4);
   });
 });
 
@@ -310,7 +277,6 @@ describe("Report V4 copy", () => {
     const missing = missingReport3Summary();
     expect(missing).not.toContain("Spark Seeker");
     expect(missing).toHaveLength(13);
-    expect(Object.keys(REPORT_V4_SNAPSHOT)).toEqual(["Spark Seeker"]);
   });
 
   it("keeps the frame's own teaser placeholder as a single source", () => {

@@ -2998,8 +2998,7 @@
   line-height: 21.6px;
   margin: 0;
 }
-.rv3 .rv4-summary__archetype,
-.rv3 .rv4-snap__archetype {
+.rv3 .rv4-summary__archetype {
   color: var(--rv3-name-ink);
   letter-spacing: -0.8px;
 }
@@ -3035,135 +3034,6 @@
 .rv3 .rv4-summary__sep {
   height: 20px;
   width: 100%;
-}
-
-/* ── Snapshot — 1:763 / panel 55:1700 ────────────────────────────── */
-.rv3 .rv4-snap {
-  align-items: center;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-}
-.rv3 .rv4-snap__heading {
-  color: var(--rv3-ink);
-  font-family: var(--font-serif);
-  font-size: 18px;
-  font-weight: 500;
-  line-height: 21.6px;
-  margin: 0;
-  max-width: 360.781px;
-  padding: 10px 0 20px 5.502px;
-  width: 100%;
-}
-/* 316:250 — one white panel with a violet hairline and a single centred shadow,
- * against V3's washed, ramp-coloured card. */
-.rv3 .rv4-snap__panel {
-  background: #fff;
-  border: 1px solid rgba(168, 85, 247, 0.4);
-  border-radius: 26px;
-  box-shadow: 0 22px 54px -20px rgba(103, 60, 120, 0.3);
-  /* 361 is what the 393 frame leaves between its 16px gutters, so it is a CEILING
-   * and not a width. A phone narrower than 393 — 375, or 360 on most Android —
-   * would otherwise push the panel past the viewport and scroll the page
-   * sideways, which is what Mark found on his phone. */
-  max-width: 361px;
-  overflow: clip;
-  padding: 26px 22px 24px;
-  width: 100%;
-}
-.rv3 .rv4-snap__divider {
-  background: rgba(22, 16, 33, 0.08);
-  height: 1px;
-  width: 100%;
-}
-.rv3 .rv4-snap__row {
-  display: flex;
-  align-items: flex-start;
-  width: 100%;
-}
-/* 316:252 — a 3px rail the frame leaves empty in the delivered state. */
-.rv3 .rv4-snap__edge {
-  align-self: stretch;
-  flex-shrink: 0;
-  padding-block: 8px;
-  width: 3px;
-}
-.rv3 .rv4-snap__content {
-  display: flex;
-  flex: 1 0 0;
-  flex-direction: column;
-  min-width: 0;
-  padding-left: 20px;
-}
-.rv3 .rv4-snap__claimrow {
-  align-items: flex-start;
-  background: none;
-  border: 0;
-  cursor: pointer;
-  display: flex;
-  font: inherit;
-  gap: 12px;
-  padding: 17px 0;
-  text-align: left;
-  width: 100%;
-}
-.rv3 .rv4-snap__claim {
-  color: var(--rv3-ink);
-  flex: 1 0 0;
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: -0.17px;
-  line-height: 25.6px;
-  min-width: 0;
-}
-/* 316:258 "Control / Disc" — a 34px disc around the chevron. The fill is
- * --rv3-violet at 10%; the glyph is the same violet at full strength. */
-.rv3 .rv4-snap__disc {
-  align-items: center;
-  background: rgba(121, 95, 200, 0.1);
-  border-radius: 17px;
-  display: flex;
-  flex-shrink: 0;
-  height: 34px;
-  justify-content: center;
-  width: 34px;
-}
-/* 316:259 — an 18px box. The path inside measures 8.44 x 4.22 under a 3px round
- * stroke, so it is drawn to those numbers rather than reused from the 24-unit
- * chevrons elsewhere in the report. */
-.rv3 .rv4-snap__chev {
-  color: var(--rv3-violet);
-  display: block;
-  height: 18px;
-  transition: transform 260ms ease;
-  width: 18px;
-}
-.rv3 .rv4-snap__chev svg {
-  display: block;
-  height: 100%;
-  width: 100%;
-}
-/* Delivered closed, so the chevron points down until a row is opened. */
-.rv3 .rv4-snap__row.is-open .rv4-snap__chev {
-  transform: rotate(180deg);
-}
-.rv3 .rv4-snap__body {
-  color: var(--rv3-copy);
-  font-size: 16px;
-  font-weight: 400;
-  line-height: 25.6px;
-  margin: 0;
-  padding-bottom: 18px;
-}
-.rv3 .rv4-snap__sep {
-  height: 20px;
-  width: 100%;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .rv3 .rv4-snap__chev {
-    transition: none;
-  }
 }
 
 /* ── Top-three section wrapper — 1:493 ───────────────────────────── */
@@ -4065,7 +3935,10 @@
 .rv3 .rv4-turn,
 .rv3 .rv4-sun {
   border-radius: 20px;
-  /* A ceiling, not a width — see the note on .rv4-snap__panel. */
+  /* 361 is what the 393 frame leaves between its 16px gutters, so it is a CEILING
+   * and not a width: a phone narrower than 393 would otherwise push the panel past
+   * the viewport and scroll the page sideways, which is what Mark found on his
+   * phone. */
   max-width: 361px;
   overflow: clip;
   width: 100%;
@@ -5941,4 +5814,228 @@ html {
 .rv3.rv4 .rv3-chapter.is-open .report-curiosity__fit-dot {
   opacity: 1;
   transform: scale(1);
+}
+
+/* ── Part II · "What you will discover" — the chapter nudges, Figma 1:763 / 663:1089 ──
+ * The H2 keeps the Snapshot heading's metrics (1:766, Lora Medium 18/21.6); the panel
+ * runs full bleed like the practice card — 393 in the 393 frame, a 27px radius, no
+ * shadow — with its violet hairline drawn over the rows, and 1px rules between them. */
+.rv3 .rv4-nudges {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+.rv3 .rv4-nudges__head {
+  color: var(--rv3-ink);
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 21.6px;
+  margin: 0;
+  max-width: 360.781px;
+  padding: 10px 0 20px 5.502px;
+  width: 100%;
+}
+.rv3 .rv4-nudges__panel {
+  background: #fff;
+  border-radius: 27px;
+  margin-inline: calc(var(--rv3-gutter) * -1);
+  overflow: clip;
+  position: relative;
+  width: calc(100% + var(--rv3-gutter) * 2);
+}
+.rv3 .rv4-nudges__panel::after {
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  border-radius: inherit;
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+.rv3 .rv4-nudges__row {
+  overflow: clip;
+  padding: 24px 18px;
+  position: relative;
+}
+.rv3 .rv4-nudges__row + .rv4-nudges__row {
+  border-top: 1px solid rgba(22, 16, 33, 0.14);
+}
+/* The open row's two soft washes: lavender top-left, rose bottom-right. */
+.rv3 .rv4-nudges__wash {
+  border-radius: 50%;
+  filter: blur(40px);
+  height: 256px;
+  pointer-events: none;
+  position: absolute;
+  width: 306px;
+}
+.rv3 .rv4-nudges__wash--lavender {
+  background: rgba(157, 138, 215, 0.136);
+  left: -98px;
+  top: -116px;
+}
+.rv3 .rv4-nudges__wash--rose {
+  background: rgba(208, 89, 118, 0.088);
+  bottom: -128px;
+  right: -124px;
+}
+.rv3 .rv4-nudges__toggle {
+  align-items: flex-start;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 14px;
+  padding: 0;
+  position: relative;
+  text-align: left;
+  width: 100%;
+}
+.rv3 .rv4-nudges__toggle:focus-visible,
+.rv3 .rv4-nudges__read:focus-visible {
+  border-radius: 8px;
+  outline: 2px solid var(--rv3-violet);
+  outline-offset: 3px;
+}
+.rv3 .rv4-nudges__content {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+}
+.rv3 .rv4-nudges__where {
+  align-items: center;
+  display: flex;
+  gap: 9px;
+  min-height: 33px;
+}
+.rv3 .rv4-nudges__label {
+  color: #6b6678;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.8px;
+  line-height: 10px;
+  text-transform: uppercase;
+}
+/* The part chip: white under a lavender-to-rose wash, a 16% hairline, 33 tall. */
+.rv3 .rv4-nudges__chip {
+  background: linear-gradient(90deg, rgba(157, 138, 215, 0.24), rgba(208, 89, 118, 0.14)), #fff;
+  border: 1px solid rgba(93, 77, 140, 0.16);
+  border-radius: 999px;
+  color: #6b5b95;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 2.6px;
+  line-height: 20px;
+  padding: 6px 11px 5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.rv3 .rv4-nudges__chapter {
+  align-items: flex-start;
+  display: flex;
+  gap: 9px;
+}
+.rv3 .rv4-nudges__book {
+  color: var(--rv3-violet);
+  flex: none;
+  height: 16px;
+  margin-top: 2px;
+  width: 16px;
+}
+.rv3 .rv4-nudges__title {
+  color: var(--rv3-ink);
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 19.2px;
+}
+.rv3 .rv4-nudges__question {
+  color: var(--rv3-ink);
+  display: block;
+  font-family: var(--font-serif);
+  font-size: 18.5px;
+  font-weight: 500;
+  letter-spacing: -0.3px;
+  line-height: 26.5px;
+  padding-top: 4px;
+}
+/* "Control / Disc" — lavender and chevron down when closed; white with a violet ring
+ * and the chevron up when open, as the chapter heads draw it. */
+.rv3 .rv4-nudges__disc {
+  align-items: center;
+  background: rgba(121, 95, 200, 0.1);
+  border-radius: 50%;
+  color: var(--rv3-violet);
+  display: flex;
+  flex: none;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+.rv3 .rv4-nudges__disc svg {
+  display: block;
+  height: 18px;
+  transition: transform 260ms ease;
+  width: 18px;
+}
+.rv3 .rv4-nudges__row.is-open .rv4-nudges__disc {
+  background: #fff;
+  box-shadow: inset 0 0 0 1.5px var(--rv3-violet);
+}
+.rv3 .rv4-nudges__row.is-open .rv4-nudges__disc svg {
+  transform: rotate(180deg);
+}
+/* In the frame the open copy sits inside the content column, so it gets that
+ * column's 9px gap and its own 12px padding: 21 under the question. */
+.rv3 .rv4-nudges__more {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding-top: 21px;
+  position: relative;
+}
+.rv3 .rv4-nudges__more[hidden] {
+  display: none;
+}
+.rv3 .rv4-nudges__support {
+  color: var(--rv3-copy);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22.4px;
+  margin: 0;
+  max-width: 309px;
+}
+.rv3 .rv4-nudges__read {
+  align-items: center;
+  align-self: flex-start;
+  background: none;
+  border: 0;
+  color: var(--rv3-violet);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: var(--rv4-manrope, "Manrope"), sans-serif;
+  font-size: 12.5px;
+  font-weight: 600;
+  gap: 6px;
+  letter-spacing: 0.06px;
+  line-height: 16px;
+  padding: 0;
+}
+.rv3 .rv4-nudges__read svg {
+  display: block;
+  height: 13px;
+  width: 13px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv4-nudges__disc svg {
+    transition: none;
+  }
 }
