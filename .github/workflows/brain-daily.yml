@@ -16,9 +16,12 @@ run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.job || (github.
 
 on:
   schedule:
-    # The brief. 08:10 is the retry: claim_slack_alert re-grants an undelivered day once
-    # its claim is ten minutes old, so after a delivery the second run is a no-op.
-    - cron: "10 6,8 * * *"
+    # The brief, three firings. GitHub starts this repo's schedules 4.5 to 5.5 hours late
+    # (measured 2026-09-25: health-monitor due 08:00 ran ~13:20, survey-db-sync 07:00 ran
+    # ~12:35, the Night Shift 00:30 ran 05:08), so 01:10 is what lands in the morning.
+    # The later two are retries: claim_slack_alert re-grants an undelivered day once its
+    # claim is ten minutes old, so after a delivery they are no-ops.
+    - cron: "10 1,3,6 * * *"
     # The decision miner, after the brief's retry.
     - cron: "25 8 * * *"
     # The Night Shift, 02:30 in Berlin: the research queued in the day, answered by morning.
