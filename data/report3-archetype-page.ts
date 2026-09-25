@@ -6,9 +6,9 @@
  * is Mark's to correct — see NOTE markers below.
  *
  * Per-archetype card copy lives separately in `data/report3-archetype-card.ts`.
- * Chapter teasers are NOT here: the frame draws all seventeen as a literal
- * `[Teaser Text]` placeholder, so they are rendered as that placeholder rather than
- * invented. `TEASER_PLACEHOLDER` is the single source of that string.
+ * Chapter teasers live in `data/report4-chapter-teasers.ts` (Sanjin's, 25.09); a
+ * preview row with none still shows the frame's `[Teaser Text]`, whose single source
+ * is `TEASER_PLACEHOLDER`.
  */
 
 import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
@@ -344,16 +344,11 @@ export interface Report3Chapter {
   /** Which of the frame's two placeholders this row carries. */
   body: "teaser" | "chapter";
   /**
-   * Most rows read "<Chapter> - of the <Archetype>", but three do not: Your Sexual
+   * Most rows read "<Chapter> / of the <Archetype>", but three do not: Your Sexual
    * Stage (1:1050), Reading Recommendations (1:1161) and Other Archetypes (1:1172)
    * are drawn as a plain title. Verified against 1:1161's own design context.
    */
   suffix?: false;
-  /**
-   * The frame puts the "- of the <Archetype>" suffix on a line of its own, whatever
-   * the width: a U+2028 line separator in 38:1675 and 38:1686, a line feed in 1:1028.
-   */
-  suffixBreak?: true;
 }
 
 /**
@@ -388,7 +383,7 @@ export const REPORT_V4_PART4_CHAPTERS: readonly Report3Chapter[] = [
     body: "teaser",
   }, // 1:1006
   { title: "Arousal Style", id: "arousal_style", body: "teaser" }, // 1:1017
-  { title: "Initiation Style", id: "initiation_style", body: "teaser", suffixBreak: true }, // 1:1028
+  { title: "Initiation Style", id: "initiation_style", body: "teaser" }, // 1:1028
   { title: "Energy & Risk", id: "energy_level", body: "teaser" }, // 1:1039
   { title: "Your Sexual Stage", id: "sexual_stage", body: "teaser", suffix: false }, // 1:1050
 ];
@@ -401,7 +396,6 @@ export const REPORT_V4_PART5_CHAPTERS: readonly Report3Chapter[] = [
     id: "challenges_in_partnership",
     gateId: "libido_challenges_in_relationships",
     body: "chapter",
-    suffixBreak: true,
   }, // 38:1672
   { title: "Attachment Style", id: "attachment_style", body: "teaser" }, // 38:1520
   { title: "Love Language", id: "love_language", body: "teaser" }, // 38:1542
@@ -409,7 +403,6 @@ export const REPORT_V4_PART5_CHAPTERS: readonly Report3Chapter[] = [
     title: "Curiosity & Relationship Form",
     id: "curiosity_level",
     body: "teaser",
-    suffixBreak: true,
   }, // 38:1683
 ];
 
@@ -448,14 +441,4 @@ export const REPORT_V4_UNSUFFIXED_CHAPTER_IDS: ReadonlySet<string> = new Set(
     ...REPORT_V4_PART5_CHAPTERS,
     ...REPORT_V4_PART6_CHAPTERS,
   ].flatMap((c) => (c.suffix === false && c.id ? [c.id] : []))
-);
-
-/** The chapters whose head breaks before its suffix (`suffixBreak` above). */
-export const REPORT_V4_SUFFIX_BREAK_IDS: ReadonlySet<string> = new Set(
-  [
-    ...REPORT_V4_PART3_CHAPTERS,
-    ...REPORT_V4_PART4_CHAPTERS,
-    ...REPORT_V4_PART5_CHAPTERS,
-    ...REPORT_V4_PART6_CHAPTERS,
-  ].flatMap((c) => (c.suffixBreak && c.id ? [c.id] : []))
 );

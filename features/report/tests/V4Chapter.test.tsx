@@ -29,12 +29,14 @@ describe("V4Chapter", () => {
     expect(section.getAttribute("data-report-section")).toBe("true");
   });
 
-  it("sets the title with its '- of the <archetype>' suffix, and no eyebrow", () => {
+  it("sets the title, then 'of the <archetype>' on a line of its own, no dash, no eyebrow", () => {
     const { container } = render(<V4Chapter title="Typical Beliefs" archetype="Spark Seeker" />);
-    expect(container.querySelector(".rv4-chapter__title")!.textContent).toBe(
-      "Typical Beliefs - of the Spark Seeker"
-    );
+    const title = container.querySelector(".rv4-chapter__title")!;
+    expect(title.textContent).toBe("Typical Beliefs of the Spark Seeker");
+    expect(container.querySelector(".rv4-chapter__name")!.textContent).toBe("Typical Beliefs");
+    expect(container.querySelector(".rv4-chapter__of")!.textContent).toBe("of the Spark Seeker");
     expect(container.querySelector(".rv4-chapter__archetype")!.textContent).toBe("Spark Seeker");
+    expect(title.textContent).not.toContain("-");
     expect(container.textContent).not.toMatch(/Chapter \d/);
   });
 
@@ -93,93 +95,55 @@ describe("V4Chapter", () => {
 });
 
 /**
- * A suffixed title as the frame sets it (310:224 / 1:865 / 304:259).
- *
- * The space before "- of the" belongs to the 24px run ("Accelerator & Brakes "), so
- * the suffix starts a 24px space after the title, not a 14px one (3px further right).
- *
- * And a wrapped title spaces its lines as Figma does: each line sits its OWN height
- * below the one above, so a line of suffix alone ("Spark Seeker") has its baseline
- * 16.8 under the title's. CSS stacks whole line boxes instead, which left the 24px
- * run's leading above that line: "Spark Seeker" 2.34 low and the head 68.6 against
- * the frame's 55. Each suffix word is a 16.8 box with its top pulled in by exactly
- * that leading, and the title keeps no strut of its own.
+ * The head as Mark redrew it on 25.09 (1:862, 1942042395: "I changed how the 'of the
+ * Spark Seeker' sits after a line break and I took the Dash out"): the title on its
+ * line, "of the <Archetype>" on the next — always, whatever the width — at Lora
+ * 14/22.4 with the name in the archetype ink. Each line is its own block, so each
+ * sits its own height under the last, as Figma stacks them (28.8 + 22.4 = 51.2 in the
+ * frame's 52 box). Fatih, 25.09: the same head for the four open chapters.
  */
-describe("V4Chapter — the suffixed title's runs (310:224)", () => {
-  const renderAb = () =>
-    render(<V4Chapter title="Accelerator & Brakes" archetype="Spark Seeker" />).container;
-
-  it("keeps the space before the suffix in the 24px run", () => {
-    const c = renderAb();
-    expect(c.querySelector(".rv4-chapter__name")!.textContent).toBe("Accelerator & Brakes ");
-    expect(c.querySelector(".rv4-chapter__of")!.textContent).toBe("- of the ");
-    expect(c.querySelector(".rv4-chapter__title")!.textContent).toBe(
-      "Accelerator & Brakes - of the Spark Seeker"
+describe("V4Chapter — the head as 1:862 sets it", () => {
+  it("puts the suffix on its own line, with no <br> and no word boxes", () => {
+    const { container } = render(
+      <V4Chapter title="Accelerators & Brakes" archetype="Spark Seeker" />
+    );
+    expect(container.querySelector(".rv4-chapter__title br")).toBeNull();
+    expect(container.querySelector(".rv4-chapter__word")).toBeNull();
+    expect(container.querySelector(".rv4-chapter__name")!.textContent).toBe(
+      "Accelerators & Brakes"
     );
   });
 
-  it("boxes each suffix word on its own, so the suffix still wraps between words", () => {
-    const words = [...renderAb().querySelectorAll(".rv4-chapter__word")].map((w) => w.textContent);
-    expect(words).toEqual(["-", "of", "the", "Spark", "Seeker"]);
-  });
-
-  it("sets each line at its own height", () => {
+  it("sets each line as its own block: 24/28.8, then 14/22.4", () => {
     const css = readFileSync(join(__dirname, "..", "ui", "v3", "reportV3.css"), "utf8");
     const block = (selector: string) => {
-      const at = css.indexOf(selector);
+      const at = css.lastIndexOf(selector);
       expect(at, `${selector} missing`).toBeGreaterThan(-1);
       return css.slice(at, css.indexOf("}", at));
     };
-    const title = block(".rv3 .rv4-chapter__button .rv4-chapter__title.has-suffix {");
-    expect(title).toContain("line-height: 0;");
-    // 23.184 + 16.8 + 3.276 = 43.26, which the frame rounds up to its 44 box.
-    expect(title).toContain("padding-bottom: 0.74px;");
-    expect(block(".rv3 .rv4-chapter__title.has-suffix .rv4-chapter__name {")).toContain(
-      "line-height: 28.8px;"
-    );
-    expect(block(".rv3 .rv4-chapter__title.has-suffix .rv4-chapter__of,")).toContain(
-      "line-height: 0;"
-    );
-    const word = block(".rv3 .rv4-chapter__word {");
-    expect(word).toContain("display: inline-block;");
-    expect(word).toContain("line-height: 16.8px;");
-    expect(word).toContain("margin-top: -2.34px;");
-  });
-});
-
-/**
- * Three heads put their suffix on a line of its own however short the name is —
- * Challenges in Partnerships (38:1675) and Curiosity & Relationship Form (38:1686)
- * with a U+2028 line separator, Initiation Style (1:1028) with a line feed. Left to
- * wrap, "Initiation Style - of the Spark Seeker" fits one 319px line.
- */
-describe("V4 chapter heads — the suffix on its own line where the frame breaks it", () => {
-  it("names exactly the three chapters Figma breaks", async () => {
-    const { REPORT_V4_SUFFIX_BREAK_IDS } = await import("@/data/report3-archetype-page");
-    expect([...REPORT_V4_SUFFIX_BREAK_IDS].sort()).toEqual([
-      "challenges_in_partnership",
-      "curiosity_level",
-      "initiation_style",
-    ]);
+    const name = block(".rv3 .rv4-chapter__title.has-suffix .rv4-chapter__name {");
+    expect(name).toContain("display: block;");
+    expect(name).toContain("line-height: 28.8px;");
+    const of = block(".rv3 .rv4-chapter__title.has-suffix .rv4-chapter__of {");
+    expect(of).toContain("display: block;");
+    expect(of).toContain("font-size: 14px;");
+    expect(of).toContain("line-height: 22.4px;");
+    expect(of).toContain("color: var(--rv3-ink);");
+    expect(css).not.toContain(".rv4-chapter__word");
   });
 
-  it("breaks before the suffix for those chapters, and only those", () => {
-    const { container } = render(
-      <>
-        <V4Chapter
-          title="Challenges in Partnerships"
-          archetype="Spark Seeker"
-          sectionId="challenges_in_partnership"
-        />
-        <V4Chapter title="Typical Beliefs" archetype="Spark Seeker" sectionId="typical_beliefs" />
-      </>
-    );
-    const [cip, tb] = [...container.querySelectorAll(".rv4-chapter__title")];
-    const br = cip!.querySelector("br")!;
-    expect(br).not.toBeNull();
-    expect(br.previousElementSibling).toHaveClass("rv4-chapter__name");
-    expect(br.nextElementSibling).toHaveClass("rv4-chapter__of");
-    expect(tb!.querySelector("br")).toBeNull();
+  it("drops the per-chapter break list: every suffix stacks", async () => {
+    const page = await import("@/data/report3-archetype-page");
+    expect("REPORT_V4_SUFFIX_BREAK_IDS" in page).toBe(false);
+  });
+
+  // The 19.09 frames tracked a plain title -0.47; every title in the file is now -0.24,
+  // plain (Reading Recommendations 1:1164, Other Archetypes 1:1175) or suffixed (1:865).
+  it("tracks every title -0.24, plain or suffixed", () => {
+    const css = readFileSync(join(__dirname, "..", "ui", "v3", "reportV3.css"), "utf8");
+    const at = css.indexOf(".rv3 .rv4-chapter__title {");
+    expect(css.slice(at, css.indexOf("}", at))).toContain("letter-spacing: -0.24px;");
+    expect(css).not.toContain(".rv3 .rv4-chapter__title.has-suffix {");
   });
 });
 

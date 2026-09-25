@@ -1,10 +1,8 @@
 "use client";
 
 import { createContext, useCallback, useContext, useState, type FC, type ReactNode } from "react";
-import {
-  REPORT_V4_SUFFIX_BREAK_IDS,
-  REPORT_V4_UNSUFFIXED_CHAPTER_IDS,
-} from "@/data/report3-archetype-page";
+import { REPORT_V4_UNSUFFIXED_CHAPTER_IDS } from "@/data/report3-archetype-page";
+import { REPORT_V4_CHAPTER_TEASERS } from "@/data/report4-chapter-teasers";
 import {
   REPORT_V3_CHAPTER_BY_ID,
   REPORT_V4_CHAPTER_BY_ID,
@@ -118,11 +116,13 @@ const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget, ar
     // divider; `.rv3-chapter` and its body keep what the V2 sections inside rely on.
     // The body stays mounted while closed — clipped by V3's own collapse, and inert —
     // so the cards in it keep their state and the paywall observers their targets.
+    // Closed, the chapter shows its teaser (1:862): free copy, the same for everyone.
+    const teaser = REPORT_V4_CHAPTER_TEASERS[sectionId];
     return (
       <section
         id={sectionId}
         data-report-section="true"
-        className={`rv3-chapter rv4-chapter${isOpen ? " is-open" : ""}`}
+        className={`rv3-chapter rv4-chapter${isOpen ? " is-open" : ""}${teaser ? " has-teaser" : ""}`}
         data-node-id={isOpen ? "1:175" : "1:862"}
         data-name="Chapter H1 + Copy"
       >
@@ -136,10 +136,20 @@ const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget, ar
           <V4ChapterTitle
             title={chapter.title}
             archetype={REPORT_V4_UNSUFFIXED_CHAPTER_IDS.has(sectionId) ? undefined : archetype}
-            breakBeforeSuffix={REPORT_V4_SUFFIX_BREAK_IDS.has(sectionId)}
           />
           <V4ChapterChevron />
         </button>
+
+        {/* 1:869 — outside the button (not part of the heading's name) and outside the
+         * V2 body (the frozen `[class$="__body"] p` rule would restyle it). It folds away
+         * on the body's own clock as the chapter opens. */}
+        {teaser ? (
+          <div className="rv4-chapter__tease" aria-hidden={isOpen} inert={isOpen}>
+            <div>
+              <p className="rv4-chapter__teaser">{teaser}</p>
+            </div>
+          </div>
+        ) : null}
 
         <div className="rv3-chapter__body" id={bodyId} inert={!isOpen}>
           <div>

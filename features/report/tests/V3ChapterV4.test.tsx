@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import V3Chapter, { V3ModeProvider, V4ModeProvider } from "@features/report/ui/v3/V3Chapter";
 import type { ReportV3Chapter } from "@features/report/ui/v3/reportV3Nav";
+import { REPORT_V4_CHAPTER_TEASERS } from "@/data/report4-chapter-teasers";
 
 /**
  * Every chapter the live V4 report still draws through V3's accordion, set like
@@ -61,7 +62,7 @@ describe("V3Chapter under ?v4=1", () => {
     expect(section.className).toContain("rv4-chapter");
     expect(section.id).toBe("core_insecurities");
     const title = container.querySelector(".rv4-chapter__button .rv4-chapter__title.has-suffix")!;
-    expect(title.textContent).toBe("Core Insecurities - of the Spark Seeker");
+    expect(title.textContent).toBe("Core Insecurities of the Spark Seeker");
     expect(container.querySelector(".rv4-chapter__archetype")!.textContent).toBe("Spark Seeker");
     expect(container.querySelector(".rv4-chapter__button .rv4-chapter__chev svg")).not.toBeNull();
     expect(container.querySelector(".rv3-chapter__title, .rv3-chapter__chev")).toBeNull();
@@ -160,6 +161,30 @@ describe("the V4 chapter rhythm (reportV3.css)", () => {
     );
   });
 
+  it("sets the teaser as 1:870 does: Plus Jakarta 14/22.4 in the copy ink, 20 above and below", () => {
+    const teaser = after1884(".rv3 .rv4-chapter__teaser {");
+    expect(teaser).toMatch(/font-family:\s*var\(--font-sans\)/);
+    expect(teaser).toMatch(/font-size:\s*14px/);
+    expect(teaser).toMatch(/line-height:\s*22\.4px/);
+    expect(teaser).toMatch(/color:\s*var\(--rv3-copy\)/);
+    expect(after1884(".rv3.rv4 .rv4-chapter__tease .rv4-chapter__teaser {")).toMatch(
+      /padding:\s*20px 0/
+    );
+    // The teaser's own 20 ends where the hairline sits — no second 20.
+    expect(after1884(".rv3.rv4 .rv4-chapter.has-teaser:not(.is-open)::after {")).toMatch(
+      /margin-top:\s*0/
+    );
+  });
+
+  it("folds the teaser away on the body's own 320ms as the chapter opens", () => {
+    expect(after1884(".rv3.rv4 .rv4-chapter__tease {")).toMatch(
+      /transition:\s*grid-template-rows 320ms ease/
+    );
+    expect(after1884(".rv3.rv4 .rv4-chapter.is-open > .rv4-chapter__tease {")).toMatch(
+      /grid-template-rows:\s*0fr/
+    );
+  });
+
   it("gives the open chapter's rating row the 16px Typical Beliefs gives it", () => {
     expect(after1884(".rv3.rv4 .rv3-chapter__body-inner > .rv4-rating {")).toMatch(
       /padding-top:\s*16px/
@@ -167,15 +192,51 @@ describe("the V4 chapter rhythm (reportV3.css)", () => {
   });
 });
 
-describe("V3Chapter under V4 — the suffix on its own line where the frame breaks it", () => {
-  it("breaks Curiosity & Relationship Form and Initiation Style (38:1686, 1:1028), not the rest", () => {
-    const heads = (["curiosity_level", "initiation_style", "love_language"] as const).map((id) => {
+describe("V3Chapter under V4 — every suffix on its own line", () => {
+  it("never breaks with a <br>: the suffix is a block of its own for every chapter", () => {
+    for (const id of ["curiosity_level", "initiation_style", "love_language"]) {
       const { container, unmount } = renderV4({ id, number: "4.4", title: id });
-      const hasBreak = container.querySelector(".rv4-chapter__title br") !== null;
+      expect(container.querySelector(".rv4-chapter__title br")).toBeNull();
+      expect(container.querySelector(".rv4-chapter__of")!.textContent).toBe("of the Spark Seeker");
       unmount();
-      return hasBreak;
+    }
+  });
+});
+
+/**
+ * The closed chapter's teaser — Mark, 25.09 (1942042395): "Teaser Texts for all closed
+ * Chapters are in Figma now"; Sanjin's doc "Teaser_Text_Chapters". 1:862 sets it under
+ * the head in a 20/20 block, then the fading hairline.
+ */
+describe("V3Chapter under V4 — the teaser while closed (1:862)", () => {
+  it("shows the chapter's teaser under its head, outside the V2 body and the button", () => {
+    const { container } = renderV4();
+    expect(container.querySelector("section")).toHaveClass("has-teaser");
+    const teaser = container.querySelector(".rv4-chapter__tease .rv4-chapter__teaser")!;
+    expect(teaser.textContent).toBe(REPORT_V4_CHAPTER_TEASERS.core_insecurities);
+    // Not inside any `[class$="__body"]`: the frozen catch-all would set it 17/28.
+    expect(teaser.closest(".rv3-chapter__body, [class$='__body']")).toBeNull();
+    // Not inside the button, so it is not part of the heading's accessible name.
+    expect(teaser.closest("button")).toBeNull();
+  });
+
+  it("lets the teaser go as the chapter opens, out of reach for assistive tech", () => {
+    const { container } = renderV4();
+    const tease = container.querySelector(".rv4-chapter__tease")!;
+    expect(tease.getAttribute("aria-hidden")).not.toBe("true");
+    fireEvent.click(container.querySelector(".rv4-chapter__button")!);
+    expect(tease.getAttribute("aria-hidden")).toBe("true");
+    expect(tease.hasAttribute("inert")).toBe(true);
+  });
+
+  it("draws no teaser where none is written (Reward System, ruling 2)", () => {
+    const { container } = renderV4({
+      id: "biochemical_reward_system_dynamics",
+      number: "3.3",
+      title: "Reward System",
     });
-    expect(heads).toEqual([true, true, false]);
+    expect(container.querySelector(".rv4-chapter__teaser")).toBeNull();
+    expect(container.querySelector("section")).not.toHaveClass("has-teaser");
   });
 });
 

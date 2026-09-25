@@ -1,5 +1,6 @@
 import { Fragment, type FC } from "react";
 import type { Report3Chapter } from "@/data/report3-archetype-page";
+import { REPORT_V4_CHAPTER_TEASERS } from "@/data/report4-chapter-teasers";
 import type { Report3TypicalBeliefsView } from "@/data/report3-typical-beliefs";
 import type { Report3AcceleratorsView } from "@/data/report3-accelerators";
 import type { Report3PartnershipView } from "@/data/report3-partnership";
@@ -136,7 +137,7 @@ const V4ChapterPart: FC<Props> = ({
                 ? undefined
                 : c.body === "chapter"
                   ? CHAPTER_COPY_PLACEHOLDER
-                  : TEASER_PLACEHOLDER
+                  : ((c.id && REPORT_V4_CHAPTER_TEASERS[c.id]) ?? TEASER_PLACEHOLDER)
             }
             defaultOpen={Boolean(entry || cip)}
             bare={Boolean(beliefs || accel || cip || fvr)}

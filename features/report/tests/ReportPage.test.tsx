@@ -1027,7 +1027,7 @@ describe("ReportPage", () => {
       expect(chapter).not.toHaveClass("rv3-chapter");
       expect(chapter).toHaveClass("is-open");
       expect(chapter.querySelector(".rv4-chapter__name")!.textContent).toBe(
-        "Challenges in Partnerships "
+        "Challenges in Partnerships"
       );
       expect(chapter.querySelector(".rv4-cip")).not.toBeNull();
       expect(chapter.querySelector(".report-partnership__heading")).toBeNull();
@@ -1168,7 +1168,7 @@ describe("ReportPage", () => {
       expect(chapter).toHaveClass("rv4-chapter");
       expect(chapter).not.toHaveClass("rv3-chapter");
       expect(chapter).toHaveClass("is-open");
-      expect(chapter.querySelector(".rv4-chapter__name")!.textContent).toBe("Fantasy vs. Reality ");
+      expect(chapter.querySelector(".rv4-chapter__name")!.textContent).toBe("Fantasy vs. Reality");
       expect(chapter.querySelector(".rv4-fvr")).not.toBeNull();
       expect(chapter.querySelector(".rv4-fvt")).not.toBeNull();
       // V2's section, map and tables, is not there.

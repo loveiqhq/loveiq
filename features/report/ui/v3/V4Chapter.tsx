@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useId, useState, type FC, type ReactNode } from "react";
-import { REPORT_V4_SUFFIX_BREAK_IDS } from "@/data/report3-archetype-page";
 import { V4ChapterChevron, V4ChapterTitle } from "./V4ChapterHead";
 import { useOnV4OpenChapter } from "./v4OpenChapter";
 
@@ -17,12 +16,12 @@ import { useOnV4OpenChapter } from "./v4OpenChapter";
  * which is why this is a separate component rather than a restyle of the live
  * `?v3=1` one:
  *
- * 1. The title goes 20/25.6 → 24/28.8 and gains an "- of the <Archetype>" suffix,
- *    set 14/16.8 with the archetype name in --rv3-name-ink.
+ * 1. The title goes 20/25.6 → 24/28.8, with "of the <Archetype>" on a line of its
+ *    own under it (Lora 14/22.4, the name in --rv3-name-ink; no dash since 25.09).
  * 2. The violet "CHAPTER 2.1" eyebrow and its rule are gone entirely.
- * 3. Open and closed carry DIFFERENT copy, not the same copy revealed: closed shows a
- *    serif teaser (Lora 16/19.2), open shows the sans body (16/25.6). So both are
- *    props, and collapsing is not merely a CSS height change.
+ * 3. Open and closed carry DIFFERENT copy, not the same copy revealed: closed shows
+ *    the teaser (Plus Jakarta 14/22.4, 1:870), open shows the body (16/25.6). So both
+ *    are props, and collapsing is not merely a CSS height change.
  *
  * The chevron sits in a 34px "Control / Disc": open is a white disc with a 1.5px
  * violet ring and the chevron pointing UP (304:260), closed is the 10% lavender
@@ -41,8 +40,8 @@ interface Props {
    */
   archetype?: string;
   /**
-   * Closed-state copy. The frame draws `[Teaser Text]` for all seventeen collapsed
-   * chapters, so that placeholder is what ships until Mark writes them.
+   * Closed-state copy: the chapter's teaser (REPORT_V4_CHAPTER_TEASERS, Sanjin's),
+   * or the frame's placeholder on a preview row that has none.
    */
   teaser?: string;
   /**
@@ -141,11 +140,7 @@ const V4Chapter: FC<Props> = ({
         aria-controls={bodyId}
         onClick={() => setIsOpen((v) => !v)}
       >
-        <V4ChapterTitle
-          title={title ?? ""}
-          archetype={archetype}
-          breakBeforeSuffix={sectionId ? REPORT_V4_SUFFIX_BREAK_IDS.has(sectionId) : false}
-        />
+        <V4ChapterTitle title={title ?? ""} archetype={archetype} />
         <V4ChapterChevron />
       </button>
 
