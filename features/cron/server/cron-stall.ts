@@ -96,6 +96,9 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   // Nightly, in GitHub Actions. It records a run whether or not anything was queued, so a
   // missing night means the job did not fire, and questions are waiting on it.
   "brain-night-shift": 26 * 3_600_000,
+  // Nightly, straight after the miner in the same GitHub job: decisions that may not both
+  // stand. It records a run whether or not anything changed, so a missing night shows.
+  "brain-radar": 26 * 3_600_000,
   // WEEKLY, Mondays in GitHub Actions: the two test batteries record their results, then
   // the brain's report on itself is written. Eight days is one missed Monday, and a missed
   // Monday means a week with no accuracy measurement at all.
@@ -125,6 +128,7 @@ export const GITHUB_WORKFLOW: Record<string, string> = {
   "brain-brief": "brain-daily.yml",
   "brain-mine": "brain-daily.yml",
   "brain-night-shift": "brain-daily.yml",
+  "brain-radar": "brain-daily.yml",
   // All three run in brain-daily.yml's `brain-health` job; start that one.
   "brain-health": "brain-daily.yml",
   "brain-battery-retrieval": "brain-daily.yml",

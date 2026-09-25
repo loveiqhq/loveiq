@@ -1,3 +1,4 @@
+import { disputesOf } from "@features/brain/server/decisions";
 import { complete, isLlmConfigured, type LlmMessage } from "@features/brain/server/llm";
 import { CorpusUnavailableError, retrieve, type BrainChunk } from "@features/brain/server/retrieve";
 import { context, divider, fitBlocks, section } from "@shared/observability/slack-blocks";
@@ -193,6 +194,21 @@ export function renderSources(
             `It is kept as history; read the replacement before acting on this.`
           : null;
       /**
+       * SAY WHEN A DECISION MAY CONFLICT WITH ANOTHER, beside SUPERSEDED and for the same
+       * reason: the decision radar writes each open finding onto both records
+       * (`meta.disputed_by`), and a reader who stops at this record must see it. Said as
+       * a question, because a model found it and no person has settled it yet.
+       */
+      const disputed =
+        disputesOf(c.meta as Record<string, unknown> | null)
+          .map(
+            (m) =>
+              `MAY CONFLICT with decision/${defence(m.id)}${m.on ? ` (${defence(m.on)})` : ""}: ` +
+              `${defence(m.why)} Nobody has settled which stands yet; decision_conflicts lists it ` +
+              `and settle_decision_conflict records the answer.`
+          )
+          .join("\n") || null;
+      /**
        * THE EDGE WAS BEING STORED AND RENDERED BY NOTHING.
        *
        * `meta.links` joins a calendar event to the Gemini notes from that same meeting
@@ -248,6 +264,7 @@ export function renderSources(
         linked,
         safeUrl ? `url: ${safeUrl}` : null,
         replaced,
+        disputed,
         "",
         defence(c.body),
       ]

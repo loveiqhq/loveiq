@@ -71,6 +71,7 @@ import {
 } from "@features/brain/server/comment-asks";
 import { renderSelfReport, selfReport } from "@features/brain/server/self-report";
 import { fileCrmCalls, liveCrmDeps, renderCrmCalls } from "@features/brain/server/crm-calls";
+import { openConflicts, renderConflicts, settleConflict } from "@features/brain/server/radar";
 import { renderWhatsNew, whatsNew } from "@features/brain/server/whats-new";
 import {
   isJump,
@@ -1166,6 +1167,41 @@ export const TOOLS = [
     },
   },
   {
+    name: "settle_decision_conflict",
+    title: "Say which of two conflicting decisions stands",
+    annotations: {
+      readOnlyHint: false,
+      // History, not deletion: the decision that does not stand stays findable, marked superseded.
+      destructiveHint: false,
+      // A settled pair is refused the second time, with who settled it and when.
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    description:
+      "Settle a pair listed by decision_conflicts. keep: 'later' or 'earlier' marks the other decision superseded by " +
+      "the one that stands, exactly as record_decision's `supersedes` would, so search shows it as history. keep: " +
+      "'both' records that they do not conflict, and the radar will not raise the pair again. Ask the person who " +
+      "knows before calling this; the answer is theirs, not yours. Every call is logged with who settled it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        earlier: {
+          type: "string",
+          description: "One decision's id, as decision_conflicts lists it.",
+        },
+        later: { type: "string", description: "The other decision's id." },
+        keep: {
+          type: "string",
+          enum: ["earlier", "later", "both"],
+          description: "Which one stands: earlier, later, or both.",
+        },
+        settled_by: { type: "string", description: "Who decided, as their full name." },
+        note: { type: "string", description: "Optional: why, in a sentence." },
+      },
+      required: ["earlier", "later", "keep", "settled_by"],
+    },
+  },
+  {
     name: "count_context",
     title: "Count what we hold, and break it down",
     annotations: { readOnlyHint: true, openWorldHint: false },
@@ -1670,6 +1706,27 @@ export const TOOLS = [
         include_resolved: {
           type: "boolean",
           description: "Also list the resolved and deleted asks. Default false.",
+        },
+      },
+    },
+  },
+  {
+    name: "decision_conflicts",
+    title: "Recorded decisions that may not both stand",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "Pairs of recorded decisions that may not both be in force: one may replace the other, or they give different " +
+      "answers to the same question (a different tool, owner, number or rule for the same job). Found every night by " +
+      "the decision radar, each pair proposed and then checked on its own by a model, so each is a question for a " +
+      "person rather than a verdict. Use it for 'which of our decisions contradict each other', or before relying on " +
+      "a decision that search marks MAY CONFLICT. settle_decision_conflict records the answer.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        topic: {
+          type: "string",
+          description:
+            "Only this topic, e.g. tooling, pricing, report, survey, growth. Default: all.",
         },
       },
     },
@@ -4816,6 +4873,36 @@ async function callTool(
     return textResult(renderCrmCalls(result, dryRun, since), failed);
   }
 
+  if (name === "decision_conflicts") {
+    const topic = typeof args.topic === "string" && args.topic.trim() ? args.topic.trim() : null;
+    const list = await openConflicts(topic);
+    if (!list) return textResult("The decision radar's records could not be read just now.", true);
+    stats.sourceCount = list.length;
+    return textResult(renderConflicts(list, topic));
+  }
+
+  if (name === "settle_decision_conflict") {
+    const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+    const earlier = str(args.earlier);
+    const later = str(args.later);
+    const keep = str(args.keep);
+    const actor = str(args.settled_by);
+    if (!earlier || !later)
+      return textResult("Give both decision ids, as decision_conflicts lists them.", true);
+    if (!["earlier", "later", "both"].includes(keep)) {
+      return textResult("`keep` must be earlier, later or both.", true);
+    }
+    if (!actor) return textResult("Say who decided, as `settled_by`.", true);
+    const res = await settleConflict({
+      a: earlier,
+      b: later,
+      keep: keep as "earlier" | "later" | "both",
+      actor,
+      note: str(args.note) || undefined,
+    });
+    return res.ok ? textResult(res.text) : textResult(res.error, true);
+  }
+
   if (name === "queue_research") {
     const question = typeof args.question === "string" ? args.question.trim() : "";
     if (question.length < 15 || question.length > 1500) {
@@ -5276,6 +5363,8 @@ export const MCP_INSTRUCTIONS =
   "comments, and whether each is still open, checked live against Figma and Google Drive.\n\n" +
   "CALLS INTO THE CRM: file_call_notes files recorded calls with people on the 'Therapists & " +
   "Coaches' board into 'Feedback Sessions'; it also runs by itself every two hours.\n\n" +
+  "DECISIONS THAT DISAGREE: decision_conflicts lists recorded decisions that may not both stand, found nightly " +
+  "and marked MAY CONFLICT on the records; settle_decision_conflict records which one stands, once a person says.\n\n" +
   "HOW THE BRAIN IS DOING: brain_health is its own report card: use, weak and empty searches, " +
   "failures, speed, the weekly test batteries and job health, against the window before.\n\n" +
   "WHAT IS NEW: whats_new lists what the brain produced on its own since a time: notices, the " +

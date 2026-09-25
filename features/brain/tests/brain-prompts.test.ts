@@ -18,6 +18,11 @@ describe("renderPrompt", () => {
     expect("text" in r && r.text).toMatch(/Paywall conversion first/);
   });
 
+  it("catches someone up on decisions that still wait to be settled", () => {
+    const r = renderPrompt("catch_me_up", { since: "2026-09-16" });
+    expect("text" in r && r.text).toContain("Then decision_conflicts: name any pair still waiting");
+  });
+
   it("asks for the person's own comment asks in what needs them", () => {
     const r = renderPrompt("what_needs_me", { person: "Mark" });
     expect("text" in r && r.text).toContain('comment_asks with person "Mark"');

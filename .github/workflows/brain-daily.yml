@@ -34,7 +34,7 @@ on:
       job:
         description: "Which job to run"
         type: choice
-        options: [brain-brief, brain-mine, brain-night-shift, brain-health]
+        options: [brain-brief, brain-mine, brain-night-shift, brain-health, brain-radar]
       query:
         description: "Optional query string, e.g. ?day=2026-09-22 or ?limit=3"
         required: false
@@ -50,8 +50,9 @@ permissions:
 jobs:
   run:
     runs-on: ubuntu-latest
-    # The Night Shift answers up to three questions of up to 20 minutes each.
-    timeout-minutes: ${{ (github.event.schedule == '30 0 * * *' || inputs.job == 'brain-night-shift') && 75 || 20 }}
+    # The Night Shift answers up to three questions of up to 20 minutes each. The miner and
+    # the decision radar after it get 40: the radar's first run reads every topic.
+    timeout-minutes: ${{ (github.event.schedule == '30 0 * * *' || inputs.job == 'brain-night-shift') && 75 || (github.event.schedule == '25 8 * * *' || inputs.job == 'brain-mine' || inputs.job == 'brain-radar') && 40 || 20 }}
     env:
       JOB: ${{ github.event_name == 'workflow_dispatch' && inputs.job || (github.event.schedule == '25 8 * * *' && 'brain-mine' || github.event.schedule == '30 0 * * *' && 'brain-night-shift' || github.event.schedule == '40 1 * * 1' && 'brain-health' || 'brain-brief') }}
     # One of each job at a time. Overlap would be harmless (the brief's day claim and the
@@ -110,7 +111,14 @@ jobs:
           fi
           case "$JOB" in
             brain-brief) npx tsx scripts/brain-cron.ts brain-brief $DRY_RUN "$QUERY" ;;
-            brain-mine) npx tsx scripts/brain-cron.ts brain-mine "$QUERY" ;;
+            # The decision radar follows the miner, so tonight's new decisions are checked
+            # against the ones already recorded. Both run; the job fails if either did.
+            brain-mine)
+              rc=0
+              npx tsx scripts/brain-cron.ts brain-mine "$QUERY" || rc=1
+              npx tsx scripts/brain-cron.ts brain-radar || rc=1
+              exit $rc ;;
+            brain-radar) npx tsx scripts/brain-cron.ts brain-radar ;;
             brain-night-shift) npx tsx scripts/brain-cron.ts brain-night-shift ;;
             # Each battery exits 0 once its result is recorded, whatever failed: failures are
             # the report's findings. All three run; the job fails if any could not.

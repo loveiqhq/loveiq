@@ -4,6 +4,7 @@ type BrainDailyJob =
   | "brain-brief"
   | "brain-mine"
   | "brain-night-shift"
+  | "brain-radar"
   | "brain-health"
   | "brain-battery-retrieval"
   | "brain-battery-mcp";
@@ -43,9 +44,11 @@ export function brainDailySchedules(): Record<BrainDailyJob, string> {
       "brain-daily.yml no longer has one schedule each for the brief, miner, Night Shift and weekly health report"
     );
   }
-  if (!["brain-brief", "brain-mine", "brain-night-shift", "brain-health"].every(runs)) {
+  if (
+    !["brain-brief", "brain-mine", "brain-radar", "brain-night-shift", "brain-health"].every(runs)
+  ) {
     throw new Error(
-      "brain-daily.yml no longer runs brain-brief, brain-mine, brain-night-shift and brain-health"
+      "brain-daily.yml no longer runs brain-brief, brain-mine, brain-radar, brain-night-shift and brain-health"
     );
   }
   if (!records("--retrieval") || !records("--mcp")) {
@@ -55,6 +58,8 @@ export function brainDailySchedules(): Record<BrainDailyJob, string> {
     "brain-brief": brief,
     "brain-mine": mine,
     "brain-night-shift": night,
+    // Runs inside the miner's job, straight after it.
+    "brain-radar": mine,
     "brain-health": health,
     "brain-battery-retrieval": health,
     "brain-battery-mcp": health,

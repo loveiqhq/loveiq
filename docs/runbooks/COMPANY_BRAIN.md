@@ -358,7 +358,7 @@ When registering any callback — Resend, Stripe, Slack — paste the `www`
 host, then confirm rows actually arrive. An endpoint that returns 401 to an
 unsigned probe proves it is deployed, not that it is reachable by the sender.
 
-**Twenty-seven tools, in three groups.** Twenty read, seven write. The write ones act
+**Twenty-nine tools, in three groups.** Twenty-one read, eight write. The write ones act
 immediately and are described at the bottom of this section — a teammate who reads
 only the first table will not know the brain can send an email.
 
@@ -375,6 +375,7 @@ only the first table will not know the brain can send an email.
 | `what_shipped`           | What changed, as the plain-English "For Marcus:" line every change to main carries, newest first, with date and pull request. Read live from GitHub, never indexed                                                                                                                                                                                                                                                                                                          |
 | `explain_change`         | Whether a day's numbers were outside their usual range (each against the 28 days before, median and spread) and where each move came from: traffic source or GA4 channel, the two halves of a rate, engagement, GA4 against our own count, ad spend and campaigns, what shipped and what was decided. The likely causes are fixed rules over numbers, never a model's guess. The anomaly watcher writes yesterday's unusual numbers as a notice between 07:00 and 11:00 UTC |
 | `comment_asks`           | Every ask left in a Figma or Google Docs comment: who asked whom, for what, a link, and whether it is still open, checked live. Figma is read from its API for every file whose link was shared somewhere the brain reads; Google from each person's notification emails, checked against Drive as that person. Says what it could not read                                                                                                                                 |
+| `decision_conflicts`     | Recorded decisions that may not both stand: one may replace the other, or they give different answers to the same question. Found nightly by the decision radar, each pair proposed and then checked on its own by a model, so each is a question for a person                                                                                                                                                                                                              |
 | `brain_health`           | How the brain itself is doing over 1 to 30 days, against the days before: use by tool, weak and empty searches and the questions it could not answer well, failed calls and error messages, speed, the weekly test batteries with what fails, and every brain job that failed or stopped running                                                                                                                                                                            |
 | `whats_new`              | What the brain produced on its own since a time (default the last 24 hours): notices, the Night Shift's research answers and decisions, newest first with ids, plus how many questions still wait for tonight. The door for "what's new", and what the Claude Code session hook shows at startup                                                                                                                                                                            |
 | `check_copy`             | Report copy against the house rules, with the sentence behind each finding: em dashes, machine-written phrases, absolute claims, reading level, length, lines that fit every archetype or repeat another chapter, and the chapter's shipped voice. Leave out `text` and name a chapter and archetype to audit what shipped                                                                                                                                                  |
@@ -527,15 +528,16 @@ These are not drafts-for-approval. There is no confirmation step, by design — 
 permission for every write makes the thing useless. Every call is recorded in
 `brain_query` with its full arguments, so anything wrong is visible and reversible.
 
-| Tool                  | What it does                                                                                                                                                                                                                                   |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `record_decision`     | Writes down what was decided, by whom, and what it supersedes. The highest-value one: decisions are otherwise reconstructed from whoever happened to record a call                                                                             |
-| `post_to_slack`       | Posts or replies in any channel the bot is in. Cannot be unsent                                                                                                                                                                                |
-| `write_to_notion`     | Creates a page or a task                                                                                                                                                                                                                       |
-| `write_to_google_doc` | Creates a Doc, or appends to one                                                                                                                                                                                                               |
-| `queue_research`      | Hand a question to the Night Shift, which answers it overnight with sources, from our own records and the web. Deduplicated (the same question returns the one queued or answered) and capped at five waiting. Writes only a `research` record |
-| `file_call_notes`     | File recorded calls with people on 'Therapists & Coaches' into 'Feedback Sessions' and move their 'Last touch'. Exact matches only (invite email or transcript speaker). Previews unless `dry_run: false`; `brain-crm` runs it every two hours |
-| `send_email`          | **Drafts by default.** It sends only when explicitly passed `send: true` — the one write that leaves the company and cannot be recalled, so it is the one that needs the extra word                                                            |
+| Tool                       | What it does                                                                                                                                                                                                                                   |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `record_decision`          | Writes down what was decided, by whom, and what it supersedes. The highest-value one: decisions are otherwise reconstructed from whoever happened to record a call                                                                             |
+| `post_to_slack`            | Posts or replies in any channel the bot is in. Cannot be unsent                                                                                                                                                                                |
+| `write_to_notion`          | Creates a page or a task                                                                                                                                                                                                                       |
+| `write_to_google_doc`      | Creates a Doc, or appends to one                                                                                                                                                                                                               |
+| `queue_research`           | Hand a question to the Night Shift, which answers it overnight with sources, from our own records and the web. Deduplicated (the same question returns the one queued or answered) and capped at five waiting. Writes only a `research` record |
+| `file_call_notes`          | File recorded calls with people on 'Therapists & Coaches' into 'Feedback Sessions' and move their 'Last touch'. Exact matches only (invite email or transcript speaker). Previews unless `dry_run: false`; `brain-crm` runs it every two hours |
+| `settle_decision_conflict` | Say which of two conflicting decisions stands. The other is marked superseded, as record_decision's `supersedes` would; `both` records that they do not conflict. Ask the person who made the call first                                       |
+| `send_email`               | **Drafts by default.** It sends only when explicitly passed `send: true` — the one write that leaves the company and cannot be recalled, so it is the one that needs the extra word                                                            |
 
 **Why `record_decision` matters more than it looks.** Decision records are the thing
 the brain exists for and, measured 2026-09-12 before the miner first ran, the thing it had
@@ -978,6 +980,35 @@ days, so a skipped run is caught up by the next.
   whoever ran the call. "Last touch" only ever moves forward.
 - **Nothing is written twice.** A call whose notes link is already on a row, or a person
   who already has a session row that day, perhaps written by hand, is left alone.
+
+### The decision radar: recorded decisions that may not both stand
+
+185 of the 200 decisions are mined from meeting notes, and nothing used to compare one with
+another, so "Require Jira tickets for all major features" (May) and a September decision
+whose reason is "concerns with using Notion for tracking bug fixes" both read as current.
+`brain-radar` (plan item G13) runs nightly in GitHub Actions straight after the miner, in the
+same `brain-mine` job, on the Team subscription:
+
+- **Two model calls per pair, never one.** Per topic, a generous first call proposes up to
+  ten candidate pairs; a strict second call judges each on its own, with both records'
+  reasons and quotes, as "reverses", "unclear" or "none". One call over a topic flagged
+  duplicates and unrelated pairs and found Jira/Notion in one run of two; the two-call form
+  found it every time and cleared the duplicates (measured 2026-09-26).
+- **Only what changed.** A topic is checked again only when its set of current decisions
+  changes (`brain_radar_topic` keeps a hash), so a quiet night costs no model calls.
+- **Shown on the records.** Each open pair is written onto both decisions
+  (`meta.disputed_by`), so search, `fetch_document` and the prior-decision block print
+  "MAY CONFLICT with decision/…"; `decision_conflicts` lists them, and one notice announces
+  each night's new ones. `brain_decision_conflict` is the authority and every run brings the
+  records back in step with it.
+- **A person settles.** `settle_decision_conflict` marks the decision that does not stand as
+  superseded (the same field `record_decision` writes), or records that both stand so the
+  pair is not raised again. A pair whose decision was superseded some other way closes
+  itself on the next run.
+
+Run it alone with `job: brain-radar`. `cron_run` records what it checked, found and could
+not check; a topic that failed (a usage limit, an unreadable answer) is simply tried again
+the next night.
 
 ### Brought to you in Claude: the proactive layer
 
