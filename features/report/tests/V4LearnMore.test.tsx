@@ -69,6 +69,28 @@ describe("V4LearnMore — closed (153:2240)", () => {
     expect(container.textContent).not.toContain(textOf(ARTICLE.free[2]!).slice(0, 60));
   });
 
+  // Review 24.09: "When at the end of the learn more, there is the 'Show more' option,
+  // and the 'Back to top' button … they are covering each other."
+  it("stops Back to top above a locked article's gate, clear of Show More", () => {
+    const { container } = render(<V4LearnMore article={ARTICLE} locked />);
+    fireEvent.click(container.querySelector(".rv4-learn__open")!);
+    const gate = container.querySelector(".rv4-learn__gate")!;
+    const backtop = container.querySelectorAll(".rv4-backtop");
+    expect(backtop).toHaveLength(1);
+    // Its sticky range is the readable copy: it docks where the free text ends,
+    // above the blurred window, and never reaches the button inside the gate.
+    expect(gate.previousElementSibling).toBe(backtop[0]);
+    expect(gate.contains(backtop[0]!)).toBe(false);
+  });
+
+  it("keeps Back to top at the end of an unlocked article", () => {
+    const { container } = render(<V4LearnMore article={ARTICLE} />);
+    fireEvent.click(container.querySelector(".rv4-learn__open")!);
+    const section = container.querySelector(".rv4-learn")!;
+    expect(container.querySelectorAll(".rv4-backtop")).toHaveLength(1);
+    expect(section.lastElementChild!.className).toBe("rv4-backtop");
+  });
+
   it("is NEVER gated — a locked reader sees the same card", () => {
     const { container } = render(<V4LearnMore article={ARTICLE} locked />);
     expect(container.querySelector(".rv4-premium")).toBeNull();

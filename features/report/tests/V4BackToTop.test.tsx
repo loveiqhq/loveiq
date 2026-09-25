@@ -62,26 +62,24 @@ const button = () => screen.getByRole("button", { hidden: true });
 const anchor = (c: HTMLElement) => c.querySelector(".rv4-backtop")!;
 
 describe("V4BackToTop", () => {
-  it("stays hidden while the section head is still on screen", () => {
+  // Review 24.09: "The 'Back to top' CTA should appear the moment someone opens a Go
+  // deeper & learn more section and should stick to the position while you scroll up
+  // and down in that element." It is mounted only while the article is open.
+  it("shows the moment the article opens, with its head still on screen", () => {
+    rectTop = 0;
     const { container } = render(<Harness />);
-    expect(anchor(container).getAttribute("data-visible")).toBe("false");
-    // Out of the tab order too, so a keyboard reader cannot land on a control
-    // that is not on screen.
-    expect(button().getAttribute("tabindex")).toBe("-1");
-    expect(button().getAttribute("aria-hidden")).toBe("true");
-  });
-
-  it("appears once the section head has passed roughly a screen above the fold", () => {
-    const { container } = render(<Harness />);
-    rectTop = -319;
-    fireEvent.scroll(window);
-    expect(anchor(container).getAttribute("data-visible")).toBe("false");
-
-    rectTop = -321;
-    fireEvent.scroll(window);
     expect(anchor(container).getAttribute("data-visible")).toBe("true");
     expect(button().getAttribute("tabindex")).toBe("0");
     expect(button().getAttribute("aria-hidden")).toBe("false");
+  });
+
+  it("stays up however far the reader scrolls within the article", () => {
+    const { container } = render(<Harness />);
+    for (const top of [0, -319, -321, -5000]) {
+      rectTop = top;
+      fireEvent.scroll(window);
+      expect(anchor(container).getAttribute("data-visible"), String(top)).toBe("true");
+    }
   });
 
   it("returns to the section top, clear of the floating chrome", () => {
@@ -129,6 +127,34 @@ describe("reportV3.css — back-to-top contracts", () => {
     expect(css).toContain("position: sticky");
     expect(css).toContain("height: 0");
     expect(css).toContain("bottom: 20px");
+  });
+
+  it("rides 12px above the fixed unlock bar at each of the bar's own breakpoints", () => {
+    // At 20px the button sat under the bar (z-index 70), so a locked reader only met
+    // it at the article's end, on top of "Show More". The bar publishes the height
+    // it occupies (ReportStickyUnlockBar, --report-unlock-bar-h); where it sits is
+    // report.css's: on the consent banner on a phone, 16px above it on a tablet,
+    // and 12px up on a desktop.
+    const rules = [
+      [
+        "max-width: 640px",
+        /var\(--liq-consent-h, 0px\) \+ var\(--report-unlock-bar-h, 71px\) \+ 12px/,
+      ],
+      [
+        "min-width: 641px) and (max-width: 1024px",
+        /16px \+ var\(--liq-consent-h, 0px\) \+ var\(--report-unlock-bar-h, 160px\) \+ 12px/,
+      ],
+      ["min-width: 1025px", /12px \+ var\(--report-unlock-bar-h, 78px\) \+ 12px/],
+    ] as const;
+    const selector = ".rv3.rv4.report-experience--sticky-pad .rv4-backtop {";
+    let from = 0;
+    for (const [media, bottom] of rules) {
+      const at = V3_CSS.indexOf(selector, from);
+      expect(at, media).toBeGreaterThan(-1);
+      expect(V3_CSS.slice(V3_CSS.lastIndexOf("@media", at), at)).toContain(media);
+      expect(V3_CSS.slice(at, V3_CSS.indexOf("}", at))).toMatch(bottom);
+      from = at + 1;
+    }
   });
 
   it("borrows the Ignite panel's hairline so it reads as part of the report", () => {

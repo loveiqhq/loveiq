@@ -1,6 +1,6 @@
 "use client";
 
-import type { FC } from "react";
+import { useEffect, useRef, type FC } from "react";
 
 import { trackStickyUnlockClicked } from "@features/analytics/client";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
@@ -28,6 +28,33 @@ const ArrowRight: FC = () => (
 );
 
 const ReportStickyUnlockBar: FC<Props> = ({ quote, onCheckout, hidden = false, archetype }) => {
+  const mobileRef = useRef<HTMLDivElement>(null);
+  const desktopRef = useRef<HTMLDivElement>(null);
+
+  // Publish the height this bar occupies as `--report-unlock-bar-h`, as
+  // ConsentBannerOffset publishes `--liq-consent-h`, so floating UI of the report's
+  // own (V4's "Back to top") can sit clear of it. It is not a constant: safe-area
+  // padding on a phone, and a stacked card with vw-clamped type from 641 to 1024px.
+  // Only one variant is displayed at a time; the other measures 0.
+  useEffect(() => {
+    const root = document.documentElement;
+    const publish = () => {
+      const height = Math.max(
+        mobileRef.current?.offsetHeight ?? 0,
+        desktopRef.current?.offsetHeight ?? 0
+      );
+      root.style.setProperty("--report-unlock-bar-h", `${height}px`);
+    };
+    publish();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(publish);
+    if (mobileRef.current) observer?.observe(mobileRef.current);
+    if (desktopRef.current) observer?.observe(desktopRef.current);
+    return () => {
+      observer?.disconnect();
+      root.style.removeProperty("--report-unlock-bar-h");
+    };
+  }, []);
+
   const handleClick = (variant: "mobile" | "desktop") => () => {
     trackStickyUnlockClicked({ variant, archetype });
     // begin_checkout is counted by ReportPage.beginCheckout, which onCheckout calls.
@@ -40,6 +67,7 @@ const ReportStickyUnlockBar: FC<Props> = ({ quote, onCheckout, hidden = false, a
     <>
       {/* ── Mobile sticky bar (Figma 7635:13896) ──────────────────────────── */}
       <div
+        ref={mobileRef}
         className="report-sticky-unlock report-sticky-unlock--mobile"
         aria-hidden={hidden || undefined}
         inert={hidden}
@@ -59,6 +87,7 @@ const ReportStickyUnlockBar: FC<Props> = ({ quote, onCheckout, hidden = false, a
 
       {/* ── Desktop sticky CTA (Figma 7635:13901) ─────────────────────────── */}
       <div
+        ref={desktopRef}
         className="report-sticky-unlock report-sticky-unlock--desktop"
         aria-hidden={hidden || undefined}
         inert={hidden}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FC, type RefObject } from "react";
+import { useCallback, useEffect, useState, type FC, type RefObject } from "react";
 
 /**
  * The floating "Back to top" control for a very long expanded section.
@@ -25,14 +25,14 @@ import { useCallback, useEffect, useRef, useState, type FC, type RefObject } fro
  * — fixed resolves against the viewport, so in the preview it would fly out to the
  * browser's corner. Sticking to `bottom` also means the button retires by itself
  * when the section ends, with no second scroll threshold to maintain.
+ *
+ * WHEN IT SHOWS. From the moment the article opens (review 24.09: "should appear the
+ * moment someone opens a Go deeper & learn more section and should stick to the
+ * position while you scroll up and down in that element"). It used to wait until the
+ * section head was a screen above the fold, which, under the unlock bar, meant a
+ * locked reader first met it at the article's end. It fades in on the frame after
+ * mounting, so opening the article is what brings it up.
  */
-
-/**
- * How far the section's top must pass above the fold before the button appears.
- * Roughly one screen: showing it while the heading is still visible would offer a
- * trip to somewhere the reader can already see.
- */
-const SHOW_AFTER_PX = 320;
 
 /**
  * The floating chrome occupies the top 136px of the viewport — header 8→56, pill
@@ -48,41 +48,15 @@ interface Props {
 }
 
 const V4BackToTop: FC<Props> = ({ targetRef, label = "Back to top" }) => {
-  const [visible, setVisible] = useState(false);
-  const frame = useRef(0);
-  const queued = useRef(false);
+  // Visible from the first render where there is no frame to wait for (SSR, old
+  // browsers); otherwise one frame after mounting, so the fade has a start to run from.
+  const [visible, setVisible] = useState(() => typeof requestAnimationFrame !== "function");
 
   useEffect(() => {
-    const read = () => {
-      const el = targetRef.current;
-      if (el) setVisible(el.getBoundingClientRect().top < -SHOW_AFTER_PX);
-    };
-    // rAF-coalesced: a passive scroll listener can fire many times per frame, and
-    // this only ever reads layout to flip one boolean.
-    //
-    // The guard is its own flag, set BEFORE the frame is requested, rather than the
-    // handle returned by requestAnimationFrame. The handle is assigned only after
-    // the call returns, so any callback that runs during it — a synchronous rAF, as
-    // in a test — would clear a handle that is then immediately overwritten, and the
-    // listener would wedge shut for good.
-    const onScroll = () => {
-      if (queued.current) return;
-      queued.current = true;
-      frame.current = window.requestAnimationFrame(() => {
-        queued.current = false;
-        read();
-      });
-    };
-
-    read();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-      if (frame.current) window.cancelAnimationFrame(frame.current);
-    };
-  }, [targetRef]);
+    if (typeof window.requestAnimationFrame !== "function") return;
+    const frame = window.requestAnimationFrame(() => setVisible(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   const toTop = useCallback(() => {
     const el = targetRef.current;
