@@ -314,6 +314,12 @@ describe("reportV3.css — fantasy table contracts", () => {
     return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
   };
 
+  // The hit area is laid from the padding box, inside the 1.5px outline: -6.5px there
+  // reached 5px past the drawn pill, 41 tall in all. -8px makes it 31 + 2 x 6.5 = 44.
+  it("gives the pill a 44px hit area, counted from inside its outline", () => {
+    expect(ruleOf(".rv3 .rv4-trig__pill::after")).toContain("inset: -8px 0");
+  });
+
   // The A&B cards' "Show all" is the same pill (713:6178), so the rule is shared.
   it("holds the pill at 31 however the browser rounds its 1.5px outline", () => {
     expect(V3_CSS).toContain(".rv3 .rv4-fvt__pill,\n.rv3 .rv4-trig__pill {");
