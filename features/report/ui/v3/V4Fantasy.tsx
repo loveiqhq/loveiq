@@ -68,12 +68,12 @@ const V4Fantasy: FC<Props> = ({ view, onUnlock }) => {
         <div className="rv4-sep" aria-hidden="true" data-node-id="368:5447" />
 
         {locked ? (
-          /* 305:228 "Locked copy", its card 16px under the table's foot (305:249). */
+          /* 305:228 "Locked copy", its card 103.3 into it (305:250). */
           <div className="rv4-fvr__gate" data-node-id="305:228" onClick={guardedUnlock(onUnlock)}>
             <div className="rv4-fvr__blurred" aria-hidden="true" inert>
               <V4Prose blocks={view.challenges} />
             </div>
-            <V4PremiumCard variant="guarantee" nodeId="305:249" />
+            <V4PremiumCard variant="guarantee" nodeId="305:250" />
           </div>
         ) : (
           <div className="rv4-fvr__text" data-node-id="368:1920">
