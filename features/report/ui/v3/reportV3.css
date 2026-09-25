@@ -7060,3 +7060,32 @@ html {
     transition: none;
   }
 }
+
+/* ── Top three — the rows Mark enlarged for Sanjin's descriptions (1:498, 25.09) ──
+ * Every archetype now has a two-sentence description (report4ArchetypeBlurbs), so
+ * the frame sets it at 12/19.2 in a 100px track — five lines — on each row: 191 /
+ * 184.08 / 184 tall, 10 apart. The lead row is fixed at 191: 14 + its 1px ring
+ * above the name, the rest below. `minmax` lets a narrow phone's sixth line grow
+ * the row rather than spill. The rows start 36 under the lede (16 + the card's 20)
+ * and the rating sits 10 under the last row, both inside 1:497. V3's card
+ * (`?v3=1`) is untouched: every rule here is scoped to `.rv4-top3`. */
+.rv3 .rv4-top3 .rv3-top3 {
+  margin: 16px 0 10px;
+  padding-bottom: 0;
+  padding-top: 20px;
+}
+.rv3 .rv4-top3 .rv3-top3__row {
+  grid-template-rows: 26px minmax(100px, auto) 17.08px;
+  padding: 14px 12px 15px;
+}
+.rv3 .rv4-top3 .rv3-top3__row.is-lead {
+  padding: 14px 12px 19.92px;
+}
+.rv3 .rv4-top3 .rv3-top3__row + .rv3-top3__row {
+  margin-top: 10px;
+}
+.rv3 .rv4-top3 .rv3-top3__blurb {
+  align-self: start;
+  font-size: 12px;
+  line-height: 19.2px;
+}
