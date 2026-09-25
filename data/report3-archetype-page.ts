@@ -252,10 +252,11 @@ export const REPORT_V4_CORE_ARCHETYPE_LEDE: readonly Report3Run[] = [
  *
  * One row per chapter the report leads with, in the frame's order. The copy is the
  * same for every archetype — each row is a way into a chapter, not a finding — so it
- * renders for all fourteen. The questions are 663:1089's; the support lines are
- * 663:1126's (Typical Beliefs, the one row the frame draws open) and the hidden
- * all-open state 662:233's for the other three. Each row's part, number and title
- * come from V4's chapter order (V4ChapterNudges), so they follow it if it moves.
+ * renders for all fourteen. The questions and support lines are Sanjin's (review
+ * round 25.09, the all-open panel 712:243: 712:260/262, 282/321, 298/332,
+ * 314/343), set in Mark's final panel (1:847). Two stray double spaces in the frame
+ * are single here. Each row's part and title come from V4's chapter order
+ * (V4ChapterNudges), so they follow it if it moves.
  */
 export interface Report3Nudge {
   /** The chapter it opens — an id in REPORT_V4_CHAPTERS. */
@@ -271,27 +272,27 @@ export const REPORT_V4_NUDGES_HEADING = "What you will discover";
 export const REPORT_V4_NUDGES: readonly Report3Nudge[] = [
   {
     id: "typical_beliefs",
-    question: "Which of your rules about sex did you never actually agree to?",
+    question: "Which rules about sex did you never actually agree to?",
     support:
-      "A short list of the beliefs most people are carrying, and a way to check which ones are yours.",
+      "Discover the beliefs that are quietly shaping what sex means to you, and how they can influence your desire, behaviour, and relationships.",
   },
   {
     id: "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
-    question: "What switches your desire off fastest?",
+    question: "What turns your desire on, and what shuts you down?",
     support:
-      "The conditions that shut you down, and which of them you can change before the weekend.",
+      "Understand what fuels your desire, what gets in the way, and how to better work with both.",
   },
   {
     id: "challenges_in_partnership",
     question: "What do your partners hear that you never said?",
     support:
-      "How your usual way of asking lands on the other side, and one sentence that makes it clearer.",
+      "Understand where your needs and habits can be misread by a partner, and how to reduce the friction without losing what matters to you.",
   },
   {
     id: "typical_sexual_fantasy_amp_practice_tendencies",
-    question: "Why does the thing you fantasise about lose its heat in real life?",
+    question: "What does your fantasy really say about what you want?",
     support:
-      "How to tell which fantasies are built for your head and which are worth trying out loud.",
+      "Learn what makes a fantasy appealing, which parts should stay imaginary, and what may be worth exploring in real life.",
   },
 ];
 

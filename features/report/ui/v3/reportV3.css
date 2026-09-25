@@ -5816,10 +5816,11 @@ html {
   transform: scale(1);
 }
 
-/* ── Part II · "What you will discover" — the chapter nudges, Figma 1:763 / 663:1089 ──
- * The H2 keeps the Snapshot heading's metrics (1:766, Lora Medium 18/21.6); the panel
- * runs full bleed like the practice card — 393 in the 393 frame, a 27px radius, no
- * shadow — with its violet hairline drawn over the rows, and 1px rules between them. */
+/* ── Part II · "What you will discover" — the chapter nudges, Figma 1:763 / 1:847 ──
+ * The H2 keeps the Snapshot heading's metrics (1:766, Lora Medium 18/21.6). Mark's
+ * final panel (25.09, 696:2647) sits in the column — 361 in the 361 frame, a 27px
+ * radius and a soft violet shadow — with its hairline drawn over the rows, 1px rules
+ * between them, and a closing line (713:6231) under the last. */
 .rv3 .rv4-nudges {
   align-items: center;
   display: flex;
@@ -5840,10 +5841,10 @@ html {
 .rv3 .rv4-nudges__panel {
   background: #fff;
   border-radius: 27px;
-  margin-inline: calc(var(--rv3-gutter) * -1);
+  box-shadow: 0 20.19px 50.47px 5px rgba(103, 60, 120, 0.08);
   overflow: clip;
   position: relative;
-  width: calc(100% + var(--rv3-gutter) * 2);
+  width: 100%;
 }
 .rv3 .rv4-nudges__panel::after {
   border: 1px solid rgba(168, 85, 247, 0.4);
@@ -5855,7 +5856,7 @@ html {
 }
 .rv3 .rv4-nudges__row {
   overflow: clip;
-  padding: 24px 18px;
+  padding: 18px 22px;
   position: relative;
 }
 .rv3 .rv4-nudges__row + .rv4-nudges__row {
@@ -5877,8 +5878,8 @@ html {
 }
 .rv3 .rv4-nudges__wash--rose {
   background: rgba(208, 89, 118, 0.088);
-  bottom: -128px;
-  right: -124px;
+  left: 179px;
+  top: 154px;
 }
 .rv3 .rv4-nudges__toggle {
   align-items: flex-start;
@@ -5907,40 +5908,37 @@ html {
   gap: 9px;
   min-width: 0;
 }
-.rv3 .rv4-nudges__where {
-  align-items: center;
-  display: flex;
-  gap: 9px;
-  min-height: 33px;
-}
-.rv3 .rv4-nudges__label {
-  color: #6b6678;
+/* The part in its own glow (696:2655): "PART III" centred in a 100x24 box under two
+ * soft radial washes, lavender and rose — no chip, no "Learn in", no number. The
+ * frame's boxes run 95-102 wide by hand; 100 is the one they share. */
+.rv3 .rv4-nudges__part {
+  align-self: flex-start;
+  background:
+    radial-gradient(
+      42.75px 12.48px at 50% 50%,
+      rgba(157, 138, 215, 0.24),
+      rgba(157, 138, 215, 0) 71%
+    ),
+    radial-gradient(37.05px 11.04px at 53% 47%, rgba(208, 89, 118, 0.14), rgba(208, 89, 118, 0) 73%);
+  color: #6b5b95;
   font-family: var(--font-sans);
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 1.8px;
-  line-height: 10px;
-  text-transform: uppercase;
-}
-/* The part chip: white under a lavender-to-rose wash, a 16% hairline, 33 tall. */
-.rv3 .rv4-nudges__chip {
-  background: linear-gradient(90deg, rgba(157, 138, 215, 0.24), rgba(208, 89, 118, 0.14)), #fff;
-  border: 1px solid rgba(93, 77, 140, 0.16);
-  border-radius: 999px;
-  color: #6b5b95;
-  font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 600;
+  height: 24px;
   letter-spacing: 2.6px;
-  line-height: 20px;
-  padding: 6px 11px 5px;
+  line-height: 19.2px;
+  padding-top: 2px;
+  text-align: center;
   text-transform: uppercase;
   white-space: nowrap;
+  width: 100px;
 }
+/* 696:2658 / 696:2667: Figma rounds the 19.2px lines' boxes up to 20. */
 .rv3 .rv4-nudges__chapter {
   align-items: flex-start;
   display: flex;
   gap: 9px;
+  min-height: 20px;
 }
 .rv3 .rv4-nudges__book {
   color: var(--rv3-violet);
@@ -6011,8 +6009,11 @@ html {
   font-weight: 400;
   line-height: 22.4px;
   margin: 0;
-  max-width: 309px;
+  /* 696:2665: the 269 column less its 48px right padding. */
+  max-width: 221px;
 }
+/* Mark's text CTA component (1941261886, 696:2667): Plus Jakarta Medium 12/19.2 in
+ * the brand violet, the arrow 6px after it. */
 .rv3 .rv4-nudges__read {
   align-items: center;
   align-self: flex-start;
@@ -6021,18 +6022,82 @@ html {
   color: var(--rv3-violet);
   cursor: pointer;
   display: inline-flex;
-  font-family: var(--rv4-manrope, "Manrope"), sans-serif;
-  font-size: 12.5px;
-  font-weight: 600;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
   gap: 6px;
-  letter-spacing: 0.06px;
-  line-height: 16px;
+  letter-spacing: 0;
+  line-height: 19.2px;
+  min-height: 20px;
   padding: 0;
 }
 .rv3 .rv4-nudges__read svg {
   display: block;
   height: 13px;
   width: 13px;
+}
+/* 713:6231 — the closing line, 30 under the last rule and 42 above the panel's
+ * foot, centred in its 311x50 glow (the frame sets the glow 10px left of centre; it
+ * is centred here, as the rows are). */
+.rv3 .rv4-nudges__coda {
+  border-top: 1px solid rgba(22, 16, 33, 0.14);
+  display: flex;
+  justify-content: center;
+  padding: 30px 0 42px;
+  position: relative;
+}
+.rv3 .rv4-nudges__tally {
+  align-items: center;
+  color: #6b5b95;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 700;
+  height: 50px;
+  justify-content: center;
+  letter-spacing: 0.8px;
+  line-height: 16px;
+  margin: 0;
+  max-width: 100%;
+  position: relative;
+  text-align: center;
+  text-transform: uppercase;
+  width: 311px;
+}
+.rv3 .rv4-nudges__tally::before {
+  background:
+    radial-gradient(
+      139.95px 26px at 50% 50%,
+      rgba(157, 138, 215, 0.24),
+      rgba(157, 138, 215, 0) 71%
+    ),
+    radial-gradient(121.29px 23px at 53% 47%, rgba(208, 89, 118, 0.14), rgba(208, 89, 118, 0) 73%);
+  content: "";
+  inset: 0;
+  opacity: 0.8;
+  pointer-events: none;
+  position: absolute;
+}
+.rv3 .rv4-nudges__tally-line {
+  display: block;
+  position: relative;
+}
+.rv3 .rv4-nudges__tally-n {
+  -webkit-background-clip: text;
+  background-clip: text;
+  background-image: linear-gradient(to bottom right, #fb683e, #e88c8c 52%, #ac88ed);
+  color: transparent;
+  font-size: 14px;
+  letter-spacing: 0;
+  line-height: 12px;
+}
+.rv3 .rv4-nudges__tally-book {
+  display: inline-block;
+  height: 16px;
+  margin-top: -3px;
+  vertical-align: middle;
+  width: 16px;
 }
 @media (prefers-reduced-motion: reduce) {
   .rv3 .rv4-nudges__disc svg {
