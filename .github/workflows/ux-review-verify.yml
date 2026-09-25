@@ -108,6 +108,13 @@ jobs:
       # given, so 40 finishers in 14 days (one with 65 dead taps) sat opened by
       # it alone and were never sent back to the survey and report scanners.
       #
+      # AND IT READS WHAT POSTHOG DID, since 2026-09-25. PostHog keeps one
+      # observation per pair and /observe/ does nothing once it exists, even a
+      # failed one: the step printed "30 queued, 0 failed" while those readers
+      # sat behind temporary failures from 2026-09-18. A temporary failure is
+      # now retried through its own endpoint (scripts/lib/scanners-by-trigger.mjs,
+      # requeueAction) and a permanent one is printed, not resent.
+      #
       # THE WINDOW WAS TWO DAYS, and that was wrong. The reasoning was that a
       # short window avoids "reaching back over recordings that have already
       # expired", but nothing expires that fast: measured 2026-09-20, PostHog
