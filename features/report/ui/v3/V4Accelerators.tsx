@@ -9,7 +9,7 @@ import V4TryThis from "./V4TryThis";
 import { guardedUnlock } from "./v4Unlock";
 
 /**
- * "Chapter — Accelerator & Brakes" — the body of the chapter that opens Part IV
+ * "Chapter — Accelerators & Brakes" — the body of the chapter that opens Part IV
  * (Figma 310:229 inside the Part IV page 334:521; paywalled 314:219), followed by
  * its "Try this & see what shifts" card.
  *
@@ -47,7 +47,7 @@ const V4Accelerators: FC<Props> = ({ view, onUnlock }) => {
       <div
         className={`rv4-ab${locked ? " is-locked" : ""}`}
         data-node-id={locked ? "314:219" : "310:229"}
-        data-name="Chapter — Accelerator & Brakes"
+        data-name="Chapter — Accelerators & Brakes"
       >
         {/* 310:230 — a 356px box in the 361 column. */}
         <div className="rv4-ab__intro">

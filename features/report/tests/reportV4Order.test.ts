@@ -15,7 +15,7 @@ import { REPORT_V4_PART_DIVIDER_BY_SECTION, REPORT_V4_PARTS } from "@/data/repor
  * Report V4 regroups two chapters against V3, both as Figma draws them:
  * - Typical Beliefs opens "How your archetype works" (the team's chapter sequence,
  *   2026-09-14, and Figma 1:849).
- * - Accelerator & Brakes opens "Your erotic engine" (Figma 334:521 / 1:982, and the
+ * - Accelerators & Brakes opens "Your erotic engine" (Figma 334:521 / 1:982, and the
  *   Notion content roadmap's "Part IV - Your Erotic Engine, Order 1"). Fatih's call,
  *   2026-09-23.
  * `?v3=1` keeps V3's own order untouched.
@@ -64,8 +64,8 @@ describe("the V4 chapter order", () => {
     }
   });
 
-  it("titles the chapter as the frame does, in V4 only", () => {
-    expect(REPORT_V4_CHAPTERS.find((c) => c.id === AB)!.title).toBe("Accelerator & Brakes");
+  it('titles A&B in the plural, as V3 does (review 24.09: add the "s" everywhere)', () => {
+    expect(REPORT_V4_CHAPTERS.find((c) => c.id === AB)!.title).toBe("Accelerators & Brakes");
     expect(REPORT_V3_CHAPTERS.find((c) => c.id === AB)!.title).toBe("Accelerators & Brakes");
   });
 
@@ -87,7 +87,7 @@ describe("the V4 chapter order", () => {
       "power_orientation",
     ]);
     expect(REPORT_V4_NAV_PARTS[2]!.items.slice(0, 2).map((i) => [i.id, i.label])).toEqual([
-      [AB, "Accelerator & Brakes"],
+      [AB, "Accelerators & Brakes"],
       ["libido_challenges_in_relationships", "Libido Challenges"],
     ]);
     expect(REPORT_V3_NAV_PARTS[1]!.items[0]!.id).toBe(AB);
@@ -112,13 +112,14 @@ describe("the V4 chapter order", () => {
     });
   });
 
-  it("swaps Accelerator & Brakes' V4 chapter in, behind the 44px separator 1:991", () => {
+  it("swaps Accelerators & Brakes' V4 chapter in, behind the 44px separator 1:991", () => {
     // The branch mirrors Typical Beliefs': V4 only, and only where the chapter is
     // written for the archetype on screen — every other reader keeps V2's section.
     expect(REPORT_PAGE).toMatch(/if \(isV4 && accelerators && hasAccelCopy\)/);
     expect(REPORT_PAGE).toContain('data-node-id="1:991"');
     expect(REPORT_PAGE).toMatch(/<V4Accelerators\s+view=\{accelerators\}/);
-    expect(REPORT_PAGE).toMatch(/title="Accelerator & Brakes"/);
+    expect(REPORT_PAGE).toMatch(/title="Accelerators & Brakes"/);
+    expect(REPORT_PAGE).not.toMatch(/"Accelerator & Brakes"/);
   });
 
   it("never falls back to a V3 part heading under V4", () => {

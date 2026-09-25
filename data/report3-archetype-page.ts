@@ -56,7 +56,7 @@ export const REPORT_V4_PARTS: readonly Report3PartHeading[] = [
  * V4 puts "Welcome" in front as Part I, so everything V3 called Part I is Part II
  * here, and so on down. Borrowing the V3 map left the report with two Part I's.
  *
- * Part III is keyed on Typical Beliefs and Part IV on Accelerator & Brakes, because
+ * Part III is keyed on Typical Beliefs and Part IV on Accelerators & Brakes, because
  * V4 moves each of those chapters to the front of its part (REPORT_V4_CHAPTERS;
  * Fatih's calls on 2026-09-23, as Figma 1:849 and 334:521 draw them). The rest of
  * Figma's Parts III–VI regrouping is not done, so the other keys still follow V3's
@@ -356,10 +356,10 @@ export const REPORT_V4_PART3_CHAPTERS: readonly Report3Chapter[] = [
 
 /** Part IV · "Your Erotic Engine" — 1:982. */
 export const REPORT_V4_PART4_CHAPTERS: readonly Report3Chapter[] = [
-  // 1:993. NOTE for Mark: the frame reads "Accelerator & Brakes" (singular) here,
-  // against "Accelerators & Brakes" in the science deck and reportV3Nav.
+  // 1:993. The frame reads "Accelerator & Brakes" (singular) here; the 24.09 review
+  // asked for the "s" everywhere, matching the science deck and reportV3Nav.
   {
-    title: "Accelerator & Brakes",
+    title: "Accelerators & Brakes",
     id: "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
     body: "chapter",
   },

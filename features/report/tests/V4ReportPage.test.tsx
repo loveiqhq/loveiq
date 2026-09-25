@@ -9,6 +9,7 @@ import V4ChapterPart from "@features/report/ui/v3/V4ChapterPart";
 import V4Report from "@features/report/ui/v3/V4Report";
 import V3Methodology from "@features/report/ui/v3/V3Methodology";
 import { report3ArchetypeCard } from "@/data/report3-archetype-card";
+import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import {
   CHAPTER_COPY_PLACEHOLDER,
   PART_INTRO_PLACEHOLDER,
@@ -232,6 +233,16 @@ describe("Parts IV, V and VI", () => {
       "Reading Recommendations",
       "Other Archetypes",
     ]);
+  });
+
+  it("titles Part IV's opener 'Accelerators & Brakes', with the 's' (review 24.09)", () => {
+    expect(REPORT_V4_PART4_CHAPTERS[0]!.title).toBe("Accelerators & Brakes");
+    // Its "Go deeper" article names the model's two systems the same way.
+    const article = JSON.stringify(
+      REPORT_V4_LEARN_MORE.typical_arousal_accelerators_turn_ons_of_the_core_archetype
+    );
+    expect(article).toContain("“Accelerators” and “brakes”");
+    expect(article).not.toContain("“Accelerator”");
   });
 
   it("gives Part V no expanded row, unlike III, IV and VI", () => {
