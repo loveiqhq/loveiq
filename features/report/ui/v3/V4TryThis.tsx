@@ -98,6 +98,12 @@ interface Props {
    */
   openPaddingTopPx?: number;
   /**
+   * The gated copy's drop, where a frame sets it apart from the open one —
+   * 441:6188 sets it 8px down where its open state, 441:6168, sets 4. CSS: the
+   * open value.
+   */
+  gatedPaddingTopPx?: number;
+  /**
    * The Premium card's top, measured from the gate — for a ramp whose tail runs on
    * under the full blur in the same paragraph, where the rest starts too late to
    * measure from. Omitted, the card sits in the rest, 88px in (Typical Beliefs).
@@ -115,6 +121,7 @@ const V4TryThis: FC<Props> = ({
   teaserHeightPx,
   rampBandPx,
   openPaddingTopPx,
+  gatedPaddingTopPx,
   premiumTopPx,
 }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -129,12 +136,13 @@ const V4TryThis: FC<Props> = ({
     ...(teaserHeightPx !== undefined ? { "--rv4-try-teaser-h": `${teaserHeightPx}px` } : {}),
     ...(rampBandPx !== undefined ? { "--rv4-try-band": `${rampBandPx}px` } : {}),
     ...(openPaddingTopPx !== undefined ? { "--rv4-try-open-pt": `${openPaddingTopPx}px` } : {}),
+    ...(gatedPaddingTopPx !== undefined ? { "--rv4-try-gated-pt": `${gatedPaddingTopPx}px` } : {}),
     ...(cardInGate ? { "--rv4-try-premium-top": `${premiumTopPx}px` } : {}),
   };
 
   return (
     <section
-      className={`rv4-try${isOpen ? " is-open" : ""}`}
+      className={`rv4-try${isOpen ? " is-open" : ""}${isOpen && gatedRamp ? " is-gated" : ""}`}
       data-node-id={isOpen ? (gatedRamp ? nodeIds.gated : nodeIds.open) : nodeIds.closed}
       data-name={practice.title}
       style={Object.keys(geometry).length ? (geometry as CSSProperties) : undefined}

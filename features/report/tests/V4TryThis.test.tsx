@@ -237,3 +237,38 @@ describe("V4TryThis — Accelerator & Brakes (377:221 / 374:304 / 375:221)", () 
     expect(V3_CSS).toContain("padding-top: var(--rv4-try-open-pt, 4px)");
   });
 });
+
+/**
+ * Fantasy vs. Reality's frames drop the copy by different amounts: 4px under the
+ * button when open (441:6168), as the closed teaser does, and 8px when gated
+ * (441:6188). A&B's open and gated frames share one value, which `openPaddingTopPx`
+ * already carries.
+ */
+describe("V4TryThis — a gated drop of its own (441:6168 / 441:6188)", () => {
+  it("carries the gated drop as its own custom property", () => {
+    const { container } = render(<V4TryThis practice={OPEN} gatedPaddingTopPx={8} />);
+    const card = container.querySelector<HTMLElement>(".rv4-try")!;
+    expect(card.style.getPropertyValue("--rv4-try-gated-pt")).toBe("8px");
+    expect(card.style.getPropertyValue("--rv4-try-open-pt")).toBe("");
+  });
+
+  it("marks the card gated only while the wall is showing", () => {
+    const locked = render(<V4TryThis practice={LOCKED} gatedPaddingTopPx={8} />).container;
+    const card = locked.querySelector(".rv4-try")!;
+    expect(card).not.toHaveClass("is-gated");
+    fireEvent.click(locked.querySelector(".rv4-try__button")!);
+    expect(card).toHaveClass("is-open");
+    expect(card).toHaveClass("is-gated");
+    fireEvent.click(locked.querySelector(".rv4-try__button")!);
+    expect(card).not.toHaveClass("is-gated");
+    cleanup();
+    const open = render(<V4TryThis practice={OPEN} defaultOpen />).container;
+    expect(open.querySelector(".rv4-try")).not.toHaveClass("is-gated");
+  });
+
+  it("drops the gated copy by the gated value, and by the open one when none is given", () => {
+    expect(V3_CSS).toContain(
+      ".rv3 .rv4-try.is-open.is-gated .rv4-try__body {\n  padding-top: var(--rv4-try-gated-pt, var(--rv4-try-open-pt, 4px));"
+    );
+  });
+});
