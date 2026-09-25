@@ -6482,3 +6482,71 @@ html {
     transition: none;
   }
 }
+
+/* ══ Fantasy vs. Reality · the chapter body — Figma 304:290, 305:217 locked ══════════
+ * A 361 column, 20px down from the chapter head, its parts flush: the intro (304:291,
+ * a 356px box), a 44px space, the table, another 44, "Common challenges" (368:1920).
+ * Body copy is 16/25.6 in --rv3-copy, bold runs in ink. The frame's last paragraph
+ * ends in a line separator (U+2028), which gives the text node one more, empty line:
+ * 334:1137 draws the practice card 45.6px under the last line, not 20. As drawn. */
+.rv3 .rv4-fvr {
+  display: flex;
+  flex-direction: column;
+  padding: 20px 0 45.6px;
+  width: 100%;
+}
+.rv3 .rv4-fvr .rv4-prose__p {
+  color: var(--rv3-copy);
+  font-size: 16px;
+  line-height: 25.6px;
+  margin-right: 5px;
+}
+.rv3 .rv4-fvr .rv4-prose__p strong {
+  color: var(--rv3-ink);
+}
+.rv3 .rv4-fvr__text > :last-child,
+.rv3 .rv4-fvr__blurred > :last-child {
+  margin-bottom: 0;
+}
+/* 304:291 sets its heading in Lora Bold 18/21.6, its baseline 47.6 under the
+ * paragraph before it and 41.6 over the one after — 6px more above than CiP's inline
+ * heading. CSS stacks line boxes: the heading's baseline sits 17.39 into its 21.6, a
+ * body line's 19.33 into its 25.6, so the gaps are 23.94 and 18.06. "Common
+ * challenges" opens its own text box, 44 under the table. */
+.rv3 .rv4-fvr .rv4-prose__h {
+  font-size: 18px;
+  line-height: 21.6px;
+  margin: 0 0 18.06px;
+}
+.rv3 .rv4-fvr .rv4-prose__p:has(+ .rv4-prose__h) {
+  margin-bottom: 23.94px;
+}
+/* 305:228 — all of "Common challenges" under the full blur (Figma radius 5), at full
+ * length so nothing moves on unlock. 305:249 straddles the table's foot and would
+ * cover its last category toggles, so the card sits 16px under the table instead,
+ * centred: 28px above the blurred copy, which starts 44 down. */
+.rv3 .rv4-fvr__gate {
+  cursor: pointer;
+  position: relative;
+}
+.rv3 .rv4-fvr__blurred {
+  filter: blur(2.5px);
+  user-select: none;
+}
+.rv3 .rv4-fvr__gate .rv4-premium {
+  top: -28px;
+}
+/* 441:6422 draws Typical Beliefs' teaser — nine lines, the last three faded, the pill
+ * 196.5px in — in a 247px text box the card ends at, so the card is 9.5px shorter
+ * than 374:217's 343. */
+.rv3 .rv4-fvr + .rv4-try {
+  margin-top: 0;
+}
+.rv3 .rv4-fvr + .rv4-try:not(.is-open) {
+  padding-bottom: 29px;
+}
+/* 334:1137 sets "Go deeper" straight under the practice card, where Typical Beliefs'
+ * frame leaves 24 and A&B's 16. */
+.rv3 .rv4-chapter__body.is-bare > .rv4-fvr ~ .rv4-learn {
+  margin-top: 0;
+}
