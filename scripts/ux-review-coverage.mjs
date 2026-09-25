@@ -44,7 +44,12 @@
  * means the misses were re-queued successfully — see the note at that branch.
  */
 import { hogQuery } from "./lib/hogql.mjs";
-import { owedScanners, requeueAction, scannersByTrigger } from "./lib/scanners-by-trigger.mjs";
+import {
+  owedScanners,
+  recordingSettled,
+  requeueAction,
+  scannersByTrigger,
+} from "./lib/scanners-by-trigger.mjs";
 
 const PROJECT = "244778";
 
@@ -188,8 +193,9 @@ const [observedRows, recordedRows, triggerRows] = await Promise.all([
   hog(`SELECT DISTINCT toString(properties.session_id), toString(properties.scanner_id) FROM events
        WHERE event='$recording_observed' AND timestamp > now() - ${window}
          AND properties.session_id IN (${inList})`),
-  hog(`SELECT DISTINCT session_id FROM raw_session_replay_events
-       WHERE min_first_timestamp > now() - ${window} AND session_id IN (${inList})`),
+  hog(`SELECT session_id, max(max_last_timestamp) FROM raw_session_replay_events
+       WHERE min_first_timestamp > now() - ${window} AND session_id IN (${inList})
+       GROUP BY session_id`),
   hog(`SELECT toString($session_id), ${TRIGGERS.map((t) => `countIf(event='${t}')`).join(", ")}
        FROM events WHERE timestamp > now() - ${window} AND $session_id IN (${inList})
        GROUP BY 1`),
@@ -199,15 +205,17 @@ const observedBy = new Map();
 for (const [sid, scannerId] of observedRows) {
   observedBy.set(String(sid), (observedBy.get(String(sid)) ?? new Set()).add(String(scannerId)));
 }
-const recorded = new Set(recordedRows.map((r) => String(r[0])));
+/** Session id -> when its recording last had activity. */
+const recorded = new Map(recordedRows.map((r) => [String(r[0]), r[1]]));
 const triggers = new Map(triggerRows.map((r) => [String(r[0]), r.slice(1).map(Number)]));
 
 const misses = [];
 let noRecording = 0;
 let noTrigger = 0;
+let recent = 0;
 // Counted over `subs`, not `observedBy.size`. The observed set covers every
 // session a scanner opened, including visitors who never finished a survey, so
-// printing its size next to the per-submission tallies made the four rows fail
+// printing its size next to the per-submission tallies made the rows fail
 // to add up to the total and invited the reader to hunt for a missing case.
 let seen = 0;
 for (const s of subs) {
@@ -228,6 +236,11 @@ for (const s of subs) {
     seen += 1;
     continue;
   }
+  // Owed, but not yet: PostHog would watch it at once and keep that partial look.
+  if (recorded.has(sid) && !recordingSettled(recorded.get(sid))) {
+    recent += 1;
+    continue;
+  }
   misses.push({ sid, submissionId: s.id, at: s.created_date_time, counts, missing });
 }
 
@@ -235,6 +248,7 @@ console.log(`submissions in the last ${DAYS} days    : ${subs.length}`);
 console.log(`  opened by every scanner that owed it : ${seen}`);
 console.log(`  no recording (not a miss)            : ${noRecording}`);
 console.log(`  recording but no trigger event       : ${noTrigger}`);
+console.log(`  recording not over for an hour yet   : ${recent}`);
 console.log(`  MISSED by a scanner that owed a look : ${misses.length}\n`);
 
 for (const m of misses) {
@@ -252,8 +266,9 @@ for (const m of misses) {
  * scanners exist for, and nothing sent them back. For each comprehensive
  * scanner, a session that fired its trigger, has 10s of activity (PostHog's
  * own minimum; MIN_WATCHABLE_ACTIVE_MS in review.ts, held equal by a test),
- * ended six hours ago and was never opened by it is
- * owed a look, exactly as a finisher is. Focused scanners skip by design.
+ * fired six hours ago, whose recording has been over for an hour
+ * (recordingSettled) and was never opened by it is owed a look, exactly as a
+ * finisher is. Focused scanners skip by design.
  */
 const STARTER_DAYS = Number(process.env.STARTER_DAYS ?? 7);
 const finisherSids = new Set(subs.map((s) => s.posthog_session_id));
@@ -262,14 +277,15 @@ for (const [trigger, scanners] of byTrigger) {
   if (!/^[$a-z_]+$/.test(trigger)) continue; // interpolated into HogQL below
   for (const sc of scanners) {
     if (sc.sampling_mode !== "comprehensive" || !SAFE_ID.test(String(sc.id))) continue;
-    const rows = await hog(`SELECT t.sid, t.at FROM (
+    const rows = await hog(`SELECT t.sid, t.at, r.last FROM (
         SELECT toString($session_id) AS sid, min(timestamp) AS at FROM events
         WHERE event = '${trigger}' AND timestamp > now() - INTERVAL ${STARTER_DAYS} DAY
           AND timestamp < now() - INTERVAL 6 HOUR
         GROUP BY sid
       ) AS t
       INNER JOIN (
-        SELECT session_id AS sid, sum(active_milliseconds) AS active FROM raw_session_replay_events
+        SELECT session_id AS sid, sum(active_milliseconds) AS active,
+          max(max_last_timestamp) AS last FROM raw_session_replay_events
         WHERE min_first_timestamp > now() - INTERVAL ${STARTER_DAYS + 1} DAY
         GROUP BY session_id
       ) AS r ON r.sid = t.sid
@@ -284,9 +300,9 @@ for (const [trigger, scanners] of byTrigger) {
         `${sc.name}: 1000 unwatched sessions, the query's cap; the rest wait for later runs`
       );
     }
-    for (const [sid, at] of rows) {
+    for (const [sid, at, last] of rows) {
       // Finishers are handled above, with their own rule for focused scanners.
-      if (!SAFE_ID.test(String(sid)) || finisherSids.has(sid)) continue;
+      if (!SAFE_ID.test(String(sid)) || finisherSids.has(sid) || !recordingSettled(last)) continue;
       starters.push({ sid: String(sid), at: new Date(at).toISOString(), sc });
     }
   }

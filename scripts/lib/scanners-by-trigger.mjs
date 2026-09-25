@@ -102,3 +102,23 @@ export function requeueAction(existing) {
     return { action: "wait", reason: "succeeded; its event has not landed yet" };
   return { action: "wait", reason: status || "in progress" };
 }
+
+/**
+ * Whether a recording is over, so PostHog may be asked to watch it.
+ *
+ * PostHog watches a recording the moment it is asked and keeps that one look
+ * for good, so asking while the reader is still on their report freezes a
+ * partial look. Measured 2026-09-25 over 567 looks this re-queue had asked
+ * for: 9 started before their recording ended (up to 30 minutes of a visit
+ * never seen) and 31 more within 15 minutes of its end, before the last of it
+ * may have been stored. PostHog ends a session after 30 minutes without
+ * activity and its own sweep waits about 38; an hour clears both.
+ *
+ * @param {string | null | undefined} lastActivity the recording's max_last_timestamp
+ * @param {number} [now]
+ */
+export const SETTLED_MS = 3_600_000;
+export function recordingSettled(lastActivity, now = Date.now()) {
+  // An unreadable end parses to NaN, and NaN is never old enough.
+  return Date.parse(String(lastActivity ?? "")) <= now - SETTLED_MS;
+}

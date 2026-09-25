@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   owedScanners,
+  recordingSettled,
   requeueAction,
   scannersByTrigger,
 } from "@/scripts/lib/scanners-by-trigger.mjs";
@@ -106,5 +107,38 @@ describe("the re-queue's idea of watchable", () => {
     const { MIN_WATCHABLE_ACTIVE_MS } = await import("@features/ux-review/server/review");
     const script = readFileSync("scripts/ux-review-coverage.mjs", "utf8");
     expect(script).toContain(`r.active >= ${MIN_WATCHABLE_ACTIVE_MS}`);
+  });
+});
+
+/**
+ * PostHog watches a recording the moment it is asked and keeps that one look,
+ * so the re-queue must not ask while the reader is still there. It did: 9 of
+ * 567 looks it asked for started before their recording ended.
+ */
+describe("when the re-queue may ask for a look", () => {
+  const now = Date.parse("2026-09-25T18:00:00Z");
+
+  it("only once the recording has been over for an hour", () => {
+    expect(recordingSettled("2026-09-25T16:59:59Z", now)).toBe(true);
+    expect(recordingSettled("2026-09-25T17:00:01Z", now)).toBe(false);
+  });
+
+  it("reads PostHog's timestamps with their offset", () => {
+    // Submission 2226: asked at 17:27:18 UTC about a recording that ended at
+    // 19:24:23 Berlin time, three minutes before.
+    const ended = "2026-09-25T19:24:23.156000+02:00";
+    expect(recordingSettled(ended, Date.parse("2026-09-25T17:27:18Z"))).toBe(false);
+    expect(recordingSettled(ended, Date.parse("2026-09-25T18:25:00Z"))).toBe(true);
+  });
+
+  it("does not ask about a recording whose end it cannot read", () => {
+    expect(recordingSettled(null, now)).toBe(false);
+    expect(recordingSettled("", now)).toBe(false);
+  });
+
+  it("is the rule for finishers and for readers who left", async () => {
+    const { readFileSync } = await import("node:fs");
+    const script = readFileSync("scripts/ux-review-coverage.mjs", "utf8");
+    expect(script.match(/!recordingSettled\(/g) ?? []).toHaveLength(2);
   });
 });
