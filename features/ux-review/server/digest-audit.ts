@@ -62,7 +62,7 @@ export interface DigestCheck {
   detail: string;
 }
 
-/** The label job runs every three hours; a newer close is not yet late. */
+/** The label job runs hourly, and GitHub drops some runs; a newer close is not yet late. */
 export const LABEL_GRACE_MS = 4 * 60 * 60 * 1000;
 
 const list = (xs: readonly (string | number)[]) =>
@@ -227,7 +227,7 @@ async function prState(url: string): Promise<PrState> {
 /**
  * Finishers one to fourteen days old, with a recording worth watching and a
  * `survey_started`, whom the survey scanner never opened. A day is the grace
- * for PostHog's own lag and the three-hourly re-queue; fourteen is how far the
+ * for PostHog's own lag and the hourly re-queue; fourteen is how far the
  * re-queue reaches, so past that the promise was never made.
  */
 async function stillUnwatched(env: Env, at: number) {

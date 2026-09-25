@@ -13,7 +13,7 @@
  * The reason is structural, not a tuning problem: this runs in a 30-second
  * function and cannot open a browser, so model prose is the only thing it could
  * publish. A finding earns a Slack post by being REPRODUCED at the viewport the
- * session reported — that is scripts/verify-ux-findings.mjs, every three hours
+ * session reported — that is scripts/verify-ux-findings.mjs, every hour
  * in CI, replying in the submission's own thread. On those same five findings
  * the probes reject all five.
  *
@@ -231,7 +231,7 @@ export async function GET(request: Request) {
        *
        * A finding earns a Slack post by being REPRODUCED in a real browser at
        * the viewport the session reported. That is scripts/verify-ux-findings.mjs,
-       * which runs every three hours in CI and posts into the submission's own
+       * which runs every hour in CI and posts into the submission's own
        * thread. Correctness check on the same five: the probes reject all of them.
        *
        * AND IT IS NOT WRITTEN TO THE BRAIN EITHER, for the same reason.

@@ -338,7 +338,7 @@ describe("buildDigestMessage", () => {
     expect(json).toContain("39 of the 118 people");
     expect(json).toContain("33%");
     // "yet", not "never": the most recent hour is always still pending, and
-    // anything skipped is re-queued every three hours.
+    // anything skipped is re-queued every hour.
     expect(json).toContain("other 79 had not been watched");
     expect(json).toContain("queued automatically");
     expect(json).not.toContain("never watched");
