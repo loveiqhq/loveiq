@@ -2515,6 +2515,7 @@ async function runRetrievalBattery(only: string | null): Promise<BatteryResult> 
   let known = 0;
   const failing: string[] = [];
   const flakyKinds: string[] = [];
+  const failedProbes: RetrievalProbe[] = [];
   for (const p of probes) {
     let { hits, issues, ms } = await run(p);
     let firstIssues: string[] = [];
@@ -2542,6 +2543,7 @@ async function runRetrievalBattery(only: string | null): Promise<BatteryResult> 
     else if (issues.length) failures++;
     else if (firstIssues.length) flaky++;
     if (recovered || (issues.length && !knownWhy)) failing.push(p.kind);
+    if (!recovered && issues.length && !knownWhy) failedProbes.push(p);
     else if (!issues.length && firstIssues.length) flakyKinds.push(p.kind);
 
     console.log(
@@ -2561,6 +2563,26 @@ async function runRetrievalBattery(only: string | null): Promise<BatteryResult> 
     console.log("      " + (hits.slice(0, 3).map(describe).join("\n      ") || "(nothing)"));
   }
 
+  /**
+   * A FAILURE DURING BRAIN-FAST'S REWRITE IS NOT A FINDING. brain-fast rewrites the analytics
+   * records at :07, :22, :37 and :52 and takes up to about a minute (p95 47 s, max 65 s,
+   * measured 2026-09-25); a probe landing in that minute finds them half-written. The first
+   * recorded run failed both signup probes at 18:52 UTC for exactly this reason. So each
+   * failure is checked once more outside a rewrite, and passing then makes it flaky: counted
+   * apart, never clean.
+   */
+  if (failedProbes.length) {
+    await outsideRewrite();
+    for (const p of failedProbes) {
+      if ((await run(p)).issues.length) continue;
+      failures--;
+      flaky++;
+      failing.splice(failing.indexOf(p.kind), 1);
+      flakyKinds.push(p.kind);
+      console.log(`\nflaky [${p.kind}] passed once brain-fast's rewrite was over`);
+    }
+  }
+
   console.log(
     `\n=== retrieval: ${probes.length - failures - flaky - known}/${probes.length} clean, ` +
       `${failures} REGRESSION${failures === 1 ? "" : "S"}` +
@@ -2574,6 +2596,15 @@ async function runRetrievalBattery(only: string | null): Promise<BatteryResult> 
     flaky: flakyKinds,
     known,
   };
+}
+
+/** Resolves once no brain-fast rewrite is under way: 90 s after one starts, and not in the 30 s before the next. */
+async function outsideRewrite(): Promise<void> {
+  const sinceStart = (((Date.now() / 1000 - 7 * 60) % 900) + 900) % 900;
+  if (sinceStart >= 90 && sinceStart <= 870) return;
+  const wait = sinceStart < 90 ? 90 - sinceStart : 990 - sinceStart;
+  console.log(`\nwaiting ${Math.ceil(wait)}s for brain-fast's rewrite before re-checking failures`);
+  await new Promise((r) => setTimeout(r, wait * 1000));
 }
 
 /** Strip thousands separators so `1,110.85` matches an expected `1110.85`. The
@@ -3471,11 +3502,22 @@ async function checkTitleStopwordsAreCurrent(): Promise<string[]> {
     );
 }
 
-async function checkEveryDocumentedParamDoesSomething(): Promise<string[]> {
+/**
+ * One MCP call: in this process, or with --live on loveiq.org itself. Live is what the team
+ * actually gets, with production's keys; a GitHub runner has no Figma, Google or Notion
+ * keys, so in-process there the tools that need them fail on the runner, not in the product,
+ * and the weekly report would count that as lost accuracy.
+ */
+async function mcpSend(request: Request): Promise<Response> {
+  if (process.argv.includes("--live")) return fetch(request);
   const { POST } = await import("@/app/api/mcp/route");
+  return POST(request);
+}
+
+async function checkEveryDocumentedParamDoesSomething(): Promise<string[]> {
   const token = process.env.LOVEIQ_MCP_TOKEN;
   const call = async (tool: string, args: Record<string, unknown>) => {
-    const res = await POST(
+    const res = await mcpSend(
       new Request("https://www.loveiq.org/api/mcp", {
         method: "POST",
         headers: {
@@ -3636,7 +3678,6 @@ async function checkEveryDocumentedParamDoesSomething(): Promise<string[]> {
 }
 
 async function runMcpBattery(only: string | null): Promise<BatteryResult> {
-  const { POST } = await import("@/app/api/mcp/route");
   const token = process.env.LOVEIQ_MCP_TOKEN;
   if (!token) {
     throw new Error(
@@ -3644,11 +3685,6 @@ async function runMcpBattery(only: string | null): Promise<BatteryResult> {
     );
   }
 
-  // --live sends each probe to the deployed endpoint instead of this process: what the team
-  // actually gets, with production's credentials. A GitHub runner has no Figma, Google or
-  // Notion keys, so in-process the tools that need them would fail on the runner, not in
-  // the product, and the weekly report would count that as lost accuracy.
-  const send = process.argv.includes("--live") ? (r: Request) => fetch(r) : POST;
   const all = await mcpProbes();
   const probes = only ? all.filter((p) => p.kind.includes(only) || p.tool.includes(only)) : all;
   let failures = 0;
@@ -3698,7 +3734,7 @@ async function runMcpBattery(only: string | null): Promise<BatteryResult> {
     let issues: string[] = [];
     let text = "";
     try {
-      const res = await send(
+      const res = await mcpSend(
         new Request("https://www.loveiq.org/api/mcp", {
           method: "POST",
           headers: {
