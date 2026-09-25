@@ -6453,10 +6453,12 @@ html {
   text-transform: uppercase;
   white-space: nowrap;
 }
+/* Laid from the padding box, inside the 1.5px outline: -8px reaches 6.5 past the
+ * drawn pill, 31 + 2 x 6.5 = 44 (at -6.5 it came to 41). */
 .rv3 .rv4-fvt__pill::after,
 .rv3 .rv4-trig__pill::after {
   content: "";
-  inset: -6.5px 0;
+  inset: -8px 0;
   position: absolute;
 }
 .rv3 .rv4-fvt__pill:focus-visible,
