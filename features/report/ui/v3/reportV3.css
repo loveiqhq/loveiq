@@ -5456,3 +5456,381 @@
   background-image: linear-gradient(to bottom right, #fb683e, #e88c8c 52%, #ac88ed);
   color: transparent;
 }
+
+/* ── Challenges in Partnerships · the loop — Figma 532:231, 612:862 locked ───────────
+ * Manrope is the site's --font-sans, set by next/font on <html>, and V4 shadows
+ * --font-sans with Plus Jakarta inside .rv3.rv4. The loop's cards are drawn in
+ * Manrope (their layers are the Sexual Stage Explorer's), so the family is captured
+ * on <html>, where the variable still resolves to Manrope, before the shadow. A new
+ * name: globals.css already reads an undefined --font-manrope, and defining that
+ * one would restyle V1. */
+html {
+  --rv4-manrope: var(--font-sans);
+}
+/* Full bleed, 393 in the 393 frame, like the practice card. The section is the size
+ * container the orbit and slides scale against (cqw). */
+.rv3 .rv4-loop {
+  background: #fff;
+  container-type: inline-size;
+  margin-inline: calc(var(--rv3-gutter) * -1);
+  overflow: hidden;
+  padding-top: 8px;
+  position: relative;
+  width: calc(100% + var(--rv3-gutter) * 2);
+}
+/* 532:243 — the 224px orbit under 26px of lead; labels sit outside the ring, so the
+ * box is 48px taller than the orbit. Narrower phones shrink the orbit to keep the
+ * side labels on the page. */
+.rv3 .rv4-loop__orbit-box {
+  --rv4-loop-d: clamp(180px, calc(100cqw - 169px), 224px);
+  height: calc(var(--rv4-loop-d) + 48px);
+  padding-top: 26px;
+  position: relative;
+}
+.rv3 .rv4-loop__orbit {
+  height: var(--rv4-loop-d);
+  margin: 0 auto;
+  position: relative;
+  width: var(--rv4-loop-d);
+}
+/* 532:246-248 — three rings, 224 / 202 / 180, fading out inwards. */
+.rv3 .rv4-loop__ring {
+  border-radius: 50%;
+  pointer-events: none;
+  position: absolute;
+}
+.rv3 .rv4-loop__ring--outer {
+  background: rgba(255, 255, 255, 0.002);
+  box-shadow:
+    inset 0 0 0 1px rgba(168, 85, 247, 0.1),
+    0 0 54px rgba(168, 85, 247, 0.05);
+  inset: 0;
+}
+.rv3 .rv4-loop__ring--mid {
+  box-shadow: inset 0 0 0 1px rgba(168, 85, 247, 0.07);
+  inset: 4.911%;
+}
+.rv3 .rv4-loop__ring--inner {
+  box-shadow: inset 0 0 0 1px rgba(168, 85, 247, 0.05);
+  inset: 9.821%;
+}
+/* 532:249 — the cycle glyph over the prompt. */
+.rv3 .rv4-loop__center {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  inset: 0;
+  justify-content: center;
+  padding: 0 32px;
+  pointer-events: none;
+  position: absolute;
+  text-align: center;
+}
+.rv3 .rv4-loop__icon {
+  color: rgba(192, 132, 252, 0.7);
+  flex: none;
+}
+.rv3 .rv4-loop__prompt {
+  color: #6b7280;
+  font-family: var(--font-serif);
+  font-size: 13px;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.234px;
+  line-height: 18px;
+  margin: 0;
+  max-width: 162px;
+  padding: 0 4px;
+}
+/* 532:253-258 — six 11px dots on a 105/224 radius, placed by the component. */
+.rv3 .rv4-loop__dot {
+  background: rgba(168, 85, 247, 0.2);
+  border: 0;
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0 0 1px #a855f7,
+    0 0 10px #c084fc;
+  cursor: pointer;
+  height: 11px;
+  padding: 0;
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 11px;
+}
+/* 532:259 — the active marker, turned by --orbit-rot (60 degrees a step) and pushed
+ * out to the dots' radius. */
+.rv3 .rv4-loop__indicator {
+  background: #c084fc;
+  border-radius: 50%;
+  box-shadow: 0 0 14px rgba(192, 132, 252, 0.85);
+  height: 19px;
+  left: 50%;
+  pointer-events: none;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(calc(var(--orbit-rot, 0deg) - 90deg))
+    translateX(calc(var(--rv4-loop-d) * 0.46875));
+  width: 19px;
+}
+/* 552:233 — 10px labels: the active one SemiBold ink, the rest Medium grey. Top and
+ * bottom sit 7px beyond their dot, the sides 8px; the sides may wrap on a narrow
+ * phone, into the room between their dot and the section's edge. */
+.rv3 .rv4-loop__label {
+  color: #6b7280;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 14px;
+  pointer-events: none;
+  position: absolute;
+  transition: color 200ms ease;
+  white-space: nowrap;
+}
+.rv3 .rv4-loop__label.is-active {
+  color: #161021;
+  font-weight: 600;
+}
+.rv3 .rv4-loop__label--top {
+  text-align: center;
+  transform: translate(-50%, calc(-100% - 12.5px));
+}
+.rv3 .rv4-loop__label--bottom {
+  text-align: center;
+  transform: translate(-50%, 12.5px);
+}
+.rv3 .rv4-loop__label--right,
+.rv3 .rv4-loop__label--left {
+  max-width: calc(50cqw - 17.5px - var(--rv4-loop-d) * 0.40595);
+  white-space: normal;
+  width: max-content;
+}
+.rv3 .rv4-loop__label--right {
+  text-align: left;
+  transform: translate(13.5px, -50%);
+}
+.rv3 .rv4-loop__label--left {
+  text-align: right;
+  transform: translate(calc(-100% - 13.5px), -50%);
+}
+/* 532:260 — the slides' scroller: 34px above them and 14 below, room for their
+ * shadow. Native scroll with snap; page scroll stays vertical (the deck's fix). */
+.rv3 .rv4-loop__viewport {
+  --rv4-loop-w: min(320px, calc(100cqw - 32px));
+  margin-top: 18px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: 34px 0 14px;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  touch-action: pan-x pan-y pinch-zoom;
+}
+.rv3 .rv4-loop__viewport::-webkit-scrollbar {
+  display: none;
+}
+.rv3 .rv4-loop__viewport:focus-visible {
+  outline: 2px solid var(--rv3-violet);
+  outline-offset: -2px;
+}
+.rv3 .rv4-loop__track {
+  display: flex;
+  gap: 16px;
+}
+/* End spacers, so the first and last slides can centre: a flex scroller's end
+ * padding is not scrollable in every engine. Spacer + gap = half the free width. */
+.rv3 .rv4-loop__track::before,
+.rv3 .rv4-loop__track::after {
+  content: "";
+  flex: 0 0 calc((100cqw - var(--rv4-loop-w)) / 2 - 16px);
+}
+/* 535:7337 — 320x272, white at 90%, an 8% hairline and a soft shadow; every slide
+ * as tall as the tallest. */
+.rv3 .rv4-loop__slide {
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 24px;
+  box-shadow:
+    inset 0 0 0 1px rgba(22, 16, 33, 0.08),
+    0 6px 24px rgba(22, 16, 33, 0.06);
+  display: flex;
+  flex: 0 0 var(--rv4-loop-w);
+  flex-direction: column;
+  gap: 16px;
+  min-height: 272px;
+  overflow: hidden;
+  padding: 24px;
+  position: relative;
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+}
+/* 535:7338 — the violet haze in the top-right corner. */
+.rv3 .rv4-loop__slide::before {
+  background: rgba(168, 85, 247, 0.06);
+  border-radius: 50%;
+  content: "";
+  filter: blur(14px);
+  height: 110px;
+  opacity: 0.7;
+  pointer-events: none;
+  position: absolute;
+  right: -9px;
+  top: -9px;
+  width: 110px;
+}
+.rv3 .rv4-loop__head {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  min-height: 26px;
+  position: relative;
+}
+.rv3 .rv4-loop__bullet {
+  background: var(--rv4-loop-dot);
+  border-radius: 50%;
+  box-shadow: 0 0 12px rgba(192, 132, 252, 0.8);
+  flex: none;
+  height: 12px;
+  width: 12px;
+}
+.rv3 .rv4-loop__title {
+  color: #161021;
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 400;
+  letter-spacing: -0.5px;
+  line-height: 26px;
+  margin: 0;
+}
+.rv3 .rv4-loop__rows {
+  flex: 1;
+  margin: 0;
+  position: relative;
+}
+.rv3 .rv4-loop__row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.rv3 .rv4-loop__term {
+  color: var(--rv4-loop-label);
+  font-family: var(--rv4-manrope, "Manrope"), sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.55px;
+  line-height: 16.5px;
+  text-transform: uppercase;
+}
+.rv3 .rv4-loop__happens {
+  color: #161021;
+  font-family: var(--rv4-manrope, "Manrope"), sans-serif;
+  font-size: 15px;
+  font-weight: 300;
+  line-height: 22.5px;
+  margin: 0;
+}
+/* 535:7347 — the underneath box, bottom-anchored by the rows filling above it. */
+.rv3 .rv4-loop__need {
+  background: rgba(168, 85, 247, 0.1);
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1px rgba(168, 85, 247, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 15px;
+  position: relative;
+}
+.rv3 .rv4-loop__need-label {
+  color: #161021;
+  font-family: var(--rv4-manrope, "Manrope"), sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+.rv3 .rv4-loop__need-value {
+  color: #161021;
+  font-family: var(--rv4-manrope, "Manrope"), sans-serif;
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 20px;
+}
+/* 532:399 — one 10px violet dot, five 6px grey ones, 16px hairlines, 8 apart: the
+ * 200px row the frame draws. Each dot carries a 28px tap target. */
+.rv3 .rv4-loop__pager {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 18px;
+  padding-top: 12px;
+}
+.rv3 .rv4-loop__pager-dot {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  flex: none;
+  height: 10px;
+  padding: 0;
+  position: relative;
+  width: 6px;
+}
+.rv3 .rv4-loop__pager-dot.is-active {
+  width: 10px;
+}
+.rv3 .rv4-loop__pager-dot::before {
+  background: #797979;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(209, 213, 219, 0.6);
+  content: "";
+  height: 6px;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  transition:
+    background-color 200ms ease,
+    height 200ms ease,
+    width 200ms ease;
+  width: 6px;
+}
+.rv3 .rv4-loop__pager-dot.is-active::before {
+  background: #a855f7;
+  box-shadow: 0 0 12px rgba(209, 213, 219, 0.7);
+  height: 10px;
+  width: 10px;
+}
+.rv3 .rv4-loop__pager-dot::after {
+  content: "";
+  inset: -9px -11px;
+  position: absolute;
+}
+.rv3 .rv4-loop__pager-dot:focus-visible {
+  border-radius: 50%;
+  outline: 2px solid var(--rv3-violet);
+  outline-offset: 3px;
+}
+.rv3 .rv4-loop__pager-line {
+  background: rgba(22, 16, 33, 0.12);
+  border-radius: 9999px;
+  flex: none;
+  height: 1px;
+  width: 16px;
+}
+/* 612:862 — the orbit and slides blurred at the frame's radius 5 (2.5px, as every
+ * V4 gate maps it), the pager sharp, and the brand lock on the seam between them:
+ * 272px down at the frame's 224px orbit, i.e. the orbit box's foot. */
+.rv3 .rv4-loop.is-locked {
+  cursor: pointer;
+}
+.rv3 .rv4-loop.is-locked .rv4-loop__orbit-box,
+.rv3 .rv4-loop.is-locked .rv4-loop__viewport {
+  filter: blur(2.5px);
+  user-select: none;
+}
+.rv3 .rv4-loop .rv4-lockbadge {
+  --rv4-lock-top: calc(clamp(180px, calc(100cqw - 169px), 224px) + 48px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv4-loop__label,
+  .rv3 .rv4-loop__pager-dot::before {
+    transition: none;
+  }
+}
