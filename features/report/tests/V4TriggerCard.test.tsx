@@ -1,14 +1,16 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import V4TriggerCard from "@features/report/ui/v3/V4TriggerCard";
 import { buildAccelerators } from "@/data/report3-accelerators";
 
 /**
- * The two trigger cards of Accelerator & Brakes — "WHAT BRAKES YOU" (Figma 386:219,
- * paywalled 386:416) and "WHAT ACCELERATES YOU" (386:317 / 386:444).
+ * The two trigger cards of Accelerator & Brakes — "WHAT BRAKES YOU" (Figma 713:6132,
+ * paywalled 386:416) and "WHAT ACCELERATES YOU" (713:6181 / 386:444). Review 25.09,
+ * Mark (1942039325): "We swapped out these visual elements. On the Paywalled version,
+ * we are just deleting the scales."
  */
 
 const V3_CSS = readFileSync(join(__dirname, "..", "ui", "v3", "reportV3.css"), "utf8");
@@ -17,51 +19,59 @@ const LOCKED = buildAccelerators("Spark Seeker", { locked: true })!;
 
 afterEach(cleanup);
 
-describe("V4TriggerCard — open (386:219 / 386:317)", () => {
-  it("draws the brakes card: its label, the minus badge and five rows", () => {
+const sharpRows = (root: Element) =>
+  [...root.querySelectorAll(".rv4-trig__row")].filter((r) => !r.closest("[aria-hidden]"));
+
+describe("V4TriggerCard — open: two rows, the third under a fade (713:6132 / 713:6181)", () => {
+  it("draws the brakes card: its label, the minus badge, two rows and a third that peeks", () => {
     const { container } = render(<V4TriggerCard tone="brake" rows={OPEN.brakes} />);
     const card = container.querySelector(".rv4-trig")!;
     expect(card.classList.contains("rv4-trig--brake")).toBe(true);
-    expect(card.getAttribute("data-node-id")).toBe("386:219");
+    expect(card.getAttribute("data-node-id")).toBe("713:6132");
     expect(screen.getByRole("heading", { name: "WHAT BRAKES YOU" })).toBeTruthy();
     const icon = container.querySelector(".rv4-trig__badge img")!;
     expect(icon.getAttribute("src")).toContain("/report/v3/accelerators/icon-minus.svg");
     expect(icon.getAttribute("width")).toBe("16");
-    expect(icon.getAttribute("height")).toBe("16");
-    expect(container.querySelectorAll(".rv4-trig__row")).toHaveLength(5);
+    expect(sharpRows(container)).toHaveLength(2);
     expect(container.querySelector(".rv4-trig__title")!.textContent).toBe(
       "Sex that feels predictable or obligatory"
     );
-    expect(container.querySelector(".rv4-trig__sub")!.textContent).toContain(
-      "can drain erotic tension."
-    );
+    const peek = container.querySelector(".rv4-trig__peek")!;
+    const peekList = peek.querySelector("ul")!;
+    expect(peekList.getAttribute("aria-hidden")).toBe("true");
+    expect(peekList.hasAttribute("inert")).toBe(true);
+    expect(peekList.querySelectorAll(".rv4-trig__row")).toHaveLength(1);
+    expect(peek.querySelector(".rv4-trig__fade")!.getAttribute("aria-hidden")).toBe("true");
+    // Rows 4 and 5 wait for the pill.
+    expect(container.querySelectorAll(".rv4-trig__row")).toHaveLength(3);
   });
 
-  it("draws the accelerators card with the plus badge", () => {
+  it("draws the accelerators card with the plus badge and its own node", () => {
     const { container } = render(<V4TriggerCard tone="accel" rows={OPEN.accelerators} />);
-    expect(container.querySelector(".rv4-trig")!.getAttribute("data-node-id")).toBe("386:317");
+    expect(container.querySelector(".rv4-trig")!.getAttribute("data-node-id")).toBe("713:6181");
     expect(screen.getByRole("heading", { name: "WHAT ACCELERATES YOU" })).toBeTruthy();
     expect(container.querySelector(".rv4-trig__badge img")!.getAttribute("src")).toContain(
       "/report/v3/accelerators/icon-plus.svg"
     );
   });
 
-  it("sets each row's scale from its fill, and hides the scale from assistive tech", () => {
-    const { container } = render(<V4TriggerCard tone="brake" rows={OPEN.brakes} />);
-    const scales = [...container.querySelectorAll<HTMLElement>(".rv4-trig__scale")];
-    expect(scales.map((s) => s.style.getPropertyValue("--fill"))).toEqual([
-      "94%",
-      "85%",
-      "77%",
-      "66%",
-      "58%",
-    ]);
-    scales.forEach((s) => expect(s.getAttribute("aria-hidden")).toBe("true"));
+  it("names each pill after its card", () => {
+    render(<V4TriggerCard tone="brake" rows={OPEN.brakes} />);
+    expect(screen.getByRole("button", { name: "Show all brakes" })).toBeTruthy();
+    cleanup();
+    render(<V4TriggerCard tone="accel" rows={OPEN.accelerators} />);
+    expect(screen.getByRole("button", { name: "Show all accelerators" })).toBeTruthy();
   });
 
-  it("marks only the card's last row, which draws no rule under it", () => {
+  it("lists every row on the pill, drops the fade and the pill, and moves focus to row 3", () => {
     const { container } = render(<V4TriggerCard tone="brake" rows={OPEN.brakes} />);
+    fireEvent.click(screen.getByRole("button", { name: "Show all brakes" }));
     const rows = [...container.querySelectorAll(".rv4-trig__row")];
+    expect(rows).toHaveLength(5);
+    expect(sharpRows(container)).toHaveLength(5);
+    expect(container.querySelector(".rv4-trig__peek")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(document.activeElement).toBe(rows[2]);
     expect(rows.map((r) => r.classList.contains("is-last"))).toEqual([
       false,
       false,
@@ -69,12 +79,31 @@ describe("V4TriggerCard — open (386:219 / 386:317)", () => {
       false,
       true,
     ]);
-    expect(container.querySelector(".rv4-tb-lock")).toBeNull();
+  });
+
+  it("shows two rows whole, with no pill, when there is nothing more", () => {
+    const { container } = render(<V4TriggerCard tone="brake" rows={OPEN.brakes.slice(0, 2)} />);
+    expect(sharpRows(container)).toHaveLength(2);
+    expect(container.querySelector(".rv4-trig__peek")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(container.querySelectorAll(".rv4-trig__row.is-last")).toHaveLength(1);
+  });
+
+  it("draws no scale and no 2.0 reveal, open or paywalled", () => {
+    const open = render(<V4TriggerCard tone="brake" rows={OPEN.brakes} />);
+    expect(open.container.querySelector(".rv4-trig__scale")).toBeNull();
+    expect(open.container.querySelector(".rv4-reveal")).toBeNull();
+    cleanup();
+    const locked = render(
+      <V4TriggerCard tone="brake" rows={LOCKED.brakes} lockedFrom={LOCKED.lockedFrom} />
+    );
+    expect(locked.container.querySelector(".rv4-trig__scale")).toBeNull();
+    expect(locked.container.querySelector(".rv4-reveal")).toBeNull();
   });
 });
 
 describe("V4TriggerCard — paywalled (386:416 / 386:444)", () => {
-  it("keeps two rows clear and locks the other three behind one badge", () => {
+  it("keeps two rows clear and locks the other three behind one badge, with no pill", () => {
     const { container } = render(
       <V4TriggerCard tone="brake" rows={LOCKED.brakes} lockedFrom={LOCKED.lockedFrom} />
     );
@@ -86,6 +115,7 @@ describe("V4TriggerCard — paywalled (386:416 / 386:444)", () => {
     expect(lockedList.querySelectorAll(".rv4-trig__row.is-locked")).toHaveLength(3);
     expect(container.querySelectorAll(".rv4-trig__row:not(.is-locked)")).toHaveLength(2);
     expect(container.querySelectorAll(".rv4-lockbadge")).toHaveLength(1);
+    expect(container.querySelector(".rv4-trig__peek")).toBeNull();
     // The locked rows carry the server's scrambled copy, not the real rows.
     expect(lock.textContent).not.toContain("Control and possessiveness");
   });
@@ -124,7 +154,7 @@ describe("reportV3.css — trigger card contracts", () => {
     return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
   };
 
-  it("draws 386:219's card: 20px radius, 1px tone border, clipped", () => {
+  it("draws the card: 20px radius, 1px tone border, clipped", () => {
     const css = rule(".rv3 .rv4-trig {");
     expect(css).toContain("border-radius: 20px");
     expect(css).toContain("border: 1px solid rgba(var(--trig), 0.24)");
@@ -133,9 +163,7 @@ describe("reportV3.css — trigger card contracts", () => {
 
   it("tones coral for the brakes and green for the accelerators", () => {
     expect(rule(".rv3 .rv4-trig--brake {")).toContain("--trig: 194, 84, 47");
-    expect(rule(".rv3 .rv4-trig--brake {")).toContain("--trig-fill: 0.45");
     expect(rule(".rv3 .rv4-trig--accel {")).toContain("--trig: 46, 125, 91");
-    expect(rule(".rv3 .rv4-trig--accel {")).toContain("--trig-fill: 0.5");
   });
 
   it("sets the label at 12/19.2 extra-bold with 1.56px tracking", () => {
@@ -145,100 +173,37 @@ describe("reportV3.css — trigger card contracts", () => {
     expect(css).toContain("letter-spacing: 1.56px");
   });
 
-  it("centres the knob on the end of the fill", () => {
-    expect(rule(".rv3 .rv4-trig__knob {")).toContain("left: calc(var(--fill) - 3px)");
-    expect(rule(".rv3 .rv4-trig__fill {")).toContain("width: var(--fill)");
+  it("keeps nothing of the scales or their reveal", () => {
+    expect(V3_CSS).not.toMatch(/\.rv4-trig__(scale|track|fill|knob)/);
+    expect(V3_CSS).not.toContain(".rv4-trig__rows.rv4-reveal");
+    expect(V3_CSS).not.toContain("--trig-fill");
   });
 
-  it("blurs locked rows at the frame's 2px and places each badge as drawn", () => {
+  it("fades the third row as the frame does, and sets the pill 48px into it, centred", () => {
+    expect(rule(".rv3 .rv4-trig__peek {")).toContain("overflow: hidden");
+    const fade = rule(".rv3 .rv4-trig__fade {");
+    expect(fade).toContain("rgba(255, 255, 255, 0.7) 40%");
+    expect(fade).toContain("#fff 85%");
+    expect(fade).toContain("height: 96px");
+    expect(fade).toContain("top: -2px");
+    const pill = rule(".rv3 .rv4-trig__peek .rv4-trig__pill {");
+    expect(pill).toContain("top: 48px");
+    expect(pill).toContain("left: 50%");
+    expect(pill).toContain("transform: translateX(-50%)");
+  });
+
+  it("draws the pill with the fantasy table's rules — one pill, 713:6178 and 639:498", () => {
+    expect(V3_CSS).toContain(".rv3 .rv4-fvt__pill,\n.rv3 .rv4-trig__pill {");
+    expect(V3_CSS).toContain(".rv3 .rv4-fvt__pill::after,\n.rv3 .rv4-trig__pill::after {");
+    expect(V3_CSS).toContain(
+      ".rv3 .rv4-fvt__pill:focus-visible,\n.rv3 .rv4-trig__pill:focus-visible {"
+    );
+    expect(V3_CSS).toContain(".rv3 .rv4-fvt__pill-label,\n.rv3 .rv4-trig__pill-label {");
+  });
+
+  it("blurs locked rows at the frame's radius 4 and places each badge as the new frames do", () => {
     expect(rule(".rv3 .rv4-trig__row.is-locked {")).toContain("filter: blur(2px)");
-    expect(rule(".rv3 .rv4-trig--brake .rv4-trig__lock {")).toContain("--rv4-lock-top: 96px");
-    expect(rule(".rv3 .rv4-trig--accel .rv4-trig__lock {")).toContain("--rv4-lock-top: 99px");
-  });
-});
-
-/**
- * Review 24.09: "In the Accelerators & Brakes visual, can we bring back the animation
- * from V2 Report". 2.0's chart (AcceleratorsSection + report.css .report-chart-reveal)
- * grows each fill from nothing, staggered row by row, and lands each dot once its
- * fill has reached it. V4's trigger cards get the same choreography.
- */
-describe("V4TriggerCard — 2.0's reveal", () => {
-  const rule = (selector: string) => {
-    const at = V3_CSS.indexOf(selector);
-    expect(at, `${selector} missing from reportV3.css`).toBeGreaterThan(-1);
-    return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
-  };
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-    vi.unstubAllGlobals();
-  });
-
-  it("staggers its rows the way 2.0 does, blurred rows included", () => {
-    const { container } = render(
-      <V4TriggerCard tone="brake" rows={LOCKED.brakes} lockedFrom={2} />
-    );
-    const rows = [...container.querySelectorAll<HTMLElement>(".rv4-trig__row")];
-    expect(rows.map((r) => r.style.getPropertyValue("--row"))).toEqual(
-      rows.map((_, i) => String(i))
-    );
-  });
-
-  it("never leaves the scales empty where it cannot observe (SSR, jsdom, old browsers)", () => {
-    const { container } = render(<V4TriggerCard tone="accel" rows={OPEN.accelerators} />);
-    const chart = container.querySelector(".rv4-trig__rows")!;
-    expect(chart.className).toContain("rv4-reveal");
-    expect(chart.className).toContain("is-revealed");
-  });
-
-  it("holds the scales back until the card has actually come on screen", () => {
-    let fire: ((entries: { isIntersecting: boolean }[]) => void) | null = null;
-    vi.stubGlobal(
-      "IntersectionObserver",
-      class {
-        constructor(cb: (entries: { isIntersecting: boolean }[]) => void) {
-          fire = cb;
-        }
-        observe() {}
-        disconnect() {}
-      }
-    );
-    vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({
-      top: 5000,
-    } as DOMRect);
-    const { container } = render(<V4TriggerCard tone="brake" rows={OPEN.brakes} />);
-    const chart = container.querySelector(".rv4-trig__rows")!;
-    expect(chart.className).not.toContain("is-revealed");
-    act(() => fire!([{ isIntersecting: true }]));
-    expect(chart.className).toContain("is-revealed");
-  });
-
-  it("grows the fill and lands the knob with 2.0's timings, and pins both for reduced motion", () => {
-    const hidden = (sel: string) =>
-      rule(`.rv3 .rv4-trig__rows.rv4-reveal:not(.is-revealed) ${sel} {`);
-    const moving = (sel: string) => rule(`.rv3 .rv4-trig__rows.rv4-reveal ${sel} {`);
-    expect(hidden(".rv4-trig__fill")).toContain("transform: scaleX(0)");
-    expect(moving(".rv4-trig__fill")).toContain("transform-origin: left center");
-    expect(moving(".rv4-trig__fill")).toContain(
-      "transition: transform 820ms cubic-bezier(0.22, 1, 0.36, 1)"
-    );
-    expect(moving(".rv4-trig__fill")).toContain("transition-delay: calc(var(--row, 0) * 70ms)");
-    expect(hidden(".rv4-trig__knob")).toMatch(/opacity: 0;[\s\S]*transform: scale\(0\.35\)/);
-    expect(moving(".rv4-trig__knob")).toContain(
-      "transition-delay: calc(var(--row, 0) * 70ms + 620ms)"
-    );
-    const reduce = V3_CSS.slice(
-      V3_CSS.indexOf(
-        "@media (prefers-reduced-motion: reduce)",
-        V3_CSS.indexOf(".rv4-trig__rows.rv4-reveal")
-      )
-    );
-    expect(reduce).toMatch(
-      /\.rv4-trig__rows\.rv4-reveal:not\(\.is-revealed\) \.rv4-trig__fill \{\s*transform: none/
-    );
-    // The static geometry the tests above pin is untouched: the reveal only
-    // transforms, so the knob still sits on the fill's end when it lands.
-    expect(rule(".rv3 .rv4-trig__fill {")).toContain("width: var(--fill)");
+    expect(rule(".rv3 .rv4-trig--brake .rv4-trig__lock {")).toContain("--rv4-lock-top: 124px");
+    expect(rule(".rv3 .rv4-trig--accel .rv4-trig__lock {")).toContain("--rv4-lock-top: 127px");
   });
 });

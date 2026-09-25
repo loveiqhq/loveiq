@@ -30,21 +30,25 @@ const SPARK = REPORT_V4_ACCELERATORS["Spark Seeker"]!;
 const payload = (locked: boolean) => JSON.stringify(buildAccelerators("Spark Seeker", { locked }));
 
 describe("the authored copy (read off 310:229 / 374:304 / 377:221)", () => {
-  it("has five rows per card, each with the frame's fill", () => {
-    expect(SPARK.brakes.map((r) => [r.label, r.fill])).toEqual([
-      ["Sex that feels predictable or obligatory", 94],
-      ["Emotional heaviness during erotic moments", 85],
-      ["Control and possessiveness", 77],
-      ["Low-energy, passive encounters", 66],
-      ["Criticism, shame or judgment", 58],
+  // The scales went on 25.09 (Mark, 1942039325), and their fills with them.
+  it("has five rows per card, each a label and a line", () => {
+    expect(SPARK.brakes.map((r) => r.label)).toEqual([
+      "Sex that feels predictable or obligatory",
+      "Emotional heaviness during erotic moments",
+      "Control and possessiveness",
+      "Low-energy, passive encounters",
+      "Criticism, shame or judgment",
     ]);
-    expect(SPARK.accelerators.map((r) => [r.label, r.fill])).toEqual([
-      ["Teasing and playful challenge", 92],
-      ["Pursuit and being pursued", 84],
-      ["Novelty and variation", 76],
-      ["Confident signals of desire", 70],
-      ["Spontaneity and controlled unpredictability", 64],
+    expect(SPARK.accelerators.map((r) => r.label)).toEqual([
+      "Teasing and playful challenge",
+      "Pursuit and being pursued",
+      "Novelty and variation",
+      "Confident signals of desire",
+      "Spontaneity and controlled unpredictability",
     ]);
+    for (const row of [...SPARK.brakes, ...SPARK.accelerators]) {
+      expect(Object.keys(row).sort()).toEqual(["label", "subtext"]);
+    }
   });
 
   it("carries the intro, both leads, seven challenge paragraphs and seven practice paragraphs", () => {
@@ -103,7 +107,7 @@ describe("buildAccelerators — unlocked", () => {
 describe("buildAccelerators — locked", () => {
   const view = buildAccelerators("Spark Seeker", { locked: true })!;
 
-  it("keeps rows 1-2 of each card real and scrambles rows 3-5, fills kept", () => {
+  it("keeps rows 1-2 of each card real and scrambles rows 3-5", () => {
     expect(ACCELERATORS_FREE_ROWS).toBe(2);
     expect(view.lockedFrom).toBe(2);
     for (const [shown, authored] of [
@@ -112,7 +116,6 @@ describe("buildAccelerators — locked", () => {
     ] as const) {
       shown.forEach((row, i) => {
         const original = authored[i]!;
-        expect(row.fill).toBe(original.fill);
         if (i < 2) {
           expect(row).toEqual(original);
         } else {

@@ -15,9 +15,8 @@
  * "shouldn't"), curly quotes around quoted speech, and the double space either side
  * of "how it is interpreted" (310:231), kept with a no-break space because a browser
  * collapses the second one. The rows are Sanjin's list, approved by Mark in Figma
- * on 2026-09-22; their fills are the frame's and are decorative, not a reader's
- * scores (Sanjin and Mark are still weighing whether the lines imply a ranking —
- * dropping them is one change in V4TriggerCard, nothing here).
+ * on 2026-09-22. The decorative scales under them went on 25.09 (Mark, 1942039325),
+ * and their fills with them.
  *
  * Chrome text — "WHAT BRAKES YOU", "WHAT ACCELERATES YOU" — lives in the client
  * component, never in this module.
@@ -45,8 +44,6 @@ export interface Report3TriggerRow {
   label: string;
   /** Plus Jakarta Regular 12/19.2 in #8f8a9c. */
   subtext: string;
-  /** The scale's fill, 0-100, as the frame's layer names give it ("fill · 94"). */
-  fill: number;
 }
 
 /** Everything one archetype's chapter needs, as authored. */
@@ -114,31 +111,26 @@ export const REPORT_V4_ACCELERATORS: Readonly<Record<string, Report3Accelerators
         label: "Sex that feels predictable or obligatory",
         subtext:
           "Repeating the same sequence, especially when sex starts to feel like something that is simply expected, can drain erotic tension.",
-        fill: 94,
       },
       {
         label: "Emotional heaviness during erotic moments",
         subtext:
           "Analysis, unresolved arguments or serious conversations entering the sexual space can abruptly shift attention away from play and arousal.",
-        fill: 85,
       },
       {
         label: "Control and possessiveness",
         subtext:
           "Feeling monitored, restricted or managed can turn closeness into confinement and quickly reduce desire.",
-        fill: 77,
       },
       {
         label: "Low-energy, passive encounters",
         subtext:
           "Sexuality that feels flat, overly cautious or without visible enthusiasm may struggle to hold the Spark Seeker's attention.",
-        fill: 66,
       },
       {
         label: "Criticism, shame or judgment",
         subtext:
           "Being mocked for wanting variety, intensity or play can turn openness into self-consciousness and inhibition.",
-        fill: 58,
       },
     ],
 
@@ -150,31 +142,26 @@ export const REPORT_V4_ACCELERATORS: Readonly<Record<string, Report3Accelerators
         label: "Teasing and playful challenge",
         subtext:
           "Banter, provocative messages and playful resistance can create tension before anything sexual happens.",
-        fill: 92,
       },
       {
         label: "Pursuit and being pursued",
         subtext:
           "Clear signs of attraction, flirtation and someone actively wanting access can make desire feel immediate and alive.",
-        fill: 84,
       },
       {
         label: "Novelty and variation",
         subtext:
           "A new setting, idea, role, outfit or change in the usual pattern can make familiar sexuality feel newly interesting.",
-        fill: 76,
       },
       {
         label: "Confident signals of desire",
         subtext:
           "Dirty talk, praise, bold initiation and unmistakable enthusiasm can strongly reinforce the feeling of being wanted.",
-        fill: 70,
       },
       {
         label: "Spontaneity and controlled unpredictability",
         subtext:
           "An unexpected kiss, sudden escalation or safe sense of rule-breaking can add the uncertainty that keeps attention engaged.",
-        fill: 64,
       },
     ],
 
