@@ -60,6 +60,19 @@ describe("windowStats", () => {
     ]);
   });
 
+  /**
+   * Live rows: the route stores an empty search as source_count 0 WITH content_score 0, so
+   * without the found-something test every empty search would count as weak as well.
+   */
+  it("counts an empty search as empty only, with no best match, and the floor itself as not weak", () => {
+    const s = windowStats(
+      [search("nothing here", 0, 0), search("exactly at the floor", FLOOR)],
+      FLOOR
+    );
+    expect(s).toMatchObject({ searches: 2, weak: 0, empty: 1 });
+    expect(s.unanswered).toEqual([{ query: "nothing here", times: 1, best: null }]);
+  });
+
   it("tells an outage from a failed call from an error message, and groups the reasons", () => {
     const s = windowStats(
       [
@@ -72,6 +85,12 @@ describe("windowStats", () => {
       FLOOR
     );
     expect(s).toMatchObject({ outages: 1, failures: 1, refusals: 3 });
+    // Each error is counted once: an outage that also says the lookup failed is an outage.
+    const both = windowStats(
+      [row({ error: "The knowledge base is unreachable. That lookup failed." })],
+      FLOOR
+    );
+    expect(both).toMatchObject({ outages: 1, failures: 0, refusals: 0 });
     expect(s.failuresByTool).toEqual([
       ["fetch_document", 1],
       ["query_product_data", 1],
@@ -246,6 +265,15 @@ describe("selfReport", () => {
     expect(text).toContain("the job log (cron_run) could not be read");
   });
 
+  it("does not judge the jobs when a quiet job's last run could not be looked up", async () => {
+    route();
+    const quiet = mockSupabaseFetch.getMockImplementation()!;
+    mockSupabaseFetch.mockImplementation(async (path: string) =>
+      path.includes("cron_name=eq.") ? down : quiet(path)
+    );
+    expect((await selfReport(7, FLOOR, NOW)).jobs).toBeNull();
+  });
+
   it("reads the batteries newest first, each on its own", async () => {
     route({
       batteries: ok([
@@ -358,6 +386,40 @@ describe("renderSelfReport", () => {
     expect(text).toContain(
       "Asked but not answered well: 1 distinct questions. The brain_health tool lists them."
     );
+  });
+
+  it("compares with the last run that finished, not a failed one in between", () => {
+    const text = renderSelfReport(
+      report({
+        batteries: {
+          "brain-battery-retrieval": [
+            {
+              at: "2026-09-28T06:02:00Z",
+              ok: true,
+              total: 229,
+              clean: 224,
+              failing: [],
+              flaky: [],
+              known: 5,
+            },
+            { at: "2026-09-21T06:02:00Z", ok: false, failing: [], flaky: [], error: "timed out" },
+            {
+              at: "2026-09-14T06:02:00Z",
+              ok: true,
+              total: 229,
+              clean: 221,
+              failing: [],
+              flaky: [],
+              known: 5,
+            },
+          ],
+          "brain-battery-mcp": [],
+        },
+      }),
+      FLOOR,
+      { withQuestions: true, nowMs: NOW }
+    );
+    expect(text).toContain("the run before, 221 of 229 on 2026-09-14.");
   });
 
   it("says when no battery has run yet, and when a job has never run", () => {
