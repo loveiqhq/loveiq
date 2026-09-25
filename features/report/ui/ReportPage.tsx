@@ -2213,8 +2213,11 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                 // V3 numbers "Other Archetypes" chapter 5.4, one ahead of
                 // Importance of Sexuality (5.5). V1 renders it inline AFTER
                 // Importance, which would invert the two.
+                // V4 no longer carries Importance (review 24.09), so there the
+                // chapter closes the report, right after Reading Recommendations.
+                const constellationHost = isV4 ? "recommendations" : "the_importance_of_sexuality";
                 const v3Constellation =
-                  isV3 && section.id === "the_importance_of_sexuality" ? (
+                  isV3 && section.id === constellationHost ? (
                     <ReportSection
                       primaryArchetype={viewArchetype}
                       sectionId="constellation"
@@ -2265,17 +2268,20 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                   <Fragment key={section.id}>
                     {dividerNode}
                     {v3PartOneExtras}
-                    {v3Constellation}
+                    {isV4 ? null : v3Constellation}
                     {sectionNode}
                     {v3Partnership}
+                    {isV4 ? v3Constellation : null}
                   </Fragment>
                 );
               })}
 
               {/* V3 closes with the "Summary" block (Figma 10392:25297), which
                   V1 retired. It sits after the last chapter, before the closing
-                  note. */}
-              {isV3 ? <V3EndSummary archetype={viewArchetype} /> : null}
+                  note. V4 drops it: "Take out the Summary, Sexual Stage, Importance
+                  of Sexuality chapters please" (review 24.09). V4's own summary is
+                  Part II's. */}
+              {isV3 && !isV4 ? <V3EndSummary archetype={viewArchetype} /> : null}
 
               {/* Report 2.0 closing note (Figma 8427:2837) — universal + free,
                   no gating, no CTA. Mounts LAST in the report content, right
