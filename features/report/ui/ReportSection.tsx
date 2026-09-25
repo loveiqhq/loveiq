@@ -128,7 +128,12 @@ const ReportSection: FC<Props> = ({
 
   if (v3Chapter) {
     return (
-      <V3Chapter chapter={v3Chapter} sectionId={sectionId} feedbackWidget={feedbackWidget}>
+      <V3Chapter
+        chapter={v3Chapter}
+        sectionId={sectionId}
+        feedbackWidget={feedbackWidget}
+        archetype={primaryArchetype}
+      >
         {children}
       </V3Chapter>
     );
