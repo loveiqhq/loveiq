@@ -878,6 +878,59 @@ describe("ReportPage", () => {
     });
   });
 
+  // Review 24.09: "Please take out the Arousal, Desire & Sexual Stage Chapter", "Take out
+  // the Summary, Sexual Stage, Importance of Sexuality chapters please", and Sanjin's note
+  // that those, the Spark Seeker summary and an opened Arousal, Desire & Pleasure chapter
+  // were still at the very end.
+  describe("V4 — the chapters the 24.09 review took out", () => {
+    const REMOVED = [
+      "background_know_how_arousal_desire_and_pleasure",
+      "sexual_stage",
+      "the_importance_of_sexuality",
+    ];
+
+    afterEach(() => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+
+    it("renders none of them, and no closing Summary, under ?v4=1", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      const { container } = render(<ReportPage />);
+
+      for (const id of REMOVED) expect(container.querySelector(`#${id}`), id).toBeNull();
+      expect(container.querySelector(".rv3-endsummary")).toBeNull();
+    });
+
+    it("keeps Other Archetypes, now straight after Reading Recommendations", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      const { container } = render(<ReportPage />);
+
+      const recommendations = container.querySelector("#recommendations")!;
+      const constellation = container.querySelector("#constellation")!;
+      expect(constellation).not.toBeNull();
+      expect(container.querySelectorAll("#constellation")).toHaveLength(1);
+      expect(
+        recommendations.compareDocumentPosition(constellation) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+      expect(constellation.querySelector(".report-constellation__row")).not.toBeNull();
+    });
+
+    it("leaves ?v3=1 with all of them", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v3=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      const { container } = render(<ReportPage />);
+
+      for (const id of REMOVED) expect(container.querySelector(`#${id}`), id).not.toBeNull();
+      expect(container.querySelector(".rv3-endsummary")).not.toBeNull();
+      expect(container.querySelector("#constellation")).not.toBeNull();
+    });
+  });
+
   // Review 24.09: "the top part is dark on my iPhone (the background to the time and
   // battery)". Safari 15-18 tints the status bar from `theme-color`, and without one it
   // keeps the site's dark shell (#0b0613) it painted while the report was loading.

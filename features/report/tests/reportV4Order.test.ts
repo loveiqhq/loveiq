@@ -24,10 +24,29 @@ import { REPORT_V4_PART_DIVIDER_BY_SECTION, REPORT_V4_PARTS } from "@/data/repor
 const REPORT_PAGE = readFileSync(join(__dirname, "..", "ui", "ReportPage.tsx"), "utf8");
 const AB = "typical_arousal_accelerators_turn_ons_of_the_core_archetype";
 
+// Review 24.09: "Please take out the Arousal, Desire & Sexual Stage Chapter" and "Take out
+// the Summary, Sexual Stage, Importance of Sexuality chapters please".
+const REMOVED_IN_V4 = [
+  "background_know_how_arousal_desire_and_pleasure",
+  "sexual_stage",
+  "the_importance_of_sexuality",
+];
+
 describe("the V4 chapter order", () => {
-  it("has exactly V3's ids, so every order-keyed filter still holds", () => {
-    expect([...REPORT_V4_SECTION_ORDER].sort()).toEqual([...REPORT_V3_SECTION_ORDER].sort());
-    expect(REPORT_V4_SECTION_ORDER).toHaveLength(REPORT_V3_SECTION_ORDER.length);
+  it("has V3's ids minus the three the 24.09 review took out", () => {
+    expect([...REPORT_V4_SECTION_ORDER].sort()).toEqual(
+      REPORT_V3_SECTION_ORDER.filter((id) => !REMOVED_IN_V4.includes(id)).sort()
+    );
+    for (const id of REMOVED_IN_V4) {
+      expect(REPORT_V4_SECTION_ORDER).not.toContain(id);
+      expect(REPORT_V4_NAV_PARTS.flatMap((p) => p.items.map((i) => i.id))).not.toContain(id);
+      // V3 keeps all three.
+      expect(REPORT_V3_SECTION_ORDER).toContain(id);
+    }
+  });
+
+  it("closes the report on Other Archetypes, after Reading Recommendations", () => {
+    expect(REPORT_V4_SECTION_ORDER.slice(-2)).toEqual(["recommendations", "constellation"]);
   });
 
   it("opens 'How your archetype works' with Typical Beliefs, and closes it before A&B", () => {

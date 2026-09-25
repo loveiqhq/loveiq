@@ -91,6 +91,17 @@ const v3Chapter = (id: string): ReportV3Chapter => {
 };
 
 /**
+ * Chapters V4 does not carry. The 24.09 review: "Please take out the Arousal, Desire &
+ * Sexual Stage Chapter" and "Take out the Summary, Sexual Stage, Importance of Sexuality
+ * chapters please". (The Summary it means is V3's closing one; see ReportPage.)
+ */
+const V4_REMOVED_CHAPTERS: ReadonlySet<string> = new Set([
+  "background_know_how_arousal_desire_and_pleasure",
+  "sexual_stage",
+  "the_importance_of_sexuality",
+]);
+
+/**
  * Report V4 (`?v4=1`) moves TWO chapters to the front of a part, both as Figma
  * draws them (Fatih's calls, 2026-09-23):
  * - Typical Beliefs opens "How your archetype works" — the team's chapter sequence
@@ -100,7 +111,8 @@ const v3Chapter = (id: string): ReportV3Chapter => {
  *   titled it in the singular, and the 24.09 review asked for the "s" everywhere,
  *   so V4 now carries V3's own plural title.
  *
- * The same 21 ids as V3, so every filter keyed on the order still holds, and each
+ * V3's ids less V4_REMOVED_CHAPTERS, so every filter keyed on the order drops those
+ * three from the page, the nav and the drawer together, and each
  * part is renumbered in its new order so the V3 eyebrows the other chapters still
  * carry keep counting up (Libido Challenges reads 3.2). The nav groups chapters by
  * that number, so the renumbering is also what moves A&B into the erotic-engine
@@ -119,7 +131,10 @@ export const REPORT_V4_CHAPTERS: readonly ReportV3Chapter[] = [
 ].flatMap((part) => {
   const openers = V4_PART_OPENERS.filter((o) => o.part === part).map((o) => v3Chapter(o.id));
   const rest = REPORT_V3_CHAPTERS.filter(
-    (c) => partOf(c) === part && !V4_PART_OPENERS.some((o) => o.id === c.id)
+    (c) =>
+      partOf(c) === part &&
+      !V4_PART_OPENERS.some((o) => o.id === c.id) &&
+      !V4_REMOVED_CHAPTERS.has(c.id)
   );
   return [...openers, ...rest].map((c, i) => ({ ...c, number: `${part}.${i + 1}` }));
 });
