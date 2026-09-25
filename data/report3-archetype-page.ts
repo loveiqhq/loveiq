@@ -382,14 +382,14 @@ export const REPORT_V4_PART4_CHAPTERS: readonly Report3Chapter[] = [
   { title: "Your Sexual Stage", id: "sexual_stage", body: "teaser", suffix: false }, // 1:1050
 ];
 
-/** Part V · "How You connect" — 38:1507. The only part with no expanded row. */
+/** Part V · "How You connect" — 38:1507, opening on Challenges in Partnerships (38:1672) expanded. */
 export const REPORT_V4_PART5_CHAPTERS: readonly Report3Chapter[] = [
   {
     // 38:1675 draws the plural; V4 follows it (Fatih, 2026-09-24).
     title: "Challenges in Partnerships",
     id: "challenges_in_partnership",
     gateId: "libido_challenges_in_relationships",
-    body: "teaser",
+    body: "chapter",
     suffixBreak: true,
   }, // 38:1672
   { title: "Attachment Style", id: "attachment_style", body: "teaser" }, // 38:1520

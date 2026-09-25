@@ -252,8 +252,10 @@ describe("Parts IV, V and VI", () => {
     expect(article).not.toContain("“Accelerator”");
   });
 
-  it("gives Part V no expanded row, unlike III, IV and VI", () => {
-    expect(REPORT_V4_PART5_CHAPTERS.some((c) => c.body === "chapter")).toBe(false);
+  it("expands one row per part — Part V's is Challenges in Partnerships (38:1672) now", () => {
+    expect(REPORT_V4_PART5_CHAPTERS.filter((c) => c.body === "chapter").map((c) => c.id)).toEqual([
+      "challenges_in_partnership",
+    ]);
     for (const list of [
       REPORT_V4_PART3_CHAPTERS,
       REPORT_V4_PART4_CHAPTERS,

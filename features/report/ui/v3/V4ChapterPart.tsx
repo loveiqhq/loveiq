@@ -2,6 +2,7 @@ import { Fragment, type FC } from "react";
 import type { Report3Chapter } from "@/data/report3-archetype-page";
 import type { Report3TypicalBeliefsView } from "@/data/report3-typical-beliefs";
 import type { Report3AcceleratorsView } from "@/data/report3-accelerators";
+import type { Report3PartnershipView } from "@/data/report3-partnership";
 import {
   CHAPTER_COPY_PLACEHOLDER,
   PART_INTRO_PLACEHOLDER,
@@ -15,6 +16,7 @@ import V4LearnMore from "./V4LearnMore";
 import V4TryThis from "./V4TryThis";
 import V4TypicalBeliefs from "./V4TypicalBeliefs";
 import V4Accelerators from "./V4Accelerators";
+import V4Partnership from "./V4Partnership";
 import V4PartHeading from "./V4PartHeading";
 
 /**
@@ -25,7 +27,8 @@ import V4PartHeading from "./V4PartHeading";
  * 1:852 · a 44px separator before each chapter row (1:860, 1:862, 1:873, 1:884,
  * 1:895). The part ENDS there.
  *
- * Part III has five rows, IV seven, V four (and no expanded row at all), VI four.
+ * Part III has five rows, IV seven, V four, VI four — each part opening on one
+ * expanded chapter (Part V's since Challenges in Partnerships, 38:1672, was drawn).
  *
  * Each of these parts also contains a "Section - Where this report comes from"
  * (1:905, 1:1060, 38:1585, 1:1194) — every one of them `hidden="true"`, so none is
@@ -69,6 +72,11 @@ interface Props {
    * `typicalBeliefs`. Part IV renders it above the chapter's article.
    */
   accelerators?: Report3AcceleratorsView | null;
+  /**
+   * Challenges in Partnerships' chapter body (38:1672), read on the server. Part V
+   * renders it as its open first row — it has no article, so it brings its own body.
+   */
+  partnership?: Report3PartnershipView | null;
 }
 
 const V4ChapterPart: FC<Props> = ({
@@ -80,6 +88,7 @@ const V4ChapterPart: FC<Props> = ({
   onUnlock,
   typicalBeliefs,
   accelerators,
+  partnership,
 }) => (
   <section className="rv4-partblock" data-node-id="1:849" data-name="Chapter part">
     {/* 1:850 */}
@@ -101,6 +110,8 @@ const V4ChapterPart: FC<Props> = ({
         c.id === "typical_arousal_accelerators_turn_ons_of_the_core_archetype" && entry
           ? accelerators
           : null;
+      // No article: the chapter's own body is the whole of its open row.
+      const cip = c.id === "challenges_in_partnership" ? (partnership ?? null) : null;
       return (
         <Fragment key={c.id ?? c.title}>
           {/* 1:858 / 1:861 / 1:872 / 1:883 / 1:894 */}
@@ -108,17 +119,21 @@ const V4ChapterPart: FC<Props> = ({
           <V4Chapter
             title={c.title}
             archetype={c.suffix === false ? undefined : archetype}
+            // The section id gives each row the anchor the chapter nudges land on.
+            sectionId={c.id}
             teaser={
-              entry
+              entry || cip
                 ? undefined
                 : c.body === "chapter"
                   ? CHAPTER_COPY_PLACEHOLDER
                   : TEASER_PLACEHOLDER
             }
-            defaultOpen={Boolean(entry)}
-            bare={Boolean(beliefs || accel)}
+            defaultOpen={Boolean(entry || cip)}
+            bare={Boolean(beliefs || accel || cip)}
           >
-            {entry ? (
+            {cip ? (
+              <V4Partnership view={cip} onUnlock={onUnlock} />
+            ) : entry ? (
               <>
                 {/* 304:256 sits ABOVE the article in 1:849: the chapter body
                  * first, then the practice (374:238), then "Go deeper & learn

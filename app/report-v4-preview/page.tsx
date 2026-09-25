@@ -16,6 +16,7 @@ import {
 import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
 import { buildAccelerators } from "@/data/report3-accelerators";
+import { buildPartnership } from "@/data/report3-partnership";
 import { isReportPurchasePlan, type ReportAccessPlan } from "@features/report/server/access";
 import {
   buildLearnMoreForReader,
@@ -87,6 +88,14 @@ export default async function ReportV4PreviewPage({
       accelerators={buildAccelerators(ARCHETYPE, {
         locked: isLearnMoreArticleLocked({
           article: { chapterId: "typical_arousal_accelerators_turn_ons_of_the_core_archetype" },
+          accessPlan,
+        }),
+      })}
+      // Challenges in Partnerships has no premium row of its own; it rides Libido's
+      // full-report gate, as REPORT_V4_PART5_CHAPTERS' gateId and the real route say.
+      partnership={buildPartnership(ARCHETYPE, {
+        locked: isLearnMoreArticleLocked({
+          article: { chapterId: "libido_challenges_in_relationships" },
           accessPlan,
         }),
       })}
