@@ -1105,6 +1105,87 @@ describe("ReportPage", () => {
     });
   });
 
+  // Mark: "when opening the remaining chapters, they should all be blurred with the
+  // icon and the Unlock CTA" (Figma 1940141608). The chapters Figma has not designed
+  // show the blurred block; the designed four keep their own gating.
+  describe("V4 — locked chapters Figma has not designed yet", () => {
+    afterEach(() => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+
+    const withPlan = (accessPlan: string | null) => {
+      const response = buildSuccessResponse();
+      (response.data as Record<string, unknown>).accessPlan = accessPlan;
+      return response;
+    };
+    const blurred = (container: HTMLElement, id: string) =>
+      container.querySelector(`#${id} .rv4-lockch`) !== null;
+
+    it("blurs them for a reader with no plan, and leaves the designed chapters alone", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(withPlan(null));
+
+      const { container } = render(<ReportPage />);
+
+      expect(blurred(container, "confidence_level")).toBe(true);
+      expect(blurred(container, "libido_challenges_in_relationships")).toBe(true);
+      expect(blurred(container, "biochemical_reward_system_dynamics")).toBe(true);
+      // The designed chapters keep their own previews, even on V2's section.
+      expect(blurred(container, "typical_beliefs")).toBe(false);
+      expect(
+        blurred(container, "typical_arousal_accelerators_turn_ons_of_the_core_archetype")
+      ).toBe(false);
+      expect(blurred(container, "challenges_in_partnership")).toBe(false);
+      expect(blurred(container, "typical_sexual_fantasy_amp_practice_tendencies")).toBe(false);
+      // Free chapters never lock.
+      expect(blurred(container, "constellation")).toBe(false);
+    });
+
+    it("opens essentials chapters for an essentials reader, and keeps the full-report ones blurred", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(withPlan("essentials"));
+
+      const { container } = render(<ReportPage />);
+
+      expect(blurred(container, "confidence_level")).toBe(false);
+      expect(blurred(container, "attachment_style")).toBe(false);
+      expect(blurred(container, "libido_challenges_in_relationships")).toBe(true);
+    });
+
+    it("blurs nothing for a full-report reader", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(withPlan("full_report"));
+
+      const { container } = render(<ReportPage />);
+
+      expect(container.querySelector(".rv4-lockch")).toBeNull();
+    });
+
+    it("opens the paywall for the chapter tapped", async () => {
+      const user = userEvent.setup();
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(withPlan(null));
+
+      const { container } = render(<ReportPage />);
+      await user.click(
+        container.querySelector<HTMLElement>("#libido_challenges_in_relationships .rv4-lockch")!
+      );
+
+      expect(vi.mocked(analytics.trackLockIconClicked)).toHaveBeenCalledWith(
+        expect.objectContaining({ section_id: "libido_challenges_in_relationships" })
+      );
+    });
+
+    it("leaves ?v3=1 on its sections' own locked states", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v3=1"));
+      mockUseReportData.mockReturnValue(withPlan(null));
+
+      const { container } = render(<ReportPage />);
+
+      expect(container.querySelector(".rv4-lockch")).toBeNull();
+    });
+  });
+
   // Review 24.09: "the top part is dark on my iPhone (the background to the time and
   // battery)". Safari 15-18 tints the status bar from `theme-color`, and without one it
   // keeps the site's dark shell (#0b0613) it painted while the report was loading.
