@@ -17,8 +17,9 @@ the team is told.
   `compareScanners`).
 - `server/digest-audit.ts` — re-asks each claim of the last digest that was
   delivered, over its own 24 hours, from a source the digest did not use.
-  Run daily at 08:53 UTC by `.github/workflows/ux-digest-audit.yml` through
-  `scripts/audit-ux-digest.mjs`.
+  Started daily at 08:41 UTC, and 10:41 as a fallback, by Vercel's clock
+  (`/api/cron/start-github-jobs`) through `.github/workflows/ux-digest-audit.yml`
+  and `scripts/audit-ux-digest.mjs`.
 
 **The one rule that shapes everything: a verdict is not a finding.**
 

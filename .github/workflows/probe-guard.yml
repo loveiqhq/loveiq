@@ -9,20 +9,24 @@ name: Probe guard — check production directly
 # This runs the probes that are safe to point at production unattended: they
 # read pages, measure geometry, and write nothing.
 
+# NO `schedule:`. Vercel's clock starts this (features/cron/server/github-jobs.ts):
+# the daily probes at 05:41 UTC, deliberately not frequent since they drive real
+# browsers against the live site, and the much heavier weekly check at 04:41 UTC
+# on Mondays, every auto-PR probe with its own defect injected across its full
+# device list. GitHub's own schedule starts this repo's jobs hours late.
 on:
-  schedule:
-    # Once a day, off the hour. These drive real browsers against the live site,
-    # so they are deliberately not frequent.
-    - cron: "23 5 * * *"
-    # Weekly, and much heavier: every auto-PR probe is run with its own defect
-    # injected, across its full device list.
-    - cron: "41 4 * * 1"
   workflow_dispatch:
     inputs:
       origin:
         description: "Origin to probe (defaults to production)"
         required: false
         default: ""
+      which:
+        description: "Which checks to run"
+        required: false
+        type: choice
+        options: [both, daily, weekly]
+        default: both
 
 permissions:
   contents: read
@@ -34,9 +38,9 @@ concurrency:
 jobs:
   probe:
     name: Measure production
-    # Daily cron or a manual run only. Without this it would also fire on the
-    # weekly falsifiability schedule below, running twice every Monday.
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '23 5 * * *'
+    # The clock's daily start, or a manual run. Without this it would also run on
+    # the clock's weekly start below, twice every Monday.
+    if: inputs.which != 'weekly'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -208,9 +212,9 @@ jobs:
 
   falsifiability:
     name: Auto-PR probes can still fail
-    # Weekly only, or on a manual run. Seven probes across their full device
-    # lists against production is minutes of real browser time.
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '41 4 * * 1'
+    # The clock's weekly start, or a manual run. Seven probes across their full
+    # device lists against production is minutes of real browser time.
+    if: inputs.which != 'daily'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

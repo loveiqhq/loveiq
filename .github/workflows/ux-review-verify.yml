@@ -7,22 +7,24 @@ name: UX review — verify findings
 # No model is involved. A probe cannot hallucinate, which is the whole reason
 # this is the verification step rather than another LLM pass.
 
+# NO `schedule:`. Vercel's clock starts this every hour at :41
+# (app/api/cron/start-github-jobs, features/cron/server/github-jobs.ts). GitHub's
+# own schedule starts this repo's jobs 4.5 to 5.5 hours late and drops the slots
+# that fall due meanwhile: an hourly cron here still ran four times a day
+# (2026-09-25). A `schedule:` would only add late duplicates of the clock's runs.
 on:
-  schedule:
-    # Hourly at :41, off the :00/:30 marks every other workflow lands on.
-    # It was every three hours until 2026-09-25, and GitHub drops and
-    # delays this repo's scheduled runs: that cron ran 4-6 times a day instead
-    # of 8, so the re-queue drained at half speed, and every schedule here
-    # starts 4.5 to 5.5 hours after its cron time (docs/runbooks/COMPANY_BRAIN.md),
-    # so a run due at 09:41 starts around 15:00. Runs take 3-12 minutes, the
-    # concurrency group below never overlaps them, and Actions minutes are free
-    # on a public repository, so a dropped run now costs an hour, not three.
-    - cron: "41 * * * *"
-    # Monday morning, for the weekly scanner scoring step below. At :11, so the
-    # hourly :41 cron never fires in the same minute and doubles the run.
-    - cron: "11 10 * * 1"
   workflow_dispatch:
     inputs:
+      on_time:
+        description: "Started by the clock (records the run for the stall watchdog)"
+        required: false
+        type: boolean
+        default: false
+      weekly:
+        description: "Also score the scanners (the clock does this Mondays at 10:41 UTC)"
+        required: false
+        type: boolean
+        default: false
       lookback_hours:
         # NO DEFAULT, deliberately. A default here is not a fallback — it makes
         # `inputs.lookback_hours` non-empty on every dispatch, so the `|| '24'`
@@ -47,8 +49,8 @@ permissions:
   # can open a DRAFT pull request carrying its evidence. The script never
   # merges, never writes to main, and never generates a fix — it pushes one
   # branch holding a reproduction record. This repository is public, so the
-  # token stays scoped to these two and the workflow is `schedule` +
-  # `workflow_dispatch` only, never `pull_request_target`.
+  # token stays scoped to these two and the workflow is `workflow_dispatch`
+  # only, never `pull_request_target`.
   contents: write
   pull-requests: write
 
@@ -151,7 +153,9 @@ jobs:
       # workflow. Failing the verify run for it would stop findings being
       # verified over a number nobody can fix from here.
       - name: Score the scanners (weekly)
-        if: github.event.schedule == '11 10 * * 1' || github.event_name == 'workflow_dispatch'
+        # format() because the clock sends "true" through the API and the Actions tab
+        # sends a boolean; both print as the same word.
+        if: format('{0}', inputs.weekly) == 'true'
         # BOTH sources, and the second is the one that survives.
         #
         # The fixtures are seven hand-curated recordings that EXPIRE 2026-09-28
@@ -268,13 +272,12 @@ jobs:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_JOURNEY_CHANNEL_ID: ${{ secrets.SLACK_JOURNEY_CHANNEL_ID }}
 
-      # For the stall watchdog (features/cron/server/cron-stall.ts): GitHub drops
-      # scheduled runs (4-6 a day on an 8-a-day cron from 2026-09-14), and a job
-      # that never starts cannot say so. Only scheduled runs count, so a
-      # hand-started run cannot hide a dead schedule. The status comes through env,
-      # not spliced into `run:`, for the reason given on the step above.
+      # For the stall watchdog (features/cron/server/cron-stall.ts): a job that
+      # never starts cannot say so. Only the clock's runs count, so a hand-started
+      # run cannot hide a stopped clock. The status comes through env, not spliced
+      # into `run:`, for the reason given on the step above.
       - name: Record that the verifier ran
-        if: always() && github.event_name == 'schedule'
+        if: always() && format('{0}', inputs.on_time) == 'true'
         env:
           JOB_STATUS: ${{ job.status }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

@@ -27,6 +27,10 @@
       "schedule": "38 * * * *"
     },
     {
+      "path": "/api/cron/start-github-jobs",
+      "schedule": "41 * * * *"
+    },
+    {
       "path": "/api/cron/conversion-digest",
       "schedule": "0 9 * * *"
     },

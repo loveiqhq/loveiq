@@ -7,7 +7,11 @@ name: Survey DB Sync
 # with a NULL answer_option_id and quietly stops joining to anything.
 #
 # The check needs live credentials, so it cannot run in the pull-request job. It runs on
-# pushes that touch the survey definition, daily, and on demand.
+# pushes that touch the survey definition, daily, and on demand. Daily because drift can
+# also arrive from the database side — a migration applied by hand, or copy edited
+# directly in the admin — which no push would catch. The daily start at 07:41 UTC comes
+# from Vercel's clock (features/cron/server/github-jobs.ts), not a `schedule:`, which
+# GitHub starts hours late for this repo.
 
 on:
   push:
@@ -18,10 +22,6 @@ on:
       - "supabase/migrations/**"
       - "scripts/check-survey-db-sync.js"
       - ".github/workflows/survey-db-sync.yml"
-  schedule:
-    # Daily: drift can also arrive from the database side — a migration applied by hand,
-    # or copy edited directly in the admin — which no push would catch.
-    - cron: "0 7 * * *"
   workflow_dispatch:
 
 concurrency:

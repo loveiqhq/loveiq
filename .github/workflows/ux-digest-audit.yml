@@ -5,20 +5,19 @@ name: UX digest — does it tell the truth
 # did not use (the survey tables, GitHub, PostHog). Why it exists, and what it
 # does not check: features/ux-review/server/digest-audit.ts.
 
+# NO `schedule:`. Vercel's clock starts this at 08:41 and 10:41 UTC
+# (features/cron/server/github-jobs.ts): after the digest in both summer (07:17
+# UTC) and winter (08:17 UTC), and once more as a fallback. GitHub's own
+# schedule starts this repo's jobs hours late and drops some. The script posts
+# at most once per digest, so two runs never mean two alerts.
 on:
-  schedule:
-    # 08:53 UTC: after the digest in both summer (07:17 UTC) and winter
-    # (08:17 UTC), since it posts at the first run after 09:00 in Berlin.
-    # GitHub starts this repo's schedules 4.5 to 5.5 hours late, which still
-    # lands after the digest, and drops some, so twice more as fallbacks. A
-    # check that silently did not run reads exactly like one that passed. The
-    # script posts at most once per digest, so three runs never mean three
-    # alerts.
-    - cron: "53 8 * * *"
-    - cron: "53 10 * * *"
-    - cron: "53 12 * * *"
   workflow_dispatch:
     inputs:
+      on_time:
+        description: "Started by the clock (records the run for the stall watchdog)"
+        required: false
+        type: boolean
+        default: false
       post:
         description: "Post a false claim to Slack (off = check and print only)"
         type: boolean
@@ -72,7 +71,7 @@ jobs:
       - name: Re-ask every claim of the last digest
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_COMMITS_WEBHOOK_URL }}
-          POST: ${{ github.event_name == 'schedule' || inputs.post }}
+          POST: ${{ inputs.post }}
         run: |
           set +e
           if [ "$POST" = "true" ]; then
@@ -84,13 +83,14 @@ jobs:
           echo "AUDIT_EXIT=$code" >> "$GITHUB_ENV"
           exit $code
 
-      # For the stall watchdog (features/cron/server/cron-stall.ts): GitHub
-      # drops scheduled runs, and a job that never starts cannot say so. Only
-      # scheduled runs count, so hand-started ones cannot hide a dead schedule.
-      # A false claim (exit 1) is the audit working; only exit 3, or a job that
-      # died before the audit ran, is recorded as an error.
+      # For the stall watchdog (features/cron/server/cron-stall.ts): a job that
+      # never starts cannot say so. Only the clock's runs count, so hand-started
+      # ones cannot hide a stopped clock. A false claim (exit 1) is the audit
+      # working; only exit 3, or a job that died before the audit ran, is
+      # recorded as an error. format() because the clock sends "true" through the
+      # API and the Actions tab sends a boolean.
       - name: Record that the audit ran
-        if: always() && github.event_name == 'schedule'
+        if: always() && format('{0}', inputs.on_time) == 'true'
         run: |
           case "${AUDIT_EXIT:-none}" in
             0|1) outcome=success ;;

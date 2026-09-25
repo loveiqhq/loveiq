@@ -894,8 +894,11 @@ watch behave exactly as they did on Vercel.
   (health-monitor due 08:00 ran ~13:20; the Night Shift due 00:30 ran 05:08). The brief is
   scheduled at 01:10 so it lands in the morning, with two retries. A job that has not
   started by its usual time has probably not been dropped yet: check `cron_run`, then run
-  it by hand. A Vercel cron that calls `workflow_dispatch` would be punctual, but needs a
-  GitHub token that can start workflows, which nobody has created yet.
+  it by hand. The punctual alternative exists since 2026-09-26: `/api/cron/start-github-jobs`
+  starts jobs through `workflow_dispatch` with `GITHUB_DISPATCH_TOKEN`, and runs the UX
+  verifier and the morning checks. The brain's jobs are not on it, because their times
+  assume GitHub's delay; to move one, add it to `features/cron/server/github-jobs.ts` at
+  the hour it should land and delete its `schedule:`.
 - **Replacing the token.** Run `claude setup-token` signed in as the seat's owner, then
   `gh secret set CLAUDE_CODE_OAUTH_TOKEN -R loveiqhq/loveiq`. `generate-fix` uses the same
   secret. Then point the ping at whoever should hear about a limit:
