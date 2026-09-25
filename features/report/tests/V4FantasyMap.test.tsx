@@ -450,10 +450,13 @@ describe("reportV3.css — the fantasy map (696:4393 / 368:3481)", () => {
     expect(map).toContain("width: min(328px, 100%)");
   });
 
-  it("wraps the chips centred, 7.9 apart, rows touching", () => {
+  // Review 25.09 (1941965616): "New design on the button containers, giving them more
+  // space" — 8 between chips and 5 between the rows, open and paywalled (696:4394 /
+  // 368:3482), where the rows used to touch.
+  it("wraps the chips centred, 8 apart, the rows 5 apart", () => {
     const row = ruleOf(".rv3 .rv4-fvm__chips");
     expect(row).toContain("justify-content: center");
-    expect(row).toContain("gap: 0 7.8992px");
+    expect(row).toContain("gap: 5px 8px");
     expect(row).toContain("flex-wrap: wrap");
   });
 
