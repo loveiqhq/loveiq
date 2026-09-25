@@ -433,7 +433,7 @@ interface ReportExperienceProps {
   attachmentFamily: string | null;
   attachmentPlane: AttachmentPlane | null;
   accelCopy: AccelCopy | null;
-  /** Report 3.0's Accelerator & Brakes chapter; null until the archetype is scaled. */
+  /** Report 3.0's Accelerators & Brakes chapter; null until the archetype is scaled. */
   accelerators: Report3AcceleratorsView | null;
   /** The "Go deeper & learn more" article that closes that chapter. */
   acceleratorsArticle: V4LearnMoreState | null;
@@ -1961,7 +1961,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                           <div className="rv4-sep" aria-hidden="true" data-node-id="1:991" />
                           <V4Chapter
                             sectionId={section.id}
-                            title="Accelerator & Brakes"
+                            title="Accelerators & Brakes"
                             archetype={viewArchetype}
                             defaultOpen
                             bare
@@ -2167,7 +2167,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                 // V4 renumbers every part: "Welcome" is Part I, so what V3 calls
                 // Part I is Part II here. Falling through to the V3 map below is
                 // what gave the report two Part I's — and since V4 also opens two
-                // parts with different chapters (Typical Beliefs, Accelerator &
+                // parts with different chapters (Typical Beliefs, Accelerators &
                 // Brakes), V3 keys fall where V4 has none. So under V4 it is the
                 // V4 heading or nothing.
                 const v4PartHeading = isV4

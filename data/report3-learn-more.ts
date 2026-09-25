@@ -40,7 +40,7 @@ export interface Report3LearnMoreArticle {
    * The closed state's clamp. The frame draws TEN LINES of copy; whether that
    * measures 240px or 224px depends only on whether a paragraph gap happens to
    * land inside them, and CSS cannot count lines across sibling paragraphs.
-   * Defaults to 240; Accelerator & Brakes' own teaser needs 247 (eleven lines).
+   * Defaults to 240; Accelerators & Brakes' own teaser needs 247 (eleven lines).
    */
   teaserHeightPx?: number;
   /**
@@ -621,7 +621,7 @@ const TYPICAL_BELIEFS_GATED: readonly Report3Block[] = [
 ];
 
 /**
- * Accelerator & Brakes — Figma 235:272 ("A&B — Learn more (full)"), 38 blocks.
+ * Accelerators & Brakes — Figma 235:272 ("A&B — Learn more (full)"), 38 blocks.
  *
  * The blurred window (240:240) opens on the heading "The patterns underneath
  * desire", which is block 17 counting from zero — a clean paragraph boundary, so
@@ -713,7 +713,7 @@ const ACCELERATOR_BRAKES_BLOCKS: readonly Report3Block[] = [
   ),
   p(
     t(
-      "The exact structure varies somewhat depending on the questionnaire, population, language, and study. That is important. “Accelerator” and “brakes” are a useful translation of a scientific model, not two literal switches in the brain that researchers can cleanly locate and measure. What is well supported is the broader distinction between people's tendencies toward sexual excitation and inhibition, their meaningful individual variation, and their associations with sexual desire, functioning, and behavior. Research has also found average sex differences in some samples: women, on average, have often reported somewhat greater inhibition and lower excitation than men. But the distributions overlap substantially. Many women have highly sensitive accelerators. Many men have highly sensitive brakes. Studies involving lesbian, gay, bisexual, asexual, and neurodivergent people also make clear that sexual orientation, gender, and neurological profile do not determine a single accelerator-and-brake configuration. The evidence in some of these groups remains much thinner than the evidence from predominantly heterosexual samples. "
+      "The exact structure varies somewhat depending on the questionnaire, population, language, and study. That is important. “Accelerators” and “brakes” are a useful translation of a scientific model, not two literal switches in the brain that researchers can cleanly locate and measure. What is well supported is the broader distinction between people's tendencies toward sexual excitation and inhibition, their meaningful individual variation, and their associations with sexual desire, functioning, and behavior. Research has also found average sex differences in some samples: women, on average, have often reported somewhat greater inhibition and lower excitation than men. But the distributions overlap substantially. Many women have highly sensitive accelerators. Many men have highly sensitive brakes. Studies involving lesbian, gay, bisexual, asexual, and neurodivergent people also make clear that sexual orientation, gender, and neurological profile do not determine a single accelerator-and-brake configuration. The evidence in some of these groups remains much thinner than the evidence from predominantly heterosexual samples. "
     ),
     b(
       "Individual patterns are far more useful for understanding a person's sexuality than assumptions based on demographic categories."

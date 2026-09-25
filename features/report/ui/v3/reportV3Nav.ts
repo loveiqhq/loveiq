@@ -95,9 +95,10 @@ const v3Chapter = (id: string): ReportV3Chapter => {
  * draws them (Fatih's calls, 2026-09-23):
  * - Typical Beliefs opens "How your archetype works" — the team's chapter sequence
  *   (2026-09-14) and Figma 1:849 both put it first.
- * - Accelerator & Brakes opens "Your erotic engine" — Figma 334:521 (1:982) and the
+ * - Accelerators & Brakes opens "Your erotic engine" — Figma 334:521 (1:982) and the
  *   Notion content roadmap ("Part IV - Your Erotic Engine", order 1). The frame
- *   titles it in the singular, so V4 does too; V3 keeps its own title.
+ *   titled it in the singular, and the 24.09 review asked for the "s" everywhere,
+ *   so V4 now carries V3's own plural title.
  *
  * The same 21 ids as V3, so every filter keyed on the order still holds, and each
  * part is renumbered in its new order so the V3 eyebrows the other chapters still
@@ -106,13 +107,9 @@ const v3Chapter = (id: string): ReportV3Chapter => {
  * part of the drawer. `?v3=1` keeps REPORT_V3_CHAPTERS exactly as it was. The rest
  * of Figma's Part III-VI regrouping is not done.
  */
-const V4_PART_OPENERS: readonly { id: string; part: string; title?: string }[] = [
+const V4_PART_OPENERS: readonly { id: string; part: string }[] = [
   { id: "typical_beliefs", part: "2" },
-  {
-    id: "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
-    part: "3",
-    title: "Accelerator & Brakes",
-  },
+  { id: "typical_arousal_accelerators_turn_ons_of_the_core_archetype", part: "3" },
 ];
 
 const partOf = (chapter: ReportV3Chapter): string => chapter.number.split(".")[0]!;
@@ -120,17 +117,14 @@ const partOf = (chapter: ReportV3Chapter): string => chapter.number.split(".")[0
 export const REPORT_V4_CHAPTERS: readonly ReportV3Chapter[] = [
   ...new Set(REPORT_V3_CHAPTERS.map(partOf)),
 ].flatMap((part) => {
-  const openers = V4_PART_OPENERS.filter((o) => o.part === part).map((o) => ({
-    ...v3Chapter(o.id),
-    ...(o.title ? { title: o.title } : {}),
-  }));
+  const openers = V4_PART_OPENERS.filter((o) => o.part === part).map((o) => v3Chapter(o.id));
   const rest = REPORT_V3_CHAPTERS.filter(
     (c) => partOf(c) === part && !V4_PART_OPENERS.some((o) => o.id === c.id)
   );
   return [...openers, ...rest].map((c, i) => ({ ...c, number: `${part}.${i + 1}` }));
 });
 
-/** Body order for V4 — V3's, with Typical Beliefs and Accelerator & Brakes each first in its part. */
+/** Body order for V4 — V3's, with Typical Beliefs and Accelerators & Brakes each first in its part. */
 export const REPORT_V4_SECTION_ORDER: readonly string[] = [
   "core_archetype",
   ...REPORT_V4_CHAPTERS.map((c) => c.id),
