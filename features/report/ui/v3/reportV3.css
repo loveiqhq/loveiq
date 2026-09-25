@@ -6697,11 +6697,13 @@ html {
   gap: 10.4947px;
   width: min(328px, 100%);
 }
-/* 696:4394 — wrapped and centred, 7.9 apart, the rows touching. */
+/* 696:4394 / 368:3482 — wrapped and centred, 8 apart and the rows 5 apart: "new
+ * design on the button containers, giving them more space" (25.09, 1941965616),
+ * where the rows used to touch. */
 .rv3 .rv4-fvm__chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 0 7.8992px;
+  gap: 5px 8px;
   justify-content: center;
 }
 /* A chip 32.8 tall: 6.77 + 1.13 of padding and stroke around a 16.96 line, 14.67 +
