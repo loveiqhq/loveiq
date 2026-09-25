@@ -6560,3 +6560,71 @@ html {
 .rv3 .rv4-chapter__body.is-bare > .rv4-fvr ~ .rv4-learn {
   margin-top: 0;
 }
+
+/* ══ "Go deeper" — an article's own gate · 482:6479 (Fantasy vs. Reality) ══════════
+ * Where an article's gated frame sets its own wall, the values arrive on the card:
+ * the band the blur ramps in over, the window (band included), the Premium card's
+ * top and the pill's place over the window's foot. The other articles keep
+ * 173:230's in the rules above. 482:6479 draws no fade. */
+.rv3 .rv4-learn.has-own-gate .rv4-learn__gated {
+  max-height: var(--rv4-learn-window);
+  min-height: var(--rv4-learn-window);
+}
+.rv3 .rv4-learn.has-own-gate .rv4-learn__blur {
+  height: var(--rv4-learn-window);
+}
+.rv3 .rv4-learn.has-own-gate .rv4-learn__blur > span:nth-child(1) {
+  --rv4-to: calc(var(--rv4-learn-band) / 3);
+}
+.rv3 .rv4-learn.has-own-gate .rv4-learn__blur > span:nth-child(2) {
+  --rv4-from: calc(var(--rv4-learn-band) / 3);
+  --rv4-to: calc(var(--rv4-learn-band) * 2 / 3);
+}
+.rv3 .rv4-learn.has-own-gate .rv4-learn__blur > span:nth-child(3) {
+  --rv4-from: calc(var(--rv4-learn-band) * 2 / 3);
+  --rv4-to: var(--rv4-learn-band);
+}
+.rv3 .rv4-learn.has-own-gate .rv4-learn__gate > .rv4-premium {
+  top: var(--rv4-learn-premium-top);
+}
+.rv3 .rv4-learn.has-own-gate .rv4-learn__showmore {
+  bottom: var(--rv4-learn-pill-bottom);
+}
+.rv3 .rv4-learn.has-own-gate.no-fade .rv4-learn__fade {
+  display: none;
+}
+/* 482:6479 centres the card and the pill on the article's 358 measure, which runs
+ * 12px into the card's right padding, not on the content box. */
+.rv3 .rv4-learn.has-own-gate .rv4-learn__gate > .rv4-premium,
+.rv3 .rv4-learn.has-own-gate .rv4-learn__showmore {
+  left: calc(min(358px, 100% + 12px) / 2);
+}
+/* A wall inside a paragraph (482:6479 stacks its free and blurred text boxes flush):
+ * the window carries straight on from the free copy's last line. */
+.rv3 .rv4-learn.is-continued .rv4-learn__gate {
+  padding-top: 0;
+}
+.rv3 .rv4-learn.is-continued .rv4-learn__blur {
+  top: 0;
+}
+.rv3 .rv4-learn__free > :last-child {
+  margin-bottom: 0;
+}
+
+/* ══ "Go deeper" — the article's headings · 153:2277 / 235:254 / 244:258 ═══════════
+ * Every article frame sets a heading's baseline 45.2 under the paragraph before it
+ * and 36.4 over the one after: its 26 and 14, counted baseline to baseline as Figma
+ * spaces lines. CSS stacks whole line boxes, so as margins the same 26 / 14 put each
+ * heading 1.2px low; these gaps land the frames' steps. */
+.rv3 .rv4-learn .rv4-prose__h {
+  margin-bottom: 15.2px;
+}
+/* A list hands on with the text's 8px list spacing, not a paragraph's 16: 235:254
+ * and 244:258 step 30.4 from a list's last line to the next paragraph's first. */
+.rv3 .rv4-learn .rv4-prose__list {
+  margin-bottom: 8px;
+}
+.rv3 .rv4-learn .rv4-prose__p:has(+ .rv4-prose__h),
+.rv3 .rv4-learn .rv4-prose__list:has(+ .rv4-prose__h) {
+  margin-bottom: 24.79px;
+}

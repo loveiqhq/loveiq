@@ -26,6 +26,10 @@ import type { Report3Block } from "@/data/report3-learn-more";
 
 const ARTICLES = Object.entries(REPORT_V4_LEARN_MORE);
 
+/** An article's blurred window: its own frame's (482:6479), else the shared one. */
+const windowOf = (article: (typeof ARTICLES)[number][1]) =>
+  article.gate?.windowPx ?? LOCKED_ARTICLE_WINDOW_PX;
+
 /** Every character a block renders. */
 const textOf = (block: Report3Block): string =>
   block.kind === "heading"
@@ -60,12 +64,12 @@ describe("splitArticleForReader", () => {
     });
 
     it("FILLS the blurred window — the regression that motivated the budget", () => {
-      expect(estimateBlocksPx(locked.gated!)).toBeGreaterThanOrEqual(LOCKED_ARTICLE_WINDOW_PX);
+      expect(estimateBlocksPx(locked.gated!)).toBeGreaterThanOrEqual(windowOf(article));
     });
 
     it("ships as little as possible: one block fewer would under-fill", () => {
       const oneFewer = locked.gated!.slice(0, -1);
-      expect(estimateBlocksPx(oneFewer)).toBeLessThan(LOCKED_ARTICLE_WINDOW_PX);
+      expect(estimateBlocksPx(oneFewer)).toBeLessThan(windowOf(article));
     });
 
     it("clips only the block that straddles the fold", () => {
@@ -168,6 +172,58 @@ describe("the height estimator", () => {
     const tight: Report3Block = { kind: "para", runs: [{ text: "x" }], tight: true };
     const para: Report3Block = { kind: "para", runs: [{ text: "x" }] };
     expect(estimateBlocksPx([tight, para])).toBeCloseTo(22.4 * 2);
+  });
+});
+
+/**
+ * Fantasy vs. Reality's gate is its own (Figma 482:6479): the free copy ends on
+ * "…skip everything before it." — a line end at 393 — and the window runs on inside
+ * the same paragraph, with no gap; the blur ramps in over 90px; the window is 606
+ * tall, the Premium card 229.5px into it and the pill on its foot, with no fade.
+ */
+describe("Fantasy vs. Reality's own gate (482:6479)", () => {
+  const article = REPORT_V4_LEARN_MORE.typical_sexual_fantasy_amp_practice_tendencies!;
+  const unlocked = splitArticleForReader(article, false);
+  const locked = splitArticleForReader(article, true);
+
+  it("ends the free copy on the line 482:6479 ends it", () => {
+    expect(textOf(unlocked.free.at(-1)!)).toMatch(
+      /You can enter at the exciting moment and skip everything before it\.$/
+    );
+    expect(textOf(unlocked.gated![0]!)).toMatch(
+      /^You do not have to negotiate\. Bodies behave as imagined\./
+    );
+  });
+
+  it("hands the reader the frame's gate, and says the window runs on mid-paragraph", () => {
+    for (const view of [locked, unlocked]) {
+      expect(view.gate).toEqual({
+        bandPx: 90,
+        windowPx: 606,
+        premiumTopPx: 229.5,
+        pillBottomPx: 0,
+        fade: false,
+      });
+      expect(view.continued).toBe(true);
+      expect(view.nodeIds).toEqual({ closed: "368:5450", open: "244:258", gated: "482:6479" });
+    }
+  });
+
+  it("trims a locked reader's window to its own 606px, not the shared 656", () => {
+    expect(estimateBlocksPx(locked.gated!)).toBeGreaterThanOrEqual(606);
+    expect(estimateBlocksPx(locked.gated!)).toBeLessThan(LOCKED_ARTICLE_WINDOW_PX);
+  });
+
+  it("leaves the other articles on the shared gate", () => {
+    for (const id of [
+      "typical_beliefs",
+      "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
+    ]) {
+      const view = splitArticleForReader(REPORT_V4_LEARN_MORE[id]!, true);
+      expect(view.gate).toBeUndefined();
+      expect(view.continued).toBeUndefined();
+      expect(view.nodeIds).toBeUndefined();
+    }
   });
 });
 

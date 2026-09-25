@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useId, useRef, useState, type CSSProperties, type FC } from "react";
-import type { Report3LearnMoreView } from "@/data/report3-learn-more";
+import type { Report3Block, Report3LearnMoreView } from "@/data/report3-learn-more";
 import V4BackToTop from "./V4BackToTop";
 import V4PremiumCard from "./V4PremiumCard";
 import V4Prose from "./V4Prose";
@@ -70,6 +70,22 @@ interface Props {
   defaultOpen?: boolean;
 }
 
+/**
+ * The paragraph a mid-paragraph wall divides, whole again. The server hands the
+ * halves over apart for everyone, so the free copy is identical either side of
+ * the wall; the tail arrives without the space it opened on.
+ */
+const rejoin = (free: readonly Report3Block[], gated: readonly Report3Block[]): Report3Block[] => {
+  const head = free.at(-1);
+  const tail = gated[0];
+  if (head?.kind !== "para" || tail?.kind !== "para") return [...free, ...gated];
+  return [
+    ...free.slice(0, -1),
+    { kind: "para", runs: [...head.runs, { text: " " }, ...tail.runs] },
+    ...gated.slice(1),
+  ];
+};
+
 const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen = false }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const bodyId = useId();
@@ -88,13 +104,28 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
     ...(article.closedPaddingBottomPx !== undefined
       ? { "--rv4-closed-pb": `${article.closedPaddingBottomPx}px` }
       : {}),
+    // 482:6479 — an article's own gate. The other articles keep 173:230's in CSS.
+    ...(article.gate
+      ? {
+          "--rv4-learn-band": `${article.gate.bandPx}px`,
+          "--rv4-learn-window": `${article.gate.windowPx}px`,
+          "--rv4-learn-premium-top": `${article.gate.premiumTopPx}px`,
+          "--rv4-learn-pill-bottom": `${article.gate.pillBottomPx}px`,
+        }
+      : {}),
   };
+  const nodes = article.nodeIds ?? { closed: "153:2240", open: "153:2260", gated: "153:2280" };
+  const marks = [
+    ...(article.gate ? ["has-own-gate"] : []),
+    ...(article.gate && !article.gate.fade ? ["no-fade"] : []),
+    ...(article.continued ? ["is-continued"] : []),
+  ];
 
   return (
     <section
       ref={sectionRef}
-      className={`rv4-learn${isOpen ? " is-open" : ""}`}
-      data-node-id={isOpen ? (locked ? "153:2280" : "153:2260") : "153:2240"}
+      className={["rv4-learn", ...(isOpen ? ["is-open"] : []), ...marks].join(" ")}
+      data-node-id={isOpen ? (locked ? nodes.gated : nodes.open) : nodes.closed}
       data-name="Go deeper & learn more"
       style={Object.keys(closedGeometry).length ? (closedGeometry as CSSProperties) : undefined}
     >
@@ -150,7 +181,24 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
           </>
         ) : (
           <>
-            <V4Prose blocks={article.free} />
+            {/* A wall inside a paragraph runs the window straight on from the free
+             * copy, so the free copy's last line carries no paragraph gap; and a
+             * reader past the wall reads the paragraph whole, as 244:258 sets it. */}
+            {!locked ? (
+              <V4Prose
+                blocks={
+                  article.continued && article.gated
+                    ? rejoin(article.free, article.gated)
+                    : [...article.free, ...(article.gated ?? [])]
+                }
+              />
+            ) : article.continued ? (
+              <div className="rv4-learn__free">
+                <V4Prose blocks={article.free} />
+              </div>
+            ) : (
+              <V4Prose blocks={article.free} />
+            )}
 
             {/* A locked article's Back to top rides only the readable copy: it
              * sits before the gate, so it docks where the free text ends and never
@@ -179,8 +227,6 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
                 </button>
                 <V4PremiumCard />
               </div>
-            ) : article.gated ? (
-              <V4Prose blocks={article.gated} />
             ) : null}
           </>
         )}

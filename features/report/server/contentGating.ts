@@ -441,9 +441,9 @@ function splitParaAt(
  * Divide the authored article into what is free and what is paid.
  *
  * Usually `paywallAt` is a clean paragraph boundary. Fantasy vs. Reality cuts
- * INSIDE a paragraph — its free copy stops at "…Bodies behave as imagined." and
- * the blurred window resumes in the same paragraph — which is why the article is
- * stored whole and divided here rather than pre-split in the data.
+ * INSIDE a paragraph — its free copy stops mid-way (482:6479) and the blurred
+ * window resumes in the same paragraph — which is why the article is stored whole
+ * and divided here rather than pre-split in the data.
  */
 function partitionArticle(article: Report3LearnMoreArticle): {
   free: Report3Block[];
@@ -460,7 +460,10 @@ function partitionArticle(article: Report3LearnMoreArticle): {
 }
 
 /** Keep only as many paid blocks as the blurred window can actually show. */
-function trimToWindow(gated: readonly Report3Block[]): Report3Block[] {
+function trimToWindow(
+  gated: readonly Report3Block[],
+  windowPx: number = LOCKED_ARTICLE_WINDOW_PX
+): Report3Block[] {
   const kept: Report3Block[] = [];
   /** Height of everything above the block that straddles the fold. */
   let above = 0;
@@ -469,7 +472,7 @@ function trimToWindow(gated: readonly Report3Block[]): Report3Block[] {
     if (kept.length >= LOCKED_ARTICLE_MAX_GATED_BLOCKS) break;
     kept.push(block);
     const content = estimateBlockContentPx(block);
-    if (above + content >= LOCKED_ARTICLE_WINDOW_PX) break;
+    if (above + content >= windowPx) break;
     above += content + gapAfterPx(block, gated.at(i + 1));
   }
 
@@ -477,7 +480,7 @@ function trimToWindow(gated: readonly Report3Block[]): Report3Block[] {
   // A heading or a list is kept whole, so there is nothing to clip.
   if (!last || last.kind !== "para") return kept;
 
-  const need = LOCKED_ARTICLE_WINDOW_PX - above + LOCKED_ARTICLE_OVERFILL_PX;
+  const need = windowPx - above + LOCKED_ARTICLE_OVERFILL_PX;
   let budget = Math.ceil(need / ARTICLE_LINE_PX) * ARTICLE_CHARS_PER_LINE;
   let clipped = clipBlock(last, budget);
 
@@ -485,11 +488,7 @@ function trimToWindow(gated: readonly Report3Block[]): Report3Block[] {
   // the last space above 60% of `max`, so a 200-character ask can come back as
   // 121 — a whole line short. Escalate a line at a time until the window fills.
   const whole = blockText(last).length;
-  while (
-    clipped &&
-    budget < whole &&
-    above + estimateBlockContentPx(clipped) < LOCKED_ARTICLE_WINDOW_PX
-  ) {
+  while (clipped && budget < whole && above + estimateBlockContentPx(clipped) < windowPx) {
     budget += ARTICLE_CHARS_PER_LINE;
     clipped = clipBlock(last, budget);
   }
@@ -524,11 +523,15 @@ export function splitArticleForReader(
     ...(article.closedPaddingBottomPx !== undefined
       ? { closedPaddingBottomPx: article.closedPaddingBottomPx }
       : {}),
+    // The frames and the gate, when the article has its own (482:6479).
+    ...(article.nodeIds ? { nodeIds: article.nodeIds } : {}),
+    ...(article.gate ? { gate: article.gate } : {}),
+    ...(article.paywallCharOffset !== undefined ? { continued: true as const } : {}),
     free,
     gated,
     gatedBlockCount: gated.length,
   };
-  return locked ? { ...view, gated: trimToWindow(gated) } : view;
+  return locked ? { ...view, gated: trimToWindow(gated, article.gate?.windowPx) } : view;
 }
 
 /**

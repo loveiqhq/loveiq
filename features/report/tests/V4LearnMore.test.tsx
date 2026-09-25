@@ -405,3 +405,95 @@ describe("V4LearnMore — the gated article's CTA (663:1359)", () => {
     expect(css).toMatch(/#fb683e/i);
   });
 });
+
+/**
+ * Fantasy vs. Reality's article on its own frames: 368:5450 closed, 244:258 open,
+ * 482:6479 gated — a 90px band, a 606px window with the card 229.5px in and the pill
+ * on its foot, no fade, and a window that runs on from the free copy mid-paragraph.
+ */
+describe("V4LearnMore — Fantasy vs. Reality's own gate (482:6479)", () => {
+  const FVR = REPORT_V4_LEARN_MORE.typical_sexual_fantasy_amp_practice_tendencies!;
+  const LOCKED_FVR = splitArticleForReader(FVR, true);
+  const OPEN_FVR = splitArticleForReader(FVR, false);
+
+  it("names its own frame in each state", () => {
+    const { container, unmount } = render(<V4LearnMore article={OPEN_FVR} />);
+    const card = container.querySelector<HTMLElement>(".rv4-learn")!;
+    expect(card.getAttribute("data-node-id")).toBe("368:5450");
+    fireEvent.click(card.querySelector(".rv4-learn__button")!);
+    expect(card.getAttribute("data-node-id")).toBe("244:258");
+    unmount();
+    const locked = render(<V4LearnMore article={LOCKED_FVR} locked defaultOpen />).container;
+    expect(locked.querySelector(".rv4-learn")!.getAttribute("data-node-id")).toBe("482:6479");
+  });
+
+  it("carries the gate's geometry on the card", () => {
+    const { container } = render(<V4LearnMore article={LOCKED_FVR} locked defaultOpen />);
+    const card = container.querySelector<HTMLElement>(".rv4-learn")!;
+    expect(card).toHaveClass("has-own-gate");
+    expect(card).toHaveClass("no-fade");
+    expect(card.style.getPropertyValue("--rv4-learn-band")).toBe("90px");
+    expect(card.style.getPropertyValue("--rv4-learn-window")).toBe("606px");
+    expect(card.style.getPropertyValue("--rv4-learn-premium-top")).toBe("229.5px");
+    expect(card.style.getPropertyValue("--rv4-learn-pill-bottom")).toBe("0px");
+  });
+
+  it("runs the window on from the free copy, the paragraph unbroken to the eye", () => {
+    const { container } = render(<V4LearnMore article={LOCKED_FVR} locked defaultOpen />);
+    const card = container.querySelector<HTMLElement>(".rv4-learn")!;
+    expect(card).toHaveClass("is-continued");
+    const free = card.querySelector(".rv4-learn__free")!;
+    expect(free.lastElementChild!.textContent).toMatch(/skip everything before it\.$/);
+    expect(card.querySelector(".rv4-learn__gated")!.textContent).toMatch(
+      /^You do not have to negotiate\./
+    );
+  });
+
+  it("leaves Typical Beliefs on the shared gate, with no marks of its own", () => {
+    const { container } = render(<V4LearnMore article={ARTICLE} locked defaultOpen />);
+    const card = container.querySelector<HTMLElement>(".rv4-learn")!;
+    for (const cls of ["has-own-gate", "no-fade", "is-continued"]) {
+      expect(card).not.toHaveClass(cls);
+    }
+    expect(card.querySelector(".rv4-learn__free")).toBeNull();
+    expect(card.getAttribute("data-node-id")).toBe("153:2280");
+  });
+
+  it("reads the gate's values in CSS, and the mid-paragraph run-on", () => {
+    expect(V3_CSS).toContain(
+      ".rv3 .rv4-learn.has-own-gate .rv4-learn__gated {\n  max-height: var(--rv4-learn-window);\n  min-height: var(--rv4-learn-window);"
+    );
+    expect(V3_CSS).toContain(
+      ".rv3 .rv4-learn.has-own-gate .rv4-learn__gate > .rv4-premium {\n  top: var(--rv4-learn-premium-top);"
+    );
+    expect(V3_CSS).toContain(
+      ".rv3 .rv4-learn.has-own-gate .rv4-learn__showmore {\n  bottom: var(--rv4-learn-pill-bottom);"
+    );
+    expect(V3_CSS).toContain(
+      ".rv3 .rv4-learn.has-own-gate.no-fade .rv4-learn__fade {\n  display: none;"
+    );
+    expect(V3_CSS).toContain(".rv3 .rv4-learn.is-continued .rv4-learn__gate {\n  padding-top: 0;");
+    // 482:6479 centres the card and the pill on the 358 measure, not the content box.
+    expect(V3_CSS).toContain(
+      ".rv3 .rv4-learn.has-own-gate .rv4-learn__gate > .rv4-premium,\n.rv3 .rv4-learn.has-own-gate .rv4-learn__showmore {\n  left: calc(min(358px, 100% + 12px) / 2);"
+    );
+  });
+});
+
+/**
+ * Every article frame (153:2277, 235:254, 244:258) sets a heading's baseline 45.2
+ * under the paragraph before it and 36.4 over the one after; the shared prose rules
+ * came out 46.4 and 35.2, so each heading sat 1.2px low.
+ */
+describe("reportV3.css — article heading rhythm", () => {
+  it("hands on from a list with the text's 8px list spacing (235:254, 244:258)", () => {
+    expect(V3_CSS).toContain(".rv3 .rv4-learn .rv4-prose__list {\n  margin-bottom: 8px;");
+  });
+
+  it("sets the frames' gaps around an article heading", () => {
+    expect(V3_CSS).toContain(".rv3 .rv4-learn .rv4-prose__h {\n  margin-bottom: 15.2px;");
+    expect(V3_CSS).toContain(
+      ".rv3 .rv4-learn .rv4-prose__p:has(+ .rv4-prose__h),\n.rv3 .rv4-learn .rv4-prose__list:has(+ .rv4-prose__h) {\n  margin-bottom: 24.79px;"
+    );
+  });
+});
