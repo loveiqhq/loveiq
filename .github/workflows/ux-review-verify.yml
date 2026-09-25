@@ -11,9 +11,10 @@ on:
   schedule:
     # Hourly at :41, off the :00/:30 marks every other workflow lands on.
     # It was every three hours until 2026-09-25, and GitHub drops and
-    # delays scheduled runs: from 2026-09-14 this cron ran 4-6 times a day
-    # instead of 8, each 90-150 minutes late, so the re-queue drained at half
-    # speed and findings waited half a day. Runs take 3-12 minutes, the
+    # delays this repo's scheduled runs: that cron ran 4-6 times a day instead
+    # of 8, so the re-queue drained at half speed, and every schedule here
+    # starts 4.5 to 5.5 hours after its cron time (docs/runbooks/COMPANY_BRAIN.md),
+    # so a run due at 09:41 starts around 15:00. Runs take 3-12 minutes, the
     # concurrency group below never overlaps them, and Actions minutes are free
     # on a public repository, so a dropped run now costs an hour, not three.
     - cron: "41 * * * *"
