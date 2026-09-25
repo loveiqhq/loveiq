@@ -64,6 +64,13 @@ const PREMIUM_DATA_MODULES = [
   // "Common challenges" whole and most of the practice, so a client component
   // importing the module would hand over exactly what the wall withholds.
   "@/data/report3-fantasy",
+  // Added 2026-09-25. The fantasy map's dots are DERIVED from every archetype's
+  // practice scores (fantasyMap.ts imports report-practice-tendencies at runtime), so
+  // a client component value-importing either module would ship all fourteen
+  // archetypes' scores — the ones a locked reader's map is blurred to withhold. The
+  // V2 and V4 maps import only its types (final review 2).
+  "@features/report/server/fantasyMap",
+  "@features/report/server/fantasyCopy",
 ];
 
 const PROJECT_ROOT = join(__dirname, "..", "..");

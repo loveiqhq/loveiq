@@ -6871,6 +6871,11 @@ html {
   left: 0;
   transform: translateX(calc(-50% + var(--fvm-shift, 0px)));
 }
+/* No clear spot: fewer names rather than overlapping ones (V2's rule). Hidden, not
+ * removed, so the name is measured again when the plot grows. */
+.rv3 .rv4-fvm__name.is-hidden {
+  visibility: hidden;
+}
 /* A chip dims the dots outside its zone; an open readout dims the rest. */
 .rv3 .rv4-fvm__dot.is-dim {
   pointer-events: none;

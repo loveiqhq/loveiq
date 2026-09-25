@@ -8,8 +8,9 @@
  * dot, toward the plot's middle, or over or under it — centred, or slid along to
  * hang past the dot's side — where a neighbour is in the way. So each name tries
  * those spots in that order and takes the first where its letters cover no other
- * dot, no other name and no quadrant title, inside the plot; failing all, the spot
- * that covers least.
+ * dot, no other name and no quadrant title, inside the plot. Failing all, it is not
+ * printed — V2's own rule, fewer labels rather than overlapping ones — and its dot
+ * keeps its readout and its screen-reader label.
  *
  * Pure, so it is tested apart from the page; the map measures the names and the
  * plot and hands them in.
@@ -51,6 +52,12 @@ export const NAME_REACH = 6;
 const SLIDE = 4;
 /** Room kept clear around another dot's ring and between two names. */
 const CLEAR = 1;
+/**
+ * Of that room, what a name may still take by a ring: a spot whose letters keep half
+ * a pixel off it is clear. Rejecting a tenth-of-a-pixel touch sent one name over its
+ * dot and left the next with nowhere but off the plot (final review 2, 25.09).
+ */
+const RING_GRACE = 0.5;
 /**
  * The letters inside a name's 12px line (Manrope 9.5, the baseline 9.64 down):
  * capitals from 2.8, descenders to 11.6. The line's leading may lie on a neighbour;
@@ -132,22 +139,22 @@ function spotsFor(dot: NameDot, size: NameSize): NameSpot[] {
   ];
 }
 
-const overlap = (a: Box, b: Box): number =>
-  Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left) + CLEAR) *
-  Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) + CLEAR);
+const meets = (a: Box, b: Box): boolean =>
+  Math.min(a.right, b.right) - Math.max(a.left, b.left) + CLEAR > 0 &&
+  Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) + CLEAR > 0;
 
-/** How far a box reaches into a ring (and the room kept round it); 0 when clear. */
-function intoRing(box: Box, cx: number, cy: number, r: number): number {
+/** Whether a box comes nearer a ring than the room kept round it, less the grace. */
+function onRing(box: Box, cx: number, cy: number, r: number): boolean {
   const dx = Math.max(box.left - cx, 0, cx - box.right);
   const dy = Math.max(box.top - cy, 0, cy - box.bottom);
-  const reach = r + CLEAR - Math.hypot(dx, dy);
-  return reach > 0 ? reach : 0;
+  return Math.hypot(dx, dy) < r + CLEAR - RING_GRACE;
 }
 
 /**
- * A spot for every named dot (null for an unnamed one), in the dots' own order —
- * the server's, most characteristic first — so an earlier name has first pick.
- * `titles` are the quadrant titles' line boxes; every test is on the letters.
+ * A spot for every named dot, in the dots' own order — the server's, most
+ * characteristic first — so an earlier name has first pick. Null for an unnamed dot,
+ * and for a name with no clear spot, which then goes unprinted. `titles` are the
+ * quadrant titles' line boxes; every test is on the letters.
  */
 export function placeNames(
   dots: readonly NameDot[],
@@ -158,28 +165,24 @@ export function placeNames(
   const centres = dots.map((dot) => centreOf(dot, plot));
   const titleInks = titles.map(titleInkOf);
   const placed: Box[] = [];
+  const clear = (ink: Box, i: number) =>
+    ink.left >= 0 &&
+    ink.top >= 0 &&
+    ink.right <= plot &&
+    ink.bottom <= plot &&
+    centres.every((c, j) => j === i || !onRing(ink, c.cx, c.cy, dots[j]!.r)) &&
+    placed.every((other) => !meets(ink, other)) &&
+    titleInks.every((title) => !meets(ink, title));
   return dots.map((dot, i) => {
     const size = sizes[i];
     if (!size) return null;
-    let best: { spot: NameSpot; ink: Box; cost: number } | null = null;
     for (const spot of spotsFor(dot, size)) {
       const ink = inkOf(spotBox(dot, plot, spot, size));
-      // Out of the plot counts as badly as sitting on a dot.
-      let cost =
-        (Math.max(0, -ink.left) +
-          Math.max(0, -ink.top) +
-          Math.max(0, ink.right - plot) +
-          Math.max(0, ink.bottom - plot)) *
-        size.height;
-      centres.forEach((c, j) => {
-        if (j !== i) cost += intoRing(ink, c.cx, c.cy, dots[j]!.r) * size.height * 4;
-      });
-      for (const other of placed) cost += overlap(ink, other);
-      for (const title of titleInks) cost += overlap(ink, title);
-      if (!best || cost < best.cost) best = { spot, ink, cost };
-      if (cost === 0) break;
+      if (clear(ink, i)) {
+        placed.push(ink);
+        return spot;
+      }
     }
-    placed.push(best!.ink);
-    return best!.spot;
+    return null;
   });
 }

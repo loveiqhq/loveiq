@@ -62,20 +62,19 @@ const expectBox = (box: Box, want: Box) => {
 
 const meets = (a: Box, b: Box) =>
   a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
-/** Whether a box reaches more than `allow` px into a ring. */
-const coversRing = (box: Box, cx: number, cy: number, r: number, allow: number) =>
+/** Whether a box reaches into a ring. */
+const coversRing = (box: Box, cx: number, cy: number, r: number) =>
   Math.hypot(
     Math.max(box.left - cx, 0, cx - box.right),
     Math.max(box.top - cy, 0, cy - box.bottom)
-  ) <
-  r - allow;
+  ) < r;
 
 /**
- * At 300 every name finds a spot clear of every ring. In the 257px plot of a 320px
- * phone one name has none: 87.3px lie between its dot and the next, its letters run
- * 87.8, and every other spot is worse. Half a pixel, there.
+ * Every whole plot size the map takes: 300 from a 356px column up, down to 260 on a
+ * 320px phone (final review 2: 257 was never a phone's, and 339-340px, a 279-280
+ * plot, pushed a name 13px off the plot).
  */
-const ALLOW: Readonly<Record<number, number>> = { 300: 0, 257: 0.5 };
+const PLOTS = Array.from({ length: 300 - 257 + 1 }, (_, i) => 257 + i);
 
 describe("centreOf — Figma's mapping, a ring inside the edge", () => {
   it("puts an inside dot at its score over ten across the plot", () => {
@@ -120,13 +119,16 @@ describe("boxFor — each spot as 696:4407 draws it", () => {
 });
 
 describe("placeNames — the Spark Seeker's own map", () => {
-  for (const plot of [300, 257]) {
+  for (const plot of PLOTS) {
     it(`sets every name clear of every dot, name and title, inside a ${plot}px plot`, () => {
       const spots = placeNames(DOTS, SIZES, plot, titlesAt(plot));
       // Judged on the letters: a line's leading may lie on a neighbour (fantasyMapNames).
       const inks = spots.map((spot, i) =>
         spot ? inkOf(spotBox(DOTS[i]!, plot, spot, SIZES[i]!)) : null
       );
+      // From 260 — a 320px phone's plot — up, all eight print. Below it, a size no
+      // phone takes, "Breasts / nipple play" gives way rather than overlap.
+      expect(inks.filter(Boolean)).toHaveLength(plot >= 260 ? 8 : 7);
       inks.forEach((ink, i) => {
         if (!ink) return;
         const label = SPARK[i]!.label;
@@ -137,10 +139,7 @@ describe("placeNames — the Spark Seeker's own map", () => {
         DOTS.forEach((dot, j) => {
           if (j === i) return;
           const { cx, cy } = centreOf(dot, plot);
-          expect(
-            coversRing(ink, cx, cy, dot.r, ALLOW[plot]!),
-            `${label} over ${SPARK[j]!.name}`
-          ).toBe(false);
+          expect(coversRing(ink, cx, cy, dot.r), `${label} over ${SPARK[j]!.name}`).toBe(false);
         });
         inks.forEach((other, j) => {
           if (other && j !== i)
@@ -214,7 +213,26 @@ describe("placeNames — the order it tries", () => {
     expect(Math.abs(places[0]!.shift)).toBeLessThanOrEqual(60 / 2 - 6);
   });
 
-  it("still places a name where every spot is taken, on the one that covers least", () => {
+  it("keeps a name's letters at least half a pixel off another dot's ring", () => {
+    // A neighbour to the left of the name's spot beside its dot: 7.1px from the
+    // letters' edge to its centre leaves them 0.6 off its 6.5 ring — clear; 6.9
+    // leaves 0.4 — the name moves under its dot instead.
+    const at = (gap: number) =>
+      placeNames(
+        [
+          { x: 0.8, y: 0.5, r: 6.5 },
+          { x: (240 - 9 - 60 - gap) / 300, y: 0.5, r: 6.5 },
+        ],
+        [{ width: 60, height: 12 }, null],
+        300
+      )[0];
+    expect(at(7.1)).toEqual({ side: "left", shift: 0 });
+    expect(at(6.9)!.side).not.toBe("left");
+  });
+
+  it("leaves a name unprinted where every spot would cover something: fewer names, never overlapping ones", () => {
+    // V2's rule (getFantasyMapDots): ship fewer labels rather than overlapping ones.
+    // The dot keeps its readout and its screen-reader label.
     const crowd: NameDot[] = [{ x: 0.5, y: 0.5, r: 6.5 }];
     for (const [dx, dy] of [
       [-0.1, 0],
@@ -228,7 +246,9 @@ describe("placeNames — the order it tries", () => {
     ]) {
       crowd.push({ x: 0.5 + dx!, y: 0.5 + dy!, r: 6.5 });
     }
-    const [place] = placeNames(crowd, [{ width: 60, height: 12 }], 300);
-    expect(place).not.toBeNull();
+    expect(placeNames(crowd, [{ width: 60, height: 12 }], 300)).toEqual([
+      null,
+      ...crowd.slice(1).map(() => null),
+    ]);
   });
 });

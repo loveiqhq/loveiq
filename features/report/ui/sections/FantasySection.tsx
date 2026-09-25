@@ -120,7 +120,7 @@ export const QUADRANTS: {
   },
 ];
 
-export const QUADRANT_DOT: Record<Quadrant, string> = {
+const QUADRANT_DOT: Record<Quadrant, string> = {
   lean: "#2e7d5b",
   keep: "#c2542f",
   hidden: "#795fc8",

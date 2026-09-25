@@ -23,9 +23,10 @@ import { guardedUnlock } from "./v4Unlock";
  * THE DOTS. A paying reader's come from the server view (getFantasyMapDots, as V2's
  * map takes them): the archetype's most characteristic fantasies, eight printed.
  * Their names are measured and set where they cover nothing (fantasyMapNames), and
- * sit under their dots, V2's rule, until the plot has a size. Without them the map
- * draws V2's illustrative layout, which is what Figma draws, the names on the sides
- * 696:4407 sets by hand.
+ * sit under their dots, V2's rule, until the plot has a size. A name with no clear
+ * spot is hidden, not dropped, so it is measured again when the plot grows. Without
+ * them the map draws V2's illustrative layout, which is what Figma draws, the names
+ * on the sides 696:4407 sets by hand.
  *
  * PAYWALLED. The reader's placements come from paid scores and are never sent, so
  * the plot shows the illustrative layout under a 2px blur with the lock on it, and
@@ -122,9 +123,8 @@ const V4FantasyMap: FC<Props> = ({ dots, locked, onUnlock }) => {
 
   /*
    * Sets the reader's names once the plot and the names have sizes: again when the
-   * plot resizes, when a web font lands (which changes a name's width) and when the
-   * map comes on screen (Safari fires no font events for a face that lands late), as
-   * useRampFit does.
+   * plot or a name resizes (a web font landing changes a name's width), when the
+   * fonts report ready, and when the map comes on screen, as useRampFit does.
    */
   useLayoutEffect(() => {
     const frame = frameRef.current;
@@ -153,6 +153,9 @@ const V4FantasyMap: FC<Props> = ({ dots, locked, onUnlock }) => {
     place();
     const resized = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(place);
     resized?.observe(frame);
+    // And each name: a web font landing changes its width without resizing the plot,
+    // and WebKit fires no event for a face that lands after mount.
+    for (const name of frame.querySelectorAll(".rv4-fvm__name")) resized?.observe(name);
     const onScreen =
       typeof IntersectionObserver === "undefined"
         ? null
@@ -235,7 +238,9 @@ const V4FantasyMap: FC<Props> = ({ dots, locked, onUnlock }) => {
                 <span className="rv4-fvm__pip" />
                 {dot.label && own ? (
                   <span
-                    className={`rv4-fvm__name is-${spots?.[i]?.side ?? "below"}`}
+                    className={`rv4-fvm__name is-${spots?.[i]?.side ?? "below"}${
+                      spots && !spots[i] ? " is-hidden" : ""
+                    }`}
                     style={{ "--fvm-shift": `${spots?.[i]?.shift ?? 0}px` } as CSSProperties}
                   >
                     {dot.label}
