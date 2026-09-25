@@ -34,15 +34,20 @@ const V4Prose: FC<Props> = ({ blocks }) => (
       if (block.kind === "list") {
         // A&B's "five questions" is list-decimal in 235:272; FvR's reality test
         // is list-disc in 244:276. Same geometry, different marker.
-        const List = block.ordered ? "ol" : "ul";
-        return (
-          <List key={i} className={`rv4-prose__list${block.ordered ? " is-ordered" : ""}`}>
-            {block.items.map((runs, j) => (
-              <li key={j}>
-                <V4Runs runs={runs} />
-              </li>
-            ))}
-          </List>
+        const items = block.items.map((runs, j) => (
+          <li key={j}>
+            <V4Runs runs={runs} />
+          </li>
+        ));
+        // `start` carries the numbering across a list a paywall split in two.
+        return block.ordered ? (
+          <ol key={i} className="rv4-prose__list is-ordered" start={block.start}>
+            {items}
+          </ol>
+        ) : (
+          <ul key={i} className="rv4-prose__list">
+            {items}
+          </ul>
         );
       }
       return (
