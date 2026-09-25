@@ -5297,3 +5297,28 @@
 .rv3.rv4 .rv3-chapter__body-inner > .rv4-rating {
   padding-top: 16px;
 }
+
+/* ══ Back to top, above the unlock bar — review 24.09 ════════════════════════════
+ * At `bottom: 20px` the button rode under the fixed "Unlock full report" bar
+ * (report.css `.report-sticky-unlock`, z-index 70), so a locked reader first met it
+ * at the article's end, on top of "Show More". While that bar is up it now rides
+ * 12px above it. The bar publishes the height it occupies (ReportStickyUnlockBar,
+ * `--report-unlock-bar-h`); where it sits is report.css's, per its own breakpoints:
+ * on any consent banner on a phone, 16px above it as a tablet card, 12px up as the
+ * desktop row. The class is the page's own flag for the bar (ReportPage:
+ * `report-experience--sticky-pad`). The fallbacks are each bar's measured height. */
+@media (max-width: 640px) {
+  .rv3.rv4.report-experience--sticky-pad .rv4-backtop {
+    bottom: calc(var(--liq-consent-h, 0px) + var(--report-unlock-bar-h, 71px) + 12px);
+  }
+}
+@media (min-width: 641px) and (max-width: 1024px) {
+  .rv3.rv4.report-experience--sticky-pad .rv4-backtop {
+    bottom: calc(16px + var(--liq-consent-h, 0px) + var(--report-unlock-bar-h, 160px) + 12px);
+  }
+}
+@media (min-width: 1025px) {
+  .rv3.rv4.report-experience--sticky-pad .rv4-backtop {
+    bottom: calc(12px + var(--report-unlock-bar-h, 78px) + 12px);
+  }
+}

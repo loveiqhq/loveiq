@@ -31,9 +31,10 @@ import { guardedUnlock } from "./v4Unlock";
  *
  * ON THE BACK-TO-TOP CONTROL. Expanded, 153:2260 is 11,624px — about eleven phone
  * screens — and the only way back to the collapse control was to flick upwards for
- * several seconds. V4BackToTop appears once the card head has passed a screen above
- * the fold and returns the reader to it. It is mounted only while open, because
- * closed the card is 341px and there is nothing to come back from.
+ * several seconds. V4BackToTop shows from the moment the article opens and returns
+ * the reader to the card head. It is mounted only while open, because closed the
+ * card is 341px and there is nothing to come back from; for a locked reader it sits
+ * before the gate, so its sticky range ends with the free copy.
  */
 
 /**
@@ -151,6 +152,10 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
           <>
             <V4Prose blocks={article.free} />
 
+            {/* A locked article's Back to top rides only the readable copy: it
+             * sits before the gate, so it docks where the free text ends and never
+             * lands on "Show More" (review 24.09: "they are covering each other"). */}
+            {locked ? <V4BackToTop targetRef={sectionRef} /> : null}
             {locked ? (
               /* 173:230. The band owns the click so a tap anywhere on the blurred
                * block opens the paywall, which is why neither the card's CTA nor
@@ -179,7 +184,7 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
         )}
       </div>
 
-      {isOpen ? <V4BackToTop targetRef={sectionRef} /> : null}
+      {isOpen && !locked ? <V4BackToTop targetRef={sectionRef} /> : null}
     </section>
   );
 };
