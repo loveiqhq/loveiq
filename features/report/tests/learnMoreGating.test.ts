@@ -137,9 +137,10 @@ describe("Fantasy vs. Reality copy spacing", () => {
 
 describe("the height estimator", () => {
   /**
-   * The calibration test. reportV3.css records that the whole Typical Beliefs
-   * article measures 11,582px in a real browser at a 358px column; if the
-   * estimator drifts from that, every budget above it is guesswork.
+   * The calibration test. The whole Typical Beliefs article measured 11,582px in a
+   * real browser at the 358px column the estimator was tuned on; if the estimator
+   * drifts from that, every budget above it is guesswork. (The column is 346 since
+   * 25.09 — see ARTICLE_CHARS_PER_LINE — which the estimate deliberately rounds.)
    */
   it("predicts the measured 11,582px article within 2%", () => {
     const article = REPORT_V4_LEARN_MORE.typical_beliefs!;

@@ -3807,24 +3807,11 @@
   width: 162.604px;
 }
 
-/* The article's text column is 358px, NOT the card's 346px content box.
- *
- * 153:2277 is drawn 358 wide at x=22.5 inside a 392 card whose padding leaves
- * 347 — so the copy overflows its own right padding by 11px, giving a 22.5 left
- * gutter against ~12 on the right. That reads as auto-layout slop, but it is
- * load-bearing: at 346 the article measures 12,008 against the frame's 11,624
- * (+3.30%) and breaks "…consciously decide | what" a word early, while at 358 it
- * lands on 11,582 (-0.36%) with Figma's own line breaks. Measured, not assumed.
- *
- * Scoped to the prose so the gate keeps the card's natural width and the floating
- * premium card still centres where 153:2300 puts it.
- */
-.rv3 .rv4-learn .rv4-prose__p,
-.rv3 .rv4-learn .rv4-prose__h,
-.rv3 .rv4-learn .rv4-prose__list,
-.rv3 .rv4-learn__teaser {
-  width: 358px;
-}
+/* The article's copy keeps to the card's content box. 153:2277 draws it 358 wide at
+ * x=22.5 in a 392 card whose padding leaves 347, so it ran 11px into the right
+ * padding — 22.5 on the left against ~12 on the right — and it was kept that way for
+ * Figma's line breaks (the article runs ~3% longer at 347). Mark, 25.09: "My mistake!
+ * Equal space left and right." */
 
 @media (prefers-reduced-motion: reduce) {
   .rv3 .rv4-learn__chev img {
@@ -4608,22 +4595,18 @@
 .rv3 .rv4-try__body {
   padding-top: 4px;
 }
-/* 374:257 is 358 wide at x=22 in the 392 card, so it runs 12px into the right
- * padding — the same load-bearing slop the article has, since it sets the line
- * breaks. Capped at 358 so tablet and desktop keep the frame's measure. */
-.rv3 .rv4-try .rv4-prose__p {
-  width: min(358px, calc(100% + 12px));
-}
+/* 374:257 draws the practice 358 wide at x=22 in the 392 card, 12px into the right
+ * padding; it keeps to the content box instead, the same space left and right (Mark,
+ * 25.09, as for the article). */
 .rv3 .rv4-try__body > :last-child,
 .rv3 .rv4-try__blurred > :last-child {
   margin-bottom: 0;
 }
 /* 375:270 — the closed teaser: a 218px box, faded over its last three lines the way
  * Mark coloured them (#7e7e7e / #b5b5b5 / #e5e5e5), and the pill overlapping its foot
- * by 10.5px, centred on the 358 column as 452:295 is. */
+ * by 10.5px, centred in the card. */
 .rv3 .rv4-try__closed {
   position: relative;
-  width: min(358px, calc(100% + 12px));
 }
 .rv3 .rv4-try__teaser {
   -webkit-mask-image: linear-gradient(
@@ -4681,12 +4664,9 @@
   cursor: pointer;
   position: relative;
 }
-/* As wide as its paragraph, which runs 12px into the card's right padding — or the
- * overlay would stop short and leave the ends of lines sharp. */
 .rv3 .rv4-try__ramp {
   --rv4-band: 100%;
   position: relative;
-  width: min(358px, calc(100% + 12px));
 }
 .rv3 .rv4-try__ramp .rv4-prose__p {
   width: auto;
@@ -4713,37 +4693,8 @@
   height: auto;
   min-height: 51px;
 }
-/* The open article keeps its 358 measure (3928-3945) but never runs past the card:
- * 12px into the right padding at most, which is exactly 358 at 393. */
-.rv3 .rv4-learn .rv4-prose__p,
-.rv3 .rv4-learn .rv4-prose__h,
-.rv3 .rv4-learn .rv4-prose__list {
-  width: min(358px, calc(100% + 12px));
-}
-/* 153:2257 — Mark evened the teaser's padding, so it now runs the card's own
- * content width (347). Its paragraphs follow, or the 358 rule would clip them. */
-.rv3 .rv4-learn__teaser {
-  width: 100%;
-}
-.rv3 .rv4-learn__teaser .rv4-prose__p,
-.rv3 .rv4-learn__teaser .rv4-prose__h,
-.rv3 .rv4-learn__teaser .rv4-prose__list {
-  width: auto;
-}
-/* The gated window clips at its own width, which was the card's content box — so it
- * cut the last 12px off every blurred line. It, the blur laid over it and the fade
- * now span the article's 358 measure instead. */
-.rv3 .rv4-learn__gated,
-.rv3 .rv4-learn__blur,
-.rv3 .rv4-learn__fade {
-  right: auto;
-  width: min(358px, calc(100% + 12px));
-}
-.rv3 .rv4-learn__gated .rv4-prose__p,
-.rv3 .rv4-learn__gated .rv4-prose__h,
-.rv3 .rv4-learn__gated .rv4-prose__list {
-  width: auto;
-}
+/* The gated window, the blur laid over it and the fade span the card's content box,
+ * as the copy now does (the blur overhanging it 8px a side, above). */
 
 /* ── The Premium card on small phones ────────────────────────────────────────
  * 330 wide is 42px more than a 320 phone's column, and its height is fixed with

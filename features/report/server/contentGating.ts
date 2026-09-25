@@ -248,9 +248,12 @@ export function buildPracticeTendenciesForUser(
  * exactly the cut the design needs: word boundary, no ellipsis, the fade sells it. */
 
 /**
- * How the article's 358px column lays out, used to predict how much copy the
- * blurred window can actually show. Measured in a browser at 393px, not assumed:
- * Plus Jakarta Sans 14/22.4 fits about fifty characters to a line there.
+ * How the article's column lays out, used to predict how much copy the blurred
+ * window can actually show. Measured in a browser at 393px, not assumed: Plus
+ * Jakarta Sans 14/22.4 fits about fifty characters to a line in the 358px column
+ * the article had until 25.09. It now keeps to the card's 346px content box (Mark:
+ * "Equal space left and right"), about 48 to a line, so these run ~4% short. That
+ * only overfills the fixed window; the characters sent are unchanged.
  */
 const ARTICLE_CHARS_PER_LINE = 50;
 /** The list sits in a 337px column — `.rv4-prose__list` has 21px of padding. */
