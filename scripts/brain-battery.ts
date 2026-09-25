@@ -2516,6 +2516,8 @@ async function runRetrievalBattery(only: string | null): Promise<BatteryResult> 
   const failing: string[] = [];
   const flakyKinds: string[] = [];
   const failedProbes: RetrievalProbe[] = [];
+  const recoveredProbes: RetrievalProbe[] = [];
+  const knownFlaky: RetrievalProbe[] = [];
   for (const p of probes) {
     let { hits, issues, ms } = await run(p);
     let firstIssues: string[] = [];
@@ -2542,9 +2544,12 @@ async function runRetrievalBattery(only: string | null): Promise<BatteryResult> 
     else if (issues.length && knownWhy) known++;
     else if (issues.length) failures++;
     else if (firstIssues.length) flaky++;
+    // Each list on its own line: an else-if here once attached to the wrong condition.
     if (recovered || (issues.length && !knownWhy)) failing.push(p.kind);
+    if (!issues.length && firstIssues.length) flakyKinds.push(p.kind);
     if (!recovered && issues.length && !knownWhy) failedProbes.push(p);
-    else if (!issues.length && firstIssues.length) flakyKinds.push(p.kind);
+    if (recovered) recoveredProbes.push(p);
+    if (knownWhy && !issues.length && firstIssues.length) knownFlaky.push(p);
 
     console.log(
       `\n${state} [${p.kind}] ${JSON.stringify(p.q.slice(0, 62))}` +
@@ -2571,15 +2576,36 @@ async function runRetrievalBattery(only: string | null): Promise<BatteryResult> 
    * failure is checked once more outside a rewrite, and passing then makes it flaky: counted
    * apart, never clean.
    */
-  if (failedProbes.length) {
+  if (failedProbes.length || recoveredProbes.length || knownFlaky.length) {
     await outsideRewrite();
     for (const p of failedProbes) {
       if ((await run(p)).issues.length) continue;
       failures--;
       flaky++;
-      failing.splice(failing.indexOf(p.kind), 1);
+      drop(failing, p.kind);
       flakyKinds.push(p.kind);
       console.log(`\nflaky [${p.kind}] passed once brain-fast's rewrite was over`);
+    }
+    // The other direction: a known-red probe "recovers" when the rewrite briefly removes the
+    // record that outranks its answer. Seen 2026-09-25 on ga4-brand at 19:22 UTC, red 3 of 3
+    // outside the minute. It recovers only if it also passes outside a rewrite.
+    for (const p of recoveredProbes) {
+      if (!(await run(p)).issues.length) continue;
+      failures--;
+      known++;
+      drop(failing, p.kind);
+      console.log(`\nKNOWN [${p.kind}] passed only during brain-fast's rewrite; still red`);
+    }
+    // Same for a known-red probe that failed and then passed its retry: red outside the
+    // rewrite means it is known, not flaky.
+    for (const p of knownFlaky) {
+      if (!(await run(p)).issues.length) continue;
+      flaky--;
+      known++;
+      drop(flakyKinds, p.kind);
+      console.log(
+        `\nKNOWN [${p.kind}] passed its retry only during brain-fast's rewrite; still red`
+      );
     }
   }
 
@@ -2596,6 +2622,12 @@ async function runRetrievalBattery(only: string | null): Promise<BatteryResult> 
     flaky: flakyKinds,
     known,
   };
+}
+
+/** Remove one entry, and nothing else when it is not there (splice(-1) would take the last). */
+function drop(list: string[], item: string): void {
+  const i = list.indexOf(item);
+  if (i >= 0) list.splice(i, 1);
 }
 
 /** Resolves once no brain-fast rewrite is under way: 90 s after one starts, and not in the 30 s before the next. */
