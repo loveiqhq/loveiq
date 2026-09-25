@@ -71,8 +71,9 @@ describe("the verifier's per-run budget", () => {
       /LOOKBACK_HOURS\s*=\s*Number\(process\.env\.LOOKBACK_HOURS\s*\?\?\s*(\d+)\)/.exec(SRC)?.[1]
     );
     expect(lookback, "LOOKBACK_HOURS must have a readable numeric default").toBeGreaterThan(0);
-    // The declared cadence is every 3 hours. GitHub has produced gaps over
-    // twice that, and a window shorter than the real gap loses the tail.
+    // The declared cadence is hourly (every 3 hours until 2026-09-25). GitHub
+    // has produced gaps of 6h36m, and a window shorter than the real gap loses
+    // the tail.
     expect(
       lookback,
       "the lookback must survive several skipped scheduled runs, not just one"

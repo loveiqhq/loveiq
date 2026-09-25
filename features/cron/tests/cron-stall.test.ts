@@ -13,6 +13,7 @@ import {
   CRON_MAX_AGE_MS,
   describeStall,
   findStalledCrons,
+  GITHUB_WORKFLOW,
   UNWATCHED_CRONS,
 } from "@features/cron/server/cron-stall";
 import { brainDailySchedules } from "./brain-daily-schedule";
@@ -32,7 +33,7 @@ async function scheduledCrons(): Promise<string[]> {
   return [
     ...(vercel.crons ?? []).map((c) => c.path.replace("/api/cron/", "")),
     ...Object.keys(brainDailySchedules()),
-    ...githubRecordedCrons(fs),
+    ...githubRecordedCrons(fs).map(([cron]) => cron),
   ];
 }
 
@@ -41,14 +42,14 @@ async function scheduledCrons(): Promise<string[]> {
  * One counts only if its workflow both has a schedule AND records under that exact name,
  * so a watched name cannot quietly stop being written.
  */
-function githubRecordedCrons(fs: typeof import("node:fs")): string[] {
-  const names: string[] = [];
+function githubRecordedCrons(fs: typeof import("node:fs")): Array<[string, string]> {
+  const found: Array<[string, string]> = [];
   for (const file of fs.readdirSync(".github/workflows")) {
     const yml = fs.readFileSync(`.github/workflows/${file}`, "utf8");
     if (!/^\s*schedule:/m.test(yml)) continue;
-    for (const m of yml.matchAll(/record-cron-run\.mjs ([a-z0-9-]+)/g)) names.push(m[1]);
+    for (const m of yml.matchAll(/record-cron-run\.mjs ([a-z0-9-]+)/g)) found.push([m[1], file]);
   }
-  return names;
+  return found;
 }
 const ok = (started_at: string | null) =>
   ({
@@ -85,6 +86,20 @@ describe("findStalledCrons", () => {
     expect(describeStall(stalled[0])).toMatch(/expected and will clear/);
   });
 
+  it("tells the reader to start a GitHub job by hand, and names its workflow", () => {
+    // GitHub starts this repo's schedules hours late and drops some, so a quiet GitHub
+    // job is usually the scheduler, and "not firing" alone sends the reader to debug it.
+    const stall = {
+      cron: "ux-review-verify",
+      lastRunAt: "2026-08-29T05:00:00Z",
+      ageMs: 7 * 3_600_000,
+      maxAgeMs: 6 * 3_600_000,
+    };
+    expect(describeStall(stall)).toMatch(/\(ux-review-verify\.yml\).*start it by hand/);
+    expect(describeStall({ ...stall, lastRunAt: null, ageMs: null })).toMatch(/start it by hand/);
+    expect(describeStall({ ...stall, cron: "brain-fast" })).not.toMatch(/GitHub/);
+  });
+
   it("says NOTHING when the database is unreachable", async () => {
     // Reporting an outage as "every cron is dead" would be a worse lie than silence,
     // and would fire an alert per cron every hour during any Supabase blip.
@@ -108,6 +123,16 @@ describe("the watch list must not drift from what is scheduled", () => {
         `cron "${cron}" is scheduled but neither watched nor explicitly unwatched`
       ).toBe(true);
     }
+  });
+
+  it("names the workflow of every job GitHub starts, and of nothing else", async () => {
+    const fs = await import("node:fs");
+    expect(GITHUB_WORKFLOW).toEqual(
+      Object.fromEntries([
+        ...Object.keys(brainDailySchedules()).map((cron) => [cron, "brain-daily.yml"]),
+        ...githubRecordedCrons(fs),
+      ])
+    );
   });
 
   it("does not watch a cron that is not scheduled at all", async () => {

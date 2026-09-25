@@ -1321,7 +1321,7 @@ function coverageLine(c: CoverageStat | null): string {
    * was being done about either.
    *
    * Both are now handled the same way: anything unwatched is re-queued every
-   * three hours by the verify workflow, so the honest word is "yet".
+   * hour by the verify workflow, so the honest word is "yet".
    */
   return (
     `*How much we watched:* ${c.observed} of the ${c.submissions} people who finished ` +

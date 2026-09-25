@@ -7,9 +7,10 @@ const read = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8");
 const crons = (yml: string) => [...yml.matchAll(/- cron: "([^"]+)"/g)].map((m) => m[1]);
 
 /**
- * GitHub drops and delays scheduled runs (measured 2026-09-14 to 09-25: the
- * verifier ran 4-6 times a day on an 8-a-day cron, 90-150 minutes late, and
- * the digest audit's first run never happened). These pin the answers.
+ * GitHub drops and delays this repo's scheduled runs (from 2026-09-14 the
+ * verifier ran 4-6 times a day on an 8-a-day cron, and every schedule here
+ * starts 4.5 to 5.5 hours late: docs/runbooks/COMPANY_BRAIN.md). These pin the
+ * answers.
  */
 describe("schedules GitHub is allowed to drop", () => {
   it("the verifier runs hourly, and its weekly step is gated on a cron that exists", () => {

@@ -91,15 +91,29 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   // missing night means the job did not fire, and questions are waiting on it.
   "brain-night-shift": 26 * 3_600_000,
   /**
-   * GITHUB-SCHEDULED, and GitHub drops scheduled runs: from 2026-09-14 the verifier ran
-   * 4-6 times a day on an 8-a-day cron, and the digest audit's first run never happened.
+   * GITHUB-SCHEDULED. GitHub starts this repo's schedules 4.5 to 5.5 hours late and
+   * drops some: from 2026-09-14 the verifier ran 4-6 times a day on an 8-a-day cron.
    * Both record their SCHEDULED runs (scripts/record-cron-run.mjs), so a hand-started run
-   * cannot hide a dead schedule. The verifier is hourly, so six hours is six missed runs
+   * cannot hide a dead schedule. The lateness shifts every run alike, so it does not
+   * widen the gap between them; the verifier is hourly, so six hours is six missed runs
    * in a row, not an ordinary drop; the audit runs three times a day, so 26 hours means
    * all three were dropped.
    */
   "ux-review-verify": 6 * 3_600_000,
   "ux-digest-audit": 26 * 3_600_000,
+};
+
+/**
+ * Watched jobs that GitHub Actions starts, and the workflow that starts them. When one
+ * goes quiet the likeliest cause is GitHub's scheduler, not the job, and the remedy is to
+ * start it by hand, so the alert says where. A test keeps this in step with the workflows.
+ */
+export const GITHUB_WORKFLOW: Record<string, string> = {
+  "brain-brief": "brain-daily.yml",
+  "brain-mine": "brain-daily.yml",
+  "brain-night-shift": "brain-daily.yml",
+  "ux-review-verify": "ux-review-verify.yml",
+  "ux-digest-audit": "ux-digest-audit.yml",
 };
 
 /**
@@ -162,15 +176,21 @@ export async function findStalledCrons(nowMs: number = Date.now()): Promise<Stal
 
 export function describeStall(s: StalledCron): string {
   const hours = (ms: number) => `${(ms / 3_600_000).toFixed(1)}h`;
+  const workflow = GITHUB_WORKFLOW[s.cron];
+  const github = workflow
+    ? `GitHub Actions starts it (${workflow}) and runs this repo's schedules hours late, ` +
+      `sometimes not at all: start it by hand from the Actions tab if it cannot wait.`
+    : null;
   if (s.lastRunAt === null) {
     return (
       `*${s.cron}* has NEVER recorded a run. If it was deployed within the last ` +
       `${hours(s.maxAgeMs)} this is expected and will clear on its own; otherwise it is ` +
-      `scheduled but never being invoked.`
+      `scheduled but never being invoked.` +
+      (github ? ` ${github}` : "")
     );
   }
   return (
     `*${s.cron}* last ran ${hours(s.ageMs ?? 0)} ago (limit ${hours(s.maxAgeMs)}). ` +
-    `It is scheduled but not firing, or dying before it can record the run.`
+    (github ?? `It is scheduled but not firing, or dying before it can record the run.`)
   );
 }

@@ -61,7 +61,7 @@ describe("findings synthesised from our own dead_click events", () => {
 
   it("gives each one a stable id, so the once-ever claim holds across runs", () => {
     // A fresh id per run would re-post the same finding into the same thread
-    // every three hours.
+    // every hour.
     expect(SRC).toContain("`own-dead-click:${sid}`");
     expect(SRC).not.toMatch(/own-dead-click:\$\{(Date\.now|Math\.random)/);
   });

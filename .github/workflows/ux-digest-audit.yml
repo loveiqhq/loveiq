@@ -9,10 +9,11 @@ on:
   schedule:
     # 08:53 UTC: after the digest in both summer (07:17 UTC) and winter
     # (08:17 UTC), since it posts at the first run after 09:00 in Berlin.
-    # Twice more as fallbacks: GitHub drops scheduled runs under load, and on
-    # its first day (2026-09-25) the 08:53 run never happened. A check that
-    # silently did not run reads exactly like one that passed. The script posts
-    # at most once per digest, so three runs never mean three alerts.
+    # GitHub starts this repo's schedules 4.5 to 5.5 hours late, which still
+    # lands after the digest, and drops some, so twice more as fallbacks. A
+    # check that silently did not run reads exactly like one that passed. The
+    # script posts at most once per digest, so three runs never mean three
+    # alerts.
     - cron: "53 8 * * *"
     - cron: "53 10 * * *"
     - cron: "53 12 * * *"

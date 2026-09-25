@@ -50,7 +50,7 @@ describe("labelling findings from pull requests", () => {
   });
 
   it("only touches findings that have no label yet", () => {
-    // Re-labelling on every 3-hourly run would overwrite a human's later
+    // Re-labelling on every hourly run would overwrite a human's later
     // correction with whatever GitHub currently says.
     expect(SRC).toContain("human_label=is.null");
   });
