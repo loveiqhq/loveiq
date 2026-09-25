@@ -6147,3 +6147,11 @@ html {
   --rv4-pf: calc(var(--rv4-band-eff) * 2 / 3);
   --rv4-pt: var(--rv4-band-eff);
 }
+
+/* ── "Try this" — a gated drop of its own · 441:6168 / 441:6188 ────────────────────
+ * Fantasy vs. Reality's gated frame sets the copy 8px under the button, where its
+ * open frame (and the closed teaser) set 4. The card only says so while the wall is
+ * showing; without a value of its own the gated copy keeps the open drop. */
+.rv3 .rv4-try.is-open.is-gated .rv4-try__body {
+  padding-top: var(--rv4-try-gated-pt, var(--rv4-try-open-pt, 4px));
+}
