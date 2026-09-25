@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState, type FC, type ReactNode } from "react";
+import { REPORT_V4_SUFFIX_BREAK_IDS } from "@/data/report3-archetype-page";
 import { V4ChapterChevron, V4ChapterTitle } from "./V4ChapterHead";
 
 /**
@@ -134,7 +135,11 @@ const V4Chapter: FC<Props> = ({
         aria-controls={bodyId}
         onClick={() => setIsOpen((v) => !v)}
       >
-        <V4ChapterTitle title={title ?? ""} archetype={archetype} />
+        <V4ChapterTitle
+          title={title ?? ""}
+          archetype={archetype}
+          breakBeforeSuffix={sectionId ? REPORT_V4_SUFFIX_BREAK_IDS.has(sectionId) : false}
+        />
         <V4ChapterChevron />
       </button>
 

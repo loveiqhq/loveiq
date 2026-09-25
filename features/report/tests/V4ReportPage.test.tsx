@@ -422,7 +422,7 @@ describe("V3Methodology science deck in V4 (493:7082)", () => {
       [
         "Relationship research",
         "How does desire endure in long-term relationships?",
-        ["Love Language", "Challenges in Partnership"],
+        ["Love Language", "Challenges in Partnerships"],
       ],
       ["Sexology", "How does arousal actually work?", ["Initiation Style", "Fantasy vs. Reality"]],
       [

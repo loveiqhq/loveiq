@@ -111,7 +111,9 @@ const V4_REMOVED_CHAPTERS: ReadonlySet<string> = new Set([
  *   so V4 now carries V3's own plural title.
  * - Challenges in Partnership opens "How you connect" — the 24.09 review: "Challenges
  *   in Partnership is the first chapter in Part V". It has no row of its own in
- *   report-general.ts, so ReportPage renders it in Attachment Style's slot.
+ *   report-general.ts, so ReportPage renders it in Attachment Style's slot. V4 titles
+ *   it in the plural, as its head 38:1675 does (Fatih's call, 2026-09-24); V3 keeps
+ *   the singular.
  * (The first two are Fatih's calls of 2026-09-23, as Figma draws them.)
  *
  * V3's ids less V4_REMOVED_CHAPTERS, so every filter keyed on the order drops those
@@ -122,10 +124,10 @@ const V4_REMOVED_CHAPTERS: ReadonlySet<string> = new Set([
  * part of the drawer. `?v3=1` keeps REPORT_V3_CHAPTERS exactly as it was. The rest
  * of Figma's Part III-VI regrouping is not done.
  */
-const V4_PART_OPENERS: readonly { id: string; part: string }[] = [
+const V4_PART_OPENERS: readonly { id: string; part: string; title?: string }[] = [
   { id: "typical_beliefs", part: "2" },
   { id: "typical_arousal_accelerators_turn_ons_of_the_core_archetype", part: "3" },
-  { id: "challenges_in_partnership", part: "4" },
+  { id: "challenges_in_partnership", part: "4", title: "Challenges in Partnerships" },
 ];
 
 const partOf = (chapter: ReportV3Chapter): string => chapter.number.split(".")[0]!;
@@ -133,7 +135,10 @@ const partOf = (chapter: ReportV3Chapter): string => chapter.number.split(".")[0
 export const REPORT_V4_CHAPTERS: readonly ReportV3Chapter[] = [
   ...new Set(REPORT_V3_CHAPTERS.map(partOf)),
 ].flatMap((part) => {
-  const openers = V4_PART_OPENERS.filter((o) => o.part === part).map((o) => v3Chapter(o.id));
+  const openers = V4_PART_OPENERS.filter((o) => o.part === part).map((o) => ({
+    ...v3Chapter(o.id),
+    ...(o.title ? { title: o.title } : {}),
+  }));
   const rest = REPORT_V3_CHAPTERS.filter(
     (c) =>
       partOf(c) === part &&

@@ -79,6 +79,7 @@ import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
 import type { ReportPracticeTendencyContentForUser } from "@features/report/ui/hooks/useReportData";
 import { reportSections } from "@/data/report-general";
 import { resolveReportSections } from "@features/report/ui/reportTitles";
+import { buildPartnership } from "@/data/report3-partnership";
 // The 50/50 was concluded → any non-empty token now buckets to the forced
 // "treatment" arm. The soft "control" (dismissible) experience is now reached
 // only via the email-return escape hatch (from=email / utm_source=email) or the
@@ -997,6 +998,110 @@ describe("ReportPage", () => {
           container.querySelector("#challenges_in_partnership")!
         )
       ).toBe(true);
+    });
+
+    // Figma 38:1672 (305:350 locked) — the Report 3.0 chapter replaces V2's section
+    // wherever the archetype on screen has one written; today that is Spark Seeker.
+    const withChapter = (locked: boolean) => {
+      const response = buildSuccessResponse();
+      Object.assign(response.data as Record<string, unknown>, {
+        primaryArchetype: "Spark Seeker",
+        percentages: { "Spark Seeker": 63, "Explorer of Edges": 37 },
+        partnership: buildPartnership("Spark Seeker", { locked }),
+      });
+      return response;
+    };
+
+    it("draws the Report 3.0 chapter, open and in the plural, where the archetype has one", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(withChapter(false));
+
+      const { container } = render(<ReportPage />);
+
+      const chapter = container.querySelector("#challenges_in_partnership")!;
+      expect(container.querySelectorAll("#challenges_in_partnership")).toHaveLength(1);
+      expect(chapter).toHaveClass("rv4-chapter");
+      expect(chapter).not.toHaveClass("rv3-chapter");
+      expect(chapter).toHaveClass("is-open");
+      expect(chapter.querySelector(".rv4-chapter__name")!.textContent).toBe(
+        "Challenges in Partnerships "
+      );
+      expect(chapter.querySelector(".rv4-cip")).not.toBeNull();
+      expect(chapter.querySelector(".report-partnership__heading")).toBeNull();
+      // 38:1516 — the 44px between the Part V heading and its first chapter.
+      expect(chapter.previousElementSibling?.getAttribute("data-node-id")).toBe("38:1516");
+      const heading = [...container.querySelectorAll(".rv4-part")].find(
+        (h) => h.querySelector(".rv4-part__eyebrow")?.textContent === "Part V"
+      )!;
+      expect(precedes(heading, chapter)).toBe(true);
+      expect(precedes(chapter, container.querySelector("#attachment_style")!)).toBe(true);
+    });
+
+    it("unlocks the Report 3.0 chapter through Curiosity's full-report gate", async () => {
+      const user = userEvent.setup();
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(withChapter(true));
+
+      const { container } = render(<ReportPage />);
+      await user.click(container.querySelector<HTMLElement>(".rv4-cip__gate")!);
+
+      expect(vi.mocked(analytics.trackLockIconClicked)).toHaveBeenCalledWith(
+        expect.objectContaining({ section_id: "curiosity_level", plan_needed: "full_report" })
+      );
+    });
+
+    it("keeps V2's section for an archetype with no Report 3.0 chapter", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      const { container } = render(<ReportPage />);
+
+      const chapter = container.querySelector("#challenges_in_partnership")!;
+      expect(chapter).toHaveClass("rv3-chapter");
+      expect(chapter.querySelector(".rv4-cip")).toBeNull();
+    });
+
+    it("feeds V2's section the copy the server keyed to the archetype on screen", () => {
+      // An all-reports reader browsing another archetype: the server builds the copy
+      // for that archetype (contentArchetype), so V4 must not demand the primary.
+      mockSearchParams.mockImplementation(
+        () => new URLSearchParams("v4=1&archetype=quiet-withdrawer")
+      );
+      const response = buildSuccessResponse();
+      Object.assign(response.data as Record<string, unknown>, {
+        accessPlan: "all_reports",
+        unlockedArchetypes: ["Emotional Voyeur", "Quiet Withdrawer"],
+        archetypeTiers: { "Emotional Voyeur": "full_report", "Quiet Withdrawer": "full_report" },
+        contentArchetype: "Quiet Withdrawer",
+        partnershipCopy: {
+          locked: false,
+          eyebrow: "The Pattern",
+          result: "The Retreat Loop",
+          "row1.label": "The bid",
+          "row1.value": "A quiet ask",
+          "row2.label": "The mishearing",
+          "row2.value": "Heard as distance",
+          "row3.label": "The confirmation",
+          "row3.value": "The retreat proves it",
+        },
+      });
+      mockUseReportData.mockReturnValue(response);
+
+      const { container } = render(<ReportPage />);
+
+      expect(container.querySelector("#challenges_in_partnership")!.textContent).toContain(
+        "The Retreat Loop"
+      );
+    });
+
+    it("leaves ?v3=1 on V2's section even when the view is there", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v3=1"));
+      mockUseReportData.mockReturnValue(withChapter(false));
+
+      const { container } = render(<ReportPage />);
+
+      expect(container.querySelector(".rv4-cip")).toBeNull();
+      expect(container.querySelector("#challenges_in_partnership")).toHaveClass("rv3-chapter");
     });
   });
 

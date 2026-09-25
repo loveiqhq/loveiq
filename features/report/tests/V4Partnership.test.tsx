@@ -121,7 +121,11 @@ describe("the paywalled body — 305:358", () => {
     const text = result.querySelector(".rv4-cip__closing-text")!;
     expect(text.hasAttribute("inert")).toBe(true);
     expect(text.getAttribute("aria-hidden")).toBe("true");
-    const practice = container.querySelector(".rv4-cip + .rv4-try")!;
+    const practice = container.querySelector<HTMLElement>(".rv4-cip + .rv4-try")!;
+    // 399:219's 240px teaser box; 399:260's card 528px down the card, measured at 393
+    // with the real fonts as 147.5px below the gate.
+    expect(practice.style.getPropertyValue("--rv4-try-teaser-h")).toBe("240px");
+    expect(practice.style.getPropertyValue("--rv4-try-premium-top")).toBe("147.5px");
     fireEvent.click(practice.querySelector(".rv4-try__button")!);
     expect(practice.getAttribute("data-node-id")).toBe("399:260");
     const tail = practice.querySelector<HTMLOListElement>(".rv4-try__blurred ol");
@@ -136,12 +140,20 @@ describe("the CSS contract", () => {
     expect(lineOf(".rv3 .rv4-cip {")).toBeGreaterThan(1884);
   });
 
-  it("sets 'Common challenges' as drawn — Lora Bold 18/21.6, 16 either side", () => {
+  it("sets 'Common challenges' as drawn — Lora Bold 18/21.6 on the text's 41.6 baseline step", () => {
     const h = rule(".rv3 .rv4-cip .rv4-prose__h");
     expect(h).toContain("font-size: 18px");
     expect(h).toContain("line-height: 21.6px");
+    expect(h).toContain("margin: 0 0 18.06px");
     expect(rule(".rv3 .rv4-cip .rv4-prose__p:has(+ .rv4-prose__h)")).toContain(
-      "margin-bottom: 16px"
+      "margin-bottom: 17.94px"
+    );
+  });
+
+  it("leaves the frame's air above the loop and sets the closed pill 200px into the teaser", () => {
+    expect(rule(".rv3 .rv4-cip__text + .rv4-loop")).toContain("margin-top: 24px");
+    expect(rule(".rv3 .rv4-cip + .rv4-try .rv4-try__open")).toContain(
+      "bottom: calc(var(--rv4-try-teaser-h, 218px) - 232px)"
     );
   });
 

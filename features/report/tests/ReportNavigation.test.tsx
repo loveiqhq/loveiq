@@ -186,3 +186,37 @@ describe("reportV3.css — V4 sections clear the floating chrome", () => {
     expect(rule).toContain("scroll-margin-top: 144px;");
   });
 });
+
+/**
+ * The floating "Chapter: …" pill names the chapter on screen. It read V1's labels in
+ * every version, so under ?v4=1 it kept the singular "Challenges in Partnership" the
+ * V4 drawer and head no longer use (Fatih, 24.09: the plural everywhere in V4).
+ */
+describe("ReportMobileNav — the chapter pill's label", () => {
+  const pill = () => document.querySelector(".report-chapter-pill__chapter")!.textContent;
+
+  it("reads V4's own nav under ?v4=1", async () => {
+    const { V3ModeProvider, V4ModeProvider } = await import("@features/report/ui/v3/V3Chapter");
+    render(
+      <V3ModeProvider>
+        <V4ModeProvider>
+          <ReportMobileNav activeSectionId="challenges_in_partnership" />
+        </V4ModeProvider>
+      </V3ModeProvider>
+    );
+    expect(pill()).toBe("Challenges in Partnerships");
+  });
+
+  it("keeps V1's labels for V3 and V1", async () => {
+    const { V3ModeProvider } = await import("@features/report/ui/v3/V3Chapter");
+    const { unmount } = render(
+      <V3ModeProvider>
+        <ReportMobileNav activeSectionId="challenges_in_partnership" />
+      </V3ModeProvider>
+    );
+    expect(pill()).toBe("Challenges in Partnership");
+    unmount();
+    render(<ReportMobileNav activeSectionId="challenges_in_partnership" />);
+    expect(pill()).toBe("Challenges in Partnership");
+  });
+});

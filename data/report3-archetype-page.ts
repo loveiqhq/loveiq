@@ -338,6 +338,11 @@ export interface Report3Chapter {
    * are drawn as a plain title. Verified against 1:1161's own design context.
    */
   suffix?: false;
+  /**
+   * The frame puts the "- of the <Archetype>" suffix on a line of its own, whatever
+   * the width: a U+2028 line separator in 38:1675 and 38:1686, a line feed in 1:1028.
+   */
+  suffixBreak?: true;
 }
 
 /**
@@ -372,7 +377,7 @@ export const REPORT_V4_PART4_CHAPTERS: readonly Report3Chapter[] = [
     body: "teaser",
   }, // 1:1006
   { title: "Arousal Style", id: "arousal_style", body: "teaser" }, // 1:1017
-  { title: "Initiation Style", id: "initiation_style", body: "teaser" }, // 1:1028
+  { title: "Initiation Style", id: "initiation_style", body: "teaser", suffixBreak: true }, // 1:1028
   { title: "Energy & Risk", id: "energy_level", body: "teaser" }, // 1:1039
   { title: "Your Sexual Stage", id: "sexual_stage", body: "teaser", suffix: false }, // 1:1050
 ];
@@ -380,14 +385,21 @@ export const REPORT_V4_PART4_CHAPTERS: readonly Report3Chapter[] = [
 /** Part V · "How You connect" — 38:1507. The only part with no expanded row. */
 export const REPORT_V4_PART5_CHAPTERS: readonly Report3Chapter[] = [
   {
-    title: "Challenges in Partnership",
+    // 38:1675 draws the plural; V4 follows it (Fatih, 2026-09-24).
+    title: "Challenges in Partnerships",
     id: "challenges_in_partnership",
     gateId: "libido_challenges_in_relationships",
     body: "teaser",
+    suffixBreak: true,
   }, // 38:1672
   { title: "Attachment Style", id: "attachment_style", body: "teaser" }, // 38:1520
   { title: "Love Language", id: "love_language", body: "teaser" }, // 38:1542
-  { title: "Curiosity & Relationship Form", id: "curiosity_level", body: "teaser" }, // 38:1683
+  {
+    title: "Curiosity & Relationship Form",
+    id: "curiosity_level",
+    body: "teaser",
+    suffixBreak: true,
+  }, // 38:1683
 ];
 
 /** Part VI · "Your edges" — 1:1137. */
@@ -425,4 +437,14 @@ export const REPORT_V4_UNSUFFIXED_CHAPTER_IDS: ReadonlySet<string> = new Set(
     ...REPORT_V4_PART5_CHAPTERS,
     ...REPORT_V4_PART6_CHAPTERS,
   ].flatMap((c) => (c.suffix === false && c.id ? [c.id] : []))
+);
+
+/** The chapters whose head breaks before its suffix (`suffixBreak` above). */
+export const REPORT_V4_SUFFIX_BREAK_IDS: ReadonlySet<string> = new Set(
+  [
+    ...REPORT_V4_PART3_CHAPTERS,
+    ...REPORT_V4_PART4_CHAPTERS,
+    ...REPORT_V4_PART5_CHAPTERS,
+    ...REPORT_V4_PART6_CHAPTERS,
+  ].flatMap((c) => (c.suffixBreak && c.id ? [c.id] : []))
 );

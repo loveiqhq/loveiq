@@ -9,7 +9,11 @@ import {
   REPORT_V4_NAV_PARTS,
   REPORT_V4_SECTION_ORDER,
 } from "@features/report/ui/v3/reportV3Nav";
-import { REPORT_V4_PART_DIVIDER_BY_SECTION, REPORT_V4_PARTS } from "@/data/report3-archetype-page";
+import {
+  REPORT_V4_PART5_CHAPTERS,
+  REPORT_V4_PART_DIVIDER_BY_SECTION,
+  REPORT_V4_PARTS,
+} from "@/data/report3-archetype-page";
 
 /**
  * Report V4 regroups two chapters against V3, both as Figma draws them:
@@ -106,6 +110,18 @@ describe("the V4 chapter order", () => {
   it('titles A&B in the plural, as V3 does (review 24.09: add the "s" everywhere)', () => {
     expect(REPORT_V4_CHAPTERS.find((c) => c.id === AB)!.title).toBe("Accelerators & Brakes");
     expect(REPORT_V3_CHAPTERS.find((c) => c.id === AB)!.title).toBe("Accelerators & Brakes");
+  });
+
+  it("titles Challenges in Partnerships in the plural, in V4 only (Fatih, 24.09: as 38:1675)", () => {
+    const CIP = "challenges_in_partnership";
+    const label = (parts: typeof REPORT_V4_NAV_PARTS) =>
+      parts.flatMap((p) => p.items).find((i) => i.id === CIP)!.label;
+    expect(REPORT_V4_CHAPTERS.find((c) => c.id === CIP)!.title).toBe("Challenges in Partnerships");
+    expect(label(REPORT_V4_NAV_PARTS)).toBe("Challenges in Partnerships");
+    expect(REPORT_V4_PART5_CHAPTERS[0]!.title).toBe("Challenges in Partnerships");
+    // ?v3=1 keeps its singular.
+    expect(REPORT_V3_CHAPTERS.find((c) => c.id === CIP)!.title).toBe("Challenges in Partnership");
+    expect(label(REPORT_V3_NAV_PARTS)).toBe("Challenges in Partnership");
   });
 
   it("leaves V3's own order and numbering alone", () => {

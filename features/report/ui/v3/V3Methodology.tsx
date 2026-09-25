@@ -82,7 +82,8 @@ const CARDS: readonly ScienceCard[] = [
     question: "What keeps intimacy and desire alive over years?",
     questionV4: "How does desire endure in long-term relationships?",
     chapters: ["Love Language", "Growth Potentials"],
-    chaptersV4: ["Love Language", "Challenges in Partnership"],
+    // Plural, as V4 titles the chapter (38:1675); V3's tile above keeps the singular.
+    chaptersV4: ["Love Language", "Challenges in Partnerships"],
   },
   {
     accent: "#6b6678",

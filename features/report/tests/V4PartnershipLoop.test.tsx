@@ -230,6 +230,16 @@ describe("V4PartnershipLoop — CSS contract", () => {
     expect(slide.slice(0, slide.indexOf("}"))).toContain("var(--rv4-manrope");
   });
 
+  it("keeps the trailing spacer at least 1px, so the last slide can centre at 320", () => {
+    // At 320 the free width is exactly the gap, so the spacer computes to 0 — and a
+    // zero-width box adds nothing to scrollable overflow (measured: 1504 of 1520px).
+    // The dedicated rule, after the shared ::before/::after one.
+    const after = V3_CSS.slice(V3_CSS.lastIndexOf(".rv3 .rv4-loop__track::after {"));
+    expect(after.slice(0, after.indexOf("}"))).toContain(
+      "flex-basis: max(1px, calc((100cqw - var(--rv4-loop-w)) / 2 - 16px))"
+    );
+  });
+
   it("snaps each slide to the centre and blurs the locked parts at the frame's radius", () => {
     const slide = V3_CSS.slice(firstRule(".rv3 .rv4-loop__slide {"));
     expect(slide.slice(0, slide.indexOf("}"))).toContain("scroll-snap-align: center");

@@ -87,6 +87,7 @@ import V4Chapter from "./v3/V4Chapter";
 import V4TypicalBeliefs from "./v3/V4TypicalBeliefs";
 import V4TryThis from "./v3/V4TryThis";
 import V4Accelerators from "./v3/V4Accelerators";
+import V4Partnership from "./v3/V4Partnership";
 import V4LearnMore from "./v3/V4LearnMore";
 import type { Report3TypicalBeliefsView } from "@/data/report3-typical-beliefs";
 import type { Report3AcceleratorsView } from "@/data/report3-accelerators";
@@ -2250,8 +2251,40 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                 const partnershipGate = isV4
                   ? resolvedSections.find((s) => s.id === "curiosity_level")
                   : section;
+                // Report 3.0 draws the chapter as Figma 38:1672 (305:350 locked) wherever
+                // the archetype on screen has it written — today Spark Seeker; everyone
+                // else keeps V2's section below. Open in V4Chapter, as Typical Beliefs
+                // and Accelerators & Brakes are, 44px (38:1516) under the part heading,
+                // behind the same gate: the server's Libido, the unlock Curiosity's.
+                const v4Partnership =
+                  isV4 &&
+                  partnership &&
+                  partnershipGate &&
+                  section.id === "attachment_style" &&
+                  viewArchetype === contentArchetype ? (
+                    <Fragment>
+                      <div className="rv4-sep" aria-hidden="true" data-node-id="38:1516" />
+                      <V4Chapter
+                        sectionId="challenges_in_partnership"
+                        title="Challenges in Partnerships"
+                        archetype={viewArchetype}
+                        defaultOpen
+                        bare
+                        feedback={renderFeedback(
+                          "challenges_in_partnership",
+                          "Challenges in Partnerships"
+                        )}
+                      >
+                        <V4Partnership
+                          view={partnership}
+                          onUnlock={() => unlockSection(partnershipGate)}
+                        />
+                      </V4Chapter>
+                    </Fragment>
+                  ) : null;
                 const v3Partnership =
                   isV3 &&
+                  !v4Partnership &&
                   partnershipGate &&
                   section.id === (isV4 ? "attachment_style" : "curiosity_level") ? (
                     <ReportSection
@@ -2265,8 +2298,19 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     >
                       <PartnershipSection
                         archetype={viewArchetype}
-                        copy={viewArchetype === primaryArchetype ? partnershipCopy : null}
-                        loop={viewArchetype === primaryArchetype ? partnershipLoop : null}
+                        // The server keys this copy to contentArchetype; V4 matches it,
+                        // so an all-reports reader browsing another archetype gets the
+                        // chapter. ?v3=1 keeps its primary-archetype check.
+                        copy={
+                          viewArchetype === (isV4 ? contentArchetype : primaryArchetype)
+                            ? partnershipCopy
+                            : null
+                        }
+                        loop={
+                          viewArchetype === (isV4 ? contentArchetype : primaryArchetype)
+                            ? partnershipLoop
+                            : null
+                        }
                         onUnlock={() => unlockSection(partnershipGate)}
                         quote={fullReportQuote}
                         sectionTitle="Challenges in Partnership"
@@ -2279,12 +2323,18 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     </ReportSection>
                   ) : null;
 
-                if (!dividerNode && !v3PartOneExtras && !v3Partnership && !v3Constellation)
+                if (
+                  !dividerNode &&
+                  !v3PartOneExtras &&
+                  !v4Partnership &&
+                  !v3Partnership &&
+                  !v3Constellation
+                )
                   return sectionNode;
                 return (
                   <Fragment key={section.id}>
                     {dividerNode}
-                    {isV4 ? v3Partnership : null}
+                    {isV4 ? (v4Partnership ?? v3Partnership) : null}
                     {v3PartOneExtras}
                     {isV4 ? null : v3Constellation}
                     {sectionNode}

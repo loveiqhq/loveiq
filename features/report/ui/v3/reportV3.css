@@ -5643,6 +5643,12 @@ html {
   content: "";
   flex: 0 0 calc((100cqw - var(--rv4-loop-w)) / 2 - 16px);
 }
+/* At 320 the free width is exactly the gap and the spacer computes to 0, and a
+ * zero-width box adds nothing to scrollable overflow — the last slide stopped 16px
+ * short of centre. A 1px floor keeps it; the leading spacer stays exact. */
+.rv3 .rv4-loop__track::after {
+  flex-basis: max(1px, calc((100cqw - var(--rv4-loop-w)) / 2 - 16px));
+}
 /* 535:7337 — 320x272, white at 90%, an 8% hairline and a soft shadow; every slide
  * as tall as the tallest. */
 .rv3 .rv4-loop__slide {
@@ -5858,16 +5864,25 @@ html {
 .rv3 .rv4-cip__closing-text > :last-child {
   margin-bottom: 0;
 }
-/* 38:1681 sets "Common challenges" inline — Lora Bold 18/21.6 with the text node's
- * 16px paragraph spacing either side — where the article's subheading is 16/19.2
- * with 26 before it. */
+/* 38:1681 sets "Common challenges" inline — Lora Bold 18/21.6 in the text node's
+ * rhythm — where the article's subheading is 16/19.2 with 26 before it. Figma keeps
+ * its 41.6 baseline step straight through the heading (1286.53 → 1328.13 → 1369.73
+ * in the SVG export); CSS stacks line boxes, the heading's baseline 17.39 into its
+ * 21.6 box and a body line's 19.33 into its 25.6, so the gaps are 17.94 above and
+ * 18.06 below rather than the frame's nominal 16. */
 .rv3 .rv4-cip .rv4-prose__h {
   font-size: 18px;
   line-height: 21.6px;
-  margin: 0 0 16px;
+  margin: 0 0 18.06px;
 }
 .rv3 .rv4-cip .rv4-prose__p:has(+ .rv4-prose__h) {
-  margin-bottom: 16px;
+  margin-bottom: 17.94px;
+}
+/* 38:1680 holds the prose in a FIXED 3105px box whose lines end at 3081.6, so the
+ * frame leaves ~24px of air above the loop on top of the body's 16 gap. Kept as
+ * drawn. */
+.rv3 .rv4-cip__text + .rv4-loop {
+  margin-top: 24px;
 }
 /* 305:462 — the ramp fades in over ~105px (the progressive blur ends 5.2% down
  * 305:361's 2032px box, about four lines); the rest sits under the full blur at full
@@ -5901,10 +5916,29 @@ html {
 .rv3 .rv4-cip + .rv4-try {
   margin-top: 0;
 }
+/* 399:219 sets its pill 200px into the teaser (285 of the card), 3.5 lower than the
+ * other chapters' 196.5, so it sits 8px off the teaser box's foot. */
+.rv3 .rv4-cip + .rv4-try .rv4-try__open {
+  bottom: calc(var(--rv4-try-teaser-h, 218px) - 232px);
+}
 /* 399:259 — the practice's three questions: 21px in, flush, 8px above what follows. */
 .rv3 .rv4-cip + .rv4-try .rv4-prose__list {
   margin: 0 0 8px;
 }
 .rv3 .rv4-cip + .rv4-try .rv4-prose__list li {
   margin-bottom: 0;
+}
+
+/* V2 rows that wait for `.report-section.is-visible` alone (report.css 21135-21163):
+ * Partnership's rows and Curiosity's fit dots and structure items. A V3 chapter never
+ * carries that class, so under V4 they sat at opacity 0 even for a reader who had paid.
+ * They build in as their chapter opens, on their own transitions and delays. */
+.rv3.rv4 .rv3-chapter.is-open .report-partnership__row,
+.rv3.rv4 .rv3-chapter.is-open .report-curiosity__struct-item {
+  opacity: 1;
+  transform: translateY(0);
+}
+.rv3.rv4 .rv3-chapter.is-open .report-curiosity__fit-dot {
+  opacity: 1;
+  transform: scale(1);
 }
