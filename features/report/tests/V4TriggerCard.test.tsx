@@ -201,6 +201,13 @@ describe("reportV3.css — trigger card contracts", () => {
     expect(V3_CSS).toContain(".rv3 .rv4-fvt__pill-label,\n.rv3 .rv4-trig__pill-label {");
   });
 
+  // Final review, 25.09: the row the pill hands focus to hid its outline from keyboard
+  // users too. The ring stays for keyboard focus; only a pointer's focus drops it.
+  it("shows keyboard focus on the row the pill hands focus to", () => {
+    expect(V3_CSS).not.toContain(".rv3 .rv4-trig__row:focus {");
+    expect(V3_CSS).toContain(".rv3 .rv4-trig__row:focus:not(:focus-visible) {");
+  });
+
   it("blurs locked rows at the frame's radius 4 and places each badge as the new frames do", () => {
     expect(rule(".rv3 .rv4-trig__row.is-locked {")).toContain("filter: blur(2px)");
     expect(rule(".rv3 .rv4-trig--brake .rv4-trig__lock {")).toContain("--rv4-lock-top: 124px");
