@@ -289,6 +289,8 @@ for (const [trigger, scanners] of byTrigger) {
         WHERE min_first_timestamp > now() - INTERVAL ${STARTER_DAYS + 1} DAY
         GROUP BY session_id
       ) AS r ON r.sid = t.sid
+      -- ponytail: PostHog also refuses a recording under 15s long (3 of 517 watchable survey
+      -- sessions, 2026-09-11..25, none finishers). Those come back ineligible and are given up on.
       WHERE r.active >= 10000 AND t.sid NOT IN (
         SELECT DISTINCT toString(properties.session_id) FROM events
         WHERE event = '$recording_observed' AND timestamp > now() - INTERVAL ${STARTER_DAYS + 2} DAY
