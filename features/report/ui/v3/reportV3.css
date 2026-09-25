@@ -6258,25 +6258,37 @@ html {
   min-height: 39px;
   text-transform: uppercase;
 }
-/* 639:319 — each line centred on the whole cell, the info mark set absolute at the
- * cell's top right (72.11, 8.56). Figma centres a line on its letters and the gaps
- * between them; CSS counts the tracking after the last letter too, which the first
- * line matches (the space it breaks at follows) and the last cancels. */
+/* 639:319 — each line centred on the whole cell, the info mark at the cell's top
+ * right (72.11, 8.56). Figma centres a line on its letters and the gaps between
+ * them; CSS counts the tracking after the last letter too, which the first line
+ * matches (the space it breaks at follows) and the last cancels. The mark hangs off
+ * the first line, 2.34 past "FANTASY" and 5.70 past "ACTUAL" — Figma's 72.11 in an
+ * 82 cell — so that in the 72 cells of a 320px phone it follows the word rather than
+ * running into it (final review, 25.09). */
 .rv3 .rv4-fvt__col--score {
+  --fvt-mark-gap: 2.34px;
   position: relative;
   text-align: center;
 }
+.rv3 .rv4-fvt__col--score:last-child {
+  --fvt-mark-gap: 5.7px;
+}
 .rv3 .rv4-fvt__col-line {
   display: block;
+}
+.rv3 .rv4-fvt__col--score .rv4-fvt__col-line:first-child {
+  margin-inline: auto;
+  position: relative;
+  width: fit-content;
 }
 .rv3 .rv4-fvt__col-line + .rv4-fvt__col-line {
   margin-right: -0.8px;
 }
 .rv3 .rv4-fvt__cols .rv4-fvt__mark {
   height: 9.89px;
+  left: calc(100% + var(--fvt-mark-gap));
   opacity: 0.82;
   position: absolute;
-  right: 0;
   top: 8.56px;
   width: 9.89px;
 }
@@ -6593,11 +6605,14 @@ html {
 .rv3 .rv4-learn.has-own-gate.no-fade .rv4-learn__fade {
   display: none;
 }
-/* 482:6479 centres the card and the pill on the article's 358 measure, which runs
- * 12px into the card's right padding, not on the content box. */
+/* 482:6479 sets the card and the pill 6px right of the gate's middle — the centre of
+ * the article's 358 measure, which runs 12px into the card's right padding. Held as
+ * an offset from the middle, the same through 393: pinned to the measure, a wide
+ * column left them 179px in, 109px left of the other articles' at 1280 (final
+ * review, 25.09). */
 .rv3 .rv4-learn.has-own-gate .rv4-learn__gate > .rv4-premium,
 .rv3 .rv4-learn.has-own-gate .rv4-learn__showmore {
-  left: calc(min(358px, 100% + 12px) / 2);
+  left: calc(50% + 6px);
 }
 /* A wall inside a paragraph (482:6479 stacks its free and blurred text boxes flush):
  * the window carries straight on from the free copy's last line. */
