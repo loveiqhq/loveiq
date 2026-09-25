@@ -225,3 +225,29 @@ describe("the verifier's per-run budget", () => {
     expect(branch).not.toMatch(/markVerified|recordFinding/);
   });
 });
+
+/**
+ * A FAILED CLAIM IS NOT SOMEONE ELSE'S CLAIM.
+ *
+ * claimFinding returned false both when another run held the finding and when
+ * the claim request failed. Measured 2026-09-25 with the claim table answering
+ * 401: the verifier printed "72 already verified on an earlier run", probed
+ * nothing and exited 0, so the workflow recorded a success.
+ */
+describe("a claim that could not be made", () => {
+  it("is told apart from a finding another run already holds", () => {
+    const claim = /async function claimFinding\([\s\S]*?\n\}/.exec(SRC)?.[0] ?? "";
+    expect(claim, "claimFinding must exist").not.toBe("");
+    expect(claim).not.toMatch(/return false/);
+    expect(claim.match(/return null/g) ?? []).toHaveLength(2);
+    expect(SRC).toMatch(
+      /const claim = await claimFinding\(observationId\);\s*if \(claim === null\) \{\s*unclaimed \+= 1;/
+    );
+  });
+
+  it("fails the run when no claim at all could be made", () => {
+    expect(SRC).toMatch(
+      /if \(claimAttempts > 0 && unclaimed === claimAttempts\) \{[\s\S]*?process\.exit\(2\)/
+    );
+  });
+});

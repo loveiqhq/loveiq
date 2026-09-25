@@ -695,6 +695,14 @@ async function markVerified(observationId) {
   }
 }
 
+/**
+ * true: ours to verify. false: already verified, or held by a run that claimed
+ * it under ten minutes ago (a deferral comes back after that). null: the claim
+ * could not be made at all.
+ *
+ * null used to be false, so a claim table that stopped answering read as every
+ * finding "already verified": the run probed nothing and still reported success.
+ */
 async function claimFinding(observationId) {
   const url = requireEnv("SUPABASE_URL");
   const key = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
@@ -708,10 +716,10 @@ async function claimFinding(observationId) {
         p_entity_id: observationId,
       }),
     });
-    if (!res.ok) return false;
+    if (!res.ok) return null;
     return (await res.json()) === true;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -1525,6 +1533,8 @@ let gaps = 0;
 let confirmed = 0;
 
 let skipped = 0;
+let claimAttempts = 0;
+let unclaimed = 0;
 let contradicted = 0;
 /** (session, criterion) pairs already probed in THIS run. */
 const probedThisRun = new Set();
@@ -1574,9 +1584,17 @@ for (const [
 
   // Claim before classifying: probes are minutes of real browser time, and a
   // second run must not spend them again on a finding already answered.
-  if (!DRY_RUN && !CLASSIFY_ONLY && !(await claimFinding(observationId))) {
-    skipped += 1;
-    continue;
+  if (!DRY_RUN && !CLASSIFY_ONLY) {
+    claimAttempts += 1;
+    const claim = await claimFinding(observationId);
+    if (claim === null) {
+      unclaimed += 1;
+      continue;
+    }
+    if (!claim) {
+      skipped += 1;
+      continue;
+    }
   }
 
   // Contradicted claims never reach a probe: minutes of real browser time spent
@@ -2014,10 +2032,19 @@ for (const [
 console.log(
   `\n${confirmed} reproduced · ${gaps} with no probe coverage` +
     (contradicted ? ` · ${contradicted} contradicted by events` : "") +
-    (skipped ? ` · ${skipped} already verified on an earlier run` : "") +
+    (skipped ? ` · ${skipped} already verified, or held by a run under ten minutes old` : "") +
+    (unclaimed ? ` · ${unclaimed} could not be claimed, so were not verified` : "") +
     // Never silent: a deferred finding is the thing that used to disappear.
     (deferred ? ` · ${deferred} left for the next run (probe budget ${PROBE_BUDGET})` : "") +
     (prsOpened ? ` · ${prsOpened} draft PR(s) opened` : "") +
     // A capped PR is deferred work, not a dropped finding — say so either way.
     (prsSkipped ? ` · ${prsSkipped} PR(s) held back by the cap of ${MAX_PRS_PER_RUN}` : "")
 );
+
+// Every claim failing is a broken claim table, not a quiet day. Exit 2, as for a
+// missing secret, rather than report success on a run that verified nothing. A
+// single failed claim is printed above and retried next run.
+if (claimAttempts > 0 && unclaimed === claimAttempts) {
+  console.error(`no finding could be claimed (${unclaimed} tried): refusing to report success.`);
+  process.exit(2);
+}
