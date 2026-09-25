@@ -389,7 +389,9 @@ describe("V3Methodology science deck in V4 (493:7082)", () => {
       ],
       [
         "Relationship research",
-        "How does desire endure in long-term relationships?",
+        // Sanjin, 2026-09-25 (1941776620 on 493:7082, 493:7233): adapted after reading
+        // the mobile staging.
+        "How do relationship dynamics shape desire, intimacy, and connection?",
         ["Love Language", "Challenges in Partnerships"],
       ],
       ["Sexology", "How does arousal actually work?", ["Initiation Style", "Fantasy vs. Reality"]],

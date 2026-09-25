@@ -80,7 +80,8 @@ const CARDS: readonly ScienceCard[] = [
     n: "06",
     title: "Relationship research",
     question: "What keeps intimacy and desire alive over years?",
-    questionV4: "How does desire endure in long-term relationships?",
+    // Sanjin's 25.09 rewrite (493:7233), after reading the mobile staging.
+    questionV4: "How do relationship dynamics shape desire, intimacy, and connection?",
     chapters: ["Love Language", "Growth Potentials"],
     // Plural, as V4 titles the chapter (38:1675); V3's tile above keeps the singular.
     chaptersV4: ["Love Language", "Challenges in Partnerships"],
