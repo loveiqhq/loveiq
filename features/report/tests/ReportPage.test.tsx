@@ -1061,6 +1061,30 @@ describe("ReportPage", () => {
       expect(chapter.querySelector(".rv4-cip")).toBeNull();
     });
 
+    // Fatih, 24.09: the plural everywhere in V4. V2's section still names itself to
+    // the feedback buttons, which a screen reader reads out.
+    it("names V2's section in V4's plural to its feedback buttons, and ?v3=1 keeps the singular", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      const v4 = render(<ReportPage />);
+      const v4Chapter = v4.container.querySelector("#challenges_in_partnership")!;
+      expect(
+        v4Chapter.querySelector('[aria-label="This resonates: Challenges in Partnerships"]')
+      ).not.toBeNull();
+      expect(
+        v4Chapter.querySelector('[aria-label="This resonates: Challenges in Partnership"]')
+      ).toBeNull();
+      v4.unmount();
+
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v3=1"));
+      const v3 = render(<ReportPage />);
+      expect(
+        v3.container.querySelector(
+          '#challenges_in_partnership [aria-label="This resonates: Challenges in Partnership"]'
+        )
+      ).not.toBeNull();
+    });
+
     it("feeds V2's section the copy the server keyed to the archetype on screen", () => {
       // An all-reports reader browsing another archetype: the server builds the copy
       // for that archetype (contentArchetype), so V4 must not demand the primary.

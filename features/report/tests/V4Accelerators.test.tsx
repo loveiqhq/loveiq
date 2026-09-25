@@ -99,6 +99,31 @@ describe("the paywalled chapter — 314:211", () => {
     expect(gate.querySelector(".rv4-lockbadge")).toBeNull();
   });
 
+  it("caps the ramp's fade where its scrambled tail starts, so none of it shows lightly blurred", () => {
+    // Review 25.09: in the 588px desktop column the anchor sentence ends on the ramp's
+    // first line and the tail rose into the two-line band. useRampFit measures it.
+    const box = (top: number) => ({ top, bottom: top, left: 0, right: 0, width: 0, height: 0 });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement
+    ) {
+      return box(this.classList.contains("rv4-ab__ramp") ? 500 : 0) as DOMRect;
+    });
+    vi.spyOn(Element.prototype, "getClientRects").mockImplementation(function (this: Element) {
+      const rects = this.classList.contains("rv4-prose__veiled")
+        ? [{ ...box(528), width: 40 }]
+        : [];
+      return rects as unknown as DOMRectList;
+    });
+    try {
+      const { container } = render(<V4Accelerators view={LOCKED} />);
+      const ramp = container.querySelector<HTMLElement>(".rv4-ab__ramp")!;
+      expect(ramp.querySelector(".rv4-prose__veiled")).not.toBeNull();
+      expect(ramp.style.getPropertyValue("--rv4-band-fit")).toBe("28px");
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it("opens the paywall exactly once from every locked surface, never from clear copy", () => {
     const onUnlock = vi.fn();
     const { container } = render(<V4Accelerators view={LOCKED} onUnlock={onUnlock} />);

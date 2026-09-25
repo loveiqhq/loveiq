@@ -32,3 +32,30 @@ describe("V4Prose lists", () => {
     expect(ul!.querySelectorAll("li")).toHaveLength(2);
   });
 });
+
+describe("V4Prose — the stand-in tail of a ramp paragraph", () => {
+  it("sets a veiled run in its own span, the space before it left outside", () => {
+    // splitRamp's scrambled tail. useRampFit reads where the span's first line starts,
+    // so the span must start on the tail's first glyph, not on the space before it.
+    const { container } = render(
+      <V4Prose
+        blocks={[
+          {
+            kind: "para",
+            runs: [{ text: "Real through here." }, { text: " Xyzq wbnn.", veiled: true }],
+          },
+        ]}
+      />
+    );
+    const veiled = container.querySelector(".rv4-prose__veiled");
+    expect(veiled?.textContent).toBe("Xyzq wbnn.");
+    expect(container.querySelector("p")?.textContent).toBe("Real through here. Xyzq wbnn.");
+  });
+
+  it("keeps a veiled run's weight inside its span", () => {
+    const { container } = render(
+      <V4Prose blocks={[{ kind: "para", runs: [{ text: "Bqlg.", weight: 700, veiled: true }] }]} />
+    );
+    expect(container.querySelector(".rv4-prose__veiled strong")?.textContent).toBe("Bqlg.");
+  });
+});

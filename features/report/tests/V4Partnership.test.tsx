@@ -75,6 +75,31 @@ describe("the chapter body — 38:1679", () => {
 });
 
 describe("the paywalled body — 305:358", () => {
+  it("caps the ramp's fade where its scrambled tail starts, so none of it shows lightly blurred", () => {
+    // Review 25.09: in the 588px desktop column paragraph 5's real part runs to three
+    // lines, so the scrambled tail rose into the 105px band. useRampFit measures it.
+    const box = (top: number) => ({ top, bottom: top, left: 0, right: 0, width: 0, height: 0 });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement
+    ) {
+      return box(this.classList.contains("rv4-cip__ramp") ? 1000 : 0) as DOMRect;
+    });
+    vi.spyOn(Element.prototype, "getClientRects").mockImplementation(function (this: Element) {
+      const rects = this.classList.contains("rv4-prose__veiled")
+        ? [{ ...box(1079), width: 40 }]
+        : [];
+      return rects as unknown as DOMRectList;
+    });
+    try {
+      const { container } = render(<V4Partnership view={LOCKED} />);
+      const ramp = container.querySelector<HTMLElement>(".rv4-cip__ramp")!;
+      expect(ramp.querySelector(".rv4-prose__veiled")).not.toBeNull();
+      expect(ramp.style.getPropertyValue("--rv4-band-fit")).toBe("79px");
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it("keeps paragraphs 1-4 sharp and ramps the blur in over paragraph 5", () => {
     const { container } = render(<V4Partnership view={LOCKED} />);
     const body = container.querySelector(".rv4-cip")!;
@@ -155,6 +180,21 @@ describe("the CSS contract", () => {
     expect(rule(".rv3 .rv4-cip + .rv4-try .rv4-try__open")).toContain(
       "bottom: calc(var(--rv4-try-teaser-h, 218px) - 232px)"
     );
+  });
+
+  it("never runs the progressive blur past a ramp's scrambled tail (--rv4-band-fit)", () => {
+    const at = V3_CSS.lastIndexOf(".rv3 .rv4-pblur {");
+    expect(V3_CSS.slice(0, at).split("\n").length).toBeGreaterThan(1884);
+    expect(V3_CSS.slice(at, V3_CSS.indexOf("}", at))).toContain(
+      "--rv4-band-eff: min(var(--rv4-band, 76px), var(--rv4-band-fit, 100000px));"
+    );
+    for (const n of [1, 2, 3]) {
+      const layer = V3_CSS.lastIndexOf(`.rv3 .rv4-pblur > span:nth-child(${n}) {`);
+      expect(layer, `layer ${n}`).toBeGreaterThan(at);
+      const body = V3_CSS.slice(layer, V3_CSS.indexOf("}", layer));
+      expect(body).toContain("var(--rv4-band-eff)");
+      expect(body).not.toContain("var(--rv4-band,");
+    }
   });
 
   it("ramps the blur in over ~105px and floats the card 282px into the gate", () => {

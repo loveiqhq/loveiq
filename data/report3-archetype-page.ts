@@ -149,6 +149,9 @@ export interface Report3Run {
   /** Plus Jakarta Sans Italic. The learn-more article (153:2277) sets quoted
    * beliefs in italic, which weight alone cannot express. */
   italic?: true;
+  /** Scrambled stand-in text: the tail of a paywall's ramp paragraph (splitRamp).
+   * The page finds it so the fade band never shows it lightly blurred (useRampFit). */
+  veiled?: true;
 }
 
 export interface Report3Summary {

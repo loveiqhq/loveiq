@@ -92,6 +92,12 @@ describe("splitRamp", () => {
     expect(split.runs[3]!.weight).toBeUndefined();
   });
 
+  it("marks the scrambled tail veiled, so the page can keep the fade off it", () => {
+    const split = splitRamp(ramp, "it builds.");
+    if (split.kind !== "para") throw new Error("expected a paragraph");
+    expect(split.runs.map((r) => r.veiled === true)).toEqual([false, false, false, true]);
+  });
+
   it("leaves the block as it is when the sentence is not in it", () => {
     expect(splitRamp(ramp, "not in this paragraph")).toEqual(ramp);
   });

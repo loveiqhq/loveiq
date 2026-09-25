@@ -1,11 +1,12 @@
 "use client";
 
-import type { FC } from "react";
+import { useRef, type FC } from "react";
 import type { Report3AcceleratorsView } from "@/data/report3-accelerators";
 import V4PremiumCard from "./V4PremiumCard";
 import V4Prose from "./V4Prose";
 import V4TriggerCard from "./V4TriggerCard";
 import V4TryThis from "./V4TryThis";
+import { useRampFit } from "./useRampFit";
 import { guardedUnlock } from "./v4Unlock";
 
 /**
@@ -41,6 +42,9 @@ interface Props {
 const V4Accelerators: FC<Props> = ({ view, onUnlock }) => {
   const locked = view.lockedFrom !== null;
   const { free, ramp, rest } = view.challenges;
+  // The fade ends where the ramp's scrambled tail starts, on a wide column too.
+  const rampRef = useRef<HTMLDivElement>(null);
+  useRampFit(rampRef, ramp !== null);
 
   return (
     <>
@@ -80,7 +84,7 @@ const V4Accelerators: FC<Props> = ({ view, onUnlock }) => {
             <div className="rv4-ab__gate" onClick={guardedUnlock(onUnlock)}>
               <div className="rv4-ab__gated" aria-hidden="true" inert>
                 {/* 482:6455 — the blur fades in over the ramp's first two lines. */}
-                <div className="rv4-ab__ramp">
+                <div className="rv4-ab__ramp" ref={rampRef}>
                   <V4Prose blocks={[ramp]} />
                   <span className="rv4-pblur" aria-hidden="true">
                     <span />

@@ -6046,8 +6046,12 @@ html {
  * with the chapter-body Premium card 87px into the text, as Typical Beliefs' gate sets
  * it. The block owns the click. It sits in a V3 chapter body, so the filler is set in
  * spans, its type re-asserted, rather than meeting the body's <p> catch-all. */
+/* The block stands at least as tall as its card: the card's 107px + its 191px + the
+ * 24px under it. In the 588px tablet/desktop column the filler wraps to only 281px,
+ * and the chapter body clips, so the card's CTA was sliced through. */
 .rv3.rv4 .rv4-lockch {
   cursor: pointer;
+  min-height: 322px;
   padding: 20px 0 24px;
   position: relative;
 }
@@ -6154,4 +6158,26 @@ html {
  * flex item, so blockified, which ::first-letter needs. */
 .rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-focused .rv3-deck__sub::first-letter {
   text-transform: uppercase;
+}
+
+/* ── The fade ends where a ramp's stand-in text starts — review 25.09 ─────────────
+ * A ramp paragraph is real through its anchor sentence and scrambled after it
+ * (splitRamp). On a phone the scrambled tail starts below the band; in the 552–590px
+ * tablet/desktop column the real part runs to fewer lines and the tail rose into
+ * the band's light blur, where it read as gibberish. useRampFit measures where the
+ * tail's first line starts and sets --rv4-band-fit on the ramp; the band is the
+ * lesser of the two, so phones keep the drawn band exactly. */
+.rv3 .rv4-pblur {
+  --rv4-band-eff: min(var(--rv4-band, 76px), var(--rv4-band-fit, 100000px));
+}
+.rv3 .rv4-pblur > span:nth-child(1) {
+  --rv4-pt: calc(var(--rv4-band-eff) / 3);
+}
+.rv3 .rv4-pblur > span:nth-child(2) {
+  --rv4-pf: calc(var(--rv4-band-eff) / 3);
+  --rv4-pt: calc(var(--rv4-band-eff) * 2 / 3);
+}
+.rv3 .rv4-pblur > span:nth-child(3) {
+  --rv4-pf: calc(var(--rv4-band-eff) * 2 / 3);
+  --rv4-pt: var(--rv4-band-eff);
 }

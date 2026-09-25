@@ -83,7 +83,9 @@ export const gate = (
  * fully blurred, so by the rule above it should not leave as real copy. This keeps
  * the paragraph real through `realThrough` (the end of a sentence chosen so the
  * fade band is real text on every phone) and scrambles the rest of it in place,
- * run by run, so it stays one paragraph that wraps like the original.
+ * run by run, so it stays one paragraph that wraps like the original. The scrambled
+ * runs are marked `veiled`: a wider column runs the real part to fewer lines, and the
+ * page uses the mark to end the fade where the stand-in text starts (useRampFit).
  *
  * Returns the block untouched when it is not a paragraph or the sentence is not in
  * it — the ramp then stays wholly real, as Typical Beliefs' does, rather than
@@ -106,10 +108,10 @@ export const splitRamp = (block: Report3Block, realThrough: string): Report3Bloc
       const from = start;
       start = end;
       if (end <= cut) return [run];
-      if (from >= cut) return [{ ...run, text: scrambleLockedText(run.text) }];
+      if (from >= cut) return [{ ...run, text: scrambleLockedText(run.text), veiled: true }];
       return [
         { ...run, text: run.text.slice(0, cut - from) },
-        { ...run, text: scrambleLockedText(run.text.slice(cut - from)) },
+        { ...run, text: scrambleLockedText(run.text.slice(cut - from)), veiled: true },
       ];
     }),
   };
