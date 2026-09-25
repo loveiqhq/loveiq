@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { owedScanners, scannersByTrigger } from "@/scripts/lib/scanners-by-trigger.mjs";
+import {
+  owedScanners,
+  requeueAction,
+  scannersByTrigger,
+} from "@/scripts/lib/scanners-by-trigger.mjs";
 
 /**
  * "Opened by some scanner" is not "opened by the one that should have looked".
@@ -53,5 +57,45 @@ describe("which scanners still owe a finished reader a look", () => {
       },
     ]);
     expect(owedScanners([1, 1, 0, 0], TRIGGERS, both, new Set()).length).toBe(1);
+  });
+});
+
+/**
+ * PostHog keeps one observation per (scanner, session), and /observe/ does
+ * nothing once it exists. On 2026-09-25, 39 readers had sat "re-queued" for a
+ * week behind temporary failures from 2026-09-18; one retry cleared its row in
+ * 49 seconds.
+ */
+describe("what the re-queue does about an owed pair", () => {
+  it("asks for a first look when PostHog has never tried", () => {
+    expect(requeueAction(undefined)).toEqual({ action: "observe" });
+  });
+
+  it("retries a temporary failure through its own endpoint", () => {
+    expect(
+      requeueAction({
+        id: "o1",
+        status: "failed",
+        error_reason: "infra_transient:Activity task timed out",
+      })
+    ).toEqual({ action: "retry", id: "o1" });
+  });
+
+  it("reads 'temporary' from what PostHog says, not only its category", () => {
+    const retried = (error_reason: string) =>
+      requeueAction({ id: "o", status: "failed", error_reason }).action;
+    expect(retried("provider_transient:The AI provider could not process the video")).toBe("retry");
+    expect(retried("internal_error:Queries are a little too busy right now")).toBe("retry");
+  });
+
+  it("does not resend a permanent failure, or one still in progress", () => {
+    expect(
+      requeueAction({ id: "o2", status: "failed", error_reason: "recording_not_found" }).action
+    ).toBe("give-up");
+    expect(
+      requeueAction({ id: "o3", status: "ineligible", error_reason: "too_short" }).action
+    ).toBe("give-up");
+    expect(requeueAction({ id: "o4", status: "running" }).action).toBe("wait");
+    expect(requeueAction({ id: "o5", status: "succeeded" }).action).toBe("wait");
   });
 });
