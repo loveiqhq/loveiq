@@ -2538,19 +2538,11 @@
   font-family: var(--font-serif);
   font-size: 24px;
   font-weight: 500;
-  letter-spacing: -0.47px;
+  /* Every title in the file, plain (1:1164, 1:1175) or suffixed (1:865). */
+  letter-spacing: -0.24px;
   line-height: 28.8px;
   margin: 0;
   min-width: 0;
-}
-/* 1:865 — the suffixed titles are tracked slightly tighter than the plain ones. */
-.rv3 .rv4-chapter__title.has-suffix {
-  letter-spacing: -0.24px;
-}
-.rv3 .rv4-chapter__of,
-.rv3 .rv4-chapter__archetype {
-  font-size: 14px;
-  line-height: 16.8px;
 }
 .rv3 .rv4-chapter__archetype {
   color: var(--rv3-name-ink);
@@ -2592,15 +2584,16 @@
 .rv3 .rv4-chapter__body > * {
   width: 356px;
 }
-/* 1:871 — the closed-state teaser is SERIF at 19.2, against the open body's
- * sans at 25.6. Two different treatments, not one revealed. */
+/* 1:870 — the closed-state teaser: Plus Jakarta 14/22.4 in the copy ink, 356 wide,
+ * against the open body's 16/25.6. Two different treatments, not one revealed. */
 .rv3 .rv4-chapter__teaser {
   color: var(--rv3-copy);
-  font-family: var(--font-serif);
-  font-size: 16px;
+  font-family: var(--font-sans);
+  font-size: 14px;
   font-weight: 400;
-  line-height: 19.2px;
+  line-height: 22.4px;
   margin: 0;
+  max-width: 100%;
   width: 356px;
 }
 
@@ -5051,34 +5044,26 @@
   padding-bottom: var(--rv4-closed-pb, 20.5px);
 }
 
-/* ══ Chapter title — a suffixed title's lines · 310:224 / 1:865 ══════════════
- * Figma spaces each line of a mixed-size paragraph by that line's OWN height: a
- * line of suffix alone ("Spark Seeker") has its baseline 16.8 under the title's.
- * CSS stacks whole line boxes, so it also kept the 5.616 the 24px run's 28.8 box
- * reaches below its baseline: "Spark Seeker" sat 2.34 low and the head came out
- * 68.6 against the frame's 55. So the title keeps no strut (line-height 0), the
- * 24px run keeps its 28.8, the suffix runs give no box of their own, and each word
- * is a 16.8 box (11.184 over its baseline once its top comes in 2.34, 3.276
- * under) — CSS sizes a line by an inline-block's margin box, so the pulled-in top
- * is what the line sees, while the glyphs stay where they are.
- * One line: 23.184 + 5.616 = 28.8, as before. Two: 23.184 + 16.8 + 3.276 = 43.26,
- * which the frame rounds up to its 44 box — the 0.74 below. (Scoped to the button:
- * the static head renders no runs.) */
+/* ══ Chapter title — the suffix on its own line · 1:865 (25.09) ══════════════
+ * Mark redrew every head (1942042395): "of the <Archetype>" always sits on the line
+ * under the title, with no dash, at Lora Medium 14/22.4 — "of the" in ink, the name
+ * in the archetype ink — and the whole title tracked -0.24. Each line is its own
+ * block, so each sits its own height under the last, as Figma stacks mixed-size
+ * lines: 28.8 + 22.4 = 51.2, the frame's 52 box (the 0.8 below). A title that wraps
+ * (Curiosity & Relationship Form) adds its own 28.8 line. Fatih, 25.09: the four open
+ * chapters take the same head. (Scoped to the button: the static head has no runs.) */
 .rv3 .rv4-chapter__button .rv4-chapter__title.has-suffix {
-  line-height: 0;
-  padding-bottom: 0.74px;
+  padding-bottom: 0.8px;
 }
 .rv3 .rv4-chapter__title.has-suffix .rv4-chapter__name {
+  display: block;
   line-height: 28.8px;
 }
-.rv3 .rv4-chapter__title.has-suffix .rv4-chapter__of,
-.rv3 .rv4-chapter__title.has-suffix .rv4-chapter__archetype {
-  line-height: 0;
-}
-.rv3 .rv4-chapter__word {
-  display: inline-block;
-  line-height: 16.8px;
-  margin-top: -2.34px;
+.rv3 .rv4-chapter__title.has-suffix .rv4-chapter__of {
+  color: var(--rv3-ink);
+  display: block;
+  font-size: 14px;
+  line-height: 22.4px;
 }
 
 /* ══ Premium card — the stroke · 153:2301 / 348:373 / 314:309 ══════════════
@@ -5162,8 +5147,8 @@
   padding-top: 0;
 }
 /* 634:230 — a closed row ends on a 1px ink hairline fading out to the right (the
- * same as 1:850's), 20px under the head where the teaser block's own padding would
- * end — the teasers are not written yet — then the 44px separator 1:872. */
+ * same as 1:850's), where the teaser block's 20px padding ends — 20 under the head
+ * when a chapter has no teaser — then the 44px separator 1:872. */
 .rv3.rv4 .rv4-chapter:not(.is-open):not(.is-static)::after {
   background: linear-gradient(90deg, rgba(22, 16, 33, 0.1), rgba(22, 16, 33, 0));
   content: "";
@@ -5173,6 +5158,32 @@
 }
 .rv3.rv4 .rv4-chapter:not(.is-open):not(.is-static) {
   margin-bottom: 44px;
+}
+/* 1:869 — the teaser under a closed head: 20 above and below, then the hairline with
+ * no second 20. It folds away on the V2 body's own 320ms as the chapter opens, so the
+ * swap reads as one motion rather than a jump. */
+.rv3.rv4 .rv4-chapter__tease {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 320ms ease;
+}
+.rv3.rv4 .rv4-chapter.is-open > .rv4-chapter__tease {
+  grid-template-rows: 0fr;
+}
+.rv3.rv4 .rv4-chapter__tease > div {
+  min-height: 0;
+  overflow: hidden;
+}
+.rv3.rv4 .rv4-chapter__tease .rv4-chapter__teaser {
+  padding: 20px 0;
+}
+.rv3.rv4 .rv4-chapter.has-teaser:not(.is-open)::after {
+  margin-top: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv3.rv4 .rv4-chapter__tease {
+    transition: none;
+  }
 }
 /* An open chapter ends on the rating row and its 44px tail, 16px under the body as
  * Typical Beliefs sets it (`.rv4-chapter__body.is-bare > .rv4-rating`). */

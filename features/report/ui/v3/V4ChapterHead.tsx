@@ -1,25 +1,10 @@
-import { Fragment, type FC } from "react";
+import type { FC } from "react";
 
 /**
  * The head of a Report V4 chapter row — Figma 1:863 / 1:874 — shared by V4Chapter
  * and by the V3 chapters the live V4 report still draws, so every chapter on the
  * page is set alike (review 24.09: "they should match the Typical Beliefs chapter").
  */
-
-/**
- * The suffix, one box per word (310:224 / 1:865). Figma sets a line of suffix alone
- * its own 16.8 below the title's baseline, where CSS would stack it under the 24px
- * run's whole line box; a word box lets reportV3.css pull its top in by exactly the
- * leading the two overlap. Per word, not per run, because the frame breaks inside
- * the suffix ("… of the / Spark Seeker", "… Spark / Seeker").
- */
-const Words: FC<{ text: string }> = ({ text }) =>
-  text.split(" ").map((word, i) => (
-    <Fragment key={i}>
-      {i > 0 ? " " : null}
-      <span className="rv4-chapter__word">{word}</span>
-    </Fragment>
-  ));
 
 /** 304:263 / 1:866 — the 15px chevron, stroke 3, drawn pointing down. */
 const Chevron: FC = () => (
@@ -35,26 +20,19 @@ const Chevron: FC = () => (
 );
 
 /**
- * The chapter title, with its "- of the <Archetype>" suffix when `archetype` is set.
- * The space before the suffix is the 24px run's, as the frame sets it.
- * `breakBeforeSuffix` puts the suffix on its own line, where the frame breaks it
- * (REPORT_V4_SUFFIX_BREAK_IDS).
+ * The chapter title, with "of the <Archetype>" under it when `archetype` is set —
+ * always on a line of its own and with no dash, as Mark redrew every head on 25.09
+ * (1:862 / 1942042395; Fatih: the open chapters too). Each line is its own block, so
+ * each sits its own height under the last, the way Figma stacks mixed-size lines.
+ * The space between the two runs is only for assistive tech: blocks swallow it.
  */
-export const V4ChapterTitle: FC<{
-  title: string;
-  archetype?: string;
-  breakBeforeSuffix?: boolean;
-}> = ({ title, archetype, breakBeforeSuffix = false }) => (
+export const V4ChapterTitle: FC<{ title: string; archetype?: string }> = ({ title, archetype }) => (
   <h3 className={`rv4-chapter__title${archetype ? " has-suffix" : ""}`}>
     {archetype ? (
       <>
-        <span className="rv4-chapter__name">{`${title} `}</span>
-        {breakBeforeSuffix ? <br /> : null}
+        <span className="rv4-chapter__name">{title}</span>{" "}
         <span className="rv4-chapter__of">
-          <Words text="- of the" />{" "}
-        </span>
-        <span className="rv4-chapter__archetype">
-          <Words text={archetype} />
+          of the <span className="rv4-chapter__archetype">{archetype}</span>
         </span>
       </>
     ) : (

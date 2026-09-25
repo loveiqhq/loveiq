@@ -10,6 +10,7 @@ import V4Report from "@features/report/ui/v3/V4Report";
 import V3Methodology from "@features/report/ui/v3/V3Methodology";
 import { report3ArchetypeCard } from "@/data/report3-archetype-card";
 import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
+import { REPORT_V4_CHAPTER_TEASERS } from "@/data/report4-chapter-teasers";
 import {
   CHAPTER_COPY_PLACEHOLDER,
   PART_INTRO_PLACEHOLDER,
@@ -127,17 +128,22 @@ describe("V4ChapterPart", () => {
   it("renders five chapters, each suffixed with the archetype", () => {
     const { container } = renderPart3();
     expect(container.querySelectorAll(".rv4-chapter")).toHaveLength(5);
-    // The name is set a word per box (310:224), so it is read off the suffix whole.
+    // The name sits in its own run on the suffix line (1:865).
     expect(
       [...container.querySelectorAll(".rv4-chapter__archetype")].map((el) => el.textContent)
     ).toEqual(Array(5).fill("Spark Seeker"));
   });
 
-  it("renders the frame's placeholders rather than inventing copy", () => {
+  it("shows Sanjin's teasers where they are written, the frame's placeholders elsewhere", () => {
     renderPart3();
-    // 1:860 carries [Chapter Copy]; the other four carry [Teaser Text].
+    // 1:860 carries [Chapter Copy]. Core Insecurities, Confidence Level and Power
+    // Orientation carry their teasers (1:871 / 1:882 / 1:893); Importance of
+    // Sexuality, a row only the preview still draws, keeps [Teaser Text].
     expect(screen.getByText(CHAPTER_COPY_PLACEHOLDER)).toBeInTheDocument();
-    expect(screen.getAllByText(TEASER_PLACEHOLDER)).toHaveLength(4);
+    expect(screen.getAllByText(TEASER_PLACEHOLDER)).toHaveLength(1);
+    for (const id of ["core_insecurities", "confidence_level", "power_orientation"]) {
+      expect(screen.getByText(REPORT_V4_CHAPTER_TEASERS[id]!)).toBeInTheDocument();
+    }
     expect(screen.getByText(PART_INTRO_PLACEHOLDER)).toBeInTheDocument();
   });
 
@@ -325,9 +331,9 @@ describe("reportV3.css — V4 contracts", () => {
     expect(V3_CSS).toMatch(/\.rv3\.rv4-doc \.rv3-sci__card \{[^}]*min-height: 0/);
   });
 
-  it("keeps the teaser serif against the open body's sans", () => {
-    expect(V3_CSS).toMatch(/\.rv4-chapter__teaser \{[^}]*font-family: var\(--font-serif\)/);
-    expect(V3_CSS).toMatch(/\.rv4-chapter__teaser \{[^}]*line-height: 19\.2px/);
+  it("sets the teaser in Plus Jakarta 14/22.4, as 1:870 does", () => {
+    expect(V3_CSS).toMatch(/\.rv4-chapter__teaser \{[^}]*font-family: var\(--font-sans\)/);
+    expect(V3_CSS).toMatch(/\.rv4-chapter__teaser \{[^}]*line-height: 22\.4px/);
   });
 });
 
