@@ -23,6 +23,7 @@
 
 import { scrambleLockedText } from "@features/report/server/scrambleLockedText";
 import { gate, scrambleBlock, type Report3PracticeView } from "@features/report/server/gatedCopy";
+import { getFantasyMapDots, type FantasyMapDot } from "@features/report/server/fantasyMap";
 import {
   reportPracticeTendencies,
   type ReportPracticeTendencyRow,
@@ -273,6 +274,12 @@ export interface Report3FantasyView {
   locked: boolean;
   /** 304:291 — 305:226 draws it all sharp, so it is the same for everyone. */
   intro: readonly Report3Block[];
+  /**
+   * The map's dots (696:4393): the archetype's sixteen most characteristic
+   * fantasies, placed by their scores as V2's map places them. Null when locked —
+   * the scores are paid — and the client draws V2's illustrative layout, blurred.
+   */
+  mapDots: FantasyMapDot[] | null;
   table: Report3FantasyTable;
   /** 368:1920 open; scrambled whole when locked — 305:228 blurs it all. */
   challenges: readonly Report3Block[];
@@ -339,10 +346,11 @@ const standIn = (row: ReportPracticeTendencyRow): Report3FantasyRow => ({
  *
  * `locked` is decided by the caller, from the same gate V2's section runs through
  * (`fantasyUnlocked`), so nothing in the V4 tree ever sees an access plan. A locked
- * reader receives: the intro verbatim; the first three rows of the first three
- * categories verbatim, two stand-ins under each; three stand-ins in every other
- * category; "Common challenges" scrambled; practice paragraphs 1-4 verbatim and the
- * rest scrambled; and the closed teaser verbatim, because it is free copy.
+ * reader receives: the intro verbatim; no map dots; the first three rows of the
+ * first three categories verbatim, two stand-ins under each; three stand-ins in
+ * every other category; "Common challenges" scrambled; practice paragraphs 1-4
+ * verbatim and the rest scrambled; and the closed teaser verbatim, because it is
+ * free copy.
  */
 export function buildFantasy(
   archetype: string,
@@ -378,6 +386,7 @@ export function buildFantasy(
   return {
     locked,
     intro: copy.intro,
+    mapDots: locked ? null : getFantasyMapDots(archetype),
     table: { locked, categories },
     challenges: locked ? copy.challenges.map(scrambleBlock) : copy.challenges,
     practice: {
