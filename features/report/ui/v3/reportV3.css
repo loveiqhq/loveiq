@@ -4769,22 +4769,21 @@
   height: 14.625px;
 }
 
-/* ══ Accelerator & Brakes — trigger cards · 386:219 / 386:317, paywalled 386:416 / 386:444 ══
+/* ══ Accelerator & Brakes — trigger cards · 713:6132 / 713:6181, paywalled 386:416 / 386:444 ══
  * One card, two tones: coral brakes, green accelerators. Every tint is the tone at
- * a fixed alpha, so the tone is carried as an RGB triple.
+ * a fixed alpha, so the tone is carried as an RGB triple. No scales since 25.09
+ * (Mark, 1942039325).
  *
  * Figma draws strokes INSIDE the frame, so the 1px card border, the header's rule
- * and each row's rule are folded into the padding: 361 x 661 / 642 at 393 as drawn.
- * Figma also rounds a text box up to the whole pixel (22.4 → 23, 38.4 → 39), which
- * the title's min-height and the 0.6px under each explanation reproduce, so rows
- * land at the frame's 107 / 126. */
+ * and each row's rule are folded into the padding: open 361 x 386 / 348 at 393 as
+ * drawn, paywalled 591 / 572. Figma also rounds a text box up to the whole pixel
+ * (22.4 → 23, 38.4 → 39), which the title's min-height and the 0.6px under each
+ * explanation reproduce, so rows land at the frame's 93 / 112. */
 .rv3 .rv4-trig--brake {
   --trig: 194, 84, 47;
-  --trig-fill: 0.45;
 }
 .rv3 .rv4-trig--accel {
   --trig: 46, 125, 91;
-  --trig-fill: 0.5;
 }
 .rv3 .rv4-trig {
   background: rgba(var(--trig), 0.04);
@@ -4875,49 +4874,51 @@
   margin: 0;
   padding-bottom: 0.6px;
 }
-/* 469:225 */
-.rv3 .rv4-trig__scale {
-  display: block;
-  height: 10px;
+/* 713:6132 / 713:6181 — open, the third row peeks under the fantasy table's fade
+ * (clear, 70% at 40%, white from 85%), 96 tall from 2px above the row and clipped to
+ * it, with the pill 48px into the row. The brakes frame sets its pill 11.5px left of
+ * the middle and the accelerators' on it; both centre here. The row keeps the
+ * frame's 92 at least, so the pill always fits in it. */
+.rv3 .rv4-trig__peek {
+  min-height: 92px;
+  overflow: hidden;
   position: relative;
 }
-.rv3 .rv4-trig__track {
-  background: rgba(22, 16, 33, 0.07);
-  border-radius: 1px;
-  height: 2px;
+.rv3 .rv4-trig__fade {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.7) 40%,
+    #fff 85%
+  );
+  height: 96px;
   left: 0;
+  pointer-events: none;
   position: absolute;
-  top: 4px;
-  width: 100%;
+  right: 0;
+  top: -2px;
 }
-.rv3 .rv4-trig__fill {
-  background: rgba(var(--trig), var(--trig-fill));
-  border-radius: 1px;
-  height: 2px;
-  left: 0;
+.rv3 .rv4-trig__peek .rv4-trig__pill {
+  left: 50%;
   position: absolute;
-  top: 4px;
-  width: var(--fill);
+  top: 48px;
+  transform: translateX(-50%);
 }
-.rv3 .rv4-trig__knob {
-  background: rgb(var(--trig));
-  border-radius: 3px;
-  height: 6px;
-  left: calc(var(--fill) - 3px);
-  position: absolute;
-  top: 2px;
-  width: 6px;
+/* The pill moves focus to the first row it revealed; the row is not a control. */
+.rv3 .rv4-trig__row:focus {
+  outline: none;
 }
-/* 386:416 / 386:444 — rows 3-5 blurred uniformly (the frame's 2px), the badge
- * 96px / 99px below the first blurred row's top, centred (157 of 361). */
+/* 386:416 / 386:444 — rows 3-5 blurred uniformly (the frame's radius 4), the badge
+ * 124px / 127px below the first blurred row's top, centred (157 of 361), as the
+ * frames place it now the rows have no scales. */
 .rv3 .rv4-trig__row.is-locked {
   filter: blur(2px);
 }
 .rv3 .rv4-trig--brake .rv4-trig__lock {
-  --rv4-lock-top: 96px;
+  --rv4-lock-top: 124px;
 }
 .rv3 .rv4-trig--accel .rv4-trig__lock {
-  --rv4-lock-top: 99px;
+  --rv4-lock-top: 127px;
 }
 
 /* ══ "Try this & see what shifts" — per-chapter numbers ═══════════════════════
@@ -5213,47 +5214,6 @@
 @media (min-width: 1025px) {
   .rv3.rv4.report-experience--sticky-pad .rv4-backtop {
     bottom: calc(12px + var(--report-unlock-bar-h, 78px) + 12px);
-  }
-}
-
-/* ══ A&B trigger scales — 2.0's reveal, back · review 24.09 ══════════════════════
- * "In the Accelerators & Brakes visual, can we bring back the animation from V2
- * Report". 2.0's chart (report.css `.report-chart-reveal`): each fill grows from its
- * origin, 70ms behind the row above, and each knob lands once its fill has reached
- * it. scaleX, not width, so the growth is composited and the static geometry above
- * (`width: var(--fill)`, the knob's `left`) is what the reveal arrives at. The knob
- * has no transform of its own, so it scales about its own centre and does not drift.
- * Fail-safe as 2.0's: a card without `.rv4-reveal` matches none of this and simply
- * shows its values; V4TriggerCard adds `.is-revealed` via useRevealOnView. */
-.rv3 .rv4-trig__rows.rv4-reveal:not(.is-revealed) .rv4-trig__fill {
-  transform: scaleX(0);
-}
-.rv3 .rv4-trig__rows.rv4-reveal .rv4-trig__fill {
-  transform-origin: left center;
-  transition: transform 820ms cubic-bezier(0.22, 1, 0.36, 1);
-  transition-delay: calc(var(--row, 0) * 70ms);
-}
-.rv3 .rv4-trig__rows.rv4-reveal:not(.is-revealed) .rv4-trig__knob {
-  opacity: 0;
-  transform: scale(0.35);
-}
-.rv3 .rv4-trig__rows.rv4-reveal .rv4-trig__knob {
-  transition:
-    opacity 260ms ease-out,
-    transform 380ms cubic-bezier(0.16, 1, 0.3, 1);
-  transition-delay: calc(var(--row, 0) * 70ms + 620ms);
-}
-@media (prefers-reduced-motion: reduce) {
-  .rv3 .rv4-trig__rows.rv4-reveal:not(.is-revealed) .rv4-trig__fill {
-    transform: none;
-  }
-  .rv3 .rv4-trig__rows.rv4-reveal:not(.is-revealed) .rv4-trig__knob {
-    opacity: 1;
-    transform: none;
-  }
-  .rv3 .rv4-trig__rows.rv4-reveal .rv4-trig__fill,
-  .rv3 .rv4-trig__rows.rv4-reveal .rv4-trig__knob {
-    transition: none;
   }
 }
 
@@ -6510,8 +6470,10 @@ html {
 /* 639:498 / 639:2099 — a white pill 31 tall, a 1.5px coral → rose → violet outline
  * and its 10/12 bold caps in the same gradient; Figma's handles, in CSS stops. The
  * height is set, not summed: Chromium floors a 1.5px border to 1, which would take
- * a pixel off it. The hit area is 44 tall. */
-.rv3 .rv4-fvt__pill {
+ * a pixel off it. The hit area is 44 tall. The A&B cards' "Show all" (713:6178 /
+ * 713:6226) is the same pill. */
+.rv3 .rv4-fvt__pill,
+.rv3 .rv4-trig__pill {
   align-items: center;
   background:
     linear-gradient(#fff, #fff) padding-box,
@@ -6531,16 +6493,19 @@ html {
   text-transform: uppercase;
   white-space: nowrap;
 }
-.rv3 .rv4-fvt__pill::after {
+.rv3 .rv4-fvt__pill::after,
+.rv3 .rv4-trig__pill::after {
   content: "";
   inset: -6.5px 0;
   position: absolute;
 }
-.rv3 .rv4-fvt__pill:focus-visible {
+.rv3 .rv4-fvt__pill:focus-visible,
+.rv3 .rv4-trig__pill:focus-visible {
   outline: 2px solid var(--rv3-violet);
   outline-offset: 2px;
 }
-.rv3 .rv4-fvt__pill-label {
+.rv3 .rv4-fvt__pill-label,
+.rv3 .rv4-trig__pill-label {
   -webkit-background-clip: text;
   background-clip: text;
   /* The longhand, so it cannot reset the clip above as the shorthand would. */
