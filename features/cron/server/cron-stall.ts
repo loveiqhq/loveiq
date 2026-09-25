@@ -90,6 +90,12 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   // Nightly, in GitHub Actions. It records a run whether or not anything was queued, so a
   // missing night means the job did not fire, and questions are waiting on it.
   "brain-night-shift": 26 * 3_600_000,
+  // WEEKLY, Mondays in GitHub Actions: the two test batteries record their results, then
+  // the brain's report on itself is written. Eight days is one missed Monday, and a missed
+  // Monday means a week with no accuracy measurement at all.
+  "brain-health": 8 * 24 * 3_600_000,
+  "brain-battery-retrieval": 8 * 24 * 3_600_000,
+  "brain-battery-mcp": 8 * 24 * 3_600_000,
   /**
    * GITHUB-SCHEDULED. GitHub starts this repo's schedules 4.5 to 5.5 hours late and
    * drops some: from 2026-09-14 the verifier ran 4-6 times a day on an 8-a-day cron.
@@ -112,6 +118,10 @@ export const GITHUB_WORKFLOW: Record<string, string> = {
   "brain-brief": "brain-daily.yml",
   "brain-mine": "brain-daily.yml",
   "brain-night-shift": "brain-daily.yml",
+  // All three run in brain-daily.yml's `brain-health` job; start that one.
+  "brain-health": "brain-daily.yml",
+  "brain-battery-retrieval": "brain-daily.yml",
+  "brain-battery-mcp": "brain-daily.yml",
   "ux-review-verify": "ux-review-verify.yml",
   "ux-digest-audit": "ux-digest-audit.yml",
 };

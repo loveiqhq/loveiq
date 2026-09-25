@@ -9,11 +9,27 @@
  * than trusting a human to spot a subtle miss in twenty paragraphs.
  *
  * Usage: npx tsx scripts/brain-battery.ts [--only <substring>]
+ *        npx tsx scripts/brain-battery.ts --retrieval|--mcp [--record]
+ *
+ * `--record` stores the run's result in cron_run for the brain's weekly report
+ * (`brain_health`), and exits 0 once it is stored, whatever failed.
  */
 
 import { answerQuestion } from "@features/brain/server/answer";
 import { retrieve, type BrainChunk, type RetrieveOptions } from "@features/brain/server/retrieve";
 import { supabaseFetch } from "@features/admin/server/supabase";
+
+/** What one battery run found, as `--record` stores it for the brain's weekly report. */
+interface BatteryResult {
+  total: number;
+  clean: number;
+  /** Failed twice, or a KNOWN_RED probe that now passes (its entry must go). */
+  failing: string[];
+  /** Passed only on the retry: counted apart, never as clean. */
+  flaky: string[];
+  /** Red on purpose, listed in KNOWN_RED. */
+  known: number;
+}
 
 interface Probe {
   kind: string;
@@ -2446,7 +2462,7 @@ function adversarialProbes(): RetrievalProbe[] {
   ];
 }
 
-async function runRetrievalBattery(only: string | null): Promise<number> {
+async function runRetrievalBattery(only: string | null): Promise<BatteryResult> {
   const live = await readLiveCounts();
   console.log(
     `live figures read from the database: ${live.monthSignups ?? "?"} signups this month, ` +
@@ -2497,6 +2513,8 @@ async function runRetrievalBattery(only: string | null): Promise<number> {
 
   let flaky = 0;
   let known = 0;
+  const failing: string[] = [];
+  const flakyKinds: string[] = [];
   for (const p of probes) {
     let { hits, issues, ms } = await run(p);
     let firstIssues: string[] = [];
@@ -2523,6 +2541,8 @@ async function runRetrievalBattery(only: string | null): Promise<number> {
     else if (issues.length && knownWhy) known++;
     else if (issues.length) failures++;
     else if (firstIssues.length) flaky++;
+    if (recovered || (issues.length && !knownWhy)) failing.push(p.kind);
+    else if (!issues.length && firstIssues.length) flakyKinds.push(p.kind);
 
     console.log(
       `\n${state} [${p.kind}] ${JSON.stringify(p.q.slice(0, 62))}` +
@@ -2547,7 +2567,13 @@ async function runRetrievalBattery(only: string | null): Promise<number> {
       `${known ? `, ${known} known (red on purpose, listed in KNOWN_RED)` : ""}` +
       `${flaky ? `, ${flaky} FLAKY (passed only on retry — not counted clean)` : ""} ===`
   );
-  return failures;
+  return {
+    total: probes.length,
+    clean: probes.length - failures - flaky - known,
+    failing,
+    flaky: flakyKinds,
+    known,
+  };
 }
 
 /** Strip thousands separators so `1,110.85` matches an expected `1110.85`. The
@@ -3600,31 +3626,40 @@ async function checkEveryDocumentedParamDoesSomething(): Promise<string[]> {
   return issues;
 }
 
-async function runMcpBattery(only: string | null): Promise<number> {
+async function runMcpBattery(only: string | null): Promise<BatteryResult> {
   const { POST } = await import("@/app/api/mcp/route");
   const token = process.env.LOVEIQ_MCP_TOKEN;
   if (!token) {
-    console.error(
+    throw new Error(
       "LOVEIQ_MCP_TOKEN is not set, so the MCP door cannot be opened. Nothing was tested."
     );
-    return 1;
   }
 
   const all = await mcpProbes();
   const probes = only ? all.filter((p) => p.kind.includes(only) || p.tool.includes(only)) : all;
   let failures = 0;
+  const failing: string[] = [];
+  let checks = 0;
 
   // Not a tool call, so it sits outside the probe list — but it guards the same door.
   if (!only || "mcp-array-keys-all-handled".includes(only)) {
     const drift = await checkArrayMetaKeysAreHandled();
-    if (drift.length) failures += 1;
+    checks++;
+    if (drift.length) {
+      failures += 1;
+      failing.push("mcp-array-keys-all-handled");
+    }
     console.log(`\n${drift.length ? "FAIL" : "ok  "} [mcp-array-keys-all-handled] metadata shapes`);
     for (const d of drift) console.log(`      ISSUE: ${d}`);
   }
 
   if (!only || "mcp-title-stopwords-current".includes(only)) {
     const stale = await checkTitleStopwordsAreCurrent();
-    if (stale.length) failures += 1;
+    checks++;
+    if (stale.length) {
+      failures += 1;
+      failing.push("mcp-title-stopwords-current");
+    }
     console.log(
       `\n${stale.length ? "FAIL" : "ok  "} [mcp-title-stopwords-current] title word frequencies`
     );
@@ -3633,7 +3668,11 @@ async function runMcpBattery(only: string | null): Promise<number> {
 
   if (!only || "mcp-params-all-do-something".includes(only)) {
     const dead = await checkEveryDocumentedParamDoesSomething();
-    if (dead.length) failures += 1;
+    checks++;
+    if (dead.length) {
+      failures += 1;
+      failing.push("mcp-params-all-do-something");
+    }
     console.log(
       `\n${dead.length ? "FAIL" : "ok  "} [mcp-params-all-do-something] documented parameters`
     );
@@ -3678,17 +3717,58 @@ async function runMcpBattery(only: string | null): Promise<number> {
       issues = [`threw: ${err instanceof Error ? err.message : String(err)}`];
     }
     const ms = Date.now() - started;
-    if (issues.length) failures++;
+    if (issues.length) {
+      failures++;
+      failing.push(p.kind);
+    }
     console.log(
       `\n${issues.length ? "FAIL" : "ok  "} [${p.kind}] ${p.tool}  ${ms}ms  ${text.length} chars`
     );
     for (const i of issues) console.log(`      ISSUE: ${i}`);
   }
 
-  console.log(
-    `\n=== mcp: ${probes.length - failures}/${probes.length} clean, ${failures} flagged ===`
-  );
-  return failures;
+  const total = probes.length + checks;
+  console.log(`\n=== mcp: ${total - failures}/${total} clean, ${failures} flagged ===`);
+  return { total, clean: total - failures, failing, flaky: [], known: 0 };
+}
+
+/**
+ * `--record`: store the run as a cron_run row, read by the brain's weekly report
+ * (features/brain/server/self-report.ts). Status "success" means the battery RAN; what
+ * failed is in the summary. Lists are capped so the JSON always fits the 1,000-character
+ * column whole: a cut summary would not parse, and the report would lose the week.
+ */
+async function recordRun(
+  name: "brain-battery-retrieval" | "brain-battery-mcp",
+  startedAtMs: number,
+  outcome: BatteryResult | Error
+): Promise<boolean> {
+  const cap = (list: string[]) => list.slice(0, 10).map((k) => k.slice(0, 48));
+  const message =
+    outcome instanceof Error
+      ? outcome.message.slice(0, 1000)
+      : JSON.stringify({
+          total: outcome.total,
+          clean: outcome.clean,
+          failing: cap(outcome.failing),
+          flaky: cap(outcome.flaky),
+          known: outcome.known,
+        });
+  const res = await supabaseFetch("/rest/v1/cron_run", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
+    body: JSON.stringify({
+      cron_name: name,
+      started_at: new Date(startedAtMs).toISOString(),
+      completed_at: new Date().toISOString(),
+      duration_ms: Date.now() - startedAtMs,
+      status: outcome instanceof Error ? "error" : "success",
+      error_message: message,
+    }),
+  }).catch(() => null);
+  const ok = Boolean(res?.ok);
+  console.log(ok ? `recorded as ${name}` : `COULD NOT RECORD ${name} in cron_run`);
+  return ok;
 }
 
 async function main(): Promise<void> {
@@ -3698,12 +3778,26 @@ async function main(): Promise<void> {
   // Retrieval mode measures the MCP door and needs no model, so it must be checked
   // BEFORE the LLM-key gate below — otherwise the mode that can always run would be
   // refused for a key it never uses.
-  if (process.argv.includes("--retrieval")) {
-    process.exit((await runRetrievalBattery(only)) ? 1 : 0);
+  // With --record the exit code says whether the run was recorded: what failed is a
+  // finding for the weekly report, not a failed job.
+  const record = process.argv.includes("--record");
+  if (record && only) {
+    console.error("--record stores a whole run, so it cannot be combined with --only.");
+    process.exit(2);
   }
-  // Same reason as --retrieval: no model, so it must be reachable without a key.
-  if (process.argv.includes("--mcp")) {
-    process.exit((await runMcpBattery(only)) ? 1 : 0);
+  for (const [flag, name, run] of [
+    ["--retrieval", "brain-battery-retrieval", runRetrievalBattery],
+    // Same reason as --retrieval: no model, so it must be reachable without a key.
+    ["--mcp", "brain-battery-mcp", runMcpBattery],
+  ] as const) {
+    if (!process.argv.includes(flag)) continue;
+    const started = Date.now();
+    const outcome = await run(only).catch((err: unknown) =>
+      err instanceof Error ? err : new Error(String(err))
+    );
+    if (outcome instanceof Error) console.error(outcome.message);
+    if (record) process.exit((await recordRun(name, started, outcome)) ? 0 : 1);
+    process.exit(outcome instanceof Error || outcome.failing.length ? 1 : 0);
   }
   // Without a model every probe reports `unconfigured`, which renders as 24 FAILs
   // and buries the one real cause. Say it once and stop.

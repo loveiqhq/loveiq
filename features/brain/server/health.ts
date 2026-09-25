@@ -40,10 +40,10 @@ export const WINDOW_HOURS = 24;
  * `CorpusUnavailableError`. Matched on rather than re-derived: it is deliberately
  * distinct from "no results" so a model never reads an outage as absence.
  */
-const OUTAGE_PHRASE = "knowledge base is unreachable";
+export const OUTAGE_PHRASE = "knowledge base is unreachable";
 
 /** The catch-all the route returns when a tool throws. A real fault, unlike a refusal. */
-const FAILURE_PHRASE = "That lookup failed";
+export const FAILURE_PHRASE = "That lookup failed";
 
 /**
  * An empty search is only worth a word when there are enough of them to be a pattern.

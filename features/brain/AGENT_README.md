@@ -25,6 +25,9 @@ Claude Code) is the door people use; the operator's guide is
 - `server/comment-asks.ts` — `comment_asks`: asks in Figma comments (read from the Figma API, mentions from
   the "@Name" in the plain message) and Google Docs comments (from notification emails, checked against the
   Drive API as the person asked), each with its live open/answered/resolved status.
+- `server/self-report.ts` — `brain_health`: the brain's report on itself (use, weak and empty searches,
+  errors, speed, the weekly batteries from `cron_run`, job health from the stall watcher's table), also
+  written weekly as a notice by `app/api/cron/brain-health`.
 - `server/night-shift.ts` — the Night Shift: `queue_research` writes a `research` record, and the
   nightly `brain-night-shift` job (GitHub Actions) answers it with Claude Code, the brain's read-only
   tools over MCP (`RESEARCH_TOOLS`) and the web; every writing tool is denied (`WRITE_TOOLS`).

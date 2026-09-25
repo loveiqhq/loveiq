@@ -65,6 +65,12 @@ vi.mock("@features/brain/server/night-shift", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@features/brain/server/night-shift")>()),
   queueResearch: (...a: unknown[]) => mockQueueResearch(...a),
 }));
+const mockSelfReport = vi.fn();
+const mockRenderSelfReport = vi.fn();
+vi.mock("@features/brain/server/self-report", () => ({
+  selfReport: (...a: unknown[]) => mockSelfReport(...a),
+  renderSelfReport: (...a: unknown[]) => mockRenderSelfReport(...a),
+}));
 const mockCommentAsks = vi.fn();
 const mockCommentDeps = vi.fn();
 vi.mock("@features/brain/server/comment-asks", async (importOriginal) => ({
@@ -85,7 +91,7 @@ vi.mock("@shared/http/ratelimit", () => ({
 
 import { flushAfterResponse } from "@shared/http/after-response";
 import { recordToolCall } from "@features/brain/server/log";
-import { outrankingHeldBack, POST, TOOLS } from "@/app/api/mcp/route";
+import { outrankingHeldBack, POST, RELEVANCE_FLOOR, TOOLS } from "@/app/api/mcp/route";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CorpusUnavailableError } from "@features/brain/server/retrieve";
@@ -479,6 +485,47 @@ describe("/api/mcp", () => {
       });
     });
 
+    describe("brain_health", () => {
+      const call = async (args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 15,
+                method: "tools/call",
+                params: { name: "brain_health", arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+      beforeEach(() => {
+        mockSelfReport.mockReset().mockResolvedValue({ now: { calls: 3 } });
+        mockRenderSelfReport.mockReset().mockReturnValue("the report");
+      });
+
+      it("reports the last seven days by default, questions included, against the floor", async () => {
+        const r = await call({});
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.text).toBe("the report");
+        expect(mockSelfReport).toHaveBeenCalledWith(7, RELEVANCE_FLOOR);
+        expect(mockRenderSelfReport).toHaveBeenCalledWith(expect.anything(), RELEVANCE_FLOOR, {
+          withQuestions: true,
+        });
+        await call({ days: 30 });
+        expect(mockSelfReport).toHaveBeenLastCalledWith(30, RELEVANCE_FLOOR);
+      });
+
+      it("refuses a window that is not a whole number of days from 1 to 30", async () => {
+        for (const days of [0, 31, 2.5, "7", null]) {
+          const r = await call({ days });
+          expect(r.isError, String(days)).toBe(true);
+          expect(r.content[0]!.text).toBe("`days` must be a whole number from 1 to 30.");
+        }
+        expect(mockSelfReport).not.toHaveBeenCalled();
+      });
+    });
+
     describe("comment_asks", () => {
       const call = async (args: Record<string, unknown>) =>
         (
@@ -843,6 +890,7 @@ describe("/api/mcp", () => {
         "what_shipped",
         "explain_change",
         "comment_asks",
+        "brain_health",
         "whats_new",
         "check_copy",
         "get_context_pack",
@@ -5624,6 +5672,7 @@ describe("the runbook's tool count is the real one", () => {
     23: "Twenty-three",
     24: "Twenty-four",
     25: "Twenty-five",
+    26: "Twenty-six",
   };
 
   it("matches what the server actually exposes", () => {

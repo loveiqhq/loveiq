@@ -69,6 +69,7 @@ import {
   liveDeps as commentAskDeps,
   renderAsks,
 } from "@features/brain/server/comment-asks";
+import { renderSelfReport, selfReport } from "@features/brain/server/self-report";
 import { renderWhatsNew, whatsNew } from "@features/brain/server/whats-new";
 import {
   isJump,
@@ -1635,6 +1636,27 @@ export const TOOLS = [
         include_resolved: {
           type: "boolean",
           description: "Also list the resolved and deleted asks. Default false.",
+        },
+      },
+    },
+  },
+  {
+    name: "brain_health",
+    title: "How the brain itself is doing",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "The brain's own report on itself over a window of days, against the window before: how " +
+      "much people used it and which tools, how often a search came back weak or empty and which " +
+      "questions it could not answer well, calls that failed and guards that refused, speed, the " +
+      "weekly test batteries (fixed questions with known answers) with what fails, and every " +
+      "scheduled job that failed or stopped running. Use it for 'how is Jarvis doing', 'can we " +
+      "trust it', or 'what does it not know'. The same report is written as a notice every week.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        days: {
+          type: "integer",
+          description: "How many days back, 1 to 30. Default 7, compared with the 7 before.",
         },
       },
     },
@@ -4737,6 +4759,16 @@ async function callTool(
     );
   }
 
+  if (name === "brain_health") {
+    const days = args.days === undefined ? 7 : args.days;
+    if (typeof days !== "number" || !Number.isInteger(days) || days < 1 || days > 30) {
+      return textResult("`days` must be a whole number from 1 to 30.", true);
+    }
+    const report = await selfReport(days, RELEVANCE_FLOOR);
+    stats.sourceCount = report.now?.calls ?? 0;
+    return textResult(renderSelfReport(report, RELEVANCE_FLOOR, { withQuestions: true }));
+  }
+
   if (name === "queue_research") {
     const question = typeof args.question === "string" ? args.question.trim() : "";
     if (question.length < 15 || question.length > 1500) {
@@ -5195,6 +5227,8 @@ export const MCP_INSTRUCTIONS =
   "owner, read off the notes by code, and whether the Notion board tracks it.\n\n" +
   "ASKS IN COMMENTS: comment_asks lists what people asked each other in Figma and Google Docs " +
   "comments, and whether each is still open, checked live against Figma and Google Drive.\n\n" +
+  "HOW THE BRAIN IS DOING: brain_health is its own report card: use, weak and empty searches, " +
+  "failures, speed, the weekly test batteries and job health, against the window before.\n\n" +
   "WHAT IS NEW: whats_new lists what the brain produced on its own since a time: notices, the " +
   "Night Shift's research answers and decisions. Call it when someone asks what is new or what " +
   "they missed.\n\n" +

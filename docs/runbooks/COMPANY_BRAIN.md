@@ -358,7 +358,7 @@ When registering any callback — Resend, Stripe, Slack — paste the `www`
 host, then confirm rows actually arrive. An endpoint that returns 401 to an
 unsigned probe proves it is deployed, not that it is reachable by the sender.
 
-**Twenty-five tools, in three groups.** Nineteen read, six write. The write ones act
+**Twenty-six tools, in three groups.** Twenty read, six write. The write ones act
 immediately and are described at the bottom of this section — a teammate who reads
 only the first table will not know the brain can send an email.
 
@@ -375,6 +375,7 @@ only the first table will not know the brain can send an email.
 | `what_shipped`           | What changed, as the plain-English "For Marcus:" line every change to main carries, newest first, with date and pull request. Read live from GitHub, never indexed                                                                                                                                                                                                                                                                                                          |
 | `explain_change`         | Whether a day's numbers were outside their usual range (each against the 28 days before, median and spread) and where each move came from: traffic source or GA4 channel, the two halves of a rate, engagement, GA4 against our own count, ad spend and campaigns, what shipped and what was decided. The likely causes are fixed rules over numbers, never a model's guess. The anomaly watcher writes yesterday's unusual numbers as a notice between 07:00 and 11:00 UTC |
 | `comment_asks`           | Every ask left in a Figma or Google Docs comment: who asked whom, for what, a link, and whether it is still open, checked live. Figma is read from its API for every file whose link was shared somewhere the brain reads; Google from each person's notification emails, checked against Drive as that person. Says what it could not read                                                                                                                                 |
+| `brain_health`           | How the brain itself is doing over 1 to 30 days, against the days before: use by tool, weak and empty searches and the questions it could not answer well, failed calls and error messages, speed, the weekly test batteries with what fails, and every brain job that failed or stopped running                                                                                                                                                                            |
 | `whats_new`              | What the brain produced on its own since a time (default the last 24 hours): notices, the Night Shift's research answers and decisions, newest first with ids, plus how many questions still wait for tonight. The door for "what's new", and what the Claude Code session hook shows at startup                                                                                                                                                                            |
 | `check_copy`             | Report copy against the house rules, with the sentence behind each finding: em dashes, machine-written phrases, absolute claims, reading level, length, lines that fit every archetype or repeat another chapter, and the chapter's shipped voice. Leave out `text` and name a chapter and archetype to audit what shipped                                                                                                                                                  |
 | `get_context_pack`       | Exactly what drafting one chapter for one archetype needs, inside a fixed size: the chapter's rules, the shipped text, another archetype's version as a model, who the archetype is, research cards and the matching prompt documents. The `draft_chapter` prompt chains it with `check_copy` and a Google Doc that ends with a "How this was made" section (model, date, who asked, prompt document, research used, final check), so the draft carries its own provenance  |
@@ -933,6 +934,24 @@ a new writing tool is on neither.
   research at a higher cost to the seat's allowance.
 - **Running it by hand.** Run the workflow with `job: brain-night-shift`. `cron_run` records
   `queued=N answered=N failed=N`, and says "error" only when the agent itself failed.
+
+### Mondays: the test batteries, then the brain's report on itself
+
+At 01:40 UTC on Mondays `brain-daily.yml` runs `brain-health` (plan item G9). It needs no
+model; it runs here so the report follows the tests:
+
+1. `scripts/brain-battery.ts --retrieval --record` and `--mcp --record` run the two test
+   batteries (fixed questions with known answers, against the live corpus) and store each
+   result as a `cron_run` row (`brain-battery-retrieval`, `brain-battery-mcp`) whose message
+   is a JSON summary: total, clean, the probes failing and those that passed only on a retry.
+   A battery exits 0 once its result is stored, whatever failed: failures are findings.
+2. `scripts/brain-cron.ts brain-health` writes "How the brain did in the week to <day>" as
+   a notice, so `whats_new` and the session hook show it. The notice leaves out the text of
+   the questions asked, because it sits in the searchable corpus; `brain_health` lists them
+   live.
+
+The stall watcher expects all three every eight days. Run it by hand with
+`job: brain-health`; a re-run the same day replaces the notice.
 
 ### Brought to you in Claude: the proactive layer
 

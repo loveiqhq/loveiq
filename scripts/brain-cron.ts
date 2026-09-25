@@ -14,6 +14,8 @@
  *   npx tsx scripts/brain-cron.ts brain-brief [?day=YYYY-MM-DD]
  *   npx tsx scripts/brain-cron.ts brain-mine [?limit=N]
  *   npx tsx scripts/brain-cron.ts brain-night-shift          # also needs LOVEIQ_MCP_TOKEN
+ *   npx tsx scripts/brain-cron.ts brain-health               # the weekly report; no model, but
+ *                                                            # it must run after the batteries
  *   npx tsx scripts/brain-cron.ts brain-brief --dry-run [?day=YYYY-MM-DD]   # print it, post nothing
  *
  * Needs SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SITE_URL=https://loveiq.org (the
@@ -29,6 +31,7 @@ const ROUTES = {
   "brain-brief": () => import("@/app/api/cron/brain-brief/route"),
   "brain-mine": () => import("@/app/api/cron/brain-mine/route"),
   "brain-night-shift": () => import("@/app/api/cron/brain-night-shift/route"),
+  "brain-health": () => import("@/app/api/cron/brain-health/route"),
 };
 
 async function main(): Promise<number> {
@@ -37,7 +40,7 @@ async function main(): Promise<number> {
   const [name, query = ""] = args.filter((a) => a !== "--dry-run");
   if (!name || !(name in ROUTES) || (dryRun && name !== "brain-brief")) {
     console.error(
-      "Usage: npx tsx scripts/brain-cron.ts brain-brief|brain-mine|brain-night-shift [?query]   (--dry-run: brain-brief only)"
+      "Usage: npx tsx scripts/brain-cron.ts brain-brief|brain-mine|brain-night-shift|brain-health [?query]   (--dry-run: brain-brief only)"
     );
     return 2;
   }

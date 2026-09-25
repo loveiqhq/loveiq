@@ -12,7 +12,7 @@ name: Company Brain daily jobs
 # Times are UTC, and GitHub can start a scheduled run late. Nothing here is time-critical:
 # the brief's second firing exists precisely so that one late or failed run is retried.
 
-run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.job || (github.event.schedule == '25 8 * * *' && 'brain-mine' || github.event.schedule == '30 0 * * *' && 'brain-night-shift' || 'brain-brief') }}
+run-name: ${{ github.event_name == 'workflow_dispatch' && inputs.job || (github.event.schedule == '25 8 * * *' && 'brain-mine' || github.event.schedule == '30 0 * * *' && 'brain-night-shift' || github.event.schedule == '40 1 * * 1' && 'brain-health' || 'brain-brief') }}
 
 on:
   schedule:
@@ -26,12 +26,15 @@ on:
     - cron: "25 8 * * *"
     # The Night Shift, 02:30 in Berlin: the research queued in the day, answered by morning.
     - cron: "30 0 * * *"
+    # Mondays: the test batteries record their results, then the brain's weekly report on
+    # itself is written as a notice. No model; it runs here so the report follows the tests.
+    - cron: "40 1 * * 1"
   workflow_dispatch:
     inputs:
       job:
         description: "Which job to run"
         type: choice
-        options: [brain-brief, brain-mine, brain-night-shift]
+        options: [brain-brief, brain-mine, brain-night-shift, brain-health]
       query:
         description: "Optional query string, e.g. ?day=2026-09-22 or ?limit=3"
         required: false
@@ -50,11 +53,11 @@ jobs:
     # The Night Shift answers up to three questions of up to 20 minutes each.
     timeout-minutes: ${{ (github.event.schedule == '30 0 * * *' || inputs.job == 'brain-night-shift') && 75 || 20 }}
     env:
-      JOB: ${{ github.event_name == 'workflow_dispatch' && inputs.job || (github.event.schedule == '25 8 * * *' && 'brain-mine' || github.event.schedule == '30 0 * * *' && 'brain-night-shift' || 'brain-brief') }}
+      JOB: ${{ github.event_name == 'workflow_dispatch' && inputs.job || (github.event.schedule == '25 8 * * *' && 'brain-mine' || github.event.schedule == '30 0 * * *' && 'brain-night-shift' || github.event.schedule == '40 1 * * 1' && 'brain-health' || 'brain-brief') }}
     # One of each job at a time. Overlap would be harmless (the brief's day claim and the
     # miner's tombstones both dedupe), but it would spend the seat's allowance twice.
     concurrency:
-      group: brain-daily-${{ github.event_name == 'workflow_dispatch' && inputs.job || (github.event.schedule == '25 8 * * *' && 'brain-mine' || github.event.schedule == '30 0 * * *' && 'brain-night-shift' || 'brain-brief') }}
+      group: brain-daily-${{ github.event_name == 'workflow_dispatch' && inputs.job || (github.event.schedule == '25 8 * * *' && 'brain-mine' || github.event.schedule == '30 0 * * *' && 'brain-night-shift' || github.event.schedule == '40 1 * * 1' && 'brain-health' || 'brain-brief') }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -96,6 +99,8 @@ jobs:
           missing=""
           need="SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY CLAUDE_CODE_OAUTH_TOKEN SLACK_BRAIN_WEBHOOK_URL"
           [ "$JOB" = "brain-night-shift" ] && need="$need LOVEIQ_MCP_TOKEN"
+          # The tool battery opens the MCP door with the same bearer.
+          [ "$JOB" = "brain-health" ] && need="$need LOVEIQ_MCP_TOKEN"
           for v in $need; do
             [ -n "${!v:-}" ] || missing="$missing $v"
           done
@@ -107,6 +112,14 @@ jobs:
             brain-brief) npx tsx scripts/brain-cron.ts brain-brief $DRY_RUN "$QUERY" ;;
             brain-mine) npx tsx scripts/brain-cron.ts brain-mine "$QUERY" ;;
             brain-night-shift) npx tsx scripts/brain-cron.ts brain-night-shift ;;
+            # Each battery exits 0 once its result is recorded, whatever failed: failures are
+            # the report's findings. All three run; the job fails if any could not.
+            brain-health)
+              rc=0
+              npx tsx scripts/brain-battery.ts --retrieval --record || rc=1
+              npx tsx scripts/brain-battery.ts --mcp --record || rc=1
+              npx tsx scripts/brain-cron.ts brain-health || rc=1
+              exit $rc ;;
             *) echo "::error::Unknown job: $JOB"; exit 2 ;;
           esac | tee /tmp/brain-job.log
 
