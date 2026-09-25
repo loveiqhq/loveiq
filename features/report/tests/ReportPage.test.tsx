@@ -80,6 +80,9 @@ import type { ReportPracticeTendencyContentForUser } from "@features/report/ui/h
 import { reportSections } from "@/data/report-general";
 import { resolveReportSections } from "@features/report/ui/reportTitles";
 import { buildPartnership } from "@/data/report3-partnership";
+import { buildFantasy } from "@/data/report3-fantasy";
+import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
+import { splitArticleForReader } from "@features/report/server/contentGating";
 // The 50/50 was concluded → any non-empty token now buckets to the forced
 // "treatment" arm. The soft "control" (dismissible) experience is now reached
 // only via the email-return escape hatch (from=email / utm_source=email) or the
@@ -1126,6 +1129,149 @@ describe("ReportPage", () => {
 
       expect(container.querySelector(".rv4-cip")).toBeNull();
       expect(container.querySelector("#challenges_in_partnership")).toHaveClass("rv3-chapter");
+    });
+  });
+
+  // Figma 304:281 (305:217 locked) — the Report 3.0 Fantasy vs. Reality chapter opens
+  // Part VI wherever the archetype on screen has one written; today that is Spark
+  // Seeker. Every other reader keeps V2's section.
+  describe("V4 — Fantasy vs. Reality opens Part VI", () => {
+    const FVR = "typical_sexual_fantasy_amp_practice_tendencies";
+
+    afterEach(() => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+
+    const precedes = (a: Element, b: Element) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+    const withChapter = (locked: boolean) => {
+      const response = buildSuccessResponse();
+      const article = REPORT_V4_LEARN_MORE[FVR]!;
+      Object.assign(response.data as Record<string, unknown>, {
+        primaryArchetype: "Spark Seeker",
+        percentages: { "Spark Seeker": 63, "Explorer of Edges": 37 },
+        fantasy: buildFantasy("Spark Seeker", { locked }),
+        fantasyArticle: { article: splitArticleForReader(article, locked), locked },
+      });
+      return response;
+    };
+
+    it("draws the Report 3.0 chapter, open, under the Part VI heading", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(withChapter(false));
+
+      const { container } = render(<ReportPage />);
+
+      const chapter = container.querySelector(`#${FVR}`)!;
+      expect(container.querySelectorAll(`#${FVR}`)).toHaveLength(1);
+      expect(chapter).toHaveClass("rv4-chapter");
+      expect(chapter).not.toHaveClass("rv3-chapter");
+      expect(chapter).toHaveClass("is-open");
+      expect(chapter.querySelector(".rv4-chapter__name")!.textContent).toBe("Fantasy vs. Reality ");
+      expect(chapter.querySelector(".rv4-fvr")).not.toBeNull();
+      expect(chapter.querySelector(".rv4-fvt")).not.toBeNull();
+      // V2's section, map and tables, is not there.
+      expect(chapter.querySelector(".report-practice-table")).toBeNull();
+      // 1:1146 — the 44px between the Part VI heading and its first chapter.
+      expect(chapter.previousElementSibling?.getAttribute("data-node-id")).toBe("1:1146");
+      const heading = [...container.querySelectorAll(".rv4-part")].find(
+        (h) => h.querySelector(".rv4-part__eyebrow")?.textContent === "Part VI"
+      )!;
+      expect(precedes(heading, chapter)).toBe(true);
+    });
+
+    it("closes on the practice card, then 'Go deeper & learn more'", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(withChapter(false));
+
+      const { container } = render(<ReportPage />);
+
+      const chapter = container.querySelector(`#${FVR}`)!;
+      const body = chapter.querySelector(".rv4-chapter__body")!;
+      expect(body.querySelector(":scope > .rv4-fvr + .rv4-try")).not.toBeNull();
+      expect(body.querySelector(":scope > .rv4-try + .rv4-learn")).not.toBeNull();
+    });
+
+    it("unlocks through its own full-report gate", async () => {
+      const user = userEvent.setup();
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(withChapter(true));
+
+      const { container } = render(<ReportPage />);
+      await user.click(container.querySelector<HTMLElement>(".rv4-fvr__gate")!);
+
+      expect(vi.mocked(analytics.trackLockIconClicked)).toHaveBeenCalledWith(
+        expect.objectContaining({ section_id: FVR, plan_needed: "full_report" })
+      );
+    });
+
+    it("opens the paywall from the table's lock too", async () => {
+      const user = userEvent.setup();
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(withChapter(true));
+
+      const { container } = render(<ReportPage />);
+      await user.click(
+        container.querySelector<HTMLElement>(`#${FVR} .rv4-fvt__lock .rv4-lockbadge`)!
+      );
+
+      expect(vi.mocked(analytics.trackLockIconClicked)).toHaveBeenCalledWith(
+        expect.objectContaining({ section_id: FVR })
+      );
+    });
+
+    it("keeps V2's section for an archetype with no Report 3.0 chapter", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      const { container } = render(<ReportPage />);
+
+      const chapter = container.querySelector(`#${FVR}`)!;
+      expect(chapter).toHaveClass("rv3-chapter");
+      expect(chapter.querySelector(".rv4-fvr")).toBeNull();
+    });
+
+    // The V4 head names the chapter "Fantasy vs. Reality"; V2's section names itself
+    // to the feedback buttons, which a screen reader reads out.
+    it("names V2's section 'Fantasy vs. Reality' to its feedback buttons, and ?v3=1 keeps its title", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      const v4 = render(<ReportPage />);
+      expect(
+        v4.container.querySelector(`#${FVR} [aria-label="This resonates: Fantasy vs. Reality"]`)
+      ).not.toBeNull();
+      v4.unmount();
+
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v3=1"));
+      const v3 = render(<ReportPage />);
+      // Read back rather than matched in a selector: jsdom's selector engine takes the
+      // "&" in the title for CSS nesting.
+      const labels = [...v3.container.querySelectorAll(`#${FVR} [aria-label]`)].map((el) =>
+        el.getAttribute("aria-label")
+      );
+      expect(labels).toContain("This resonates: Typical Sexual Fantasy & Practice Tendencies");
+    });
+
+    it("names the Report 3.0 chapter the same way", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(withChapter(false));
+
+      const { container } = render(<ReportPage />);
+
+      expect(
+        container.querySelector(`#${FVR} [aria-label="This resonates: Fantasy vs. Reality"]`)
+      ).not.toBeNull();
+    });
+
+    it("leaves ?v3=1 on V2's section even where the chapter exists", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v3=1"));
+      mockUseReportData.mockReturnValue(withChapter(false));
+
+      const { container } = render(<ReportPage />);
+
+      expect(container.querySelector(`#${FVR}`)).toHaveClass("rv3-chapter");
+      expect(container.querySelector(".rv4-fvr")).toBeNull();
     });
   });
 
