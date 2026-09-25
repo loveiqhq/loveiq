@@ -132,7 +132,14 @@ export function findBadColumns(files, liveColumns, read = (f) => readFileSync(f,
           continue;
         }
         for (const raw of stripEmbeds(select[1]).split(",")) {
-          const column = raw.trim().replace(/^\w+:/, "").trim();
+          // `out:col->>key` reads a JSONB path: as with a filter, only the base column is
+          // schema. A `::type` cast is not part of the name either.
+          const column = raw
+            .trim()
+            .replace(/^\w+:(?!:)/, "")
+            .split("->")[0]
+            .split("::")[0]
+            .trim();
           if (!column || column.includes(".")) continue;
           checked++;
           if (!columns.has(column)) findings.push({ file, line: i + 1, table, column });
