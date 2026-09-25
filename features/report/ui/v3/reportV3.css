@@ -4867,8 +4867,9 @@
   top: 48px;
   transform: translateX(-50%);
 }
-/* The pill moves focus to the first row it revealed; the row is not a control. */
-.rv3 .rv4-trig__row:focus {
+/* The pill moves focus to the first row it revealed. A keyboard user keeps the ring,
+ * so they can see where they are; a pointer's focus shows none. */
+.rv3 .rv4-trig__row:focus:not(:focus-visible) {
   outline: none;
 }
 /* 386:416 / 386:444 — rows 3-5 blurred uniformly (the frame's radius 4), the badge
