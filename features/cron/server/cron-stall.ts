@@ -68,6 +68,8 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
   "brain-calendar": 3 * 3_600_000,
   // Hourly, but with a 300s ceiling — a full Drive walk is minutes, not seconds.
   "brain-drive": 3 * 3_600_000,
+  // Every two hours, filing recorded calls into the Notion CRM. Five hours is two missed runs.
+  "brain-crm": 5 * 3_600_000,
   // Daily, and the ONLY job here whose normal output is silence -- it posts
   // nothing on a routine day. That makes it the easiest one to be dead without
   // anyone noticing, which is exactly why it is watched: it records a run every

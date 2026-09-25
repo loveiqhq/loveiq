@@ -59,6 +59,10 @@
       "schedule": "52 * * * *"
     },
     {
+      "path": "/api/cron/brain-crm",
+      "schedule": "17 */2 * * *"
+    },
+    {
       "path": "/api/cron/brain-clarity",
       "schedule": "40 5 * * *"
     },

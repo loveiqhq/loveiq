@@ -358,7 +358,7 @@ When registering any callback — Resend, Stripe, Slack — paste the `www`
 host, then confirm rows actually arrive. An endpoint that returns 401 to an
 unsigned probe proves it is deployed, not that it is reachable by the sender.
 
-**Twenty-six tools, in three groups.** Twenty read, six write. The write ones act
+**Twenty-seven tools, in three groups.** Twenty read, seven write. The write ones act
 immediately and are described at the bottom of this section — a teammate who reads
 only the first table will not know the brain can send an email.
 
@@ -534,6 +534,7 @@ permission for every write makes the thing useless. Every call is recorded in
 | `write_to_notion`     | Creates a page or a task                                                                                                                                                                                                                       |
 | `write_to_google_doc` | Creates a Doc, or appends to one                                                                                                                                                                                                               |
 | `queue_research`      | Hand a question to the Night Shift, which answers it overnight with sources, from our own records and the web. Deduplicated (the same question returns the one queued or answered) and capped at five waiting. Writes only a `research` record |
+| `file_call_notes`     | File recorded calls with people on 'Therapists & Coaches' into 'Feedback Sessions' and move their 'Last touch'. Exact matches only (invite email or transcript speaker). Previews unless `dry_run: false`; `brain-crm` runs it every two hours |
 | `send_email`          | **Drafts by default.** It sends only when explicitly passed `send: true` — the one write that leaves the company and cannot be recalled, so it is the one that needs the extra word                                                            |
 
 **Why `record_decision` matters more than it looks.** Decision records are the thing
@@ -954,6 +955,26 @@ model; it runs here so the report follows the tests:
 
 The stall watcher expects all three every eight days. Run it by hand with
 `job: brain-health`; a re-run the same day replaces the notice.
+
+### Calls into the Notion CRM
+
+Every two hours `brain-crm` (Vercel) files each recorded call with someone on the Notion
+board "Therapists & Coaches" as a row in "Feedback Sessions" (plan item A17), and writes a
+notice for each one. It is `file_call_notes` with `dry_run: false` over the last fourteen
+days, so a skipped run is caught up by the next.
+
+- **Who was on the call** is matched only two ways, both exact: an address on the calendar
+  invite the Gemini notes link to, equal to the row's Email; or the row's full name as a
+  speaker in the transcript. A name that is only talked about in a team sync never files
+  anything. A first name in the invite's title is listed by the tool as a possible match
+  and never filed: the calendar said "Kiu Coates" for the row "Kiu Cortes". Put the
+  person's email on their row and every later call files itself.
+- **What the row holds** is what the notes say: date, format, session type (a discovery
+  interview for a first call, a follow-up after that), the notes link, the next steps and
+  the summary. Outcome, signal strength and the other judgement fields are left empty for
+  whoever ran the call. "Last touch" only ever moves forward.
+- **Nothing is written twice.** A call whose notes link is already on a row, or a person
+  who already has a session row that day, perhaps written by hand, is left alone.
 
 ### Brought to you in Claude: the proactive layer
 

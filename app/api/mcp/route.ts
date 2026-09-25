@@ -70,6 +70,7 @@ import {
   renderAsks,
 } from "@features/brain/server/comment-asks";
 import { renderSelfReport, selfReport } from "@features/brain/server/self-report";
+import { fileCrmCalls, liveCrmDeps, renderCrmCalls } from "@features/brain/server/crm-calls";
 import { renderWhatsNew, whatsNew } from "@features/brain/server/whats-new";
 import {
   isJump,
@@ -1129,6 +1130,39 @@ export const TOOLS = [
         },
       },
       required: ["question"],
+    },
+  },
+  {
+    name: "file_call_notes",
+    title: "File recorded calls into the Notion CRM",
+    annotations: {
+      readOnlyHint: false,
+      // Additive and reversible: a row it writes can be archived in Notion.
+      destructiveHint: false,
+      // A call already filed (the same notes link) is left alone, so a second run adds nothing.
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+    description:
+      "Files each recorded call with someone on the Notion board 'Therapists & Coaches' as a row " +
+      "in 'Feedback Sessions', linked to them, with the date, the Gemini notes link, the next steps " +
+      "and the summary, and moves their 'Last touch' to the day of the call. Who was on the call is " +
+      "matched exactly: their email on the calendar invite, or their full name as a speaker in the " +
+      "transcript. A first name alone is listed as a possible match and never filed. A call already " +
+      "filed, or a person with a session row that day, is left alone. The same runs by itself every " +
+      "two hours. BY DEFAULT IT ONLY SHOWS what it would file; pass dry_run: false to write.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        since: {
+          type: "string",
+          description: "First day, YYYY-MM-DD. Default: fourteen days ago.",
+        },
+        dry_run: {
+          type: "boolean",
+          description: "Default true: show what would be filed and write nothing. false files it.",
+        },
+      },
     },
   },
   {
@@ -4769,6 +4803,19 @@ async function callTool(
     return textResult(renderSelfReport(report, RELEVANCE_FLOOR, { withQuestions: true }));
   }
 
+  if (name === "file_call_notes") {
+    const raw = typeof args.since === "string" ? args.since.trim() : "";
+    const since = raw || new Date(Date.now() - 14 * 86_400_000).toISOString().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(since) || !isRealDate(since)) {
+      return textResult(`\`since\` must be a real day like 2026-09-01, not "${raw}".`, true);
+    }
+    const dryRun = args.dry_run !== false;
+    const result = await fileCrmCalls(since, dryRun, liveCrmDeps());
+    stats.sourceCount = result.calls;
+    const failed = result.gaps.length > 0 || result.filed.some((f) => f.error);
+    return textResult(renderCrmCalls(result, dryRun, since), failed);
+  }
+
   if (name === "queue_research") {
     const question = typeof args.question === "string" ? args.question.trim() : "";
     if (question.length < 15 || question.length > 1500) {
@@ -5227,6 +5274,8 @@ export const MCP_INSTRUCTIONS =
   "owner, read off the notes by code, and whether the Notion board tracks it.\n\n" +
   "ASKS IN COMMENTS: comment_asks lists what people asked each other in Figma and Google Docs " +
   "comments, and whether each is still open, checked live against Figma and Google Drive.\n\n" +
+  "CALLS INTO THE CRM: file_call_notes files recorded calls with people on the 'Therapists & " +
+  "Coaches' board into 'Feedback Sessions'; it also runs by itself every two hours.\n\n" +
   "HOW THE BRAIN IS DOING: brain_health is its own report card: use, weak and empty searches, " +
   "failures, speed, the weekly test batteries and job health, against the window before.\n\n" +
   "WHAT IS NEW: whats_new lists what the brain produced on its own since a time: notices, the " +
