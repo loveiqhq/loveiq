@@ -39,6 +39,13 @@ describe("reportV3.css — the part heading stays centred on every phone", () =>
     const stage = rule(".rv3 .rv4-part__stage {");
     expect(stage).toContain("overflow-x: clip;");
     expect(stage).toContain("overflow-y: visible;");
-    expect(stage).not.toMatch(/overflow: clip;/);
+    expect(stage).not.toMatch(/\boverflow: clip;/);
+  });
+
+  // Final review, 25.09: spilling out of the stage, the glow lay over the first
+  // chapter's head wherever nothing separates them (the 13 archetypes on V2 chapters),
+  // and swallowed the taps on its title. It is decoration; it never takes a tap.
+  it("never takes a tap from what lies under the glow", () => {
+    expect(rule(".rv3 .rv4-part__glow {")).toContain("pointer-events: none;");
   });
 });
