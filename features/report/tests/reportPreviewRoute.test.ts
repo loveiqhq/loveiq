@@ -172,3 +172,52 @@ describe("GET /api/report/preview — Challenges in Partnerships", () => {
     expect(json.partnershipLoop).not.toBeNull();
   });
 });
+
+describe("GET /api/report/preview — Fantasy vs. Reality", () => {
+  const FVR_PROBES = [
+    "Imagine being watched. In fantasy, the attention is flattering",
+    "Finally, think in terms of translation rather than reproduction.",
+  ];
+
+  it("locks the V4 chapter and its article for a reader with no plan, with nothing paid past the wall", async () => {
+    const { json } = await get("archetype=Spark%20Seeker&plan=");
+    expect(json.fantasy.locked).toBe(true);
+    expect(json.fantasy.table.locked).toBe(true);
+    expect(json.fantasyArticle.locked).toBe(true);
+    const body = JSON.stringify(json);
+    for (const probe of FVR_PROBES) expect(body, probe).not.toContain(probe);
+  });
+
+  it("keeps it locked on essentials — it is a full-report chapter", async () => {
+    const { json } = await get("archetype=Spark%20Seeker&plan=essentials");
+    expect(json.fantasy.locked).toBe(true);
+    expect(json.fantasyCopy.locked).toBe(true);
+  });
+
+  it("opens every word for a full-report preview", async () => {
+    const { json } = await get("archetype=Spark%20Seeker&plan=full_report");
+    expect(json.fantasy.locked).toBe(false);
+    expect(json.fantasyArticle.locked).toBe(false);
+    const body = JSON.stringify(json);
+    for (const probe of FVR_PROBES) expect(body, probe).toContain(probe);
+  });
+
+  it("sends V2's section copy and map dots, gated and edu-stripped as the real route does", async () => {
+    const locked = (await get("archetype=Spark%20Seeker&plan=")).json;
+    expect(locked.fantasyCopy.locked).toBe(true);
+    expect(locked.fantasyCopy["edu.eyebrow"]).toEqual(expect.any(String));
+    // stripLockedEduBodyFromPayload clips p1 and drops the rest for a locked reader.
+    expect(locked.fantasyCopy["edu.body.p2"]).toBeNull();
+    expect(locked.fantasyDots).toBeNull();
+    const open = (await get("archetype=Spark%20Seeker&plan=full_report")).json;
+    expect(open.fantasyCopy.locked).toBe(false);
+    expect(open.fantasyDots).not.toBeNull();
+  });
+
+  it("falls back to V2 for an archetype without Report 3.0 copy", async () => {
+    const { json } = await get("archetype=emotional-voyeur&plan=full_report");
+    expect(json.fantasy).toBeNull();
+    expect(json.fantasyArticle).toBeNull();
+    expect(json.fantasyCopy.locked).toBe(false);
+  });
+});

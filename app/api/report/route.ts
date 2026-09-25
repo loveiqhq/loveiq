@@ -24,6 +24,7 @@ import { getReport2Section, getReport2Config } from "@/data/report2";
 import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
 import { buildAccelerators } from "@/data/report3-accelerators";
 import { buildPartnership } from "@/data/report3-partnership";
+import { buildFantasy } from "@/data/report3-fantasy";
 import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { splitArticleForReader } from "@features/report/server/contentGating";
 import { getAttachmentPlaneForFamily } from "@/data/report2-attachment-planes";
@@ -33,9 +34,9 @@ import { getRelationshipFit } from "@/data/report2-relationship-fit";
 import { getPowerZone } from "@/data/report2-power-zones";
 import { getLoveLanguageOrder } from "@/data/report2-love-languages";
 import { getLibidoLoopSteps } from "@/data/report2-libido-loops";
-import { getFantasyMapDots } from "@features/report/server/fantasyMap";
 import { isSectionUnlockedForPlan } from "@features/report/server/access";
 import { buildPartnershipCopy } from "@features/report/server/partnershipCopy";
+import { buildFantasyCopy } from "@features/report/server/fantasyCopy";
 import type { AttachmentPlane } from "@features/report/ui/sections/AttachmentPatternsSection";
 import logger from "@shared/observability/logger";
 import { notifySlack, escapeSlack } from "@shared/observability/slack";
@@ -1483,47 +1484,45 @@ export async function GET(request: Request) {
       locked: !powerUnlocked,
     };
 
-    // Report 2.0 Fantasy ("Fantasy vs. Reality") section copy — a Part III,
-    // FULL_REPORT-tier PREMIUM section (this is section 27,
-    // `typical_sexual_fantasy_amp_practice_tendencies`; NOT in
-    // ESSENTIALS_SECTION_IDS, so it unlocks only at the full_report tier). UNLIKE
-    // the sibling sections EVERY fantasy copy slot is universal (all 12 are
-    // `universal: true` in report2-sections-schema.json — hook, edu.*, the two
-    // chart-notes, learn.*), so there is nothing per-archetype to withhold: all
-    // slots are always shipped and frame the section for locked clients too. The
-    // ONLY gated element is the map's per-user dot layout — and no per-user or
-    // per-archetype fantasy dot data exists today (`getReport2Config().fantasy_map`
-    // is null for all 14, carrying only meta for one), so the client draws the
-    // Figma's fixed representative dot layout (node 8427:2479) for everyone and
-    // the chartnote states placements are illustrative. Nothing is fabricated.
-    // `locked` only drives whether the client blurs the map behind the overlay.
-    // Shared viewers inherit the owner's plan via `accessPlan`. Keyed to primary.
-    const fantasySection = getReport2Section(contentArchetype, "fantasy");
+    // Report 2.0 Fantasy ("Fantasy vs. Reality") section copy and map dots — section
+    // 27, full report only. The helper's own doc says what a locked reader receives;
+    // the staging preview route builds the copy through it too. Shared viewers
+    // inherit the owner's plan via `accessPlan`. Keyed to the content archetype.
     const fantasyUnlocked = isSectionUnlockedForPlan({
       accessPlan,
       archetypeTier: contentArchetypeTier,
       isPremium: true,
       sectionId: "typical_sexual_fantasy_amp_practice_tendencies",
     });
-    // Per-archetype map dots, DERIVED from the practice-tendency scores (fantasy
-    // pull × lived pleasure) rather than hand-authored — see
-    // `features/report/server/fantasyMap.ts`. Withheld when locked: the client
-    // then falls back to the universal illustrative layout behind the blur, so no
-    // per-archetype placement leaks to an unpaid reader.
-    const fantasyDots = fantasyUnlocked ? getFantasyMapDots(contentArchetype) : null;
-    const fantasyCopy = {
-      "edu.eyebrow": fantasySection["edu.eyebrow"] ?? null,
-      "edu.teaser": fantasySection["edu.teaser"] ?? null,
-      "edu.body.p1": fantasySection["edu.body.p1"] ?? null,
-      "edu.body.p2": fantasySection["edu.body.p2"] ?? null,
-      "edu.body.p3": fantasySection["edu.body.p3"] ?? null,
-      "edu.body.p4": fantasySection["edu.body.p4"] ?? null,
-      chartnote1: fantasySection.chartnote1 ?? null,
-      chartnote2: fantasySection.chartnote2 ?? null,
-      "learn.eyebrow": fantasySection["learn.eyebrow"] ?? null,
-      "learn.body": fantasySection["learn.body"] ?? null,
-      locked: !fantasyUnlocked,
-    };
+    const { fantasyCopy, fantasyDots } = buildFantasyCopy(contentArchetype, fantasyUnlocked);
+
+    /**
+     * Report 3.0's Fantasy vs. Reality chapter — Figma 304:281, and 305:217 locked.
+     * Rides beside fantasyCopy as `partnership` rides beside partnershipCopy: NULL for
+     * any archetype whose chapter is not written yet, which is the signal ReportPage
+     * keeps V2's section on. Same gate as fantasyCopy. A locked reader receives the
+     * intro, three rows of the first three table categories and practice paragraphs
+     * 1-4 verbatim; every other row as a blurred stand-in with no scores; "Common
+     * challenges" and the rest of the practice scrambled — see buildFantasy.
+     */
+    const fantasy = buildFantasy(contentArchetype, { locked: !fantasyUnlocked });
+
+    /**
+     * The "Go deeper & learn more" article closing the same chapter — Figma 244:258,
+     * and 482:6479 locked. Gated on `fantasyUnlocked` like the chapter, so the two can
+     * never disagree about who has paid, and shipped only alongside the chapter it
+     * belongs to, so the thirteen archetypes still on V2's section carry none of it.
+     */
+    const fantasyArticle =
+      fantasy && REPORT_V4_LEARN_MORE.typical_sexual_fantasy_amp_practice_tendencies
+        ? {
+            article: splitArticleForReader(
+              REPORT_V4_LEARN_MORE.typical_sexual_fantasy_amp_practice_tendencies,
+              !fantasyUnlocked
+            ),
+            locked: !fantasyUnlocked,
+          }
+        : null;
 
     // Report 2.0 Curiosity & Relationship Form section copy — a Part III,
     // FULL_REPORT-tier PREMIUM section (`curiosity_level`, section 16; NOT in
@@ -1773,6 +1772,8 @@ export async function GET(request: Request) {
         powerCopy,
         fantasyCopy,
         fantasyDots,
+        fantasy,
+        fantasyArticle,
         curiosityCopy,
         relationshipFit,
         lovelangCopy,
