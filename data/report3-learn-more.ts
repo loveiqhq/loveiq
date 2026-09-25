@@ -942,7 +942,7 @@ const FANTASY_REALITY_BLOCKS: readonly Report3Block[] = [
   h("Fantasy is not the same as wanting"),
   p(
     t(
-      "Imagine that someone repeatedly fantasizes about surrendering all control. In the fantasy, that loss of control feels exhilarating. Yet when they imagine actually doing what the fantasy depicts,  they become uncomfortable. They want to know what will happen, trust the person involved, establish limits, and remain able to stop."
+      "Imagine that someone repeatedly fantasizes about surrendering all control. In the fantasy, that loss of control feels exhilarating. Yet when they imagine actually doing what the fantasy depicts, they become uncomfortable. They want to know what will happen, trust the person involved, establish limits, and remain able to stop."
     )
   ),
   p(
@@ -982,7 +982,7 @@ const FANTASY_REALITY_BLOCKS: readonly Report3Block[] = [
   ),
   p(
     b(
-      "“What is my fantasy telling me? And how do I know whether this is a fantasy that I want or should explore? ”"
+      "“What is my fantasy telling me? And how do I know whether this is a fantasy that I want or should explore?”"
     )
   ),
   h("Why imagination and reality can feel so different"),
@@ -1129,7 +1129,7 @@ const FANTASY_REALITY_BLOCKS: readonly Report3Block[] = [
   p(
     t("Imagine removing individual pieces from the fantasy. "),
     i(
-      "If the particular person changed, would it still be exciting?If the location changed?If nobody knew about it afterward?If the act itself disappeared but the feeling of being intensely wanted remained?"
+      "If the particular person changed, would it still be exciting? If the location changed? If nobody knew about it afterward? If the act itself disappeared but the feeling of being intensely wanted remained?"
     )
   ),
   p(

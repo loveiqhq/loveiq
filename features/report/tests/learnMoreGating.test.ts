@@ -108,6 +108,29 @@ describe("splitArticleForReader", () => {
   });
 });
 
+/**
+ * Spacing slips in Fantasy vs. Reality's pasted copy (Fatih, 25.09: fix the
+ * spacing, leave the wording): questions run together without a space, a doubled
+ * space, and a space inside a closing quote. Accelerators & Brakes stays
+ * transcribed verbatim, its typos listed for Mark (see its article).
+ */
+describe("Fantasy vs. Reality copy spacing", () => {
+  const article = REPORT_V4_LEARN_MORE.typical_sexual_fantasy_amp_practice_tendencies!;
+  const texts = article.blocks.map(textOf);
+
+  it("puts a space after every question mark that ends a sentence", () => {
+    expect(texts.filter((text) => /\?[A-Z“]/.test(text))).toEqual([]);
+  });
+
+  it("never doubles a space", () => {
+    expect(texts.filter((text) => / {2,}/.test(text))).toEqual([]);
+  });
+
+  it("keeps closing quotes against their text", () => {
+    expect(texts.filter((text) => / ”/.test(text))).toEqual([]);
+  });
+});
+
 describe("the height estimator", () => {
   /**
    * The calibration test. reportV3.css records that the whole Typical Beliefs
