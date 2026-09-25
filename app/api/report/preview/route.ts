@@ -3,6 +3,7 @@ import { getReport2Section } from "@/data/report2";
 import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
 import { buildAccelerators } from "@/data/report3-accelerators";
+import { buildPartnership } from "@/data/report3-partnership";
 import {
   buildArchetypeContentForUser,
   buildPracticeTendenciesForUser,
@@ -10,6 +11,7 @@ import {
   stripLockedEduBodyFromPayload,
 } from "@features/report/server/contentGating";
 import { isSectionUnlockedForPlan, isReportPurchasePlan } from "@features/report/server/access";
+import { buildPartnershipCopy } from "@features/report/server/partnershipCopy";
 import type { ReportAccessPlan } from "@features/report/server/access";
 import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
 import { buildPreviewQuotes } from "@/app/report-v4-preview/previewQuotes";
@@ -103,6 +105,9 @@ export async function GET(request: Request) {
   const accelerators = buildAccelerators(archetype, { locked: !accelUnlocked });
   const accelArticle =
     REPORT_V4_LEARN_MORE.typical_arousal_accelerators_turn_ons_of_the_core_archetype;
+  // Challenges in Partnership shares Libido's full-report gate, as on the real route.
+  const partnershipUnlocked = unlocked("libido_challenges_in_relationships");
+  const { partnershipCopy, partnershipLoop } = buildPartnershipCopy(archetype, partnershipUnlocked);
 
   const payload = stripLockedEduBodyFromPayload({
     submissionId: null,
@@ -187,6 +192,16 @@ export async function GET(request: Request) {
       accelerators && accelArticle
         ? { article: splitArticleForReader(accelArticle, !accelUnlocked), locked: !accelUnlocked }
         : null,
+
+    // V2's Challenges in Partnership copy and loop, through the real route's own
+    // builder. Without them the V2 section rendered nothing under ?preview=1 — the
+    // chapter an empty head for every archetype still on V2, V4's fallback included.
+    partnershipCopy,
+    partnershipLoop,
+
+    // Report 3.0's Challenges in Partnerships, gated identically to the chapter it
+    // replaces.
+    partnership: buildPartnership(archetype, { locked: !partnershipUnlocked }),
   });
 
   // No caching: the answer changes with every ?archetype= and ?plan=, and it is

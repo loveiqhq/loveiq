@@ -23,6 +23,7 @@ import {
 import { getReport2Section, getReport2Config } from "@/data/report2";
 import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
 import { buildAccelerators } from "@/data/report3-accelerators";
+import { buildPartnership } from "@/data/report3-partnership";
 import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { splitArticleForReader } from "@features/report/server/contentGating";
 import { getAttachmentPlaneForFamily } from "@/data/report2-attachment-planes";
@@ -32,9 +33,9 @@ import { getRelationshipFit } from "@/data/report2-relationship-fit";
 import { getPowerZone } from "@/data/report2-power-zones";
 import { getLoveLanguageOrder } from "@/data/report2-love-languages";
 import { getLibidoLoopSteps } from "@/data/report2-libido-loops";
-import { getPartnershipLoop } from "@/data/report2-partnership-loops";
 import { getFantasyMapDots } from "@features/report/server/fantasyMap";
 import { isSectionUnlockedForPlan } from "@features/report/server/access";
+import { buildPartnershipCopy } from "@features/report/server/partnershipCopy";
 import type { AttachmentPlane } from "@features/report/ui/sections/AttachmentPatternsSection";
 import logger from "@shared/observability/logger";
 import { notifySlack, escapeSlack } from "@shared/observability/slack";
@@ -1292,46 +1293,27 @@ export async function GET(request: Request) {
       locked: !libidoUnlocked,
     };
 
-    // Report 2.0 "Challenges in Partnership" section copy — renders INLINE right
-    // after Libido (section 28); it has no own row in report-general.ts, so it
-    // shares Libido's gate: a Part IV, FULL_REPORT-tier PREMIUM section (NOT in
-    // ESSENTIALS_SECTION_IDS, so it unlocks only at the full_report tier). The
-    // framing slots (`eyebrow`, `row1..3.label`, `edu.*`, `learn.*`)
-    // are UNIVERSAL (verified identical across all 14) and always shipped. The
-    // per-archetype payload — `result` (the loop name, e.g. "The Resonance Loop")
-    // and `row1..3.value` — is the gated content: shipped ONLY when unlocked at
-    // the full_report tier. A locked client (`partnershipCopy.locked`) receives
-    // those null and renders the hook teaser + PremiumOverlay. There is no
-    // per-archetype orbit/stage copy, so no cycle visual is fabricated — the
-    // three rows carry the loop. All 14 carry full partnership copy. Shared
-    // viewers inherit the owner's plan. Keyed to the primary archetype.
-    const partnershipSection = getReport2Section(contentArchetype, "partnership");
+    // Report 2.0 "Challenges in Partnership" section copy and its loop — Libido's
+    // full-report gate (the section has no row of its own in report-general.ts).
+    // The helper's own doc says what a locked reader receives; the staging preview
+    // route builds the copy through it too. Shared viewers inherit the owner's plan.
+    // Keyed to the content archetype.
     const partnershipUnlocked = libidoUnlocked;
-    // The orbit's three steps + the reader's own bid. All 14 have their own (the
-    // frames' footer: "All 14 need their own"); withheld when locked.
-    const partnershipLoop = partnershipUnlocked
-      ? getPartnershipLoop(report2ArchetypeSlug(contentArchetype))
-      : null;
-    const partnershipCopy = {
-      // Universal — always shipped (frame the section for locked clients too).
-      eyebrow: partnershipSection.eyebrow ?? null,
-      "row1.label": partnershipSection["row1.label"] ?? null,
-      "row2.label": partnershipSection["row2.label"] ?? null,
-      "row3.label": partnershipSection["row3.label"] ?? null,
-      "edu.eyebrow": partnershipSection["edu.eyebrow"] ?? null,
-      "edu.teaser": partnershipSection["edu.teaser"] ?? null,
-      "edu.body.p1": partnershipSection["edu.body.p1"] ?? null,
-      "edu.body.p2": partnershipSection["edu.body.p2"] ?? null,
-      "edu.body.p3": partnershipSection["edu.body.p3"] ?? null,
-      "learn.eyebrow": partnershipSection["learn.eyebrow"] ?? null,
-      "learn.body": partnershipSection["learn.body"] ?? null,
-      // Per-archetype — withheld from locked clients.
-      result: partnershipUnlocked ? (partnershipSection.result ?? null) : null,
-      "row1.value": partnershipUnlocked ? (partnershipSection["row1.value"] ?? null) : null,
-      "row2.value": partnershipUnlocked ? (partnershipSection["row2.value"] ?? null) : null,
-      "row3.value": partnershipUnlocked ? (partnershipSection["row3.value"] ?? null) : null,
-      locked: !partnershipUnlocked,
-    };
+    const { partnershipCopy, partnershipLoop } = buildPartnershipCopy(
+      contentArchetype,
+      partnershipUnlocked
+    );
+
+    /**
+     * Report 3.0's Challenges in Partnerships chapter — Figma 38:1672, and 305:350
+     * locked. Rides beside partnershipCopy as `accelerators` rides beside accelCopy:
+     * NULL for any archetype whose chapter is not written yet, which is the signal
+     * ReportPage keeps V2's section on. Same gate as partnershipCopy. A locked reader
+     * receives paragraphs 1-4 and the practice's opening verbatim, paragraph 5 real
+     * only through its fade band, and everything past it — the loop and the result
+     * included — scrambled; see buildPartnership.
+     */
+    const partnership = buildPartnership(contentArchetype, { locked: !partnershipUnlocked });
 
     // Report 2.0 "Challenges to Enjoy Sex" (Enjoyment) section copy — a Part IV,
     // FULL_REPORT-tier PREMIUM section
@@ -1783,6 +1765,7 @@ export async function GET(request: Request) {
         libidoConfig,
         partnershipCopy,
         partnershipLoop,
+        partnership,
         enjoyCopy,
         growthCopy,
         growthRungs,

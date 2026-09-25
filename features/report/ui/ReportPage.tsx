@@ -90,6 +90,7 @@ import V4Accelerators from "./v3/V4Accelerators";
 import V4LearnMore from "./v3/V4LearnMore";
 import type { Report3TypicalBeliefsView } from "@/data/report3-typical-beliefs";
 import type { Report3AcceleratorsView } from "@/data/report3-accelerators";
+import type { Report3PartnershipView } from "@/data/report3-partnership";
 import type { V4LearnMoreState } from "@/data/report3-learn-more";
 import ConfidenceSection, {
   type ConfidenceCopy,
@@ -452,6 +453,8 @@ interface ReportExperienceProps {
   libidoConfig: LibidoConfig | null;
   partnershipCopy: PartnershipCopy | null;
   partnershipLoop: PartnershipLoop | null;
+  /** Report 3.0's Challenges in Partnerships chapter; null keeps V2's section. */
+  partnership: Report3PartnershipView | null;
   enjoyCopy: EnjoyCopy | null;
   growthCopy: GrowthCopy | null;
   growthRungs: number | null;
@@ -546,6 +549,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   libidoConfig,
   partnershipCopy,
   partnershipLoop,
+  partnership,
   enjoyCopy,
   growthCopy,
   growthRungs,
@@ -3116,6 +3120,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
           readingCopy={data.readingCopy ?? null}
           partnershipCopy={data.partnershipCopy ?? null}
           partnershipLoop={data.partnershipLoop ?? null}
+          partnership={data.partnership ?? null}
           enjoyCopy={data.enjoyCopy ?? null}
           powerCopy={data.powerCopy ?? null}
           fantasyCopy={data.fantasyCopy ?? null}

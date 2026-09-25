@@ -115,3 +115,60 @@ describe("GET /api/report/preview — Other Archetypes", () => {
     }
   });
 });
+
+// The Challenges in Partnerships chapter (Figma 38:1672, 305:350 locked) and V2's
+// section it replaces. The preview sent neither, so on staging the V2 section — and
+// V4's fallback for the thirteen archetypes still on it — was an empty head.
+describe("GET /api/report/preview — Challenges in Partnerships", () => {
+  const CIP_PROBES = [
+    "Routine can feel different to each partner.",
+    "They do not really want me the way they used to.",
+    "Intensity is my evidence that love is real",
+    "keep the commitment clear while leaving parts of the experience open",
+  ];
+
+  it("locks the V4 chapter for a reader with no plan, with nothing paid past the wall", async () => {
+    const { json } = await get("archetype=Spark%20Seeker&plan=");
+    expect(json.partnership.locked).toBe(true);
+    expect(json.partnership.practice.locked).toBe(true);
+    const body = JSON.stringify(json);
+    for (const probe of CIP_PROBES) expect(body, probe).not.toContain(probe);
+  });
+
+  it("keeps it locked on essentials — it is a full-report chapter, Libido's gate", async () => {
+    const { json } = await get("archetype=Spark%20Seeker&plan=essentials");
+    expect(json.partnership.locked).toBe(true);
+    expect(json.partnershipCopy.locked).toBe(true);
+  });
+
+  it("opens every word for a full-report preview", async () => {
+    const { json } = await get("archetype=Spark%20Seeker&plan=full_report");
+    expect(json.partnership.locked).toBe(false);
+    const body = JSON.stringify(json);
+    for (const probe of CIP_PROBES) expect(body, probe).toContain(probe);
+  });
+
+  it("sends V2's section copy and loop, gated and edu-stripped as the real route does", async () => {
+    const locked = (await get("archetype=Spark%20Seeker&plan=")).json;
+    expect(locked.partnershipCopy).toMatchObject({
+      locked: true,
+      result: null,
+      "row1.value": null,
+    });
+    expect(locked.partnershipCopy["edu.eyebrow"]).toEqual(expect.any(String));
+    // stripLockedEduBodyFromPayload clips p1 and drops p2/p3 for a locked reader.
+    expect(locked.partnershipCopy["edu.body.p2"]).toBeNull();
+    expect(locked.partnershipLoop).toBeNull();
+    const open = (await get("archetype=Spark%20Seeker&plan=full_report")).json;
+    expect(open.partnershipCopy.locked).toBe(false);
+    expect(open.partnershipCopy.result).toEqual(expect.any(String));
+    expect(open.partnershipLoop.steps).toHaveLength(3);
+  });
+
+  it("falls back to V2 for an archetype without Report 3.0 copy", async () => {
+    const { json } = await get("archetype=emotional-voyeur&plan=full_report");
+    expect(json.partnership).toBeNull();
+    expect(json.partnershipCopy.locked).toBe(false);
+    expect(json.partnershipLoop).not.toBeNull();
+  });
+});

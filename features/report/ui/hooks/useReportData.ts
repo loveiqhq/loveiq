@@ -195,6 +195,12 @@ export interface ReportData {
   partnershipCopy: import("../sections/PartnershipSection").PartnershipCopy | null;
   partnershipLoop: import("@/data/report2-partnership-loops").PartnershipLoop | null;
   /**
+   * Report 3.0's Challenges in Partnerships chapter, for `?v4=1`. NULL for any
+   * archetype the content has not been scaled to yet, which is what ReportPage
+   * falls back on (V2's section, fed by partnershipCopy above).
+   */
+  partnership: import("@/data/report3-partnership").Report3PartnershipView | null;
+  /**
    * Report 2.0 "Challenges to Enjoy Sex" (Enjoyment) copy for the primary
    * archetype, resolved server-side. Universal framing (`eyebrow`,
    * `row1..3.label`, `insight.label`, `edu.*`, `learn.*`) always present;
