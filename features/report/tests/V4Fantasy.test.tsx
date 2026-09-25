@@ -133,7 +133,7 @@ describe("V4Fantasy — paywalled (305:217)", () => {
     );
     const card = gate.querySelector(".rv4-premium")!;
     expect(card).toHaveClass("rv4-premium--guarantee");
-    expect(card.getAttribute("data-node-id")).toBe("305:249");
+    expect(card.getAttribute("data-node-id")).toBe("305:250");
   });
 
   it("opens the paywall once per tap on the blurred copy or its card", () => {
@@ -174,6 +174,15 @@ describe("reportV3.css — Fantasy vs. Reality body contracts", () => {
     expect(at, selector).toBeGreaterThan(0);
     return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
   };
+
+  // Review 25.09, Mark (1941866053): "move this CTA down a bit so that it isnt
+  // immediately following the drop down" and a separator after it. 305:225 spaces the
+  // table, that separator and the blurred copy 16 apart and floats the card 103.3 into
+  // the copy (305:250); the open body (304:290) keeps them flush.
+  it("paywalled, sets the table's separator 16 from each side and the card 103.3 into the copy", () => {
+    expect(ruleOf(".rv3 .rv4-fvr.is-locked > .rv4-fvt + .rv4-sep")).toContain("margin: 16px 0");
+    expect(ruleOf(".rv3 .rv4-fvr__gate .rv4-premium")).toContain("top: 103.3px");
+  });
 
   it("sets the body copy 16/25.6 in the copy grey, its bold runs in ink", () => {
     const p = ruleOf(".rv3 .rv4-fvr .rv4-prose__p");

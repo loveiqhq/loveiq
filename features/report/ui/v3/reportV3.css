@@ -6585,9 +6585,11 @@ html {
   margin-bottom: 23.94px;
 }
 /* 305:228 — all of "Common challenges" under the full blur (Figma radius 5), at full
- * length so nothing moves on unlock. 305:249 straddles the table's foot and would
- * cover its last category toggles, so the card sits 16px under the table instead,
- * centred: 28px above the blurred copy, which starts 44 down. */
+ * length so nothing moves on unlock. Mark, 25.09 (1941866053): "move this CTA down a
+ * bit so that it isnt immediately following the drop down", with a separator after
+ * it. 305:225 spaces the table, that separator and the blurred copy 16 apart and
+ * floats the card 103.3 into the copy (305:250), centred; the open body (304:290)
+ * keeps them flush. */
 .rv3 .rv4-fvr__gate {
   cursor: pointer;
   position: relative;
@@ -6596,8 +6598,11 @@ html {
   filter: blur(2.5px);
   user-select: none;
 }
+.rv3 .rv4-fvr.is-locked > .rv4-fvt + .rv4-sep {
+  margin: 16px 0;
+}
 .rv3 .rv4-fvr__gate .rv4-premium {
-  top: -28px;
+  top: 103.3px;
 }
 /* 441:6422 draws Typical Beliefs' teaser — nine lines, the last three faded, the pill
  * 196.5px in — in a 247px text box the card ends at, so the card is 9.5px shorter
