@@ -2288,7 +2288,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       title=""
                       feedbackWidget={renderFeedback(
                         "challenges_in_partnership",
-                        "Challenges in Partnership"
+                        // V4 names the chapter in the plural, as its head does.
+                        isV4 ? "Challenges in Partnerships" : "Challenges in Partnership"
                       )}
                     >
                       <PartnershipSection
@@ -2308,7 +2309,9 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                         }
                         onUnlock={() => unlockSection(partnershipGate)}
                         quote={fullReportQuote}
-                        sectionTitle="Challenges in Partnership"
+                        sectionTitle={
+                          isV4 ? "Challenges in Partnerships" : "Challenges in Partnership"
+                        }
                         tier={
                           isSectionIncludedInEssentials(partnershipGate.id)
                             ? "essentials"

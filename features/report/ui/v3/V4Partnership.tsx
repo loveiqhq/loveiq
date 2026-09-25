@@ -1,11 +1,12 @@
 "use client";
 
-import type { FC } from "react";
+import { useRef, type FC } from "react";
 import type { Report3PartnershipView } from "@/data/report3-partnership";
 import V4PartnershipLoop from "./V4PartnershipLoop";
 import V4PremiumCard from "./V4PremiumCard";
 import V4Prose from "./V4Prose";
 import V4TryThis from "./V4TryThis";
+import { useRampFit } from "./useRampFit";
 import { guardedUnlock } from "./v4Unlock";
 
 /**
@@ -38,6 +39,9 @@ interface Props {
 const V4Partnership: FC<Props> = ({ view, onUnlock }) => {
   const { locked } = view;
   const { free, ramp, rest } = view.body;
+  // The fade ends where paragraph 5's scrambled tail starts, on a wide column too.
+  const rampRef = useRef<HTMLDivElement>(null);
+  useRampFit(rampRef, ramp !== null);
 
   return (
     <>
@@ -53,7 +57,7 @@ const V4Partnership: FC<Props> = ({ view, onUnlock }) => {
             /* 305:462 "Paywall sample". The band owns the click. */
             <div className="rv4-cip__gate" onClick={guardedUnlock(onUnlock)}>
               <div className="rv4-cip__gated" aria-hidden="true" inert>
-                <div className="rv4-cip__ramp">
+                <div className="rv4-cip__ramp" ref={rampRef}>
                   <V4Prose blocks={[ramp]} />
                   <span className="rv4-pblur" aria-hidden="true">
                     <span />

@@ -320,4 +320,29 @@ describe("V3Chapter under V4 — locked, not yet designed", () => {
     expect(at).toBeGreaterThan(0);
     expect(V3_CSS.slice(0, at).split("\n").length).toBeGreaterThan(1884);
   });
+
+  it("stands tall enough for its Premium card however short the filler wraps", () => {
+    // Review 25.09: in the 588px tablet/desktop column the three filler lines wrap to
+    // 281px, the 191px card runs from 107 to 298, and the body wrapper clipped its CTA.
+    const px = (block: string, prop: string) =>
+      Number(new RegExp(`(?:^|[\\s;{])${prop}:\\s*([\\d.]+)px`).exec(block)?.[1]);
+    const ruleOf = (selector: string) => {
+      const at = V3_CSS.lastIndexOf(`${selector} {`);
+      expect(at, selector).toBeGreaterThan(0);
+      return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+    };
+    const block = ruleOf(".rv3.rv4 .rv4-lockch");
+    const padBottom = Number(/padding:\s*[\d.]+px\s+[\d.]+(?:px)?\s+([\d.]+)px/.exec(block)?.[1]);
+    const cardTop = px(ruleOf(".rv3.rv4 .rv4-lockch .rv4-premium"), "top");
+    // The card's base rule sets its height; later `.rv3 .rv4-premium` rules restyle it,
+    // so take the last one that declares a height.
+    let cardHeight = NaN;
+    for (let at = V3_CSS.indexOf(".rv3 .rv4-premium {"); at >= 0;) {
+      const height = px(V3_CSS.slice(at, V3_CSS.indexOf("}", at)), "height");
+      if (!Number.isNaN(height)) cardHeight = height;
+      at = V3_CSS.indexOf(".rv3 .rv4-premium {", at + 1);
+    }
+    expect([padBottom, cardTop, cardHeight]).toEqual([24, 107, 191]);
+    expect(px(block, "min-height")).toBe(cardTop + cardHeight + padBottom);
+  });
 });
