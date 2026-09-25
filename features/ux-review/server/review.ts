@@ -749,15 +749,16 @@ export async function fetchPaywallDeadTaps(days = 30): Promise<PaywallDeadTaps |
 /**
  * A recording with less activity than this is never watched, by any scanner.
  *
- * Measured 2026-09-24, once survey and report had gone comprehensive (#253):
- * every session they skipped had under 5 seconds of activity (2.0, 2.9, 4.6,
- * 4.6s) or no recording at all, and every session they watched had 12.6s or
- * more. PostHog does not even record an ineligible observation for them. Over a
- * week that is 19% of report sessions — so counting them as misses put a
- * permanent ⚠ on a scanner that was watching everything it could, which is the
- * warning people learn to skip.
+ * PostHog's own number, from its own words (2026-09-25): asked to observe a
+ * session with 8.9s of activity it answered `ineligible`, "too_inactive: Only
+ * 8.9s of active interaction; min is 10s", and it writes no $recording_observed
+ * event for that. This was 5s, read off a sample (2026-09-24) where every
+ * skipped session had under 5s and every watched one 12.6s or more, so nothing
+ * fell in between to show where the line really was. At 5s, the 5-10s sessions
+ * counted as watchable but never watched: a permanent gap in every coverage
+ * figure and a "not lost" claim no re-queue could ever make true.
  */
-export const MIN_WATCHABLE_ACTIVE_MS = 5_000;
+export const MIN_WATCHABLE_ACTIVE_MS = 10_000;
 
 export interface ScannerCoverage {
   scanner: string;

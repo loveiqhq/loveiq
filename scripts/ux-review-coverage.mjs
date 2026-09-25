@@ -250,8 +250,9 @@ for (const m of misses) {
  * "comprehensive" sweep never even tried 48 of 253 watchable survey sessions and
  * 13 of 111 report sessions, mostly people who left partway: the ones the
  * scanners exist for, and nothing sent them back. For each comprehensive
- * scanner, a session that fired its trigger, has 5s of recording (the digest's
- * MIN_WATCHABLE_ACTIVE_MS), ended six hours ago and was never opened by it is
+ * scanner, a session that fired its trigger, has 10s of activity (PostHog's
+ * own minimum; MIN_WATCHABLE_ACTIVE_MS in review.ts, held equal by a test),
+ * ended six hours ago and was never opened by it is
  * owed a look, exactly as a finisher is. Focused scanners skip by design.
  */
 const STARTER_DAYS = Number(process.env.STARTER_DAYS ?? 7);
@@ -272,7 +273,7 @@ for (const [trigger, scanners] of byTrigger) {
         WHERE min_first_timestamp > now() - INTERVAL ${STARTER_DAYS + 1} DAY
         GROUP BY session_id
       ) AS r ON r.sid = t.sid
-      WHERE r.active >= 5000 AND t.sid NOT IN (
+      WHERE r.active >= 10000 AND t.sid NOT IN (
         SELECT DISTINCT toString(properties.session_id) FROM events
         WHERE event = '$recording_observed' AND timestamp > now() - INTERVAL ${STARTER_DAYS + 2} DAY
           AND toString(properties.scanner_id) = '${sc.id}'

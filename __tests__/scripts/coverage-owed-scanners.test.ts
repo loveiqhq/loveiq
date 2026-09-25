@@ -99,3 +99,12 @@ describe("what the re-queue does about an owed pair", () => {
     expect(requeueAction({ id: "o5", status: "succeeded" }).action).toBe("wait");
   });
 });
+
+describe("the re-queue's idea of watchable", () => {
+  it("is PostHog's minimum, the same bar every coverage figure uses", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { MIN_WATCHABLE_ACTIVE_MS } = await import("@features/ux-review/server/review");
+    const script = readFileSync("scripts/ux-review-coverage.mjs", "utf8");
+    expect(script).toContain(`r.active >= ${MIN_WATCHABLE_ACTIVE_MS}`);
+  });
+});

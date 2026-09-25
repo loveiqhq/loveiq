@@ -236,7 +236,8 @@ queue or a retry spends `MAX_ENQUEUE`. It also covers readers who LEFT: the
 re-queue used to start from `survey_submission`, so it only saw finishers, while
 PostHog's comprehensive sweep never tried 48 of 253 watchable survey sessions and 13
 of 111 report sessions in a week. Every comprehensive scanner now gets the watchable
-sessions its trigger matched (7 days, 5 s of recording) that it never opened.
+sessions its trigger matched (7 days, 10 s of activity, PostHog's own minimum) that it
+never opened.
 
 **The fix writer stays dispatch-only, decided 2026-09-21.**
 
