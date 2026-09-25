@@ -35,6 +35,7 @@ import {
 } from "@/data/report3-archetype-page";
 import type { ReportAccessPlan } from "@features/report/server/access";
 import { buildAccelerators } from "@/data/report3-accelerators";
+import { buildPartnership } from "@/data/report3-partnership";
 
 afterEach(cleanup);
 
@@ -163,5 +164,65 @@ describe("/report-v4-preview — Accelerator & Brakes", () => {
     const { container } = renderWithAccel("full_report");
     expect(container.querySelector(".rv4-ab")).not.toBeNull();
     expect(container.querySelector(".rv4-trig .rv4-tb-lock")).toBeNull();
+  });
+});
+
+/**
+ * Challenges in Partnerships opens Part V here too (Figma 38:1672 / 305:350), with
+ * the same body the live report uses, and every row carries its section id so the
+ * chapter nudges have somewhere to land.
+ */
+describe("/report-v4-preview — Challenges in Partnerships", () => {
+  const renderWithCip = (accessPlan: ReportAccessPlan) =>
+    render(
+      <ReportV4PreviewClient
+        archetype="Spark Seeker"
+        matchStrength={43}
+        copy={report3ArchetypeCard["Spark Seeker"]!}
+        learnMore={buildLearnMoreForReader({
+          chapters: ALL_CHAPTERS,
+          articles: REPORT_V4_LEARN_MORE,
+          accessPlan,
+        })}
+        accessPlan={accessPlan}
+        accessPlanLabel={accessPlan ?? "no purchase"}
+        quotes={buildPreviewQuotes()}
+        partnership={buildPartnership("Spark Seeker", { locked: !accessPlan })}
+      />
+    );
+
+  it("draws the chapter body, loop and practice in an open, bare chapter", () => {
+    const { container } = renderWithCip(null);
+    const chapter = container.querySelector("#challenges_in_partnership")!;
+    expect(chapter).not.toBeNull();
+    expect(chapter).toHaveClass("is-open");
+    expect(chapter).toHaveClass("is-bare");
+    expect(chapter.querySelector(".rv4-cip")).not.toBeNull();
+    expect(chapter.querySelector(".rv4-loop")).not.toBeNull();
+    expect(chapter.querySelector(".rv4-try")!.getAttribute("data-node-id")).toBe("399:219");
+    expect(chapter.textContent).not.toContain("[Chapter Copy]");
+  });
+
+  it("opens the pricing modal from the gated prose", () => {
+    const { container } = renderWithCip(null);
+    fireEvent.click(container.querySelector(".rv4-cip__gate")!);
+    expect(modalState(container)).toBe("open");
+  });
+
+  it("draws no gate for a reader who has paid", () => {
+    const { container } = renderWithCip("full_report");
+    expect(container.querySelector(".rv4-cip")).not.toBeNull();
+    expect(container.querySelector(".rv4-cip__gate")).toBeNull();
+  });
+
+  it("gives every chapter row its section id, so a nudge can land on it", () => {
+    const { container } = renderWithCip(null);
+    for (const id of [
+      "typical_beliefs",
+      "attachment_style",
+      "typical_sexual_fantasy_amp_practice_tendencies",
+    ]) {
+      expect(container.querySelector(`#${id}`), id).not.toBeNull();
+    }
   });
 });
