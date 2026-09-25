@@ -50,6 +50,14 @@ describe("plans pop-up trigger", () => {
     expect(SOURCE).toMatch(/rootMargin:\s*"0px 0px -25% 0px"/);
   });
 
+  it("waits for Part V's new first chapter under V4", () => {
+    // V4 opens Part V with Challenges in Partnership, one chapter above Attachment
+    // Style (review 24.09), so the pop-up still arrives where that part begins.
+    expect(SOURCE).toMatch(
+      /\(isV4 \? document\.getElementById\("challenges_in_partnership"\) : null\) \?\?\s*document\.getElementById\("attachment_style"\)/
+    );
+  });
+
   it("still shows the pop-up if that chapter is ever absent", () => {
     // Losing the offer entirely would be worse than firing it early, so the chain
     // degrades to the chapter this trigger used to sit on, then to the snapshot, then

@@ -45,6 +45,26 @@ describe("the V4 chapter order", () => {
     }
   });
 
+  it("opens 'How You connect' with Challenges in Partnership (review 24.09)", () => {
+    // "Double Check the Chapter order. Challenges in Partnership is the first chapter
+    // in Part V." V3 calls that part 4, and keeps the chapter last in it.
+    expect(
+      REPORT_V4_CHAPTERS.filter((c) => c.number.startsWith("4.")).map((c) => [c.id, c.number])
+    ).toEqual([
+      ["challenges_in_partnership", "4.1"],
+      ["attachment_style", "4.2"],
+      ["love_language", "4.3"],
+      ["curiosity_level", "4.4"],
+    ]);
+    const connect = REPORT_V4_NAV_PARTS.find((p) =>
+      p.items.some((i) => i.id === "attachment_style")
+    )!;
+    expect(connect.items[0]!.id).toBe("challenges_in_partnership");
+    expect(REPORT_V3_CHAPTERS.find((c) => c.id === "challenges_in_partnership")!.number).toBe(
+      "4.4"
+    );
+  });
+
   it("closes the report on Other Archetypes, after Reading Recommendations", () => {
     expect(REPORT_V4_SECTION_ORDER.slice(-2)).toEqual(["recommendations", "constellation"]);
   });
