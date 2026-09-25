@@ -158,8 +158,13 @@ describe("reportV3.css — practice card contracts", () => {
     expect(rule(".rv3 .rv4-try__button {")).toContain("min-height: 51px");
   });
 
-  it("never lets the 358px measure run past the card", () => {
-    expect(rule(".rv3 .rv4-try .rv4-prose__p {")).toContain("width: min(358px, calc(100% + 12px))");
+  // Review 25.09, Mark: "My mistake! Equal space left and right." The frames set the
+  // practice 358 wide in a card that leaves 347, so it ran 12px into the right
+  // padding; the copy, the closed teaser and the ramp now keep to the content box.
+  it("keeps the practice inside the card's padding, the same space left and right", () => {
+    expect(V3_CSS).not.toContain(".rv3 .rv4-try .rv4-prose__p {");
+    expect(rule(".rv3 .rv4-try__closed {")).not.toContain("358px");
+    expect(rule(".rv3 .rv4-try__ramp {")).not.toContain("358px");
   });
 });
 
