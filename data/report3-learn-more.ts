@@ -21,8 +21,17 @@ export type Report3Block =
   | { kind: "heading"; text: string }
   /** `tight` drops the 16px rule below — FvR stacks three bold questions flush. */
   | { kind: "para"; runs: readonly Report3Run[]; tight?: true }
-  /** `ordered` renders <ol>; A&B's "five questions" is list-decimal in 235:272. */
-  | { kind: "list"; ordered?: true; items: readonly (readonly Report3Run[])[] };
+  /**
+   * `ordered` renders <ol>; A&B's "five questions" is list-decimal in 235:272.
+   * `start` numbers an ordered list on from where an earlier part left off — the
+   * blurred tail of a list a paywall splits (CiP's practice, 399:260).
+   */
+  | {
+      kind: "list";
+      ordered?: true;
+      start?: number;
+      items: readonly (readonly Report3Run[])[];
+    };
 
 export interface Report3LearnMoreArticle {
   /** Must equal a Report3Chapter.id. */

@@ -54,6 +54,11 @@ const PREMIUM_DATA_MODULES = [
   // frame (314:211) blurs rows 3-5 and most of the prose, so a client component
   // importing the module would hand over exactly what the wall withholds.
   "@/data/report3-accelerators",
+  // Added 2026-09-25. The Challenges in Partnerships chapter body (Figma 38:1672) —
+  // its prose, the six loop steps, the result paragraph and the practice. The
+  // paywalled frame (305:350) blurs everything past paragraph 5, so a client
+  // component importing the module would hand over exactly what the wall withholds.
+  "@/data/report3-partnership",
 ];
 
 const PROJECT_ROOT = join(__dirname, "..", "..");
