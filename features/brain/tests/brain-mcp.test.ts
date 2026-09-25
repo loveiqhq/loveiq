@@ -65,6 +65,13 @@ vi.mock("@features/brain/server/night-shift", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@features/brain/server/night-shift")>()),
   queueResearch: (...a: unknown[]) => mockQueueResearch(...a),
 }));
+const mockCommentAsks = vi.fn();
+const mockCommentDeps = vi.fn();
+vi.mock("@features/brain/server/comment-asks", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/brain/server/comment-asks")>()),
+  commentAsks: (...a: unknown[]) => mockCommentAsks(...a),
+  liveDeps: (...a: unknown[]) => mockCommentDeps(...a),
+}));
 const mockWhatsNew = vi.fn();
 vi.mock("@features/brain/server/whats-new", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@features/brain/server/whats-new")>()),
@@ -472,6 +479,62 @@ describe("/api/mcp", () => {
       });
     });
 
+    describe("comment_asks", () => {
+      const call = async (args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 14,
+                method: "tools/call",
+                params: { name: "comment_asks", arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+      const ask = {
+        person: "Marcus Börner",
+        asker: "Mark Oldenburg",
+        app: "Figma",
+        kind: "mention",
+        file: "LoveIQ",
+        text: "@Marcus Börner thoughts?",
+        day: "2026-09-10",
+        link: "https://www.figma.com/design/K#1",
+        status: "open",
+      };
+      beforeEach(() => {
+        mockCommentAsks.mockReset().mockResolvedValue({ asks: [ask], gaps: [] });
+        mockCommentDeps.mockReset().mockReturnValue({});
+      });
+
+      it("lists the asks for a person over the last thirty days by default", async () => {
+        const r = await call({ person: "Marcus" });
+        expect(r.isError).toBeFalsy();
+        const since = mockCommentAsks.mock.calls[0]![0] as string;
+        const days = (Date.now() - Date.parse(`${since}T00:00:00Z`)) / 86_400_000;
+        expect(days).toBeGreaterThan(29);
+        expect(days).toBeLessThan(31.5);
+        expect(r.content[0]!.text).toContain("to Marcus.");
+        expect(r.content[0]!.text).toContain("Marcus Börner: 1 open of 1 shown");
+      });
+
+      it("refuses a day that is not one, and a day to come", async () => {
+        expect((await call({ since: "2026-09-31" })).isError).toBe(true);
+        const future = await call({ since: "2999-01-01" });
+        expect(future.isError).toBe(true);
+        expect(future.content[0]!.text).toBe("2999-01-01 has not happened yet.");
+        expect(mockCommentAsks).not.toHaveBeenCalled();
+      });
+
+      it("lists resolved asks only when asked to", async () => {
+        mockCommentAsks.mockResolvedValue({ asks: [{ ...ask, status: "resolved" }], gaps: [] });
+        expect((await call({})).content[0]!.text).toContain("Nothing open");
+        expect((await call({ include_resolved: true })).content[0]!.text).toContain("→ resolved");
+      });
+    });
+
     describe("queue_research and whats_new", () => {
       const call = async (name: string, args: Record<string, unknown>) =>
         (
@@ -779,6 +842,7 @@ describe("/api/mcp", () => {
         "show_page",
         "what_shipped",
         "explain_change",
+        "comment_asks",
         "whats_new",
         "check_copy",
         "get_context_pack",
@@ -872,6 +936,7 @@ describe("/api/mcp", () => {
           .map((t) => t.name)
           .sort()
       ).toEqual([
+        "comment_asks",
         "explain_change",
         "post_to_slack",
         "query_external_service",
@@ -5558,6 +5623,7 @@ describe("the runbook's tool count is the real one", () => {
     22: "Twenty-two",
     23: "Twenty-three",
     24: "Twenty-four",
+    25: "Twenty-five",
   };
 
   it("matches what the server actually exposes", () => {

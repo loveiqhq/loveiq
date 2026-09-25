@@ -64,6 +64,11 @@ import {
 } from "@features/brain/server/promises";
 import { promptDocs } from "@features/brain/server/ingest/skills";
 import { PER_NIGHT, queueResearch } from "@features/brain/server/night-shift";
+import {
+  commentAsks,
+  liveDeps as commentAskDeps,
+  renderAsks,
+} from "@features/brain/server/comment-asks";
 import { renderWhatsNew, whatsNew } from "@features/brain/server/whats-new";
 import {
   isJump,
@@ -1604,6 +1609,32 @@ export const TOOLS = [
           description:
             "One metric to explain whether or not it was unusual. Leave empty to list every metric " +
             "that was outside its usual range that day.",
+        },
+      },
+    },
+  },
+  {
+    name: "comment_asks",
+    title: "What people asked each other in comments",
+    annotations: { readOnlyHint: true, openWorldHint: true },
+    description:
+      "Every ask left in a Figma or Google Docs comment: who asked whom for what, a link to the " +
+      "comment, and whether it is still open, checked live against Figma and Google Drive. Use it " +
+      "for 'what is waiting on me in comments', 'what did Mark ask Sanjin in Figma', or 'which " +
+      "review requests are still open'. Figma is read from every file whose link the company has " +
+      "shared; a Google comment arrives through the notification email the person asked receives. " +
+      "'Answered' means they replied in the thread but nobody resolved it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        person: {
+          type: "string",
+          description: "Only asks to this person: a full name, or a first name such as 'Marcus'.",
+        },
+        since: { type: "string", description: "First day, YYYY-MM-DD. Default: thirty days ago." },
+        include_resolved: {
+          type: "boolean",
+          description: "Also list the resolved and deleted asks. Default false.",
         },
       },
     },
@@ -4685,6 +4716,27 @@ async function callTool(
     );
   }
 
+  if (name === "comment_asks") {
+    const raw = typeof args.since === "string" ? args.since.trim() : "";
+    const since = raw || new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(since) || !isRealDate(since)) {
+      return textResult(`\`since\` must be a real day like 2026-09-01, not "${raw}".`, true);
+    }
+    if (since > new Date().toISOString().slice(0, 10)) {
+      return textResult(`${since} has not happened yet.`, true);
+    }
+    const person =
+      typeof args.person === "string" && args.person.trim() ? args.person.trim() : null;
+    const result = await commentAsks(since, commentAskDeps(oidcForReport));
+    stats.sourceCount = result.asks.length;
+    return textResult(
+      `Asks left in comments since ${since}${person ? `, to ${person}` : ""}.\n\n` +
+        renderAsks(result, person, args.include_resolved === true),
+      false,
+      "name a `person`, or a later `since`"
+    );
+  }
+
   if (name === "queue_research") {
     const question = typeof args.question === "string" ? args.question.trim() : "";
     if (question.length < 15 || question.length > 1500) {
@@ -5141,6 +5193,8 @@ export const MCP_INSTRUCTIONS =
   "logic already.\n\n" +
   "WHO PROMISED WHAT: meeting_promises lists every next step agreed in a recorded meeting, by " +
   "owner, read off the notes by code, and whether the Notion board tracks it.\n\n" +
+  "ASKS IN COMMENTS: comment_asks lists what people asked each other in Figma and Google Docs " +
+  "comments, and whether each is still open, checked live against Figma and Google Drive.\n\n" +
   "WHAT IS NEW: whats_new lists what the brain produced on its own since a time: notices, the " +
   "Night Shift's research answers and decisions. Call it when someone asks what is new or what " +
   "they missed.\n\n" +
