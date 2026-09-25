@@ -931,6 +931,75 @@ describe("ReportPage", () => {
     });
   });
 
+  // Review 24.09: "Double Check the Chapter order. Challenges in Partnership is the first
+  // chapter in Part V."
+  describe("V4 — Challenges in Partnership opens Part V", () => {
+    const LOCKED_PARTNERSHIP = {
+      locked: true,
+      eyebrow: "The Pattern",
+      "learn.eyebrow": "What you will learn",
+      "learn.body": "The loop you and a partner fall into, and how to step out of it.",
+    };
+
+    afterEach(() => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+
+    const precedes = (a: Element, b: Element) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+    it("renders it once, under the Part V heading and above Attachment Style", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      const { container } = render(<ReportPage />);
+
+      const heading = [...container.querySelectorAll(".rv4-part")].find(
+        (h) => h.querySelector(".rv4-part__eyebrow")?.textContent === "Part V"
+      )!;
+      const partnership = container.querySelector("#challenges_in_partnership")!;
+      const attachment = container.querySelector("#attachment_style")!;
+      expect(heading).toBeDefined();
+      expect(container.querySelectorAll("#challenges_in_partnership")).toHaveLength(1);
+      expect(precedes(heading, partnership)).toBe(true);
+      expect(precedes(partnership, attachment)).toBe(true);
+    });
+
+    it("keeps its full-report gate, not the essentials one of the slot it sits in", async () => {
+      const user = userEvent.setup();
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      const response = buildSuccessResponse();
+      (response.data as Record<string, unknown>).partnershipCopy = LOCKED_PARTNERSHIP;
+      mockUseReportData.mockReturnValue(response);
+
+      const { container } = render(<ReportPage />);
+      const chapter = container.querySelector<HTMLElement>("#challenges_in_partnership")!;
+      // The plans pop-up opens by itself for a locked reader and hides the report
+      // from the accessibility tree, so the chapter toggle is found by its class.
+      const toggle = chapter.querySelector<HTMLElement>("[aria-expanded]")!;
+      if (toggle.getAttribute("aria-expanded") === "false") await user.click(toggle);
+      await user.click(chapter.querySelector<HTMLElement>(".report-premium-overlay__cta")!);
+
+      expect(vi.mocked(analytics.trackLockIconClicked)).toHaveBeenCalledWith(
+        expect.objectContaining({ section_id: "curiosity_level", plan_needed: "full_report" })
+      );
+    });
+
+    it("leaves ?v3=1 with it after Curiosity", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v3=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      const { container } = render(<ReportPage />);
+
+      expect(
+        precedes(
+          container.querySelector("#curiosity_level")!,
+          container.querySelector("#challenges_in_partnership")!
+        )
+      ).toBe(true);
+    });
+  });
+
   // Review 24.09: "the top part is dark on my iPhone (the background to the time and
   // battery)". Safari 15-18 tints the status bar from `theme-color`, and without one it
   // keeps the site's dark shell (#0b0613) it painted while the report was loading.

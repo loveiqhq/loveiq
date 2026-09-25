@@ -2237,8 +2237,19 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                 // V3 promotes "Challenges in Partnership" to its own chapter 4.4,
                 // after Curiosity. V1 renders it inline under Libido (3.1 in V3),
                 // which would put chapter 4.4 two parts early.
+                // V4 opens Part V with it instead (review 24.09), in Attachment
+                // Style's slot: under the part heading, above Attachment. It keeps
+                // the gate it has everywhere: the server unlocks its copy with
+                // Libido's full-report tier, and V3 reads the tier and the unlock off
+                // Curiosity, also full report. Attachment is an essentials chapter,
+                // so V4 still reads them off Curiosity, never off the slot.
+                const partnershipGate = isV4
+                  ? resolvedSections.find((s) => s.id === "curiosity_level")
+                  : section;
                 const v3Partnership =
-                  isV3 && section.id === "curiosity_level" ? (
+                  isV3 &&
+                  partnershipGate &&
+                  section.id === (isV4 ? "attachment_style" : "curiosity_level") ? (
                     <ReportSection
                       primaryArchetype={viewArchetype}
                       sectionId="challenges_in_partnership"
@@ -2252,11 +2263,13 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                         archetype={viewArchetype}
                         copy={viewArchetype === primaryArchetype ? partnershipCopy : null}
                         loop={viewArchetype === primaryArchetype ? partnershipLoop : null}
-                        onUnlock={() => unlockSection(section)}
+                        onUnlock={() => unlockSection(partnershipGate)}
                         quote={fullReportQuote}
                         sectionTitle="Challenges in Partnership"
                         tier={
-                          isSectionIncludedInEssentials(section.id) ? "essentials" : "full_report"
+                          isSectionIncludedInEssentials(partnershipGate.id)
+                            ? "essentials"
+                            : "full_report"
                         }
                       />
                     </ReportSection>
@@ -2267,10 +2280,11 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                 return (
                   <Fragment key={section.id}>
                     {dividerNode}
+                    {isV4 ? v3Partnership : null}
                     {v3PartOneExtras}
                     {isV4 ? null : v3Constellation}
                     {sectionNode}
-                    {v3Partnership}
+                    {isV4 ? null : v3Partnership}
                     {isV4 ? v3Constellation : null}
                   </Fragment>
                 );
@@ -2631,8 +2645,10 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // Primary target is Attachment Style — the chapter after the two teased ones.
     // Beliefs is the first backstop (the chapter this trigger used to sit on) and the
     // snapshot the second, so a layout change that drops a chapter moves the pop-up
-    // earlier rather than losing it.
+    // earlier rather than losing it. V4 opens that part with Challenges in Partnership,
+    // one chapter above Attachment (review 24.09), so there it waits for that.
     const trigger =
+      (isV4 ? document.getElementById("challenges_in_partnership") : null) ??
       document.getElementById("attachment_style") ??
       document.getElementById("typical_beliefs") ??
       document.getElementById("snapshot");
@@ -2746,7 +2762,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       }
       scrollTeaserFiredRef.current = false;
     };
-  }, [accessPlan, notifyPaywallReached, data, viewMode, shouldShowOfferVariant]);
+  }, [accessPlan, notifyPaywallReached, data, viewMode, shouldShowOfferVariant, isV4]);
 
   // Every other route to the paywall reports it too: an ?offer=1 email deep-link,
   // the 24h ladder auto-open, and every manual "Unlock" CTA. Whichever comes first

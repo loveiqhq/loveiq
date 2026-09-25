@@ -102,14 +102,17 @@ const V4_REMOVED_CHAPTERS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Report V4 (`?v4=1`) moves TWO chapters to the front of a part, both as Figma
- * draws them (Fatih's calls, 2026-09-23):
+ * Report V4 (`?v4=1`) moves THREE chapters to the front of a part:
  * - Typical Beliefs opens "How your archetype works" — the team's chapter sequence
  *   (2026-09-14) and Figma 1:849 both put it first.
  * - Accelerators & Brakes opens "Your erotic engine" — Figma 334:521 (1:982) and the
  *   Notion content roadmap ("Part IV - Your Erotic Engine", order 1). The frame
  *   titled it in the singular, and the 24.09 review asked for the "s" everywhere,
  *   so V4 now carries V3's own plural title.
+ * - Challenges in Partnership opens "How you connect" — the 24.09 review: "Challenges
+ *   in Partnership is the first chapter in Part V". It has no row of its own in
+ *   report-general.ts, so ReportPage renders it in Attachment Style's slot.
+ * (The first two are Fatih's calls of 2026-09-23, as Figma draws them.)
  *
  * V3's ids less V4_REMOVED_CHAPTERS, so every filter keyed on the order drops those
  * three from the page, the nav and the drawer together, and each
@@ -122,6 +125,7 @@ const V4_REMOVED_CHAPTERS: ReadonlySet<string> = new Set([
 const V4_PART_OPENERS: readonly { id: string; part: string }[] = [
   { id: "typical_beliefs", part: "2" },
   { id: "typical_arousal_accelerators_turn_ons_of_the_core_archetype", part: "3" },
+  { id: "challenges_in_partnership", part: "4" },
 ];
 
 const partOf = (chapter: ReportV3Chapter): string => chapter.number.split(".")[0]!;
