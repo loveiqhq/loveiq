@@ -6155,3 +6155,330 @@ html {
 .rv3 .rv4-try.is-open.is-gated .rv4-try__body {
   padding-top: var(--rv4-try-gated-pt, var(--rv4-try-open-pt, 4px));
 }
+
+/* ══ Fantasy vs. Reality · the fantasy table — Figma 639:308, 639:1905 locked ══════
+ * Eleven categories 24 apart in a 328px frame, left in the chapter's column as the
+ * frame sets it; narrower columns take the table down with them. */
+.rv3 .rv4-fvt {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: min(328px, 100%);
+}
+/* 639:310 — the head: the title fills, 12px, then the 34px disc; 34 tall, or as tall
+ * as a two-line title. Figma rounds the title's 21.6px line box up to 22 before it
+ * centres it, which sets the baseline 23.39 down; the 0.4px keeps that. */
+.rv3 .rv4-fvt__head {
+  font: inherit;
+  margin: 0;
+}
+.rv3 .rv4-fvt__toggle {
+  align-items: center;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 12px;
+  min-height: 34px;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+.rv3 .rv4-fvt__title {
+  color: #161021;
+  flex: 1 1 auto;
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.4px;
+  line-height: 21.6px;
+  min-width: 0;
+  padding-bottom: 0.4px;
+}
+/* 639:312 open — white, a 1.5px violet ring, chevron up; 639:664 closed — violet at
+ * 10%, chevron down. */
+.rv3 .rv4-fvt__disc {
+  align-items: center;
+  background: rgba(121, 95, 200, 0.1);
+  border-radius: 17px;
+  color: #795fc8;
+  display: flex;
+  flex: none;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+.rv3 .rv4-fvt__disc svg {
+  display: block;
+  height: 15px;
+  transition: transform 0.18s ease;
+  width: 15px;
+}
+.rv3 .rv4-fvt__cat.is-open .rv4-fvt__disc {
+  background: #fff;
+  box-shadow: inset 0 0 0 1.5px #795fc8;
+}
+.rv3 .rv4-fvt__cat.is-open .rv4-fvt__disc svg {
+  transform: rotate(180deg);
+}
+.rv3 .rv4-fvt__toggle:focus-visible {
+  border-radius: 8px;
+  outline: 2px solid var(--rv3-violet);
+  outline-offset: 2px;
+}
+/* 639:309 — 24px from the head to the table. */
+.rv3 .rv4-fvt__panel {
+  padding-top: 24px;
+}
+/* 639:316 / 639:332 — 14 | fantasy 122 | 7 | pull 82 | 7 | pleasure 82 | 14 at 328.
+ * Below 328 the fantasy column gives way first and the scores narrow to 72 at a
+ * 288px table (a 320px phone): 25% + 7px of the grid's content box is 82 at 300. */
+.rv3 .rv4-fvt__cols,
+.rv3 .rv4-fvt__row {
+  column-gap: 7px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(2, clamp(72px, calc(25% + 7px), 82px));
+  padding-left: 14px;
+  padding-right: 14px;
+}
+/* The heads: cells 39 tall (two 19.2px lines, rounded up), 10 under them in the
+ * 49px row, then 4 to the first row. */
+.rv3 .rv4-fvt__cols {
+  padding-bottom: 14px;
+}
+.rv3 .rv4-fvt__col {
+  color: #6b6678;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.8px;
+  line-height: 19.2px;
+  min-height: 39px;
+  text-transform: uppercase;
+}
+/* 639:319 — centred on the whole cell, each line with its trailing space, the info
+ * mark set absolute at the cell's top right (72.11, 8.56). */
+.rv3 .rv4-fvt__col--score {
+  position: relative;
+  text-align: center;
+}
+.rv3 .rv4-fvt__col-line {
+  display: block;
+}
+.rv3 .rv4-fvt__cols .rv4-fvt__mark {
+  height: 9.89px;
+  opacity: 0.82;
+  position: absolute;
+  right: 0;
+  top: 8.56px;
+  width: 9.89px;
+}
+.rv3 .rv4-fvt__mark {
+  color: #a855f7;
+  display: block;
+}
+.rv3 .rv4-fvt__mark svg {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+/* 639:332 — 12 above and below the taller of the label and the 46px scores, each
+ * centred in the row. The name's box is Figma's fixed 102px beside the info mark;
+ * its 0.8px rounds a three-line name to the frame's 68. */
+.rv3 .rv4-fvt__row {
+  align-items: center;
+  padding-bottom: 12px;
+  padding-top: 12px;
+}
+.rv3 .rv4-fvt__label {
+  align-items: flex-start;
+  display: flex;
+  gap: 5.6px;
+  min-width: 0;
+}
+.rv3 .rv4-fvt__name {
+  color: #3f3a4d;
+  flex: 1 1 auto;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22.4px;
+  min-width: 0;
+  padding-bottom: 0.8px;
+}
+/* 639:335 — the mark in a 14.39px button, 3.2px down: the glyph lands 4.96px under
+ * the label's top. The hit area reaches past the glyph. */
+.rv3 .rv4-fvt__info {
+  align-items: center;
+  background: none;
+  border: 0;
+  border-radius: 50%;
+  display: flex;
+  flex: none;
+  height: 14.39px;
+  justify-content: center;
+  margin-top: 3.2px;
+  padding: 0;
+  position: relative;
+  width: 14.39px;
+}
+.rv3 button.rv4-fvt__info {
+  cursor: pointer;
+}
+.rv3 button.rv4-fvt__info::after {
+  content: "";
+  inset: -14px;
+  position: absolute;
+}
+.rv3 button.rv4-fvt__info:focus-visible {
+  outline: 2px solid var(--rv3-violet);
+  outline-offset: 1px;
+}
+.rv3 .rv4-fvt__row .rv4-fvt__mark {
+  height: 10.875px;
+  opacity: 0.92;
+  width: 10.875px;
+}
+/* 639:341 — the score (22, Figma's 21.6 rounded up), 4, its likelihood (20). */
+.rv3 .rv4-fvt__score {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  text-align: center;
+}
+.rv3 .rv4-fvt__num {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.58px;
+  line-height: 21.6px;
+  padding-bottom: 0.4px;
+}
+.rv3 .rv4-fvt__score--pull .rv4-fvt__num {
+  color: #7c3aed;
+}
+.rv3 .rv4-fvt__score--pleasure .rv4-fvt__num {
+  color: #d9531f;
+}
+.rv3 .rv4-fvt__qual {
+  color: #6b6678;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 19.2px;
+  padding-bottom: 0.8px;
+  white-space: nowrap;
+}
+/* The note a row's mark opens — Figma draws none; V2's name and note, in the table's
+ * violet. */
+.rv3 .rv4-fvt__note-row {
+  padding: 0 14px 12px;
+}
+.rv3 .rv4-fvt__note {
+  background: rgba(121, 95, 200, 0.06);
+  border-radius: 12px;
+  color: #3f3a4d;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  gap: 4px;
+  line-height: 20.8px;
+  padding: 12px 14px;
+}
+.rv3 .rv4-fvt__note-name {
+  color: #161021;
+  font-weight: 700;
+}
+/* 639:497 — rows 4 and 5 under a 96px fade: clear, 70% at 40%, white from 85%. */
+.rv3 .rv4-fvt__peek {
+  height: 96px;
+  overflow: hidden;
+  position: relative;
+}
+.rv3 .rv4-fvt__fade {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.7) 40%,
+    #fff 85%
+  );
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+/* 639:498 / 639:2099 — a white pill 31 tall, a 1.5px coral → rose → violet outline
+ * and its 10/12 bold caps in the same gradient; Figma's handles, in CSS stops. The
+ * hit area is 44 tall. */
+.rv3 .rv4-fvt__pill {
+  align-items: center;
+  background:
+    linear-gradient(#fff, #fff) padding-box,
+    linear-gradient(to bottom right, #fb683e 14.6%, #e88c8c 51.4%, #ac88ed 85.4%) border-box;
+  border: 1.5px solid transparent;
+  border-radius: 999px;
+  cursor: pointer;
+  display: flex;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 700;
+  justify-content: center;
+  line-height: 12px;
+  padding: 7.5px 20.5px 8.5px;
+  position: relative;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.rv3 .rv4-fvt__pill::after {
+  content: "";
+  inset: -6.5px 0;
+  position: absolute;
+}
+.rv3 .rv4-fvt__pill:focus-visible {
+  outline: 2px solid var(--rv3-violet);
+  outline-offset: 2px;
+}
+.rv3 .rv4-fvt__pill-label {
+  -webkit-background-clip: text;
+  background-clip: text;
+  /* The longhand, so it cannot reset the clip above as the shorthand would. */
+  background-image: linear-gradient(to bottom right, #fb683e 14.6%, #e88c8c 51.4%, #ac88ed 85.4%);
+  color: transparent;
+}
+/* 639:498 sits 48px into the fade, centred 20px right of the table's middle (x 184
+ * of 328) in both open categories — where the locked pills centre on 164. As drawn. */
+.rv3 .rv4-fvt__peek .rv4-fvt__pill {
+  left: calc(50% + 20px);
+  position: absolute;
+  top: 48px;
+  transform: translateX(-50%);
+}
+/* 639:1905 — the stand-ins under a 2px blur (Figma radius 4), the badge on their
+ * middle; the group owns the click. 4px on, the CTA row: 16, then the pill. */
+.rv3 .rv4-fvt__lock {
+  cursor: pointer;
+}
+.rv3 .rv4-fvt__lockrows {
+  position: relative;
+}
+.rv3 .rv4-fvt__blurred {
+  filter: blur(2px);
+  user-select: none;
+}
+.rv3 .rv4-fvt__lockrows .rv4-lockbadge {
+  --rv4-lock-top: calc(50% - 24px);
+}
+.rv3 .rv4-fvt__cta {
+  display: flex;
+  justify-content: center;
+  padding-top: 20px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv4-fvt__disc svg {
+    transition: none;
+  }
+}
