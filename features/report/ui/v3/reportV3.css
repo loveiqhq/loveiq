@@ -6069,3 +6069,89 @@ html {
 .rv3.rv4 .rv4-lockch .rv4-premium {
   top: 107px;
 }
+
+/* ── Archetype card, V4 — Figma 15:815 as it is drawn today ──────────────────────
+ * Mark, 15.09: "We slightly updated the design of the archetype card (Icon size of
+ * Core Motivation, spacing and structure of the headlines of the Communication etc.
+ * cards)". The icon was already right (a 45px chip round a 23px glyph); the rest is
+ * here, with the frame's own geometry, which the V3 build's card had drifted from.
+ * Measured against the live page at 393, every text baseline lands within 1px.
+ *
+ * The card: a 1px inside stroke insets the children by 1px, so the border alone does
+ * it; the V3 card's `padding: 19px 1px` counted the stroke twice. The frame is a
+ * fixed 1031, which leaves 31px under the meters: 18 + 31 at the bottom.
+ *
+ * Scoped to both V4 roots: `.rv4` is the live report under `?v4=1`, `.rv4-doc` the
+ * standalone /report-v4-preview, which takes the design's own updates too. */
+.rv3:is(.rv4, .rv4-doc) .rv3-arch {
+  padding: 18px 0 49px;
+}
+/* 15:816 is a fixed 191: the match row (15:819) grows into the slack and the tagline
+ * sits in a fixed 70px box (15:828), so the core motivation panel starts at y=210.
+ * Minimums, so a longer tagline grows the header instead of spilling out of it.
+ *
+ * Both rows are 323 wide in the frame, 8px into the header's right padding. Fixed,
+ * they ran out of the card below 393, which clips: at 360 "43%" lost its last 19px
+ * and the tagline 13. 100% + 8 is exactly 323 at 393 and keeps the 15px inset below. */
+.rv3:is(.rv4, .rv4-doc) .rv3-arch__head {
+  min-height: 191px;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-arch__match {
+  flex-grow: 1;
+  width: min(323px, calc(100% + 8px));
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-arch__tagline {
+  min-height: 70px;
+  width: min(323px, calc(100% + 8px));
+}
+/* 15:832 is 51 tall: the label's box is 23 (Figma rounds the 22.4 line up) and the
+ * value sits in a fixed 28 (15:842), which centres the chip 3px down and sets the
+ * body 20px under. The body's 259 ran out of its panel at 320. */
+.rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-label {
+  min-height: 23px;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-value {
+  min-height: 28px;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-body {
+  width: min(259px, 100%);
+}
+/* The deck is the frame's 359 at 393 and the card's width below it, so its last
+ * indicator bar stays inside (at 360 it was 11px out). The cards keep their 268px slot
+ * and 280px step; only the scrollport narrows. */
+.rv3:is(.rv4, .rv4-doc) .rv3-deck {
+  width: 100%;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__viewport {
+  width: 100%;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__dots {
+  width: 100%;
+}
+/* 15:926 lays the two meters on fixed 57px rows, 20 apart, so they step 77px and the
+ * scale overflows its row, as drawn. Each bars row (15:932) is 7px round its 6px track. */
+.rv3:is(.rv4, .rv4-doc) .rv3-arch__meters {
+  grid-auto-rows: 57px;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-arch__meter-bars {
+  min-height: 16px;
+}
+/* The deck's headline: Lora 20/24 in a fixed 29px box under the 8px pad (instance
+ * 15:847, I15:847;11070:796), so the body keeps its place. The peeking card draws the
+ * same box at 0.94. */
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__value {
+  font-size: 20px;
+  line-height: 24px;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-focused .rv3-deck__value {
+  padding-bottom: 5px;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-peeking .rv3-deck__value {
+  padding-bottom: 3.26px;
+}
+/* "How desire gets spoken": the focused card's second line opens with a capital. The
+ * copy stays lower-case, as the peeking card sets it in capitals anyway; the span is a
+ * flex item, so blockified, which ::first-letter needs. */
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-focused .rv3-deck__sub::first-letter {
+  text-transform: uppercase;
+}

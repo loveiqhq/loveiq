@@ -252,3 +252,86 @@ describe("report3ArchetypeCard", () => {
     );
   });
 });
+
+/**
+ * Report V4 — the card as Figma 15:815 draws it today. Mark's 15.09 update ("icon size
+ * of Core Motivation, spacing and structure of the headlines of the Communication etc.
+ * cards") and the frame's own geometry, measured against the live page at 393.
+ * `?v3=1` never renders this card (it shows V2's CoreArchetypeSection): these are V4's
+ * overrides, appended below line 1884 for both V4 roots, the live report (`.rv4`) and
+ * /report-v4-preview (`.rv4-doc`).
+ */
+describe("V4 archetype card — reportV3.css, both V4 roots", () => {
+  const v4Rule = (selector: string) => {
+    const needle = `${selector} {`;
+    const at = V3_CSS.indexOf(needle);
+    expect(at, `missing: ${needle}`).toBeGreaterThan(-1);
+    expect(V3_CSS.slice(0, at).split("\n").length).toBeGreaterThan(1884);
+    return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+  };
+
+  it("sets the deck card's headline in Lora 20/24 inside 15:847's 29px box", () => {
+    const value = v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__value");
+    expect(value).toMatch(/font-size: 20px/);
+    expect(value).toMatch(/line-height: 24px/);
+    // I15:847;11070:796 is a fixed 29px under an 8px pad: 24px of line and 5 below.
+    // The peeking card draws the same box at 0.94.
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-focused .rv3-deck__value")).toMatch(
+      /padding-bottom: 5px/
+    );
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-peeking .rv3-deck__value")).toMatch(
+      /padding-bottom: 3\.26px/
+    );
+  });
+
+  it("opens the focused card's sub-label with a capital, as 15:847 writes it", () => {
+    // "How desire gets spoken"; the copy stays lower-case, as the peeking card sets it.
+    expect(
+      v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-deck__card.is-focused .rv3-deck__sub::first-letter")
+    ).toMatch(/text-transform: uppercase/);
+  });
+
+  it("holds the header at 15:816's fixed 191px, the match row taking the slack", () => {
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__head")).toMatch(/min-height: 191px/);
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__match")).toMatch(/flex-grow: 1/);
+    // 15:828, the tagline's fixed 70px box.
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__tagline")).toMatch(/min-height: 70px/);
+  });
+
+  it("sizes the core motivation head to 15:832's 51px", () => {
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-label")).toMatch(/min-height: 23px/);
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-value")).toMatch(/min-height: 28px/);
+  });
+
+  it("insets the content by the 1px stroke alone and keeps the fixed frame's room below", () => {
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch")).toMatch(/padding: 18px 0 49px/);
+  });
+
+  it("keeps the frame's widths at 393 but narrows instead of clipping on smaller phones", () => {
+    // At 360 the fixed 323px rows lost the end of "43%" and the tagline, and the deck's
+    // last indicator bar; at 320 the core motivation body ran out of its panel. 100% + 8
+    // is the frame's 323 at 393 (the head's 315 plus 8 into its right padding).
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__match")).toMatch(
+      /width: min\(323px, calc\(100% \+ 8px\)\)/
+    );
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__tagline")).toMatch(
+      /width: min\(323px, calc\(100% \+ 8px\)\)/
+    );
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__motive-body")).toMatch(
+      /width: min\(259px, 100%\)/
+    );
+    for (const part of [
+      ".rv3:is(.rv4, .rv4-doc) .rv3-deck",
+      ".rv3:is(.rv4, .rv4-doc) .rv3-deck__viewport",
+      ".rv3:is(.rv4, .rv4-doc) .rv3-deck__dots",
+    ]) {
+      expect(v4Rule(part)).toMatch(/width: 100%/);
+    }
+  });
+
+  it("steps the two meters 77px apart, as 15:926's fixed 57px rows do", () => {
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__meters")).toMatch(/grid-auto-rows: 57px/);
+    // 15:932: the bars row is 7px tall around its 6px track.
+    expect(v4Rule(".rv3:is(.rv4, .rv4-doc) .rv3-arch__meter-bars")).toMatch(/min-height: 16px/);
+  });
+});
