@@ -1,5 +1,7 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { GET } from "@/app/api/report/preview/route";
+import { getReport2Section } from "@/data/report2";
+import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
 
 /**
  * `/api/report/preview` — the report with no database behind it (`?preview=1`),
@@ -72,5 +74,44 @@ describe("GET /api/report/preview — Accelerator & Brakes", () => {
     process.env.NEXT_PUBLIC_SITE_URL = "https://www.loveiq.org";
     const { status } = await get("archetype=Spark%20Seeker&plan=full_report");
     expect(status).toBe(404);
+  });
+});
+
+// Review 24.09: "The other Archetypes should not be the constellation, but the larger
+// list of other archetypes of the Report V2". 2.0's list ranks all fourteen, each with
+// its motto; the preview sent only the frame's three percentages and no mottos, so on
+// staging V4's Other Archetypes drew three bare rows — a repeat of the top-three card.
+describe("GET /api/report/preview — Other Archetypes", () => {
+  const ranked = (json: { percentages: Record<string, number> }) =>
+    Object.entries(json.percentages).sort(([, a], [, b]) => b - a);
+
+  it("ranks all fourteen archetypes, keeping the frame's top three", async () => {
+    const { json } = await get("archetype=Spark%20Seeker");
+    const rows = ranked(json);
+    expect(rows).toHaveLength(14);
+    expect(new Set(rows.map(([name]) => name))).toEqual(new Set(KNOWN_ARCHETYPES));
+    expect(rows.slice(0, 3)).toEqual([
+      ["Spark Seeker", 43.4],
+      ["Explorer of Edges", 39.5],
+      ["Emotional Voyeur", 36.2],
+    ]);
+    // Strictly descending, so the order is the ranking and never a tie.
+    expect(new Set(rows.map(([, pct]) => pct)).size).toBe(14);
+  });
+
+  it("puts the requested archetype first, rather than tying it with Spark Seeker", async () => {
+    const { json } = await get("archetype=quiet-withdrawer");
+    const rows = ranked(json);
+    expect(rows[0]).toEqual(["Quiet Withdrawer", 43.4]);
+    expect(rows).toHaveLength(14);
+  });
+
+  it("sends every archetype's motto, built as the real route builds them", async () => {
+    const { json } = await get("archetype=Spark%20Seeker");
+    for (const name of KNOWN_ARCHETYPES) {
+      expect(json.constellationMottos[name], name).toBe(
+        getReport2Section(name, "constellation").motto ?? null
+      );
+    }
   });
 });

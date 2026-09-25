@@ -46,12 +46,27 @@ function isProduction(): boolean {
   return /\/\/(www\.)?loveiq\.org\b/.test(siteUrl) && !siteUrl.includes("staging");
 }
 
-/** The frame's own numbers, so the constellation has something plausible to draw. */
-const PREVIEW_PERCENTAGES: Record<string, number> = {
-  "Spark Seeker": 43.4,
-  "Explorer of Edges": 39.5,
-  "Emotional Voyeur": 36.2,
-};
+/**
+ * The frame's own numbers for the top three (43.4 / 39.5 / 36.2), then a descending
+ * tail for the other eleven. Every list that ranks all fourteen — 2.0's Other
+ * Archetypes (review 24.09: "the larger list of other archetypes of the Report V2"),
+ * V1's probabilities — then has all fourteen rows to draw, as a real report does;
+ * with only three, staging drew a repeat of the top-three card. The requested
+ * archetype takes the top value, so it is the reader's own and never a tie.
+ */
+const PREVIEW_LEADERS = ["Spark Seeker", "Explorer of Edges", "Emotional Voyeur"] as const;
+const PREVIEW_ORDER: readonly string[] = [
+  ...PREVIEW_LEADERS,
+  ...KNOWN_ARCHETYPES.filter((name) => !(PREVIEW_LEADERS as readonly string[]).includes(name)),
+];
+const PREVIEW_VALUES: readonly number[] = [
+  43.4, 39.5, 36.2, 33.1, 30.2, 27.6, 25.1, 22.9, 20.8, 18.9, 17.1, 15.4, 13.8, 12.3,
+];
+
+function previewPercentages(primary: string): Record<string, number> {
+  const order = [primary, ...PREVIEW_ORDER.filter((name) => name !== primary)];
+  return Object.fromEntries(order.map((name, i) => [name, PREVIEW_VALUES.at(i) ?? 0]));
+}
 
 export async function GET(request: Request) {
   if (isProduction()) {
@@ -99,8 +114,12 @@ export async function GET(request: Request) {
     viewMode: "owner" as const,
     primaryArchetype: archetype,
     contentArchetype: archetype,
-    // eslint-disable-next-line security/detect-object-injection -- as above.
-    percentages: { ...PREVIEW_PERCENTAGES, [archetype]: PREVIEW_PERCENTAGES[archetype] ?? 43.4 },
+    percentages: previewPercentages(archetype),
+    // Every archetype's motto, exactly as app/api/report/route.ts builds them, so the
+    // Other Archetypes rows carry their line under each name.
+    constellationMottos: Object.fromEntries(
+      KNOWN_ARCHETYPES.map((name) => [name, getReport2Section(name, "constellation").motto ?? null])
+    ),
     reportDate: new Date().toISOString(),
     diagnostics: null,
     snapshotAnswers: { currentSexualSatisfaction: 3, importanceOfSex: 5 },
