@@ -200,18 +200,17 @@ const Category: FC<CategoryProps> = ({
             <span className="rv4-fvt__col rv4-fvt__col--practice" role="columnheader">
               Fantasy &amp; Practice
             </span>
-            {/* 639:319 — the frame breaks both heads after their first word and
-             * centres each line with its trailing space, so the lines are set
-             * apart here and the space kept unbreakable. */}
+            {/* 639:319 — the frame breaks both heads after their first word, so the
+             * lines are set apart here, each centred on the whole cell. */}
             <span className="rv4-fvt__col rv4-fvt__col--score" role="columnheader">
-              <span className="rv4-fvt__col-line">Fantasy&nbsp;</span>{" "}
+              <span className="rv4-fvt__col-line">Fantasy</span>{" "}
               <span className="rv4-fvt__col-line">Pull</span>
               <span className="rv4-fvt__mark" aria-hidden="true">
                 <Mark />
               </span>
             </span>
             <span className="rv4-fvt__col rv4-fvt__col--score" role="columnheader">
-              <span className="rv4-fvt__col-line">Actual&nbsp;</span>{" "}
+              <span className="rv4-fvt__col-line">Actual</span>{" "}
               <span className="rv4-fvt__col-line">Pleasure</span>
               <span className="rv4-fvt__mark" aria-hidden="true">
                 <Mark />

@@ -273,6 +273,24 @@ describe("reportV3.css — fantasy table contracts", () => {
     expect(V3_CSS.slice(0, at).split("\n").length).toBeGreaterThan(1884);
   });
 
+  // Measured at 393 against 639:308 / 639:1905 (scratchpad fvr-measure-table.js).
+  const ruleOf = (selector: string) => {
+    const at = V3_CSS.lastIndexOf(`${selector} {`);
+    expect(at, selector).toBeGreaterThan(0);
+    return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+  };
+
+  it("holds the pill at 31 however the browser rounds its 1.5px outline", () => {
+    expect(ruleOf(".rv3 .rv4-fvt__pill")).toContain("height: 31px");
+  });
+
+  it("centres the column heads' lines as Figma does, on the letters and their gaps", () => {
+    expect(ruleOf(".rv3 .rv4-fvt__col-line + .rv4-fvt__col-line")).toContain(
+      "margin-right: -0.8px"
+    );
+    expect(ruleOf(".rv3 .rv4-fvt__num")).toContain("margin-right: 0.58px");
+  });
+
   it("uses no class name the V3 chapter catch-alls restyle", () => {
     const names = new Set(V3_CSS.match(/\.rv4-fvt[\w-]*/g) ?? []);
     for (const name of names) {
