@@ -1,4 +1,5 @@
 import type { FC, ReactNode } from "react";
+import { report4ArchetypeBlurbs } from "@/data/report3-archetype-blurbs";
 import {
   REPORT_V4_TOP_THREE,
   REPORT_V4_TOP_THREE_HEADING,
@@ -11,8 +12,9 @@ import V4Runs from "./V4Runs";
 /**
  * "3 highest scoring Archetypes" — Report V4, Figma 1:493, 361x756.
  *
- * `V3TopThree` already renders the ranked list itself (1:497, 361x505) and needs no
- * change — measured at 497 against the frame's 505. What it does NOT render is the
+ * `V3TopThree` renders the ranked list itself (1:497) with V4's descriptions passed
+ * in: Sanjin's fourteen (25.09), set in the rows Mark enlarged for them (191 /
+ * 184.08 / 184, 10 apart — the CSS is scoped to `.rv4-top3`). What it does NOT render is the
  * section around it: the heading (1:494), the two-paragraph lede (1:496) and the
  * rating (1:560). Those live here rather than inside V3TopThree, so the component
  * the live `?v3=1` report uses is left exactly as it is.
@@ -48,7 +50,7 @@ const V4TopThreeSection: FC<Props> = ({ percentages = REPORT_V4_TOP_THREE, feedb
       ))}
     </div>
 
-    <V3TopThree percentages={percentages} />
+    <V3TopThree percentages={percentages} blurbs={report4ArchetypeBlurbs} />
 
     {/* 1:560 — a live widget takes the rating's geometry: right-aligned row, then
      * the frame's 44px tail. */}

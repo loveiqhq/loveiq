@@ -18,9 +18,14 @@ import { getReportTheme } from "../reportTheme";
  */
 interface Props {
   percentages: Record<string, number>;
+  /**
+   * The description under each name. Defaults to V3's own three one-liners; Report V4
+   * passes all fourteen of Sanjin's (`report4ArchetypeBlurbs`, 1:493).
+   */
+  blurbs?: Readonly<Record<string, string>>;
 }
 
-const V3TopThree: FC<Props> = ({ percentages }) => {
+const V3TopThree: FC<Props> = ({ percentages, blurbs = report3ArchetypeBlurbs }) => {
   const ranked = Object.entries(percentages)
     .sort(([, a], [, b]) => b - a)
     .slice(0, 3);
@@ -35,7 +40,7 @@ const V3TopThree: FC<Props> = ({ percentages }) => {
         {ranked.map(([name, pct], idx) => {
           const theme = getReportTheme(name);
           const Icon = theme.Icon;
-          const blurb = report3ArchetypeBlurbs[name];
+          const blurb = blurbs[name];
           const style = {
             "--rv3-accent": theme.accent,
             "--rv3-accent-ink": theme.accentInk,
