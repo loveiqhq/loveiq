@@ -6040,40 +6040,6 @@ html {
   }
 }
 
-/* ── Locked, not-yet-designed chapters — Figma comments 1940141608, 1939992442 ─────
- * "Blurred with the icon and the Unlock CTA": three paragraphs of filler under the
- * full blur (2.5px, Figma's radius 5, as Fantasy vs. Reality's locked copy 305:228)
- * with the chapter-body Premium card 87px into the text, as Typical Beliefs' gate sets
- * it. The block owns the click. It sits in a V3 chapter body, so the filler is set in
- * spans, its type re-asserted, rather than meeting the body's <p> catch-all. */
-/* The block stands at least as tall as its card: the card's 107px + its 191px + the
- * 24px under it. In the 588px tablet/desktop column the filler wraps to only 281px,
- * and the chapter body clips, so the card's CTA was sliced through. */
-.rv3.rv4 .rv4-lockch {
-  cursor: pointer;
-  min-height: 322px;
-  padding: 20px 0 24px;
-  position: relative;
-}
-.rv3.rv4 .rv4-lockch__text {
-  display: flex;
-  filter: blur(2.5px);
-  flex-direction: column;
-  gap: 16px;
-  user-select: none;
-}
-.rv3.rv4 .rv3-chapter .rv4-lockch__line {
-  color: var(--rv3-copy);
-  display: block;
-  font-family: var(--font-sans);
-  font-size: 16px;
-  font-weight: 400;
-  line-height: 25.6px;
-}
-.rv3.rv4 .rv4-lockch .rv4-premium {
-  top: 107px;
-}
-
 /* ── Archetype card, V4 — Figma 15:815 as it is drawn today ──────────────────────
  * Mark, 15.09: "We slightly updated the design of the archetype card (Icon size of
  * Core Motivation, spacing and structure of the headlines of the Communication etc.
