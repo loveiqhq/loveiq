@@ -231,6 +231,7 @@ export const WRITE_TOOLS = [
   "send_email",
   "write_to_google_doc",
   "queue_research",
+  "file_call_notes",
 ];
 
 export const researchModel = () => process.env.BRAIN_RESEARCH_MODEL?.trim() || "sonnet";

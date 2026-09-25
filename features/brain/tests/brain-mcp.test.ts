@@ -65,6 +65,12 @@ vi.mock("@features/brain/server/night-shift", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@features/brain/server/night-shift")>()),
   queueResearch: (...a: unknown[]) => mockQueueResearch(...a),
 }));
+const mockFileCrm = vi.fn();
+vi.mock("@features/brain/server/crm-calls", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/brain/server/crm-calls")>()),
+  fileCrmCalls: (...a: unknown[]) => mockFileCrm(...a),
+  liveCrmDeps: () => ({}),
+}));
 const mockSelfReport = vi.fn();
 const mockRenderSelfReport = vi.fn();
 vi.mock("@features/brain/server/self-report", () => ({
@@ -485,6 +491,57 @@ describe("/api/mcp", () => {
       });
     });
 
+    describe("file_call_notes", () => {
+      const call = async (args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 16,
+                method: "tools/call",
+                params: { name: "file_call_notes", arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+      beforeEach(() => {
+        mockFileCrm.mockReset().mockResolvedValue({
+          calls: 4,
+          filed: [],
+          skips: [],
+          near: [],
+          gaps: [],
+        });
+      });
+
+      it("only shows what it would file unless told otherwise, over the last fourteen days", async () => {
+        const r = await call({});
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.text).toContain("Recorded calls since");
+        const [since, dryRun] = mockFileCrm.mock.calls[0]!;
+        expect(dryRun).toBe(true);
+        const days = (Date.now() - Date.parse(`${since as string}T00:00:00Z`)) / 86_400_000;
+        expect(days).toBeGreaterThan(13);
+        expect(days).toBeLessThan(15.5);
+        await call({ dry_run: false, since: "2026-09-01" });
+        expect(mockFileCrm).toHaveBeenLastCalledWith("2026-09-01", false, {});
+      });
+
+      it("refuses a day that is not one, and marks a run that could not read or write as an error", async () => {
+        expect((await call({ since: "2026-02-30" })).isError).toBe(true);
+        expect(mockFileCrm).not.toHaveBeenCalled();
+        mockFileCrm.mockResolvedValue({
+          calls: 0,
+          filed: [],
+          skips: [],
+          near: [],
+          gaps: ["The meeting notes could not be read."],
+        });
+        expect((await call({})).isError).toBe(true);
+      });
+    });
+
     describe("brain_health", () => {
       const call = async (args: Record<string, unknown>) =>
         (
@@ -878,6 +935,7 @@ describe("/api/mcp", () => {
         "send_email",
         "write_to_google_doc",
         "queue_research",
+        "file_call_notes",
         "count_context",
         "browse_context",
         "get_business_numbers",
@@ -940,6 +998,7 @@ describe("/api/mcp", () => {
         "send_email",
         "write_to_google_doc",
         "queue_research",
+        "file_call_notes",
       ]);
       /**
        * EXACTLY ONE TOOL IS DESTRUCTIVE, and it is the one whose effect nobody can undo.
@@ -986,6 +1045,7 @@ describe("/api/mcp", () => {
       ).toEqual([
         "comment_asks",
         "explain_change",
+        "file_call_notes",
         "post_to_slack",
         "query_external_service",
         "send_email",
@@ -5673,6 +5733,7 @@ describe("the runbook's tool count is the real one", () => {
     24: "Twenty-four",
     25: "Twenty-five",
     26: "Twenty-six",
+    27: "Twenty-seven",
   };
 
   it("matches what the server actually exposes", () => {

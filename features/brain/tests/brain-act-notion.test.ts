@@ -13,8 +13,10 @@ import {
   clearNotionCache,
   createNotionPage,
   NotionTargetError,
+  queryNotionDatabase,
   resolveDatabase,
   toBlocks,
+  updateNotionPage,
 } from "@features/brain/server/act/notion";
 
 const prop = (type: string, options?: string[]) => ({
@@ -269,6 +271,26 @@ describe("creating the page", () => {
     ).rejects.toThrow(/only apply to a database row/);
   });
 
+  it("adds raw properties from code, such as a relation, and refuses them on a page", async () => {
+    await createNotionPage({
+      parent: "398e0cbef1a38060bba4e2e14e170454",
+      title: "Kiu Cortes - Follow-up",
+      properties: { Status: "Backlog" },
+      rawProperties: { Therapist: { relation: [{ id: "page-kiu" }] } },
+    });
+    const [, init] = mockFetch.mock.calls.find(([u]) => String(u).endsWith("/pages"))!;
+    const body = JSON.parse(String((init as { body: string }).body));
+    expect(body.properties.Therapist).toEqual({ relation: [{ id: "page-kiu" }] });
+    expect(body.properties.Status).toEqual({ select: { name: "Backlog" } });
+    await expect(
+      createNotionPage({
+        parent: "11111111-2222-3333-4444-555555555555",
+        title: "x",
+        rawProperties: { Therapist: { relation: [] } },
+      })
+    ).rejects.toThrow(/only apply to a database row/);
+  });
+
   it("reports the paragraphs Notion's limit left out", async () => {
     const page = await createNotionPage({
       parent: "398e0cbef1a38060bba4e2e14e170454",
@@ -283,5 +305,43 @@ describe("creating the page", () => {
     await expect(
       createNotionPage({ parent: "398e0cbef1a38060bba4e2e14e170454", title: "x" })
     ).rejects.toThrow(/body.properties/);
+  });
+});
+
+describe("reading and updating rows", () => {
+  it("reads every row, a page at a time, and refuses a read that never ends", async () => {
+    mockFetch.mockReset();
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          results: [{ id: "a", properties: {} }],
+          has_more: true,
+          next_cursor: "c1",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ results: [{ id: "b", properties: {} }], has_more: false }),
+      });
+    expect((await queryNotionDatabase("db1")).map((r) => r.id)).toEqual(["a", "b"]);
+    const second = JSON.parse(String((mockFetch.mock.calls[1]![1] as { body: string }).body));
+    expect(second).toEqual({ page_size: 100, start_cursor: "c1" });
+    mockFetch.mockReset().mockResolvedValue({
+      ok: true,
+      json: async () => ({ results: [], has_more: true, next_cursor: "again" }),
+    });
+    await expect(queryNotionDatabase("db1")).rejects.toThrow(/notion_query_too_large/);
+  });
+
+  it("updates a page's properties with a PATCH", async () => {
+    mockFetch.mockReset().mockResolvedValue({ ok: true, json: async () => ({ id: "p1" }) });
+    await updateNotionPage("p1", { "Last touch": { date: { start: "2026-09-29" } } });
+    const [url, init] = mockFetch.mock.calls[0]!;
+    expect(String(url)).toBe("https://api.notion.com/v1/pages/p1");
+    expect((init as { method: string }).method).toBe("PATCH");
+    expect(JSON.parse(String((init as { body: string }).body))).toEqual({
+      properties: { "Last touch": { date: { start: "2026-09-29" } } },
+    });
   });
 });

@@ -25,6 +25,9 @@ Claude Code) is the door people use; the operator's guide is
 - `server/comment-asks.ts` — `comment_asks`: asks in Figma comments (read from the Figma API, mentions from
   the "@Name" in the plain message) and Google Docs comments (from notification emails, checked against the
   Drive API as the person asked), each with its live open/answered/resolved status.
+- `server/crm-calls.ts` — `file_call_notes` and the `brain-crm` job: recorded calls with people on the
+  Notion board "Therapists & Coaches" filed into "Feedback Sessions" (matched by invite email or transcript
+  speaker), and "Last touch" moved forward.
 - `server/self-report.ts` — `brain_health`: the brain's report on itself (use, weak and empty searches,
   errors, speed, the weekly batteries from `cron_run`, job health from the stall watcher's table), also
   written weekly as a notice by `app/api/cron/brain-health`.
