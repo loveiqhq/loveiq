@@ -45,6 +45,31 @@ describe("V4FantasyTable — open (639:308)", () => {
     expect(container.querySelector(".rv4-fvt")!.getAttribute("data-node-id")).toBe("639:308");
   });
 
+  it("keeps every button in a table inside a cell: the peek and the lock sit beside it", () => {
+    for (const table of [OPEN, LOCKED]) {
+      const { container, unmount } = render(<V4FantasyTable table={table} onUnlock={() => {}} />);
+      for (const grid of container.querySelectorAll('[role="table"]')) {
+        for (const button of grid.querySelectorAll("button")) {
+          expect(button.closest('[role="cell"], [role="columnheader"]')).not.toBeNull();
+        }
+        expect(grid.querySelector(".rv4-fvt__peek, .rv4-fvt__lock")).toBeNull();
+      }
+      const panel = container.querySelector(".rv4-fvt__cat.is-open .rv4-fvt__panel")!;
+      expect(
+        panel.querySelector(":scope > .rv4-fvt__peek, :scope > .rv4-fvt__lock")
+      ).not.toBeNull();
+      unmount();
+    }
+  });
+
+  it("hangs each head's info mark off its first line, so it follows the word", () => {
+    const { container } = render(<V4FantasyTable table={OPEN} />);
+    const cat = categories(container)[0]!;
+    for (const head of cat.querySelectorAll(".rv4-fvt__col--score")) {
+      expect(head.querySelector(".rv4-fvt__col-line:first-child > .rv4-fvt__mark")).not.toBeNull();
+    }
+  });
+
   it("sets the three column heads, their info marks decorative", () => {
     const { container } = render(<V4FantasyTable table={OPEN} />);
     const cat = categories(container)[0]!;
@@ -124,6 +149,15 @@ describe("V4FantasyTable — open (639:308)", () => {
     expect(liveRows(cat)).toHaveLength(11);
     expect(cat.querySelector(".rv4-fvt__peek")).toBeNull();
     expect(within(cat).queryByRole("button", { name: /show all/i })).toBeNull();
+  });
+
+  it("moves focus to the first row 'Show all' reveals, so the keyboard carries on from there", () => {
+    const { container } = render(<V4FantasyTable table={OPEN} />);
+    const cat = categories(container)[0]!;
+    const pill = within(cat).getByRole("button", { name: "Show all 11 fantasies" });
+    pill.focus();
+    fireEvent.click(pill);
+    expect(document.activeElement).toBe(liveRows(cat)[3]!.querySelector(".rv4-fvt__info"));
   });
 
   it("opens a closed category onto three rows and its own count", () => {
@@ -282,6 +316,20 @@ describe("reportV3.css — fantasy table contracts", () => {
 
   it("holds the pill at 31 however the browser rounds its 1.5px outline", () => {
     expect(ruleOf(".rv3 .rv4-fvt__pill")).toContain("height: 31px");
+  });
+
+  it("sets a head's mark where 639:319 draws it at 82, and after its word when narrower", () => {
+    // Measured at 393: 2.34 past "FANTASY", 5.70 past "ACTUAL" — both at Figma's 72.11.
+    // At 320 the columns are 72 and the mark, fixed to the cell's right, ran into
+    // "FANTASY" (final review, 25.09).
+    const mark = ruleOf(".rv3 .rv4-fvt__cols .rv4-fvt__mark");
+    expect(mark).toContain("left: calc(100% + var(--fvt-mark-gap))");
+    expect(mark).not.toContain("right: 0");
+    expect(ruleOf(".rv3 .rv4-fvt__col--score")).toContain("--fvt-mark-gap: 2.34px");
+    expect(ruleOf(".rv3 .rv4-fvt__col--score:last-child")).toContain("--fvt-mark-gap: 5.7px");
+    const first = ruleOf(".rv3 .rv4-fvt__col--score .rv4-fvt__col-line:first-child");
+    expect(first).toContain("width: fit-content");
+    expect(first).toContain("position: relative");
   });
 
   it("centres the column heads' lines as Figma does, on the letters and their gaps", () => {

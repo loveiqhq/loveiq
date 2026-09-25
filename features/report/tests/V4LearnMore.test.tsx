@@ -473,10 +473,13 @@ describe("V4LearnMore — Fantasy vs. Reality's own gate (482:6479)", () => {
       ".rv3 .rv4-learn.has-own-gate.no-fade .rv4-learn__fade {\n  display: none;"
     );
     expect(V3_CSS).toContain(".rv3 .rv4-learn.is-continued .rv4-learn__gate {\n  padding-top: 0;");
-    // 482:6479 centres the card and the pill on the 358 measure, not the content box.
+    // 482:6479 sets the card and the pill 6px right of the gate's middle. As an
+    // offset from the middle, so a wide column keeps them there: pinned to the 358
+    // measure, they sat 109px left of the other articles' at 1280 (final review).
     expect(V3_CSS).toContain(
-      ".rv3 .rv4-learn.has-own-gate .rv4-learn__gate > .rv4-premium,\n.rv3 .rv4-learn.has-own-gate .rv4-learn__showmore {\n  left: calc(min(358px, 100% + 12px) / 2);"
+      ".rv3 .rv4-learn.has-own-gate .rv4-learn__gate > .rv4-premium,\n.rv3 .rv4-learn.has-own-gate .rv4-learn__showmore {\n  left: calc(50% + 6px);"
     );
+    expect(V3_CSS).not.toContain("min(358px, 100% + 12px)");
   });
 });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState, type FC } from "react";
+import { useEffect, useId, useRef, useState, type FC } from "react";
 import type {
   Report3FantasyCategory,
   Report3FantasyRow,
@@ -168,6 +168,9 @@ const Category: FC<CategoryProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(category.defaultOpen);
   const [showAll, setShowAll] = useState(false);
+  const rowsRef = useRef<HTMLDivElement>(null);
+  /** Set by the pill: once the rows are in, focus goes to the first one it revealed. */
+  const revealed = useRef(false);
   const baseId = useId();
   const panelId = `${baseId}-panel`;
   const clear = category.rows.slice(0, category.blurredFrom);
@@ -176,6 +179,15 @@ const Category: FC<CategoryProps> = ({
   const sharp = collapsed ? clear.slice(0, CLEAR_ROWS) : clear;
   const peek = collapsed ? clear.slice(CLEAR_ROWS, CLEAR_ROWS + PEEK_ROWS) : [];
   const noteKey = (row: number) => `${index}:${row}`;
+
+  // The pill unmounts under the keyboard's focus, which would drop it on <body>;
+  // it goes to the first row the pill revealed instead (final review, 25.09).
+  useEffect(() => {
+    if (!showAll || !revealed.current) return;
+    revealed.current = false;
+    const row = rowsRef.current?.querySelectorAll<HTMLElement>(".rv4-fvt__row")[CLEAR_ROWS];
+    (row?.querySelector<HTMLElement>("button") ?? rowsRef.current)?.focus();
+  }, [showAll]);
 
   return (
     <section className={`rv4-fvt__cat${isOpen ? " is-open" : ""}`}>
@@ -201,24 +213,29 @@ const Category: FC<CategoryProps> = ({
               Fantasy &amp; Practice
             </span>
             {/* 639:319 — the frame breaks both heads after their first word, so the
-             * lines are set apart here, each centred on the whole cell. */}
+             * lines are set apart here, each centred on the whole cell. The info mark
+             * hangs off the first line, so it follows the word below Figma's 82. */}
             <span className="rv4-fvt__col rv4-fvt__col--score" role="columnheader">
-              <span className="rv4-fvt__col-line">Fantasy</span>{" "}
+              <span className="rv4-fvt__col-line">
+                Fantasy
+                <span className="rv4-fvt__mark" aria-hidden="true">
+                  <Mark />
+                </span>
+              </span>{" "}
               <span className="rv4-fvt__col-line">Pull</span>
-              <span className="rv4-fvt__mark" aria-hidden="true">
-                <Mark />
-              </span>
             </span>
             <span className="rv4-fvt__col rv4-fvt__col--score" role="columnheader">
-              <span className="rv4-fvt__col-line">Actual</span>{" "}
+              <span className="rv4-fvt__col-line">
+                Actual
+                <span className="rv4-fvt__mark" aria-hidden="true">
+                  <Mark />
+                </span>
+              </span>{" "}
               <span className="rv4-fvt__col-line">Pleasure</span>
-              <span className="rv4-fvt__mark" aria-hidden="true">
-                <Mark />
-              </span>
             </span>
           </div>
 
-          <div className="rv4-fvt__rows" role="rowgroup">
+          <div className="rv4-fvt__rows" role="rowgroup" ref={rowsRef} tabIndex={-1}>
             {sharp.map((row, i) => (
               <Row
                 key={row.practice}
@@ -229,45 +246,53 @@ const Category: FC<CategoryProps> = ({
               />
             ))}
           </div>
+        </div>
 
-          {collapsed ? (
-            <div className="rv4-fvt__peek">
-              <div className="rv4-fvt__peek-rows" aria-hidden="true" inert>
-                {peek.map((row) => (
-                  <Row key={row.practice} row={row} />
+        {/* Beside the table, not in it: a table holds rows and cells only. */}
+        {collapsed ? (
+          <div className="rv4-fvt__peek">
+            <div className="rv4-fvt__peek-rows" aria-hidden="true" inert>
+              {peek.map((row) => (
+                <Row key={row.practice} row={row} />
+              ))}
+            </div>
+            <span className="rv4-fvt__fade" aria-hidden="true" />
+            <button
+              type="button"
+              className="rv4-fvt__pill"
+              onClick={() => {
+                revealed.current = true;
+                setShowAll(true);
+              }}
+            >
+              <span className="rv4-fvt__pill-label">Show all {category.total} fantasies</span>
+            </button>
+          </div>
+        ) : null}
+
+        {hidden.length ? (
+          <div className="rv4-fvt__lock" onClick={guardedUnlock(onUnlock)}>
+            {/* 639:2094 — the badge sits on the middle of the blurred rows. */}
+            <div className="rv4-fvt__lockrows">
+              <div className="rv4-fvt__blurred" aria-hidden="true" inert>
+                {hidden.map((row, i) => (
+                  <Row
+                    key={`${row.practice}-${i}`}
+                    row={row}
+                    standIn={STAND_IN_SCORES[i % STAND_IN_SCORES.length]}
+                  />
                 ))}
               </div>
-              <span className="rv4-fvt__fade" aria-hidden="true" />
-              <button type="button" className="rv4-fvt__pill" onClick={() => setShowAll(true)}>
-                <span className="rv4-fvt__pill-label">Show all {category.total} fantasies</span>
+              <V4LockBadge />
+            </div>
+            {/* 639:2098 */}
+            <div className="rv4-fvt__cta">
+              <button type="button" className="rv4-fvt__pill">
+                <span className="rv4-fvt__pill-label">Unlock all {category.total} fantasies</span>
               </button>
             </div>
-          ) : null}
-
-          {hidden.length ? (
-            <div className="rv4-fvt__lock" onClick={guardedUnlock(onUnlock)}>
-              {/* 639:2094 — the badge sits on the middle of the blurred rows. */}
-              <div className="rv4-fvt__lockrows">
-                <div className="rv4-fvt__blurred" aria-hidden="true" inert>
-                  {hidden.map((row, i) => (
-                    <Row
-                      key={`${row.practice}-${i}`}
-                      row={row}
-                      standIn={STAND_IN_SCORES[i % STAND_IN_SCORES.length]}
-                    />
-                  ))}
-                </div>
-                <V4LockBadge />
-              </div>
-              {/* 639:2098 */}
-              <div className="rv4-fvt__cta">
-                <button type="button" className="rv4-fvt__pill">
-                  <span className="rv4-fvt__pill-label">Unlock all {category.total} fantasies</span>
-                </button>
-              </div>
-            </div>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </div>
     </section>
   );
