@@ -33,6 +33,30 @@ export type Report3Block =
       items: readonly (readonly Report3Run[])[];
     };
 
+/**
+ * An article's own paywall, where its gated frame sets one apart from 173:230's —
+ * Fantasy vs. Reality's 482:6479. Omitted, the article takes the shared gate.
+ */
+export interface Report3ArticleGate {
+  /** How far the blur ramps in, from sharp to Figma radius 5 (173:230: 76). */
+  bandPx: number;
+  /** The blurred window, band included (173:230: 656). The server trims to it. */
+  windowPx: number;
+  /** The Premium card's top, from the gate's (173:230: 90). */
+  premiumTopPx: number;
+  /** The "Unlock the full article" pill's bottom, over the window's foot (19.5). */
+  pillBottomPx: number;
+  /** Whether the window fades out at its foot (173:230 does, 482:6479 does not). */
+  fade: boolean;
+}
+
+/** The frame an article's card draws in each state (153:2240 / 153:2260 / 153:2280). */
+export interface Report3ArticleNodes {
+  closed: string;
+  open: string;
+  gated: string;
+}
+
 export interface Report3LearnMoreArticle {
   /** Must equal a Report3Chapter.id. */
   chapterId: string;
@@ -62,11 +86,15 @@ export interface Report3LearnMoreArticle {
   teaserPillBottomPx?: number;
   /** The closed card's padding under the teaser. CSS default 20.5. */
   closedPaddingBottomPx?: number;
+  /** This article's frames, where they are not Typical Beliefs'. */
+  nodeIds?: Report3ArticleNodes;
+  /** This article's own gate, where its gated frame sets one. */
+  gate?: Report3ArticleGate;
   /**
    * The WHOLE article, exactly as the expanded frame draws it.
    *
    * One array rather than a free/paid pair, because Fantasy vs. Reality cuts
-   * MID-PARAGRAPH: its free copy ends at "…Bodies behave as imagined." and the
+   * MID-PARAGRAPH: its free copy ends at "…skip everything before it." and the
    * blurred window resumes inside the same paragraph. Pre-splitting that here
    * would put a wrong paragraph break into the UNGATED article, which has to match
    * 244:258 exactly. So the cut is data, and the split happens on the server.
@@ -92,6 +120,10 @@ export interface Report3LearnMoreView {
   teaser?: readonly Report3Block[];
   teaserPillBottomPx?: number;
   closedPaddingBottomPx?: number;
+  nodeIds?: Report3ArticleNodes;
+  gate?: Report3ArticleGate;
+  /** Set when the wall falls inside a paragraph: the window runs straight on. */
+  continued?: true;
   free: readonly Report3Block[];
   /**
    * THE SEAM. The paid remainder a locked reader is allowed to glimpse behind the
@@ -911,10 +943,10 @@ const ACCELERATOR_BRAKES_BLOCKS: readonly Report3Block[] = [
 /**
  * Fantasy vs. Reality — Figma 244:276 ("FvR — Learn more (full)"), 96 blocks.
  *
- * The only article whose paywall cuts MID-PARAGRAPH. 249:243 (the free copy)
- * stops at "…Bodies behave as imagined." and 245:248 (the blurred window) resumes
- * inside the same paragraph at "Nobody misunderstands you." — which is why the
- * article is stored whole and divided on the server rather than pre-split here.
+ * The only article whose paywall cuts MID-PARAGRAPH. 482:6479's free copy stops
+ * at "…skip everything before it." and its blurred window resumes inside the same
+ * paragraph at "You do not have to negotiate." — which is why the article is stored
+ * whole and divided on the server rather than pre-split here.
  */
 const FANTASY_REALITY_BLOCKS: readonly Report3Block[] = [
   p(
@@ -1398,10 +1430,17 @@ export const REPORT_V4_LEARN_MORE: Readonly<Record<string, Report3LearnMoreArtic
     eyebrow: "Reading time: ~13 min.",
     label: "Go deeper & learn more",
     blocks: FANTASY_REALITY_BLOCKS,
-    // The only mid-paragraph cut: 249:243 ends inside block 16 and 245:248
-    // resumes in the same paragraph at "Nobody misunderstands you."
+    // The only mid-paragraph cut: 482:6479 ends the free copy inside block 16, at the
+    // end of a line at 393, and its blurred window resumes in the same paragraph.
     paywallAt: 16,
-    paywallCharOffset: charsThrough(FANTASY_REALITY_BLOCKS[16], "Bodies behave as imagined."),
+    paywallCharOffset: charsThrough(FANTASY_REALITY_BLOCKS[16], "skip everything before it."),
+    // 368:5450 is 359 tall: a pixel under 153:2240's foot.
+    closedPaddingBottomPx: 19.5,
+    nodeIds: { closed: "368:5450", open: "244:258", gated: "482:6479" },
+    // 482:6479 ramps the blur in over the first 90px (488:6499's progressive blur),
+    // ends the window at the pill's foot 606px down, sets the card 229.5px in and
+    // draws no fade.
+    gate: { bandPx: 90, windowPx: 606, premiumTopPx: 229.5, pillBottomPx: 0, fade: false },
   },
 };
 
