@@ -410,3 +410,17 @@ export const REPORT_V4_PART6_CHAPTERS: readonly Report3Chapter[] = [
     suffix: false,
   }, // 1:1172
 ];
+
+/**
+ * The chapters the frames draw as a plain title, without "- of the <Archetype>"
+ * (`suffix: false` above). The live report sets its V3 chapters' heads from this, so
+ * a chapter that gains or loses its suffix in Figma changes in one place.
+ */
+export const REPORT_V4_UNSUFFIXED_CHAPTER_IDS: ReadonlySet<string> = new Set(
+  [
+    ...REPORT_V4_PART3_CHAPTERS,
+    ...REPORT_V4_PART4_CHAPTERS,
+    ...REPORT_V4_PART5_CHAPTERS,
+    ...REPORT_V4_PART6_CHAPTERS,
+  ].flatMap((c) => (c.suffix === false && c.id ? [c.id] : []))
+);

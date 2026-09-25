@@ -5265,3 +5265,35 @@
 .rv3.rv4 .report-section {
   scroll-margin-top: 144px;
 }
+
+/* ══ Every chapter reads like Typical Beliefs — review 24.09 ═════════════════════
+ * "The Core Insecurities and other chapters etc. are the wrong size → they should
+ * match the Typical Beliefs chapter", "Lets take out the Icon + Chapter number and
+ * the line", and "Lets have a horizontal divider line between chapters when they
+ * are closed" — Mark's pin beside 1:873: "All collapsed chapters should look like
+ * this". Under V4 the V3 chapters now carry V4Chapter's head (V4ChapterHead) and its
+ * `.rv4-chapter` class, so the rules above set their type and discs; these are only
+ * what differs. V4 only: `?v3=1` keeps its numbered chapters. */
+
+/* The 22px sat above the eyebrow, which V4 no longer draws. */
+.rv3.rv4 .rv3-chapter.rv4-chapter {
+  padding-top: 0;
+}
+/* 634:230 — a closed row ends on a 1px ink hairline fading out to the right (the
+ * same as 1:850's), 20px under the head where the teaser block's own padding would
+ * end — the teasers are not written yet — then the 44px separator 1:872. */
+.rv3.rv4 .rv4-chapter:not(.is-open):not(.is-static)::after {
+  background: linear-gradient(90deg, rgba(22, 16, 33, 0.1), rgba(22, 16, 33, 0));
+  content: "";
+  display: block;
+  height: 1px;
+  margin-top: 20px;
+}
+.rv3.rv4 .rv4-chapter:not(.is-open):not(.is-static) {
+  margin-bottom: 44px;
+}
+/* An open chapter ends on the rating row and its 44px tail, 16px under the body as
+ * Typical Beliefs sets it (`.rv4-chapter__body.is-bare > .rv4-rating`). */
+.rv3.rv4 .rv3-chapter__body-inner > .rv4-rating {
+  padding-top: 16px;
+}

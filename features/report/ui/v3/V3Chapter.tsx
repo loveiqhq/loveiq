@@ -1,11 +1,13 @@
 "use client";
 
 import { createContext, useContext, useState, type FC, type ReactNode } from "react";
+import { REPORT_V4_UNSUFFIXED_CHAPTER_IDS } from "@/data/report3-archetype-page";
 import {
   REPORT_V3_CHAPTER_BY_ID,
   REPORT_V4_CHAPTER_BY_ID,
   type ReportV3Chapter,
 } from "./reportV3Nav";
+import { V4ChapterChevron, V4ChapterTitle } from "./V4ChapterHead";
 
 /**
  * V3 chapter chrome — Figma 10439:181 (eyebrow) + 10439:190 (title button).
@@ -86,13 +88,63 @@ interface Props {
   sectionId: string;
   children: ReactNode;
   feedbackWidget?: ReactNode;
+  /** The archetype on screen. V4 sets each title's "- of the <Archetype>" run from it. */
+  archetype?: string;
 }
 
-const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget }) => {
-  // The delivered frame is "UNTOGGLED (all chapters open)", so open is the
-  // resting state and the chevron points up until the reader collapses it.
-  const [isOpen, setIsOpen] = useState(true);
+const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget, archetype }) => {
+  const isV4 = useIsV4();
+  // The delivered V3 frame is "UNTOGGLED (all chapters open)", so open is its
+  // resting state and the chevron points up until the reader collapses it. V4 closes
+  // them (review 24.09): a chapter opens when the reader asks for it, and only then
+  // shows its "Does this resonate?".
+  const [isOpen, setIsOpen] = useState(!isV4);
   const bodyId = `rv3-chapter-body-${sectionId}`;
+
+  if (isV4) {
+    // Typical Beliefs' head (V4ChapterHead), not V3's: no book icon, chapter number
+    // or rule. `.rv4-chapter` takes V4Chapter's type, discs and the closed row's
+    // divider; `.rv3-chapter` and its body keep what the V2 sections inside rely on.
+    // The body stays mounted while closed — clipped by V3's own collapse, and inert —
+    // so the cards in it keep their state and the paywall observers their targets.
+    return (
+      <section
+        id={sectionId}
+        data-report-section="true"
+        className={`rv3-chapter rv4-chapter${isOpen ? " is-open" : ""}`}
+        data-node-id={isOpen ? "1:175" : "1:862"}
+        data-name="Chapter H1 + Copy"
+      >
+        <button
+          type="button"
+          className="rv4-chapter__button"
+          aria-expanded={isOpen}
+          aria-controls={bodyId}
+          onClick={() => setIsOpen((v) => !v)}
+        >
+          <V4ChapterTitle
+            title={chapter.title}
+            archetype={REPORT_V4_UNSUFFIXED_CHAPTER_IDS.has(sectionId) ? undefined : archetype}
+          />
+          <V4ChapterChevron />
+        </button>
+
+        <div className="rv3-chapter__body" id={bodyId} inert={!isOpen}>
+          <div>
+            <div className="rv3-chapter__body-inner">
+              {children}
+              {feedbackWidget ? (
+                <div className="rv4-rating">
+                  <div className="rv4-rating__live">{feedbackWidget}</div>
+                  <div className="rv4-rating__tail" aria-hidden="true" />
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section
