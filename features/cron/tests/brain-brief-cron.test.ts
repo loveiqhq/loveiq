@@ -146,7 +146,7 @@ describe("/api/cron/brain-brief", () => {
 describe("a day this job failed must be recoverable", () => {
   /**
    * The schedule only ever asks for YESTERDAY, so a day the job fails was lost forever
-   * until the 08:10 retry firing (below) existed.
+   * until the retry firings (below) existed.
    * That happened on the very first run: 2026-08-31 06:11 died on a 45s model timeout
    * and 2026-08-30's brief was never posted, with nothing able to retry it.
    *
@@ -162,6 +162,17 @@ describe("a day this job failed must be recoverable", () => {
    * 503s five seconds apart and the 2026-09-22 brief was lost, because nothing came
    * back. A tidy-up that merges the two hours back into one would silently undo this.
    */
+  /**
+   * GitHub starts this repo's schedules 4.5 to 5.5 hours late (measured 2026-09-25). A first
+   * firing at 06:10 therefore delivered the morning brief around lunchtime, so the first
+   * firing must be early enough that such a delay still lands it before 08:00 UTC.
+   */
+  it("fires first early enough that GitHub's usual delay still lands it in the morning", () => {
+    const hourField = brainDailySchedules()["brain-brief"].split(" ")[1]!;
+    const first = Math.min(...hourField.split(",").map(Number));
+    expect(first + 5.5).toBeLessThanOrEqual(8);
+  });
+
   it("fires twice a day, further apart than the claim lease", () => {
     // GitHub Actions schedules it now (it needs the `claude` binary), not vercel.json.
     const [, hourField, dom, month, dow] = brainDailySchedules()["brain-brief"].split(" ");

@@ -26,8 +26,9 @@ export const maxDuration = 120;
  *
  * The one job here that PUSHES instead of waiting to be asked.
  *
- * Runs at 06:10 UTC, after the nightly Search Console ingest at 04:47 and before
- * the funnel numbers at 09:00, so the morning reads: what happened, then how it did.
+ * Scheduled at 01:10, 03:10 and 06:10 UTC in GitHub Actions, which starts this repo's
+ * schedules 4.5 to 5.5 hours late (measured 2026-09-25), so it lands in the morning,
+ * before the funnel numbers: what happened, then how it did.
  *
  * Deliberately not another numbers digest — `conversion-digest` already posts the
  * funnel and `anomaly-watcher` already watches for moves. This covers what is

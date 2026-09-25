@@ -869,7 +869,7 @@ a stale pool config degrades to the previous path rather than to no access.
 
 ### The brief and the miner run in GitHub Actions, on the Team subscription
 
-`brain-brief` (06:10 and 08:10 UTC) and `brain-mine` (08:25 UTC) are the two crons that
+`brain-brief` (01:10, 03:10 and 06:10 UTC) and `brain-mine` (08:25 UTC) are the two crons that
 need a language model, and since 2026-09-24 the model is the Claude Team plan we already
 pay for rather than an API key. Only the `claude` binary may use a subscription:
 `claude setup-token` mints a one-year `CLAUDE_CODE_OAUTH_TOKEN`, and Anthropic's terms
@@ -886,6 +886,13 @@ watch behave exactly as they did on Vercel.
   `CLAUDE_TOKEN_OWNER_SLACK_ID`). If that happens more than once or twice, move the token
   to the teamwork@ seat, which nobody works in all day. On 2026-09-19 `generate-fix` stopped
   on "You've hit your session limit" for exactly this reason.
+- **GitHub starts these hours late.** Measured 2026-09-25, this repo's scheduled workflows
+  start 4.5 to 5.5 hours after their cron time and frequent ones are sometimes dropped
+  (health-monitor due 08:00 ran ~13:20; the Night Shift due 00:30 ran 05:08). The brief is
+  scheduled at 01:10 so it lands in the morning, with two retries. A job that has not
+  started by its usual time has probably not been dropped yet: check `cron_run`, then run
+  it by hand. A Vercel cron that calls `workflow_dispatch` would be punctual, but needs a
+  GitHub token that can start workflows, which nobody has created yet.
 - **Replacing the token.** Run `claude setup-token` signed in as the seat's owner, then
   `gh secret set CLAUDE_CODE_OAUTH_TOKEN -R loveiqhq/loveiq`. `generate-fix` uses the same
   secret. Then point the ping at whoever should hear about a limit:
