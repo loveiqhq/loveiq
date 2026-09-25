@@ -45,6 +45,7 @@
  */
 import { hogQuery } from "./lib/hogql.mjs";
 import {
+  asFinisher,
   owedScanners,
   recordingSettled,
   requeueAction,
@@ -231,7 +232,7 @@ for (const s of subs) {
     continue;
   }
   // Opened by SOME scanner is not opened by the right one: see owedScanners().
-  const missing = owedScanners(counts, TRIGGERS, byTrigger, seenBy);
+  const missing = owedScanners(asFinisher(counts, TRIGGERS), TRIGGERS, byTrigger, seenBy);
   if (missing.length === 0) {
     seen += 1;
     continue;

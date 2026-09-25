@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  asFinisher,
   owedScanners,
   recordingSettled,
   requeueAction,
@@ -140,5 +141,35 @@ describe("when the re-queue may ask for a look", () => {
     const { readFileSync } = await import("node:fs");
     const script = readFileSync("scripts/ux-review-coverage.mjs", "utf8");
     expect(script.match(/!recordingSettled\(/g) ?? []).toHaveLength(2);
+  });
+});
+
+/**
+ * Submission 2222 resumed the survey in a new visit, so that visit had no
+ * survey_started and the survey scanner was owed nothing, while the digest
+ * promised the reader "not lost".
+ */
+describe("a finished reader who started the survey in an earlier visit", () => {
+  const TRIGGERS = ["survey_started", "report_viewed", "dead_click", "rage_click"];
+  const survey = { id: "s", name: "LoveIQ survey UX", sampling_mode: "comprehensive" };
+  const byTrigger = new Map([["survey_started", [survey]]]);
+
+  it("still counts as having started it", () => {
+    expect(asFinisher([0, 2, 20, 0], TRIGGERS)).toEqual([1, 2, 20, 0]);
+    expect(asFinisher([3, 0, 0, 0], TRIGGERS)).toEqual([3, 0, 0, 0]);
+    expect(asFinisher([], TRIGGERS)).toEqual([1, 0, 0, 0]);
+  });
+
+  it("is owed a look by the survey scanner", () => {
+    const counts = asFinisher([0, 2, 20, 0], TRIGGERS);
+    expect(owedScanners(counts, TRIGGERS, byTrigger, new Set())).toEqual([survey]);
+  });
+
+  it("is how the re-queue reads every finisher", async () => {
+    const { readFileSync } = await import("node:fs");
+    const script = readFileSync("scripts/ux-review-coverage.mjs", "utf8");
+    expect(script).toContain(
+      "owedScanners(asFinisher(counts, TRIGGERS), TRIGGERS, byTrigger, seenBy)"
+    );
   });
 });

@@ -122,3 +122,24 @@ export function recordingSettled(lastActivity, now = Date.now()) {
   // An unreadable end parses to NaN, and NaN is never old enough.
   return Date.parse(String(lastActivity ?? "")) <= now - SETTLED_MS;
 }
+
+/**
+ * A finisher's trigger counts, with the survey counted as started.
+ *
+ * Every finisher started the survey, though not always in the visit that
+ * finished it: a reader who resumes in a new session fires survey_started in
+ * the old one, so the survey scanner's query never matches the visit that
+ * finished. The digest counts every finisher against the survey scanner, so
+ * the re-queue must owe it every finisher too. Submission 2222 on 2026-09-25
+ * was 1 of 201 in 14 days, promised "not lost" and never sent back; PostHog
+ * watches such a visit when asked.
+ *
+ * @param {number[]} counts per trigger, in `triggers` order
+ * @param {string[]} triggers
+ */
+export function asFinisher(counts, triggers) {
+  const out = triggers.map((_, i) => Number(counts[i] ?? 0));
+  const survey = triggers.indexOf("survey_started");
+  if (survey >= 0) out[survey] = Math.max(out[survey], 1);
+  return out;
+}
