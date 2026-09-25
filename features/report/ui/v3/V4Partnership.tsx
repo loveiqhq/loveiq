@@ -16,7 +16,8 @@ import { guardedUnlock } from "./v4Unlock";
  *
  * In 38:1679's own order, 16 apart: the prose (one text node in the frame, sixteen
  * blocks with the inline "Common challenges"), the Spark Seeker loop, a 44px rule,
- * and the result paragraph. The practice card follows as the body's next sibling,
+ * the result paragraph and, since 25.09, another 44px rule before the practice card
+ * (742:6653 / 742:6656). The practice card follows as the body's next sibling,
  * as 399:240 sits after 38:1672 in the Part 5 page, with this chapter's geometry.
  *
  * The copy arrives as a prop. `@/data/report3-partnership` is paid copy registered
@@ -94,6 +95,14 @@ const V4Partnership: FC<Props> = ({ view, onUnlock }) => {
             <V4Prose blocks={[view.result]} />
           </div>
         </div>
+
+        {/* 742:6653 / 742:6656 — 44px before "Try this" (Mark, 1941881246): the body's
+         * 16 above it, its 20 below, as the frames set them. */}
+        <div
+          className="rv4-sep"
+          aria-hidden="true"
+          data-node-id={locked ? "742:6656" : "742:6653"}
+        />
       </div>
 
       <V4TryThis

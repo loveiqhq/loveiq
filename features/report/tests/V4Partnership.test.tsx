@@ -36,8 +36,28 @@ describe("the chapter body — 38:1679", () => {
       "rv4-loop",
       "rv4-sep",
       "rv4-cip__closing",
+      "rv4-sep",
     ]);
     expect(body.querySelector(".rv4-sep")!.getAttribute("data-node-id")).toBe("612:335");
+  });
+
+  // Review 25.09, Mark (1941881246): staging ran the result into "Try this". The frames
+  // now draw a 44px separator 16 under the result, 20 over the card (742:6653 / 742:6656).
+  it("closes on a 44px separator before 'Try this', open and paywalled", () => {
+    const open = render(<V4Partnership view={OPEN} />);
+    const last = open.container.querySelector(".rv4-cip")!.lastElementChild!;
+    expect(last).toHaveClass("rv4-sep");
+    expect(last.getAttribute("data-node-id")).toBe("742:6653");
+    expect(last.getAttribute("aria-hidden")).toBe("true");
+    cleanup();
+    const locked = render(<V4Partnership view={LOCKED} />);
+    const lockedLast = locked.container.querySelector(".rv4-cip")!.lastElementChild!;
+    expect(lockedLast).toHaveClass("rv4-sep");
+    expect(lockedLast.getAttribute("data-node-id")).toBe("742:6656");
+    // 16 (the body's gap) + 44 + 20 (its padding) over the card, nothing between.
+    expect(rule(".rv3 .rv4-cip")).toContain("gap: 16px");
+    expect(rule(".rv3 .rv4-cip")).toContain("padding: 20px 0");
+    expect(rule(".rv3 .rv4-cip + .rv4-try")).toContain("margin-top: 0");
   });
 
   it("sets fifteen paragraphs and the inline 'Common challenges', nothing gated", () => {
