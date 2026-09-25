@@ -314,8 +314,10 @@ describe("reportV3.css — fantasy table contracts", () => {
     return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
   };
 
+  // The A&B cards' "Show all" is the same pill (713:6178), so the rule is shared.
   it("holds the pill at 31 however the browser rounds its 1.5px outline", () => {
-    expect(ruleOf(".rv3 .rv4-fvt__pill")).toContain("height: 31px");
+    expect(V3_CSS).toContain(".rv3 .rv4-fvt__pill,\n.rv3 .rv4-trig__pill {");
+    expect(ruleOf(".rv3 .rv4-trig__pill")).toContain("height: 31px");
   });
 
   it("sets a head's mark where 639:319 draws it at 82, and after its word when narrower", () => {
