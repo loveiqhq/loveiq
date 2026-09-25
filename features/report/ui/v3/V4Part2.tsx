@@ -1,16 +1,12 @@
 import type { FC } from "react";
-import {
-  REPORT_V4_PARTS,
-  REPORT_V4_SNAPSHOT,
-  REPORT_V4_SUMMARY,
-} from "@/data/report3-archetype-page";
+import { REPORT_V4_PARTS, REPORT_V4_SUMMARY } from "@/data/report3-archetype-page";
 import type { Report3CardCopy } from "@/data/report3-archetype-card";
 import type { ArchetypeName } from "@features/report/server/archetypeSlug";
 import V3ArchetypeCard from "./V3ArchetypeCard";
 import V4CoreArchetypeHeading from "./V4CoreArchetypeHeading";
 import V4PartHeading from "./V4PartHeading";
 import V4Rating from "./V4Rating";
-import V4Snapshot from "./V4Snapshot";
+import V4ChapterNudges from "./V4ChapterNudges";
 import V4TopThreeSection from "./V4TopThreeSection";
 import V4SummaryChapter from "./V4SummaryChapter";
 
@@ -35,7 +31,6 @@ interface Props {
 
 const V4Part2: FC<Props> = ({ archetype, matchStrength, card, initialDeckIndex = 0 }) => {
   const summary = REPORT_V4_SUMMARY[archetype];
-  const snapshot = REPORT_V4_SNAPSHOT[archetype];
 
   return (
     <section className="rv4-partblock" data-node-id="1:483" data-name="Part 2 - Your Constellation">
@@ -77,8 +72,8 @@ const V4Part2: FC<Props> = ({ archetype, matchStrength, card, initialDeckIndex =
       {/* 1:736 — omitted rather than faked for an archetype Mark has not written. */}
       {summary ? <V4SummaryChapter archetype={archetype} summary={summary} /> : null}
 
-      {/* 1:763 */}
-      {snapshot ? <V4Snapshot archetype={archetype} rows={snapshot} /> : null}
+      {/* 1:763 — "What you will discover" over the chapter nudges (663:1089). */}
+      <V4ChapterNudges />
 
       {/* 1:833 */}
       <V4Rating label={`Part II — Your Constellation`} />

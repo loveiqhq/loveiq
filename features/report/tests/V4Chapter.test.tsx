@@ -182,3 +182,22 @@ describe("V4 chapter heads — the suffix on its own line where the frame breaks
     expect(tb!.querySelector("br")).toBeNull();
   });
 });
+
+/** "Read full chapter" in Part II's nudges opens the chapter it names (v4OpenChapter). */
+describe("V4Chapter — opened from a nudge", () => {
+  it("opens when its section is asked for, and ignores other sections", async () => {
+    const { act } = await import("@testing-library/react");
+    const { openV4Chapter } = await import("@features/report/ui/v3/v4OpenChapter");
+    const { container } = render(
+      <V4Chapter title="Typical Beliefs" archetype="Spark Seeker" sectionId="typical_beliefs" bare>
+        <p>body</p>
+      </V4Chapter>
+    );
+    const button = container.querySelector(".rv4-chapter__button")!;
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    act(() => openV4Chapter("love_language"));
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    act(() => openV4Chapter("typical_beliefs"));
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+  });
+});

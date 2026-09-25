@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, type FC, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useState, type FC, type ReactNode } from "react";
 import {
   REPORT_V4_SUFFIX_BREAK_IDS,
   REPORT_V4_UNSUFFIXED_CHAPTER_IDS,
@@ -11,6 +11,7 @@ import {
   type ReportV3Chapter,
 } from "./reportV3Nav";
 import { V4ChapterChevron, V4ChapterTitle } from "./V4ChapterHead";
+import { useOnV4OpenChapter } from "./v4OpenChapter";
 
 /**
  * V3 chapter chrome — Figma 10439:181 (eyebrow) + 10439:190 (title button).
@@ -103,6 +104,13 @@ const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget, ar
   // shows its "Does this resonate?".
   const [isOpen, setIsOpen] = useState(!isV4);
   const bodyId = `rv3-chapter-body-${sectionId}`;
+  // Part II's nudges open a chapter by its section id — V4 only; V3 has no nudges
+  // and its chapters start open. Called before the branch so hook order is stable.
+  useOnV4OpenChapter(
+    sectionId,
+    useCallback(() => setIsOpen(true), []),
+    isV4
+  );
 
   if (isV4) {
     // Typical Beliefs' head (V4ChapterHead), not V3's: no book icon, chapter number

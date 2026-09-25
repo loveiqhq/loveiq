@@ -328,7 +328,9 @@ describe("reportV3.css — belief panel contracts", () => {
    * reported from his phone against the staging build. 361 is a maximum here.
    */
   it("treats the frame's 361 as a ceiling, not a width", () => {
-    for (const selector of [".rv3 .rv4-turn,", ".rv3 .rv4-snap__panel {"]) {
+    // (The Snapshot's panel shared this rule until the chapter nudges replaced it;
+    // the nudges run full bleed, as 663:1089 draws them.)
+    for (const selector of [".rv3 .rv4-turn,"]) {
       const css = block(selector);
       expect(css).toContain("max-width: 361px");
       expect(css).toContain("width: 100%");

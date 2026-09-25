@@ -220,17 +220,31 @@ const V3_PART_LABELS: Record<string, string> = {
   "5": "Your edges",
 };
 
-const navPartsFrom = (chapters: readonly ReportV3Chapter[]): readonly ReportV3NavPart[] => [
+const V3_PART_NUMERALS: Record<string, string> = {
+  "1": "I",
+  "2": "II",
+  "3": "III",
+  "4": "IV",
+  "5": "V",
+};
+
+const navPartsFrom = (
+  chapters: readonly ReportV3Chapter[],
   {
-    part: "Part I",
+    numerals = V3_PART_NUMERALS,
+    snapshotLabel = "Your Snapshot",
+  }: { numerals?: Record<string, string>; snapshotLabel?: string } = {}
+): readonly ReportV3NavPart[] => [
+  {
+    part: `Part ${numerals["1"]}`,
     label: "Your constellation",
     items: [
       { label: "Core Archetype", id: "core_archetype" },
-      { label: "Your Snapshot", id: "snapshot", gateId: "core_archetype" },
+      { label: snapshotLabel, id: "snapshot", gateId: "core_archetype" },
     ],
   },
   ...["2", "3", "4", "5"].map((p) => ({
-    part: `Part ${{ "2": "II", "3": "III", "4": "IV", "5": "V" }[p]}`,
+    part: `Part ${numerals[p]}`,
     label: V3_PART_LABELS[p] as string,
     items: chapters
       .filter((c) => c.number.startsWith(`${p}.`))
@@ -248,5 +262,13 @@ const navPartsFrom = (chapters: readonly ReportV3Chapter[]): readonly ReportV3Na
 
 export const REPORT_V3_NAV_PARTS: readonly ReportV3NavPart[] = navPartsFrom(REPORT_V3_CHAPTERS);
 
-/** The same nav in V4's body order, so the drawer lists both moved chapters first too. */
-export const REPORT_V4_NAV_PARTS: readonly ReportV3NavPart[] = navPartsFrom(REPORT_V4_CHAPTERS);
+/**
+ * The same nav in V4's body order, so the drawer lists the moved chapters first too.
+ * Numbered as V4's page is: Part I is the Welcome, which lists no chapters, so the
+ * drawer and sidebar start at Part II — the numbers the part headings and the chapter
+ * nudges' chips show. The snapshot anchor is "What you will discover" (Figma 1:766).
+ */
+export const REPORT_V4_NAV_PARTS: readonly ReportV3NavPart[] = navPartsFrom(REPORT_V4_CHAPTERS, {
+  numerals: { "1": "II", "2": "III", "3": "IV", "4": "V", "5": "VI" },
+  snapshotLabel: "What you will discover",
+});

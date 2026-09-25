@@ -124,6 +124,32 @@ describe("the V4 chapter order", () => {
     expect(label(REPORT_V3_NAV_PARTS)).toBe("Challenges in Partnership");
   });
 
+  it("numbers V4's drawer parts as the page does, and names the nudges' anchor", () => {
+    // The page opens on Part I "Welcome", which lists no chapters, so the drawer and
+    // sidebar start at Part II, as the part headings and the nudge chips count.
+    expect(REPORT_V4_NAV_PARTS.map((p) => p.part)).toEqual([
+      "Part II",
+      "Part III",
+      "Part IV",
+      "Part V",
+      "Part VI",
+    ]);
+    expect(REPORT_V4_NAV_PARTS[0]!.items.find((i) => i.id === "snapshot")!.label).toBe(
+      "What you will discover"
+    );
+    // ?v3=1 keeps its own.
+    expect(REPORT_V3_NAV_PARTS.map((p) => p.part)).toEqual([
+      "Part I",
+      "Part II",
+      "Part III",
+      "Part IV",
+      "Part V",
+    ]);
+    expect(REPORT_V3_NAV_PARTS[0]!.items.find((i) => i.id === "snapshot")!.label).toBe(
+      "Your Snapshot"
+    );
+  });
+
   it("leaves V3's own order and numbering alone", () => {
     expect(REPORT_V3_CHAPTERS.slice(0, 2).map((c) => [c.id, c.number])).toEqual([
       [AB, "2.1"],
