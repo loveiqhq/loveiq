@@ -132,6 +132,13 @@ route exits 3. Route steps and recorded dead taps are counted separately,
 because a selector naming content that is not on our report says nothing about
 the page's health — folding them together dragged coverage from 90% to 52%.
 
+**It comes back from a checkout it started.** Checkout is stubbed as disabled,
+so pressing a reader's Unlock leaves the page's own status layer up
+(`.report-checkout-handoff`, "Back to your report"). Judged as covering the
+page, that was the replay's second false confirmation (2026-09-25). It now
+presses the layer's button, as the reader did on coming back from Stripe; a
+layer that never offers one is still reported.
+
 **It cannot speak alone yet.** A finding confirmed by the replay and nothing
 else is recorded as reproduced and named in the daily digest, but it is not
 posted under the reader and opens no pull request until a person has looked.
