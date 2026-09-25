@@ -237,7 +237,11 @@ re-queue used to start from `survey_submission`, so it only saw finishers, while
 PostHog's comprehensive sweep never tried 48 of 253 watchable survey sessions and 13
 of 111 report sessions in a week. Every comprehensive scanner now gets the watchable
 sessions its trigger matched (7 days, 10 s of activity, PostHog's own minimum) that it
-never opened.
+never opened. It asks only about a recording that has been over for an hour
+(`recordingSettled`), because PostHog watches the moment it is asked and keeps that one
+look: 9 of 567 earlier asks started before the visit had ended. And every finisher is
+owed the survey scanner (`asFinisher`): a reader who resumes in a new visit finishes in
+one whose `survey_started` fired elsewhere, so the trigger never matches it.
 
 **The fix writer stays dispatch-only, decided 2026-09-21.**
 
