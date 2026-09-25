@@ -2367,6 +2367,14 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   const v4Param = searchParams.get("v4");
   const isV4 = v4Param === "1" || v4Param === "true";
 
+  // Review 24.09: the status bar was dark on an iPhone. Safari 15-18 tints it from
+  // `theme-color`, and with none it keeps the site's dark shell (#0b0613), which is
+  // what paints while the report loads. V4 is white edge to edge, so it says so, on
+  // every screen below, from the loading one on. React hoists the tag into <head>,
+  // and Safari follows theme-color as it changes. A route-level `viewport` would
+  // need `searchParams` and turn /report dynamic for every version, so it lives here.
+  const v4ThemeColor = isV4 ? <meta name="theme-color" content="#ffffff" /> : null;
+
   // V4 takes the V3 chrome underneath it for the same reason V3 takes V2: the
   // mobile-first shell is what the redesigned components are drawn against.
   const isV3 = isV4 || v3Param === "1" || v3Param === "true";
@@ -2903,6 +2911,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
   if (status === "loading") {
     return (
       <main className="report-status-screen">
+        {v4ThemeColor}
         <div className="report-status-card report-card">
           <div className="report-status-card__spinner" />
           <p className="report-status-card__label">Loading your report...</p>
@@ -2913,18 +2922,22 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
 
   if (status === "needs_verification" && token) {
     return (
-      <ShareVerifyGate
-        shareToken={token}
-        ownerFirstName={challenge?.ownerFirstName ?? null}
-        recipientEmailHint={challenge?.recipientEmailHint ?? null}
-        onVerified={() => retry()}
-      />
+      <>
+        {v4ThemeColor}
+        <ShareVerifyGate
+          shareToken={token}
+          ownerFirstName={challenge?.ownerFirstName ?? null}
+          recipientEmailHint={challenge?.recipientEmailHint ?? null}
+          onVerified={() => retry()}
+        />
+      </>
     );
   }
 
   if (status === "missing") {
     return (
       <main className="report-status-screen">
+        {v4ThemeColor}
         <div className="report-status-card report-card">
           <p className="report-overline">LoveIQ report</p>
           <h1 className="report-status-card__title">No saved report session</h1>
@@ -2945,6 +2958,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
 
     return (
       <main className="report-status-screen">
+        {v4ThemeColor}
         <div className="report-status-card report-card">
           <p className="report-overline">LoveIQ report</p>
           <h1 className="report-status-card__title">{statusState.title}</h1>
@@ -3017,6 +3031,7 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
 
   return (
     <>
+      {v4ThemeColor}
       {showReportV2 ? (
         <ReportExperience
           key={`${token ?? "browser"}:${sessionId ?? "anon"}`}

@@ -877,4 +877,46 @@ describe("ReportPage", () => {
       expect(container.querySelector(".report-page")).not.toBeNull();
     });
   });
+
+  // Review 24.09: "the top part is dark on my iPhone (the background to the time and
+  // battery)". Safari 15-18 tints the status bar from `theme-color`, and without one it
+  // keeps the site's dark shell (#0b0613) it painted while the report was loading.
+  describe("V4 status bar", () => {
+    const themeColor = () =>
+      document.head.querySelector('meta[name="theme-color"]')?.getAttribute("content") ?? null;
+
+    afterEach(() => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+
+    it("declares a white theme-color for ?v4=1 from the loading screen on", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue({ data: null, status: "loading", error: null });
+
+      render(<ReportPage />);
+
+      expect(themeColor()).toBe("#ffffff");
+    });
+
+    it("keeps it on the rendered report, however the flag is spelled", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=true"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      render(<ReportPage />);
+
+      expect(themeColor()).toBe("#ffffff");
+    });
+
+    it("leaves V1, V2 and V3 without one", () => {
+      for (const qs of ["", "v2=1", "v3=1"]) {
+        mockSearchParams.mockImplementation(() => new URLSearchParams(qs));
+        mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+        const { unmount } = render(<ReportPage />);
+
+        expect(themeColor(), qs || "default").toBeNull();
+        unmount();
+      }
+    });
+  });
 });
