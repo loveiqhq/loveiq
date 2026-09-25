@@ -7089,3 +7089,39 @@ html {
   font-size: 12px;
   line-height: 19.2px;
 }
+
+/* ── Dimension deck — the icon changes colour slowly (Mark, review 25.09) ─────────
+ * "A timed animation where the icon slowly changes color, as right now it feels
+ * quite abrupt." Each slot stacks two designs of its card and cross-fades them in
+ * 180ms (the 24.09 fix for the lagging swipe), and each design has its own chip, so
+ * the icon flipped with the cross-fade. Here each copy's chip takes its colour from
+ * the SLOT's state and eases over 600ms: a card arriving in focus shows the
+ * peeking tint for an instant and warms to the solid accent; a card leaving focus
+ * cools the other way. The cards keep their 180ms, so the swipe itself is as quick
+ * as before; the page indicator moves on the icon's clock. */
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__slot.is-peeking > .rv3-deck__card.is-focused .rv3-deck__chip {
+  background-color: color-mix(in srgb, var(--rv3-deck-accent) 11%, transparent);
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__slot.is-peeking > .rv3-deck__card.is-focused .rv3-deck__glyph {
+  background-color: var(--rv3-deck-accent);
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__slot.is-focused > .rv3-deck__card.is-peeking .rv3-deck__chip {
+  background-color: var(--rv3-deck-accent);
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__slot.is-focused > .rv3-deck__card.is-peeking .rv3-deck__glyph {
+  background-color: #fff;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__chip,
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__glyph {
+  transition: background-color 600ms ease-in-out;
+}
+.rv3:is(.rv4, .rv4-doc) .rv3-deck__dot {
+  transition: background 600ms ease-in-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv3:is(.rv4, .rv4-doc) .rv3-deck__chip,
+  .rv3:is(.rv4, .rv4-doc) .rv3-deck__glyph,
+  .rv3:is(.rv4, .rv4-doc) .rv3-deck__dot {
+    transition: none;
+  }
+}
