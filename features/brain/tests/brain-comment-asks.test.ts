@@ -311,6 +311,11 @@ describe("the corpus reads", () => {
       );
     expect([...(await figmaFiles())!]).toEqual([["Bq2w3e4r5t6y7u8i9o0p1a", "Team Retro"]]);
     expect(String(mockSupabaseFetch.mock.calls[1]![0])).toContain("&offset=1000");
+    // Through the fts index: a substring scan of every body timed out in production.
+    expect(String(mockSupabaseFetch.mock.calls[0]![0])).toContain(
+      `fts=fts(simple).${encodeURIComponent("www.figma.com | figma.com")}`
+    );
+    expect(String(mockSupabaseFetch.mock.calls[0]![0])).not.toContain("body=ilike");
     mockSupabaseFetch.mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) });
     expect(await figmaFiles()).toBeNull();
     // Past the ceiling the read is partial, and a partial read must not pass for the whole.
@@ -330,6 +335,7 @@ describe("the corpus reads", () => {
     expect(String(mockSupabaseFetch.mock.calls[0]![0])).toContain(
       "Figma%20is%20a%20design%20platform"
     );
+    expect(String(mockSupabaseFetch.mock.calls[0]![0])).toContain("&fts=fts(english).figma");
     mockSupabaseFetch.mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) });
     expect(await figmaMailNames("2026-09-01")).toBeNull();
   });
@@ -344,6 +350,9 @@ describe("the corpus reads", () => {
     expect(await googleThreads("2026-09-01")).toEqual([
       { mailbox: "sk@loveiq.org", text: "first\n\nsecond" },
     ]);
+    expect(String(mockSupabaseFetch.mock.calls[0]![0])).toContain(
+      `&fts=fts(english).${encodeURIComponent("(assigned & action & item) | (mentioned & comment)")}`
+    );
     mockSupabaseFetch.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) });
     expect(await googleThreads("2026-09-01")).toBeNull();
   });

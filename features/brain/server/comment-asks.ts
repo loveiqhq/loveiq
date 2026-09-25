@@ -190,9 +190,14 @@ const nameKey = (s: string) => fold(s).replace(/[^\p{L}\d]+/gu, "");
  * reads: `figma.com/design/<key>/Report-3.0` is the file "Report 3.0".
  */
 export async function figmaFiles(): Promise<Map<string, string> | null> {
-  // Newest first, so a renamed file keeps its latest name.
+  // Newest first, so a renamed file keeps its latest name. Found through the `fts` index,
+  // where a link's host is a token of its own: a substring scan read every body in the
+  // corpus, 6.8 s cold against an 8 s timeout beside the other reads, and production timed
+  // out on it (2026-09-25). The index finds the same eight files in 0.2 s; the pattern
+  // below still decides what counts as a file link.
   const rows = await readAll<{ body: string }>(
-    `select=body&body=ilike.*figma.com/*&order=period_end.desc,id.asc`
+    `select=body&fts=fts(simple).${encodeURIComponent("www.figma.com | figma.com")}` +
+      `&order=period_end.desc,id.asc`
   );
   if (!rows) return null;
   const out = new Map<string, string>();
@@ -222,6 +227,8 @@ export async function figmaMailNames(since: string): Promise<string[] | null> {
   const rows = await readAll<{ title: string | null }>(
     `select=title&source=eq.gmail&period_end=gte.${since}` +
       // Notion, Slack and Claude send "mentioned you in" mail too; only Figma's carries this line.
+      // The `fts` condition only narrows the rows through its index; the phrase decides.
+      `&fts=fts(english).${encodeURIComponent("figma & design & platform")}` +
       `&body=ilike.*${encodeURIComponent("Figma is a design platform")}*` +
       `&or=(title.ilike.*mentioned%20you%20in*,title.ilike.*new%20comment*,title.ilike.*left%20a%20comment%20in*)` +
       `&order=id.asc`
@@ -324,6 +331,9 @@ export async function googleThreads(
 ): Promise<Array<{ mailbox: string; text: string }> | null> {
   const rows = await readAll<ChunkRow>(
     `select=source_id,body,meta&source=eq.gmail&period_end=gte.${since}` +
+      // Narrowed through the `fts` index first: without it every gmail body in the window
+      // is read (15,042 buffers against 1,988, measured 2026-09-25). The phrases decide.
+      `&fts=fts(english).${encodeURIComponent("(assigned & action & item) | (mentioned & comment)")}` +
       `&or=(body.ilike.*assigned%20you%20an%20action%20item*,body.ilike.*mentioned%20you%20in%20a%20comment%20in%20the*)` +
       `&order=source_id.asc`
   );
