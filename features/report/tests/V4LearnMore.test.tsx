@@ -111,7 +111,7 @@ describe("V4LearnMore — expanded, unlocked (153:2260)", () => {
     const blocks = container.querySelectorAll(".rv4-prose__p, .rv4-prose__h, .rv4-prose__list");
     expect(blocks).toHaveLength(ARTICLE.free.length + ARTICLE.gated!.length);
     expect(container.querySelector(".rv4-learn__gate")).toBeNull();
-    expect(screen.queryByText("Show More")).toBeNull();
+    expect(screen.queryByText("Unlock the full article")).toBeNull();
     expect(screen.queryByText("Unlock full report")).toBeNull();
   });
 
@@ -134,7 +134,7 @@ describe("V4LearnMore — expanded, gated (153:2280)", () => {
     const { container } = render(<V4LearnMore article={ARTICLE} locked defaultOpen />);
     expect(container.querySelector(".rv4-learn__gated")).toBeTruthy();
     expect(container.querySelector(".rv4-learn__fade")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Show More" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Unlock the full article" })).toBeTruthy();
     expect(screen.getByText("Premium content")).toBeTruthy();
     expect(screen.getByText("14-day money-back guarantee")).toBeTruthy();
     expect(screen.getByText("No questions asked.")).toBeTruthy();
@@ -177,7 +177,7 @@ describe("V4LearnMore — expanded, gated (153:2280)", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Unlock full report" }));
     expect(onUnlock).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("button", { name: "Show More" }));
+    fireEvent.click(screen.getByRole("button", { name: "Unlock the full article" }));
     expect(onUnlock).toHaveBeenCalledTimes(2);
     fireEvent.click(container.querySelector(".rv4-learn__gate")!);
     expect(onUnlock).toHaveBeenCalledTimes(3);
@@ -381,5 +381,27 @@ describe("V4LearnMore — Accelerator & Brakes closed (235:234)", () => {
   it("reads the new custom properties with the old values as fallbacks", () => {
     expect(V3_CSS).toContain("bottom: var(--rv4-pill-bottom, 18.5px)");
     expect(V3_CSS).toContain("padding-bottom: var(--rv4-closed-pb, 20.5px)");
+  });
+});
+
+// Mark, 2026-09-24 (1940252445 on 348:213): "We swapped the CTA. New CTA here." The
+// gated article's "Show More" link (230:238, gone from the file) became 663:1359, the
+// "UNLOCK THE FULL ARTICLE" pill: 163x32, white, a 1.5px gradient outline, 10px bold
+// caps in the same gradient.
+describe("V4LearnMore — the gated article's CTA (663:1359)", () => {
+  it("names it as the frame does", () => {
+    render(<V4LearnMore article={ARTICLE} locked defaultOpen />);
+    expect(screen.getByRole("button", { name: "Unlock the full article" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show More" })).toBeNull();
+  });
+
+  it("draws the pill", () => {
+    const at = V3_CSS.lastIndexOf(".rv3 .rv4-learn__showmore {");
+    const css = V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+    expect(css).toMatch(/width:\s*163px/);
+    expect(css).toMatch(/height:\s*32px/);
+    expect(css).toMatch(/border:\s*1\.5px solid transparent/);
+    expect(css).toMatch(/text-transform:\s*uppercase/);
+    expect(css).toMatch(/#fb683e/i);
   });
 });

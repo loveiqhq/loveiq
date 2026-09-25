@@ -15,7 +15,7 @@ import { guardedUnlock } from "./v4Unlock";
  *   153:2240  closed          teaser clamped to 240px, faded, "Read the full article" pill
  *   153:2260  expanded        the whole article, no gate
  *   153:2280  expanded+gated  free copy, then a blurred 580px window, a fade,
- *                             "Show More", and the Premium content card over it
+ *                             "Unlock the full article", and the Premium card over it
  *
  * THE CLOSED STATE IS NEVER GATED. 153:2240 draws no paywall, so a locked and an
  * unlocked reader see the same teaser and the same link. The wall appears only on
@@ -154,12 +154,12 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
 
             {/* A locked article's Back to top rides only the readable copy: it
              * sits before the gate, so it docks where the free text ends and never
-             * lands on "Show More" (review 24.09: "they are covering each other"). */}
+             * lands on the gate's CTA (review 24.09: "they are covering each other"). */}
             {locked ? <V4BackToTop targetRef={sectionRef} /> : null}
             {locked ? (
               /* 173:230. The band owns the click so a tap anywhere on the blurred
                * block opens the paywall, which is why neither the card's CTA nor
-               * "Show More" carries its own handler. */
+               * the pill under the fade carries its own handler. */
               <div className="rv4-learn__gate" onClick={openPaywall}>
                 <div className="rv4-learn__gated" aria-hidden="true" inert>
                   {article.gated ? <V4Prose blocks={article.gated} /> : null}
@@ -172,8 +172,10 @@ const V4LearnMore: FC<Props> = ({ article, locked = false, onUnlock, defaultOpen
                 </span>
                 <span className="rv4-learn__fade" aria-hidden="true" />
                 {/* 230:238 — cannot reveal anything, so it opens the paywall too. */}
+                {/* 663:1359 — Mark swapped the "Show More" link for this pill on
+                 * 2026-09-24 (1940252445). It still bubbles to the band. */}
                 <button type="button" className="rv4-learn__showmore">
-                  Show More
+                  <span className="rv4-learn__showmore-label">Unlock the full article</span>
                 </button>
                 <V4PremiumCard />
               </div>

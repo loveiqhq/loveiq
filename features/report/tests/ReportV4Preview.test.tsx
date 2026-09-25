@@ -84,7 +84,7 @@ describe("/report-v4-preview — the paywall is live", () => {
   it('opens the pricing modal from "Show More" on a gated card', () => {
     const { container } = renderPreview(null);
     expandFirstCard();
-    fireEvent.click(screen.getAllByRole("button", { name: "Show More" })[0]!);
+    fireEvent.click(screen.getAllByRole("button", { name: "Unlock the full article" })[0]!);
     expect(modalState(container)).toBe("open");
   });
 
@@ -109,7 +109,7 @@ describe("/report-v4-preview — the paywall is live", () => {
     const { container } = renderPreview("full_report");
     expandFirstCard();
     expect(container.querySelector(".rv4-learn__gate")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Show More" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Unlock the full article" })).toBeNull();
     expect(modalState(container)).toBe("closed");
   });
 
