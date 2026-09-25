@@ -21,17 +21,37 @@ afterEach(cleanup);
 
 const body = (root: HTMLElement) => root.querySelector<HTMLElement>(".rv4-fvr")!;
 
+const partsOf = (root: HTMLElement) =>
+  [...body(root).children].map((el) => el.getAttribute("data-node-id") ?? el.className);
+
 describe("V4Fantasy — open (304:290)", () => {
-  it("runs the intro, a 44px space, the table, another, then 'Common challenges'", () => {
+  it("runs the intro, the map, the table and 'Common challenges' 44px apart, then 44 more", () => {
     const { container } = render(<V4Fantasy view={OPEN} />);
-    const parts = [...body(container).children].map(
-      (el) => el.getAttribute("data-node-id") ?? el.className
-    );
-    expect(parts).toEqual(["304:291", "368:1925", "639:308", "368:5447", "368:1920"]);
+    // The first separator is ours: 304:290 sets the map flush under the intro.
+    expect(partsOf(container)).toEqual([
+      "304:291",
+      "rv4-sep",
+      "696:4393",
+      "368:1925",
+      "639:308",
+      "368:5447",
+      "368:1920",
+      "696:6060",
+    ]);
     const seps = body(container).querySelectorAll(":scope > .rv4-sep");
-    expect(seps).toHaveLength(2);
+    expect(seps).toHaveLength(4);
     seps.forEach((sep) => expect(sep.getAttribute("aria-hidden")).toBe("true"));
     expect(body(container).getAttribute("data-node-id")).toBe("304:290");
+  });
+
+  it("maps the reader's own dots, in the clear", () => {
+    const { container } = render(<V4Fantasy view={OPEN} />);
+    const map = body(container).querySelector<HTMLElement>(".rv4-fvm")!;
+    expect(map.querySelectorAll(".rv4-fvm__dot")).toHaveLength(16);
+    expect([...map.querySelectorAll(".rv4-fvm__name")].map((n) => n.textContent)).toEqual(
+      OPEN.mapDots!.filter((d) => d.label).map((d) => d.label)
+    );
+    expect(map.querySelector(".rv4-fvm__lock")).toBeNull();
   });
 
   it("sets the intro's eleven paragraphs and its heading", () => {
@@ -67,6 +87,29 @@ describe("V4Fantasy — open (304:290)", () => {
 });
 
 describe("V4Fantasy — paywalled (305:217)", () => {
+  it("runs the same blocks on 305:217's frames", () => {
+    const { container } = render(<V4Fantasy view={LOCKED} onUnlock={() => {}} />);
+    expect(partsOf(container)).toEqual([
+      "304:291",
+      "rv4-sep",
+      "368:3481",
+      "696:6063",
+      "639:1905",
+      "368:5447",
+      "305:228",
+      "696:6057",
+    ]);
+  });
+
+  it("blurs the map's plot behind its badge, and a tap on it opens the paywall", () => {
+    const unlock = vi.fn();
+    const { container } = render(<V4Fantasy view={LOCKED} onUnlock={unlock} />);
+    const map = body(container).querySelector<HTMLElement>(".rv4-fvm")!;
+    expect(map.querySelector(".rv4-fvm__blurred")!.hasAttribute("inert")).toBe(true);
+    fireEvent.click(map.querySelector(".rv4-fvm__blurred")!);
+    expect(unlock).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps the intro sharp", () => {
     const { container } = render(<V4Fantasy view={LOCKED} onUnlock={() => {}} />);
     const intro = body(container).querySelector<HTMLElement>('[data-node-id="304:291"]')!;
@@ -148,6 +191,10 @@ describe("reportV3.css — Fantasy vs. Reality body contracts", () => {
     expect(ruleOf(".rv3 .rv4-fvr .rv4-prose__p:has(+ .rv4-prose__h)")).toContain(
       "margin-bottom: 23.94px"
     );
+  });
+
+  it("leaves 20 under the last separator, as 334:1137 now sets the practice card 64 under the last line", () => {
+    expect(ruleOf(".rv3 .rv4-fvr")).toContain("padding: 20px 0;");
   });
 
   it("ends the card 247.5px under the teaser's top, where 441:6422 does", () => {
