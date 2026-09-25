@@ -5424,3 +5424,35 @@
 .rv3 .rv3-method.is-v4 .rv3-sci__list li {
   min-height: 20px;
 }
+
+/* ══ The gated article's CTA — 663:1359 · 2026-09-24 ═════════════════════════════
+ * "We swapped the CTA. New CTA here" (Mark, 1940252445): the underlined "Show More"
+ * link (230:238, since deleted) became "UNLOCK THE FULL ARTICLE", a 163x32 white pill
+ * with a 1.5px coral → rose → violet outline and its label in the same gradient,
+ * 10/12 bold caps. The outline is a border-box layer under a white padding-box one,
+ * as the Premium card's is; it keeps the old centred spot 19.5px off the foot. */
+.rv3 .rv4-learn__showmore {
+  align-items: center;
+  background:
+    linear-gradient(#fff, #fff) padding-box,
+    linear-gradient(to bottom right, #fb683e, #e88c8c 52%, #ac88ed) border-box;
+  border: 1.5px solid transparent;
+  border-radius: 999px;
+  display: flex;
+  font-size: 10px;
+  font-weight: 700;
+  height: 32px;
+  justify-content: center;
+  line-height: 12px;
+  padding: 0 22px;
+  text-decoration: none;
+  text-transform: uppercase;
+  width: 163px;
+}
+.rv3 .rv4-learn__showmore-label {
+  -webkit-background-clip: text;
+  background-clip: text;
+  /* The longhand, so it cannot reset the clip above as the shorthand would. */
+  background-image: linear-gradient(to bottom right, #fb683e, #e88c8c 52%, #ac88ed);
+  color: transparent;
+}
