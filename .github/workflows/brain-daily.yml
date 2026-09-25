@@ -117,7 +117,8 @@ jobs:
             brain-health)
               rc=0
               npx tsx scripts/brain-battery.ts --retrieval --record || rc=1
-              npx tsx scripts/brain-battery.ts --mcp --record || rc=1
+              # --live: the tools are probed on loveiq.org, which has the keys this runner lacks.
+              npx tsx scripts/brain-battery.ts --mcp --record --live || rc=1
               npx tsx scripts/brain-cron.ts brain-health || rc=1
               exit $rc ;;
             *) echo "::error::Unknown job: $JOB"; exit 2 ;;

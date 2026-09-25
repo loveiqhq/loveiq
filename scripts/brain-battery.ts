@@ -9,7 +9,7 @@
  * than trusting a human to spot a subtle miss in twenty paragraphs.
  *
  * Usage: npx tsx scripts/brain-battery.ts [--only <substring>]
- *        npx tsx scripts/brain-battery.ts --retrieval|--mcp [--record]
+ *        npx tsx scripts/brain-battery.ts --retrieval|--mcp [--record] [--live]
  *
  * `--record` stores the run's result in cron_run for the brain's weekly report
  * (`brain_health`), and exits 0 once it is stored, whatever failed.
@@ -2689,6 +2689,15 @@ async function firstUnconfiguredService(): Promise<string | null> {
 }
 
 async function unconfiguredServiceProbe(): Promise<McpProbe[]> {
+  // Which services lack a key is known to the process that answers. Live, that is the
+  // server, and a key missing HERE says nothing about it.
+  if (process.argv.includes("--live")) {
+    console.log(
+      "note  [mcp-external-unconfigured] omitted with --live: which services lack keys is " +
+        "known only to the server. Not a pass."
+    );
+    return [];
+  }
   const service = await firstUnconfiguredService();
   if (!service) {
     console.log(
@@ -3635,6 +3644,11 @@ async function runMcpBattery(only: string | null): Promise<BatteryResult> {
     );
   }
 
+  // --live sends each probe to the deployed endpoint instead of this process: what the team
+  // actually gets, with production's credentials. A GitHub runner has no Figma, Google or
+  // Notion keys, so in-process the tools that need them would fail on the runner, not in
+  // the product, and the weekly report would count that as lost accuracy.
+  const send = process.argv.includes("--live") ? (r: Request) => fetch(r) : POST;
   const all = await mcpProbes();
   const probes = only ? all.filter((p) => p.kind.includes(only) || p.tool.includes(only)) : all;
   let failures = 0;
@@ -3684,7 +3698,7 @@ async function runMcpBattery(only: string | null): Promise<BatteryResult> {
     let issues: string[] = [];
     let text = "";
     try {
-      const res = await POST(
+      const res = await send(
         new Request("https://www.loveiq.org/api/mcp", {
           method: "POST",
           headers: {

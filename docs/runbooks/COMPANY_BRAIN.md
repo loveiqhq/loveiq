@@ -945,6 +945,8 @@ model; it runs here so the report follows the tests:
    result as a `cron_run` row (`brain-battery-retrieval`, `brain-battery-mcp`) whose message
    is a JSON summary: total, clean, the probes failing and those that passed only on a retry.
    A battery exits 0 once its result is stored, whatever failed: failures are findings.
+   The tool battery runs with `--live`, against loveiq.org rather than in the runner, so it
+   measures production with production's keys (the runner has no Figma, Google or Notion keys).
 2. `scripts/brain-cron.ts brain-health` writes "How the brain did in the week to <day>" as
    a notice, so `whats_new` and the session hook show it. The notice leaves out the text of
    the questions asked, because it sits in the searchable corpus; `brain_health` lists them
