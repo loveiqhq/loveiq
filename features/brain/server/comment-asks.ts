@@ -1,5 +1,6 @@
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { loadPeople } from "@features/brain/server/people";
+import { readAll } from "@features/brain/server/read-all";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { DRIVE_SCOPE, getDelegatedToken } from "@shared/http/google-oauth";
 import logger from "@shared/observability/logger";
@@ -164,24 +165,6 @@ export function figmaAsks(
   return out;
 }
 
-/**
- * Every brain_chunk row a query matches, a page at a time: PostgREST returns at most 1,000
- * rows per read and says nothing about the rest. Null when a page fails, or past the ceiling,
- * so a partial read is never passed off as the whole.
- */
-async function readAll<T>(query: string): Promise<T[] | null> {
-  const rows: T[] = [];
-  for (let offset = 0; offset < 20_000; offset += 1000) {
-    const res = await supabaseFetch(`/rest/v1/brain_chunk?${query}&limit=1000&offset=${offset}`);
-    if (!res.ok) return null;
-    const batch = (await res.json().catch(() => null)) as T[] | null;
-    if (!Array.isArray(batch)) return null;
-    rows.push(...batch);
-    if (batch.length < 1000) return rows;
-  }
-  return null;
-}
-
 /** A file name as both a link slug and an email title can spell it. */
 const nameKey = (s: string) => fold(s).replace(/[^\p{L}\d]+/gu, "");
 
@@ -196,7 +179,7 @@ export async function figmaFiles(): Promise<Map<string, string> | null> {
   // out on it (2026-09-25). The index finds the same eight files in 0.2 s; the pattern
   // below still decides what counts as a file link.
   const rows = await readAll<{ body: string }>(
-    `select=body&fts=fts(simple).${encodeURIComponent("www.figma.com | figma.com")}` +
+    `/rest/v1/brain_chunk?select=body&fts=fts(simple).${encodeURIComponent("www.figma.com | figma.com")}` +
       `&order=period_end.desc,id.asc`
   );
   if (!rows) return null;
@@ -225,7 +208,7 @@ export async function figmaFiles(): Promise<Map<string, string> | null> {
  */
 export async function figmaMailNames(since: string): Promise<string[] | null> {
   const rows = await readAll<{ title: string | null }>(
-    `select=title&source=eq.gmail&period_end=gte.${since}` +
+    `/rest/v1/brain_chunk?select=title&source=eq.gmail&period_end=gte.${since}` +
       // Notion, Slack and Claude send "mentioned you in" mail too; only Figma's carries this line.
       // The `fts` condition only narrows the rows through its index; the phrase decides.
       `&fts=fts(english).${encodeURIComponent("figma & design & platform")}` +
@@ -330,7 +313,8 @@ export async function googleThreads(
   since: string
 ): Promise<Array<{ mailbox: string; text: string }> | null> {
   const rows = await readAll<ChunkRow>(
-    `select=source_id,body,meta&source=eq.gmail&period_end=gte.${since}` +
+    `/rest/v1/brain_chunk?select=source_id,body,meta` +
+      `&source=eq.gmail&period_end=gte.${since}` +
       // Narrowed through the `fts` index first: without it every gmail body in the window
       // is read (15,042 buffers against 1,988, measured 2026-09-25). The phrases decide.
       `&fts=fts(english).${encodeURIComponent("(assigned & action & item) | (mentioned & comment)")}` +

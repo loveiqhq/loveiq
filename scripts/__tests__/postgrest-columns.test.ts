@@ -78,6 +78,14 @@ describe("findBadColumns", () => {
     expect(scan("`/rest/v1/payment?select=id&order=created_date_time.desc`")).toEqual([]);
   });
 
+  it("reads a JSONB path in select= as its base column, which must still exist", () => {
+    expect(scan("`/rest/v1/payment?select=id,plan:metadata->>plan,kind:metadata->kind`")).toEqual(
+      []
+    );
+    expect(scan("`/rest/v1/payment?select=id,status::text`")).toEqual([]);
+    expect(scan("`/rest/v1/payment?select=id,plan:meta->>plan`")).toEqual(["payment.meta"]);
+  });
+
   it("accepts a JSONB path filter, where only the base column is schema", () => {
     expect(scan("`/rest/v1/payment?metadata->>via=eq.x&select=id`")).toEqual([]);
     expect(scan("`/rest/v1/payment?nosuch->>via=eq.x&select=id`")).toEqual(["payment.nosuch"]);
