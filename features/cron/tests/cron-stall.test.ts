@@ -92,8 +92,8 @@ describe("findStalledCrons", () => {
     const stall = {
       cron: "ux-review-verify",
       lastRunAt: "2026-08-29T05:00:00Z",
-      ageMs: 7 * 3_600_000,
-      maxAgeMs: 6 * 3_600_000,
+      ageMs: 10 * 3_600_000,
+      maxAgeMs: 9 * 3_600_000,
     };
     expect(describeStall(stall)).toMatch(/\(ux-review-verify\.yml\).*start it by hand/);
     expect(describeStall({ ...stall, lastRunAt: null, ageMs: null })).toMatch(/start it by hand/);
@@ -123,6 +123,13 @@ describe("the watch list must not drift from what is scheduled", () => {
         `cron "${cron}" is scheduled but neither watched nor explicitly unwatched`
       ).toBe(true);
     }
+  });
+
+  it("gives a GitHub job more room than the gaps GitHub leaves on an ordinary day", () => {
+    // Measured 2026-09-14..25: the verifier's longest gap between scheduled runs was 7.9h,
+    // and a third passed 6h. The audit's first slot to its last the next day is ~29h.
+    expect(CRON_MAX_AGE_MS["ux-review-verify"]).toBeGreaterThan(7.9 * 3_600_000);
+    expect(CRON_MAX_AGE_MS["ux-digest-audit"]).toBeGreaterThan(29 * 3_600_000);
   });
 
   it("names the workflow of every job GitHub starts, and of nothing else", async () => {
