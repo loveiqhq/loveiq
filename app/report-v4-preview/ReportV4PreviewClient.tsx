@@ -12,6 +12,7 @@ import type { V4LearnMoreByChapter } from "@/data/report3-learn-more";
 import type { Report3TypicalBeliefsView } from "@/data/report3-typical-beliefs";
 import type { Report3AcceleratorsView } from "@/data/report3-accelerators";
 import type { Report3PartnershipView } from "@/data/report3-partnership";
+import type { Report3FantasyView } from "@/data/report3-fantasy";
 
 // reportV3.css is imported by ReportPage.tsx, never by the root layout, so a
 // standalone preview has to pull it in itself or every `rv3-`/`rv4-` rule is missing.
@@ -40,6 +41,8 @@ interface Props {
   accelerators?: Report3AcceleratorsView | null;
   /** The Challenges in Partnerships chapter body, assembled on the server. */
   partnership?: Report3PartnershipView | null;
+  /** The Fantasy vs. Reality chapter body, assembled on the server. */
+  fantasy?: Report3FantasyView | null;
 }
 
 /**
@@ -78,6 +81,7 @@ const ReportV4PreviewClient: FC<Props> = ({
   typicalBeliefs,
   accelerators,
   partnership,
+  fantasy,
 }) => {
   const [paywallOpen, setPaywallOpen] = useState(false);
 
@@ -103,6 +107,7 @@ const ReportV4PreviewClient: FC<Props> = ({
             typicalBeliefs={typicalBeliefs}
             accelerators={accelerators}
             partnership={partnership}
+            fantasy={fantasy}
           />
         </div>
       </div>
