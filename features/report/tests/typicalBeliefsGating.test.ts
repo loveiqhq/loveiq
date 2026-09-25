@@ -139,9 +139,9 @@ describe("buildTypicalBeliefs — locked", () => {
       "stop treating its presence or absence as a verdict",
       // Panel rows 5-10 and the shifts of rows 4-10.
       "I need novelty to stay sexually interested.",
-      "Being desired feels good, but it does not determine my worth.",
-      "A quieter kind of intimacy can still contain genuine desire.",
-      "Desire can change in intensity without meaning something is wrong.",
+      "Being desired feels good, but it does not determine my worth or attractiveness.",
+      "Safety and excitement can coexist, especially when we keep creating room",
+      "Sex can stay alive when I treat excitement as something I can participate in",
     ];
     for (const probe of probes) {
       expect(unlocked, probe).toContain(probe);

@@ -41,9 +41,11 @@ const V4SummaryChapter: FC<Props> = ({ archetype, summary, feedback }) => (
             </p>
           ))}
         </div>
-        <p className="rv4-summary__closer" data-node-id="1:744">
-          {summary.closer}
-        </p>
+        {summary.closer ? (
+          <p className="rv4-summary__closer" data-node-id="1:744">
+            {summary.closer}
+          </p>
+        ) : null}
       </div>
 
       {/* 1:745 */}

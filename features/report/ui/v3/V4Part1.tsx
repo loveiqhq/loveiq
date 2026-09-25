@@ -31,8 +31,9 @@ const V4Part1: FC = () => (
   <section className="rv4-partblock" data-node-id="1:168" data-name="Part 1 - Welcome">
     <V4PartHeading heading={REPORT_V4_PARTS[0]!} lead />
 
-    {/* 1:175 — nothing in Part I collapses, so no toggle. */}
-    <V4Chapter title="Introduction" collapsible={false}>
+    {/* 1:175 — nothing in Part I collapses, so no toggle. Mark took its
+     * "Introduction" title out on 2026-09-24 (comment 1939924076); the copy stays. */}
+    <V4Chapter collapsible={false}>
       <div className="rv4-copy">
         {REPORT_V4_INTRODUCTION.map((runs, i) => (
           <p className="rv3-prose" key={i}>
