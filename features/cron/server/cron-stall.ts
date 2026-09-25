@@ -102,13 +102,15 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
    * GITHUB-SCHEDULED. GitHub starts this repo's schedules 4.5 to 5.5 hours late and
    * drops some: from 2026-09-14 the verifier ran 4-6 times a day on an 8-a-day cron.
    * Both record their SCHEDULED runs (scripts/record-cron-run.mjs), so a hand-started run
-   * cannot hide a dead schedule. The lateness shifts every run alike, so it does not
-   * widen the gap between them; the verifier is hourly, so six hours is six missed runs
-   * in a row, not an ordinary drop; the audit runs three times a day, so 26 hours means
-   * all three were dropped.
+   * cannot hide a dead schedule. Each limit sits just above the longest gap GitHub
+   * leaves on an ordinary day, so an alert means more than its usual drops. The
+   * verifier's 49 gaps from 2026-09-14 to 09-25 peaked at 7.9h and 16 were over 6h, so
+   * the 6h this started with would have alerted most days. The audit's three slots span
+   * four hours, so its first slot one day and its last the next, with the two between
+   * dropped, is about 29h and still ordinary.
    */
-  "ux-review-verify": 6 * 3_600_000,
-  "ux-digest-audit": 26 * 3_600_000,
+  "ux-review-verify": 9 * 3_600_000,
+  "ux-digest-audit": 32 * 3_600_000,
 };
 
 /**
