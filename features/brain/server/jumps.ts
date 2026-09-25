@@ -475,7 +475,8 @@ export function explainDay(
   const ga = today.ga4;
   if (ga) {
     const rateOf = (d: Ga4Day) => (d.sessions >= 20 ? d.engaged / d.sessions : null);
-    const newOf = (d: Ga4Day) => (d.users >= 20 ? d.newUsers / d.users : null);
+    // GA4 can count more new users than users on a day (seen: 107%); a share stops at 100%.
+    const newOf = (d: Ga4Day) => (d.users >= 20 ? Math.min(1, d.newUsers / d.users) : null);
     const usualOf = (f: (d: Ga4Day) => number | null) => {
       const xs = before
         .map((d) => (d.ga4 ? f(d.ga4) : null))

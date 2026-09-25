@@ -335,6 +335,12 @@ describe("explainDay", () => {
     expect(explainDay(s, LAST, NONE).likely.join(" ")).not.toMatch(/Only/);
   });
 
+  /** Seen in the first live notice (2026-09-25): "new users 107%". */
+  it("never shows a new-user share above 100%, whatever GA4 reports", () => {
+    const s = build((i) => (i === 29 ? { ga4: { users: 600, newUsers: 640 } } : {}));
+    expect(explainDay(s, LAST, NONE).evidence[0]).toContain("new users 100%");
+  });
+
   it("does not blame engagement when traffic did not go up", () => {
     const s = build((i) => (i === 29 ? { ga4: { engaged: 5 } } : {}));
     expect(explainDay(s, LAST, NONE).likely.join(" ")).not.toMatch(/barely engages/);
