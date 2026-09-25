@@ -3,6 +3,7 @@ import type { Report3Chapter } from "@/data/report3-archetype-page";
 import type { Report3TypicalBeliefsView } from "@/data/report3-typical-beliefs";
 import type { Report3AcceleratorsView } from "@/data/report3-accelerators";
 import type { Report3PartnershipView } from "@/data/report3-partnership";
+import type { Report3FantasyView } from "@/data/report3-fantasy";
 import {
   CHAPTER_COPY_PLACEHOLDER,
   PART_INTRO_PLACEHOLDER,
@@ -17,6 +18,7 @@ import V4TryThis from "./V4TryThis";
 import V4TypicalBeliefs from "./V4TypicalBeliefs";
 import V4Accelerators from "./V4Accelerators";
 import V4Partnership from "./V4Partnership";
+import V4Fantasy from "./V4Fantasy";
 import V4PartHeading from "./V4PartHeading";
 
 /**
@@ -77,6 +79,11 @@ interface Props {
    * renders it as its open first row — it has no article, so it brings its own body.
    */
   partnership?: Report3PartnershipView | null;
+  /**
+   * Fantasy vs. Reality's chapter body (304:281), read on the server. Part VI renders
+   * it above the chapter's article, as Part IV does Accelerator & Brakes'.
+   */
+  fantasy?: Report3FantasyView | null;
 }
 
 const V4ChapterPart: FC<Props> = ({
@@ -89,6 +96,7 @@ const V4ChapterPart: FC<Props> = ({
   typicalBeliefs,
   accelerators,
   partnership,
+  fantasy,
 }) => (
   <section className="rv4-partblock" data-node-id="1:849" data-name="Chapter part">
     {/* 1:850 */}
@@ -112,6 +120,8 @@ const V4ChapterPart: FC<Props> = ({
           : null;
       // No article: the chapter's own body is the whole of its open row.
       const cip = c.id === "challenges_in_partnership" ? (partnership ?? null) : null;
+      const fvr =
+        c.id === "typical_sexual_fantasy_amp_practice_tendencies" && entry ? fantasy : null;
       return (
         <Fragment key={c.id ?? c.title}>
           {/* 1:858 / 1:861 / 1:872 / 1:883 / 1:894 */}
@@ -129,7 +139,7 @@ const V4ChapterPart: FC<Props> = ({
                   : TEASER_PLACEHOLDER
             }
             defaultOpen={Boolean(entry || cip)}
-            bare={Boolean(beliefs || accel || cip)}
+            bare={Boolean(beliefs || accel || cip || fvr)}
           >
             {cip ? (
               <V4Partnership view={cip} onUnlock={onUnlock} />
@@ -145,6 +155,7 @@ const V4ChapterPart: FC<Props> = ({
                   </>
                 ) : null}
                 {accel ? <V4Accelerators view={accel} onUnlock={onUnlock} /> : null}
+                {fvr ? <V4Fantasy view={fvr} onUnlock={onUnlock} /> : null}
                 <V4LearnMore article={entry.article} locked={entry.locked} onUnlock={onUnlock} />
               </>
             ) : undefined}

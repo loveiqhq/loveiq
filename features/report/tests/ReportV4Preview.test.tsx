@@ -36,6 +36,7 @@ import {
 import type { ReportAccessPlan } from "@features/report/server/access";
 import { buildAccelerators } from "@/data/report3-accelerators";
 import { buildPartnership } from "@/data/report3-partnership";
+import { buildFantasy } from "@/data/report3-fantasy";
 
 afterEach(cleanup);
 
@@ -224,5 +225,55 @@ describe("/report-v4-preview — Challenges in Partnerships", () => {
     ]) {
       expect(container.querySelector(`#${id}`), id).not.toBeNull();
     }
+  });
+});
+
+/**
+ * Fantasy vs. Reality opens Part VI here too (Figma 304:281 / 305:217), with the same
+ * body, table and practice the live report uses, above its article.
+ */
+describe("/report-v4-preview — Fantasy vs. Reality", () => {
+  const renderWithFvr = (accessPlan: ReportAccessPlan) =>
+    render(
+      <ReportV4PreviewClient
+        archetype="Spark Seeker"
+        matchStrength={43}
+        copy={report3ArchetypeCard["Spark Seeker"]!}
+        learnMore={buildLearnMoreForReader({
+          chapters: ALL_CHAPTERS,
+          articles: REPORT_V4_LEARN_MORE,
+          accessPlan,
+        })}
+        accessPlan={accessPlan}
+        accessPlanLabel={accessPlan ?? "no purchase"}
+        quotes={buildPreviewQuotes()}
+        fantasy={buildFantasy("Spark Seeker", { locked: accessPlan !== "full_report" })}
+      />
+    );
+
+  it("draws the body, table and practice above the article, in an open, bare chapter", () => {
+    const { container } = renderWithFvr(null);
+    const chapter = container.querySelector("#typical_sexual_fantasy_amp_practice_tendencies")!;
+    expect(chapter).toHaveClass("is-open");
+    expect(chapter).toHaveClass("is-bare");
+    expect(chapter.querySelector(".rv4-fvr .rv4-fvt")).not.toBeNull();
+    expect(chapter.querySelector(".rv4-fvr + .rv4-try")!.getAttribute("data-node-id")).toBe(
+      "441:6422"
+    );
+    expect(chapter.querySelector(".rv4-try + .rv4-learn")).not.toBeNull();
+    expect(chapter.textContent).not.toContain("[Chapter Copy]");
+  });
+
+  it("opens the pricing modal from the table's lock", () => {
+    const { container } = renderWithFvr(null);
+    fireEvent.click(container.querySelector(".rv4-fvt__lock .rv4-lockbadge")!);
+    expect(modalState(container)).toBe("open");
+  });
+
+  it("draws no gate for a reader who has paid", () => {
+    const { container } = renderWithFvr("full_report");
+    expect(container.querySelector(".rv4-fvr")).not.toBeNull();
+    expect(container.querySelector(".rv4-fvr__gate")).toBeNull();
+    expect(container.querySelector(".rv4-fvt__lock")).toBeNull();
   });
 });

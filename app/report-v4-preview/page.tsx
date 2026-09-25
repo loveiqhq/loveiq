@@ -17,6 +17,7 @@ import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
 import { buildAccelerators } from "@/data/report3-accelerators";
 import { buildPartnership } from "@/data/report3-partnership";
+import { buildFantasy } from "@/data/report3-fantasy";
 import { isReportPurchasePlan, type ReportAccessPlan } from "@features/report/server/access";
 import {
   buildLearnMoreForReader,
@@ -96,6 +97,13 @@ export default async function ReportV4PreviewPage({
       partnership={buildPartnership(ARCHETYPE, {
         locked: isLearnMoreArticleLocked({
           article: { chapterId: "libido_challenges_in_relationships" },
+          accessPlan,
+        }),
+      })}
+      // The same full-report gate its article runs through.
+      fantasy={buildFantasy(ARCHETYPE, {
+        locked: isLearnMoreArticleLocked({
+          article: { chapterId: "typical_sexual_fantasy_amp_practice_tendencies" },
           accessPlan,
         }),
       })}
