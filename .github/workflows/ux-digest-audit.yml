@@ -41,6 +41,7 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       GITHUB_TOKEN: ${{ github.token }}
     steps:
+      - run: echo "START_MS=$(date +%s%3N)" >> "$GITHUB_ENV"
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
@@ -72,8 +73,26 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_COMMITS_WEBHOOK_URL }}
           POST: ${{ github.event_name == 'schedule' || inputs.post }}
         run: |
+          set +e
           if [ "$POST" = "true" ]; then
             npx tsx scripts/audit-ux-digest.mjs --post
           else
             npx tsx scripts/audit-ux-digest.mjs
           fi
+          code=$?
+          echo "AUDIT_EXIT=$code" >> "$GITHUB_ENV"
+          exit $code
+
+      # For the stall watchdog (features/cron/server/cron-stall.ts): GitHub
+      # drops scheduled runs, and a job that never starts cannot say so. Only
+      # scheduled runs count, so hand-started ones cannot hide a dead schedule.
+      # A false claim (exit 1) is the audit working; only exit 3, or a job that
+      # died before the audit ran, is recorded as an error.
+      - name: Record that the audit ran
+        if: always() && github.event_name == 'schedule'
+        run: |
+          case "${AUDIT_EXIT:-none}" in
+            0|1) outcome=success ;;
+            *) outcome=error ;;
+          esac
+          npx tsx scripts/record-cron-run.mjs ux-digest-audit "$outcome"

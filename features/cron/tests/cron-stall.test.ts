@@ -32,7 +32,23 @@ async function scheduledCrons(): Promise<string[]> {
   return [
     ...(vercel.crons ?? []).map((c) => c.path.replace("/api/cron/", "")),
     ...Object.keys(brainDailySchedules()),
+    ...githubRecordedCrons(fs),
   ];
+}
+
+/**
+ * GitHub Actions jobs that record their scheduled runs with scripts/record-cron-run.mjs.
+ * One counts only if its workflow both has a schedule AND records under that exact name,
+ * so a watched name cannot quietly stop being written.
+ */
+function githubRecordedCrons(fs: typeof import("node:fs")): string[] {
+  const names: string[] = [];
+  for (const file of fs.readdirSync(".github/workflows")) {
+    const yml = fs.readFileSync(`.github/workflows/${file}`, "utf8");
+    if (!/^\s*schedule:/m.test(yml)) continue;
+    for (const m of yml.matchAll(/record-cron-run\.mjs ([a-z0-9-]+)/g)) names.push(m[1]);
+  }
+  return names;
 }
 const ok = (started_at: string | null) =>
   ({

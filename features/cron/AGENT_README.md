@@ -20,6 +20,15 @@ is deliberately off (see CLAUDE.md, "Postponed / TODO"), and `chapter-nudge`,
 retired without deleting the code. Check `vercel.json` before assuming one of these runs;
 `cron_run` shows their last real execution was July 2026.
 
+**GitHub Actions jobs are watched too, if they record their runs.** GitHub drops
+scheduled runs under load (from 2026-09-14 the UX verifier ran 4-6 times a day on an
+8-a-day cron, and a new workflow's first run never happened). A job that is never
+started cannot report its own absence, so `ux-review-verify.yml` and
+`ux-digest-audit.yml` end with `scripts/record-cron-run.mjs <name>` on scheduled runs,
+and `server/cron-stall.ts` alerts #ops when one goes quiet (6 h and 26 h). The stall
+test counts a GitHub job only if its workflow both has a schedule and records under
+that name.
+
 **Belongs:** cron job handlers + their tests.
 
 **Does NOT belong:**

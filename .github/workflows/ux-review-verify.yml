@@ -57,6 +57,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
+      - run: echo "START_MS=$(date +%s%3N)" >> "$GITHUB_ENV"
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
@@ -265,3 +266,18 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_JOURNEY_CHANNEL_ID: ${{ secrets.SLACK_JOURNEY_CHANNEL_ID }}
+
+      # For the stall watchdog (features/cron/server/cron-stall.ts): GitHub drops
+      # scheduled runs (4-6 a day on an 8-a-day cron from 2026-09-14), and a job
+      # that never starts cannot say so. Only scheduled runs count, so a
+      # hand-started run cannot hide a dead schedule. The status comes through env,
+      # not spliced into `run:`, for the reason given on the step above.
+      - name: Record that the verifier ran
+        if: always() && github.event_name == 'schedule'
+        env:
+          JOB_STATUS: ${{ job.status }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ "$JOB_STATUS" = "success" ]; then outcome=success; else outcome=error; fi
+          npx tsx scripts/record-cron-run.mjs ux-review-verify "$outcome"
