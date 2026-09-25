@@ -6,6 +6,7 @@ import {
   REPORT_V4_FANTASY,
 } from "@/data/report3-fantasy";
 import { reportPracticeTendencies } from "@/data/report-practice-tendencies";
+import { getFantasyMapDots } from "@features/report/server/fantasyMap";
 import type { Report3Block } from "@/data/report3-learn-more";
 
 /**
@@ -307,6 +308,36 @@ describe("buildFantasy — the practice (441:6168 open, 441:6188 gated)", () => 
 
   it("teases the closed card with the same free paragraphs for everyone", () => {
     expect(view(true).practice.teaser).toEqual(SPARK.practice.slice(0, 2));
+  });
+});
+
+/**
+ * The map over the table (696:4393 open, 368:3481 paywalled). Its dots are V2's:
+ * the archetype's sixteen most characteristic fantasies, placed by their two scores
+ * (getFantasyMapDots). Those scores are paid, so a locked reader is sent no dots at
+ * all; the client draws V2's illustrative layout under a blur instead.
+ */
+describe("buildFantasy — the map", () => {
+  it("gives a paying reader the archetype's own sixteen dots, derived as V2 derives them", () => {
+    const dots = view(false).mapDots!;
+    expect(dots).toHaveLength(16);
+    expect(dots).toEqual(getFantasyMapDots("Spark Seeker"));
+  });
+
+  it("sends a locked reader no dots", () => {
+    expect(view(true).mapDots).toBeNull();
+  });
+
+  it("keeps every dot the clear rows don't show out of the locked payload", () => {
+    const clear = new Set(
+      SOURCE.groups
+        .slice(0, 3)
+        .flatMap((g) => g.rows.slice(0, FANTASY_CLEAR_ROWS).map((r) => r.practice))
+    );
+    const hidden = getFantasyMapDots("Spark Seeker")!.filter((d) => !clear.has(d.name));
+    expect(hidden.length).toBeGreaterThan(0);
+    const wire = payload(true);
+    for (const dot of hidden) expect(wire).not.toContain(`"${dot.name}"`);
   });
 });
 

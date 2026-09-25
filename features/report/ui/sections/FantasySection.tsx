@@ -65,16 +65,16 @@ interface Props {
   dots?: FantasyMapDot[] | null;
 }
 
-type Quadrant = "lean" | "keep" | "hidden" | "not";
+export type Quadrant = "lean" | "keep" | "hidden" | "not";
 
 /** "all" plus one entry per quadrant — drives the filter tab row. */
-type MapFilter = "all" | Quadrant;
+export type MapFilter = "all" | Quadrant;
 
 // The 5 filter tabs above the map (Figma 8427:2467 — buttons 8427:2468/2470/
 // 2472/2474/2476), in the Figma's left-to-right order. Selecting one dims every
 // dot outside that quadrant rather than removing it, so the plot keeps its shape
 // and the eye can still read the filtered group in context.
-const MAP_FILTERS: { id: MapFilter; label: string }[] = [
+export const MAP_FILTERS: { id: MapFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "lean", label: "Lean in" },
   { id: "hidden", label: "Hidden gems" },
@@ -85,7 +85,7 @@ const MAP_FILTERS: { id: MapFilter; label: string }[] = [
 // The four quadrant frames (Figma 8427:2480–2488). Each carries its tint accent
 // (background wash + label colour) and grid placement. Axes: x = lived pleasure
 // (left low → right high); y = fantasy pull (bottom low → top high).
-const QUADRANTS: {
+export const QUADRANTS: {
   id: Quadrant;
   label: string;
   ink: string;
@@ -120,7 +120,7 @@ const QUADRANTS: {
   },
 ];
 
-const QUADRANT_DOT: Record<Quadrant, string> = {
+export const QUADRANT_DOT: Record<Quadrant, string> = {
   lean: "#2e7d5b",
   keep: "#c2542f",
   hidden: "#795fc8",
@@ -141,7 +141,7 @@ const QUADRANT_LABEL: Record<Quadrant, string> = QUADRANTS.reduce(
   {} as Record<Quadrant, string>
 );
 
-type MapDot = {
+export type MapDot = {
   /** Printed under the dot. */
   label: string | null;
   /** What the dot IS — null only for the illustrative fallback set. */
@@ -154,7 +154,7 @@ type MapDot = {
   pleasure?: number | null;
 };
 
-const MAP_DOTS: MapDot[] = [
+export const MAP_DOTS: MapDot[] = [
   { label: "Mutual surrender", q: "lean", x: 0.92, y: 0.12 },
   { label: "Sacred kink", q: "lean", x: 0.8, y: 0.17 },
   { label: "Tantra", q: "lean", x: 0.89, y: 0.22 },

@@ -6628,3 +6628,413 @@ html {
 .rv3 .rv4-learn .rv4-prose__list:has(+ .rv4-prose__h) {
   margin-bottom: 24.79px;
 }
+
+/* ══ Fantasy vs. Reality · the map — Figma 696:4393 open, 368:3481 paywalled ════════
+ * Chips, plot and caption 10.49 apart, no padding: 368:3481's 328 column. 696:4393
+ * is 316 and clips its 327px plot row, cutting the right quadrants' last 10px and
+ * the caption's first letter; the card itself is white on white, so it is not
+ * drawn. Manrope throughout, through the token captured before V4's font swap. */
+.rv3 .rv4-fvm {
+  display: flex;
+  flex-direction: column;
+  gap: 10.4947px;
+  width: min(328px, 100%);
+}
+/* 696:4394 — wrapped and centred, 7.9 apart, the rows touching. */
+.rv3 .rv4-fvm__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 7.8992px;
+  justify-content: center;
+}
+/* A chip 32.8 tall: 6.77 + 1.13 of padding and stroke around a 16.96 line, 14.67 +
+ * 1.13 at the sides. The stroke is painted inside, not laid out as a border:
+ * Chromium floors a fractional border to a whole pixel, which would take a quarter
+ * pixel off every chip. */
+.rv3 .rv4-fvm__chip {
+  background: #fff;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1.12846px rgba(22, 16, 33, 0.12);
+  box-sizing: border-box;
+  color: #6b6678;
+  cursor: pointer;
+  font-family: var(--rv4-manrope, "Manrope"), sans-serif;
+  font-size: 12.4131px;
+  font-weight: 700;
+  height: 32.7985px;
+  line-height: 16.9563px;
+  padding: 0 15.7985px;
+  transition:
+    background 180ms ease,
+    color 180ms ease;
+  white-space: nowrap;
+}
+.rv3 .rv4-fvm__chip.is-active {
+  background: #161021;
+  box-shadow: none;
+  color: #fff;
+}
+.rv3 .rv4-fvm__chip:focus-visible {
+  outline: 2px solid var(--rv3-violet);
+  outline-offset: 2px;
+}
+/* 696:4405 → 696:4406: 5.3 down, the 300 plot 26 in from the left, "lived pleasure"
+ * 9 under it, "fantasy pull" up its left side. Below 328 the plot gives way, 28px
+ * narrower than the column. */
+.rv3 .rv4-fvm__row {
+  container-type: inline-size;
+  padding-top: 5.3038px;
+}
+.rv3 .rv4-fvm__img {
+  --fvm-plot: min(300px, 100cqi - 28px);
+  height: calc(var(--fvm-plot) + 26px);
+  position: relative;
+}
+.rv3 .rv4-fvm__frame {
+  height: var(--fvm-plot);
+  left: 26px;
+  position: absolute;
+  top: 0;
+  width: var(--fvm-plot);
+}
+.rv3 .rv4-fvm__plot {
+  display: grid;
+  gap: 4px;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  height: 100%;
+  position: relative;
+}
+/* 696:4408-4411 — each quadrant in its own wash, titled 9 and 8 in from its corner
+ * in its zone's ink. */
+.rv3 .rv4-fvm [data-zone="keep"],
+.rv3 .rv4-fvm .rv4-fvm__dot--keep {
+  --fvm-rgb: 194 84 47;
+}
+.rv3 .rv4-fvm [data-zone="lean"],
+.rv3 .rv4-fvm .rv4-fvm__dot--lean {
+  --fvm-rgb: 46 125 91;
+}
+.rv3 .rv4-fvm [data-zone="not"],
+.rv3 .rv4-fvm .rv4-fvm__dot--not {
+  --fvm-rgb: 179 170 192;
+}
+.rv3 .rv4-fvm [data-zone="hidden"],
+.rv3 .rv4-fvm .rv4-fvm__dot--hidden {
+  --fvm-rgb: 121 95 200;
+}
+.rv3 .rv4-fvm__quad {
+  border-radius: 10px;
+  position: relative;
+}
+.rv3 .rv4-fvm__quad[data-zone="keep"] {
+  background: rgba(242, 109, 79, 0.05);
+}
+.rv3 .rv4-fvm__quad[data-zone="lean"] {
+  background: rgba(95, 180, 140, 0.08);
+}
+.rv3 .rv4-fvm__quad[data-zone="not"] {
+  background: rgba(22, 16, 33, 0.02);
+}
+.rv3 .rv4-fvm__quad[data-zone="hidden"] {
+  background: rgba(157, 138, 215, 0.08);
+}
+.rv3 .rv4-fvm__zone {
+  color: rgb(var(--fvm-rgb));
+  font-family: var(--rv4-manrope, "Manrope"), sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  left: 9px;
+  letter-spacing: 0.6px;
+  line-height: 12px;
+  position: absolute;
+  top: 8px;
+  white-space: nowrap;
+}
+/* The dots over the whole plot. Each is a 26px button centred on its dot — x and y
+ * are Figma's own mapping, the score over ten across the plot — held a ring's
+ * radius inside the edge, so a ten sits in the plot rather than half off it. The
+ * pip, the name and the readout hang from a point at the button's centre. */
+.rv3 .rv4-fvm__dots {
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+.rv3 .rv4-fvm__dot {
+  --fvm-r: 6.5px;
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  height: 26px;
+  left: clamp(var(--fvm-r), var(--fvm-x), 100% - var(--fvm-r));
+  margin: -13px 0 0 -13px;
+  padding: 0;
+  pointer-events: auto;
+  position: absolute;
+  top: clamp(var(--fvm-r), var(--fvm-y), 100% - var(--fvm-r));
+  width: 26px;
+}
+.rv3 .rv4-fvm__dot--lean {
+  --fvm-r: 7.5px;
+}
+.rv3 .rv4-fvm__anchor {
+  left: 13px;
+  position: absolute;
+  top: 13px;
+}
+.rv3 .rv4-fvm__dot:focus {
+  outline: none;
+}
+/* 696:4416-4431 — 10 across, 12 in "Lean in", a 1.5 white ring outside. */
+.rv3 .rv4-fvm__pip {
+  background: rgb(var(--fvm-rgb));
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px #fff;
+  height: 10px;
+  left: -5px;
+  position: absolute;
+  top: -5px;
+  transition:
+    opacity 180ms ease,
+    transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  width: 10px;
+}
+.rv3 .rv4-fvm__dot--lean .rv4-fvm__pip {
+  height: 12px;
+  left: -6px;
+  top: -6px;
+  width: 12px;
+}
+.rv3 .rv4-fvm__dot:focus-visible .rv4-fvm__pip {
+  outline: 2px solid rgb(var(--fvm-rgb));
+  outline-offset: 3px;
+}
+.rv3 .rv4-fvm__dot.is-open {
+  z-index: 2;
+}
+.rv3 .rv4-fvm__dot.is-open .rv4-fvm__pip {
+  transform: scale(1.35);
+}
+/* A printed name on one line, 2.5 off the ring: beside the dot and centred on it,
+ * or over or under it — centred, slid along by the placer (--fvm-shift), or flush
+ * with the dot's right ("end"). */
+.rv3 .rv4-fvm__name {
+  color: #6b6678;
+  font-family: var(--rv4-manrope, "Manrope"), sans-serif;
+  font-size: 9.5px;
+  font-weight: 400;
+  line-height: 12px;
+  pointer-events: none;
+  position: absolute;
+  transition: opacity 180ms ease;
+  white-space: nowrap;
+}
+.rv3 .rv4-fvm__name.is-left {
+  right: calc(var(--fvm-r) + 2.5px);
+  top: -6px;
+}
+.rv3 .rv4-fvm__name.is-right {
+  left: calc(var(--fvm-r) + 2.5px);
+  top: -6px;
+}
+.rv3 .rv4-fvm__name.is-above {
+  bottom: calc(var(--fvm-r) + 2.5px);
+}
+.rv3 .rv4-fvm__name.is-below {
+  top: calc(var(--fvm-r) + 2.5px);
+}
+.rv3 .rv4-fvm__name.is-end {
+  right: -6px;
+}
+.rv3 .rv4-fvm__name.is-above:not(.is-end),
+.rv3 .rv4-fvm__name.is-below:not(.is-end) {
+  left: 0;
+  transform: translateX(calc(-50% + var(--fvm-shift, 0px)));
+}
+/* A chip dims the dots outside its zone; an open readout dims the rest. */
+.rv3 .rv4-fvm__dot.is-dim {
+  pointer-events: none;
+}
+.rv3 .rv4-fvm__dot.is-dim .rv4-fvm__pip {
+  opacity: 0.16;
+}
+.rv3 .rv4-fvm__dot.is-dim .rv4-fvm__name {
+  opacity: 0;
+}
+.rv3 .rv4-fvm.is-inspecting .rv4-fvm__dot:not(.is-open, .is-dim) .rv4-fvm__pip {
+  opacity: 0.32;
+}
+.rv3 .rv4-fvm.is-inspecting .rv4-fvm__dot:not(.is-open) .rv4-fvm__name {
+  opacity: 0.25;
+}
+/* 696:4440 / 696:4441. */
+.rv3 .rv4-fvm__axis {
+  color: #8d84a6;
+  font-family: var(--rv4-manrope, "Manrope"), sans-serif;
+  font-size: 9.5px;
+  font-weight: 400;
+  line-height: 12.977px;
+  position: absolute;
+  white-space: nowrap;
+}
+.rv3 .rv4-fvm__axis--x {
+  left: calc(26px + var(--fvm-plot) - 132px);
+  top: calc(var(--fvm-plot) + 9px);
+}
+/* Its 81px box centred on the plot's height, the words reading up from its foot. */
+.rv3 .rv4-fvm__axis--y {
+  left: 5px;
+  top: calc(var(--fvm-plot) / 2 + 40.5px);
+  transform: rotate(-90deg);
+  transform-origin: 0 0;
+}
+/* 696:4443 — two 18.62 lines centred in Figma's 38px box, 0.85 under it. */
+.rv3 .rv4-fvm__caption {
+  color: #6b6678;
+  font-family: var(--rv4-manrope, "Manrope"), sans-serif;
+  font-size: 12.4131px;
+  font-weight: 400;
+  line-height: 18.6196px;
+  margin: 0;
+  padding: 0.3804px 0 1.2267px;
+}
+/* The readout a dot opens — Figma draws none; V2's zone, name and two scores, in
+ * V4's type. It opens above the dot, toward the plot's middle near an edge, and
+ * under the dot in the plot's top quarter. */
+.rv3 .rv4-fvm__readout {
+  background: #fff;
+  border: 1px solid rgb(var(--fvm-rgb) / 0.3);
+  border-radius: 12px;
+  bottom: calc(var(--fvm-r) + 8px);
+  box-shadow:
+    0 12px 26px -14px rgba(22, 16, 33, 0.32),
+    0 2px 6px -3px rgba(22, 16, 33, 0.14);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  left: 0;
+  max-width: 176px;
+  opacity: 0;
+  padding: 9px 11px 10px;
+  pointer-events: none;
+  position: absolute;
+  text-align: left;
+  transform: translate(-50%, 4px);
+  transition:
+    opacity 180ms ease-out,
+    transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 240ms;
+  visibility: hidden;
+  width: max-content;
+  z-index: 3;
+}
+.rv3 .rv4-fvm__dot.is-open .rv4-fvm__readout {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition:
+    opacity 180ms ease-out,
+    transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s;
+  visibility: visible;
+}
+.rv3 .rv4-fvm__dot.is-flip-x .rv4-fvm__readout {
+  left: auto;
+  right: calc(var(--fvm-r) * -1);
+  transform: translate(0, 4px);
+}
+.rv3 .rv4-fvm__dot.is-flip-start .rv4-fvm__readout {
+  left: calc(var(--fvm-r) * -1);
+  transform: translate(0, 4px);
+}
+.rv3 .rv4-fvm__dot.is-flip-x.is-open .rv4-fvm__readout,
+.rv3 .rv4-fvm__dot.is-flip-start.is-open .rv4-fvm__readout {
+  transform: none;
+}
+.rv3 .rv4-fvm__dot.is-flip-y .rv4-fvm__readout {
+  bottom: auto;
+  top: calc(var(--fvm-r) + 8px);
+}
+.rv3 .rv4-fvm__readout-zone {
+  color: rgb(var(--fvm-rgb));
+  font-family: var(--font-sans);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  line-height: 12px;
+  text-transform: uppercase;
+}
+.rv3 .rv4-fvm__readout-name {
+  color: #161021;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 17px;
+}
+.rv3 .rv4-fvm__meters {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 2px;
+}
+.rv3 .rv4-fvm__meter {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.rv3 .rv4-fvm__meter-head {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+.rv3 .rv4-fvm__meter-label {
+  color: #6b6678;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 14px;
+  white-space: nowrap;
+}
+.rv3 .rv4-fvm__meter-value {
+  color: #161021;
+  font-family: var(--font-serif);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 14px;
+}
+.rv3 .rv4-fvm__meter-pips {
+  display: flex;
+  gap: 2.5px;
+}
+.rv3 .rv4-fvm__meter-pips > span {
+  background: rgb(var(--fvm-rgb) / 0.18);
+  border-radius: 50%;
+  height: 6px;
+  width: 6px;
+}
+.rv3 .rv4-fvm__meter-pips > span.is-on {
+  background: rgb(var(--fvm-rgb));
+}
+/* Paywalled: the plot under the table's 2px blur, the lock on its middle; the
+ * frame owns the click. */
+.rv3 .rv4-fvm__lock {
+  cursor: pointer;
+}
+.rv3 .rv4-fvm__blurred {
+  filter: blur(2px);
+  user-select: none;
+}
+.rv3 .rv4-fvm__lock .rv4-lockbadge {
+  --rv4-lock-top: calc(50% - 24px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv4-fvm__chip,
+  .rv3 .rv4-fvm__pip,
+  .rv3 .rv4-fvm__name,
+  .rv3 .rv4-fvm__readout,
+  .rv3 .rv4-fvm__dot.is-open .rv4-fvm__readout {
+    transition: none;
+  }
+}
