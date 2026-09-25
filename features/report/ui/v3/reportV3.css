@@ -2442,6 +2442,9 @@
   /* 1:172 sits 14px in from a 361px stage — kept as the same offset from its
    * centre, so the glow stays centred when a narrow phone shrinks the column. */
   left: calc(50% - 166.5px);
+  /* It spills past the stage (above), over the next chapter's head where nothing
+   * separates them — decoration, so it never takes that head's taps. */
+  pointer-events: none;
   position: absolute;
   top: -33.39px;
   width: 332px;
