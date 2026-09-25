@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import V4FantasyMap from "@features/report/ui/v3/V4FantasyMap";
 import { MAP_DOTS } from "@features/report/ui/sections/FantasySection";
-import { getFantasyMapDots } from "@features/report/server/fantasyMap";
+import { getFantasyMapDots, type FantasyMapDot } from "@features/report/server/fantasyMap";
 import { placeNames } from "@features/report/ui/v3/fantasyMapNames";
 
 /**
@@ -116,6 +116,109 @@ describe("V4FantasyMap — open (696:4393)", () => {
     for (const name of container.querySelectorAll(".rv4-fvm__name")) {
       expect(name).toHaveClass("is-below");
       expect(name).not.toHaveClass("is-end");
+    }
+  });
+
+  it("places the names again when one changes size — a web font landing", () => {
+    // WebKit fires no event for a face that lands after mount, so the names were set
+    // on the fallback font's widths and stayed there (final review 2, WebKit at 320).
+    const observed: Element[] = [];
+    let fire = () => {};
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: () => void) {
+          fire = callback;
+        }
+        observe(el: Element) {
+          observed.push(el);
+        }
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+    let nameWidth = 40;
+    const rect = (width: number, height: number) =>
+      ({ left: 0, top: 0, width, height, right: width, bottom: height, x: 0, y: 0 }) as DOMRect;
+    const measure = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        if (this.classList.contains("rv4-fvm__frame")) return rect(300, 300);
+        if (this.classList.contains("rv4-fvm__name")) return rect(nameWidth, 12);
+        return rect(0, 0);
+      });
+    const spotsFor = (width: number) =>
+      placeNames(
+        SPARK_DOTS.map((d) => ({ x: d.x, y: d.y, r: d.q === "lean" ? 7.5 : 6.5 })),
+        SPARK_DOTS.map((d) => (d.label ? { width, height: 12 } : null)),
+        300,
+        []
+      );
+    const shown = (root: HTMLElement) =>
+      dots(root).map((dot) => {
+        const name = dot.querySelector<HTMLElement>(".rv4-fvm__name");
+        return name ? `${name.className} ${name.style.getPropertyValue("--fvm-shift")}` : null;
+      });
+    const expected = (width: number) =>
+      spotsFor(width).map((spot, i) =>
+        SPARK_DOTS[i]!.label
+          ? `rv4-fvm__name is-${spot?.side ?? "below"}${spot ? "" : " is-hidden"} ${spot?.shift ?? 0}px`
+          : null
+      );
+    try {
+      const { container } = render(<V4FantasyMap dots={SPARK_DOTS} locked={false} />);
+      expect(observed.filter((el) => el.classList.contains("rv4-fvm__name"))).toHaveLength(8);
+      expect(shown(container)).toEqual(expected(40));
+      nameWidth = 120;
+      act(() => fire());
+      expect(shown(container)).toEqual(expected(120));
+      expect(expected(120)).not.toEqual(expected(40));
+    } finally {
+      measure.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("leaves a name unprinted where it has no clear spot, its dot still reading it out", () => {
+    // Nine named dots packed round one: the middle name has nowhere clear to go.
+    const crowd: FantasyMapDot[] = [
+      [0.5, 0.5],
+      [0.4, 0.5],
+      [0.6, 0.5],
+      [0.5, 0.44],
+      [0.5, 0.56],
+      [0.4, 0.44],
+      [0.6, 0.56],
+      [0.4, 0.56],
+      [0.6, 0.44],
+    ].map(([x, y], i) => ({
+      label: `Name ${i}`,
+      name: `Name ${i}`,
+      q: "lean" as const,
+      x: x!,
+      y: y!,
+      pull: 7,
+      pleasure: 7,
+    }));
+    const rect = (width: number, height: number) =>
+      ({ left: 0, top: 0, width, height, right: width, bottom: height, x: 0, y: 0 }) as DOMRect;
+    const measure = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        if (this.classList.contains("rv4-fvm__frame")) return rect(300, 300);
+        if (this.classList.contains("rv4-fvm__name")) return rect(60, 12);
+        return rect(0, 0);
+      });
+    try {
+      const { container } = render(<V4FantasyMap dots={crowd} locked={false} />);
+      const middle = dots(container)[0]!;
+      const name = middle.querySelector(".rv4-fvm__name")!;
+      expect(name).toHaveClass("is-hidden");
+      // Still in the page, so it is measured again when the plot grows.
+      expect(name.textContent).toBe("Name 0");
+      expect(middle.getAttribute("aria-label")).toMatch(/^Name 0, fantasy pull 7 of 10/);
+    } finally {
+      measure.mockRestore();
     }
   });
 

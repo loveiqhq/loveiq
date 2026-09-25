@@ -751,6 +751,10 @@ describe("GET /api/report — Fantasy vs. Reality (Report 3.0)", () => {
     expect(json.fantasy.practice.locked).toBe(true);
     expect(json.fantasyArticle.locked).toBe(true);
     expect(json.fantasyCopy.locked).toBe(true);
+    // The map's dots come from paid scores: none travel to a locked reader, V4's or
+    // V2's (final review 2).
+    expect(json.fantasy.mapDots).toBeNull();
+    expect(json.fantasyDots).toBeNull();
     const body = JSON.stringify(json);
     for (const probe of FVR_PROBES) expect(body, probe).not.toContain(probe);
   });
@@ -761,6 +765,7 @@ describe("GET /api/report — Fantasy vs. Reality (Report 3.0)", () => {
     const json = await (await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"))).json();
     expect(json.fantasy.locked).toBe(true);
     expect(json.fantasyArticle.locked).toBe(true);
+    expect(json.fantasy.mapDots).toBeNull();
   });
 
   it("ships a paid Spark Seeker every word", async () => {
@@ -770,6 +775,8 @@ describe("GET /api/report — Fantasy vs. Reality (Report 3.0)", () => {
     expect(json.fantasy.locked).toBe(false);
     expect(json.fantasyArticle.locked).toBe(false);
     expect(json.fantasyCopy.locked).toBe(false);
+    expect(json.fantasy.mapDots).toHaveLength(16);
+    expect(json.fantasyDots).toHaveLength(16);
     const body = JSON.stringify(json);
     for (const probe of FVR_PROBES) expect(body, probe).toContain(probe);
   });
