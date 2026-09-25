@@ -2174,18 +2174,33 @@
 }
 /* While a finger is down the track tracks the finger 1:1, with no easing. */
 
-.rv3 .rv3-deck__card {
+/* A card's slot in the track: the 268px the frames step by. It holds the card's two
+ * designs one over the other (V3DimensionDeck), and its state decides which shows. */
+.rv3 .rv3-deck__slot {
   flex-shrink: 0;
   height: 325px;
   position: relative;
   width: 268px;
 }
+/* One design of the card. A change of focus cross-fades the two — opacity only,
+ * which the compositor runs without laying anything out (review 24.09: the swipe
+ * lagged while the old boxes morphed width, height and inset for 260ms). */
+.rv3 .rv3-deck__card {
+  inset: 0;
+  position: absolute;
+  transition: opacity 180ms ease;
+}
+.rv3 .rv3-deck__slot.is-focused > .rv3-deck__card.is-peeking,
+.rv3 .rv3-deck__slot.is-peeking > .rv3-deck__card.is-focused {
+  opacity: 0;
+  pointer-events: none;
+}
 /* BOTH STATES ARE ABSOLUTE. They used not to be: the focused card sat in normal
  * flow and the peeking card was `position: absolute`, so every change of active
  * card pulled one card out of the track's layout and pushed another back in. The
  * track re-flowed mid-scroll and the card visibly jumped — the "pops up really
- * weird" in review. Same layout mode on both means the geometry can simply
- * transition between the frame's two boxes.
+ * weird" in review. Each design now keeps its own box and the pair cross-fades
+ * (above), so neither box transitions at all.
  *
  * Not a `transform: scale`, and a test pins that: the frames set the peeking
  * body at 12px against the focused card's 14px, so a uniform scale would carry
@@ -2194,13 +2209,6 @@
   display: flex;
   flex-direction: column;
   position: absolute;
-  transition:
-    background 220ms ease,
-    opacity 220ms ease,
-    inset 260ms cubic-bezier(0.22, 1, 0.36, 1),
-    width 260ms cubic-bezier(0.22, 1, 0.36, 1),
-    height 260ms cubic-bezier(0.22, 1, 0.36, 1),
-    border-radius 260ms ease;
 }
 /* Focused — 15:1161 */
 .rv3 .rv3-deck__card.is-focused .rv3-deck__inner {
@@ -2378,6 +2386,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .rv3 .rv3-deck__track,
+  .rv3 .rv3-deck__card,
   .rv3 .rv3-deck__inner,
   .rv3 .rv3-deck__dot {
     transition: none;
@@ -3444,7 +3453,7 @@
   transition: none;
   width: max-content;
 }
-.rv3 .rv3-deck__card {
+.rv3 .rv3-deck__slot {
   scroll-snap-align: start;
 }
 

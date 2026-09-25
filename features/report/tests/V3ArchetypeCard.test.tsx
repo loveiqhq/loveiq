@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import V3ArchetypeCard from "@features/report/ui/v3/V3ArchetypeCard";
 import { missingReport3CardCopy, report3ArchetypeCard } from "@/data/report3-archetype-card";
 
@@ -78,15 +78,80 @@ describe("V3ArchetypeCard", () => {
 describe("V3DimensionDeck", () => {
   it("renders all four dimensions with exactly one focused", () => {
     const { container } = renderCard();
-    expect(container.querySelectorAll(".rv3-deck__card")).toHaveLength(4);
-    expect(container.querySelectorAll(".rv3-deck__card.is-focused")).toHaveLength(1);
-    expect(container.querySelectorAll(".rv3-deck__card.is-peeking")).toHaveLength(3);
+    expect(container.querySelectorAll(".rv3-deck__slot")).toHaveLength(4);
+    expect(container.querySelectorAll(".rv3-deck__slot.is-focused")).toHaveLength(1);
+    expect(container.querySelectorAll(".rv3-deck__slot.is-peeking")).toHaveLength(3);
   });
 
   it("opens on the requested dimension", () => {
     const { container } = renderCard(2);
-    const focused = container.querySelector(".rv3-deck__card.is-focused");
+    const focused = container.querySelector(".rv3-deck__slot.is-focused");
     expect(focused?.getAttribute("data-dimension")).toBe("attachment");
+  });
+
+  // Review 24.09: "on the Spark Seeker card in the core Archetype, the swipe is
+  // lagging, from communication - initiation - attachment -power". The focused design
+  // used to arrive only once a swipe had SETTLED (scrollend, or 120ms of quiet on
+  // Safari) and then morph its box for 260ms, animating width, height and inset.
+  it("lays out both designs in every slot, so a swap is a cross-fade, not a re-layout", () => {
+    const { container } = renderCard();
+    const slots = container.querySelectorAll(".rv3-deck__slot");
+    expect(slots).toHaveLength(4);
+    for (const slot of slots) {
+      expect(slot.querySelectorAll(":scope > .rv3-deck__card.is-focused")).toHaveLength(1);
+      const peek = slot.querySelectorAll(":scope > .rv3-deck__card.is-peeking");
+      expect(peek).toHaveLength(1);
+      // The same words twice; assistive tech hears them once.
+      expect(peek[0]!.getAttribute("aria-hidden")).toBe("true");
+    }
+  });
+
+  describe("while a swipe is travelling", () => {
+    const setup = () => {
+      vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+        cb(0);
+        return 1;
+      });
+      vi.stubGlobal("cancelAnimationFrame", () => {});
+      const view = renderCard();
+      const viewport = view.container.querySelector<HTMLElement>(".rv3-deck__viewport")!;
+      // 22 + 4 x 268 + 3 x 12 + 69 = 1199 of track in a 359 viewport.
+      Object.defineProperty(viewport, "scrollWidth", { value: 1199, configurable: true });
+      Object.defineProperty(viewport, "clientWidth", { value: 359, configurable: true });
+      const scrollTo = (left: number) => {
+        viewport.scrollLeft = left;
+        fireEvent.scroll(viewport);
+      };
+      const focused = () =>
+        view.container.querySelector(".rv3-deck__slot.is-focused")?.getAttribute("data-dimension");
+      return { scrollTo, focused };
+    };
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("hands focus to the arriving card before the swipe lands", () => {
+      const { scrollTo, focused } = setup();
+      scrollTo(196); // 70% of the way from Communication to Initiation, still moving
+      expect(focused()).toBe("initiation");
+      scrollTo(476); // 70% on to Attachment
+      expect(focused()).toBe("attachment");
+      scrollTo(840); // the end of the track: Power
+      expect(focused()).toBe("power");
+    });
+
+    it("does not flicker when a finger hovers around the midpoint", () => {
+      const { scrollTo, focused } = setup();
+      scrollTo(154); // 55%: not yet
+      expect(focused()).toBe("communication");
+      scrollTo(182); // 65%: Initiation
+      expect(focused()).toBe("initiation");
+      scrollTo(126); // back to 45%: still Initiation
+      expect(focused()).toBe("initiation");
+      scrollTo(98); // 35%: back to Communication
+      expect(focused()).toBe("communication");
+    });
   });
 
   it("is a native scroller, so a trackpad moves it like the other decks", () => {
@@ -98,7 +163,7 @@ describe("V3DimensionDeck", () => {
     expect(V3_CSS).toMatch(/\.rv3-deck__viewport \{[^}]*scroll-snap-type: x mandatory/);
     expect(V3_CSS).toMatch(/\.rv3-deck__viewport \{[^}]*scroll-padding-inline-start: 22px/);
     expect(V3_CSS).toMatch(/\.rv3-deck__track \{[^}]*padding: 14px 69px 6px 22px/);
-    expect(V3_CSS).toMatch(/\.rv3-deck__card \{[^}]*scroll-snap-align: start/);
+    expect(V3_CSS).toMatch(/\.rv3-deck__slot \{[^}]*scroll-snap-align: start/);
     expect(container.querySelectorAll("[data-deck-card]")).toHaveLength(4);
   });
 
@@ -135,6 +200,22 @@ describe("reportV3.css contracts", () => {
     expect(V3_CSS).toMatch(/-webkit-mask: var\(--rv3-deck-glyph\)/);
   });
 
+  it("swaps a card's design on opacity alone, which the compositor runs by itself", () => {
+    const block = (selector: string) => {
+      const at = V3_CSS.indexOf(selector);
+      expect(at, selector).toBeGreaterThan(-1);
+      return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+    };
+    const face = block(".rv3 .rv3-deck__card {");
+    expect(face).toMatch(/position: absolute/);
+    expect(face).toMatch(/transition: opacity 180ms ease/);
+    expect(block(".rv3 .rv3-deck__inner {")).not.toMatch(/transition/);
+    // A focused slot hides its peeking design and a peeking slot its focused one.
+    expect(V3_CSS).toContain(".rv3 .rv3-deck__slot.is-focused > .rv3-deck__card.is-peeking,");
+    const hidden = block(".rv3 .rv3-deck__slot.is-peeking > .rv3-deck__card.is-focused {");
+    expect(hidden).toMatch(/opacity: 0/);
+  });
+
   it("stops the deck animating under prefers-reduced-motion", () => {
     // Match the block that actually names the deck rather than the last one in the
     // file: reportV3.css has several reduced-motion blocks and gains more as the V4
@@ -147,8 +228,8 @@ describe("reportV3.css contracts", () => {
     const deckBlock = blocks.find((b) => b.slice(0, b.indexOf("}")).includes(".rv3-deck__track"));
     expect(deckBlock, "no reduced-motion block opens on .rv3-deck__track").toBeDefined();
     expect(deckBlock).toContain("transition: none");
-    // The focused/peeking geometry now transitions, so it has to stop here too.
-    expect(deckBlock!.slice(0, deckBlock!.indexOf("}"))).toContain(".rv3-deck__inner");
+    // The two designs cross-fade, so that has to stop here too.
+    expect(deckBlock!.slice(0, deckBlock!.indexOf("}"))).toContain(".rv3-deck__card");
   });
 });
 

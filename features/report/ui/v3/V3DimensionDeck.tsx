@@ -21,7 +21,24 @@ import type { Report3Dimension } from "@/data/report3-archetype-card";
  * The card geometry is unchanged: a 268px slot, 12px gap, and the focused card
  * resting 22px from the viewport's left edge, exactly where each variant frame draws
  * it (`left: -280px x index`, 280 = 268 + 12).
+ *
+ * THE SWIPE (review 24.09: "the swipe is lagging, from communication - initiation -
+ * attachment - power"). Focus used to move only once a swipe had SETTLED —
+ * `scrollend`, or 120ms of quiet on Safari, which has none — and the two cards then
+ * morphed their boxes for 260ms, animating width, height and inset: layout on every
+ * frame, twice, after the card had already arrived. Now each slot lays out BOTH
+ * designs, one over the other, and a change of focus only cross-fades them — opacity,
+ * which the compositor runs on its own, glow included. And focus follows the swipe
+ * while it travels, read from `scrollLeft` once a frame, so the arriving card is
+ * already the focused one when it lands.
  */
+
+/**
+ * How far past the halfway point a swipe must travel before focus moves: 60% of a
+ * step each way, so a finger resting near the middle cannot flick focus back and
+ * forth between the two cards it straddles.
+ */
+const SWITCH_AT = 0.6;
 
 /** One card slot: 268 card + 12 gap. Every frame offset is a multiple of this. */
 const STEP = 280;
@@ -36,66 +53,72 @@ interface Props {
   initialIndex?: number;
 }
 
+/** One design of a card — 15:1161 focused or 15:1139 peeking, set by its wrapper. */
+const DeckFace: FC<{ d: Report3Dimension }> = ({ d }) => (
+  <div className="rv3-deck__inner">
+    <header className="rv3-deck__head">
+      <span className="rv3-deck__chip" aria-hidden="true">
+        <span className="rv3-deck__glyph" />
+      </span>
+      <span className="rv3-deck__labels">
+        <span className="rv3-deck__title">{d.title}</span>
+        <span className="rv3-deck__sub">{d.subtitle}</span>
+      </span>
+    </header>
+
+    <p className="rv3-deck__value">{d.value}</p>
+    <p className="rv3-deck__body">{d.body}</p>
+    {/* No "Learn more in chapter" link on any card: the body is followed by blank
+     * space, as 15:1136 / 15:1236 / 15:1336 draw it. Removed on Fatih's instruction,
+     * 2026-09-23. */}
+  </div>
+);
+
 const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) => {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(initialIndex);
 
-  // Which card is nearest the scrollport's snap edge. Measured from bounding rects
-  // rather than `offsetLeft`, which is relative to the nearest positioned ancestor
-  // and so carries the page's own x-offset in any centred layout.
+  // Which card the swipe is on, read while it moves. Every card sits a whole STEP
+  // from the one before it and snaps to the same 22px inset, so the scroll offset
+  // alone says where the swipe is — no layout read, once a frame at most.
   useEffect(() => {
     const el = viewportRef.current;
     if (!el) return;
+    const count = dimensions.length;
     let frame = 0;
+    // Its own flag, set BEFORE the frame is requested, rather than the handle
+    // requestAnimationFrame returns: that handle is assigned only after the call
+    // returns, so a callback run during it (a synchronous rAF, as in a test) would
+    // clear a guard that is then overwritten, and the listener would wedge shut.
+    let queued = false;
     const measure = () => {
-      frame = 0;
-      const cards = el.querySelectorAll<HTMLElement>("[data-deck-card]");
-      if (!cards.length) return;
+      queued = false;
+      if (!count) return;
       // At maximum scroll the last card cannot reach the snap edge — the track's
-      // trailing padding is smaller than the gap it would need — so "nearest to the
-      // edge" keeps naming the second-to-last one while the last is fully in view.
-      // Being at the end IS being on the last card, whatever the geometry says.
+      // trailing padding is smaller than the gap it would need — so being at the
+      // end IS being on the last card, whatever the offset says.
       if (el.scrollLeft >= el.scrollWidth - el.clientWidth - 2) {
-        setActive(cards.length - 1);
+        setActive(count - 1);
         return;
       }
-      const edge = el.getBoundingClientRect().left + 22;
-      let nearest = 0;
-      let best = Infinity;
-      cards.forEach((c, i) => {
-        const d = Math.abs(c.getBoundingClientRect().left - edge);
-        if (d < best) {
-          best = d;
-          nearest = i;
-        }
-      });
-      setActive(nearest);
-    };
-    // Measured once the swipe SETTLES, not while it is moving. Changing the
-    // active card swaps a card between the focused and peeking designs — size,
-    // type, background, shadow — and doing that mid-gesture, under a moving
-    // finger and a running snap, is what still read as clunky after the scroll
-    // work was coalesced. `scrollend` fires once the snap lands; browsers
-    // without it (Safari) get the same moment from a short quiet period.
-    let settle = 0;
-    const onSettled = () => {
-      if (settle) window.clearTimeout(settle);
-      settle = 0;
-      if (!frame) frame = window.requestAnimationFrame(measure);
+      const at = el.scrollLeft / STEP;
+      setActive((current) =>
+        Math.abs(at - current) < SWITCH_AT
+          ? current
+          : Math.min(count - 1, Math.max(0, Math.round(at)))
+      );
     };
     const onScroll = () => {
-      if (settle) window.clearTimeout(settle);
-      settle = window.setTimeout(onSettled, 120);
+      if (queued) return;
+      queued = true;
+      frame = window.requestAnimationFrame(measure);
     };
     el.addEventListener("scroll", onScroll, { passive: true });
-    el.addEventListener("scrollend", onSettled);
     return () => {
       el.removeEventListener("scroll", onScroll);
-      el.removeEventListener("scrollend", onSettled);
-      if (settle) window.clearTimeout(settle);
       if (frame) window.cancelAnimationFrame(frame);
     };
-  }, []);
+  }, [dimensions.length]);
 
   // Open on the requested card without animating past the others. Assigning
   // `scrollLeft` rather than calling `scrollTo` keeps this working anywhere the
@@ -143,29 +166,20 @@ const V3DimensionDeck: FC<Props> = ({ dimensions, accent, initialIndex = 0 }) =>
                 key={d.key}
                 data-deck-card
                 data-dimension={d.key}
-                className={`rv3-deck__card ${isFocused ? "is-focused" : "is-peeking"}`}
+                className={`rv3-deck__slot ${isFocused ? "is-focused" : "is-peeking"}`}
                 aria-roledescription="slide"
                 aria-label={`${d.title}: ${d.value}`}
                 style={
                   { "--rv3-deck-glyph": `url(/report/v3/dimensions/${d.key}.svg)` } as CSSProperties
                 }
               >
-                <div className="rv3-deck__inner">
-                  <header className="rv3-deck__head">
-                    <span className="rv3-deck__chip" aria-hidden="true">
-                      <span className="rv3-deck__glyph" />
-                    </span>
-                    <span className="rv3-deck__labels">
-                      <span className="rv3-deck__title">{d.title}</span>
-                      <span className="rv3-deck__sub">{d.subtitle}</span>
-                    </span>
-                  </header>
-
-                  <p className="rv3-deck__value">{d.value}</p>
-                  <p className="rv3-deck__body">{d.body}</p>
-                  {/* No "Learn more in chapter" link on any card: the body is followed
-                   * by blank space, as 15:1136 / 15:1236 / 15:1336 draw it. Removed on
-                   * Fatih's instruction, 2026-09-23. */}
+                {/* Both designs, always laid out; the slot's state cross-fades them.
+                 * The focused one carries the words for assistive tech. */}
+                <div className="rv3-deck__card is-focused">
+                  <DeckFace d={d} />
+                </div>
+                <div className="rv3-deck__card is-peeking" aria-hidden="true">
+                  <DeckFace d={d} />
                 </div>
               </article>
             );
