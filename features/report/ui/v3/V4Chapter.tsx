@@ -28,8 +28,11 @@ import { V4ChapterChevron, V4ChapterTitle } from "./V4ChapterHead";
  */
 
 interface Props {
-  /** Chapter name, e.g. "Core Insecurities". */
-  title: string;
+  /**
+   * Chapter name, e.g. "Core Insecurities". Only a non-collapsible chapter may go
+   * without one — Part I's Introduction lost its title on 2026-09-24.
+   */
+  title?: string;
   /**
    * Renders the "- of the <name>" suffix after the title. Omitted on Part I's
    * chapters, which the frame draws without it.
@@ -103,9 +106,11 @@ const V4Chapter: FC<Props> = ({
         data-node-id="1:175"
         data-name="Chapter H1 + Copy"
       >
-        <div className="rv4-chapter__head">
-          <h3 className={`rv4-chapter__title${archetype ? " has-suffix" : ""}`}>{title}</h3>
-        </div>
+        {title ? (
+          <div className="rv4-chapter__head">
+            <h3 className={`rv4-chapter__title${archetype ? " has-suffix" : ""}`}>{title}</h3>
+          </div>
+        ) : null}
         <div className="rv4-chapter__body">
           {children}
           {rating}
@@ -129,7 +134,7 @@ const V4Chapter: FC<Props> = ({
         aria-controls={bodyId}
         onClick={() => setIsOpen((v) => !v)}
       >
-        <V4ChapterTitle title={title} archetype={archetype} />
+        <V4ChapterTitle title={title ?? ""} archetype={archetype} />
         <V4ChapterChevron />
       </button>
 

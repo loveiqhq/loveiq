@@ -154,8 +154,8 @@ export interface Report3Run {
 export interface Report3Summary {
   /** 1:742 — seven paragraphs, each opening on a bold or extra-bold lead. */
   paragraphs: readonly (readonly Report3Run[])[];
-  /** 1:744 — the extra-bold closing line. */
-  closer: string;
+  /** 1:744 — an extra-bold closing line. The frame dropped it on 2026-09-24. */
+  closer?: string;
 }
 
 /**
@@ -166,6 +166,9 @@ export interface Report3Summary {
  * and `missingReport3CardCopy()` do, so the gap closes loudly.
  */
 export const REPORT_V4_SUMMARY: Readonly<Record<string, Report3Summary>> = {
+  // Re-read from 1:741 on 2026-09-24, after Mark updated the text and moved its
+  // emphasis ("We have updated this text. Please push to staging", 1939884155). The
+  // frame no longer draws the closing line 1:744.
   "Spark Seeker": {
     paragraphs: [
       [
@@ -174,59 +177,57 @@ export const REPORT_V4_SUMMARY: Readonly<Record<string, Report3Summary>> = {
           text: "The Spark Seeker experiences sexuality primarily as a space for aliveness, chemistry, and playful charge.",
         },
         {
-          text: " For them, desire begins in anticipation, energy, and the feeling that something exciting is unfolding. When there is flirtation, novelty, and a sense of \u201Cspark,\u201D their erotic system ignites quickly and vividly.",
+          text: " For them, desire begins in anticipation, energy, and the feeling that something exciting is unfolding. When there is flirtation, novelty, and a sense of “spark,” their erotic system ignites quickly and vividly.",
         },
       ],
       [
+        { text: "They are " },
+        { weight: 700, text: "lively, charismatic, and pleasure-forward lovers" },
+        { text: " who value " },
+        { weight: 700, text: "teasing, spontaneity, and emotional lightness" },
         {
-          weight: 700,
-          text: "They are lively, charismatic, and pleasure-forward lovers who value teasing, spontaneity, and emotional lightness over heaviness or routine.",
-        },
-        {
-          text: " Sexuality is meaningful to them not as reassurance or devotion, but as a way to feel energized, wanted, and fully awake in the moment. Fun, novelty, and momentum are central to their arousal.",
+          text: " over heaviness or routine. Sexuality is meaningful to them not as reassurance or devotion, but as a way to feel energized, wanted, and fully awake in the moment. Fun, novelty, and momentum are central to their arousal.",
         },
       ],
       [
+        { text: "At their best, Spark Seekers create intimacy that feels " },
+        { weight: 700, text: "electric, playful, and creatively alive for both partners." },
         {
-          weight: 700,
-          text: "At their best, Spark Seekers create intimacy that feels electric, playful, and creatively alive for both partners. ",
-        },
-        {
-          text: "Their presence invites laughter, confidence, and erotic adventure. However, because their desire is closely tied to stimulation and freshness, they ",
+          text: " Their presence invites laughter, confidence, and erotic adventure. However, because their desire is closely tied to stimulation and freshness, they ",
         },
         {
           weight: 700,
           text: "may struggle when sex becomes predictable, duty-like, or emotionally dense.",
         },
         {
-          text: "  In such moments, arousal can drop quickly not because attraction is gone, but because their system stops feeling \u201Ccharged.\u201D",
+          text: " In such moments, arousal can drop quickly, not because attraction is gone, but because their system stops feeling “charged.”",
+        },
+      ],
+      [
+        { text: "Spark Seekers may " },
+        {
+          weight: 800,
+          text: "hesitate to slow down or go deeper emotionally, fearing it will dull the spark or trap them in expectations.",
+        },
+        {
+          text: " This can lead to repeated cycles of intensity followed by restlessness, or to disconnection when a partner asks for more consistency than they naturally offer. They may also worry that if they are not exciting, they will lose desirability or feel bored and stuck.",
         },
       ],
       [
         {
           weight: 800,
-          text: "Spark Seekers may hesitate to slow down or go deeper emotionally, fearing it will dull the spark or trap them in expectations. ",
+          text: "Growth for the Spark Seeker lies in learning to sustain desire beyond novelty,",
         },
         {
-          text: "This can lead to repeated cycles of intensity followed by restlessness, or to disconnect when a partner asks for more consistency than they naturally offer. They may also worry that if they are not exciting, they will lose desirability or feel bored and stuck.",
-        },
-      ],
-      [
-        {
-          weight: 800,
-          text: "Growth for the Spark Seeker lies in learning to sustain desire beyond novelty, ",
-        },
-        {
-          text: "building depth without losing play, communicating needs for variety without shame, and developing the capacity to enjoy calm intimacy without interpreting it as \u201Cdead.\u201D",
+          text: " building depth without losing play, communicating needs for variety without shame, and developing the capacity to enjoy calm intimacy without interpreting it as “dead.”",
         },
       ],
       [
         {
-          text: "When supported and understood, the Spark Seeker\u2019s sexuality becomes a powerful source of joy, creativity, and lasting erotic vitality that can keep relationships feeling bright over time.",
+          text: "When supported and understood, the Spark Seeker’s sexuality becomes a powerful source of joy, creativity, and lasting erotic vitality that can keep relationships feeling bright over time.",
         },
       ],
     ],
-    closer: "Not a verdict. A mirror, and a map for where your intimacy goes next.",
   },
 };
 
@@ -296,8 +297,9 @@ export const REPORT_V4_TOP_THREE: Readonly<Record<string, number>> = {
   "Emotional Voyeur": 36.2,
 };
 
-/** Part II · the top-three section's heading — 1:494 (Lora 20/24, -0.8px). */
-export const REPORT_V4_TOP_THREE_HEADING = "3 highest scoring Archetypes";
+/** Part II · the top-three section's heading — 1:494 (Lora 20/24, -0.8px). Mark
+ * capitalised "Highest" and "Scoring" on 2026-09-24 (comment 1939883544). */
+export const REPORT_V4_TOP_THREE_HEADING = "3 Highest Scoring Archetypes";
 
 /** Part II · its lede — 1:496. Two paragraphs, one bold run. */
 export const REPORT_V4_TOP_THREE_LEDE: readonly (readonly Report3Run[])[] = [

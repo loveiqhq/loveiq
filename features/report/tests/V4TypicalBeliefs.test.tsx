@@ -72,14 +72,15 @@ describe("the belief panels", () => {
     expect(container.querySelectorAll(".rv4-sun__row")).toHaveLength(10);
   });
 
-  it("lands every turn on one of the ten sun beliefs", () => {
-    // The authored chapter writes a bespoke shift under each shadow belief; Mark
-    // replaced all ten with the sun beliefs, so the panels read as one set seen
-    // twice. If a future copy pass breaks that, this is where it shows.
+  it("turns each shadow belief into its own shift, apart from the ten sun beliefs", () => {
+    // Since 2026-09-24 (comment 1940014480) the frame follows the authored chapter:
+    // a bespoke shift under each shadow belief, and a sun panel of its own. They used
+    // to be one set seen twice.
     const { turns, sun } = REPORT_V4_TYPICAL_BELIEFS["Spark Seeker"]!;
     expect(turns).toHaveLength(10);
+    expect(new Set(turns.map((t) => t.shift))).toHaveLength(10);
     expect(new Set(sun)).toHaveLength(10);
-    for (const turn of turns) expect(sun).toContain(turn.shift);
+    for (const turn of turns) expect(sun).not.toContain(turn.shift);
   });
 });
 

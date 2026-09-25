@@ -7,13 +7,12 @@
  * hands the rows down as props, exactly as buildLearnMoreForReader does for the
  * long-form articles.
  *
- * THE PAIRINGS ARE THE FRAME'S, NOT THE SOURCE DOCUMENT'S. The authored chapter
- * ("Spark_Seeker_Typical Beliefs_Chapter") writes a bespoke shift under each
- * shadow belief — "Planning can create the conditions for anticipation and spark."
- * Mark replaced all ten with the short sun beliefs from the same chapter, so the
- * two panels read as one set seen twice rather than two separate lists. These are
- * read off the frame, including the hidden `line/shift · hidden at rest` text on
- * the rows the frame delivers un-turned.
+ * THE PAIRINGS ARE THE FRAME'S. On 2026-09-24 Mark re-set both panels to the authored
+ * chapter ("Spark_Seeker_Typical Beliefs_Chapter"; comment 1940014480, after Sanjin
+ * flagged that they differed from the doc): each shadow belief turns into the
+ * chapter's own bespoke shift, and the sun panel carries ten sun beliefs of its own.
+ * These are read off the frame, including the hidden `line/shift · hidden at rest`
+ * text on the rows the frame delivers un-turned.
  *
  * Quotation marks are the frame's curly pairs, not ASCII, because the copy is set
  * in Lora italic where the difference is obvious.
@@ -22,7 +21,7 @@
 export interface Report3BeliefTurn {
   /** The shadow belief, struck through once the row turns. */
   shadow: string;
-  /** What it becomes — a sun belief, revealed under "THE SHIFT". */
+  /** What it becomes, revealed under "THE SHIFT". */
   shift: string;
 }
 
@@ -36,61 +35,62 @@ export const REPORT_V4_TYPICAL_BELIEFS: Readonly<Record<string, Report3BeliefPan
     turns: [
       {
         shadow: "“If sex has to be planned, the spark must be gone.”",
-        shift: "“Planned intimacy can still become playful and spontaneous.”",
+        shift: "“Planning can create the conditions for anticipation and spark.”",
       },
       {
         shadow: "“Real desire should happen spontaneously.”",
-        shift: "“Spark can be created together, not only discovered.”",
+        shift: "“Spontaneous desire excites me, but desire can also emerge once intimacy begins.”",
       },
       {
-        shadow: "“If things feel predictable, attraction is fading.”",
-        shift: "“Familiarity can give me more freedom to experiment.”",
+        shadow: "“If things feel predictable, attraction must be fading.”",
+        shift:
+          "“Familiarity can lower excitement sometimes without saying anything definitive about attraction.”",
       },
       {
         shadow: "“Good sex should keep becoming more exciting.”",
-        shift: "“Desire can change in intensity without meaning something is wrong.”",
+        shift:
+          "“Great sex does not always need to escalate. Sometimes depth, connection, or anticipation can be just as powerful.”",
       },
       {
         shadow: "“I need novelty to stay sexually interested.”",
-        shift: "“I can love novelty without needing constant novelty.”",
+        shift:
+          "“Novelty strongly activates my desire, but I can create freshness without constantly needing something completely new.”",
       },
       {
         shadow: "“If my partner rarely initiates, they must not really want me.”",
-        shift: "“I can enjoy pursuit without needing uncertainty to stay interested.”",
+        shift:
+          "“Initiation is one expression of desire, not the only evidence that desire exists.”",
       },
       {
         shadow: "“Being desired proves that I am still attractive and exciting.”",
-        shift: "“Being desired feels good, but it does not determine my worth.”",
+        shift: "“Being desired feels good, but it does not determine my worth or attractiveness.”",
       },
       {
         shadow: "“Talking about how to make sex better makes it less natural.”",
-        shift: "“Curiosity does not mean I am dissatisfied with what I already have.”",
+        shift: "“Talking openly can give us more material to play with, not less.”",
       },
       {
         shadow: "“If I have to ask for flirting or pursuit, it no longer counts.”",
-        shift: "“I can ask directly for more flirting, play, or excitement.”",
+        shift: "“Asking for what turns me on does not make the response less genuine.”",
       },
       {
         shadow: "“Once a relationship becomes too safe or routine, passion inevitably disappears.”",
-        shift: "“A quieter kind of intimacy can still contain genuine desire.”",
+        shift:
+          "“Safety and excitement can coexist, especially when we keep creating room for curiosity and play.”",
       },
     ],
-    /**
-     * 368:5623. The same ten sun beliefs the turns above land on, in the frame's
-     * own order — which is NOT the turn order, so the list is written out rather
-     * than derived from `turns`.
-     */
+    /** 368:5623 — ten sun beliefs of their own, in the frame's order. */
     sun: [
-      "“I can love novelty without needing constant novelty.”",
-      "“Spark can be created together, not only discovered.”",
-      "“Planned intimacy can still become playful and spontaneous.”",
-      "“Familiarity can give me more freedom to experiment.”",
-      "“Being desired feels good, but it does not determine my worth.”",
-      "“I can ask directly for more flirting, play, or excitement.”",
-      "“Curiosity does not mean I am dissatisfied with what I already have.”",
-      "“A quieter kind of intimacy can still contain genuine desire.”",
-      "“I can enjoy pursuit without needing uncertainty to stay interested.”",
-      "“Desire can change in intensity without meaning something is wrong.”",
+      "“Curiosity is one of the ways I keep my sexuality alive.”",
+      "“I enjoy discovering new sides of myself, my partner, and what turns us on.”",
+      "“I can bring playfulness and energy into intimacy instead of waiting for excitement to appear on its own.”",
+      "“Anticipation can be erotic in itself. Flirting, teasing, and build-up can make desire stronger.”",
+      "“I am allowed to want variety, experimentation, and change without assuming something is missing.”",
+      "“I can be open about what excites me and invite my partner into that exploration.”",
+      "“Familiarity can give me enough safety to experiment more boldly.”",
+      "“I notice chemistry quickly, and I can use that sensitivity to understand what makes desire come alive for me.”",
+      "“I can create novelty through small changes in mood, setting, energy, or interaction, not only through completely new experiences.”",
+      "“Sex can stay alive when I treat excitement as something I can participate in creating.”",
     ],
   },
 };

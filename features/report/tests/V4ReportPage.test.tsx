@@ -39,7 +39,12 @@ describe("V4Part1", () => {
   it("renders the part heading, both chapters and the science section", () => {
     const { container } = render(<V4Part1 />);
     expect(screen.getByText("Part I")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Introduction" })).toBeInTheDocument();
+    // "We took the 'Introduction' out" (Mark, 2026-09-24, comment 1939924076): the
+    // chapter keeps its copy and loses only its title.
+    expect(screen.queryByRole("heading", { name: "Introduction" })).toBeNull();
+    expect(
+      screen.getByText(/congratulations on having the courage to look inward/)
+    ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "What shaped this report" })).toBeInTheDocument();
     expect(container.querySelectorAll(".rv4-chapter")).toHaveLength(2);
     expect(container.querySelector(".rv3-method.is-v4")).toBeInTheDocument();
