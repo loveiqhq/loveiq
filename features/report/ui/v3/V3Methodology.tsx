@@ -20,9 +20,11 @@ interface ScienceCard {
   n: string;
   title: string;
   question: string;
-  /** Report V4 shortened five of the seven questions (1:222 and siblings). */
+  /** Report V4's own wording of the question (1:222 and siblings, 493:7082). */
   questionV4?: string;
   chapters: string[];
+  /** Report V4's own chapter list, where it differs (493:7082). */
+  chaptersV4?: string[];
 }
 
 /** 10360:9880 … 10360:10068, transcribed from the frame. */
@@ -49,8 +51,9 @@ const CARDS: readonly ScienceCard[] = [
     n: "03",
     title: "Attachment research",
     question: "How you connect in relationships and what throws you off?",
-    questionV4: "Why does safety change what you want?",
+    questionV4: "How does emotional security shape desire and intimacy?",
     chapters: ["Attachment Style", "Challenges in Partnership"],
+    chaptersV4: ["Attachment Style"],
   },
   {
     accent: "#2fbfba",
@@ -67,7 +70,8 @@ const CARDS: readonly ScienceCard[] = [
     n: "05",
     title: "Behavioral science",
     question: "Why do habits often overwrite intentions? How do we break through self-sabotage?",
-    questionV4: "Why do habits outrun intentions?",
+    // The frame reads "Why habits beat intentions?dasdads"; the tail is stray typing.
+    questionV4: "Why habits beat intentions?",
     chapters: ["Accelerators & Brakes", "Libido Challenges"],
   },
   {
@@ -76,8 +80,9 @@ const CARDS: readonly ScienceCard[] = [
     n: "06",
     title: "Relationship research",
     question: "What keeps intimacy and desire alive over years?",
-    questionV4: "What keeps desire alive over years?",
+    questionV4: "How does desire endure in long-term relationships?",
     chapters: ["Love Language", "Growth Potentials"],
+    chaptersV4: ["Love Language", "Challenges in Partnership"],
   },
   {
     accent: "#6b6678",
@@ -86,10 +91,27 @@ const CARDS: readonly ScienceCard[] = [
     title: "Therapy rooms",
     question:
       "What do decades in the room teach? What are 3 practical ways to keep intimacy intact?",
-    questionV4: "What do decades in the room teach?",
+    questionV4: "What have decades of clinical practice taught us about desire and intimacy?",
     chapters: ["Reading Recommendations"],
   },
 ];
+
+/**
+ * Report V4's order (493:7082, 2026-09-24): Relationship research and Attachment
+ * research trade places. `?v3=1` keeps CARDS as they are.
+ */
+const V4_ORDER = [
+  "Neuroscience",
+  "Psychology",
+  "Relationship research",
+  "Sexology",
+  "Behavioral science",
+  "Attachment research",
+  "Therapy rooms",
+] as const;
+const CARDS_V4: readonly ScienceCard[] = V4_ORDER.map((title) =>
+  CARDS.find((c) => c.title === title)!
+);
 
 /** 10392:18700 — the three source cards under the deck. */
 const SOURCES: readonly { title: string; body: string; icon: string }[] = [
@@ -124,6 +146,7 @@ interface Props {
 }
 
 const V3Methodology: FC<Props> = ({ chrome = "full" }) => {
+  const cards = chrome === "deck" ? CARDS_V4 : CARDS;
   const trackRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
 
@@ -188,7 +211,7 @@ const V3Methodology: FC<Props> = ({ chrome = "full" }) => {
 
       <div className="rv3-sci" data-node-id="10360:9879">
         <div className="rv3-sci__track" ref={trackRef}>
-          {CARDS.map((card) => (
+          {cards.map((card) => (
             <article
               key={card.title}
               className="rv3-sci__card"
@@ -223,7 +246,7 @@ const V3Methodology: FC<Props> = ({ chrome = "full" }) => {
                 {chrome === "deck" ? "Read more in chapter" : "read this in CHAPTER:"}
               </p>
               <ul className="rv3-sci__list">
-                {card.chapters.map((c) => (
+                {((chrome === "deck" && card.chaptersV4) || card.chapters).map((c) => (
                   <li key={c}>
                     <span className="rv3-sci__bullet" aria-hidden="true" />
                     {c}
@@ -234,7 +257,7 @@ const V3Methodology: FC<Props> = ({ chrome = "full" }) => {
           ))}
         </div>
         <div className="rv3-sci__dots" aria-hidden="true">
-          {CARDS.map((c, i) => (
+          {cards.map((c, i) => (
             <span key={c.title} className={i === active ? "is-active" : ""} />
           ))}
         </div>
