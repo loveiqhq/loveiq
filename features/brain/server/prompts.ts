@@ -147,7 +147,8 @@ export const PROMPTS: BrainPrompt[] = [
       `2. Asks from meetings: meeting_promises with person "${person}" and a since date two weeks back. It reads every ` +
       'meeting\'s "Next steps" list by code and shows the board task each one matches. Drop the ones whose task is Done, ' +
       "and name the ones on no board: nobody is tracking those.\n" +
-      `3. Asks hidden in comments: search sources ["gmail"] for Figma and Google Docs comment mails from the last two weeks that ask ${person} to do something.\n\n` +
+      `3. Asks hidden in comments: comment_asks with person "${person}". List the open ones, then the answered ones that ` +
+      "still wait on a resolve, each with its link.\n\n" +
       "One line per item: what, where (direct link), since when. Nothing that is already done.\n\n" +
       HOUSE_RULES,
   },

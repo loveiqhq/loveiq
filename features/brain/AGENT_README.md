@@ -22,6 +22,9 @@ Claude Code) is the door people use; the operator's guide is
   repeat another chapter) plus `voice.ts`'s per-chapter checks, run on a draft or on shipped copy.
 - `server/context-pack.ts` — `get_context_pack`: only what drafting one chapter for one archetype
   needs, inside a fixed size (Mark: "be crazy careful with the context window").
+- `server/comment-asks.ts` — `comment_asks`: asks in Figma comments (read from the Figma API, mentions from
+  the "@Name" in the plain message) and Google Docs comments (from notification emails, checked against the
+  Drive API as the person asked), each with its live open/answered/resolved status.
 - `server/night-shift.ts` — the Night Shift: `queue_research` writes a `research` record, and the
   nightly `brain-night-shift` job (GitHub Actions) answers it with Claude Code, the brain's read-only
   tools over MCP (`RESEARCH_TOOLS`) and the web; every writing tool is denied (`WRITE_TOOLS`).
