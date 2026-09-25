@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import V4TriggerCard from "@features/report/ui/v3/V4TriggerCard";
 import { buildAccelerators } from "@/data/report3-accelerators";
@@ -154,5 +154,91 @@ describe("reportV3.css — trigger card contracts", () => {
     expect(rule(".rv3 .rv4-trig__row.is-locked {")).toContain("filter: blur(2px)");
     expect(rule(".rv3 .rv4-trig--brake .rv4-trig__lock {")).toContain("--rv4-lock-top: 96px");
     expect(rule(".rv3 .rv4-trig--accel .rv4-trig__lock {")).toContain("--rv4-lock-top: 99px");
+  });
+});
+
+/**
+ * Review 24.09: "In the Accelerators & Brakes visual, can we bring back the animation
+ * from V2 Report". 2.0's chart (AcceleratorsSection + report.css .report-chart-reveal)
+ * grows each fill from nothing, staggered row by row, and lands each dot once its
+ * fill has reached it. V4's trigger cards get the same choreography.
+ */
+describe("V4TriggerCard — 2.0's reveal", () => {
+  const rule = (selector: string) => {
+    const at = V3_CSS.indexOf(selector);
+    expect(at, `${selector} missing from reportV3.css`).toBeGreaterThan(-1);
+    return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+  };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("staggers its rows the way 2.0 does, blurred rows included", () => {
+    const { container } = render(
+      <V4TriggerCard tone="brake" rows={LOCKED.brakes} lockedFrom={2} />
+    );
+    const rows = [...container.querySelectorAll<HTMLElement>(".rv4-trig__row")];
+    expect(rows.map((r) => r.style.getPropertyValue("--row"))).toEqual(
+      rows.map((_, i) => String(i))
+    );
+  });
+
+  it("never leaves the scales empty where it cannot observe (SSR, jsdom, old browsers)", () => {
+    const { container } = render(<V4TriggerCard tone="accel" rows={OPEN.accelerators} />);
+    const chart = container.querySelector(".rv4-trig__rows")!;
+    expect(chart.className).toContain("rv4-reveal");
+    expect(chart.className).toContain("is-revealed");
+  });
+
+  it("holds the scales back until the card has actually come on screen", () => {
+    let fire: ((entries: { isIntersecting: boolean }[]) => void) | null = null;
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        constructor(cb: (entries: { isIntersecting: boolean }[]) => void) {
+          fire = cb;
+        }
+        observe() {}
+        disconnect() {}
+      }
+    );
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({
+      top: 5000,
+    } as DOMRect);
+    const { container } = render(<V4TriggerCard tone="brake" rows={OPEN.brakes} />);
+    const chart = container.querySelector(".rv4-trig__rows")!;
+    expect(chart.className).not.toContain("is-revealed");
+    act(() => fire!([{ isIntersecting: true }]));
+    expect(chart.className).toContain("is-revealed");
+  });
+
+  it("grows the fill and lands the knob with 2.0's timings, and pins both for reduced motion", () => {
+    const hidden = (sel: string) =>
+      rule(`.rv3 .rv4-trig__rows.rv4-reveal:not(.is-revealed) ${sel} {`);
+    const moving = (sel: string) => rule(`.rv3 .rv4-trig__rows.rv4-reveal ${sel} {`);
+    expect(hidden(".rv4-trig__fill")).toContain("transform: scaleX(0)");
+    expect(moving(".rv4-trig__fill")).toContain("transform-origin: left center");
+    expect(moving(".rv4-trig__fill")).toContain(
+      "transition: transform 820ms cubic-bezier(0.22, 1, 0.36, 1)"
+    );
+    expect(moving(".rv4-trig__fill")).toContain("transition-delay: calc(var(--row, 0) * 70ms)");
+    expect(hidden(".rv4-trig__knob")).toMatch(/opacity: 0;[\s\S]*transform: scale\(0\.35\)/);
+    expect(moving(".rv4-trig__knob")).toContain(
+      "transition-delay: calc(var(--row, 0) * 70ms + 620ms)"
+    );
+    const reduce = V3_CSS.slice(
+      V3_CSS.indexOf(
+        "@media (prefers-reduced-motion: reduce)",
+        V3_CSS.indexOf(".rv4-trig__rows.rv4-reveal")
+      )
+    );
+    expect(reduce).toMatch(
+      /\.rv4-trig__rows\.rv4-reveal:not\(\.is-revealed\) \.rv4-trig__fill \{\s*transform: none/
+    );
+    // The static geometry the tests above pin is untouched: the reveal only
+    // transforms, so the knob still sits on the fill's end when it lands.
+    expect(rule(".rv3 .rv4-trig__fill {")).toContain("width: var(--fill)");
   });
 });
