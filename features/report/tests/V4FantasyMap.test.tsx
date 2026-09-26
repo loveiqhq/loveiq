@@ -540,6 +540,6 @@ describe("reportV3.css — the fantasy map (696:4393 / 368:3481)", () => {
   });
 
   it("blurs the locked plot 2px, as the table's stand-ins", () => {
-    expect(ruleOf(".rv3 .rv4-fvm__blurred")).toContain("filter: blur(2px)");
+    expect(ruleOf(".rv3 .rv4-fvm__blurred")).toContain("filter: blur(var(--rv4-veil, 5px))");
   });
 });

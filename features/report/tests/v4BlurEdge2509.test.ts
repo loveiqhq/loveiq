@@ -8,9 +8,9 @@ import { describe, expect, it } from "vitest";
  * layers (and the article window's) were exactly as wide as the text, so each blurred
  * line began on a hard vertical cut; WebKit also repeats the box's edge pixels, which
  * drew a darker seam. The copy blurred with `filter` below the ramp spills softly past
- * its edge, which is the "then looks fine". The layers now overhang the text by 8px a
- * side, over three times the 2.5px blur they build to, and stay inside the cards'
- * padding.
+ * its edge, which is the "then looks fine". The layers overhang the text by three times
+ * the blur they build to, and stay inside the cards' padding: 8px while that was 2.5px,
+ * 15px since review 26.09 raised it to 5px (v4Veil2609.test.ts).
  */
 const css = readFileSync(join(__dirname, "..", "ui", "v3", "reportV3.css"), "utf8");
 const first = (selector: string) => {
@@ -20,13 +20,16 @@ const first = (selector: string) => {
 };
 
 describe("V4 — progressive blur layers overhang the text they blur", () => {
-  it("lets every ramp's layers run 8px past the text on both sides", () => {
-    expect(first(".rv3 .rv4-pblur {")).toContain("inset: 0 -8px;");
+  it("lets every ramp's layers run three blurs past the text on both sides", () => {
+    // …and past the block's foot since review 26.09 (v4Veil2609.test.ts).
+    expect(first(".rv3 .rv4-pblur {")).toContain(
+      "inset: 0 calc(var(--rv4-veil, 5px) * -3) calc(var(--rv4-pb-foot) * -1);"
+    );
   });
 
-  it("lets the article window's layers run 8px past the text on both sides", () => {
+  it("lets the article window's layers run three blurs past the text on both sides", () => {
     const blur = first(".rv3 .rv4-learn__blur {");
-    expect(blur).toContain("left: -8px;");
-    expect(blur).toContain("right: -8px;");
+    expect(blur).toContain("left: calc(var(--rv4-veil, 5px) * -3);");
+    expect(blur).toContain("right: calc(var(--rv4-veil, 5px) * -3);");
   });
 });

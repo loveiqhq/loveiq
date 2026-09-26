@@ -297,15 +297,20 @@ describe("reportV3.css — learn-more contracts", () => {
     expect(css).toContain("overflow: clip");
   });
 
-  it("ramps the blur in over the first 76px, then holds Figma's radius 5", () => {
-    // 411:5694 is a PROGRESSIVE layer blur (0 -> 5 over 76px); 170:231 holds 5.
-    // Three backdrop layers whose sigmas add in quadrature to CSS 2.5px.
+  it("ramps the blur in over the first 76px, then holds the veil", () => {
+    // 411:5694 is a PROGRESSIVE layer blur (0 -> 5 over 76px); 170:231 holds 5. Three
+    // backdrop layers whose sigmas add in quadrature to the veil — CSS 2.5px until
+    // review 26.09, 5px since (v4Veil2609.test.ts).
     const layers = [1, 2, 3].map((n) => rule(`.rv3 .rv4-learn__blur > span:nth-child(${n}) {`));
-    const sigmas = layers.map((css) => parseFloat(css.match(/--rv4-blur:\s*([\d.]+)px/)![1]!));
-    expect(Math.sqrt(sigmas.reduce((sum, s) => sum + s * s, 0))).toBeCloseTo(2.5, 1);
+    const factors = layers.map((css) =>
+      parseFloat(css.match(/--rv4-blur:\s*calc\(var\(--rv4-veil, 5px\) \* ([\d.]+)\)/)![1]!)
+    );
+    expect(Math.sqrt(factors.reduce((sum, k) => sum + k * k, 0))).toBeCloseTo(1, 2);
     expect(layers[2]).toContain("--rv4-to: 76px");
-    // Without backdrop-filter the copy falls back to the old uniform blur.
-    expect(V3_CSS).toMatch(/@supports not \(\(backdrop-filter[\s\S]*?filter: blur\(2\.5px\)/);
+    // Without backdrop-filter the copy falls back to the uniform blur.
+    expect(V3_CSS).toMatch(
+      /@supports not \(\(backdrop-filter[\s\S]*?filter: blur\(var\(--rv4-veil, 5px\)\)/
+    );
   });
 
   it("draws the fade exactly as 230:236 does", () => {

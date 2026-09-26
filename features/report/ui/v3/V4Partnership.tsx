@@ -40,7 +40,7 @@ interface Props {
 const V4Partnership: FC<Props> = ({ view, onUnlock }) => {
   const { locked } = view;
   const { free, ramp, rest } = view.body;
-  // The fade ends where paragraph 5's scrambled tail starts, on a wide column too.
+  // The fade ends where paragraph 5's veiled tail starts, on a wide column too.
   const rampRef = useRef<HTMLDivElement>(null);
   useRampFit(rampRef, ramp !== null);
 

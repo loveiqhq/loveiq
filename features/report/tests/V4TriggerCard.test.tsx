@@ -121,6 +121,25 @@ describe("V4TriggerCard — paywalled (386:416 / 386:444)", () => {
     expect(lockedList.textContent).toContain("Control and possessiveness");
   });
 
+  // 452:261: the third row ramps from sharp at its top to the full blur 64% down it;
+  // rows 4-5 sit under the full blur (452:264, 452:267). Held uniform while that row
+  // was a decoy; since review 26.09 it is the real row (lockedBlurCopy.ts).
+  it("ramps the first locked row into the blur, the others under it whole", () => {
+    const { container } = render(
+      <V4TriggerCard tone="brake" rows={LOCKED.brakes} lockedFrom={LOCKED.lockedFrom} />
+    );
+    const locked = [...container.querySelectorAll(".rv4-trig__row.is-locked")];
+    expect(locked).toHaveLength(3);
+    expect(locked[0]).toHaveClass("is-ramp");
+    expect(locked[0]).not.toHaveClass("is-blurred");
+    expect(locked[0]!.querySelectorAll(".rv4-pblur.rv4-trig__ramp > span")).toHaveLength(3);
+    for (const row of locked.slice(1)) {
+      expect(row).toHaveClass("is-blurred");
+      expect(row.querySelector(".rv4-pblur")).toBeNull();
+    }
+    expect(V3_CSS).toMatch(/\.rv3 \.rv4-trig__ramp \{\s*--rv4-band: 64%;/);
+  });
+
   it("uses the accelerators card's own paywalled node", () => {
     const { container } = render(
       <V4TriggerCard tone="accel" rows={LOCKED.accelerators} lockedFrom={LOCKED.lockedFrom} />
@@ -209,8 +228,10 @@ describe("reportV3.css — trigger card contracts", () => {
     expect(V3_CSS).toContain(".rv3 .rv4-trig__row:focus:not(:focus-visible) {");
   });
 
-  it("blurs locked rows at the frame's radius 4 and places each badge as the new frames do", () => {
-    expect(rule(".rv3 .rv4-trig__row.is-locked {")).toContain("filter: blur(2px)");
+  it("blurs locked rows by the veil (review 26.09) and places each badge as the new frames do", () => {
+    expect(rule(".rv3 .rv4-trig__row.is-locked.is-blurred {")).toContain(
+      "filter: blur(var(--rv4-veil, 5px))"
+    );
     expect(rule(".rv3 .rv4-trig--brake .rv4-trig__lock {")).toContain("--rv4-lock-top: 124px");
     expect(rule(".rv3 .rv4-trig--accel .rv4-trig__lock {")).toContain("--rv4-lock-top: 127px");
   });

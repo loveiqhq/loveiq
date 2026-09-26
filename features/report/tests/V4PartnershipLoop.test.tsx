@@ -246,6 +246,6 @@ describe("V4PartnershipLoop — CSS contract", () => {
     const slide = V3_CSS.slice(firstRule(".rv3 .rv4-loop__slide {"));
     expect(slide.slice(0, slide.indexOf("}"))).toContain("scroll-snap-align: center");
     const locked = V3_CSS.slice(firstRule(".rv3 .rv4-loop.is-locked .rv4-loop__orbit-box"));
-    expect(locked.slice(0, locked.indexOf("}"))).toContain("filter: blur(2.5px)");
+    expect(locked.slice(0, locked.indexOf("}"))).toContain("filter: blur(var(--rv4-veil, 5px))");
   });
 });

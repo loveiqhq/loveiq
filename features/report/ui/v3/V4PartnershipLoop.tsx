@@ -31,8 +31,9 @@ import { guardedUnlock } from "./v4Unlock";
  *
  * LOCKED (612:862): the orbit and the slides are blurred, the pager is left sharp,
  * and the brand lock sits on the seam between them — the lock goes on visuals only
- * (V4LockBadge). The slides' lines arrive already scrambled from the server, and a
- * tap anywhere on the section opens the paywall.
+ * (V4LockBadge). The slides' lines arrive as the server sends them (lockedBlurCopy.ts:
+ * the real lines since review 26.09), and a tap anywhere on the section opens the
+ * paywall.
  *
  * The step names and colours are the same for every archetype and live here; only
  * the two lines on each card are the archetype's, and arrive as props.
@@ -73,7 +74,7 @@ const CycleIcon: FC = () => (
 );
 
 interface Props {
-  /** The six steps' lines, in orbit order — scrambled by the server when locked. */
+  /** The six steps' lines, in orbit order; when locked, as lockedBlurCopy.ts decides. */
   stages: readonly Report3LoopStage[];
   locked?: boolean;
   /** Opens the paywall from the locked section. */

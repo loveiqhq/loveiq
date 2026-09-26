@@ -24,12 +24,13 @@ import { guardedUnlock } from "./v4Unlock";
  * "Show all" drops the fade and lists every row; Figma draws no way back, so the
  * category toggle is it.
  *
- * PAYWALLED. The server sends three real rows of the first three categories and
- * blurred stand-ins after them — a scrambled name, no scores, no note — and three
- * stand-ins for every other category. One group owns the click over the stand-ins,
- * the lock and the "Unlock all N fantasies" pill, so any of them opens the paywall
- * once (the badge and the pill only bubble). The stand-ins' scores are drawn here:
- * a score never leaves the server for a row the reader has not bought.
+ * PAYWALLED. The server sends three sharp rows of the first three categories, the
+ * blurred rows after them and three blurred rows for every other category: since
+ * review 26.09 with their real names and scores and no note (lockedBlurCopy.ts); in
+ * decoy mode with a scrambled name and no scores, and the scores under the blur are
+ * drawn here. One group owns the click over the blurred rows, the lock and the
+ * "Unlock all N fantasies" pill, so any of them opens the paywall once (the badge
+ * and the pill only bubble).
  *
  * No copy is quoted in these comments on purpose: production serves browser source
  * maps, so a client component's comments are public.
@@ -95,7 +96,7 @@ const Score: FC<{ tone: "pull" | "pleasure"; value: number }> = ({ tone, value }
 
 interface RowProps {
   row: Report3FantasyRow;
-  /** Stand-in scores, for a blurred row. */
+  /** Scores for a blurred row the server sent without its own (decoy mode). */
   standIn?: readonly [number, number];
   noteId?: string;
   noteOpen?: boolean;
