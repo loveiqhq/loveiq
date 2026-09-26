@@ -31,7 +31,7 @@ import { guardedUnlock } from "./v4Unlock";
  * PAYWALLED. The plot sits under the blur with the lock on it, and the plot owns the
  * click; the chips, axes and caption stay sharp. What it draws there is what the
  * server sends (lockedBlurCopy.ts): the reader's own dots since review 26.09 ("the
- * unlocked content but blurred"), or none in the decoy position, when it draws the
+ * unlocked content but blurred"), or none in decoy mode, when it draws the
  * illustrative layout — never sharp, where invented placements would read as the
  * reader's own.
  *

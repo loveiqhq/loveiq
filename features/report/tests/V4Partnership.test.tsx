@@ -222,7 +222,7 @@ describe("the CSS contract", () => {
 
   it("ramps the blur in over ~105px and floats the card 282px into the gate", () => {
     expect(rule(".rv3 .rv4-cip__ramp")).toContain("--rv4-band: 105px");
-    expect(rule(".rv3 .rv4-cip__blurred")).toContain("filter: blur(2.5px)");
+    expect(rule(".rv3 .rv4-cip__blurred")).toContain("filter: blur(var(--rv4-veil, 5px))");
     expect(rule(".rv3 .rv4-cip__gate .rv4-premium")).toContain("top: 282px");
   });
 

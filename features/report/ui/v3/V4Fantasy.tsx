@@ -26,10 +26,10 @@ import { guardedUnlock } from "./v4Unlock";
  *
  * THE PAYWALLED STATE — 305:217. The intro stays sharp; the map blurs its plot; the
  * table shows its locked rows; "Common challenges" sits under the full blur at full
- * length, scrambled on
- * the server, with the chapter-body Premium card on it. The frame's blurred block
- * also repeats the practice, which has a gated card of its own, so it is left out.
- * The blurred copy owns the click, which is why the card's CTA carries no handler.
+ * length, as the server sends it (lockedBlurCopy.ts), with the chapter-body Premium
+ * card on it. The frame's blurred block also repeats the practice, which has a gated
+ * card of its own, so it is left out. The blurred copy owns the click, which is why
+ * the card's CTA carries no handler.
  */
 
 interface Props {

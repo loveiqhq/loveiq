@@ -42,7 +42,7 @@ interface Props {
 const V4Accelerators: FC<Props> = ({ view, onUnlock }) => {
   const locked = view.lockedFrom !== null;
   const { free, ramp, rest } = view.challenges;
-  // The fade ends where the ramp's scrambled tail starts, on a wide column too.
+  // The fade ends where the ramp's veiled tail starts, on a wide column too.
   const rampRef = useRef<HTMLDivElement>(null);
   useRampFit(rampRef, ramp !== null);
 

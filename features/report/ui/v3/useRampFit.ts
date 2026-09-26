@@ -3,15 +3,16 @@
 import { useLayoutEffect, type RefObject } from "react";
 
 /**
- * Keeps a paywall ramp's fade off its scrambled tail — Report V4.
+ * Keeps a paywall ramp's fade off its veiled tail — Report V4.
  *
- * A ramp paragraph is real through an anchor sentence and scrambled after it
- * (splitRamp, the `veiled` runs). The anchor is chosen so that on a phone the real
- * part outlasts the fade band. In the 552–590px tablet/desktop column the same
+ * A ramp paragraph fades in over an anchor sentence; the rest of it, the `veiled`
+ * runs (splitRamp), belongs under the full blur — the real copy since review 26.09,
+ * scrambled in decoy mode (lockedBlurCopy.ts). The anchor is chosen so that on a
+ * phone it outlasts the fade band. In the 552–590px tablet/desktop column the same
  * sentence runs to fewer lines, so the tail rose into the band's light blur and read
- * as gibberish (review 25.09). This measures where the tail's first line starts and
- * sets `--rv4-band-fit` on the ramp; CSS takes the lesser of it and the drawn band,
- * so phones keep the band exactly as drawn.
+ * as gibberish (review 25.09); the real copy would read outright. This measures
+ * where the tail's first line starts and sets `--rv4-band-fit` on the ramp; CSS takes
+ * the lesser of it and the drawn band, so phones keep the band exactly as drawn.
  *
  * Measured again when the ramp changes size (the column, or a collapsed chapter
  * opening), whenever a web font finishes loading (which moves the wrap; Chromium and

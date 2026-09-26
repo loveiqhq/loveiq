@@ -21,7 +21,7 @@ import { guardedUnlock } from "./v4Unlock";
  * unlocked reader see the same teaser and the same link. The wall appears only on
  * expand, which is what makes it a conversion surface rather than a bounce.
  *
- * ON THE BLUR. The gated window is real text under `filter: blur(2.5px)`, which
+ * ON THE BLUR. The gated window is real text under the blur (--rv4-veil), which
  * is a paint effect and nothing more — LockedPreviewImage.tsx:6-12 says so. What
  * makes that safe is not the blur but `article.gated`: the server hands a locked
  * reader only the few blocks the window can actually show (see

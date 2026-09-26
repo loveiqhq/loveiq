@@ -298,7 +298,9 @@ describe("reportV3.css — belief panel contracts", () => {
   });
 
   it("blurs locked rows at Figma's radius 5 (CSS 2.5px), with the ramp row left to the overlay", () => {
-    expect(block(".rv3 .rv4-turn__row.is-locked.is-blurred,")).toContain("filter: blur(2.5px)");
+    expect(block(".rv3 .rv4-turn__row.is-locked.is-blurred,")).toContain(
+      "filter: blur(var(--rv4-veil, 5px))"
+    );
     // The old uniform 5px is switched off for every locked row first.
     const locked = block(".rv3 .rv4-turn__row.is-locked,");
     expect(locked).toContain("filter: none");
@@ -306,13 +308,16 @@ describe("reportV3.css — belief panel contracts", () => {
     expect(block(".rv3 .rv4-sun__ramp {")).toContain("--rv4-band: 65.6%");
   });
 
-  it("stacks the progressive blur to 2.5px, sigmas in quadrature", () => {
-    const sigmas = [1, 2, 3].map((n) =>
+  it("stacks the progressive blur to the veil, sigmas in quadrature", () => {
+    // 2.5px until review 26.09, 5px since (v4Veil2609.test.ts).
+    const factors = [1, 2, 3].map((n) =>
       parseFloat(
-        block(`.rv3 .rv4-pblur > span:nth-child(${n}) {`).match(/--rv4-pb:\s*([\d.]+)px/)![1]!
+        block(`.rv3 .rv4-pblur > span:nth-child(${n}) {`).match(
+          /--rv4-pb:\s*calc\(var\(--rv4-veil, 5px\) \* ([\d.]+)\)/
+        )![1]!
       )
     );
-    expect(Math.sqrt(sigmas.reduce((sum, s) => sum + s * s, 0))).toBeCloseTo(2.5, 1);
+    expect(Math.sqrt(factors.reduce((sum, k) => sum + k * k, 0))).toBeCloseTo(1, 2);
   });
 
   /**
