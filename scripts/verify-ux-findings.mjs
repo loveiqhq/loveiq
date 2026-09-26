@@ -51,7 +51,11 @@ import { hogQuery } from "./lib/hogql.mjs";
 // Shared with scripts/replay-bench/score.mjs, which runs under plain node and
 // cannot import this file. That module documents what earns a probe a place in
 // the set, and why an unscoped `clear` is not evidence about anyone.
-import { CLAIM_SCOPED_PROBES, SESSION_REPLAY_PROBES } from "./lib/claim-scoped-probes.mjs";
+import {
+  CLAIM_SCOPED_PROBES,
+  replayCanSpeakTo,
+  SESSION_REPLAY_PROBES,
+} from "./lib/claim-scoped-probes.mjs";
 
 /**
  * Probes that OPEN A REPORT, and are therefore claim-scoped once they are given
@@ -1811,9 +1815,16 @@ for (const [
    * where they all pass is exactly where that matters.
    *
    * Needs a report: the replay drives the report page, so a survey-only
-   * session has no route for it to follow.
+   * session has no route for it to follow. And a claim ABOUT the report, for
+   * the same reason (replayCanSpeakTo): a fault it finds there cannot confirm
+   * a tap on the survey, which is what its false confirmations had in common.
    */
-  if (replaysLeft > 0 && reportToken && !results.some((r) => !r.passed && !r.inconclusive)) {
+  if (
+    replaysLeft > 0 &&
+    reportToken &&
+    replayCanSpeakTo(scannerName, clickTarget) &&
+    !results.some((r) => !r.passed && !r.inconclusive)
+  ) {
     replaysLeft -= 1;
     results.push(runProbe("replay-session.mjs", viewport, clickTarget, reportToken, sessionId));
   }

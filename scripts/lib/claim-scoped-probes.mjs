@@ -39,6 +39,25 @@ export const CLAIM_SCOPED_PROBES = new Set(["verify-dead-click-target.mjs"]);
 export const SESSION_REPLAY_PROBES = new Set(["replay-session.mjs"]);
 
 /**
+ * Can the replay speak to this claim at all?
+ *
+ * It drives the reader's REPORT and nothing else, so only a claim about the report:
+ * one whose tapped element was on /report/, or, with no element, one that did not
+ * come from a scanner or log that watches the survey. Otherwise a fault it finds on
+ * the report "confirms" a claim about another page. That was #282 and the held
+ * finding of 2026-09-26: both a single dead tap on a /survey button, both
+ * confirmed only by the report replay, both ruled out by a person.
+ *
+ * @param {string | null | undefined} scannerName
+ * @param {{ pathname?: string } | null | undefined} clickTarget
+ */
+export function replayCanSpeakTo(scannerName, clickTarget) {
+  const page = String(clickTarget?.pathname ?? "");
+  if (page) return page.startsWith("/report/");
+  return !/survey/i.test(String(scannerName ?? ""));
+}
+
+/**
  * Was the replay the only thing that confirmed it? Such a row waits for a
  * person rather than counting as the scanner being right.
  *

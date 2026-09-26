@@ -94,7 +94,7 @@ describe("replaying the reader's own route", () => {
     // The replay drives the report page, so a survey-only session has no route
     // for it to follow — it would spend one of two slots to return
     // inconclusive. The gate is the reader having a report at all.
-    const gate = /if \(replaysLeft > 0 && reportToken &&/;
+    const gate = /if \(\s*replaysLeft > 0 &&\s*reportToken &&/;
     expect(VERIFIER).toMatch(gate);
   });
 
