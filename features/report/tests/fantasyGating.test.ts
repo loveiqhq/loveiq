@@ -44,7 +44,7 @@ describe("the authored copy (304:291 / 368:1920 / 441:6187)", () => {
       text: "What a fantasy might actually be about",
     });
     expect(textOf(SPARK.intro[0]!)).toBe(
-      "A sexual fantasy can feel like evidence. If a scene is intensely arousing or keeps returning, it is easy to assume it must reveal something you secretly want. But fantasy and real-world desire are not the same psychological experience."
+      "A sexual fantasy can feel like evidence. If a scene is intensely arousing or keeps returning, it is easy to assume it must reveal something you secretly want. However, fantasy and real-world desire are not the same psychological experience."
     );
     expect(textOf(SPARK.intro[11]!)).toBe(
       "For the Spark Seeker, this matters because fantasy can concentrate novelty, pursuit and intensity into their purest form. That can make imagination useful, but it can also influence what real desire is expected to feel like."

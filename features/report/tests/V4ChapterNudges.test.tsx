@@ -77,6 +77,9 @@ describe("V4ChapterNudges — 663:1089", () => {
     ]);
   });
 
+  // Challenges' line is Sanjin's polish of 26.09 (Mark: "this sentence needs a little
+  // polish", 1942399260; Sanjin: "better?"). 712:332 drops the final period every other
+  // line has; it keeps one here (ruling 3 of the 26.09 round).
   it("carries Sanjin's support lines (712:262 / 321 / 332 / 343), stray spaces out", () => {
     expect(REPORT_V4_NUDGES.map((n) => [n.id, n.support])).toEqual([
       [
@@ -89,7 +92,7 @@ describe("V4ChapterNudges — 663:1089", () => {
       ],
       [
         "challenges_in_partnership",
-        "Understand where your needs and habits can be misread by a partner, and how to reduce the friction without losing what matters to you.",
+        "Understand where your needs and habits can be misread by a partner, and how to navigate those differences with less friction and greater understanding.",
       ],
       [
         "typical_sexual_fantasy_amp_practice_tendencies",

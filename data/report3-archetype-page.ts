@@ -257,7 +257,8 @@ export const REPORT_V4_CORE_ARCHETYPE_LEDE: readonly Report3Run[] = [
  * renders for all fourteen. The questions and support lines are Sanjin's (review
  * round 25.09, the all-open panel 712:243: 712:260/262, 282/321, 298/332,
  * 314/343), set in Mark's final panel (1:847). Two stray double spaces in the frame
- * are single here. Each row's part and title come from V4's chapter order
+ * are single here. Challenges' line is Sanjin's polish of 26.09 (Mark 1942399260);
+ * 712:332 drops its final period and it keeps one here, as every other line has. Each row's part and title come from V4's chapter order
  * (V4ChapterNudges), so they follow it if it moves.
  */
 export interface Report3Nudge {
@@ -288,7 +289,7 @@ export const REPORT_V4_NUDGES: readonly Report3Nudge[] = [
     id: "challenges_in_partnership",
     question: "What do your partners hear that you never said?",
     support:
-      "Understand where your needs and habits can be misread by a partner, and how to reduce the friction without losing what matters to you.",
+      "Understand where your needs and habits can be misread by a partner, and how to navigate those differences with less friction and greater understanding.",
   },
   {
     id: "typical_sexual_fantasy_amp_practice_tendencies",
