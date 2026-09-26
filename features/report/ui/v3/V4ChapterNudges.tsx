@@ -10,7 +10,7 @@ import { REPORT_V4_CHAPTER_BY_ID, REPORT_V4_CHAPTERS } from "./reportV3Nav";
 import { goToV4Chapter } from "./v4OpenChapter";
 
 /**
- * Part II's "What you will discover" — Figma 1:763: the H2 1:766 over the chapter
+ * Part II's "A Snapshot of what you will learn" — Figma 1:763: the H2 1:766 over the chapter
  * nudges panel, as Mark finalised it on 25.09 (1:847 — "Ignite panel expanded"
  * 696:2647; the text CTA 1941261886) with Sanjin's copy (712:243).
  *
@@ -114,7 +114,7 @@ const V4ChapterNudges: FC = () => {
     });
 
   return (
-    <section className="rv4-nudges" data-node-id="1:763" data-name="What you will discover">
+    <section className="rv4-nudges" data-node-id="1:763" data-name="Snapshot">
       <h2 className="rv4-nudges__head" data-node-id="1:766">
         {REPORT_V4_NUDGES_HEADING}
       </h2>

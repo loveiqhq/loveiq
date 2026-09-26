@@ -247,8 +247,10 @@ export const REPORT_V4_CORE_ARCHETYPE_LEDE: readonly Report3Run[] = [
 ];
 
 /**
- * Part II · "What you will discover" — Figma 1:763: the H2 1:766 over the chapter
- * nudges panel 663:1089, which replaced the Snapshot's five claims (316:250).
+ * Part II · "A Snapshot of what you will learn" — Figma 1:763 (the frame is named
+ * "Snapshot" since 26.09): the H2 1:766 over the chapter nudges panel 663:1089, which
+ * replaced the Snapshot's five claims (316:250). Review 26.09: "The headline changed
+ * to 'A Snapshot of what you will learn'"; it was "What you will discover".
  *
  * One row per chapter the report leads with, in the frame's order. The copy is the
  * same for every archetype — each row is a way into a chapter, not a finding — so it
@@ -267,7 +269,7 @@ export interface Report3Nudge {
   support: string;
 }
 
-export const REPORT_V4_NUDGES_HEADING = "What you will discover";
+export const REPORT_V4_NUDGES_HEADING = "A Snapshot of what you will learn";
 
 export const REPORT_V4_NUDGES: readonly Report3Nudge[] = [
   {
