@@ -222,7 +222,10 @@ export function renderTotals(req: TotalsRequest, people: Person[]): string {
   out.push(
     "",
     `Paid means a succeeded payment above EUR 0 that is not a test` +
-      (comps ? `; ${n(comps)} free unlocks with a coupon are not counted as paid.` : ".") +
+      (comps
+        ? `; ${n(comps)} free ${comps === 1 ? "unlock" : "unlocks"} with a coupon ` +
+          `${comps === 1 ? "is" : "are"} not counted as paid.`
+        : ".") +
       ` A finisher is counted once however many times they paid.` +
       (other
         ? ` ${n(other)} sales in other currencies are counted as paid but not in the EUR revenue.`
