@@ -222,6 +222,13 @@ describe("show_chart: what gets drawn", () => {
     expect(payload.footnote).toContain("GA4 misses visitors who decline cookies");
   });
 
+  it("averages a count over the days that have a record, not over the gaps", async () => {
+    dayOf = (day) => (day >= "2026-09-22" ? { ga4: { sessions: 100 } } : {});
+    const { payload } = await draw({ metrics: ["sessions"], days: 7 });
+    expect(payload.first).toEqual([null, null, null, 100, 100, 100, 100]);
+    expect(payload.headline).toBe("Over the 7 days: 400 on the 4 days with a record, 100 a day");
+  });
+
   it("warns that today's numbers are partial when the chart runs to today", async () => {
     const { text } = await draw({ metrics: ["visitors"], until: "2026-09-26" });
     expect(text).toContain("Today is still going, so its numbers are partial.");
