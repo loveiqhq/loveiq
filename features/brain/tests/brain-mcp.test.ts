@@ -849,6 +849,112 @@ describe("/api/mcp", () => {
       });
     });
 
+    describe("show_chart", () => {
+      const call = async (args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 13,
+                method: "tools/call",
+                params: { name: "show_chart", arguments: args },
+              })
+            )
+          ).json()
+        ).result as {
+          content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
+          isError?: boolean;
+        };
+      const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+      const saved = {
+        site: process.env.NEXT_PUBLIC_SITE_URL,
+        secret: process.env.STRATEGY_DIGEST_SIGNING_SECRET,
+      };
+      const restore = (key: string, value: string | undefined) => {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      };
+
+      beforeEach(() => {
+        process.env.NEXT_PUBLIC_SITE_URL = "https://loveiq.example";
+        process.env.STRATEGY_DIGEST_SIGNING_SECRET = "a-test-secret-of-some-length";
+        mockSupabaseFetch.mockResolvedValue({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => [],
+        });
+        mockRollup.mockResolvedValue(
+          Array.from({ length: 60 }, (_, i) => ({
+            day: new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10),
+            unique_visitors: 200,
+            survey_starts: 28,
+            submissions: 10,
+            report_opens: 12,
+            reports_paid: 1,
+            revenue: "9.90",
+            top_sources: {},
+          }))
+        );
+      });
+      afterEach(() => {
+        restore("NEXT_PUBLIC_SITE_URL", saved.site);
+        restore("STRATEGY_DIGEST_SIGNING_SECRET", saved.secret);
+        mockSupabaseFetch.mockReset();
+        mockFetch.mockReset();
+        mockRollup.mockReset();
+      });
+
+      it("answers with the numbers and the link first, then the picture the link names", async () => {
+        mockFetch.mockResolvedValue({
+          ok: true,
+          headers: new Headers({ "content-type": "image/png" }),
+          arrayBuffer: async () => png.buffer,
+        });
+        const r = await call({ metrics: ["visitors"], days: 7 });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.type).toBe("text");
+        expect(r.content[0]!.text).toContain("Visitors (our own count), 7 days to");
+        expect(r.content[0]!.text).toContain("Over the 7 days: 1,400, 200 a day.");
+        const link = /Picture: (\S+)/.exec(r.content[0]!.text!)?.[1];
+        expect(link).toMatch(
+          /^https:\/\/loveiq\.example\/api\/admin\/digest-image\/metric-trend\?d=/
+        );
+        expect(mockFetch).toHaveBeenCalledWith(link, { timeoutMs: 8_000 });
+        expect(r.content[1]).toEqual({
+          type: "image",
+          mimeType: "image/png",
+          data: Buffer.from(png).toString("base64"),
+        });
+      });
+
+      it("still answers with the numbers and the link when the picture cannot be drawn", async () => {
+        mockFetch.mockResolvedValue({ ok: false, status: 500, headers: new Headers() });
+        const r = await call({ metrics: ["revenue"] });
+        expect(r.isError).toBeFalsy();
+        expect(r.content).toHaveLength(1);
+        expect(r.content[0]!.text).toContain("Revenue in EUR, net of refunds, 30 days to");
+        expect(r.content[0]!.text).toContain(
+          "The picture could not be attached just now; the link above draws it."
+        );
+      });
+
+      it("refuses two numbers of different kinds as an error the caller can fix", async () => {
+        const r = await call({ metrics: ["visitors", "paid_rate"] });
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toMatch(/cannot share one axis/);
+        expect(mockFetch).not.toHaveBeenCalled();
+      });
+
+      it("calls an unreadable rollup an outage, not a flat line", async () => {
+        mockRollup.mockRejectedValue(new Error("down"));
+        const r = await call({ metrics: ["visitors"] });
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toMatch(/outage, not a flat line/);
+      });
+    });
+
     describe("explain_change", () => {
       const call = async (args: Record<string, unknown>) =>
         (
@@ -1030,6 +1136,7 @@ describe("/api/mcp", () => {
         "show_page",
         "what_shipped",
         "explain_change",
+        "show_chart",
         "comment_asks",
         "decision_conflicts",
         "brain_health",
@@ -5847,6 +5954,7 @@ describe("the runbook's tool count is the real one", () => {
     27: "Twenty-seven",
     28: "Twenty-eight",
     29: "Twenty-nine",
+    30: "Thirty",
   };
 
   it("matches what the server actually exposes", () => {
