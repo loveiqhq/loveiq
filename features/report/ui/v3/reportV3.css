@@ -7240,3 +7240,26 @@ html {
 .rv3:is(.rv4, .rv4-doc) {
   --rv4-veil: 5px;
 }
+
+/* ══ Locked chapters — review 26.09 ═══════════════════════════════════════════════
+ * WhatsApp: Mark's "current vs. fully locked" mock, agreed by Marcus. A chapter the
+ * reader has no access to keeps its head and teaser, as a closed chapter draws them,
+ * and the chevron's 34px disc (1:867) is filled as 441:5956's "Lock / Gradient Brand"
+ * badge is, its shadow and its 22px padlock scaled by 34/48. */
+.rv3.rv4 .rv4-chapter__lock {
+  align-items: center;
+  background: linear-gradient(135deg, #fb683e 14.6%, #e88c8c 51.4%, #ac88ed 85.4%);
+  border-radius: 17px;
+  box-shadow: 0 2.83px 8.5px rgba(168, 90, 76, 0.3);
+  color: #fff;
+  display: flex;
+  flex-shrink: 0;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+.rv3.rv4 .rv4-chapter__lock svg {
+  display: block;
+  height: 15.6px;
+  width: 15.6px;
+}

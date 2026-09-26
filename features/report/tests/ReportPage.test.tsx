@@ -84,6 +84,7 @@ import { buildFantasy } from "@/data/report3-fantasy";
 import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
 import { buildAccelerators } from "@/data/report3-accelerators";
 import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
+import { REPORT_V4_DESIGNED_CHAPTER_IDS } from "@/data/report3-archetype-page";
 import { splitArticleForReader } from "@features/report/server/contentGating";
 // The 50/50 was concluded → any non-empty token now buckets to the forced
 // "treatment" arm. The soft "control" (dismissible) experience is now reached
@@ -1392,54 +1393,109 @@ describe("ReportPage", () => {
     });
   });
 
-  // Mark's "they should all be blurred with the icon and the Unlock CTA" (Figma
-  // 1940141608) is pinned on Fantasy vs. Reality's collapsed table categories, not on
-  // chapters (25.09). A locked chapter without a V4 design keeps V2's own preview and
-  // Premium card under V4.
-  describe("V4 — locked chapters without a V4 design keep V2's preview", () => {
+  // WhatsApp, 26.09: Mark proposed locking "the other chapters" outright instead of
+  // letting a paywalled reader open them into V2's preview; Marcus agreed ("Love
+  // this", "Agree") and Mark closed it ("Let's do that then"). Under V4 a chapter the
+  // reader has no access to is its head, its teaser and the gradient lock, and a tap
+  // opens the paywall. Who is locked is the nav badges' answer. The four designed
+  // chapters keep their own gates, and V2's previews for the archetypes still on V2.
+  describe("V4 — a chapter the reader has no access to is locked outright (review 26.09)", () => {
+    const LIBIDO = "libido_challenges_in_relationships";
+    const DESIGNED = [
+      "typical_beliefs",
+      "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
+      "challenges_in_partnership",
+      "typical_sexual_fantasy_amp_practice_tendencies",
+    ];
+    const withPlan = (plan: string | null) => {
+      const response = buildSuccessResponse();
+      (response.data as Record<string, unknown>).accessPlan = plan;
+      return response;
+    };
+    const lockedIds = (container: HTMLElement) =>
+      [...container.querySelectorAll(".rv4-chapter.is-locked")].map((c) => c.id);
+
     afterEach(() => {
       mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
     });
 
-    it("shows V2's Premium card in a locked chapter, and no blurred stand-in anywhere", () => {
+    it("draws a locked chapter as its head, teaser and lock, with no V2 preview", () => {
       mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
-      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      mockUseReportData.mockReturnValue(withPlan(null));
 
       const { container } = render(<ReportPage />);
 
-      expect(
-        container.querySelector("#libido_challenges_in_relationships .report-premium-overlay")
-      ).not.toBeNull();
-      expect(container.querySelector(".rv4-lockch")).toBeNull();
+      const chapter = container.querySelector(`#${LIBIDO}`)!;
+      expect(chapter).toHaveClass("rv4-chapter", "is-locked");
+      expect(chapter.querySelector(".rv4-chapter__lock")).not.toBeNull();
+      expect(chapter.querySelector(".rv4-chapter__teaser")).not.toBeNull();
+      expect(chapter.querySelector(".report-premium-overlay")).toBeNull();
+      expect(chapter.querySelector(".rv3-chapter__body")).toBeNull();
     });
 
     it("opens the paywall for the chapter tapped", async () => {
       const user = userEvent.setup();
       mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
-      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      mockUseReportData.mockReturnValue(withPlan(null));
 
       const { container } = render(<ReportPage />);
-      const chapter = container.querySelector<HTMLElement>("#libido_challenges_in_relationships")!;
-      // The plans pop-up opens by itself for a locked reader and hides the report
-      // from the accessibility tree, so the chapter toggle is found by its attribute.
-      const toggle = chapter.querySelector<HTMLElement>("[aria-expanded]")!;
-      if (toggle.getAttribute("aria-expanded") === "false") await user.click(toggle);
-      await user.click(chapter.querySelector<HTMLElement>(".report-premium-overlay")!);
+      await user.click(container.querySelector<HTMLElement>(`#${LIBIDO} .rv4-chapter__button`)!);
 
       expect(vi.mocked(analytics.trackLockIconClicked)).toHaveBeenCalledWith(
-        expect.objectContaining({ section_id: "libido_challenges_in_relationships" })
+        expect.objectContaining({ section_id: LIBIDO, plan_needed: "full_report" })
       );
     });
 
-    it("leaves ?v3=1 on the same V2 preview", () => {
-      mockSearchParams.mockImplementation(() => new URLSearchParams("v3=1"));
-      mockUseReportData.mockReturnValue(buildSuccessResponse());
+    it("locks Reward System, and never the free Other Archetypes or a designed chapter", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(withPlan(null));
 
       const { container } = render(<ReportPage />);
 
-      expect(
-        container.querySelector("#libido_challenges_in_relationships .report-premium-overlay")
-      ).not.toBeNull();
+      expect([...REPORT_V4_DESIGNED_CHAPTER_IDS].sort()).toEqual([...DESIGNED].sort());
+      const locked = lockedIds(container);
+      expect(locked).toContain("biochemical_reward_system_dynamics");
+      expect(locked).toContain("core_insecurities");
+      expect(locked).not.toContain("constellation");
+      for (const id of DESIGNED) expect(locked).not.toContain(id);
+      // The archetype on screen is still on V2's chapters: its designed chapters open
+      // into V2's own locked preview, as before.
+      const beliefs = container.querySelector("#typical_beliefs")!;
+      expect(beliefs.querySelector("[aria-expanded]")).not.toBeNull();
+      expect(beliefs.querySelector(".rv3-chapter__body")).not.toBeNull();
+    });
+
+    it("locks only what Essentials leaves out", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(withPlan("essentials"));
+
+      const { container } = render(<ReportPage />);
+
+      const locked = lockedIds(container);
+      expect(locked).toContain(LIBIDO);
+      expect(locked).not.toContain("core_insecurities");
+      expect(locked).not.toContain("confidence_level");
+      expect(locked).not.toContain("attachment_style");
+      expect(container.querySelector("#core_insecurities [aria-expanded]")).not.toBeNull();
+    });
+
+    it("locks nothing for a full-report reader", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(withPlan("full_report"));
+
+      const { container } = render(<ReportPage />);
+
+      expect(lockedIds(container)).toEqual([]);
+    });
+
+    it("leaves ?v3=1 on V2's preview", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v3=1"));
+      mockUseReportData.mockReturnValue(withPlan(null));
+
+      const { container } = render(<ReportPage />);
+
+      expect(container.querySelector(".is-locked")).toBeNull();
+      expect(container.querySelector(`#${LIBIDO} .report-premium-overlay`)).not.toBeNull();
     });
   });
 
