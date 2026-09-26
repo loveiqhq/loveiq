@@ -94,6 +94,12 @@ import {
   chartPng,
   drawChart,
 } from "@features/brain/server/chart";
+import {
+  DEFAULT_DAYS as BREAK_EVEN_DEFAULT_DAYS,
+  MAX_DAYS as BREAK_EVEN_MAX_DAYS,
+  MIN_DAYS as BREAK_EVEN_MIN_DAYS,
+  breakEven,
+} from "@features/brain/server/break-even";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
@@ -1726,6 +1732,41 @@ export const TOOLS = [
         },
       },
       required: ["metrics"],
+    },
+  },
+  {
+    name: "break_even",
+    title: "What it takes to break even on ads",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "What the Google Ads spend buys and what it would take to earn it back, from live numbers " +
+      "over a window: the cost per visitor, the share of visitors who finish the survey, the share " +
+      "of finishers who pay, the average order and the net after ad spend, then the level each of " +
+      "those four alone would have to reach to break even. Give any of the four to ask 'what if': " +
+      "'what if 5% of finishers paid', 'what if a visitor cost EUR 0.05'. Counted like the digest's " +
+      "cost per paying customer: every visitor and buyer on the days the ad data covers, not only " +
+      "those who came from an ad, and it says when the purchases are too few to trust.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        days: {
+          type: "number",
+          description: `The window for today's numbers, ${BREAK_EVEN_MIN_DAYS} to ${BREAK_EVEN_MAX_DAYS} days ending yesterday. Default ${BREAK_EVEN_DEFAULT_DAYS}.`,
+        },
+        cost_per_visitor: { type: "number", description: "What if: ad cost per visitor, in EUR." },
+        visitor_to_finish: {
+          type: "number",
+          description: "What if: the percentage of visitors who finish the survey, like 5 for 5%.",
+        },
+        finish_to_paid: {
+          type: "number",
+          description: "What if: the percentage of finishers who pay, like 2 for 2%.",
+        },
+        average_order: {
+          type: "number",
+          description: "What if: the average a paying customer pays, in EUR.",
+        },
+      },
     },
   },
   {
@@ -5051,6 +5092,28 @@ async function callTool(
     return imageResult(outcome.text, [{ data: png, mimeType: "image/png" }]);
   }
 
+  if (name === "break_even") {
+    let outcome;
+    try {
+      outcome = await breakEven({
+        days: args.days,
+        cost_per_visitor: args.cost_per_visitor,
+        visitor_to_finish: args.visitor_to_finish,
+        finish_to_paid: args.finish_to_paid,
+        average_order: args.average_order,
+      });
+    } catch (err) {
+      logger.error({ err }, "brain: break_even failed");
+      return textResult(
+        "The live numbers could not be read right now. This is an outage, not a result.",
+        true
+      );
+    }
+    if (!outcome.ok) return textResult(outcome.message, true);
+    stats.sourceCount = 1;
+    return textResult(outcome.text);
+  }
+
   if (name === "explain_change") {
     const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
     const today = new Date().toISOString().slice(0, 10);
@@ -5451,6 +5514,9 @@ export const MCP_INSTRUCTIONS =
   "CHARTS: show_chart draws one or two daily numbers as a line in the digest's style and returns " +
   "the picture, a link that opens in any browser and pastes into a doc or a deck, and the " +
   "numbers behind it. Use it when someone wants to see a trend rather than read it.\n\n" +
+  "BREAK-EVEN: break_even says what the Google Ads spend buys (cost per visitor, the share who " +
+  "finish, the share who pay, the average order, the net) and what each would have to reach " +
+  "alone to earn the spend back, with 'what if' values in place of any of them.\n\n" +
   'WHAT CHANGED, in plain English: what_shipped lists the "For Marcus:" line of every change ' +
   "that reached main, newest first, read live from the repository.\n\n" +
   "REPORT COPY: get_context_pack gives exactly what one chapter for one archetype needs before " +
