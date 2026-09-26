@@ -8,7 +8,8 @@ import {
   REPORT_V4_CHAPTER_BY_ID,
   type ReportV3Chapter,
 } from "./reportV3Nav";
-import { V4ChapterChevron, V4ChapterTitle } from "./V4ChapterHead";
+import { V4ChapterChevron, V4ChapterLockDisc, V4ChapterTitle } from "./V4ChapterHead";
+import { useV4ChapterLock } from "./V4ChapterLock";
 import { useOnV4OpenChapter } from "./v4OpenChapter";
 
 /**
@@ -102,13 +103,48 @@ const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget, ar
   // shows its "Does this resonate?".
   const [isOpen, setIsOpen] = useState(!isV4);
   const bodyId = `rv3-chapter-body-${sectionId}`;
+  // A chapter the reader has no access to is locked outright under V4 (review 26.09);
+  // no provider exists outside V4. Called before the branch so hook order is stable.
+  const lock = useV4ChapterLock(sectionId);
   // Part II's nudges open a chapter by its section id — V4 only; V3 has no nudges
-  // and its chapters start open. Called before the branch so hook order is stable.
+  // and its chapters start open. A locked chapter does not open for one.
   useOnV4OpenChapter(
     sectionId,
     useCallback(() => setIsOpen(true), []),
-    isV4
+    isV4 && !lock
   );
+
+  if (isV4 && lock) {
+    // Mark's "fully locked" mock (26.09): the head and the teaser as a closed chapter
+    // draws them, the gradient lock where the chevron was. A plain button, not a
+    // disclosure: a tap opens the paywall, and there is no body to open.
+    const teaser = REPORT_V4_CHAPTER_TEASERS[sectionId];
+    return (
+      <section
+        id={sectionId}
+        data-report-section="true"
+        className={`rv3-chapter rv4-chapter is-locked${teaser ? " has-teaser" : ""}`}
+        data-node-id="1:862"
+        data-name="Chapter H1 + Copy"
+      >
+        <button type="button" className="rv4-chapter__button" onClick={lock.unlock}>
+          <V4ChapterTitle
+            title={chapter.title}
+            archetype={REPORT_V4_UNSUFFIXED_CHAPTER_IDS.has(sectionId) ? undefined : archetype}
+          />{" "}
+          <span className="rv3-sr">Locked — unlock to read</span>
+          <V4ChapterLockDisc />
+        </button>
+        {teaser ? (
+          <div className="rv4-chapter__tease">
+            <div>
+              <p className="rv4-chapter__teaser">{teaser}</p>
+            </div>
+          </div>
+        ) : null}
+      </section>
+    );
+  }
 
   if (isV4) {
     // Typical Beliefs' head (V4ChapterHead), not V3's: no book icon, chapter number

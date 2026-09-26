@@ -329,6 +329,12 @@ interface ReportIdentifier {
    * Part of the effect's dependencies, so switching archetype refetches.
    */
   archetypeSlug?: string | null;
+  /**
+   * The page is Report V4 (`?v4=1`). Only then does the API build V4's chapters: no
+   * other version draws them, and a locked reader's copy of them is the real one
+   * under the blur since review 26.09. Part of the effect's dependencies.
+   */
+  v4?: boolean;
 }
 
 async function parseErrorResponse(res: Response): Promise<ReportRequestError> {
@@ -347,7 +353,7 @@ async function parseErrorResponse(res: Response): Promise<ReportRequestError> {
 }
 
 export function useReportData(identifier: ReportIdentifier) {
-  const { sessionId, token, pricingSessionIdOverride, archetypeSlug, preview, previewPlan } =
+  const { sessionId, token, pricingSessionIdOverride, archetypeSlug, preview, previewPlan, v4 } =
     identifier;
   // A preview needs no identifier: there is no reader to identify. Without this
   // the effect never runs on a machine with no session and no token, which is
@@ -393,6 +399,9 @@ export function useReportData(identifier: ReportIdentifier) {
         if (archetypeSlug) {
           params.set("archetype", archetypeSlug);
         }
+        if (v4) {
+          params.set("v4", "1");
+        }
 
         // `?preview=1` answers from static copy instead of the database — see
         // app/api/report/preview/route.ts. Nothing else in this hook changes, so
@@ -401,6 +410,7 @@ export function useReportData(identifier: ReportIdentifier) {
           ? `/api/report/preview?${new URLSearchParams({
               archetype: archetypeSlug ?? "",
               plan: previewPlan ?? "",
+              ...(v4 ? { v4: "1" } : {}),
             }).toString()}`
           : `/api/report?${params.toString()}`;
 
@@ -484,6 +494,7 @@ export function useReportData(identifier: ReportIdentifier) {
     state.refreshKey,
     preview,
     previewPlan,
+    v4,
   ]);
 
   const retry = () => setState((prev) => ({ ...prev, refreshKey: prev.refreshKey + 1 }));

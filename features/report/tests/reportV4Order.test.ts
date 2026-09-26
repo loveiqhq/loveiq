@@ -12,6 +12,7 @@ import {
 import {
   REPORT_V4_PART5_CHAPTERS,
   REPORT_V4_PART_DIVIDER_BY_SECTION,
+  REPORT_V4_PART_FRAME_BY_SECTION,
   REPORT_V4_PARTS,
 } from "@/data/report3-archetype-page";
 
@@ -135,7 +136,7 @@ describe("the V4 chapter order", () => {
       "Part VI",
     ]);
     expect(REPORT_V4_NAV_PARTS[0]!.items.find((i) => i.id === "snapshot")!.label).toBe(
-      "What you will discover"
+      "A Snapshot of what you will learn"
     );
     // ?v3=1 keeps its own.
     expect(REPORT_V3_NAV_PARTS.map((p) => p.part)).toEqual([
@@ -196,8 +197,10 @@ describe("the V4 chapter order", () => {
   it("swaps Accelerators & Brakes' V4 chapter in, behind the 44px separator 1:991", () => {
     // The branch mirrors Typical Beliefs': V4 only, and only where the chapter is
     // written for the archetype on screen — every other reader keeps V2's section.
+    // Since 26.09 the separator is the part opener's, for V2's chapter too.
     expect(REPORT_PAGE).toMatch(/if \(isV4 && accelerators && hasAccelCopy\)/);
-    expect(REPORT_PAGE).toContain('data-node-id="1:991"');
+    expect(REPORT_V4_PART_FRAME_BY_SECTION[AB]!.sep).toBe("1:991");
+    expect(REPORT_PAGE).toContain("data-node-id={v4PartFrame?.sep}");
     expect(REPORT_PAGE).toMatch(/<V4Accelerators\s+view=\{accelerators\}/);
     expect(REPORT_PAGE).toMatch(/title="Accelerators & Brakes"/);
     expect(REPORT_PAGE).not.toMatch(/"Accelerator & Brakes"/);

@@ -29,8 +29,8 @@ import { guardedUnlock } from "./v4Unlock";
  *
  * THE PAYWALLED STATE — 381:222. Rows 1 to 3 still turn. Row 4 is the ramp: the
  * blur fades in over its top half, real copy underneath. Rows 5 to 10 sit under
- * the full blur, and the server has already scrambled their text. The locked rows
- * live in their own group, which owns the click and carries the gradient lock
+ * the full blur, their text as the server sends it (lockedBlurCopy.ts). The locked
+ * rows live in their own group, which owns the click and carries the gradient lock
  * (441:5956) 100px below its top — inside the group rather than measured from the
  * panel, because rows 1 to 3 grow from 61 to 126px as they turn.
  *
@@ -121,8 +121,8 @@ const V4ShadowBeliefs: FC<Props> = ({ turns, lockedFrom = null, onUnlock }) => {
 
   const locked = lockedFrom !== null;
 
-  // Keyed by index: a locked reader's rows 5-10 arrive scrambled, and scrambled
-  // text is not a stable identity.
+  // Keyed by index: in decoy mode a locked reader's rows 5-10 arrive scrambled, and
+  // scrambled text is not a stable identity.
   const row = (turn: Report3BeliefTurnView, i: number) => {
     const isLocked = locked && i >= lockedFrom;
     const isRamp = locked && i === lockedFrom;

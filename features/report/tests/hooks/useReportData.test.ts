@@ -70,6 +70,54 @@ describe("useReportData", () => {
     });
   });
 
+  /**
+   * Final review 26.09: the API built Report V4's four chapters for every request,
+   * so a locked reader of the default report received their copy — the real copy
+   * under the blur since review 26.09 — without ever being shown it. The V4 page now
+   * says it is one, and only then does the API build them.
+   */
+  describe("the V4 page's request", () => {
+    const fetchOk = () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ primaryArchetype: "Spark Seeker", percentages: {} }),
+      });
+      globalThis.fetch = mockFetch as unknown as typeof globalThis.fetch;
+      return mockFetch;
+    };
+
+    it("asks for the V4 chapters when the page is V4", async () => {
+      const mockFetch = fetchOk();
+      const { result } = renderHook(() =>
+        useReportData({ token: "rpt_abcdefghij0123456789", v4: true })
+      );
+      await waitFor(() => expect(result.current.status).toBe("success"));
+      const url = String(mockFetch.mock.calls[0]?.[0] ?? "");
+      expect(url).toContain("/api/report?");
+      expect(new URL(url, "http://localhost").searchParams.get("v4")).toBe("1");
+    });
+
+    it("does not ask for them from any other version", async () => {
+      const mockFetch = fetchOk();
+      const { result } = renderHook(() => useReportData({ token: "rpt_abcdefghij0123456789" }));
+      await waitFor(() => expect(result.current.status).toBe("success"));
+      const url = String(mockFetch.mock.calls[0]?.[0] ?? "");
+      expect(new URL(url, "http://localhost").searchParams.has("v4")).toBe(false);
+    });
+
+    it("says so to the preview endpoint too", async () => {
+      const mockFetch = fetchOk();
+      const { result } = renderHook(() =>
+        useReportData({ sessionId: null, token: null, preview: true, v4: true })
+      );
+      await waitFor(() => expect(result.current.status).toBe("success"));
+      const url = String(mockFetch.mock.calls[0]?.[0] ?? "");
+      expect(url).toContain("/api/report/preview");
+      expect(new URL(url, "http://localhost").searchParams.get("v4")).toBe("1");
+    });
+  });
+
   it("returns a missing status when no report session id exists", () => {
     const { result } = renderHook(() => useReportData({ sessionId: null }));
 

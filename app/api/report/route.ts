@@ -273,6 +273,12 @@ export async function GET(request: Request) {
   }
 
   const rawPricingSessionId = url.searchParams.get("pricingSessionId") ?? undefined;
+  // Report V4's chapters travel only to the V4 page, which says so (`v4=1`, sent by
+  // useReportData). Every other version draws none of them, and since review 26.09 a
+  // locked reader's copy of them is the real one under the blur (lockedBlurCopy.ts),
+  // so building them for every request handed the default report's locked readers
+  // paid copy they are never shown (final review, 26.09).
+  const isV4Request = url.searchParams.get("v4") === "1";
   const tokenParsed = rawToken
     ? tokenSchema.safeParse({ pricingSessionId: rawPricingSessionId, token: rawToken })
     : null;
@@ -853,11 +859,13 @@ export async function GET(request: Request) {
      * below it can never disagree about who has paid. Locked readers receive the
      * first three turns in full and the remaining seven WITHOUT their shift, and
      * everything they only ever see under the full blur — rows 5-10, and the prose
-     * past each ramp — arrives scrambled. See buildTypicalBeliefs.
+     * past each ramp — as lockedBlurCopy.ts decides: the copy itself since review
+     * 26.09, scrambled in decoy mode. See buildTypicalBeliefs. Built for the V4 page
+     * only (isV4Request).
      */
-    const typicalBeliefs = buildTypicalBeliefs(contentArchetype, {
-      locked: !beliefsUnlocked,
-    });
+    const typicalBeliefs = isV4Request
+      ? buildTypicalBeliefs(contentArchetype, { locked: !beliefsUnlocked })
+      : null;
 
     /**
      * The "Go deeper & learn more" article that closes the same chapter — Figma
@@ -873,12 +881,13 @@ export async function GET(request: Request) {
      * chapter it belongs to — see the swap in ReportPage. Half a redesigned
      * chapter under V2's section would read worse than either on its own.
      */
-    const typicalBeliefsArticle = REPORT_V4_LEARN_MORE.typical_beliefs
-      ? {
-          article: splitArticleForReader(REPORT_V4_LEARN_MORE.typical_beliefs, !beliefsUnlocked),
-          locked: !beliefsUnlocked,
-        }
-      : null;
+    const typicalBeliefsArticle =
+      isV4Request && REPORT_V4_LEARN_MORE.typical_beliefs
+        ? {
+            article: splitArticleForReader(REPORT_V4_LEARN_MORE.typical_beliefs, !beliefsUnlocked),
+            locked: !beliefsUnlocked,
+          }
+        : null;
 
     // Report 2.0 Attachment Style section copy — a Part II, essentials-tier
     // PREMIUM section (section 8). The universal slots (`eyebrow`,
@@ -972,10 +981,14 @@ export async function GET(request: Request) {
      * beliefsCopy: `?v4=1` is a copy of V2, and this is NULL for any archetype whose
      * chapter is not written yet, which is the signal ReportPage keeps V2's section
      * on. Same gate as accelCopy. A locked reader receives rows 1-2 of each card, the
-     * intro and the free paragraphs verbatim, each ramp paragraph real only through
-     * its fade band, and everything past it scrambled — see buildAccelerators.
+     * intro and the free paragraphs verbatim, row 3 (the ramp) and each ramp
+     * paragraph through its fade band as written, and everything past them as
+     * lockedBlurCopy.ts decides (the copy itself since review 26.09, scrambled in decoy
+     * mode) — see buildAccelerators. Built for the V4 page only (isV4Request).
      */
-    const accelerators = buildAccelerators(contentArchetype, { locked: !accelUnlocked });
+    const accelerators = isV4Request
+      ? buildAccelerators(contentArchetype, { locked: !accelUnlocked })
+      : null;
 
     /**
      * The "Go deeper & learn more" article closing the same chapter — Figma 235:254,
@@ -1310,11 +1323,14 @@ export async function GET(request: Request) {
      * locked. Rides beside partnershipCopy as `accelerators` rides beside accelCopy:
      * NULL for any archetype whose chapter is not written yet, which is the signal
      * ReportPage keeps V2's section on. Same gate as partnershipCopy. A locked reader
-     * receives paragraphs 1-4 and the practice's opening verbatim, paragraph 5 real
-     * only through its fade band, and everything past it — the loop and the result
-     * included — scrambled; see buildPartnership.
+     * receives paragraphs 1-4 and the practice's opening verbatim, paragraph 5 as
+     * written through its fade band, and everything past it — the loop and the result
+     * included — as lockedBlurCopy.ts decides (the copy itself since review 26.09,
+     * scrambled in decoy mode); see buildPartnership. Built for the V4 page only.
      */
-    const partnership = buildPartnership(contentArchetype, { locked: !partnershipUnlocked });
+    const partnership = isV4Request
+      ? buildPartnership(contentArchetype, { locked: !partnershipUnlocked })
+      : null;
 
     // Report 2.0 "Challenges to Enjoy Sex" (Enjoyment) section copy — a Part IV,
     // FULL_REPORT-tier PREMIUM section
@@ -1502,10 +1518,14 @@ export async function GET(request: Request) {
      * any archetype whose chapter is not written yet, which is the signal ReportPage
      * keeps V2's section on. Same gate as fantasyCopy. A locked reader receives the
      * intro, three rows of the first three table categories and practice paragraphs
-     * 1-4 verbatim; every other row as a blurred stand-in with no scores; "Common
-     * challenges" and the rest of the practice scrambled — see buildFantasy.
+     * 1-4 verbatim; the drawn rows past them, "Common challenges" and the rest of the
+     * practice as lockedBlurCopy.ts decides — the copy (rows with their scores, and the
+     * map's dots) since review 26.09, stand-ins with no scores in decoy mode — see
+     * buildFantasy. Built for the V4 page only (isV4Request).
      */
-    const fantasy = buildFantasy(contentArchetype, { locked: !fantasyUnlocked });
+    const fantasy = isV4Request
+      ? buildFantasy(contentArchetype, { locked: !fantasyUnlocked })
+      : null;
 
     /**
      * The "Go deeper & learn more" article closing the same chapter — Figma 244:258,

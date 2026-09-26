@@ -32,6 +32,7 @@ import {
 } from "./reportNav";
 import ReportMobileNav from "./ReportMobileNav";
 import { V3ModeProvider, V4ModeProvider } from "./v3/V3Chapter";
+import { V4ChapterLockProvider } from "./v3/V4ChapterLock";
 import V3Intro from "./v3/V3Intro";
 import V4Part1 from "./v3/V4Part1";
 import V3ArchetypeCard from "./v3/V3ArchetypeCard";
@@ -43,7 +44,10 @@ import V4TopThreeSection from "./v3/V4TopThreeSection";
 import { report3ArchetypeCard } from "@/data/report3-archetype-card";
 import type { ArchetypeName } from "@features/report/server/archetypeSlug";
 import {
+  REPORT_V4_DESIGNED_CHAPTER_IDS,
+  REPORT_V4_NUDGES_HEADING,
   REPORT_V4_PART_DIVIDER_BY_SECTION,
+  REPORT_V4_PART_FRAME_BY_SECTION,
   REPORT_V4_SUMMARY,
   REPORT_V4_TOP_THREE_HEADING,
 } from "@/data/report3-archetype-page";
@@ -1176,7 +1180,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                             data-report-section="true"
                             className="report-section is-visible rv3-snap"
                           >
-                            {/* V4 draws Figma 1:763's "What you will discover" over
+                            {/* V4 draws Figma 1:763's "A Snapshot of what you will learn" over
                              * the chapter nudges (663:1089), which replaced the
                              * Snapshot for every archetype — the rows are ways into
                              * chapters, not findings — and bring their own heading.
@@ -1191,7 +1195,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                             <div className="rv3-chapter__feedback">
                               {renderFeedback(
                                 "findings",
-                                isV4 ? "What you will discover" : "Five things this report found"
+                                isV4 ? REPORT_V4_NUDGES_HEADING : "Five things this report found"
                               )}
                             </div>
                           </section>
@@ -1899,9 +1903,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       const unlockBeliefs = () => unlockSection(section);
                       return (
                         <Fragment key={section.id}>
-                          {/* 1:858 — 44px between the part heading and its first
-                           * chapter. */}
-                          <div className="rv4-sep" aria-hidden="true" data-node-id="1:858" />
+                          {/* 1:858 — the 44px under the part heading is the part
+                           * opener's (dividerNode below), for every archetype. */}
                           <V4Chapter
                             sectionId={section.id}
                             title="Typical Beliefs"
@@ -1964,7 +1967,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       const unlockAccel = () => unlockSection(section);
                       return (
                         <Fragment key={section.id}>
-                          <div className="rv4-sep" aria-hidden="true" data-node-id="1:991" />
                           <V4Chapter
                             sectionId={section.id}
                             title="Accelerators & Brakes"
@@ -2064,7 +2066,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       const unlockFantasy = () => unlockSection(section);
                       return (
                         <Fragment key={section.id}>
-                          <div className="rv4-sep" aria-hidden="true" data-node-id="1:1146" />
                           <V4Chapter
                             sectionId={section.id}
                             title="Fantasy vs. Reality"
@@ -2219,14 +2220,18 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                 const v4PartHeading = isV4
                   ? REPORT_V4_PART_DIVIDER_BY_SECTION[section.id]
                   : undefined;
+                const v4PartFrame = v4PartHeading
+                  ? REPORT_V4_PART_FRAME_BY_SECTION[section.id]
+                  : undefined;
                 const dividerNode = v4PartHeading ? (
                   <>
-                    {/* 1:484 — Part II opens on a hairline sitting directly above
-                     * its heading. */}
-                    {section.id === "core_archetype" ? (
-                      <div className="rv4-rule" aria-hidden="true" data-node-id="1:484" />
-                    ) : null}
+                    {/* Every part opens as its frame draws it (review 26.09): the
+                     * fading hairline (1:484, 1:850, 1:983, 38:1508, 1:1138), the
+                     * heading, and 44px (1:491, 1:858, 1:991, 38:1516, 1:1146) before
+                     * its first block — the designed chapters and V2's alike. */}
+                    <div className="rv4-rule" aria-hidden="true" data-node-id={v4PartFrame?.rule} />
                     <V4PartHeading heading={v4PartHeading} />
+                    <div className="rv4-sep" aria-hidden="true" data-node-id={v4PartFrame?.sep} />
                   </>
                 ) : partDivider && !isV4 ? (
                   isV3 ? (
@@ -2295,8 +2300,9 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                 // Report 3.0 draws the chapter as Figma 38:1672 (305:350 locked) wherever
                 // the archetype on screen has it written — today Spark Seeker; everyone
                 // else keeps V2's section below. Open in V4Chapter, as Typical Beliefs
-                // and Accelerators & Brakes are, 44px (38:1516) under the part heading,
-                // behind the same gate: the server's Libido, the unlock Curiosity's.
+                // and Accelerators & Brakes are, under the part heading and its 44px
+                // (38:1516, the part opener's), behind the same gate: the server's
+                // Libido, the unlock Curiosity's.
                 const v4Partnership =
                   isV4 &&
                   partnership &&
@@ -2304,7 +2310,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                   section.id === "attachment_style" &&
                   viewArchetype === contentArchetype ? (
                     <Fragment>
-                      <div className="rv4-sep" aria-hidden="true" data-node-id="38:1516" />
                       <V4Chapter
                         sectionId="challenges_in_partnership"
                         title="Challenges in Partnerships"
@@ -2443,9 +2448,27 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   // V4 rides on V3 mode and announces itself on top of it, for the chapter nav
   // and the eyebrow numbers, whose order differs (REPORT_V4_CHAPTERS).
   if (!isV3) return experience;
+  // Under V4 a chapter the reader has no access to is locked outright (review 26.09):
+  // the nav badges' answer, from the same gate the sections use, and its paywall is
+  // that gate's. The designed chapters keep their own gates.
+  const v4ChapterLock = {
+    isLocked: (id: string) =>
+      !REPORT_V4_DESIGNED_CHAPTER_IDS.has(id) && navAccessById.get(id) === "locked",
+    unlock: (id: string) => {
+      const item = REPORT_V3_NAV_PARTS.flatMap((part) => part.items).find((i) => i.id === id);
+      const section = resolvedSections.find((s) => s.id === (item?.gateId ?? id));
+      if (section) unlockSection(section);
+    },
+  };
   return (
     <V3ModeProvider>
-      {isV4 ? <V4ModeProvider>{experience}</V4ModeProvider> : experience}
+      {isV4 ? (
+        <V4ModeProvider>
+          <V4ChapterLockProvider value={v4ChapterLock}>{experience}</V4ChapterLockProvider>
+        </V4ModeProvider>
+      ) : (
+        experience
+      )}
     </V3ModeProvider>
   );
 };
@@ -2557,6 +2580,9 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // production, and /api/report is untouched either way.
     preview: searchParams.get("preview") === "1",
     previewPlan: searchParams.get("plan"),
+    // Only the V4 page asks for V4's chapters: no other version draws them, and a
+    // locked reader's copy of them is the real one under the blur (final review 26.09).
+    v4: isV4,
   });
   // Pass both identifiers — the hook prefers whichever is present and the API
   // resolves the user server-side. Token is the durable identifier (works

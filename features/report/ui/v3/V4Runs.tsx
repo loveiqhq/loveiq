@@ -16,9 +16,10 @@ import type { Report3Run } from "@/data/report3-archetype-page";
  * A "\n" inside a run is a line break the frame sets mid-paragraph (Part I's 1:184
  * breaks after "wrong."), so it renders as <br> rather than collapsing to a space.
  *
- * A `veiled` run is a paywall ramp's scrambled tail. It sits in its own span, the
- * space before it left outside, so the span's first line box is the line where the
- * stand-in text begins — which is what useRampFit measures.
+ * A `veiled` run is a paywall ramp's tail, the part that belongs under the full blur
+ * (scrambled in decoy mode; lockedBlurCopy.ts). It sits in its own span, the space
+ * before it left outside, so the span's first line box is the line where the tail
+ * begins — which is what useRampFit measures.
  */
 
 interface Props {

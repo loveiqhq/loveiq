@@ -222,66 +222,76 @@ describe("V4FantasyMap — open (696:4393)", () => {
     }
   });
 
-  it("sets each of the reader's names where placeNames puts it, once measured", () => {
-    const plot = 300;
-    const far = (plot + 4) / 2;
-    const zoneAt: Record<string, [number, number, number]> = {
-      keep: [9, 8, 104.42],
-      lean: [far + 9, 8, 37.56],
-      not: [9, far + 8, 82.06],
-      hidden: [far + 9, far + 8, 67.23],
-    };
-    const rect = (left: number, top: number, width: number, height: number) =>
-      ({
-        left,
-        top,
-        width,
-        height,
-        right: left + width,
-        bottom: top + height,
-        x: left,
-        y: top,
-      }) as DOMRect;
-    const measure = vi
-      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
-      .mockImplementation(function (this: HTMLElement) {
-        if (this.classList.contains("rv4-fvm__frame")) return rect(0, 0, plot, plot);
-        if (this.classList.contains("rv4-fvm__name"))
-          return rect(0, 0, NAME_WIDTH[this.textContent!]!, 12);
-        if (this.classList.contains("rv4-fvm__zone")) {
-          const [left, top, width] = zoneAt[this.parentElement!.getAttribute("data-zone")!]!;
-          return rect(left, top, width, 12);
-        }
-        return rect(0, 0, 0, 0);
-      });
-    try {
-      const { container } = render(<V4FantasyMap dots={SPARK_DOTS} locked={false} />);
-      const want = placeNames(
-        SPARK_DOTS.map((d) => ({ x: d.x, y: d.y, r: d.q === "lean" ? 7.5 : 6.5 })),
-        SPARK_DOTS.map((d) => (d.label ? { width: NAME_WIDTH[d.label]!, height: 12 } : null)),
-        plot,
-        Object.values(zoneAt).map(([left, top, width]) => ({
+  // Locked too (final review 26.09): the blurred plot draws the reader's own dots,
+  // so their names sit where they will once unlocked, not stacked under each dot.
+  it.each([
+    ["open", false],
+    ["locked", true],
+  ] as const)(
+    "sets each of the reader's names where placeNames puts it, once measured — %s",
+    (_state, locked) => {
+      const plot = 300;
+      const far = (plot + 4) / 2;
+      const zoneAt: Record<string, [number, number, number]> = {
+        keep: [9, 8, 104.42],
+        lean: [far + 9, 8, 37.56],
+        not: [9, far + 8, 82.06],
+        hidden: [far + 9, far + 8, 67.23],
+      };
+      const rect = (left: number, top: number, width: number, height: number) =>
+        ({
           left,
           top,
+          width,
+          height,
           right: left + width,
-          bottom: top + 12,
-        }))
-      );
-      const sides = new Set<string>();
-      dots(container).forEach((dot, i) => {
-        const spot = want[i];
-        const name = dot.querySelector<HTMLElement>(".rv4-fvm__name");
-        if (!spot) return expect(name).toBeNull();
-        expect(name, SPARK_DOTS[i]!.label!).toHaveClass(`is-${spot.side}`);
-        expect(name!.style.getPropertyValue("--fvm-shift")).toBe(`${spot.shift}px`);
-        sides.add(spot.side);
-      });
-      // The map is no longer all names-under-dots.
-      expect(sides.size).toBeGreaterThan(1);
-    } finally {
-      measure.mockRestore();
+          bottom: top + height,
+          x: left,
+          y: top,
+        }) as DOMRect;
+      const measure = vi
+        .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+        .mockImplementation(function (this: HTMLElement) {
+          if (this.classList.contains("rv4-fvm__frame")) return rect(0, 0, plot, plot);
+          if (this.classList.contains("rv4-fvm__name"))
+            return rect(0, 0, NAME_WIDTH[this.textContent!]!, 12);
+          if (this.classList.contains("rv4-fvm__zone")) {
+            const [left, top, width] = zoneAt[this.parentElement!.getAttribute("data-zone")!]!;
+            return rect(left, top, width, 12);
+          }
+          return rect(0, 0, 0, 0);
+        });
+      try {
+        const { container } = render(
+          <V4FantasyMap dots={SPARK_DOTS} locked={locked} onUnlock={() => {}} />
+        );
+        const want = placeNames(
+          SPARK_DOTS.map((d) => ({ x: d.x, y: d.y, r: d.q === "lean" ? 7.5 : 6.5 })),
+          SPARK_DOTS.map((d) => (d.label ? { width: NAME_WIDTH[d.label]!, height: 12 } : null)),
+          plot,
+          Object.values(zoneAt).map(([left, top, width]) => ({
+            left,
+            top,
+            right: left + width,
+            bottom: top + 12,
+          }))
+        );
+        const sides = new Set<string>();
+        dots(container).forEach((dot, i) => {
+          const spot = want[i];
+          const name = dot.querySelector<HTMLElement>(".rv4-fvm__name");
+          if (!spot) return expect(name).toBeNull();
+          expect(name, SPARK_DOTS[i]!.label!).toHaveClass(`is-${spot.side}`);
+          expect(name!.style.getPropertyValue("--fvm-shift")).toBe(`${spot.shift}px`);
+          sides.add(spot.side);
+        });
+        // The map is no longer all names-under-dots.
+        expect(sides.size).toBeGreaterThan(1);
+      } finally {
+        measure.mockRestore();
+      }
     }
-  });
+  );
 
   it("reads each dot out whole: its fantasy, both scores and its zone", () => {
     const { container } = render(<V4FantasyMap dots={SPARK_DOTS} locked={false} />);
@@ -408,10 +418,22 @@ describe("V4FantasyMap — paywalled (368:3481)", () => {
     expect(lock.querySelector(".rv4-lockbadge")).not.toBeNull();
   });
 
-  it("draws the illustrative layout even if dots arrive, so no score is ever drawn locked", () => {
+  // Review 26.09 — Mark: "This should always be the unlocked content but blurred".
+  // The server decides what arrives (lockedBlurCopy.ts): the reader's own dots since
+  // then, drawn under the blur; nothing in the decoy position, which draws V2's
+  // illustrative layout as above.
+  it("draws the reader's own dots under the blur when they arrive", () => {
     const { container } = render(<V4FantasyMap dots={SPARK_DOTS} locked onUnlock={() => {}} />);
-    expect(printed(container)).toEqual(MAP_DOTS.filter((d) => d.label).map((d) => d.label));
-    expect(container.textContent).not.toContain(SPARK_DOTS[0]!.name);
+    const blurred = container.querySelector<HTMLElement>(".rv4-fvm__blurred")!;
+    const drawn = [...blurred.querySelectorAll<HTMLElement>(".rv4-fvm__dot")];
+    expect(drawn).toHaveLength(16);
+    drawn.forEach((dot, i) => {
+      expect(dot.style.getPropertyValue("--fvm-x")).toBe(`${SPARK_DOTS[i]!.x * 100}%`);
+      expect(dot.style.getPropertyValue("--fvm-y")).toBe(`${SPARK_DOTS[i]!.y * 100}%`);
+    });
+    expect(printed(container)).toEqual(SPARK_DOTS.filter((d) => d.label).map((d) => d.label));
+    expect(blurred.getAttribute("aria-hidden")).toBe("true");
+    expect(blurred.hasAttribute("inert")).toBe(true);
   });
 
   it("opens the paywall once per tap on the plot or its badge", () => {
@@ -528,6 +550,6 @@ describe("reportV3.css — the fantasy map (696:4393 / 368:3481)", () => {
   });
 
   it("blurs the locked plot 2px, as the table's stand-ins", () => {
-    expect(ruleOf(".rv3 .rv4-fvm__blurred")).toContain("filter: blur(2px)");
+    expect(ruleOf(".rv3 .rv4-fvm__blurred")).toContain("filter: blur(var(--rv4-veil, 5px))");
   });
 });

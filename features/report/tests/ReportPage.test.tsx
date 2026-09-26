@@ -81,7 +81,10 @@ import { reportSections } from "@/data/report-general";
 import { resolveReportSections } from "@features/report/ui/reportTitles";
 import { buildPartnership } from "@/data/report3-partnership";
 import { buildFantasy } from "@/data/report3-fantasy";
+import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
+import { buildAccelerators } from "@/data/report3-accelerators";
 import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
+import { REPORT_V4_DESIGNED_CHAPTER_IDS } from "@/data/report3-archetype-page";
 import { splitArticleForReader } from "@features/report/server/contentGating";
 // The 50/50 was concluded → any non-empty token now buckets to the forced
 // "treatment" arm. The soft "control" (dismissible) experience is now reached
@@ -90,6 +93,13 @@ import { splitArticleForReader } from "@features/report/server/contentGating";
 const TREATMENT_TOKEN = "rpt_report_test_001";
 
 const REPORT_MODAL_TEST_TIMEOUT_MS = 60_000;
+/**
+ * How long a closed pricing dialog may take to leave the DOM. waitFor's default 1s
+ * holds alone, but under the full suite's parallel load (the pre-push hook) the close
+ * has taken longer: "locks background scroll…" and "shows the pricing modal on report
+ * open…" each failed there once on 2026-09-26 and passed alone every time.
+ */
+const DIALOG_CLOSED = { timeout: 5_000 };
 const mockScrollTo = vi.fn();
 
 describe("ReportPage", () => {
@@ -454,7 +464,10 @@ describe("ReportPage", () => {
 
       await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
 
-      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      await waitFor(
+        () => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+        DIALOG_CLOSED
+      );
       expect(container.querySelectorAll(".report-premium-overlay__cta").length).toBeGreaterThan(0);
 
       const growthSection = container.querySelector(
@@ -483,7 +496,10 @@ describe("ReportPage", () => {
       const { container } = render(<ReportPage />);
 
       await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
-      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      await waitFor(
+        () => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+        DIALOG_CLOSED
+      );
 
       const firstSectionUnlockButton = container.querySelector(
         ".report-section .report-premium-overlay__cta"
@@ -527,7 +543,10 @@ describe("ReportPage", () => {
 
       await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
 
-      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      await waitFor(
+        () => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+        DIALOG_CLOSED
+      );
       expect(document.documentElement.style.overflow).toBe("");
       expect(document.body.style.position).toBe("");
       expect(document.body.style.top).toBe("");
@@ -632,7 +651,10 @@ describe("ReportPage", () => {
 
       // Close the auto-opened modal first, then click a locked section.
       await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
-      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      await waitFor(
+        () => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+        DIALOG_CLOSED
+      );
 
       const lockedCta = container.querySelector(
         ".report-section .report-premium-overlay__cta"
@@ -860,26 +882,40 @@ describe("ReportPage", () => {
       expect(href).toContain("v2=1");
     });
 
-    it("carries neither the forced paywall nor the EUR 2 urgency countdown", async () => {
-      const user = userEvent.setup();
-      mockUseReportData.mockReturnValue(buildSuccessResponse());
+    it(
+      "carries neither the forced paywall nor the EUR 2 urgency countdown",
+      async () => {
+        const user = userEvent.setup();
+        mockUseReportData.mockReturnValue(buildSuccessResponse());
 
-      const { container } = render(<ReportPage />);
+        const { container } = render(<ReportPage />);
 
-      // 565f4cac removed the countdown. Its label was the only text on the card
-      // and in the modal, so its absence is the whole assertion.
-      expect(screen.queryByText(/time left to secure this price/i)).not.toBeInTheDocument();
+        // 565f4cac removed the countdown. Its label was the only text on the card
+        // and in the modal, so its absence is the whole assertion.
+        expect(screen.queryByText(/time left to secure this price/i)).not.toBeInTheDocument();
 
-      // 05725c7f removed the forced wall: the modal must always be dismissible.
-      await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
-      const closeButton = screen.getByRole("button", { name: /close pricing modal/i });
-      expect(closeButton).toBeInTheDocument();
-      await user.click(closeButton);
-      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+        // 05725c7f removed the forced wall: the modal must always be dismissible.
+        await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+        // Two things open the modal here: the fixture's discount ladder, at once, and
+        // the plans pop-up's 1.6s beat after the reader reaches its chapter — which
+        // jsdom's zero-sized boxes count as reached on mount. Closing inside that beat
+        // let the pop-up open the modal again, so the test failed whenever the render
+        // was quick. Let the beat pass (it is a no-op while the modal is open) before
+        // closing, and the close is the only thing left to observe.
+        await new Promise((resolve) => setTimeout(resolve, 1_700));
+        const closeButton = screen.getByRole("button", { name: /close pricing modal/i });
+        expect(closeButton).toBeInTheDocument();
+        await user.click(closeButton);
+        await waitFor(
+          () => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+          DIALOG_CLOSED
+        );
 
-      // And the report underneath is readable rather than walled off.
-      expect(container.querySelector(".report-page")).not.toBeNull();
-    });
+        // And the report underneath is readable rather than walled off.
+        expect(container.querySelector(".report-page")).not.toBeNull();
+      },
+      REPORT_MODAL_TEST_TIMEOUT_MS
+    );
   });
 
   // Review 24.09: "Please take out the Arousal, Desire & Sexual Stage Chapter", "Take out
@@ -932,6 +968,110 @@ describe("ReportPage", () => {
       for (const id of REMOVED) expect(container.querySelector(`#${id}`), id).not.toBeNull();
       expect(container.querySelector(".rv3-endsummary")).not.toBeNull();
       expect(container.querySelector("#constellation")).not.toBeNull();
+    });
+  });
+
+  // Review 26.09: "The headline changed to 'A Snapshot of what you will learn'" (1:766).
+  describe("V4 — the Snapshot's heading names its rating", () => {
+    afterEach(() => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+
+    it("names the Snapshot's feedback buttons after the new heading under ?v4=1", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      const { container } = render(<ReportPage />);
+
+      expect(
+        container.querySelector(
+          '#snapshot [aria-label="This resonates: A Snapshot of what you will learn"]'
+        )
+      ).not.toBeNull();
+    });
+
+    it("leaves ?v3=1 on its own label", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v3=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      const { container } = render(<ReportPage />);
+
+      expect(
+        container.querySelector(
+          '#snapshot [aria-label="This resonates: Five things this report found"]'
+        )
+      ).not.toBeNull();
+    });
+  });
+
+  // Review 26.09: "Can we standardise the space between things/sections?" Every part
+  // opens as Figma's part frames do: the fading hairline, the heading, then a 44px
+  // separator before its first block — for the archetypes still on V2's chapters too,
+  // whose first chapter used to sit straight under the heading.
+  describe("V4 — every part opens on its rule, its heading and 44px (review 26.09)", () => {
+    const FRAMES = [
+      ["1:484", "1:491"],
+      ["1:850", "1:858"],
+      ["1:983", "1:991"],
+      ["38:1508", "38:1516"],
+      ["1:1138", "1:1146"],
+    ];
+
+    afterEach(() => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+
+    const partHeads = (container: HTMLElement) =>
+      [...container.querySelectorAll(".rv4-part")].filter(
+        (el) => !el.classList.contains("rv4-part--lead")
+      );
+
+    const expectFrames = (container: HTMLElement) => {
+      const heads = partHeads(container);
+      expect(heads).toHaveLength(5);
+      heads.forEach((head, i) => {
+        const before = head.previousElementSibling!;
+        const after = head.nextElementSibling!;
+        expect(before, `rule before part ${i + 2}`).toHaveClass("rv4-rule");
+        expect(before.getAttribute("data-node-id")).toBe(FRAMES[i]![0]);
+        expect(after, `separator after part ${i + 2}`).toHaveClass("rv4-sep");
+        expect(after.getAttribute("data-node-id")).toBe(FRAMES[i]![1]);
+        expect(after.nextElementSibling, `one separator in part ${i + 2}`).not.toHaveClass(
+          "rv4-sep"
+        );
+      });
+      return heads;
+    };
+
+    it("frames Parts II-VI the same way over V2's chapters", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      const { container } = render(<ReportPage />);
+
+      const heads = expectFrames(container);
+      expect(heads[0]!.nextElementSibling!.nextElementSibling).toHaveClass("rv4-top3");
+    });
+
+    it("keeps one separator where the designed chapters open their parts", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      const response = buildSuccessResponse();
+      Object.assign(response.data as Record<string, unknown>, {
+        primaryArchetype: "Spark Seeker",
+        percentages: { "Spark Seeker": 63, "Explorer of Edges": 37 },
+        typicalBeliefs: buildTypicalBeliefs("Spark Seeker"),
+        accelerators: buildAccelerators("Spark Seeker"),
+        partnership: buildPartnership("Spark Seeker"),
+        fantasy: buildFantasy("Spark Seeker"),
+      });
+      mockUseReportData.mockReturnValue(response);
+
+      const { container } = render(<ReportPage />);
+
+      const heads = expectFrames(container);
+      for (const head of heads.slice(1)) {
+        expect(head.nextElementSibling!.nextElementSibling).toHaveClass("rv4-chapter", "is-open");
+      }
     });
   });
 
@@ -1275,60 +1415,139 @@ describe("ReportPage", () => {
     });
   });
 
-  // Mark's "they should all be blurred with the icon and the Unlock CTA" (Figma
-  // 1940141608) is pinned on Fantasy vs. Reality's collapsed table categories, not on
-  // chapters (25.09). A locked chapter without a V4 design keeps V2's own preview and
-  // Premium card under V4.
-  describe("V4 — locked chapters without a V4 design keep V2's preview", () => {
+  // WhatsApp, 26.09: Mark proposed locking "the other chapters" outright instead of
+  // letting a paywalled reader open them into V2's preview; Marcus agreed ("Love
+  // this", "Agree") and Mark closed it ("Let's do that then"). Under V4 a chapter the
+  // reader has no access to is its head, its teaser and the gradient lock, and a tap
+  // opens the paywall. Who is locked is the nav badges' answer. The four designed
+  // chapters keep their own gates, and V2's previews for the archetypes still on V2.
+  describe("V4 — a chapter the reader has no access to is locked outright (review 26.09)", () => {
+    const LIBIDO = "libido_challenges_in_relationships";
+    const DESIGNED = [
+      "typical_beliefs",
+      "typical_arousal_accelerators_turn_ons_of_the_core_archetype",
+      "challenges_in_partnership",
+      "typical_sexual_fantasy_amp_practice_tendencies",
+    ];
+    const withPlan = (plan: string | null) => {
+      const response = buildSuccessResponse();
+      (response.data as Record<string, unknown>).accessPlan = plan;
+      return response;
+    };
+    const lockedIds = (container: HTMLElement) =>
+      [...container.querySelectorAll(".rv4-chapter.is-locked")].map((c) => c.id);
+
     afterEach(() => {
       mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
     });
 
-    it("shows V2's Premium card in a locked chapter, and no blurred stand-in anywhere", () => {
+    it("draws a locked chapter as its head, teaser and lock, with no V2 preview", () => {
       mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
-      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      mockUseReportData.mockReturnValue(withPlan(null));
 
       const { container } = render(<ReportPage />);
 
-      expect(
-        container.querySelector("#libido_challenges_in_relationships .report-premium-overlay")
-      ).not.toBeNull();
-      expect(container.querySelector(".rv4-lockch")).toBeNull();
+      const chapter = container.querySelector(`#${LIBIDO}`)!;
+      expect(chapter).toHaveClass("rv4-chapter", "is-locked");
+      expect(chapter.querySelector(".rv4-chapter__lock")).not.toBeNull();
+      expect(chapter.querySelector(".rv4-chapter__teaser")).not.toBeNull();
+      expect(chapter.querySelector(".report-premium-overlay")).toBeNull();
+      expect(chapter.querySelector(".rv3-chapter__body")).toBeNull();
     });
 
     it("opens the paywall for the chapter tapped", async () => {
       const user = userEvent.setup();
       mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
-      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      mockUseReportData.mockReturnValue(withPlan(null));
 
       const { container } = render(<ReportPage />);
-      const chapter = container.querySelector<HTMLElement>("#libido_challenges_in_relationships")!;
-      // The plans pop-up opens by itself for a locked reader and hides the report
-      // from the accessibility tree, so the chapter toggle is found by its attribute.
-      const toggle = chapter.querySelector<HTMLElement>("[aria-expanded]")!;
-      if (toggle.getAttribute("aria-expanded") === "false") await user.click(toggle);
-      await user.click(chapter.querySelector<HTMLElement>(".report-premium-overlay")!);
+      await user.click(container.querySelector<HTMLElement>(`#${LIBIDO} .rv4-chapter__button`)!);
 
       expect(vi.mocked(analytics.trackLockIconClicked)).toHaveBeenCalledWith(
-        expect.objectContaining({ section_id: "libido_challenges_in_relationships" })
+        expect.objectContaining({ section_id: LIBIDO, plan_needed: "full_report" })
       );
     });
 
-    it("leaves ?v3=1 on the same V2 preview", () => {
-      mockSearchParams.mockImplementation(() => new URLSearchParams("v3=1"));
-      mockUseReportData.mockReturnValue(buildSuccessResponse());
+    it("locks Reward System, and never the free Other Archetypes or a designed chapter", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(withPlan(null));
 
       const { container } = render(<ReportPage />);
 
-      expect(
-        container.querySelector("#libido_challenges_in_relationships .report-premium-overlay")
-      ).not.toBeNull();
+      expect([...REPORT_V4_DESIGNED_CHAPTER_IDS].sort()).toEqual([...DESIGNED].sort());
+      const locked = lockedIds(container);
+      expect(locked).toContain("biochemical_reward_system_dynamics");
+      expect(locked).toContain("core_insecurities");
+      expect(locked).not.toContain("constellation");
+      for (const id of DESIGNED) expect(locked).not.toContain(id);
+      // The archetype on screen is still on V2's chapters: its designed chapters open
+      // into V2's own locked preview, as before.
+      const beliefs = container.querySelector("#typical_beliefs")!;
+      expect(beliefs.querySelector("[aria-expanded]")).not.toBeNull();
+      expect(beliefs.querySelector(".rv3-chapter__body")).not.toBeNull();
+    });
+
+    it("locks only what Essentials leaves out", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(withPlan("essentials"));
+
+      const { container } = render(<ReportPage />);
+
+      const locked = lockedIds(container);
+      expect(locked).toContain(LIBIDO);
+      expect(locked).not.toContain("core_insecurities");
+      expect(locked).not.toContain("confidence_level");
+      expect(locked).not.toContain("attachment_style");
+      expect(container.querySelector("#core_insecurities [aria-expanded]")).not.toBeNull();
+    });
+
+    it("locks nothing for a full-report reader", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(withPlan("full_report"));
+
+      const { container } = render(<ReportPage />);
+
+      expect(lockedIds(container)).toEqual([]);
+    });
+
+    it("leaves ?v3=1 on V2's preview", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v3=1"));
+      mockUseReportData.mockReturnValue(withPlan(null));
+
+      const { container } = render(<ReportPage />);
+
+      expect(container.querySelector(".is-locked")).toBeNull();
+      expect(container.querySelector(`#${LIBIDO} .report-premium-overlay`)).not.toBeNull();
     });
   });
 
   // Review 24.09: "the top part is dark on my iPhone (the background to the time and
   // battery)". Safari 15-18 tints the status bar from `theme-color`, and without one it
   // keeps the site's dark shell (#0b0613) it painted while the report was loading.
+  // Final review 26.09: the API built V4's chapters for every request, handing the
+  // default report's locked readers paid copy they are never shown. The page says
+  // when it is V4, and the API builds them only then.
+  describe("V4 — asks the API for its chapters, and nothing else does (final review 26.09)", () => {
+    afterEach(() => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+    const lastRequest = () => mockUseReportData.mock.calls.at(-1)?.[0] as { v4?: boolean };
+
+    it("tells the data hook when the page is V4", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      render(<ReportPage />);
+      expect(lastRequest().v4).toBe(true);
+    });
+
+    it.each(["", "v2=1", "v3=1"])("does not on %j", (query) => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams(query));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      render(<ReportPage />);
+      expect(lastRequest().v4).toBe(false);
+    });
+  });
+
   describe("V4 status bar", () => {
     const themeColor = () =>
       document.head.querySelector('meta[name="theme-color"]')?.getAttribute("content") ?? null;

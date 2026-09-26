@@ -152,22 +152,16 @@ describe("the paywalled chapter — 348:213", () => {
     }
   });
 
-  it("ships the rows under the full blur scrambled, and only the ramp row for real", () => {
-    // 381:362 draws its locked rows blurred at full length, and a CSS blur is paint
-    // only — LockedPreviewImage.tsx:6-12 says as much. So the server scrambles every
-    // row that is only ever seen under the full blur (Fatih's call, 2026-09-23): same
-    // shape, no content. Row 4 is the ramp, legible at the light end, and stays real.
+  it("draws every row as written, the ones under the full blur included", () => {
+    // 381:362 draws its locked rows blurred at full length. From 23.09 the server
+    // scrambled every row only ever seen under the full blur; since review 26.09
+    // ("the unlocked content but blurred", Fatih's call) it sends them as written
+    // (lockedBlurCopy.ts), and the blur is what hides them. Row 4 is the ramp.
     const { container } = render(<V4TypicalBeliefs view={LOCKED} />);
     const green = container.querySelector(".rv4-sun")!;
-    VIEW.panels.sun.forEach((belief, i) => {
-      if (i <= 3) expect(green.textContent).toContain(belief);
-      else expect(green.textContent).not.toContain(belief);
-    });
+    VIEW.panels.sun.forEach((belief) => expect(green.textContent).toContain(belief));
     const coral = container.querySelector(".rv4-turn")!;
-    VIEW.panels.turns.forEach((turn, i) => {
-      if (i <= 3) expect(coral.textContent).toContain(turn.shadow);
-      else expect(coral.textContent).not.toContain(turn.shadow);
-    });
+    VIEW.panels.turns.forEach((turn) => expect(coral.textContent).toContain(turn.shadow));
   });
 
   it("puts the gradient lock on both panels, and only when locked", () => {
@@ -229,11 +223,11 @@ describe("the paywalled chapter — 348:213", () => {
     expect(gated).not.toBeNull();
     expect(gated!.getAttribute("aria-hidden")).toBe("true");
     expect(gated!.hasAttribute("inert")).toBe(true);
-    // The ramp is real copy; the rest arrived scrambled.
+    // The ramp, then the rest under the full blur: since review 26.09 the copy under the blur is the real one (lockedBlurCopy.ts).
     expect(container.querySelector(".rv4-tb__ramp")!.textContent).toContain(
       "For the Spark Seeker, planning may begin to feel like evidence"
     );
-    expect(container.querySelector(".rv4-tb__blurred")!.textContent).not.toContain(
+    expect(container.querySelector(".rv4-tb__blurred")!.textContent).toContain(
       "When being wanted becomes evidence of worth"
     );
     expect(container.querySelectorAll(".rv4-tb__gate .rv4-premium")).toHaveLength(1);
@@ -304,7 +298,9 @@ describe("reportV3.css — belief panel contracts", () => {
   });
 
   it("blurs locked rows at Figma's radius 5 (CSS 2.5px), with the ramp row left to the overlay", () => {
-    expect(block(".rv3 .rv4-turn__row.is-locked.is-blurred,")).toContain("filter: blur(2.5px)");
+    expect(block(".rv3 .rv4-turn__row.is-locked.is-blurred,")).toContain(
+      "filter: blur(var(--rv4-veil, 5px))"
+    );
     // The old uniform 5px is switched off for every locked row first.
     const locked = block(".rv3 .rv4-turn__row.is-locked,");
     expect(locked).toContain("filter: none");
@@ -312,13 +308,16 @@ describe("reportV3.css — belief panel contracts", () => {
     expect(block(".rv3 .rv4-sun__ramp {")).toContain("--rv4-band: 65.6%");
   });
 
-  it("stacks the progressive blur to 2.5px, sigmas in quadrature", () => {
-    const sigmas = [1, 2, 3].map((n) =>
+  it("stacks the progressive blur to the veil, sigmas in quadrature", () => {
+    // 2.5px until review 26.09, 5px since (v4Veil2609.test.ts).
+    const factors = [1, 2, 3].map((n) =>
       parseFloat(
-        block(`.rv3 .rv4-pblur > span:nth-child(${n}) {`).match(/--rv4-pb:\s*([\d.]+)px/)![1]!
+        block(`.rv3 .rv4-pblur > span:nth-child(${n}) {`).match(
+          /--rv4-pb:\s*calc\(var\(--rv4-veil, 5px\) \* ([\d.]+)\)/
+        )![1]!
       )
     );
-    expect(Math.sqrt(sigmas.reduce((sum, s) => sum + s * s, 0))).toBeCloseTo(2.5, 1);
+    expect(Math.sqrt(factors.reduce((sum, k) => sum + k * k, 0))).toBeCloseTo(1, 2);
   });
 
   /**

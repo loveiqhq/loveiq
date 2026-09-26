@@ -16,8 +16,8 @@ import { guardedUnlock } from "./v4Unlock";
  * own order, which is not the turn order.
  *
  * THE PAYWALLED STATE — 381:362. Rows 1 to 3 clear, row 4 the ramp (the blur fades
- * in over its top 65.6%), rows 5 to 10 under the full blur with their text already
- * scrambled on the server, and the gradient lock (441:6129) 111px below the top
+ * in over its top 65.6%), rows 5 to 10 under the full blur, their text as the server
+ * sends it (lockedBlurCopy.ts), and the gradient lock (441:6129) 111px below the top
  * of the locked group. A client component only because that group opens the
  * paywall.
  */
@@ -40,7 +40,7 @@ interface Props {
 const V4SunBeliefs: FC<Props> = ({ sun, lockedFrom = null, onUnlock }) => {
   const locked = lockedFrom !== null;
 
-  // Keyed by index: a locked reader's rows 5-10 arrive scrambled.
+  // Keyed by index: in decoy mode a locked reader's rows 5-10 arrive scrambled.
   const row = (belief: string, i: number) => {
     const isLocked = locked && i >= lockedFrom;
     const isRamp = locked && i === lockedFrom;

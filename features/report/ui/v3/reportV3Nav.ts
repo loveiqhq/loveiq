@@ -18,6 +18,8 @@
  * render in the eyebrow above each chapter title.
  */
 
+import { REPORT_V4_NUDGES_HEADING } from "@/data/report3-archetype-page";
+
 export interface ReportV3Chapter {
   /** Section id in `data/report-general.ts` (the DOM anchor). */
   id: string;
@@ -266,9 +268,10 @@ export const REPORT_V3_NAV_PARTS: readonly ReportV3NavPart[] = navPartsFrom(REPO
  * The same nav in V4's body order, so the drawer lists the moved chapters first too.
  * Numbered as V4's page is: Part I is the Welcome, which lists no chapters, so the
  * drawer and sidebar start at Part II — the numbers the part headings and the chapter
- * nudges' chips show. The snapshot anchor is "What you will discover" (Figma 1:766).
+ * nudges' chips show. The snapshot anchor is named after the heading over the nudges
+ * (Figma 1:766), so the drawer and the chapter pill follow it when it changes.
  */
 export const REPORT_V4_NAV_PARTS: readonly ReportV3NavPart[] = navPartsFrom(REPORT_V4_CHAPTERS, {
   numerals: { "1": "II", "2": "III", "3": "IV", "4": "V", "5": "VI" },
-  snapshotLabel: "What you will discover",
+  snapshotLabel: REPORT_V4_NUDGES_HEADING,
 });

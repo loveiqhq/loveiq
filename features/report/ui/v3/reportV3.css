@@ -2616,8 +2616,10 @@
   height: 19px;
   width: 100%;
 }
+/* 1:485 / 1:851 / 1:1139 — the part frames' hairline fades from 10% ink to nothing,
+ * left to right, as the closed chapters' divider does (review 26.09). */
 .rv3 .rv4-rule::before {
-  background: var(--rv3-hairline);
+  background: linear-gradient(90deg, rgba(22, 16, 33, 0.1), rgba(22, 16, 33, 0));
   content: "";
   height: 1px;
   width: 100%;
@@ -3083,11 +3085,6 @@
 }
 .rv3 .rv4-top3 .rv3-top3__row + .rv3-top3__row {
   border-top: 0;
-}
-/* 1:493 ends 9px below its rating row, where "Core Archetype" (1:576) begins; the
- * rating's usual 44px tail runs past the frame's edge into empty space there. */
-.rv3 .rv4-top3 .rv4-rating__tail {
-  height: 9px;
 }
 
 /* The preview iframe's own document: the report column at its true 393 width. */
@@ -3606,54 +3603,73 @@
   user-select: none;
 }
 /* PROGRESSIVE BLUR — 411:5694 ramps the blur from 0 at the top of the gated copy
- * to Figma radius 5 (CSS 2.5px) 76px down, where 170:231 holds it at 2.5px for
- * the rest of the window; readable copy eases into the paywall instead of
- * hitting a hard edge. Three stacked backdrop layers, each faded in over a third
- * of the band. Stacked blurs compound (sigmas add in quadrature), so the layers
- * are 0.8 / 1.39 / 1.92px to land on 0.8 / 1.6 / 2.5px at each third. The
- * copy itself carries no filter; the layers blur it from above. They overhang the
- * copy 8px a side, as the ramps' do (.rv4-pblur), so its edge blurs too. */
+ * to Figma radius 5 76px down, where 170:231 holds it for the rest of the window;
+ * readable copy eases into the paywall instead of hitting a hard edge. It lands on
+ * CSS 2.5px until review 26.09 and on --rv4-veil (5px) since. Three stacked backdrop
+ * layers, each faded in over a third of the band. Stacked blurs compound (sigmas
+ * add in quadrature), so the layers are 0.32 / 0.556 / 0.768 of the veil to land on
+ * 0.32 / 0.64 / 1 of it at each third. The copy itself carries no filter; the
+ * layers blur it from above. They overhang the copy three times the veil a side, as
+ * the ramps' do (.rv4-pblur), so its edge blurs too. They run as far past the
+ * window's foot and draw nothing there: ending with it, they had only the letter tops
+ * the window cuts through to sample, and those stayed legible under the full blur
+ * (review 26.09, Fantasy vs. Reality's article, which draws no fade over its foot). */
 .rv3 .rv4-learn__blur {
-  height: 656px;
-  left: -8px;
+  --rv4-learn-foot: calc(var(--rv4-veil, 5px) * 3);
+  height: calc(656px + var(--rv4-learn-foot));
+  left: calc(var(--rv4-veil, 5px) * -3);
   pointer-events: none;
   position: absolute;
-  right: -8px;
+  right: calc(var(--rv4-veil, 5px) * -3);
   top: 16px;
 }
 .rv3 .rv4-learn__blur > span {
   -webkit-backdrop-filter: blur(var(--rv4-blur));
   backdrop-filter: blur(var(--rv4-blur));
   inset: 0;
-  -webkit-mask-image: linear-gradient(180deg, transparent var(--rv4-from), #000 var(--rv4-to));
-  mask-image: linear-gradient(180deg, transparent var(--rv4-from), #000 var(--rv4-to));
+  -webkit-mask-image: linear-gradient(
+    180deg,
+    transparent var(--rv4-from),
+    #000 var(--rv4-to),
+    #000 calc(100% - var(--rv4-learn-foot)),
+    transparent calc(100% - var(--rv4-learn-foot))
+  );
+  mask-image: linear-gradient(
+    180deg,
+    transparent var(--rv4-from),
+    #000 var(--rv4-to),
+    #000 calc(100% - var(--rv4-learn-foot)),
+    transparent calc(100% - var(--rv4-learn-foot))
+  );
   position: absolute;
 }
 .rv3 .rv4-learn__blur > span:nth-child(1) {
-  --rv4-blur: 0.8px;
+  --rv4-blur: calc(var(--rv4-veil, 5px) * 0.32);
   --rv4-from: 0px;
   --rv4-to: 25px;
 }
 .rv3 .rv4-learn__blur > span:nth-child(2) {
-  --rv4-blur: 1.39px;
+  --rv4-blur: calc(var(--rv4-veil, 5px) * 0.556);
   --rv4-from: 25px;
   --rv4-to: 51px;
 }
 .rv3 .rv4-learn__blur > span:nth-child(3) {
-  --rv4-blur: 1.92px;
+  --rv4-blur: calc(var(--rv4-veil, 5px) * 0.768);
   --rv4-from: 51px;
   --rv4-to: 76px;
 }
 /* No backdrop-filter: fall back to the old uniform blur on the copy itself. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .rv3 .rv4-learn__gated {
-    filter: blur(2.5px);
+    filter: blur(var(--rv4-veil, 5px));
   }
   .rv3 .rv4-learn__blur {
     display: none;
   }
 }
-/* 230:236 — fades to #fcfbfe, which is the card's own gradient at its foot. */
+/* 230:236 — fades to #fcfbfe, which is the card's own gradient at its foot. As wide
+ * as the blur runs (.rv4-learn__blur), into the card's padding: flush with the copy,
+ * the halo past it stayed unfaded once the blur was 5px (review 26.09). */
 .rv3 .rv4-learn__fade {
   background: linear-gradient(
     180deg,
@@ -3664,10 +3680,10 @@
   bottom: 0;
   display: block;
   height: 63px;
-  left: 0;
+  left: calc(var(--rv4-veil, 5px) * -3);
   pointer-events: none;
   position: absolute;
-  right: 0;
+  right: calc(var(--rv4-veil, 5px) * -3);
 }
 /* 230:238 — 596 - 576.5 = 19.5 from the window's foot. */
 .rv3 .rv4-learn__showmore {
@@ -4179,14 +4195,14 @@
  * not how much room the chapter takes. */
 .rv3 .rv4-turn__row.is-locked,
 .rv3 .rv4-sun__row.is-locked {
-  filter: blur(5px);
+  filter: blur(var(--rv4-veil, 5px));
   user-select: none;
 }
 /* 348:332 down: every block of "Common challenges" past the subheading and its
  * first three paragraphs. The mask ramps the copy in over two 25.6px lines rather
  * than cutting to it — Mark's "Fade first 2 lines of next paragraph". */
 .rv3 .rv4-tb__gated {
-  filter: blur(5px);
+  filter: blur(var(--rv4-veil, 5px));
   -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 51.2px);
   mask-image: linear-gradient(180deg, transparent 0, #000 51.2px);
   pointer-events: none;
@@ -4350,7 +4366,8 @@
 /* ── Locked panels — 381:222 / 381:362 ────────────────────────────────────────
  * Row `lockedFrom` is the ramp: the blur fades in over its top 50.8% (coral) /
  * 65.6% (green) and holds below. The rows after it sit under Figma's radius 5,
- * which is CSS 2.5px — not the 5px above, which doubled it. */
+ * which is CSS 2.5px — not the 5px above, which doubled it — until review 26.09,
+ * and under --rv4-veil since. */
 .rv3 .rv4-turn__row.is-locked,
 .rv3 .rv4-sun__row.is-locked {
   filter: none;
@@ -4358,7 +4375,7 @@
 }
 .rv3 .rv4-turn__row.is-locked.is-blurred,
 .rv3 .rv4-sun__row.is-locked.is-blurred {
-  filter: blur(2.5px);
+  filter: blur(var(--rv4-veil, 5px));
 }
 .rv3 .rv4-turn__row.is-ramp,
 .rv3 .rv4-sun__row.is-ramp {
@@ -4421,16 +4438,24 @@
 
 /* ── Progressive blur — the ramp into every paywall ───────────────────────────
  * 411:5694's technique, generalised: three stacked backdrop layers, each faded in
- * over a third of the band. Stacked blurs add in quadrature, so 0.8 / 1.39 /
- * 1.92px land on 2.5px (Figma radius 5) at the band's foot and hold there below
- * it. `--rv4-band` is the ramp's length, a percentage of the element or a length.
+ * over a third of the band. Stacked blurs add in quadrature, so 0.32 / 0.556 / 0.768
+ * of --rv4-veil land on it at the band's foot and hold there below it: 0.8 / 1.39 /
+ * 1.92px onto 2.5px (Figma radius 5) until review 26.09, now onto 5px (Figma 10) —
+ * Mark could read the copy through 2.5px, and it is the real copy now. `--rv4-band`
+ * is the ramp's length, a percentage of the element or a length.
  * Only ever laid over the ramp block — everything past it takes a plain filter,
  * which is cheaper on phones and doubles as the fallback.
- * A backdrop filter samples only its own box, so the layers overhang the text 8px a
- * side (over 3x the 2.5px they build to): flush with it, every blurred line began on
- * a hard cut, and WebKit repeated the edge pixels into a darker seam (Sanjin, 25.09). */
+ * A backdrop filter samples only its own box, so the layers overhang the text by three
+ * times the blur they build to (15px at 5px): flush with it, every blurred line began on
+ * a hard cut, and WebKit repeated the edge pixels into a darker seam (Sanjin, 25.09).
+ * They run as far past the block's foot too: flush with it, the last line's halo was cut
+ * off in a straight line once the blur was 5px (review 26.09). The gradient is sized to
+ * the block, so the band keeps its drawn length, and a solid second layer covers the
+ * foot. Every ramp is followed by blurred copy, whose filter makes it paint over the
+ * foot, so only the background under the foot takes the extra blur. */
 .rv3 .rv4-pblur {
-  inset: 0 -8px;
+  --rv4-pb-foot: calc(var(--rv4-veil, 5px) * 3);
+  inset: 0 calc(var(--rv4-veil, 5px) * -3) calc(var(--rv4-pb-foot) * -1);
   pointer-events: none;
   position: absolute;
 }
@@ -4438,22 +4463,40 @@
   -webkit-backdrop-filter: blur(var(--rv4-pb));
   backdrop-filter: blur(var(--rv4-pb));
   inset: 0;
-  -webkit-mask-image: linear-gradient(180deg, transparent var(--rv4-pf), #000 var(--rv4-pt));
-  mask-image: linear-gradient(180deg, transparent var(--rv4-pf), #000 var(--rv4-pt));
+  -webkit-mask-image:
+    linear-gradient(180deg, transparent var(--rv4-pf), #000 var(--rv4-pt)),
+    linear-gradient(#000, #000);
+  mask-image:
+    linear-gradient(180deg, transparent var(--rv4-pf), #000 var(--rv4-pt)),
+    linear-gradient(#000, #000);
+  -webkit-mask-position:
+    0 0,
+    0 100%;
+  mask-position:
+    0 0,
+    0 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size:
+    100% calc(100% - var(--rv4-pb-foot)),
+    100% var(--rv4-pb-foot);
+  mask-size:
+    100% calc(100% - var(--rv4-pb-foot)),
+    100% var(--rv4-pb-foot);
   position: absolute;
 }
 .rv3 .rv4-pblur > span:nth-child(1) {
-  --rv4-pb: 0.8px;
+  --rv4-pb: calc(var(--rv4-veil, 5px) * 0.32);
   --rv4-pf: 0px;
   --rv4-pt: calc(var(--rv4-band, 76px) / 3);
 }
 .rv3 .rv4-pblur > span:nth-child(2) {
-  --rv4-pb: 1.39px;
+  --rv4-pb: calc(var(--rv4-veil, 5px) * 0.556);
   --rv4-pf: calc(var(--rv4-band, 76px) / 3);
   --rv4-pt: calc(var(--rv4-band, 76px) * 2 / 3);
 }
 .rv3 .rv4-pblur > span:nth-child(3) {
-  --rv4-pb: 1.92px;
+  --rv4-pb: calc(var(--rv4-veil, 5px) * 0.768);
   --rv4-pf: calc(var(--rv4-band, 76px) * 2 / 3);
   --rv4-pt: var(--rv4-band, 76px);
 }
@@ -4463,9 +4506,10 @@
   }
   .rv3 .rv4-turn__row.is-ramp,
   .rv3 .rv4-sun__row.is-ramp,
+  .rv3 .rv4-trig__row.is-ramp,
   .rv3 .rv4-tb__ramp,
   .rv3 .rv4-try__ramp {
-    filter: blur(1.25px);
+    filter: blur(calc(var(--rv4-veil, 5px) / 2));
   }
 }
 
@@ -4489,7 +4533,7 @@
   position: relative;
 }
 .rv3 .rv4-tb__blurred {
-  filter: blur(2.5px);
+  filter: blur(var(--rv4-veil, 5px));
 }
 .rv3 .rv4-tb__gate .rv4-premium {
   top: 87px;
@@ -4678,7 +4722,7 @@
   position: relative;
 }
 .rv3 .rv4-try__blurred {
-  filter: blur(2.5px);
+  filter: blur(var(--rv4-veil, 5px));
 }
 .rv3 .rv4-try__rest .rv4-premium {
   top: 88px;
@@ -4697,7 +4741,7 @@
   min-height: 51px;
 }
 /* The gated window, the blur laid over it and the fade span the card's content box,
- * as the copy now does (the blur overhanging it 8px a side, above). */
+ * as the copy now does (the blur overhanging it, above). */
 
 /* ── The Premium card on small phones ────────────────────────────────────────
  * 330 wide is 42px more than a 320 phone's column, and its height is fixed with
@@ -4872,11 +4916,22 @@
 .rv3 .rv4-trig__row:focus:not(:focus-visible) {
   outline: none;
 }
-/* 386:416 / 386:444 — rows 3-5 blurred uniformly (the frame's radius 4), the badge
- * 124px / 127px below the first blurred row's top, centred (157 of 361), as the
+/* 386:416 / 386:444 — row 3 ramps from sharp at its top to the full blur 64% down it
+ * (452:261's progressive blur), rows 4-5 sit under it whole (452:264, 452:267); the
+ * badge 124px / 127px below the first blurred row's top, centred (157 of 361), as the
  * frames place it now the rows have no scales. */
-.rv3 .rv4-trig__row.is-locked {
-  filter: blur(2px);
+.rv3 .rv4-trig__row.is-locked.is-blurred {
+  filter: blur(var(--rv4-veil, 5px));
+}
+.rv3 .rv4-trig__row.is-ramp {
+  position: relative;
+}
+.rv3 .rv4-trig__ramp {
+  --rv4-band: 64%;
+  /* The card leaves 14px beside the rows. Three blurs (15px) covered its border and
+   * smeared it over the row, so these layers stop a pixel short of it. */
+  left: -13px;
+  right: -13px;
 }
 .rv3 .rv4-trig--brake .rv4-trig__lock {
   --rv4-lock-top: 124px;
@@ -4965,11 +5020,12 @@
   line-height: 21.6px;
   margin: 0 0 16.19px;
 }
-/* 314:307 — the ramp fades in over two 25.6px lines; everything after is blurred
- * 2.5px (Figma radius 5) to the end of the section, with the card 82px below the
- * ramp's top (197 into the section). The frame builds this from three stacked text
- * nodes with spacer lines, which runs the section to 1228; the open layout stays
- * under the blur instead, so nothing moves when the reader unlocks. */
+/* 314:307 — the ramp fades in over two 25.6px lines; everything after sits under
+ * the full blur (Figma radius 5; --rv4-veil since review 26.09) to the end of the
+ * section, with the card 82px below the ramp's top (197 into the section). The
+ * frame builds this from three stacked text nodes with spacer lines, which runs the
+ * section to 1228; the open layout stays under the blur instead, so nothing moves
+ * when the reader unlocks. */
 .rv3 .rv4-ab__gate {
   cursor: pointer;
   position: relative;
@@ -4979,14 +5035,14 @@
   position: relative;
 }
 .rv3 .rv4-ab__blurred {
-  filter: blur(2.5px);
+  filter: blur(var(--rv4-veil, 5px));
 }
 .rv3 .rv4-ab__gate .rv4-premium {
   top: 82px;
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .rv3 .rv4-ab__ramp {
-    filter: blur(1.25px);
+    filter: blur(calc(var(--rv4-veil, 5px) / 2));
   }
 }
 /* 310:229's 16px continues to the practice card and the article. */
@@ -5628,15 +5684,16 @@ html {
   height: 1px;
   width: 16px;
 }
-/* 612:862 — the orbit and slides blurred at the frame's radius 5 (2.5px, as every
- * V4 gate maps it), the pager sharp, and the brand lock on the seam between them:
- * 272px down at the frame's 224px orbit, i.e. the orbit box's foot. */
+/* 612:862 — the orbit and slides under the full blur (the frame's radius 5;
+ * --rv4-veil, as every V4 gate since review 26.09), the pager sharp, and the brand
+ * lock on the seam between them: 272px down at the frame's 224px orbit, i.e. the
+ * orbit box's foot. */
 .rv3 .rv4-loop.is-locked {
   cursor: pointer;
 }
 .rv3 .rv4-loop.is-locked .rv4-loop__orbit-box,
 .rv3 .rv4-loop.is-locked .rv4-loop__viewport {
-  filter: blur(2.5px);
+  filter: blur(var(--rv4-veil, 5px));
   user-select: none;
 }
 .rv3 .rv4-loop .rv4-lockbadge {
@@ -5658,7 +5715,9 @@ html {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 20px 0;
+  /* No foot: 38:1679 and 305:358 are fixed-height boxes that end on their 44px
+   * separator, so "Try this" sits 16 + 44 under the closing copy (review 26.09). */
+  padding: 20px 0 0;
   width: 100%;
 }
 .rv3 .rv4-cip .rv4-prose__p {
@@ -5704,21 +5763,21 @@ html {
   position: relative;
 }
 .rv3 .rv4-cip__blurred {
-  filter: blur(2.5px);
+  filter: blur(var(--rv4-veil, 5px));
 }
 .rv3 .rv4-cip__gate .rv4-premium {
   top: 282px;
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .rv3 .rv4-cip__ramp {
-    filter: blur(1.25px);
+    filter: blur(calc(var(--rv4-veil, 5px) / 2));
   }
 }
 /* 659:234 — the result under the full blur. The wrapper owns the click: the
  * paragraph inside is inert, and a tap on inert content lands on its ancestor. */
 .rv3 .rv4-cip__closing.is-blurred {
   cursor: pointer;
-  filter: blur(2.5px);
+  filter: blur(var(--rv4-veil, 5px));
   user-select: none;
 }
 .rv3 .rv4-cip + .rv4-try {
@@ -6126,13 +6185,15 @@ html {
   text-transform: uppercase;
 }
 
-/* ── The fade ends where a ramp's stand-in text starts — review 25.09 ─────────────
- * A ramp paragraph is real through its anchor sentence and scrambled after it
- * (splitRamp). On a phone the scrambled tail starts below the band; in the 552–590px
- * tablet/desktop column the real part runs to fewer lines and the tail rose into
- * the band's light blur, where it read as gibberish. useRampFit measures where the
- * tail's first line starts and sets --rv4-band-fit on the ramp; the band is the
- * lesser of the two, so phones keep the drawn band exactly. */
+/* ── The fade ends where a ramp's veiled tail starts — review 25.09 ───────────────
+ * A ramp paragraph fades in over its anchor sentence; the rest of it, the veiled
+ * tail (splitRamp), belongs under the full blur: the real copy since review 26.09,
+ * scrambled in decoy mode (lockedBlurCopy.ts). On a phone the tail starts below the
+ * band; in the 552–590px tablet/desktop column the anchor runs to fewer lines and
+ * the tail rose into the band's light blur, where it read as gibberish (the real
+ * copy would read outright). useRampFit measures where the tail's first line starts
+ * and sets --rv4-band-fit on the ramp; the band is the lesser of the two, so phones
+ * keep the drawn band exactly. */
 .rv3 .rv4-pblur {
   --rv4-band-eff: min(var(--rv4-band, 76px), var(--rv4-band-fit, 100000px));
 }
@@ -6486,8 +6547,9 @@ html {
   top: 48px;
   transform: translateX(-50%);
 }
-/* 639:1905 — the stand-ins under a 2px blur (Figma radius 4), the badge on their
- * middle; the group owns the click. 4px on, the CTA row: 16, then the pill. */
+/* 639:1905 — the locked rows under the full blur (Figma radius 4; --rv4-veil since
+ * review 26.09), the badge on their middle; the group owns the click. 4px on, the
+ * CTA row: 16, then the pill. */
 .rv3 .rv4-fvt__lock {
   cursor: pointer;
 }
@@ -6495,7 +6557,7 @@ html {
   position: relative;
 }
 .rv3 .rv4-fvt__blurred {
-  filter: blur(2px);
+  filter: blur(var(--rv4-veil, 5px));
   user-select: none;
 }
 .rv3 .rv4-fvt__lockrows .rv4-lockbadge {
@@ -6561,7 +6623,7 @@ html {
   position: relative;
 }
 .rv3 .rv4-fvr__blurred {
-  filter: blur(2.5px);
+  filter: blur(var(--rv4-veil, 5px));
   user-select: none;
 }
 .rv3 .rv4-fvr.is-locked > .rv4-fvt + .rv4-sep {
@@ -6596,7 +6658,7 @@ html {
   min-height: var(--rv4-learn-window);
 }
 .rv3 .rv4-learn.has-own-gate .rv4-learn__blur {
-  height: var(--rv4-learn-window);
+  height: calc(var(--rv4-learn-window) + var(--rv4-learn-foot));
 }
 .rv3 .rv4-learn.has-own-gate .rv4-learn__blur > span:nth-child(1) {
   --rv4-to: calc(var(--rv4-learn-band) / 3);
@@ -7054,13 +7116,13 @@ html {
 .rv3 .rv4-fvm__meter-pips > span.is-on {
   background: rgb(var(--fvm-rgb));
 }
-/* Paywalled: the plot under the table's 2px blur, the lock on its middle; the
- * frame owns the click. */
+/* Paywalled: the plot under the table's blur (--rv4-veil), the lock on its middle;
+ * the frame owns the click. */
 .rv3 .rv4-fvm__lock {
   cursor: pointer;
 }
 .rv3 .rv4-fvm__blurred {
-  filter: blur(2px);
+  filter: blur(var(--rv4-veil, 5px));
   user-select: none;
 }
 .rv3 .rv4-fvm__lock .rv4-lockbadge {
@@ -7139,4 +7201,92 @@ html {
   .rv3:is(.rv4, .rv4-doc) .rv3-deck__dot {
     transition: none;
   }
+}
+
+/* ══ Standardised spacing — review 26.09 ═════════════════════════════════════════
+ * Mark: "Can we standardise the space between things/sections?" and "the 'Does this
+ * resonate' and the next element". Figma's rating is one component, a 26px row over
+ * a 44px tail ("Rating with buttom space": 1:747, 1:833, 1:560), and blocks sit one
+ * 44px separator apart. V2's section rhythm (48px between sections, 20px above the
+ * Snapshot and its rating, a 28px header row) ran over it here. V4 only. */
+
+/* 1:747 → 1:763: after the V4 Summary its rating's 44px tail is the whole gap to the
+ * Snapshot heading (it was 44 + 48 + 20 = 112). The thirteen archetypes still on V2
+ * end on #means_for_you's rating row, which has no tail, so there the Snapshot takes
+ * the 44px separator itself (final review 26.09: a 0 set its heading flush under
+ * that row). */
+.rv3.rv4 #snapshot {
+  margin-top: 44px;
+  padding-top: 0;
+}
+.rv3.rv4 #summary + #snapshot {
+  margin-top: 0;
+}
+/* 1:848 → 1:833: the rating 44 under the panel, where its shadow has faded (the
+ * panel's own 44px separator), then its 44px tail before Part III's hairline. */
+.rv3.rv4 #snapshot .rv3-chapter__feedback {
+  padding: 0 0 44px;
+}
+/* 1:734: one 44px separator from the archetype card to the Summary, whose heading
+ * is its own (V4SummaryChapter) — V2's empty header row goes. */
+.rv3.rv4 #summary {
+  margin-top: 44px;
+}
+.rv3.rv4 #summary .report-section__header {
+  display: none;
+}
+
+/* ══ One blur for everything locked — review 26.09 ═══════════════════════════════
+ * Mark: "I can read the blurred pieces and the scores … Blur 5 in Figma makes it non
+ * readable. If it already is Figma's blurred 5, we need to increase the blur here".
+ * Since this round the blur carries the real copy (lockedBlurCopy.ts). Rendered at 393
+ * on a 3x screen with the real fonts, the fantasy names and scores, the A&B labels and
+ * 16px prose still read at 2-4px and none of them does at 5px (Figma radius 10), so
+ * every locked surface blurs by this, and the ramps build to it. */
+.rv3:is(.rv4, .rv4-doc) {
+  --rv4-veil: 5px;
+}
+
+/* ══ Locked chapters — review 26.09 ═══════════════════════════════════════════════
+ * WhatsApp: Mark's "current vs. fully locked" mock, agreed by Marcus. A chapter the
+ * reader has no access to keeps its head and teaser, as a closed chapter draws them,
+ * and the chevron's 34px disc (1:867) is filled as 441:5956's "Lock / Gradient Brand"
+ * badge is, its shadow and its 22px padlock scaled by 34/48. */
+.rv3.rv4 .rv4-chapter__lock {
+  align-items: center;
+  background: linear-gradient(135deg, #fb683e 14.6%, #e88c8c 51.4%, #ac88ed 85.4%);
+  border-radius: 17px;
+  box-shadow: 0 2.83px 8.5px rgba(168, 90, 76, 0.3);
+  color: #fff;
+  display: flex;
+  flex-shrink: 0;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+.rv3.rv4 .rv4-chapter__lock svg {
+  display: block;
+  height: 15.6px;
+  width: 15.6px;
+}
+
+/* ══ Fixed text widths on a narrow phone — review 26.09 sweep ══════════════════════
+ * Part I's copy, the top three's heading and lede and the Summary take Figma's 356 /
+ * 361 / 328px, which only fit its 393 frame: on a 320-360px phone (360 is a common
+ * Android width) the page's clip cut the end of their lines off. They keep the drawn
+ * width and give way to the column below it. Chapter bodies only for their prose: a
+ * designed chapter's full-bleed cards run wider than the column on purpose. */
+.rv3.rv4
+  :is(
+    .rv4-chapter__body > .rv3-prose,
+    .rv4-copy,
+    .rv4-copy > p,
+    .rv4-part__intro,
+    .rv4-top3__heading,
+    .rv4-top3__lede,
+    .rv4-summary__inner,
+    .rv4-summary__copy,
+    .rv4-summary__closer
+  ) {
+  max-width: 100%;
 }

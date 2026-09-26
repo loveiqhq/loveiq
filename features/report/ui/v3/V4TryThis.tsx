@@ -27,9 +27,11 @@ import { guardedUnlock } from "./v4Unlock";
  * wall only appears on open.
  *
  * WHAT A LOCKED READER RECEIVES. The server splits the practice into `free`
- * (clear), `ramp` (the block the blur fades in over — real copy, and also the tail
- * of the teaser) and `rest`, which it has already scrambled: same shape under the
- * blur, no content. This component decides how that looks, never what may be read.
+ * (clear), `ramp` (the block the blur fades in over, and also the tail of the
+ * teaser) and `rest`, which sits under the full blur: the real copy since review
+ * 26.09, in decoy mode scrambled to the same shape with no content
+ * (lockedBlurCopy.ts). This component decides how that looks, never what may be
+ * read.
  *
  * PER CHAPTER. The frames differ in a handful of numbers — the node ids, the closed
  * teaser's box (218 vs 224), how far the blur fades in over the ramp, and where the

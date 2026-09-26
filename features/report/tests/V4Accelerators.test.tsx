@@ -86,10 +86,10 @@ describe("the paywalled chapter — 314:211", () => {
     const gated = gate.querySelector(".rv4-ab__gated")!;
     expect(gated.getAttribute("aria-hidden")).toBe("true");
     expect(gated.hasAttribute("inert")).toBe(true);
-    // The ramp is real through its fade band, then scrambled.
+    // The ramp's fade band, then the full blur — since review 26.09 the copy under the blur is the real one (lockedBlurCopy.ts), hidden with the rest.
     const ramp = gate.querySelector(".rv4-ab__ramp")!;
     expect(ramp.textContent).toContain("can create days of tension.");
-    expect(ramp.textContent).not.toContain("A suggestive message on Wednesday");
+    expect(ramp.textContent).toContain("A suggestive message on Wednesday");
     expect(ramp.querySelector(".rv4-pblur")).not.toBeNull();
     expect(gate.querySelectorAll(".rv4-ab__blurred .rv4-prose__p")).toHaveLength(5);
     const card = gate.querySelector(".rv4-premium")!;
@@ -184,9 +184,9 @@ describe("reportV3.css — chapter body contracts", () => {
     expect(css).toContain("margin: 0 0 16.19px");
   });
 
-  it("ramps the gate over 314:307's two lines, blurs the rest 2.5px, and floats the card at 197", () => {
+  it("ramps the gate over 314:307's two lines, blurs the rest by the veil, and floats the card at 197", () => {
     expect(rule(".rv3 .rv4-ab__ramp {")).toContain("--rv4-band: 51.2px");
-    expect(rule(".rv3 .rv4-ab__blurred {")).toContain("filter: blur(2.5px)");
+    expect(rule(".rv3 .rv4-ab__blurred {")).toContain("filter: blur(var(--rv4-veil, 5px))");
     // 314:308 sits 197 into the section; the gate opens 10 + 21.6 + 16.19 + two
     // 25.6 lines + 16 = 114.99 in, so the card is 82 below it.
     expect(rule(".rv3 .rv4-ab__gate .rv4-premium {")).toContain("top: 82px");

@@ -9,7 +9,7 @@ import { REPORT_V4_CHAPTERS } from "@features/report/ui/v3/reportV3Nav";
 import { REPORT_V4_NUDGES } from "@/data/report3-archetype-page";
 
 /**
- * Part II's "What you will discover" — Figma 1:763: the H2 1:766 over the chapter
+ * Part II's "A Snapshot of what you will learn" — Figma 1:763: the H2 1:766 over the chapter
  * nudges panel. Four rows, each a way into a chapter: its part, its name, a serif
  * question, and — open — a line of support and "Read full chapter".
  *
@@ -37,9 +37,11 @@ afterEach(() => {
 });
 
 describe("V4ChapterNudges — 663:1089", () => {
-  it("heads the panel 'What you will discover', as 1:766 now reads", () => {
+  it("heads the panel 'A Snapshot of what you will learn', as 1:766 reads since 26.09", () => {
     render(<V4ChapterNudges />);
-    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("What you will discover");
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe(
+      "A Snapshot of what you will learn"
+    );
   });
 
   it("lists four chapters and their part, from V4's own order — no 'Learn in', no number", () => {
@@ -75,6 +77,9 @@ describe("V4ChapterNudges — 663:1089", () => {
     ]);
   });
 
+  // Challenges' line is Sanjin's polish of 26.09 (Mark: "this sentence needs a little
+  // polish", 1942399260; Sanjin: "better?"). 712:332 drops the final period every other
+  // line has; it keeps one here (ruling 3 of the 26.09 round).
   it("carries Sanjin's support lines (712:262 / 321 / 332 / 343), stray spaces out", () => {
     expect(REPORT_V4_NUDGES.map((n) => [n.id, n.support])).toEqual([
       [
@@ -87,7 +92,7 @@ describe("V4ChapterNudges — 663:1089", () => {
       ],
       [
         "challenges_in_partnership",
-        "Understand where your needs and habits can be misread by a partner, and how to reduce the friction without losing what matters to you.",
+        "Understand where your needs and habits can be misread by a partner, and how to navigate those differences with less friction and greater understanding.",
       ],
       [
         "typical_sexual_fantasy_amp_practice_tendencies",

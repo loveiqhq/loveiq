@@ -70,6 +70,23 @@ export const REPORT_V4_PART_DIVIDER_BY_SECTION: Readonly<Record<string, Report3P
   typical_sexual_fantasy_amp_practice_tendencies: REPORT_V4_PARTS[5]!,
 };
 
+/**
+ * How each part opens, as its frame draws it (review 26.09, "standardise the space
+ * between things/sections"): the fading hairline "Seperator - Horizontal Line" (19px,
+ * the line 18px down) above the heading, and the 44px "Seperator" under it before the
+ * part's first block. Keyed like REPORT_V4_PART_DIVIDER_BY_SECTION; the values are the
+ * frames' node ids, which ride on the rendered elements.
+ */
+export const REPORT_V4_PART_FRAME_BY_SECTION: Readonly<
+  Record<string, { readonly rule: string; readonly sep: string }>
+> = {
+  core_archetype: { rule: "1:484", sep: "1:491" },
+  typical_beliefs: { rule: "1:850", sep: "1:858" },
+  typical_arousal_accelerators_turn_ons_of_the_core_archetype: { rule: "1:983", sep: "1:991" },
+  attachment_style: { rule: "38:1508", sep: "38:1516" },
+  typical_sexual_fantasy_amp_practice_tendencies: { rule: "1:1138", sep: "1:1146" },
+};
+
 /*
  * Part I copy — re-read from the frame on 2026-09-23, after Mark rewrote all three
  * blocks and added bold runs. A "\n" inside a run is a line break the frame sets
@@ -247,15 +264,18 @@ export const REPORT_V4_CORE_ARCHETYPE_LEDE: readonly Report3Run[] = [
 ];
 
 /**
- * Part II · "What you will discover" — Figma 1:763: the H2 1:766 over the chapter
- * nudges panel 663:1089, which replaced the Snapshot's five claims (316:250).
+ * Part II · "A Snapshot of what you will learn" — Figma 1:763 (the frame is named
+ * "Snapshot" since 26.09): the H2 1:766 over the chapter nudges panel 663:1089, which
+ * replaced the Snapshot's five claims (316:250). Review 26.09: "The headline changed
+ * to 'A Snapshot of what you will learn'"; it was "What you will discover".
  *
  * One row per chapter the report leads with, in the frame's order. The copy is the
  * same for every archetype — each row is a way into a chapter, not a finding — so it
  * renders for all fourteen. The questions and support lines are Sanjin's (review
  * round 25.09, the all-open panel 712:243: 712:260/262, 282/321, 298/332,
  * 314/343), set in Mark's final panel (1:847). Two stray double spaces in the frame
- * are single here. Each row's part and title come from V4's chapter order
+ * are single here. Challenges' line is Sanjin's polish of 26.09 (Mark 1942399260);
+ * 712:332 drops its final period and it keeps one here, as every other line has. Each row's part and title come from V4's chapter order
  * (V4ChapterNudges), so they follow it if it moves.
  */
 export interface Report3Nudge {
@@ -267,7 +287,7 @@ export interface Report3Nudge {
   support: string;
 }
 
-export const REPORT_V4_NUDGES_HEADING = "What you will discover";
+export const REPORT_V4_NUDGES_HEADING = "A Snapshot of what you will learn";
 
 export const REPORT_V4_NUDGES: readonly Report3Nudge[] = [
   {
@@ -286,7 +306,7 @@ export const REPORT_V4_NUDGES: readonly Report3Nudge[] = [
     id: "challenges_in_partnership",
     question: "What do your partners hear that you never said?",
     support:
-      "Understand where your needs and habits can be misread by a partner, and how to reduce the friction without losing what matters to you.",
+      "Understand where your needs and habits can be misread by a partner, and how to navigate those differences with less friction and greater understanding.",
   },
   {
     id: "typical_sexual_fantasy_amp_practice_tendencies",
@@ -441,4 +461,20 @@ export const REPORT_V4_UNSUFFIXED_CHAPTER_IDS: ReadonlySet<string> = new Set(
     ...REPORT_V4_PART5_CHAPTERS,
     ...REPORT_V4_PART6_CHAPTERS,
   ].flatMap((c) => (c.suffix === false && c.id ? [c.id] : []))
+);
+
+/**
+ * The chapters Figma has designed — its expanded rows (`body: "chapter"`): Typical
+ * Beliefs, Accelerators & Brakes, Challenges in Partnerships and Fantasy vs. Reality.
+ * Under V4 they never lock outright (review 26.09, V4ChapterLock): a locked reader
+ * gets their paywalled designs, or V2's previews for the archetypes still on V2, so
+ * Part II's nudges never point at a chapter that will not open.
+ */
+export const REPORT_V4_DESIGNED_CHAPTER_IDS: ReadonlySet<string> = new Set(
+  [
+    ...REPORT_V4_PART3_CHAPTERS,
+    ...REPORT_V4_PART4_CHAPTERS,
+    ...REPORT_V4_PART5_CHAPTERS,
+    ...REPORT_V4_PART6_CHAPTERS,
+  ].flatMap((c) => (c.body === "chapter" && c.id ? [c.id] : []))
 );

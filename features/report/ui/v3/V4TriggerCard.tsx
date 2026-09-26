@@ -20,13 +20,12 @@ import { guardedUnlock } from "./v4Unlock";
  * table, whose pill this is. The pill unmounts under the keyboard's focus, so focus
  * moves to the first row it revealed.
  *
- * PAYWALLED, the cards keep their first `lockedFrom` rows sharp and blur the rest
- * uniformly, with the gradient lock badge floating over the blur. The blurred rows
- * arrive scrambled from the server; they are `aria-hidden` and `inert`, and the group
- * around them owns the click, so a tap anywhere on the blur opens the paywall once
- * (the badge has no handler of its own and bubbles to it — the same seam as
- * V4ShadowBeliefs). The frames ramp the first blurred row's blur in; it holds
- * uniform here, because a ramp would show that row's stand-in text nearly sharp.
+ * PAYWALLED, the cards keep their first `lockedFrom` rows sharp; the next ramps into
+ * the blur and the rest sit under it, with the gradient lock badge floating over the
+ * blur. The blurred rows arrive as the server decides (lockedBlurCopy.ts: the real
+ * rows since review 26.09); they are `aria-hidden` and `inert`, and the group around
+ * them owns the click, so a tap anywhere on the blur opens the paywall once (the badge
+ * has no handler of its own and bubbles to it — the same seam as V4ShadowBeliefs).
  *
  * The chrome text lives here, never in the paid module.
  */
@@ -67,18 +66,31 @@ interface Props {
   onUnlock?: () => void;
 }
 
-const Row: FC<{ row: Report3TriggerRow; locked?: boolean; last: boolean; focusable?: boolean }> = ({
-  row,
-  locked = false,
-  last,
-  focusable = false,
-}) => (
+/**
+ * A locked row either ramps into the blur (452:261: sharp at its top, the full blur 64%
+ * down it) or sits under the blur whole (452:264, 452:267).
+ */
+type LockedAs = "ramp" | "blurred";
+
+const Row: FC<{
+  row: Report3TriggerRow;
+  locked?: LockedAs;
+  last: boolean;
+  focusable?: boolean;
+}> = ({ row, locked, last, focusable = false }) => (
   <li
-    className={`rv4-trig__row${locked ? " is-locked" : ""}${last ? " is-last" : ""}`}
+    className={`rv4-trig__row${locked ? ` is-locked is-${locked}` : ""}${last ? " is-last" : ""}`}
     tabIndex={focusable ? -1 : undefined}
   >
     <p className="rv4-trig__title">{row.label}</p>
     <p className="rv4-trig__sub">{row.subtext}</p>
+    {locked === "ramp" ? (
+      <span className="rv4-pblur rv4-trig__ramp" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </span>
+    ) : null}
   </li>
 );
 
@@ -99,7 +111,7 @@ const V4TriggerCard: FC<Props> = ({ tone, rows, lockedFrom = null, onUnlock }) =
     listRef.current?.querySelectorAll<HTMLElement>(".rv4-trig__row")[CLEAR_ROWS]?.focus();
   }, [showAll]);
 
-  // Scrambled rows are not stable keys, so rows are keyed by position.
+  // Rows are keyed by position: in decoy mode their text is not stable.
   return (
     <section
       className={`rv4-trig rv4-trig--${tone}`}
@@ -145,7 +157,12 @@ const V4TriggerCard: FC<Props> = ({ tone, rows, lockedFrom = null, onUnlock }) =
           <div className="rv4-tb-lock rv4-trig__lock" onClick={guardedUnlock(onUnlock)}>
             <ul className="rv4-trig__list is-locked" aria-hidden="true" inert>
               {blurred.map((row, index) => (
-                <Row key={index} row={row} locked last={index === blurred.length - 1} />
+                <Row
+                  key={index}
+                  row={row}
+                  locked={index === 0 ? "ramp" : "blurred"}
+                  last={index === blurred.length - 1}
+                />
               ))}
             </ul>
             <V4LockBadge />

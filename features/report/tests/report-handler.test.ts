@@ -1,5 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// The switch in lockedBlurCopy.ts decides what rides under the blur. These tests run
+// in its decoy position (nothing paid past the wall) unless one says otherwise; the
+// default since review 26.09 is the real copy, pinned at the boundary below and in
+// lockedBlurCopy2609.test.ts.
+const blurCopy = vi.hoisted(() => ({ mode: "decoy" as "real" | "decoy" }));
+vi.mock("@features/report/server/lockedBlurCopy", () => ({
+  get LOCKED_BLUR_COPY() {
+    return blurCopy.mode;
+  },
+}));
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -60,8 +70,8 @@ import {
 } from "@features/report/server/personalReport";
 import { getReportPriceQuotesForContext } from "@features/pricing/logic/reportPricing";
 
-function makeRequest(sessionId = "550e8400-e29b-41d4-a716-446655440000") {
-  return new Request(`http://localhost:3000/api/report?sessionId=${sessionId}`);
+function makeRequest(sessionId = "550e8400-e29b-41d4-a716-446655440000", query = "") {
+  return new Request(`http://localhost:3000/api/report?sessionId=${sessionId}${query}`);
 }
 
 function allowCsrf() {
@@ -581,7 +591,7 @@ describe("GET /api/report", () => {
  */
 describe("GET /api/report — Accelerator & Brakes (Report 3.0)", () => {
   const AB_PROBES = [
-    "Control and possessiveness",
+    "Low-energy, passive encounters",
     "Spontaneity and controlled unpredictability",
     "A suggestive message on Wednesday",
     "Respect brakes that are protecting something real.",
@@ -635,7 +645,7 @@ describe("GET /api/report — Accelerator & Brakes (Report 3.0)", () => {
       unlockedArchetypeColumn: [],
     });
     queueSubmission("Spark Seeker");
-    const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"));
+    const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848", "&v4=1"));
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.accelerators.lockedFrom).toBe(2);
@@ -643,6 +653,65 @@ describe("GET /api/report — Accelerator & Brakes (Report 3.0)", () => {
     expect(json.acceleratorsArticle.locked).toBe(true);
     const body = JSON.stringify(json);
     for (const probe of AB_PROBES) expect(body, probe).not.toContain(probe);
+  });
+
+  // Review 26.09 — Mark: "This should always be the unlocked content but blurred";
+  // Fatih's call. In the switch's real position the locked chapter carries the copy
+  // it draws blurred, still marked locked, so the page blurs it.
+  it("ships a locked Spark Seeker the blurred rows and passages as written (real)", async () => {
+    blurCopy.mode = "real";
+    try {
+      vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({
+        accessPlan: null,
+        archetypeTiers: {},
+        personalReportId: 99,
+        unlockedArchetypeColumn: [],
+      });
+      queueSubmission("Spark Seeker");
+      const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848", "&v4=1"));
+      const json = await res.json();
+      expect(json.accelerators.lockedFrom).toBe(2);
+      expect(json.accelerators.practice.locked).toBe(true);
+      const body = JSON.stringify(json);
+      for (const probe of AB_PROBES) expect(body, probe).toContain(probe);
+    } finally {
+      blurCopy.mode = "decoy";
+    }
+  });
+
+  // Final review 26.09: the four V4 chapters were built for every request, so with
+  // the real copy under the blur a locked reader of the DEFAULT report — which draws
+  // none of them — received their paid copy in this response. Only a V4 page, which
+  // says so with `v4=1`, gets them now.
+  it("sends a request that is not V4 none of the four V4 chapters, even with the real copy", async () => {
+    blurCopy.mode = "real";
+    try {
+      vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({
+        accessPlan: null,
+        archetypeTiers: {},
+        personalReportId: 99,
+        unlockedArchetypeColumn: [],
+      });
+      queueSubmission("Spark Seeker");
+      const json = await (await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"))).json();
+      for (const key of [
+        "typicalBeliefs",
+        "typicalBeliefsArticle",
+        "accelerators",
+        "acceleratorsArticle",
+        "partnership",
+        "fantasy",
+        "fantasyArticle",
+      ]) {
+        expect(json[key], key).toBeNull();
+      }
+      const body = JSON.stringify(json);
+      for (const probe of AB_PROBES) expect(body, probe).not.toContain(probe);
+      // V2's own sections, which that page does draw, are untouched.
+      expect(json.accelCopy).not.toBeNull();
+    } finally {
+      blurCopy.mode = "decoy";
+    }
   });
 
   it("ships a paid Spark Seeker every word", async () => {
@@ -653,7 +722,7 @@ describe("GET /api/report — Accelerator & Brakes (Report 3.0)", () => {
       unlockedArchetypeColumn: [],
     });
     queueSubmission("Spark Seeker");
-    const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"));
+    const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848", "&v4=1"));
     const json = await res.json();
     expect(json.accelerators.lockedFrom).toBeNull();
     expect(json.acceleratorsArticle.locked).toBe(false);
@@ -669,7 +738,7 @@ describe("GET /api/report — Accelerator & Brakes (Report 3.0)", () => {
       unlockedArchetypeColumn: [],
     });
     queueSubmission("Emotional Voyeur");
-    const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"));
+    const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848", "&v4=1"));
     const json = await res.json();
     expect(json.accelerators).toBeNull();
     expect(json.acceleratorsArticle).toBeNull();
@@ -743,7 +812,7 @@ describe("GET /api/report — Fantasy vs. Reality (Report 3.0)", () => {
   it("ships a locked Spark Seeker the chapter with nothing paid past the wall", async () => {
     withPlan(null);
     queueSubmission("Spark Seeker");
-    const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"));
+    const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848", "&v4=1"));
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.fantasy.locked).toBe(true);
@@ -759,10 +828,49 @@ describe("GET /api/report — Fantasy vs. Reality (Report 3.0)", () => {
     for (const probe of FVR_PROBES) expect(body, probe).not.toContain(probe);
   });
 
+  it("ships a locked Spark Seeker the blurred rows, the map's dots and the copy as written (real)", async () => {
+    blurCopy.mode = "real";
+    try {
+      withPlan(null);
+      queueSubmission("Spark Seeker");
+      const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848", "&v4=1"));
+      const json = await res.json();
+      expect(json.fantasy.locked).toBe(true);
+      expect(json.fantasy.table.locked).toBe(true);
+      // V4's map draws its real dots blurred; V2's section keeps its own rule.
+      expect(json.fantasy.mapDots).not.toBeNull();
+      expect(json.fantasyDots).toBeNull();
+      const body = JSON.stringify(json);
+      for (const probe of FVR_PROBES) expect(body, probe).toContain(probe);
+    } finally {
+      blurCopy.mode = "decoy";
+    }
+  });
+
+  // Final review 26.09: the default report draws no V4 chapter, so neither its copy
+  // nor the map's dots (final review 2) may travel on a request that is not V4.
+  it("keeps the chapter and the map's dots off a request that is not V4, even with the real copy", async () => {
+    blurCopy.mode = "real";
+    try {
+      withPlan(null);
+      queueSubmission("Spark Seeker");
+      const json = await (await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"))).json();
+      expect(json.fantasy).toBeNull();
+      expect(json.fantasyArticle).toBeNull();
+      expect(json.fantasyDots).toBeNull();
+      const body = JSON.stringify(json);
+      for (const probe of FVR_PROBES) expect(body, probe).not.toContain(probe);
+    } finally {
+      blurCopy.mode = "decoy";
+    }
+  });
+
   it("keeps it locked on essentials — it is a full-report chapter", async () => {
     withPlan("essentials");
     queueSubmission("Spark Seeker");
-    const json = await (await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"))).json();
+    const json = await (
+      await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848", "&v4=1"))
+    ).json();
     expect(json.fantasy.locked).toBe(true);
     expect(json.fantasyArticle.locked).toBe(true);
     expect(json.fantasy.mapDots).toBeNull();
@@ -771,7 +879,9 @@ describe("GET /api/report — Fantasy vs. Reality (Report 3.0)", () => {
   it("ships a paid Spark Seeker every word", async () => {
     withPlan("full_report");
     queueSubmission("Spark Seeker");
-    const json = await (await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"))).json();
+    const json = await (
+      await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848", "&v4=1"))
+    ).json();
     expect(json.fantasy.locked).toBe(false);
     expect(json.fantasyArticle.locked).toBe(false);
     expect(json.fantasyCopy.locked).toBe(false);
@@ -784,7 +894,9 @@ describe("GET /api/report — Fantasy vs. Reality (Report 3.0)", () => {
   it("ships null for an archetype without Report 3.0 copy, so V2's section stays", async () => {
     withPlan(null);
     queueSubmission("Emotional Voyeur");
-    const json = await (await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"))).json();
+    const json = await (
+      await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848", "&v4=1"))
+    ).json();
     expect(json.fantasy).toBeNull();
     expect(json.fantasyArticle).toBeNull();
     expect(json.fantasyCopy).not.toBeNull();

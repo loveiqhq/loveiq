@@ -107,7 +107,7 @@ describe("V4Part2", () => {
     expect(container.querySelector(".rv4-corehead")).toBeInTheDocument();
     expect(container.querySelector(".rv3-arch")).toBeInTheDocument();
     expect(container.querySelector(".rv4-summary")).toBeInTheDocument();
-    // 1:763 — "What you will discover" over the chapter nudges, where the Snapshot was.
+    // 1:763 — "A Snapshot of what you will learn" over the chapter nudges, where the Snapshot was.
     expect(container.querySelector(".rv4-nudges")).toBeInTheDocument();
     expect(container.querySelector(".rv4-snap")).toBeNull();
   });

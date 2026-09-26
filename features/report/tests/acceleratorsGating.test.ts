@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   ACCELERATORS_CHALLENGES_FREE_BLOCKS,
   ACCELERATORS_CHALLENGES_RAMP_THROUGH,
@@ -9,6 +9,11 @@ import {
   REPORT_V4_ACCELERATORS,
 } from "@/data/report3-accelerators";
 import type { Report3Block } from "@/data/report3-learn-more";
+
+// These tests pin the switch's decoy position (lockedBlurCopy.ts): what the chapter
+// sends a locked reader when nothing paid rides under the blur. The default since
+// review 26.09 is the real copy — see lockedBlurCopy2609.test.ts.
+vi.mock("@features/report/server/lockedBlurCopy", () => ({ LOCKED_BLUR_COPY: "decoy" }));
 
 /**
  * What a reader RECEIVES of the Accelerator & Brakes chapter (Figma 334:521 open,
@@ -107,7 +112,10 @@ describe("buildAccelerators — unlocked", () => {
 describe("buildAccelerators — locked", () => {
   const view = buildAccelerators("Spark Seeker", { locked: true })!;
 
-  it("keeps rows 1-2 of each card real and scrambles rows 3-5", () => {
+  // Row 3 ramps into the blur, sharp at its top (386:416 / 386:444), so it stays real
+  // in the decoy position too — as Typical Beliefs' ramp row does. A stand-in there
+  // would show its made-up label nearly sharp (final review 26.09).
+  it("keeps rows 1-2 of each card real, the ramp row 3 real, and scrambles rows 4-5", () => {
     expect(ACCELERATORS_FREE_ROWS).toBe(2);
     expect(view.lockedFrom).toBe(2);
     for (const [shown, authored] of [
@@ -116,7 +124,7 @@ describe("buildAccelerators — locked", () => {
     ] as const) {
       shown.forEach((row, i) => {
         const original = authored[i]!;
-        if (i < 2) {
+        if (i <= 2) {
           expect(row).toEqual(original);
         } else {
           expect(row.label).not.toBe(original.label);
@@ -173,12 +181,9 @@ describe("buildAccelerators — locked", () => {
     const locked = payload(true);
     const unlocked = payload(false);
     const probes = [
-      // Rows 3-5 of both cards.
-      "Control and possessiveness",
-      "Feeling monitored, restricted or managed",
+      // Rows 4-5 of both cards. Row 3 is the ramp, sent as written (see above).
       "Low-energy, passive encounters",
       "Criticism, shame or judgment",
-      "Novelty and variation",
       "Confident signals of desire",
       "Spontaneity and controlled unpredictability",
       // Common challenges past the fade band.

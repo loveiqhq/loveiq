@@ -1,23 +1,15 @@
-import { describe, expect, it } from "vitest";
-import {
-  gate,
-  lockedBlurIsReal,
-  scrambleBlock,
-  splitRamp,
-  veilBlock,
-  veilText,
-} from "@features/report/server/gatedCopy";
-import { LOCKED_BLUR_COPY } from "@features/report/server/lockedBlurCopy";
+import { describe, expect, it, vi } from "vitest";
+import { gate, scrambleBlock, splitRamp } from "@features/report/server/gatedCopy";
 import type { Report3Block } from "@/data/report3-learn-more";
+
+// The switch's other position (lockedBlurCopy.ts): decoys under the blur. Kept
+// tested so flipping back is one line.
+vi.mock("@features/report/server/lockedBlurCopy", () => ({ LOCKED_BLUR_COPY: "decoy" }));
 
 /**
  * The paywall split every V4 chapter body shares (Typical Beliefs, Accelerator &
  * Brakes): clear blocks, one ramp block the blur fades in over, and a rest that is
- * only ever seen under the full blur.
- *
- * Review 26.09 — Mark: "This should always be the unlocked content but blurred";
- * Fatih: real paid content under a stronger blur. So by default what the blur covers
- * is the copy itself (lockedBlurCopy.ts). The decoy position is gatedCopyDecoy.test.
+ * only ever seen under the full blur — in decoy mode it leaves the server scrambled.
  */
 
 const textOf = (block: Report3Block): string =>
@@ -46,28 +38,22 @@ const BLOCKS: readonly Report3Block[] = [
   { kind: "list", items: [[{ text: "First item" }], [{ text: "Second item" }]] },
 ];
 
-describe("the switch (lockedBlurCopy.ts)", () => {
-  it("sends the real copy under the blur — Fatih's call of 26.09", () => {
-    expect(LOCKED_BLUR_COPY).toBe("real");
-    expect(lockedBlurIsReal()).toBe(true);
-  });
-
-  it("veils nothing in real mode: the text and the block come back as written", () => {
-    expect(veilText("Novelty and variation")).toBe("Novelty and variation");
-    expect(veilBlock(BLOCKS[3]!)).toBe(BLOCKS[3]);
-  });
-});
-
 describe("gate", () => {
   it("hands an unlocked reader everything, nothing split off", () => {
     expect(gate(BLOCKS, 2, false)).toEqual({ free: BLOCKS, ramp: null, rest: [] });
   });
 
-  it("splits a locked passage into clear blocks, the ramp, and the rest as written", () => {
+  it("splits a locked passage into clear blocks, the ramp, and a scrambled rest", () => {
     const { free, ramp, rest } = gate(BLOCKS, 2, true);
     expect(free).toEqual(BLOCKS.slice(0, 2));
     expect(ramp).toEqual(BLOCKS[2]);
-    expect(rest).toEqual(BLOCKS.slice(3));
+    expect(rest).toHaveLength(2);
+    rest.forEach((block, i) => {
+      const original = BLOCKS[3 + i]!;
+      expect(block.kind).toBe(original.kind);
+      expect(textOf(block)).toHaveLength(textOf(original).length);
+      expect(textOf(block)).not.toBe(textOf(original));
+    });
   });
 });
 
@@ -85,9 +71,19 @@ describe("scrambleBlock", () => {
 describe("splitRamp", () => {
   const ramp = BLOCKS[2]!;
 
-  it("keeps the whole ramp real, the tail past the named sentence included", () => {
+  it("keeps the ramp real through the named sentence and scrambles the rest of it", () => {
     const split = splitRamp(ramp, "it builds.");
-    expect(textOf(split)).toBe(textOf(ramp));
+    const full = textOf(ramp);
+    const cut = full.indexOf("it builds.") + "it builds.".length;
+    expect(textOf(split)).toHaveLength(full.length);
+    expect(textOf(split).slice(0, cut)).toBe(full.slice(0, cut));
+    expect(textOf(split).slice(cut)).not.toBe(full.slice(cut));
+    // The tail keeps its spaces and punctuation, so it still wraps like the real copy.
+    expect(
+      textOf(split)
+        .slice(cut)
+        .replace(/[A-Za-z0-9]/g, "")
+    ).toBe(full.slice(cut).replace(/[A-Za-z0-9]/g, ""));
   });
 
   it("splits a run at the cut into two runs of the same style", () => {
@@ -96,11 +92,11 @@ describe("splitRamp", () => {
     expect(split.runs).toHaveLength(4);
     expect(split.runs.slice(0, 2)).toEqual(ramp.kind === "para" ? ramp.runs.slice(0, 2) : []);
     expect(split.runs[2]!.text).toBe(". In the right form, it builds.");
-    expect(split.runs[3]!.text).toBe(" A message on Wednesday helps.");
+    expect(split.runs[3]!.text).toHaveLength(" A message on Wednesday helps.".length);
     expect(split.runs[3]!.weight).toBeUndefined();
   });
 
-  it("marks the tail veiled, so the page can end the fade where the full blur starts", () => {
+  it("marks the scrambled tail veiled, so the page can keep the fade off it", () => {
     const split = splitRamp(ramp, "it builds.");
     if (split.kind !== "para") throw new Error("expected a paragraph");
     expect(split.runs.map((r) => r.veiled === true)).toEqual([false, false, false, true]);

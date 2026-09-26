@@ -28,17 +28,19 @@ import { guardedUnlock } from "./v4Unlock";
  * them the map draws V2's illustrative layout, which is what Figma draws, the names
  * on the sides 696:4407 sets by hand.
  *
- * PAYWALLED. The reader's placements come from paid scores and are never sent, so
- * the plot shows the illustrative layout under a 2px blur with the lock on it, and
- * the plot owns the click. 305:217 draws the plot sharp; drawn sharp, invented
- * placements would read as the reader's own. The chips, axes and caption stay sharp.
+ * PAYWALLED. The plot sits under the blur with the lock on it, and the plot owns the
+ * click; the chips, axes and caption stay sharp. What it draws there is what the
+ * server sends (lockedBlurCopy.ts): the reader's own dots since review 26.09 ("the
+ * unlocked content but blurred"), or none in decoy mode, when it draws the
+ * illustrative layout — never sharp, where invented placements would read as the
+ * reader's own.
  *
  * No copy is quoted in these comments on purpose: production serves browser source
  * maps, so a client component's comments are public.
  */
 
 interface Props {
-  /** The reader's own dots (buildFantasy); null draws V2's illustrative layout. */
+  /** The reader's own dots (buildFantasy), blurred when locked; null draws V2's illustrative layout. */
   dots: FantasyMapDot[] | null;
   locked: boolean;
   /** Opens the paywall. Omitted where it would be inert. */
@@ -111,8 +113,8 @@ const V4FantasyMap: FC<Props> = ({ dots, locked, onUnlock }) => {
   const wasTouch = useRef(false);
   const wasOpen = useRef(false);
 
-  /** The reader's own dots, sharp; otherwise V2's illustrative layout. */
-  const own = !locked && Boolean(dots?.length);
+  /** The reader's own dots when the server sent them (blurred if locked); else V2's layout. */
+  const own = Boolean(dots?.length);
   const shown: readonly MapDot[] = own ? dots! : MAP_DOTS;
   const points = useMemo<NameDot[]>(
     () => shown.map((dot) => ({ x: dot.x, y: dot.y, r: RING[dot.q] })),
@@ -293,7 +295,11 @@ const V4FantasyMap: FC<Props> = ({ dots, locked, onUnlock }) => {
       <div className="rv4-fvm__row">
         <div className="rv4-fvm__img">
           {locked ? (
-            <div className="rv4-fvm__frame rv4-fvm__lock" onClick={guardedUnlock(onUnlock)}>
+            <div
+              className="rv4-fvm__frame rv4-fvm__lock"
+              ref={frameRef}
+              onClick={guardedUnlock(onUnlock)}
+            >
               {plot}
               <V4LockBadge />
             </div>
