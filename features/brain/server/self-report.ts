@@ -34,11 +34,15 @@ export interface CallRow {
   content_score: number | null;
   latency_ms: number | null;
   error: string | null;
+  /** Who asked: a member's address, "shared", or null before sign-in existed (2026-09-26). */
+  actor?: string | null;
 }
 
 export interface WindowStats {
   calls: number;
   bySurface: Array<[string, number]>;
+  /** Calls per member address; "shared" is the unattended jobs' token, "" is not recorded. */
+  byActor: Array<[string, number]>;
   byTool: Array<[string, number]>;
   searches: number;
   weak: number;
@@ -125,6 +129,7 @@ export function windowStats(rows: CallRow[], floor: number): WindowStats {
   return {
     calls: rows.length,
     bySurface: countBy(rows, (r) => r.surface ?? "unknown"),
+    byActor: countBy(rows, (r) => r.actor ?? ""),
     byTool: tools,
     searches: searches.length,
     weak: searches.filter(isWeak).length,
@@ -254,7 +259,7 @@ export async function selfReport(
 
   const [calls, testCalls, runs, batteryRows] = await Promise.all([
     readAll<CallRow>(
-      `/rest/v1/brain_query?select=created_at,surface,tool,query:args->>query,source_count,` +
+      `/rest/v1/brain_query?select=created_at,surface,actor,tool,query:args->>query,source_count,` +
         `content_score,latency_ms,error&created_at=gte.${enc(beforeSince)}` +
         `&surface=neq.mcp-battery&order=id.asc`
     ),
@@ -409,6 +414,19 @@ export function renderSelfReport(
               .join(", ")}.`
           : "")
     );
+    // Only once someone has signed in: before that every row is unattributed. People
+    // first, busiest first; then the shared token, then calls from before sign-in existed.
+    if (s.byActor.some(([who]) => who && who !== "shared")) {
+      const rank = (who: string) => (who === "shared" ? 1 : who ? 0 : 2);
+      out.push(
+        `By who: ${[...s.byActor]
+          .sort((a, b) => rank(a[0]) - rank(b[0]))
+          .map(
+            ([who, v]) => `${who === "shared" ? "the shared token" : who || "not recorded"} ${n(v)}`
+          )
+          .join(", ")}.`
+      );
+    }
     out.push(
       s.searches
         ? `Searches: ${n(s.searches)}. ${n(s.weak)} came back weak (${pct(s.weak, s.searches)}; before, ${pct(b.weak, b.searches)}) ` +

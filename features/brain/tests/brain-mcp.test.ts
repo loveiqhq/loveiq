@@ -111,6 +111,7 @@ vi.mock("@shared/http/ratelimit", () => ({
 
 import { flushAfterResponse } from "@shared/http/after-response";
 import { recordToolCall } from "@features/brain/server/log";
+import { forgetSignIns } from "@features/brain/server/sign-in";
 import { outrankingHeldBack, POST, RELEVANCE_FLOOR, TOOLS } from "@/app/api/mcp/route";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -178,9 +179,12 @@ describe("/api/mcp", () => {
   });
 
   describe("auth", () => {
-    it("503s while the token is unset, so it is safe to deploy before it exists", async () => {
+    it("with the shared token unset, still refuses a bearer that is not a sign-in", async () => {
+      // It used to 503 here. People sign in themselves now, so an unset shared token is
+      // not "unconfigured" — but it must never make an empty or arbitrary bearer valid.
       delete process.env.LOVEIQ_MCP_TOKEN;
-      expect((await POST(rpc({ jsonrpc: "2.0", id: 1, method: "ping" }))).status).toBe(503);
+      expect((await POST(rpc({ jsonrpc: "2.0", id: 1, method: "ping" }))).status).toBe(401);
+      expect((await POST(rpc({ jsonrpc: "2.0", id: 1, method: "ping" }, ""))).status).toBe(401);
     });
 
     it("401s with no token, a wrong token, and a wrong-LENGTH token", async () => {
@@ -189,6 +193,104 @@ describe("/api/mcp", () => {
       expect((await POST(rpc({ method: "ping" }, null))).status).toBe(401);
       expect((await POST(rpc({ method: "ping" }, "wrong-but-same-length"))).status).toBe(401);
       expect((await POST(rpc({ method: "ping" }, "short"))).status).toBe(401);
+    });
+
+    it("tells a client with no sign-in where to get one (RFC 9728)", async () => {
+      const res = await POST(rpc({ method: "ping" }, null));
+      expect(res.headers.get("WWW-Authenticate")).toBe(
+        'Bearer resource_metadata="https://www.loveiq.org/.well-known/oauth-protected-resource/api/mcp", scope="email"'
+      );
+    });
+
+    describe("a person who signed in", () => {
+      const BASE = "https://proj.supabase.co";
+      const part = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
+      const signIn = `${part({ alg: "HS256" })}.${part({
+        iss: `${BASE}/auth/v1`,
+        client_id: "claude",
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      })}.sig`;
+
+      beforeEach(() => {
+        forgetSignIns();
+        process.env.SUPABASE_URL = BASE;
+        process.env.SUPABASE_SERVICE_ROLE_KEY = "service-key";
+        mockFetch.mockImplementation(async (url: string) =>
+          String(url).endsWith("/auth/v1/user")
+            ? { ok: true, json: async () => ({ email: "mo@loveiq.org" }) }
+            : { ok: false, status: 404, json: async () => ({}) }
+        );
+        mockSupabaseFetch.mockImplementation(async (path: string) => ({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () =>
+            String(path).startsWith("/rest/v1/brain_person")
+              ? [{ canonical: "Mark Oldenburg" }]
+              : [],
+          text: async () => "",
+        }));
+      });
+      afterEach(() => {
+        delete process.env.SUPABASE_URL;
+        delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+      });
+
+      it("logs every call under their own address, and the shared token as shared", async () => {
+        await POST(
+          rpc(
+            {
+              jsonrpc: "2.0",
+              id: 1,
+              method: "tools/call",
+              params: { name: "list_sources", arguments: {} },
+            },
+            signIn
+          )
+        );
+        await POST(
+          rpc({
+            jsonrpc: "2.0",
+            id: 2,
+            method: "tools/call",
+            params: { name: "list_sources", arguments: {} },
+          })
+        );
+        await flushAfterResponse();
+        expect(writes().map((w) => w.actor)).toEqual(["mo@loveiq.org", "shared"]);
+      });
+
+      it("names them as the recorder of a decision someone else made", async () => {
+        const r = await POST(
+          rpc(
+            {
+              jsonrpc: "2.0",
+              id: 3,
+              method: "tools/call",
+              params: {
+                name: "record_decision",
+                arguments: {
+                  decision: "Move report pricing to flat tiers",
+                  actor: "Marcus Börner",
+                },
+              },
+            },
+            signIn
+          )
+        );
+        expect((await r.json()).result.isError).toBe(false);
+        const row = mockSupabaseFetch.mock.calls
+          .filter(
+            ([path, init]) =>
+              String(path).startsWith("/rest/v1/brain_chunk") &&
+              typeof (init as { body?: unknown } | undefined)?.body === "string"
+          )
+          .map(([, init]) => JSON.parse(String((init as { body: string }).body)) as unknown[])
+          .flat()[0] as { body: string; meta: Record<string, unknown> };
+        expect(row.body).toContain("Decided on");
+        expect(row.body).toContain("by Marcus Börner.\nRecorded by Mark Oldenburg.");
+        expect(row.meta).toMatchObject({ actor: "Marcus Börner", recorded_by: "Mark Oldenburg" });
+      });
     });
 
     it("429s when rate limited, before doing any work", async () => {

@@ -299,9 +299,9 @@ PostHog is on the **EU** host. The same key is rejected by the US host with
 `authentication_failed`, which says nothing about the region, so it is an easy
 hour to lose.
 
-`LOVEIQ_MCP_TOKEN` gates the MCP endpoint rather than a source: unset means
-`/api/mcp` returns 503 and no Claude can connect, which is why it is safe to
-deploy before the token exists.
+`LOVEIQ_MCP_TOKEN` gates the MCP endpoint rather than a source. It is the shared
+token the unattended jobs use; people sign in as themselves (see "Connecting Claude
+to it"). Unset, only personal sign-ins work.
 
 **Both Google credentials are now in place** (2026-08-28). Two things were needed
 and neither is obvious:
@@ -339,10 +339,46 @@ This is the primary way to use the brain. `/api/mcp` exposes the corpus as an MC
 server, so Claude — the claude.ai app, Claude Desktop, or Claude Code — can search
 it as a tool and reason across it alongside the live connectors it already has.
 
-Add it as a custom connector with:
+**Everyone signs in as themselves** (decision 2026-09-26,
+`decision:2026-09-26-3b76af89e8`). Add it with just the URL,
+`https://www.loveiq.org/api/mcp`, and no Authorization header:
 
-- **URL** `https://www.loveiq.org/api/mcp`
-- **Authorization** `Bearer <LOVEIQ_MCP_TOKEN>`
+- **claude.ai / Claude Desktop:** the organization connector (Settings → Connectors).
+  Each person clicks **Connect** once, types their `@loveiq.org` address, then the
+  six-digit code from their inbox, then **Allow**.
+- **Claude Code:** `claude mcp add --transport http loveiq-brain https://www.loveiq.org/api/mcp`,
+  then `/mcp` → Authenticate. The same page opens in the browser.
+
+The same page, `/jarvis/connect`, handles both. Each call and each write then carries
+the person's own name: `brain_query.actor` holds their address, and a decision
+records them as `recorded_by` next to the `actor` they typed. Every new connection is
+posted to #brain.
+
+**How it works.** Supabase Auth's OAuth 2.1 server (beta, free) does the tokens.
+Claude finds it on its own: a 401 from `/api/mcp` points at
+`/.well-known/oauth-protected-resource/api/mcp`, which names
+`https://pveqkhdpypfzxggwjsnk.supabase.co/auth/v1`, and Claude registers itself there
+(dynamic registration). Supabase then sends the person to our authorization path,
+`/jarvis/connect`. The code is minted by Supabase (`generate_link`) and sent by us
+through Resend, as the admin login does, so nothing relies on Supabase's own mailer.
+`features/brain/server/sign-in.ts` checks each call's token with Supabase
+(`/auth/v1/user`) and trusts the answer for a minute. The auth settings are
+`oauth_server_enabled`, `oauth_server_allow_dynamic_registration`,
+`oauth_server_authorization_path = /jarvis/connect`, and `site_url =
+https://www.loveiq.org`.
+
+- **Who may sign in is the people registry.** An `@loveiq.org` address on an active
+  person in `brain_person`: not a shared mailbox, not a personal address.
+- **Offboarding** is `update brain_person set active = false where canonical = '…'`.
+  Every client they connected stops working within a minute, because membership is
+  checked on each call, not once at sign-in.
+- **An approval only goes back to Claude:** `claude.ai`, `claude.com`, or
+  `localhost` for Claude Code. Anyone can register a client, so without that check a
+  stranger could register one called "Claude" and ask a member to approve it.
+- **The shared `LOVEIQ_MCP_TOKEN` stays for the unattended jobs:** the Night Shift,
+  the weekly health report, the test batteries and the session hook. Its calls log as
+  `actor = 'shared'`. Once everyone has connected as themselves, rotate it so only
+  those jobs hold it.
 
 **Use `www`, not the apex.** `loveiq.org` 308-redirects to `www`, and a redirect
 drops the `Authorization` header, so the apex presents as a confusing 401 with a

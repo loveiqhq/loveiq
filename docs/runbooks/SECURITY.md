@@ -228,6 +228,28 @@ would otherwise provide.
 - Export survey and waitlist_user data regularly from Supabase (CSV or snapshots) and store securely.
 - Test restores periodically to ensure data integrity.
 
+## Jarvis sign-in (company brain, `/api/mcp`)
+
+Since 2026-09-26 each person signs in to Jarvis as themselves. Supabase Auth's OAuth 2.1
+server issues the tokens, and `/jarvis/connect` is its authorization path. The operator
+detail is in `docs/runbooks/COMPANY_BRAIN.md` ("Connecting Claude to it").
+
+- **Membership is the people registry:** an `@loveiq.org` address on an active person in
+  `brain_person`. It is checked on every call, cached for at most a minute, so setting
+  `active = false` revokes every client that person connected.
+- **Tokens are verified by Supabase** (`/auth/v1/user`, which checks the signature and
+  that the session still exists). Only tokens carrying a `client_id` (OAuth-issued) are
+  accepted. An admin-panel session token is not a Jarvis sign-in.
+- **Open client registration is safe only with the callback allowlist.** Approvals go
+  back only to claude.ai, claude.com or localhost (Claude Code). Any other app is refused
+  on the consent page and in `/api/jarvis/decision`.
+- **Staff accounts in Supabase Auth reach no data directly.** Every public table's RLS
+  policy is `service_role` only, and no function is executable by `authenticated` that
+  `anon` could not already run (checked 2026-09-26). Creating an auth user for a member
+  therefore grants nothing but the Jarvis sign-in.
+- **The shared `LOVEIQ_MCP_TOKEN`** remains for the unattended jobs. Rotate it after
+  everyone has connected as themselves. Its calls log as `actor = 'shared'`.
+
 ## Abuse protection
 
 - Rate limit and cooldown on `/api/survey` and `/api/contact` (in place).

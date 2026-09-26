@@ -355,6 +355,26 @@ describe("renderSelfReport", () => {
     ...over,
   });
 
+  it("says who used it once people sign in, and says nothing about it before", () => {
+    const signedIn = windowStats(
+      [
+        row({ actor: "mo@loveiq.org" }),
+        row({ actor: "mo@loveiq.org" }),
+        row({ actor: "ec@loveiq.org" }),
+        row({ actor: "shared" }),
+        row({ actor: null }),
+      ],
+      FLOOR
+    );
+    expect(
+      renderSelfReport(report({ now: signedIn }), FLOOR, { withQuestions: false, nowMs: NOW })
+    ).toContain("By who: mo@loveiq.org 2, ec@loveiq.org 1, the shared token 1, not recorded 1.");
+    const onlyShared = windowStats([row({ actor: "shared" }), row({})], FLOOR);
+    expect(
+      renderSelfReport(report({ now: onlyShared }), FLOOR, { withQuestions: false, nowMs: NOW })
+    ).not.toContain("By who");
+  });
+
   it("reports use, searches, errors, the batteries against their last run, and only the jobs in trouble", () => {
     const text = renderSelfReport(report(), FLOOR, { withQuestions: true, nowMs: NOW });
     expect(text).toContain(

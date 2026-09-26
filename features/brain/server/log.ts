@@ -241,6 +241,8 @@ export async function recordToolCall(input: {
    * first question anyone asks of it unanswerable.
    */
   surface?: "mcp" | "mcp-battery";
+  /** Who asked: a member's address from their own sign-in, or "shared" for the shared token. */
+  actor?: string | null;
 }): Promise<void> {
   try {
     await supabaseFetch("/rest/v1/brain_query", {
@@ -248,6 +250,7 @@ export async function recordToolCall(input: {
       headers: { Prefer: "return=minimal" },
       body: JSON.stringify({
         surface: input.surface ?? "mcp",
+        actor: input.actor ?? null,
         tool: input.tool.slice(0, 100),
         // Redacted like `args`, and for the same reason: `question` is a copy of
         // the search query or the table name, so redacting one and not the other

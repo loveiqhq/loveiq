@@ -1,4 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { googleCredentialShape, readVercelOidcToken } from "@shared/http/google-oauth";
@@ -24,6 +23,7 @@ import {
 } from "@features/brain/server/see/figma";
 import { redactUrlSecrets } from "@features/brain/server/ingest/upsert";
 import { recordToolCall } from "@features/brain/server/log";
+import { resolveCaller, signInChallenge, type Caller } from "@features/brain/server/sign-in";
 import { adCostByDay, adCovers, brainDailyRollup } from "@features/brain/server/ingest/analytics";
 import { ARRAY_META_KEYS, UNFILTERABLE_META_KEYS } from "@features/brain/server/retrieve";
 import {
@@ -136,8 +136,9 @@ export const maxDuration = 60;
  * cache problem.
  *
  * AUTH IS A BEARER TOKEN, NOT CSRF. There is no browser and no cookie here, so
- * the double-submit pattern the rest of the app uses cannot apply. Unset token ⇒
- * 503, so this is safe to deploy before the token exists.
+ * the double-submit pattern the rest of the app uses cannot apply. The token is
+ * either a person's own sign-in (Supabase OAuth, see features/brain/server/sign-in.ts)
+ * or LOVEIQ_MCP_TOKEN, which the unattended jobs use.
  *
  * The connector URL must be `https://www.loveiq.org/api/mcp` — the apex-to-www
  * redirect drops the Authorization header, which presents as a confusing 401.
@@ -537,7 +538,8 @@ const UNTRUSTED_SOURCES_PREAMBLE =
  *
  * The composed risk is what makes it worth saying: injected text, a client that
  * auto-approves the four write tools, and `record_decision` -- whose `actor` is
- * self-declared -- would forge a decision that then reappears under this server's most
+ * self-declared (a signed-in caller is named as the recorder, but the actor is still what
+ * the caller typed) -- would forge a decision that then reappears under this server's most
  * assertive header on every future search.
  */
 const UNTRUSTED_DATA_PREAMBLE =
@@ -892,9 +894,9 @@ export const TOOLS = [
         actor: {
           type: "string",
           description:
-            "Who decided it, as their full name. There is one shared credential on this " +
-            "server, so this is taken on trust and never verified — record who actually " +
-            "decided, not who is typing.",
+            "Who decided it, as their full name — who actually decided, not who is typing. " +
+            "It is taken as given. When you are signed in to Jarvis as yourself, the record " +
+            "also names you as the one who recorded it, from the sign-in.",
         },
         why: { type: "string", description: "The reasoning, if there is any worth keeping." },
         rejected: {
@@ -2994,7 +2996,9 @@ async function callTool(
    * return sites, three of them mid-branch, and a third top-level key on a tool
    * result is not something MCP defines.
    */
-  stats: { sourceCount?: number; topScore?: number; contentScore?: number } = {}
+  stats: { sourceCount?: number; topScore?: number; contentScore?: number } = {},
+  /** Who is asking; the shared token when nobody signed in. Names the recorder of a decision. */
+  caller: Caller = { kind: "shared" }
 ) {
   /**
    * An argument a tool does not declare is REFUSED, never ignored.
@@ -4153,6 +4157,7 @@ async function callTool(
         // own output, and the record itself is keyed on the bare id. Accepting either
         // rather than refusing the one that was actually shown to them.
         supersedes: str(args.supersedes)?.replace(/^decision\//, ""),
+        recordedBy: caller.kind === "person" ? caller.name : undefined,
       });
     } catch (err) {
       logger.error({ err }, "brain: could not record a decision");
@@ -5886,28 +5891,29 @@ export const MCP_INSTRUCTIONS =
   "corpus gets better at the thing it is for.";
 
 export async function POST(request: Request) {
-  const expected = process.env.LOVEIQ_MCP_TOKEN;
-  if (!expected) {
-    logger.warn("LOVEIQ_MCP_TOKEN not set — refusing MCP request");
-    return NextResponse.json({ error: "Not configured." }, { status: 503 });
+  /**
+   * WHO IS ASKING: a person signed in through Claude, or the shared token the unattended
+   * jobs use. See features/brain/server/sign-in.ts. A 401 names where to sign in
+   * (RFC 9728), which is how claude.ai and Claude Code find the sign-in page on their own.
+   */
+  const who = await resolveCaller(request.headers.get("authorization"));
+  if (!who.ok) {
+    return NextResponse.json(
+      { error: who.message },
+      {
+        status: who.status,
+        headers:
+          who.status === 401
+            ? { "WWW-Authenticate": signInChallenge(new URL(request.url).origin) }
+            : undefined,
+      }
+    );
   }
+  const caller = who.caller;
 
-  const auth = request.headers.get("authorization") ?? "";
-  const presented = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  // The comment here used to claim timingSafeEqual while the code did a plain
-  // `!==`, which short-circuits on the first differing byte and so leaks the
-  // shared token's prefix to anyone who can time responses. Now it does what it
-  // says. The length check stays FIRST because timingSafeEqual throws outright on
-  // unequal buffer lengths — and length is not a secret worth protecting here.
-  const a = Buffer.from(presented);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
-
-  // The corpus is undifferentiated — revenue, ad spend, every internal doc — and
-  // one token is shared by the team, so a leaked token is the whole thing. A rate
-  // limit bounds how fast that could be drained.
+  // The corpus is undifferentiated — revenue, ad spend, every internal doc — so a
+  // leaked token (the shared one, or a person's) is the whole thing. A rate limit
+  // bounds how fast that could be drained.
   const rate = await checkRateLimit(getClientIp(request), {
     bucket: "mcp",
     limit: 120,
@@ -6018,7 +6024,7 @@ export async function POST(request: Request) {
     const stats: { sourceCount?: number; topScore?: number; contentScore?: number } = {};
     let out: { content: ContentBlock[]; isError: boolean };
     try {
-      out = await callTool(name, args, readVercelOidcToken(request), stats);
+      out = await callTool(name, args, readVercelOidcToken(request), stats, caller);
     } catch (err) {
       logger.error({ err, tool: name }, "MCP tool call failed");
       // Returned as a tool RESULT, not a protocol error: the model can then say
@@ -6064,6 +6070,8 @@ export async function POST(request: Request) {
         // is what the usage analysis groups by, so an arbitrary value would let a
         // caller fragment its own traffic into buckets nobody thinks to query.
         surface: request.headers.get("x-loveiq-mcp-client") === "battery" ? "mcp-battery" : "mcp",
+        // Who asked, from the sign-in itself; "shared" for the token the unattended jobs use.
+        actor: caller.kind === "person" ? caller.email : "shared",
         // The refusal text IS the diagnosis -- "rpc/x writes to the database",
         // "path must be a simple path". Storing it is what makes a bad call
         // reproducible without the caller filing a report.
