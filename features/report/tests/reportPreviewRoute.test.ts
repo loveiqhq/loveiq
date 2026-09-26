@@ -11,7 +11,7 @@ import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL;
 const AB_PROBES = [
-  "Control and possessiveness",
+  "Low-energy, passive encounters",
   "Spontaneity and controlled unpredictability",
   "A suggestive message on Wednesday",
   "Respect brakes that are protecting something real.",
