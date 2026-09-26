@@ -862,26 +862,37 @@ describe("ReportPage", () => {
       expect(href).toContain("v2=1");
     });
 
-    it("carries neither the forced paywall nor the EUR 2 urgency countdown", async () => {
-      const user = userEvent.setup();
-      mockUseReportData.mockReturnValue(buildSuccessResponse());
+    it(
+      "carries neither the forced paywall nor the EUR 2 urgency countdown",
+      async () => {
+        const user = userEvent.setup();
+        mockUseReportData.mockReturnValue(buildSuccessResponse());
 
-      const { container } = render(<ReportPage />);
+        const { container } = render(<ReportPage />);
 
-      // 565f4cac removed the countdown. Its label was the only text on the card
-      // and in the modal, so its absence is the whole assertion.
-      expect(screen.queryByText(/time left to secure this price/i)).not.toBeInTheDocument();
+        // 565f4cac removed the countdown. Its label was the only text on the card
+        // and in the modal, so its absence is the whole assertion.
+        expect(screen.queryByText(/time left to secure this price/i)).not.toBeInTheDocument();
 
-      // 05725c7f removed the forced wall: the modal must always be dismissible.
-      await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
-      const closeButton = screen.getByRole("button", { name: /close pricing modal/i });
-      expect(closeButton).toBeInTheDocument();
-      await user.click(closeButton);
-      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+        // 05725c7f removed the forced wall: the modal must always be dismissible.
+        await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+        // Two things open the modal here: the fixture's discount ladder, at once, and
+        // the plans pop-up's 1.6s beat after the reader reaches its chapter — which
+        // jsdom's zero-sized boxes count as reached on mount. Closing inside that beat
+        // let the pop-up open the modal again, so the test failed whenever the render
+        // was quick. Let the beat pass (it is a no-op while the modal is open) before
+        // closing, and the close is the only thing left to observe.
+        await new Promise((resolve) => setTimeout(resolve, 1_700));
+        const closeButton = screen.getByRole("button", { name: /close pricing modal/i });
+        expect(closeButton).toBeInTheDocument();
+        await user.click(closeButton);
+        await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 
-      // And the report underneath is readable rather than walled off.
-      expect(container.querySelector(".report-page")).not.toBeNull();
-    });
+        // And the report underneath is readable rather than walled off.
+        expect(container.querySelector(".report-page")).not.toBeNull();
+      },
+      REPORT_MODAL_TEST_TIMEOUT_MS
+    );
   });
 
   // Review 24.09: "Please take out the Arousal, Desire & Sexual Stage Chapter", "Take out
