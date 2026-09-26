@@ -25,7 +25,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -89,18 +89,6 @@ async function main(): Promise<void> {
     return;
   }
 
-  // A frozen database syncs "successfully" forever, so say so, and keep syncing what is there.
-  const { desktopSilenceHours, DESKTOP_SILENCE_LIMIT_H } =
-    await import("@features/brain/server/ingest/whatsapp");
-  const mtimes = [DB, `${DB}-wal`].map((f) => (existsSync(f) ? statSync(f).mtimeMs : NaN));
-  const silent = desktopSilenceHours(mtimes, Date.now());
-  if (silent > DESKTOP_SILENCE_LIMIT_H) {
-    fail(
-      `WhatsApp Desktop has not written its database for ${Math.round(silent)}h: open it on ` +
-        `this Mac, and check the phone still lists it under Linked devices.`
-    );
-  }
-
   const esc = GROUP_JID.replace(/'/g, "''");
   const session = query<{ pk: number }>(
     `select Z_PK as pk from ZWACHATSESSION where ZCONTACTJID = '${esc}' limit 1;`
@@ -154,7 +142,8 @@ async function main(): Promise<void> {
       order by m.ZMESSAGEDATE asc;`
   );
 
-  const { dayRows } = await import("@features/brain/server/ingest/whatsapp");
+  const { dayRows, groupQuietDays, GROUP_QUIET_LIMIT_DAYS } =
+    await import("@features/brain/server/ingest/whatsapp");
   const messages = rows.map((r) => {
     const at = new Date((r.ts + CORE_DATA_EPOCH) * 1000);
     return {
@@ -165,6 +154,19 @@ async function main(): Promise<void> {
       at: at.getTime(),
     };
   });
+
+  // A frozen copy syncs "successfully" forever, so a quiet week fails the run, and the rest
+  // still syncs.
+  const quiet = groupQuietDays(
+    messages.map((m) => m.at),
+    Date.now()
+  );
+  if (quiet > GROUP_QUIET_LIMIT_DAYS) {
+    fail(
+      `No new message in the group for ${Number.isFinite(quiet) ? Math.floor(quiet) : "any"} ` +
+        `days: is WhatsApp Desktop open on this Mac, and still under Linked devices on the phone?`
+    );
+  }
 
   const stampedAt = new Date().toISOString();
   const chunks = dayRows({

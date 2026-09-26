@@ -1102,9 +1102,13 @@ hourly, from a SEPARATE checkout at `~/.loveiq-brain`. It does not appear in
 `vercel.json`, and it pauses whenever the laptop is off.
 
 **Every run records itself** as `brain-whatsapp` in `cron_run` (since 2026-09-26), and a
-run is a failure when WhatsApp Desktop has not written its database for a day. That
-means the app is closed or unlinked, and the sync would otherwise read a frozen copy
-"successfully". The stall watcher counts only successful runs for this job
+run is a failure when the group has had no new message for a week. That almost always
+means WhatsApp Desktop is closed or unlinked, and the sync would otherwise read a frozen
+copy "successfully". The first version read the database's file times instead. That run
+hung on macOS opening the database, and a hung run blocks every hourly run after it, so
+the signal now comes from the group's own rows. Never start the job from a shell that
+lacks Full Disk Access (`launchctl kickstart`); if a run hangs,
+`launchctl kill SIGTERM gui/$(id -u)/org.loveiq.whatsapp-sync`. The stall watcher counts only successful runs for this job
 (`LAPTOP_JOBS` in `features/cron/server/cron-stall.ts`) and alerts after **three days**
 without one, with the fix in the message: open the Mac and WhatsApp Desktop.
 
