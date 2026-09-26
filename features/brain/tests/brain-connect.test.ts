@@ -66,6 +66,7 @@ import { forgetSignIns } from "@features/brain/server/sign-in";
 import { POST as signInPOST } from "@/app/api/jarvis/sign-in/route";
 import { POST as verifyPOST } from "@/app/api/jarvis/verify/route";
 import { POST as decisionPOST } from "@/app/api/jarvis/decision/route";
+import { POST as signOutPOST } from "@/app/api/jarvis/sign-out/route";
 
 const CLAUDE = "https://claude.ai/api/mcp/auth_callback";
 const asking = (redirect_uri = CLAUDE) => ({
@@ -248,5 +249,16 @@ describe("the sign-in code", () => {
     members = {};
     expect((await verifyPOST(post({ email: "mo@loveiq.org", code: "123456" }))).status).toBe(403);
     expect(auth.signOut).toHaveBeenCalled();
+  });
+});
+
+describe("signing out", () => {
+  it("forgets the sign-in, and takes no arguments", async () => {
+    expect((await signOutPOST(post({}))).status).toBe(200);
+    expect(auth.signOut).toHaveBeenCalledTimes(1);
+    expect((await signOutPOST(post({ everywhere: true }))).status).toBe(400);
+    csrfOk = false;
+    expect((await signOutPOST(post({}))).status).toBe(403);
+    expect(auth.signOut).toHaveBeenCalledTimes(1);
   });
 });
