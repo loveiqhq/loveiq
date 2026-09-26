@@ -141,6 +141,29 @@ describe("experiments: the registry, read", () => {
     expect(text).not.toContain("- None. No test is being randomised");
   });
 
+  it("counts a paused test as running, and reads a pricing test from the arm on its quote", async () => {
+    rows = [row({ id: 6, status: "paused", axis: "pricing", start_date: "2026-09-22" })];
+    const priced: ArmOutcomes = {
+      submissions: [1, 2, 3].map((id) => ({
+        id,
+        created_date_time: "2026-09-23T10:00:00Z",
+        utm_tracker: null,
+      })),
+      bySubmission: new Map([
+        [1, { pricing: "B", purchased: true, startedCheckout: true, revenue: 19 }],
+        [2, { pricing: "B", purchased: false, startedCheckout: false, revenue: 0 }],
+        [3, { pricing: "B", purchased: false, startedCheckout: false, revenue: 0 }],
+      ]),
+      truncated: false,
+    };
+    const text = await listExperiments(
+      NOW,
+      vi.fn(async () => priced)
+    );
+    expect(text).toMatch(/RUNNING NOW\n- #6 .*\(paused, Report pricing, 2026-09-22 onwards\)/);
+    expect(text).toMatch(/ {2}So far: .*1 of 3 bought \(33\.3%\)/);
+  });
+
   it("says why a running test has no live numbers when it has no axis, or one nothing stamps", async () => {
     rows = [row({ id: 4, axis: null }), row({ id: 5, axis: "paywall" })];
     const text = await listExperiments(
