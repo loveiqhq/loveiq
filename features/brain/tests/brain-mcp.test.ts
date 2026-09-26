@@ -67,6 +67,13 @@ vi.mock("@features/brain/server/night-shift", async (importOriginal) => ({
 }));
 const mockOpenConflicts = vi.fn();
 const mockSettle = vi.fn();
+const mockListExperiments = vi.fn();
+const mockRecordExperiment = vi.fn();
+vi.mock("@features/brain/server/experiments", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@features/brain/server/experiments")>()),
+  listExperiments: (...a: unknown[]) => mockListExperiments(...a),
+  recordExperiment: (...a: unknown[]) => mockRecordExperiment(...a),
+}));
 vi.mock("@features/brain/server/radar", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@features/brain/server/radar")>()),
   openConflicts: (...a: unknown[]) => mockOpenConflicts(...a),
@@ -1024,6 +1031,59 @@ describe("/api/mcp", () => {
       });
     });
 
+    describe("experiments and record_experiment", () => {
+      const call = async (name: string, args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 15,
+                method: "tools/call",
+                params: { name, arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+      afterEach(() => {
+        mockListExperiments.mockReset();
+        mockRecordExperiment.mockReset();
+      });
+
+      it("lists the registry, and calls an unreadable one an outage, not an empty registry", async () => {
+        mockListExperiments.mockResolvedValue("RUNNING NOW\n- None.");
+        expect((await call("experiments", {})).content[0]!.text).toBe("RUNNING NOW\n- None.");
+        mockListExperiments.mockRejectedValue(new Error("admin_experiment: 500"));
+        const r = await call("experiments", {});
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toMatch(/outage, not an empty registry/);
+      });
+
+      it("passes the caller's fields through, and reports a refusal or a failure as an error", async () => {
+        mockRecordExperiment.mockResolvedValue({
+          ok: true,
+          id: 7,
+          text: "Registered experiment #7.",
+        });
+        const args = { name: "x", hypothesis: "y", metric: "z", recorded_by: "Eman Cickusic" };
+        expect((await call("record_experiment", args)).content[0]!.text).toBe(
+          "Registered experiment #7."
+        );
+        expect(mockRecordExperiment).toHaveBeenCalledWith(args);
+        mockRecordExperiment.mockResolvedValue({ ok: false, message: "`hypothesis` is required" });
+        const refused = await call("record_experiment", {
+          name: "x",
+          recorded_by: "Eman Cickusic",
+        });
+        expect(refused.isError).toBe(true);
+        expect(refused.content[0]!.text).toBe("`hypothesis` is required");
+        mockRecordExperiment.mockRejectedValue(new Error("admin_upsert_experiment: 500"));
+        const failed = await call("record_experiment", args);
+        expect(failed.isError).toBe(true);
+        expect(failed.content[0]!.text).toMatch(/nothing was changed/);
+      });
+    });
+
     describe("explain_change", () => {
       const call = async (args: Record<string, unknown>) =>
         (
@@ -1194,6 +1254,7 @@ describe("/api/mcp", () => {
         "queue_research",
         "file_call_notes",
         "settle_decision_conflict",
+        "record_experiment",
         "count_context",
         "browse_context",
         "get_business_numbers",
@@ -1207,6 +1268,7 @@ describe("/api/mcp", () => {
         "explain_change",
         "show_chart",
         "break_even",
+        "experiments",
         "comment_asks",
         "decision_conflicts",
         "brain_health",
@@ -1261,6 +1323,7 @@ describe("/api/mcp", () => {
         "queue_research",
         "file_call_notes",
         "settle_decision_conflict",
+        "record_experiment",
       ]);
       /**
        * EXACTLY ONE TOOL IS DESTRUCTIVE, and it is the one whose effect nobody can undo.
@@ -6125,6 +6188,8 @@ describe("the runbook's tool count is the real one", () => {
     29: "Twenty-nine",
     30: "Thirty",
     31: "Thirty-one",
+    32: "Thirty-two",
+    33: "Thirty-three",
   };
 
   it("matches what the server actually exposes", () => {

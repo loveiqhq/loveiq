@@ -12,15 +12,16 @@ a DM gets a one-line pointer to Claude, while channel messages are still indexed
 
 **It is good at** (all measured against the real corpus):
 
-| Ask                                                        | Why it works                                                                            |
-| ---------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| "how are we doing this month"                              | The funnel rollup carries visits, signups, revenue and ad spend per day, week and month |
-| "how much did we spend on Google Ads and what did we earn" | Spend and revenue sit in the same chunk, already divided, so nothing has to be computed |
-| "why did we stop the dark landing page test"               | Recorded call notes and the Slack day it was discussed both carry the reasoning         |
-| "why is the data retention purge turned off"               | `CLAUDE.md` records deliberately-deferred work and the reason                           |
-| "what does `STRIPE_COUPON_100` do"                         | The whole environment-variable table is indexed                                         |
-| "show me visitors this month as a chart"                   | `show_chart` draws the digest's chart and links it, so it pastes into a doc or a deck   |
-| "what would it take to break even on ads"                  | `break_even` works it out from live spend, funnel and orders, and takes what-ifs        |
+| Ask                                                               | Why it works                                                                            |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| "how are we doing this month"                                     | The funnel rollup carries visits, signups, revenue and ad spend per day, week and month |
+| "how much did we spend on Google Ads and what did we earn"        | Spend and revenue sit in the same chunk, already divided, so nothing has to be computed |
+| "why did we stop the dark landing page test"                      | Recorded call notes and the Slack day it was discussed both carry the reasoning         |
+| "why is the data retention purge turned off"                      | `CLAUDE.md` records deliberately-deferred work and the reason                           |
+| "what does `STRIPE_COUPON_100` do"                                | The whole environment-variable table is indexed                                         |
+| "show me visitors this month as a chart"                          | `show_chart` draws the digest's chart and links it, so it pastes into a doc or a deck   |
+| "what would it take to break even on ads"                         | `break_even` works it out from live spend, funnel and orders, and takes what-ifs        |
+| "what A/B tests are running, and what did the last ones conclude" | `experiments` reads the registry and the live arms, in /admin's own words               |
 
 **It is weak at, and will say so rather than guess:**
 
@@ -360,7 +361,7 @@ When registering any callback — Resend, Stripe, Slack — paste the `www`
 host, then confirm rows actually arrive. An endpoint that returns 401 to an
 unsigned probe proves it is deployed, not that it is reachable by the sender.
 
-**Thirty-one tools, in three groups.** Twenty-three read, eight write. The write ones act
+**Thirty-three tools, in three groups.** Twenty-four read, nine write. The write ones act
 immediately and are described at the bottom of this section — a teammate who reads
 only the first table will not know the brain can send an email.
 
@@ -378,6 +379,7 @@ only the first table will not know the brain can send an email.
 | `explain_change`         | Whether a day's numbers were outside their usual range (each against the 28 days before, median and spread) and where each move came from: traffic source or GA4 channel, the two halves of a rate, engagement, GA4 against our own count, ad spend and campaigns, what shipped and what was decided. The likely causes are fixed rules over numbers, never a model's guess. The anomaly watcher writes yesterday's unusual numbers as a notice between 07:00 and 11:00 UTC     |
 | `show_chart`             | One or two of the site's daily numbers as a line chart in the digest's style: every metric `explain_change` reads, plus revenue (payment ledger, net of refunds) and Google Ads spend (a gap outside the days the ad data covers, never a zero), 7 to 180 days. Returns the picture, a signed link to it that opens in any browser without a login, and the numbers. Two metrics share one axis, so they must be the same kind                                                  |
 | `break_even`             | What the Google Ads spend buys and what it would take to earn it back, over 7 to 180 days: cost per visitor, the share who finish the survey, the share of finishers who pay, the average order and the net, then the level each alone must reach to break even. Any of the four can be given as a what-if. Counted like the digest's cost per paying customer (every visitor and buyer, only on the days the ad data covers), and says when the purchases are too few to trust |
+| `experiments`            | The A/B registry (/admin's own `admin_experiment` table): every test with its hypothesis, deciding metric, dates and outcome, a live readout for a running test whose arms are stamped (the code and words of /admin's A/B overview, which never calls a winner the numbers cannot support), and the four tests that ended before the registry existed                                                                                                                          |
 | `comment_asks`           | Every ask left in a Figma or Google Docs comment: who asked whom, for what, a link, and whether it is still open, checked live. Figma is read from its API for every file whose link was shared somewhere the brain reads; Google from each person's notification emails, checked against Drive as that person. Says what it could not read                                                                                                                                     |
 | `decision_conflicts`     | Recorded decisions that may not both stand: one may replace the other, or they give different answers to the same question. Found nightly by the decision radar, each pair proposed and then checked on its own by a model, so each is a question for a person                                                                                                                                                                                                                  |
 | `brain_health`           | How the brain itself is doing over 1 to 30 days, against the days before: use by tool, weak and empty searches and the questions it could not answer well, failed calls and error messages, speed, the weekly test batteries with what fails, and every brain job that failed or stopped running                                                                                                                                                                                |
@@ -532,16 +534,17 @@ These are not drafts-for-approval. There is no confirmation step, by design — 
 permission for every write makes the thing useless. Every call is recorded in
 `brain_query` with its full arguments, so anything wrong is visible and reversible.
 
-| Tool                       | What it does                                                                                                                                                                                                                                   |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `record_decision`          | Writes down what was decided, by whom, and what it supersedes. The highest-value one: decisions are otherwise reconstructed from whoever happened to record a call                                                                             |
-| `post_to_slack`            | Posts or replies in any channel the bot is in. Cannot be unsent                                                                                                                                                                                |
-| `write_to_notion`          | Creates a page or a task                                                                                                                                                                                                                       |
-| `write_to_google_doc`      | Creates a Doc, or appends to one                                                                                                                                                                                                               |
-| `queue_research`           | Hand a question to the Night Shift, which answers it overnight with sources, from our own records and the web. Deduplicated (the same question returns the one queued or answered) and capped at five waiting. Writes only a `research` record |
-| `file_call_notes`          | File recorded calls with people on 'Therapists & Coaches' into 'Feedback Sessions' and move their 'Last touch'. Exact matches only (invite email or transcript speaker). Previews unless `dry_run: false`; `brain-crm` runs it every two hours |
-| `settle_decision_conflict` | Say which of two conflicting decisions stands. The other is marked superseded, as record_decision's `supersedes` would; `both` records that they do not conflict. Ask the person who made the call first                                       |
-| `send_email`               | **Drafts by default.** It sends only when explicitly passed `send: true` — the one write that leaves the company and cannot be recalled, so it is the one that needs the extra word                                                            |
+| Tool                       | What it does                                                                                                                                                                                                                                                     |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `record_decision`          | Writes down what was decided, by whom, and what it supersedes. The highest-value one: decisions are otherwise reconstructed from whoever happened to record a call                                                                                               |
+| `post_to_slack`            | Posts or replies in any channel the bot is in. Cannot be unsent                                                                                                                                                                                                  |
+| `write_to_notion`          | Creates a page or a task                                                                                                                                                                                                                                         |
+| `write_to_google_doc`      | Creates a Doc, or appends to one                                                                                                                                                                                                                                 |
+| `queue_research`           | Hand a question to the Night Shift, which answers it overnight with sources, from our own records and the web. Deduplicated (the same question returns the one queued or answered) and capped at five waiting. Writes only a `research` record                   |
+| `file_call_notes`          | File recorded calls with people on 'Therapists & Coaches' into 'Feedback Sessions' and move their 'Last touch'. Exact matches only (invite email or transcript speaker). Previews unless `dry_run: false`; `brain-crm` runs it every two hours                   |
+| `settle_decision_conflict` | Say which of two conflicting decisions stands. The other is marked superseded, as record_decision's `supersedes` would; `both` records that they do not conflict. Ask the person who made the call first                                                         |
+| `record_experiment`        | Registers an A/B test before it starts, through /admin's own upsert, which refuses one without a hypothesis and a deciding metric; with `experiment_id` it changes one, handing back every field it does not change, including readout figures typed into /admin |
+| `send_email`               | **Drafts by default.** It sends only when explicitly passed `send: true` — the one write that leaves the company and cannot be recalled, so it is the one that needs the extra word                                                                              |
 
 **Why `record_decision` matters more than it looks.** Decision records are the thing
 the brain exists for and, measured 2026-09-12 before the miner first ran, the thing it had
