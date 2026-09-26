@@ -1,7 +1,12 @@
 /**
  * Does the fixed chapter bar cover the report's first heading?
  *
- * On phones the chapter bar is FIXED at 80–136px. `.report-shell` is meant to
+ * Below 1280px wide the chapter bar is FIXED at 80–136px: phones, and tablets and
+ * small laptops too (measured 2026-09-26: present at 768–1279, absent from 1280).
+ * On a desktop device this measures at the reader's own width (WIDTHS, which the
+ * verifier passes), because Playwright's "Desktop Chrome" is 1280 wide and has no
+ * bar, so a reader's claim from a 1241px Chromebook could never be measured.
+ * `.report-shell` is meant to
  * clear it, but a later unscoped `padding` shorthand resets its top padding to
  * 32px at every width, so the v1 welcome heading started at 112px and the bar
  * hid the top 24px of it — measured on production across all three devices.
@@ -30,10 +35,20 @@ const DEVICE_NAMES = (process.env.DEVICES ?? "Pixel 7,iPhone 15 Pro,iPhone SE")
   .split(",")
   .map((d) => d.trim())
   .filter(Boolean);
+const readerWidth = Math.max(
+  0,
+  ...(process.env.WIDTHS ?? "").split(",").map(Number).filter(Number.isFinite)
+);
 for (const name of DEVICE_NAMES) {
   const engine = /iphone/i.test(name) ? webkit : chromium;
   const b = await engine.launch();
-  const c = await b.newContext({ ...devices[name], locale: "en-US" });
+  const preset = devices[name];
+  const atReaderWidth = preset && !preset.isMobile && readerWidth > 0;
+  const c = await b.newContext({
+    ...preset,
+    ...(atReaderWidth ? { viewport: { ...preset.viewport, width: readerWidth } } : {}),
+    locale: "en-US",
+  });
   await c.addCookies(stagingCookies(O)).catch(() => {});
   const p = await c.newPage();
   /**
@@ -98,7 +113,8 @@ for (const name of DEVICE_NAMES) {
       unmeasured += 1;
       console.log(
         `INCONCLUSIVE ${name.padEnd(15)} ${r.nav ? "no heading" : "no chapter bar"} on screen — ` +
-          `the report did not render, so nothing was measured`
+          `the report did not render, or this width has no bar (1280px and up), so nothing ` +
+          `was measured`
       );
     } else if (r.overlapPx > 0) {
       bad += 1;
