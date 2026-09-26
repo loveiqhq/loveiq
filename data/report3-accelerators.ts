@@ -292,10 +292,10 @@ export interface Report3AcceleratorsView {
   acceleratorsLead: string;
   accelerators: readonly Report3TriggerRow[];
   /**
-   * Index of the first BLURRED row in both cards, or null when the chapter is
-   * open. 386:416 and 386:444 keep rows 1-2 sharp and blur rows 3-5 uniformly —
-   * no ramp row, unlike Typical Beliefs' panels — so every row from here on is
-   * scrambled.
+   * Index of the first locked row in both cards, or null when the chapter is open.
+   * 386:416 and 386:444 keep rows 1-2 sharp; row 3 ramps into the blur, sharp at
+   * its top, so it is sent as written in both of lockedBlurCopy.ts's positions, as
+   * Typical Beliefs' ramp row is; rows 4-5 sit under the full blur and follow it.
    */
   lockedFrom: number | null;
   challengesTitle: string;
@@ -352,8 +352,10 @@ export function buildAccelerators(
   const copy = REPORT_V4_ACCELERATORS[archetype];
   if (!copy) return null;
   const lockedFrom = locked ? ACCELERATORS_FREE_ROWS : null;
+  // The ramp row (index lockedFrom) is legible at its sharp end, so only the rows
+  // under the full blur are veiled.
   const rows = (list: readonly Report3TriggerRow[]) =>
-    list.map((row, index) => (lockedFrom !== null && index >= lockedFrom ? veilRow(row) : row));
+    list.map((row, index) => (lockedFrom !== null && index > lockedFrom ? veilRow(row) : row));
   return {
     intro: copy.intro,
     brakesLead: copy.brakesLead,

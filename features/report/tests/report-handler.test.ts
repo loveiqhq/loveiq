@@ -591,7 +591,7 @@ describe("GET /api/report", () => {
  */
 describe("GET /api/report — Accelerator & Brakes (Report 3.0)", () => {
   const AB_PROBES = [
-    "Control and possessiveness",
+    "Low-energy, passive encounters",
     "Spontaneity and controlled unpredictability",
     "A suggestive message on Wednesday",
     "Respect brakes that are protecting something real.",
