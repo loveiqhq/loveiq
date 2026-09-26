@@ -45,6 +45,7 @@ import type { ArchetypeName } from "@features/report/server/archetypeSlug";
 import {
   REPORT_V4_NUDGES_HEADING,
   REPORT_V4_PART_DIVIDER_BY_SECTION,
+  REPORT_V4_PART_FRAME_BY_SECTION,
   REPORT_V4_SUMMARY,
   REPORT_V4_TOP_THREE_HEADING,
 } from "@/data/report3-archetype-page";
@@ -1900,9 +1901,8 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       const unlockBeliefs = () => unlockSection(section);
                       return (
                         <Fragment key={section.id}>
-                          {/* 1:858 — 44px between the part heading and its first
-                           * chapter. */}
-                          <div className="rv4-sep" aria-hidden="true" data-node-id="1:858" />
+                          {/* 1:858 — the 44px under the part heading is the part
+                           * opener's (dividerNode below), for every archetype. */}
                           <V4Chapter
                             sectionId={section.id}
                             title="Typical Beliefs"
@@ -1965,7 +1965,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       const unlockAccel = () => unlockSection(section);
                       return (
                         <Fragment key={section.id}>
-                          <div className="rv4-sep" aria-hidden="true" data-node-id="1:991" />
                           <V4Chapter
                             sectionId={section.id}
                             title="Accelerators & Brakes"
@@ -2065,7 +2064,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                       const unlockFantasy = () => unlockSection(section);
                       return (
                         <Fragment key={section.id}>
-                          <div className="rv4-sep" aria-hidden="true" data-node-id="1:1146" />
                           <V4Chapter
                             sectionId={section.id}
                             title="Fantasy vs. Reality"
@@ -2220,14 +2218,18 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                 const v4PartHeading = isV4
                   ? REPORT_V4_PART_DIVIDER_BY_SECTION[section.id]
                   : undefined;
+                const v4PartFrame = v4PartHeading
+                  ? REPORT_V4_PART_FRAME_BY_SECTION[section.id]
+                  : undefined;
                 const dividerNode = v4PartHeading ? (
                   <>
-                    {/* 1:484 — Part II opens on a hairline sitting directly above
-                     * its heading. */}
-                    {section.id === "core_archetype" ? (
-                      <div className="rv4-rule" aria-hidden="true" data-node-id="1:484" />
-                    ) : null}
+                    {/* Every part opens as its frame draws it (review 26.09): the
+                     * fading hairline (1:484, 1:850, 1:983, 38:1508, 1:1138), the
+                     * heading, and 44px (1:491, 1:858, 1:991, 38:1516, 1:1146) before
+                     * its first block — the designed chapters and V2's alike. */}
+                    <div className="rv4-rule" aria-hidden="true" data-node-id={v4PartFrame?.rule} />
                     <V4PartHeading heading={v4PartHeading} />
+                    <div className="rv4-sep" aria-hidden="true" data-node-id={v4PartFrame?.sep} />
                   </>
                 ) : partDivider && !isV4 ? (
                   isV3 ? (
@@ -2296,8 +2298,9 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                 // Report 3.0 draws the chapter as Figma 38:1672 (305:350 locked) wherever
                 // the archetype on screen has it written — today Spark Seeker; everyone
                 // else keeps V2's section below. Open in V4Chapter, as Typical Beliefs
-                // and Accelerators & Brakes are, 44px (38:1516) under the part heading,
-                // behind the same gate: the server's Libido, the unlock Curiosity's.
+                // and Accelerators & Brakes are, under the part heading and its 44px
+                // (38:1516, the part opener's), behind the same gate: the server's
+                // Libido, the unlock Curiosity's.
                 const v4Partnership =
                   isV4 &&
                   partnership &&
@@ -2305,7 +2308,6 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                   section.id === "attachment_style" &&
                   viewArchetype === contentArchetype ? (
                     <Fragment>
-                      <div className="rv4-sep" aria-hidden="true" data-node-id="38:1516" />
                       <V4Chapter
                         sectionId="challenges_in_partnership"
                         title="Challenges in Partnerships"
