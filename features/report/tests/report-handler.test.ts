@@ -1,5 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// The switch in lockedBlurCopy.ts decides what rides under the blur. These tests run
+// in its decoy position (nothing paid past the wall) unless one says otherwise; the
+// default since review 26.09 is the real copy, pinned at the boundary below and in
+// lockedBlurCopy2609.test.ts.
+const blurCopy = vi.hoisted(() => ({ mode: "decoy" as "real" | "decoy" }));
+vi.mock("@features/report/server/lockedBlurCopy", () => ({
+  get LOCKED_BLUR_COPY() {
+    return blurCopy.mode;
+  },
+}));
 vi.mock("@shared/observability/logger", () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -645,6 +655,30 @@ describe("GET /api/report — Accelerator & Brakes (Report 3.0)", () => {
     for (const probe of AB_PROBES) expect(body, probe).not.toContain(probe);
   });
 
+  // Review 26.09 — Mark: "This should always be the unlocked content but blurred";
+  // Fatih's call. In the switch's real position the locked chapter carries the copy
+  // it draws blurred, still marked locked, so the page blurs it.
+  it("ships a locked Spark Seeker the blurred rows and passages as written (real)", async () => {
+    blurCopy.mode = "real";
+    try {
+      vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({
+        accessPlan: null,
+        archetypeTiers: {},
+        personalReportId: 99,
+        unlockedArchetypeColumn: [],
+      });
+      queueSubmission("Spark Seeker");
+      const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"));
+      const json = await res.json();
+      expect(json.accelerators.lockedFrom).toBe(2);
+      expect(json.accelerators.practice.locked).toBe(true);
+      const body = JSON.stringify(json);
+      for (const probe of AB_PROBES) expect(body, probe).toContain(probe);
+    } finally {
+      blurCopy.mode = "decoy";
+    }
+  });
+
   it("ships a paid Spark Seeker every word", async () => {
     vi.mocked(getReportAccessPlanForSubmission).mockResolvedValue({
       accessPlan: "full_report",
@@ -757,6 +791,25 @@ describe("GET /api/report — Fantasy vs. Reality (Report 3.0)", () => {
     expect(json.fantasyDots).toBeNull();
     const body = JSON.stringify(json);
     for (const probe of FVR_PROBES) expect(body, probe).not.toContain(probe);
+  });
+
+  it("ships a locked Spark Seeker the blurred rows, the map's dots and the copy as written (real)", async () => {
+    blurCopy.mode = "real";
+    try {
+      withPlan(null);
+      queueSubmission("Spark Seeker");
+      const res = await GET(makeRequest("02d88f31-eceb-4402-940d-c8cd98d01848"));
+      const json = await res.json();
+      expect(json.fantasy.locked).toBe(true);
+      expect(json.fantasy.table.locked).toBe(true);
+      // V4's map draws its real dots blurred; V2's section keeps its own rule.
+      expect(json.fantasy.mapDots).not.toBeNull();
+      expect(json.fantasyDots).toBeNull();
+      const body = JSON.stringify(json);
+      for (const probe of FVR_PROBES) expect(body, probe).toContain(probe);
+    } finally {
+      blurCopy.mode = "decoy";
+    }
   });
 
   it("keeps it locked on essentials — it is a full-report chapter", async () => {

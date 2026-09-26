@@ -106,9 +106,9 @@ export const REPORT_V4_TYPICAL_BELIEFS: Readonly<Record<string, Report3BeliefPan
  * own `t`/`b`/`i`/`p`/`h` module-private, and widening that file's surface for a
  * second consumer buys nothing. */
 
-import { scrambleLockedText } from "@features/report/server/scrambleLockedText";
 import {
   gate,
+  veilText,
   type Report3GatedCopy,
   type Report3PracticeView,
 } from "@features/report/server/gatedCopy";
@@ -372,8 +372,9 @@ export const TYPICAL_BELIEFS_PRACTICE_FREE_BLOCKS = 2;
  *
  * A locked reader receives: every free block and row verbatim; the ramp block and
  * ramp row verbatim (legible through the light end of the blur); no shift for any
- * locked row; and SCRAMBLED copy for everything that is only ever shown under the
- * full blur. Nothing paid past the ramp leaves the server.
+ * locked row, since none is drawn; and everything only ever shown under the full
+ * blur as the copy itself since 26.09, decoys in the switch's other position
+ * (lockedBlurCopy.ts).
  */
 export function buildTypicalBeliefs(
   archetype: string,
@@ -387,10 +388,10 @@ export function buildTypicalBeliefs(
     intro: TYPICAL_BELIEFS_INTRO,
     panels: {
       turns: panels.turns.map((turn, i) => ({
-        shadow: underFullBlur(i) ? scrambleLockedText(turn.shadow) : turn.shadow,
+        shadow: underFullBlur(i) ? veilText(turn.shadow) : turn.shadow,
         shift: lockedFrom !== null && i >= lockedFrom ? null : turn.shift,
       })),
-      sun: panels.sun.map((belief, i) => (underFullBlur(i) ? scrambleLockedText(belief) : belief)),
+      sun: panels.sun.map((belief, i) => (underFullBlur(i) ? veilText(belief) : belief)),
     },
     lockedFrom,
     challengesTitle: TYPICAL_BELIEFS_CHALLENGES_TITLE,

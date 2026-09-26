@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildPartnership,
   PARTNERSHIP_FREE_BLOCKS,
@@ -7,6 +7,11 @@ import {
   REPORT_V4_PARTNERSHIP,
 } from "@/data/report3-partnership";
 import type { Report3Block } from "@/data/report3-learn-more";
+
+// These tests pin the switch's decoy position (lockedBlurCopy.ts): what the chapter
+// sends a locked reader when nothing paid rides under the blur. The default since
+// review 26.09 is the real copy — see lockedBlurCopy2609.test.ts.
+vi.mock("@features/report/server/lockedBlurCopy", () => ({ LOCKED_BLUR_COPY: "decoy" }));
 
 /**
  * What a reader RECEIVES of the Challenges in Partnerships chapter (Figma 38:1672

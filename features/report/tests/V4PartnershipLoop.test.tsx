@@ -181,8 +181,10 @@ describe("V4PartnershipLoop — locked (612:862)", () => {
     expect(screen.getByRole("button", { name: "Unlock the full report" })).toHaveClass(
       "rv4-lockbadge"
     );
-    // Nothing a locked reader sees under the blur is the real line.
-    expect(container.textContent).not.toContain(OPEN.loop[1]!.underneath);
+    // Under the blur and hidden from assistive tech; since review 26.09 the copy under the blur is the real one (lockedBlurCopy.ts).
+    expect(container.querySelector(".rv4-loop__viewport")!.textContent).toContain(
+      OPEN.loop[1]!.underneath
+    );
   });
 
   it("opens the paywall once from a tap anywhere on it, the badge included", () => {

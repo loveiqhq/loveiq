@@ -98,12 +98,12 @@ describe("V4TryThis — open & gated (374:258)", () => {
     const ramp = container.querySelector(".rv4-try__ramp")!;
     expect(ramp.textContent).toContain("Separate the event from its meaning.");
     const blurred = container.querySelector(".rv4-try__blurred")!;
-    // The rest arrived scrambled from the server: same shape, none of the words.
+    // The rest, under the blur: since review 26.09 the copy under the blur is the real one (lockedBlurCopy.ts).
     expect(blurred.querySelectorAll(".rv4-prose__p")).toHaveLength(
       TYPICAL_BELIEFS_PRACTICE.length - 3
     );
-    expect(blurred.textContent).not.toContain("Name the rule underneath it.");
-    expect(blurred.textContent).not.toContain("The goal is not for the Spark Seeker");
+    expect(blurred.textContent).toContain("Name the rule underneath it.");
+    expect(blurred.textContent).toContain("The goal is not for the Spark Seeker");
     for (const el of [ramp, blurred]) {
       expect(el.getAttribute("aria-hidden")).toBe("true");
       expect(el.hasAttribute("inert")).toBe(true);
@@ -222,7 +222,8 @@ describe("V4TryThis — Accelerator & Brakes (377:221 / 374:304 / 375:221)", () 
     expect(container.querySelectorAll(".rv4-try__body > .rv4-prose__p")).toHaveLength(1);
     const ramp = container.querySelector(".rv4-try__ramp")!;
     expect(ramp.textContent).toContain("making it harder to respond?”");
-    expect(ramp.textContent).not.toContain("Sometimes the solution is to add an accelerator.");
+    // The ramp's tail runs on under the full blur; since review 26.09 the copy under the blur is the real one (lockedBlurCopy.ts).
+    expect(ramp.textContent).toContain("Sometimes the solution is to add an accelerator.");
     expect(container.querySelectorAll(".rv4-try__blurred .rv4-prose__p")).toHaveLength(5);
     expect(container.querySelectorAll(".rv4-try__gate > .rv4-premium")).toHaveLength(1);
     expect(container.querySelector(".rv4-try__rest .rv4-premium")).toBeNull();

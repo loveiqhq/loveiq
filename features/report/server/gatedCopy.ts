@@ -3,11 +3,11 @@
  * and Accelerator & Brakes (314:211): clear blocks, then ONE ramp block the blur
  * fades in over, then a rest that is only ever seen under the full blur.
  *
- * Decided on the server, so the browser never decides where the wall falls, and
- * scrambled on the server, because a CSS blur is paint only
- * (LockedPreviewImage.tsx:6-12): anything a locked reader only ever sees fully
- * blurred leaves here as scrambleLockedText's same-shape stand-in (Fatih's call,
- * 2026-09-23).
+ * Decided on the server, so the browser never decides where the wall falls. What
+ * a locked reader only ever sees fully blurred leaves as the copy itself or as
+ * scrambleLockedText's same-shape stand-in, by the switch in lockedBlurCopy.ts: real
+ * since review 26.09 (Mark: "the unlocked content but blurred"; Fatih's call), decoys
+ * from 23.09 — a CSS blur is paint only (LockedPreviewImage.tsx:6-12).
  *
  * No paid copy lives here — the chapter modules own it and call in — so any module
  * can import this without dragging another chapter's copy into its graph. The
@@ -15,6 +15,7 @@
  */
 
 import type { Report3Block } from "@/data/report3-learn-more";
+import { LOCKED_BLUR_COPY } from "./lockedBlurCopy";
 import { scrambleLockedText } from "./scrambleLockedText";
 
 /**
@@ -23,7 +24,7 @@ import { scrambleLockedText } from "./scrambleLockedText";
  * Unlocked: everything in `free`, `ramp` null, `rest` empty.
  * Locked: `free` is readable; `ramp` is the block the blur fades in over, real
  * copy where the light end of the ramp is legible; `rest` sits under the full blur
- * and is scrambled — same shape, no content.
+ * — the copy itself, or its same-shape stand-in in decoy mode.
  */
 export interface Report3GatedCopy {
   free: readonly Report3Block[];
@@ -45,6 +46,13 @@ export interface Report3PracticeView extends Report3GatedCopy {
   teaser?: readonly Report3Block[];
 }
 
+/** True while a locked reader's page carries the real copy under the blur. */
+export const lockedBlurIsReal = (): boolean => LOCKED_BLUR_COPY === "real";
+
+/** Copy a locked reader only ever sees blurred: as written, or its decoy. */
+export const veilText = (text: string): string =>
+  lockedBlurIsReal() ? text : scrambleLockedText(text);
+
 export const scrambleBlock = (block: Report3Block): Report3Block => {
   if (block.kind === "heading") return { ...block, text: scrambleLockedText(block.text) };
   if (block.kind === "list") {
@@ -61,7 +69,11 @@ export const scrambleBlock = (block: Report3Block): Report3Block => {
   };
 };
 
-/** Splits a passage at `freeBlocks`: clear, ramp, then scrambled rest. */
+/** A block a locked reader only ever sees blurred: as written, or scrambled. */
+export const veilBlock = (block: Report3Block): Report3Block =>
+  lockedBlurIsReal() ? block : scrambleBlock(block);
+
+/** Splits a passage at `freeBlocks`: clear, ramp, then the blurred rest. */
 export const gate = (
   blocks: readonly Report3Block[],
   freeBlocks: number,
@@ -71,7 +83,7 @@ export const gate = (
     ? {
         free: blocks.slice(0, freeBlocks),
         ramp: blocks.at(freeBlocks) ?? null,
-        rest: blocks.slice(freeBlocks + 1).map(scrambleBlock),
+        rest: blocks.slice(freeBlocks + 1).map(veilBlock),
       }
     : { free: blocks, ramp: null, rest: [] };
 
@@ -80,12 +92,12 @@ export const gate = (
  *
  * The blur fades in over the ramp's first lines only — two in 314:307, four in
  * 375:221 — and everything after them in the same paragraph is only ever seen
- * fully blurred, so by the rule above it should not leave as real copy. This keeps
- * the paragraph real through `realThrough` (the end of a sentence chosen so the
- * fade band is real text on every phone) and scrambles the rest of it in place,
- * run by run, so it stays one paragraph that wraps like the original. The scrambled
- * runs are marked `veiled`: a wider column runs the real part to fewer lines, and the
- * page uses the mark to end the fade where the stand-in text starts (useRampFit).
+ * fully blurred. This splits the paragraph after `realThrough` (the end of a sentence
+ * chosen so the fade band covers it on every phone) and veils the rest in place, run
+ * by run (veilText: as written, or scrambled in decoy mode), so it stays one
+ * paragraph that wraps like the original. The tail runs are marked `veiled`: a wider
+ * column runs the first part to fewer lines, and the page uses the mark to end the
+ * fade where the full blur takes over (useRampFit).
  *
  * Returns the block untouched when it is not a paragraph or the sentence is not in
  * it — the ramp then stays wholly real, as Typical Beliefs' does, rather than
@@ -108,10 +120,10 @@ export const splitRamp = (block: Report3Block, realThrough: string): Report3Bloc
       const from = start;
       start = end;
       if (end <= cut) return [run];
-      if (from >= cut) return [{ ...run, text: scrambleLockedText(run.text), veiled: true }];
+      if (from >= cut) return [{ ...run, text: veilText(run.text), veiled: true }];
       return [
         { ...run, text: run.text.slice(0, cut - from) },
-        { ...run, text: scrambleLockedText(run.text.slice(cut - from)), veiled: true },
+        { ...run, text: veilText(run.text.slice(cut - from)), veiled: true },
       ];
     }),
   };

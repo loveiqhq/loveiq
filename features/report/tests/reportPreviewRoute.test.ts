@@ -40,13 +40,15 @@ afterAll(() => {
 });
 
 describe("GET /api/report/preview — Accelerator & Brakes", () => {
-  it("locks the chapter for a reader with no plan, with nothing paid past the wall", async () => {
+  // Review 26.09 (lockedBlurCopy.ts): a locked reader's page carries the copy it
+  // draws blurred — "the unlocked content but blurred" — still marked locked.
+  it("locks the chapter for a reader with no plan, the blurred copy as written", async () => {
     const { status, json } = await get("archetype=Spark%20Seeker&plan=");
     expect(status).toBe(200);
     expect(json.accelerators.lockedFrom).toBe(2);
     expect(json.acceleratorsArticle.locked).toBe(true);
     const body = JSON.stringify(json);
-    for (const probe of AB_PROBES) expect(body, probe).not.toContain(probe);
+    for (const probe of AB_PROBES) expect(body, probe).toContain(probe);
   });
 
   it("opens every word for a full-report preview", async () => {
@@ -127,12 +129,12 @@ describe("GET /api/report/preview — Challenges in Partnerships", () => {
     "keep the commitment clear while leaving parts of the experience open",
   ];
 
-  it("locks the V4 chapter for a reader with no plan, with nothing paid past the wall", async () => {
+  it("locks the V4 chapter for a reader with no plan, the blurred copy as written", async () => {
     const { json } = await get("archetype=Spark%20Seeker&plan=");
     expect(json.partnership.locked).toBe(true);
     expect(json.partnership.practice.locked).toBe(true);
     const body = JSON.stringify(json);
-    for (const probe of CIP_PROBES) expect(body, probe).not.toContain(probe);
+    for (const probe of CIP_PROBES) expect(body, probe).toContain(probe);
   });
 
   it("keeps it locked on essentials — it is a full-report chapter, Libido's gate", async () => {
@@ -179,13 +181,13 @@ describe("GET /api/report/preview — Fantasy vs. Reality", () => {
     "Finally, think in terms of translation rather than reproduction.",
   ];
 
-  it("locks the V4 chapter and its article for a reader with no plan, with nothing paid past the wall", async () => {
+  it("locks the V4 chapter and its article for a reader with no plan, the blurred copy as written", async () => {
     const { json } = await get("archetype=Spark%20Seeker&plan=");
     expect(json.fantasy.locked).toBe(true);
     expect(json.fantasy.table.locked).toBe(true);
     expect(json.fantasyArticle.locked).toBe(true);
     const body = JSON.stringify(json);
-    for (const probe of FVR_PROBES) expect(body, probe).not.toContain(probe);
+    for (const probe of FVR_PROBES) expect(body, probe).toContain(probe);
   });
 
   it("keeps it locked on essentials — it is a full-report chapter", async () => {

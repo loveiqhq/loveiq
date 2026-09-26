@@ -22,10 +22,10 @@
  * component, never in this module.
  */
 
-import { scrambleLockedText } from "@features/report/server/scrambleLockedText";
 import {
   gate,
   splitRamp,
+  veilText,
   type Report3GatedCopy,
   type Report3PracticeView,
 } from "@features/report/server/gatedCopy";
@@ -319,15 +319,16 @@ export const ACCELERATORS_PRACTICE_FREE_BLOCKS = 1;
  * Where each ramp paragraph stops being real (splitRamp). The fade runs over its
  * first two lines in 314:307 and its first four in 375:221; these sentence ends sit
  * past that on every phone from 320 to 430, so the band is always real copy and
- * everything after it — only ever seen fully blurred — is scrambled.
+ * everything after it is only ever seen fully blurred (veiled: lockedBlurCopy.ts).
  */
 export const ACCELERATORS_CHALLENGES_RAMP_THROUGH = "create days of tension.";
 export const ACCELERATORS_PRACTICE_RAMP_THROUGH = "harder to respond?”";
 
-const scrambleRow = (row: Report3TriggerRow): Report3TriggerRow => ({
+/** A row under the lock: as written, or its decoy (lockedBlurCopy.ts). */
+const veilRow = (row: Report3TriggerRow): Report3TriggerRow => ({
   ...row,
-  label: scrambleLockedText(row.label),
-  subtext: scrambleLockedText(row.subtext),
+  label: veilText(row.label),
+  subtext: veilText(row.subtext),
 });
 
 const rampOf = (gated: Report3GatedCopy, realThrough: string): Report3GatedCopy =>
@@ -339,10 +340,10 @@ const rampOf = (gated: Report3GatedCopy, realThrough: string): Report3GatedCopy 
  *
  * `locked` is decided by the caller, from the same gate the V2 section runs through
  * (`accelUnlocked`), so nothing in the V4 tree ever sees an access plan. A locked
- * reader receives: the intro, both leads and rows 1-2 verbatim; rows 3-5 scrambled
- * (fills kept); each ramp paragraph real through its fade band and scrambled after;
- * everything past the ramps scrambled; and the closed practice teaser verbatim,
- * because it is free copy.
+ * reader receives: the intro, both leads and rows 1-2 verbatim; rows 3-5 and
+ * everything past the ramps as the page draws them blurred — the copy itself since
+ * 26.09, decoys in the switch's other position (lockedBlurCopy.ts); and the closed
+ * practice teaser verbatim, because it is free copy.
  */
 export function buildAccelerators(
   archetype: string,
@@ -352,7 +353,7 @@ export function buildAccelerators(
   if (!copy) return null;
   const lockedFrom = locked ? ACCELERATORS_FREE_ROWS : null;
   const rows = (list: readonly Report3TriggerRow[]) =>
-    list.map((row, index) => (lockedFrom !== null && index >= lockedFrom ? scrambleRow(row) : row));
+    list.map((row, index) => (lockedFrom !== null && index >= lockedFrom ? veilRow(row) : row));
   return {
     intro: copy.intro,
     brakesLead: copy.brakesLead,

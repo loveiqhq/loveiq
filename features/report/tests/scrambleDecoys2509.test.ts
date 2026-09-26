@@ -13,6 +13,10 @@ import { DECOY_WORDS, scrambleLockedText } from "@features/report/server/scrambl
 
 /** Every string the locked chapters send through the scrambler, as it comes out. */
 const emitted = vi.hoisted(() => [] as string[]);
+// These tests pin the switch's decoy position (lockedBlurCopy.ts): what the chapter
+// sends a locked reader when nothing paid rides under the blur. The default since
+// review 26.09 is the real copy — see lockedBlurCopy2609.test.ts.
+vi.mock("@features/report/server/lockedBlurCopy", () => ({ LOCKED_BLUR_COPY: "decoy" }));
 vi.mock("@features/report/server/scrambleLockedText", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@features/report/server/scrambleLockedText")>();

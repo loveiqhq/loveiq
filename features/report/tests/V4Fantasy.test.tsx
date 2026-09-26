@@ -127,8 +127,8 @@ describe("V4Fantasy — paywalled (305:217)", () => {
     expect(blurred.getAttribute("aria-hidden")).toBe("true");
     expect(blurred.hasAttribute("inert")).toBe(true);
     expect(blurred.querySelectorAll(".rv4-prose__p")).toHaveLength(13);
-    // Scrambled on the server: none of the real copy is on the page.
-    expect(gate.textContent).not.toContain(
+    // Under the blur and out of reach of assistive tech; since review 26.09 the copy under the blur is the real one (lockedBlurCopy.ts).
+    expect(blurred.textContent).toContain(
       "A fantasy often works because reality has been edited out."
     );
     const card = gate.querySelector(".rv4-premium")!;

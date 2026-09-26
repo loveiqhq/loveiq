@@ -176,7 +176,10 @@ describe("the paywalled body — 305:358", () => {
     const tail = practice.querySelector<HTMLOListElement>(".rv4-try__blurred ol");
     expect(tail).not.toBeNull();
     expect(tail!.start).toBe(3);
-    expect(screen.queryByText(/keep the commitment clear/)).toBeNull();
+    // The practice's tail sits under the blur; since review 26.09 the copy under the blur is the real one (lockedBlurCopy.ts).
+    expect(practice.querySelector(".rv4-try__blurred")!.textContent).toMatch(
+      /keep the commitment clear/
+    );
   });
 });
 
