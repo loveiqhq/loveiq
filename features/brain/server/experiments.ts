@@ -148,7 +148,7 @@ export async function listExperiments(
     "Before the next test starts, record it with record_experiment: what it should change and " +
       "why (the hypothesis), the one number that decides it, the axis its arms are stamped on, " +
       "and the day it starts. When it ends, record the outcome there and the decision with " +
-      "record_decision. The same registry is /admin's Experiments page."
+      "record_decision."
   );
   return out.join("\n");
 }
@@ -301,7 +301,7 @@ export async function recordExperiment(
       `${existing ? "Updated" : "Registered"} experiment #${id}: ${name} (${nextStatus}` +
       `${(axis ?? existing?.axis) ? `, ${AXIS_TITLES[(axis ?? existing?.axis) as ExperimentAxis]}` : ""}).\n` +
       `Hypothesis: ${hypothesis}\nDecided by: ${metric}\n` +
-      `It shows in /admin's Experiments page too. ` +
+      "It is saved in the admin panel's own experiment table. " +
       (nextStatus === "completed"
         ? "Record the decision it led to with record_decision, if you have not."
         : "When it ends, set its status to completed with the outcome, and record the decision with record_decision."),

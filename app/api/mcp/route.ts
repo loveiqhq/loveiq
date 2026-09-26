@@ -1238,8 +1238,8 @@ export const TOOLS = [
       "stamped on (landing, survey, pricing or paywall) and the day it starts. Refused without " +
       "a hypothesis and a metric, because a test without them cannot be concluded from. Call " +
       "it again with experiment_id to change it, and when the test ends set status " +
-      "'completed' with the outcome, then record the decision with record_decision. The " +
-      "registry is /admin's Experiments page, so an entry here shows there too.",
+      "'completed' with the outcome, then record the decision with record_decision. It is " +
+      "saved in the admin panel's own experiment table (admin_experiment).",
     inputSchema: {
       type: "object",
       properties: {
@@ -5342,7 +5342,7 @@ async function callTool(
     } catch (err) {
       logger.error({ err }, "brain: record_experiment failed");
       return textResult(
-        "The experiment could not be saved just now; nothing was changed. Try again, or use /admin's Experiments page.",
+        "The experiment could not be saved just now; nothing was changed. Try again in a minute.",
         true
       );
     }
