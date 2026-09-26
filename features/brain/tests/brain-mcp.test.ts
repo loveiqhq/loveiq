@@ -4295,6 +4295,29 @@ describe("/api/mcp", () => {
       expect(out).toContain("brain-ingest ok at 2026-08-30 04:47");
     });
 
+    it("shows WhatsApp's last sync from the laptop, and says when it failed", async () => {
+      cronRuns = { "brain-whatsapp": { started_at: "2026-08-30T21:15:02Z", status: "success" } };
+      wireCorpus({ whatsapp: 540 });
+      expect(await text()).toContain(
+        "synced hourly from WhatsApp Desktop on a laptop, not by a server cron — so it pauses while that machine is off; last synced 2026-08-30 21:15"
+      );
+      cronRuns = {
+        "brain-whatsapp": {
+          started_at: "2026-08-30T22:15:02Z",
+          status: "error",
+          error_message: "WhatsApp Desktop has not written its database for 30h",
+        },
+      };
+      expect(await text()).toContain(
+        "the last sync FAILED at 2026-08-30 22:15 (WhatsApp Desktop has not written its database for 30h)"
+      );
+      // A timeout is a failure too, not a sync.
+      cronRuns = { "brain-whatsapp": { started_at: "2026-08-30T23:15:02Z", status: "timeout" } };
+      expect(await text()).toContain("the last sync FAILED at 2026-08-30 23:15");
+      cronRuns = {};
+      expect(await text()).toContain("no sync has recorded itself yet");
+    });
+
     it("names a job that genuinely has no record, rather than implying health", async () => {
       cronRuns = {};
       wireCorpus({ gmail: 10 });

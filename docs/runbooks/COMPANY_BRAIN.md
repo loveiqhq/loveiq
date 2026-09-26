@@ -1097,7 +1097,22 @@ What the brain notices on its own reaches people in Claude, not only in a Slack 
 
 WhatsApp is driven by a launchd agent on Eman's machine, `org.loveiq.whatsapp-sync`,
 hourly, from a SEPARATE checkout at `~/.loveiq-brain`. It does not appear in
-`vercel.json`, writes no `cron_run` row, and stops when the laptop is off.
+`vercel.json`, and it pauses whenever the laptop is off.
+
+**Every run records itself** as `brain-whatsapp` in `cron_run` (since 2026-09-26), and a
+run is a failure when WhatsApp Desktop has not written its database for a day. That
+means the app is closed or unlinked, and the sync would otherwise read a frozen copy
+"successfully". The stall watcher counts only successful runs for this job
+(`LAPTOP_JOBS` in `features/cron/server/cron-stall.ts`) and alerts after **three days**
+without one, with the fix in the message: open the Mac and WhatsApp Desktop.
+
+A closed laptop only delays WhatsApp: the servers hold undelivered messages, and keep a
+linked device linked, for 30 days, so three days leaves four weeks of margin.
+`list_sources` shows the last sync next to the WhatsApp source. A free way to run it off
+the laptop was researched on 2026-09-26, and there is none that is official, automatic
+and free. The one safe automated option is a spare Android phone on its own SIM, as a
+member of the group whose nightly encrypted backup is read. It needs hardware, so it was
+not chosen.
 
 The embedding backfill ran the same way (`org.loveiq.reembed`, every fifteen minutes)
 until 2026-09-26. It is now the `brain-embed.yml` GitHub job, which Vercel's clock
@@ -1623,9 +1638,11 @@ A linked desktop keeps back-filling history in the background, so the range grow
 its own: 614 messages over 53 days when first linked, 1,952 over 306 days a few hours
 later. It syncs when the Mac is awake.
 
-**Bounded at 2026-05-01** (`WHATSAPP_SINCE`), by decision on 2026-08-31 — older chat
-is not worth the storage or the embedding cost. Note that moving that floor FORWARD
-will not clean up on its own: the sweep's majority guard refuses to delete more than
+**The floor is 2025-10-01** (the default of `WHATSAPP_SINCE` in the script), so the
+corpus holds the team's whole history. It was 2026-05-01 until 2026-09-20 (`c7db7b2e`),
+on the grounds that older chat was not worth the storage. Measured, the cut dropped 42% of
+the group's messages, the founding months, for about twenty-five chunks, so it was undone.
+Note that moving the floor FORWARD will not clean up on its own: the sweep's majority guard refuses to delete more than
 half a source, correctly, because it cannot tell a deliberate cut-off from a broken
 collection. Trim by date instead, which is scoped to exactly what you meant:
 

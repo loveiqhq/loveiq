@@ -115,6 +115,30 @@ export const CRON_MAX_AGE_MS: Record<string, number> = {
    */
   "ux-review-verify": 3 * 3_600_000,
   "ux-digest-audit": 26 * 3_600_000,
+  /**
+   * HOURLY ON A LAPTOP, not a server (LAPTOP_JOBS below), so it pauses whenever the Mac is
+   * closed, and only a successful run counts. Three days because a closed laptop only
+   * delays WhatsApp: the servers hold undelivered messages, and keep a linked Mac linked,
+   * for 30 days. Three days is long enough not to page over a weekend away, and leaves
+   * four weeks before anything is lost.
+   */
+  "brain-whatsapp": 3 * 24 * 3_600_000,
+};
+
+/**
+ * Watched jobs that run on a laptop: the script that records the run, and what to do when
+ * one goes quiet. A laptop job is judged on its SUCCESSFUL runs, because the ways it fails
+ * while running (WhatsApp Desktop closed or unlinked) are exactly the ones that matter.
+ * A test checks each script records under its name.
+ */
+export const LAPTOP_JOBS: Record<string, { script: string; remedy: string }> = {
+  "brain-whatsapp": {
+    script: "scripts/whatsapp-sync.ts",
+    remedy:
+      "It runs hourly on Eman's Mac (launchd org.loveiq.whatsapp-sync) and reads WhatsApp " +
+      "Desktop there: open the Mac and WhatsApp Desktop, and check the phone still lists it " +
+      "under Linked devices. Nothing is lost until a message is 30 days old.",
+  },
 };
 
 /**
@@ -163,6 +187,7 @@ export interface StalledCron {
 async function newestRun(cron: string): Promise<string | null | undefined> {
   const res = await supabaseFetch(
     `/rest/v1/cron_run?cron_name=eq.${encodeURIComponent(cron)}&select=started_at` +
+      (cron in LAPTOP_JOBS ? "&status=eq.success" : "") +
       `&order=started_at.desc&limit=1`
   );
   // undefined = could not tell. Distinct from null = genuinely never ran, because
@@ -197,6 +222,15 @@ export async function findStalledCrons(nowMs: number = Date.now()): Promise<Stal
 
 export function describeStall(s: StalledCron): string {
   const hours = (ms: number) => `${(ms / 3_600_000).toFixed(1)}h`;
+  const laptop = LAPTOP_JOBS[s.cron];
+  if (laptop) {
+    return (
+      (s.lastRunAt === null
+        ? `*${s.cron}* has never recorded a successful run. `
+        : `*${s.cron}* last succeeded ${hours(s.ageMs ?? 0)} ago (limit ${hours(s.maxAgeMs)}). `) +
+      laptop.remedy
+    );
+  }
   const workflow = GITHUB_WORKFLOW[s.cron];
   const byClock = (CLOCK_WORKFLOWS as readonly string[]).includes(workflow ?? "");
   const github = !workflow

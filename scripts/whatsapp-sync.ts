@@ -25,7 +25,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -67,16 +67,38 @@ function query<T>(sql: string): T[] {
   return out.trim() ? (JSON.parse(out) as T[]) : [];
 }
 
+/**
+ * Why the run failed, if it did. Every run records itself as `brain-whatsapp` in cron_run,
+ * so the stall watcher can say when this laptop job has gone quiet: it pauses whenever the
+ * Mac is closed, and the watcher counts only successful runs.
+ */
+let failure: string | undefined;
+function fail(message: string): void {
+  console.error(message);
+  failure ??= message.split("\n")[0];
+  process.exitCode = 1;
+}
+
 async function main(): Promise<void> {
   if (!GROUP_JID.endsWith("@g.us")) {
-    console.error("WHATSAPP_GROUP_JID must be a group jid ending in @g.us — refusing to run.");
-    process.exitCode = 1;
+    fail("WHATSAPP_GROUP_JID must be a group jid ending in @g.us — refusing to run.");
     return;
   }
   if (!existsSync(DB)) {
-    console.error(`No WhatsApp Desktop database at ${DB}\nInstall WhatsApp Desktop and link it.`);
-    process.exitCode = 1;
+    fail(`No WhatsApp Desktop database at ${DB}\nInstall WhatsApp Desktop and link it.`);
     return;
+  }
+
+  // A frozen database syncs "successfully" forever, so say so, and keep syncing what is there.
+  const { desktopSilenceHours, DESKTOP_SILENCE_LIMIT_H } =
+    await import("@features/brain/server/ingest/whatsapp");
+  const mtimes = [DB, `${DB}-wal`].map((f) => (existsSync(f) ? statSync(f).mtimeMs : NaN));
+  const silent = desktopSilenceHours(mtimes, Date.now());
+  if (silent > DESKTOP_SILENCE_LIMIT_H) {
+    fail(
+      `WhatsApp Desktop has not written its database for ${Math.round(silent)}h: open it on ` +
+        `this Mac, and check the phone still lists it under Linked devices.`
+    );
   }
 
   const esc = GROUP_JID.replace(/'/g, "''");
@@ -84,8 +106,7 @@ async function main(): Promise<void> {
     `select Z_PK as pk from ZWACHATSESSION where ZCONTACTJID = '${esc}' limit 1;`
   )[0];
   if (!session) {
-    console.error(`That group is not in this database. Is WhatsApp Desktop linked and synced?`);
-    process.exitCode = 1;
+    fail(`That group is not in this database. Is WhatsApp Desktop linked and synced?`);
     return;
   }
 
@@ -176,4 +197,12 @@ async function main(): Promise<void> {
   console.log(`speakers: ${[...new Set(messages.map((m) => m.sender))].join(", ")}`);
 }
 
-void main();
+const started = Date.now();
+void main()
+  .catch((err: unknown) => {
+    fail(err instanceof Error ? err.message : String(err));
+  })
+  .finally(async () => {
+    const { recordCronRun } = await import("@shared/observability/slack-alert-dedup");
+    await recordCronRun("brain-whatsapp", started, failure ? "error" : "success", failure);
+  });

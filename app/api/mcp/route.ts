@@ -5528,6 +5528,9 @@ async function callTool(
       calendar: "brain-calendar",
       gsc: "brain-ingest",
       people: "brain-fast",
+      // Pushed from a laptop, not a server cron: read here only so its last sync can be
+      // shown beside the laptop note below.
+      whatsapp: "brain-whatsapp",
     };
 
     /**
@@ -5574,8 +5577,16 @@ async function callTool(
       // It IS scheduled — hourly, by a launchd agent on a laptop rather than by Vercel.
       // The distinction that matters to a reader is that it stops when that machine is
       // off, which "not a scheduled job" obscured.
-      if (source === "whatsapp")
-        return " · synced hourly from WhatsApp Desktop on a laptop, not by a server cron — so it stops when that machine is off";
+      if (source === "whatsapp") {
+        const note =
+          " · synced hourly from WhatsApp Desktop on a laptop, not by a server cron — so it pauses while that machine is off";
+        const run = lastRun.get("brain-whatsapp");
+        if (!run) return `${note}; no sync has recorded itself yet`;
+        const when = run.at.slice(0, 16).replace("T", " ");
+        return run.status === "success"
+          ? `${note}; last synced ${when}`
+          : `${note}; the last sync FAILED at ${when}${run.error ? ` (${run.error})` : ""}`;
+      }
       // Written by `record_decision`, so there is no job to be behind. Said explicitly:
       // an empty clause here reads as an ingester whose state could not be determined,
       // and the staleness guidance below would otherwise apply a rule that cannot hold —

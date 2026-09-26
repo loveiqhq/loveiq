@@ -229,3 +229,16 @@ export function whatsappRows(
     stampedAt,
   });
 }
+
+/**
+ * How long WhatsApp Desktop has gone without writing its database, in hours, from the
+ * modification times of `ChatStorage.sqlite` and its `-wal`. The app writes the log
+ * whenever any chat or receipt moves, so a quiet day means it is closed or no longer
+ * linked, and the sync is reading a frozen copy while believing it succeeded.
+ */
+export const DESKTOP_SILENCE_LIMIT_H = 24;
+
+export function desktopSilenceHours(mtimesMs: number[], nowMs: number): number {
+  const newest = Math.max(...mtimesMs.filter((t) => Number.isFinite(t)));
+  return Number.isFinite(newest) ? Math.max(0, (nowMs - newest) / 3_600_000) : Infinity;
+}
