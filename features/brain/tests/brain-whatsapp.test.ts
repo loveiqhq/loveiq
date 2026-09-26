@@ -7,7 +7,7 @@ import {
   looksLikeWhatsAppExport,
   parseWhatsApp,
   whatsappRows,
-  desktopSilenceHours,
+  groupQuietDays,
 } from "@features/brain/server/ingest/whatsapp";
 
 const STAMP = "2026-08-31T00:00:00.000Z";
@@ -177,15 +177,15 @@ describe("whatsappRows — one chunk per DAY", () => {
   });
 });
 
-describe("desktopSilenceHours", () => {
+describe("groupQuietDays", () => {
   const NOW = Date.parse("2026-09-26T12:00:00Z");
-  it("reads the newest of the database and its log, so a busy log keeps the app alive", () => {
-    expect(desktopSilenceHours([NOW - 30 * 3_600_000, NOW - 60_000], NOW)).toBeCloseTo(1 / 60);
-    expect(desktopSilenceHours([NOW - 30 * 3_600_000, Number.NaN], NOW)).toBe(30);
+  it("counts days since the group's newest message", () => {
+    expect(groupQuietDays([NOW - 9 * 86_400_000, NOW - 2 * 86_400_000], NOW)).toBe(2);
+    expect(groupQuietDays([NOW - 3 * 86_400_000, Number.NaN], NOW)).toBe(3);
   });
 
-  it("calls a database it could not read at all silent forever, not fresh", () => {
-    expect(desktopSilenceHours([Number.NaN, Number.NaN], NOW)).toBe(Infinity);
-    expect(desktopSilenceHours([], NOW)).toBe(Infinity);
+  it("calls a group with no readable message silent forever, not fresh", () => {
+    expect(groupQuietDays([Number.NaN], NOW)).toBe(Infinity);
+    expect(groupQuietDays([], NOW)).toBe(Infinity);
   });
 });

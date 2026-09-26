@@ -231,14 +231,15 @@ export function whatsappRows(
 }
 
 /**
- * How long WhatsApp Desktop has gone without writing its database, in hours, from the
- * modification times of `ChatStorage.sqlite` and its `-wal`. The app writes the log
- * whenever any chat or receipt moves, so a quiet day means it is closed or no longer
- * linked, and the sync is reading a frozen copy while believing it succeeded.
+ * Days since the group's newest message. A frozen copy of the database (WhatsApp Desktop
+ * closed, or no longer linked) syncs "successfully" forever, and the group talks most
+ * days, so a week of silence is the sign. Read from the group's own rows: the database's
+ * file times would say it sooner, but reading WhatsApp's folder from node hung the sync on
+ * macOS on 2026-09-26, and a hung run blocks every hourly run after it.
  */
-export const DESKTOP_SILENCE_LIMIT_H = 24;
+export const GROUP_QUIET_LIMIT_DAYS = 7;
 
-export function desktopSilenceHours(mtimesMs: number[], nowMs: number): number {
-  const newest = Math.max(...mtimesMs.filter((t) => Number.isFinite(t)));
-  return Number.isFinite(newest) ? Math.max(0, (nowMs - newest) / 3_600_000) : Infinity;
+export function groupQuietDays(messageTimesMs: number[], nowMs: number): number {
+  const newest = Math.max(...messageTimesMs.filter((t) => Number.isFinite(t)));
+  return Number.isFinite(newest) ? Math.max(0, (nowMs - newest) / 86_400_000) : Infinity;
 }
