@@ -113,7 +113,7 @@ export default function JarvisConnect({
         {state.kind === "sign-in" && !codeSent && (
           <form onSubmit={sendCode} className="space-y-4">
             <p className="text-center text-sm text-text-muted">
-              Sign in with your LoveIQ email. We&rsquo;ll send you a six-digit code.
+              Sign in with your LoveIQ email. We&rsquo;ll send you a code.
             </p>
             <label htmlFor="jarvis-email" className="sr-only">
               Email
@@ -142,23 +142,23 @@ export default function JarvisConnect({
               If {email} can use Jarvis, a code is in that inbox now. Type it here.
             </p>
             <label htmlFor="jarvis-code" className="sr-only">
-              Six-digit code
+              Code from the email
             </label>
             <input
               id="jarvis-code"
               inputMode="numeric"
               autoComplete="one-time-code"
-              pattern="[0-9]{6}"
-              maxLength={6}
+              pattern="[0-9]{6,10}"
+              maxLength={10}
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-              placeholder="123456"
+              placeholder="12345678"
               required
               autoFocus
               className={`${input} text-center tracking-[0.4em]`}
             />
             {error && <p className="text-sm text-red-400">{error}</p>}
-            <button type="submit" disabled={busy || code.length !== 6} className={primary}>
+            <button type="submit" disabled={busy || code.length < 6} className={primary}>
               {busy ? "Checking…" : "Sign in"}
             </button>
             <button

@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseServer } from "@features/admin/server/supabase-server";
+import { SIGN_IN_CODE } from "@features/brain/server/connect";
 import { memberByEmail } from "@features/brain/server/sign-in";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
@@ -12,7 +13,7 @@ import logger from "@shared/observability/logger";
 
 const schema = z.object({
   email: z.string().trim().toLowerCase().email().max(320),
-  code: z.string().regex(/^\d{6}$/),
+  code: z.string().trim().regex(SIGN_IN_CODE),
 });
 
 export async function POST(request: Request) {
@@ -29,10 +30,7 @@ export async function POST(request: Request) {
   }
   const parsed = schema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "The code is the six digits in the email." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "The code is the number in the email." }, { status: 400 });
   }
   const { email } = parsed.data;
 

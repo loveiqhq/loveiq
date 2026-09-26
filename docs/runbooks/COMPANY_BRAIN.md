@@ -345,7 +345,7 @@ it as a tool and reason across it alongside the live connectors it already has.
 
 - **claude.ai / Claude Desktop:** the organization connector (Settings → Connectors).
   Each person clicks **Connect** once, types their `@loveiq.org` address, then the
-  six-digit code from their inbox, then **Allow**.
+  code from their inbox, then **Allow**.
 - **Claude Code:** `claude mcp add --transport http loveiq-brain https://www.loveiq.org/api/mcp`,
   then `/mcp` → Authenticate. The same page opens in the browser.
 

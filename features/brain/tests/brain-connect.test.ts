@@ -10,7 +10,8 @@ vi.mock("@shared/observability/logger", () => ({
 }));
 
 let members: Record<string, string> = {};
-let otp: string | undefined = "123456";
+// Eight digits, as this project mints them (mailer_otp_length).
+let otp: string | undefined = "12345678";
 const mockSupabaseFetch = vi.fn(async (path: string, init?: { body?: string }) => {
   if (path.startsWith("/rest/v1/brain_person")) {
     const email = /cs\.%7B%22(.+?)%22%7D/.exec(path)?.[1]?.replace("%40", "@") ?? "";
@@ -92,7 +93,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   forgetSignIns();
   members = { "mo@loveiq.org": "Mark Oldenburg" };
-  otp = "123456";
+  otp = "12345678";
   csrfOk = true;
   process.env.RESEND_API_KEY = "re_test";
   auth.oauth.getAuthorizationDetails.mockResolvedValue(asking());
@@ -210,7 +211,7 @@ describe("the sign-in code", () => {
     expect(mockSend).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "mo@loveiq.org",
-        subject: "Your Jarvis sign-in code: 123456",
+        subject: "Your Jarvis sign-in code: 12345678",
       })
     );
   });
@@ -231,23 +232,27 @@ describe("the sign-in code", () => {
 
   it("signs a member in with the code, and turns away a code that fails", async () => {
     auth.verifyOtp.mockResolvedValue({ error: null });
-    const ok = await verifyPOST(post({ email: "MO@loveiq.org ", code: "123456" }));
+    const ok = await verifyPOST(post({ email: "MO@loveiq.org ", code: " 12345678" }));
     expect(ok.status).toBe(200);
     expect(auth.verifyOtp).toHaveBeenCalledWith({
       email: "mo@loveiq.org",
-      token: "123456",
+      token: "12345678",
       type: "email",
     });
+    // Any length Supabase can be set to mint, six to ten digits.
+    expect((await verifyPOST(post({ email: "mo@loveiq.org", code: "123456" }))).status).toBe(200);
 
     auth.verifyOtp.mockResolvedValue({ error: { message: "Token has expired or is invalid" } });
-    expect((await verifyPOST(post({ email: "mo@loveiq.org", code: "000000" }))).status).toBe(400);
-    expect((await verifyPOST(post({ email: "mo@loveiq.org", code: "12345" }))).status).toBe(400);
+    expect((await verifyPOST(post({ email: "mo@loveiq.org", code: "00000000" }))).status).toBe(400);
+    for (const code of ["12345", "12345678901", "1234abcd"]) {
+      expect((await verifyPOST(post({ email: "mo@loveiq.org", code }))).status, code).toBe(400);
+    }
   });
 
   it("signs straight back out someone whose membership ended after the code was sent", async () => {
     auth.verifyOtp.mockResolvedValue({ error: null });
     members = {};
-    expect((await verifyPOST(post({ email: "mo@loveiq.org", code: "123456" }))).status).toBe(403);
+    expect((await verifyPOST(post({ email: "mo@loveiq.org", code: "12345678" }))).status).toBe(403);
     expect(auth.signOut).toHaveBeenCalled();
   });
 });
