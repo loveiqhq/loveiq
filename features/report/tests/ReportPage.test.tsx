@@ -93,6 +93,13 @@ import { splitArticleForReader } from "@features/report/server/contentGating";
 const TREATMENT_TOKEN = "rpt_report_test_001";
 
 const REPORT_MODAL_TEST_TIMEOUT_MS = 60_000;
+/**
+ * How long a closed pricing dialog may take to leave the DOM. waitFor's default 1s
+ * holds alone, but under the full suite's parallel load (the pre-push hook) the close
+ * has taken longer: "locks background scroll…" and "shows the pricing modal on report
+ * open…" each failed there once on 2026-09-26 and passed alone every time.
+ */
+const DIALOG_CLOSED = { timeout: 5_000 };
 const mockScrollTo = vi.fn();
 
 describe("ReportPage", () => {
@@ -457,7 +464,10 @@ describe("ReportPage", () => {
 
       await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
 
-      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      await waitFor(
+        () => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+        DIALOG_CLOSED
+      );
       expect(container.querySelectorAll(".report-premium-overlay__cta").length).toBeGreaterThan(0);
 
       const growthSection = container.querySelector(
@@ -486,7 +496,10 @@ describe("ReportPage", () => {
       const { container } = render(<ReportPage />);
 
       await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
-      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      await waitFor(
+        () => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+        DIALOG_CLOSED
+      );
 
       const firstSectionUnlockButton = container.querySelector(
         ".report-section .report-premium-overlay__cta"
@@ -530,7 +543,10 @@ describe("ReportPage", () => {
 
       await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
 
-      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      await waitFor(
+        () => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+        DIALOG_CLOSED
+      );
       expect(document.documentElement.style.overflow).toBe("");
       expect(document.body.style.position).toBe("");
       expect(document.body.style.top).toBe("");
@@ -635,7 +651,10 @@ describe("ReportPage", () => {
 
       // Close the auto-opened modal first, then click a locked section.
       await user.click(screen.getByRole("button", { name: /close pricing modal/i }));
-      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      await waitFor(
+        () => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+        DIALOG_CLOSED
+      );
 
       const lockedCta = container.querySelector(
         ".report-section .report-premium-overlay__cta"
@@ -887,7 +906,10 @@ describe("ReportPage", () => {
         const closeButton = screen.getByRole("button", { name: /close pricing modal/i });
         expect(closeButton).toBeInTheDocument();
         await user.click(closeButton);
-        await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+        await waitFor(
+          () => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+          DIALOG_CLOSED
+        );
 
         // And the report underneath is readable rather than walled off.
         expect(container.querySelector(".report-page")).not.toBeNull();
