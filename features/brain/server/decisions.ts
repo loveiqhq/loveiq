@@ -58,6 +58,37 @@ function idFor(decision: string, decidedOn: string): string {
   return `decision:${decidedOn}-${digest.slice(0, 10)}`;
 }
 
+/**
+ * A DECISION'S TITLE SAYS WHAT WAS DECIDED, NEVER "DECIDED".
+ *
+ * "decided" shares its stem with "decide", so a title carrying it matched every "what did
+ * we decide about X" question, and titles weigh double. Measured 2026-09-26: a record about
+ * the subscription model, titled "...that was decided on 18 May", ranked second for "what
+ * did we decide about micro assessments and the consumer pivot" and was lifted into the
+ * prior-decision block for it. The body keeps the words as written; only the title changes.
+ */
+const TITLE_WORDING: Array<[RegExp, string]> = [
+  [/\bdecided against\b/gi, "ruled out"],
+  [/\bdecided to\b/gi, "chose to"],
+  [/\bdecided that\b/gi, "agreed that"],
+  [/\bdecided on\b/gi, "settled on"],
+  [/\bdecided\b/gi, "agreed"],
+  [/\bdecides\b/gi, "chooses"],
+  [/\bdeciding\b/gi, "choosing"],
+  [/\bdecide\b/gi, "choose"],
+];
+
+export function decisionTitle(decision: string): string {
+  let worded = decision.trim();
+  for (const [pattern, word] of TITLE_WORDING) {
+    // Keep a sentence-initial capital: "Decided to" becomes "Chose to".
+    worded = worded.replace(pattern, (hit) =>
+      hit[0] === hit[0]!.toUpperCase() ? word[0]!.toUpperCase() + word.slice(1) : word
+    );
+  }
+  return `Decision: ${worded}`.slice(0, 300);
+}
+
 export function buildDecisionRow(input: DecisionInput, now: Date): BrainRow {
   const decidedOn =
     input.decidedOn && ISO_DAY.test(input.decidedOn)
@@ -74,7 +105,7 @@ export function buildDecisionRow(input: DecisionInput, now: Date): BrainRow {
    * of it. A record whose title is "Decision: switch to flat pricing, drop the uplift"
    * matches the question someone actually asks.
    */
-  const title = `Decision: ${input.decision.trim()}`.slice(0, 300);
+  const title = decisionTitle(input.decision);
 
   const lines = [
     `Decided on ${decidedOn} by ${input.actor.trim()}.`,

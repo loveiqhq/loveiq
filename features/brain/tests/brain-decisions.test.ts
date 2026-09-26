@@ -14,6 +14,7 @@ vi.mock("@features/brain/server/ingest/upsert", () => ({
 vi.mock("@shared/observability/slack", () => ({ notifySlack: vi.fn(async () => undefined) }));
 
 import {
+  decisionTitle,
   buildDecisionRow,
   disputesOf,
   looksLikeDecisionBrowse,
@@ -555,6 +556,40 @@ describe("markSuperseded", () => {
       .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) });
     await expect(markSuperseded("decision:x", "decision:y", "2026-09-26")).rejects.toThrow(
       /could not mark/
+    );
+  });
+});
+
+describe("a decision's title never says 'decided'", () => {
+  // "decided" stems like "decide", so it matched every "what did we decide about X" question.
+  it("rewords the verb in the title and keeps the body as written", () => {
+    const row = buildDecisionRow(
+      {
+        decision: "Drop the subscription model that was decided on 18 May 2026",
+        actor: "Eman Cickusic",
+      },
+      NOW
+    );
+    expect(row.title).toBe("Decision: Drop the subscription model that was settled on 18 May 2026");
+    expect(row.body).toContain("Drop the subscription model that was decided on 18 May 2026");
+  });
+
+  it("keeps a sentence-initial capital and covers every form of the verb", () => {
+    expect(decisionTitle("Decided to ship the blurred preview first")).toBe(
+      "Decision: Chose to ship the blurred preview first"
+    );
+    expect(decisionTitle("The team decided against a fade effect")).toBe(
+      "Decision: The team ruled out a fade effect"
+    );
+    expect(decisionTitle("We decided that Sanjin owns the components")).toBe(
+      "Decision: We agreed that Sanjin owns the components"
+    );
+    expect(decisionTitle("Marcus decides the price; nobody else is deciding it")).toBe(
+      "Decision: Marcus chooses the price; nobody else is choosing it"
+    );
+    // The noun stems differently and stays.
+    expect(decisionTitle("Record every decision in Notion")).toBe(
+      "Decision: Record every decision in Notion"
     );
   });
 });

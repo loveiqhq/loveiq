@@ -263,6 +263,17 @@ describe("titleFor — the figure stays out of the title, the decision stays in"
     expect(t).toContain("500");
   });
 
+  it("words a mined title without 'decided', as record_decision does", () => {
+    expect(
+      titleFor(
+        "The team decided against implementing a visual fade effect on collapsed preview text.",
+        ROSTER
+      )
+    ).toBe(
+      "Decision: The team ruled out implementing a visual fade effect on collapsed preview text."
+    );
+  });
+
   it("leaves a decision that merely mentions money completely alone", () => {
     // All three conditions must hold. A price is not somebody's pay.
     const t = titleFor("Cap the report price at 29 for all plans.", ROSTER);

@@ -1738,7 +1738,8 @@ describe("/api/mcp", () => {
         until: "2026-09-01",
         meta: { status: "WIP" },
       });
-      expect(mockRetrieve).toHaveBeenLastCalledWith(
+      // Any call, not the last: a narrowed search that finds little also looks outside it.
+      expect(mockRetrieve).toHaveBeenCalledWith(
         "which tasks are in progress",
         12,
         {
@@ -1777,7 +1778,8 @@ describe("/api/mcp", () => {
 
       // A well-formed request still passes through untouched, scalars coerced.
       await call({ query: "anything", sources: ["notion"], meta: { status: "WIP", count: 3 } });
-      expect(mockRetrieve).toHaveBeenLastCalledWith(
+      // Any call, not the last: a narrowed search that finds little also looks outside it.
+      expect(mockRetrieve).toHaveBeenCalledWith(
         "anything",
         12,
         {
@@ -1979,6 +1981,103 @@ describe("/api/mcp", () => {
       const strong = (await (await call({ query: "anything" })).json()).result.content[0]
         .text as string;
       expect(strong).not.toMatch(/WEAK MATCH/);
+    });
+
+    /**
+     * A WEAK MATCH INSIDE A FILTER IS OFTEN A STRONG ONE OUTSIDE IT (measured 2026-09-26:
+     * 25 of the week's 42 weak searches were narrowed, and the same question unfiltered
+     * cleared the floor). The narrowed search is the retrieve() call with a filter; the
+     * look outside is the call with none.
+     */
+    describe("looking outside a narrow filter", () => {
+      const narrowedCall = (opts: unknown) =>
+        Boolean((opts as { sources?: unknown } | undefined)?.sources);
+      const weakInside = [
+        chunk({ sourceId: "day:2026-09-20", source: "slack", score: 2.1, contentScore: 1.6 }),
+      ];
+      const strongOutside = [
+        chunk({ sourceId: "task:better", source: "notion", score: 3.7, contentScore: 3.65 }),
+        chunk({ sourceId: "day:2026-09-20", source: "slack", score: 2.1, contentScore: 1.6 }),
+        chunk({
+          sourceId: "doc:also",
+          source: "drive",
+          score: 2.9,
+          contentScore: 2.4,
+          periodEnd: null,
+        }),
+        chunk({ sourceId: "doc:weak", source: "drive", score: 2.0, contentScore: 1.7 }),
+      ];
+      const textOf = async (args: Record<string, unknown>) =>
+        (await (await call(args)).json()).result.content[0].text as string;
+
+      it("names the better matches by id when a narrowed search is weak, with no decimals", async () => {
+        mockRetrieve.mockImplementation(async (_q: string, _l: number, opts: unknown) =>
+          narrowedCall(opts) ? weakInside : strongOutside
+        );
+        const text = await textOf({ query: "entity model ontology", sources: ["slack"] });
+        expect(text).toMatch(/WEAK MATCH/);
+        expect(text).toContain("OUTSIDE YOUR FILTER (sources=slack)");
+        expect(text).toContain("  • notion/task:better (2026-09-01)");
+        expect(text).toContain("  • drive/doc:also\n");
+        // Under the floor, like everything already on the page: not offered.
+        expect(text).not.toContain("  • slack/day:2026-09-20");
+        expect(text).not.toContain("  • drive/doc:weak");
+        const outside = text.slice(text.indexOf("OUTSIDE YOUR FILTER")).split("\n\n")[0]!;
+        expect(outside).not.toMatch(/\d\.\d/);
+        // The look outside is one unfiltered call.
+        expect(mockRetrieve).toHaveBeenLastCalledWith("entity model ontology", 3, {});
+      });
+
+      it("does not look outside a search that was not narrowed, or one that matched well", async () => {
+        mockRetrieve.mockReset();
+        mockRetrieve.mockResolvedValue(weakInside);
+        expect(await textOf({ query: "entity model ontology" })).not.toContain(
+          "OUTSIDE YOUR FILTER"
+        );
+        expect(mockRetrieve).toHaveBeenCalledTimes(1);
+        mockRetrieve.mockReset();
+        mockRetrieve.mockResolvedValue(strongOutside);
+        expect(await textOf({ query: "entity model", sources: ["notion"] })).not.toContain(
+          "OUTSIDE YOUR FILTER"
+        );
+        expect(mockRetrieve).toHaveBeenCalledTimes(1);
+      });
+
+      it("names the better matches when a narrowed search found nothing at all", async () => {
+        mockRetrieve.mockImplementation(async (_q: string, _l: number, opts: unknown) =>
+          narrowedCall(opts) ? [] : strongOutside
+        );
+        const text = await textOf({
+          query: "fantasy vs reality",
+          sources: ["slack"],
+          since: "2026-09-10",
+        });
+        expect(text).toContain("WITH THE FILTERS YOU SET (sources=slack, since=2026-09-10)");
+        expect(text).toContain("OUTSIDE YOUR FILTER (sources=slack, since=2026-09-10)");
+        expect(text).toContain("  • notion/task:better");
+      });
+
+      it("costs nothing when the look outside fails", async () => {
+        mockRetrieve.mockImplementation(async (_q: string, _l: number, opts: unknown) => {
+          if (narrowedCall(opts)) return weakInside;
+          throw new Error("corpus unreachable");
+        });
+        const text = await textOf({ query: "entity model ontology", sources: ["slack"] });
+        expect(text).toMatch(/WEAK MATCH/);
+        expect(text).not.toContain("OUTSIDE YOUR FILTER");
+        expect(text).toContain("Board: something");
+      });
+    });
+
+    it("refuses a filter on disputed_by and points to decision_conflicts, never an empty result", async () => {
+      mockRetrieve.mockClear();
+      const r = (
+        await (await call({ query: "pricing", meta: { disputed_by: "decision:x" } })).json()
+      ).result;
+      expect(r.isError).toBe(true);
+      expect(r.content[0].text).toContain("`meta.disputed_by` cannot be filtered on");
+      expect(r.content[0].text).toContain("decision_conflicts");
+      expect(mockRetrieve).not.toHaveBeenCalled();
     });
 
     /**
