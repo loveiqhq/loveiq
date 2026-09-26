@@ -2,8 +2,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { cleanup, fireEvent, render } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import V3Chapter, { V3ModeProvider, V4ModeProvider } from "@features/report/ui/v3/V3Chapter";
+import { V4ChapterLockProvider } from "@features/report/ui/v3/V4ChapterLock";
 import type { ReportV3Chapter } from "@features/report/ui/v3/reportV3Nav";
 import { REPORT_V4_CHAPTER_TEASERS } from "@/data/report4-chapter-teasers";
 
@@ -315,5 +316,131 @@ describe("V3Chapter — opened from a nudge", () => {
     expect(button.getAttribute("aria-expanded")).toBe("false");
     act(() => openV4Chapter("core_insecurities"));
     expect(button.getAttribute("aria-expanded")).toBe("false");
+  });
+});
+
+/**
+ * WhatsApp, 26.09: Mark proposed locking "the other chapters" outright rather than
+ * letting a paywalled reader open them into V2's preview, Marcus agreed ("Love this",
+ * "Agree") and Mark closed it ("Let's do that then"). His "current vs. fully locked"
+ * mock keeps the head and the teaser and puts the gradient lock where the chevron
+ * disc was. Who is locked comes from ReportPage (V4ChapterLockProvider).
+ */
+describe("V3Chapter under V4 — locked outright (review 26.09)", () => {
+  const cssRule = (selector: string) => {
+    const at = V3_CSS.indexOf(`${selector} {`);
+    expect(at, `${selector} missing`).toBeGreaterThan(-1);
+    return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+  };
+  const renderLocked = (onUnlock = vi.fn(), locked = true) =>
+    render(
+      <V3ModeProvider>
+        <V4ModeProvider>
+          <V4ChapterLockProvider
+            value={{ isLocked: (id) => locked && id === "core_insecurities", unlock: onUnlock }}
+          >
+            <V3Chapter
+              chapter={INSECURITIES}
+              sectionId="core_insecurities"
+              archetype="Spark Seeker"
+              feedbackWidget={<span className="fb">Does this resonate?</span>}
+            >
+              <p className="body">chapter body</p>
+            </V3Chapter>
+          </V4ChapterLockProvider>
+        </V4ModeProvider>
+      </V3ModeProvider>
+    );
+
+  it("keeps the head and the teaser, with the gradient lock where the chevron was", () => {
+    const { container } = renderLocked();
+    const section = container.querySelector("section")!;
+    expect(section).toHaveClass("rv4-chapter", "is-locked");
+    expect(section).not.toHaveClass("is-open");
+    expect(section.querySelector(".rv4-chapter__name")!.textContent).toBe("Core Insecurities");
+    expect(section.querySelector(".rv4-chapter__button .rv4-chapter__lock svg")).not.toBeNull();
+    expect(section.querySelector(".rv4-chapter__chev")).toBeNull();
+    const tease = section.querySelector(".rv4-chapter__tease")!;
+    expect(tease.textContent).toBe(REPORT_V4_CHAPTER_TEASERS.core_insecurities);
+    expect(tease.getAttribute("aria-hidden")).not.toBe("true");
+    expect(tease.hasAttribute("inert")).toBe(false);
+  });
+
+  it("draws no body and no rating: nothing of the chapter reaches the page", () => {
+    const { container } = renderLocked();
+    expect(container.querySelector(".rv3-chapter__body")).toBeNull();
+    expect(container.querySelector(".body")).toBeNull();
+    expect(container.querySelector(".fb")).toBeNull();
+  });
+
+  it("is a plain button that opens the paywall, not a disclosure", () => {
+    const onUnlock = vi.fn();
+    const { container } = renderLocked(onUnlock);
+    const button = container.querySelector<HTMLButtonElement>(".rv4-chapter__button")!;
+    expect(button.hasAttribute("aria-expanded")).toBe(false);
+    expect(button.hasAttribute("aria-controls")).toBe(false);
+    expect(button.querySelector(".rv3-sr")!.textContent).toBe("Locked — unlock to read");
+    // Named "Core Insecurities of the Spark Seeker Locked — unlock to read": the
+    // space is for assistive tech, as the title's own runs have one.
+    expect(button.textContent).toBe(
+      "Core Insecurities of the Spark Seeker Locked — unlock to read"
+    );
+    fireEvent.click(button);
+    expect(onUnlock).toHaveBeenCalledTimes(1);
+    // The paywall decides what opens, not the tap.
+    expect(container.querySelector(".rv3-chapter__body")).toBeNull();
+  });
+
+  it("stays shut when a nudge asks for it", async () => {
+    const { act } = await import("@testing-library/react");
+    const { openV4Chapter } = await import("@features/report/ui/v3/v4OpenChapter");
+    const { container } = renderLocked();
+    act(() => openV4Chapter("core_insecurities"));
+    expect(container.querySelector("section")).not.toHaveClass("is-open");
+    expect(container.querySelector(".rv3-chapter__body")).toBeNull();
+  });
+
+  it("opens as ever for a reader who has it", () => {
+    const { container } = renderLocked(vi.fn(), false);
+    const button = container.querySelector(".rv4-chapter__button")!;
+    expect(container.querySelector(".rv4-chapter__lock")).toBeNull();
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(button);
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    expect(container.querySelector(".body")).not.toBeNull();
+  });
+
+  it("leaves ?v3=1 alone, even under a lock", () => {
+    const { container } = render(
+      <V3ModeProvider>
+        <V4ChapterLockProvider value={{ isLocked: () => true, unlock: vi.fn() }}>
+          <V3Chapter chapter={INSECURITIES} sectionId="core_insecurities">
+            <p className="body">body</p>
+          </V3Chapter>
+        </V4ChapterLockProvider>
+      </V3ModeProvider>
+    );
+    expect(container.querySelector(".rv3-chapter__button")!.getAttribute("aria-expanded")).toBe(
+      "true"
+    );
+    expect(container.querySelector(".body")).not.toBeNull();
+    expect(container.querySelector(".rv4-chapter__lock")).toBeNull();
+  });
+
+  it("sets the lock as 34px of 441:5956's gradient, the padlock scaled with it", () => {
+    // The chevron's 34px disc (1:867), filled as the 48px "Lock / Gradient Brand"
+    // badge is; Mark's mock draws it at the disc's size. The 22px padlock scales by
+    // 34/48 to 15.6.
+    const disc = cssRule(".rv3.rv4 .rv4-chapter__lock");
+    expect(disc).toContain(
+      "background: linear-gradient(135deg, #fb683e 14.6%, #e88c8c 51.4%, #ac88ed 85.4%);"
+    );
+    expect(disc).toContain("border-radius: 17px;");
+    expect(disc).toContain("height: 34px;");
+    expect(disc).toContain("width: 34px;");
+    expect(cssRule(".rv3.rv4 .rv4-chapter__lock svg")).toContain("height: 15.6px;");
+    // Appended below the frozen top of the stylesheet.
+    const at = V3_CSS.indexOf(".rv3.rv4 .rv4-chapter__lock {");
+    expect(V3_CSS.slice(0, at).split("\n").length).toBeGreaterThan(1884);
   });
 });

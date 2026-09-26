@@ -1,4 +1,5 @@
 import type { FC } from "react";
+import { V4Padlock } from "./V4LockBadge";
 
 /**
  * The head of a Report V4 chapter row — Figma 1:863 / 1:874 — shared by V4Chapter
@@ -45,5 +46,16 @@ export const V4ChapterTitle: FC<{ title: string; archetype?: string }> = ({ titl
 export const V4ChapterChevron: FC = () => (
   <span className="rv4-chapter__chev" aria-hidden="true">
     <Chevron />
+  </span>
+);
+
+/**
+ * A locked chapter's disc, in the chevron's place (Mark's mock, 26.09): the
+ * chevron's 34px disc filled as 441:5956's "Lock / Gradient Brand" is. A span, not
+ * V4LockBadge's button: it sits inside the chapter's own button.
+ */
+export const V4ChapterLockDisc: FC = () => (
+  <span className="rv4-chapter__lock" aria-hidden="true">
+    <V4Padlock />
   </span>
 );

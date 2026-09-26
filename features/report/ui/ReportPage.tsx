@@ -32,6 +32,7 @@ import {
 } from "./reportNav";
 import ReportMobileNav from "./ReportMobileNav";
 import { V3ModeProvider, V4ModeProvider } from "./v3/V3Chapter";
+import { V4ChapterLockProvider } from "./v3/V4ChapterLock";
 import V3Intro from "./v3/V3Intro";
 import V4Part1 from "./v3/V4Part1";
 import V3ArchetypeCard from "./v3/V3ArchetypeCard";
@@ -43,6 +44,7 @@ import V4TopThreeSection from "./v3/V4TopThreeSection";
 import { report3ArchetypeCard } from "@/data/report3-archetype-card";
 import type { ArchetypeName } from "@features/report/server/archetypeSlug";
 import {
+  REPORT_V4_DESIGNED_CHAPTER_IDS,
   REPORT_V4_NUDGES_HEADING,
   REPORT_V4_PART_DIVIDER_BY_SECTION,
   REPORT_V4_PART_FRAME_BY_SECTION,
@@ -2446,9 +2448,27 @@ const ReportExperience: FC<ReportExperienceProps> = ({
   // V4 rides on V3 mode and announces itself on top of it, for the chapter nav
   // and the eyebrow numbers, whose order differs (REPORT_V4_CHAPTERS).
   if (!isV3) return experience;
+  // Under V4 a chapter the reader has no access to is locked outright (review 26.09):
+  // the nav badges' answer, from the same gate the sections use, and its paywall is
+  // that gate's. The designed chapters keep their own gates.
+  const v4ChapterLock = {
+    isLocked: (id: string) =>
+      !REPORT_V4_DESIGNED_CHAPTER_IDS.has(id) && navAccessById.get(id) === "locked",
+    unlock: (id: string) => {
+      const item = REPORT_V3_NAV_PARTS.flatMap((part) => part.items).find((i) => i.id === id);
+      const section = resolvedSections.find((s) => s.id === (item?.gateId ?? id));
+      if (section) unlockSection(section);
+    },
+  };
   return (
     <V3ModeProvider>
-      {isV4 ? <V4ModeProvider>{experience}</V4ModeProvider> : experience}
+      {isV4 ? (
+        <V4ModeProvider>
+          <V4ChapterLockProvider value={v4ChapterLock}>{experience}</V4ChapterLockProvider>
+        </V4ModeProvider>
+      ) : (
+        experience
+      )}
     </V3ModeProvider>
   );
 };
