@@ -7210,11 +7210,17 @@ html {
  * 44px separator apart. V2's section rhythm (48px between sections, 20px above the
  * Snapshot and its rating, a 28px header row) ran over it here. V4 only. */
 
-/* 1:747 → 1:763: the Summary's rating tail is the whole gap to the Snapshot heading
- * (it was 44 + 48 + 20 = 112). */
+/* 1:747 → 1:763: after the V4 Summary its rating's 44px tail is the whole gap to the
+ * Snapshot heading (it was 44 + 48 + 20 = 112). The thirteen archetypes still on V2
+ * end on #means_for_you's rating row, which has no tail, so there the Snapshot takes
+ * the 44px separator itself (final review 26.09: a 0 set its heading flush under
+ * that row). */
 .rv3.rv4 #snapshot {
-  margin-top: 0;
+  margin-top: 44px;
   padding-top: 0;
+}
+.rv3.rv4 #summary + #snapshot {
+  margin-top: 0;
 }
 /* 1:848 → 1:833: the rating 44 under the panel, where its shadow has faded (the
  * panel's own 44px separator), then its 44px tail before Part III's hairline. */
