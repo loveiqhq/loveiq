@@ -341,6 +341,19 @@ export const ARRAY_META_KEYS = new Set([
   "links",
 ]);
 
+/**
+ * Array keys a filter cannot usefully reach, each with where to go instead.
+ *
+ * `disputed_by` (the decision radar, 2026-09-26) holds {id, on, why} objects, so a bare
+ * value never matches it by containment and wrapping it in an array does not help either.
+ * A filter on it is refused with this pointer rather than run, because an empty result
+ * would read as "no decision is disputed". The MCP battery's metadata-shapes probe accepts
+ * a key listed here as handled.
+ */
+export const UNFILTERABLE_META_KEYS = new Map<string, string>([
+  ["disputed_by", "decision_conflicts lists the recorded decisions that may not both stand"],
+]);
+
 export function normaliseMetaFilter(
   meta: Record<string, string | string[]>
 ): Record<string, string | string[]> {

@@ -25,7 +25,7 @@ import {
 import { redactUrlSecrets } from "@features/brain/server/ingest/upsert";
 import { recordToolCall } from "@features/brain/server/log";
 import { adCostByDay, adCovers, brainDailyRollup } from "@features/brain/server/ingest/analytics";
-import { ARRAY_META_KEYS } from "@features/brain/server/retrieve";
+import { ARRAY_META_KEYS, UNFILTERABLE_META_KEYS } from "@features/brain/server/retrieve";
 import {
   CorpusUnavailableError,
   retrieve,
@@ -2509,6 +2509,46 @@ function snakeCase(key: string): string {
  * Ids and scores only, never titles: this text sits outside the per-source fences, and
  * a title can be an email subject written by anyone. An id is enough to fetch it.
  */
+/**
+ * A WEAK MATCH INSIDE A FILTER IS OFTEN A STRONG ONE OUTSIDE IT.
+ *
+ * Measured 2026-09-26 over the week's 42 weak searches: 25 were narrowed to a source, a
+ * date range or a person, and the same question with no filter found a match at or above
+ * the floor. "entity model ontology data model patient hub schema" in Slack alone scored
+ * 1.60; across everything, 3.65 (a Notion task). "fantasy vs reality report chapter" in
+ * Slack since the 10th scored 1.40; across everything, 3.30 (the chapter's own output by
+ * email). Agents narrow before they know where an answer lives, and a weak result read as
+ * "the record is thin" is the failure this server exists to prevent.
+ *
+ * Ids and dates only. No title, because a title can be written by anyone who emails the
+ * company and this line sits outside the fenced sources; and no score, because a weak
+ * result never hands the reader a decimal to re-threshold on (see the weak-match note).
+ */
+export function outsideTheFilter(
+  applied: string[],
+  wide: Array<{
+    source: string;
+    sourceId: string;
+    contentScore: number;
+    periodEnd?: string | null;
+  }>,
+  shown: Array<{ sourceId: string }>
+): string {
+  const seen = new Set(shown.map((c) => c.sourceId));
+  const better = wide
+    .filter((c) => c.contentScore >= RELEVANCE_FLOOR && !seen.has(c.sourceId))
+    .slice(0, 3);
+  if (better.length === 0) return "";
+  return (
+    `\n\nOUTSIDE YOUR FILTER (${applied.join(", ")}): the same question with no filter ` +
+    `matches better. Fetch these, or search again without the filter, before calling the ` +
+    `record thin:\n` +
+    better
+      .map((c) => `  • ${c.source}/${c.sourceId}` + (c.periodEnd ? ` (${c.periodEnd})` : ""))
+      .join("\n")
+  );
+}
+
 export function outrankingHeldBack(
   shaping: RetrieveShaping,
   shown: Array<{ score: number }>
@@ -2759,6 +2799,15 @@ function malformedFilterMessage(args: Record<string, unknown>): string | null {
       `ignored, which would have returned the unfiltered corpus with no notice.`
     );
   }
+  for (const key of Object.keys((args.meta as Record<string, unknown> | undefined) ?? {})) {
+    const instead = UNFILTERABLE_META_KEYS.get(key);
+    if (instead) {
+      return (
+        `\`meta.${key}\` cannot be filtered on: it holds records, not a value a filter can ` +
+        `match, so the search would return nothing and read as none. Instead, ${instead}.`
+      );
+    }
+  }
   return null;
 }
 
@@ -2965,6 +3014,18 @@ async function callTool(
           `narrow the question, or use browse_context, which enumerates instead of ranking.`
       );
     }
+    const applied = [
+      opts.sources?.length ? `sources=${opts.sources.join(",")}` : null,
+      opts.excludeSources?.length ? `exclude_sources=${opts.excludeSources.join(",")}` : null,
+      opts.since ? `since=${opts.since}` : null,
+      opts.until ? `until=${opts.until}` : null,
+      opts.meta ? `meta=${JSON.stringify(opts.meta)}` : null,
+    ].filter((x): x is string => x !== null);
+    /** The same question with no filter, for a narrowed search that came back weak or empty. */
+    const unfiltered = () =>
+      retrieve(query, 3, {}).catch(
+        () => [] as Array<{ source: string; sourceId: string; contentScore: number }>
+      );
     if (chunks.length === 0) {
       /**
        * A NARROW FILTER IS NOT AN EMPTY CORPUS, and the two must never read alike.
@@ -2976,13 +3037,6 @@ async function callTool(
        * otherwise. Same family as `CorpusUnavailableError`: never let the shape of
        * the request be reported as the state of the world.
        */
-      const applied = [
-        opts.sources?.length ? `sources=${opts.sources.join(",")}` : null,
-        opts.excludeSources?.length ? `exclude_sources=${opts.excludeSources.join(",")}` : null,
-        opts.since ? `since=${opts.since}` : null,
-        opts.until ? `until=${opts.until}` : null,
-        opts.meta ? `meta=${JSON.stringify(opts.meta)}` : null,
-      ].filter((x): x is string => x !== null);
       if (applied.length > 0) {
         return textResult(
           `Nothing matched "${query}" WITH THE FILTERS YOU SET (${applied.join(", ")}). ` +
@@ -2990,7 +3044,8 @@ async function callTool(
             `search already found, they do not select on their own. Re-run without them, ` +
             `or widen them, before concluding the record does not exist. Note that any ` +
             `since/until range excludes repository documentation, which carries no date, ` +
-            `and that meta values match EXACTLY.`
+            `and that meta values match EXACTLY.` +
+            outsideTheFilter(applied, await unfiltered(), [])
         );
       }
       return textResult(
@@ -3136,6 +3191,8 @@ async function callTool(
           `written record is thin rather than assembling an answer from adjacent material; ` +
           `if one of them plainly does answer it, use it.\n`
         : "";
+    const outside =
+      weakMatch && applied.length > 0 ? outsideTheFilter(applied, await unfiltered(), chunks) : "";
     /**
      * WHAT THE BRAIN NOTICED WITHOUT BEING ASKED.
      *
@@ -3240,7 +3297,7 @@ async function callTool(
       : "";
 
     return textResult(
-      `${UNTRUSTED_SOURCES_PREAMBLE}\n\n${notices}${browse}${prior}${RESULT_GUIDE}${weakMatch}${shortOfLimit}${heldBack}\n\n${renderSources(chunks, { forAgent: true })}`,
+      `${UNTRUSTED_SOURCES_PREAMBLE}\n\n${notices}${browse}${prior}${RESULT_GUIDE}${weakMatch}${outside}${shortOfLimit}${heldBack}\n\n${renderSources(chunks, { forAgent: true })}`,
       false,
       "lower the limit, then fetch_document the ids that matter"
     );

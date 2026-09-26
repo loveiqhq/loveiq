@@ -3436,7 +3436,8 @@ async function mcpProbes(): Promise<McpProbe[]> {
  * the real corpus and fails when it has.
  */
 async function checkArrayMetaKeysAreHandled(): Promise<string[]> {
-  const { ARRAY_META_KEYS } = await import("@features/brain/server/retrieve");
+  const { ARRAY_META_KEYS, UNFILTERABLE_META_KEYS } =
+    await import("@features/brain/server/retrieve");
   const { supabaseFetch } = await import("@features/admin/server/supabase");
   const sources = [
     "drive",
@@ -3462,13 +3463,16 @@ async function checkArrayMetaKeysAreHandled(): Promise<string[]> {
       }
     }
   }
-  return [...found.entries()]
-    .filter(([k]) => !ARRAY_META_KEYS.has(k))
-    .map(
-      ([k, src]) =>
-        `meta.${k} (on ${src}) is an array but is NOT in ARRAY_META_KEYS — a bare-string ` +
-        `filter on it returns nothing and reads as "no matches"`
-    );
+  return (
+    [...found.entries()]
+      // A key refused with a pointer is handled too: the caller is told, not given nothing.
+      .filter(([k]) => !ARRAY_META_KEYS.has(k) && !UNFILTERABLE_META_KEYS.has(k))
+      .map(
+        ([k, src]) =>
+          `meta.${k} (on ${src}) is an array but is NOT in ARRAY_META_KEYS — a bare-string ` +
+          `filter on it returns nothing and reads as "no matches"`
+      )
+  );
 }
 
 /**
