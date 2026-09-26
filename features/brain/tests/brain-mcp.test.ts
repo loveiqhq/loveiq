@@ -1031,6 +1031,80 @@ describe("/api/mcp", () => {
       });
     });
 
+    describe("check_answer", () => {
+      const call = async (args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 16,
+                method: "tools/call",
+                params: { name: "check_answer", arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+      const doc = {
+        source_id: "monthly:2026-09",
+        title: "LoveIQ numbers — September 2026",
+        body: "13245 visitors, 434 finished the survey.",
+      };
+      beforeEach(() => {
+        mockSupabaseFetch.mockImplementation(async (path: string) => ({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () =>
+            path.includes("source=eq.analytics") && path.includes("monthly%3A2026-09") ? [doc] : [],
+        }));
+      });
+      afterEach(() => mockSupabaseFetch.mockReset());
+
+      it("reads each cited document and checks the draft's figures against it", async () => {
+        const r = await call({
+          answer: "September had 13,245 visitors and 440 finished the survey.",
+          sources: ["analytics/monthly:2026-09"],
+        });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.text).toContain("Checked 2 figures and 0 quotes against 1 source.");
+        expect(r.content[0]!.text).toMatch(
+          /440 \(nearest there: 434\) is not in analytics\/monthly:2026-09/
+        );
+      });
+
+      it("says which ids it could not find, and refuses when it can find none", async () => {
+        const some = await call({
+          answer: "September had 13,245 visitors.",
+          sources: ["analytics/monthly:2026-09", "gmail/thread:nope"],
+        });
+        expect(some.content[0]!.text).toContain("Not indexed, so left out: gmail/thread:nope.");
+        const none = await call({
+          answer: "It had 13,245 visitors.",
+          sources: ["gmail/thread:nope"],
+        });
+        expect(none.isError).toBe(true);
+        expect(none.content[0]!.text).toMatch(/None of those ids is indexed/);
+      });
+
+      it("refuses a missing draft or source list, and calls an unreadable corpus an outage", async () => {
+        expect((await call({ answer: "", sources: ["analytics/x"] })).isError).toBe(true);
+        expect((await call({ answer: "Some draft.", sources: [] })).isError).toBe(true);
+        mockSupabaseFetch.mockResolvedValue({
+          ok: false,
+          status: 503,
+          headers: new Headers(),
+          json: async () => [],
+        });
+        const down = await call({
+          answer: "It had 13,245 visitors.",
+          sources: ["analytics/monthly:2026-09"],
+        });
+        expect(down.isError).toBe(true);
+        expect(down.content[0]!.text).toMatch(/outage, not a failed check/);
+      });
+    });
+
     describe("experiments and record_experiment", () => {
       const call = async (name: string, args: Record<string, unknown>) =>
         (
@@ -1268,6 +1342,7 @@ describe("/api/mcp", () => {
         "explain_change",
         "show_chart",
         "break_even",
+        "check_answer",
         "experiments",
         "comment_asks",
         "decision_conflicts",
@@ -6190,6 +6265,7 @@ describe("the runbook's tool count is the real one", () => {
     31: "Thirty-one",
     32: "Thirty-two",
     33: "Thirty-three",
+    34: "Thirty-four",
   };
 
   it("matches what the server actually exposes", () => {

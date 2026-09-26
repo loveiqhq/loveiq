@@ -94,6 +94,7 @@ import {
   chartPng,
   drawChart,
 } from "@features/brain/server/chart";
+import { checkAnswer, type SourceText } from "@features/brain/server/check-answer";
 import {
   AXES as EXPERIMENT_AXES,
   STATUSES as EXPERIMENT_STATUSES,
@@ -1837,6 +1838,35 @@ export const TOOLS = [
     },
   },
   {
+    name: "check_answer",
+    title: "Check a draft answer's figures and quotes against its sources",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "Before sending an answer drawn from the brain, pass the draft and the ids it drew on. " +
+      "Every number, date and quoted phrase in it is looked up in those documents, and anything " +
+      "not there is listed with the nearest figure the source does hold, so a rounding slip or " +
+      "a wrong number is caught before a person reads it. A sentence that names an id is " +
+      "checked against that document alone. It cannot judge wording, only whether each figure " +
+      "and quote is in the cited record, and it says which sentences it could not check. Use it " +
+      "on any answer with numbers.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        answer: { type: "string", description: "The draft answer, in full." },
+        sources: {
+          type: "array",
+          items: { type: "string" },
+          minItems: 1,
+          maxItems: 12,
+          description:
+            "The ids the answer drew on, exactly as printed on search lines, e.g. " +
+            "decision/decision:2026-09-09-3d275f5327.",
+        },
+      },
+      required: ["answer", "sources"],
+    },
+  },
+  {
     name: "experiments",
     title: "Every A/B test: running, planned and finished",
     annotations: { readOnlyHint: true, openWorldHint: false },
@@ -2604,6 +2634,35 @@ function snakeCase(key: string): string {
  * company and this line sits outside the fenced sources; and no score, because a weak
  * result never hands the reader a decimal to re-threshold on (see the weak-match note).
  */
+/**
+ * A cited document's whole text, title first, joined as fetch_document joins its parts,
+ * or null when the id does not resolve. Throws on an outage, which is not a missing id.
+ */
+async function documentText(raw: string): Promise<string | null> {
+  const slash = raw.indexOf("/");
+  const src = slash > 0 ? raw.slice(0, slash) : "";
+  const rawId = slash > 0 ? raw.slice(slash + 1) : "";
+  if (!SOURCES_FOR_TEST.includes(src) || !rawId) return null;
+  const { base, sep } = documentParts(src, rawId);
+  const res = await supabaseFetch(
+    `/rest/v1/brain_chunk?select=source_id,title,body&source=eq.${encodeURIComponent(src)}` +
+      `&source_id=like.${encodeURIComponent(base)}*&order=source_id.asc&limit=400`
+  );
+  if (!res.ok) throw new Error(`brain_chunk: ${res.status}`);
+  const rows = (await res.json()) as Array<Record<string, unknown>>;
+  const parts = dropLeftoverParts(
+    rows
+      .filter((r) => {
+        const sid = String(r.source_id ?? "");
+        return sid === base || (sep !== null && sid.startsWith(base + sep));
+      })
+      .sort((a, b) => partNumber(a) - partNumber(b)),
+    base
+  );
+  if (parts.length === 0) return null;
+  return [String(parts[0]!.title ?? ""), ...parts.map((p) => String(p.body ?? ""))].join("\n");
+}
+
 export function outsideTheFilter(
   applied: string[],
   wide: Array<{
@@ -5227,6 +5286,42 @@ async function callTool(
     return imageResult(outcome.text, [{ data: png, mimeType: "image/png" }]);
   }
 
+  if (name === "check_answer") {
+    const answer = typeof args.answer === "string" ? args.answer.trim() : "";
+    const ids = asStrings(args.sources) ?? [];
+    if (answer.length < 2) return textResult("`answer` is the draft to check, in full.", true);
+    if (ids.length === 0 || ids.length > 12) {
+      return textResult(
+        "`sources` lists the ids the answer drew on, exactly as printed on search lines: 1 to 12 of them.",
+        true
+      );
+    }
+    let read: Array<{ id: string; text: string | null }>;
+    try {
+      read = await Promise.all(ids.map(async (id) => ({ id, text: await documentText(id) })));
+    } catch {
+      return textResult(
+        "The cited documents could not be read right now. This is an outage, not a failed check.",
+        true
+      );
+    }
+    const found = read.filter((r): r is SourceText => r.text !== null);
+    const unread = read.filter((r) => r.text === null).map((r) => r.id);
+    if (found.length === 0) {
+      return textResult(
+        `None of those ids is indexed (${unread.join(", ")}). Ids come from search lines and ` +
+          "are not guessable: copy the `id:` value of each source the answer used.",
+        true
+      );
+    }
+    stats.sourceCount = found.length;
+    return textResult(
+      (unread.length
+        ? `Not indexed, so left out: ${unread.join(", ")}. Figures were checked against the rest.\n\n`
+        : "") + checkAnswer(answer, found).text
+    );
+  }
+
   if (name === "experiments") {
     try {
       stats.sourceCount = 1;
@@ -5677,6 +5772,8 @@ export const MCP_INSTRUCTIONS =
   "CHARTS: show_chart draws one or two daily numbers as a line in the digest's style and returns " +
   "the picture, a link that opens in any browser and pastes into a doc or a deck, and the " +
   "numbers behind it. Use it when someone wants to see a trend rather than read it.\n\n" +
+  "CHECK BEFORE SENDING: check_answer looks up every figure, date and quote in a draft answer " +
+  "in the documents it cites. Run it on any answer with numbers, and fix or explain what it lists.\n\n" +
   "EXPERIMENTS: experiments is the A/B registry (running, planned, finished, with live readouts " +
   "in /admin's words); record_experiment registers a test before it starts, with its hypothesis " +
   "and deciding metric, and records how it ended.\n\n" +
