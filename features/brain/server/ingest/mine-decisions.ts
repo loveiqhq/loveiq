@@ -32,6 +32,7 @@
  * would break that promise for every consumer. Mined rows carry `meta.origin = "mined"`
  * and render a RECONSTRUCTED line.
  */
+import { decisionTitle } from "@features/brain/server/decisions";
 import { createHash } from "node:crypto";
 import { buildDecisionRow } from "@features/brain/server/decisions";
 import { complete, isLlmConfigured } from "@features/brain/server/llm";
@@ -250,12 +251,12 @@ export function titleFor(decision: string, roster: string[]): string {
     (n) => n && new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(decision)
   );
   if (names.length === 0 || !PAY_CONTEXT.test(decision) || !FIGURE.test(decision)) {
-    return `Decision: ${decision.trim()}`.slice(0, 300);
+    return decisionTitle(decision);
   }
   // The figure is replaced, not the name and not the subject: "what did we decide about
   // Eman's rate" must still find this, and the body still holds the number.
   const masked = decision.replace(FIGURE, "(the figure is in the record)");
-  return `Decision: ${masked.trim()}`.slice(0, 300);
+  return decisionTitle(masked);
 }
 
 export function buildMinedRows(
