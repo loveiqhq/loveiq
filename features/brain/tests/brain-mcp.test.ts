@@ -955,6 +955,75 @@ describe("/api/mcp", () => {
       });
     });
 
+    describe("break_even", () => {
+      const call = async (args: Record<string, unknown>) =>
+        (
+          await (
+            await POST(
+              rpc({
+                jsonrpc: "2.0",
+                id: 14,
+                method: "tools/call",
+                params: { name: "break_even", arguments: args },
+              })
+            )
+          ).json()
+        ).result as { content: Array<{ text: string }>; isError?: boolean };
+      const day = (i: number) => new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10);
+
+      beforeEach(() => {
+        // 1,000 visitors and 50 finishers a day, one EUR 25 purchase two days ago, EUR 50 a day spent.
+        mockRollup.mockResolvedValue(
+          Array.from({ length: 200 }, (_, i) => ({
+            day: day(i),
+            unique_visitors: 1000,
+            submissions: 50,
+            reports_paid: i === 2 ? 1 : 0,
+            revenue: i === 2 ? "25.00" : 0,
+          }))
+        );
+        mockAdCost = {
+          byDay: new Map(Array.from({ length: 40 }, (_, i) => [day(i), 50] as [string, number])),
+          from: day(39),
+          to: day(1),
+        };
+      });
+      afterEach(() => {
+        mockRollup.mockReset();
+        mockAdCost = { byDay: new Map(), from: null, to: null };
+      });
+
+      it("answers from the live numbers, over the days the ad data covers", async () => {
+        const r = await call({ days: 7 });
+        expect(r.isError).toBeFalsy();
+        expect(r.content[0]!.text).toContain("every day covered by the ad data");
+        expect(r.content[0]!.text).toContain("- Spent EUR 350.00 on Google Ads, EUR 50.00 a day.");
+        expect(r.content[0]!.text).toContain("- 7,000 visitors (each person once a day)");
+        expect(r.content[0]!.text).toContain("- 1 paid: 0.29% of finishers.");
+        expect(r.content[0]!.text).toContain("Read with care: 1 purchase is too few to trust");
+      });
+
+      it("takes a what-if as a percentage", async () => {
+        const r = await call({ days: 7, finish_to_paid: 10 });
+        expect(r.content[0]!.text).toContain(
+          "What if 10.0% of finishers pay, with the rest as now:"
+        );
+      });
+
+      it("refuses a share above 100 as an error the caller can fix", async () => {
+        const r = await call({ finish_to_paid: 150 });
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toMatch(/percentage from 0 to 100/);
+      });
+
+      it("calls an unreadable rollup an outage, not a result", async () => {
+        mockRollup.mockRejectedValue(new Error("down"));
+        const r = await call({});
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toMatch(/outage, not a result/);
+      });
+    });
+
     describe("explain_change", () => {
       const call = async (args: Record<string, unknown>) =>
         (
@@ -1137,6 +1206,7 @@ describe("/api/mcp", () => {
         "what_shipped",
         "explain_change",
         "show_chart",
+        "break_even",
         "comment_asks",
         "decision_conflicts",
         "brain_health",
@@ -5955,6 +6025,7 @@ describe("the runbook's tool count is the real one", () => {
     28: "Twenty-eight",
     29: "Twenty-nine",
     30: "Thirty",
+    31: "Thirty-one",
   };
 
   it("matches what the server actually exposes", () => {

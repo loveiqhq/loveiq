@@ -42,6 +42,9 @@ Claude Code) is the door people use; the operator's guide is
 - `server/jumps.ts` — `explain_change` and the daily "Unusual numbers" notice: each metric against its
   28-day median and spread, the move split by source, channel and rate halves, and day-level rules
   (engagement, GA4 against our count, spend, campaigns, shipped, decided). No model writes a cause.
+- `server/break-even.ts` — `break_even`: spend, visitors, finishers, buyers and revenue on the days
+  `adCovers` says the ad data covers (the digest's basis), the level each lever alone must reach,
+  and what-ifs. No model.
 - `server/chart.ts` — `show_chart`: one or two daily numbers (jumps.ts's metrics, revenue, and
   Google Ads spend through `adCostByDay`) drawn by the digest's renderer
   (`/api/admin/digest-image/metric-trend`, `unit` "" for counts and money) behind a signed URL.

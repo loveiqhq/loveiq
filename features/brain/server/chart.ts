@@ -300,7 +300,8 @@ export async function drawChart(req: ChartRequest, now = Date.now()): Promise<Ch
           .join("\n")
       : `${headline}.`,
     `Picture: ${url}`,
-    "The link opens in any browser without a login and can be pasted into a doc or a deck.",
+    "The link opens in any browser without a login, so anyone you share it with can see this " +
+      "chart and its numbers. It can be pasted into a doc or a deck.",
     ...notes,
     "",
     "By day, oldest first:",
