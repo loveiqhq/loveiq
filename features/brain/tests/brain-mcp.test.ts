@@ -1444,6 +1444,7 @@ describe("/api/mcp", () => {
         "explain_change",
         "show_chart",
         "break_even",
+        "user_totals",
         "check_answer",
         "experiments",
         "comment_asks",
@@ -3734,6 +3735,96 @@ describe("/api/mcp", () => {
     it("threads a reply when given a ts", async () => {
       await call({ channel: "#all-loveiq", text: "re", thread_ts: "999.1" });
       expect(mockPostToSlack).toHaveBeenCalledWith(expect.objectContaining({ threadTs: "999.1" }));
+    });
+  });
+
+  describe("user_totals", () => {
+    const call = (args: Record<string, unknown>) =>
+      POST(
+        rpc({
+          jsonrpc: "2.0",
+          id: 70,
+          method: "tools/call",
+          params: { name: "user_totals", arguments: args },
+        })
+      ).then((r) =>
+        r.json().then((b) => b.result as { isError: boolean; content: Array<{ text: string }> })
+      );
+
+    const submissions = (n: number, gender: string) =>
+      Array.from({ length: n }, () => ({
+        created_date_time: "2026-09-10T12:00:00Z",
+        age: [{ answer_option: { option_text: "25–34" } }],
+        app_user: {
+          email: "x@example.com",
+          user_profile: {
+            gender,
+            sexual_orientation: null,
+            relationship_status: null,
+            location_primary: "Canada",
+          },
+        },
+        scoring_result: { v5_primary_archetype: "Spark Seeker", primary_archetype: null },
+        personal_report: null,
+      }));
+
+    it("refuses what it cannot group by, more than two groupings, and a bad date, naming the valid keys", async () => {
+      for (const args of [
+        { group_by: ["email"] },
+        { filter: { name: "Ana" } },
+        { filter: "Woman" },
+        { group_by: ["gender", "age", "country"] },
+        { since: "last week" },
+      ]) {
+        const r = await call(args);
+        expect(r.isError, JSON.stringify(args)).toBe(true);
+      }
+      expect((await call({ group_by: ["email"] })).content[0]!.text).toContain(
+        "gender, age, orientation, relationship, country, archetype, month"
+      );
+      expect(toolCalls()).toHaveLength(0);
+    });
+
+    it("reads the finished submissions in the window and answers with totals only", async () => {
+      mockSupabaseFetch.mockImplementation(async (path: string) => ({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () =>
+          String(path).startsWith("/rest/v1/survey_question")
+            ? [{ id: 41 }]
+            : String(path).startsWith("/rest/v1/survey_submission")
+              ? [
+                  ...submissions(7, "Woman"),
+                  ...submissions(6, "Man"),
+                  ...submissions(3, "Other"),
+                  ...submissions(2, "Nonbinary"),
+                ]
+              : [],
+        text: async () => "",
+      }));
+      const r = await call({ group_by: ["gender"], since: "2026-09-01", until: "2026-09-30" });
+      expect(r.isError).toBe(false);
+      expect(r.content[0]!.text).toContain("- Woman: 7 finished");
+      expect(r.content[0]!.text).toContain("- Man: 6 finished");
+      expect(r.content[0]!.text).not.toMatch(/Other:|Nonbinary/);
+      const [path] = toolCalls().find(([p]) => String(p).includes("survey_submission")) as [string];
+      expect(path).toContain("&age.survey_question_id=eq.41");
+      expect(path).toContain("status=eq.completed");
+      expect(path).toContain("created_date_time=gte.2026-09-01T00:00:00Z");
+      expect(path).toContain("created_date_time=lt.2026-10-01T00:00:00Z");
+    });
+
+    it("calls an unreadable database an outage, not an empty answer", async () => {
+      mockSupabaseFetch.mockResolvedValue({
+        ok: false,
+        status: 503,
+        headers: new Headers(),
+        json: async () => ({}),
+      });
+      const r = await call({});
+      expect(r.isError).toBe(true);
+      expect(r.content[0]!.text).toMatch(/outage/);
     });
   });
 
@@ -6393,6 +6484,7 @@ describe("the runbook's tool count is the real one", () => {
     32: "Thirty-two",
     33: "Thirty-three",
     34: "Thirty-four",
+    35: "Thirty-five",
   };
 
   it("matches what the server actually exposes", () => {

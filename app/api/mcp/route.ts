@@ -24,6 +24,12 @@ import {
 import { redactUrlSecrets } from "@features/brain/server/ingest/upsert";
 import { recordToolCall } from "@features/brain/server/log";
 import { resolveCaller, signInChallenge, type Caller } from "@features/brain/server/sign-in";
+import {
+  DIMENSIONS as USER_DIMENSIONS,
+  loadPeople,
+  renderTotals,
+  type Dimension as UserDimension,
+} from "@features/brain/server/user-totals";
 import { adCostByDay, adCovers, brainDailyRollup } from "@features/brain/server/ingest/analytics";
 import { ARRAY_META_KEYS, UNFILTERABLE_META_KEYS } from "@features/brain/server/retrieve";
 import {
@@ -1836,6 +1842,39 @@ export const TOOLS = [
           type: "number",
           description: "What if: the average a paying customer pays, in EUR.",
         },
+      },
+    },
+  },
+  {
+    name: "user_totals",
+    title: "Anonymous totals about our users",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "How many of our users finished the survey, paid, and what they paid, as totals by group: " +
+      "'how many women aged 25 to 34 finished', 'which archetype pays most', 'conversion by " +
+      "country'. Group by up to two of gender, age, orientation, relationship, country, " +
+      "archetype and month, and narrow with the same keys. Never a person: any group smaller " +
+      "than 5 is hidden, because a count that small can point to someone (decision of " +
+      "26 Sep 2026). Staff submissions are left out, and paid means a real sale above EUR 0, " +
+      "not a test and not a free coupon unlock. For one person's record, or for a table this " +
+      "does not cover, use query_product_data.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        group_by: {
+          type: "array",
+          items: { type: "string", enum: [...USER_DIMENSIONS] },
+          description: "Up to two of: " + USER_DIMENSIONS.join(", ") + ". Empty for one total.",
+        },
+        filter: {
+          type: "object",
+          description:
+            'Narrow to people with these values, e.g. {"gender": "Woman", "age": "25-34"}. ' +
+            "Keys are the group_by names. Ages are the survey's bands: 18-24, 25-34, 35-44, " +
+            "45-54, 55-64, 65+. Months look like 2026-09.",
+        },
+        since: { type: "string", description: "First day of survey submissions, YYYY-MM-DD." },
+        until: { type: "string", description: "Last day, YYYY-MM-DD." },
       },
     },
   },
@@ -5377,6 +5416,62 @@ async function callTool(
     return textResult(outcome.text);
   }
 
+  if (name === "user_totals") {
+    const groupBy = Array.isArray(args.group_by)
+      ? args.group_by
+      : args.group_by === undefined
+        ? []
+        : [args.group_by];
+    const filter =
+      args.filter && typeof args.filter === "object" && !Array.isArray(args.filter)
+        ? (args.filter as Record<string, unknown>)
+        : args.filter === undefined
+          ? {}
+          : null;
+    const valid = USER_DIMENSIONS.join(", ");
+    const unknown = [...groupBy, ...Object.keys(filter ?? {})].filter(
+      (d) => !(USER_DIMENSIONS as readonly unknown[]).includes(d)
+    );
+    if (filter === null || unknown.length) {
+      return textResult(
+        `${filter === null ? "`filter` must be an object." : `Not something to group or filter by: ${unknown.join(", ")}.`} ` +
+          `Use ${valid}.`,
+        true
+      );
+    }
+    if (groupBy.length > 2) {
+      return textResult("Group by at most two things at once, or most groups fall under 5.", true);
+    }
+    for (const key of ["since", "until"] as const) {
+      if (args[key] !== undefined && (typeof args[key] !== "string" || !isRealDate(args[key]))) {
+        return textResult(`\`${key}\` must look like 2026-09-01.`, true);
+      }
+    }
+    const since = args.since as string | undefined;
+    const until = args.until as string | undefined;
+    const people = await loadPeople(since, until);
+    if (!people) {
+      return textResult(
+        "The survey data could not be read right now. This is an outage, not a result.",
+        true
+      );
+    }
+    stats.sourceCount = 1;
+    return textResult(
+      renderTotals(
+        {
+          groupBy: groupBy as UserDimension[],
+          filter: Object.fromEntries(
+            Object.entries(filter).map(([k, v]) => [k, String(v)])
+          ) as Partial<Record<UserDimension, string>>,
+          since,
+          until,
+        },
+        people
+      )
+    );
+  }
+
   if (name === "explain_change") {
     const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
     const today = new Date().toISOString().slice(0, 10);
@@ -5793,6 +5888,9 @@ export const MCP_INSTRUCTIONS =
   "EXPERIMENTS: experiments is the A/B registry (running, planned, finished, with live readouts " +
   "in /admin's words); record_experiment registers a test before it starts, with its hypothesis " +
   "and deciding metric, and records how it ended.\n\n" +
+  "OUR USERS, as totals: user_totals counts who finished the survey, who paid and what they " +
+  "paid, by gender, age, orientation, relationship, country, archetype or month, never a " +
+  "person, with any group under 5 hidden.\n\n" +
   "BREAK-EVEN: break_even says what the Google Ads spend buys (cost per visitor, the share who " +
   "finish, the share who pay, the average order, the net) and what each would have to reach " +
   "alone to earn the spend back, with 'what if' values in place of any of them.\n\n" +

@@ -222,6 +222,8 @@ export const RESEARCH_TOOLS = [
   "what_shipped",
   "meeting_promises",
   "explain_change",
+  // Totals only, with groups under 5 hidden, so it can never put a person in a brief.
+  "user_totals",
   // Read-only, and the check an unattended answer most needs: a wrong figure nobody saw.
   "check_answer",
 ];
