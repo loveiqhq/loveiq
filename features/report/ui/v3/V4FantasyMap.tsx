@@ -295,7 +295,11 @@ const V4FantasyMap: FC<Props> = ({ dots, locked, onUnlock }) => {
       <div className="rv4-fvm__row">
         <div className="rv4-fvm__img">
           {locked ? (
-            <div className="rv4-fvm__frame rv4-fvm__lock" onClick={guardedUnlock(onUnlock)}>
+            <div
+              className="rv4-fvm__frame rv4-fvm__lock"
+              ref={frameRef}
+              onClick={guardedUnlock(onUnlock)}
+            >
               {plot}
               <V4LockBadge />
             </div>
