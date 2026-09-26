@@ -408,10 +408,22 @@ describe("V4FantasyMap — paywalled (368:3481)", () => {
     expect(lock.querySelector(".rv4-lockbadge")).not.toBeNull();
   });
 
-  it("draws the illustrative layout even if dots arrive, so no score is ever drawn locked", () => {
+  // Review 26.09 — Mark: "This should always be the unlocked content but blurred".
+  // The server decides what arrives (lockedBlurCopy.ts): the reader's own dots since
+  // then, drawn under the blur; nothing in the decoy position, which draws V2's
+  // illustrative layout as above.
+  it("draws the reader's own dots under the blur when they arrive", () => {
     const { container } = render(<V4FantasyMap dots={SPARK_DOTS} locked onUnlock={() => {}} />);
-    expect(printed(container)).toEqual(MAP_DOTS.filter((d) => d.label).map((d) => d.label));
-    expect(container.textContent).not.toContain(SPARK_DOTS[0]!.name);
+    const blurred = container.querySelector<HTMLElement>(".rv4-fvm__blurred")!;
+    const drawn = [...blurred.querySelectorAll<HTMLElement>(".rv4-fvm__dot")];
+    expect(drawn).toHaveLength(16);
+    drawn.forEach((dot, i) => {
+      expect(dot.style.getPropertyValue("--fvm-x")).toBe(`${SPARK_DOTS[i]!.x * 100}%`);
+      expect(dot.style.getPropertyValue("--fvm-y")).toBe(`${SPARK_DOTS[i]!.y * 100}%`);
+    });
+    expect(printed(container)).toEqual(SPARK_DOTS.filter((d) => d.label).map((d) => d.label));
+    expect(blurred.getAttribute("aria-hidden")).toBe("true");
+    expect(blurred.hasAttribute("inert")).toBe(true);
   });
 
   it("opens the paywall once per tap on the plot or its badge", () => {

@@ -25,11 +25,11 @@
  * in the client components, never in this module.
  */
 
-import { scrambleLockedText } from "@features/report/server/scrambleLockedText";
 import {
   gate,
-  scrambleBlock,
   splitRamp,
+  veilBlock,
+  veilText,
   type Report3GatedCopy,
   type Report3PracticeView,
 } from "@features/report/server/gatedCopy";
@@ -298,7 +298,7 @@ export interface Report3PartnershipView {
   body: Report3GatedCopy;
   /** Scrambled when locked — 612:862 blurs every card. */
   loop: readonly Report3LoopStage[];
-  /** Scrambled when locked — 659:234 is blurred. */
+  /** Blurred when locked (659:234): the copy itself, or its decoy (lockedBlurCopy.ts). */
   result: Report3Block;
   practice: Report3PracticeView;
 }
@@ -310,8 +310,8 @@ export const PARTNERSHIP_FREE_BLOCKS = 4;
  * Where paragraph 5 stops being real (splitRamp). The blur fades in over its
  * first ~105px (305:361's progressive blur ends 5.2% down a 2032px box, about four
  * lines); this phrase end sits past that band on every phone from 320 to 430, so
- * the band is always real copy and the rest of the paragraph — only ever seen
- * fully blurred — is scrambled.
+ * the band is always real copy and the rest of the paragraph is only ever seen
+ * fully blurred (veiled: lockedBlurCopy.ts).
  */
 export const PARTNERSHIP_RAMP_THROUGH = "vulnerable needs more directly,";
 
@@ -323,9 +323,10 @@ export const PARTNERSHIP_RAMP_THROUGH = "vulnerable needs more directly,";
  */
 export const PARTNERSHIP_PRACTICE_FREE_BLOCKS = 3;
 
-const scrambleStage = (stage: Report3LoopStage): Report3LoopStage => ({
-  happens: scrambleLockedText(stage.happens),
-  underneath: scrambleLockedText(stage.underneath),
+/** A loop stage under the blur: as written, or its decoy (lockedBlurCopy.ts). */
+const veilStage = (stage: Report3LoopStage): Report3LoopStage => ({
+  happens: veilText(stage.happens),
+  underneath: veilText(stage.underneath),
 });
 
 /**
@@ -349,11 +350,12 @@ const splitPracticeList = (blocks: readonly Report3Block[]): readonly Report3Blo
  *
  * `locked` is decided by the caller, from the same gate the V2 section runs through
  * (`partnershipUnlocked`, Libido's full-report gate), so nothing in the V4 tree ever
- * sees an access plan. A locked reader receives: paragraphs 1-4 verbatim; paragraph
- * 5 real through its fade band and scrambled after; everything past it scrambled;
- * the loop's lines and the result scrambled; practice paragraphs 1-3 and list
- * items 1-2 verbatim, the rest scrambled; and the closed teaser verbatim, because
- * it is free copy.
+ * sees an access plan. A locked reader receives: paragraphs 1-4 verbatim; practice
+ * paragraphs 1-3 and list items 1-2 verbatim; everything the page draws blurred —
+ * paragraph 5 past its fade band and all after it, the loop's lines, the result, the
+ * rest of the practice — as the copy itself since 26.09, decoys in the switch's
+ * other position (lockedBlurCopy.ts); and the closed teaser verbatim, because it is
+ * free copy.
  */
 export function buildPartnership(
   archetype: string,
@@ -365,8 +367,8 @@ export function buildPartnership(
   return {
     locked,
     body: body.ramp ? { ...body, ramp: splitRamp(body.ramp, PARTNERSHIP_RAMP_THROUGH) } : body,
-    loop: locked ? copy.loop.map(scrambleStage) : copy.loop,
-    result: locked ? scrambleBlock(copy.result) : copy.result,
+    loop: locked ? copy.loop.map(veilStage) : copy.loop,
+    result: locked ? veilBlock(copy.result) : copy.result,
     practice: {
       eyebrow: copy.practiceEyebrow,
       title: copy.practiceTitle,

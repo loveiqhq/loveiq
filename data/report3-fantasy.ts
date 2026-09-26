@@ -22,7 +22,12 @@
  */
 
 import { scrambleLockedText } from "@features/report/server/scrambleLockedText";
-import { gate, scrambleBlock, type Report3PracticeView } from "@features/report/server/gatedCopy";
+import {
+  gate,
+  lockedBlurIsReal,
+  veilBlock,
+  type Report3PracticeView,
+} from "@features/report/server/gatedCopy";
 import { getFantasyMapDots, type FantasyMapDot } from "@features/report/server/fantasyMap";
 import {
   reportPracticeTendencies,
@@ -328,17 +333,23 @@ const realRow = (row: ReportPracticeTendencyRow): Report3FantasyRow => ({
 });
 
 /**
- * A blurred row. The name is scrambled to the same shape, so the stand-in wraps and
- * stands as tall as the real row. The scores are never scrambled: the scrambler is
- * deterministic, so a single digit's stand-in would give the digit away; the
- * component draws fixed stand-in digits under the blur instead.
+ * A blurred row. Since 26.09 it is the real fantasy with its real scores — Mark:
+ * "This should always be the unlocked content but blurred" (lockedBlurCopy.ts) — and
+ * no note, which a blurred row never shows. In the switch's decoy position the name
+ * is scrambled to the same shape, so the stand-in wraps and stands as tall as the
+ * real row, and the scores stay out: the scrambler is deterministic, so a single
+ * digit's stand-in would give the digit away; the component draws fixed stand-in
+ * digits under the blur instead.
  */
-const standIn = (row: ReportPracticeTendencyRow): Report3FantasyRow => ({
-  practice: scrambleLockedText(row.practice),
-  pull: null,
-  pleasure: null,
-  description: null,
-});
+const standIn = (row: ReportPracticeTendencyRow): Report3FantasyRow =>
+  lockedBlurIsReal()
+    ? {
+        practice: row.practice,
+        pull: row.fantasyPull,
+        pleasure: row.actualPleasure,
+        description: null,
+      }
+    : { practice: scrambleLockedText(row.practice), pull: null, pleasure: null, description: null };
 
 /**
  * Server-side assembly. Returns null for an archetype nobody has written yet, which
@@ -346,11 +357,12 @@ const standIn = (row: ReportPracticeTendencyRow): Report3FantasyRow => ({
  *
  * `locked` is decided by the caller, from the same gate V2's section runs through
  * (`fantasyUnlocked`), so nothing in the V4 tree ever sees an access plan. A locked
- * reader receives: the intro verbatim; no map dots; the first three rows of the
- * first three categories verbatim, two stand-ins under each; three stand-ins in
- * every other category; "Common challenges" scrambled; practice paragraphs 1-4
- * verbatim and the rest scrambled; and the closed teaser verbatim, because it is
- * free copy.
+ * reader receives: the intro verbatim; the first three rows of the first three
+ * categories verbatim; everything the page draws blurred — the two rows under each
+ * of those, three rows in every other category, the map's dots, "Common challenges"
+ * and the practice past paragraph 4 — as the copy itself since 26.09, decoys (and no
+ * dots) in the switch's other position (lockedBlurCopy.ts); no row past the ones
+ * drawn; and the closed teaser verbatim, because it is free copy.
  */
 export function buildFantasy(
   archetype: string,
@@ -386,9 +398,9 @@ export function buildFantasy(
   return {
     locked,
     intro: copy.intro,
-    mapDots: locked ? null : getFantasyMapDots(archetype),
+    mapDots: locked && !lockedBlurIsReal() ? null : getFantasyMapDots(archetype),
     table: { locked, categories },
-    challenges: locked ? copy.challenges.map(scrambleBlock) : copy.challenges,
+    challenges: locked ? copy.challenges.map(veilBlock) : copy.challenges,
     practice: {
       eyebrow: copy.practiceEyebrow,
       title: copy.practiceTitle,

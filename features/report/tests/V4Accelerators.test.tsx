@@ -86,10 +86,10 @@ describe("the paywalled chapter — 314:211", () => {
     const gated = gate.querySelector(".rv4-ab__gated")!;
     expect(gated.getAttribute("aria-hidden")).toBe("true");
     expect(gated.hasAttribute("inert")).toBe(true);
-    // The ramp is real through its fade band, then scrambled.
+    // The ramp's fade band, then the full blur — since review 26.09 the copy under the blur is the real one (lockedBlurCopy.ts), hidden with the rest.
     const ramp = gate.querySelector(".rv4-ab__ramp")!;
     expect(ramp.textContent).toContain("can create days of tension.");
-    expect(ramp.textContent).not.toContain("A suggestive message on Wednesday");
+    expect(ramp.textContent).toContain("A suggestive message on Wednesday");
     expect(ramp.querySelector(".rv4-pblur")).not.toBeNull();
     expect(gate.querySelectorAll(".rv4-ab__blurred .rv4-prose__p")).toHaveLength(5);
     const card = gate.querySelector(".rv4-premium")!;

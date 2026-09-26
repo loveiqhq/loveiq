@@ -45,7 +45,11 @@ interface Props {
 const likelihood = (score: number): string =>
   score >= 7 ? "More likely" : score >= 4 ? "Neutral likely" : "Less likely";
 
-/** Drawn under the blur for a stand-in row, cycling. Never a real score. */
+/**
+ * Drawn under the blur for a decoy row, cycling — never a real score. Since review
+ * 26.09 a blurred row carries its real scores (lockedBlurCopy.ts), which Row prefers;
+ * these only fill a row the server sent without them.
+ */
 const STAND_IN_SCORES: readonly (readonly [number, number])[] = [
   [5, 7],
   [7, 6],

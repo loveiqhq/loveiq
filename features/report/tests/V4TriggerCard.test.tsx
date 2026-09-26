@@ -116,8 +116,9 @@ describe("V4TriggerCard — paywalled (386:416 / 386:444)", () => {
     expect(container.querySelectorAll(".rv4-trig__row:not(.is-locked)")).toHaveLength(2);
     expect(container.querySelectorAll(".rv4-lockbadge")).toHaveLength(1);
     expect(container.querySelector(".rv4-trig__peek")).toBeNull();
-    // The locked rows carry the server's scrambled copy, not the real rows.
-    expect(lock.textContent).not.toContain("Control and possessiveness");
+    // Under the lock and hidden from assistive tech; since review 26.09 the rows there
+    // are the real ones (lockedBlurCopy.ts).
+    expect(lockedList.textContent).toContain("Control and possessiveness");
   });
 
   it("uses the accelerators card's own paywalled node", () => {
