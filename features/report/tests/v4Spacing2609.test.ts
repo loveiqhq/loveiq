@@ -36,11 +36,18 @@ const lineOf = (selector: string) =>
   V3_CSS.slice(0, V3_CSS.indexOf(`${selector} {`)).split("\n").length;
 
 describe("V4 spacing — the Snapshot sits 44 under Summary's rating and 44 above its own", () => {
-  it("drops the section margin and padding V2 gives #snapshot, so Summary's 44px tail is the gap", () => {
+  it("gives #snapshot one 44px separator in place of V2's 48 + 20", () => {
     const css = rule(".rv3.rv4 #snapshot");
-    expect(css).toMatch(/margin-top:\s*0;/);
+    expect(css).toMatch(/margin-top:\s*44px;/);
     expect(css).toMatch(/padding-top:\s*0;/);
     expect(lineOf(".rv3.rv4 #snapshot")).toBeGreaterThan(1884);
+  });
+
+  // Final review 26.09: only Spark Seeker's V4 Summary ends on a 44px tail. The
+  // thirteen archetypes still on V2 end on #means_for_you's bare rating row, where a
+  // 0 had put the Snapshot heading flush under it.
+  it("lets the V4 Summary's own 44px tail be the whole gap, and only there", () => {
+    expect(rule(".rv3.rv4 #summary + #snapshot")).toMatch(/margin-top:\s*0;/);
   });
 
   it("sets the Snapshot's rating 44 under the panel (1:848) with its own 44px tail (1:833)", () => {
