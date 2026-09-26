@@ -260,7 +260,7 @@ export const CRITERIA = [
     // classifier missing them is the expensive gap. Every alternative below is
     // taken verbatim from an observation we have actually seen.
     match:
-      /loop(ed|s|ing)?( \w+){0,2} back|a loop where|restart(ed|s)? from the (beginning|start)|reset(s|ting)?( \w+){0,2} to an earlier|back (to|at) the (survey |questionnaire )?(start|beginning)|beginning of the survey|(returned|sent|taken|redirected)( \w+){0,2} back to|returned to (an )?earlier|reset(s|ting)? back|start(ed)? (the survey )?(over|from scratch)|re-?initiali[sz]ed|already completed|first (introduction |intro )?screen|initial question/i,
+      /loop(ed|s|ing)?( \w+){0,2} back|looped( \w+){3} back|a loop where|restart(ed|s)? from the (beginning|start)|reset(s|ting)?( \w+){0,2} to an earlier|back (to|at) the (survey |questionnaire )?(start|beginning)|beginning of the survey|(returned|sent|taken|redirected)( \w+){0,2} back to|returned to (an )?earlier|reset(s|ting)? back|start(ed)? (the survey )?(over|from scratch)|re-?initiali[sz]ed|already completed|first (introduction |intro )?screen|introductory (survey )?(intro )?screen|initial question/i,
     /**
      * TWO SURFACES, and until 2026-09-17 only one had a probe.
      *
@@ -833,6 +833,14 @@ if (process.argv.includes("--selftest")) {
     ["At, the view resets entirely to an earlier preparation screen previously shown at.", "L1"],
     ["the application looped them back to the exact same 'Before we begin' consent screen", "L1"],
     ["the paywall or navigation looped the user back into taking the survey again", "L1"],
+    // Verbatim, 2026-09-26: three words between "looped" and "back", and an
+    // "introductory survey intro screen" the pattern did not know. It fell through
+    // to "no test for that kind of problem" while the same session's L1 was clear.
+    [
+      "instead of presenting the unlocked report, the site looped the user entirely back " +
+        "to the introductory survey intro screen at.",
+      "L1",
+    ],
     // The paywall-exit lane's own sentence: it must reach L1 or every one is a gap.
     [
       "A reader was sent back to /survey from their report while the paywall was still open, " +
