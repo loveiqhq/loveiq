@@ -7,6 +7,7 @@ import {
   looksLikeWhatsAppExport,
   parseWhatsApp,
   whatsappRows,
+  desktopSilenceHours,
 } from "@features/brain/server/ingest/whatsapp";
 
 const STAMP = "2026-08-31T00:00:00.000Z";
@@ -173,5 +174,18 @@ describe("whatsappRows — one chunk per DAY", () => {
 
   it("strips WhatsApp's filename boilerplate from the chat name", () => {
     expect(chatName("WhatsApp Chat with LoveIQ Team.txt")).toBe("LoveIQ Team");
+  });
+});
+
+describe("desktopSilenceHours", () => {
+  const NOW = Date.parse("2026-09-26T12:00:00Z");
+  it("reads the newest of the database and its log, so a busy log keeps the app alive", () => {
+    expect(desktopSilenceHours([NOW - 30 * 3_600_000, NOW - 60_000], NOW)).toBeCloseTo(1 / 60);
+    expect(desktopSilenceHours([NOW - 30 * 3_600_000, Number.NaN], NOW)).toBe(30);
+  });
+
+  it("calls a database it could not read at all silent forever, not fresh", () => {
+    expect(desktopSilenceHours([Number.NaN, Number.NaN], NOW)).toBe(Infinity);
+    expect(desktopSilenceHours([], NOW)).toBe(Infinity);
   });
 });

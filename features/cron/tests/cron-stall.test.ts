@@ -14,6 +14,7 @@ import {
   describeStall,
   findStalledCrons,
   GITHUB_WORKFLOW,
+  LAPTOP_JOBS,
   UNWATCHED_CRONS,
 } from "@features/cron/server/cron-stall";
 import { CLOCK_WORKFLOWS } from "@features/cron/server/github-jobs";
@@ -36,6 +37,13 @@ async function scheduledCrons(): Promise<string[]> {
     ...(vercel.crons ?? []).map((c) => c.path.replace("/api/cron/", "")),
     ...Object.keys(brainDailySchedules()),
     ...githubRecordedCrons(fs).map(([cron]) => cron),
+    // Scheduled by launchd on a laptop. Counted only while its script still records the
+    // run under that exact name, so a watched name cannot quietly stop being written.
+    ...Object.entries(LAPTOP_JOBS)
+      .filter(([cron, job]) =>
+        fs.readFileSync(job.script, "utf8").includes(`recordCronRun("${cron}"`)
+      )
+      .map(([cron]) => cron),
   ];
 }
 
@@ -108,6 +116,30 @@ describe("findStalledCrons", () => {
       /\(brain-daily\.yml\) and runs this repo's schedules hours late.*start it by hand/
     );
     expect(describeStall({ ...stall, cron: "brain-fast" })).not.toMatch(/GitHub/);
+  });
+
+  it("judges a laptop job on its successful runs, and tells the reader to open the Mac", async () => {
+    mockFetch.mockReset();
+    mockFetch.mockResolvedValue(ok("2026-08-29T11:00:00Z"));
+    await findStalledCrons(NOW);
+    const urls = mockFetch.mock.calls.map(([u]) => String(u));
+    expect(urls.find((u) => u.includes("cron_name=eq.brain-whatsapp"))).toContain(
+      "&status=eq.success"
+    );
+    expect(urls.find((u) => u.includes("cron_name=eq.brain-fast"))).not.toContain("status=");
+
+    const quiet = {
+      cron: "brain-whatsapp",
+      lastRunAt: "2026-08-25T12:00:00Z",
+      ageMs: 4 * 24 * 3_600_000,
+      maxAgeMs: CRON_MAX_AGE_MS["brain-whatsapp"]!,
+    };
+    expect(describeStall(quiet)).toMatch(
+      /^\*brain-whatsapp\* last succeeded 96\.0h ago \(limit 72\.0h\)\. .*open the Mac and WhatsApp Desktop.*30 days old\.$/
+    );
+    expect(describeStall({ ...quiet, lastRunAt: null, ageMs: null })).toMatch(
+      /never recorded a successful run.*open the Mac/
+    );
   });
 
   it("says NOTHING when the database is unreachable", async () => {
