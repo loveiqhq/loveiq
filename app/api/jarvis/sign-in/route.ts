@@ -1,5 +1,5 @@
 /**
- * POST /api/jarvis/sign-in — email a six-digit sign-in code to a Jarvis member.
+ * POST /api/jarvis/sign-in — email a one-time sign-in code to a Jarvis member.
  *
  * The same answer whether or not the address is a member, and a non-member gets no email,
  * so this cannot be used to learn who is on the list. See features/brain/server/connect.ts.

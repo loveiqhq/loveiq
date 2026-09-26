@@ -7,11 +7,17 @@ import logger from "@shared/observability/logger";
 
 /**
  * The sign-in page Claude sends a person to, /jarvis/connect (Supabase's OAuth
- * "authorization path"). Signing in is a six-digit code sent to the person's @loveiq.org
+ * "authorization path"). Signing in is a one-time code sent to the person's @loveiq.org
  * address, typed on the same page, so it works when the email is read on a phone and
  * Claude runs on a laptop. The same pattern as the admin login: Supabase mints the code,
  * we send it, so nothing depends on Supabase's own mail service.
  */
+
+/**
+ * A sign-in code: digits, as many as Supabase is set to mint (`mailer_otp_length`, 8 here;
+ * Supabase allows 6 to 10). Six was assumed at first, and every real code was refused.
+ */
+export const SIGN_IN_CODE = /^\d{6,10}$/;
 
 export type ConnectState =
   | { kind: "no-request" }
@@ -139,7 +145,7 @@ export async function sendSignInCode(email: string): Promise<boolean> {
     body: JSON.stringify({ type: "magiclink", email: member.email }),
   });
   const link = (await linkRes.json().catch(() => ({}))) as { email_otp?: string };
-  if (!linkRes.ok || !/^\d{6}$/.test(link.email_otp ?? "")) {
+  if (!linkRes.ok || !SIGN_IN_CODE.test(link.email_otp ?? "")) {
     logger.error({ status: linkRes.status }, "jarvis: Supabase did not mint a sign-in code");
     return false;
   }
