@@ -63,7 +63,7 @@ export function reportEssentialsEmail({
         ${insideHtml}
       </p>
       <p style="margin:0 0 16px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
-        Inside, you&rsquo;ll find three dimensions that together give you a grounded read on how you experience desire and connection &mdash; your archetype probabilities, core motivation, and relational stage. Most people have felt these patterns for years. Now you&rsquo;ll have language for them.
+        Inside, you&rsquo;ll find your summary, attachment style, core insecurities, confidence level, typical beliefs, and turn-ons. Most people have felt these patterns for years. Now you&rsquo;ll have language for them.
       </p>
       <p style="margin:0 0 24px 0; font-family:${EMAIL_FONT}; font-size:17px; line-height:1.55; color:#000000;">
         You can also <strong style="font-weight:700;">share the report</strong> with one person you trust &mdash; sometimes the most valuable insight is a conversation it starts.
@@ -118,7 +118,7 @@ export function reportEssentialsEmail({
       ? `Your ${trimmedArchetype} Essentials report is ready.`
       : "Your Essentials report is ready.",
     "",
-    "Inside, you'll find three dimensions that together give you a grounded read on how you experience desire and connection — your archetype probabilities, core motivation, and relational stage. Most people have felt these patterns for years. Now you'll have language for them.",
+    "Inside, you'll find your summary, attachment style, core insecurities, confidence level, typical beliefs, and turn-ons. Most people have felt these patterns for years. Now you'll have language for them.",
     "",
     "You can also share the report with one person you trust — sometimes the most valuable insight is a conversation it starts.",
     "",
