@@ -892,13 +892,14 @@ allow it only in the unmodified binary, never in our own API calls. Vercel has n
 `BRAIN_LLM_CLI=claude`. The day claim, the `cron_run` row, the Slack post and the stall
 watch behave exactly as they did on Vercel.
 
-- **Whose seat.** Eman's own Premium seat, by their choice (2026-09-24). Automated runs share
-  its five-hour and weekly limits with their own Claude use, though at about fifteen short
-  calls a day they take little. A limit hit is reported as `rate_limited`, the job stops for
-  the day, and the #brain alert pings the seat's owner (repository variable
-  `CLAUDE_TOKEN_OWNER_SLACK_ID`). If that happens more than once or twice, move the token
-  to the teamwork@ seat, which nobody works in all day. On 2026-09-19 `generate-fix` stopped
-  on "You've hit your session limit" for exactly this reason.
+- **Whose seat.** The teamwork@ seat since 2026-09-26, moved from Eman's own seat at their
+  request. Claude Code on Eman's laptop is signed in as teamwork@ too, so its sessions and
+  these jobs share the seat's five-hour and weekly limits. The jobs take about fifteen short
+  calls a day, so a limit hit most likely means a heavy day of sessions. A hit is reported
+  as `rate_limited`, the job stops for the day, and the #brain alert pings whoever looks
+  after the seat (repository variable `CLAUDE_TOKEN_OWNER_SLACK_ID`, Eman). The limit resets
+  on its own; run the job again from Actions once it has. On 2026-09-19 `generate-fix`
+  stopped on "You've hit your session limit" for exactly this reason.
 - **GitHub starts these hours late.** Measured 2026-09-25, this repo's scheduled workflows
   start 4.5 to 5.5 hours after their cron time and frequent ones are sometimes dropped
   (health-monitor due 08:00 ran ~13:20; the Night Shift due 00:30 ran 05:08). The brief is
@@ -909,9 +910,15 @@ watch behave exactly as they did on Vercel.
   verifier and the morning checks. The brain's jobs are not on it, because their times
   assume GitHub's delay; to move one, add it to `features/cron/server/github-jobs.ts` at
   the hour it should land and delete its `schedule:`.
-- **Replacing the token.** Run `claude setup-token` signed in as the seat's owner, then
-  `gh secret set CLAUDE_CODE_OAUTH_TOKEN -R loveiqhq/loveiq`. `generate-fix` uses the same
-  secret. Then point the ping at whoever should hear about a limit:
+- **Replacing the token.** Run `claude setup-token` with the browser signed in to the seat's
+  claude.ai account (it approves on its own when that account has approved Claude Code
+  before, so the account is whichever one the browser holds), then
+  `gh secret set CLAUDE_CODE_OAUTH_TOKEN -R loveiqhq/loveiq`, reading the token from a file
+  rather than pasting it into a terminal that keeps history. `generate-fix` uses the same
+  secret. To check whose a token is without printing it, compare `/usage` in an interactive
+  `claude` started with `CLAUDE_CODE_OAUTH_TOKEN` set against the account's own: one seat
+  shows the same meters. `claude auth status` and `/status` do not name the account for a
+  token passed that way. Then point the ping at whoever should hear about a limit:
   `gh variable set CLAUDE_TOKEN_OWNER_SLACK_ID -R loveiqhq/loveiq --body <Slack member id>`.
 - **Secrets it needs.** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
   `CLAUDE_CODE_OAUTH_TOKEN`, `SLACK_BRAIN_WEBHOOK_URL`. The run fails when any is missing:
