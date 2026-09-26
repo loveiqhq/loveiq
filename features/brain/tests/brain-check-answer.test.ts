@@ -67,6 +67,15 @@ describe("check_answer: what it does not pretend to check", () => {
     expect(atomsIn("It scored 7/10.").map((a) => a.raw)).toEqual(["10"]);
   });
 
+  it("does not read a web address's digits as figures", () => {
+    expect(
+      atomsIn("Short surveys finish more often (https://pubmed.ncbi.nlm.nih.gov/12345678/).")
+    ).toEqual([]);
+    expect(
+      atomsIn("See www.example.org/2026/report-44 for 1,250 answers.").map((a) => a.raw)
+    ).toEqual(["1,250"]);
+  });
+
   it("treats a word or two in quotes as a term, not a quotation", () => {
     expect(atomsIn('We call it the "postponed list" internally.')).toEqual([]);
     expect(atomsIn('He said "ship it on Monday".').map((a) => a.kind)).toEqual(["quote"]);

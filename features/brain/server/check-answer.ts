@@ -65,6 +65,11 @@ const SOURCE_NAMES =
   "decision|plan|notice|report|research|skill|domain|doc|analytics|ga4|gsc|notion|drive|" +
   "slack|gmail|calendar|whatsapp|people|evidence|clarity";
 const ID = new RegExp(`\\b(?:${SOURCE_NAMES})\\/[^\\s,;)\\]]+`, "gi");
+/**
+ * A web address is a citation, not a claim: the Night Shift ends each point with one, and
+ * the digits in "pubmed.ncbi.nlm.nih.gov/12345678" are an index, not a figure.
+ */
+const URL_PATTERN = /\bhttps?:\/\/\S+|\bwww\.\S+/gi;
 /** An id as written in prose, without the punctuation that ends its sentence. */
 const bareId = (id: string) => id.replace(/[.:!?]+$/, "");
 const ISO_DAY = /\b(\d{4})-(\d{2})-(\d{2})\b/g;
@@ -84,7 +89,7 @@ function numbersIn(text: string): number[] {
 /** The figures, days and quoted phrases in one sentence that a source can confirm. */
 export function atomsIn(sentence: string): Atom[] {
   const atoms: Atom[] = [];
-  const bare = sentence.replace(ID, " ");
+  const bare = sentence.replace(URL_PATTERN, " ").replace(ID, " ");
   for (const m of bare.matchAll(QUOTE)) {
     const norm = normText(m[1]!);
     // A quote of three words or more; shorter is a term in quotes, not a quotation.
