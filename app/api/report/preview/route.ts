@@ -87,6 +87,8 @@ export async function GET(request: Request) {
     KNOWN_ARCHETYPES.find((a) => flatten(a) === flatten(requested)) ?? "Spark Seeker";
 
   const planParam = url.searchParams.get("plan") ?? "";
+  // As on the real route, V4's chapters go only to the V4 page (final review 26.09).
+  const isV4Request = url.searchParams.get("v4") === "1";
   const accessPlan: ReportAccessPlan = isReportPurchasePlan(planParam) ? planParam : null;
 
   // A paid preview owns its own archetype, exactly as a real purchase does.
@@ -104,7 +106,9 @@ export async function GET(request: Request) {
   const beliefsSection = getReport2Section(archetype, "beliefs");
   const accelUnlocked = unlocked("typical_arousal_accelerators_turn_ons_of_the_core_archetype");
   const accelSection = getReport2Section(archetype, "accel");
-  const accelerators = buildAccelerators(archetype, { locked: !accelUnlocked });
+  const accelerators = isV4Request
+    ? buildAccelerators(archetype, { locked: !accelUnlocked })
+    : null;
   const accelArticle =
     REPORT_V4_LEARN_MORE.typical_arousal_accelerators_turn_ons_of_the_core_archetype;
   // Challenges in Partnership shares Libido's full-report gate, as on the real route.
@@ -113,7 +117,7 @@ export async function GET(request: Request) {
   // Fantasy vs. Reality — section 27, full report only, as on the real route.
   const fantasyUnlocked = unlocked("typical_sexual_fantasy_amp_practice_tendencies");
   const { fantasyCopy, fantasyDots } = buildFantasyCopy(archetype, fantasyUnlocked);
-  const fantasy = buildFantasy(archetype, { locked: !fantasyUnlocked });
+  const fantasy = isV4Request ? buildFantasy(archetype, { locked: !fantasyUnlocked }) : null;
   const fantasyArticle = REPORT_V4_LEARN_MORE.typical_sexual_fantasy_amp_practice_tendencies;
 
   const payload = stripLockedEduBodyFromPayload({
@@ -169,13 +173,16 @@ export async function GET(request: Request) {
     },
 
     // Report 3.0, gated identically to the chapter it replaces.
-    typicalBeliefs: buildTypicalBeliefs(archetype, { locked: !beliefsUnlocked }),
-    typicalBeliefsArticle: REPORT_V4_LEARN_MORE.typical_beliefs
-      ? {
-          article: splitArticleForReader(REPORT_V4_LEARN_MORE.typical_beliefs, !beliefsUnlocked),
-          locked: !beliefsUnlocked,
-        }
+    typicalBeliefs: isV4Request
+      ? buildTypicalBeliefs(archetype, { locked: !beliefsUnlocked })
       : null,
+    typicalBeliefsArticle:
+      isV4Request && REPORT_V4_LEARN_MORE.typical_beliefs
+        ? {
+            article: splitArticleForReader(REPORT_V4_LEARN_MORE.typical_beliefs, !beliefsUnlocked),
+            locked: !beliefsUnlocked,
+          }
+        : null,
 
     // V2's Accelerators & Brakes copy, exactly as the real route builds it. Without
     // it the V2 section rendered nothing under ?preview=1, leaving the chapter an
@@ -208,7 +215,7 @@ export async function GET(request: Request) {
 
     // Report 3.0's Challenges in Partnerships, gated identically to the chapter it
     // replaces.
-    partnership: buildPartnership(archetype, { locked: !partnershipUnlocked }),
+    partnership: isV4Request ? buildPartnership(archetype, { locked: !partnershipUnlocked }) : null,
 
     // V2's Fantasy vs. Reality copy and map dots, through the real route's own
     // builder, so V4's fallback for the thirteen archetypes still on V2 is not an

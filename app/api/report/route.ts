@@ -273,6 +273,12 @@ export async function GET(request: Request) {
   }
 
   const rawPricingSessionId = url.searchParams.get("pricingSessionId") ?? undefined;
+  // Report V4's chapters travel only to the V4 page, which says so (`v4=1`, sent by
+  // useReportData). Every other version draws none of them, and since review 26.09 a
+  // locked reader's copy of them is the real one under the blur (lockedBlurCopy.ts),
+  // so building them for every request handed the default report's locked readers
+  // paid copy they are never shown (final review, 26.09).
+  const isV4Request = url.searchParams.get("v4") === "1";
   const tokenParsed = rawToken
     ? tokenSchema.safeParse({ pricingSessionId: rawPricingSessionId, token: rawToken })
     : null;
@@ -855,9 +861,9 @@ export async function GET(request: Request) {
      * everything they only ever see under the full blur — rows 5-10, and the prose
      * past each ramp — arrives scrambled. See buildTypicalBeliefs.
      */
-    const typicalBeliefs = buildTypicalBeliefs(contentArchetype, {
-      locked: !beliefsUnlocked,
-    });
+    const typicalBeliefs = isV4Request
+      ? buildTypicalBeliefs(contentArchetype, { locked: !beliefsUnlocked })
+      : null;
 
     /**
      * The "Go deeper & learn more" article that closes the same chapter — Figma
@@ -873,12 +879,13 @@ export async function GET(request: Request) {
      * chapter it belongs to — see the swap in ReportPage. Half a redesigned
      * chapter under V2's section would read worse than either on its own.
      */
-    const typicalBeliefsArticle = REPORT_V4_LEARN_MORE.typical_beliefs
-      ? {
-          article: splitArticleForReader(REPORT_V4_LEARN_MORE.typical_beliefs, !beliefsUnlocked),
-          locked: !beliefsUnlocked,
-        }
-      : null;
+    const typicalBeliefsArticle =
+      isV4Request && REPORT_V4_LEARN_MORE.typical_beliefs
+        ? {
+            article: splitArticleForReader(REPORT_V4_LEARN_MORE.typical_beliefs, !beliefsUnlocked),
+            locked: !beliefsUnlocked,
+          }
+        : null;
 
     // Report 2.0 Attachment Style section copy — a Part II, essentials-tier
     // PREMIUM section (section 8). The universal slots (`eyebrow`,
@@ -975,7 +982,9 @@ export async function GET(request: Request) {
      * intro and the free paragraphs verbatim, each ramp paragraph real only through
      * its fade band, and everything past it scrambled — see buildAccelerators.
      */
-    const accelerators = buildAccelerators(contentArchetype, { locked: !accelUnlocked });
+    const accelerators = isV4Request
+      ? buildAccelerators(contentArchetype, { locked: !accelUnlocked })
+      : null;
 
     /**
      * The "Go deeper & learn more" article closing the same chapter — Figma 235:254,
@@ -1314,7 +1323,9 @@ export async function GET(request: Request) {
      * only through its fade band, and everything past it — the loop and the result
      * included — scrambled; see buildPartnership.
      */
-    const partnership = buildPartnership(contentArchetype, { locked: !partnershipUnlocked });
+    const partnership = isV4Request
+      ? buildPartnership(contentArchetype, { locked: !partnershipUnlocked })
+      : null;
 
     // Report 2.0 "Challenges to Enjoy Sex" (Enjoyment) section copy — a Part IV,
     // FULL_REPORT-tier PREMIUM section
@@ -1505,7 +1516,9 @@ export async function GET(request: Request) {
      * 1-4 verbatim; every other row as a blurred stand-in with no scores; "Common
      * challenges" and the rest of the practice scrambled — see buildFantasy.
      */
-    const fantasy = buildFantasy(contentArchetype, { locked: !fantasyUnlocked });
+    const fantasy = isV4Request
+      ? buildFantasy(contentArchetype, { locked: !fantasyUnlocked })
+      : null;
 
     /**
      * The "Go deeper & learn more" article closing the same chapter — Figma 244:258,
