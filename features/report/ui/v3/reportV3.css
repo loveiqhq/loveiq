@@ -2616,8 +2616,10 @@
   height: 19px;
   width: 100%;
 }
+/* 1:485 / 1:851 / 1:1139 — the part frames' hairline fades from 10% ink to nothing,
+ * left to right, as the closed chapters' divider does (review 26.09). */
 .rv3 .rv4-rule::before {
-  background: var(--rv3-hairline);
+  background: linear-gradient(90deg, rgba(22, 16, 33, 0.1), rgba(22, 16, 33, 0));
   content: "";
   height: 1px;
   width: 100%;
@@ -3083,11 +3085,6 @@
 }
 .rv3 .rv4-top3 .rv3-top3__row + .rv3-top3__row {
   border-top: 0;
-}
-/* 1:493 ends 9px below its rating row, where "Core Archetype" (1:576) begins; the
- * rating's usual 44px tail runs past the frame's edge into empty space there. */
-.rv3 .rv4-top3 .rv4-rating__tail {
-  height: 9px;
 }
 
 /* The preview iframe's own document: the report column at its true 393 width. */
@@ -5658,7 +5655,9 @@ html {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 20px 0;
+  /* No foot: 38:1679 and 305:358 are fixed-height boxes that end on their 44px
+   * separator, so "Try this" sits 16 + 44 under the closing copy (review 26.09). */
+  padding: 20px 0 0;
   width: 100%;
 }
 .rv3 .rv4-cip .rv4-prose__p {
@@ -7139,4 +7138,31 @@ html {
   .rv3:is(.rv4, .rv4-doc) .rv3-deck__dot {
     transition: none;
   }
+}
+
+/* ══ Standardised spacing — review 26.09 ═════════════════════════════════════════
+ * Mark: "Can we standardise the space between things/sections?" and "the 'Does this
+ * resonate' and the next element". Figma's rating is one component, a 26px row over
+ * a 44px tail ("Rating with buttom space": 1:747, 1:833, 1:560), and blocks sit one
+ * 44px separator apart. V2's section rhythm (48px between sections, 20px above the
+ * Snapshot and its rating, a 28px header row) ran over it here. V4 only. */
+
+/* 1:747 → 1:763: the Summary's rating tail is the whole gap to the Snapshot heading
+ * (it was 44 + 48 + 20 = 112). */
+.rv3.rv4 #snapshot {
+  margin-top: 0;
+  padding-top: 0;
+}
+/* 1:848 → 1:833: the rating 44 under the panel, where its shadow has faded (the
+ * panel's own 44px separator), then its 44px tail before Part III's hairline. */
+.rv3.rv4 #snapshot .rv3-chapter__feedback {
+  padding: 0 0 44px;
+}
+/* 1:734: one 44px separator from the archetype card to the Summary, whose heading
+ * is its own (V4SummaryChapter) — V2's empty header row goes. */
+.rv3.rv4 #summary {
+  margin-top: 44px;
+}
+.rv3.rv4 #summary .report-section__header {
+  display: none;
 }

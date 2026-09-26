@@ -70,6 +70,23 @@ export const REPORT_V4_PART_DIVIDER_BY_SECTION: Readonly<Record<string, Report3P
   typical_sexual_fantasy_amp_practice_tendencies: REPORT_V4_PARTS[5]!,
 };
 
+/**
+ * How each part opens, as its frame draws it (review 26.09, "standardise the space
+ * between things/sections"): the fading hairline "Seperator - Horizontal Line" (19px,
+ * the line 18px down) above the heading, and the 44px "Seperator" under it before the
+ * part's first block. Keyed like REPORT_V4_PART_DIVIDER_BY_SECTION; the values are the
+ * frames' node ids, which ride on the rendered elements.
+ */
+export const REPORT_V4_PART_FRAME_BY_SECTION: Readonly<
+  Record<string, { readonly rule: string; readonly sep: string }>
+> = {
+  core_archetype: { rule: "1:484", sep: "1:491" },
+  typical_beliefs: { rule: "1:850", sep: "1:858" },
+  typical_arousal_accelerators_turn_ons_of_the_core_archetype: { rule: "1:983", sep: "1:991" },
+  attachment_style: { rule: "38:1508", sep: "38:1516" },
+  typical_sexual_fantasy_amp_practice_tendencies: { rule: "1:1138", sep: "1:1146" },
+};
+
 /*
  * Part I copy — re-read from the frame on 2026-09-23, after Mark rewrote all three
  * blocks and added bold runs. A "\n" inside a run is a line break the frame sets

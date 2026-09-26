@@ -81,6 +81,8 @@ import { reportSections } from "@/data/report-general";
 import { resolveReportSections } from "@features/report/ui/reportTitles";
 import { buildPartnership } from "@/data/report3-partnership";
 import { buildFantasy } from "@/data/report3-fantasy";
+import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
+import { buildAccelerators } from "@/data/report3-accelerators";
 import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { splitArticleForReader } from "@features/report/server/contentGating";
 // The 50/50 was concluded → any non-empty token now buckets to the forced
@@ -965,6 +967,77 @@ describe("ReportPage", () => {
           '#snapshot [aria-label="This resonates: Five things this report found"]'
         )
       ).not.toBeNull();
+    });
+  });
+
+  // Review 26.09: "Can we standardise the space between things/sections?" Every part
+  // opens as Figma's part frames do: the fading hairline, the heading, then a 44px
+  // separator before its first block — for the archetypes still on V2's chapters too,
+  // whose first chapter used to sit straight under the heading.
+  describe("V4 — every part opens on its rule, its heading and 44px (review 26.09)", () => {
+    const FRAMES = [
+      ["1:484", "1:491"],
+      ["1:850", "1:858"],
+      ["1:983", "1:991"],
+      ["38:1508", "38:1516"],
+      ["1:1138", "1:1146"],
+    ];
+
+    afterEach(() => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+
+    const partHeads = (container: HTMLElement) =>
+      [...container.querySelectorAll(".rv4-part")].filter(
+        (el) => !el.classList.contains("rv4-part--lead")
+      );
+
+    const expectFrames = (container: HTMLElement) => {
+      const heads = partHeads(container);
+      expect(heads).toHaveLength(5);
+      heads.forEach((head, i) => {
+        const before = head.previousElementSibling!;
+        const after = head.nextElementSibling!;
+        expect(before, `rule before part ${i + 2}`).toHaveClass("rv4-rule");
+        expect(before.getAttribute("data-node-id")).toBe(FRAMES[i]![0]);
+        expect(after, `separator after part ${i + 2}`).toHaveClass("rv4-sep");
+        expect(after.getAttribute("data-node-id")).toBe(FRAMES[i]![1]);
+        expect(after.nextElementSibling, `one separator in part ${i + 2}`).not.toHaveClass(
+          "rv4-sep"
+        );
+      });
+      return heads;
+    };
+
+    it("frames Parts II-VI the same way over V2's chapters", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      const { container } = render(<ReportPage />);
+
+      const heads = expectFrames(container);
+      expect(heads[0]!.nextElementSibling!.nextElementSibling).toHaveClass("rv4-top3");
+    });
+
+    it("keeps one separator where the designed chapters open their parts", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      const response = buildSuccessResponse();
+      Object.assign(response.data as Record<string, unknown>, {
+        primaryArchetype: "Spark Seeker",
+        percentages: { "Spark Seeker": 63, "Explorer of Edges": 37 },
+        typicalBeliefs: buildTypicalBeliefs("Spark Seeker"),
+        accelerators: buildAccelerators("Spark Seeker"),
+        partnership: buildPartnership("Spark Seeker"),
+        fantasy: buildFantasy("Spark Seeker"),
+      });
+      mockUseReportData.mockReturnValue(response);
+
+      const { container } = render(<ReportPage />);
+
+      const heads = expectFrames(container);
+      for (const head of heads.slice(1)) {
+        expect(head.nextElementSibling!.nextElementSibling).toHaveClass("rv4-chapter", "is-open");
+      }
     });
   });
 
