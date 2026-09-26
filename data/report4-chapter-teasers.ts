@@ -13,7 +13,8 @@
  * this module stays out of the premium list.
  *
  * Keyed by section id. The four chapters V4 opens by default have none (Figma draws
- * them open), and neither has Reward System, which the frames no longer draw at all.
+ * them open). Reward System came last: review 26.09, Mark put it back into Part 4
+ * (1:1017, "We missed this chapter", 1942400765) and Sanjin wrote its teaser in 1:1026.
  */
 export const REPORT_V4_CHAPTER_TEASERS: Readonly<Record<string, string>> = {
   // Part III — 1:871 / 1:882 / 1:893
@@ -23,9 +24,11 @@ export const REPORT_V4_CHAPTER_TEASERS: Readonly<Record<string, string>> = {
     "Sexual confidence is not simply about how attractive or experienced you feel. It shapes how easily you express desire, communicate what you want, handle uncertainty, and stay present when intimacy feels vulnerable. This chapter explores where your confidence feels solid, where it wavers, and how that may shape your sexual experiences.",
   power_orientation:
     "Power can shape intimacy in subtle ways, from who takes the lead to how comfortable you feel giving up control, setting the pace, or being guided by someone else. This chapter explores the balance of dominance, submission, and equality that feels most natural to you, and how that shows up in your sexual experiences.",
-  // Part IV — 1:1004 / 1:1026 / 1:1037 / 1:1048
+  // Part IV — 1:1004 / 1:1026 / 792:6965 / 1:1037 / 1:1048
   libido_challenges_in_relationships:
     "Low or inconsistent desire rarely has a single cause. Stress, health, hormones, medications, relationship dynamics, and even the way desire naturally works for you can all play a role. This chapter helps you understand what may be influencing your libido and why your desire can change across different moments and relationships.",
+  biochemical_reward_system_dynamics:
+    "Sexual desire is shaped not only by what feels good, but by what your brain learns to seek out and repeat. This chapter helps you understand how rewarding experiences shape sexual motivation, why some develop a stronger pull than others, and how those patterns can change over time.",
   arousal_style:
     "Your arousal style is the way sexual excitement tends to begin, build, and respond to different kinds of stimulation. Some people are easily sparked by novelty or intensity, while others need more time, emotional connection, anticipation, or the right context. This chapter explores the conditions that tend to bring your arousal to life and what can make it fade.",
   initiation_style:

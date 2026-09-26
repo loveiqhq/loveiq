@@ -229,14 +229,28 @@ describe("V3Chapter under V4 — the teaser while closed (1:862)", () => {
     expect(tease.hasAttribute("inert")).toBe(true);
   });
 
-  it("draws no teaser where none is written (Reward System, ruling 2)", () => {
+  it("draws no teaser where none is written (an open chapter's V2 fallback)", () => {
+    const { container } = renderV4({
+      id: "typical_beliefs",
+      number: "2.1",
+      title: "Typical Beliefs",
+    });
+    expect(container.querySelector(".rv4-chapter__teaser")).toBeNull();
+    expect(container.querySelector("section")).not.toHaveClass("has-teaser");
+  });
+
+  it("shows Reward System's teaser now Sanjin has written it (1:1026, review 26.09)", () => {
     const { container } = renderV4({
       id: "biochemical_reward_system_dynamics",
       number: "3.3",
       title: "Reward System",
     });
-    expect(container.querySelector(".rv4-chapter__teaser")).toBeNull();
-    expect(container.querySelector("section")).not.toHaveClass("has-teaser");
+    expect(container.querySelector(".rv4-chapter__teaser")!.textContent).toBe(
+      REPORT_V4_CHAPTER_TEASERS.biochemical_reward_system_dynamics
+    );
+    expect(REPORT_V4_CHAPTER_TEASERS.biochemical_reward_system_dynamics).toMatch(
+      /^Sexual desire is shaped not only by what feels good/
+    );
   });
 });
 
