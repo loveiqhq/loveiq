@@ -38,6 +38,11 @@ export interface DecisionInput {
   actor: string;
   decidedOn?: string;
   supersedes?: string;
+  /**
+   * Who recorded it, from their own Jarvis sign-in: verified, unlike `actor`, which is
+   * whatever the caller typed. Absent when the call came in on the shared token.
+   */
+  recordedBy?: string;
 }
 
 export interface DecisionResult {
@@ -107,8 +112,11 @@ export function buildDecisionRow(input: DecisionInput, now: Date): BrainRow {
    */
   const title = decisionTitle(input.decision);
 
+  const recorder = input.recordedBy?.trim() || null;
   const lines = [
     `Decided on ${decidedOn} by ${input.actor.trim()}.`,
+    // Said only when it adds something: "decided by Mark, recorded by Mark" is noise.
+    recorder && recorder !== input.actor.trim() ? `Recorded by ${recorder}.` : null,
     input.topic ? `Topic: ${input.topic.trim()}` : null,
     "",
     input.decision.trim(),
@@ -131,6 +139,7 @@ export function buildDecisionRow(input: DecisionInput, now: Date): BrainRow {
       // Read by `peopleIn` at the shared write path, so a decision joins the person
       // spine without this module knowing anything about identity resolution.
       actor: input.actor.trim(),
+      ...(recorder ? { recorded_by: recorder } : {}),
       ...(input.topic ? { topic: input.topic.trim().toLowerCase() } : {}),
       ...(input.supersedes ? { supersedes: input.supersedes.trim() } : {}),
     },
@@ -225,19 +234,22 @@ export async function recordDecision(
 
   /**
    * Mirrored to ops immediately, because the owner chose act-freely-and-log over
-   * confirm-first. With one shared token a write cannot be attributed to a person, so
-   * the compensating control is that it is impossible to do quietly.
+   * confirm-first, so a write is impossible to do quietly. A signed-in caller is named as
+   * the recorder; one on the shared token is not, and the mirror then shows the actor only.
    *
    * Never allowed to fail the write: the decision is recorded either way, and losing it
    * because a webhook was down would be the worse outcome.
    */
+  const recorder = input.recordedBy?.trim() || null;
+  const decidedBy =
+    recorder && recorder !== input.actor.trim() ? ` (decided by ${escapeSlack(input.actor)})` : "";
   try {
     await notifySlack({
       channel: "brain",
       kind: "brain_decision_recorded",
       username: "ops_alerts",
       text:
-        `:memo: *Decision recorded* by ${escapeSlack(input.actor)} — ` +
+        `:memo: *Decision recorded* by ${escapeSlack(recorder ?? input.actor)}${decidedBy} — ` +
         `${escapeSlack(input.decision.slice(0, 300))}` +
         (input.supersedes ? `\n_supersedes ${escapeSlack(input.supersedes)}_` : ""),
       context: { sourceId: row.source_id, decidedOn: row.period_end ?? null },

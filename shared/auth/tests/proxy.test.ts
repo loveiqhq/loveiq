@@ -775,10 +775,12 @@ describe("proxy — consent-independent daily unique-visit count", () => {
     ).toBe(true);
   });
 
-  it("ignores non-GET / api / admin / login / _next / bots / prefetch / non-document", () => {
+  it("ignores non-GET / api / admin / jarvis / login / _next / bots / prefetch / non-document", () => {
     expect(shouldCountVisit(makeVisitRequest({ method: "POST" }))).toBe(false);
     expect(shouldCountVisit(makeVisitRequest({ path: "/api/contact" }))).toBe(false);
     expect(shouldCountVisit(makeVisitRequest({ path: "/admin/x" }))).toBe(false);
+    // The team's Jarvis sign-in page is not a visitor.
+    expect(shouldCountVisit(makeVisitRequest({ path: "/jarvis/connect" }))).toBe(false);
     expect(shouldCountVisit(makeVisitRequest({ path: "/login" }))).toBe(false);
     expect(shouldCountVisit(makeVisitRequest({ path: "/_next/data/x.json" }))).toBe(false);
     expect(shouldCountVisit(makeVisitRequest({ ua: "Googlebot/2.1" }))).toBe(false);

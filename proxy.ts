@@ -174,7 +174,7 @@ export function shouldCountSurveyView(request: NextRequest): boolean {
 /**
  * True when this request is a real, countable page view for the daily
  * unique-visit metric: a top-level document GET on a public page, not a bot, not
- * `/api|/admin|/login|/_next`. (Next prefetches are already excluded by the
+ * `/api|/admin|/jarvis|/login|/_next`. (Next prefetches are already excluded by the
  * matcher; `sec-purpose` is belt-and-suspenders.) Exported for unit testing.
  */
 export function shouldCountVisit(request: NextRequest): boolean {
@@ -183,6 +183,8 @@ export function shouldCountVisit(request: NextRequest): boolean {
   if (
     path.startsWith("/api") ||
     path.startsWith("/admin") ||
+    // The team's Jarvis sign-in page, not a visitor.
+    path.startsWith("/jarvis") ||
     path.startsWith("/_next") ||
     path === "/login"
   ) {

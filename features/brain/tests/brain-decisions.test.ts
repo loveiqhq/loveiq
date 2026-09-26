@@ -30,6 +30,19 @@ const NOW = new Date("2026-09-09T14:30:00Z");
 const base = { decision: "Move report pricing to flat tiers", actor: "Eman Cickusic" };
 
 describe("buildDecisionRow", () => {
+  it("names a signed-in recorder, and says so in the text only when it is someone else", () => {
+    const other = buildDecisionRow({ ...base, recordedBy: "Mark Oldenburg" }, NOW);
+    expect(other.meta).toMatchObject({ actor: "Eman Cickusic", recorded_by: "Mark Oldenburg" });
+    expect(other.body).toContain("by Eman Cickusic.\nRecorded by Mark Oldenburg.");
+    const self = buildDecisionRow({ ...base, recordedBy: "Eman Cickusic" }, NOW);
+    expect(self.meta).toMatchObject({ recorded_by: "Eman Cickusic" });
+    expect(self.body).not.toContain("Recorded by");
+    // On the shared token nobody is named, and the id does not change.
+    const shared = buildDecisionRow(base, NOW);
+    expect(shared.meta).not.toHaveProperty("recorded_by");
+    expect(other.source_id).toBe(shared.source_id);
+  });
+
   /**
    * THE ID IS A CONTENT HASH, AND THAT IS THE WHOLE IDEMPOTENCY STORY.
    *
