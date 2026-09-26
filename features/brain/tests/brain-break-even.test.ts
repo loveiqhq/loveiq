@@ -136,7 +136,10 @@ describe("break_even: where it stands", () => {
           }
         : {}
     );
-    expect(await text({ days: 10 })).toContain("Read with care: 1 purchase is too few to trust");
+    const one = await text({ days: 10 });
+    expect(one).toContain("Read with care: 1 purchase is too few to trust");
+    // One purchase is its own average: nothing props the divisor up.
+    expect(one).toContain("- They paid EUR 25.00 on average, EUR 25.00 in all.");
   });
 
   it("borrows the average order from 180 days when nobody paid in the window, and says so", async () => {
