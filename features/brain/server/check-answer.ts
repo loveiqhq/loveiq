@@ -126,9 +126,9 @@ export function atomsIn(sentence: string): Atom[] {
 /** A figure is in a source when a number there rounds to it: "3.3%" is confirmed by "3.28%". */
 function holdsNumber(source: Array<{ value: number; decimals: number }>, a: NumberAtom): boolean {
   const f = 10 ** a.decimals;
-  return source.some(
-    (s) => s.decimals >= a.decimals && Math.round(s.value * f) / f === Math.round(a.value * f) / f
-  );
+  // A source figure with fewer places can never round to a more precise answer, since
+  // trailing zeros are already stripped, so no separate precision check is needed.
+  return source.some((s) => Math.round(s.value * f) / f === Math.round(a.value * f) / f);
 }
 
 /** The source figures nearest a missing one, to show a rounding slip or a typo at a glance. */

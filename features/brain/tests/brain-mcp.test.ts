@@ -1363,6 +1363,8 @@ describe("/api/mcp", () => {
      */
     it("keeps the Night Shift's researcher to read-only tools, with every writing tool denied", async () => {
       const { RESEARCH_TOOLS, WRITE_TOOLS } = await import("@features/brain/server/night-shift");
+      // It checks its own draft before replying, so the checker must be on its list.
+      expect(RESEARCH_TOOLS).toContain("check_answer");
       const byName = new Map(TOOLS.map((t) => [t.name, t]));
       for (const t of RESEARCH_TOOLS) {
         expect(byName.get(t)?.annotations?.readOnlyHint, t).toBe(true);

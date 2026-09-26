@@ -67,6 +67,11 @@ describe("check_answer: what it does not pretend to check", () => {
     expect(atomsIn("It scored 7/10.").map((a) => a.raw)).toEqual(["10"]);
   });
 
+  it("treats a word or two in quotes as a term, not a quotation", () => {
+    expect(atomsIn('We call it the "postponed list" internally.')).toEqual([]);
+    expect(atomsIn('He said "ship it on Monday".').map((a) => a.kind)).toEqual(["quote"]);
+  });
+
   it("calls figures with no source given uncited", () => {
     const r = checkAnswer("We spent EUR 1,196.96 on ads.", []);
     expect(r.uncited).toBe(1);
