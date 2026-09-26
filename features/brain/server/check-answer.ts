@@ -71,18 +71,12 @@ const ISO_DAY = /\b(\d{4})-(\d{2})-(\d{2})\b/g;
 const NUMBER = /(?:€\s?|EUR\s?)?-?\d[\d,]*(?:\.\d+)?\s?%?/g;
 const QUOTE = /["“]([^"”]{8,300})["”]/g;
 
-/** Decimal places that carry information: "70.00" is as precise as "70", "3.30" as "3.3". */
-const placesOf = (digits: string) =>
-  digits.includes(".") ? digits.split(".")[1]!.replace(/0+$/, "").length : 0;
-
 /** Numbers in a text, normalised: "13,245" and "13245" are the same figure. */
-function numbersIn(text: string): Array<{ value: number; decimals: number }> {
-  const out: Array<{ value: number; decimals: number }> = [];
+function numbersIn(text: string): number[] {
+  const out: number[] = [];
   for (const m of text.replace(ID, " ").replace(ISO_DAY, " ").matchAll(NUMBER)) {
-    const digits = m[0].replace(/€|EUR|%|\s/g, "").replace(/,/g, "");
-    const value = Number(digits);
-    if (!Number.isFinite(value)) continue;
-    out.push({ value, decimals: placesOf(digits) });
+    const value = Number(m[0].replace(/€|EUR|%|\s/g, "").replace(/,/g, ""));
+    if (Number.isFinite(value)) out.push(value);
   }
   return out;
 }
@@ -114,7 +108,7 @@ export function atomsIn(sentence: string): Atom[] {
     const digits = raw.replace(/€|EUR|%|\s/g, "").replace(/,/g, "");
     const value = Number(digits);
     if (!Number.isFinite(value) || digits === "") continue;
-    const decimals = placesOf(digits);
+    const decimals = digits.includes(".") ? digits.split(".")[1]!.length : 0;
     // A bare single digit is in almost every document, so finding it proves nothing: it
     // is left unchecked rather than reported as confirmed. Percentages and amounts stay.
     if (Math.abs(value) < 10 && decimals === 0 && !/%|€|EUR/.test(raw)) continue;
@@ -123,18 +117,19 @@ export function atomsIn(sentence: string): Atom[] {
   return atoms;
 }
 
-/** A figure is in a source when a number there rounds to it: "3.3%" is confirmed by "3.28%". */
-function holdsNumber(source: Array<{ value: number; decimals: number }>, a: NumberAtom): boolean {
+/**
+ * A figure is in a source when a number there rounds to it at the answer's own places:
+ * "3.3%" is confirmed by "3.28%", and "EUR 70.00" by "70".
+ */
+function holdsNumber(source: number[], a: NumberAtom): boolean {
   const f = 10 ** a.decimals;
-  // A source figure with fewer places can never round to a more precise answer, since
-  // trailing zeros are already stripped, so no separate precision check is needed.
-  return source.some((s) => Math.round(s.value * f) / f === Math.round(a.value * f) / f);
+  return source.some((v) => Math.round(v * f) / f === Math.round(a.value * f) / f);
 }
 
 /** The source figures nearest a missing one, to show a rounding slip or a typo at a glance. */
-function nearest(source: Array<{ value: number }>, a: NumberAtom): number[] {
+function nearest(source: number[], a: NumberAtom): number[] {
   const scale = Math.max(Math.abs(a.value), 1);
-  return [...new Set(source.map((s) => s.value))]
+  return [...new Set(source)]
     .filter((v) => v !== a.value && Math.abs(v - a.value) / scale <= 0.25)
     .sort((x, y) => Math.abs(x - a.value) - Math.abs(y - a.value))
     .slice(0, 2);
