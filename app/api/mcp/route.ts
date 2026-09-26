@@ -86,6 +86,14 @@ import {
   renderMetric,
   type Reading,
 } from "@features/brain/server/jumps";
+import {
+  CHART_METRICS,
+  DEFAULT_DAYS,
+  MAX_DAYS,
+  MIN_DAYS,
+  chartPng,
+  drawChart,
+} from "@features/brain/server/chart";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { scheduleAfterResponse } from "@shared/http/after-response";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
@@ -1683,6 +1691,41 @@ export const TOOLS = [
             "that was outside its usual range that day.",
         },
       },
+    },
+  },
+  {
+    name: "show_chart",
+    title: "Chart a number over time",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "Draw one or two of the site's daily numbers as a line chart, in the Slack digest's style, " +
+      "and return the picture, a link to it and the numbers behind it. Use it whenever a trend is " +
+      "easier to see than to read: 'show me visitors this month', 'chart the share of report " +
+      "openers who pay since August', 'revenue against Google Ads spend'. The link opens in any " +
+      "browser without a login and can be pasted into a doc or a deck. Two numbers share one " +
+      "axis, so they must be the same kind: two counts, two shares or two amounts in EUR. Days " +
+      "are UTC, and a share is left as a gap on a day with too few people to read it.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        metrics: {
+          type: "array",
+          items: { type: "string", enum: CHART_METRICS.map((m) => m.id) },
+          minItems: 1,
+          maxItems: 2,
+          description:
+            "One or two of: " + CHART_METRICS.map((m) => `${m.id} (${m.label})`).join(", ") + ".",
+        },
+        days: {
+          type: "number",
+          description: `How many days, ${MIN_DAYS} to ${MAX_DAYS}, ending on \`until\`. Default ${DEFAULT_DAYS}.`,
+        },
+        until: {
+          type: "string",
+          description: "The last day, YYYY-MM-DD. Default: yesterday, the last whole day.",
+        },
+      },
+      required: ["metrics"],
     },
   },
   {
@@ -4986,6 +5029,28 @@ async function callTool(
     );
   }
 
+  if (name === "show_chart") {
+    let outcome;
+    try {
+      outcome = await drawChart({ metrics: args.metrics, days: args.days, until: args.until });
+    } catch (err) {
+      logger.error({ err }, "brain: show_chart failed");
+      return textResult(
+        "The daily numbers could not be read right now. This is an outage, not a flat line.",
+        true
+      );
+    }
+    if (!outcome.ok) return textResult(outcome.message, true);
+    stats.sourceCount = 1;
+    const png = await chartPng(outcome.url);
+    if (!png) {
+      return textResult(
+        `${outcome.text}\n\nThe picture could not be attached just now; the link above draws it.`
+      );
+    }
+    return imageResult(outcome.text, [{ data: png, mimeType: "image/png" }]);
+  }
+
   if (name === "explain_change") {
     const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
     const today = new Date().toISOString().slice(0, 10);
@@ -5383,6 +5448,9 @@ export const MCP_INSTRUCTIONS =
   "WHY A NUMBER MOVED: explain_change says whether a day's numbers were outside their usual " +
   "range and splits each move by source, channel, engagement, ad spend and what shipped, before " +
   "anyone explains a jump from memory.\n\n" +
+  "CHARTS: show_chart draws one or two daily numbers as a line in the digest's style and returns " +
+  "the picture, a link that opens in any browser and pastes into a doc or a deck, and the " +
+  "numbers behind it. Use it when someone wants to see a trend rather than read it.\n\n" +
   'WHAT CHANGED, in plain English: what_shipped lists the "For Marcus:" line of every change ' +
   "that reached main, newest first, read live from the repository.\n\n" +
   "REPORT COPY: get_context_pack gives exactly what one chapter for one archetype needs before " +

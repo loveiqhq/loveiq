@@ -19,6 +19,7 @@ a DM gets a one-line pointer to Claude, while channel messages are still indexed
 | "why did we stop the dark landing page test"               | Recorded call notes and the Slack day it was discussed both carry the reasoning         |
 | "why is the data retention purge turned off"               | `CLAUDE.md` records deliberately-deferred work and the reason                           |
 | "what does `STRIPE_COUPON_100` do"                         | The whole environment-variable table is indexed                                         |
+| "show me visitors this month as a chart"                   | `show_chart` draws the digest's chart and links it, so it pastes into a doc or a deck   |
 
 **It is weak at, and will say so rather than guess:**
 
@@ -358,7 +359,7 @@ When registering any callback — Resend, Stripe, Slack — paste the `www`
 host, then confirm rows actually arrive. An endpoint that returns 401 to an
 unsigned probe proves it is deployed, not that it is reachable by the sender.
 
-**Twenty-nine tools, in three groups.** Twenty-one read, eight write. The write ones act
+**Thirty tools, in three groups.** Twenty-two read, eight write. The write ones act
 immediately and are described at the bottom of this section — a teammate who reads
 only the first table will not know the brain can send an email.
 
@@ -374,6 +375,7 @@ only the first table will not know the brain can send an email.
 | `browse_context`         | Everything matching a filter, in date order and without ranking: every meeting note, every open task, everything learned since Tuesday. Use when you want a list, not an answer                                                                                                                                                                                                                                                                                             |
 | `what_shipped`           | What changed, as the plain-English "For Marcus:" line every change to main carries, newest first, with date and pull request. Read live from GitHub, never indexed                                                                                                                                                                                                                                                                                                          |
 | `explain_change`         | Whether a day's numbers were outside their usual range (each against the 28 days before, median and spread) and where each move came from: traffic source or GA4 channel, the two halves of a rate, engagement, GA4 against our own count, ad spend and campaigns, what shipped and what was decided. The likely causes are fixed rules over numbers, never a model's guess. The anomaly watcher writes yesterday's unusual numbers as a notice between 07:00 and 11:00 UTC |
+| `show_chart`             | One or two of the site's daily numbers as a line chart in the digest's style: every metric `explain_change` reads, plus revenue (payment ledger, net of refunds) and Google Ads spend (a gap outside the days the ad data covers, never a zero), 7 to 180 days. Returns the picture, a signed link to it that opens in any browser without a login, and the numbers. Two metrics share one axis, so they must be the same kind                                              |
 | `comment_asks`           | Every ask left in a Figma or Google Docs comment: who asked whom, for what, a link, and whether it is still open, checked live. Figma is read from its API for every file whose link was shared somewhere the brain reads; Google from each person's notification emails, checked against Drive as that person. Says what it could not read                                                                                                                                 |
 | `decision_conflicts`     | Recorded decisions that may not both stand: one may replace the other, or they give different answers to the same question. Found nightly by the decision radar, each pair proposed and then checked on its own by a model, so each is a question for a person                                                                                                                                                                                                              |
 | `brain_health`           | How the brain itself is doing over 1 to 30 days, against the days before: use by tool, weak and empty searches and the questions it could not answer well, failed calls and error messages, speed, the weekly test batteries with what fails, and every brain job that failed or stopped running                                                                                                                                                                            |

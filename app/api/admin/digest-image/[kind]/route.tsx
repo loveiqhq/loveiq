@@ -102,6 +102,7 @@ const VALID_KINDS = new Set([
   "dropout-funnel",
   "dropout-by-arm",
   "conversion-by-arm",
+  "metric-trend",
   "reactivation-email",
 ]);
 
@@ -167,7 +168,7 @@ interface DropoutPayload {
  * are aligned question labels; `first`/`last` are drop-off % per index.
  */
 interface DropoutByArmPayload {
-  kind: "dropout-by-arm" | "conversion-by-arm";
+  kind: "dropout-by-arm" | "conversion-by-arm" | "metric-trend";
   windowLabel?: string;
   labels: string[];
   /**
@@ -195,6 +196,13 @@ interface DropoutByArmPayload {
    * come from `armLabel`, so nobody in Slack meets a raw value like `white_prev`.
    */
   title?: string;
+  /**
+   * What follows every value on the axis, the end labels and the default headline: "%"
+   * unless the payload says "" for a count or an amount. `metric-trend` (the brain's
+   * show_chart) draws counts and euros on this renderer too. Only those two values are
+   * honoured, so the digest's payloads, which never send it, render byte-identically.
+   */
+  unit?: string;
   legendFirst?: string;
   legendLast?: string;
   headline?: string;
@@ -1218,6 +1226,8 @@ export function renderDropoutByArm(p: DropoutByArmPayload): {
   const colFirst = asHex(p.colorFirst, COLORS.accentBlue);
   const colLast = asHex(p.colorLast, COLORS.accentOrange);
   const title = p.title ?? "Where users quit by arm — email first vs last";
+  const unit = p.unit === "" ? "" : "%";
+  const withUnit = (v: number) => `${fmtAxis(v)}${unit}`;
   const n = Math.max(first.length, last.length);
 
   // Full-length arrays of nulls are "no data" just as much as empty arrays are.
@@ -1422,7 +1432,7 @@ export function renderDropoutByArm(p: DropoutByArmPayload): {
       }}
     >
       <div style={{ display: "flex", fontSize: 15, fontWeight: 700, color: COLORS.text }}>
-        {`${fmtAxis(value)}%`}
+        {`${withUnit(value)}`}
       </div>
       <div style={{ display: "flex", fontSize: 11, color: COLORS.textMuted, lineHeight: 1.1 }}>
         {name}
@@ -1456,8 +1466,8 @@ export function renderDropoutByArm(p: DropoutByArmPayload): {
   // Any value whose label is not on the plot still has to be readable somewhere —
   // but only for arms that HAVE a value. An arm with no data contributes nothing.
   const carried: string[] = [];
-  if (hasFirst && !showFirstLabel) carried.push(`${shortFirst} ${fmtAxis(endFirst)}%`);
-  if (hasLast && !showLastLabel) carried.push(`${shortLast} ${fmtAxis(endLast)}%`);
+  if (hasFirst && !showFirstLabel) carried.push(`${shortFirst} ${withUnit(endFirst)}`);
+  if (hasLast && !showLastLabel) carried.push(`${shortLast} ${withUnit(endLast)}`);
   const footnote = carried.length > 0 ? `${carried.join(" · ")} — ${footnoteBase}` : footnoteBase;
 
   const element = chartShell(
@@ -1504,7 +1514,7 @@ export function renderDropoutByArm(p: DropoutByArmPayload): {
                 color: COLORS.textMuted,
               }}
             >
-              {`${fmtAxis(value)}%`}
+              {`${withUnit(value)}`}
             </div>
           );
         })}
@@ -1589,12 +1599,12 @@ export function renderDropoutByArm(p: DropoutByArmPayload): {
       >
         {p.headline ??
           (solo
-            ? `Latest — ${fmtAxis(endFirst)}%`
+            ? `Latest — ${withUnit(endFirst)}`
             : hasFirst && hasLast
-              ? `Latest — ${fmtAxis(endFirst)}% vs ${fmtAxis(endLast)}%`
+              ? `Latest — ${withUnit(endFirst)} vs ${withUnit(endLast)}`
               : hasFirst
-                ? `Latest — ${fmtAxis(endFirst)}% (${shortLast}: no data yet)`
-                : `Latest — ${fmtAxis(endLast)}% (${shortFirst}: no data yet)`)}
+                ? `Latest — ${withUnit(endFirst)} (${shortLast}: no data yet)`
+                : `Latest — ${withUnit(endLast)} (${shortFirst}: no data yet)`)}
       </div>
       <div style={{ display: "flex", marginTop: 5, fontSize: 12, color: COLORS.textMuted }}>
         {footnote}
@@ -1621,6 +1631,7 @@ function renderForKind(
       return renderDropoutBars(payload as DropoutPayload);
     case "dropout-by-arm":
     case "conversion-by-arm":
+    case "metric-trend":
       return renderDropoutByArm(payload as DropoutByArmPayload);
     case "reactivation-email":
       return renderStageConversion(payload as StageConversionPayload);
