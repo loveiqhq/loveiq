@@ -1502,6 +1502,30 @@ describe("ReportPage", () => {
   // Review 24.09: "the top part is dark on my iPhone (the background to the time and
   // battery)". Safari 15-18 tints the status bar from `theme-color`, and without one it
   // keeps the site's dark shell (#0b0613) it painted while the report was loading.
+  // Final review 26.09: the API built V4's chapters for every request, handing the
+  // default report's locked readers paid copy they are never shown. The page says
+  // when it is V4, and the API builds them only then.
+  describe("V4 — asks the API for its chapters, and nothing else does (final review 26.09)", () => {
+    afterEach(() => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+    const lastRequest = () => mockUseReportData.mock.calls.at(-1)?.[0] as { v4?: boolean };
+
+    it("tells the data hook when the page is V4", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      render(<ReportPage />);
+      expect(lastRequest().v4).toBe(true);
+    });
+
+    it.each(["", "v2=1", "v3=1"])("does not on %j", (query) => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams(query));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+      render(<ReportPage />);
+      expect(lastRequest().v4).toBe(false);
+    });
+  });
+
   describe("V4 status bar", () => {
     const themeColor = () =>
       document.head.querySelector('meta[name="theme-color"]')?.getAttribute("content") ?? null;

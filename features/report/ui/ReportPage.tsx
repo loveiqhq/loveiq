@@ -2580,6 +2580,9 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
     // production, and /api/report is untouched either way.
     preview: searchParams.get("preview") === "1",
     previewPlan: searchParams.get("plan"),
+    // Only the V4 page asks for V4's chapters: no other version draws them, and a
+    // locked reader's copy of them is the real one under the blur (final review 26.09).
+    v4: isV4,
   });
   // Pass both identifiers — the hook prefers whichever is present and the API
   // resolves the user server-side. Token is the durable identifier (works
