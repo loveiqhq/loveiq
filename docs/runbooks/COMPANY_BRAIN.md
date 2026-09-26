@@ -379,6 +379,22 @@ https://www.loveiq.org`.
   the weekly health report, the test batteries and the session hook. Its calls log as
   `actor = 'shared'`. Once everyone has connected as themselves, rotate it so only
   those jobs hold it.
+- **Codes are eight digits** here (`mailer_otp_length = 8`). The sign-in accepts 6 to
+  10, whatever Supabase is set to. It assumed six at first, and the first live run
+  refused every real code.
+- **A client that asks for `openid` cannot finish signing in.** Supabase can only
+  mint an OpenID ID token with asymmetric signing keys, and this project still signs
+  with the legacy HS256 secret, so the token step fails with "Error generating ID
+  token". Claude does not ask for it: Claude Code requests the resource's advertised
+  scope (`email`) plus `offline_access`, which was verified live on 2026-09-26. The 401
+  and the metadata document both say `email`. To support `openid`, move the project to
+  asymmetric signing keys (Settings → JWT keys → migrate, then rotate). First make
+  `brain-embed` check its own caller, though: Supabase warns that rotating can break an
+  Edge Function whose "Verify JWT" setting is on, as `brain-embed`'s is.
+- **Checked end to end against production on 2026-09-26** by a script that plays
+  Claude: discovery, registration, the emailed code, consent, a stranger's app refused,
+  the token exchange, calls logged under the person, refresh, and a signed-out session
+  refused after the minute of trust. All 28 checks passed.
 
 **Use `www`, not the apex.** `loveiq.org` 308-redirects to `www`, and a redirect
 drops the `Authorization` header, so the apex presents as a confusing 401 with a
