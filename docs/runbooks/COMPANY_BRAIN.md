@@ -1041,12 +1041,15 @@ What the brain notices on its own reaches people in Claude, not only in a Slack 
   runs only for someone with `LOVEIQ_MCP_TOKEN` in their environment or `.env.local`, and
   prints nothing on any error or after five seconds.
 
-### The two jobs that run on a laptop, not on Vercel
+### The job that runs on a laptop, not on Vercel
 
-WhatsApp and the embedding backfill are driven by launchd agents on Eman's machine,
-from a SEPARATE checkout at `~/.loveiq-brain` — `org.loveiq.whatsapp-sync` hourly and
-`org.loveiq.reembed` every fifteen minutes. Neither appears in `vercel.json`, neither
-writes a `cron_run` row, and both stop when the laptop is off.
+WhatsApp is driven by a launchd agent on Eman's machine, `org.loveiq.whatsapp-sync`,
+hourly, from a SEPARATE checkout at `~/.loveiq-brain`. It does not appear in
+`vercel.json`, writes no `cron_run` row, and stops when the laptop is off.
+
+The embedding backfill ran the same way (`org.loveiq.reembed`, every fifteen minutes)
+until 2026-09-26. It is now the `brain-embed.yml` GitHub job, which Vercel's clock
+starts every hour (see "Keeping up" under Embeddings), and the launchd agent is retired.
 
 **That checkout silently went 365 commits behind**, which is how it was found on
 2026-09-17: the corpus redaction had shipped a week earlier, and every hour this copy
@@ -1607,12 +1610,21 @@ and Gmail lanes, the nightly job, and the push-based Slack route are all picked 
 without any of those knowing embeddings exist. Measured growth is ~3 new chunks an
 hour against roughly 7 a run.
 
-**If the ops channel says chunks are waiting for embeddings**, the 15-minute lane
-has fallen behind — normally because a builder-version bump rewrote thousands of
-chunks at once, which drains at only ~670/day. Run the backfill directly:
+**A backlog drains itself within the hour.** A builder-version bump or a widened
+walk can rewrite thousands of chunks at once, which the 15-minute lane drains at only
+~670/day. So `/api/cron/start-github-jobs` starts `brain-embed.yml` every hour at :41.
+It counts the chunks with no embedding and, when there are any, runs
+`scripts/brain-embed-backfill.ts` on a GitHub runner for up to 100 minutes, a few
+thousand chunks. A bigger backlog carries on in the next hour's run, and an hour with
+nothing to embed ends after the count. A drain that embeds nothing, or errors, posts to
+#brain.
+
+**If the ops channel says chunks are waiting for embeddings**, the backlog has outlived
+that job. Look at its latest runs in GitHub Actions, or start it now:
 
 ```bash
-npx tsx scripts/brain-embed-backfill.ts
+gh workflow run brain-embed.yml -R loveiqhq/loveiq   # on a GitHub runner
+npx tsx scripts/brain-embed-backfill.ts              # or locally, with .env.local
 ````
 
 Nothing is broken while that backlog exists. Those chunks are still found

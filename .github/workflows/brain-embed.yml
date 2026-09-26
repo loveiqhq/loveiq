@@ -1,0 +1,88 @@
+name: Company Brain Embeddings
+
+# Embeds every brain chunk that has no embedding yet, whenever there is a backlog.
+#
+# brain-fast embeds a few chunks every 15 minutes, which keeps up with steady state but
+# takes hours after a bulk addition (a widened Drive walk, a re-chunk, a builder-version
+# bump), and a chunk with no embedding cannot be found by meaning. This drains such a
+# backlog in minutes. Until 2026-09-26 it ran from a launchd agent on a laptop, so it
+# stopped whenever that machine was closed.
+#
+# Started every hour at :41 by /api/cron/start-github-jobs (features/cron/server/github-jobs.ts).
+# There is no `schedule:` here, because GitHub starts this repository's scheduled jobs hours late.
+# An hour with nothing to embed ends after the count, before anything is installed.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  # Never cancel a drain in progress; a start that arrives meanwhile waits its turn.
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  embed:
+    name: Embed chunks that have none
+    runs-on: ubuntu-latest
+    # The backfill stops itself between passes after BACKFILL_BUDGET_MIN (a pass is at
+    # most nine minutes), so this is only the ceiling if a pass hangs.
+    timeout-minutes: 130
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - name: Count chunks with no embedding
+        id: count
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+            echo "::error::Supabase secrets are not set, so the brain's embeddings cannot be caught up."
+            exit 1
+          fi
+          missing=$(curl -sS --fail -m 30 -o /dev/null -D - \
+            "$SUPABASE_URL/rest/v1/brain_chunk?embedding=is.null&select=id&limit=1" \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Prefer: count=exact" | tr -d '\r' | grep -i '^content-range:' | sed 's/.*\///')
+          # A count that is not a number is a failure, never "nothing to do".
+          if ! [[ "$missing" =~ ^[0-9]+$ ]]; then
+            echo "::error::Could not read how many chunks lack an embedding (got '${missing}')."
+            exit 1
+          fi
+          echo "missing=$missing" >> "$GITHUB_OUTPUT"
+          echo "$missing chunk(s) with no embedding"
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        if: steps.count.outputs.missing != '0'
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        if: steps.count.outputs.missing != '0'
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - if: steps.count.outputs.missing != '0'
+        run: npm ci
+
+      - name: Embed
+        if: steps.count.outputs.missing != '0'
+        # Exit 0 when done, or at the budget after making progress (the next hour carries
+        # on). Non-zero when a pass embeds nothing or errors, so a stall is a failure.
+        env:
+          BACKFILL_BUDGET_MIN: "100"
+        run: npx tsx scripts/brain-embed-backfill.ts
+
+      - name: Tell the brain channel the embeddings are not catching up
+        if: failure()
+        env:
+          SLACK_BRAIN_WEBHOOK_URL: ${{ secrets.SLACK_BRAIN_WEBHOOK_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SLACK_BRAIN_WEBHOOK_URL:-}" ]; then
+            echo "::warning::SLACK_BRAIN_WEBHOOK_URL is not set, so this failure alerts nobody"
+            exit 0
+          fi
+          curl -sS --fail -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\":brain: The brain's embedding catch-up FAILED. Chunks without an embedding still answer by their words but cannot be found by meaning until this runs clean. ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" \
+            "$SLACK_BRAIN_WEBHOOK_URL"
