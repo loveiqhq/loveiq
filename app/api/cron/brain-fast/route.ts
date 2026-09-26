@@ -221,10 +221,12 @@ export async function GET(request: Request) {
      * words, which is exactly how the legal pages measured as "0 of 5 unreachable"
      * twenty minutes after they were indexed.
      *
-     * SO: after any bulk addition — a widened walk, a re-chunk, a builder-version
-     * bump — drain it deliberately with `scripts/brain-embed-backfill.ts` rather
-     * than waiting. It cleared those 238 in five minutes against the eight hours
-     * this loop would have taken. And do not measure retrieval until
+     * SO: a bulk addition — a widened walk, a re-chunk, a builder-version bump — is
+     * drained by `scripts/brain-embed-backfill.ts`, which cleared those 238 in five
+     * minutes against the eight hours this loop would have taken. The brain-embed
+     * GitHub job runs it within the hour, started by /api/cron/start-github-jobs; to
+     * start it now, `gh workflow run brain-embed.yml -R loveiqhq/loveiq`. And do not
+     * measure retrieval until
      * `select count(*) from brain_chunk where embedding is null` reads zero.
      */
     try {
@@ -257,7 +259,9 @@ export async function GET(request: Request) {
           "embed:backlog",
           `:brain: ${embed.remaining} chunks are waiting for embeddings, which is more ` +
             `than the 15-minute job drains. Search still answers, but it cannot match ` +
-            `those by meaning yet. Run \`npx tsx scripts/brain-embed-backfill.ts\` to catch up.`
+            `those by meaning yet. The hourly brain-embed job should catch up; if this ` +
+            `persists, check its runs in GitHub Actions, or start it with ` +
+            `\`gh workflow run brain-embed.yml -R loveiqhq/loveiq\`.`
         );
       }
     } catch (err) {

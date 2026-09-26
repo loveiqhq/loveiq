@@ -11,8 +11,9 @@
  * :41, and their workflows carry no `schedule:` of their own, so GitHub cannot start a
  * late duplicate.
  *
- * The brain's jobs (brain-daily.yml) are not here: their times were chosen to land after
- * GitHub's delay, so starting them on time would move the brief to the small hours.
+ * The brain's daily jobs (brain-daily.yml) are not here: their times were chosen to land
+ * after GitHub's delay, so starting them on time would move the brief to the small hours.
+ * The brain's embedding catch-up (brain-embed.yml) is, hourly: it has no time of day.
  */
 
 export interface GithubJob {
@@ -29,6 +30,7 @@ export const CLOCK_WORKFLOWS = [
   "survey-db-sync.yml",
   "health-monitor.yml",
   "ux-digest-audit.yml",
+  "brain-embed.yml",
 ] as const;
 
 /** The jobs to start at `at`, a run of the hourly :41 cron. Times are UTC. */
@@ -42,6 +44,8 @@ export function jobsDue(at: Date): GithubJob[] {
       workflow: "ux-review-verify.yml",
       inputs: { on_time: "true", ...(monday && hour === 10 ? { weekly: "true" } : {}) },
     },
+    // Embeds any chunks brain-fast has not caught up with; ends at once when there are none.
+    { workflow: "brain-embed.yml" },
   ];
   if (monday && hour === 4) jobs.push({ workflow: "probe-guard.yml", inputs: { which: "weekly" } });
   if (hour === 5) jobs.push({ workflow: "probe-guard.yml", inputs: { which: "daily" } });

@@ -3,17 +3,29 @@
  *
  * Restartable: it selects on `embedding IS NULL`, so interrupting it loses only
  * the batch in flight. Safe to run while ingesters are writing.
+ *
+ * BACKFILL_BUDGET_MIN, set by the hourly brain-embed job, stops it between passes once
+ * that many minutes have gone, with exit 0: it made progress, and the next run carries
+ * on. Without it (a run by hand) it keeps going until done or stuck.
  */
 async function main() {
   const { embedMissing } = await import("@features/brain/server/embed");
   const started = Date.now();
+  const budgetMin = Number(process.env.BACKFILL_BUDGET_MIN) || 0;
+  let left = -1;
   for (let pass = 1; pass <= 60; pass++) {
+    if (budgetMin > 0 && pass > 1 && Date.now() - started > budgetMin * 60_000) {
+      return console.log(
+        `  stopped at the ${budgetMin}-minute budget with ${left} left; the next run carries on`
+      );
+    }
     const t0 = Date.now();
     const r = await embedMissing(() => Date.now() - t0 > 540_000, 50);
     console.log(
       `  pass ${pass}: embedded ${r.embedded}, ${r.remaining} left ` +
         `(${Math.round((Date.now() - t0) / 1000)}s, total ${Math.round((Date.now() - started) / 60000)}m)`
     );
+    left = r.remaining;
     if (r.complete) return console.log("  done — every chunk has an embedding");
     // Stopping early leaves chunks the search cannot match by meaning. The semantic
     // term is weighted 8, so an unembedded row scores up to 2.4 low and simply does

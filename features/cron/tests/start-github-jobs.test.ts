@@ -53,6 +53,14 @@ describe("when each GitHub job is due", () => {
     }
   });
 
+  it("checks for chunks with no embedding every hour", () => {
+    for (let h = 0; h < 24; h += 1) {
+      expect(workflows(`2026-09-29T${String(h).padStart(2, "0")}:41:00Z`), `hour ${h}`).toContain(
+        "brain-embed.yml"
+      );
+    }
+  });
+
   it("scores the scanners once a week, Mondays at 10:41", () => {
     const monday10 = jobsDue(at("2026-09-28T10:41:00Z"));
     expect(monday10.find((j) => j.workflow === "ux-review-verify.yml")?.inputs).toEqual({
@@ -75,8 +83,8 @@ describe("when each GitHub job is due", () => {
       expect.arrayContaining(["health-monitor.yml", "ux-digest-audit.yml"])
     );
     expect(workflows("2026-09-29T10:41:00Z")).toContain("ux-digest-audit.yml");
-    // A quiet hour starts the verifier and nothing else.
-    expect(workflows("2026-09-29T15:41:00Z")).toEqual(["ux-review-verify.yml"]);
+    // A quiet hour starts only the hourly jobs.
+    expect(workflows("2026-09-29T15:41:00Z")).toEqual(["ux-review-verify.yml", "brain-embed.yml"]);
   });
 
   it("runs the heavy weekly probes on Monday at 04:41, not every day", () => {
