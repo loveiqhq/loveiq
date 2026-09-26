@@ -2019,7 +2019,7 @@ describe("/api/mcp", () => {
         expect(text).toContain("OUTSIDE YOUR FILTER (sources=slack)");
         expect(text).toContain("  • notion/task:better (2026-09-01)");
         expect(text).toContain("  • drive/doc:also\n");
-        // Already on the page, or no better than it: not offered.
+        // Under the floor, like everything already on the page: not offered.
         expect(text).not.toContain("  • slack/day:2026-09-20");
         expect(text).not.toContain("  • drive/doc:weak");
         const outside = text.slice(text.indexOf("OUTSIDE YOUR FILTER")).split("\n\n")[0]!;

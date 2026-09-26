@@ -2531,13 +2531,11 @@ export function outsideTheFilter(
     sourceId: string;
     contentScore: number;
     periodEnd?: string | null;
-  }>,
-  shown: Array<{ sourceId: string }>
+  }>
 ): string {
-  const seen = new Set(shown.map((c) => c.sourceId));
-  const better = wide
-    .filter((c) => c.contentScore >= RELEVANCE_FLOOR && !seen.has(c.sourceId))
-    .slice(0, 3);
+  // Nothing on the page can reappear here: it fires only when every row shown scored
+  // under the floor, and it offers only rows at or above it.
+  const better = wide.filter((c) => c.contentScore >= RELEVANCE_FLOOR).slice(0, 3);
   if (better.length === 0) return "";
   return (
     `\n\nOUTSIDE YOUR FILTER (${applied.join(", ")}): the same question with no filter ` +
@@ -3045,7 +3043,7 @@ async function callTool(
             `or widen them, before concluding the record does not exist. Note that any ` +
             `since/until range excludes repository documentation, which carries no date, ` +
             `and that meta values match EXACTLY.` +
-            outsideTheFilter(applied, await unfiltered(), [])
+            outsideTheFilter(applied, await unfiltered())
         );
       }
       return textResult(
@@ -3192,7 +3190,7 @@ async function callTool(
           `if one of them plainly does answer it, use it.\n`
         : "";
     const outside =
-      weakMatch && applied.length > 0 ? outsideTheFilter(applied, await unfiltered(), chunks) : "";
+      weakMatch && applied.length > 0 ? outsideTheFilter(applied, await unfiltered()) : "";
     /**
      * WHAT THE BRAIN NOTICED WITHOUT BEING ASKED.
      *
