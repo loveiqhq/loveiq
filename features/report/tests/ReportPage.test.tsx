@@ -935,6 +935,39 @@ describe("ReportPage", () => {
     });
   });
 
+  // Review 26.09: "The headline changed to 'A Snapshot of what you will learn'" (1:766).
+  describe("V4 — the Snapshot's heading names its rating", () => {
+    afterEach(() => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+
+    it("names the Snapshot's feedback buttons after the new heading under ?v4=1", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      const { container } = render(<ReportPage />);
+
+      expect(
+        container.querySelector(
+          '#snapshot [aria-label="This resonates: A Snapshot of what you will learn"]'
+        )
+      ).not.toBeNull();
+    });
+
+    it("leaves ?v3=1 on its own label", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v3=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      const { container } = render(<ReportPage />);
+
+      expect(
+        container.querySelector(
+          '#snapshot [aria-label="This resonates: Five things this report found"]'
+        )
+      ).not.toBeNull();
+    });
+  });
+
   // Review 24.09: "Double Check the Chapter order. Challenges in Partnership is the first
   // chapter in Part V."
   describe("V4 — Challenges in Partnership opens Part V", () => {

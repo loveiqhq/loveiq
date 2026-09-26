@@ -43,6 +43,7 @@ import V4TopThreeSection from "./v3/V4TopThreeSection";
 import { report3ArchetypeCard } from "@/data/report3-archetype-card";
 import type { ArchetypeName } from "@features/report/server/archetypeSlug";
 import {
+  REPORT_V4_NUDGES_HEADING,
   REPORT_V4_PART_DIVIDER_BY_SECTION,
   REPORT_V4_SUMMARY,
   REPORT_V4_TOP_THREE_HEADING,
@@ -1176,7 +1177,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                             data-report-section="true"
                             className="report-section is-visible rv3-snap"
                           >
-                            {/* V4 draws Figma 1:763's "What you will discover" over
+                            {/* V4 draws Figma 1:763's "A Snapshot of what you will learn" over
                              * the chapter nudges (663:1089), which replaced the
                              * Snapshot for every archetype — the rows are ways into
                              * chapters, not findings — and bring their own heading.
@@ -1191,7 +1192,7 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                             <div className="rv3-chapter__feedback">
                               {renderFeedback(
                                 "findings",
-                                isV4 ? "What you will discover" : "Five things this report found"
+                                isV4 ? REPORT_V4_NUDGES_HEADING : "Five things this report found"
                               )}
                             </div>
                           </section>

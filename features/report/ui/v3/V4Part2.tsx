@@ -72,7 +72,7 @@ const V4Part2: FC<Props> = ({ archetype, matchStrength, card, initialDeckIndex =
       {/* 1:736 — omitted rather than faked for an archetype Mark has not written. */}
       {summary ? <V4SummaryChapter archetype={archetype} summary={summary} /> : null}
 
-      {/* 1:763 — "What you will discover" over the chapter nudges (663:1089). */}
+      {/* 1:763 — "A Snapshot of what you will learn" over the chapter nudges (663:1089). */}
       <V4ChapterNudges />
 
       {/* 1:833 */}

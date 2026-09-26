@@ -9,7 +9,7 @@ import { REPORT_V4_CHAPTERS } from "@features/report/ui/v3/reportV3Nav";
 import { REPORT_V4_NUDGES } from "@/data/report3-archetype-page";
 
 /**
- * Part II's "What you will discover" — Figma 1:763: the H2 1:766 over the chapter
+ * Part II's "A Snapshot of what you will learn" — Figma 1:763: the H2 1:766 over the chapter
  * nudges panel. Four rows, each a way into a chapter: its part, its name, a serif
  * question, and — open — a line of support and "Read full chapter".
  *
@@ -37,9 +37,11 @@ afterEach(() => {
 });
 
 describe("V4ChapterNudges — 663:1089", () => {
-  it("heads the panel 'What you will discover', as 1:766 now reads", () => {
+  it("heads the panel 'A Snapshot of what you will learn', as 1:766 reads since 26.09", () => {
     render(<V4ChapterNudges />);
-    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("What you will discover");
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe(
+      "A Snapshot of what you will learn"
+    );
   });
 
   it("lists four chapters and their part, from V4's own order — no 'Learn in', no number", () => {

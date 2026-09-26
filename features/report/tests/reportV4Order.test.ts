@@ -135,7 +135,7 @@ describe("the V4 chapter order", () => {
       "Part VI",
     ]);
     expect(REPORT_V4_NAV_PARTS[0]!.items.find((i) => i.id === "snapshot")!.label).toBe(
-      "What you will discover"
+      "A Snapshot of what you will learn"
     );
     // ?v3=1 keeps its own.
     expect(REPORT_V3_NAV_PARTS.map((p) => p.part)).toEqual([
