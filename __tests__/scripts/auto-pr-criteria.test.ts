@@ -107,6 +107,19 @@ describe("auto-PR criteria", () => {
     }
   });
 
+  it("measures C1 on a desktop reader at their own width, where the chapter bar exists", () => {
+    // The bar shows below 1280px only, and Playwright's "Desktop Chrome" is 1280 wide,
+    // so a C1 claim from a 1241px Chromebook (2026-09-25) came back "could not
+    // measure": the one criterion here that opens a PR could never see that band.
+    const src = readFileSync(
+      resolve(process.cwd(), "scripts/probes/verify-nav-heading-clearance.mjs"),
+      "utf8"
+    );
+    expect(src).toMatch(/process\.env\.WIDTHS/);
+    expect(src).toMatch(/!preset\.isMobile && readerWidth > 0/);
+    expect(src).toMatch(/viewport: \{ \.\.\.preset\.viewport, width: readerWidth \}/);
+  });
+
   it("holds the session-appended probe to the same rules", () => {
     // verify-dead-click-target.mjs is added by the SESSION, not listed under a
     // criterion, so criteriaProbes() cannot see it — but it runs for D1, which
