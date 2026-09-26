@@ -1104,13 +1104,21 @@ hourly, from a SEPARATE checkout at `~/.loveiq-brain`. It does not appear in
 **Every run records itself** as `brain-whatsapp` in `cron_run` (since 2026-09-26), and a
 run is a failure when the group has had no new message for a week. That almost always
 means WhatsApp Desktop is closed or unlinked, and the sync would otherwise read a frozen
-copy "successfully". The first version read the database's file times instead. That run
-hung on macOS opening the database, and a hung run blocks every hourly run after it, so
-the signal now comes from the group's own rows. Never start the job from a shell that
-lacks Full Disk Access (`launchctl kickstart`); if a run hangs,
-`launchctl kill SIGTERM gui/$(id -u)/org.loveiq.whatsapp-sync`. The stall watcher counts only successful runs for this job
-(`LAPTOP_JOBS` in `features/cron/server/cron-stall.ts`) and alerts after **three days**
-without one, with the fix in the message: open the Mac and WhatsApp Desktop.
+copy "successfully".
+
+**Never touch WhatsApp's folder from node.** The first version (#340) read the database's
+file times from node. Every run after it hung for good in sqlite3's `open()` of the
+database: scheduled runs as well as hand-started ones, on no other change to the Mac. That
+is macOS asking whether "node" may access another app's data, and until someone answers,
+every open of the database by the job, sqlite3 included, waits. A waiting run blocks every
+hourly run after it. #343 took the read out, but a question already asked stays open.
+**If runs hang:** at the Mac, answer the prompt with Allow, or give `/usr/local/bin/node`
+Full Disk Access (System Settings → Privacy & Security). Stop a stuck run with
+`launchctl kill SIGTERM gui/$(id -u)/org.loveiq.whatsapp-sync`.
+
+The stall watcher counts only successful runs for this job (`LAPTOP_JOBS` in
+`features/cron/server/cron-stall.ts`) and alerts after **three days** without one, with the
+fix in the message: open the Mac and WhatsApp Desktop.
 
 A closed laptop only delays WhatsApp: the servers hold undelivered messages, and keep a
 linked device linked, for 30 days, so three days leaves four weeks of margin.
