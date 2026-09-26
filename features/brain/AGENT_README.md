@@ -42,6 +42,9 @@ Claude Code) is the door people use; the operator's guide is
 - `server/jumps.ts` — `explain_change` and the daily "Unusual numbers" notice: each metric against its
   28-day median and spread, the move split by source, channel and rate halves, and day-level rules
   (engagement, GA4 against our count, spend, campaigns, shipped, decided). No model writes a cause.
+- `server/experiments.ts` — `experiments` and `record_experiment`: /admin's `admin_experiment`
+  registry (written through `admin_upsert_experiment`, which overwrites every column, so an update
+  hands back what it does not change) and live readouts from `features/admin/server/experiment-readouts.ts`.
 - `server/break-even.ts` — `break_even`: spend, visitors, finishers, buyers and revenue on the days
   `adCovers` says the ad data covers (the digest's basis), the level each lever alone must reach,
   and what-ifs. No model.

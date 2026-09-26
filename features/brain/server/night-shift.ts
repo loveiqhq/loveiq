@@ -233,6 +233,7 @@ export const WRITE_TOOLS = [
   "queue_research",
   "file_call_notes",
   "settle_decision_conflict",
+  "record_experiment",
 ];
 
 export const researchModel = () => process.env.BRAIN_RESEARCH_MODEL?.trim() || "sonnet";

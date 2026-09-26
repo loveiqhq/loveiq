@@ -95,6 +95,12 @@ import {
   drawChart,
 } from "@features/brain/server/chart";
 import {
+  AXES as EXPERIMENT_AXES,
+  STATUSES as EXPERIMENT_STATUSES,
+  listExperiments,
+  recordExperiment,
+} from "@features/brain/server/experiments";
+import {
   DEFAULT_DAYS as BREAK_EVEN_DEFAULT_DAYS,
   MAX_DAYS as BREAK_EVEN_MAX_DAYS,
   MIN_DAYS as BREAK_EVEN_MIN_DAYS,
@@ -1217,6 +1223,67 @@ export const TOOLS = [
     },
   },
   {
+    name: "record_experiment",
+    title: "Register an A/B test, or record how it ended",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
+    description:
+      "Put an A/B test in the registry before it starts: its name, the hypothesis (what the " +
+      "change should do, and why), the one metric that decides it, the axis its arms are " +
+      "stamped on (landing, survey, pricing or paywall) and the day it starts. Refused without " +
+      "a hypothesis and a metric, because a test without them cannot be concluded from. Call " +
+      "it again with experiment_id to change it, and when the test ends set status " +
+      "'completed' with the outcome, then record the decision with record_decision. The " +
+      "registry is /admin's Experiments page, so an entry here shows there too.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        experiment_id: {
+          type: "number",
+          description: "To change a registered test: its number, as experiments lists it.",
+        },
+        name: {
+          type: "string",
+          description: "A short name, e.g. 'Paywall with a guarantee badge'.",
+        },
+        hypothesis: {
+          type: "string",
+          description: "What the change should do, and why, in a sentence or two.",
+        },
+        metric: {
+          type: "string",
+          description: "The one number that decides it, e.g. 'share of report openers who pay'.",
+        },
+        axis: {
+          type: "string",
+          enum: EXPERIMENT_AXES,
+          description: "Where its arms are stamped, so its numbers can be read live.",
+        },
+        status: { type: "string", enum: [...EXPERIMENT_STATUSES] },
+        start_date: {
+          type: "string",
+          description: "YYYY-MM-DD. Today or earlier makes it active.",
+        },
+        decision_date: {
+          type: "string",
+          description: "YYYY-MM-DD: when it will be, or was, called.",
+        },
+        expected_impact: {
+          type: "string",
+          description: "Optional: the change you expect, e.g. '+1 point'.",
+        },
+        outcome: { type: "string", description: "When it ends: what happened, in words." },
+        recorded_by: { type: "string", description: "Who is recording it, as their full name." },
+        owner: { type: "string", description: "Optional: whose test it is, as their full name." },
+      },
+      required: ["recorded_by"],
+    },
+  },
+  {
     name: "count_context",
     title: "Count what we hold, and break it down",
     annotations: { readOnlyHint: true, openWorldHint: false },
@@ -1768,6 +1835,19 @@ export const TOOLS = [
         },
       },
     },
+  },
+  {
+    name: "experiments",
+    title: "Every A/B test: running, planned and finished",
+    annotations: { readOnlyHint: true, openWorldHint: false },
+    description:
+      "The experiment registry: every A/B test with its hypothesis, the metric that decides " +
+      "it, its dates and its outcome, plus the live readout of a running test whose arms are " +
+      "stamped, in the same words /admin's A/B overview uses (it never calls a winner the " +
+      "numbers cannot support). Also the tests that ended before the registry existed: the " +
+      "landing page, pricing, paywall and survey designs. Use it for 'what are we testing', " +
+      "'how is the paywall test doing', 'what did the pricing test conclude'.",
+    inputSchema: { type: "object", properties: {} },
   },
   {
     name: "comment_asks",
@@ -5147,6 +5227,34 @@ async function callTool(
     return imageResult(outcome.text, [{ data: png, mimeType: "image/png" }]);
   }
 
+  if (name === "experiments") {
+    try {
+      stats.sourceCount = 1;
+      return textResult(await listExperiments());
+    } catch (err) {
+      logger.error({ err }, "brain: experiments failed");
+      return textResult(
+        "The experiment registry could not be read right now. This is an outage, not an empty registry.",
+        true
+      );
+    }
+  }
+
+  if (name === "record_experiment") {
+    let outcome;
+    try {
+      outcome = await recordExperiment(args);
+    } catch (err) {
+      logger.error({ err }, "brain: record_experiment failed");
+      return textResult(
+        "The experiment could not be saved just now; nothing was changed. Try again, or use /admin's Experiments page.",
+        true
+      );
+    }
+    if (!outcome.ok) return textResult(outcome.message, true);
+    return textResult(outcome.text);
+  }
+
   if (name === "break_even") {
     let outcome;
     try {
@@ -5569,6 +5677,9 @@ export const MCP_INSTRUCTIONS =
   "CHARTS: show_chart draws one or two daily numbers as a line in the digest's style and returns " +
   "the picture, a link that opens in any browser and pastes into a doc or a deck, and the " +
   "numbers behind it. Use it when someone wants to see a trend rather than read it.\n\n" +
+  "EXPERIMENTS: experiments is the A/B registry (running, planned, finished, with live readouts " +
+  "in /admin's words); record_experiment registers a test before it starts, with its hypothesis " +
+  "and deciding metric, and records how it ended.\n\n" +
   "BREAK-EVEN: break_even says what the Google Ads spend buys (cost per visitor, the share who " +
   "finish, the share who pay, the average order, the net) and what each would have to reach " +
   "alone to earn the spend back, with 'what if' values in place of any of them.\n\n" +
