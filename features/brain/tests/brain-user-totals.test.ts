@@ -131,7 +131,7 @@ describe("renderTotals", () => {
     expect(text).toContain(
       "- Spark Seeker: 10 finished · 2 paid (20.0%) · EUR 67.99, EUR 22.66 a sale"
     );
-    expect(text).toContain("1 free unlocks with a coupon are not counted as paid");
+    expect(text).toContain("1 free unlock with a coupon is not counted as paid");
   });
 
   it("orders months in time, and other groups largest first", () => {
