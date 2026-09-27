@@ -3891,6 +3891,30 @@ describe("/api/mcp", () => {
       expect(path).toContain("created_date_time=lt.2026-10-01T00:00:00Z");
     });
 
+    it("counts someone who finished many times as one person", async () => {
+      // 36 users have finished more than once (one tester 31 times); rows are submissions.
+      const rows = [
+        ...submissions(6, "Woman").map((r) => ({ ...r, user_id: "same-person" })),
+        ...submissions(6, "Man").map((r, i) => ({ ...r, user_id: `man-${i}` })),
+      ];
+      mockSupabaseFetch.mockImplementation(async (path: string) => ({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () =>
+          String(path).startsWith("/rest/v1/survey_question")
+            ? [{ id: 41 }]
+            : String(path).startsWith("/rest/v1/survey_submission")
+              ? rows
+              : [],
+        text: async () => "",
+      }));
+      const r = await call({});
+      expect(r.content[0]!.text).toContain("- All: 7 finished");
+      const [path] = toolCalls().find(([p]) => String(p).includes("survey_submission")) as [string];
+      expect(path).toContain("select=user_id,");
+    });
+
     it("calls an unreadable database an outage, not an empty answer", async () => {
       mockSupabaseFetch.mockResolvedValue({
         ok: false,
