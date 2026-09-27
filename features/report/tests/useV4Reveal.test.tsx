@@ -114,3 +114,44 @@ describe("useV4Reveal — when it reveals", () => {
     expect(shown()).toBe("yes");
   });
 });
+
+/** A held-back surface with a control in it, as the map's dots and the Snapshot's rows. */
+const FocusProbe: FC<{ opts?: V4RevealOptions }> = ({ opts }) => {
+  const [ref, isShown] = useV4Reveal<HTMLDivElement>(opts);
+  return (
+    <div ref={ref} data-testid="probe" data-shown={isShown ? "yes" : "no"}>
+      <button type="button">inside</button>
+    </div>
+  );
+};
+
+// Final review 27.09: a held-back surface is clear, and a browser scrolls a focused
+// control into view only when it is off screen, so a keyboard reader could tab onto a
+// dot or a row still held below the band and see neither it nor its focus ring.
+describe("useV4Reveal — keyboard focus inside it reveals it (WCAG 2.4.7)", () => {
+  beforeEach(() => {
+    installRevealObserver();
+  });
+
+  it("reveals when focus lands on a control inside it, below the band", () => {
+    mockRect({ top: 5000 });
+    render(<FocusProbe />);
+    expect(shown()).toBe("no");
+    act(() => screen.getByRole("button").focus());
+    expect(shown()).toBe("yes");
+  });
+
+  it("does so with catchUp off too — the flywheel's orbit", () => {
+    mockRect({ top: 5000 });
+    render(<FocusProbe opts={{ catchUp: false }} />);
+    act(() => screen.getByRole("button").focus());
+    expect(shown()).toBe("yes");
+  });
+
+  it("ignores focus while disabled — nothing under the blur moves", () => {
+    mockRect({ top: 5000 });
+    render(<FocusProbe opts={{ enabled: false }} />);
+    act(() => screen.getByRole("button").focus());
+    expect(shown()).toBe("no");
+  });
+});

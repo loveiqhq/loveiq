@@ -43,8 +43,9 @@ export function useV4Reveal<T extends Element>({
   const [revealed, setRevealed] = useState(false);
 
   useEffect(() => {
-    const el = ref.current;
-    if (!enabled || revealed || !el) return;
+    const current = ref.current;
+    if (!enabled || revealed || !current) return;
+    const el: Element = current;
 
     let done = false;
     let frame = 0;
@@ -52,6 +53,7 @@ export function useV4Reveal<T extends Element>({
 
     function teardown() {
       observer?.disconnect();
+      el.removeEventListener("focusin", reveal);
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("scrollend", check);
       if (frame) cancelAnimationFrame(frame);
@@ -78,6 +80,12 @@ export function useV4Reveal<T extends Element>({
     function onScroll() {
       if (!frame) frame = requestAnimationFrame(check);
     }
+
+    // Focus inside reveals it too. A held-back surface is clear, and a browser scrolls a
+    // focused control into view only when it is off screen, so a keyboard reader could
+    // tab onto a map dot or a Snapshot row below the band and see neither it nor its
+    // focus ring (final review 27.09).
+    el.addEventListener("focusin", reveal);
 
     if (typeof IntersectionObserver === "undefined") {
       if (catchUp) reveal();
