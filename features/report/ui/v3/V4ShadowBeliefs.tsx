@@ -8,7 +8,8 @@ import { guardedUnlock } from "./v4Unlock";
 
 /**
  * "Typical shadow beliefs" — Figma 368:5482, the coral panel in the Typical
- * Beliefs chapter, and the one genuinely animated element in the report.
+ * Beliefs chapter, animated on the scroll line the sun panel below it now shares
+ * (useMidlineRows; review 27.09).
  *
  * WHAT THE FRAME ENCODES. Mark drew it mid-scroll and named every row with the
  * animation's own parameter: `krow/1 · turned (p=1)` through `krow/4`, then
