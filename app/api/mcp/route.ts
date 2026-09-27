@@ -1872,8 +1872,11 @@ export const TOOLS = [
       "archetype and month, and narrow with the same keys. Never a person: any group smaller " +
       "than 5 is hidden, because a count that small can point to someone (decision of " +
       "26 Sep 2026). Staff submissions are left out, and paid means a real sale above EUR 0, " +
-      "not a test and not a free coupon unlock. For one person's record, or for a table this " +
-      "does not cover, use query_product_data.",
+      "not a test and not a free coupon unlock. Each person counts once, however many times " +
+      "they finished. Each answer is protected on its own: two answers can still be " +
+      "subtracted (a day apart, one filter narrower), so never use it to find out about one " +
+      "person. For one person's record, or for a table this does not cover, use " +
+      "query_product_data.",
     inputSchema: {
       type: "object",
       properties: {
