@@ -116,8 +116,12 @@ async function embedBatch(
       return json?.embeddings ?? null;
     }
     const detail = (await res.text().catch(() => "")).slice(0, 200);
+    // 503 with an empty body is the platform's own "not now", and it counted as final:
+    // on 2026-09-27 15:42 one ended the hourly catch-up on its first try and posted a
+    // FAILED alert to #brain, after eight clean runs.
     const transient =
-      res.status === 546 || /WORKER_RESOURCE_LIMIT|BOOT_ERROR|timed out/i.test(detail);
+      [429, 502, 503, 504, 546].includes(res.status) ||
+      /WORKER_RESOURCE_LIMIT|BOOT_ERROR|timed out/i.test(detail);
     if (!transient || attempt === attempts - 1) {
       logger.warn({ status: res.status, detail, attempt }, "brain-embed: edge function refused");
       return null;
