@@ -155,19 +155,41 @@ export function buildDecisionRow(input: DecisionInput, now: Date): BrainRow {
  * decision reads the same whichever way it was replaced. Returns how many records it
  * marked (0: no such decision), and throws when a read or a write fails, so a caller
  * that must not half-finish can tell.
+ *
+ * `superseded_on` IS WHEN THE REPLACEMENT TOOK EFFECT: the later of the two decisions' own
+ * dates, never the day someone marked it. The two callers used to disagree, record_decision
+ * passing the new decision's date and the radar's settle passing the day it was settled, so
+ * a pair settled weeks later would have told an "as of" answer the old decision still stood
+ * all that time. `byDay` is the replacing decision's date when the caller has it; otherwise
+ * it is read.
  */
 export async function markSuperseded(
   olderId: string,
   byId: string,
-  onDay: string
+  byDay?: string
 ): Promise<number> {
   const older = olderId.trim().replace(/^decision\//, "");
   const res = await supabaseFetch(
-    `/rest/v1/brain_chunk?select=id,meta&source=eq.decision&source_id=eq.${encodeURIComponent(older)}`
+    `/rest/v1/brain_chunk?select=id,meta,period_end&source=eq.decision&source_id=eq.${encodeURIComponent(older)}`
   );
   if (!res.ok) throw new Error(`could not read decision ${older} (${res.status})`);
-  const rows = (await res.json()) as Array<{ id: number; meta: Record<string, unknown> | null }>;
+  const rows = (await res.json()) as Array<{
+    id: number;
+    meta: Record<string, unknown> | null;
+    period_end: string | null;
+  }>;
+  if (rows.length === 0) return 0;
+  let replacedOn = byDay;
+  if (!replacedOn) {
+    const by = await supabaseFetch(
+      `/rest/v1/brain_chunk?select=period_end&source=eq.decision&source_id=eq.${encodeURIComponent(byId)}&limit=1`
+    );
+    if (!by.ok) throw new Error(`could not read decision ${byId} (${by.status})`);
+    replacedOn = ((await by.json()) as Array<{ period_end: string | null }>)[0]?.period_end ?? "";
+    if (!replacedOn) throw new Error(`decision ${byId} has no date to take effect from`);
+  }
   for (const old of rows) {
+    const onDay = [replacedOn, old.period_end ?? ""].sort().at(-1)!;
     const patched = await supabaseFetch(`/rest/v1/brain_chunk?id=eq.${old.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
@@ -298,6 +320,8 @@ export interface PriorDecision {
   mined?: boolean;
   /** `meta.superseded_by`, when a later decision explicitly replaced this one. */
   supersededBy?: string | null;
+  /** `meta.superseded_on`: when that replacement took effect. */
+  supersededOn?: string | null;
   /** How many decisions on the same `meta.topic` are dated later, and the newest date. */
   laterOnTopic?: { count: number; newest: string } | null;
   /** `meta.disputed_by`: open conflicts the decision radar found and nobody has settled. */
@@ -313,6 +337,30 @@ export function disputesOf(meta: Record<string, unknown> | null): DisputeMark[] 
           typeof m?.id === "string" && typeof m?.why === "string" && typeof m?.on === "string"
       )
     : [];
+}
+
+/**
+ * HOW A REPLACED DECISION STOOD ON A DAY.
+ *
+ * A search or browse with `until` asks about the record up to that day. A decision replaced
+ * AFTER it still stood on it, and sending that reader to "read the replacement instead" sends
+ * them to something that did not exist yet. So `later` says the replacement came after
+ * `asOf`. A replacement with no recorded day is treated as already made: saying a decision
+ * stood when we cannot tell is the expensive mistake.
+ */
+export function replacementAsOf(
+  by: unknown,
+  on: unknown,
+  asOf?: string
+): { by: string; on: string | null; later: boolean } | null {
+  if (typeof by !== "string" || !by) return null;
+  const day = typeof on === "string" && on ? on.slice(0, 10) : null;
+  return { by, on: day, later: Boolean(asOf && day && day > asOf.slice(0, 10)) };
+}
+
+/** A conflict with a decision made after `asOf` did not exist on that day. */
+export function disputesAsOf(marks: DisputeMark[], asOf?: string): DisputeMark[] {
+  return asOf ? marks.filter((m) => !m.on || m.on.slice(0, 10) <= asOf.slice(0, 10)) : marks;
 }
 
 /**
@@ -364,7 +412,9 @@ export function proposesSomething(question: string): boolean {
  * complete without it.
  */
 async function withLaterOnTopic(
-  found: Array<PriorDecision & { topic: string | null }>
+  found: Array<PriorDecision & { topic: string | null }>,
+  /** As of this day, a decision made after it is not a later one yet. */
+  until?: string
 ): Promise<PriorDecision[]> {
   const topics = [...new Set(found.map((d) => d.topic).filter((t): t is string => Boolean(t)))];
   if (topics.length === 0) return found;
@@ -382,7 +432,10 @@ async function withLaterOnTopic(
     return found.map((d) => {
       if (!d.topic || !d.decidedOn) return d;
       const later = all.filter(
-        (r) => r.meta?.topic === d.topic && (r.period_end ?? "") > (d.decidedOn ?? "")
+        (r) =>
+          r.meta?.topic === d.topic &&
+          (r.period_end ?? "") > (d.decidedOn ?? "") &&
+          (!until || (r.period_end ?? "") <= until.slice(0, 10))
       );
       return later.length === 0
         ? d
@@ -393,7 +446,11 @@ async function withLaterOnTopic(
   }
 }
 
-export async function priorDecisions(question: string): Promise<PriorDecision[]> {
+export async function priorDecisions(
+  question: string,
+  /** A search's `until`: only decisions made by then can have settled it. */
+  until?: string
+): Promise<PriorDecision[]> {
   if (!proposesSomething(question)) return [];
   try {
     const res = await supabaseFetch("/rest/v1/rpc/brain_search", {
@@ -404,6 +461,7 @@ export async function priorDecisions(question: string): Promise<PriorDecision[]>
         sources: ["decision"],
         // Explicitly null: the whole point is to skip the embedding round trip.
         query_embedding: null,
+        ...(until ? { until } : {}),
       }),
     });
     if (!res.ok) return [];
@@ -427,13 +485,17 @@ export async function priorDecisions(question: string): Promise<PriorDecision[]>
           typeof (r.meta as { superseded_by?: unknown } | null)?.superseded_by === "string"
             ? ((r.meta as { superseded_by: string }).superseded_by ?? null)
             : null,
+        supersededOn:
+          typeof (r.meta as { superseded_on?: unknown } | null)?.superseded_on === "string"
+            ? (r.meta as { superseded_on: string }).superseded_on
+            : null,
         topic:
           typeof (r.meta as { topic?: unknown } | null)?.topic === "string"
             ? (r.meta as { topic: string }).topic
             : null,
         disputedBy: disputesOf(r.meta),
       }));
-    return await withLaterOnTopic(found);
+    return await withLaterOnTopic(found, until);
   } catch (err) {
     // Never allowed to cost the answer. This is an addition to a result that is already
     // complete without it.
@@ -482,10 +544,11 @@ export function looksLikeDecisionBrowse(question: string): boolean {
  * Deliberately NOT a search: no query text, no embedding, no ranking. The question had no
  * topic, so applying one would be inventing it.
  */
-export async function recentDecisions(limit = 8): Promise<PriorDecision[]> {
+export async function recentDecisions(limit = 8, until?: string): Promise<PriorDecision[]> {
   try {
     const res = await supabaseFetch(
       `/rest/v1/brain_chunk?select=source_id,title,period_end,meta&source=eq.decision` +
+        (until ? `&period_end=lte.${encodeURIComponent(until.slice(0, 10))}` : "") +
         // `source_id` breaks the tie so a day with three decisions lists them in a stable
         // order; without it the same question can return the same three shuffled.
         `&order=period_end.desc,source_id.desc&limit=${limit}`
@@ -502,6 +565,10 @@ export async function recentDecisions(limit = 8): Promise<PriorDecision[]> {
       title: r.title,
       decidedOn: r.period_end,
       mined: (r.meta as { origin?: unknown } | null)?.origin === "mined",
+      // The browse block printed no SUPERSEDED line at all, so a replaced decision listed
+      // among "the most recent decisions" read as standing.
+      supersededBy: typeof r.meta?.superseded_by === "string" ? r.meta.superseded_by : null,
+      supersededOn: typeof r.meta?.superseded_on === "string" ? r.meta.superseded_on : null,
       disputedBy: disputesOf(r.meta),
     }));
   } catch (err) {
@@ -535,17 +602,20 @@ export async function recentDecisions(limit = 8): Promise<PriorDecision[]> {
  * Shared by both renderers on purpose: the first draft patched only one of them, because
  * the two lines it replaced were identical and `String.replace` takes the first.
  */
-function staleness(d: PriorDecision): string {
+function staleness(d: PriorDecision, asOf?: string): string {
+  const replaced = replacementAsOf(d.supersededBy, d.supersededOn, asOf);
   return (
-    (d.supersededBy
-      ? `\n    SUPERSEDED by decision/${d.supersededBy} — read that one instead.`
-      : "") +
+    (replaced?.later
+      ? `\n    STOOD ON ${asOf!.slice(0, 10)}: replaced later, on ${replaced.on}, by decision/${replaced.by}.`
+      : replaced
+        ? `\n    SUPERSEDED by decision/${replaced.by} — read that one instead.`
+        : "") +
     (d.laterOnTopic
       ? `\n    ${d.laterOnTopic.count} later decision${d.laterOnTopic.count > 1 ? "s" : ""}` +
         ` on this topic, newest ${d.laterOnTopic.newest} — check before treating this as current.`
       : "") +
     // The decision radar's open findings: a question for a person, said as one.
-    (d.disputedBy ?? [])
+    disputesAsOf(d.disputedBy ?? [], asOf)
       .map(
         (m) =>
           `\n    MAY CONFLICT with decision/${m.id}${m.on ? ` (${m.on})` : ""}: ${m.why}` +
@@ -556,7 +626,7 @@ function staleness(d: PriorDecision): string {
 }
 
 /** The browse block, prepended when the question asked for a list rather than a match. */
-export function renderRecentDecisions(found: PriorDecision[]): string {
+export function renderRecentDecisions(found: PriorDecision[], asOf?: string): string {
   if (found.length === 0) return "";
   const lines = found
     .map(
@@ -564,11 +634,11 @@ export function renderRecentDecisions(found: PriorDecision[]): string {
         `  • ${d.decidedOn ?? "undated"}  ${String(d.title ?? "(untitled)").replace(/^Decision:\s*/, "")}` +
         `${d.mined ? " — reconstructed from call notes, not written down by a person" : ""}` +
         `\n    id: decision/${d.sourceId}` +
-        staleness(d)
+        staleness(d, asOf)
     )
     .join("\n");
   return (
-    `THE ${found.length} MOST RECENT DECISIONS, newest first — this question names no topic, ` +
+    `THE ${found.length} MOST RECENT DECISIONS${asOf ? ` UP TO ${asOf.slice(0, 10)}` : ""}, newest first — this question names no topic, ` +
     `so it is a browse and not a search, and these are listed by date rather than matched ` +
     `to wording:\n\n${lines}\n\nThese are the decisions WRITTEN DOWN as decisions; things ` +
     `settled in a thread and never recorded will not be here. To go further back or narrow ` +
@@ -578,7 +648,7 @@ export function renderRecentDecisions(found: PriorDecision[]): string {
 }
 
 /** The block prepended to a search result. Empty string when there is nothing to say. */
-export function renderPriorDecisions(found: PriorDecision[]): string {
+export function renderPriorDecisions(found: PriorDecision[], asOf?: string): string {
   if (found.length === 0) return "";
   const lines = found
     .map(
@@ -592,7 +662,7 @@ export function renderPriorDecisions(found: PriorDecision[]): string {
         // writing it down. Unmarked, this block would assert the stronger of the two.
         `${d.mined ? " — reconstructed from call notes, not written down by a person" : ""}` +
         `\n    id: decision/${d.sourceId}` +
-        staleness(d)
+        staleness(d, asOf)
     )
     .join("\n");
   return (

@@ -497,7 +497,8 @@ export async function settleConflict(
   const today = now.toISOString().slice(0, 10);
   const winner = input.keep === "earlier" ? c.earlier : input.keep === "later" ? c.later : null;
   const loser = input.keep === "earlier" ? c.later : input.keep === "later" ? c.earlier : null;
-  if (winner && loser) await markSuperseded(loser, winner, today);
+  // No day passed: the replacement takes effect from the decisions' own dates, not today's.
+  if (winner && loser) await markSuperseded(loser, winner);
   await write(
     `/rest/v1/brain_decision_conflict?earlier=eq.${encodeURIComponent(c.earlier)}&later=eq.${encodeURIComponent(c.later)}`,
     "PATCH",
