@@ -57,10 +57,10 @@ describe("V3Chapter under ?v4=1", () => {
   it("carries Typical Beliefs' head: the 24px title, its suffix and the 34px disc", () => {
     const { container } = renderV4();
     const section = container.querySelector("section")!;
-    // `.rv4-chapter` is what gives it V4Chapter's type and discs; `.rv3-chapter` is
-    // what keeps the V2 body inside it styled.
-    expect(section.className).toContain("rv3-chapter");
-    expect(section.className).toContain("rv4-chapter");
+    // `.rv4-chapter` gives it V4Chapter's type and discs. Since review 27.09 it no
+    // longer carries `.rv3-chapter`, whose frozen catch-alls restyled the 2.0 body.
+    expect(section).not.toHaveClass("rv3-chapter");
+    expect(section).toHaveClass("rv4-chapter");
     expect(section.id).toBe("core_insecurities");
     const title = container.querySelector(".rv4-chapter__button .rv4-chapter__title.has-suffix")!;
     expect(title.textContent).toBe("Core Insecurities of the Spark Seeker");
@@ -271,20 +271,20 @@ describe("V2 rows inside a V4 chapter build in as it opens", () => {
 
   it("reveals Partnership's rows and Curiosity's structure items", () => {
     const reveal = rule(
-      ".rv3.rv4 .rv3-chapter.is-open .report-partnership__row,\n.rv3.rv4 .rv3-chapter.is-open .report-curiosity__struct-item"
+      ".rv3.rv4 .rv4-chapter.is-open .report-partnership__row,\n.rv3.rv4 .rv4-chapter.is-open .report-curiosity__struct-item"
     );
     expect(reveal).toContain("opacity: 1");
     expect(reveal).toContain("transform: translateY(0)");
   });
 
   it("pops Curiosity's fit dots to full size", () => {
-    const reveal = rule(".rv3.rv4 .rv3-chapter.is-open .report-curiosity__fit-dot");
+    const reveal = rule(".rv3.rv4 .rv4-chapter.is-open .report-curiosity__fit-dot");
     expect(reveal).toContain("opacity: 1");
     expect(reveal).toContain("transform: scale(1)");
   });
 
   it("is appended below the frozen top of reportV3.css", () => {
-    const at = V3_CSS.indexOf(".rv3.rv4 .rv3-chapter.is-open .report-partnership__row");
+    const at = V3_CSS.indexOf(".rv3.rv4 .rv4-chapter.is-open .report-partnership__row");
     expect(at).toBeGreaterThan(0);
     expect(V3_CSS.slice(0, at).split("\n").length).toBeGreaterThan(1884);
   });
@@ -442,5 +442,141 @@ describe("V3Chapter under V4 — locked outright (review 26.09)", () => {
     // Appended below the frozen top of the stylesheet.
     const at = V3_CSS.indexOf(".rv3.rv4 .rv4-chapter__lock {");
     expect(V3_CSS.slice(0, at).split("\n").length).toBeGreaterThan(1884);
+  });
+});
+
+/**
+ * Review 27.09, Mark: "For the unlocked version, any chance we can show the report 2.0
+ * version in the other chapters that we don't open by default." Under V4 these
+ * chapters already ran Report 2.0's own components, but inside `.rv3-chapter`, where
+ * Report 3.0's frozen catch-alls (reportV3.css 1653-1731) flattened them: one white
+ * card, violet labels, no "What you will learn" chip, the practical and "Learn:"
+ * panels boxed in violet. V4 roots drop the class, so the 2.0 body draws as ?v2=1
+ * draws it; V4 keeps its head, teaser, font, hairline rhythm and rating.
+ */
+describe("V3Chapter under V4 — Report 2.0's own look (review 27.09)", () => {
+  const CATCH_ALLS = [
+    ...new Set(V3_CSS.match(/\.rv3 \.rv3-chapter \[class\$="[a-z_-]+"\](?: p)?/g) ?? []),
+  ];
+  const TwoPointOh = () => (
+    <div className="report-power">
+      <h3 className="report-power__heading">Power Orientation</h3>
+      <div className="report-power__learn-pill-wrap">
+        <span className="report-power__learn-pill">What you will learn</span>
+        <p className="report-power__learn-body">lede</p>
+      </div>
+      <article className="report-power__card">
+        <p className="report-power__result">Result</p>
+        <p className="report-power__eyebrow">Label</p>
+        <div className="report-power__body">
+          <p>Body</p>
+        </div>
+        <div className="report-power__details">
+          <button type="button" className="report-power__details-summary">
+            <span className="report-power__details-eyebrow">Learn</span>
+          </button>
+          <p className="report-power__details-para">Para</p>
+        </div>
+      </article>
+    </div>
+  );
+
+  it("finds the catch-alls it guards against", () => {
+    expect(CATCH_ALLS.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it("carries no .rv3-chapter on a V4 root, closed, open or locked", () => {
+    const { container, unmount } = renderV4();
+    expect(container.querySelector("section")).not.toHaveClass("rv3-chapter");
+    fireEvent.click(container.querySelector(".rv4-chapter__button")!);
+    expect(container.querySelector("section")).not.toHaveClass("rv3-chapter");
+    unmount();
+    const locked = render(
+      <V3ModeProvider>
+        <V4ModeProvider>
+          <V4ChapterLockProvider value={{ isLocked: () => true, unlock: () => {} }}>
+            <V3Chapter
+              chapter={INSECURITIES}
+              sectionId="core_insecurities"
+              archetype="Spark Seeker"
+            >
+              <p>body</p>
+            </V3Chapter>
+          </V4ChapterLockProvider>
+        </V4ModeProvider>
+      </V3ModeProvider>
+    );
+    expect(locked.container.querySelector("section")).toHaveClass("rv4-chapter", "is-locked");
+    expect(locked.container.querySelector("section")).not.toHaveClass("rv3-chapter");
+  });
+
+  it("lets none of Report 3.0's catch-alls reach the 2.0 body, as they still do under ?v3=1", () => {
+    const v4 = render(
+      <main className="rv3 rv4">
+        <V3ModeProvider>
+          <V4ModeProvider>
+            <V3Chapter
+              chapter={INSECURITIES}
+              sectionId="power_orientation"
+              archetype="Spark Seeker"
+            >
+              <TwoPointOh />
+            </V3Chapter>
+          </V4ModeProvider>
+        </V3ModeProvider>
+      </main>
+    );
+    for (const selector of CATCH_ALLS) {
+      expect(v4.container.querySelectorAll(selector), selector).toHaveLength(0);
+    }
+    // The frozen rule that hides the section's own title keys on the body, not the
+    // root, so the chapter button stays the only title.
+    expect(
+      v4.container.querySelectorAll('.rv3 .rv3-chapter__body-inner > * > [class$="__heading"]')
+    ).toHaveLength(1);
+    v4.unmount();
+
+    const v3 = render(
+      <main className="rv3">
+        <V3ModeProvider>
+          <V3Chapter chapter={INSECURITIES} sectionId="power_orientation">
+            <TwoPointOh />
+          </V3Chapter>
+        </V3ModeProvider>
+      </main>
+    );
+    const matched = CATCH_ALLS.filter((s) => v3.container.querySelectorAll(s).length > 0);
+    expect(matched.length).toBeGreaterThanOrEqual(8);
+  });
+
+  const block = (selector: string) => {
+    const at = V3_CSS.indexOf(selector);
+    expect(at, `missing: ${selector}`).toBeGreaterThan(-1);
+    expect(V3_CSS.slice(0, at).split("\n").length).toBeGreaterThan(1884);
+    return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+  };
+
+  it("opens the body on V4's own class, the frozen rule keying on .rv3-chapter", () => {
+    expect(block(".rv3.rv4 .rv4-chapter.is-open > .rv3-chapter__body {")).toMatch(
+      /grid-template-rows:\s*1fr/
+    );
+  });
+
+  it("clips the collapsing body top and bottom only, where the browser can", () => {
+    // `clip` makes no scroll container: full-width cards are not cut, and a sticky
+    // Back to top still follows the screen. Without `clip`, `visible` beside `hidden`
+    // would turn into `auto` and scroll every body sideways, hence the @supports.
+    const at = V3_CSS.indexOf("@supports (overflow: clip) {");
+    expect(at).toBeGreaterThan(0);
+    const rule = V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+    expect(rule).toContain(".rv3.rv4 .rv4-chapter > .rv3-chapter__body > div {");
+    expect(rule).toMatch(/overflow-x:\s*visible/);
+    expect(rule).toMatch(/overflow-y:\s*clip/);
+  });
+
+  it("drops Attachment's band when it has nothing left to hold", () => {
+    expect(block(".rv3.rv4 .rv4-chapter .report-attachment__edu:empty {")).toMatch(
+      /display:\s*none/
+    );
   });
 });

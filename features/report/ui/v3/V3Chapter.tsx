@@ -123,7 +123,7 @@ const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget, ar
       <section
         id={sectionId}
         data-report-section="true"
-        className={`rv3-chapter rv4-chapter is-locked${teaser ? " has-teaser" : ""}`}
+        className={`rv4-chapter is-locked${teaser ? " has-teaser" : ""}`}
         data-node-id="1:862"
         data-name="Chapter H1 + Copy"
       >
@@ -149,7 +149,10 @@ const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget, ar
   if (isV4) {
     // Typical Beliefs' head (V4ChapterHead), not V3's: no book icon, chapter number
     // or rule. `.rv4-chapter` takes V4Chapter's type, discs and the closed row's
-    // divider; `.rv3-chapter` and its body keep what the V2 sections inside rely on.
+    // divider. The root carries no `.rv3-chapter` (review 27.09: "show the report 2.0
+    // version in the other chapters"): Report 3.0's frozen catch-alls key on it and
+    // flattened the Report 2.0 section inside, so without it the section draws as
+    // ?v2=1 draws it. The body keeps V3's collapse classes; V4's CSS opens it.
     // The body stays mounted while closed — clipped by V3's own collapse, and inert —
     // so the cards in it keep their state and the paywall observers their targets.
     // Closed, the chapter shows its teaser (1:862): free copy, the same for everyone.
@@ -158,7 +161,7 @@ const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget, ar
       <section
         id={sectionId}
         data-report-section="true"
-        className={`rv3-chapter rv4-chapter${isOpen ? " is-open" : ""}${teaser ? " has-teaser" : ""}`}
+        className={`rv4-chapter${isOpen ? " is-open" : ""}${teaser ? " has-teaser" : ""}`}
         data-node-id={isOpen ? "1:175" : "1:862"}
         data-name="Chapter H1 + Copy"
       >

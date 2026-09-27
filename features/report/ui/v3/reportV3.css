@@ -5824,13 +5824,14 @@ html {
 /* V2 rows that wait for `.report-section.is-visible` alone (report.css 21135-21163):
  * Partnership's rows and Curiosity's fit dots and structure items. A V3 chapter never
  * carries that class, so under V4 they sat at opacity 0 even for a reader who had paid.
- * They build in as their chapter opens, on their own transitions and delays. */
-.rv3.rv4 .rv3-chapter.is-open .report-partnership__row,
-.rv3.rv4 .rv3-chapter.is-open .report-curiosity__struct-item {
+ * They build in as their chapter opens, on their own transitions and delays. Keyed on
+ * V4's own chapter class since review 27.09, when V4 roots dropped `.rv3-chapter`. */
+.rv3.rv4 .rv4-chapter.is-open .report-partnership__row,
+.rv3.rv4 .rv4-chapter.is-open .report-curiosity__struct-item {
   opacity: 1;
   transform: translateY(0);
 }
-.rv3.rv4 .rv3-chapter.is-open .report-curiosity__fit-dot {
+.rv3.rv4 .rv4-chapter.is-open .report-curiosity__fit-dot {
   opacity: 1;
   transform: scale(1);
 }
@@ -7532,4 +7533,36 @@ html {
     transform: none;
     transition: none;
   }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════════
+ * THE REPORT 2.0 CHAPTERS IN V4 — review 27.09
+ *
+ * Mark: "For the unlocked version, any chance we can show the report 2.0 version in
+ * the other chapters that we don't open by default." Those chapters run Report 2.0's
+ * own sections inside V3Chapter, and Report 3.0's frozen catch-alls (1653-1731, all
+ * keyed on `.rv3 .rv3-chapter`) flattened them. V4 roots no longer carry
+ * `.rv3-chapter`, so the section draws as ?v2=1 draws it. What the root class used to
+ * give the V4 chapter is given back here.
+ * ════════════════════════════════════════════════════════════════════════════════ */
+
+/* The open state (frozen 609 keys on `.rv3-chapter.is-open`). */
+.rv3.rv4 .rv4-chapter.is-open > .rv3-chapter__body {
+  grid-template-rows: 1fr;
+}
+/* The collapse clips top and bottom only. `clip` makes no scroll container, so a 2.0
+ * card bleeding to the screen's edge and V4's full-width cards are not cut at the
+ * column, and a sticky Back to top still follows the screen. Where `clip` is unknown
+ * (Safari before 16) `visible` beside the frozen `hidden` would turn into `auto` and
+ * scroll every body sideways, so those browsers keep the frozen rule. */
+@supports (overflow: clip) {
+  .rv3.rv4 .rv4-chapter > .rv3-chapter__body > div {
+    overflow-x: visible;
+    overflow-y: clip;
+  }
+}
+/* Attachment's "Learn:" band wraps its panel and renders even without one; with the
+ * panel handed to V4's card it would leave an empty tinted strip at the card's foot. */
+.rv3.rv4 .rv4-chapter .report-attachment__edu:empty {
+  display: none;
 }

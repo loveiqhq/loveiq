@@ -5,7 +5,7 @@ import VerdictStar from "./VerdictStar";
 import LockedPreviewImage from "./LockedPreviewImage";
 import PremiumOverlay, { type PremiumOverlayTier } from "./PremiumOverlay";
 import V3Accelerators from "../v3/V3Accelerators";
-import { useIsV3 } from "../v3/V3Chapter";
+import { useIsV3, useIsV4 } from "../v3/V3Chapter";
 import { useRevealOnView } from "../hooks/useRevealOnView";
 import type { ReportPriceQuoteSnapshot } from "@features/pricing/logic/reportPricing";
 import { archetypeSlug } from "@/data/report2-config";
@@ -136,6 +136,7 @@ const AcceleratorsSection: FC<Props> = ({
   const [chartRef, revealed] = useRevealOnView<HTMLDivElement>();
   const [verdictRef, verdictRevealed] = useRevealOnView<HTMLDivElement>();
   const isV3 = useIsV3();
+  const isV4 = useIsV4();
   if (!copy) return null;
 
   const locked = copy.locked;
@@ -212,8 +213,9 @@ const AcceleratorsSection: FC<Props> = ({
 
   // V3 rearranges the same rows into a hero gauge plus two stacked cards, with
   // brakes first (Figma 10392:19343). Locked readers keep V1's teaser treatment,
-  // which V3 has no frame for.
-  if (isV3 && !locked) {
+  // which V3 has no frame for. V4 rides on V3 mode but shows this section as Report
+  // 2.0 draws it (review 27.09), until its V4 chapter is written.
+  if (isV3 && !isV4 && !locked) {
     return (
       <div className="report-accel">
         <h3 className="report-accel__heading">Accelerators &amp; Brakes</h3>
