@@ -2610,8 +2610,11 @@
   height: 44px;
   width: 100%;
 }
+/* Every "Seperator - Horizontal Line" (1:484, 1:850, 1:983, 38:1508, 1:1138) is 19.078
+ * tall with an 18.078 padding-top: its 1px line is the frame's last pixel, sitting on
+ * the part heading. Centred, the line rode 9px higher than drawn (review 27.09). */
 .rv3 .rv4-rule {
-  align-items: center;
+  align-items: flex-end;
   display: flex;
   height: 19px;
   width: 100%;
@@ -5179,6 +5182,15 @@
 }
 .rv3.rv4 .rv4-chapter:not(.is-open):not(.is-static) {
   margin-bottom: 44px;
+}
+/* Review 27.09 (Extra divider.jpeg): "Two divider lines here same before part 6." Where
+ * a part opens straight after a closed chapter — before Parts IV, V and VI — that
+ * chapter's hairline sat 44 above the part's own rule (1:983, 38:1508, 1:1138). Figma
+ * never stacks the two: each part page opens on its rule and each collapsed chapter
+ * frame ends on its hairline. The part keeps its rule and the chapter keeps its 44px,
+ * so those parts open exactly as II and III do. */
+.rv3.rv4 .rv4-chapter:not(.is-open):not(.is-static):has(+ .rv4-rule)::after {
+  display: none;
 }
 /* 1:869 — the teaser under a closed head: 20 above and below, then the hairline with
  * no second 20. It folds away on the V2 body's own 320ms as the chapter opens, so the
