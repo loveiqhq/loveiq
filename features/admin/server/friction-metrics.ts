@@ -445,11 +445,12 @@ export async function buildFrictionReport(
       // reach a row here, because persisting needs a submission id and during
       // the survey nothing has been submitted yet.
       "form errors (PostHog only — no submission exists mid-survey to key a row to)",
-      // Not a tracking gap: there is nothing to seek. The money-back guarantee
-      // is static text, Trustpilot is deliberately off, and the FAQ is on the
-      // landing page only. Adding a tracker here would be building a sensor for
-      // an interaction the product does not offer.
-      "trust seeking (nothing on the report is clickable — guarantee is static text, Trustpilot off)",
+      // A real gap, not an absent interaction. The report renders the site footer
+      // (FooterSection in ReportExperienceV1 and ReportPage), so a reader CAN go
+      // looking for trust: Trust Center, privacy policy, medical disclaimer. Those
+      // visits reach PostHog as page views and never a row here. (The guarantee is
+      // static text and Trustpilot is off, so the footer is the only route.)
+      "trust seeking (PostHog only — report footer links to Trust Center, privacy policy, medical disclaimer)",
     ],
   };
 }
