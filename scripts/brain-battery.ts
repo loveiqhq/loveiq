@@ -886,6 +886,24 @@ const topSource =
       : [`no ${want.join("/")} in top ${n}: ${at(h, n).map(describe).join(", ")}`];
   };
 
+/** Not one row of the named source in the top `n`: an opt-in source leaking into search. */
+const noSource =
+  (src: string, n = 12) =>
+  (h: BrainChunk[]): string[] => {
+    const leaked = at(h, n).filter((x) => x.source === src);
+    return leaked.length === 0
+      ? []
+      : [`${leaked.length} ${src} rows in top ${n}: ${leaked.map(describe).join(", ")}`];
+  };
+
+/** A title matching `re` in the top `n`: the right document, not just the right source. */
+const topTitle =
+  (re: RegExp, n = 3) =>
+  (h: BrainChunk[]): string[] =>
+    at(h, n).some((x) => re.test(x.title ?? ""))
+      ? []
+      : [`no title matching ${re} in top ${n}: ${at(h, n).map(describe).join(", ")}`];
+
 /**
  * A literal fact must be present in the top `n` bodies. Correctness, not routing.
  *
@@ -977,6 +995,29 @@ function sourceCoverageProbes(live: LiveCounts): RetrievalProbe[] {
       "evidence-literature",
       "what does the literature say about relationship satisfaction",
       topSource("evidence", 3)
+    ),
+    /**
+     * THE BOOKS ARE OPT-IN (20260928010000): searched only when the caller names the
+     * source. Both sides are asserted because each can break alone. Named, the source must
+     * reach the right book; unnamed, a question on the books' own topic must return none
+     * of them, which is the whole reason they were kept out of the corpus until now.
+     */
+    P(
+      "book-perel",
+      "desire in long-term relationships, and why familiarity can dampen it",
+      topTitle(/Mating in Captivity/, 3),
+      { sources: ["book"] }
+    ),
+    P(
+      "book-nagoski",
+      "responsive desire and the dual control model of sexual response",
+      topTitle(/Come As You Are/, 3),
+      { sources: ["book"] }
+    ),
+    P(
+      "book-opt-in",
+      "what does the research say about desire in long-term relationships",
+      noSource("book", 12)
     ),
     /**
      * THE SHIPPED COPY ADDED ON 2026-09-21, probed for the same reason the evidence

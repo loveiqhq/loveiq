@@ -132,6 +132,12 @@ const PDF_TEXT_LIMIT = 400_000;
  * answer, because a 2,400-character book page matches almost any vocabulary.
  *
  * Kept deliberately: the academic sources. Decision recorded 2026-09-06.
+ *
+ * The walk still skips all fourteen books. Eleven of them, the ones on love, desire and
+ * sex, are searchable since 2026-09-28 as source `book`, loaded whole by
+ * scripts/brain-books.ts and OPT-IN in brain_search, so they cannot crowd out company
+ * answers the way they did here. The other three (leadership, habits, persuasion) are
+ * not relevant to what LoveIQ measures and stay out.
  */
 /* eslint-disable no-secrets/no-secrets -- Google Drive FILE IDS, not credentials.
    They appear in every Drive URL, and each is already stored in this corpus as

@@ -35,6 +35,7 @@
     "brain:battery": "tsx scripts/brain-battery.ts",
     "brain:battery:retrieval": "tsx --env-file-if-exists=.env.local scripts/brain-battery.ts --retrieval",
     "brain:battery:mcp": "tsx --env-file-if-exists=.env.local scripts/brain-battery.ts --mcp",
+    "brain:books": "tsx --env-file-if-exists=.env.local scripts/brain-books.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run --config vitest.integration.config.ts",

@@ -477,6 +477,11 @@ export const SOURCES_FOR_TEST = [
   // Questions queued with `queue_research` and the Night Shift's cited answers to them,
   // one record per question. Listed here in the commit that creates the first one.
   "research",
+  // Eleven third-party books on love, desire and sex, whole, loaded by
+  // scripts/brain-books.ts. OPT-IN: brain_search returns them only when a caller names
+  // the source, so they cannot crowd company answers out. Listed in the commit that
+  // loads the first part.
+  "book",
 ];
 // `jira` is deliberately absent. The 1,037 issues in loveiq.atlassian.net are real
 // and actively updated, but `JIRA_API_TOKEN` has never been set, so the corpus holds
@@ -5944,6 +5949,11 @@ export const MCP_INSTRUCTIONS =
   "Use " +
   "search_company_context, and list_sources when you need to know how fresh a source " +
   "is.\n\n" +
+  "BOOKS, searched only when you ask for them: eleven third-party books on love, desire " +
+  "and sex that we keep, whole (Fisher, Perel, Nagoski, Lehmiller, Kleinplatz and Ménard, " +
+  "Hite, Ryan and Jethá, Easton and Hardy, Winston, Roach, Bataille). Pass " +
+  '`sources: ["book"]`; an ordinary search never returns them. They are other people\'s ' +
+  "work, not LoveIQ's claims, so name the book and author when you use one.\n\n" +
   "LIVE STATE, queried straight from the production database with full history and no " +
   "lag: payments and refunds, Resend email delivery and bounces, call invitations, " +
   "survey submissions and answers, reports, shares, invites, the waitlist, marketing " +
