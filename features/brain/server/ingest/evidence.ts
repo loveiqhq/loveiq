@@ -34,7 +34,7 @@
  * how "this chapter claims something with nothing behind it" becomes findable.
  */
 
-import { upsertChunks, type BrainRow } from "./upsert";
+import { MAX_BODY_CHARS, upsertChunks, type BrainRow } from "./upsert";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
 import { decodeEntities } from "@shared/format/html-escape";
@@ -296,27 +296,48 @@ export function buildEvidenceRow(
 ): BrainRow | null {
   if (result.hitCount < MIN_HITS || result.papers.length === 0) return null;
 
-  const lines = result.papers.map((p) => {
+  const head = (p: Paper) => {
     const where = [p.journal, p.year].filter(Boolean).join(", ");
     const cited = p.citedBy > 0 ? `, cited ${p.citedBy}×` : "";
-    const doi = p.doi ? `\n    doi: ${p.doi}${p.openAccess ? " (open access)" : ""}` : "";
-    const gist = p.abstract ? `\n    ${p.abstract.slice(0, SNIPPET).replace(/\s+/g, " ")}…` : "";
-    return `  • ${p.title}${where ? ` (${where}${cited})` : cited}${doi}${gist}`;
-  });
+    // Open access is worth saying with or without a DOI; it only printed beside one.
+    const oa = p.openAccess ? " (open access)" : "";
+    const doi = p.doi ? `\n    doi: ${p.doi}${oa}` : oa ? `\n   ${oa}` : "";
+    return `  • ${p.title}${where ? ` (${where}${cited})` : cited}${doi}`;
+  };
+  const intro = (listed: number) =>
+    [
+      `Published research whose TITLE contains “${construct}”, from Europe PMC — so each paper ` +
+        `is about the construct rather than merely mentioning it.`,
+      "",
+      "THIS IS OTHER PEOPLE'S WORK, NOT LOVEIQ'S. Nothing here has been reviewed or endorsed",
+      "by us, the findings may disagree with each other and with our own material, and a paper",
+      "appearing here means only that it is titled with the term in our field — not that it supports how",
+      `we use it. Cite it as the paper, never as “LoveIQ found”.`,
+      "",
+      `${result.hitCount} papers match in total; the ${listed} most relevant are listed.`,
+      "",
+    ].join("\n");
 
-  const body = [
-    `Published research whose TITLE contains “${construct}”, from Europe PMC — so each paper ` +
-      `is about the construct rather than merely mentioning it.`,
-    "",
-    "THIS IS OTHER PEOPLE'S WORK, NOT LOVEIQ'S. Nothing here has been reviewed or endorsed",
-    "by us, the findings may disagree with each other and with our own material, and a paper",
-    "appearing here means only that it is titled with the term in our field — not that it supports how",
-    `we use it. Cite it as the paper, never as “LoveIQ found”.`,
-    "",
-    `${result.hitCount} papers match in total; the ${result.papers.length} most relevant are listed.`,
-    "",
-    ...lines,
-  ].join("\n");
+  /**
+   * THE WHOLE CARD FITS IN ONE CHUNK. The write path cuts every body at MAX_BODY_CHARS, and
+   * five papers with 260-character snippets ran past it: on 2026-09-27, 63 of 70 cards were
+   * cut off there, 32 of them losing a listed paper mid-abstract while still saying "the 5
+   * most relevant are listed". The snippets now share whatever room the titles leave, and
+   * a paper is dropped (and the count with it) only if the titles alone cannot fit.
+   */
+  let papers = result.papers;
+  const headsLength = (ps: Paper[]) => ps.reduce((n, p) => n + head(p).length + 1, 0);
+  while (papers.length > 1 && intro(papers.length).length + headsLength(papers) > MAX_BODY_CHARS) {
+    papers = papers.slice(0, -1);
+  }
+  const room = MAX_BODY_CHARS - intro(papers.length).length - headsLength(papers);
+  // Each snippet costs its text plus "\n    " and "…".
+  const each = Math.min(SNIPPET, Math.floor(room / papers.length) - 6);
+  const lines = papers.map((p) => {
+    const gist = p.abstract?.replace(/\s+/g, " ").trim();
+    return head(p) + (gist && each >= 40 ? `\n    ${gist.slice(0, each).trimEnd()}…` : "");
+  });
+  const body = intro(papers.length) + lines.join("\n");
 
   return {
     source: "evidence",
@@ -331,14 +352,15 @@ export function buildEvidenceRow(
       kind: "evidence",
       construct,
       hitCount: result.hitCount,
-      papers: result.papers.length,
+      papers: papers.length,
       provider: "europepmc",
     },
     updated_at: stampedAt,
     /**
-     * Null: a citation list is reference material with no date it describes. Dating it
-     * with today would make it compete with dated records on recency, which is the
-     * ranking mistake the reference demotion already exists to undo.
+     * Null: a citation list is reference material with no date it describes. Note that
+     * brain_search scores a missing date AS TODAY (`coalesce(period_end, CURRENT_DATE)`),
+     * so these cards carry the full recency bonus. The reference demotion is what
+     * offsets it; leaving the date out does not.
      */
     period_end: null,
   };
