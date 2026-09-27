@@ -7395,3 +7395,41 @@ html {
     transition: none;
   }
 }
+
+/* ── Challenges in Partnerships: "The Situation" pulses — 532:231 ─────────────────
+ * "let's have the dot of The Situation pulsated when it comes into view. Ideally for a
+ * few seconds." At rest the violet marker (532:259) sits on The Situation's dot, so
+ * the pulse is a halo breathing out of the marker: three 1.2s beats once the orbit is
+ * 60% up the screen, over for good when they end or the reader moves on. The marker's
+ * own transform is what puts it on the ring, so the halo scales on its ::after — the
+ * `scale` property would scale the ring offset too and throw the marker off the ring.
+ * At 1.8x the halo still clears the step's label, 12.5px above the dot. */
+.rv3 .rv4-loop__indicator::after {
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 2px rgba(192, 132, 252, 0.95),
+    0 0 14px 4px rgba(192, 132, 252, 0.55);
+  content: "";
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+}
+.rv3 .rv4-loop__indicator.is-pulsing::after {
+  animation: rv4-loop-pulse 1200ms ease-out 3;
+}
+@keyframes rv4-loop-pulse {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.8);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv4-loop__indicator.is-pulsing::after {
+    animation: none;
+  }
+}
