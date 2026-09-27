@@ -1,6 +1,13 @@
+// @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { act, cleanup, render } from "@testing-library/react";
+import { hydrateRoot } from "react-dom/client";
+import { renderToString } from "react-dom/server";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Report3PartHeading } from "@/data/report3-archetype-page";
+import V4PartHeading from "@features/report/ui/v3/V4PartHeading";
+import { installRevealObserver, mockRect, observerOf } from "./v4RevealTestKit";
 
 /**
  * The V4 part heading (Figma 1:169 / 1:852 / 1:985) is drawn in a 361px column,
@@ -47,5 +54,82 @@ describe("reportV3.css — the part heading stays centred on every phone", () =>
   // and swallowed the taps on its title. It is decoration; it never takes a tap.
   it("never takes a tap from what lies under the glow", () => {
     expect(rule(".rv3 .rv4-part__glow {")).toContain("pointer-events: none;");
+  });
+});
+
+// Our own extra, one of the two Fatih approved on 27.09 in answer to Mark's "maybe you
+// also have some good ideas": each part's glow blooms in as its heading reaches the
+// screen, on Report 2.0's own timings for its part dividers.
+describe("V4PartHeading — the glow blooms in when the heading reaches the screen", () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  const HEADING: Report3PartHeading = { eyebrow: "Part V", lead: "How You", accent: "connect" };
+  const part = (root: ParentNode) => root.querySelector(".rv4-part")!;
+
+  it("holds the glow back until the heading is in view", () => {
+    installRevealObserver();
+    mockRect({ top: 5000 });
+    const { container } = render(<V4PartHeading heading={HEADING} />);
+    expect(part(container)).toHaveClass("is-pending");
+    observerOf(part(container))!.fire(true);
+    expect(part(container)).not.toHaveClass("is-pending");
+  });
+
+  it("opens at once on a heading already on screen", () => {
+    installRevealObserver();
+    mockRect({ top: 100 });
+    const { container } = render(<V4PartHeading heading={HEADING} />);
+    expect(part(container)).not.toHaveClass("is-pending");
+  });
+
+  it("hydrates the server-rendered preview without a mismatch", async () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+    const html = renderToString(
+      <V4PartHeading heading={HEADING} intro="[Part Introductory Text]" />
+    );
+    expect(html).toContain("is-pending");
+    installRevealObserver();
+    const host = document.createElement("div");
+    host.innerHTML = html;
+    document.body.appendChild(host);
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    await act(async () => {
+      hydrateRoot(host, <V4PartHeading heading={HEADING} intro="[Part Introductory Text]" />);
+    });
+    expect(errors).not.toHaveBeenCalled();
+    host.remove();
+  });
+});
+
+describe("reportV3.css — the part glow's bloom (review 27.09)", () => {
+  it("rises from 82% and clear, on Report 2.0's part-divider timings", () => {
+    const moving = rule(".rv3 .rv4-part .rv4-part__glow {");
+    expect(moving).toContain("opacity 1100ms ease-out");
+    expect(moving).toContain("transform 1500ms cubic-bezier(0.22, 1, 0.36, 1)");
+    const pending = rule(".rv3 .rv4-part.is-pending .rv4-part__glow {");
+    expect(pending).toContain("opacity: 0");
+    expect(pending).toContain("transform: scale(0.82)");
+  });
+
+  it("keeps the intro glow centred while it blooms: its transform carries translateX(-50%)", () => {
+    expect(rule(".rv3 .rv4-part--intro.is-pending .rv4-part__glow {")).toContain(
+      "transform: translateX(-50%) scale(0.82)"
+    );
+    // The `scale` property composes outside the transform list: the glow would slide.
+    expect(V3_CSS).not.toMatch(/\.rv4-part__glow[^{]*\{[^}]*\bscale:/);
+  });
+
+  it("shows the glow in full under reduced motion, the intro one still centred", () => {
+    const media = rule(`@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv4-part .rv4-part__glow,`);
+    expect(media).toContain("opacity: 1");
+    expect(media).toContain("transition: none");
+    const at = V3_CSS.indexOf("  .rv3 .rv4-part--intro.is-pending .rv4-part__glow {");
+    expect(at).toBeGreaterThan(0);
+    expect(V3_CSS.slice(at, V3_CSS.indexOf("}", at))).toContain("transform: translateX(-50%)");
   });
 });
