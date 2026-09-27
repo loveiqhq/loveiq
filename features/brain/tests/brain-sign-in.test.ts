@@ -16,6 +16,30 @@ const mockFetch = vi.fn();
 vi.mock("@shared/http/fetch-with-timeout", () => ({
   fetchWithTimeout: (...a: unknown[]) => mockFetch(...a),
 }));
+/** The shared Redis every instance sees; `kvDown` makes it fail. */
+const kv = new Map<string, unknown>();
+let kvDown = false;
+const kvOptions: Array<Record<string, unknown>> = [];
+const kvSetOptions: Array<{ px?: number }> = [];
+vi.mock("@upstash/redis", () => ({
+  Redis: class {
+    constructor(options: Record<string, unknown>) {
+      kvOptions.push(options);
+    }
+    async get(k: string) {
+      if (kvDown) throw new Error("kv down");
+      return kv.get(k) ?? null;
+    }
+    async set(k: string, v: unknown, options?: { px?: number }) {
+      if (kvDown) throw new Error("kv down");
+      kv.set(k, v);
+      kvSetOptions.push(options ?? {});
+      return "OK";
+    }
+  },
+}));
+process.env.KV_REST_API_URL = "https://kv.test";
+process.env.KV_REST_API_TOKEN = "kv-token";
 
 import {
   forgetSignIns,
@@ -56,6 +80,8 @@ function signedIn(email: string, person: string | null) {
 
 beforeEach(() => {
   forgetSignIns();
+  kv.clear();
+  kvDown = false;
   vi.clearAllMocks();
   process.env.SUPABASE_URL = `${BASE}/`;
   process.env.SUPABASE_SERVICE_ROLE_KEY = "service-key";
@@ -187,6 +213,46 @@ describe("resolveCaller", () => {
     await resolveCaller(bearer(oauth({ sub: "user-1", client_id: "b" })), NOW + 1_000, check);
     await resolveCaller(bearer(oauth({ sub: "stranger", client_id: "c" })), NOW + 2_000, check);
     expect(seen).toEqual([undefined, "user-1", undefined]);
+  });
+
+  it("still knows a verified account on a new instance or after a deploy", async () => {
+    signedIn("mo@loveiq.org", "Mark Oldenburg");
+    const seen: Array<string | undefined> = [];
+    const check = async (who: { knownSub?: string }) => {
+      seen.push(who.knownSub);
+      return true;
+    };
+    await resolveCaller(bearer(oauth({ sub: "user-1", client_id: "a" })), NOW, check);
+    forgetSignIns(); // this instance's memory is gone; Redis is not
+    await resolveCaller(bearer(oauth({ sub: "user-1", client_id: "b" })), NOW + 1_000, check);
+    // A day on, the account has to verify again before it is known.
+    forgetSignIns();
+    const later = NOW + 86_402_000;
+    const fresh = oauth({ sub: "user-1", client_id: "c", exp: later / 1000 + 3600 });
+    await resolveCaller(bearer(fresh), later, check);
+    expect(seen).toEqual([undefined, "user-1", undefined]);
+    // Kept a day and no longer: the key expires with the trust it records.
+    expect(kvSetOptions.at(-1)).toEqual({ px: 86_400_000 });
+  });
+
+  it("falls back to the address limit when Redis is down, and still signs in", async () => {
+    signedIn("mo@loveiq.org", "Mark Oldenburg");
+    kvDown = true;
+    const seen: Array<string | undefined> = [];
+    const check = async (who: { knownSub?: string }) => {
+      seen.push(who.knownSub);
+      return true;
+    };
+    expect((await resolveCaller(bearer(oauth({ sub: "user-1" })), NOW, check)).ok).toBe(true);
+    expect(seen).toEqual([undefined]);
+    // And it fails fast: no retry backoff, and each call bounded at a second, so an outage
+    // costs at most a second on the read and a second on the write.
+    expect(kvOptions[0]).toMatchObject({ retry: false });
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    const signal = (kvOptions[0]!.signal as () => AbortSignal)();
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(timeout).toHaveBeenCalledWith(1_000);
+    timeout.mockRestore();
   });
 
   it("stops a member within a minute of their registry row going inactive", async () => {

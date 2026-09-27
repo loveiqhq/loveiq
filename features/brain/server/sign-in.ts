@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { Redis } from "@upstash/redis";
 import { supabaseFetch } from "@features/admin/server/supabase";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import logger from "@shared/observability/logger";
@@ -51,10 +52,42 @@ const tokens = new Map<string, { caller: Caller; until: number }>();
  * bucket of their own instead of the per-address one, so a flood of forged tokens through
  * Anthropic's shared addresses cannot make a connected member's once-a-minute re-check
  * fail. A forger would need a member's account id, which only appears in that member's
- * own tokens. Kept a day; per instance, so a cold instance falls back to the address.
+ * own tokens. Kept a day, in Redis as well as here: kept only in memory, every deploy and
+ * every new instance forgot them, so a flood right then refused the members it protects.
  */
 const VERIFIED_SUB_MS = 24 * 3_600_000;
 const verifiedSubs = new Map<string, number>();
+let _subRedis: Redis | null | undefined;
+function subRedis(): Redis | null {
+  if (_subRedis !== undefined) return _subRedis;
+  const url = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
+  // No retry backoff and a one-second bound per call: this only picks a rate-limit bucket,
+  // so an unreachable Redis must cost a sign-in nothing but the address limit. The client's
+  // default (five retries with backoff, no timeout) added about 8.6 s to every check while
+  // it was down.
+  _subRedis =
+    url && token
+      ? new Redis({ url, token, retry: false, signal: () => AbortSignal.timeout(1_000) })
+      : null;
+  return _subRedis;
+}
+const subKey = (sub: string) => `jarvis:verified-sub:${sub}`;
+
+/** Whether Supabase vouched for this account in the last day, here or on any instance. */
+async function verifiedRecently(sub: string, now: number): Promise<boolean> {
+  if ((verifiedSubs.get(sub) ?? 0) > now) return true;
+  try {
+    const until = Number(await subRedis()?.get(subKey(sub)));
+    if (until > now) {
+      remember(verifiedSubs, sub, until);
+      return true;
+    }
+  } catch (err) {
+    logger.warn({ err }, "jarvis: could not read verified accounts, using the address limit");
+  }
+  return false;
+}
 
 /** Drop the oldest entry once a cache is full; Map keeps insertion order. */
 function remember<V>(cache: Map<string, V>, key: string, value: V): void {
@@ -169,7 +202,7 @@ export async function resolveCaller(
   if (hit && hit.until > now) return { ok: true, caller: hit.caller };
 
   const sub = typeof claims.sub === "string" ? claims.sub : undefined;
-  const knownSub = sub && (verifiedSubs.get(sub) ?? 0) > now ? sub : undefined;
+  const knownSub = sub && (await verifiedRecently(sub, now)) ? sub : undefined;
   if (beforeCheck && !(await beforeCheck({ knownSub }))) {
     return refused(429, "Too many sign-in checks from this address. Try again in a minute.");
   }
@@ -210,7 +243,14 @@ export async function resolveCaller(
   // offboarded person kept access for up to two minutes, not the one we promise.
   const memberUntil = members.get(member.email)?.until ?? now + TRUST_MS;
   remember(tokens, hash, { caller, until: Math.min(now + TRUST_MS, memberUntil) });
-  if (sub) remember(verifiedSubs, sub, now + VERIFIED_SUB_MS);
+  if (sub) {
+    remember(verifiedSubs, sub, now + VERIFIED_SUB_MS);
+    try {
+      await subRedis()?.set(subKey(sub), now + VERIFIED_SUB_MS, { px: VERIFIED_SUB_MS });
+    } catch (err) {
+      logger.warn({ err }, "jarvis: could not record a verified account");
+    }
+  }
   return { ok: true, caller };
 }
 
