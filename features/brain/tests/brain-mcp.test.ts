@@ -127,7 +127,7 @@ import { SlackTargetError } from "@features/brain/server/act/slack";
 import { NotionTargetError } from "@features/brain/server/act/notion";
 import { EmailRefusal } from "@features/brain/server/act/email";
 import { DelegationNotGranted, GoogleDocRefusal } from "@features/brain/server/act/gdoc";
-import { lastBilledMonth } from "@features/brain/server/cost-watch";
+import { lastBilledMonth, settleWindow } from "@features/brain/server/cost-watch";
 
 const TOKEN = "test-token-0123456789";
 
@@ -194,20 +194,6 @@ describe("/api/mcp", () => {
       expect((await POST(rpc({ jsonrpc: "2.0", id: 1, method: "ping" }, ""))).status).toBe(401);
     });
 
-    it("rate-limits before any sign-in check, so a fake token costs no call to Supabase", async () => {
-      mockRateLimit.mockResolvedValueOnce({ allowed: false });
-      const claims = Buffer.from(
-        JSON.stringify({
-          iss: `${process.env.SUPABASE_URL ?? "https://x.supabase.co"}/auth/v1`,
-          client_id: "c",
-          exp: Date.now() / 1000 + 3600,
-        })
-      ).toString("base64url");
-      const res = await POST(rpc({ method: "ping" }, `e30.${claims}.sig`));
-      expect(res.status).toBe(429);
-      expect(mockFetch.mock.calls.some(([u]) => String(u).includes("/auth/v1/user"))).toBe(false);
-    });
-
     it("401s with no token, a wrong token, and a wrong-LENGTH token", async () => {
       // The length case matters on its own: a naive constant-time compare throws
       // on mismatched lengths, which would surface as a 500 rather than a 401.
@@ -255,6 +241,35 @@ describe("/api/mcp", () => {
       afterEach(() => {
         delete process.env.SUPABASE_URL;
         delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+      });
+
+      it("limits sign-in checks on their own, so strangers never spend the team's budget", async () => {
+        // claude.ai's calls leave from Anthropic's shared addresses, so a per-address limit
+        // at the door let anyone sending junk tokens lock the team out. The costly step, the
+        // check with Supabase, has its own bucket; the door's is keyed by who is calling.
+        mockRateLimit.mockImplementation(async (...a: unknown[]) => ({
+          allowed: (a[1] as { bucket: string }).bucket !== "mcp-sign-in",
+        }));
+        try {
+          const refused = await POST(rpc({ method: "ping" }, signIn));
+          expect(refused.status).toBe(429);
+          expect(mockFetch.mock.calls.some(([u]) => String(u).includes("/auth/v1/user"))).toBe(
+            false
+          );
+          // The shared token needs no check, so the jobs are never locked out by strangers.
+          expect((await POST(rpc({ method: "ping" }))).status).toBe(200);
+          expect(
+            mockRateLimit.mock.calls.map(
+              ([k, o]) => `${(o as { bucket: string }).bucket}:${String(k).split("|")[0]}`
+            )
+          ).toContain("mcp:shared");
+          // A token that cannot be a sign-in is refused before any bucket is touched.
+          mockRateLimit.mockClear();
+          expect((await POST(rpc({ method: "ping" }, "not-a-sign-in-token-000"))).status).toBe(401);
+          expect(mockRateLimit).not.toHaveBeenCalled();
+        } finally {
+          mockRateLimit.mockImplementation(async () => ({ allowed: true }));
+        }
       });
 
       it("logs every call under their own address, and the shared token as shared", async () => {
@@ -3989,6 +4004,17 @@ describe("/api/mcp", () => {
       ["Adwords", "", "Marketing", -1000, -1000],
       ["A. Person", "", "Intern - full time", -987.65, -987.65],
     ];
+    beforeEach(() => {
+      // One successful filing run inside the window, as the 3rd's run would record.
+      mockSupabaseFetch.mockImplementation(async (path: string) => ({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () =>
+          String(path).includes("cron_run") ? [{ started_at: "2026-09-03T06:40:05Z" }] : [],
+        text: async () => "",
+      }));
+    });
     afterEach(() => {
       mockAdCost = { byDay: new Map(), from: null, to: null };
     });
@@ -4008,6 +4034,15 @@ describe("/api/mcp", () => {
       expect(text).toContain("may never have been entered. GA4 recorded EUR 1,100.00");
       expect(text).not.toMatch(/Person|987/);
       expect(mockLoadCostSheet).toHaveBeenCalledTimes(1);
+      // Settled only by a successful filing run inside the window that can settle the month.
+      const w = settleWindow(billed);
+      const asked = mockSupabaseFetch.mock.calls
+        .map(([p]) => String(p))
+        .find((p) => p.includes("cron_run"));
+      expect(asked).toContain("cron_name=eq.file-invoices&status=eq.success");
+      expect(asked).toContain(
+        `started_at=gte.${w.from.toISOString()}&started_at=lte.${w.to.toISOString()}`
+      );
     });
 
     it("still answers when the GA4 check fails, only without it", async () => {

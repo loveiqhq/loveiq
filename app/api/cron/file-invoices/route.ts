@@ -451,11 +451,15 @@ export async function GET(request: Request) {
     }
 
     let outOfTime = false;
+    // A walk that did not cover every mailbox cannot vouch for the months it wrote: recorded
+    // as an error and said in #ops, where both cases used to record "success" in silence.
+    const incomplete: string[] = [];
     for (const mailbox of MAILBOXES) {
       if (outOfTime) break;
       const gmailToken = await getDelegatedToken(mailbox, GMAIL_SCOPE);
       if (!gmailToken) {
         logger.warn({ mailbox }, "file-invoices: no gmail token, skipping mailbox");
+        incomplete.push(`no Gmail access to ${mailbox}`);
         continue;
       }
       const q = encodeURIComponent(`has:attachment filename:pdf newer_than:${LOOKBACK_DAYS}d`);
@@ -470,6 +474,7 @@ export async function GET(request: Request) {
           // loop would start the next mailbox with no budget left and blow the
           // 300s ceiling, which leaves NO cron_run row at all to debug from.
           outOfTime = true;
+          incomplete.push(`ran out of time before reading every mailbox (stopped in ${mailbox})`);
           break;
         }
 
@@ -717,7 +722,11 @@ export async function GET(request: Request) {
         : "",
       "",
       `_No invoice expected by email from: ${NEVER_ATTACHES.map((n) => `${n.sheetName} (${n.why})`).join("; ")}._`,
+      incomplete.length
+        ? `:warning: *Incomplete run, so invoices may be missing:* ${escapeSlack(incomplete.join("; "))}. Run it again.`
+        : "",
     ];
+    if (incomplete.length) cronError = `incomplete: ${incomplete.join("; ")}`;
 
     await notifySlack({
       channel: "ops",

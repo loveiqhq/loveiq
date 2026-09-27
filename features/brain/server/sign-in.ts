@@ -32,7 +32,7 @@ export type Caller =
     };
 
 export type Resolution =
-  { ok: true; caller: Caller } | { ok: false; status: 401 | 403 | 503; message: string };
+  { ok: true; caller: Caller } | { ok: false; status: 401 | 403 | 429 | 503; message: string };
 
 export interface Member {
   name: string;
@@ -106,7 +106,7 @@ function sameSecret(presented: string, expected: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-const refused = (status: 401 | 403 | 503, message: string): Resolution => ({
+const refused = (status: 401 | 403 | 429 | 503, message: string): Resolution => ({
   ok: false,
   status,
   message,
@@ -121,7 +121,14 @@ const refused = (status: 401 | 403 | 503, message: string): Resolution => ({
  */
 export async function resolveCaller(
   authorization: string | null,
-  now = Date.now()
+  now = Date.now(),
+  /**
+   * Asked before each check with Supabase (a token not trusted from the last minute): false
+   * refuses it with a 429. The limit sits here, on the one step that costs something,
+   * rather than on the door: the door's limit is per address, and claude.ai's calls leave
+   * from Anthropic's shared addresses, so strangers sending junk would spend the team's.
+   */
+  beforeCheck?: () => Promise<boolean>
 ): Promise<Resolution> {
   const presented = authorization?.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
   if (!presented) return refused(401, "Sign in to use Jarvis.");
@@ -149,6 +156,10 @@ export async function resolveCaller(
   const hash = createHash("sha256").update(presented).digest("hex");
   const hit = tokens.get(hash);
   if (hit && hit.until > now) return { ok: true, caller: hit.caller };
+
+  if (beforeCheck && !(await beforeCheck())) {
+    return refused(429, "Too many sign-in checks from this address. Try again in a minute.");
+  }
 
   let email: string;
   try {
