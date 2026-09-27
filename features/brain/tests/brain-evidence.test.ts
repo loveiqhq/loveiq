@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MAX_BODY_CHARS } from "@features/brain/server/ingest/upsert";
 import {
   buildEvidenceRow,
   buildQuery,
@@ -135,10 +136,51 @@ describe("buildEvidenceRow", () => {
     expect(body).toContain("cited 1×");
   });
 
-  it("is undated, so it cannot outrank a dated record on recency", () => {
-    // A citation list describes no period. Stamping it with today would put reference
-    // material into the recency contest the reference demotion exists to keep it out of.
+  it("is undated, because a citation list describes no period", () => {
+    // Not a ranking shield: brain_search scores a missing date as TODAY, so this card
+    // carries the full recency bonus and the reference demotion is what offsets it.
     expect(buildEvidenceRow("Endorphins", result(), "t")!.period_end).toBeNull();
+  });
+
+  /**
+   * THE WHOLE CARD FITS IN ONE CHUNK. The write path cuts every body at MAX_BODY_CHARS, and
+   * on 2026-09-27 63 of 70 live cards were cut there, 32 losing a listed paper mid-abstract
+   * while still saying "the 5 most relevant are listed".
+   */
+  it("fits five papers with long abstracts, shortening the snippets rather than losing a paper", () => {
+    const papers = Array.from({ length: 5 }, (_, i) =>
+      paper({
+        title: `Paper ${i + 1} on endorphins and the long title a real journal gives it, ${"x".repeat(60)}`,
+        abstract: "Beta-endorphin rises in early love. ".repeat(40),
+      })
+    );
+    const row = buildEvidenceRow("Endorphins", result({ papers }), "t")!;
+    expect(row.body.length).toBeLessThanOrEqual(MAX_BODY_CHARS);
+    for (let i = 1; i <= 5; i += 1) expect(row.body).toContain(`Paper ${i} on endorphins`);
+    expect(row.body).toContain("the 5 most relevant are listed");
+    expect(row.body.match(/…/g)).toHaveLength(5);
+    expect(row.meta).toMatchObject({ papers: 5 });
+  });
+
+  it("drops a paper, and says so in the count, only when the titles alone cannot fit", () => {
+    const papers = Array.from({ length: 5 }, (_, i) =>
+      paper({ title: `Paper ${i + 1} ${"endorphins ".repeat(60)}`, abstract: null })
+    );
+    const row = buildEvidenceRow("Endorphins", result({ papers }), "t")!;
+    expect(row.body.length).toBeLessThanOrEqual(MAX_BODY_CHARS);
+    const listed = (row.body.match(/^ {2}• /gm) ?? []).length;
+    expect(listed).toBeLessThan(5);
+    expect(row.body).toContain(`the ${listed} most relevant are listed`);
+    expect(row.meta).toMatchObject({ papers: listed });
+  });
+
+  it("marks open access even when the paper has no DOI", () => {
+    const body = buildEvidenceRow(
+      "Endorphins",
+      result({ papers: [paper({ doi: null, openAccess: true })] }),
+      "t"
+    )!.body;
+    expect(body).toContain("(open access)");
   });
 
   it("states the true total, not just what it listed", () => {

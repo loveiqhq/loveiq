@@ -39,7 +39,7 @@ const NUL_BYTE = String.fromCharCode(0);
 
 /** Matches the ceiling the repo ingester enforces, so every source is chunked
  *  to a comparable size and no single row can dominate a prompt. */
-const MAX_BODY_CHARS = 2400;
+export const MAX_BODY_CHARS = 2400;
 
 /**
  * Credential shapes that must never enter the corpus.
