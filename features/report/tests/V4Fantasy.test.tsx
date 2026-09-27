@@ -175,12 +175,13 @@ describe("reportV3.css — Fantasy vs. Reality body contracts", () => {
     return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
   };
 
-  // Review 25.09, Mark (1941866053): "move this CTA down a bit so that it isnt
-  // immediately following the drop down" and a separator after it. 305:225 spaces the
-  // table, that separator and the blurred copy 16 apart and floats the card 103.3 into
-  // the copy (305:250); the open body (304:290) keeps them flush.
-  it("paywalled, sets the table's separator 16 from each side and the card 103.3 into the copy", () => {
-    expect(ruleOf(".rv3 .rv4-fvr.is-locked > .rv4-fvt + .rv4-sep")).toContain("margin: 16px 0");
+  // Review 27.09, Mark (Divider.jpeg): "That space feels a bit wide. Is that more than a
+  // separator element in figma?" It was — 305:225 spaces the table, its separator and the
+  // blurred copy 16 apart, 76 in all. One 44px separator now, as the open body (304:290)
+  // has; the card keeps its 103.3 into the copy (305:250), still well clear of the
+  // dropdown Mark asked it to move off on 25.09 (1941866053).
+  it("paywalled, leaves one 44px separator between the table and the blurred copy", () => {
+    expect(V3_CSS).not.toMatch(/\.rv4-fvr\.is-locked > \.rv4-fvt \+ \.rv4-sep\s*\{/);
     expect(ruleOf(".rv3 .rv4-fvr__gate .rv4-premium")).toContain("top: 103.3px");
   });
 
