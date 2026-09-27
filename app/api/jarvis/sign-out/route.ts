@@ -24,6 +24,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
   const supabase = await createSupabaseServer();
-  await supabase.auth.signOut();
+  // This browser only. The default scope is global, which also ended every Claude client the
+  // person had connected and their admin session: not what "sign out" on this page means.
+  await supabase.auth.signOut({ scope: "local" });
   return NextResponse.json({ success: true });
 }

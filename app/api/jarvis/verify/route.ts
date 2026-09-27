@@ -49,9 +49,18 @@ export async function POST(request: Request) {
   }
   // Checked again after sign-in: a code only exists for a member, but membership can end
   // between the email and the typing.
-  const member = await memberByEmail(email).catch(() => null);
+  // An unreadable registry is an outage, not a "no": it must not sign the person out.
+  let member;
+  try {
+    member = await memberByEmail(email);
+  } catch {
+    return NextResponse.json(
+      { error: "Jarvis could not check your membership just now. Try again in a minute." },
+      { status: 503 }
+    );
+  }
   if (!member) {
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: "local" });
     return NextResponse.json({ error: `${email} cannot use Jarvis.` }, { status: 403 });
   }
   return NextResponse.json({ success: true });

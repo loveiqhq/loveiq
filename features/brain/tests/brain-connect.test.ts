@@ -70,9 +70,11 @@ import { POST as decisionPOST } from "@/app/api/jarvis/decision/route";
 import { POST as signOutPOST } from "@/app/api/jarvis/sign-out/route";
 
 const CLAUDE = "https://claude.ai/api/mcp/auth_callback";
+// Shaped the way Supabase mints them: 32 letters and digits.
+const AUTH = "x6msceh5cxbk3kmdm3jcbaqvejbzdz5o";
 const asking = (redirect_uri = CLAUDE) => ({
   data: {
-    authorization_id: "auth-1",
+    authorization_id: AUTH,
     redirect_uri,
     client: { name: "Claude" },
     user: { id: "u", email: "mo@loveiq.org" },
@@ -111,9 +113,9 @@ describe("what the page shows", () => {
   it("walks from no request, to signing in, to asking the member", async () => {
     expect(await connectState(null)).toEqual({ kind: "no-request" });
     signedIn(null);
-    expect(await connectState("auth-1")).toEqual({ kind: "sign-in" });
+    expect(await connectState(AUTH)).toEqual({ kind: "sign-in" });
     signedIn("mo@loveiq.org");
-    expect(await connectState("auth-1")).toEqual({
+    expect(await connectState(AUTH)).toEqual({
       kind: "consent",
       app: "Claude",
       name: "Mark Oldenburg",
@@ -123,7 +125,7 @@ describe("what the page shows", () => {
 
   it("tells a signed-in non-member so, and never looks up the request", async () => {
     signedIn("teamwork@loveiq.org");
-    expect(await connectState("auth-1")).toEqual({
+    expect(await connectState(AUTH)).toEqual({
       kind: "not-member",
       email: "teamwork@loveiq.org",
     });
@@ -136,17 +138,54 @@ describe("what the page shows", () => {
       data: { redirect_url: `${CLAUDE}?code=xyz` },
       error: null,
     });
-    expect(await connectState("auth-1")).toEqual({ kind: "redirect", url: `${CLAUDE}?code=xyz` });
+    expect(await connectState(AUTH)).toEqual({ kind: "redirect", url: `${CLAUDE}?code=xyz` });
   });
 
   it("refuses an app that would send the sign-in anywhere but Claude, naming where", async () => {
     signedIn("mo@loveiq.org");
     auth.oauth.getAuthorizationDetails.mockResolvedValue(asking("https://evil.example/cb"));
-    expect(await connectState("auth-1")).toEqual({
+    expect(await connectState(AUTH)).toEqual({
       kind: "not-claude",
       app: "Claude",
       host: "evil.example",
     });
+  });
+
+  it("refuses to send an already-allowed app's code anywhere but Claude", async () => {
+    // Consent is kept per app, not per return address, and an app can register several. An
+    // app allowed once through Claude could ask again with its own address; Supabase then
+    // approves on its own, and the page used to forward the code there.
+    signedIn("mo@loveiq.org");
+    auth.oauth.getAuthorizationDetails.mockResolvedValue({
+      data: { redirect_url: "https://evil.example/cb?code=stolen" },
+      error: null,
+    });
+    expect(await connectState(AUTH)).toEqual({
+      kind: "not-claude",
+      app: "An app you allowed before",
+      host: "evil.example",
+    });
+    const r = await decisionPOST(post({ authorization_id: AUTH, decision: "approve" }));
+    expect(r.status).toBe(400);
+    expect(JSON.stringify(await r.json())).not.toContain("stolen");
+  });
+
+  it("never passes a malformed request id to Supabase", async () => {
+    // The SDK puts the id into the request path unencoded, so "../authorize?..." would
+    // reach a different Supabase endpoint.
+    signedIn("mo@loveiq.org");
+    for (const bad of ["../authorize?client_id=x", "auth-1", `${AUTH}/`, `${AUTH}x`]) {
+      expect(await connectState(bad)).toMatchObject({ kind: "error" });
+      const r = await decisionPOST(post({ authorization_id: bad, decision: "approve" }));
+      expect(r.status).toBe(400);
+    }
+    expect(auth.oauth.getAuthorizationDetails).not.toHaveBeenCalled();
+  });
+
+  it("calls an unreadable registry an outage on the page, not a stranger", async () => {
+    signedIn("mo@loveiq.org");
+    mockSupabaseFetch.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) });
+    expect(await connectState(AUTH)).toMatchObject({ kind: "error" });
   });
 
   it("calls an expired request expired", async () => {
@@ -155,20 +194,20 @@ describe("what the page shows", () => {
       data: null,
       error: { message: "gone" },
     });
-    expect(await connectState("auth-1")).toMatchObject({ kind: "error" });
+    expect(await connectState(AUTH)).toMatchObject({ kind: "error" });
   });
 });
 
 describe("the decision", () => {
   it("approves for a member and returns Claude's callback with the code", async () => {
     signedIn("mo@loveiq.org");
-    expect(await decide("auth-1", true)).toEqual({
+    expect(await decide(AUTH, true)).toEqual({
       ok: true,
       url: `${CLAUDE}?code=abc&state=s`,
       app: "Claude",
       member: "Mark Oldenburg",
     });
-    expect(auth.oauth.approveAuthorization).toHaveBeenCalledWith("auth-1", {
+    expect(auth.oauth.approveAuthorization).toHaveBeenCalledWith(AUTH, {
       skipBrowserRedirect: true,
     });
   });
@@ -176,17 +215,17 @@ describe("the decision", () => {
   it("never approves for a stranger's app, a non-member or nobody", async () => {
     signedIn("mo@loveiq.org");
     auth.oauth.getAuthorizationDetails.mockResolvedValue(asking("https://evil.example/cb"));
-    expect(await decide("auth-1", true)).toMatchObject({ ok: false, status: 400 });
+    expect(await decide(AUTH, true)).toMatchObject({ ok: false, status: 400 });
     signedIn("teamwork@loveiq.org");
-    expect(await decide("auth-1", true)).toMatchObject({ ok: false, status: 403 });
+    expect(await decide(AUTH, true)).toMatchObject({ ok: false, status: 403 });
     signedIn(null);
-    expect(await decide("auth-1", true)).toMatchObject({ ok: false, status: 401 });
+    expect(await decide(AUTH, true)).toMatchObject({ ok: false, status: 401 });
     expect(auth.oauth.approveAuthorization).not.toHaveBeenCalled();
   });
 
   it("posts a new connection to #brain, and a cancel nowhere", async () => {
     signedIn("mo@loveiq.org");
-    const res = await decisionPOST(post({ authorization_id: "auth-1", decision: "approve" }));
+    const res = await decisionPOST(post({ authorization_id: AUTH, decision: "approve" }));
     expect(await res.json()).toEqual({ redirect_url: `${CLAUDE}?code=abc&state=s` });
     expect(mockNotify).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -195,7 +234,7 @@ describe("the decision", () => {
       })
     );
     mockNotify.mockClear();
-    const denied = await decisionPOST(post({ authorization_id: "auth-1", decision: "deny" }));
+    const denied = await decisionPOST(post({ authorization_id: AUTH, decision: "deny" }));
     expect((await denied.json()).redirect_url).toContain("error=access_denied");
     expect(mockNotify).not.toHaveBeenCalled();
   });
@@ -253,7 +292,14 @@ describe("the sign-in code", () => {
     auth.verifyOtp.mockResolvedValue({ error: null });
     members = {};
     expect((await verifyPOST(post({ email: "mo@loveiq.org", code: "12345678" }))).status).toBe(403);
-    expect(auth.signOut).toHaveBeenCalled();
+    expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" });
+  });
+
+  it("does not sign a member out because the registry could not be read", async () => {
+    auth.verifyOtp.mockResolvedValue({ error: null });
+    mockSupabaseFetch.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) });
+    expect((await verifyPOST(post({ email: "mo@loveiq.org", code: "12345678" }))).status).toBe(503);
+    expect(auth.signOut).not.toHaveBeenCalled();
   });
 });
 
@@ -261,6 +307,8 @@ describe("signing out", () => {
   it("forgets the sign-in, and takes no arguments", async () => {
     expect((await signOutPOST(post({}))).status).toBe(200);
     expect(auth.signOut).toHaveBeenCalledTimes(1);
+    // This browser only: the default, global, also ended every connected Claude client.
+    expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" });
     expect((await signOutPOST(post({ everywhere: true }))).status).toBe(400);
     csrfOk = false;
     expect((await signOutPOST(post({}))).status).toBe(403);

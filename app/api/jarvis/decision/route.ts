@@ -5,14 +5,14 @@
  */
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { decide } from "@features/brain/server/connect";
+import { AUTHORIZATION_ID, decide } from "@features/brain/server/connect";
 import { verifyCsrfToken } from "@shared/http/csrf";
 import { checkRateLimit, getClientIp } from "@shared/http/ratelimit";
 import logger from "@shared/observability/logger";
 import { escapeSlack, notifySlack } from "@shared/observability/slack";
 
 const schema = z.object({
-  authorization_id: z.string().min(1).max(200),
+  authorization_id: z.string().regex(AUTHORIZATION_ID),
   decision: z.enum(["approve", "deny"]),
 });
 

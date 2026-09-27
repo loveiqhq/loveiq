@@ -194,6 +194,20 @@ describe("/api/mcp", () => {
       expect((await POST(rpc({ jsonrpc: "2.0", id: 1, method: "ping" }, ""))).status).toBe(401);
     });
 
+    it("rate-limits before any sign-in check, so a fake token costs no call to Supabase", async () => {
+      mockRateLimit.mockResolvedValueOnce({ allowed: false });
+      const claims = Buffer.from(
+        JSON.stringify({
+          iss: `${process.env.SUPABASE_URL ?? "https://x.supabase.co"}/auth/v1`,
+          client_id: "c",
+          exp: Date.now() / 1000 + 3600,
+        })
+      ).toString("base64url");
+      const res = await POST(rpc({ method: "ping" }, `e30.${claims}.sig`));
+      expect(res.status).toBe(429);
+      expect(mockFetch.mock.calls.some(([u]) => String(u).includes("/auth/v1/user"))).toBe(false);
+    });
+
     it("401s with no token, a wrong token, and a wrong-LENGTH token", async () => {
       // The length case matters on its own: a naive constant-time compare throws
       // on mismatched lengths, which would surface as a 500 rather than a 401.
