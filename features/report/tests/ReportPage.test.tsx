@@ -1720,6 +1720,9 @@ describe("ReportPage", () => {
   // Report 2.0 chapters carried their content — though only the two navs read it.
   describe("the scroll-spy", () => {
     let scrollY = 0;
+    // After mount, every anchor past `pivot` sits `grown` px further down.
+    let grown = 0;
+    let pivot = Infinity;
     let rects: { mockRestore: () => void } | null = null;
     // Frames queue and run one batch at a time: some of the page's frame loops
     // schedule their next frame from inside the last.
@@ -1732,6 +1735,8 @@ describe("ReportPage", () => {
 
     beforeEach(() => {
       scrollY = 0;
+      grown = 0;
+      pivot = Infinity;
       frames = [];
       Object.defineProperty(window, "scrollY", { configurable: true, get: () => scrollY });
       // Every nav anchor sits 1000px below the one before it.
@@ -1739,7 +1744,7 @@ describe("ReportPage", () => {
         this: Element
       ) {
         const i = REPORT_NAV_IDS.indexOf(this.id);
-        const top = (i < 0 ? 0 : i * 1000) - scrollY;
+        const top = (i < 0 ? 0 : i * 1000 + (i > pivot ? grown : 0)) - scrollY;
         return {
           top,
           bottom: top + 10,
@@ -1791,6 +1796,46 @@ describe("ReportPage", () => {
 
       expect(current()).toEqual([`#${target}`]);
       expect(v3ChapterRenders.count).toBe(before);
+    });
+
+    // Found in the lag round (27.09): the tops were measured once, at mount, and the page
+    // keeps growing after that — Typical Beliefs' rows as they turn (~759px), a chapter
+    // opening, the fonts landing. The highlight ran ahead of the reader: at Attachment it
+    // lit Love Language. `staging` did the same.
+    it("follows the chapters where they are now, after the page above them grows", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      const response = buildSuccessResponse();
+      (response.data as Record<string, unknown>).accessPlan = "full_report";
+      mockUseReportData.mockReturnValue(response);
+      render(<ReportPage />);
+
+      const current = () =>
+        screen
+          .getAllByRole("link")
+          .filter((link) => link.getAttribute("aria-current") === "location")
+          .map((link) => link.getAttribute("href"));
+      const listed = REPORT_NAV_IDS.filter(
+        (id) => document.getElementById(id) && document.querySelector(`a[href="#${id}"]`)
+      );
+      // Halfway down, with the next anchor on the page too: measured at mount, the
+      // grown page would light that one instead.
+      const target = listed.find(
+        (id, k) =>
+          k >= listed.length / 2 &&
+          document.getElementById(REPORT_NAV_IDS[REPORT_NAV_IDS.indexOf(id) + 1] ?? "")
+      )!;
+      expect(target).toBeDefined();
+
+      // Everything past the second anchor moves 1759px down, with no resize to tell.
+      pivot = REPORT_NAV_IDS.indexOf(listed[1]!);
+      grown = 1759;
+      scrollY = REPORT_NAV_IDS.indexOf(target) * 1000 + grown + 50;
+      act(() => {
+        fireEvent.scroll(window);
+        nextFrame();
+      });
+
+      expect(current()).toEqual([`#${target}`]);
     });
   });
 
