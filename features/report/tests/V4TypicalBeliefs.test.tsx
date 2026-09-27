@@ -119,6 +119,21 @@ describe("the turn — 368:5482", () => {
     expect(screen.getByText(VIEW.panels.turns[9]!.shift)).toBeInTheDocument();
   });
 
+  // Review 27.09, Fatih: the coral panel's turn is its crossing out, and the checkmark
+  // animation is the sun panel's alone. A turned row keeps its pink minus.
+  it("keeps the pink minus on a turned row: the crossing out is the turn", () => {
+    const { container } = render(<V4ShadowBeliefs turns={VIEW.panels.turns} />);
+    rowTop = 380;
+    fireEvent.scroll(window);
+    const turned = container.querySelectorAll(".rv4-turn__row.is-turned");
+    expect(turned).toHaveLength(10);
+    for (const row of turned) {
+      const disc = row.querySelector(".rv4-turn__tick")!;
+      expect(disc.querySelector(".rv4-turn__minus")).not.toBeNull();
+      expect(disc.querySelector("svg")).toBeNull();
+    }
+  });
+
   // A designed chapter closes with display:none, where every row measures 0×0 at top 0,
   // which reads as "past the line": every row turned while nobody could see them.
   it("keeps its rows as they were while the chapter is collapsed", () => {
@@ -351,6 +366,13 @@ describe("reportV3.css — belief panel contracts", () => {
     expect(block(".rv3 .rv4-turn__row.is-turned .rv4-turn__shift {")).toContain(
       "grid-template-rows: 1fr"
     );
+  });
+
+  it("leaves the coral disc alone on a turn: no rule swaps its minus for a check", () => {
+    // Review 27.09: the checkmark is the sun panel's animation, not the coral turn's.
+    expect(V3_CSS).not.toMatch(/\.rv4-turn__row\.is-turned \.rv4-turn__(tick|minus|check)\b/);
+    expect(V3_CSS).not.toContain(".rv4-turn__check");
+    expect(block(".rv3 .rv4-turn__tick {")).toContain("background: rgba(194, 84, 47, 0.16)");
   });
 
   it("fades the strike in by colour, since a line-through cannot be part-drawn", () => {

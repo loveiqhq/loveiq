@@ -16,9 +16,11 @@ import { guardedUnlock } from "./v4Unlock";
  * `krow/5 · CROSSING THE LINE (p=0.5)`, then `krow/6 · at rest (p=0)` to
  * `krow/10`. A dashed `marker/mid-screen line` runs across the frame at the point
  * row 5 is crossing. So a row turns as it passes the middle of the viewport: the
- * shadow belief is struck through rather than removed, its coral minus becomes a
- * green check, and "THE SHIFT" and the sun belief it becomes appear underneath.
- * That marker is an annotation for whoever built this and is NOT rendered.
+ * shadow belief is struck through rather than removed, and "THE SHIFT" and the sun
+ * belief it becomes appear underneath. The row keeps its coral minus (review 27.09,
+ * Fatih: the crossing out is this panel's turn, and the checkmark animation is the
+ * sun panel's alone). That marker is an annotation for whoever built this and is
+ * NOT rendered.
  *
  * WHY THE TURN IS BINARY, NOT A CONTINUOUS p. `p=0.5` is what the transition looks
  * like halfway through, not a value the page has to compute. Driving it from CSS
@@ -101,7 +103,6 @@ const V4ShadowBeliefs: FC<Props> = ({ turns, lockedFrom = null, onUnlock }) => {
         <div className="rv4-turn__belief">
           <span className="rv4-turn__tick" aria-hidden="true">
             <span className="rv4-turn__minus" />
-            <Check className="rv4-turn__check" />
           </span>
           <p className="rv4-turn__text">{turn.shadow}</p>
         </div>
