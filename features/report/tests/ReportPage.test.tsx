@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 const mockRouterPush = vi.fn();
 const mockStartReportCheckout = vi.fn().mockResolvedValue(null);
@@ -72,6 +72,19 @@ vi.mock("@features/analytics/client", () => ({
   hasCookieYesConsent: () => true,
 }));
 
+// The real V3Chapter, counted: the scroll-spy test below checks that moving the nav's
+// highlight renders no chapter again. Transparent to every other test.
+const v3ChapterRenders = vi.hoisted(() => ({ count: 0 }));
+vi.mock("@features/report/ui/v3/V3Chapter", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@features/report/ui/v3/V3Chapter")>();
+  const { createElement } = await import("react");
+  const Counted = (props: Parameters<typeof actual.default>[0]) => {
+    v3ChapterRenders.count += 1;
+    return createElement(actual.default, props);
+  };
+  return { ...actual, default: Counted };
+});
+
 import ReportPage from "@features/report/ui/ReportPage";
 import * as analytics from "@features/analytics/client";
 import { archetypeContent } from "@/data/report-archetypes";
@@ -85,6 +98,7 @@ import { buildTypicalBeliefs } from "@/data/report3-typical-beliefs";
 import { buildAccelerators } from "@/data/report3-accelerators";
 import { REPORT_V4_LEARN_MORE } from "@/data/report3-learn-more";
 import { REPORT_V4_DESIGNED_CHAPTER_IDS } from "@/data/report3-archetype-page";
+import { REPORT_NAV_IDS } from "@features/report/ui/reportNav";
 import { splitArticleForReader } from "@features/report/server/contentGating";
 // The 50/50 was concluded → any non-empty token now buckets to the forced
 // "treatment" arm. The soft "control" (dismissible) experience is now reached
@@ -1697,6 +1711,86 @@ describe("ReportPage", () => {
       mockUseReportData.mockReturnValue(buildSuccessResponse());
       render(<ReportPage />);
       expect(lastRequest().v4).toBe(false);
+    });
+  });
+
+  // Fatih, 27.09: "the entire page is laggy". The chapter the nav marks as current
+  // changes some twenty times down the page. As state on ReportExperience, every change
+  // re-rendered the whole report — ~120ms each on the dev server, and more once the
+  // Report 2.0 chapters carried their content — though only the two navs read it.
+  describe("the scroll-spy", () => {
+    let scrollY = 0;
+    let rects: { mockRestore: () => void } | null = null;
+    // Frames queue and run one batch at a time: some of the page's frame loops
+    // schedule their next frame from inside the last.
+    let frames: FrameRequestCallback[] = [];
+    const nextFrame = () => {
+      const due = frames;
+      frames = [];
+      due.forEach((cb) => cb(0));
+    };
+
+    beforeEach(() => {
+      scrollY = 0;
+      frames = [];
+      Object.defineProperty(window, "scrollY", { configurable: true, get: () => scrollY });
+      // Every nav anchor sits 1000px below the one before it.
+      rects = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (
+        this: Element
+      ) {
+        const i = REPORT_NAV_IDS.indexOf(this.id);
+        const top = (i < 0 ? 0 : i * 1000) - scrollY;
+        return {
+          top,
+          bottom: top + 10,
+          left: 0,
+          right: 10,
+          width: 10,
+          height: 10,
+          x: 0,
+          y: top,
+          toJSON: () => ({}),
+        } as DOMRect;
+      });
+      vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => frames.push(cb));
+      vi.stubGlobal("cancelAnimationFrame", () => {});
+    });
+
+    afterEach(() => {
+      rects?.mockRestore();
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+
+    it("moves the nav's highlight without rendering the report again", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      const response = buildSuccessResponse();
+      (response.data as Record<string, unknown>).accessPlan = "full_report";
+      mockUseReportData.mockReturnValue(response);
+      render(<ReportPage />);
+
+      const current = () =>
+        screen
+          .getAllByRole("link")
+          .filter((link) => link.getAttribute("aria-current") === "location")
+          .map((link) => link.getAttribute("href"));
+      // A chapter halfway down that the page draws and the sidebar lists.
+      const listed = REPORT_NAV_IDS.filter(
+        (id) => document.getElementById(id) && document.querySelector(`a[href="#${id}"]`)
+      );
+      expect(listed.length).toBeGreaterThan(6);
+      const target = listed[Math.floor(listed.length / 2)]!;
+      expect(current()).not.toEqual([`#${target}`]);
+
+      const before = v3ChapterRenders.count;
+      expect(before).toBeGreaterThan(0);
+      scrollY = REPORT_NAV_IDS.indexOf(target) * 1000 + 50;
+      act(() => {
+        fireEvent.scroll(window);
+        nextFrame();
+      });
+
+      expect(current()).toEqual([`#${target}`]);
+      expect(v3ChapterRenders.count).toBe(before);
     });
   });
 
