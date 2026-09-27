@@ -816,11 +816,15 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       );
     }
 
-    let sectionTops = buildSectionTops();
     let rafId: number | null = null;
 
     function updateActive() {
       if (Date.now() < clickLockUntilRef.current) return;
+      // Measured on every update, not once at mount: the page keeps changing height
+      // after it — Typical Beliefs' rows grow ~759px as they turn, chapters open and
+      // close, the fonts land — and tops measured at mount ran the highlight ahead of
+      // the reader (27.09: at Attachment it lit Love Language). Once a frame at most.
+      const sectionTops = buildSectionTops();
       const threshold = window.scrollY + ACTIVATION_LINE;
       let activeId = sectionTops[0]?.id ?? REPORT_NAV_IDS[0] ?? "core_archetype";
       for (const section of sectionTops) {
@@ -841,22 +845,17 @@ const ReportExperience: FC<ReportExperienceProps> = ({
       });
     }
 
-    function onResize() {
-      sectionTops = buildSectionTops();
-      updateActive();
-    }
-
     window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onResize, { passive: true });
+    window.addEventListener("resize", onScroll, { passive: true });
     updateActive();
 
     return () => {
       window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onResize);
+      window.removeEventListener("resize", onScroll);
       if (rafId !== null) cancelAnimationFrame(rafId);
     };
     // `REPORT_NAV_IDS` is a module constant; `resolvedSections` only matters
-    // because the sections have to be in the DOM before the tops are measured.
+    // because the sections have to be in the DOM before the first update measures them.
     // `activeSection` never changes: it is created once.
   }, [resolvedSections, activeSection]);
 
