@@ -189,7 +189,7 @@ export async function embedMissing(
     if (isOutOfTime()) return { embedded, remaining: await countMissing(), complete: false };
 
     /**
-     * NEWEST FIRST, and the direction is the whole point.
+     * NEWEST WRITTEN FIRST, and the direction is the whole point.
      *
      * A chunk with no embedding still matches lexically, but scores ZERO on the semantic
      * term while its rivals score 0.4-0.8 — so it is not merely less findable, it is
@@ -202,12 +202,20 @@ export async function embedMissing(
      * that morning, matching "September" and "signups" lexically — did not appear at all.
      * It was 181 rows down a queue drained oldest-first.
      *
+     * `id.desc` only fixed that for rows INSERTED fresh. The totals people ask about most
+     * (all time, this month, today) are UPDATED in place every fifteen minutes and keep
+     * their old id, so behind any backlog they waited again. Measured 2026-09-27: after 70
+     * evidence cards were rebuilt, "alltime" and "monthly:2026-09" sat unembedded behind
+     * them and four funnel questions failed the battery. So the order is `updated_at`,
+     * read off a partial index that holds only the unembedded rows
+     * (20260927170500_brain_chunk_unembedded_queue).
+     *
      * The tail is guarded by the backlog alarm in brain-fast rather than by fairness
      * here: if new rows ever arrive faster than they can be embedded, `remaining` grows
      * and says so, and that is a problem no ordering fixes.
      */
     const res = await supabaseFetch(
-      `/rest/v1/brain_chunk?select=id,title,body&embedding=is.null&order=id.desc&limit=${READ_BATCH}`
+      `/rest/v1/brain_chunk?select=id,title,body&embedding=is.null&order=updated_at.desc,id.desc&limit=${READ_BATCH}`
     );
     if (!res.ok) {
       logger.warn({ status: res.status }, "brain-embed: could not read chunks");
