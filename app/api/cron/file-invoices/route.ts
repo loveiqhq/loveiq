@@ -42,6 +42,12 @@
 import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { getDelegatedToken, GMAIL_SCOPE, DRIVE_WRITE_SCOPE } from "@shared/http/google-oauth";
+import {
+  COST_SHEET_ID,
+  COST_SHEET_READ_URL,
+  COST_SHEET_TAB,
+  NEVER_ATTACHES,
+} from "@features/brain/server/cost-sheet";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { notifySlack, escapeSlack } from "@shared/observability/slack";
 import { isProdCronHost } from "@shared/http/is-prod-cron-host";
@@ -57,11 +63,8 @@ const SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets";
 /** Finance / Invoices and Receipts. */
 // eslint-disable-next-line no-secrets/no-secrets -- Drive folder id, not a credential
 const DRIVE_ROOT = "1ml7y_fMcGB8YFpelnQJzWWcpEgTExBBO";
-// eslint-disable-next-line no-secrets/no-secrets -- public Sheets file id, not a credential
-const SHEET_ID = "11ulNYMtbZ34eQEdBFaW2OWn1FpRvYH9GFRwAoc_8rXE";
-const SHEET_TAB = "Costs";
-const READ_RANGE = "A1:AZ60";
-const RAW_VALUES = "UNFORMATTED" + "_VALUE";
+const SHEET_ID = COST_SHEET_ID;
+const SHEET_TAB = COST_SHEET_TAB;
 
 /**
  * Column I is November 2025 — the first month the sheet models. Every other month
@@ -224,13 +227,8 @@ const VENDORS: Vendor[] = [
   },
 ];
 
-/** Vendors that bill us but never attach a PDF. Reported, never silently dropped. */
-const NEVER_ATTACHES = [
-  { sheetName: "Figma", why: "emails a receipt link, not a PDF" },
-  { sheetName: "Adwords", why: "billing doc lives in the Ads console; spend is read from GA4" },
-  { sheetName: "Upwork - Arsalan Majid", why: "HTML summary, hourly not fixed" },
-  { sheetName: "Domain - united-domains", why: "registrar mails the portfolio owner only" },
-];
+// Vendors that bill us but never attach a PDF (NEVER_ATTACHES, shared with cost_watch):
+// reported, never silently dropped.
 
 function safeCompare(a: string, b: string): boolean {
   const aBuf = Buffer.from(a);
@@ -619,10 +617,7 @@ export async function GET(request: Request) {
     }
 
     // ---- reconcile against the sheet ------------------------------------
-    const grid = await gapi<{ values?: string[][] }>(
-      `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${SHEET_TAB}!${READ_RANGE}?valueRenderOption=${RAW_VALUES}`,
-      sheetToken
-    );
+    const grid = await gapi<{ values?: string[][] }>(COST_SHEET_READ_URL, sheetToken);
     const rows = grid.values || [];
     // Bound the model to the month columns that actually exist. Row 1 carries a
     // date serial per month, so its width IS the model's width. Deriving this from
