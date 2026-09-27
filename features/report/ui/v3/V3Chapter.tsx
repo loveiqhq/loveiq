@@ -8,6 +8,7 @@ import {
   REPORT_V4_CHAPTER_BY_ID,
   type ReportV3Chapter,
 } from "./reportV3Nav";
+import V4ChapterCards, { useV4ChapterCards } from "./V4ChapterCards";
 import { V4ChapterChevron, V4ChapterLockDisc, V4ChapterTitle } from "./V4ChapterHead";
 import { useV4ChapterLock } from "./V4ChapterLock";
 import { useOnV4OpenChapter } from "./v4OpenChapter";
@@ -106,6 +107,9 @@ const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget, ar
   // A chapter the reader has no access to is locked outright under V4 (review 26.09);
   // no provider exists outside V4. Called before the branch so hook order is stable.
   const lock = useV4ChapterLock(sectionId);
+  // V4's Try this / Go deeper cards in place of the 2.0 section's own panels (review
+  // 27.09). Only V4 provides them.
+  const cards = useV4ChapterCards(sectionId);
   // Part II's nudges open a chapter by its section id — V4 only; V3 has no nudges
   // and its chapters start open. A locked chapter does not open for one.
   useOnV4OpenChapter(
@@ -194,6 +198,7 @@ const V3Chapter: FC<Props> = ({ chapter, sectionId, children, feedbackWidget, ar
           <div>
             <div className="rv3-chapter__body-inner">
               {children}
+              {cards ? <V4ChapterCards cards={cards} /> : null}
               {feedbackWidget ? (
                 <div className="rv4-rating">
                   <div className="rv4-rating__live">{feedbackWidget}</div>

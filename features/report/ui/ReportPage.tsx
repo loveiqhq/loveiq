@@ -32,7 +32,9 @@ import {
 } from "./reportNav";
 import ReportMobileNav from "./ReportMobileNav";
 import { V3ModeProvider, V4ModeProvider } from "./v3/V3Chapter";
+import { V4ChapterCardsProvider } from "./v3/V4ChapterCards";
 import { V4ChapterLockProvider } from "./v3/V4ChapterLock";
+import { v4CardsFromV2 } from "./v3/v4CardsFromV2";
 import V3Intro from "./v3/V3Intro";
 import V4Part1 from "./v3/V4Part1";
 import V3ArchetypeCard from "./v3/V3ArchetypeCard";
@@ -1893,8 +1895,10 @@ const ReportExperience: FC<ReportExperienceProps> = ({
                     // locked): the V4 chapter row, then the chapter body, the
                     // practice (374:238) and "Go deeper & learn more" (153:2260).
                     // It sits in V4Chapter rather than ReportSection's V3 chrome —
-                    // the frame draws no "Chapter 2.2" eyebrow, and the V3 chapter's
-                    // suffix restyles and its overflow clip both broke the cards.
+                    // the frame draws no "Chapter 2.2" eyebrow, and this chapter opens
+                    // bare and open. (The V3 chapter's suffix restyles and overflow
+                    // clip that once broke these cards no longer reach V4: its roots
+                    // dropped `.rv3-chapter` and clip only vertically, review 27.09.)
                     // All three blocks open the same pricing modal every other
                     // locked section does. It falls back to V2's section whenever
                     // the archetype has no Report 3.0 copy yet — 13 of the 14 — so
@@ -3175,96 +3179,126 @@ const ReportPage: FC<ReportPageProps> = ({ token }) => {
       return ia - ib;
     });
 
+  // Review 27.09: V4 opens its Report 2.0 chapters on V4's own "Try this & see what
+  // shifts" and "Go deeper & learn more" cards in place of 2.0's practical and "Learn:"
+  // panels (v4CardsFromV2, which clears each panel's copy where its card took it). Only
+  // while the payload describes the archetype on screen — the test ReportExperience
+  // makes as `hasArchetypeCopy` — so a chapter shows its panel or its card, never both.
+  const reportV2Copies = {
+    insecuritiesCopy: data.insecuritiesCopy ?? null,
+    libidoCopy: data.libidoCopy ?? null,
+    initiationCopy: data.initiationCopy ?? null,
+    confidenceCopy: data.confidenceCopy ?? null,
+    powerCopy: data.powerCopy ?? null,
+    rewardCopy: data.rewardCopy ?? null,
+    arousalCopy: data.arousalCopy ?? null,
+    energyCopy: data.energyCopy ?? null,
+    attachmentCopy: data.attachmentCopy ?? null,
+    lovelangCopy: data.lovelangCopy ?? null,
+    curiosityCopy: data.curiosityCopy ?? null,
+    beliefsCopy: data.beliefsCopy ?? null,
+    accelCopy: data.accelCopy ?? null,
+    fantasyCopy: data.fantasyCopy ?? null,
+    partnershipCopy: data.partnershipCopy ?? null,
+  };
+  const v4Chapters =
+    isV4 && effectiveViewArchetype === (data.contentArchetype ?? primaryArchetype)
+      ? v4CardsFromV2(reportV2Copies)
+      : null;
+  const v2Copies = v4Chapters?.copies ?? reportV2Copies;
+
   return (
     <>
       {v4ThemeColor}
       {showReportV2 ? (
-        <ReportExperience
-          key={`${token ?? "browser"}:${sessionId ?? "anon"}`}
-          isV3={isV3}
-          isV4={isV4}
-          submissionId={data.submissionId ?? null}
-          devParam={devParam}
-          accessPlan={data.accessPlan}
-          archetypeTiers={data.archetypeTiers ?? {}}
-          feedbacks={feedbacks}
-          isPricingModalOpen={isPricingModalOpen}
-          isShareModalOpen={isShareModalOpen}
-          matchScore={matchScore}
-          onBeginCheckout={beginCheckout}
-          onClosePricingModal={closePricingModal}
-          onCloseShareModal={closeShareModal}
-          onOpenShareModal={openShareModal}
-          onOpenPricingModal={openPricingModal}
-          onUnlockArchetype={handleUnlockArchetype}
-          ownerFirstName={ownerFirstName}
-          ownerToken={ownerToken}
-          percentages={percentages}
-          placeholderValues={placeholderValues}
-          primaryArchetype={primaryArchetype}
-          pricingQuotes={pricingQuotes}
-          archetypeContent={data.archetypeContent ?? {}}
-          practiceTendencies={data.practiceTendencies ?? {}}
-          pricingTargetArchetype={pricingTargetArchetype}
-          pricingVariant={pricingVariant}
-          ranking={ranking}
-          reportDate={reportDate}
-          resolvedSections={resolvedSections}
-          snapshot={snapshot}
-          snapshotCopy={data.snapshotCopy ?? null}
-          findingsCopy={data.findingsCopy ?? null}
-          beliefsCopy={data.beliefsCopy ?? null}
-          typicalBeliefs={data.typicalBeliefs ?? null}
-          typicalBeliefsArticle={data.typicalBeliefsArticle ?? null}
-          attachmentCopy={data.attachmentCopy ?? null}
-          attachmentFamily={data.attachmentFamily ?? null}
-          attachmentPlane={data.attachmentPlane ?? null}
-          accelCopy={data.accelCopy ?? null}
-          accelerators={data.accelerators ?? null}
-          acceleratorsArticle={data.acceleratorsArticle ?? null}
-          insecuritiesCopy={data.insecuritiesCopy ?? null}
-          insecurityCueFamily={data.insecurityCueFamily ?? null}
-          insecurityGraph={data.insecurityGraph ?? null}
-          rewardCopy={data.rewardCopy ?? null}
-          rewardConfig={data.rewardConfig ?? null}
-          energyCopy={data.energyCopy ?? null}
-          energyConfig={data.energyConfig ?? null}
-          arousalCopy={data.arousalCopy ?? null}
-          arousalConfig={data.arousalConfig ?? null}
-          initiationCopy={data.initiationCopy ?? null}
-          initiationConfig={data.initiationConfig ?? null}
-          libidoCopy={data.libidoCopy ?? null}
-          libidoConfig={data.libidoConfig ?? null}
-          growthCopy={data.growthCopy ?? null}
-          growthRungs={data.growthRungs ?? null}
-          readingCopy={data.readingCopy ?? null}
-          partnershipCopy={data.partnershipCopy ?? null}
-          partnershipLoop={data.partnershipLoop ?? null}
-          partnership={data.partnership ?? null}
-          enjoyCopy={data.enjoyCopy ?? null}
-          powerCopy={data.powerCopy ?? null}
-          fantasyCopy={data.fantasyCopy ?? null}
-          fantasyDots={data.fantasyDots ?? null}
-          fantasy={data.fantasy ?? null}
-          fantasyArticle={data.fantasyArticle ?? null}
-          curiosityCopy={data.curiosityCopy ?? null}
-          relationshipFit={data.relationshipFit ?? null}
-          lovelangCopy={data.lovelangCopy ?? null}
-          loveLanguageOrder={data.loveLanguageOrder ?? null}
-          confidenceCopy={data.confidenceCopy ?? null}
-          confidenceStrip={data.confidenceStrip ?? null}
-          mapCopy={data.mapCopy ?? null}
-          stageCopy={data.stageCopy ?? null}
-          constellationMottos={data.constellationMottos ?? {}}
-          submitFeedback={submitFeedback}
-          submitted={submitted}
-          theme={theme}
-          userEmail={data.userEmail}
-          userName={data.userName}
-          contentArchetype={data.contentArchetype ?? primaryArchetype}
-          viewArchetype={effectiveViewArchetype}
-          viewMode={viewMode}
-        />
+        <V4ChapterCardsProvider value={v4Chapters?.cards ?? null}>
+          <ReportExperience
+            key={`${token ?? "browser"}:${sessionId ?? "anon"}`}
+            isV3={isV3}
+            isV4={isV4}
+            submissionId={data.submissionId ?? null}
+            devParam={devParam}
+            accessPlan={data.accessPlan}
+            archetypeTiers={data.archetypeTiers ?? {}}
+            feedbacks={feedbacks}
+            isPricingModalOpen={isPricingModalOpen}
+            isShareModalOpen={isShareModalOpen}
+            matchScore={matchScore}
+            onBeginCheckout={beginCheckout}
+            onClosePricingModal={closePricingModal}
+            onCloseShareModal={closeShareModal}
+            onOpenShareModal={openShareModal}
+            onOpenPricingModal={openPricingModal}
+            onUnlockArchetype={handleUnlockArchetype}
+            ownerFirstName={ownerFirstName}
+            ownerToken={ownerToken}
+            percentages={percentages}
+            placeholderValues={placeholderValues}
+            primaryArchetype={primaryArchetype}
+            pricingQuotes={pricingQuotes}
+            archetypeContent={data.archetypeContent ?? {}}
+            practiceTendencies={data.practiceTendencies ?? {}}
+            pricingTargetArchetype={pricingTargetArchetype}
+            pricingVariant={pricingVariant}
+            ranking={ranking}
+            reportDate={reportDate}
+            resolvedSections={resolvedSections}
+            snapshot={snapshot}
+            snapshotCopy={data.snapshotCopy ?? null}
+            findingsCopy={data.findingsCopy ?? null}
+            beliefsCopy={v2Copies.beliefsCopy}
+            typicalBeliefs={data.typicalBeliefs ?? null}
+            typicalBeliefsArticle={data.typicalBeliefsArticle ?? null}
+            attachmentCopy={v2Copies.attachmentCopy}
+            attachmentFamily={data.attachmentFamily ?? null}
+            attachmentPlane={data.attachmentPlane ?? null}
+            accelCopy={v2Copies.accelCopy}
+            accelerators={data.accelerators ?? null}
+            acceleratorsArticle={data.acceleratorsArticle ?? null}
+            insecuritiesCopy={v2Copies.insecuritiesCopy}
+            insecurityCueFamily={data.insecurityCueFamily ?? null}
+            insecurityGraph={data.insecurityGraph ?? null}
+            rewardCopy={v2Copies.rewardCopy}
+            rewardConfig={data.rewardConfig ?? null}
+            energyCopy={v2Copies.energyCopy}
+            energyConfig={data.energyConfig ?? null}
+            arousalCopy={v2Copies.arousalCopy}
+            arousalConfig={data.arousalConfig ?? null}
+            initiationCopy={v2Copies.initiationCopy}
+            initiationConfig={data.initiationConfig ?? null}
+            libidoCopy={v2Copies.libidoCopy}
+            libidoConfig={data.libidoConfig ?? null}
+            growthCopy={data.growthCopy ?? null}
+            growthRungs={data.growthRungs ?? null}
+            readingCopy={data.readingCopy ?? null}
+            partnershipCopy={v2Copies.partnershipCopy}
+            partnershipLoop={data.partnershipLoop ?? null}
+            partnership={data.partnership ?? null}
+            enjoyCopy={data.enjoyCopy ?? null}
+            powerCopy={v2Copies.powerCopy}
+            fantasyCopy={v2Copies.fantasyCopy}
+            fantasyDots={data.fantasyDots ?? null}
+            fantasy={data.fantasy ?? null}
+            fantasyArticle={data.fantasyArticle ?? null}
+            curiosityCopy={v2Copies.curiosityCopy}
+            relationshipFit={data.relationshipFit ?? null}
+            lovelangCopy={v2Copies.lovelangCopy}
+            loveLanguageOrder={data.loveLanguageOrder ?? null}
+            confidenceCopy={v2Copies.confidenceCopy}
+            confidenceStrip={data.confidenceStrip ?? null}
+            mapCopy={data.mapCopy ?? null}
+            stageCopy={data.stageCopy ?? null}
+            constellationMottos={data.constellationMottos ?? {}}
+            submitFeedback={submitFeedback}
+            submitted={submitted}
+            theme={theme}
+            userEmail={data.userEmail}
+            userName={data.userName}
+            contentArchetype={data.contentArchetype ?? primaryArchetype}
+            viewArchetype={effectiveViewArchetype}
+            viewMode={viewMode}
+          />
+        </V4ChapterCardsProvider>
       ) : (
         <ReportExperienceV1
           key={`${token ?? "browser"}:${sessionId ?? "anon"}`}

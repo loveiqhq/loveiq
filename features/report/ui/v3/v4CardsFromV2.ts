@@ -43,8 +43,11 @@ export interface V4ChapterCardSet {
 
 type Copy = Readonly<Record<string, unknown>>;
 
-/** The payload's Report 2.0 copies this reads, by their payload names. */
-export type V2ChapterCopies = Partial<Record<V2CopyKey, Copy | null>>;
+/**
+ * The payload's Report 2.0 copies this reads, by their payload names. `object`, not a
+ * record: each section's copy type is an interface, and every field is read by name.
+ */
+export type V2ChapterCopies = Partial<Record<V2CopyKey, object | null>>;
 
 type V2CopyKey = (typeof PRACTICES)[number]["key"] | (typeof ARTICLES)[number]["key"];
 
@@ -211,7 +214,7 @@ const without = (copy: Copy, keys: readonly string[]): Copy => ({
 export function v4CardsFromV2<T extends V2ChapterCopies>(
   copies: T
 ): { copies: T; cards: ReadonlyMap<string, V4ChapterCardSet> } {
-  const source = new Map<string, Copy | null | undefined>(Object.entries(copies));
+  const source = new Map(Object.entries(copies) as [string, Copy | null | undefined][]);
   const out = new Map(source);
   const cards = new Map<string, V4ChapterCardSet>();
 
