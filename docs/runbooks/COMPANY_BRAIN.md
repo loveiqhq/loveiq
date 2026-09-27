@@ -154,6 +154,7 @@ a transcript. Filter on `surface` to tell the two apart.
 | Gmail (every mailbox on the domain)                                             | `/api/cron/brain-gmail`                                                | hourly, at :11          |
 | Search Console                                                                  | `/api/cron/brain-ingest`                                               | daily, 04:47 UTC        |
 | Shipped report copy, the chapter method, the glossary/survey/scoring vocabulary | `/api/cron/brain-fast`                                                 | every 15 min            |
+| Books on love, desire and sex (eleven, whole; searched only when asked for)     | `npm run brain:books` → `scripts/brain-books.ts`                       | by hand, once           |
 
 Jira is **not** a source. Notion is the system of record for the team's work
 (decision 2026-08-28), so `ingestJira` is no longer called by the cron and `jira`
@@ -162,6 +163,15 @@ kept — the 1,037 issues in `loveiq.atlassian.net` are real and actively update
 re-enabling it later means wiring the call back and setting `JIRA_*`, not rewriting
 it. Do not add `jira` back to the source list before chunks exist: naming a source
 with zero rows tells the model to search something that cannot answer.
+
+Books are a source, and an opt-in one (decision 2026-09-28). Eleven third-party books on
+love, desire and sex that we keep in Drive are loaded whole as `book` by
+`npm run brain:books`, which is safe to re-run. `brain_search` returns a `book` row only
+when the caller asks for the source (`sources: ["book"]`), because about 3,200 pages in the
+product's own vocabulary would otherwise crowd company answers out of the semantic
+top-120 before any demotion applied. Every part says whose work it is. The three other
+books in that folder (leadership, habits, persuasion) stay out, and the Drive walk still
+skips all fourteen.
 
 Both are idempotent and both sweep rows they did not rewrite, guarded by the
 write count **of their own source** so an empty run can never wipe a source.
