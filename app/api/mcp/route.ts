@@ -5645,7 +5645,11 @@ async function callTool(
         entries.map((e) => `${e.date} · ${e.pr ? `#${e.pr}` : e.sha} · ${e.text}`).join("\n") +
         (read.truncated
           ? "\n\nOnly the newest 300 commits were read; narrow since/until to see older changes."
-          : "")
+          : ""),
+      false,
+      // The generic advice says "page with offset", which this tool does not take. A month
+      // of changes runs past the ceiling (August 2026: cut at the 23rd), so say what works.
+      "ask again for a shorter period with since and until, a week at a time"
     );
   }
 

@@ -30,6 +30,8 @@ export const DEFAULT_EDGE_PX = 1600;
 export const MAX_IMAGE_B64 = 1_400_000;
 /** Taller (or wider) than this and no scale keeps the text readable after downscaling. */
 export const MAX_ASPECT = 3;
+/** The longest edge a vision client shows without shrinking the image. */
+export const CLIENT_EDGE_PX = 1568;
 
 export type ShowDesignOutcome =
   | { kind: "image"; text: string; data: string; mimeType: string }
@@ -223,7 +225,10 @@ export async function renderDesign(
    * after the client's downscale -- the model then answers from an image in which no
    * text survived, which is worse than being told to ask for a child.
    */
-  if (Math.max(w, h) > Math.min(w, h) * MAX_ASPECT) {
+  // Only a frame the client will SHRINK loses its text. A strip that fits (the landing's
+  // 1115x95 nav, its 1115x68 sticky bar) is never shrunk, so its shape does not matter;
+  // refusing it left four of the landing's fifteen sections impossible to look at.
+  if (Math.max(w, h) > Math.min(w, h) * MAX_ASPECT && Math.max(w, h) > CLIENT_EDGE_PX) {
     const kids = (node.children ?? []) as Array<Record<string, unknown>>;
     const why =
       `\`${name}\` is ${w}x${h}, which is longer than ${MAX_ASPECT}:1. Rendered small enough ` +

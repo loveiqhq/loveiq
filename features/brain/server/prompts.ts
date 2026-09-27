@@ -219,7 +219,8 @@ export const PROMPTS: BrainPrompt[] = [
         "2. What we paid for tools: cost_watch. Its latest settled month is usually this one; for an older month use its " +
         "trend line. Name any hand-typed line it flags.\n" +
         `3. Who our users were: user_totals with since ${since} and until ${until}, grouped by archetype, then by country.\n` +
-        `4. What shipped: what_shipped with since ${since} and until ${until}, in the plain words each change was summarised in.\n` +
+        `4. What shipped: what_shipped from ${since} to ${until} a week at a time (a month of changes is longer than one ` +
+        "answer holds), in the plain words each change was summarised in.\n" +
         "5. What we tested: experiments. Say which ran or ended this month and what each concluded.\n" +
         `6. What we decided: browse_context with sources ["decision"], since ${since} and until ${until}. Then ` +
         "decision_conflicts: name any pair still waiting for someone to say which stands.\n" +

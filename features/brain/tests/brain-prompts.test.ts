@@ -74,6 +74,8 @@ describe("renderPrompt", () => {
     expect(text).toContain("user_totals with since 2028-02-01 and until 2028-02-29");
     expect(text).toMatch(/Lead with paywall conversion/);
     expect(text).toContain("cost_watch");
+    // A month of changes runs past one answer's ceiling (August 2026 was cut at the 23rd).
+    expect(text).toContain("what_shipped from 2028-02-01 to 2028-02-29 a week at a time");
     expect(text).toMatch(/after my OK put it in a Google Doc/);
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-01-15T12:00:00Z"));

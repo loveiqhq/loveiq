@@ -1401,6 +1401,27 @@ describe("/api/mcp", () => {
         );
       });
 
+      it("says to ask a week at a time when a long period runs past the ceiling, not to page", async () => {
+        const long = "A change described at the length a real one runs to, ".repeat(10);
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () =>
+            Array.from({ length: 100 }, (_, i) => commit(1000 - i, `${long}${i}`, "2026-08-20")),
+          text: async () => "",
+        });
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => [],
+          text: async () => "",
+        });
+        const text = (await call({ since: "2026-08-01", until: "2026-08-31" })).content[0].text;
+        expect(text).toContain("[TRUNCATED");
+        expect(text).toContain("a week at a time");
+        expect(text).not.toContain("page with offset");
+      });
+
       it("says the list could not be read when GitHub fails, rather than that nothing shipped", async () => {
         mockFetch.mockResolvedValueOnce({
           ok: false,
@@ -5403,6 +5424,22 @@ describe("/api/mcp", () => {
       expect(img).toBeUndefined();
       expect(r.content[0].text).toContain("ceiling");
       expect(r.content[0].text).toContain("Ask for a child frame");
+    });
+
+    it("shows a short wide strip the client never shrinks, whatever its shape", async () => {
+      // The landing's 1115x95 nav and 1115x68 sticky bar are "longer than 3:1" but fit the
+      // client's edge, so nothing shrinks them; refusing them hid four of fifteen sections.
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => nodeBody(1115, 95) })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ images: { "1:2": "https://s3/x.png" } }),
+        })
+        .mockResolvedValueOnce({ ok: true, status: 200, arrayBuffer: async () => bytes(PNG) });
+      const r = await call({ node_id: "1:2" });
+      expect(r.content.find((c) => c.type === "image")).toBeDefined();
+      expect(r.content[0].text).not.toContain("longer than");
     });
 
     it("refuses a frame too long to survive the client's downscale, and offers its children", async () => {
