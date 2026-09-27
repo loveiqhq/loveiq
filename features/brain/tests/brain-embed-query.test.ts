@@ -116,6 +116,26 @@ describe("embedding must never outlive the cron that called it", () => {
   });
 });
 
+describe("the backfill waits out the platform saying not now", () => {
+  it("retries a bare 503 and a 429, and gives up at once on a real refusal", async () => {
+    const { embedMissing } = await import("@features/brain/server/embed");
+    chunkRows = [{ id: 1, title: "t", body: "text long enough to be worth embedding" }];
+    const replies = [
+      new Response("", { status: 503 }),
+      new Response(JSON.stringify({ embeddings: [[0.1, 0.2, 0.3]] }), { status: 200 }),
+    ];
+    respond = () => replies.shift()!;
+    const ok = await embedMissing(() => false, 1);
+    expect(calls.filter((c) => c.url.includes("brain-embed"))).toHaveLength(2);
+    expect(ok.embedded).toBe(1);
+
+    calls.length = 0;
+    respond = () => new Response("bad input", { status: 400 });
+    await embedMissing(() => false, 1);
+    expect(calls.filter((c) => c.url.includes("brain-embed"))).toHaveLength(1);
+  });
+});
+
 describe("embedMissing cannot outlive the function that calls it", () => {
   /**
    * `embedBatch` defaults to 6 attempts at 120s each -- the BACKFILL script's
