@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import V3Chapter, { V3ModeProvider, V4ModeProvider } from "@features/report/ui/v3/V3Chapter";
+import { V4ChapterCardsProvider } from "@features/report/ui/v3/V4ChapterCards";
 import { V4ChapterLockProvider } from "@features/report/ui/v3/V4ChapterLock";
 import type { ReportV3Chapter } from "@features/report/ui/v3/reportV3Nav";
 import { REPORT_V4_CHAPTER_TEASERS } from "@/data/report4-chapter-teasers";
@@ -578,5 +579,118 @@ describe("V3Chapter under V4 — Report 2.0's own look (review 27.09)", () => {
     expect(block(".rv3.rv4 .rv4-chapter .report-attachment__edu:empty {")).toMatch(
       /display:\s*none/
     );
+  });
+});
+
+/**
+ * Review 27.09: in the chapters V4 opens onto a Report 2.0 section, 2.0's practical and
+ * "Learn:" panels give way to V4's "Try this & see what shifts" and "Go deeper & learn
+ * more" (v4CardsFromV2). They sit inside the chapter, after the 2.0 section and before
+ * "Does this resonate?", so they fold away with it.
+ */
+describe("V3Chapter under V4 — the Try this and Go deeper cards (review 27.09)", () => {
+  const CARDS = new Map([
+    [
+      "core_insecurities",
+      {
+        practice: {
+          eyebrow: "Working with your sensitivity: three moves",
+          title: "Try this & see what shifts",
+          locked: false,
+          free: [{ kind: "para" as const, runs: [{ text: "Three small moves." }] }],
+          ramp: null,
+          rest: [],
+        },
+        article: {
+          eyebrow: "Reading time: ~1 min.",
+          label: "Go deeper & learn more",
+          free: [{ kind: "para" as const, runs: [{ text: "Why it matters." }] }],
+          gated: null,
+          gatedBlockCount: 0,
+        },
+      },
+    ],
+  ]);
+
+  const renderWithCards = (v4 = true) =>
+    render(
+      <V3ModeProvider>
+        {v4 ? (
+          <V4ModeProvider>
+            <V4ChapterCardsProvider value={CARDS}>
+              <V3Chapter
+                chapter={INSECURITIES}
+                sectionId="core_insecurities"
+                archetype="Spark Seeker"
+                feedbackWidget={<span className="fb">Does this resonate?</span>}
+              >
+                <div className="report-insecurities">
+                  <h3 className="report-insecurities__heading">Core Insecurities</h3>
+                </div>
+              </V3Chapter>
+            </V4ChapterCardsProvider>
+          </V4ModeProvider>
+        ) : (
+          <V4ChapterCardsProvider value={CARDS}>
+            <V3Chapter chapter={INSECURITIES} sectionId="core_insecurities">
+              <div className="report-insecurities">body</div>
+            </V3Chapter>
+          </V4ChapterCardsProvider>
+        )}
+      </V3ModeProvider>
+    );
+
+  it("sets the cards after the 2.0 section and before the rating, practice first", () => {
+    const { container } = renderWithCards();
+    const inner = container.querySelector(".rv3-chapter__body-inner")!;
+    const rows = [...inner.children].map((el) => el.className.split(" ")[0]);
+    expect(rows).toEqual(["report-insecurities", "rv4-chapter__extras", "rv4-rating"]);
+    const extras = inner.querySelector(".rv4-chapter__extras")!;
+    expect([...extras.children].map((el) => el.className.split(" ")[0])).toEqual([
+      "rv4-try",
+      "rv4-learn",
+    ]);
+    expect(extras.querySelector(".rv4-try__label")!.textContent).toBe("Try this & see what shifts");
+    expect(extras.querySelector(".rv4-learn__label")!.textContent).toBe("Go deeper & learn more");
+  });
+
+  it("keeps the 2.0 section's own title hidden at the depth the frozen rule needs", () => {
+    const { container } = renderWithCards();
+    const inner = container.querySelector(".rv3-chapter__body-inner")!;
+    const heading = inner.querySelector('[class$="__heading"]')!;
+    expect(heading.parentElement!.parentElement).toBe(inner);
+    // …and nothing in the cards ends in __heading, so the rule hides only that one.
+    expect(inner.querySelectorAll(':scope > * > [class$="__heading"]')).toHaveLength(1);
+  });
+
+  it("draws no slot for a chapter with no cards", () => {
+    const { container } = render(
+      <V3ModeProvider>
+        <V4ModeProvider>
+          <V4ChapterCardsProvider value={CARDS}>
+            <V3Chapter chapter={INSECURITIES} sectionId="growth" archetype="Spark Seeker">
+              <p>body</p>
+            </V3Chapter>
+          </V4ChapterCardsProvider>
+        </V4ModeProvider>
+      </V3ModeProvider>
+    );
+    expect(container.querySelector(".rv4-chapter__extras")).toBeNull();
+  });
+
+  it("leaves ?v3=1 without them", () => {
+    const { container } = renderWithCards(false);
+    expect(container.querySelector(".rv4-chapter__extras, .rv4-try, .rv4-learn")).toBeNull();
+  });
+
+  it("spaces them as the designed chapters do: a separator above, 16 between", () => {
+    const at = V3_CSS.indexOf(".rv3.rv4 .rv3-chapter__body-inner > .rv4-chapter__extras {");
+    expect(at).toBeGreaterThan(0);
+    expect(V3_CSS.slice(0, at).split("\n").length).toBeGreaterThan(1884);
+    const rule = V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+    expect(rule).toMatch(/display:\s*flex/);
+    expect(rule).toMatch(/flex-direction:\s*column/);
+    expect(rule).toMatch(/gap:\s*16px/);
+    expect(rule).toMatch(/padding-top:\s*44px/);
   });
 });

@@ -1556,6 +1556,129 @@ describe("ReportPage", () => {
   // Final review 26.09: the API built V4's chapters for every request, handing the
   // default report's locked readers paid copy they are never shown. The page says
   // when it is V4, and the API builds them only then.
+  // Review 27.09, Mark: "For the unlocked version, any chance we can show the report 2.0
+  // version in the other chapters that we don't open by default. Please make sure that
+  // the practical and learn more elements are according to the new design."
+  describe("V4 — the Report 2.0 chapters open on V4's Try this and Go deeper cards", () => {
+    const POWER = {
+      "edu.eyebrow": "Learn: leading and yielding",
+      "edu.teaser": "In sex, one person usually sets the pace.",
+      "edu.body.p1": "Leading: setting the pace.",
+      "learn.eyebrow": "What you will learn",
+      "learn.body": "Where you sit between leading and yielding.",
+      takeaway: "Power works on you as play.",
+      locked: false,
+    };
+    const INSECURITIES = {
+      "practical.label": "Working with your sensitivity: three moves",
+      "practical.teaser": "Three small moves.",
+      "practical.line1": "1. Name it.",
+      "learn.eyebrow": "What you will learn",
+      "learn.body": "What sexual insecurity is.",
+      locked: false,
+    };
+    const withCopies = (
+      plan: string | null = "full_report",
+      extra: Record<string, unknown> = {}
+    ) => {
+      const response = buildSuccessResponse();
+      Object.assign(response.data as Record<string, unknown>, {
+        accessPlan: plan,
+        powerCopy: POWER,
+        insecuritiesCopy: INSECURITIES,
+        ...extra,
+      });
+      return response;
+    };
+
+    afterEach(() => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));
+    });
+
+    it("opens Power on 2.0's card, then Go deeper where 2.0's 'Learn:' panel was", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(withCopies());
+
+      const { container } = render(<ReportPage />);
+
+      const power = container.querySelector("#power_orientation")!;
+      expect(power.querySelector(".report-power__card")).not.toBeNull();
+      expect(power.querySelector(".report-power__details")).toBeNull();
+      const learn = power.querySelector(".rv4-chapter__extras .rv4-learn")!;
+      expect(learn.querySelector(".rv4-learn__label")!.textContent).toBe("Go deeper & learn more");
+      expect(learn.textContent).toContain(POWER["edu.teaser"]);
+      const inner = power.querySelector(".rv3-chapter__body-inner")!;
+      expect([...inner.children].map((el) => el.className.split(" ")[0])).toEqual([
+        "report-power",
+        "rv4-chapter__extras",
+        "rv4-rating",
+      ]);
+    });
+
+    it("gives Insecurities a Try this card, its 2.0 label for the eyebrow", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(withCopies());
+
+      const { container } = render(<ReportPage />);
+
+      const chapter = container.querySelector("#core_insecurities")!;
+      expect(chapter.querySelector(".report-insecurities__details")).toBeNull();
+      const practice = chapter.querySelector(".rv4-chapter__extras .rv4-try")!;
+      expect(practice.querySelector(".rv4-try__label")!.textContent).toBe(
+        "Try this & see what shifts"
+      );
+      expect(practice.querySelector(".rv4-try__eyebrow")!.textContent).toBe(
+        INSECURITIES["practical.label"]
+      );
+    });
+
+    it("keeps 2.0's own panels, and no V4 card, under ?v2=1 and ?v3=1", () => {
+      for (const query of ["v2=1", "v3=1"]) {
+        mockSearchParams.mockImplementation(() => new URLSearchParams(query));
+        mockUseReportData.mockReturnValue(withCopies());
+        const { container, unmount } = render(<ReportPage />);
+        expect(container.querySelector(".report-power__details"), query).not.toBeNull();
+        expect(container.querySelector(".report-insecurities__details"), query).not.toBeNull();
+        expect(container.querySelector(".rv4-chapter__extras"), query).toBeNull();
+        unmount();
+      }
+    });
+
+    it("keeps a locked 2.0 section's own panel, which opens the paywall, and makes it no card", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(
+        withCopies(null, {
+          beliefsCopy: {
+            "edu.eyebrow": "Learn: where beliefs come from",
+            "edu.teaser": "Beliefs form early.",
+            "learn.body": "Where your beliefs came from.",
+            keep: [],
+            loosen: [],
+            locked: true,
+          },
+        })
+      );
+
+      const { container } = render(<ReportPage />);
+
+      // Typical Beliefs never locks outright: this archetype opens V2's locked preview.
+      const beliefs = container.querySelector("#typical_beliefs")!;
+      expect(beliefs.querySelector(".report-beliefs__details")).not.toBeNull();
+      expect(beliefs.querySelector(".rv4-chapter__extras")).toBeNull();
+    });
+
+    it("hands over no card while the payload is still another archetype's", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(
+        withCopies("full_report", { contentArchetype: "Spark Seeker" })
+      );
+
+      const { container } = render(<ReportPage />);
+
+      expect(container.querySelector(".rv4-chapter__extras")).toBeNull();
+    });
+  });
+
   describe("V4 — asks the API for its chapters, and nothing else does (final review 26.09)", () => {
     afterEach(() => {
       mockSearchParams.mockImplementation(() => new URLSearchParams("v2=1"));

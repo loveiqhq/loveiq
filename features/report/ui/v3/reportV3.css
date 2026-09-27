@@ -7566,3 +7566,12 @@ html {
 .rv3.rv4 .rv4-chapter .report-attachment__edu:empty {
   display: none;
 }
+/* V4's Try this and Go deeper cards, where the 2.0 panels were: a separator under the
+ * 2.0 section, 16 between them, as the designed chapters set them; the rating keeps
+ * its own 16 below. Full width like theirs (the collapse above no longer cuts them). */
+.rv3.rv4 .rv3-chapter__body-inner > .rv4-chapter__extras {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 44px;
+}
