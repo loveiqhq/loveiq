@@ -25,8 +25,9 @@ import { guardedUnlock } from "./v4Unlock";
  * THE PAYWALLED STATE — 381:362. Rows 1 to 3 clear, row 4 the ramp (the blur fades
  * in over its top 65.6%), rows 5 to 10 under the full blur, their text as the server
  * sends it (lockedBlurCopy.ts), and the gradient lock (441:6129) 111px below the top
- * of the locked group. Locked rows are drawn from the first render, as the frame
- * draws them, and never animate: nothing under the blur moves.
+ * of the locked group. The locked rows draw their ticks at the same line as the clear
+ * ones, under the blur (Fatih, 27.09: in the frame's still state they sat drawn from the
+ * start; "make those added one by one while you're scrolling").
  */
 
 /** 368:5623 heading. Chrome, not paid copy — see V4ShadowBeliefs. */
@@ -47,7 +48,8 @@ interface Props {
 const V4SunBeliefs: FC<Props> = ({ sun, lockedFrom = null, onUnlock }) => {
   const locked = lockedFrom !== null;
   const rowsRef = useRef<(HTMLLIElement | null)[]>([]);
-  const drawn = useMidlineRows(rowsRef, lockedFrom ?? sun.length);
+  // Every row, the locked ones included: they draw under the blur as the clear ones do.
+  const drawn = useMidlineRows(rowsRef, sun.length);
 
   // Keyed by index: in decoy mode a locked reader's rows 5-10 arrive scrambled.
   const row = (belief: string, i: number) => {
@@ -59,7 +61,7 @@ const V4SunBeliefs: FC<Props> = ({ sun, lockedFrom = null, onUnlock }) => {
         ref={(el) => {
           rowsRef.current[i] = el;
         }}
-        className={`rv4-sun__row${drawn.has(i) || isLocked ? " is-drawn" : ""}${
+        className={`rv4-sun__row${drawn.has(i) ? " is-drawn" : ""}${
           isLocked ? ` is-locked ${isRamp ? "is-ramp" : "is-blurred"}` : ""
         }`}
       >

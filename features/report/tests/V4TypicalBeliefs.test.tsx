@@ -199,17 +199,25 @@ describe("the sun ticks — 368:5623, drawn at the coral panel's scroll line", (
     expect(drawnRows(container)).toHaveLength(0);
   });
 
-  it("keeps every locked row drawn and still, as 381:362 draws them", () => {
+  // Fatih, 27.09: in the paywalled chapter the locked rows' ticks sat under the blur from
+  // the start — "make those added one by one while you're scrolling". They now draw at
+  // the same line as the clear rows, and leave again below it.
+  it("draws the locked rows' ticks at the line too, under the blur", () => {
     const { container } = render(
       <V4SunBeliefs sun={LOCKED.panels.sun} lockedFrom={LOCKED.lockedFrom} />
     );
-    expect(drawnRows(container)).toHaveLength(7);
-    for (const row of drawnRows(container)) {
-      expect(row.closest(".rv4-sun__list.is-locked")).not.toBeNull();
-    }
-    rowTop = 100;
+    const lockedDrawn = () =>
+      container.querySelectorAll(".rv4-sun__list.is-locked .rv4-sun__row.is-drawn");
+    expect(drawnRows(container)).toHaveLength(0);
+
+    rowTop = 380;
     fireEvent.scroll(window);
     expect(drawnRows(container)).toHaveLength(10);
+    expect(lockedDrawn()).toHaveLength(7);
+
+    rowTop = 395;
+    fireEvent.scroll(window);
+    expect(drawnRows(container)).toHaveLength(0);
   });
 });
 
