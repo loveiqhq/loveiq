@@ -46,6 +46,9 @@ describe("parseCosts", () => {
     expect([...slack.values()]).toEqual([30, 33.27, null, 0]);
     // A positive figure in the sheet is a credit.
     expect(parsed.lines[1]!.months.get("2026-06")).toBe(-5);
+    // A zero the sheet stores as 0 stays 0: negating it gave -0, printed "EUR -0.00".
+    const zero = parseCosts(sheet([["PostHog", "", "Software", 0, 0, 0, 0]]));
+    expect(Object.is(zero.lines[0]!.months.get("2026-09"), 0)).toBe(true);
   });
 
   it("finds no lines when the header is gone, rather than reading the wrong rows", () => {
@@ -148,6 +151,34 @@ describe("renderCostWatch", () => {
     expect(noGa4).not.toContain("GA4");
     expect(noGa4).toContain("so August 2026 may never have been entered.");
     expect(renderCostWatch(parsed, now, { eur: 0, covered: 0, days: 31 })).not.toContain("GA4");
+  });
+
+  it("reports only tool categories, and names a category it does not know without its lines", () => {
+    // An allowlist: listing the pay categories instead let a new one ("Salaries") through.
+    const withNew = parseCosts(
+      sheet([
+        line("Claude", "Software", 400, 476.77, 537.88, 576.01),
+        line("A. Person", "Salaries", 3000, 3000, 3000, 3000),
+      ])
+    );
+    const text = renderCostWatch(withNew, now);
+    expect(text).not.toMatch(/Person|3,000/);
+    expect(text).toContain("Left out, in a category this does not know: Salaries.");
+    // The known pay categories are simply left out, not flagged.
+    expect(renderCostWatch(parsed, now)).not.toContain("does not know");
+  });
+
+  it("warns when the filing that should have settled the month has not run", () => {
+    const ok = renderCostWatch(parsed, now, undefined, new Date("2026-09-19T20:24:00Z"));
+    expect(ok).not.toContain("has not run successfully");
+    const missed = renderCostWatch(parsed, now, undefined, new Date("2026-08-20T06:40:00Z"));
+    expect(missed).toContain(
+      "The invoice filing has not run successfully since 2026-08-20 (it is due at 06:40 UTC " +
+        "on the 3rd), so August 2026 may still hold the month before's figures."
+    );
+    expect(renderCostWatch(parsed, now, undefined, null)).toContain("since it was set up");
+    expect(renderCostWatch(parsed, now, undefined, "unreadable")).toContain("could not be read");
+    expect(renderCostWatch(parsed, now)).not.toMatch(/filing has not|could not be read/);
   });
 
   it("says so when the sheet has no column for the settled month", () => {
