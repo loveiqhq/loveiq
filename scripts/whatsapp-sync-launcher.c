@@ -4,7 +4,7 @@
  *
  * macOS asks "... would like to access data from other apps" when a program reads another
  * app's container, and an Allow there lasts only while that one process runs. The sync
- * starts a fresh process every hour, so it asked again every hour. Give THIS binary Full Disk
+ * starts a fresh process every run, so it asked again every run. Give THIS binary Full Disk
  * Access once and it never asks again: bash, node and sqlite3 run as its children, and macOS
  * holds the program launchd started responsible for everything under it.
  *

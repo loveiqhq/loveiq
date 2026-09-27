@@ -1098,7 +1098,7 @@ What the brain notices on its own reaches people in Claude, not only in a Slack 
 ### The job that runs on a laptop, not on Vercel
 
 WhatsApp is driven by a launchd agent on Eman's machine, `org.loveiq.whatsapp-sync`,
-hourly, from a SEPARATE checkout at `~/.loveiq-brain`. It does not appear in
+every five minutes, from a SEPARATE checkout at `~/.loveiq-brain`. It does not appear in
 `vercel.json`, and it pauses whenever the laptop is off.
 
 **Every run records itself** as `brain-whatsapp` in `cron_run` (since 2026-09-26), and a
@@ -1108,7 +1108,7 @@ copy "successfully".
 
 **launchd runs a launcher that has Full Disk Access, not the script.** macOS asks "…
 would like to access data from other apps" when a program reads WhatsApp's folder, and an
-Allow there lasts only while that one process runs. The sync starts a new one every hour,
+Allow there lasts only while that one process runs. The sync starts a new one every run,
 so it asked every hour, and a run waiting on the question blocks every run after it. So
 launchd starts `~/.loveiq-brain/bin/loveiq-whatsapp-sync`
 (`scripts/whatsapp-sync-launcher.c`), which runs the script as its child. macOS holds the
@@ -1629,12 +1629,29 @@ Three things the schema will not tell you:
   `ZGROUPMEMBER` to `ZWAPROFILEPUSHNAME` instead.
 - Dates are Core Data seconds from 2001-01-01; add 978307200 for a Unix timestamp.
 
-**It runs hourly on Eman's Mac**, not on Vercel — there is no server that can see a
+**It runs every five minutes on Eman's Mac**, not on Vercel — there is no server that can see a
 WhatsApp Desktop database. `list_sources` says so rather than showing an empty slot
 where a cron should be.
 
+**It writes only the days that changed** (since 2026-09-27; it rewrote all ~540 day parts
+every hour before).
+
+- Each part carries `meta.fingerprint`, covering its text, its details and the people the
+  registry resolves for it. A run writes only new parts and parts whose fingerprint moved,
+  usually just today's.
+- It removes by id the parts it no longer produces, through `sweepMissing` with its
+  majority guard, and only when a stored part is missing.
+- Rewriting every day every five minutes is the pattern that exhausted the database's disk
+  budget on 2026-08-31, because an indexed `updated_at` means no rewrite is cheap.
+- Bump `DAY_ROW_VERSION` in `features/brain/server/ingest/whatsapp.ts` to rewrite every
+  day once after changing how a day is built.
+- A run records itself in `cron_run` when it changed something or failed, and otherwise
+  once an hour.
+- New messages are findable by their words within five minutes, and by meaning once
+  brain-fast embeds them (every fifteen minutes).
+
 ```text
-~/Library/LaunchAgents/org.loveiq.whatsapp-sync.plist   launchd, StartInterval 3600
+~/Library/LaunchAgents/org.loveiq.whatsapp-sync.plist   launchd, StartInterval 300 (5 min)
 ~/.loveiq-brain/bin/loveiq-whatsapp-sync                what launchd runs; has Full Disk Access
 ~/.loveiq-brain/run-whatsapp-sync.sh                    the runner
 ~/.loveiq-brain/whatsapp-sync.log                       what it did, per run

@@ -5669,12 +5669,12 @@ async function callTool(
        * `scripts/whatsapp-sync.ts`. Saying so beats an empty slot that reads like a
        * job nobody wired up.
        */
-      // It IS scheduled — hourly, by a launchd agent on a laptop rather than by Vercel.
+      // It IS scheduled — every five minutes, by a launchd agent on a laptop, not by Vercel.
       // The distinction that matters to a reader is that it stops when that machine is
       // off, which "not a scheduled job" obscured.
       if (source === "whatsapp") {
         const note =
-          " · synced hourly from WhatsApp Desktop on a laptop, not by a server cron — so it pauses while that machine is off";
+          " · synced every five minutes from WhatsApp Desktop on a laptop, not by a server cron — so it pauses while that machine is off";
         const run = lastRun.get("brain-whatsapp");
         if (!run) return `${note}; no sync has recorded itself yet`;
         const when = run.at.slice(0, 16).replace("T", " ");

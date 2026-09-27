@@ -4390,7 +4390,7 @@ describe("/api/mcp", () => {
       cronRuns = { "brain-whatsapp": { started_at: "2026-08-30T21:15:02Z", status: "success" } };
       wireCorpus({ whatsapp: 540 });
       expect(await text()).toContain(
-        "synced hourly from WhatsApp Desktop on a laptop, not by a server cron — so it pauses while that machine is off; last synced 2026-08-30 21:15"
+        "synced every five minutes from WhatsApp Desktop on a laptop, not by a server cron — so it pauses while that machine is off; last synced 2026-08-30 21:15"
       );
       cronRuns = {
         "brain-whatsapp": {
