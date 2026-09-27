@@ -33,10 +33,16 @@ export function useMidlineRows(
     const read = () => {
       const line = window.innerHeight / 2;
       const next = new Set<number>();
+      let laidOut = false;
       rowsRef.current.forEach((el, i) => {
         if (!el || i >= count) return;
-        if (el.getBoundingClientRect().top < line - MIDLINE_MARGIN_PX) next.add(i);
+        const box = el.getBoundingClientRect();
+        if (box.width !== 0 || box.height !== 0) laidOut = true;
+        if (box.top < line - MIDLINE_MARGIN_PX) next.add(i);
       });
+      // A designed chapter closes with `display: none`: every row measures 0×0 at top
+      // 0, which would read as past the line. Keep what the reader last saw instead.
+      if (!laidOut) return;
       setPassed((prev) =>
         prev.size === next.size && [...next].every((i) => prev.has(i)) ? prev : next
       );
