@@ -198,14 +198,18 @@ describe("which chunks get embedded first", () => {
    * morning and matching both "September" and "signups" lexically — did not appear at
    * all. It was 181 rows down a queue drained oldest-first.
    */
-  it("drains the queue newest first, so today's numbers are searchable today", async () => {
+  it("drains the queue newest WRITTEN first, so today's numbers are searchable today", async () => {
+    // By `updated_at`, not `id`: the all-time and this-month totals are rewritten in place
+    // every fifteen minutes and keep their old id, so `id.desc` left them behind any
+    // backlog (2026-09-27: four funnel questions failed the battery that way).
     chunkReads.length = 0;
     chunkRows = [];
     respond = () => new Response(JSON.stringify({ embeddings: [] }), { status: 200 });
     const { embedMissing } = await import("@features/brain/server/embed");
     await embedMissing(() => false, 1);
     expect(chunkReads.length).toBeGreaterThan(0);
-    expect(chunkReads[0]).toContain("order=id.desc");
-    expect(chunkReads[0]).not.toContain("order=id.asc");
+    expect(new URL(`http://x${chunkReads[0]}`).searchParams.get("order")).toBe(
+      "updated_at.desc,id.desc"
+    );
   });
 });
