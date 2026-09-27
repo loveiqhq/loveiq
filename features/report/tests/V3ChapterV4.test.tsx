@@ -580,6 +580,43 @@ describe("V3Chapter under V4 — Report 2.0's own look (review 27.09)", () => {
       /display:\s*none/
     );
   });
+
+  // Fatih, 27.09: "the entire page is laggy". Report 2.0's pings, breathes and loops run
+  // forever, and a closed V4 chapter only clips its body, so they ticked on unseen — a
+  // style recalc and a repaint every frame — in every chapter the reader had scrolled past.
+  it("pauses every animation inside a closed chapter, pseudo-elements included", () => {
+    const at = V3_CSS.indexOf(".rv3.rv4 .rv4-chapter:not(.is-open) > .rv3-chapter__body *,");
+    expect(at, "missing the pause rule").toBeGreaterThan(-1);
+    expect(V3_CSS.slice(0, at).split("\n").length).toBeGreaterThan(1884);
+    const rule = V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+    expect(rule).toContain(".rv3.rv4 .rv4-chapter:not(.is-open) > .rv3-chapter__body *::before,");
+    expect(rule).toContain(".rv3.rv4 .rv4-chapter:not(.is-open) > .rv3-chapter__body *::after {");
+    expect(rule).toMatch(/animation-play-state:\s*paused\s*!important/);
+  });
+
+  // The same lag, second half: 2.0's reveal hooks fire as the reader scrolls past a closed
+  // chapter (its boxes keep their size under the clip), and each reveal's transitions —
+  // staggered dots, readouts, fades — then played out unseen, frame by frame.
+  it("switches transitions off inside a closed chapter; they are back the moment it opens", () => {
+    const at = V3_CSS.indexOf(".rv3.rv4 .rv4-chapter:not(.is-open) > .rv3-chapter__body *,");
+    const rule = V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+    expect(rule).toMatch(/transition:\s*none\s*!important/);
+    // Only the contents: the body's own 320ms collapse (frozen 604) still plays.
+    expect(rule).not.toMatch(/\.rv3-chapter__body\s*[,{]/);
+  });
+
+  it("stays paused whatever Report 2.0's own rules say", () => {
+    // Every `animation` shorthand resets the play state, and some of 2.0's selectors
+    // outrank any sensible pause rule — the importance ping's is (0,7,1) — so the pause
+    // is !important. 2.0's own !important animations are reduced-motion overrides that
+    // stop or shorten one; only an !important endless one could run on past the pause.
+    const V2_CSS = readFileSync(join(process.cwd(), "features/report/ui/report.css"), "utf8");
+    const endless = [...V2_CSS.matchAll(/\{([^{}]*)\}/g)].filter((m) =>
+      /animation[a-z-]*:[^;]*infinite/.test(m[1]!)
+    );
+    expect(endless.length).toBeGreaterThan(8);
+    expect(V2_CSS).not.toMatch(/animation[a-z-]*:[^;{}]*infinite[^;{}]*!important/);
+  });
 });
 
 /**

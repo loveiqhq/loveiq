@@ -7552,3 +7552,19 @@ html {
   gap: 16px;
   padding-top: 44px;
 }
+/* A closed chapter holds its motion (Fatih, 27.09: "the entire page is laggy"). The
+ * collapse only clips the body, so everything in it is still laid out, and 2.0's reveal
+ * hooks fire as the reader scrolls past. Its pings, breathes and loops — Libido's
+ * flowing dash, the confidence and power pings, the energy line — then ran forever,
+ * and each reveal's staggered transitions played out, all unseen: a style recalc and a
+ * repaint every frame. Held here, the animations play when the chapter opens, and the
+ * transitions are back in the same style change that opens it, so rows keyed on
+ * `.is-open` still build in. Only the contents: the body's own collapse still plays.
+ * !important because every `animation` shorthand resets the play state, and some of
+ * 2.0's selectors outrank any sensible rule (the importance ping's is 0,7,1). */
+.rv3.rv4 .rv4-chapter:not(.is-open) > .rv3-chapter__body *,
+.rv3.rv4 .rv4-chapter:not(.is-open) > .rv3-chapter__body *::before,
+.rv3.rv4 .rv4-chapter:not(.is-open) > .rv3-chapter__body *::after {
+  animation-play-state: paused !important;
+  transition: none !important;
+}
