@@ -258,7 +258,14 @@ const V4FantasyMap: FC<Props> = ({ dots, locked, onUnlock }) => {
               }
               aria-label={readout}
               aria-expanded={open}
-              onMouseEnter={() => setOpenDot(i)}
+              // Hover opens a readout on a pointer that MOVES over the dot. A dot the page
+              // scrolls under a resting pointer gets mouseenter too, and that opened a
+              // readout mid-scroll, over the dots' entrance (Fatih, 27.09: "there
+              // shouldn't be a window when scrolling"). A finger's drag is a scroll, not
+              // a hover; touch opens by a tap, below.
+              onPointerMove={(event) => {
+                if (event.pointerType !== "touch" && openDot !== i) setOpenDot(i);
+              }}
               onMouseLeave={() => setOpenDot((c) => (c === i ? null : c))}
               onFocus={() => setOpenDot(i)}
               onBlur={() => setOpenDot((c) => (c === i ? null : c))}
