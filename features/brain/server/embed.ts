@@ -105,12 +105,25 @@ async function embedBatch(
    * So: back off and retry rather than shrink. Giving up loses the batch entirely.
    */
   for (let attempt = 0; attempt < attempts; attempt++) {
-    const res = await fetchWithTimeout(`${url}/functions/v1/brain-embed`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ texts }),
-      timeoutMs,
-    });
+    let res: Response;
+    try {
+      res = await fetchWithTimeout(`${url}/functions/v1/brain-embed`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ texts }),
+        timeoutMs,
+      });
+    } catch (err) {
+      // A timeout or a dropped connection THROWS rather than returning a status, so it was
+      // never retried: the hourly job exited on its first try, and brain-fast threw away
+      // the vectors it had already made for that read. Same patience as a 503.
+      if (attempt === attempts - 1 || opts.isOutOfTime?.()) {
+        logger.warn({ err, attempt }, "brain-embed: edge function unreachable");
+        return null;
+      }
+      await sleep(1500 * (attempt + 1));
+      continue;
+    }
     if (res.ok) {
       const json = (await res.json().catch(() => null)) as { embeddings?: number[][] } | null;
       return json?.embeddings ?? null;

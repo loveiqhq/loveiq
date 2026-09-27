@@ -136,6 +136,26 @@ describe("the backfill waits out the platform saying not now", () => {
   });
 });
 
+describe("a timeout is a 503 too", () => {
+  it("retries a call that THROWS (timeout, dropped connection) instead of giving up", async () => {
+    // fetchWithTimeout throws on a timeout rather than returning a status, and only HTTP
+    // answers were retried: the hourly job exited on its first try.
+    const { embedMissing } = await import("@features/brain/server/embed");
+    chunkRows = [{ id: 1, title: "t", body: "text long enough to be worth embedding" }];
+    let first = true;
+    respond = () => {
+      if (first) {
+        first = false;
+        throw new Error("The operation was aborted due to timeout");
+      }
+      return new Response(JSON.stringify({ embeddings: [[0.1, 0.2, 0.3]] }), { status: 200 });
+    };
+    const ok = await embedMissing(() => false, 1);
+    expect(calls.filter((c) => c.url.includes("brain-embed"))).toHaveLength(2);
+    expect(ok.embedded).toBe(1);
+  });
+});
+
 describe("embedMissing cannot outlive the function that calls it", () => {
   /**
    * `embedBatch` defaults to 6 attempts at 120s each -- the BACKFILL script's
