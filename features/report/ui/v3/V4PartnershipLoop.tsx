@@ -10,6 +10,7 @@ import {
   type FC,
 } from "react";
 import type { Report3LoopStage } from "@/data/report3-partnership";
+import useV4Reveal from "./useV4Reveal";
 import V4LockBadge from "./V4LockBadge";
 import { guardedUnlock } from "./v4Unlock";
 
@@ -34,6 +35,13 @@ import { guardedUnlock } from "./v4Unlock";
  * (V4LockBadge). The slides' lines arrive as the server sends them (lockedBlurCopy.ts:
  * the real lines since review 26.09), and a tap anywhere on the section opens the
  * paywall.
+ *
+ * THE PULSE (review 27.09). Mark: "let's have the dot of The Situation pulsated when
+ * it comes into view. Ideally for a few seconds." At rest the violet indicator sits on
+ * The Situation's dot, so the indicator is what pulses: a halo breathing out of it for
+ * three beats once the orbit is 60% up the screen (never where nobody is looking: the
+ * reveal has no catch-up), over for good once the beats end or the reader moves on.
+ * Never on a locked loop.
  *
  * The step names and colours are the same for every archetype and live here; only
  * the two lines on each card are the archetype's, and arrive as props.
@@ -85,7 +93,16 @@ const V4PartnershipLoop: FC<Props> = ({ stages, locked = false, onUnlock }) => {
   const [active, setActive] = useState(0);
   const viewportRef = useRef<HTMLDivElement>(null);
   const orbitRef = useRef<HTMLDivElement>(null);
+  const indicatorRef = useRef<HTMLSpanElement>(null);
   const stepRef = useRef(0);
+  const [orbitBoxRef, orbitSeen] = useV4Reveal<HTMLDivElement>({
+    band: 0.6,
+    catchUp: false,
+    enabled: !locked,
+  });
+  const [movedOn, setMovedOn] = useState(false);
+  const [pulseDone, setPulseDone] = useState(false);
+  const pulsing = orbitSeen && !movedOn && !pulseDone;
 
   // The slide pitch, measured rather than assumed: it narrows with the viewport
   // (slides are min(320px, 100% - 32px) wide). Zero until the section is laid out
@@ -109,6 +126,8 @@ const V4PartnershipLoop: FC<Props> = ({ stages, locked = false, onUnlock }) => {
       const at = Math.min(LOOP_STEPS.length - 1, Math.max(0, viewport.scrollLeft / step));
       orbitRef.current?.style.setProperty("--orbit-rot", `${Math.round(at * 60 * 100) / 100}deg`);
       setActive(Math.round(at));
+      // The pulse points at The Situation; once the reader has left it, it is done.
+      if (Math.round(at) !== 0) setMovedOn(true);
     };
     const onScroll = () => {
       // Set before scheduling: a frame callback that runs synchronously clears it.
@@ -132,6 +151,16 @@ const V4PartnershipLoop: FC<Props> = ({ stages, locked = false, onUnlock }) => {
       cancelAnimationFrame(frame);
     };
   }, [measure]);
+
+  // The halo is the indicator's ::after, whose animationend reaches the indicator. A
+  // native listener, because jsdom cannot fire React's onAnimationEnd.
+  useEffect(() => {
+    const indicator = indicatorRef.current;
+    if (!pulsing || !indicator) return;
+    const end = () => setPulseDone(true);
+    indicator.addEventListener("animationend", end);
+    return () => indicator.removeEventListener("animationend", end);
+  }, [pulsing]);
 
   const goTo = (index: number) => {
     const viewport = viewportRef.current;
@@ -157,7 +186,12 @@ const V4PartnershipLoop: FC<Props> = ({ stages, locked = false, onUnlock }) => {
       {/* 532:243 — the orbit, 224px, labels outside the ring. A mouse shortcut to a
        * step; the pager below is the keyboard path, so the orbit is hidden from
        * assistive tech and its dots are out of the tab order. */}
-      <div className="rv4-loop__orbit-box" aria-hidden={locked ? true : undefined} inert={locked}>
+      <div
+        ref={orbitBoxRef}
+        className="rv4-loop__orbit-box"
+        aria-hidden={locked ? true : undefined}
+        inert={locked}
+      >
         <div
           ref={orbitRef}
           className="rv4-loop__orbit"
@@ -203,7 +237,10 @@ const V4PartnershipLoop: FC<Props> = ({ stages, locked = false, onUnlock }) => {
             );
           })}
           {/* 532:259 — rides the ring with the scroll (--orbit-rot). */}
-          <span className="rv4-loop__indicator" />
+          <span
+            ref={indicatorRef}
+            className={`rv4-loop__indicator${pulsing ? " is-pulsing" : ""}`}
+          />
         </div>
       </div>
 

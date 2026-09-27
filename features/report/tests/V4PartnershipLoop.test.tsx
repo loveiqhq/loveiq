@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 import V4PartnershipLoop, { LOOP_STEPS } from "@features/report/ui/v3/V4PartnershipLoop";
 import { buildPartnership } from "@/data/report3-partnership";
+import { installRevealObserver, observerOf, RevealObserver } from "./v4RevealTestKit";
 
 /**
  * The Spark Seeker loop — Figma 532:231 (open) and 612:862 (locked): the orbit of
@@ -190,6 +191,51 @@ describe("V4PartnershipLoop — the orbit's dots: easy to hit, in the tiles' col
   });
 });
 
+// Review 27.09, Mark: "let's have the dot of The Situation pulsated when it comes into
+// view. Ideally for a few seconds."
+describe("V4PartnershipLoop — The Situation pulses as the loop comes into view", () => {
+  const indicator = (c: HTMLElement) => c.querySelector(".rv4-loop__indicator")!;
+  const orbitBox = (c: HTMLElement) => c.querySelector(".rv4-loop__orbit-box")!;
+
+  it("waits for the orbit to be 60% up the screen, then pulses the marker resting on it", () => {
+    installRevealObserver();
+    const { container } = renderLoop();
+    expect(indicator(container)).not.toHaveClass("is-pulsing");
+    const observer = observerOf(orbitBox(container))!;
+    expect(observer.rootMargin).toBe("0px 0px -40% 0px");
+    observer.fire(true);
+    expect(indicator(container)).toHaveClass("is-pulsing");
+  });
+
+  it("pulses once: when its beats end, it is over for good", () => {
+    installRevealObserver();
+    const { container } = renderLoop();
+    observerOf(orbitBox(container))!.fire(true);
+    fireEvent.animationEnd(indicator(container));
+    expect(indicator(container)).not.toHaveClass("is-pulsing");
+  });
+
+  it("stops as soon as the reader moves on from The Situation, and stays stopped", () => {
+    installRevealObserver();
+    const { container } = renderLoop();
+    const viewport = layOut(container);
+    observerOf(orbitBox(container))!.fire(true);
+    viewport.scrollLeft = STEP;
+    fireEvent.scroll(viewport);
+    expect(indicator(container)).not.toHaveClass("is-pulsing");
+    viewport.scrollLeft = 0;
+    fireEvent.scroll(viewport);
+    expect(indicator(container)).not.toHaveClass("is-pulsing");
+  });
+
+  it("never pulses a locked loop, and watches nothing for it", () => {
+    installRevealObserver();
+    const { container } = renderLoop({ stages: LOCKED.loop, locked: true, onUnlock: () => {} });
+    expect(RevealObserver.instances).toHaveLength(0);
+    expect(indicator(container)).not.toHaveClass("is-pulsing");
+  });
+});
+
 describe("V4PartnershipLoop — locked (612:862)", () => {
   it("blurs the orbit and slides behind the brand lock, the pager sharp but inert", () => {
     const { container } = renderLoop({ stages: LOCKED.loop, locked: true, onUnlock: () => {} });
@@ -257,6 +303,31 @@ describe("V4PartnershipLoop — CSS contract", () => {
     const label = V3_CSS.slice(labelAt, V3_CSS.indexOf("}", labelAt));
     expect(label).toContain("pointer-events: auto");
     expect(label).toContain("cursor: pointer");
+  });
+
+  it("pulses a halo off the marker in three 1.2s beats, from a top-level keyframe", () => {
+    const at = V3_CSS.indexOf(".rv3 .rv4-loop__indicator.is-pulsing::after {");
+    expect(at).toBeGreaterThan(0);
+    expect(V3_CSS.slice(at, V3_CSS.indexOf("}", at))).toMatch(
+      /animation:\s*rv4-loop-pulse 1200ms [^;]* 3;/
+    );
+    const kf = V3_CSS.indexOf("\n@keyframes rv4-loop-pulse {");
+    expect(kf).toBeGreaterThan(0);
+    expect(V3_CSS.slice(kf, V3_CSS.indexOf("\n}\n", kf))).toContain("transform: scale(1.8)");
+  });
+
+  it("never scales the marker itself: its transform is what puts it on the ring", () => {
+    expect(V3_CSS).not.toMatch(/\.rv4-loop__indicator[^{]*\{[^}]*\bscale:/);
+  });
+
+  it("holds the pulse still under reduced motion", () => {
+    const at = V3_CSS.indexOf(
+      "@media (prefers-reduced-motion: reduce) {" +
+        String.fromCharCode(10) +
+        "  .rv3 .rv4-loop__indicator.is-pulsing::after {"
+    );
+    expect(at).toBeGreaterThan(0);
+    expect(V3_CSS.slice(at, V3_CSS.indexOf("}", at))).toContain("animation: none");
   });
 
   it("uses no class name a V3 catch-all would restyle", () => {
