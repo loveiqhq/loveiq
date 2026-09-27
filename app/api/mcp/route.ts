@@ -1732,9 +1732,9 @@ export const TOOLS = [
       "anything shipped since is not in the picture. A page that is not on the list has no " +
       "screenshot, which is a gap in what was captured and not a page that looks like " +
       "nothing. " +
-      "The landing page appears TWICE, as `landing-white` and `landing-white-prev`: those " +
-      "are the two arms of a live A/B and they are different pages, so name the arm in any " +
-      "critique of 'the landing page'.",
+      "The landing page appears TWICE: `landing-white` is the one every visitor gets, and " +
+      "`landing-white-prev` is the design retired on 2026-09-19 (the A/B ended; it opens " +
+      "only with ?variant=white_prev). Critique the live one unless asked to compare.",
     inputSchema: {
       type: "object",
       properties: {
