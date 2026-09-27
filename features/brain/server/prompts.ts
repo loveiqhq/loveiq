@@ -29,6 +29,27 @@ const HOUSE_RULES =
   "Answer short and in plain words. Put a link or id beside every fact so it can be " +
   "checked, say plainly when the record is thin, and never fill a gap by guessing.";
 
+/** A month's first and last day, worked out when the prompt is rendered, never stored. */
+function monthSpan(month: string): { name: string; since: string; until: string } {
+  const [y, m] = month.split("-").map(Number) as [number, number];
+  return {
+    name: new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-GB", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    }),
+    since: `${month}-01`,
+    until: new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10),
+  };
+}
+
+function lastMonth(): string {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
+    .toISOString()
+    .slice(0, 7);
+}
+
 export const PROMPTS: BrainPrompt[] = [
   {
     name: "catch_me_up",
@@ -175,6 +196,67 @@ export const PROMPTS: BrainPrompt[] = [
       'Status "Backlog", a Due Date only if the meeting named one, and the owner, meeting and link in the content ' +
       "(owners cannot be set as a property).\n" +
       "4. Show me the drafts and wait for my OK. Create only the ones I approve, and give me each link.\n\n" +
+      HOUSE_RULES,
+  },
+  {
+    name: "monthly_review",
+    title: "Monthly review",
+    description:
+      "One page on how a month went: funnel and money, what we paid for tools, who our users were, what shipped, what we tested and decided, and what is stuck.",
+    arguments: [
+      { name: "month", description: "The month, e.g. 2026-08. Leave empty for last month." },
+    ],
+    render: ({ month }) => {
+      // Anything but YYYY-MM ("August", "last month") is left for the model to work out.
+      const exact = /^\d{4}-(0[1-9]|1[0-2])$/.test(month || lastMonth());
+      const span = exact ? monthSpan(month || lastMonth()) : null;
+      const since = span?.since ?? "the month's first day";
+      const until = span?.until ?? "its last day";
+      return (
+        `Write the monthly review of ${span ? `${span.name} (${since} to ${until})` : month} for the team.\n\n` +
+        `1. Funnel and money: get_business_numbers with since ${since}, until ${until} and compare_to "previous". ` +
+        "Lead with paywall conversion, the core goal. For a day that jumped, explain_change before calling it real.\n" +
+        "2. What we paid for tools: cost_watch. Its latest settled month is usually this one; for an older month use its " +
+        "trend line. Name any hand-typed line it flags.\n" +
+        `3. Who our users were: user_totals with since ${since} and until ${until}, grouped by archetype, then by country.\n` +
+        `4. What shipped: what_shipped with since ${since} and until ${until}, in the plain words each change was summarised in.\n` +
+        "5. What we tested: experiments. Say which ran or ended this month and what each concluded.\n" +
+        `6. What we decided: browse_context with sources ["decision"], since ${since} and until ${until}. Then ` +
+        "decision_conflicts: name any pair still waiting for someone to say which stands.\n" +
+        '7. What is stuck: open Notion tasks past their due date (browse_context with sources ["notion"] and meta {"state": "open"}).\n\n' +
+        "Open with three lines: the month in one sentence, the best thing, the worst thing. Then one short section per step. " +
+        'Show it to me, and after my OK put it in a Google Doc with write_to_google_doc, titled "Monthly review" and the month.\n\n' +
+        HOUSE_RULES
+      );
+    },
+  },
+  {
+    name: "onboard",
+    title: "Onboard a new teammate",
+    description:
+      "A first-weeks plan for someone joining, in the shape our Notion onboarding pages use, built from what the brain holds.",
+    arguments: [
+      { name: "person", description: "Their full name, e.g. Fatih Hadžić.", required: true },
+      { name: "role", description: "What they will work on, e.g. engineering or design." },
+    ],
+    render: ({ person, role }) =>
+      `${person} is joining LoveIQ${role ? ` to work on ${role}` : ""}. Build their onboarding.\n\n` +
+      `1. Look for their page first: search_company_context for "Onboarding ${person}" with sources ["notion"], and read a ` +
+      "hit with their name in full with fetch_document. If one exists, do not write another: tell me what is done, what " +
+      "is still open, and what it lacks against step 2.\n" +
+      '2. Otherwise follow how we do it: read the Notion page titled "Onboarding" and the newest per-hire page, and use ' +
+      "their shape: access first, reading second, workstreams third, and a dated first deliverable for each workstream. " +
+      "Every resource must be a live link.\n" +
+      "3. Fill it from the brain, never from memory:\n" +
+      "- Access: the tools the role needs and who grants each, from how the newest hire got theirs.\n" +
+      '- Reading: what LoveIQ is and how the funnel makes money (search_company_context with sources ["doc"]), and the ' +
+      'decisions that shape the work (browse_context with sources ["decision"], newest first).\n' +
+      '- People: who does what (search_company_context with sources ["people"]), so they know who to ask for what.\n' +
+      `- Workstreams: open Notion tasks in ${role ? `their area (${role})` : "their area"}, and what_shipped for the last ` +
+      "month, so they see where things stand.\n" +
+      "- Jarvis: which ready-made prompts to try first (Catch me up, What needs me, KPI check).\n" +
+      "4. Show me the draft and wait for my OK. Then create it with write_to_notion as a page under the Onboarding page " +
+      `(as parent, the part of its id after "notion/page:"), titled "Onboarding — ${person}", and give me the link.\n\n` +
       HOUSE_RULES,
   },
   {

@@ -44,8 +44,8 @@ a DM gets a one-line pointer to Claude, while channel messages are still indexed
 
 In claude.ai and Claude Code the brain offers ready-made prompts to pick, so nobody has
 to know which tool answers what: **Catch me up**, **KPI check**, **Review this chapter**,
-**Draft a chapter**, **What needs me**, **Put meeting promises on the board** and
-**Record a decision**. They live in
+**Draft a chapter**, **What needs me**, **Put meeting promises on the board**,
+**Monthly review**, **Onboard a new teammate** and **Record a decision**. They live in
 `features/brain/server/prompts.ts` and are served over MCP `prompts/list` and
 `prompts/get`. Each one ends with the house rules (short, plain, every fact linked),
 and a test fails if a prompt names a tool that does not exist.

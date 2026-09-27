@@ -330,7 +330,7 @@ describe("/api/mcp", () => {
         expect(body.result.capabilities.prompts).toBeDefined();
       });
 
-      it("lists the seven prompts, each with its arguments", async () => {
+      it("lists the nine prompts, each with its arguments", async () => {
         const body = await call("prompts/list");
         const prompts = body.result.prompts as Array<{
           name: string;
@@ -343,6 +343,8 @@ describe("/api/mcp", () => {
           "draft_chapter",
           "what_needs_me",
           "track_promises",
+          "monthly_review",
+          "onboard",
           "record_decision",
         ]);
         const needs = prompts.find((p) => p.name === "what_needs_me")!;
@@ -388,11 +390,11 @@ describe("/api/mcp", () => {
           const text = (await call("prompts/get", { name: p.name, arguments: args })).result
             .messages[0].content.text as string;
           const named = text.match(/\b[a-z]+(?:_[a-z]+)+\b/g) ?? [];
-          const toolish = named.filter((w) =>
-            /^(search|browse|fetch|count|get|list|query|record|show|post|send|write|related)_/.test(
-              w
-            )
-          );
+          // A word that starts the way a real tool does must BE one. The prefixes come from
+          // the live list: a fixed list missed every tool outside it (cost_, user_, what_...),
+          // so a prompt naming a renamed one of those passed.
+          const prefixes = new Set([...tools].map((t) => t.split("_")[0]));
+          const toolish = named.filter((w) => prefixes.has(w.split("_")[0]!));
           expect(toolish.length).toBeGreaterThan(0);
           for (const t of toolish) expect(tools.has(t), `${p.name} names ${t}`).toBe(true);
         }
