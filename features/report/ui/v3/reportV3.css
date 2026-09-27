@@ -7300,3 +7300,55 @@ html {
   ) {
   max-width: 100%;
 }
+
+/* ════════════════════════════════════════════════════════════════════════════════
+ * MOTION — review 27.09 (Mark's WhatsApp notes, and two of our own he can drop)
+ *
+ * Every entrance below is class-driven: a component flips a class when the reader
+ * reaches it (useMidlineRows, useV4Reveal) and CSS does the rest. Nothing under the
+ * paywall's blur moves, and reduced motion always shows the finished state.
+ * ════════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Typical sun beliefs: the circle, then the tick — 368:5623 ─────────────────────
+ * "When element is at the scroll line place the round green circle and then draw the
+ * tick into the circle." A row gets `is-drawn` on the coral panel's line. The circle
+ * springs in, and the tick's stroke draws on once it has landed; below the line the
+ * tick goes first and the circle after it (a transition's delay is read from the rule
+ * it is heading to). The check is 9.28 units long, so a 10-unit dash offset by 11
+ * leaves no round cap at its start. Locked rows are drawn from the first render. */
+.rv3 .rv4-sun__row .rv4-sun__tick {
+  opacity: 0;
+  transform: scale(0);
+  transition:
+    opacity 180ms ease 140ms,
+    transform 220ms ease-in 140ms;
+}
+.rv3 .rv4-sun__row .rv4-sun__tick path {
+  stroke-dasharray: 10 20;
+  stroke-dashoffset: 11;
+  transition: stroke-dashoffset 200ms ease-in;
+}
+.rv3 .rv4-sun__row.is-drawn .rv4-sun__tick {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 160ms ease,
+    transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.rv3 .rv4-sun__row.is-drawn .rv4-sun__tick path {
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 360ms ease-out 220ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv4-sun__row .rv4-sun__tick,
+  .rv3 .rv4-sun__row.is-drawn .rv4-sun__tick {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .rv3 .rv4-sun__row .rv4-sun__tick path,
+  .rv3 .rv4-sun__row.is-drawn .rv4-sun__tick path {
+    stroke-dashoffset: 0;
+    transition: none;
+  }
+}

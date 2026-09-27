@@ -1,6 +1,7 @@
 "use client";
 
-import type { FC } from "react";
+import { useRef, type FC } from "react";
+import useMidlineRows from "./useMidlineRows";
 import V4LockBadge from "./V4LockBadge";
 import { guardedUnlock } from "./v4Unlock";
 
@@ -9,8 +10,14 @@ import { guardedUnlock } from "./v4Unlock";
  * one in the Typical Beliefs chapter.
  *
  * The same chrome as 368:5482 in the other hue — white under a 0.11 to 0.03
- * vertical wash, a hairline at 26%, a 20px radius and one soft drop shadow — but
- * no animation: every row is already a sun belief, so there is nothing to turn.
+ * vertical wash, a hairline at 26%, a 20px radius and one soft drop shadow.
+ *
+ * THE DRAW (review 27.09). Mark: "similarly as above with the scroll. When element is
+ * at the scroll line place the round green circle and then draw the tick into the
+ * circle." Every row is already a sun belief, so nothing turns; instead each row's
+ * circle arrives, and its tick draws into it, as the row crosses the coral panel's
+ * line (useMidlineRows), and both leave again below it, as the coral rows unturn. The
+ * row carries `is-drawn`; CSS runs the two steps.
  *
  * The ten entries are the same ten the coral panel's rows land on, in the frame's
  * own order, which is not the turn order.
@@ -18,8 +25,8 @@ import { guardedUnlock } from "./v4Unlock";
  * THE PAYWALLED STATE — 381:362. Rows 1 to 3 clear, row 4 the ramp (the blur fades
  * in over its top 65.6%), rows 5 to 10 under the full blur, their text as the server
  * sends it (lockedBlurCopy.ts), and the gradient lock (441:6129) 111px below the top
- * of the locked group. A client component only because that group opens the
- * paywall.
+ * of the locked group. Locked rows are drawn from the first render, as the frame
+ * draws them, and never animate: nothing under the blur moves.
  */
 
 /** 368:5623 heading. Chrome, not paid copy — see V4ShadowBeliefs. */
@@ -39,6 +46,8 @@ interface Props {
 
 const V4SunBeliefs: FC<Props> = ({ sun, lockedFrom = null, onUnlock }) => {
   const locked = lockedFrom !== null;
+  const rowsRef = useRef<(HTMLLIElement | null)[]>([]);
+  const drawn = useMidlineRows(rowsRef, lockedFrom ?? sun.length);
 
   // Keyed by index: in decoy mode a locked reader's rows 5-10 arrive scrambled.
   const row = (belief: string, i: number) => {
@@ -47,7 +56,12 @@ const V4SunBeliefs: FC<Props> = ({ sun, lockedFrom = null, onUnlock }) => {
     return (
       <li
         key={i}
-        className={`rv4-sun__row${isLocked ? ` is-locked ${isRamp ? "is-ramp" : "is-blurred"}` : ""}`}
+        ref={(el) => {
+          rowsRef.current[i] = el;
+        }}
+        className={`rv4-sun__row${drawn.has(i) || isLocked ? " is-drawn" : ""}${
+          isLocked ? ` is-locked ${isRamp ? "is-ramp" : "is-blurred"}` : ""
+        }`}
       >
         <span className="rv4-sun__tick" aria-hidden="true">
           <svg viewBox="0 0 9 9" fill="none">

@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import V4TypicalBeliefs from "@features/report/ui/v3/V4TypicalBeliefs";
 import V4ShadowBeliefs from "@features/report/ui/v3/V4ShadowBeliefs";
+import V4SunBeliefs from "@features/report/ui/v3/V4SunBeliefs";
 import { buildTypicalBeliefs, REPORT_V4_TYPICAL_BELIEFS } from "@/data/report3-typical-beliefs";
 
 /**
@@ -150,6 +151,50 @@ describe("the turn — 368:5482", () => {
     rowTop = 100;
     fireEvent.scroll(window);
     expect(container.querySelectorAll(".rv4-turn__row.is-turned")).toHaveLength(3);
+  });
+});
+
+// Review 27.09, Mark: "maybe similarly as above with the scroll. When element is at the
+// scroll line place the round green circle and then draw the tick into the circle."
+describe("the sun ticks — 368:5623, drawn at the coral panel's scroll line", () => {
+  const drawnRows = (c: HTMLElement) => c.querySelectorAll(".rv4-sun__row.is-drawn");
+
+  it("delivers every free row without its circle or tick", () => {
+    const { container } = render(<V4SunBeliefs sun={VIEW.panels.sun} />);
+    expect(drawnRows(container)).toHaveLength(0);
+  });
+
+  it("draws a row's tick once its top passes the middle, as the coral rows turn", () => {
+    const { container } = render(<V4SunBeliefs sun={VIEW.panels.sun} />);
+    rowTop = 395;
+    fireEvent.scroll(window);
+    expect(drawnRows(container)).toHaveLength(0);
+
+    rowTop = 380;
+    fireEvent.scroll(window);
+    expect(drawnRows(container)).toHaveLength(10);
+  });
+
+  it("takes the tick back once the row is below the line again, as the coral rows unturn", () => {
+    const { container } = render(<V4SunBeliefs sun={VIEW.panels.sun} />);
+    rowTop = 380;
+    fireEvent.scroll(window);
+    rowTop = 395;
+    fireEvent.scroll(window);
+    expect(drawnRows(container)).toHaveLength(0);
+  });
+
+  it("keeps every locked row drawn and still, as 381:362 draws them", () => {
+    const { container } = render(
+      <V4SunBeliefs sun={LOCKED.panels.sun} lockedFrom={LOCKED.lockedFrom} />
+    );
+    expect(drawnRows(container)).toHaveLength(7);
+    for (const row of drawnRows(container)) {
+      expect(row.closest(".rv4-sun__list.is-locked")).not.toBeNull();
+    }
+    rowTop = 100;
+    fireEvent.scroll(window);
+    expect(drawnRows(container)).toHaveLength(10);
   });
 });
 
@@ -377,5 +422,54 @@ describe("reportV3.css — belief panel contracts", () => {
     const css = block(".rv3 .rv4-turn__blob {");
     expect(css).toContain("right: -22px");
     expect(css).not.toContain("left:");
+  });
+});
+
+describe("reportV3.css — the sun tick draws in two steps (review 27.09)", () => {
+  const ruleOf = (selector: string) => {
+    const at = V3_CSS.indexOf(`${selector} {`);
+    expect(at, selector).toBeGreaterThan(0);
+    return V3_CSS.slice(at, V3_CSS.indexOf("}", at));
+  };
+  const REST = ".rv3 .rv4-sun__row .rv4-sun__tick";
+  const DRAWN = ".rv3 .rv4-sun__row.is-drawn .rv4-sun__tick";
+
+  it("rests with no circle and the tick's stroke fully offset", () => {
+    const circle = ruleOf(REST);
+    expect(circle).toMatch(/opacity:\s*0;/);
+    expect(circle).toMatch(/transform:\s*scale\(0\);/);
+    // The check is 9.28 units long: a 10-unit dash pushed 11 along leaves no round cap
+    // showing at the path's start.
+    const path = ruleOf(`${REST} path`);
+    expect(path).toMatch(/stroke-dasharray:\s*10 20;/);
+    expect(path).toMatch(/stroke-dashoffset:\s*11;/);
+  });
+
+  it("places the circle first, then draws the tick into it", () => {
+    const circle = ruleOf(DRAWN);
+    expect(circle).toMatch(/opacity:\s*1;/);
+    expect(circle).toMatch(/transform:\s*none;/);
+    const path = ruleOf(`${DRAWN} path`);
+    expect(path).toMatch(/stroke-dashoffset:\s*0;/);
+    expect(path).toMatch(/stroke-dashoffset 360ms [a-z-]+ 220ms/);
+  });
+
+  it("takes the tick away before the circle, in reverse", () => {
+    expect(ruleOf(REST)).toMatch(/transform 220ms [a-z-]+ 140ms/);
+    expect(ruleOf(`${REST} path`)).toMatch(/stroke-dashoffset 200ms [a-z-]+;/);
+  });
+
+  it("shows the finished tick under reduced motion", () => {
+    const at = V3_CSS.indexOf(`@media (prefers-reduced-motion: reduce) {\n  ${REST},`);
+    expect(at).toBeGreaterThan(0);
+    const media = V3_CSS.slice(at, V3_CSS.indexOf("\n}\n", at));
+    expect(media).toMatch(/opacity:\s*1;/);
+    expect(media).toMatch(/transform:\s*none;/);
+    expect(media).toMatch(/stroke-dashoffset:\s*0;/);
+    expect(media.match(/transition:\s*none;/g)).toHaveLength(2);
+  });
+
+  it("sits below the frozen region", () => {
+    expect(V3_CSS.slice(0, V3_CSS.indexOf(`${REST} {`)).split("\n").length).toBeGreaterThan(1884);
   });
 });
