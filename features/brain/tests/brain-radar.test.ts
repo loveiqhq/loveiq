@@ -497,6 +497,18 @@ describe("syncDisputes and settling", () => {
     expect(db.chunks.find((c) => c.source_id === JIRA)!.meta.superseded_by).toBeUndefined();
   });
 
+  it("settles by the id exactly as search prints it", async () => {
+    // MAY CONFLICT lines print "decision/decision:<id>"; stripping one prefix made it
+    // "decision:decision:<id>", which matched no conflict.
+    db.conflicts = [open(JIRA, NOTION)];
+    const r = await settleConflict(
+      { a: `decision/${JIRA}`, b: `decision/${NOTION}`, keep: "later", actor: "Mark" },
+      new Date(NOW)
+    );
+    expect(r).toMatchObject({ ok: true });
+    expect(db.conflicts[0]).toMatchObject({ status: "settled" });
+  });
+
   it("records both standing without superseding anything, and refuses a second settle or an unknown pair", async () => {
     db.conflicts = [open(JIRA, NOTION)];
     const both = await settleConflict(

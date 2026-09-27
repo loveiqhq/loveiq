@@ -49,6 +49,8 @@ export interface DecisionResult {
   id: string;
   sourceId: string;
   decidedOn: string;
+  /** Why `supersedes` did not mark the older decision, said back to the caller. */
+  supersedeProblem?: string;
 }
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -179,6 +181,18 @@ export async function markSuperseded(
     period_end: string | null;
   }>;
   if (rows.length === 0) return 0;
+  // A decision is replaced once. Re-marking it overwrote the first replacement, so an "as
+  // of" day between the two showed it standing and the first replacement lost its mark.
+  // Refused before anything is written; the replacement that stands is the one to supersede.
+  const taken = rows.find(
+    (r) => typeof r.meta?.superseded_by === "string" && r.meta.superseded_by !== byId
+  );
+  if (taken) {
+    throw new Error(
+      `decision ${older} was already replaced by ${String(taken.meta!.superseded_by)}; ` +
+        `supersede that one instead`
+    );
+  }
   let replacedOn = byDay;
   if (!replacedOn) {
     const by = await supabaseFetch(
@@ -238,6 +252,7 @@ export async function recordDecision(
    * Never fails the write. The new decision is the thing being recorded; losing it
    * because the back-reference could not be stamped would be the worse trade.
    */
+  let supersedeProblem: string | undefined;
   if (input.supersedes) {
     const older = input.supersedes.trim().replace(/^decision\//, "");
     try {
@@ -248,9 +263,11 @@ export async function recordDecision(
           { supersedes: older, by: row.source_id },
           "brain: a decision claims to supersede an id that is not in the corpus"
         );
+        supersedeProblem = `no decision ${older} is on record, so nothing was marked as replaced`;
       }
     } catch (err) {
       logger.warn({ err, supersedes: older }, "brain: could not mark the superseded decision");
+      supersedeProblem = err instanceof Error ? err.message : String(err);
     }
   }
 
@@ -280,7 +297,12 @@ export async function recordDecision(
     logger.warn({ err, sourceId: row.source_id }, "brain: decision recorded but not mirrored");
   }
 
-  return { id: row.source_id, sourceId: row.source_id, decidedOn: row.period_end as string };
+  return {
+    id: row.source_id,
+    sourceId: row.source_id,
+    decidedOn: row.period_end as string,
+    ...(supersedeProblem ? { supersedeProblem } : {}),
+  };
 }
 
 /**

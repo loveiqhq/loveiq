@@ -392,6 +392,16 @@ describe("superseding is history a reader can see, not just metadata", () => {
     mockUpsertChunks.mockResolvedValue(1);
   });
 
+  it("tells the caller when the decision it replaces is not on record, rather than only logging it", async () => {
+    mockSupabaseFetch.mockResolvedValue({ ok: true, json: async () => [] });
+    const r = await recordDecision({
+      decision: "the new way",
+      actor: "A Person",
+      supersedes: "decision/decision:2026-01-01-missing",
+    });
+    expect(r.supersedeProblem).toMatch(/no decision decision:2026-01-01-missing is on record/);
+  });
+
   it("marks the REPLACED decision, because that is the record a reader lands on", async () => {
     /**
      * `supersedes` was written into the NEW decision's metadata, body and Slack
@@ -597,6 +607,19 @@ describe("markSuperseded", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => [] });
     await expect(markSuperseded("decision:a", "decision:b")).rejects.toThrow(/no date/);
     expect(mockSupabaseFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses to re-mark a decision another one already replaced, writing nothing", async () => {
+    mockSupabaseFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        { id: 7, meta: { superseded_by: "decision:2026-06-01-b" }, period_end: "2026-05-15" },
+      ],
+    });
+    await expect(
+      markSuperseded("decision:2026-05-15-a", "decision:2026-09-03-c", "2026-09-03")
+    ).rejects.toThrow(/already replaced by decision:2026-06-01-b; supersede that one instead/);
+    expect(mockSupabaseFetch).toHaveBeenCalledTimes(1);
   });
 
   it("throws when it cannot read or cannot write, so a caller never half-finishes", async () => {
