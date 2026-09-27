@@ -4257,6 +4257,9 @@ async function callTool(
         "Findable by its wording immediately, fully indexed within about fifteen " +
         "minutes, and `fetch_document` reads it back by that id at once. " +
         "Quote the id if a later decision replaces this one." +
+        (recorded.supersedeProblem
+          ? `\n\nNOT MARKED AS REPLACED: ${recorded.supersedeProblem}.`
+          : "") +
         (str(args.rejected)
           ? ""
           : "\n\nNothing was recorded about what was REJECTED. If alternatives were " +

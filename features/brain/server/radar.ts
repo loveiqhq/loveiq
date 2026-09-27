@@ -93,7 +93,10 @@ export interface DisputeMark {
   why: string;
 }
 
-const bare = (id: string) => id.replace(/^decision[:/]/, "");
+// Both prefixes, in turn: search and the MAY CONFLICT lines print "decision/decision:<id>",
+// and stripping only the first turned that into "decision:decision:<id>", which matched
+// no conflict, so settling by the id Jarvis prints answered "No recorded conflict".
+const bare = (id: string) => id.replace(/^decision\//, "").replace(/^decision:/, "");
 export const decisionId = (id: string) => `decision:${bare(id.trim())}`;
 const pairKey = (a: string, b: string) => [a, b].sort().join("|");
 
