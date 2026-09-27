@@ -1221,7 +1221,11 @@ describe("ReportPage", () => {
       const { container } = render(<ReportPage />);
 
       const chapter = container.querySelector("#challenges_in_partnership")!;
-      expect(chapter).toHaveClass("rv3-chapter");
+      // V3Chapter draws V2's section; under V4 its root is `.rv4-chapter` alone (review
+      // 27.09: the frozen 3.0 restyle keyed on `.rv3-chapter`), its body still V3's.
+      expect(chapter).toHaveClass("rv4-chapter");
+      expect(chapter).not.toHaveClass("rv3-chapter");
+      expect(chapter.querySelector(".rv3-chapter__body")).not.toBeNull();
       expect(chapter.querySelector(".rv4-cip")).toBeNull();
     });
 
@@ -1389,7 +1393,11 @@ describe("ReportPage", () => {
       const { container } = render(<ReportPage />);
 
       const chapter = container.querySelector(`#${FVR}`)!;
-      expect(chapter).toHaveClass("rv3-chapter");
+      // V3Chapter draws V2's section; under V4 its root is `.rv4-chapter` alone (review
+      // 27.09: the frozen 3.0 restyle keyed on `.rv3-chapter`), its body still V3's.
+      expect(chapter).toHaveClass("rv4-chapter");
+      expect(chapter).not.toHaveClass("rv3-chapter");
+      expect(chapter.querySelector(".rv3-chapter__body")).not.toBeNull();
       expect(chapter.querySelector(".rv4-fvr")).toBeNull();
     });
 
