@@ -1,5 +1,8 @@
+"use client";
+
 import type { FC } from "react";
 import type { Report3PartHeading } from "@/data/report3-archetype-page";
+import useV4Reveal from "./useV4Reveal";
 
 /**
  * Part heading — Report V4.
@@ -16,6 +19,11 @@ import type { Report3PartHeading } from "@/data/report3-archetype-page";
  * Two shapes, chosen by whether `intro` is supplied:
  * - no intro  → 148px tall, 56px of lead-in above it, accent in near-black (Part I).
  * - intro     → the glow box shortens 226→185px and a lede paragraph follows it.
+ *
+ * THE BLOOM (review 27.09, our own, one of two Fatih approved in answer to Mark's
+ * "maybe you also have some good ideas"): the glow holds back (`is-pending`) until
+ * the heading reaches the screen, then opens on Report 2.0's own part-divider
+ * timings. Only the glow moves; the words are there from the start.
  */
 
 interface Props {
@@ -36,10 +44,14 @@ interface Props {
 const V4PartHeading: FC<Props> = ({ heading, intro, lead: hasLead = false }) => {
   const { eyebrow, lead, accent, tone, leadItalic } = heading;
   const withIntro = intro !== undefined;
+  const [ref, inView] = useV4Reveal<HTMLDivElement>();
 
   return (
     <div
-      className={`rv4-part${withIntro ? " rv4-part--intro" : ""}${hasLead ? " rv4-part--lead" : ""}`}
+      ref={ref}
+      className={`rv4-part${withIntro ? " rv4-part--intro" : ""}${hasLead ? " rv4-part--lead" : ""}${
+        inView ? "" : " is-pending"
+      }`}
       data-node-id={withIntro ? "1:852" : "1:169"}
       data-name="Part heading"
     >

@@ -7475,3 +7475,34 @@ html {
     animation: none;
   }
 }
+
+/* ── Extra: the part glows bloom in (ours, review 27.09 — Mark can drop it) ─────────
+ * Each part heading's soft glow (1:172 / 1:854) opens as the heading reaches the
+ * screen, on Report 2.0's own timings for its part dividers (report.css
+ * `.report-part-reveal`). Only the glow moves; the words are there from the start. The
+ * intro variant centres its glow with a transform, so its pending state restates it —
+ * the `scale` property would compose outside it and slide the glow. */
+.rv3 .rv4-part .rv4-part__glow {
+  transition:
+    opacity 1100ms ease-out,
+    transform 1500ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.rv3 .rv4-part.is-pending .rv4-part__glow {
+  opacity: 0;
+  transform: scale(0.82);
+}
+.rv3 .rv4-part--intro.is-pending .rv4-part__glow {
+  transform: translateX(-50%) scale(0.82);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv3 .rv4-part .rv4-part__glow,
+  .rv3 .rv4-part.is-pending .rv4-part__glow {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .rv3 .rv4-part--intro .rv4-part__glow,
+  .rv3 .rv4-part--intro.is-pending .rv4-part__glow {
+    transform: translateX(-50%);
+  }
+}
