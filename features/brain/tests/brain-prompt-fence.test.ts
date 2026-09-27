@@ -259,6 +259,22 @@ describe("a superseded decision says so on itself", () => {
     expect(out.indexOf("SUPERSEDED")).toBeLessThan(out.indexOf("the old way"));
   });
 
+  it("shows a decision replaced after the day asked about as standing on it", () => {
+    const old = chunk({
+      source: "decision",
+      sourceId: "decision:2026-05-18-old",
+      body: "the old way",
+      meta: { superseded_by: "decision:2026-09-26-new", superseded_on: "2026-09-26" },
+    });
+    const then = renderSources([old], { forAgent: true, asOf: "2026-08-01" });
+    expect(then).toContain(
+      "STOOD ON 2026-08-01: this decision was replaced later, on 2026-09-26, by " +
+        "decision/decision:2026-09-26-new."
+    );
+    expect(then).not.toContain("SUPERSEDED");
+    expect(renderSources([old], { forAgent: true, asOf: "2026-09-30" })).toContain("SUPERSEDED");
+  });
+
   it("says nothing on a decision that still stands", () => {
     const out = renderSources([chunk({ source: "decision", body: "the current way" })], {
       forAgent: true,
@@ -299,6 +315,14 @@ describe("a decision the radar disputes says so on itself", () => {
       "MAY CONFLICT with decision/decision:2026-09-03-b (2026-09-03): Two tools named. Nobody has settled which stands yet"
     );
     expect(out.indexOf("MAY CONFLICT")).toBeLessThan(out.indexOf("the old way"));
+  });
+
+  it("leaves out a conflict with a decision made after the day asked about", () => {
+    const d = chunk({ source: "decision", body: "the old way", meta: { disputed_by: [mark] } });
+    expect(renderSources([d], { forAgent: true, asOf: "2026-08-01" })).not.toContain(
+      "MAY CONFLICT"
+    );
+    expect(renderSources([d], { forAgent: true, asOf: "2026-09-03" })).toContain("MAY CONFLICT");
   });
 
   it("says nothing without a dispute, and ignores a malformed one", () => {

@@ -16,13 +16,16 @@ vi.mock("@shared/observability/slack", () => ({ notifySlack: vi.fn(async () => u
 import {
   decisionTitle,
   buildDecisionRow,
+  disputesAsOf,
   disputesOf,
   looksLikeDecisionBrowse,
   markSuperseded,
   priorDecisions,
   proposesSomething,
+  recentDecisions,
   recordDecision,
   renderPriorDecisions,
+  renderRecentDecisions,
 } from "@features/brain/server/decisions";
 import { peopleIn, type Person } from "@features/brain/server/people";
 
@@ -559,6 +562,43 @@ describe("markSuperseded", () => {
     });
   });
 
+  it("dates the replacement from the later decision, never the day it was marked", async () => {
+    // The replaced rows, then the replacing decision's own day, then the write.
+    mockSupabaseFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ id: 7, meta: {}, period_end: "2026-05-15" }],
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ period_end: "2026-09-03" }] })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+    await markSuperseded("decision:2026-05-15-a", "decision:2026-09-03-b");
+    const written = (i: number) =>
+      JSON.parse((mockSupabaseFetch.mock.calls[i]![1] as { body: string }).body).meta;
+    expect(written(2).superseded_on).toBe("2026-09-03");
+    // Keeping the EARLIER one: the later decision never stood, so from its own day.
+    mockSupabaseFetch.mockReset();
+    mockSupabaseFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ id: 8, meta: {}, period_end: "2026-09-03" }],
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ period_end: "2026-05-15" }] })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+    await markSuperseded("decision:2026-09-03-b", "decision:2026-05-15-a");
+    expect(written(2).superseded_on).toBe("2026-09-03");
+  });
+
+  it("refuses to guess when the replacing decision has no day, and writes nothing", async () => {
+    mockSupabaseFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ id: 7, meta: {}, period_end: "2026-05-15" }],
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] });
+    await expect(markSuperseded("decision:a", "decision:b")).rejects.toThrow(/no date/);
+    expect(mockSupabaseFetch).toHaveBeenCalledTimes(2);
+  });
+
   it("throws when it cannot read or cannot write, so a caller never half-finishes", async () => {
     mockSupabaseFetch.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) });
     await expect(markSuperseded("decision:x", "decision:y", "2026-09-26")).rejects.toThrow(
@@ -570,6 +610,99 @@ describe("markSuperseded", () => {
     await expect(markSuperseded("decision:x", "decision:y", "2026-09-26")).rejects.toThrow(
       /could not mark/
     );
+  });
+});
+
+/**
+ * AS OF A DAY. A search or browse with `until` asks what stood on that day, and a decision
+ * replaced after it still stood then. Sending that reader to "read the replacement instead"
+ * sends them to something that did not exist yet.
+ */
+describe("as of a day, a decision reads as it stood then", () => {
+  const sub = {
+    sourceId: "decision:2026-05-18-sub",
+    title: "Decision: Sell premium content as a subscription",
+    decidedOn: "2026-05-18",
+    supersededBy: "decision:2026-09-26-drop",
+    supersededOn: "2026-09-26",
+  };
+
+  it("calls one replaced after the day standing on it, and one replaced by then superseded", () => {
+    const then = renderPriorDecisions([sub], "2026-08-01");
+    expect(then).toContain(
+      "STOOD ON 2026-08-01: replaced later, on 2026-09-26, by decision/decision:2026-09-26-drop."
+    );
+    expect(then).not.toContain("SUPERSEDED");
+    expect(renderPriorDecisions([sub], "2026-09-26")).toContain(
+      "SUPERSEDED by decision/decision:2026-09-26-drop"
+    );
+    expect(renderPriorDecisions([sub])).toContain("SUPERSEDED by");
+    // No recorded day: saying it stood when we cannot tell is the expensive mistake.
+    expect(renderPriorDecisions([{ ...sub, supersededOn: null }], "2026-08-01")).toContain(
+      "SUPERSEDED by"
+    );
+  });
+
+  it("drops a conflict with a decision made after the day", () => {
+    const marks = [
+      { id: "decision:2026-09-03-b", on: "2026-09-03", kind: "unclear" as const, why: "x" },
+    ];
+    expect(disputesAsOf(marks, "2026-08-01")).toEqual([]);
+    expect(disputesAsOf(marks, "2026-09-03")).toHaveLength(1);
+    expect(disputesAsOf(marks)).toHaveLength(1);
+  });
+
+  it("lists the latest decisions up to the day, and marks a replaced one either way", async () => {
+    mockSupabaseFetch.mockReset();
+    mockSupabaseFetch.mockResolvedValue({
+      ok: true,
+      json: async () => [
+        {
+          source_id: sub.sourceId,
+          title: sub.title,
+          period_end: sub.decidedOn,
+          meta: { superseded_by: sub.supersededBy, superseded_on: sub.supersededOn },
+        },
+      ],
+    });
+    const found = await recentDecisions(8, "2026-08-01");
+    expect(String(mockSupabaseFetch.mock.calls[0]![0])).toContain("&period_end=lte.2026-08-01");
+    const then = renderRecentDecisions(found, "2026-08-01");
+    expect(then).toContain("MOST RECENT DECISIONS UP TO 2026-08-01");
+    expect(then).toContain("STOOD ON 2026-08-01");
+    // Without a day it is plainly replaced. This block used to print nothing at all.
+    expect(renderRecentDecisions(found)).toContain(
+      "SUPERSEDED by decision/decision:2026-09-26-drop"
+    );
+  });
+
+  it("asks the search only about decisions made by the day, and counts later ones up to it", async () => {
+    mockSupabaseFetch.mockReset();
+    mockSupabaseFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            source_id: "decision:2026-05-18-sub",
+            title: sub.title,
+            period_end: "2026-05-18",
+            score: 2.4,
+            meta: { topic: "pricing" },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          { period_end: "2026-09-26", meta: { topic: "pricing" } },
+          { period_end: "2026-07-01", meta: { topic: "pricing" } },
+        ],
+      });
+    const found = await priorDecisions("should we sell a subscription", "2026-08-01");
+    const [, init] = mockSupabaseFetch.mock.calls[0]!;
+    expect(JSON.parse((init as { body: string }).body).until).toBe("2026-08-01");
+    // July's counts, September's did not exist yet on the day asked about.
+    expect(found[0]!.laterOnTopic).toEqual({ count: 1, newest: "2026-07-01" });
   });
 });
 

@@ -473,9 +473,11 @@ describe("syncDisputes and settling", () => {
       ok: true,
       text: expect.stringContaining("decision/2026-09-03-notion stands"),
     });
+    // From the day the later decision was made, not the day the pair was settled: settling
+    // weeks later must not tell an "as of" answer that Jira stood all that time.
     expect(db.chunks.find((c) => c.source_id === JIRA)!.meta).toMatchObject({
       superseded_by: NOTION,
-      superseded_on: "2026-09-26",
+      superseded_on: "2026-09-03",
     });
     expect(db.conflicts[0]).toMatchObject({
       status: "settled",
@@ -483,6 +485,16 @@ describe("syncDisputes and settling", () => {
       settled_on: "2026-09-26",
       note: "Notion it is",
     });
+  });
+
+  it("keeping the earlier one means the later never stood: replaced from its own day", async () => {
+    db.conflicts = [open(JIRA, NOTION)];
+    await settleConflict({ a: JIRA, b: NOTION, keep: "earlier", actor: "Mark" }, new Date(NOW));
+    expect(db.chunks.find((c) => c.source_id === NOTION)!.meta).toMatchObject({
+      superseded_by: JIRA,
+      superseded_on: "2026-09-03",
+    });
+    expect(db.chunks.find((c) => c.source_id === JIRA)!.meta.superseded_by).toBeUndefined();
   });
 
   it("records both standing without superseding anything, and refuses a second settle or an unknown pair", async () => {

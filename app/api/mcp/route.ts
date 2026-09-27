@@ -51,6 +51,7 @@ import {
   recentDecisions,
   recordDecision,
   renderPriorDecisions,
+  replacementAsOf,
   renderRecentDecisions,
 } from "@features/brain/server/decisions";
 import { postToSlack, SlackTargetError } from "@features/brain/server/act/slack";
@@ -752,7 +753,10 @@ export const TOOLS = [
         },
         until: {
           type: "string",
-          description: "Latest date the record describes, YYYY-MM-DD. Same caveat as `since`.",
+          description:
+            "Latest date the record describes, YYYY-MM-DD. Same caveat as `since`. Also the " +
+            "way to ask what stood on a past day: a decision replaced after it shows as " +
+            "standing then, with the day it was replaced.",
         },
         meta: {
           type: "object",
@@ -1435,7 +1439,12 @@ export const TOOLS = [
             "YYYY-MM-DD. Filters on the date a record DESCRIBES, not when it was indexed. " +
             "Any date range excludes repository documentation, which carries no date.",
         },
-        until: { type: "string", description: "YYYY-MM-DD, inclusive." },
+        until: {
+          type: "string",
+          description:
+            'YYYY-MM-DD, inclusive. With sources ["decision"], what had been decided by that ' +
+            "day: a decision replaced after it is marked as standing then.",
+        },
         meta: {
           type: "object",
           description:
@@ -3417,7 +3426,7 @@ async function callTool(
      * down the ranked path untouched.
      */
     const browse = looksLikeDecisionBrowse(query)
-      ? renderRecentDecisions(await recentDecisions())
+      ? renderRecentDecisions(await recentDecisions(8, opts.until), opts.until)
       : "";
 
     const prior = renderPriorDecisions(
@@ -3431,6 +3440,10 @@ async function callTool(
             supersededBy:
               typeof (c.meta as { superseded_by?: unknown } | null)?.superseded_by === "string"
                 ? ((c.meta as { superseded_by: string }).superseded_by ?? null)
+                : null,
+            supersededOn:
+              typeof (c.meta as { superseded_on?: unknown } | null)?.superseded_on === "string"
+                ? (c.meta as { superseded_on: string }).superseded_on
                 : null,
             disputedBy: disputesOf(c.meta as Record<string, unknown> | null),
           }))
@@ -3448,7 +3461,9 @@ async function callTool(
            * The lookup has its own floor and its own decision-only search, so it is not
            * the ranked result's confidence being borrowed.
            */
-          await priorDecisions(query)
+          await priorDecisions(query, opts.until),
+      // `until` is the day the reader is asking about: a decision is shown as it stood then.
+      opts.until
     );
     // Was: raw `c.body`, joined by `---`. The Slack path removed that separator
     // BECAUSE a chunk could pose as the operator across it, then kept the fence,
@@ -3497,7 +3512,7 @@ async function callTool(
       : "";
 
     return textResult(
-      `${UNTRUSTED_SOURCES_PREAMBLE}\n\n${notices}${browse}${prior}${RESULT_GUIDE}${weakMatch}${outside}${shortOfLimit}${heldBack}\n\n${renderSources(chunks, { forAgent: true })}`,
+      `${UNTRUSTED_SOURCES_PREAMBLE}\n\n${notices}${browse}${prior}${RESULT_GUIDE}${weakMatch}${outside}${shortOfLimit}${heldBack}\n\n${renderSources(chunks, { forAgent: true, asOf: opts.until })}`,
       false,
       "lower the limit, then fetch_document the ids that matter"
     );
@@ -4044,7 +4059,12 @@ async function callTool(
     // Only what is rendered. `url` and `meta` were selected and never printed, which is
     // a jsonb column pulled over the wire per row for nothing; `fetch_document` carries
     // both for the one record a reader actually opens.
-    qs.set("select", "source,source_id,title,period_end,first_seen_at");
+    // Two text fields, not `meta`: enough to say on the line that a decision was replaced.
+    qs.set(
+      "select",
+      "source,source_id,title,period_end,first_seen_at," +
+        "superseded_by:meta->>superseded_by,superseded_on:meta->>superseded_on"
+    );
     // NULLS LAST both ways: repository documentation carries no date, and letting it
     // head an "oldest first" listing buries everything the caller asked for.
     qs.set(
@@ -4156,7 +4176,15 @@ async function callTool(
         // `<source>/<source_id>`, the form `fetch_document` accepts and the form
         // `search_company_context` prints. Printing the bare source_id here — as this did
         // — hands the reader an id that the very next tool refuses.
-        return `${date}  [${String(r.source)}]  ${String(r.title ?? "(untitled)")}\n          id: ${String(r.source)}/${String(r.source_id)}`;
+        // A replaced decision said nothing on this line, so a browse of "what we decided"
+        // listed dead decisions as standing. With `until`, as it stood on that day.
+        const replaced = replacementAsOf(r.superseded_by, r.superseded_on, opts.until);
+        const mark = replaced?.later
+          ? `  (stood on ${opts.until!.slice(0, 10)}; replaced later, on ${replaced.on}, by decision/${replaced.by})`
+          : replaced
+            ? `  (SUPERSEDED by decision/${replaced.by})`
+            : "";
+        return `${date}  [${String(r.source)}]  ${String(r.title ?? "(untitled)")}${mark}\n          id: ${String(r.source)}/${String(r.source_id)}`;
       })
       .join("\n");
     const shownTo = offset + rows.length;

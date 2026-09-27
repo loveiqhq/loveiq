@@ -23,6 +23,7 @@ a DM gets a one-line pointer to Claude, while channel messages are still indexed
 | "what would it take to break even on ads"                         | `break_even` works it out from live spend, funnel and orders, and takes what-ifs        |
 | "how many women aged 25 to 34 finished, and how many paid"        | `user_totals` gives totals by group, hiding any group under 5                           |
 | "what do we pay for tools each month, and what went up"           | `cost_watch` reads the cost sheet the invoice filing keeps current, without pay         |
+| "what had we decided about pricing by 1 August"                   | `until` shows each decision as it stood that day, even one replaced since               |
 | "what A/B tests are running, and what did the last ones conclude" | `experiments` reads the registry and the live arms, in /admin's own words               |
 
 **It is weak at, and will say so rather than guess:**

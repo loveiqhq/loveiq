@@ -1,4 +1,4 @@
-import { disputesOf } from "@features/brain/server/decisions";
+import { disputesAsOf, disputesOf, replacementAsOf } from "@features/brain/server/decisions";
 import { complete, isLlmConfigured, type LlmMessage } from "@features/brain/server/llm";
 import { CorpusUnavailableError, retrieve, type BrainChunk } from "@features/brain/server/retrieve";
 import { context, divider, fitBlocks, section } from "@shared/observability/slack-blocks";
@@ -143,7 +143,11 @@ export function renderSources(
    * something the model quotes rather than uses. The defence is NOT optional and
    * is not behind this flag -- only the extra lines are.
    */
-  opts: { forAgent?: boolean } = {}
+  opts: {
+    forAgent?: boolean;
+    /** The search's `until`: decisions are described as they stood on that day. */
+    asOf?: string;
+  } = {}
 ): string {
   // Chunks were previously joined by "---", the SAME token that fenced the
   // question below it, and the `[n] title` heads were plain text a chunk could
@@ -187,10 +191,17 @@ export function renderSources(
        * Placed in the head block, above the body, because a reader who stops early
        * must still see it. The id is defenced like every other quoted field.
        */
-      const supersededBy = (c.meta as { superseded_by?: unknown } | null)?.superseded_by;
-      const replaced =
-        typeof supersededBy === "string" && supersededBy
-          ? `SUPERSEDED — this decision was replaced by decision/${defence(supersededBy)}. ` +
+      const replacement = replacementAsOf(
+        (c.meta as { superseded_by?: unknown } | null)?.superseded_by,
+        (c.meta as { superseded_on?: unknown } | null)?.superseded_on,
+        opts.asOf
+      );
+      const replaced = replacement?.later
+        ? `STOOD ON ${defence(opts.asOf!.slice(0, 10))}: this decision was replaced later, on ` +
+          `${defence(replacement.on ?? "")}, by decision/${defence(replacement.by)}. Read that ` +
+          `one for what holds now.`
+        : replacement
+          ? `SUPERSEDED — this decision was replaced by decision/${defence(replacement.by)}. ` +
             `It is kept as history; read the replacement before acting on this.`
           : null;
       /**
@@ -200,7 +211,7 @@ export function renderSources(
        * a question, because a model found it and no person has settled it yet.
        */
       const disputed =
-        disputesOf(c.meta as Record<string, unknown> | null)
+        disputesAsOf(disputesOf(c.meta as Record<string, unknown> | null), opts.asOf)
           .map(
             (m) =>
               `MAY CONFLICT with decision/${defence(m.id)}${m.on ? ` (${defence(m.on)})` : ""}: ` +

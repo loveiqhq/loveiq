@@ -1749,6 +1749,20 @@ describe("/api/mcp", () => {
         expect(text).toContain("settled in a thread and never recorded");
       });
 
+      it("lists only decisions made by `until`, and says the list stops there", async () => {
+        withDecisions();
+        mockRetrieve.mockResolvedValue([chunk({})]);
+        const text = String(
+          (await (await call({ query: "what did we decide", until: "2026-09-14" })).json()).result
+            .content[0].text
+        );
+        expect(text).toContain("MOST RECENT DECISIONS UP TO 2026-09-14");
+        const listed = mockSupabaseFetch.mock.calls
+          .map(([u]) => String(u))
+          .find((u) => u.includes("source=eq.decision") && u.includes("order=period_end.desc"));
+        expect(listed).toContain("&period_end=lte.2026-09-14");
+      });
+
       it("leaves a question with a topic to the ranked search", async () => {
         withDecisions();
         mockRetrieve.mockResolvedValue([chunk({})]);
@@ -1882,6 +1896,30 @@ describe("/api/mcp", () => {
       expect(block).toContain(
         "MAY CONFLICT with decision/decision:2026-09-03-b (2026-09-03): Two tools."
       );
+    });
+
+    it("describes decisions as they stood on `until`, and looks up only decisions made by then", async () => {
+      mockSupabaseFetch.mockResolvedValue({
+        ok: true,
+        headers: new Headers(),
+        json: async () => [],
+      });
+      mockRetrieve.mockResolvedValue([
+        chunk({
+          source: "decision",
+          sourceId: "decision:2026-05-18-sub",
+          title: "Decision: Sell a subscription",
+          score: 3.38,
+          periodEnd: "2026-05-18",
+          meta: { superseded_by: "decision:2026-09-26-drop", superseded_on: "2026-09-26" },
+        }),
+      ]);
+      const text = (
+        await (await call({ query: "should we sell a subscription", until: "2026-08-01" })).json()
+      ).result.content[0].text as string;
+      expect(text).toContain("STOOD ON 2026-08-01: replaced later, on 2026-09-26");
+      expect(text).toContain("STOOD ON 2026-08-01: this decision was replaced later");
+      expect(text).not.toContain("SUPERSEDED");
     });
 
     it("lifts a decision out of the results when it ranks with them", async () => {
@@ -3145,6 +3183,34 @@ describe("/api/mcp", () => {
      * 2026-09-09: `newest` and a nonsense value were byte-identical, and neither matched
      * `recently_learned`.
      */
+    it("marks a replaced decision on its line, and as it stood on `until`", async () => {
+      wire(
+        [
+          {
+            source: "decision",
+            source_id: "decision:2026-05-18-sub",
+            title: "Decision: Sell a subscription",
+            period_end: "2026-05-18",
+            superseded_by: "decision:2026-09-26-drop",
+            superseded_on: "2026-09-26",
+          },
+        ],
+        1
+      );
+      const now = (await call({ sources: ["decision"] })).content[0].text as string;
+      expect(now).toContain(
+        "Decision: Sell a subscription  (SUPERSEDED by decision/decision:2026-09-26-drop)"
+      );
+      const then = (await call({ sources: ["decision"], until: "2026-08-01" })).content[0]
+        .text as string;
+      expect(then).toContain(
+        "(stood on 2026-08-01; replaced later, on 2026-09-26, by decision/decision:2026-09-26-drop)"
+      );
+      expect(decodeURIComponent(String(toolCalls().at(-1)?.[0]))).toContain(
+        "superseded_by:meta->>superseded_by,superseded_on:meta->>superseded_on"
+      );
+    });
+
     it("refuses an order it does not recognise instead of quietly using newest", async () => {
       wire([{ source: "notion", source_id: "task:a", title: "A", period_end: "2027-01-07" }], 1);
       for (const bad of ["recentlylearned", "alphabetical", "newest ", 5]) {
