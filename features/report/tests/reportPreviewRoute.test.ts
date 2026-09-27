@@ -245,3 +245,77 @@ describe("GET /api/report/preview — Fantasy vs. Reality", () => {
     expect(json.fantasyCopy.locked).toBe(false);
   });
 });
+
+// Review 27.09: Mark reviews through the preview, where every Report 2.0 chapter but
+// four opened onto an empty body — the route sent copy for Beliefs, A&B, Partnership
+// and Fantasy alone — which is where "show the report 2.0 version in the other
+// chapters" began. The preview now builds them through the real route's own builder.
+describe("GET /api/report/preview — every Report 2.0 chapter, as the real route sends it", () => {
+  const COPIES = [
+    "attachmentCopy",
+    "insecuritiesCopy",
+    "rewardCopy",
+    "energyCopy",
+    "arousalCopy",
+    "initiationCopy",
+    "libidoCopy",
+    "enjoyCopy",
+    "growthCopy",
+    "readingCopy",
+    "powerCopy",
+    "curiosityCopy",
+    "lovelangCopy",
+    "confidenceCopy",
+  ] as const;
+  const CONFIGS = [
+    "attachmentPlane",
+    "energyConfig",
+    "arousalConfig",
+    "initiationConfig",
+    "libidoConfig",
+    "relationshipFit",
+    "loveLanguageOrder",
+  ] as const;
+
+  it("sends a full-report preview every chapter's copy and chart, unlocked", async () => {
+    const { json } = await get("archetype=Spark%20Seeker&plan=full_report&v4=1");
+    for (const key of COPIES) {
+      expect(json[key], key).toBeTruthy();
+      expect(json[key].locked, key).toBe(false);
+    }
+    for (const key of CONFIGS) expect(json[key], key).toBeTruthy();
+    const power = getReport2Section("Spark Seeker", "power");
+    expect(json.powerCopy["edu.body.p2"]).toBe(power["edu.body.p2"]);
+    expect(json.powerCopy.takeaway).toBe(power.takeaway);
+    expect(json.insecuritiesCopy["practical.line1"]).toBeTruthy();
+  });
+
+  it("gates them for a preview with no plan, exactly as a locked report", async () => {
+    const { json } = await get("archetype=Spark%20Seeker&plan=&v4=1");
+    for (const key of COPIES) expect(json[key].locked, key).toBe(true);
+    for (const key of CONFIGS) expect(json[key], key).toBeNull();
+    // The "Learn:" bodies come off the wire for a locked section, as on the real route.
+    expect(json.powerCopy["edu.body.p2"]).toBeNull();
+    expect(json.powerCopy.takeaway).toBeNull();
+    expect(json.insecuritiesCopy["practical.line1"]).toBeNull();
+  });
+
+  it("opens only the Essentials chapters for an Essentials preview", async () => {
+    const { json } = await get("archetype=Spark%20Seeker&plan=essentials&v4=1");
+    expect(json.insecuritiesCopy.locked).toBe(false);
+    expect(json.confidenceCopy.locked).toBe(false);
+    expect(json.attachmentCopy.locked).toBe(false);
+    expect(json.powerCopy.locked).toBe(true);
+    expect(json.rewardCopy.locked).toBe(true);
+  });
+
+  it("builds the chapters for every archetype", async () => {
+    for (const archetype of KNOWN_ARCHETYPES) {
+      const { json } = await get(`archetype=${encodeURIComponent(archetype)}&plan=full_report`);
+      for (const key of COPIES) expect(json[key]?.locked, `${archetype} ${key}`).toBe(false);
+      expect(json.growthCopy.takeaway, archetype).toBe(
+        getReport2Section(archetype, "growth").takeaway ?? null
+      );
+    }
+  });
+});
