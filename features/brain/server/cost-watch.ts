@@ -2,7 +2,9 @@ import {
   COST_SHEET_ID,
   COST_SHEET_READ_URL,
   NEVER_ATTACHES,
+  TOOL_CATEGORIES,
 } from "@features/brain/server/cost-sheet";
+import { supabaseFetch } from "@features/admin/server/supabase";
 import { fetchWithTimeout } from "@shared/http/fetch-with-timeout";
 import { getDelegatedToken } from "@shared/http/google-oauth";
 
@@ -23,6 +25,7 @@ import { getDelegatedToken } from "@shared/http/google-oauth";
  * is called out, and Google Ads is set beside what GA4 recorded.
  */
 
+/** The sheet's people categories today, so only a category that is neither is called unknown. */
 export const PEOPLE_CATEGORY = /FTE|freelance|intern|employee|salary|contractor/i;
 const SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets";
 
@@ -56,7 +59,8 @@ export function parseCosts(rows: unknown[][]): { months: string[]; lines: CostLi
     monthCols.forEach((col, k) => {
       const v = r?.[col];
       // Costs are negative in the sheet; a positive figure is a credit.
-      byMonth.set(months[k]!, typeof v === "number" ? -v : null);
+      // `0 - v`, not `-v`: a zero in the sheet came out as -0 and printed "EUR -0.00".
+      byMonth.set(months[k]!, typeof v === "number" ? 0 - v : null);
     });
     lines.push({ name, category: String(r?.[2] ?? "").trim(), months: byMonth });
   }
@@ -116,9 +120,22 @@ const ADS_LINE = "Adwords";
 export function renderCostWatch(
   parsed: { months: string[]; lines: CostLine[] },
   now: Date,
-  ads?: AdsCheck
+  ads?: AdsCheck,
+  /**
+   * When the invoice filing last succeeded (cron_run): null if never, "unreadable" if that
+   * could not be read, left out to skip the check. The month is called settled by the
+   * calendar; this says when the run that should have settled it did not.
+   */
+  lastFiling?: Date | null | "unreadable"
 ): string {
-  const tools = parsed.lines.filter((l) => !PEOPLE_CATEGORY.test(l.category));
+  const tools = parsed.lines.filter((l) => TOOL_CATEGORIES.includes(l.category));
+  const unknown = [
+    ...new Set(
+      parsed.lines
+        .filter((l) => !TOOL_CATEGORIES.includes(l.category) && !PEOPLE_CATEGORY.test(l.category))
+        .map((l) => l.category || "(none)")
+    ),
+  ];
   const billed = lastBilledMonth(now);
   const prev = shiftMonth(billed, -1);
   if (!parsed.months.includes(billed)) {
@@ -136,6 +153,7 @@ export function renderCostWatch(
     `Tools and services, EUR a month, from the Business Case cost sheet. People's pay is left out.`,
     "",
     `${label(billed)}, the latest month the invoice filing has settled: ${eur(latest)}, against ${eur(before)} in ${label(prev)}${change}.`,
+    ...filingCaveat(billed, lastFiling),
     "",
     "Biggest:",
     ...tools
@@ -215,8 +233,50 @@ export function renderCostWatch(
       );
     }
   }
+  if (unknown.length) {
+    out.push(
+      "",
+      `Left out, in a category this does not know: ${unknown.join(", ")}. If it is not anyone's ` +
+        `pay, add it to TOOL_CATEGORIES in features/brain/server/cost-sheet.ts.`
+    );
+  }
   out.push("", `Sheet: https://docs.google.com/spreadsheets/d/${COST_SHEET_ID}/edit`);
   return out.join("\n");
+}
+
+/**
+ * A warning when the run that should have settled `billed` (06:40 UTC on the 3rd of the
+ * month after) has not succeeded: the month's figures may still be the month before's,
+ * carried forward. Nothing when it has, or when there is nothing to check against.
+ */
+function filingCaveat(
+  billed: string,
+  lastFiling: Date | null | "unreadable" | undefined
+): string[] {
+  const [y, m] = billed.split("-").map(Number) as [number, number];
+  const due = Date.UTC(y, m, 3, 6, 40);
+  if (lastFiling === undefined) return [];
+  if (lastFiling === "unreadable") {
+    return ["The invoice filing's runs could not be read, so whether it ran is not checked."];
+  }
+  if (lastFiling && lastFiling.getTime() >= due) return [];
+  return [
+    `The invoice filing has not run successfully since ` +
+      `${lastFiling ? lastFiling.toISOString().slice(0, 10) : "it was set up"} (it is due at 06:40 UTC on ` +
+      `the 3rd), so ${label(billed)} may still hold the month before's figures.`,
+  ];
+}
+
+/** When the invoice filing last succeeded: null if never, "unreadable" if it cannot be read. */
+export async function lastFilingSuccess(): Promise<Date | null | "unreadable"> {
+  const res = await supabaseFetch(
+    "/rest/v1/cron_run?select=started_at&cron_name=eq.file-invoices&status=eq.success" +
+      "&order=started_at.desc&limit=1"
+  ).catch(() => null);
+  if (!res?.ok) return "unreadable";
+  const rows = (await res.json().catch(() => null)) as Array<{ started_at?: string }> | null;
+  if (!Array.isArray(rows)) return "unreadable";
+  return rows[0]?.started_at ? new Date(rows[0].started_at) : null;
 }
 
 /** The Costs tab, as the filing reads it. Throws when it cannot be read. */

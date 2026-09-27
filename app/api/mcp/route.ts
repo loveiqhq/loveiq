@@ -33,6 +33,7 @@ import {
 import {
   adsForMonth,
   lastBilledMonth,
+  lastFilingSuccess,
   loadCostSheet,
   parseCosts,
   renderCostWatch,
@@ -5544,11 +5545,14 @@ async function callTool(
     }
     const now = new Date();
     // The GA4 check is a cross-check, not the answer: without it the sheet still speaks.
-    const ads = await adCostByDay()
-      .then((ad) => adsForMonth(ad, lastBilledMonth(now)))
-      .catch(() => undefined);
+    const [ads, lastFiling] = await Promise.all([
+      adCostByDay()
+        .then((ad) => adsForMonth(ad, lastBilledMonth(now)))
+        .catch(() => undefined),
+      lastFilingSuccess(),
+    ]);
     stats.sourceCount = 1;
-    return textResult(renderCostWatch(parsed, now, ads));
+    return textResult(renderCostWatch(parsed, now, ads, lastFiling));
   }
 
   if (name === "explain_change") {
