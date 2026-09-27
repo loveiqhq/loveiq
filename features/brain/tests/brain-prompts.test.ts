@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { PROMPTS, renderPrompt } from "@features/brain/server/prompts";
 
 describe("renderPrompt", () => {
@@ -62,6 +62,55 @@ describe("renderPrompt", () => {
     expect(renderPrompt("draft_chapter", { chapter: "beliefs" })).toEqual({
       error: expect.stringMatching(/needs `archetype`/),
     });
+  });
+
+  it("reviews a month from its first day to its last, and last month by default", () => {
+    const r = renderPrompt("monthly_review", { month: "2028-02" });
+    const text = "text" in r ? r.text : "";
+    expect(text).toContain("Write the monthly review of February 2028 (2028-02-01 to 2028-02-29)");
+    expect(text).toContain(
+      'get_business_numbers with since 2028-02-01, until 2028-02-29 and compare_to "previous"'
+    );
+    expect(text).toContain("user_totals with since 2028-02-01 and until 2028-02-29");
+    expect(text).toMatch(/Lead with paywall conversion/);
+    expect(text).toContain("cost_watch");
+    expect(text).toMatch(/after my OK put it in a Google Doc/);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-01-15T12:00:00Z"));
+    try {
+      const d = renderPrompt("monthly_review", {});
+      expect("text" in d && d.text).toContain("December 2025 (2025-12-01 to 2025-12-31)");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("leaves a month it cannot read as dates for the model to work out, rather than guessing", () => {
+    const r = renderPrompt("monthly_review", { month: "August" });
+    const text = "text" in r ? r.text : "";
+    expect(text).toContain("Write the monthly review of August for the team.");
+    expect(text).toContain("since the month's first day, until its last day");
+    expect(renderPrompt("monthly_review", { month: "2026-13" })).toMatchObject({
+      text: expect.stringContaining("review of 2026-13 for the team"),
+    });
+  });
+
+  it("onboards from their own page when there is one, and in our shape when there is not", () => {
+    const r = renderPrompt("onboard", { person: "Fatih Hadžić", role: "engineering" });
+    const text = "text" in r ? r.text : "";
+    expect(text).toContain(
+      'search_company_context for "Onboarding Fatih Hadžić" with sources ["notion"]'
+    );
+    expect(text).toContain("If one exists, do not write another");
+    expect(text).toMatch(
+      /access first, reading second, workstreams third, and a dated first deliverable/
+    );
+    expect(text).toContain('titled "Onboarding — Fatih Hadžić"');
+    // write_to_notion takes a bare page id; the brain's ids carry a "notion/page:" prefix.
+    expect(text).toContain('the part of its id after "notion/page:"');
+    expect(text).toMatch(/wait for my OK/);
+    expect(text.indexOf("search_company_context")).toBeLessThan(text.indexOf("write_to_notion"));
+    expect(renderPrompt("onboard", {})).toEqual({ error: expect.stringMatching(/needs `person`/) });
   });
 
   it("asks before recording a decision, never records one on its own", () => {
