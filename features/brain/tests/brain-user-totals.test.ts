@@ -89,6 +89,19 @@ describe("onePerPerson", () => {
     });
   });
 
+  it("keeps a sale with the archetype it was paid under, not a later unpaid retake's", () => {
+    const [paidThenRetook] = onePerPerson([
+      person({ userId: "u1", archetype: "Paid As", sales: 1, revenue: 29 }),
+      person({ userId: "u1", archetype: "Retook As" }),
+    ]);
+    expect(paidThenRetook).toMatchObject({ archetype: "Paid As", sales: 1 });
+    const [retookThenPaid] = onePerPerson([
+      person({ userId: "u2", archetype: "First" }),
+      person({ userId: "u2", archetype: "Paid As", sales: 1, revenue: 29 }),
+    ]);
+    expect(retookThenPaid).toMatchObject({ archetype: "Paid As" });
+  });
+
   it("stops one repeat finisher from filling a group on their own", () => {
     const text = renderTotals(
       { groupBy: [], filter: {} },

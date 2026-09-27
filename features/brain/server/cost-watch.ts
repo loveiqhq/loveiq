@@ -122,11 +122,10 @@ export function renderCostWatch(
   now: Date,
   ads?: AdsCheck,
   /**
-   * When the invoice filing last succeeded (cron_run): null if never, "unreadable" if that
-   * could not be read, left out to skip the check. The month is called settled by the
-   * calendar; this says when the run that should have settled it did not.
+   * Whether a successful filing run settled the month (see filingSettled): left out to
+   * skip the check. The month is named by the calendar; this says when no run settled it.
    */
-  lastFiling?: Date | null | "unreadable"
+  settledByFiling?: boolean | "unreadable"
 ): string {
   const tools = parsed.lines.filter((l) => TOOL_CATEGORIES.includes(l.category));
   const unknown = [
@@ -153,7 +152,7 @@ export function renderCostWatch(
     `Tools and services, EUR a month, from the Business Case cost sheet. People's pay is left out.`,
     "",
     `${label(billed)}, the latest month the invoice filing has settled: ${eur(latest)}, against ${eur(before)} in ${label(prev)}${change}.`,
-    ...filingCaveat(billed, lastFiling),
+    ...filingCaveat(billed, settledByFiling),
     "",
     "Biggest:",
     ...tools
@@ -245,38 +244,50 @@ export function renderCostWatch(
 }
 
 /**
- * A warning when the run that should have settled `billed` (06:40 UTC on the 3rd of the
- * month after) has not succeeded: the month's figures may still be the month before's,
- * carried forward. Nothing when it has, or when there is nothing to check against.
+ * The window in which a filing run can settle `month`: from the scheduled run (06:40 UTC on
+ * the 3rd of the month after) until the month's first day falls out of the filing's 45-day
+ * look-back. A run outside it (a re-run on the 20th) files the month but cannot reconcile it.
  */
-function filingCaveat(
-  billed: string,
-  lastFiling: Date | null | "unreadable" | undefined
-): string[] {
-  const [y, m] = billed.split("-").map(Number) as [number, number];
-  const due = Date.UTC(y, m, 3, 6, 40);
-  if (lastFiling === undefined) return [];
-  if (lastFiling === "unreadable") {
-    return ["The invoice filing's runs could not be read, so whether it ran is not checked."];
+export function settleWindow(month: string): { from: Date; to: Date } {
+  const [y, m] = month.split("-").map(Number) as [number, number];
+  return {
+    from: new Date(Date.UTC(y, m, 3, 6, 40)),
+    to: new Date(Date.UTC(y, m - 1, 1) + 45 * 86_400_000),
+  };
+}
+
+/** A warning when no successful filing run could have settled `billed`. */
+function filingCaveat(billed: string, settled: boolean | "unreadable" | undefined): string[] {
+  if (settled === undefined || settled === true) return [];
+  if (settled === "unreadable") {
+    return [
+      "The invoice filing's runs could not be read, so whether it settled the month is not checked.",
+    ];
   }
-  if (lastFiling && lastFiling.getTime() >= due) return [];
+  const w = settleWindow(billed);
+  const day = (d: Date) => d.toISOString().slice(0, 10);
   return [
-    `The invoice filing has not run successfully since ` +
-      `${lastFiling ? lastFiling.toISOString().slice(0, 10) : "it was set up"} (it is due at 06:40 UTC on ` +
-      `the 3rd), so ${label(billed)} may still hold the month before's figures.`,
+    `No run of the invoice filing settled ${label(billed)} (only a successful run between ` +
+      `${day(w.from)} and ${day(w.to)} can), so its figures are only as good as the sheet's ` +
+      `last hand edit.`,
   ];
 }
 
-/** When the invoice filing last succeeded: null if never, "unreadable" if it cannot be read. */
-export async function lastFilingSuccess(): Promise<Date | null | "unreadable"> {
-  const res = await supabaseFetch(
-    "/rest/v1/cron_run?select=started_at&cron_name=eq.file-invoices&status=eq.success" +
-      "&order=started_at.desc&limit=1"
-  ).catch(() => null);
+/** Whether a successful filing run settled `month`; "unreadable" when that cannot be read. */
+export async function filingSettled(month: string): Promise<boolean | "unreadable"> {
+  const w = settleWindow(month);
+  let res: Response | null | undefined;
+  try {
+    res = await supabaseFetch(
+      "/rest/v1/cron_run?select=started_at&cron_name=eq.file-invoices&status=eq.success" +
+        `&started_at=gte.${w.from.toISOString()}&started_at=lte.${w.to.toISOString()}&limit=1`
+    );
+  } catch {
+    res = null;
+  }
   if (!res?.ok) return "unreadable";
-  const rows = (await res.json().catch(() => null)) as Array<{ started_at?: string }> | null;
-  if (!Array.isArray(rows)) return "unreadable";
-  return rows[0]?.started_at ? new Date(rows[0].started_at) : null;
+  const rows = (await res.json().catch(() => null)) as unknown[] | null;
+  return Array.isArray(rows) ? rows.length > 0 : "unreadable";
 }
 
 /** The Costs tab, as the filing reads it. Throws when it cannot be read. */

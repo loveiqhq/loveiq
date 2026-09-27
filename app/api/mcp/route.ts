@@ -33,7 +33,7 @@ import {
 import {
   adsForMonth,
   lastBilledMonth,
-  lastFilingSuccess,
+  filingSettled,
   loadCostSheet,
   parseCosts,
   renderCostWatch,
@@ -5548,14 +5548,14 @@ async function callTool(
     }
     const now = new Date();
     // The GA4 check is a cross-check, not the answer: without it the sheet still speaks.
-    const [ads, lastFiling] = await Promise.all([
+    const [ads, settled] = await Promise.all([
       adCostByDay()
         .then((ad) => adsForMonth(ad, lastBilledMonth(now)))
         .catch(() => undefined),
-      lastFilingSuccess(),
+      filingSettled(lastBilledMonth(now)),
     ]);
     stats.sourceCount = 1;
-    return textResult(renderCostWatch(parsed, now, ads, lastFiling));
+    return textResult(renderCostWatch(parsed, now, ads, settled));
   }
 
   if (name === "explain_change") {
@@ -6097,11 +6097,32 @@ export async function POST(request: Request) {
    * jobs use. See features/brain/server/sign-in.ts. A 401 names where to sign in
    * (RFC 9728), which is how claude.ai and Claude Code find the sign-in page on their own.
    */
+  const ip = getClientIp(request);
+  const who = await resolveCaller(
+    request.headers.get("authorization"),
+    Date.now(),
+    async () =>
+      (await checkRateLimit(ip, { bucket: "mcp-sign-in", limit: 60, windowMs: 60_000 })).allowed
+  );
+  if (!who.ok) {
+    return NextResponse.json(
+      { error: who.message },
+      {
+        status: who.status,
+        headers:
+          who.status === 401
+            ? { "WWW-Authenticate": signInChallenge(new URL(request.url).origin) }
+            : undefined,
+      }
+    );
+  }
+  const caller = who.caller;
+
   // The corpus is undifferentiated — revenue, ad spend, every internal doc — so a
   // leaked token (the shared one, or a person's) is the whole thing. A rate limit
-  // bounds how fast that could be drained. It runs BEFORE the sign-in check: checking a
-  // token-shaped string costs a call to Supabase, and that must not be free to repeat.
-  const rate = await checkRateLimit(getClientIp(request), {
+  // bounds how fast that could be drained. Keyed by who is calling as well as from where,
+  // AFTER the sign-in check, so nobody who cannot sign in spends anyone's budget.
+  const rate = await checkRateLimit(`${caller.kind === "person" ? caller.email : "shared"}|${ip}`, {
     bucket: "mcp",
     limit: 120,
     windowMs: 60_000,
@@ -6121,21 +6142,6 @@ export async function POST(request: Request) {
       { status: 429 }
     );
   }
-
-  const who = await resolveCaller(request.headers.get("authorization"));
-  if (!who.ok) {
-    return NextResponse.json(
-      { error: who.message },
-      {
-        status: who.status,
-        headers:
-          who.status === 401
-            ? { "WWW-Authenticate": signInChallenge(new URL(request.url).origin) }
-            : undefined,
-      }
-    );
-  }
-  const caller = who.caller;
 
   /**
    * A SECOND, TIGHTER BUCKET FOR THE TOOLS THAT RETURN PIXELS.

@@ -55,7 +55,8 @@ export async function POST(request: Request) {
     member = await memberByEmail(email);
   } catch {
     return NextResponse.json(
-      { error: "Jarvis could not check your membership just now. Try again in a minute." },
+      // The code is used up (the session is set), so "retype it" would fail: reload instead.
+      { error: "Jarvis could not check your membership just now. Reload this page in a minute." },
       { status: 503 }
     );
   }

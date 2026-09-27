@@ -10,6 +10,7 @@ import {
   lastBilledMonth,
   parseCosts,
   renderCostWatch,
+  settleWindow,
 } from "@features/brain/server/cost-watch";
 
 const serial = (month: string) =>
@@ -168,17 +169,23 @@ describe("renderCostWatch", () => {
     expect(renderCostWatch(parsed, now)).not.toContain("does not know");
   });
 
-  it("warns when the filing that should have settled the month has not run", () => {
-    const ok = renderCostWatch(parsed, now, undefined, new Date("2026-09-19T20:24:00Z"));
-    expect(ok).not.toContain("has not run successfully");
-    const missed = renderCostWatch(parsed, now, undefined, new Date("2026-08-20T06:40:00Z"));
-    expect(missed).toContain(
-      "The invoice filing has not run successfully since 2026-08-20 (it is due at 06:40 UTC " +
-        "on the 3rd), so August 2026 may still hold the month before's figures."
+  it("warns when no filing run could have settled the month", () => {
+    expect(renderCostWatch(parsed, now, undefined, true)).not.toContain("No run of the invoice");
+    expect(renderCostWatch(parsed, now, undefined, false)).toContain(
+      "No run of the invoice filing settled August 2026 (only a successful run between " +
+        "2026-09-03 and 2026-09-15 can), so its figures are only as good as the sheet's last hand edit."
     );
-    expect(renderCostWatch(parsed, now, undefined, null)).toContain("since it was set up");
     expect(renderCostWatch(parsed, now, undefined, "unreadable")).toContain("could not be read");
-    expect(renderCostWatch(parsed, now)).not.toMatch(/filing has not|could not be read/);
+    expect(renderCostWatch(parsed, now)).not.toMatch(/No run of|could not be read/);
+  });
+
+  it("counts a run as settling a month only inside the window it can", () => {
+    // A re-run on the 20th files September but cannot reconcile it: 1 Sep is out of the
+    // filing's 45-day look-back by then.
+    expect(settleWindow("2026-09")).toEqual({
+      from: new Date("2026-10-03T06:40:00Z"),
+      to: new Date("2026-10-16T00:00:00Z"),
+    });
   });
 
   it("says so when the sheet has no column for the settled month", () => {

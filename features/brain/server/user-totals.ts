@@ -163,7 +163,9 @@ export function onePerPerson(people: Person[]): Person[] {
       orientation: p.orientation,
       relationship: p.relationship,
       country: p.country,
-      archetype: p.archetype,
+      // The archetype they paid under stays with their sale: a later unpaid retake that
+      // scored differently must not move the revenue to another archetype.
+      archetype: p.sales > 0 || seen.sales === 0 ? p.archetype : seen.archetype,
       revenue: seen.revenue + p.revenue,
       sales: seen.sales + p.sales,
       otherCurrency: seen.otherCurrency + p.otherCurrency,
