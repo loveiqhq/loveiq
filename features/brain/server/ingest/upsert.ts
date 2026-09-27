@@ -338,7 +338,11 @@ function clean(row: BrainRow): BrainRow {
     ...row,
     title: redactUrlSecrets(row.title.split(NUL_BYTE).join("")),
     // Redacted BEFORE the length cap, so a masked value cannot push real text out.
-    body: redactUrlSecrets(row.body.split(NUL_BYTE).join("")).slice(0, MAX_BODY_CHARS),
+    // Well-formed after the cut: slicing can split a character stored as two halves (an
+    // emoji, a math letter), and Postgres rejects the lone half, failing the whole batch.
+    body: redactUrlSecrets(row.body.split(NUL_BYTE).join(""))
+      .slice(0, MAX_BODY_CHARS)
+      .toWellFormed(),
     // `url` too. It was the one field of the three left unguarded, and `renderSources`
     // prints it on every search line — 588 chunks carry a query string there. Nothing
     // leaked through it today; a field that is exempt by omission is how the next one does.

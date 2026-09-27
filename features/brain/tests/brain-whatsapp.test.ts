@@ -217,20 +217,24 @@ describe("whatsappRows — one chunk per DAY", () => {
     expect(script).toMatch(/select max\(ZMESSAGEDATE\) as ts from ZWAMESSAGE where ZCHATSESSION/);
   });
 
-  it("sweeps only days this run read, so a freshly linked copy cannot delete older days", () => {
+  it("sweeps only after the first day read, so a freshly linked copy cannot delete older days", () => {
     const parts = [
+      { source_id: "wa:g#wa-2026-09-25-0900", meta: { day: "2026-09-25" } },
       { source_id: "wa:g#wa-2026-09-27-0900", meta: { day: "2026-09-27" } },
-      { source_id: "wa:g#wa-2026-09-26-1000", meta: { day: "2026-09-26" } },
     ];
-    // An old day this read did not reach is not a reason to sweep.
+    const stored = [
+      "wa:g#wa-2025-11-11-0609", // older than the copy: not read, kept
+      "wa:g#wa-2026-09-25-0700", // on the first day read, which may be partly filled: kept
+      "wa:g#wa-2026-09-26-1000", // inside the range with nothing left (deleted): swept
+      ...parts.map((p) => p.source_id),
+    ];
+    const scope = sweepScope(stored, parts);
+    expect(scope.needed).toBe(true);
+    expect(scope.days).toEqual(new Set(["2026-09-26", "2026-09-27"]));
+    // Nothing missing inside the range: no sweep, so a partial copy costs no full re-read.
     expect(
-      sweepScope(["wa:g#wa-2025-11-11-0609", ...parts.map((p) => p.source_id)], parts)
-    ).toEqual({
-      needed: false,
-      days: new Set(["2026-09-27", "2026-09-26"]),
-    });
-    // A read day with a part it no longer produces is.
-    expect(sweepScope(["wa:g#wa-2026-09-26-1000-2"], parts).needed).toBe(true);
+      sweepScope(["wa:g#wa-2025-11-11-0609", ...parts.map((p) => p.source_id)], parts).needed
+    ).toBe(false);
   });
 
   /**

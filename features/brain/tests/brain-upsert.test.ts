@@ -69,6 +69,15 @@ describe("upsertChunks payload shape", () => {
     expect(objects[1].period_end).toBeNull();
   });
 
+  it("never writes half of a character that the 2,400 cut splits", async () => {
+    // An emoji is two UTF-16 halves; cutting between them left a lone half, which Postgres
+    // rejects (22P02), failing the whole batch.
+    await upsertChunks([row({ body: `${"a".repeat(2399)}😀 and more` })]);
+    const [written] = JSON.parse(posted[0]!) as Array<{ body: string }>;
+    expect(written!.body).toHaveLength(2400);
+    expect(written!.body.isWellFormed()).toBe(true);
+  });
+
   it("keeps a supplied period_end untouched", async () => {
     await upsertChunks([row({ period_end: "2026-08-25" })]);
     expect((JSON.parse(posted[0]) as Record<string, unknown>[])[0].period_end).toBe("2026-08-25");

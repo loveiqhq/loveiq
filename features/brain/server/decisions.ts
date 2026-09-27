@@ -170,7 +170,13 @@ export async function markSuperseded(
   byId: string,
   byDay?: string
 ): Promise<number> {
-  const older = olderId.trim().replace(/^decision\//, "");
+  // Every form Jarvis prints: "decision/decision:<id>", "decision:<id>", and the short
+  // "decision/<id>" that decision_conflicts and settle's reply use. The short one looked up
+  // "<id>" and found nothing, so the reply said no such decision was on record.
+  const older = `decision:${olderId
+    .trim()
+    .replace(/^decision\//, "")
+    .replace(/^decision:/, "")}`;
   const res = await supabaseFetch(
     `/rest/v1/brain_chunk?select=id,meta,period_end&source=eq.decision&source_id=eq.${encodeURIComponent(older)}`
   );
@@ -208,7 +214,16 @@ export async function markSuperseded(
       method: "PATCH",
       headers: { "Content-Type": "application/json", Prefer: "return=minimal" },
       body: JSON.stringify({
-        meta: { ...(old.meta ?? {}), superseded_by: byId, superseded_on: onDay },
+        // Its conflict marks go: being replaced settles them, and the radar only keeps the
+        // marks of decisions that still stand, so a copied mark said "MAY CONFLICT, nobody
+        // has settled which stands" beside "SUPERSEDED" forever.
+        meta: {
+          ...Object.fromEntries(
+            Object.entries(old.meta ?? {}).filter(([k]) => k !== "disputed_by")
+          ),
+          superseded_by: byId,
+          superseded_on: onDay,
+        },
       }),
     });
     if (!patched.ok) throw new Error(`could not mark decision ${older} (${patched.status})`);

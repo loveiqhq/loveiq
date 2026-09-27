@@ -46,14 +46,14 @@ function monthSpan(month: string): { name: string; since: string; until: string 
 /** The month before this one by the team's clock. In UTC, the first hours of a month in
  *  Berlin were still the month before, so "last month" came out two months back. */
 function lastMonth(): string {
-  const [y, m] = new Intl.DateTimeFormat("en-CA", {
+  // By parts, not by text: an older ICU formats this "09/2026", which a split on "-" breaks.
+  const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Berlin",
     year: "numeric",
     month: "2-digit",
-  })
-    .format(new Date())
-    .split("-")
-    .map(Number) as [number, number];
+  }).formatToParts(new Date());
+  const y = Number(parts.find((p) => p.type === "year")?.value);
+  const m = Number(parts.find((p) => p.type === "month")?.value);
   return new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 7);
 }
 

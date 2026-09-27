@@ -497,6 +497,24 @@ describe("syncDisputes and settling", () => {
     expect(db.chunks.find((c) => c.source_id === JIRA)!.meta.superseded_by).toBeUndefined();
   });
 
+  it("says why a settle could not mark the loser, and leaves the pair open", async () => {
+    // The loser was already replaced by a third decision: the refusal used to throw into
+    // the generic handler ("That lookup failed") with the pair still open.
+    db.conflicts = [open(JIRA, NOTION)];
+    db.chunks.find((c) => c.source_id === JIRA)!.meta.superseded_by = "decision:2026-09-20-third";
+    const r = await settleConflict(
+      { a: JIRA, b: NOTION, keep: "later", actor: "Mark" },
+      new Date(NOW)
+    );
+    expect(r).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(
+        /already replaced by decision:2026-09-20-third.*Nothing was changed/
+      ),
+    });
+    expect(db.conflicts[0]).toMatchObject({ status: "open" });
+  });
+
   it("settles by the id exactly as search prints it", async () => {
     // MAY CONFLICT lines print "decision/decision:<id>"; stripping one prefix made it
     // "decision:decision:<id>", which matched no conflict.
@@ -544,9 +562,13 @@ describe("syncDisputes and settling", () => {
   it("settles nothing when the superseded mark cannot be written", async () => {
     db.conflicts = [open(JIRA, NOTION)];
     db.failWrite = "brain_chunk";
-    await expect(
-      settleConflict({ a: JIRA, b: NOTION, keep: "later", actor: "X" }, new Date(NOW))
-    ).rejects.toThrow(/could not mark/);
+    // Said to the person, not thrown into the generic "lookup failed": the pair stays open.
+    expect(
+      await settleConflict({ a: JIRA, b: NOTION, keep: "later", actor: "X" }, new Date(NOW))
+    ).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/could not mark.*Nothing was changed/),
+    });
     expect(db.conflicts[0]).toMatchObject({ status: "open" });
   });
 });
