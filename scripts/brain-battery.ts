@@ -350,6 +350,12 @@ function buildProbes(f: LiveFigures): Probe[] {
  * fails when its gap disappears.
  */
 const KNOWN_RED: Record<string, string> = {
+  "decision-pivot":
+    "red again 2026-09-27, the same gauge as before: decision records went from 82 to 267, " +
+    "and two recorded 2026-09-26 (anonymous user totals, dropping subscriptions) rank #2-#3 " +
+    "at 2.37/2.35 with the full recency bonus, above the meeting summary this wants. The " +
+    "phrase 'what did we decide' favours decision records by design; fixing the crowding " +
+    "needs a measured ranking sweep, not a threshold.",
   "record-beats-transcript":
     "red since 2026-09-20: no meeting SUMMARY chunk mentions pricing, so only transcripts " +
     "match at all. Two fixes measured and rejected — see the comment on the probe.",

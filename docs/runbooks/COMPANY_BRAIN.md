@@ -370,6 +370,13 @@ through Resend, as the admin login does, so nothing relies on Supabase's own mai
 `oauth_server_authorization_path = /jarvis/connect`, and `site_url =
 https://www.loveiq.org`.
 
+**Check it end to end after any change to sign-in:** `node scripts/jarvis-sign-in-e2e.mjs
+<member-email>` with `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` set. It runs the whole
+flow against production the way Claude does. That includes the attack closed on
+2026-09-27: an app allowed once through Claude, then asking with its own return address.
+It removes the apps it registers, signs out only the session it made, and sends that
+member one sign-in code email.
+
 - **Who may sign in is the people registry.** An `@loveiq.org` address on an active
   person in `brain_person`: not a shared mailbox, not a personal address.
 - **Offboarding** is `update brain_person set active = false where canonical = '…'`.
