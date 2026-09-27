@@ -4032,9 +4032,10 @@
   position: relative;
   width: 20px;
 }
+/* The coral disc keeps its minus through the turn (review 27.09, Fatih): the crossing
+ * out is this panel's animation, and the checkmark is the sun panel's alone. */
 .rv3 .rv4-turn__tick {
   background: rgba(194, 84, 47, 0.16);
-  transition: background-color 420ms ease;
 }
 .rv3 .rv4-sun__tick {
   background: rgba(46, 125, 91, 0.16);
@@ -4049,19 +4050,7 @@
   background: #c2542f;
   border-radius: 0.6px;
   height: 1.275px;
-  transition: opacity 420ms ease;
   width: 5.625px;
-}
-.rv3 .rv4-turn__check {
-  color: #2e7d5b;
-  height: 9px;
-  left: 50%;
-  opacity: 0;
-  position: absolute;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  transition: opacity 420ms ease;
-  width: 9px;
 }
 .rv3 .rv4-turn__text,
 .rv3 .rv4-turn__shift-text,
@@ -4089,15 +4078,6 @@
 .rv3 .rv4-sun__text,
 .rv3 .rv4-turn__shift-text {
   color: #2e7d5b;
-}
-.rv3 .rv4-turn__row.is-turned .rv4-turn__tick {
-  background: rgba(46, 125, 91, 0.16);
-}
-.rv3 .rv4-turn__row.is-turned .rv4-turn__minus {
-  opacity: 0;
-}
-.rv3 .rv4-turn__row.is-turned .rv4-turn__check {
-  opacity: 1;
 }
 .rv3 .rv4-turn__row.is-turned .rv4-turn__text {
   color: #c2542f;
@@ -4149,9 +4129,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rv3 .rv4-turn__tick,
-  .rv3 .rv4-turn__minus,
-  .rv3 .rv4-turn__check,
   .rv3 .rv4-turn__text,
   .rv3 .rv4-turn__shift {
     transition: none;
