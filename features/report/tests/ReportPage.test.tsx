@@ -1053,6 +1053,27 @@ describe("ReportPage", () => {
       expect(heads[0]!.nextElementSibling!.nextElementSibling).toHaveClass("rv4-top3");
     });
 
+    // Review 27.09 (Extra divider.jpeg): the rule that drops a closed chapter's hairline
+    // before a part keys on the chapter and the part's rule being adjacent siblings.
+    it("opens Parts IV-VI straight after a closed chapter, the sibling the one-line rule keys on", () => {
+      mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
+      mockUseReportData.mockReturnValue(buildSuccessResponse());
+
+      const { container } = render(<ReportPage />);
+
+      for (const [id, frame] of [
+        ["power_orientation", "1:983"],
+        ["energy_level", "38:1508"],
+        ["curiosity_level", "1:1138"],
+      ] as const) {
+        const chapter = container.querySelector(`#${id}`)!;
+        expect(chapter, id).toHaveClass("rv4-chapter");
+        expect(chapter, id).not.toHaveClass("is-open");
+        expect(chapter.nextElementSibling, id).toHaveClass("rv4-rule");
+        expect(chapter.nextElementSibling!.getAttribute("data-node-id")).toBe(frame);
+      }
+    });
+
     it("keeps one separator where the designed chapters open their parts", () => {
       mockSearchParams.mockImplementation(() => new URLSearchParams("v4=1"));
       const response = buildSuccessResponse();
