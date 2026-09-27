@@ -899,14 +899,15 @@ function partIdsOf(known: Map<string, { edited: string; v: number }>, baseId: st
   return [...known.keys()].filter((id) => id.startsWith(prefix));
 }
 
-export function splitBody(text: string): string[] {
+/** `limit` below BODY_LIMIT leaves room for a header a caller adds to every part. */
+export function splitBody(text: string, limit = BODY_LIMIT): string[] {
   const out: string[] = [];
   let rest = text;
-  while (rest.length > BODY_LIMIT) {
-    const window = rest.slice(0, BODY_LIMIT);
+  while (rest.length > limit) {
+    const window = rest.slice(0, limit);
     let cut = window.lastIndexOf("\n\n");
     if (cut < MIN_SPLIT) cut = window.lastIndexOf("\n");
-    if (cut < MIN_SPLIT) cut = BODY_LIMIT;
+    if (cut < MIN_SPLIT) cut = limit;
     out.push(rest.slice(0, cut).trim());
     rest = rest.slice(cut).trim();
   }

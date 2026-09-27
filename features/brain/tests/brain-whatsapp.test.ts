@@ -1,6 +1,9 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  sweepScope,
   chatName,
   dayRows,
   detectDayFirst,
@@ -150,6 +153,84 @@ describe("whatsappRows — one chunk per DAY", () => {
     });
     expect(rows.length).toBeGreaterThan(1);
     for (const r of rows) expect(r.body.length).toBeLessThanOrEqual(2400);
+  });
+
+  it("leaves room for the head on EVERY part, so no part loses the end of its last message", () => {
+    // The head was added to parts 2+ AFTER splitting, so they ran past 2,400 and the writer
+    // cut them (a stored part sat at exactly 2,400). The fixture above never got that long.
+    const at = 1_754_460_000_000;
+    const rows = dayRows({
+      source: "whatsapp",
+      idBase: "wa:test",
+      chat: "LoveIQ",
+      url: null,
+      stampedAt: STAMP,
+      messages: Array.from({ length: 200 }, (_, i) => ({
+        day: "2026-08-06",
+        time: "09:12",
+        sender: "Marcus",
+        text: `message ${i} ends here${"x".repeat(i % 7 === 0 ? 300 : 40)}`,
+        at: at + i * 1000,
+      })),
+    });
+    expect(rows.length).toBeGreaterThan(2);
+    for (const r of rows) {
+      expect(r.body.length).toBeLessThanOrEqual(2400);
+      expect(r.body.startsWith("WhatsApp: LoveIQ — 2026-08-06 09:12\nBetween: Marcus\n\n")).toBe(
+        true
+      );
+    }
+    // Every message survives, in order, with nothing cut from any part's end.
+    const all = rows.map((r) => r.body.split("\n\n").slice(1).join("\n\n")).join("\n");
+    for (let i = 0; i < 200; i += 1) expect(all).toContain(`message ${i} ends here`);
+  });
+
+  it("writes a one-part day exactly as before, so its fingerprint does not change", () => {
+    const rows = dayRows({
+      source: "whatsapp",
+      idBase: "wa:test",
+      chat: "LoveIQ",
+      url: null,
+      stampedAt: STAMP,
+      messages: [
+        { day: "2026-08-06", time: "09:12", sender: "Marcus", text: "hi", at: 1 },
+        { day: "2026-08-06", time: "09:13", sender: "Mark", text: "hello", at: 60_001 },
+      ],
+    });
+    expect(rows[0]!.body).toBe(
+      "WhatsApp: LoveIQ — 2026-08-06 09:12\nBetween: Marcus, Mark\n\nMarcus (09:12): hi\nMark (09:13): hello"
+    );
+  });
+
+  /**
+   * The laptop script runs its logic at import, so it cannot be driven from a test. This is
+   * a tripwire on the three lines that matter, so a refactor cannot drop them unseen: the
+   * scoped sweep (an unscoped one deleted older days), the read timeout (a hung read
+   * blocked every run for 7.5 hours) and freshness from every kind of message.
+   */
+  it("the laptop script keeps the scoped sweep, the read timeout and the any-message freshness", () => {
+    const script = readFileSync(join(process.cwd(), "scripts/whatsapp-sync.ts"), "utf8");
+    expect(script).toContain(
+      'sweepMissing("whatsapp", current, { scopeKey: "day", walkedScopes: scope.days })'
+    );
+    expect(script).toContain("timeout: 120_000");
+    expect(script).toMatch(/select max\(ZMESSAGEDATE\) as ts from ZWAMESSAGE where ZCHATSESSION/);
+  });
+
+  it("sweeps only days this run read, so a freshly linked copy cannot delete older days", () => {
+    const parts = [
+      { source_id: "wa:g#wa-2026-09-27-0900", meta: { day: "2026-09-27" } },
+      { source_id: "wa:g#wa-2026-09-26-1000", meta: { day: "2026-09-26" } },
+    ];
+    // An old day this read did not reach is not a reason to sweep.
+    expect(
+      sweepScope(["wa:g#wa-2025-11-11-0609", ...parts.map((p) => p.source_id)], parts)
+    ).toEqual({
+      needed: false,
+      days: new Set(["2026-09-27", "2026-09-26"]),
+    });
+    // A read day with a part it no longer produces is.
+    expect(sweepScope(["wa:g#wa-2026-09-26-1000-2"], parts).needed).toBe(true);
   });
 
   /**

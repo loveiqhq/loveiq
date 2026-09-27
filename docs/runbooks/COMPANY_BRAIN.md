@@ -1104,15 +1104,17 @@ WhatsApp is driven by a launchd agent on Eman's machine, `org.loveiq.whatsapp-sy
 every five minutes, from a SEPARATE checkout at `~/.loveiq-brain`. It does not appear in
 `vercel.json`, and it pauses whenever the laptop is off.
 
-**Every run records itself** as `brain-whatsapp` in `cron_run` (since 2026-09-26), and a
-run is a failure when the group has had no new message for a week. That almost always
-means WhatsApp Desktop is closed or unlinked, and the sync would otherwise read a frozen
-copy "successfully".
+**A run records itself** as `brain-whatsapp` in `cron_run` when it changed something or
+failed, and otherwise once an hour. A run is a failure when the group has had no message
+of any kind for 14 days (it has gone quiet for real for 12). That almost always means
+WhatsApp Desktop is closed or unlinked, and the sync would otherwise read a frozen copy
+"successfully". With the stall watcher's 3 days on top, a frozen copy is flagged within
+17 days, inside WhatsApp's 30-day window.
 
 **launchd runs a launcher that has Full Disk Access, not the script.** macOS asks "…
 would like to access data from other apps" when a program reads WhatsApp's folder, and an
 Allow there lasts only while that one process runs. The sync starts a new one every run,
-so it asked every hour, and a run waiting on the question blocks every run after it. So
+so it asked on every run, and a run waiting on the question blocks every run after it. So
 launchd starts `~/.loveiq-brain/bin/loveiq-whatsapp-sync`
 (`scripts/whatsapp-sync-launcher.c`), which runs the script as its child. macOS holds the
 program launchd started responsible for everything under it, so that one binary having
