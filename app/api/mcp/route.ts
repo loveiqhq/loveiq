@@ -6098,11 +6098,18 @@ export async function POST(request: Request) {
    * (RFC 9728), which is how claude.ai and Claude Code find the sign-in page on their own.
    */
   const ip = getClientIp(request);
+  // A recently verified account re-checks in its own bucket; anyone else shares the address's.
   const who = await resolveCaller(
     request.headers.get("authorization"),
     Date.now(),
-    async () =>
-      (await checkRateLimit(ip, { bucket: "mcp-sign-in", limit: 60, windowMs: 60_000 })).allowed
+    async ({ knownSub }) =>
+      (
+        await checkRateLimit(knownSub ? `sub:${knownSub}` : ip, {
+          bucket: knownSub ? "mcp-sign-in-member" : "mcp-sign-in",
+          limit: 60,
+          windowMs: 60_000,
+        })
+      ).allowed
   );
   if (!who.ok) {
     return NextResponse.json(

@@ -304,7 +304,9 @@ try {
   failures++;
   console.log(`FAIL  the run stopped early: ${err instanceof Error ? err.message : String(err)}`);
 } finally {
-  // 8. Tidy up: the session this made, then every app it registered.
+  // 8. Tidy up: the page's own sign-in (made by /api/jarvis/verify), the OAuth session,
+  // then every app it registered.
+  await postJson("/api/jarvis/sign-out", {}).catch(() => undefined);
   if (openSession) {
     await fetch(`${SUPA}/auth/v1/logout?scope=local`, {
       method: "POST",

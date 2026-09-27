@@ -92,13 +92,25 @@ jobs:
             echo "::warning::SLACK_BRAIN_WEBHOOK_URL is not set, so this failure alerts nobody"
             exit 0
           fi
-          # Once per outage, not once an hour: say it when the run before this one was clean.
-          prev=$(gh run list -R "$GITHUB_REPOSITORY" --workflow brain-embed.yml --limit 5 \
-            --json databaseId,conclusion \
-            -q "[.[] | select(.databaseId != ${GITHUB_RUN_ID} and .conclusion != \"\")][0].conclusion" || true)
-          # Only "failure": a queued run GitHub replaced never started, so it reads
-          # "cancelled" and would have silenced the next real failure, and every one after.
-          if [ "$prev" = "failure" ]; then
+          # Once per outage, not once an hour: post when the last run that actually RAN was
+          # clean. A queued run GitHub replaced never ran a step (cancelled, no steps), so it
+          # is skipped; one that hung until timeout-minutes also reads "cancelled" but ran,
+          # so it counts as reported. Counting "cancelled" either way was wrong both ways.
+          prev=""
+          for row in $(gh run list -R "$GITHUB_REPOSITORY" --workflow brain-embed.yml --limit 10 \
+              --json databaseId,conclusion \
+              -q ".[] | select(.databaseId != ${GITHUB_RUN_ID} and .conclusion != \"\") | \"\(.databaseId):\(.conclusion)\"" || true); do
+            id="${row%%:*}"
+            conclusion="${row#*:}"
+            if [ "$conclusion" = "cancelled" ]; then
+              steps=$(gh run view "$id" -R "$GITHUB_REPOSITORY" --json jobs \
+                -q '[.jobs[].steps | length] | add // 0' || echo 0)
+              if [ "$steps" = "0" ]; then continue; fi
+            fi
+            prev="$conclusion"
+            break
+          done
+          if [ "$prev" = "failure" ] || [ "$prev" = "cancelled" ]; then
             echo "The previous run already failed and was reported; not posting again."
             exit 0
           fi

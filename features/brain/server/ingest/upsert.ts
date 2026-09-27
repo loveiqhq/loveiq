@@ -336,7 +336,8 @@ export function credentialKind(text: string): string | null {
 function clean(row: BrainRow): BrainRow {
   return {
     ...row,
-    title: redactUrlSecrets(row.title.split(NUL_BYTE).join("")),
+    // Titles are cut by their builders too (a research question at 300 characters).
+    title: redactUrlSecrets(row.title.split(NUL_BYTE).join("")).toWellFormed(),
     // Redacted BEFORE the length cap, so a masked value cannot push real text out.
     // Well-formed after the cut: slicing can split a character stored as two halves (an
     // emoji, a math letter), and Postgres rejects the lone half, failing the whole batch.

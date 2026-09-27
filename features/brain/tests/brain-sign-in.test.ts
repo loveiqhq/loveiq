@@ -174,6 +174,21 @@ describe("resolveCaller", () => {
     expect(await resolveCaller(bearer(refreshed), NOW + 61_000)).toMatchObject({ status: 403 });
   });
 
+  it("tells the limiter when a token's account verified recently, so it gets its own bucket", async () => {
+    // Forged tokens through Anthropic's shared addresses must not fail a connected member's
+    // re-check: a known account is not charged to the address.
+    signedIn("mo@loveiq.org", "Mark Oldenburg");
+    const seen: Array<string | undefined> = [];
+    const check = async (who: { knownSub?: string }) => {
+      seen.push(who.knownSub);
+      return true;
+    };
+    await resolveCaller(bearer(oauth({ sub: "user-1", client_id: "a" })), NOW, check);
+    await resolveCaller(bearer(oauth({ sub: "user-1", client_id: "b" })), NOW + 1_000, check);
+    await resolveCaller(bearer(oauth({ sub: "stranger", client_id: "c" })), NOW + 2_000, check);
+    expect(seen).toEqual([undefined, "user-1", undefined]);
+  });
+
   it("stops a member within a minute of their registry row going inactive", async () => {
     signedIn("mo@loveiq.org", "Mark Oldenburg");
     expect((await resolveCaller(bearer(oauth()), NOW)).ok).toBe(true);

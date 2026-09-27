@@ -78,6 +78,13 @@ describe("upsertChunks payload shape", () => {
     expect(written!.body.isWellFormed()).toBe(true);
   });
 
+  it("never writes half a character in a title either", async () => {
+    // Builders cut titles too: the Night Shift's is its question at 300 characters.
+    await upsertChunks([row({ title: `${"q".repeat(299)}😀`.slice(0, 300) })]);
+    const [written] = JSON.parse(posted[0]!) as Array<{ title: string }>;
+    expect(written!.title.isWellFormed()).toBe(true);
+  });
+
   it("keeps a supplied period_end untouched", async () => {
     await upsertChunks([row({ period_end: "2026-08-25" })]);
     expect((JSON.parse(posted[0]) as Record<string, unknown>[])[0].period_end).toBe("2026-08-25");
