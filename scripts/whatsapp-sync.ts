@@ -63,14 +63,18 @@ function query<T>(sql: string): T[] {
   const out = execFileSync("sqlite3", ["-readonly", "-json", `file:${DB}?immutable=1`, sql], {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
+    // A read that hangs (it did, for 7.5 hours on 2026-09-26) blocks every later run, since
+    // launchd never starts a second copy. Killed after two minutes, it fails the run instead.
+    timeout: 120_000,
   });
   return out.trim() ? (JSON.parse(out) as T[]) : [];
 }
 
 /**
- * Why the run failed, if it did. Every run records itself as `brain-whatsapp` in cron_run,
- * so the stall watcher can say when this laptop job has gone quiet: it pauses whenever the
- * Mac is closed, and the watcher counts only successful runs.
+ * Why the run failed, if it did. A run records itself as `brain-whatsapp` in cron_run when
+ * it changed something or failed, and otherwise once an hour, so the stall watcher can say
+ * when this laptop job has gone quiet: it pauses whenever the Mac is closed, and the
+ * watcher counts only successful runs.
  */
 let failure: string | undefined;
 /** Whether this run wrote or removed anything: a run that changed nothing records sparingly. */
@@ -144,8 +148,14 @@ async function main(): Promise<void> {
       order by m.ZMESSAGEDATE asc;`
   );
 
-  const { dayFingerprint, dayRows, daysToWrite, groupQuietDays, GROUP_QUIET_LIMIT_DAYS } =
-    await import("@features/brain/server/ingest/whatsapp");
+  const {
+    dayFingerprint,
+    dayRows,
+    daysToWrite,
+    groupQuietDays,
+    GROUP_QUIET_LIMIT_DAYS,
+    sweepScope,
+  } = await import("@features/brain/server/ingest/whatsapp");
   const messages = rows.map((r) => {
     const at = new Date((r.ts + CORE_DATA_EPOCH) * 1000);
     return {
@@ -157,10 +167,17 @@ async function main(): Promise<void> {
     };
   });
 
-  // A frozen copy syncs "successfully" forever, so a quiet week fails the run, and the rest
-  // still syncs.
+  // A frozen copy syncs "successfully" forever, so a long silence fails the run, and the rest
+  // still syncs. Measured on EVERY kind of message, not only those with text: a reaction or
+  // a photo is the group talking too.
+  const [newest] = query<{ ts: number | null }>(
+    `select max(ZMESSAGEDATE) as ts from ZWAMESSAGE where ZCHATSESSION = ${session.pk};`
+  );
   const quiet = groupQuietDays(
-    messages.map((m) => m.at),
+    [
+      ...messages.map((m) => m.at),
+      ...(newest?.ts != null ? [(newest.ts + CORE_DATA_EPOCH) * 1000] : []),
+    ],
     Date.now()
   );
   if (quiet > GROUP_QUIET_LIMIT_DAYS) {
@@ -197,7 +214,9 @@ async function main(): Promise<void> {
 
   const { readAll } = await import("@features/brain/server/read-all");
   const stored = await readAll<{ source_id: string; fingerprint: string | null }>(
-    `/rest/v1/brain_chunk?select=source_id,fingerprint:meta->>fingerprint&source=eq.whatsapp`
+    // Ordered, as readAll's paging needs: past 1,000 rows an unordered read can skip some.
+    `/rest/v1/brain_chunk?select=source_id,fingerprint:meta->>fingerprint&source=eq.whatsapp` +
+      `&order=source_id.asc`
   );
   // Unreadable: write every day, as every run did before the fingerprints.
   const toWrite = stored
@@ -210,15 +229,22 @@ async function main(): Promise<void> {
     fail(`Wrote ${written} of the ${toWrite.length} days that changed.`);
 
   /**
-   * Remove the days this run no longer produces (a day cut into fewer parts, a moved floor).
-   * By id, not by write time: an unchanged day is not rewritten, so its write time is old
-   * and says nothing. `sweepMissing` keeps the majority guard, so a bad read cannot wipe
-   * the source. Asked only when a stored day is missing from this run, which is rare, so
-   * the usual five-minute run does not re-read every row.
+   * Remove the parts this run no longer produces for a day it READ (a day cut into fewer
+   * parts). By id, not by write time: an unchanged day is not rewritten, so its write time
+   * is old and says nothing. Scoped to the days read (see sweepScope): a freshly linked
+   * WhatsApp Desktop holds only recent weeks, and an unscoped sweep deleted older days.
+   * A moved floor (WHATSAPP_SINCE) is therefore NOT swept on its own; delete those days by
+   * hand. The majority guard stays, so a bad read cannot wipe the source.
    */
   const current = new Set(parts.map((r) => r.source_id));
-  const gone = stored === null || stored.some((r) => !current.has(r.source_id));
-  const swept = gone ? await sweepMissing("whatsapp", current) : 0;
+  const scope = sweepScope(
+    (stored ?? []).map((r) => r.source_id),
+    parts
+  );
+  const swept =
+    stored === null || scope.needed
+      ? await sweepMissing("whatsapp", current, { scopeKey: "day", walkedScopes: scope.days })
+      : 0;
   changed = written + swept > 0;
 
   const days = new Set(messages.map((m) => m.day));
