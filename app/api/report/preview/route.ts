@@ -14,6 +14,7 @@ import {
 import { isSectionUnlockedForPlan, isReportPurchasePlan } from "@features/report/server/access";
 import { buildPartnershipCopy } from "@features/report/server/partnershipCopy";
 import { buildFantasyCopy } from "@features/report/server/fantasyCopy";
+import { buildReport2ChapterCopies } from "@features/report/server/report2ChapterCopies";
 import type { ReportAccessPlan } from "@features/report/server/access";
 import { KNOWN_ARCHETYPES } from "@features/report/server/archetypeSlug";
 import { buildPreviewQuotes } from "@/app/report-v4-preview/previewQuotes";
@@ -119,6 +120,10 @@ export async function GET(request: Request) {
   const { fantasyCopy, fantasyDots } = buildFantasyCopy(archetype, fantasyUnlocked);
   const fantasy = isV4Request ? buildFantasy(archetype, { locked: !fantasyUnlocked }) : null;
   const fantasyArticle = REPORT_V4_LEARN_MORE.typical_sexual_fantasy_amp_practice_tendencies;
+  // Every other Report 2.0 chapter, Attachment Style through Confidence Level, through
+  // the real route's own builder. Without them each opened onto an empty body under
+  // ?preview=1 — the chapters Mark asked to see in their 2.0 version (review 27.09).
+  const report2Chapters = buildReport2ChapterCopies(archetype, unlocked);
 
   const payload = stripLockedEduBodyFromPayload({
     submissionId: null,
@@ -183,6 +188,10 @@ export async function GET(request: Request) {
             locked: !beliefsUnlocked,
           }
         : null,
+
+    // Attachment Style to Confidence Level, copy and chart configs, as the real route
+    // builds them (report2ChapterCopies.ts).
+    ...report2Chapters,
 
     // V2's Accelerators & Brakes copy, exactly as the real route builds it. Without
     // it the V2 section rendered nothing under ?preview=1, leaving the chapter an
