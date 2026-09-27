@@ -21,11 +21,17 @@ const LOCKED = buildTypicalBeliefs("Spark Seeker", { locked: true })!;
 
 /** Where every row's top sits, in viewport coordinates. */
 let rowTop = 9999;
+/** A collapsed chapter (`display: none`) lays nothing out: every box is 0×0 at 0. */
+let collapsed = false;
 
 beforeEach(() => {
   rowTop = 9999;
+  collapsed = false;
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
-    () => ({ top: rowTop, height: 61, width: 329 }) as DOMRect
+    () =>
+      (collapsed
+        ? { top: 0, height: 0, width: 0 }
+        : { top: rowTop, height: 61, width: 329 }) as DOMRect
   );
   vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
     cb(0);
@@ -110,6 +116,31 @@ describe("the turn — 368:5482", () => {
     expect(container.querySelectorAll(".rv4-turn__row.is-turned")).toHaveLength(0);
     expect(container.querySelectorAll(".rv4-turn__shift-text")).toHaveLength(10);
     expect(screen.getByText(VIEW.panels.turns[9]!.shift)).toBeInTheDocument();
+  });
+
+  // A designed chapter closes with display:none, where every row measures 0×0 at top 0,
+  // which reads as "past the line": every row turned while nobody could see them.
+  it("keeps its rows as they were while the chapter is collapsed", () => {
+    const { container } = render(<V4ShadowBeliefs turns={VIEW.panels.turns} />);
+    const turnedRows = () => container.querySelectorAll(".rv4-turn__row.is-turned");
+
+    collapsed = true;
+    fireEvent.scroll(window);
+    expect(turnedRows()).toHaveLength(0);
+
+    collapsed = false;
+    rowTop = 380;
+    fireEvent.scroll(window);
+    expect(turnedRows()).toHaveLength(10);
+
+    collapsed = true;
+    fireEvent.scroll(window);
+    expect(turnedRows()).toHaveLength(10);
+
+    collapsed = false;
+    rowTop = 395;
+    fireEvent.scroll(window);
+    expect(turnedRows()).toHaveLength(0);
   });
 
   it("turns nothing past the wall, however far the reader scrolls", () => {
