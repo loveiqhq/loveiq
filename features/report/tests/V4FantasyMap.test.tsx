@@ -317,9 +317,38 @@ describe("V4FantasyMap — open (696:4393)", () => {
     ).toEqual([String(SPARK_DOTS[3]!.pull), String(SPARK_DOTS[3]!.pleasure)]);
     fireEvent.blur(dot);
     expect(dot).not.toHaveClass("is-open");
-    fireEvent.mouseEnter(dots(container)[5]!);
+    fireEvent.pointerMove(dots(container)[5]!, { pointerType: "mouse" });
     expect(dots(container)[5]!).toHaveClass("is-open");
     fireEvent.mouseLeave(dots(container)[5]!);
+    expect(mapOf(container)).not.toHaveClass("is-inspecting");
+  });
+
+  // Fatih, 27.09: "there shouldn't be a window when scrolling". A dot the page scrolls
+  // under a resting pointer gets pointerenter / mouseover / mouseenter but never a move,
+  // and mouseenter opened its readout in the middle of the dots' entrance.
+  it("opens nothing for a dot that slides under a resting pointer as the page scrolls", () => {
+    const { container } = render(<V4FantasyMap dots={SPARK_DOTS} locked={false} />);
+    const dot = dots(container)[5]!;
+    fireEvent.pointerEnter(dot, { pointerType: "mouse" });
+    fireEvent.mouseOver(dot);
+    fireEvent.mouseEnter(dot);
+    expect(dot).not.toHaveClass("is-open");
+    expect(mapOf(container)).not.toHaveClass("is-inspecting");
+  });
+
+  it("opens a readout once the pointer moves on a dot, and closes it on leaving", () => {
+    const { container } = render(<V4FantasyMap dots={SPARK_DOTS} locked={false} />);
+    const dot = dots(container)[5]!;
+    fireEvent.pointerMove(dot, { pointerType: "mouse" });
+    expect(dot).toHaveClass("is-open");
+    fireEvent.mouseLeave(dot);
+    expect(dot).not.toHaveClass("is-open");
+    expect(mapOf(container)).not.toHaveClass("is-inspecting");
+  });
+
+  it("opens nothing for a finger dragging across the map: that is a scroll", () => {
+    const { container } = render(<V4FantasyMap dots={SPARK_DOTS} locked={false} />);
+    fireEvent.pointerMove(dots(container)[5]!, { pointerType: "touch" });
     expect(mapOf(container)).not.toHaveClass("is-inspecting");
   });
 
