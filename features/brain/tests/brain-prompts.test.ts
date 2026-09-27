@@ -68,18 +68,28 @@ describe("renderPrompt", () => {
     const r = renderPrompt("monthly_review", { month: "2028-02" });
     const text = "text" in r ? r.text : "";
     expect(text).toContain("Write the monthly review of February 2028 (2028-02-01 to 2028-02-29)");
+    // Against the calendar month before, not an equally long window ("previous").
     expect(text).toContain(
-      'get_business_numbers with since 2028-02-01, until 2028-02-29 and compare_to "previous"'
+      'get_business_numbers with since 2028-02-01, until 2028-02-29 and compare_to "2028-01-01..2028-01-31"'
     );
+    // Overdue tasks come from the board record: a browse shows no due dates.
+    expect(text).toContain("fetch_document plan/plan:board-health");
     expect(text).toContain("user_totals with since 2028-02-01 and until 2028-02-29");
     expect(text).toMatch(/Lead with paywall conversion/);
     expect(text).toContain("cost_watch");
+    // A month of changes runs past one answer's ceiling (August 2026 was cut at the 23rd).
+    expect(text).toContain("what_shipped from 2028-02-01 to 2028-02-29 a week at a time");
     expect(text).toMatch(/after my OK put it in a Google Doc/);
     vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-01-15T12:00:00Z"));
     try {
+      vi.setSystemTime(new Date("2026-01-15T12:00:00Z"));
       const d = renderPrompt("monthly_review", {});
       expect("text" in d && d.text).toContain("December 2025 (2025-12-01 to 2025-12-31)");
+      expect("text" in d && d.text).toContain('compare_to "2025-11-01..2025-11-30"');
+      // 00:30 on 1 November in Berlin is still October in UTC: last month is October.
+      vi.setSystemTime(new Date("2026-10-31T23:30:00Z"));
+      const e = renderPrompt("monthly_review", {});
+      expect("text" in e && e.text).toContain("October 2026 (2026-10-01 to 2026-10-31)");
     } finally {
       vi.useRealTimers();
     }

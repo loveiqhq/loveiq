@@ -43,11 +43,25 @@ function monthSpan(month: string): { name: string; since: string; until: string 
   };
 }
 
+/** The month before this one by the team's clock. In UTC, the first hours of a month in
+ *  Berlin were still the month before, so "last month" came out two months back. */
 function lastMonth(): string {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
-    .toISOString()
-    .slice(0, 7);
+  const [y, m] = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Berlin",
+    year: "numeric",
+    month: "2-digit",
+  })
+    .format(new Date())
+    .split("-")
+    .map(Number) as [number, number];
+  return new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 7);
+}
+
+/** The calendar month before `month` (YYYY-MM), as get_business_numbers' range form. */
+function monthBefore(month: string): string {
+  const [y, m] = month.split("-").map(Number) as [number, number];
+  const before = monthSpan(new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 7));
+  return `${before.since}..${before.until}`;
 }
 
 export const PROMPTS: BrainPrompt[] = [
@@ -212,18 +226,25 @@ export const PROMPTS: BrainPrompt[] = [
       const span = exact ? monthSpan(month || lastMonth()) : null;
       const since = span?.since ?? "the month's first day";
       const until = span?.until ?? "its last day";
+      // The calendar month before, never "previous": that is an equally long window, so
+      // September's "previous" was 2 to 31 August.
+      const before = span
+        ? `"${monthBefore(month || lastMonth())}"`
+        : "set to the whole month before";
       return (
         `Write the monthly review of ${span ? `${span.name} (${since} to ${until})` : month} for the team.\n\n` +
-        `1. Funnel and money: get_business_numbers with since ${since}, until ${until} and compare_to "previous". ` +
+        `1. Funnel and money: get_business_numbers with since ${since}, until ${until} and compare_to ${before}. ` +
         "Lead with paywall conversion, the core goal. For a day that jumped, explain_change before calling it real.\n" +
         "2. What we paid for tools: cost_watch. Its latest settled month is usually this one; for an older month use its " +
         "trend line. Name any hand-typed line it flags.\n" +
         `3. Who our users were: user_totals with since ${since} and until ${until}, grouped by archetype, then by country.\n` +
-        `4. What shipped: what_shipped with since ${since} and until ${until}, in the plain words each change was summarised in.\n` +
+        `4. What shipped: what_shipped from ${since} to ${until} a week at a time (a month of changes is longer than one ` +
+        "answer holds), in the plain words each change was summarised in.\n" +
         "5. What we tested: experiments. Say which ran or ended this month and what each concluded.\n" +
         `6. What we decided: browse_context with sources ["decision"], since ${since} and until ${until}. Then ` +
         "decision_conflicts: name any pair still waiting for someone to say which stands.\n" +
-        '7. What is stuck: open Notion tasks past their due date (browse_context with sources ["notion"] and meta {"state": "open"}).\n\n' +
+        "7. What is stuck: fetch_document plan/plan:board-health, the board's overdue and untouched tasks, rebuilt every " +
+        "fifteen minutes. Name the oldest and who owns each.\n\n" +
         "Open with three lines: the month in one sentence, the best thing, the worst thing. Then one short section per step. " +
         'Show it to me, and after my OK put it in a Google Doc with write_to_google_doc, titled "Monthly review" and the month.\n\n' +
         HOUSE_RULES
@@ -253,7 +274,7 @@ export const PROMPTS: BrainPrompt[] = [
       'decisions that shape the work (browse_context with sources ["decision"], newest first).\n' +
       '- People: who does what (search_company_context with sources ["people"]), so they know who to ask for what.\n' +
       `- Workstreams: open Notion tasks in ${role ? `their area (${role})` : "their area"}, and what_shipped for the last ` +
-      "month, so they see where things stand.\n" +
+      "week (a month of changes is longer than one answer holds), so they see where things stand.\n" +
       "- Jarvis: which ready-made prompts to try first (Catch me up, What needs me, KPI check).\n" +
       "4. Show me the draft and wait for my OK. Then create it with write_to_notion as a page under the Onboarding page " +
       `(as parent, the part of its id after "notion/page:"), titled "Onboarding — ${person}", and give me the link.\n\n` +

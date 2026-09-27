@@ -1415,6 +1415,27 @@ describe("/api/mcp", () => {
         );
       });
 
+      it("says to ask a week at a time when a long period runs past the ceiling, not to page", async () => {
+        const long = "A change described at the length a real one runs to, ".repeat(10);
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () =>
+            Array.from({ length: 100 }, (_, i) => commit(1000 - i, `${long}${i}`, "2026-08-20")),
+          text: async () => "",
+        });
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => [],
+          text: async () => "",
+        });
+        const text = (await call({ since: "2026-08-01", until: "2026-08-31" })).content[0].text;
+        expect(text).toContain("[TRUNCATED");
+        expect(text).toContain("a week at a time");
+        expect(text).not.toContain("page with offset");
+      });
+
       it("says the list could not be read when GitHub fails, rather than that nothing shipped", async () => {
         mockFetch.mockResolvedValueOnce({
           ok: false,
@@ -5443,6 +5464,22 @@ describe("/api/mcp", () => {
       expect(r.content[0].text).toContain("Ask for a child frame");
     });
 
+    it("shows a short wide strip the client never shrinks, whatever its shape", async () => {
+      // The landing's 1115x95 nav and 1115x68 sticky bar are "longer than 3:1" but fit the
+      // client's edge, so nothing shrinks them; refusing them hid four of fifteen sections.
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, status: 200, json: async () => nodeBody(1115, 95) })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({ images: { "1:2": "https://s3/x.png" } }),
+        })
+        .mockResolvedValueOnce({ ok: true, status: 200, arrayBuffer: async () => bytes(PNG) });
+      const r = await call({ node_id: "1:2" });
+      expect(r.content.find((c) => c.type === "image")).toBeDefined();
+      expect(r.content[0].text).not.toContain("longer than");
+    });
+
     it("refuses a frame too long to survive the client's downscale, and offers its children", async () => {
       // Answered the way Figma does: `depth=0` carries no children. This fixture used to
       // hand them over at any depth, so the tool passed here while every real tall frame
@@ -5488,6 +5525,43 @@ describe("/api/mcp", () => {
       expect(r.content.find((c) => c.type === "image")).toBeUndefined();
       expect(r.content[0].text).toContain("longer than");
       expect(r.content[0].text).toContain("1:3");
+    });
+
+    it("marks in the listing exactly the frames the render would refuse, wide ones too", async () => {
+      // The listing flagged only TALL frames while the render refused wide ones, so a
+      // 3554x701 child was listed with no warning and then answered "cannot be shown".
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            nodes: { "1:2": { document: { id: "1:2", name: "Page", type: "CANVAS" } } },
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            nodes: {
+              "1:2": {
+                document: {
+                  name: "Page",
+                  children: [
+                    {
+                      id: "1:3",
+                      name: "Banner",
+                      absoluteBoundingBox: { width: 3554, height: 701 },
+                    },
+                    { id: "1:4", name: "Nav", absoluteBoundingBox: { width: 1115, height: 95 } },
+                  ],
+                },
+              },
+            },
+          }),
+        });
+      const text = (await call({ node_id: "1:2" })).content[0].text as string;
+      expect(text).toMatch(/1:3 {2}3554x701 {2}\(too long to render\) {2}Banner/);
+      expect(text).toMatch(/1:4 {2}1115x95 {2}Nav/);
     });
 
     it("says Figma is still rendering, not that the frame is empty", async () => {
